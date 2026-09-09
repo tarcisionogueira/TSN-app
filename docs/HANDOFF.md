@@ -4,6 +4,56 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 19 (09/09) — 4 PEDIDOS NUM SÓ: TRAVAMENTO, DOCUMENTO POR FONTE, DASHBOARD, PRODUÇÃO
+
+**Pedido do dono, 4 itens numa mensagem só**: (1) checar outras telas contra o mesmo travamento do
+MinhaRede; (2) auditar quais imóveis não têm matrícula/edital e o que falta pra IA gerar relatório;
+(3) dashboard com métricas mais relevantes de negócio, tirando Inadimplentes/Reembolsos pra Financeiro;
+(4) subir tudo pra produção.
+
+**1. Travamento — só o MinhaRede tinha o padrão.** Duas buscas independentes (grep por
+`parent_id|indicado_por|arvore|recursiv|hierarqui` + varredura de componentes React recursivos sobre
+dado do próprio banco) confirmaram: nenhuma outra tela monta árvore recursiva sobre relação
+auto-referenciada sem proteção de ciclo. O padrão que mordeu (grafo assumido como árvore, sem guarda)
+é específico do MinhaRede — corrigido na Parte 18.
+
+**2. Dashboard geral trocou métrica de cobrança por métrica de negócio.** `Admin.jsx` (DashboardTab):
+saíram os cards "Inadimplentes"/"Reembolsos pendentes" (sem contexto de caixa ali — mudaram pra
+Financeiro › Síntese, ao lado do Inadimplentes que já existia) e entraram:
+- **Usuários pagos** = soma dos tiers pagos (top2+assessorado+clube, anual já normalizado) — exclui
+  admin/consultor/analista/advogado de propósito (papel interno, não cliente; mesmo critério de
+  `PLANOS_PAGOS`). Mostra % de conversão sobre o TOTAL real (não sobre a soma dos tiers), senão
+  admin/consultor inflam a taxa artificialmente.
+- **Receita potencial (100% pagante)** = MRR real + cada Explorador (grátis) convertendo pro plano de
+  ENTRADA (Investidor Pro) — cenário conservador, não o mix atual de planos; é a leitura mais fácil de
+  explicar, não uma meta.
+`financeiro_resumo()` RPC ganhou `reembolsos_pendentes` no retorno (mesma query que
+`admin_dashboard_contadores()` já usa, só espelhada). **Em produção** (`bidprobrasil.com.br`, deploy
+READY, commit `a30f088`).
+
+**3. Cobertura documental — 6 fontes investigadas, 2 causas reais corrigidas, 4 documentadas com plano.**
+Agente dedicado leu o scraper inteiro de cada fonte, cruzou com o HANDOFF (achando inclusive uma
+contradição entre duas sessões anteriores sobre GESTAOLEILOES — resolvida com leitura direta do código
+atual) e confirmou contra o dado real em `imoveis_leilao`:
+
+| Fonte | Ativos | Com doc | Causa | Ação |
+|---|---|---|---|---|
+| **SBID9 / SBID21** | 34 + poucas dezenas | 0% | **Bug real**: a chamada do scraper esquecia `{ enrich: true }` — mesma função (`scraperSuperbidNet`) e mesmo template de página que SUPERBID (74%) e SOLD (100%), só que sem o enriquecimento que visita o detalhe do lote | ✅ **Corrigido e em produção** (`scripts/scraper-puppeteer.mjs`, commit `45b43a7`) |
+| **GESTAOLEILOES** | 123 | 0% | **Bug real**: o parser decapa TODAS as tags antes de checar link de documento, e nunca visita `url_lote` (página do lote — já vem 100% populada, só não é usada) — só a página do EVENTO | Fix conhecido (portar o padrão de scan de `<a href>` que `scraper-soleon.mjs` já usa) — **não apliquei**: essa fonte é paga por request (Bright Data, sub-cota `gestao`), e visitar 1 página por LOTE significaria +100 requests/rodada contra o teto SEMANAL compartilhado com CALIL/VEGAS/RJLEILOES. É decisão de orçamento, não só de código — fica pra sua aprovação. |
+| **SATO** | 23 | 0% | Nunca implementado — é um TODO já explícito no código (`link_edital: url, // TODO(detalhe)`). Site é SPA (Quasar/Vue): fetch puro não vê nada renderizado, precisaria do mesmo Puppeteer que outras fontes já usam | Backlog — é feature nova, não bug pontual de 1 linha |
+| **EDITAL_DJEN** | 152 | 0% | Por natureza: publicação judicial (DJEN) é só texto, nunca PDF — o lote nasce sem doc de propósito (sua decisão de 03/09, fica como lembrete de trabalho pendente). O mecanismo de busca automática no site do leiloeiro já tentou 76/152 e achou 0: a URL disponível é a HOME do leiloeiro, não a página do lote — mas é isso que o texto do DJEN de fato contém, não achei uma URL mais específica pra extrair | Sem fix óbvio — funcionando como projetado; qualquer ganho aqui seria parser dedicado por leiloeiro, não uma correção geral |
+| **FERREIRALEIL** | 110 | 58% | O parser funciona de verdade (os mesmos 110 lotes têm avaliação e matrícula-texto, vindos da MESMA busca na página) — o SITE varia o que publica lote a lote | Nenhuma ação — não é bug |
+| **SUPERBID** | 1199 | 74% | Mesmo pipeline do SOLD (com enrich ligado), mas o cap diário (150 lotes/rodada) não dá conta de um acervo ~15x maior que o do SOLD | Fixável subindo `enrichCap` ou rodando backfill dedicado (mesmo molde do MEGA/BIASI de 11/07) — **não apliquei**: é mais tempo de Puppeteer por rodada, decisão de custo/duração de execução, não risco de código. |
+
+**Resumo pro dono**: 2 das 6 fontes tinham bug de 1 linha, já corrigido. As outras 4 não são "conserta e
+esquece" — 2 são decisão de orçamento (quanto vale gastar pra fechar o gap), 1 é feature nova (SATO), e
+1 já está funcionando como o desenho pede (EDITAL_DJEN). Nenhuma delas bloqueia a IA de gerar relatório
+nos imóveis que JÁ têm documento — o gap é só nesses 152+123+23+34+dezenas de lotes específicos.
+
+**4. Produção**: dashboard (item 2) e fix SBID9/21 (item 3) — ambos em `main`, deploy Vercel `READY`.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 18 (09/09) — "MINHA REDE" TRAVAVA O NAVEGADOR: CICLO DE INDICAÇÃO (A INDICA B, B INDICA A)
 
 **Reportado pelo dono**: a tela de indicações (home / `MinhaRede.jsx`) travava — "Página sem
