@@ -355,6 +355,28 @@ async function main() {
     console.log(`  anexos (${docs.anexos.length}):`);
     console.log(JSON.stringify(docs.anexos, null, 2));
     console.log(`  matricula=${docs.matricula} · edital=${docs.edital} · regras=${docs.regras} · laudo=${docs.laudo}`);
+
+    // RAIO-X (09/09) — dono reportou modalidade errada (venda_direta com 2 praças) e
+    // documento sem classificação (edital 2x, matrícula não veio). Mostra o CONTEXTO bruto
+    // ao redor de cada sinal, pra ver o que o classificador está realmente lendo.
+    console.log(`\n  --- RAIO-X ---`);
+    console.log(`  pracas do feed (${item?.pracas?.length ?? '?'}):`, JSON.stringify(item?.pracas || []));
+    const txtPlano = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    for (const m of txtPlano.matchAll(/venda\s*direta/gi)) {
+      const i = m.index;
+      console.log(`  "venda direta" em ${i}: …${txtPlano.slice(Math.max(0, i - 80), i + 80)}…`);
+    }
+    let nPraca = 0;
+    for (const m of txtPlano.matchAll(/\d[ªa]?\s*pra[çc]a/gi)) {
+      if (nPraca++ >= 4) break;
+      const i = m.index;
+      console.log(`  "praça" em ${i}: …${txtPlano.slice(Math.max(0, i - 60), i + 60)}…`);
+    }
+    for (const m of html.matchAll(/(?:previewlote|downloadlote)\/[\w/.-]+/gi)) {
+      const i = m.index;
+      const antes = html.slice(Math.max(0, i - 400), i).replace(/\s+/g, ' ');
+      console.log(`  doc "${m[0]}" — 400 chars ANTES (bruto): …${antes.slice(-250)}…`);
+    }
     return;
   }
 
