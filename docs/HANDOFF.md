@@ -4,6 +4,58 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 24 (09/09) — "PRAÇA COM DATA NUNCA É VENDA DIRETA": O MESMO BUG EM MAIS 5 SCRAPERS
+
+**Pedido do dono, na sequência da Parte 23**: "verifique nos outros lotes ao buscar pois se ha
+praças com datas, não ha venda direta. venda direta posso comprar na hora bastando me
+cadastrar no leiloeiro ou comitente vendedor. veja para que essas classificações do leilão não
+venham erradas mais."
+
+**A correção da Parte 23 estava incompleta.** Ela só forçava `extrajudicial` com **2+** praças
+(o caso exato do print) — praça **ÚNICA** com data ainda caía no texto contaminado pelo menu do
+site. Medido no banco antes de mexer: **35 dos 60 imóveis BAYIT ativos** ainda saíam
+`venda_direta` com `data_leilao` preenchida. Fix: `nPracasComData >= 1` (não `>= 2`), contando
+só praças com `startDate` real (não o bloco cru do feed, que pode vir sem data).
+
+**Puxando o fio, o mesmo padrão (texto livre decide `venda_direta` sem checar se há sinal de
+praça) apareceu em mais 5 scrapers** — todos escritos antes desta regra ficar explícita. Medição
+real por fonte (`modalidade='venda_direta' AND data_leilao IS NOT NULL`, entre ativos) achou
+contaminação de verdade em **APICE** (tenant da plataforma Soleon): 2/2. Os outros 4
+(RJLEILOES, GESTAOLEILOES, LeilãoPro, EmilioMatos, SATO) estavam com **zero contaminação atual**
+— mesmo risco estrutural, mas o texto solto desses sites não tem o antimenu genérico que o
+Bayit tem. Corrigidos mesmo assim (regra do dono é geral, e o custo do fix é uma linha por
+arquivo), cada um reaproveitando um sinal que **já calculava** para outra coisa — sem inventar
+extração nova:
+
+| Arquivo | Sinal de praça reaproveitado |
+|---|---|
+| `scraper-soleon.mjs` (APICE/CALIL/VEGAS/FERREIRALEIL/PURCENA/TMLEILOES) | `data_leilao` (via `extrairData`, calculado 1x, reusado no retorno) |
+| `scraper-rj.mjs` | idem |
+| `scraper-gestao.mjs` | valor de praça rotulado (`inicial`/`praça 2`/`venda 1º-2º leilão`) — `card.vendaDireta` (sinal estrutural da URL do site) continua incondicional |
+| `scripts/lib/leilaopro-parse.mjs` | lance do 1º/2º leilão (`p1`/`p2`) |
+| `scripts/lib/emiliomatos-parse.mjs` | oferta/lance inicial encontrado (`ofUnq`) |
+| `scraper-sato.mjs` | `dataLeilao(l)` — `l.venda_direta==='1'` (campo estrutural do próprio site) continua incondicional |
+
+**Por que o BAYIT não ganhou o mesmo tratamento "judicial vs. extrajudicial por texto" que os
+outros têm**: o RAIO-X da Parte 23 já mostrou que o menu de navegação do Bayit lista "Judicial"
+no singular num dos blocos de filtro — ou seja, a checagem de texto pra judicial está **igualmente
+contaminada** pela mesma fonte que contaminava venda_direta. Sem sinal de texto confiável ali,
+manter o default `extrajudicial` (o mesmo já usado no resto do repo pra leilão/praça genérico
+sem rótulo exato do leiloeiro, ver `api/_modalidade.js`) é mais seguro que inventar uma segunda
+checagem sobre o mesmo texto contaminado.
+
+**Dados existentes corrigidos via SQL direto** (sem re-scraping — o dado certo já estava no
+banco, só a coluna `modalidade` estava errada): `UPDATE imoveis_leilao SET modalidade =
+'extrajudicial' WHERE ativo AND modalidade='venda_direta' AND data_leilao IS NOT NULL AND fonte
+IN ('BAYIT','APICE')` — **37 linhas** (35 BAYIT + 2 APICE). Zero linhas restantes após o
+UPDATE, confirmado por reconsulta. Sem gasto de Bright Data.
+
+**Testes de regressão** (`testar:modalidade-cef`, `testar:judicial-venda-direta`) seguem 100%
+verdes — não tocam nos scrapers editados, mas confirmam que a normalização/exibição de
+modalidade (BUSCA, badges, `_modalidade.js`) não regrediu.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 23 (09/09) — BAYIT: MODALIDADE E DOCUMENTO SEM CLASSIFICAÇÃO EM 77/78 (+ QUASE UM AUTOGOL DE ORÇAMENTO)
 
 **Pedido do dono, com print da própria tela do app**: o imóvel de Alphaville/Tamboré (o
