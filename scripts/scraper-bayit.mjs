@@ -143,10 +143,28 @@ function inferirTipo(txt = '') {
   return 'outros';
 }
 
+// O site monta alguns links de "Baixar Boleto/Depósito Comissão" com template TrimPath
+// client-side (${rowLancamento.ID_Financeiro_Lancamento}, {if ...}{else}...{/if}) — como só
+// buscamos o HTML cru (sem executar o JS que resolve o template), esses "documentos" são
+// URL/rótulo LITERAIS do template, nunca resolvidos: um clique bateria em ".../$%7BrowLanc
+// amento.ID_Financeiro_Lancamento%7D", 404 garantido. Achado ao vivo no 1º dry-run real —
+// aparecia em TODOS os lotes testados. Descarta antes de gravar (mesmo espírito do filtro
+// de ruído institucional que RE_DOC_INSTITUCIONAL já aplica em api/_doc-scan.js, só que
+// aqui o ruído é sintático — template não resolvido — não temático).
+const RE_TEMPLATE_NAO_RESOLVIDO = /\{if\b|\{else\}?|\{\/if\}|\$\{|%7[Bb]/i;
+function eDocumentoDeVerdade(a) {
+  return !RE_TEMPLATE_NAO_RESOLVIDO.test(a.url || '') && !RE_TEMPLATE_NAO_RESOLVIDO.test(a.nome || '');
+}
+
 async function enriquecerDetalhe(urlLote, fotoAtual) {
   const html = await bd(urlLote);
   if (!html) return {};
   const docs = vasculharDocumentos(html, urlLote, fotoAtual);
+  docs.anexos = docs.anexos.filter(eDocumentoDeVerdade);
+  if (docs.matricula && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.matricula)) docs.matricula = null;
+  if (docs.edital && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.edital)) docs.edital = null;
+  if (docs.regras && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.regras)) docs.regras = null;
+  if (docs.laudo && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.laudo)) docs.laudo = null;
   const txt = decodificarEntidades(
     html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
   ).replace(/\s+/g, ' ');
@@ -186,6 +204,21 @@ async function main() {
   const itens = parseFeed(feedXml);
   console.log(`Feed: ${itens.length} <listing> no total.`);
 
+  // DIAGNÓSTICO (09/09, pedido do dono): a foto é link externo direto — carrega no NAVEGADOR
+  // do cliente, não passa pelo Bright Data. Cloudflare bloqueia a NAVEGAÇÃO do site (HTML);
+  // não sabíamos se também bloqueia o CDN de imagem. fetch() PURO (sem Bright Data, sem
+  // Referer do próprio Bayit) simula exatamente o que o <img> do nosso front faz.
+  const fotoTeste = itens.find((it) => it.fotos?.[0])?.fotos?.[0];
+  if (fotoTeste) {
+    try {
+      const r = await fetch(fotoTeste, { method: 'GET', signal: AbortSignal.timeout(15000) });
+      console.log(`🖼️  Teste de hotlink (sem Bright Data, sem Referer) em ${fotoTeste}: `
+        + `HTTP ${r.status} · content-type ${r.headers.get('content-type') || '?'}`);
+    } catch (e) {
+      console.log(`🖼️  Teste de hotlink falhou: ${String(e.message).slice(0, 120)}`);
+    }
+  }
+
   const candidatos = itens.filter((it) => it.availability === 'for_sale' && !!slugCidadeUf(it.url));
   console.log(`${candidatos.length} candidato(s) a imóvel (for_sale + URL cidade-UF válida); `
     + `${itens.length - candidatos.length} descartado(s) na enumeração (não-imóvel ou indisponível).`);
@@ -220,6 +253,10 @@ async function main() {
       anexos: null,
       url_lote: it.url,
       link_foto: it.fotos[0] || null,
+      // Galeria completa (não só a capa) — link externo direto, não re-hospedado (ver
+      // leiloeiro_conhecimento: só CEF re-hospeda foto), então trazer todas não custa
+      // storage nosso, só a linha. Pedido do dono, 09/09.
+      fotos: it.fotos.length ? it.fotos : null,
       leiloeiro: 'Portal Bayit',
       data_leilao: dataLeilao,
       forma_pagamento: 'a_vista',
