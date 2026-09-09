@@ -3561,7 +3561,14 @@ export default function Analise() {
                     )}
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
                       <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Composição por período (venda R$/m²)</span>
-                      <span style={{ fontSize:10.5, color:'#64748b' }}>a cada 4 meses · {comp.total_anuncios || 0} anúncio(s) · {comp.n_recentes || 0} recente(s)</span>
+                      {/* A FONTE PRECISA ESTAR NO RÓTULO (09/09, pergunta do dono: "por que mostra
+                          amostras num campo e no outro não"). Este painel conta os anúncios da
+                          NOSSA BASE (Índice BidPro); o painel "Amostras e comparativos", logo
+                          abaixo, conta os comparáveis da busca AO VIVO. São populações diferentes
+                          com a mesma palavra — então "39 anúncios" aqui e "0 amostras" ali pareciam
+                          o relatório se contradizendo, quando os dois estavam certos. */}
+                      <span style={{ fontSize:9.5, fontWeight:800, padding:'2px 7px', borderRadius:999, background:'#eef2ff', color:'#4338ca' }}>ÍNDICE BIDPRO</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>a cada 4 meses · {comp.total_anuncios || 0} anúncio(s) na nossa base · {comp.n_recentes || 0} recente(s)</span>
                       {comp.projetado && <span style={{ marginLeft:'auto', fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:999, background:'#fff7ed', color:'#c2410c' }}>VALOR PROJETADO</span>}
                     </div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
@@ -3577,6 +3584,14 @@ export default function Analise() {
                       ))}
                     </div>
                     {comp.taxa_aa != null && <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Valorização estimada da região: ~{comp.taxa_aa}% a.a. (curva do Índice BidPro).{comp.projetado ? ' O valor de mercado exibido é projetado para hoje a partir dos anúncios de períodos anteriores.' : ''}</div>}
+                    {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && (
+                      <div style={{ fontSize:10.5, color:'#475569', marginTop:8, lineHeight:1.55, paddingTop:8, borderTop:'1px dashed #c7d2fe' }}>
+                        Estes {comp.total_anuncios || 0} anúncio(s) vêm da <strong>nossa base própria</strong>, acumulada de análises
+                        anteriores nesta praça — não da busca ao vivo. É por isso que o painel
+                        <strong> Amostras e comparativos</strong> mostra 0: naquela busca, feita agora, não entrou nenhum
+                        comparável ativo. Os dois números estão certos e contam coisas diferentes.
+                      </div>
+                    )}
                   </div>
                 );
               })()}
