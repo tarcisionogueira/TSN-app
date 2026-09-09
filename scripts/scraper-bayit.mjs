@@ -267,8 +267,16 @@ async function main() {
   // upar de novo arriscaria sobrescrever anexos reais por null se ENRICH_CAP cortasse
   // antes dele (ordem do feed não é garantida estável). Excluir de saída é mais seguro
   // que confiar em reprocessar igual. Rodar sem essa lista (ex.: 1ª carga) processa tudo.
+  //
+  // SEM `if (!DRYRUN)` DE PROPÓSITO (09/09 — achado ao vivo): esta consulta é Supabase, não
+  // Bright Data — de graça. Estava atrás do guard por analogia com fotosExistentes (que aí sim
+  // custaria à toa), e o efeito colateral não era o de custo: em DRY-RUN o Set ficava vazio,
+  // ENTÃO o loop de enriquecimento (esse sim, PAGO) reprocessava os 78 candidatos inteiros —
+  // inclusive os já bons — só pra "prever". Um dry-run gastou a cota da semana inteira sem
+  // gravar nada. Tirar o guard faz o PREVIEW mostrar (e o loop pagar) só o que é novo de
+  // verdade, em dry-run ou não — o mesmo comportamento, sem custo escondido atrás do "não grava".
   const jaEnriquecidos = new Set();
-  if (!DRYRUN) {
+  {
     const { data, error } = await supabase.from('imoveis_leilao')
       .select('fonte_id').eq('fonte', 'BAYIT').not('anexos', 'is', null);
     if (!error) for (const r of data || []) jaEnriquecidos.add(r.fonte_id);
