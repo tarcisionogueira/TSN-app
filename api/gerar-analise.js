@@ -2034,7 +2034,16 @@ export default async function handler(req, res) {
       const sysComp = `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`;
       const promptA = promptComparaveis({ ...mercadoInputs, bairro: imRegBase?.bairro || null, fontesConhecidas: fontesTxt }) + cacheTxt;
       // 1ª busca: reserva o parecer, ~55s p/ a Etapa B (contexto) e ~35s p/ uma 2ª tentativa da A.
-      let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
+      // CRONÔMETRO DA BUSCA (09/09). O terreno de Guarapari falhou NOVE vezes seguidas com o
+      // mesmo `This operation was aborted`, e não havia como saber ONDE o tempo foi: o orçamento
+      // da 1ª passada, o gasto real, se a 2ª chegou a rodar — nada disso ficava registrado, então
+      // qualquer ajuste no orçamento seria chute. Isto não conserta o timeout; faz a próxima
+      // falha DIZER o que aconteceu, que é o passo que faltava para consertar com dado.
+      const diagBusca = { orcamentoA: Math.min(135000, restante() - RESERVA_PARECER - 90000), webA: maxWebA, restanteAoIniciar: restante() };
+      const tBuscaA = Date.now();
+      let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: diagBusca.orcamentoA, webUses: maxWebA });
+      diagBusca.gastoA = Date.now() - tBuscaA;
+      diagBusca.falhouA = !!compar?.__falhou;
       if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
       const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
 
@@ -2110,6 +2119,8 @@ export default async function handler(req, res) {
       // Re-tenta se (falhou OU vazio OU vendas abaixo do alvo) E ainda há orçamento. Falhou → 1
       // busca (quase sempre conclui e dá um R$/m² de referência); os outros dois → ≤3 buscas.
       const vendas1 = contarVendas(compar);
+      diagBusca.restanteAposA = restante();
+      diagBusca.segundaCabe = restante() > RESERVA_PARECER + 55000;
       if (!daBase && (compar.__falhou || semAmostrasA(compar) || vendas1 < MIN_VENDAS_ALVO) && restante() > RESERVA_PARECER + 55000) {
         const usos = compar.__falhou ? 1 : Math.min(maxWebA, 3);
         // A segunda passada precisa saber o que a primeira já trouxe, senão ela repete os mesmos
@@ -2122,7 +2133,12 @@ export default async function handler(req, res) {
 
 SEGUNDA PASSADA — FOCO EXCLUSIVO EM VENDA. A primeira busca trouxe ${vendas1} comparável(is) de VENDA, e a precificação exige pelo menos ${MIN_VENDAS_ALVO}. Traga anúncios NOVOS de VENDA do mesmo tipo (${mercadoInputs.tipoImovel}), priorizando a MENOR distância. Locação não substitui venda aqui: se só houver aluguel, devolva vendas vazias em vez de preencher com locação.${jaTem.length ? `
 JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
-        const segunda = await buscarEtapa({ prompt: promptA + reforco, sistema: sysComp, msBudget: Math.min(100000, restante() - RESERVA_PARECER - 30000), webUses: usos });
+        diagBusca.orcamentoB = Math.min(100000, restante() - RESERVA_PARECER - 30000);
+        diagBusca.webB = usos;
+        const tBuscaB = Date.now();
+        const segunda = await buscarEtapa({ prompt: promptA + reforco, sistema: sysComp, msBudget: diagBusca.orcamentoB, webUses: usos });
+        diagBusca.gastoB = Date.now() - tBuscaB;
+        diagBusca.falhouB = !!segunda?.__falhou;
         // Falha total na 1ª → não há o que fundir. Nos demais, união: o resultado nunca encolhe.
         compar = compar.__falhou ? segunda : fundirMercado(compar, segunda);
         // Sem este rastro, "a 2ª passada resolveu" e "a 2ª passada não achou nada" ficam
@@ -2134,10 +2150,11 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // (abort/timeout — não "vazio de verdade"), vira TRANSITÓRIO (__instavel): o Índice BidPro/
       // self-heal assume mais abaixo; não derruba aqui. Vazio genuíno (JSON ok, 0 anúncio) segue.
       if (compar.__falhou) {
-        mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true, __erroApi: compar.__erroApi || '' };
+        mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true, __erroApi: compar.__erroApi || '', __diagBusca: diagBusca };
         prog.comparaveis = { status: 'erro', n: 0 };
       } else {
         mercado = compar;
+        mercado.__diagBusca = diagBusca;
         mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
         mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
         // ALUGUEL RECALCULADO NO SERVIDOR (07/08) — mesmo princípio da correção de Cotia: se o
@@ -2833,7 +2850,17 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // vazio). Mercado GENUINAMENTE vazio (busca OK, 0 anúncios reais) NÃO cai aqui: buscaInstavel
     // é false → segue como 'concluida'/não estimado, como antes.
     if (buscaInstavel && !(Number(valorMercado) > 0) && !(Number(precoM2) > 0)) {
-      const e = new Error('tempo_limite'); e.detalhe = erroApiBusca || 'busca instável'; throw e;
+      const e = new Error('tempo_limite');
+      e.detalhe = erroApiBusca || 'busca instável';
+      e.diagBusca = mercado.__diagBusca || null;
+      // SEM ÍNDICE, A BUSCA É A ÚNICA FONTE — e isso muda o que se pode PROMETER ao cliente.
+      // Com cobertura, uma busca instável é mesmo transitória: o Índice cobre na próxima. Sem
+      // cobertura, não há segunda fonte, e "tente de novo" vira convite a repetir a mesma falha
+      // — o terreno de Guarapari/ES foi clicado NOVE vezes em 09/09 com esse texto na tela,
+      // enquanto o Índice tinha zero amostra de terreno no estado inteiro.
+      e.semIndice = !(Number(mercado.indiceBidPro?.venda_m2) > 0);
+      e.segmento = segIdx || null;
+      throw e;
     }
 
     // PRAÇA DE REFERÊNCIA (regra do dono: "no relatório deve fazer em relação à praça MAIS
@@ -3317,7 +3344,10 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';
     const msg = timeout
-      ? 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.'
+      ? (e?.semIndice
+        // Sem cobertura do Índice não existe segunda fonte: repetir o clique repete a falha.
+        ? `Não encontramos anúncios comparáveis ativos${e?.segmento ? ` de ${e.segmento}` : ''}${cidade ? ` em ${cidade}` : ''} e nossa base própria ainda não cobre esse segmento nessa região. Tentar de novo tende a dar no mesmo — nos avise para incluirmos essa praça na base.`
+        : 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.')
       : String(e?.message || e);
     // REGERAÇÃO QUE FALHOU: devolve o relatório anterior em vez de deixar o cliente sem nada.
     // Volta como 'concluida' (é um relatório íntegro, o de antes) com o motivo da falha em
@@ -3327,7 +3357,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     } else {
       await upsertAnalise({ ...base, status: 'erro', erro: msg });
     }
-    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, restaurouAnterior: !!resultAnterior, ator: user.id }); } catch { /* log best-effort */ }
+    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, semIndice: e?.semIndice ?? null, segmento: e?.segmento || null, diagBusca: e?.diagBusca || null, restaurouAnterior: !!resultAnterior, ator: user.id }); } catch { /* log best-effort */ }
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
     if (cota && cota.ok && cota.tipo) {
