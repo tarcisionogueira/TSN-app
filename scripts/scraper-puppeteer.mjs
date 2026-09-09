@@ -1779,22 +1779,30 @@ function mapLoteLJUD_pp(it) {
   // destino era o SITE do leiloeiro — que resolvia o erro e criava outro: a HOME não mostra o
   // imóvel, e um dos domínios devolve literalmente "Leiloeiro não cadastrado!".
   //
-  // RECON DE 28/08 (`scripts/recon-ljud-url.mjs`, rodado no Actions) testou as quatro formas
-  // em 3 lotes abertos e a resposta foi limpa:
-  //   /lote/{lote_id}            → 2 de 3 "Leilão não encontrado"
-  //   /leilao/{leilao_id}        → 3 de 3 ABREM, e num deles o <title> é o próprio imóvel
-  //                                ("Alto Parnaíba/MA - Fazenda São Bento c/ 16.040 hectares")
-  //   /leilao/{id}/lote/{id}     → 500 nos 3
-  //   domínio do leiloeiro       → home; num caso, "Leiloeiro não cadastrado!"
-  // Então o destino passa a ser a PÁGINA DO LEILÃO no agregador, que é a que existe. O site do
-  // leiloeiro vira o segundo degrau (quando o portal não informa `leilao_id`), e o /lote/ some
-  // da escada: ele é o único que já sabemos que costuma falhar.
+  // A URL DO LOTE TEM DOIS SEGMENTOS: /lote/{leilao_id}/{lote_id} (09/09, achado do dono).
   //
-  // url_lote é reescrito pelo scraper todo dia e o doc-scan (enriquecer-lote só grava
-  // link_edital vazio) NUNCA o sobrescreve → a próxima coleta conserta os 1.358 lotes ativos.
+  // O RECON DE 28/08 (`scripts/recon-ljud-url.mjs`) testou quatro formas e concluiu que a página
+  // do lote não existia:
+  //   /lote/{lote_id}            → 2 de 3 "Leilão não encontrado"
+  //   /leilao/{leilao_id}        → 3 de 3 abrem
+  //   /leilao/{id}/lote/{id}     → 500 nos 3
+  //   domínio do leiloeiro       → home
+  // A conclusão estava errada porque a forma CERTA não estava entre as quatro: falta o
+  // `leilao_id` ANTES do `lote_id`. Com isso o destino virou a página do LEILÃO — que abre, mas
+  // mostra a lista inteira, não o imóvel. Foi o que o dono viu: "o botão não está caindo na
+  // página do imóvel e sim na página geral do leiloeiro". 1.289 de 1.289 lotes ativos.
+  //
+  // A prova não precisou de recon novo: o PRÓPRIO portal emite essa forma dentro do payload de
+  // anexos (`https://www.leiloesjudiciais.com.br/lote/98563/212605`), e o navegador do dono
+  // estava em `/lote/98563/212684`. Duas fontes independentes, ambas com os dois segmentos.
+  //
+  // E o estrago era duplo: como `url_lote` apontava para a página do LEILÃO, o varredor de
+  // documentos leu essa página e pendurou em CADA lote os documentos de TODOS os lotes do
+  // leilão — 25 anexos num lote que tem 2 no site, incluindo matrícula de imóvel de outra
+  // cidade. Um relatório documental lido em cima disso analisaria o imóvel errado.
   const siteLeiloeiro = siteLeiloeiroLJUD(it.nm_url_leiloeiro);
   const leilaoId = it.leilao_id;
-  const loteUrlAgg = leilaoId ? `https://www.leiloesjudiciais.com.br/leilao/${leilaoId}` : null;
+  const loteUrlAgg = (leilaoId && loteId) ? `https://www.leiloesjudiciais.com.br/lote/${leilaoId}/${loteId}` : null;
   const loteUrl = loteUrlAgg || siteLeiloeiro || 'https://www.leiloesjudiciais.com.br';
   // `anexos`: documentos REAIS do lote (edital, matrícula, laudo…) com URL S3 direta.
   const anexosArr = (Array.isArray(it.anexos) ? it.anexos : [])
@@ -1813,7 +1821,11 @@ function mapLoteLJUD_pp(it) {
     area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
     descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
     // Documentos reais do lote (antes tudo apontava p/ a home do leiloeiro).
-    link_edital: editalDoc || loteUrl,
+    // PÁGINA NÃO É EDITAL. O fallback para `loteUrl` fazia 423 lotes carregarem a página do
+    // leilão no campo `link_edital` — a tela mostra "Edital" e abre uma listagem. Sem PDF de
+    // edital, o campo fica vazio, que é a verdade e o que o enriquecimento procura para tentar
+    // preencher depois.
+    link_edital: editalDoc,
     link_matricula: matricula,
     url_lote: loteUrl,
     anexos: anexosArr.length ? anexosArr : null,
