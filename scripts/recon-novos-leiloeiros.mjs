@@ -183,11 +183,13 @@ async function bdFetch(url) {
   return { status: r.status, html: await r.text().catch(() => '') };
 }
 
-// Recon PROFUNDO do Pecini: enumeração via sitemap (sem JS), JSON embutido (Next/Nuxt),
-// refs de API e o dump de UMA página de lote (estrutura para o scraper de detalhe).
-async function reconPeciniProfundo(cfg) {
+// Recon PROFUNDO (09/09: generalizado do Pecini original — corpo já não tinha nada
+// específico de nome, só o rótulo do log e o lote de fallback): enumeração via sitemap
+// (sem JS), JSON embutido (Next/Nuxt), refs de API e o dump de UMA página de lote
+// (estrutura para o scraper de detalhe).
+async function reconProfundo(nome, cfg) {
   const TOKEN = process.env.BRIGHTDATA_API_TOKEN, ZONE = process.env.BRIGHTDATA_ZONE;
-  console.log(`\n\n══════════════════ RECON PECINI PROFUNDO ══════════════════`);
+  console.log(`\n\n══════════════════ RECON ${nome} PROFUNDO ══════════════════`);
   if (!TOKEN || !ZONE) { console.log('   ⚠️ BRIGHTDATA_* ausentes — pulei.'); return; }
 
   // 1) Sitemaps — a via mais robusta p/ enumerar TODOS os lotes sem executar JS.
@@ -240,7 +242,10 @@ async function reconPeciniProfundo(cfg) {
   } catch (e) { console.log(`── HOME → ERRO: ${String(e.message).slice(0, 100)}`); }
 
   // 3) Dump de UMA página de lote — estrutura de detalhe (preço, avaliação, praças, foto, cidade/UF).
-  const alvoLote = loteUrls[0] || '/lote/recife-pe/10474/';
+  // Fallback fixo só faz sentido pro Pecini (URL conhecida de recon anterior); pra um
+  // candidato novo sem NENHUM link de lote achado, adivinhar uma URL só produziria 404.
+  const alvoLote = loteUrls[0] || (nome === 'PECINI' ? '/lote/recife-pe/10474/' : null);
+  if (!alvoLote) { console.log('\n── LOTE: nenhum link de lote achado na home — pulei o dump de detalhe.'); return; }
   try {
     const { status, html } = await bdFetch(cfg.base + alvoLote);
     console.log(`\n── LOTE ${alvoLote} → HTTP ${status}, len ${html.length}`);
@@ -343,13 +348,20 @@ const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim(
       // Pecini responde 403 (Cloudflare) ao Puppeteer → tenta pelo Bright Data unlocker.
       if (nome === 'PECINI') {
         try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
-        try { await reconPeciniProfundo(cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
+        try { await reconProfundo(nome, cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
       }
       // JONASLEILOEIRO, FERNANDOLEILOEIRO (07/09) e BAYIT (09/09): 100% Cloudflare no
       // Puppeteer (403 "Just a moment..." em TODOS os paths padrão) — mesmo sintoma do
       // Pecini, mesmo remédio.
       if (nome === 'JONASLEILOEIRO' || nome === 'FERNANDOLEILOEIRO' || nome === 'BAYIT') {
         try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
+      }
+      // BAYIT (09/09): via Bright Data voltou HTTP 200 mas ainda com marcador de Cloudflare
+      // no corpo E zero link de lote/imóvel achado em ~167-218 KB de HTML — ambíguo demais
+      // pra escrever parser (challenge residual? SPA que só popula via JS depois do load?
+      // API embutida?). Profundo decide: sitemap, __NEXT_DATA__/__NUXT__, refs de API.
+      if (nome === 'BAYIT') {
+        try { await reconProfundo(nome, cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
       }
     }
   } finally {
