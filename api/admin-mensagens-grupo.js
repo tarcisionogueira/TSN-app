@@ -84,7 +84,7 @@ function linkDaAula(slug, edicao, tipo) {
 // resto até 10 com quem não tem data só se faltar candidato — nunca deixa a lista vazia.
 async function buscarOportunidades() {
   const base = 'imoveis_leilao?ativo=eq.true&link_foto=not.is.null&desconto_percentual=gte.30' +
-    '&select=id,titulo,tipo,modalidade,cidade,estado,bairro,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto';
+    '&select=id,titulo,tipo,modalidade,cidade,estado,bairro,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,link_foto';
 
   const rComData = await sb(`${base}&data_leilao=not.is.null&order=desconto_percentual.desc&limit=10`);
   if (!rComData.ok) { console.error('[mensagens-grupo] nao consegui ler oportunidades (com praca):', await rComData.text()); return []; }

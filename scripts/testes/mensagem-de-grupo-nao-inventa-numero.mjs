@@ -177,8 +177,34 @@ checa('dispatcher chega no formatador certo (assessoria)',
 checa('dispatcher chega no formatador certo (assinatura)',
   montarMensagemGrupo('assinatura', { link: 'https://x' })?.includes('https://x'));
 
+console.log('\nPREÇO × DESCONTO — o percentual sempre se refere ao valor impresso ao lado dele');
+{
+  // O caso real que abriu o achado (09/09): 3.461 lotes ativos com desconto contra a 2ª praça
+  // e a 1ª acima da avaliação. Antes a mensagem saía com as três linhas se contradizendo.
+  const im = { titulo: 'Apartamento', cidade: 'Serra', estado: 'ES', valor_minimo: 330000, valor_minimo_2: 184800, valor_avaliacao: 308000, desconto_percentual: 40, data_leilao: '2026-10-08', data_leilao_2: '2026-10-29' };
+  const r = montarOportunidade({ imovel: im, link: 'https://x' });
+  checa('mostra o valor da 2ª praça, que é o que o desconto mede', r?.includes('184.800'), r);
+  checa('não anuncia a 1ª praça como se fosse o preço com desconto', !r?.includes('330.000'), r);
+  checa('rotula a praça em vez de chamar de "Lance inicial"', r?.includes('2ª praça'), r);
+  checa('desconto sai coerente com os dois valores impressos', r?.includes('40% abaixo da avaliação'), r);
+  checa('a data é a da praça cujo valor está na mensagem', r?.includes('29/10') && !r?.includes('08/10'), r);
+}
+{
+  const im = { titulo: 'Casa', valor_minimo: 200000, valor_avaliacao: 200000, desconto_percentual: 12 };
+  const r = montarOportunidade({ imovel: im, link: 'https://x' });
+  checa('avaliação igual ao lance é eco, não avaliação → não sai', !r?.includes('Avaliação'), r);
+  checa('e sem avaliação utilizável o gancho de desconto também não sai', !r?.includes('abaixo da avaliação'), r);
+}
+{
+  const im = { titulo: 'Terreno', valor_minimo: 90000, valor_avaliacao: 150000, desconto_percentual: 40 };
+  const r = montarOportunidade({ imovel: im, link: 'https://x' });
+  checa('lote sem 2ª praça segue como "Lance inicial", sem rótulo inventado',
+    r?.includes('Lance inicial') && !r?.includes('2ª praça'), r);
+  checa('desconto recalculado dos números reais (40%)', r?.includes('40% abaixo da avaliação'), r);
+}
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 56) {
+if (ok + falhas < 65) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

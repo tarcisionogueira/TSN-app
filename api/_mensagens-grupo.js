@@ -16,6 +16,7 @@
  * `npm run testar:mensagem-grupo` cobre os invariantes de cada função.
  */
 import { PLANOS, formatarPreco } from '../src/data/cursos.js';
+import { lanceVitrine } from './_lance-vitrine.js';
 
 const linhas = (...ls) => ls.filter((l) => l !== null && l !== undefined).join('\n');
 const RECURSOS_MOSTRADOS = 4; // top N da lista real de `recursos` — a completa é longa demais pra WhatsApp
@@ -153,17 +154,20 @@ export function montarOportunidade({ imovel, link }) {
 
   const rubrica = RUBRICA_MODALIDADE[String(imovel?.modalidade || '').trim()] || null;
 
-  const avalNum = Number(imovel?.valor_avaliacao) || 0;
-  const lanceNum = Number(imovel?.valor_minimo) || 0;
-  const avaliacao = avalNum > 0 ? `Avaliação: R$ ${Math.round(avalNum).toLocaleString('pt-BR')}` : null;
-  const lance = lanceNum > 0 ? `Lance inicial: R$ ${Math.round(lanceNum).toLocaleString('pt-BR')}` : null;
-  const desconto = Math.round(Number(imovel?.desconto_percentual) || 0);
-  const diferenca = (avalNum > lanceNum && lanceNum > 0) ? avalNum - lanceNum : 0;
-  const linhaDesconto = desconto > 0
-    ? `→ ${desconto}% abaixo da avaliação${diferenca > 0 ? ` (R$ ${Math.round(diferenca).toLocaleString('pt-BR')} de diferença)` : ''}`
+  // Preço, desconto e data saem todos de `lanceVitrine` para que falem da MESMA praça. Antes
+  // esta mensagem imprimia "Avaliação: R$ 308.000 / Lance inicial: R$ 330.000 / → 40% abaixo da
+  // avaliação" — as três linhas juntas, o desconto da 2ª praça ao lado do lance da 1ª.
+  const v = lanceVitrine(imovel);
+  const avaliacao = v.avalUtil > 0 ? `Avaliação: R$ ${Math.round(v.avalUtil).toLocaleString('pt-BR')}` : null;
+  const lance = v.valor > 0
+    ? `${v.ehSegunda ? '2ª praça' : 'Lance inicial'}: R$ ${Math.round(v.valor).toLocaleString('pt-BR')}`
+    : null;
+  const diferenca = v.desconto > 0 ? v.avalUtil - v.valor : 0;
+  const linhaDesconto = v.desconto > 0
+    ? `→ ${v.desconto}% abaixo da avaliação${diferenca > 0 ? ` (R$ ${Math.round(diferenca).toLocaleString('pt-BR')} de diferença)` : ''}`
     : null;
 
-  const praca = String(imovel?.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const praca = String(v.data || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   const dataPraca = praca ? `📅 Praça em ${praca[3]}/${praca[2]}/${praca[1]}` : null;
 
   // 3ª rodada (08/09, pedido do dono): NADA de header gritando "assine agora" — isso soou

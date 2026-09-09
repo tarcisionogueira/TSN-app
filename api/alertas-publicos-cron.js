@@ -15,11 +15,12 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
+import { lanceVitrine } from './_lance-vitrine.js';
 
 export const GET = handler;
 export const POST = handler;
 
-const SEL = 'id,titulo,tipo,cidade,cidade_norm,estado,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_fim,link_foto';
+const SEL = 'id,titulo,tipo,cidade,cidade_norm,estado,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,link_foto';
 const LIMITE_ALERTAS = 500;   // teto de runtime; se estourar, o log avisa (nada de corte silencioso)
 const POR_ENVIO = 6;
 
@@ -71,9 +72,12 @@ async function handler(req) {
         // bloqueiam hotlink — melhor sem foto do que quadro quebrado.
         const foto = (im.link_foto && String(im.link_foto).includes('supabase.co'))
           ? `<a href="${url}"><img src="${im.link_foto}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
-        const desc = Number(im.desconto_percentual) || 0;
-        const descTag = desc > 0 ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">${Math.round(desc)}% OFF</span>` : '';
-        const dataLabel = fmtData(im.data_fim || im.data_leilao);
+        // Selo e preço saem do MESMO par de números (`lanceVitrine`): o "% OFF" é da 2ª praça
+        // quando ela existe, e antes ficava ao lado do "Lance mínimo" da 1ª — em 3.461 lotes
+        // ativos isso anunciava desconto sobre um valor acima da própria avaliação.
+        const v = lanceVitrine(im);
+        const descTag = v.desconto > 0 ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">${v.desconto}% OFF</span>` : '';
+        const dataLabel = fmtData(im.data_fim || v.data);
         const dataTag = dataLabel ? `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-left:4px;">📅 ${dataLabel}</span>` : '';
         return `<div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
@@ -82,7 +86,7 @@ async function handler(req) {
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo)}</div></div>
+              <div><div style="font-size:11px;color:#94a3b8;">${v.ehSegunda ? '2ª praça' : 'Lance mínimo'}</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(v.valor)}</div></div>
               <a href="${url}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;">Ver imóvel →</a>
             </div>
           </div>

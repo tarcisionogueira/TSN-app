@@ -37,6 +37,7 @@ import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { linkRastreado } from './_link-email.js';
 import { utmEmail } from './_utm.js';
+import { lanceVitrine } from './_lance-vitrine.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -50,7 +51,7 @@ const sb = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...op
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 
-const SEL = 'id,titulo,cidade,estado,tipo,valor_minimo,valor_avaliacao,desconto_percentual';
+const SEL = 'id,titulo,cidade,estado,tipo,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual';
 
 /**
  * Três imóveis para a pessoa. Vai afunilando: cidade de interesse → estado → Brasil. O
@@ -102,7 +103,9 @@ function cabecalho(L) {
 
 function cardImovel(im, L) {
   const url = L(`/#/imovel/${im.id}?${utmEmail('ativacao')}`);
-  const desc = Math.round(Number(im.desconto_percentual) || 0);
+  // Preço e percentual saem do MESMO par (`lanceVitrine`) — antes o card imprimia o lance da
+  // 1ª praça com o desconto da 2ª colado ao lado, na mesma linha.
+  const v = lanceVitrine(im);
   // O card SEMPRE foi um link (o `<a>` envolve tudo) — o que faltava era PARECER clicável.
   // Sem pista visual, o leitor lê como cartaz e não clica: a barra azul à esquerda e o
   // "Ver relatório →" existem para isso, não para enfeite.
@@ -110,8 +113,8 @@ function cardImovel(im, L) {
     <a href="${url}" target="_blank" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-left:4px solid #0D63DB;border-radius:12px;padding:14px 16px;background:#ffffff;">
       <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.4;">${esc(im.titulo || 'Imóvel em leilão')}</div>
       <div style="font-size:12px;color:#64748b;margin-top:4px;">${esc(im.cidade || '')}${im.estado ? ' · ' + esc(im.estado) : ''}</div>
-      <div style="margin-top:8px;font-size:15px;font-weight:800;color:#0D63DB;">${brl(im.valor_minimo)}
-        ${desc >= 25 ? `<span style="font-size:12px;font-weight:700;color:#059669;margin-left:8px;">${desc}% abaixo da avaliação</span>` : ''}
+      <div style="margin-top:8px;font-size:15px;font-weight:800;color:#0D63DB;">${brl(v.valor)}${v.ehSegunda ? '<span style="font-size:11px;font-weight:600;color:#64748b;margin-left:6px;">na 2ª praça</span>' : ''}
+        ${v.desconto >= 25 ? `<span style="font-size:12px;font-weight:700;color:#059669;margin-left:8px;">${v.desconto}% abaixo da avaliação</span>` : ''}
       </div>
       <div style="margin-top:9px;font-size:12.5px;font-weight:700;color:#0D63DB;">Ver relatório deste imóvel &rarr;</div>
     </a></td></tr>`;
