@@ -205,8 +205,18 @@ async function reconProfundo(nome, cfg) {
       if (smRefs.length) console.log(`   robots Sitemap: ${JSON.stringify(smRefs)}`);
       console.log(`   ${locs.length} <loc>; sub-sitemaps: ${JSON.stringify(subs.slice(0, 10))}`);
       if (lotes.length) console.log(`   lotes (${lotes.length}) amostra: ${JSON.stringify(lotes.slice(0, 6))}`);
+      // 09/09 (BAYIT): '/sitemap.xml' pode não ser sitemap de URL nenhum — pode ser FEED de
+      // imóveis (formato Facebook/Google Dynamic Ads for Real Estate: <listings><listing>
+      // <home_listing_id>...). Sem <loc>, o dump de 600 chars corta antes do 1º <listing>
+      // terminar — aqui damos um dump bem maior e contamos quantos <listing> existem (é a
+      // enumeração inteira do acervo, de graça, sem paginar).
+      const nListings = (html.match(/<listing>/gi) || []).length;
+      if (nListings > 0) {
+        console.log(`   ⭐ FEED DE IMÓVEIS detectado: ${nListings} <listing>`);
+        console.log(`   raw[0..6000]: ${html.slice(0, 6000).replace(/\s+/g, ' ')}`);
+      }
       // Dump cru do começo p/ ver a estrutura real (índice? urlset? html? gzip?).
-      if (sm !== '/robots.txt') console.log(`   raw[0..600]: ${html.slice(0, 600).replace(/\s+/g, ' ')}`);
+      else if (sm !== '/robots.txt') console.log(`   raw[0..600]: ${html.slice(0, 600).replace(/\s+/g, ' ')}`);
       else console.log(`   robots.txt: ${html.replace(/\s+/g, ' ').slice(0, 500)}`);
     } catch (e) { console.log(`── ${sm} → ERRO: ${String(e.message).slice(0, 100)}`); }
   }
