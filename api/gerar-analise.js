@@ -2051,18 +2051,15 @@ export default async function handler(req, res) {
       // da 1ª passada, o gasto real, se a 2ª chegou a rodar — nada disso ficava registrado, então
       // qualquer ajuste no orçamento seria chute. Isto não conserta o timeout; faz a próxima
       // falha DIZER o que aconteceu, que é o passo que faltava para consertar com dado.
-      // ORÇAMENTO DA 1ª PASSADA — REPARTIÇÃO MEDIDA, NÃO CHUTADA (09/09).
-      // O cronômetro do terreno de Guarapari devolveu, na 10ª tentativa:
-      //   restanteAoIniciar 263,1s · orcamentoA 118,1s → gastoA 118,3s (abortou NO TETO, 6 buscas)
-      //                              orcamentoB  59,9s → gastoB  60,0s (abortou NO TETO, 1 busca)
-      // Duas leituras saem daí. (a) O documento NÃO é o gargalo: sobravam 263 dos 285s quando a
-      // busca começou. (b) Reduzir buscas não resolve — com UMA busca e 60s ela morreu igual. A
-      // chamada não volta; quem a mata é o relógio, e ela morre no teto que receber.
-      // Então a repartição em 118 + 60 é o pior arranjo possível: duas mortes no próprio teto em
-      // vez de uma tentativa com o tempo somado. A reserva que sobrava para a Etapa B (contexto)
-      // cai de 90s para 45s — B é opcional e já é PULADA quando a busca fica instável, enquanto
-      // os comparáveis são o que o relatório existe para entregar.
-      const diagBusca = { orcamentoA: Math.min(190000, restante() - RESERVA_PARECER - 45000), webA: maxWebA, restanteAoIniciar: restante() };
+      // ORÇAMENTO DA 1ª PASSADA — mantido como estava, e o motivo fica registrado (09/09).
+      // Cheguei a ampliá-lo de 118s para 180s com base no cronômetro (as duas passadas morriam
+      // exatamente no próprio teto). A tentativa seguinte MEDIU e refutou: com orcamentoA
+      // 180,3s o Claude abortou no teto igual, e a 2ª passada nem coube (segundaCabe: false).
+      // A causa não era o tamanho do orçamento — era o motor primário fora do ar
+      // (Gemini: HTTP 403 "Your project has been denied access"), o que joga TODA busca no
+      // fallback Claude web_search, que este arquivo já documenta como o caminho que aborta.
+      // Ampliar o teto só trocava o instante da morte e ainda espremia a Etapa B: revertido.
+      const diagBusca = { orcamentoA: Math.min(135000, restante() - RESERVA_PARECER - 90000), webA: maxWebA, restanteAoIniciar: restante() };
       const tBuscaA = Date.now();
       let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: diagBusca.orcamentoA, webUses: maxWebA });
       diagBusca.gastoA = Date.now() - tBuscaA;
