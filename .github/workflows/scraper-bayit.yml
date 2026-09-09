@@ -26,6 +26,10 @@ on:
         description: 'Diagnóstico: busca por nome no feed AO VIVO e sai (não roda o pipeline). Vazio = desligado.'
         required: false
         default: ''
+      inspecionar:
+        description: 'Diagnóstico: fonte_id (ex. bayit_640) ou URL do lote — busca a página fresca e mostra anexos antes/depois do filtro. Vazio = desligado.'
+        required: false
+        default: ''
 
 jobs:
   scraper-bayit:
@@ -50,4 +54,5 @@ jobs:
           BAYIT_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           BAYIT_ENRICH_CAP: ${{ github.event.inputs.enrich_cap || '200' }}
           BAYIT_BUSCAR: ${{ github.event.inputs.buscar || '' }}
+          BAYIT_INSPECIONAR: ${{ github.event.inputs.inspecionar || '' }}
         run: node scripts/scraper-bayit.mjs

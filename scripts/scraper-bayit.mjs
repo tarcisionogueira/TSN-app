@@ -309,6 +309,33 @@ async function main() {
     return;
   }
 
+  // MODO INSPECIONAR (09/09) — diagnóstico pontual: cliente reportou anexos incorretos em
+  // bayit_640 (o filtro RE_TEMPLATE_NAO_RESOLVIDO deveria ter removido 2 entradas de
+  // template TrimPath não-resolvido, mas a linha gravada ainda as tem). Testado offline: o
+  // filtro remove essas 2 entradas corretamente quando aplicado às strings que JÁ ESTÃO no
+  // banco — então o bug não está no filtro em si. Isto busca a página de detalhe FRESCA (só
+  // esse lote, não o pipeline inteiro) e mostra o que vasculharDocumentos() encontra ANTES e
+  // DEPOIS do filtro, pra achar onde a divergência realmente está.
+  if (process.env.BAYIT_INSPECIONAR) {
+    const alvo = process.env.BAYIT_INSPECIONAR.trim();
+    const item = itens.find((it) => `bayit_${it.id}` === alvo || it.url === alvo);
+    const urlLote = item?.url || alvo;
+    console.log(`\n🔬 INSPECIONAR: "${alvo}" → item do feed ${item ? 'ENCONTRADO' : 'NÃO encontrado (tratando alvo como URL direta)'} → url_lote = ${urlLote}`);
+    const html = await bd(urlLote);
+    if (!html) { console.log('  (página não veio — ver erro do [bd] acima, provavelmente sem cota ou rede)'); return; }
+    console.log(`  HTML recebido: ${html.length} chars.`);
+    const docsCru = vasculharDocumentos(html, urlLote, item?.fotos?.[0] || null);
+    console.log(`  anexos ANTES do filtro de template (${docsCru.anexos.length}):`);
+    console.log(JSON.stringify(docsCru.anexos, null, 2));
+    const removidos = docsCru.anexos.filter((a) => !eDocumentoDeVerdade(a));
+    const filtrados = docsCru.anexos.filter(eDocumentoDeVerdade);
+    console.log(`  REMOVIDOS pelo filtro (${removidos.length}):`);
+    console.log(JSON.stringify(removidos, null, 2));
+    console.log(`  anexos DEPOIS do filtro (${filtrados.length}):`);
+    console.log(JSON.stringify(filtrados, null, 2));
+    return;
+  }
+
   // DIAGNÓSTICO (09/09, pedido do dono): a foto é link externo direto — carrega no NAVEGADOR
   // do cliente, não passa pelo Bright Data. Cloudflare bloqueia a NAVEGAÇÃO do site (HTML);
   // não sabíamos se também bloqueia o CDN de imagem. fetch() PURO (sem Bright Data, sem
