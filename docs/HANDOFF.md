@@ -42,10 +42,24 @@ que ninguém tinha implementado esse lado até agora.
 continuaria vazio pra sempre, silenciosamente. É a mesma classe de defeito do topo deste
 documento: ausência que parece funcionamento normal.
 
-**3. Windsor.ai reconectado** (permissão de leitura de comentários do Instagram, bloqueada
-desde 30/08) — pendente ainda confirmar se a extração de 90 dias de comentários-resposta do
-dono funciona de ponta a ponta (schema do Windsor não expõe autor do comentário; a checagem
-de viabilidade real está em andamento nesta mesma sessão).
+**3. Windsor.ai reconectado, mas continua bloqueado** — dono reconectou a conta (permissão de
+leitura de comentários do Instagram, pendente desde 30/08) e o erro *"Application does not
+have permission for this action"* persistiu igual. Não é algo que o fluxo de reconexão de
+conta resolve — parece limitação do app da própria Windsor (não deles), fora do nosso alcance
+corrigir. Também confirmado: o conector `instagram_public` (alternativa sem OAuth de negócio)
+só tem MÉTRICAS agregadas de comentário, nenhum texto — não serve pra este propósito de jeito
+nenhum, independente de permissão.
+
+**4. Caminho alternativo construído: `api/admin-ig-backfill-comentarios.js` (novo, admin-only)**
+— usa o MESMO `IG_PAGE_TOKEN` da Send API (já tem `instagram_business_manage_comments`) pra
+puxar direto da Graph API os comentários dos últimos 90 dias de cada post, junto com as replies
+— e grava em `ig_mensagens` todo par onde a reply é do dono (comentário pai + resposta,
+`mid` com prefixo `bf_c_` pra ficar rastreável como backfill, não webhook ao vivo). Botão em
+`/admin/instagram`. Processa em orçamento de 48s e devolve cursor pra continuar se a conta
+tiver posts demais pra caber numa chamada — idempotente, seguro clicar de novo.
+⚠️ **Sem confirmação contra tráfego real** — `replies{...}` como sub-campo de `/comments` não
+foi testado contra a documentação viva da Meta (não verificável deste ambiente). Rodar e
+conferir o resultado (`respostas_do_dono_encontradas`, `pares_gravados`) antes de confiar.
 
 ---
 
