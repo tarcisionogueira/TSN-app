@@ -35,11 +35,18 @@
  * quando a galeria for construída (reusa garantirFotoCapa nela também).
  *
  * SEGURANÇA DE CUSTO: proposito 'bayit' tem sub-cota própria em brightdata_reserva (teto
- * 200/semana, subiu de 100 — o backfill de hoje sozinho consome ~80 só de detalhe +
- * ~80 de capa). Não compete pelo orçamento geral compartilhado com CALIL/VEGAS/GESTAO.
- *   - BAYIT_ENRICH_CAP (default 200): teto de páginas de detalhe visitadas/execução.
- *     Catálogo é pequeno (~84 <listing> em 09/09) — o default cobre o acervo inteiro numa
- *     rodada só. Numa cron recorrente futura, considerar baixar (só quem falta doc).
+ * 350/semana, subiu de 100→200→280→350 ao longo do backfill de 09/09 — dimensionar
+ * ~160 requests pra uma 1ª carga completa com foto; bem menos depois, ver abaixo). Não
+ * compete pelo orçamento geral compartilhado com CALIL/VEGAS/GESTAO.
+ *   - MANUTENÇÃO INCREMENTAL: quem já tem `anexos` gravado (fonte_id em imoveis_leilao)
+ *     NUNCA reentra no loop de enriquecimento nem no upsert — nem reprocessa (custaria
+ *     Bright Data à toa) nem sobrescreve (upsert substitui a linha inteira; reprocessar
+ *     um lote já bom e ser cortado pelo ENRICH_CAP no meio arriscaria gravar anexos=null
+ *     por cima do que já estava certo). Rodadas depois da 1ª carga só pagam pelos lotes
+ *     NOVOS no feed ou pelos que ficaram sem doc por falta de orçamento numa rodada
+ *     anterior (ver Parte 20 do HANDOFF — 38/78 ficaram assim no backfill de 09/09).
+ *   - BAYIT_ENRICH_CAP (default 200): teto de páginas de detalhe visitadas/execução,
+ *     dentro do que sobrou depois do filtro de manutenção incremental acima.
  *   - garantirFotoCapa() checa o bucket ANTES de gastar Bright Data — listing já
  *     re-hospedado (mesmo fonte_id) não paga de novo em rodadas futuras.
  *   - BAYIT_DRYRUN (default '1'): NÃO grava — parseia e loga o que inseriria (não
@@ -256,6 +263,21 @@ async function main() {
     } catch { /* segue sem cache — pior caso é re-hospedar o que já existia */ }
   }
 
+  // MANUTENÇÃO INCREMENTAL (09/09): quem JÁ tem anexos gravados não entra de novo no loop
+  // de enriquecimento — nem no upsert. Duas razões, uma de custo e uma de correção:
+  // (a) não paga Bright Data de novo por um lote que já foi buscado com sucesso;
+  // (b) o upsert do Supabase SUBSTITUI a linha inteira — reprocessar um lote já bom e
+  // upar de novo arriscaria sobrescrever anexos reais por null se ENRICH_CAP cortasse
+  // antes dele (ordem do feed não é garantida estável). Excluir de saída é mais seguro
+  // que confiar em reprocessar igual. Rodar sem essa lista (ex.: 1ª carga) processa tudo.
+  const jaEnriquecidos = new Set();
+  if (!DRYRUN) {
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('fonte_id').eq('fonte', 'BAYIT').not('anexos', 'is', null);
+    if (!error) for (const r of data || []) jaEnriquecidos.add(r.fonte_id);
+    console.log(`${jaEnriquecidos.size} lote(s) já enriquecido(s) em rodada anterior — não reprocessa.`);
+  }
+
   const feedXml = await bd(`${BASE}/sitemap.xml`);
   if (!feedXml) {
     await registrarSaude(supabase, 'BAYIT', [], 'feed_xml', {
@@ -286,9 +308,11 @@ async function main() {
     }
   }
 
-  const candidatos = itens.filter((it) => it.availability === 'for_sale' && !!slugCidadeUf(it.url));
-  console.log(`${candidatos.length} candidato(s) a imóvel (for_sale + URL cidade-UF válida); `
-    + `${itens.length - candidatos.length} descartado(s) na enumeração (não-imóvel ou indisponível).`);
+  const todosCandidatos = itens.filter((it) => it.availability === 'for_sale' && !!slugCidadeUf(it.url));
+  const candidatos = todosCandidatos.filter((it) => !jaEnriquecidos.has(`bayit_${it.id}`));
+  console.log(`${todosCandidatos.length} candidato(s) a imóvel (for_sale + URL cidade-UF válida); `
+    + `${itens.length - todosCandidatos.length} descartado(s) na enumeração (não-imóvel ou indisponível); `
+    + `${candidatos.length} entram no loop (${todosCandidatos.length - candidatos.length} já enriquecido(s), pulado(s)).`);
 
   const rows = [];
   let enriquecidos = 0;
