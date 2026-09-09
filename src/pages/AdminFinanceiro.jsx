@@ -472,6 +472,8 @@ export function SinteseFinanceira() {
         <Card titulo="MRR projetado" valor={`R$ ${fmt(a.mrr_projetado)}`} cor="#0D63DB" tag="proj" sub="Se todas as assinaturas ativas seguirem" />
         <Card titulo="Assinantes ativos" valor={a.ativos ?? 0} cor="#111" tag="real" sub="Assinaturas autorizadas" />
         <Card titulo="Inadimplentes" valor={d.inadimplentes ?? 0} cor="#dc2626" tag="real" sub="Cobrança em atraso" />
+        {/* 09/09: veio do Dashboard geral — reembolso é decisão de caixa, pertence aqui. */}
+        <Card titulo="Reembolsos pendentes" valor={d.reembolsos_pendentes ?? 0} cor={d.reembolsos_pendentes ? '#dc2626' : '#94a3b8'} tag="real" sub={d.reembolsos_pendentes ? 'garantia 7 dias — ação em Saques' : 'nenhum pendente'} />
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '18px 20px' }}>

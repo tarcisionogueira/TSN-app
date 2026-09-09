@@ -5771,9 +5771,22 @@ function DashboardTab({ irParaTab }) {
       const taxaPix = mrr * 0.01;
       const receita = m?.receita || {};
 
+      // Pagante = tier pago (top2/assessorado/clube já vem com anual somado ao mensal em
+      // `contagem`, mesma normalização do servidor) — EXCLUI admin/consultor/analista/advogado
+      // de propósito: são papel interno, não cliente. Mesmo critério de PLANOS_PAGOS em
+      // AdminFinanceiro.jsx, só que a partir da contagem já agregada (sem puxar `perfis` de novo).
+      const usuariosPagos = (contagem.top2 || 0) + (contagem.assessorado || 0) + (contagem.clube || 0);
+      // "Se todo mundo pagasse": só os EXPLORADOR (grátis) têm pra onde subir — quem já é
+      // pagante já está contado no MRR real. Assume conversão pro plano de ENTRADA (Investidor
+      // Pro), não o mix atual — é a leitura mais conservadora e a mais fácil de explicar.
+      const precoEntrada = mrrMensalPlano(planosCtx?.top2, 49.90);
+      const receitaPotencial = mrr + (contagem.explorador || 0) * precoEntrada;
+
       setDados({
         contagem,
         total: m?.total || 0, // total REAL de perfis (inclui anuais/leiloeiro/pacote/outros)
+        usuariosPagos,
+        receitaPotencial,
         mrr,
         mrrAssinatura,
         contratoMensalizado,
@@ -6083,9 +6096,17 @@ function DashboardTab({ irParaTab }) {
         <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — 09/09: Inadimplentes/Reembolsos saíram daqui (métrica de COBRANÇA, não de
+          visão geral do negócio) e foram pra Financeiro › Síntese, onde já tem contexto de caixa
+          ao redor. Entraram Usuários pagos e Receita potencial, que respondem a pergunta que o
+          dashboard não respondia: quanto do que já temos está convertido, e quanto falta. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} ${periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : periodo === 'custom' ? 'no período' : 'este mês'}`, '#60a5fa')}
+        {/* % sobre o total REAL (dados.total), não sobre a soma dos tiers — assim admin/consultor/
+            etc. contam no denominador e a taxa não fica artificialmente alta. */}
+        {statCard('Usuários pagos', fmtN(dados.usuariosPagos || 0),
+          dados.total > 0 ? `${((dados.usuariosPagos || 0) / dados.total * 100).toFixed(1)}% de conversão do total` : 'sem usuários ainda',
+          '#0D63DB')}
         {/* RECEBIDO é caixa: entrou de verdade, no período selecionado. Era o número que
             faltava — o card antigo mostrava só a projeção por plano (R$ 699,60) enquanto
             entravam R$ 4.615 no mês, porque 95% vem de avulso, que a projeção não vê. */}
@@ -6100,8 +6121,12 @@ function DashboardTab({ irParaTab }) {
             ? `projeção mensal · + R$ ${fmt(dados.contratoMensalizado)}/mês de contrato de prazo fixo`
             : 'projeção mensal das assinaturas ativas',
           '#34d399')}
-        {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
-        {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Financeiro › Saques' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
+        {/* Cenário, não meta: assume cada Explorador virando Investidor Pro (entrada), não o mix
+            atual de planos — é a leitura mais fácil de explicar e a mais conservadora das duas. */}
+        {statCard('Receita potencial (100% pagante)',
+          `R$ ${fmt(dados.receitaPotencial || 0)}`,
+          `se cada Explorador virasse Investidor Pro · hoje: R$ ${fmt(dados.mrr || 0)}`,
+          '#7c3aed')}
       </div>
 
       {/* Quem ainda NÃO é cliente: onde chega, onde para, por quê. Vem antes da cobertura
