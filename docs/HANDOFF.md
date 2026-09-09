@@ -4,6 +4,51 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 21 (09/09) — BAYIT: FILTRO DE TEMPLATE ERA LOCAL AO SCRAPER, NÃO PROTEGIA O ENRIQUECIMENTO SOB DEMANDA
+
+**Achado do dono, ao vivo**: "acabei de acessar um imóvel na Serra do Sol, chácara Serra do
+Sol, e os anexos não estão condizentes com que está no portador do leiloeiro". Imóvel:
+`bayit_640` (título gravado é o genérico "Terreno - 598,22 m²", Santana De Parnaiba/SP —
+achado só depois que o dono mandou print, ver nota de processo abaixo).
+
+**Causa raiz — filtro protegia UMA porta e não a outra.** O `RE_TEMPLATE_NAO_RESOLVIDO` da
+Parte 20 (bug #2, os 2 links de "Baixar Boleto/Depósito Comissão" que são template TrimPath
+nunca resolvido) nasceu LOCAL dentro de `scraper-bayit.mjs`. Mas `vasculharDocumentos()`
+— a função que realmente varre o HTML — é COMPARTILHADA: `api/enriquecer-lote.js` chama a
+mesma função SOB DEMANDA, toda vez que um cliente ABRE a ficha de um imóvel, e faz merge
+do resultado em `anexos` sem passar pelo filtro que só existia no scraper. **O simples ato
+de o cliente abrir o imóvel reintroduzia o lixo pela outra porta.** E como aquele endpoint
+só grava `enriquecido_em` (nunca `atualizado_em`), a corrupção não aparecia no timestamp
+que normalmente denuncia reescrita — `bayit_640` mostrava `atualizado_em` do scraper (09:32)
+enquanto o conteúdo já vinha de uma reescrita posterior (10:21, quando o dono abriu a tela).
+
+Confirmado por query, não suposição: das 78 linhas BAYIT, só 2 tinham `enriquecido_em`
+preenchido (as únicas já abertas por algum cliente) — e eram EXATAMENTE as 2 com lixo de
+template (`bayit_640` e `bayit_627`, ambas Santana De Parnaiba/SP). Escopo pequeno porque a
+fonte é nova; teria crescido a cada imóvel visitado se não corrigido agora.
+
+**Fix na raiz**: `RE_TEMPLATE_NAO_RESOLVIDO` mudou de `scraper-bayit.mjs` para dentro de
+`ehDocumento()` em `api/_doc-scan.js` — o único ponto que TODO chamador (scraper semanal +
+enriquecimento sob demanda + qualquer leiloeiro futuro com o mesmo problema de template
+client-side não resolvido) atravessa. Mesmo padrão e mesma lição já documentados ali para
+`RE_DOC_INSTITUCIONAL`: "duas cópias da mesma regra é uma que um dia discorda da outra".
+As 2 linhas corrompidas foram limpas direto via SQL (filtra o `anexos` jsonb existente —
+não precisou revisitar a página via Bright Data).
+
+**Processo, para a próxima vez (feedback do dono)**: ele disse "acabei de acessar" e eu
+tentei achar o imóvel por busca de texto (título/bairro/endereço) — não achou, porque o
+título gravado ("Terreno - 598,22 m²") não bate com o nome popular do lote ("Chácara Serra
+do Sol"). O dono apontou: **Cliente 360 mostra o que o cliente acabou de acessar** — é o
+caminho direto, mais rápido que adivinhar por texto. Mecanismo (pra não redescobrir):
+tabela `imovel_visto` (`user_id, imovel_id, titulo, cidade, estado, tipo, valor, vezes,
+visto_em`), consumida pela RPC de Cliente 360 (`'vistos'`: os 20 mais recentes por
+`visto_em desc`). Query direta: `select imovel_id, titulo, cidade, estado, visto_em from
+imovel_visto where user_id = '<uid>' order by visto_em desc limit 5;`. Usar isso primeiro
+da próxima vez que o dono disser "acabei de acessar X" e o nome não bater com o título
+gravado.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 20 (09/09) — PORTAL BAYIT INTEGRADO: 78 IMÓVEIS EM PRODUÇÃO
 
 **Pedido do dono**: "a bayiat estamos integrados? o leiloeiro? verifique." → não estava.
