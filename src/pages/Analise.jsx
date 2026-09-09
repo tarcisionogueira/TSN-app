@@ -277,6 +277,22 @@ export default function Analise() {
         .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'outro']);
       // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
       if (!cancel) setDocsLeiloeiro(await assinarAnexos(data || []));
+
+      // OS ANEXOS DO LOTE SÃO RELIDOS DO BANCO (09/09, achado do dono).
+      // `imovelInicial` vem de `location.state`: é uma FOTO tirada quando o usuário navegou
+      // para cá, e esta tela nunca a atualizava. Depois de limpar no banco os anexos que o
+      // varredor tinha pendurado errado no lote de Guarapari, a aba aberta seguiu listando os
+      // 25 antigos — e nem o F5 resolve, porque o React Router restaura o `state` do
+      // `history`. Corrigir dado no banco e o cliente continuar vendo o errado é o pior dos
+      // dois mundos. Só os ANEXOS são relidos: a semente do formulário continua sendo a foto,
+      // de propósito (o usuário pode ter editado valores).
+      if (/^[0-9a-f-]{36}$/i.test(String(idImovel))) {
+        const { data: fresco, error: eFresco } = await supabase
+          .from('imoveis_leilao').select('anexos').eq('id', idImovel).maybeSingle();
+        // `error` conferido: leitura que falha NÃO pode virar "o lote não tem anexo" e apagar
+        // da tela o que existe — sem isto, um 5xx transitório esconderia os documentos.
+        if (!cancel && !eFresco && fresco) setAnexosLote(Array.isArray(fresco.anexos) ? fresco.anexos : []);
+      }
     })();
     return () => { cancel = true; };
   }, [imovelInicial]);
@@ -473,6 +489,8 @@ export default function Analise() {
   const [reuniaoRealizada, setReuniaoRealizada] = useState(false);
   const [juridicoEnviado, setJuridicoEnviado] = useState(false);
   const [docsLeiloeiro, setDocsLeiloeiro] = useState([]); // anexos do imóvel (matrícula/edital/regras)
+  // null = ainda não releu do banco → usa a foto que veio na navegação (comportamento anterior).
+  const [anexosLote, setAnexosLote] = useState(null);
   const isStaffAnalise = ['analista','advogado','admin','consultor'].includes(role);
   // Cliente: analisar imóvel de leiloeiro ainda não integrado (fora da base)
   const [externoLink, setExternoLink] = useState('');
@@ -1725,7 +1743,10 @@ export default function Analise() {
               const isVendaDireta = /^venda_(direta|online)$/.test(imovelInicial?.modalidade || '');
               // Anexos capturados pelo scraper/on-demand (imoveis_leilao.anexos) —
               // fonte do Laudo de Avaliação e demais docs além do que o usuário subiu.
-              const anexosScrape = Array.isArray(imovelInicial?.anexos) ? imovelInicial.anexos : [];
+              // Prefere o que foi RELIDO do banco; cai na foto da navegação só enquanto a
+              // releitura não voltou (ou quando o id não é do acervo).
+              const anexosScrape = Array.isArray(anexosLote) ? anexosLote
+                : (Array.isArray(imovelInicial?.anexos) ? imovelInicial.anexos : []);
               const acharAnexo = (t) => docsLeiloeiro.find(x => x.tipo === t) || anexosScrape.find(x => x.tipo === t);
               const temLaudo = !!acharAnexo('laudo');
               const base = isVendaDireta ? ['regras_venda','matricula'] : ['edital','matricula'];
