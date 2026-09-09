@@ -4,6 +4,75 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 23 (09/09) — BAYIT: MODALIDADE E DOCUMENTO SEM CLASSIFICAÇÃO EM 77/78 (+ QUASE UM AUTOGOL DE ORÇAMENTO)
+
+**Pedido do dono, com print da própria tela do app**: o imóvel de Alphaville/Tamboré (o
+mesmo da Parte 22) aparecia como **"Venda Direta"** mesmo mostrando 1ª E 2ª praça na tela, e
+os **"Documentos"** vinham como 2 entradas genéricas iguais — parecendo o edital duplicado —
+**sem a matrícula**, apesar do número dela já constar no card. "Verifique se há outros lotes
+assim. Resolva e deixe em produção."
+
+**Escala real, medida antes de mexer em código**: 77 dos 78 imóveis BAYIT tinham os dois
+defeitos. Não era um imóvel — era o comportamento padrão da fonte inteira.
+
+**Causa raiz #1 — modalidade lida de um MENU, não do lote.** A página do Bayit tem um menu de
+navegação/filtro genérico ("Judiciais Extrajudiciais **Venda Direta** Residenciais…", "Tipo de
+leilão… Judicial Extrajudicial Particular **Venda direta**…") que lista TODAS as modalidades
+como opções de busca — e aparece em toda página do site. Como a extração antiga fazia
+`texto.match(/venda direta/i)` na página inteira, batia nesse menu em vez de na modalidade
+real do lote, sempre na mesma ordem de prioridade (venda_direta primeiro) — **99% do catálogo
+saía "Venda Direta" independente do que a página realmente dizia**. Fix: o feed já traz
+`pracas` (array estruturado, direto do XML) — **2 praças com datas distintas é a assinatura
+estrutural de leilão formal** (não venda direta); passou a decidir sozinho quando ≥2, só
+caindo pro texto (ainda contaminado, mas correto por eliminação) quando há praça única —
+caso genuinamente ambíguo mesmo, porque aí não há sinal estrutural nenhum pra usar.
+
+**Causa raiz #2 — o rótulo do documento mora no elemento-PAI, não na âncora.** O Bayit lista
+documentos como `<li> Edital do Leilão <a>Visualizar</a> <a>Baixar</a> </li>` — o texto que
+diz o que É o documento fica no `<li>`, e a âncora (que é o que `vasculharDocumentos()` lia)
+só tem "Visualizar"/"Baixar", sem palavra-chave nenhuma. Resultado: os 3 documentos de cada
+lote (Edital, Matrícula, Laudo — todos DIFERENTES) caíam juntos no genérico "anexo",
+indistinguíveis na tela — daí a impressão de "edital 2x, matrícula sumiu": eram documentos
+certos, só sem nome. Fix em `api/_doc-scan.js` (raiz compartilhada, protege scraper +
+enriquecimento sob demanda): `rotuloDoBloco()` busca a posição do `href` no HTML bruto e lê
+pra trás até o bloco (`<li>`/`<tr>`/`<div>`) mais próximo — só como FALLBACK, quando
+label+url já não classificaram nada (zero risco pra qualquer fonte cuja âncora já é
+descritiva). **Dois bugs no próprio fix, achados testando contra dado real antes de
+confiar**: (a) janela fixa de 400 chars não alcançava o bloco quando o ícone SVG entre os
+dois links do mesmo par era mais longo — o "d" do `<path>` vazava como nome do documento;
+trocado por busca direta do bloco (sem depender de tamanho de janela, capada em 3000 chars
+pra não agarrar bloco distante). (b) a fatia sempre cortava NO MEIO da tag `<a href="AQUI"`,
+e o fragmento sem fechamento não casava com o strip de tags — vazava lixo de atributo.
+
+**O quase-autogol: forçar reprocessamento sem medir o orçamento primeiro.** Corrigir os
+dados JÁ gravados (não só as próximas coletas) exigia reprocessar os 77 — mas a manutenção
+incremental existe justamente pra NUNCA reprocessar quem já tem `anexos` (ver Parte 20).
+Criado `BAYIT_FORCAR_TODOS=1` (uso pontual, desliga a exclusão só na rodada) e disparado
+**sem antes medir quantos requests o catálogo inteiro custaria contra o teto GLOBAL da
+conta** (que é compartilhado com todas as fontes, não só o sub-orçamento do Bayit). O teto
+global estourou no meio da lista — e como o upsert grava a linha INTEIRA a partir de campos
+default quando `FORCAR_TODOS` também ignora o cache local, os candidatos que vieram DEPOIS
+do estouro foram gravados com `anexos=null`, apagando dado bom que já existia (a mesma
+armadilha que a Parte 20 já tinha documentado como razão de existir da manutenção
+incremental — só que desta vez fui eu que passei por cima dela). **50 de 78 chegaram a ficar
+sem documento por uns minutos**, incluindo o próprio `bayit_694` que motivou o pedido.
+Recuperado em 2 rodadas: como a manutenção incremental normal (sem `FORCAR_TODOS`) trata
+`anexos=null` como "precisa reprocessar", bastou medir o orçamento certo desta vez (contando
+a reserva de 60 do propósito `rj`, que reduz o teto GLOBAL efetivo) e rodar de novo sem
+forçar — ela foi atrás exatamente dos que quebraram, sem tocar nos que já estavam bons.
+**Lição, pra não repetir**: `BAYIT_FORCAR_TODOS` (ou qualquer reprocessamento em massa) exige
+medir o custo do catálogo INTEIRO contra `brightdata_decisao(N, proposito)` ANTES de disparar
+— não em incrementos pequenos torcendo pra não faltar no meio.
+
+**Estado final** (verificado por query, não suposição): 77/78 com `anexos` corretamente
+classificados (matrícula/edital/laudo/regras quando existem — o 1 restante, `bayit_700`,
+tem **zero documentos na própria página do leiloeiro**, confirmado ao vivo, caso real e
+aceito). Modalidade: 43 `extrajudicial` (2+ praças, decisão estrutural) · 35 `venda_direta`
+(praça única — inclui casos genuínos de venda direta com desconto sobre avaliação, que o
+`price` vs a única praça do feed já revela sem precisar de texto nenhum).
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 22 (09/09) — BAYIT: CIDADE VINHA DO SLUG DE MARKETING, NÃO DO MUNICÍPIO — 13 IMÓVEIS INVISÍVEIS NA BUSCA (+ VALIDAÇÕES + HASTA ZERADO)
 
 **Pedido do dono, com print do site**: imóvel de Alphaville/Tamboré (R$72,8 milhões, o de maior
