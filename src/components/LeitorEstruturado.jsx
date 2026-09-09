@@ -47,7 +47,12 @@ export default function LeitorEstruturado({
   capitulos, titulo, onClose,
   itemId, itemTipo = 'ebook', supabase, userId,
 }) {
-  const [capituloIdx, setCapituloIdx] = useState(0);
+  // -1 = SUMÁRIO. O livro abre pelo sumário, como livro abre (09/09, achado do dono: "o sumário
+  // foi retirado da tela e não deve"). Ele nunca existiu como capítulo: a importação do .docx de
+  // 04/09 gravou os 8 capítulos de uma vez, começando na Introdução, e a lista de capítulos só
+  // existia atrás de um ícone que some junto com a barra. Quem já tem progresso salvo NÃO cai
+  // aqui — vai direto para onde parou, que é o comportamento que já valia.
+  const [capituloIdx, setCapituloIdx] = useState(-1);
   const [paginaAtual, setPaginaAtual] = useState(0);       // página DENTRO do capítulo atual
   const [totalPaginas, setTotalPaginas] = useState(1);     // recalculado a cada render relevante
   const [fontSize, setFontSize] = useState(19);
@@ -91,8 +96,14 @@ export default function LeitorEstruturado({
         } catch { /* segue do início */ }
       }
       if (cancel) return;
-      const alvo = Math.min(Math.max(1, salva), total) - 1;
-      if (alvo > 0) { setCapituloIdx(alvo); setRetomado(alvo + 1); setTimeout(() => setRetomado(0), 4000); }
+      // `salva > 0` é o que distingue "já leu" de "nunca abriu" — sem progresso o leitor fica no
+      // sumário (capituloIdx -1). Antes o `if (alvo > 0)` fundia os dois casos: quem parou no
+      // capítulo 1 e quem nunca abriu recebiam o mesmo tratamento.
+      if (salva > 0) {
+        const alvo = Math.min(salva, total) - 1;
+        setCapituloIdx(alvo);
+        if (alvo > 0) { setRetomado(alvo + 1); setTimeout(() => setRetomado(0), 4000); }
+      }
     })();
     return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,6 +155,7 @@ export default function LeitorEstruturado({
   // ── Salva progresso (por capítulo — debounce) ──────────────────────────────
   const salvarProgresso = useCallback(() => {
     if (!itemId || !total || !supabase || !userId) return;
+    if (capituloIdx < 0) return; // no sumário não há leitura para registrar — gravar 0 aqui APAGARIA o progresso de quem só abriu o índice
     clearTimeout(salvarRef.current);
     salvarRef.current = setTimeout(async () => {
       const pct = Math.max(0, Math.min(100, Math.round(((capituloIdx + (paginaAtual + 1) / totalPaginas) / total) * 100)));
@@ -162,13 +174,17 @@ export default function LeitorEstruturado({
   useEffect(() => { salvarProgresso(); return () => clearTimeout(salvarRef.current); }, [salvarProgresso]);
 
   const proxima = useCallback(() => {
+    if (capituloIdx < 0) { setCapituloIdx(0); return; }   // do sumário, avançar abre o 1º capítulo
     if (paginaAtual < totalPaginas - 1) { setPaginaAtual((p) => p + 1); return; }
     if (capituloIdx < total - 1) setCapituloIdx((c) => c + 1); // página 1 do próximo — natural, sem precisar medi-lo antes
   }, [paginaAtual, totalPaginas, capituloIdx, total]);
 
   const anterior = useCallback(() => {
+    if (capituloIdx < 0) return;                          // sumário é a primeira página do livro
     if (paginaAtual > 0) { setPaginaAtual((p) => p - 1); return; }
-    if (capituloIdx > 0) { irParaUltimaPaginaRef.current = true; setCapituloIdx((c) => c - 1); }
+    // Voltar da 1ª página do 1º capítulo devolve ao sumário: ele é folheável como qualquer página.
+    if (capituloIdx === 0) { setCapituloIdx(-1); return; }
+    irParaUltimaPaginaRef.current = true; setCapituloIdx((c) => c - 1);
   }, [paginaAtual, capituloIdx]);
 
   function irParaCapitulo(idx) {
@@ -223,7 +239,9 @@ export default function LeitorEstruturado({
         transform: chrome ? 'translateY(0)' : 'translateY(-110%)', transition: 'transform .22s',
       }}>
         <button onClick={onClose} style={btn} aria-label="Fechar leitor"><X size={20} /></button>
-        <button onClick={() => setMenuAberto((m) => !m)} style={btn} aria-label="Capítulos"><Menu size={19} /></button>
+        <button onClick={() => setMenuAberto((m) => !m)} style={{ ...btn, gap: 6, fontSize: 12.5, fontWeight: 700 }} aria-label="Sumário">
+          <Menu size={19} /><span style={{ display: larguraPagina > 420 ? 'inline' : 'none' }}>Sumário</span>
+        </button>
         <div style={{ flex: 1, minWidth: 0, color: cor.ui, fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo}</div>
         <button onClick={() => setFontSize((f) => Math.max(14, f - 1))} style={btn} aria-label="Diminuir fonte"><Minus size={17} /></button>
         <span style={{ color: cor.ui, fontSize: 11.5, minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{fontSize}</span>
@@ -236,7 +254,11 @@ export default function LeitorEstruturado({
         <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-start' }}
           onClick={(e) => { if (e.target === e.currentTarget) setMenuAberto(false); }}>
           <div style={{ width: 'min(320px, 84vw)', height: '100%', background: cor.papel, overflowY: 'auto', padding: '24px 16px', paddingTop: 'calc(24px + env(safe-area-inset-top, 0px))' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 800, color: cor.texto }}>Capítulos</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 800, color: cor.texto }}>Sumário</h3>
+            <button onClick={() => irParaCapitulo(-1)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer', marginBottom: 6, background: capituloIdx < 0 ? 'rgba(13,99,219,0.12)' : 'transparent', color: capituloIdx < 0 ? '#0D63DB' : cor.texto, fontSize: 13.5, fontWeight: capituloIdx < 0 ? 700 : 400 }}>
+              Início — página do sumário
+            </button>
             {capitulos.map((c, i) => (
               <button key={i} onClick={() => irParaCapitulo(i)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', marginBottom: 2, background: i === capituloIdx ? 'rgba(13,99,219,0.12)' : 'transparent', color: i === capituloIdx ? '#0D63DB' : cor.texto, fontSize: 13.5, fontWeight: i === capituloIdx ? 700 : 400 }}>
@@ -253,6 +275,35 @@ export default function LeitorEstruturado({
         padding: 'calc(58px + env(safe-area-inset-top, 0px)) 0 calc(58px + env(safe-area-inset-bottom, 0px))',
         cursor: 'pointer', userSelect: 'none',
       }}>
+        {capituloIdx < 0 && larguraPagina > 0 && (
+          // O SUMÁRIO É UMA PÁGINA DO LIVRO, não um menu sobreposto: mesma moldura de papel, mesma
+          // fonte, mesma sombra das outras páginas. É gerado a partir dos capítulos — não é texto
+          // importado — então renomear um capítulo atualiza o sumário sozinho, e ele nunca fica
+          // descrevendo um livro que mudou.
+          // `stopPropagation` porque a área de leitura inteira é um virador de página (terço
+          // esquerdo volta, direito avança): sem isso, tocar num capítulo do sumário ACERTA o
+          // capítulo e vira a página no mesmo toque — medido no navegador antes de subir.
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: larguraPagina + PAD_H * 2, height: alturaPagina + PAD_V * 2, position: 'relative', background: cor.papel, borderRadius: 6, boxShadow: '0 10px 40px rgba(0,0,0,0.35)' }}>
+            <div style={{ position: 'absolute', top: PAD_V, left: PAD_H, width: larguraPagina, height: alturaPagina, overflowY: 'auto', fontFamily: FONTE_LEITURA, color: cor.texto }}>
+              <div style={{ fontSize: Math.round(fontSize * 0.72), letterSpacing: 1.6, textTransform: 'uppercase', opacity: 0.55, marginBottom: 6 }}>Sumário</div>
+              <h2 style={{ margin: '0 0 22px', fontSize: Math.round(fontSize * 1.35), fontWeight: 600, lineHeight: 1.25 }}>{titulo}</h2>
+              {capitulos.map((c, i) => (
+                <button key={i} onClick={() => irParaCapitulo(i)}
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 10, width: '100%', textAlign: 'left',
+                    padding: '9px 0', background: 'none', border: 'none', borderBottom: '1px solid rgba(0,0,0,0.08)',
+                    cursor: 'pointer', color: cor.texto, fontFamily: FONTE_LEITURA, fontSize: Math.round(fontSize * 0.92) }}>
+                  <span style={{ opacity: 0.45, minWidth: 22, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+                  <span style={{ flex: 1, lineHeight: 1.4 }}>{c.titulo || '(sem título)'}</span>
+                </button>
+              ))}
+              <div style={{ marginTop: 20, fontSize: Math.round(fontSize * 0.7), opacity: 0.5, lineHeight: 1.6 }}>
+                Toque em um capítulo para começar por ele.
+              </div>
+            </div>
+          </div>
+        )}
+
         {cap && larguraPagina > 0 && (
           // 3 camadas de propósito: a de fora é só moldura (fundo/sombra, do tamanho da
           // página + margem); a do meio é o RECORTE (overflow:hidden) — largura/altura
@@ -297,14 +348,15 @@ export default function LeitorEstruturado({
         )}
       </div>
 
-      {/* Setas laterais (desktop) */}
-      {chrome && (
+      {/* Setas laterais (desktop) — escondidas no sumário: ali elas ficam POR CIMA das linhas de
+          capítulo no celular, e a lista já é a navegação da página. */}
+      {chrome && capituloIdx >= 0 && (
         <>
-          <button onClick={anterior} disabled={paginaAtual === 0 && capituloIdx === 0} aria-label="Página anterior"
+          <button onClick={anterior} disabled={capituloIdx < 0} aria-label="Página anterior"
             style={{ position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)', zIndex: 2,
               background: 'rgba(0,0,0,0.35)', border: 'none', borderRadius: 999, width: 40, height: 40,
               display: 'flex', alignItems: 'center', justifyContent: 'center', color: cor.ui,
-              cursor: (paginaAtual === 0 && capituloIdx === 0) ? 'default' : 'pointer', opacity: (paginaAtual === 0 && capituloIdx === 0) ? 0.25 : 1 }}>
+              cursor: capituloIdx < 0 ? 'default' : 'pointer', opacity: capituloIdx < 0 ? 0.25 : 1 }}>
             <ChevronLeft size={22} />
           </button>
           <button onClick={proxima} disabled={paginaAtual === totalPaginas - 1 && capituloIdx === total - 1} aria-label="Próxima página"
@@ -337,8 +389,8 @@ export default function LeitorEstruturado({
           <div style={{ height: '100%', width: `${pctCapitulo}%`, background: '#0D63DB', transition: 'width .25s' }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: cor.ui, fontSize: 12 }}>
-          <span style={{ fontWeight: 700 }}>Capítulo {capituloIdx + 1} de {total}</span>
-          <span style={{ opacity: 0.75 }}>Página {paginaAtual + 1} de {totalPaginas}</span>
+          <span style={{ fontWeight: 700 }}>{capituloIdx < 0 ? 'Sumário' : `Capítulo ${capituloIdx + 1} de ${total}`}</span>
+          <span style={{ opacity: 0.75 }}>{capituloIdx < 0 ? `${total} capítulos` : `Página ${paginaAtual + 1} de ${totalPaginas}`}</span>
         </div>
       </div>
     </div>
