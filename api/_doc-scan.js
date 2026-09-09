@@ -130,14 +130,21 @@ function absolutizar(href, baseUrl) {
 // bruto e lê pra trás até o início do bloco (<li>/<tr>/<div>) mais próximo; corta uma eventual
 // palavra de ação que tenha vazado do link IRMÃO (2º de um par Visualizar/Baixar do MESMO
 // item — o rótulo de verdade vem antes dela, não depois).
-function rotuloDoBloco(html, href, janela = 400) {
+function rotuloDoBloco(html, href, janela = 3000) {
   let i = html.indexOf(`href="${href}"`);
   if (i < 0) i = html.indexOf(`href='${href}'`);
   if (i < 0) i = html.indexOf(href);
   if (i < 0) return '';
-  const antes = html.slice(Math.max(0, i - janela), i);
-  const inicioBloco = Math.max(antes.lastIndexOf('<li'), antes.lastIndexOf('<tr'), antes.lastIndexOf('<div'));
-  let trecho = inicioBloco >= 0 ? antes.slice(inicioBloco) : antes;
+  // ACHADO AO VIVO (09/09): uma janela FIXA curta (400 chars) não bastava — o ícone SVG entre
+  // os dois links do mesmo par (Visualizar/Baixar) tem o "d" do <path> mais longo que isso, e
+  // pra o 2º link a janela cortava NO MEIO do dado do ícone, sem alcançar nem o </a> anterior
+  // nem o <li> — o "d" (números e letras de comando SVG) vazava direto como nome do documento.
+  // Busca o bloco (<li>/<tr>/<div>) mais próximo SEM depender de tamanho de janela — só limita
+  // a distância (3000 chars) pra não agarrar um bloco distante e sem relação.
+  const limite = Math.max(0, i - janela);
+  const inicioBloco = Math.max(html.lastIndexOf('<li', i), html.lastIndexOf('<tr', i), html.lastIndexOf('<div', i));
+  const inicio = inicioBloco >= limite ? inicioBloco : limite;
+  let trecho = html.slice(inicio, i);
   // A fatia sempre termina NO MEIO da tag <a …href="AQUI" — a abertura entrou sem o ">" de
   // fechamento, e esse resto não casa com /<[^>]+>/g (que exige fechar). Descarta o fragmento
   // de tag aberta no fim antes de decodificar, senão ele vaza pro texto ("vazio.a class=…").
