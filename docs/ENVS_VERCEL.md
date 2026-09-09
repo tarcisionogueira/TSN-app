@@ -99,13 +99,36 @@ Verificar o status da Verificação de Negócio e do App Review antes de supor o
 | `IG_APP_SECRET` / `IG_APP_SECRET_INSTAGRAM` | Valida `X-Hub-Signature-256` de cada entrega da Meta — o webhook aceita qualquer uma das duas e loga qual fechou (ver comentário em `api/instagram-webhook.js`) |
 | `IG_VERIFY_TOKEN` | Responde o `hub.challenge` na verificação do webhook — o mesmo valor digitado no painel da Meta ao cadastrar a URL |
 
-Previstas para as etapas seguintes (ainda sem código que as leia):
+## ✅ CRIADAS — `IG_PAGE_TOKEN` / `IG_USER_ID`, para ENVIAR (09/09)
 
 | Nome | Para quê |
 |---|---|
-| `IG_PAGE_TOKEN` | Token long-lived para **ENVIAR** mensagens (Send API) |
-| `IG_USER_ID` | Id da conta profissional. **Já medido: `17841400563334157`** (`tarcisionogueiraleiloes`) |
-| `IG_BOT_ATIVO` | `1`/`0` — mata a resposta automática sem deploy. **Não governa a escuta**, de propósito |
+| `IG_PAGE_TOKEN` | Token de longa duração (~60 dias) para a Send API (`api/_instagram-envio.js`) |
+| `IG_USER_ID` | **`28367331459563737`** — ver correção abaixo, não é mais o valor antigo |
+| `IG_BOT_ATIVO` | `1`/`0` — mata a resposta automática sem deploy. **Não governa a escuta**, de propósito. Ainda não criada — segue prevista |
+
+⚠️ **`IG_USER_ID` mudou de valor — o `17841400563334157` registrado em 01/09 media a conta pelo
+caminho ERRADO.** A Meta tem dois IDs para a MESMA conta: um pelo vínculo com Página do
+Facebook (`1784...`, o antigo) e outro pelo Instagram Login direto (`2836...`). Como o app
+"BidPro - Atendimento-IG" (`911295054971510` — é um app PRÓPRIO, distinto de "BidPro -
+Atendimento", `1533306125147104`; não aparece em todo seletor de app, mas existe) usa Instagram
+Login, é o ID `2836...` que a Send API espera — confirmado batendo `/me` e o Depurador de Token
+da própria Meta contra o token gerado. Usar o ID antigo teria dado erro silencioso ou recusa da
+API mesmo com token e secret corretos.
+
+⚠️ **O botão "Gerar token" do painel atual da Meta (v26.0) já entrega token de LONGA DURAÇÃO
+direto — não um de 1h.** Achado só depois de gastar várias rodadas tentando `GET
+graph.instagram.com/access_token?grant_type=ig_exchange_token` sobre um token que já não
+precisava de troca: a Meta devolvia `"Session key invalid"` (código 452) toda vez, com QUALQUER
+secret, porque a operação em si não fazia sentido para esse token. O Depurador
+(`developers.facebook.com/tools/debug/accesstoken/`) resolveu de vez: `Válido: Verdadeiro`,
+expira em ~2 meses. **Antes de gerar um token novo, sempre passar pelo Depurador primeiro** —
+ele mostra em segundos se já é de longa duração, evitando repetir esta novela.
+
+⚠️ **Ele expira (~60 dias da geração) e precisa ser renovado antes disso**, via
+`GET graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=<TOKEN_ATUAL>`
+(token precisa ter pelo menos 24h). Nenhuma automação faz isso ainda — é manual, e sem aviso
+programado. Achado a registrar como pendência, não resolvido nesta sessão.
 
 **Como conferir se a escuta está configurada, sem segredo nenhum:**
 `GET /api/instagram-webhook` devolve `{ configurado: true|false }`.
