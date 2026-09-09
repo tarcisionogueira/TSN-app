@@ -19,7 +19,17 @@
       "mcp__github__create_pull_request",
       "mcp__github__update_pull_request",
       "mcp__github__actions_list",
-      "mcp__github__get_job_logs"
+      "mcp__github__get_job_logs",
+      "mcp__github__actions_get",
+      "mcp__Supabase__list_projects",
+      "Bash(npm run verificar:padroes*)",
+      "Bash(npm run verificar:sintaxe*)",
+      "Bash(npm run build*)",
+      "Bash(npm run testar:mensagem-grupo*)",
+      "Bash(npm run testar:instagram*)",
+      "Bash(npm run testar:ig-envio*)",
+      "Bash(git checkout main*)",
+      "Bash(git fetch origin main*)"
     ],
     "ask": [
       "mcp__Vercel__deploy_to_vercel",
