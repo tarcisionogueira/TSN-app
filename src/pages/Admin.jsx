@@ -9681,7 +9681,7 @@ function PrestacaoContasTab() {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{perf.nome || '—'} · {fmtBRL(Math.abs(p.valor))}</div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>CNPJ: {perf.cnpj || '—'} · {perf.razao_social || 'razão social não informada'}</div>
-                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>PIX PJ: {perf.pj_chave_pix || '—'} · KYC: {perf.identidade_validada ? '✓ verificado' : '✕ pendente'} · pedido {new Date(p.criado_em).toLocaleDateString('pt-BR')}</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>PIX PJ (destino deste saque, já cadastrado pelo parceiro): {perf.pj_chave_pix || '—'} · KYC: {perf.identidade_validada ? '✓ verificado' : '✕ pendente'} · pedido {new Date(p.criado_em).toLocaleDateString('pt-BR')}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button onClick={() => verDocsPJ(p.user_id)} style={{ padding: '7px 12px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{dp ? 'Ocultar docs' : 'Ver documentos'}</button>
@@ -9741,7 +9741,7 @@ function PrestacaoContasTab() {
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#059669', marginTop: 2 }}>{fmtBRL(Math.abs(Number(p.valor)))}</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                      PIX: {p.perfis?.chave_pix || '—'} · {new Date(p.criado_em).toLocaleString('pt-BR')}
+                      Recebe em (PIX já cadastrado pelo usuário): {p.perfis?.chave_pix || '—'} · {new Date(p.criado_em).toLocaleString('pt-BR')}
                     </div>
                     <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: '1px 8px', background: p.elegivel_hoje ? '#dcfce7' : '#fef9c3', color: p.elegivel_hoje ? '#15803d' : '#a16207' }}>
                       {p.elegivel_hoje ? 'Elegível nesta sexta' : 'Próxima sexta'}

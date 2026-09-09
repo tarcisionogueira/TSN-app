@@ -50,16 +50,26 @@ const STATUS_ASSIN = {
   gratis:   { label: 'Grátis',      cor: '#7c3aed', bg: '#faf5ff' },
 };
 
+// ACHADO (09/09, dono: "mostrando inadimplentes em um [card] e no outro não"): o gate de
+// `pago` (por role) tinha que vir DEPOIS da checagem de `inadimplente_desde`, não antes.
+// `api/_webhook-core.js` (processarVencido/processarRecusado) grava `inadimplente_desde` e
+// REBAIXA o role pra 'explorador' na MESMA escrita — então, no banco real, ninguém tem role
+// pago E inadimplente_desde ao mesmo tempo (confirmado: dos perfis com inadimplente_desde,
+// 0 ficam com role ainda pago). Checar `pago` primeiro fazia essa pessoa cair direto em
+// 'gratis' sem NUNCA olhar a dívida — o branch 'atraso'/'vencida' era código morto. O card
+// "Inadimplentes" da Síntese (RPC financeiro_resumo, `count(*) where inadimplente_desde is
+// not null`, sem gate de role) contava a mesma pessoa — daí o card mostrando 1 e a aba
+// Assinaturas mostrando 0 em "Em atraso"/"Vencida" (a pessoa aparecia como "Grátis").
 function statusAssinante(p) {
   if (p.ativo === false) return 'cancelada';
-  // O TIER pago é a fonte de verdade no `role` (top2/assessorado/clube e anuais); a coluna
-  // `plano` hoje fica sempre 'gratuito' (default legado). Considera pago por role OU plano.
-  const pago = PLANOS_PAGOS.includes(p.role) || PLANOS_PAGOS.includes(p.plano);
-  if (!pago) return 'gratis'; // Explorador / sem plano pago (não é assinatura ativa)
   if (p.inadimplente_desde) {
     const dias = Math.floor((Date.now() - new Date(p.inadimplente_desde).getTime()) / 86400000);
     return dias <= DIAS_ATRASO_MAX ? 'atraso' : 'vencida';
   }
+  // O TIER pago é a fonte de verdade no `role` (top2/assessorado/clube e anuais); a coluna
+  // `plano` hoje fica sempre 'gratuito' (default legado). Considera pago por role OU plano.
+  const pago = PLANOS_PAGOS.includes(p.role) || PLANOS_PAGOS.includes(p.plano);
+  if (!pago) return 'gratis'; // Explorador / sem plano pago (não é assinatura ativa) e sem dívida
   return 'em_dia';
 }
 
