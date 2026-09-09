@@ -3,6 +3,7 @@ import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { acessoAssessoria } from '../lib/assessoria-acesso';
 import { useAuth } from '../contexts/AuthContext';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../utils/gtag';
@@ -441,8 +442,11 @@ export default function Checkout() {
 
   // Assessoria (por arrematação) só pode ser contratada por assinante Investidor
   // Pro ou acima. Explorador/deslogado veem um upsell para assinar o Pro antes.
-  const ROLES_PRO_OU_ACIMA = ['top2', 'assessorado', 'clube', 'admin', 'analista', 'advogado', 'suporte'];
-  if (planoKey === 'assessorado' && !ROLES_PRO_OU_ACIMA.includes(role)) {
+  // A regra saiu daqui para src/lib/assessoria-acesso.js em 09/09, junto com a da tela de
+  // Planos e a do servidor. A lista literal que estava aqui tinha 'top2' mas NÃO 'top2_anual':
+  // quem assinava o Investidor Pro ANUAL era mandado de volta para "assine o Pro". A regex
+  // compartilhada (^top2) cobre os dois — e é o tipo de divergência que só some com fonte única.
+  if (planoKey === 'assessorado' && acessoAssessoria(role) === 'requer_pro') {
     // Regra ABSOLUTA (dono): assessoria só para Investidor Pro. Em vez de barrar num beco,
     // a tela é TRANSPARENTE sobre a regra e as DUAS cobranças, e conduz: assina o Pro e volta
     // direto para a assessoria (?apos=assessorado). Reaproveita os checkouts já testados.

@@ -7,6 +7,8 @@
  * Retorna { podeContratar: bool, motivo }. Motivos:
  *   'ok' | 'nova_arrematacao' | 'assessoria_em_andamento' | 'clube_incluido' | 'requer_pro'
  */
+import { acessoAssessoria, ROLES_EQUIPE_ASSESSORIA } from '../src/lib/assessoria-acesso.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 
@@ -17,9 +19,12 @@ function sb(path) {
 }
 
 export async function podeContratarAssessoria({ userId, email, role }) {
-  if (/^clube/.test(role || '')) return { podeContratar: false, motivo: 'clube_incluido' };
-  if (['admin', 'analista', 'advogado', 'suporte'].includes(role)) return { podeContratar: true, motivo: 'ok' };
-  if (!/^(top2|assessorado)/.test(role || '')) return { podeContratar: false, motivo: 'requer_pro' };
+  // O teste de PAPEL mora em src/lib/assessoria-acesso.js — a mesma função que a tela de Planos
+  // e o Checkout usam, para as três não poderem divergir. Aqui segue o que só o banco sabe.
+  const acesso = acessoAssessoria(role);
+  if (acesso === 'incluido') return { podeContratar: false, motivo: 'clube_incluido' };
+  if (acesso === 'requer_pro') return { podeContratar: false, motivo: 'requer_pro' };
+  if (ROLES_EQUIPE_ASSESSORIA.includes(String(role || ''))) return { podeContratar: true, motivo: 'ok' };
 
   // Contrato de assessoria VIVO (aguardando/assinado). Casa por criado_por OU assinante_email
   // (quando a EQUIPE emite, criado_por é o staff).

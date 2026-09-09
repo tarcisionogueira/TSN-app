@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, Star, ArrowRight, Share2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
+import { acessoAssessoria } from '../lib/assessoria-acesso';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { usePlanos } from '../contexts/PlanosContext';
@@ -379,7 +380,24 @@ export default function Planos() {
             {ativoPlano('assessorado') && (
             <div id="plano-assessorado" style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
               <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#fff7ed', color: '#c2410c', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Assessoria</div>
-              <PrecoComercial planoKey="assessorado" />
+              {/* VALORES LIMITADOS PARA QUEM NÃO É PRO (09/09, regra do dono). Antes o explorador
+                  via o preço cheio e um botão "Contratar assessoria →" que levava a um checkout
+                  que só ali dizia "vire Pro primeiro" — a exigência aparecia uma tela depois da
+                  promessa. O gate por papel é o MESMO do servidor (src/lib/assessoria-acesso). */}
+              {acessoAssessoria(role) === 'requer_pro' ? (
+                <div style={{ marginBottom: 18, padding: '16px 18px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+                    Exclusivo para Investidor Pro
+                  </div>
+                  <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.6 }}>
+                    Contratação única por arrematação, parcelável. Os valores e as condições ficam
+                    visíveis para quem é <strong>Investidor Pro</strong> — que é também o requisito
+                    para contratar.
+                  </div>
+                </div>
+              ) : (
+                <PrecoComercial planoKey="assessorado" />
+              )}
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.7 }}>
                 Assessoria completa para 1 arrematação, da análise do imóvel até a imissão de posse. Acesso à plataforma por 12 meses, extensível até a conclusão.
@@ -391,12 +409,22 @@ export default function Planos() {
                   contratar a PRÓXIMA operação — o Checkout valida se a atual já teve o
                   arremate sinalizado. Leilão Club não contrata avulsa (já tem ilimitada). */}
               {(() => {
-                const ehClube = user && /^clube/.test(role || '');
+                const acesso = acessoAssessoria(role);
+                const ehClube = acesso === 'incluido';
+                const precisaPro = acesso === 'requer_pro';
                 const jaAssessorado = atual('assessorado');
+                // Quem não é Pro vai para o CHECKOUT DO PRO já marcado para voltar à assessoria
+                // depois (?apos=assessorado) — o mesmo caminho que o Checkout usa. Deslogado
+                // passa pelo login primeiro, sem perder o destino.
+                const irParaPro = () => nav(user
+                  ? '/checkout?plano=top2&apos=assessorado'
+                  : `/login?next=${encodeURIComponent('/checkout?plano=top2&apos=assessorado')}`);
                 return (
-                  <button onClick={() => !ehClube && ir('assessorado')} disabled={ehClube}
+                  <button onClick={() => { if (ehClube) return; precisaPro ? irParaPro() : ir('assessorado'); }} disabled={ehClube}
                     style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: ehClube ? '#f1f5f9' : '#d97706', color: ehClube ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: ehClube ? 'default' : 'pointer', boxShadow: ehClube ? 'none' : '0 4px 14px rgba(217,119,6,0.35)' }}>
-                    {ehClube ? 'Incluído no seu plano' : jaAssessorado ? 'Contratar nova arrematação →' : 'Contratar assessoria →'}
+                    {ehClube ? 'Incluído no seu plano'
+                      : precisaPro ? 'Seja Investidor Pro para contratar →'
+                      : jaAssessorado ? 'Contratar nova arrematação →' : 'Contratar assessoria →'}
                   </button>
                 );
               })()}
