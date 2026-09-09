@@ -170,6 +170,28 @@ function slugCidadeUf(url) {
   return { cidade, uf };
 }
 
+// ACHADO AO VIVO (09/09, dono: imóvel do Alphaville/Tamboré "não vem" na busca): o lote
+// EXISTE no acervo (ativo, com anexos, valor batendo com o site) — o problema é geográfico,
+// não de coleta. Bayit usa bairro/distrito informal na URL quando o lote fica numa região
+// conhecida ("alphaville-sp"), não o MUNICÍPIO legal — e Alphaville não é cidade própria,
+// é distrito que atravessa Santana de Parnaíba E Barueri. `cidade='Alphaville'` não bate com
+// nenhum município real: a busca do site filtra cidade_norm por igualdade exata contra uma
+// lista de municípios de verdade (src/data/cidades.js), então nenhuma busca por "Santana de
+// Parnaíba" (nem por "Alphaville", que nem está na lista) jamais encontra este lote — ele fica
+// permanentemente invisível, mesmo ativo e correto no banco.
+// O feed traz o endereço completo (`addr1`) com o MUNICÍPIO real por extenso — só não é usado
+// pra cidade/UF hoje. Extrai daqui como fonte preferencial (mais confiável que o slug de
+// marketing da URL); cai pro slug só quando o endereço não bate no formato esperado
+// ("..., <Cidade> - <UF>, <CEP>") — nunca pior que o comportamento atual, só corrige o caso
+// em que o slug mente.
+function cidadeUfDoEndereco(addr1) {
+  const m = String(addr1 || '').match(/,\s*([A-ZÀ-Ý][A-Za-zà-ÿÀ-Ý0-9.'\-\s]+?)\s*-\s*([A-Z]{2})\s*,\s*\d{5}/);
+  if (!m) return null;
+  const uf = m[2].toUpperCase();
+  if (!UFS_BR.has(uf)) return null;
+  return { cidade: m[1].trim(), uf };
+}
+
 function inferirTipo(txt = '') {
   const t = txt.toLowerCase();
   if (/apartament|apto|flat|kitnet|studio|unidade aut/.test(t)) return 'apartamento';
@@ -361,6 +383,11 @@ async function main() {
   let enriquecidos = 0;
   for (const it of candidatos) {
     const su = slugCidadeUf(it.url);
+    // Endereço (município legal) prevalece sobre o slug (bairro/distrito de marketing) quando
+    // dá pra ler — ver comentário de cidadeUfDoEndereco(). su continua sendo o filtro de
+    // categoria (já aplicado acima); aqui só decide QUAL cidade/uf gravar.
+    const suEndereco = cidadeUfDoEndereco(it.addr1);
+    const cidadeUf = suEndereco || su;
     const ratesPositivos = it.pracas.map((p) => p.rate).filter((v) => v > 0);
     const valorAval = it.price || (ratesPositivos.length ? Math.max(...ratesPositivos) : 0);
     const valorMinimo = ratesPositivos.length ? Math.min(...ratesPositivos) : valorAval;
@@ -373,8 +400,8 @@ async function main() {
       titulo: (it.nome || `Imóvel Portal Bayit ${it.id}`).slice(0, 180),
       tipo: inferirTipo(it.nome || ''),
       modalidade: 'extrajudicial', // default; enriquecerDetalhe() ajusta com o texto real do lote
-      estado: su.uf,
-      cidade: su.cidade,
+      estado: cidadeUf.uf,
+      cidade: cidadeUf.cidade,
       bairro: it.bairro || null,
       endereco: it.addr1 || null,
       valor_avaliacao: valorAval,
