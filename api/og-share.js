@@ -82,20 +82,47 @@ export default async function handler(req, res) {
       // select) e já são públicos na página `/leilao/:id` deste mesmo lote desde 02/08 —
       // nenhuma exposição nova. Endereço, edital, matrícula e análise seguem fora, como manda
       // a decisão de 08/08. (14/08, pedido do dono.)
-      const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=titulo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto`);
+      const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=titulo,cidade,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,data_leilao,data_leilao_2,link_foto`);
       const im = rows?.[0];
       if (im) {
         titulo = `${im.titulo || 'Imóvel em leilão'} — BidPro Brasil`;
+        // ORDEM É COMERCIAL, NÃO ALFABÉTICA (09/09, pedido do dono: "isso dá atratividade
+        // comercial para ofertar"). O WhatsApp corta a descrição do cartão por volta de
+        // 100-120 caracteres no celular, e a versão anterior abria por bairro/cidade e área —
+        // então o DESCONTO, que é o gancho, e os dois valores caíam justamente na parte
+        // cortada. Aqui o que decide o clique vem primeiro: desconto → lance → avaliação →
+        // onde. Área e data da praça continuam, no fim, para quem abre o cartão inteiro.
         const partes = [];
+        // O DESCONTO TEM QUE SE REFERIR AO PREÇO QUE O CARTÃO IMPRIME AO LADO DELE (09/09).
+        // Medindo em dado real antes de subir: 3.461 lotes ativos (13% do acervo, todos CEF)
+        // têm `desconto_percentual > 0` com `valor_minimo >= valor_avaliacao` — pareados com a
+        // 1ª praça o cartão abriria com "40% abaixo da avaliação" colado em dois números que
+        // desmentem isso. Só que o desconto NÃO está errado: em 3.461 de 3.461 ele bate com a
+        // 2ª praça (`valor_minimo_2`), que está abaixo da avaliação nos 3.461. O campo mede a
+        // 2ª praça e era exibido com o nome da 1ª — a forma nº 10 do CLAUDE.md.
+        // Então o cartão usa a MESMA regra do `gerar-analise` (menor lance entre as praças) e
+        // recalcula o percentual a partir dele: promessa e prova passam a falar do mesmo preço.
+        const vMin = Number(im.valor_minimo) || 0;
+        const vMin2 = Number(im.valor_minimo_2) || 0;
+        const vAval = Number(im.valor_avaliacao) || 0;
+        const vLance = vMin2 > 0 && (vMin <= 0 || vMin2 < vMin) ? vMin2 : vMin;
+        const d = vAval > 0 && vLance > 0 && vLance < vAval ? Math.round((1 - vLance / vAval) * 100) : 0;
+        if (d > 0) partes.push(`${d}% abaixo da avaliação`);
+        const lance = fmtBRL(vLance);
+        if (lance) partes.push(`${vLance === vMin2 && vMin2 !== vMin ? '2ª praça' : 'lance'} ${lance}`);
+        // Avaliação IDÊNTICA ao lance não é avaliação, é eco — imprimir isso como "avaliação"
+        // seria dar ao valor que faltou o nome do valor que se procurava.
+        const aval = vAval !== vLance ? fmtBRL(im.valor_avaliacao) : null;
+        if (aval) partes.push(`avaliação ${aval}`);
         const ondeE = [im.bairro, im.cidade].filter(Boolean).join(', ');
         if (ondeE) partes.push(`${ondeE}${im.estado ? '/' + im.estado : ''}`);
         if (Number(im.area_m2) > 0) partes.push(`${Math.round(im.area_m2)} m²`);
-        const lance = fmtBRL(im.valor_minimo); if (lance) partes.push(`lance a partir de ${lance}`);
-        const aval = fmtBRL(im.valor_avaliacao); if (aval) partes.push(`avaliação ${aval}`);
-        const d = Math.round(Number(im.desconto_percentual) || 0); if (d > 0) partes.push(`${d}% abaixo da avaliação`);
-        const praca = String(im.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (praca) partes.push(`praça em ${praca[3]}/${praca[2]}/${praca[1]}`);
-        desc = `${partes.join(' · ') || 'Imóvel em leilão'} · Fotos, análise de viabilidade e documentos na BidPro Brasil.`;
+        // A data tem que ser a da praça cujo VALOR está no cartão, pelo mesmo motivo do desconto:
+        // imprimir a data da 1ª ao lado do lance da 2ª é o mesmo erro, uma coluna adiante.
+        const dataDoLance = vLance === vMin2 && vMin2 !== vMin ? im.data_leilao_2 : im.data_leilao;
+        const praca = String(dataDoLance || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (praca) partes.push(`praça ${praca[3]}/${praca[2]}`);
+        desc = partes.length ? partes.join(' · ') : 'Imóvel em leilão com análise de viabilidade na BidPro Brasil.';
         if (/^https?:\/\//.test(im.link_foto || '')) img = im.link_foto;
       }
     } else if ((tipo === 'curso' || tipo === 'ebook') && idOk) {
