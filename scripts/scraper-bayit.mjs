@@ -331,7 +331,10 @@ async function main() {
       ativo: true,
       latitude: it.lat ? Number(it.lat) : null,
       longitude: it.lon ? Number(it.lon) : null,
-      cep: it.cep || null,
+      // cep é varchar(8) no banco (mesmo padrão dos outros coletores: só dígitos, sem
+      // hífen) — o feed vem formatado "67110-470" (9 chars), que estourava a coluna e
+      // derrubava o upsert inteiro (achado ao vivo: "value too long for type varchar(8)").
+      cep: it.cep ? it.cep.replace(/\D/g, '').slice(0, 8) || null : null,
       viavel: temDesconto ? (1 - valorMinimo / valorAval) >= 0.3 : null,
       score_viabilidade: temDesconto ? Math.min(100, Math.round((1 - valorMinimo / valorAval) * 150)) : 30,
       desconto_percentual: temDesconto ? Math.round((1 - valorMinimo / valorAval) * 100) : null,
