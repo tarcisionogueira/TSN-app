@@ -398,7 +398,7 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const uf = String(imDb.estado).toUpperCase();
-    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng&limit=800`);
+    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng,bairro_norm&limit=800`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
     const limpas = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
@@ -411,7 +411,26 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
     const pond = referenciaPonderada(limpas.map(a => ({ valor_m2: Number(a.valor_m2), lat: a.lat, lng: a.lng })),
       { lat: imDb.latitude, lng: imDb.longitude });
     const venda_m2 = (pond && pond.valor > 0) ? pond.valor : Math.round(pct(0.50));
-    return { venda_m2, bandas: { popular: Math.round(pct(0.25)), medio: Math.round(pct(0.50)), alto: Math.round(pct(0.75)) }, n: vals.length, ponderacao: pond || null };
+    // DE QUAIS BAIRROS ESSA MÉDIA É FEITA (09/09, achado do dono: "o mercadológico deu muito
+    // fora"). O apartamento de Coqueiral de Itaparica saiu a R$ 10.000/m² porque as 39 amostras
+    // de Vila Velha na base eram 25 de Itapuã e 14 da Praia da Costa — os dois bairros de praia
+    // mais caros da cidade — e NENHUMA de Coqueiral. O rótulo "nível cidade" era honesto e ainda
+    // assim insuficiente: numa cidade com orla, "cidade" pode significar "só a orla". A
+    // ponderação por proximidade não salva, porque não há sinal nenhum da faixa do imóvel.
+    const porBairro = new Map();
+    for (const a of limpas) {
+      const b = String(a.bairro_norm || '').trim();
+      if (!b) continue;
+      const cur = porBairro.get(b) || { n: 0, soma: 0 };
+      cur.n += 1; cur.soma += Number(a.valor_m2) || 0;
+      porBairro.set(b, cur);
+    }
+    const bairros = [...porBairro.entries()]
+      .map(([bairro, v]) => ({ bairro, n: v.n, m2: Math.round(v.soma / v.n) }))
+      .sort((x, y) => y.n - x.n).slice(0, 6);
+    const alvoNorm = _norm(imDb.bairro || '');
+    const temBairroDoImovel = !!alvoNorm && bairros.some((b) => _norm(b.bairro) === alvoNorm);
+    return { venda_m2, bandas: { popular: Math.round(pct(0.25)), medio: Math.round(pct(0.50)), alto: Math.round(pct(0.75)) }, n: vals.length, ponderacao: pond || null, bairros, temBairroDoImovel };
   } catch { return null; }
 }
 async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
@@ -436,7 +455,7 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
     // com dado da cidade): n_amostras/fonte sempre presentes, e o NÍVEL declara o escopo
     // REAL do número — o caminho central usa amostras da CIDADE (ponderadas por proximidade),
     // então nunca herda o rótulo 'bairro'/'grid' do RPC (prometia granularidade que não tem).
-    if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: 'cidade', bandas: central.bandas, n_amostras: central.n, fonte: 'relatorio' };
+    if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: 'cidade', bandas: central.bandas, n_amostras: central.n, fonte: 'relatorio', bairros: central.bairros, temBairroDoImovel: central.temBairroDoImovel };
     if (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) return j;
     // ÚLTIMO nível do cascata: ESTADO (referência ampla majorada) quando a cidade não tem base
     // própria — dá um valor de referência em vez de nada (deixa EXPLÍCITO que é do estado).
@@ -2868,6 +2887,34 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       mercado.fonteEstimativa = 'indice_bidpro';
       const rotSeg = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx;
       mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${rotSeg} para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa usa o Índice BidPro (base própria por microrregião e segmento, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
+
+      // DE ONDE VEIO A MÉDIA, QUANDO O BAIRRO DO IMÓVEL NÃO ESTÁ NELA (09/09, achado do dono:
+      // "o mercadológico deu muito fora"). "Nível cidade" é rótulo honesto e insuficiente: em
+      // Vila Velha as 39 amostras eram 25 de Itapuã e 14 da Praia da Costa — a orla — e o imóvel
+      // fica em Coqueiral de Itaparica. Dizer QUAIS bairros formaram a média é a diferença entre
+      // um número que o cliente pode conferir e um número em que ele só pode acreditar.
+      const bairrosIdx = Array.isArray(mercado.indiceBidPro?.bairros) ? mercado.indiceBidPro.bairros : [];
+      if (bairrosIdx.length && mercado.indiceBidPro?.temBairroDoImovel === false) {
+        mercado.indiceOutrosBairros = true;
+        const lista = bairrosIdx.map((b) => `${b.bairro} (${b.n})`).join(', ');
+        mercado.comentario += ` ATENÇÃO: a base não tem amostra do bairro ${imDb?.bairro || 'do imóvel'} — a referência vem de ${lista}. Se esses bairros forem de padrão diferente, o valor acima está deslocado na mesma proporção.`;
+      }
+
+      // O NÚMERO PRECISA SER CONFRONTADO COM A AVALIAÇÃO DO PRÓPRIO LOTE. O relatório publicou
+      // R$ 467.100 para um apartamento cuja avaliação judicial era R$ 308.000 (52% acima) sem
+      // dizer uma palavra. A avaliação não é verdade absoluta — costuma ser conservadora ou
+      // antiga —, mas divergência grande é sinal de que a referência não descreve este imóvel, e
+      // esconder isso é entregar confiança que o dado não tem.
+      const avalM2 = avalDb > 0 && areaSeg > 0 ? avalDb / areaSeg : 0;
+      if (avalM2 > 0 && valorMercado > 0) {
+        const desvio = Math.round((valorMercado / avalDb - 1) * 100);
+        if (Math.abs(desvio) >= 30) {
+          mercado.divergenciaAvaliacao = {
+            pct: desvio, avaliacao: avalDb, avaliacaoM2: Math.round(avalM2), indiceM2: Math.round(indiceVenda),
+          };
+          mercado.comentario += ` A estimativa ficou ${desvio > 0 ? `${desvio}% ACIMA` : `${Math.abs(desvio)}% ABAIXO`} da avaliação do lote (R$ ${Math.round(avalDb).toLocaleString('pt-BR')}, equivalente a R$ ${Math.round(avalM2).toLocaleString('pt-BR')}/m²). Trate o valor como FAIXA, não como ponto, até haver comparável ativo.`;
+        }
+      }
     }
 
     // "NÃO SE REPITA" (incidente BH 28/07): busca web INSTÁVEL (timeout/abort) E o Índice NÃO

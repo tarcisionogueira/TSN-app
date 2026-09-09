@@ -3805,6 +3805,33 @@ export default function Analise() {
                   <span style={{ marginLeft:'auto', fontSize:11, color:'#0D63DB', fontWeight:700 }}>ver detalhes ▾</span>
                 </summary>
                 <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'14px' }}>
+                  {/* DE ONDE VEIO A MÉDIA, E COMO ELA SE COMPARA À AVALIAÇÃO (09/09, achado do
+                      dono: "o mercadológico deu muito fora"). O apartamento de Coqueiral saiu a
+                      R$ 467.100 porque as 39 amostras de Vila Velha na base eram 25 de Itapuã e
+                      14 da Praia da Costa — a orla — e nenhuma do bairro dele. "Nível cidade"
+                      era rótulo honesto e insuficiente. Aqui a tela diz QUAIS bairros formaram a
+                      média e quanto o número se afasta da avaliação do próprio lote. */}
+                  {(mercado.indiceOutrosBairros || mercado.divergenciaAvaliacao) && (
+                    <div style={{ padding:'11px 14px', borderRadius:10, background:'#fff7ed', border:'1px solid #fdba74' }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:'#9a3412', marginBottom:5 }}>
+                        Leia este valor como FAIXA, não como preço
+                      </div>
+                      {mercado.indiceOutrosBairros && (
+                        <div style={{ fontSize:11.5, color:'#7c2d12', lineHeight:1.6, marginBottom: mercado.divergenciaAvaliacao ? 6 : 0 }}>
+                          A nossa base <strong>não tem amostra do bairro deste imóvel</strong>. A referência foi formada
+                          por {(mercado.indiceBidPro?.bairros || []).map(b => `${b.bairro} (${b.n})`).join(', ')}.
+                          Se esses bairros forem de padrão diferente, o valor está deslocado na mesma proporção.
+                        </div>
+                      )}
+                      {mercado.divergenciaAvaliacao && (
+                        <div style={{ fontSize:11.5, color:'#7c2d12', lineHeight:1.6 }}>
+                          A estimativa ficou <strong>{Math.abs(mercado.divergenciaAvaliacao.pct)}% {mercado.divergenciaAvaliacao.pct > 0 ? 'acima' : 'abaixo'}</strong> da
+                          avaliação do lote ({moedaOuTraco(mercado.divergenciaAvaliacao.avaliacao)} · R$ {fmt(mercado.divergenciaAvaliacao.avaliacaoM2)}/m²),
+                          contra R$ {fmt(mercado.divergenciaAvaliacao.indiceM2)}/m² do índice.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {/* RECONCILIAÇÃO (09/09, achado do dono: relatório com "0 amostras" aqui e um
                       valor de mercado classificado, sem explicação visível no mesmo painel).
                       Zero amostras diretas + fonteEstimativa='indice_bidpro' é o fallback já
