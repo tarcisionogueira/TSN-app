@@ -11140,6 +11140,12 @@ function LiveTab() {
   // trava o botão durante o disparo, que é o único momento em que dedo duplo custa caro.
   const [previa, setPrevia] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  // CONVITE PRO GRUPO, POR LINHA (09/09, pedido do dono). O texto NÃO é montado aqui: vem pronto
+  // de /api/admin-whatsapp-fila?modo=grupo&todos=1, que é o mesmo montador da tela de disparo em
+  // massa. Montar a mensagem no cliente seria a segunda cópia da mesma regra — o defeito que o
+  // toast de "relatório pronto" custou hoje de manhã.
+  const [grupo, setGrupo] = useState(null);   // { porInscricao: Map, motivo } — null = ainda carregando
+  const [chamando, setChamando] = useState('');
   const SLUG = 'leilao-ao-vivo';
 
   const carregar = useCallback(async () => {
@@ -11155,7 +11161,7 @@ function LiveTab() {
     // PRÓXIMA aula". `p.edicao` vem pronta de `live_proxima` (mesma fonte da data), então não
     // se recalcula a fórmula da edição aqui — foi copiar essa conta que causou o defeito de 03/09.
     let qIns = supabase.from('live_inscricoes')
-      .select('nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000');
+      .select('id, nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000');
     if (p?.edicao) qIns = qIns.eq('edicao', p.edicao);
     const { data: ins, error: eIns } = await qIns.order('criado_em', { ascending: false });
     if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
@@ -11172,6 +11178,42 @@ function LiveTab() {
     ]);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+
+  // A fila do grupo é lida SEPARADA do `carregar()` de propósito: se a rota falhar, a lista de
+  // inscritos (o produto desta tela) tem que continuar aparecendo. Falha vira `motivo` legível
+  // no lugar do botão — nunca um botão que não faz nada.
+  const carregarGrupo = useCallback(async () => {
+    try {
+      const r = await apiCall('/api/admin-whatsapp-fila?modo=grupo&todos=1');
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j) { setGrupo({ porInscricao: new Map(), motivo: j?.error || `falha ao ler a fila (HTTP ${r.status})` }); return; }
+      const porInscricao = new Map((j.fila || []).filter((f) => f.inscricao_id).map((f) => [f.inscricao_id, f]));
+      setGrupo({ porInscricao, motivo: j.motivo || null });
+    } catch (e) {
+      setGrupo({ porInscricao: new Map(), motivo: 'não consegui ler a fila do grupo: ' + e.message });
+    }
+  }, []);
+  useEffect(() => { carregarGrupo(); }, [carregarGrupo]);
+
+  // Envio ASSISTIDO: abre a conversa com o texto pronto — quem aperta enviar é o dono. Só
+  // registra a rodada DEPOIS de abrir, e recarrega a fila para o próximo convite dessa pessoa já
+  // vir com outro texto.
+  async function chamarProGrupo(item) {
+    if (!item?.wa || chamando) return;
+    setChamando(item.inscricao_id);
+    window.open(item.wa, '_blank', 'noopener');
+    try {
+      const r = await apiCall('/api/admin-whatsapp-fila', {
+        method: 'POST',
+        body: JSON.stringify({ modo: 'grupo', user_id: item.user_id, inscricao_id: item.inscricao_id, rodada: item.rodada }),
+      });
+      if (!r.ok) setErro('Abri a conversa, mas não registrei o convite — o próximo texto pode repetir.');
+      else await carregarGrupo();
+    } catch (e) {
+      setErro('Abri a conversa, mas não registrei o convite: ' + e.message);
+    }
+    setChamando('');
+  }
 
   async function salvar(campos) {
     setSalvando(true); setErro('');
@@ -11558,13 +11600,19 @@ function LiveTab() {
         Só a edição de {prox?.data_hora ? new Date(prox.data_hora).toLocaleDateString('pt-BR') : 'hoje'} — quem se
         inscreveu em edições passadas continua recebendo convite e lembrete, mas não soma aqui.
       </div>
+      <div style={{ fontSize:11.5, color:'#64748b', margin:'-4px 0 10px', lineHeight:1.6 }}>
+        O botão <strong>Chamar pro grupo</strong> abre a conversa no WhatsApp com o texto pronto —
+        quem aperta enviar é você. <strong>Cada convite sai com uma mensagem diferente</strong>: o
+        1º apresenta o grupo, o 2º fala das oportunidades que circulam lá, e assim por diante.
+        Passe o mouse no botão para ler o texto antes de abrir.
+      </div>
       {inscritos.length === 0 ? (
         <div style={{ fontSize:13.5, color:'#64748b' }}>Ninguém ainda. Divulgue o link acima.</div>
       ) : (
         <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:8 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
             <thead><tr style={{ background:'#f8fafc' }}>
-              {['Nome','E-mail','WhatsApp','Cidade','Origem','Quando'].map(h =>
+              {['Nome','E-mail','WhatsApp','Cidade','Origem','Quando','Grupo'].map(h =>
                 <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, textTransform:'uppercase', color:'#64748b', letterSpacing:0.5 }}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -11577,6 +11625,37 @@ function LiveTab() {
                   <td style={{ padding:'9px 12px', color:'#64748b' }}>{i.origem || '—'}</td>
                   <td style={{ padding:'9px 12px', color:'#94a3b8', whiteSpace:'nowrap' }}>
                     {new Date(i.criado_em).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
+                    {(() => {
+                      if (!grupo) return <span style={{ fontSize:11.5, color:'#94a3b8' }}>…</span>;
+                      const item = grupo.porInscricao.get(i.id);
+                      // Sem item a causa importa e é DIFERENTE em cada caso: sem link de grupo
+                      // cadastrado, telefone que não vira WhatsApp, ou falha de leitura. Um botão
+                      // cinza mudo faria as três parecerem a mesma coisa.
+                      if (!item) return (
+                        <span title={grupo.motivo || 'WhatsApp desta inscrição não é um número válido'}
+                          style={{ fontSize:11.5, color:'#94a3b8' }}>
+                          {grupo.motivo ? 'indisponível' : 'sem WhatsApp válido'}
+                        </span>
+                      );
+                      return (
+                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                          <button onClick={() => chamarProGrupo(item)} disabled={!!chamando}
+                            title={item.texto}
+                            style={{ padding:'5px 11px', background: chamando === item.inscricao_id ? '#94a3b8' : '#16a34a',
+                              color:'#fff', border:'none', borderRadius:7, fontWeight:700, fontSize:12,
+                              cursor: chamando ? 'default' : 'pointer' }}>
+                            {chamando === item.inscricao_id ? 'Abrindo…' : item.rodada > 0 ? 'Chamar de novo' : 'Chamar pro grupo'}
+                          </button>
+                          {item.rodada > 0 && (
+                            <span style={{ fontSize:11, color:'#64748b' }} title="cada convite sai com um texto diferente">
+                              {item.rodada}x
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

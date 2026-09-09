@@ -200,11 +200,45 @@ checa('com cidade, cita a cidade', gmsg({ cidade: 'Vitória', uf: 'ES' }).includ
 checa('sem cidade, a frase não cita cidade nenhuma',
   !/em\s*\.|em\s*$/m.test(gmsg({ cidade: null, uf: null })), gmsg({ cidade: null, uf: null }).slice(-120));
 
+console.log('\n── 7b. RODADAS (09/09): o dono chama a MESMA pessoa de novo, e o texto não pode repetir ──');
+// Contexto real: ele chamou os 7 inscritos da edição às 17h41–17h48 e a fila zerou. O convite
+// seguinte é o SEGUNDO para cada um. Exigência literal: "a mensagem não pode se repetir".
+{
+  const textos = [];
+  for (let r = 0; r < 20; r += 1) textos.push(gmsg({ rodada: r, indice: 0 }));
+  checa('20 convites à mesma pessoa → 20 textos distintos', new Set(textos).size === 20,
+    `${new Set(textos).size} distintos`);
+  checa('a rodada 4 não é cópia da rodada 0 (foi o defeito medido antes de subir)',
+    textos[4] !== textos[0]);
+  checa('todas as rodadas levam o link do grupo', textos.every((t) => t.includes(GBASE.linkGrupo)));
+  checa('nenhuma rodada imprime undefined/null', textos.every((t) => !/undefined|null/.test(t)));
+  checa('nenhuma rodada promete que é a última vez (o ciclo reabriria a promessa)',
+    textos.every((t) => !/última vez|não insisto mais|nunca mais te chamo/i.test(t)));
+  checa('nenhuma rodada inventa preço ou plano', textos.every((t) => !/R\$|desconto de \d|plano/i.test(t)));
+  checa('nenhuma rodada inventa escassez', textos.every((t) => !/últimas vagas|restam \d|acaba em/i.test(t)));
+  checa('só a 1ª rodada se apresenta (as seguintes já são conversa continuada)',
+    textos.filter((t) => t.includes('Aqui é o Tarcísio')).length === 20 / 5);
+  checa('alguma rodada fala das oportunidades do acervo (pedido do dono)',
+    textos.some((t) => /abaixo da avalia|lotes/i.test(t)));
+}
+{
+  // Pessoas diferentes, mesma rodada, mesmo minuto: o texto tem de sair diferente.
+  const nomes = ['Francisca Bezerra', 'Raquel dos Santos', 'Thailane Carvalho', 'Dailson Siqueira'];
+  const lote = nomes.map((nome, i) => gmsg({ nome, rodada: 1, indice: i }));
+  checa('4 pessoas na mesma rodada → 4 textos distintos', new Set(lote).size === 4);
+  checa('cada uma é chamada só pelo primeiro nome',
+    lote.every((t, i) => t.includes(nomes[i].split(' ')[0]) && !t.includes(nomes[i].split(' ')[1])));
+}
+checa('rodada inválida não quebra nem repete a saudação errada',
+  typeof gmsg({ rodada: -3, indice: 'x' }) === 'string');
+checa('sem link, nenhuma rodada gera texto',
+  [0, 1, 2, 3, 4].every((r) => gmsg({ linkGrupo: '', rodada: r }) === null));
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
 // Piso de asserções: um `import` quebrado ou um laço que não roda deixaria o teste "passar"
 // com zero verificações — sucesso por ausência de medição, que é o defeito que este arquivo
 // inteiro existe para pegar.
-if (ok + falhas < 100) {
+if (ok + falhas < 113) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

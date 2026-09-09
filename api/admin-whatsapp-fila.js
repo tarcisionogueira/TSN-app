@@ -223,25 +223,93 @@ export function montarMensagem({ nome, cidade, uf, quando, link, publico, tratam
  * o mecanismo real — aviso de mudança de horário e o link da sala em cima da hora chegam
  * primeiro no grupo, e quem está só no e-mail depende de abrir o e-mail na hora certa.
  */
-export function montarMensagemGrupo({ nome, cidade, uf, titulo, quando, linkGrupo }) {
-  if (!linkGrupo) return null; // sem grupo cadastrado não há o que convidar — nunca inventa link
-  const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
-  const ola = primeiro ? `Oi, ${primeiro}!` : 'Oi!';
-  const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
-  const linhas = (...ls) => ls.filter((l) => l !== null).join('\n');
+// A MENSAGEM NÃO PODE SE REPETIR (09/09, exigência literal do dono).
+//
+// Por que isso virou requisito: ele chamou os 7 inscritos desta edição às 17h41–17h48 e a fila de
+// "quem nunca foi chamado" zerou. O próximo convite é, por definição, o SEGUNDO para a mesma
+// pessoa — e reenviar o mesmo parágrafo é o que faz a conta parecer robô (e o WhatsApp tratar
+// como disparo em massa).
+//
+// Duas variações INDEPENDENTES, as duas determinísticas — nada de sorteio, senão o texto não é
+// testável e a mesma pessoa pode receber duas vezes o mesmo por azar:
+//   · `rodada`  = quantas vezes ESTA pessoa já foi chamada (vem do log, coluna `rodada`). Troca o
+//                 ARGUMENTO: convite → oportunidades → lembrete curto → porta aberta.
+//   · `indice`  = posição na fila daquele dia. Troca a SAUDAÇÃO, para que duas pessoas chamadas na
+//                 mesma rodada, no mesmo minuto, não recebam textos idênticos.
+// Os dois ciclam, então a rodada 4 volta ao argumento do convite — mas com outra saudação. Por
+// isso nenhuma rodada promete "é a última vez que eu chamo": seria uma promessa que o próprio
+// ciclo quebraria.
+//
+// O que nenhuma rodada faz: inventar número, preço, plano, prazo ou escassez. A única coisa
+// concreta afirmada é o que o dono realmente publica no grupo.
+const SAUDACOES_GRUPO = [
+  (p) => (p ? `Oi, ${p}!` : 'Oi!'),
+  (p) => (p ? `${p}, tudo certo?` : 'Tudo certo?'),
+  (p) => (p ? `Olá, ${p}!` : 'Olá!'),
+  (p) => (p ? `Oi ${p}, tudo bem?` : 'Oi, tudo bem?'),
+];
 
-  return linhas(
+const RODADAS_GRUPO = [
+  // 0 — o convite propriamente dito. É a única que se apresenta.
+  ({ ola, onde, titulo, quando, link, l }) => l(
     `${ola} Aqui é o Tarcísio, da BidPro Brasil.`,
     '',
     `Sua vaga${titulo ? ` em *${titulo}*` : ''} está confirmada${quando ? ` — ${quando}` : ''}. Só que eu ainda não te vi no grupo do WhatsApp.`,
     '',
     'É lá que eu aviso na hora se mudar alguma coisa e onde eu mando o link da sala quando a aula abre. Quem fica só no e-mail depende de abrir o e-mail na hora certa.',
     '',
-    `Entra agora, leva 10 segundos: ${linkGrupo}`,
+    `Entra agora, leva 10 segundos: ${link}`,
     '',
     onde ? `Te espero lá — e me diga o que você procura em ${onde} que eu levo o seu caso pra aula.`
          : 'Te espero lá — e me diga o que você procura que eu levo o seu caso pra aula.',
-  );
+  ),
+  // 1 — o que circula no grupo. Genérica de propósito (pedido do dono: "pode ser uma mensagem
+  // genérica falando das oportunidades"), e sem número: percentual concreto aqui seria promessa
+  // que a fila não tem como conferir no momento do envio.
+  ({ ola, onde, link, l }) => l(
+    `${ola} Voltei rapidinho por causa do grupo.`,
+    '',
+    'É lá que eu solto os lotes que aparecem no meio da semana: imóvel abaixo da avaliação, praça já marcada, leilão de banco. Um a um por e-mail não dá.',
+    '',
+    `O link é este: ${link}`,
+    '',
+    onde ? `Entrando, me diz o que você procura em ${onde} — quando entrar algo parecido eu te chamo.`
+         : 'Entrando, me diz o que você procura — quando entrar algo parecido eu te chamo.',
+  ),
+  // 2 — lembrete curto. Sem argumento novo, sem repetir os anteriores: só o motivo prático.
+  ({ ola, link, l }) => l(
+    `${ola} Uma linha só: o link da sala da aula eu mando primeiro no grupo.`,
+    '',
+    link,
+    '',
+    'É só entrar, não precisa falar nada.',
+  ),
+  // 3 — porta aberta, sem cobrança.
+  ({ ola, titulo, quando, link, l }) => l(
+    `${ola} Deixo o link do grupo aqui à mão, sem pressa: ${link}`,
+    '',
+    `Sua vaga${titulo ? ` em *${titulo}*` : ''} está de pé de qualquer jeito${quando ? ` — ${quando}` : ''}. O grupo é só pra você não depender do e-mail no dia.`,
+  ),
+  // 4 — tira o peso de entrar. São CINCO argumentos contra QUATRO saudações de propósito: os
+  // ciclos são coprimos, então a combinação só se repetiria no 21º convite à mesma pessoa. Com
+  // quatro de cada, a rodada 4 saía idêntica à rodada 0 — medido, e por isso este quinto existe.
+  ({ ola, link, l }) => l(
+    `${ola} Entrar no grupo não te compromete com nada — dá pra sair quando quiser.`,
+    '',
+    `${link}`,
+    '',
+    'O que eu não queria mesmo é você perder o aviso da sala no dia.',
+  ),
+];
+
+export function montarMensagemGrupo({ nome, cidade, uf, titulo, quando, linkGrupo, rodada = 0, indice = 0 }) {
+  if (!linkGrupo) return null; // sem grupo cadastrado não há o que convidar — nunca inventa link
+  const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
+  const n = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
+  const ola = SAUDACOES_GRUPO[(n(indice) + n(rodada)) % SAUDACOES_GRUPO.length](primeiro);
+  const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
+  const l = (...ls) => ls.filter((x) => x !== null && x !== undefined).join('\n');
+  return RODADAS_GRUPO[n(rodada) % RODADAS_GRUPO.length]({ ola, onde, titulo, quando, link: linkGrupo, l });
 }
 
 export default async function handler(req, res) {
@@ -289,14 +357,26 @@ export default async function handler(req, res) {
   // é o que permite a mesma pessoa receber os dois na mesma edição sem um bloquear o outro.
   const modo = String((req.method === 'POST' ? req.body?.modo : new URL(req.url, 'http://x').searchParams.get('modo')) || 'aula');
   const ehGrupo = modo === 'grupo';
+  // `todos` só faz sentido no modo grupo: a tabela de inscritos do Admin quer TODA a lista com
+  // um botão por linha, não a fila do que falta.
+  const todosGrupo = String((req.method === 'POST' ? req.body?.todos : new URL(req.url, 'http://x').searchParams.get('todos')) || '') === '1';
 
   if (req.method === 'POST') {
     const userId = String(req.body?.user_id || '');
     if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({ error: 'user_id invalido' });
+    // No modo grupo a chave do log é a INSCRIÇÃO + a RODADA, não o usuário: é o que permite
+    // chamar a mesma pessoa de novo (com outro texto) sem o 409 do convite anterior, e o que
+    // impede inscrito anônimo de colidir com todos os outros anônimos numa chave só.
+    let extra = {};
+    if (ehGrupo) {
+      const inscricaoId = String(req.body?.inscricao_id || '');
+      if (!/^[0-9a-f-]{36}$/i.test(inscricaoId)) return res.status(400).json({ error: 'inscricao_id invalido' });
+      extra = { inscricao_id: inscricaoId, rodada: Math.max(0, Math.floor(Number(req.body?.rodada) || 0)) };
+    }
     const r = await sb(ehGrupo ? 'whatsapp_disparo_grupo_log' : 'whatsapp_disparo_log', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ evento_id: evento.id, edicao, user_id: userId, enviado_por: user.id }),
+      body: JSON.stringify({ evento_id: evento.id, edicao, user_id: userId, enviado_por: user.id, ...extra }),
     });
     // 409 = já estava marcado (duas abas, clique duplo). Não é erro: o desfecho desejado
     // já vale. Qualquer outro status precisa aparecer, senão a tela marca "enviado" em
@@ -324,19 +404,26 @@ export default async function handler(req, res) {
       });
     }
 
+    // `todos=1` devolve TODOS os inscritos da edição, não só quem nunca foi chamado — é o que a
+    // tabela "Inscritos nesta edição" do Admin usa para ter um botão POR LINHA. A tela de disparo
+    // em massa continua sem o parâmetro e continua vendo só a fila de quem falta.
     const rG = await sb('rpc/whatsapp_fila_grupo', {
-      method: 'POST', body: JSON.stringify({ p_evento: evento.id, p_edicao: edicao }),
+      method: 'POST', body: JSON.stringify({ p_evento: evento.id, p_edicao: edicao, p_todos: todosGrupo }),
     });
     if (!rG.ok) return res.status(502).json({ error: 'fila_ilegivel', detalhe: await rG.text() });
     const brutoG = await rG.json();
     const quandoG = quandoPorExtenso(evento.data_hora);
-    const filaG = (Array.isArray(brutoG) ? brutoG : []).map((p) => {
+    const filaG = (Array.isArray(brutoG) ? brutoG : []).map((p, i) => {
+      const rodada = Number(p.rodada) || 0;
       const texto = montarMensagemGrupo({
         nome: p.nome, cidade: p.cidade, uf: p.uf, titulo: evento.titulo, quando: quandoG, linkGrupo,
+        rodada, indice: i,
       });
       return {
-        user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
-        motivo: 'inscrito, fora do grupo', prioridade: 1, publico: 'inscrito',
+        inscricao_id: p.inscricao_id, user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
+        rodada,
+        motivo: rodada === 0 ? 'inscrito, fora do grupo' : `já chamado ${rodada}x — texto diferente`,
+        prioridade: 1, publico: 'inscrito',
         wa: `https://wa.me/${p.telefone_wa}?text=${encodeURIComponent(texto)}`,
         texto,
       };
