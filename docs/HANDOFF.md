@@ -4,6 +4,57 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 28 (09/09) — O DESCONTO MEDIA A 2ª PRAÇA E ERA PUBLICADO COM O NOME DA 1ª
+
+**Pedido do dono**: "link de compartilhamento no whatsapp deveria aparecer uma descrição com a
+cidade, valor de avaliação e valor do leilão e percentual de desconto (se der) isso da
+atratividade comercial para ofertar."
+
+**O que o pedido virou.** `api/og-share.js` já montava os quatro campos desde 14/08 — o que
+faltava era ORDEM: o WhatsApp corta a descrição do cartão por volta de 100-120 caracteres no
+celular, e a versão anterior abria por bairro/cidade e área, de forma que o desconto e os dois
+valores caíam justamente na parte cortada. A ordem agora é comercial (desconto → lance →
+avaliação → onde), com área e data no fim.
+
+**O achado que a reordenação destravou — e que nenhuma varredura de código pegaria.** Testando
+em dado real antes de subir (o antídoto da forma nº 10), o imóvel que o dono compartilhou tinha
+`valor_minimo` 330.000, `valor_avaliacao` 308.000 e `desconto_percentual` 40. O lance ACIMA da
+avaliação, com 40% de desconto anunciado. Medindo o alcance: **3.461 lotes ativos (13% do
+acervo, 100% CEF)** no mesmo estado, 2.029 deles com os dois valores idênticos.
+
+**A causa não é dado corrompido.** Em **3.461 de 3.461** o percentual bate exatamente com
+`valor_minimo_2` (a 2ª praça), que está abaixo da avaliação em **todos**. `desconto_percentual`
+não é o desconto da 1ª praça: quando o lote tem 2ª, ele é calculado contra ela. **O número está
+certo e era publicado com o nome de outro preço** — a forma nº 10 do CLAUDE.md, e aqui pior que
+um vazio, porque sai como texto que o próprio cartão desmente.
+
+**Quatro telas publicavam o par descasado**, todas voltadas para fora:
+- cartão de compartilhamento (`api/og-share.js`);
+- gerador de "Oportunidade real" (`api/_mensagens-grupo.js`), que imprimia *"Avaliação:
+  R$ 308.000 / Lance inicial: R$ 330.000 / → 40% abaixo da avaliação"* nas três linhas
+  seguidas, numa mensagem que vai para o grupo inteiro;
+- nudge de ativação (`api/ativacao-nudge-cron.js`), com lance e percentual na MESMA linha;
+- alertas públicos (`api/alertas-publicos-cron.js`), selo "% OFF" ao lado de "Lance mínimo".
+
+**Conserto**: `api/_lance-vitrine.js` centraliza a regra que `gerar-analise` já usava (menor
+lance entre as praças) e devolve preço, avaliação utilizável, desconto e data derivados do
+**mesmo par de números** — quem chamar não tem como reintroduzir o descasamento. Avaliação
+idêntica ao lance é eco do próprio lance e não é publicada como avaliação. Avaliação ABAIXO do
+lance continua saindo: é desfavorável, mas é informação de verdade.
+
+**Medido depois, sobre os 25.823 ativos**: nenhum lote fica com o campo positivo sem a tela
+sustentar (era 3.461), 18.770 passam a abrir com o gancho, e o e-mail de nudge renderizado com o
+imóvel do achado sai `R$ 184.800 · na 2ª praça · 40% abaixo da avaliação`. 9 asserções novas em
+`npm run testar:mensagem-grupo` (73/73). Commits `3bbc764` e `7ce8e49`.
+
+**Ponta solta para a próxima sessão**: `api/calcular-score.js` também consome
+`desconto_percentual` (peso 0,6 por ponto, até +60 no score de viabilidade). Como o campo mede a
+2ª praça, o score está premiando o lance da 2ª — o que provavelmente é o certo, já que a 2ª é a
+praça operativa, mas **não foi verificado** se o resto do score assume a 1ª. Vale conferir antes
+de mexer.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 27 (09/09) — CONTRAMEDIDAS: BRECHA NOS CRONS DE ENRIQUECIMENTO + MONITORAMENTO GUARAPARI
 
 **Pedido do dono**: "coloquei para gerar novamente. monitore. veja se ha outras brechas para que
