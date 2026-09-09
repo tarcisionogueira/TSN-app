@@ -11,6 +11,12 @@
  * WhatsApp, e pelo mesmo motivo: uma tela que dissesse "enviando" sem ter enviado seria a
  * mentira mais cara possível.
  *
+ * ⚠️ 09/09 — GANHOU 'responder_publico' (comentário-resposta visível sob o comentário
+ * original, não é DM/private reply). Existe pra classe `outro` (comentário inconclusivo tipo
+ * "Exatamente" sem contexto) poder receber uma reação curta e pública em vez de forçar uma
+ * pergunta de esclarecimento — mesma permissão da private reply, sem escopo novo pedido à
+ * Meta. Só vale pra `origem='comentario'`.
+ *
  * ─── POR QUE O REGISTRO IMPORTA MAIS DO QUE PARECE ───────────────────────────────────
  * A régua de promoção é "a classe vira autônoma quando o dono envia o rascunho SEM EDITAR em
  * 8 de 10 casos". Ela compara `texto_sugerido` com `texto_enviado`. Se o botão gravasse o
@@ -27,7 +33,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { getUser } from './_auth.js';
-import { envioConfigurado, enviarDM, enviarPrivateReply } from './_instagram-envio.js';
+import { envioConfigurado, enviarDM, enviarPrivateReply, responderComentarioPublicamente } from './_instagram-envio.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -214,6 +220,24 @@ async function desfecho(req, res, user) {
 
     patch.enviado_em = new Date().toISOString();
     patch.texto_enviado = texto;
+  } else if (acao === 'responder_publico') {
+    // Resposta PÚBLICA sob o comentário (não é DM nem private reply) — ver cabeçalho de
+    // _instagram-envio.js. Só existe pra comentário: DM não tem "embaixo" pra responder.
+    const texto = String(corpo.texto ?? '').trim();
+    if (!texto) return res.status(400).json({ error: 'texto vazio' });
+    if (!envioConfigurado()) return res.status(409).json({ error: 'envio_nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes na Vercel' });
+
+    const rAlvo = await sb(`ig_rascunho?id=eq.${id}&enviado_em=is.null&descartado_em=is.null&select=origem,mid_origem`);
+    if (!rAlvo.ok) return res.status(502).json({ error: 'rascunho_ilegivel', detalhe: await rAlvo.text() });
+    const [alvo] = await rAlvo.json().catch(() => []);
+    if (!alvo) return res.status(409).json({ error: 'ja_teve_desfecho' });
+    if (alvo.origem !== 'comentario') return res.status(400).json({ error: 'resposta_publica_so_para_comentario' });
+
+    const envio = await responderComentarioPublicamente(alvo.mid_origem, texto);
+    if (!envio.ok) return res.status(502).json({ error: 'envio_falhou', motivo: envio.erro, detalhe: envio.detalhe || null });
+
+    patch.enviado_em = new Date().toISOString();
+    patch.texto_enviado = texto;
   } else if (acao === 'enviado') {
     const texto = String(corpo.texto ?? '').trim();
     // Sem texto não há o que medir, e gravar `texto_enviado` vazio faria a régua comparar a
@@ -272,5 +296,5 @@ async function desfecho(req, res, user) {
   // `fila_limpa` volta para a tela: o desfecho VALEU (é o que a régua lê), mas se a mensagem
   // não saiu da fila o dono verá o item de novo amanhã, e precisa saber por quê — senão vira
   // "esta tela repete rascunho" e ele para de usar.
-  return res.status(200).json({ ok: true, acao, fila_limpa: filaLimpa, enviado_via_api: acao === 'enviar' });
+  return res.status(200).json({ ok: true, acao, fila_limpa: filaLimpa, enviado_via_api: acao === 'enviar' || acao === 'responder_publico' });
 }

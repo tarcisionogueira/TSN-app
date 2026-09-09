@@ -7,12 +7,18 @@
  * resposta AUTOMÁTICA (que não existe ainda); isto aqui é só a peça que faltava pra até o
  * envio MANUAL deixar de precisar de copiar-colar no app.
  *
- * ─── DM E COMENTÁRIO USAM O MESMO ENDPOINT, SÓ MUDA O `recipient` ─────────────────────
+ * ─── DM E COMENTÁRIO (PRIVADO) USAM O MESMO ENDPOINT, SÓ MUDA O `recipient` ──────────
  * DM (e resposta/reação de story, que chega pelo mesmo `messages` do webhook): `recipient.id`.
  * Comentário: PRIVATE REPLY via `recipient.comment_id` — é a forma sancionada de mandar a
  * primeira mensagem pra quem não escreveu por DM (tiro único por comentário, 7 dias — ver
- * docs/INSTAGRAM_AUTOMACAO.md §7). Nunca posta resposta PÚBLICA visível sob o comentário —
- * essa é outra permissão, outro endpoint, fora do escopo desta v1.
+ * docs/INSTAGRAM_AUTOMACAO.md §7).
+ *
+ * ─── RESPOSTA PÚBLICA (09/09) — endpoint e permissão DIFERENTES da private reply ──────
+ * `POST /{comment-id}/replies` posta um comentário-resposta visível pra todo mundo, sob o
+ * comentário original. Usa `instagram_business_manage_comments` — a MESMA permissão que a
+ * private reply já usa, então não precisou pedir escopo novo pra Meta (conferido contra a
+ * documentação do Instagram Platform antes de escrever isto, não de memória). Só faz sentido
+ * pra `origem === 'comentario'` — não existe "resposta pública" de DM.
  *
  * ⚠️ SEM CONFIRMAÇÃO CONTRA TRÁFEGO REAL AINDA (sessão sem token válido/tráfego aprovado no
  * momento em que isto foi escrito — ver Parte 14 do HANDOFF). `GRAPH_VERSION` e o formato
@@ -86,4 +92,45 @@ export function enviarDM(igUserId, texto) {
 export function enviarPrivateReply(commentId, texto) {
   const corpo = montarCorpoEnvio({ tipo: 'comentario', commentId }, texto);
   return corpo ? chamarSendAPI(corpo) : Promise.resolve({ ok: false, erro: 'dados_insuficientes' });
+}
+
+/**
+ * Monta o corpo da resposta PÚBLICA — pura, mesmo cuidado do `montarCorpoEnvio`: tira o
+ * prefixo `c_` (namespace nosso, a Meta não conhece) e recusa texto/id vazio.
+ */
+export function montarCorpoRespostaPublica(commentId, texto) {
+  const t = String(texto || '').trim();
+  const id = String(commentId || '').replace(/^c_/, '').trim();
+  return t && id ? { id, message: t } : null;
+}
+
+async function chamarRespostaPublica({ id, message }) {
+  if (!envioConfigurado()) return { ok: false, erro: 'nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes' };
+  const { pageToken } = envCfg();
+  // `message` e `access_token` como PARÂMETRO (não corpo JSON) — é o formato documentado pra
+  // este endpoint específico, diferente do `/messages` acima. Mesma ressalva do cabeçalho:
+  // conferir contra tráfego real antes de confiar cegamente.
+  const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${id}/replies`);
+  url.searchParams.set('message', message);
+  let r;
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${pageToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) {
+    return { ok: false, erro: 'falha_rede', detalhe: String(e?.message || e) };
+  }
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    return { ok: false, erro: 'recusado_pela_meta', status: r.status, detalhe: j?.error?.message || JSON.stringify(j || {}).slice(0, 300) };
+  }
+  if (!j?.id) return { ok: false, erro: 'sem_confirmacao', detalhe: JSON.stringify(j || {}).slice(0, 300) };
+  return { ok: true, reply_id: j.id };
+}
+
+export function responderComentarioPublicamente(commentId, texto) {
+  const corpo = montarCorpoRespostaPublica(commentId, texto);
+  return corpo ? chamarRespostaPublica(corpo) : Promise.resolve({ ok: false, erro: 'dados_insuficientes' });
 }

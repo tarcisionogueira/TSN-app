@@ -1,13 +1,15 @@
 /**
  * npm run testar:ig-envio — o envio real do Instagram (api/_instagram-envio.js) monta o
- * `recipient` certo pra cada canal, e nunca chama a Send API sem os dois segredos.
+ * corpo certo pra cada canal, e nunca chama a API sem os dois segredos.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  * O risco aqui não é a chamada de rede (isso só se prova contra a Meta de verdade) — é a
  * MONTAGEM do corpo: mandar DM pro id errado, esquecer de tirar o prefixo `c_` do id de
- * comentário (que é só o nosso namespace interno, a Meta não conhece), ou deixar passar um
- * texto vazio pra Send API cobrar da conta por nada.
+ * comentário (que é só o nosso namespace interno, a Meta não conhece), deixar passar um
+ * texto vazio pra API cobrar da conta por nada, ou (09/09, resposta pública) misturar as
+ * DUAS formas — DM/private reply usa `{recipient: {...}}`, resposta pública usa `{id,
+ * message}` direto. Confundir as duas manda o corpo certo pro endpoint errado.
  */
-import { montarCorpoEnvio, envioConfigurado } from '../../api/_instagram-envio.js';
+import { montarCorpoEnvio, montarCorpoRespostaPublica, envioConfigurado } from '../../api/_instagram-envio.js';
 
 let ok = 0, falhas = 0;
 const checa = (nome, cond, extra) => {
@@ -44,6 +46,21 @@ console.log('\nmontarCorpoEnvio — tipo desconhecido nunca vira envio às cegas
 checa('tipo inexistente → null', montarCorpoEnvio({ tipo: 'story-reaction', igUserId: '123' }, 'oi') === null);
 checa('sem destino nenhum → null', montarCorpoEnvio(null, 'oi') === null);
 
+console.log('\nmontarCorpoRespostaPublica — resposta PÚBLICA usa {id, message}, nunca recipient (formato diferente da privada)');
+{
+  const comPrefixo = montarCorpoRespostaPublica('c_17869900112233', 'valeu pelo comentário!');
+  checa('tira o prefixo c_ igual à privada', comPrefixo?.id === '17869900112233', comPrefixo);
+  checa('message é o texto literal', comPrefixo?.message === 'valeu pelo comentário!', comPrefixo);
+  checa('nunca usa a forma recipient.* da privada', !('recipient' in (comPrefixo || {})), comPrefixo);
+
+  const semPrefixo = montarCorpoRespostaPublica('17869900112233', 'valeu!');
+  checa('funciona também sem o prefixo', semPrefixo?.id === '17869900112233', semPrefixo);
+}
+checa('resposta pública sem commentId → null', montarCorpoRespostaPublica('', 'oi') === null);
+checa('resposta pública só com o prefixo e nada depois → null', montarCorpoRespostaPublica('c_', 'oi') === null);
+checa('resposta pública sem texto → null', montarCorpoRespostaPublica('123', '') === null);
+checa('resposta pública com texto só de espaços → null', montarCorpoRespostaPublica('123', '   ') === null);
+
 console.log('\nenvioConfigurado — só true com os DOIS segredos presentes');
 {
   const igAntes = process.env.IG_USER_ID;
@@ -72,7 +89,7 @@ console.log('\nenvioConfigurado — só true com os DOIS segredos presentes');
 }
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 15) {
+if (ok + falhas < 25) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

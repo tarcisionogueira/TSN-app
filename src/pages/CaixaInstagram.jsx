@@ -106,6 +106,12 @@ export default function CaixaInstagram() {
     await registrar(item, 'enviar', { texto });
   }
 
+  async function responderPublico(item) {
+    const texto = (textos[item.id] || '').trim();
+    if (!texto) { setErro('A caixa está vazia — não há o que responder.'); return; }
+    await registrar(item, 'responder_publico', { texto });
+  }
+
   async function mudarEstado(item, estado) {
     setOcupado(item.id);
     try {
@@ -230,6 +236,13 @@ export default function CaixaInstagram() {
               <button onClick={() => enviarAgora(it)} disabled={ocupado === it.id}
                 style={{ ...B, flex: 1, minWidth: 200, background: ocupado === it.id ? '#cbd5e1' : '#0D63DB', color: '#fff', border: 'none', padding: 13, fontSize: 15, fontWeight: 800 }}>
                 {ocupado === it.id ? 'Enviando…' : 'Enviar agora →'}
+              </button>
+            )}
+            {it.texto_sugerido && it.origem === 'comentario' && dados?.envio_disponivel && (
+              <button onClick={() => responderPublico(it)} disabled={ocupado === it.id}
+                title="Publica como resposta visível sob o comentário — não é mensagem privada"
+                style={{ ...B, flex: 1, minWidth: 200, background: ocupado === it.id ? '#cbd5e1' : '#7c3aed', color: '#fff', border: 'none', padding: 13, fontSize: 15, fontWeight: 800 }}>
+                {ocupado === it.id ? 'Respondendo…' : 'Responder no comentário →'}
               </button>
             )}
             {it.texto_sugerido && (
