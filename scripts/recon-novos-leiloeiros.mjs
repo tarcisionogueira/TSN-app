@@ -345,9 +345,10 @@ const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim(
         try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
         try { await reconPeciniProfundo(cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
       }
-      // JONASLEILOEIRO e FERNANDOLEILOEIRO (07/09): 100% Cloudflare no Puppeteer (403 "Just a
-      // moment..." em TODOS os paths padrão) — mesmo sintoma do Pecini, mesmo remédio.
-      if (nome === 'JONASLEILOEIRO' || nome === 'FERNANDOLEILOEIRO') {
+      // JONASLEILOEIRO, FERNANDOLEILOEIRO (07/09) e BAYIT (09/09): 100% Cloudflare no
+      // Puppeteer (403 "Just a moment..." em TODOS os paths padrão) — mesmo sintoma do
+      // Pecini, mesmo remédio.
+      if (nome === 'JONASLEILOEIRO' || nome === 'FERNANDOLEILOEIRO' || nome === 'BAYIT') {
         try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
       }
     }
