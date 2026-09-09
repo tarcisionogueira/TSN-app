@@ -3696,9 +3696,13 @@ async function main() {
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
+    // 09/09: SBID9/21 nunca passavam { enrich: true } — mesmo portal, mesmo template de
+    // página de oferta que SUPERBID/SOLD (que capturam 74%/100% com enrich ligado), mas
+    // aqui a chamada saía sem enriquecerDocumentosLote nenhuma vez → 0% de doc num
+    // inventário pequeno o bastante (34/72 ativos) pro cap padrão (120) cobrir de sobra.
     if (rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
-    if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
-    if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
+    if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120 });
+    if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120 });
 
     // 3c. White-labels da rede por LOJA (Round 35 do backlog TRT-15): mesma offer-query,
     // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
