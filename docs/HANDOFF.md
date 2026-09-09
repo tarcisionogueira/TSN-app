@@ -4,6 +4,77 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 20 (09/09) — PORTAL BAYIT INTEGRADO: 78 IMÓVEIS EM PRODUÇÃO
+
+**Pedido do dono**: "a bayiat estamos integrados? o leiloeiro? verifique." → não estava.
+Depois: "Deixe pronto via bright data e já traga tudo" + "trazer TODAS as fotos" + "resolva
+da forma mais eficiente e segura". Construído, testado contra dado real (3 bugs achados e
+corrigidos ANTES de gravar) e **está em produção: 78 imóveis ativos, fonte=BAYIT**.
+
+**Descoberta da fonte** (detalhe na Parte 19/leiloeiro_conhecimento): navegação bloqueada
+por Cloudflare, mas o site publica feed XML completo em `/sitemap.xml` (formato Facebook/
+Google Dynamic Ads for Real Estate) — enumeração inteira sem precisar da navegação.
+
+**`scripts/scraper-bayit.mjs` (novo) + `.github/workflows/scraper-bayit.yml`** (cron
+quinta 13h UTC + dispatch manual): busca o feed via Bright Data, filtra por
+`/lote/<cidade>-<uf>/<id>/` com UF válida (mais confiável que `property_type`, que não
+distingue imóvel de outros bens no feed do Bayit — um veículo apareceu com o mesmo
+`property_type` de casas reais), visita a página de cada lote pra matrícula/edital
+(`vasculharDocumentos`, o mesmo scanner do `enriquecer-lote.js`) e re-hospeda a foto de
+capa. `imoveis_leilao` ganhou a coluna `fotos` (jsonb, galeria completa como link externo).
+
+**3 bugs achados rodando dry-run contra o feed real, ANTES de gravar** (o método que
+funcionou: nenhum apareceria em revisão de código):
+1. `<image><url>foto.jpg</url></image>` usa a MESMA tag `<url>` da página do lote —
+   `campo(bloco,'url')` pegava a 1ª ocorrência (a foto), então os 84 listings zeravam no
+   filtro de categoria. Fix: remove blocos `<image>` antes de extrair a url do lote.
+2. O site monta 2 links de "Baixar Boleto/Depósito Comissão" via template TrimPath
+   client-side nunca resolvido (`${rowLancamento.ID_Financeiro_Lancamento}`,
+   `{if...}{else}...{/if}`) — como só buscamos HTML cru, viravam "documento" com URL
+   literal quebrada. Apareciam em TODOS os lotes. Fix: `RE_TEMPLATE_NAO_RESOLVIDO` filtra
+   antes de gravar.
+3. `cep` do feed vem formatado ("67110-470", 9 chars); a coluna é `varchar(8)` (mesmo
+   padrão dos outros coletores — só dígitos). Um lote com CEP formatado derrubava o
+   **upsert inteiro dos 78 juntos**, silenciosamente jogando fora 11 minutos de Bright
+   Data já gasto. Fix: strip de não-dígitos.
+
+**Achado ao vivo que mudou o plano — foto não carrega direto pro cliente.** Testei fetch
+puro (sem Bright Data, sem Referer — exatamente o `<img>` do nosso front) numa foto do
+feed: **HTTP 403**. O Cloudflare do Bayit protege o CDN de imagem, não só a navegação —
+o link cru nunca funcionaria pro visitante. Decisão do dono ("mais eficiente e seguro"):
+`garantirFotoCapa()` baixa 1x via Bright Data e re-hospeda no bucket `imoveis-fotos`
+(mesmo padrão já usado pra CEF, `foto-cef.mjs`) — só a CAPA, que é a única foto que
+qualquer tela hoje exibe; a galeria completa (`fotos`) fica como link externo até existir
+UI de galeria (pagar Bright Data por foto que ninguém vê seria gasto especulativo). Checa
+o bucket ANTES de gastar Bright Data — capa já re-hospedada não paga de novo.
+
+**Estado final em produção** (verificado por query, não por suposição):
+```
+total 78 · com_anexos 40 · com_matricula 40 · com_area 38 · foto_rehospedada 78 · com_galeria 78
+```
+Foto: **100% resolvida** (78/78 já servem do nosso bucket). Documento/área: **51% (40/78)** —
+os outros 38 ficaram sem enriquecimento de detalhe porque o orçamento SEMANAL da conta
+inteira (não só bayit) chegou a 490/550 no meio do backfill (o próprio backfill consumiu a
+maior fatia — sub-cota do propósito `bayit` subiu de 100→200→280→350 ao longo do dia,
+porque cada tentativa de dry-run/gravação real gasta Bright Data de verdade, não é grátis
+repetir). Preferi não estourar o teto global — prejudicaria `docs`/`vlance`/`recon` pro
+resto da semana — a forçar os últimos ~16 requests. Todos os 78 têm os campos essenciais
+(preço, endereço, foto, galeria, url_lote); só falta terminar documento/área nos 38.
+
+**Próximo passo registrado** (`leiloeiro_conhecimento.fonte='BAYIT'` tem o detalhe completo):
+re-rodar `scraper-bayit.yml` (dispatch, `dryrun=0`) quando o orçamento semanal renovar
+(segunda) ou tiver folga — é idempotente (upsert por `fonte_id`), só paga pelos 38 que
+faltam (foto já cacheada no bucket, não paga de novo).
+
+**PARA AMANHÃ, já registrado no cabeçalho do próprio scraper** (pedido do dono): testar se
+o runner RESIDENCIAL (Chromium em IP de casa, grátis — mesmo padrão de `GESTAO_HEADLESS`
+em `scraper-gestao.mjs`/`fetch-residencial.mjs`) também passa do Cloudflare do Bayit — pra
+NAVEGAÇÃO e, importante, pro **CDN de imagem também** (se passar, a foto pode carregar
+direto sem precisar da re-hospedagem). Se passar, migra e o arquivo para de gastar cota
+paga — essa é a "economia de Bright Data" que o dono pediu pra amanhã.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 19 (09/09) — 4 PEDIDOS NUM SÓ: TRAVAMENTO, DOCUMENTO POR FONTE, DASHBOARD, PRODUÇÃO
 
 **Pedido do dono, 4 itens numa mensagem só**: (1) checar outras telas contra o mesmo travamento do
