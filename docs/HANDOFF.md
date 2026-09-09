@@ -4,6 +4,48 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 25 (09/09) — FINANCEIRO: INADIMPLÊNCIA SUMIA EM ASSINATURAS (CÓDIGO MORTO) + PIX SEM EXPLICAÇÃO
+
+**Pedido do dono**: "mostrando inadimplentes em um e no outro não. mostrando uma chave pix que
+já foi cadastrada, não entendi a finalidade. verifique a origem e finalidade de todos os
+indicadores e informações mostrados" (tela: Admin Financeiro).
+
+**Causa raiz confirmada por SQL antes de mexer em código**: `select role, count(*) from perfis
+where inadimplente_desde is not null group by role` devolveu **1 linha: `explorador, 1`** — ou
+seja, das pessoas com dívida marcada, **nenhuma** ainda tem role pago. Motivo: `api/_webhook-
+core.js` (`processarVencido`/`processarRecusado`) grava `inadimplente_desde` **e** rebaixa
+`role` para `'explorador'` na MESMA escrita. `statusAssinante()` (`AdminFinanceiro.jsx`)
+checava `pago = PLANOS_PAGOS.includes(role)` **antes** de olhar `inadimplente_desde` — como o
+role já vinha rebaixado, o branch `'atraso'/'vencida'` era **estruturalmente inalcançável**
+(código morto): a pessoa caía direto em `'gratis'`. O card "Inadimplentes" da aba Síntese
+(RPC `financeiro_resumo`, `count(*) where inadimplente_desde is not null`, sem olhar role)
+contava a mesma pessoa — daí a Síntese mostrar 1 e Assinaturas mostrar 0. Fix: inverte a
+ordem — dívida decide primeiro, independente do role atual (ela sobrevive ao rebaixamento).
+
+**"Chave PIX já cadastrada"**: não é da tela `/admin/financeiro` (`AdminFinanceiro.jsx`) — é de
+`Admin.jsx` → aba Financeiro (`FinanceiroHub`) → sub-aba **"💸 Saques da equipe"**
+(`PrestacaoContasTab`), 3 exibições (validação PJ, fila de saque elegível, tabela "Saldos da
+equipe"). É o destino já cadastrado pelo parceiro/usuário, mostrado pro admin conferir ANTES
+de aprovar/pagar o saque — não é campo editável. Adicionado texto explicativo inline nas 2
+exibições em lista solta (a da tabela já tem cabeçalho de coluna autoexplicativo).
+
+**Achado à parte, sinalizado mas NÃO alterado** (decisão de compliance, não de código): o
+marcador de limite Bacen (R$500k/mês, aba Fluxo de caixa) mede **só o volume do Asaas**
+(`financas.statsMes.revenue`, API Asaas) — nunca inclui o Mercado Pago, que é o gateway
+PRINCIPAL. Se o limite do Bacen se aplica ao volume total da empresa (não por gateway), este
+marcador está medindo uma fração pequena do que precisa vigiar. Fica para o dono/advogado
+confirmar a leitura correta antes de qualquer mudança.
+
+**Achado à parte, informativo**: a aba "Financeiro" dentro do hub do Admin (`FinanceiroHub`,
+4 sub-abas: MP/Asaas/Assinaturas/Saques) e a página standalone `/admin/financeiro`
+(`AdminFinanceiro.jsx`, 7 abas: Síntese/Caixa/Extrato/Conciliação/Monitor/Assinaturas/Recusas)
+**não são a mesma tela** — compartilham só 2 componentes (`FinanceiroCaixa`, `AbaAssinaturas`).
+Já existem atalhos de um lado pro outro (botões "Extrato real"/"Conciliação e DRE"/"Monitor"
+dentro do hub); não é bug, mas explica por que a mesma informação financeira pode parecer estar
+"em lugares diferentes" dependendo de por onde se navega.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 24 (09/09) — "PRAÇA COM DATA NUNCA É VENDA DIRETA": O MESMO BUG EM MAIS 5 SCRAPERS
 
 **Pedido do dono, na sequência da Parte 23**: "verifique nos outros lotes ao buscar pois se ha
