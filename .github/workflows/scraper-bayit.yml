@@ -1,0 +1,48 @@
+name: Scraper Portal Bayit (Bright Data)
+
+# Portal Bayit (portalbayit.com.br) — leiloeiro judicial/extrajudicial. Navegação atrás de
+# Cloudflare; a coleta usa o feed XML de imóveis (/sitemap.xml, formato Dynamic Ads for Real
+# Estate) + Bright Data pra buscar matrícula/edital na página de cada lote. Ver o cabeçalho
+# de scripts/scraper-bayit.mjs para o recon completo. No cron GRAVA; no dispatch manual é
+# dry-run por padrão (dryrun=0 p/ gravar).
+#
+# PLANO (09/09): fonte 100% Bright Data por ora. Pendência registrada em leiloeiro_conhecimento
+# e docs/HANDOFF.md — testar se o runner residencial (GESTAO_HEADLESS-style, IP de casa,
+# grátis) também passa do Cloudflare aqui; se passar, este workflow para de gastar cota paga.
+on:
+  schedule:
+    - cron: '0 13 * * 4'   # 1x/semana (quinta), 13 UTC — fonte PAGA, catálogo pequeno
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      enrich_cap:
+        description: 'Máx. de páginas de detalhe (matrícula/edital) visitadas por execução'
+        required: false
+        default: '200'
+
+jobs:
+  scraper-bayit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper Portal Bayit
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          BAYIT_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          BAYIT_ENRICH_CAP: ${{ github.event.inputs.enrich_cap || '200' }}
+        run: node scripts/scraper-bayit.mjs
