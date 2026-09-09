@@ -13,12 +13,14 @@ import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { groundingGemini, geminiDisponivel } from './_grounding.js';
+import { comCascataBusca } from './_busca-modelo.js';
 import { SEG_TIPOS, norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
-const MODEL = 'claude-sonnet-4-6';
+// O modelo da busca NÃO mora mais aqui: quem escolhe é a cascata de `_busca-modelo.js`
+// (Haiku primeiro, Sonnet só se houver recusa estrutural). Constante local seria 2ª fonte.
 const EST_INDICE_MICRO = 600000; // ~US$0,60 estimado (1 busca web + tokens) p/ pré-autorizar crédito
 
 // Variante que DIZ se a chamada deu certo. O `rpc()` abaixo colapsa "falhou" e "sem resultado"
@@ -149,17 +151,19 @@ export default async function handler(req, res) {
     motorUsado = 'gemini';
     return json;
   };
-  const buscar = async (webUses, timeoutMs, compacto = false) => {
+  // FALLBACK EM CASCATA (09/09): Haiku primeiro — 3x mais barato e mais rápido que o Sonnet —
+  // e o Sonnet de antes só se o Haiku for recusado por ESTRUTURA. `modeloBusca` guarda qual
+  // rodou (vai em `motorUsado`), para a medição de custo não sair no nome do modelo errado. A
+  // variante da ferramenta vem PAREADA ao modelo (`_busca-modelo.js`): a nova não existe no
+  // Haiku e daria 400.
+  const buscar = async (webUses, timeoutMs, compacto = false) => comCascataBusca(async (degrau) => {
     let r;
     try {
       r = await anthropicFetch({
         method: 'POST', headers,
         body: JSON.stringify({
-          model: MODEL, max_tokens: 12000,
-          // web_search_20260209 (filtragem dinâmica): o modelo filtra os resultados da busca ANTES
-          // de entrarem no contexto — mais acerto e menos token gasto com página irrelevante. Não
-          // precisa de header beta nem de declarar code_execution junto (roda por baixo).
-          tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: webUses }],
+          model: degrau.model, max_tokens: 12000,
+          tools: [degrau.ferramenta(webUses)],
           system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
           messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }],
         }),
@@ -173,14 +177,14 @@ export default async function handler(req, res) {
     }
     if (!r.ok) { motivoFalha = `anthropic_http_${r.status}`; throw new Error(motivoFalha); }
     const data = await r.json();
-    try { custoMicro += custoRespostaClaude(MODEL, data?.usage); } catch { /* medição best-effort */ }
+    try { custoMicro += custoRespostaClaude(degrau.model, data?.usage); } catch { /* medição best-effort */ }
     const json = parseJSON(extractText(data)); // null se truncou (JSON incompleto)
-    if (json) motorUsado = 'claude';
+    if (json) motorUsado = `claude:${degrau.model}`; // qual Claude importa: Haiku e Sonnet custam 3x diferente
     // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — no log da Vercel só aparecia o status, sem
     // dizer se foi 429, timeout ou JSON cortado, e sem isso não dá para saber o que corrigir.
     if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${data?.usage?.server_tool_use?.web_search_requests})`;
     return json;
-  };
+  }, { aoFalhar: (degrau, e, subiu) => { motivoFalha = `${degrau.model}: ${motivoFalha || String(e?.message || e).slice(0, 80)}${subiu ? ' (subiu de degrau)' : ''}`; } });
   // ORÇAMENTO DE TEMPO (achado 06/08 — 504 "Task timed out after 250 seconds"): os timeouts
   // eram FIXOS (150s + 80s) e não conversavam com o maxDuration. Somados ao overhead já
   // raspavam o teto; com um retry interno passavam dele, e o cliente recebia a página de erro

@@ -26,6 +26,7 @@ import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
 import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
+import { comCascataBusca } from './_busca-modelo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -2044,24 +2045,39 @@ export default async function handler(req, res) {
           motivoGemini = g?.__erroApi || 'gemini devolveu vazio';
           console.log('[gemini-grounding-falhou]', JSON.stringify({ motivo: motivoGemini, imovel: String(imovelId) }));
         }
+        // FALLBACK CLAUDE EM CASCATA: Haiku (barato e rápido) e, só se ele for recusado por
+        // ESTRUTURA, o Sonnet de antes. A régua e o pareamento modelo×ferramenta moram em
+        // `_busca-modelo.js` — a variante da busca NUNCA é escolhida aqui (mandar a nova para
+        // o Haiku é 400, e 400 aqui derruba o relatório inteiro, não "zera as amostras").
         try {
-          const messages = [{ role: 'user', content: prompt }];
-          let data, stop, cont = 0;
-          do {
-            data = await anthropic({
-              model: MODEL, max_tokens: 32000,
-              tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: webUses }],
-              system: sistema,
-              messages,
-            }, true, { retries: 0, timeoutMs: Math.max(30000, msBudget), noFallback: true });
-            stop = data?.stop_reason;
-            if (stop === 'pause_turn' && Array.isArray(data.content)) { messages.push({ role: 'assistant', content: data.content }); cont++; }
-          } while (stop === 'pause_turn' && cont < pauseCap && restante() > minReserva);
-          const txt = extractText(data);
-          const parsed = parseJSON(txt) || {};
-          // Diagnóstico PERSISTIDO (fica no result mesmo quando vazio) p/ validar o fluxo pelo banco.
-          parsed.__diag = { stop: stop || null, blocos: Array.isArray(data?.content) ? data.content.length : 0, textoLen: txt.length, out_tokens: data?.usage?.output_tokens || 0, buscas: webUses, continuou: cont, geminiErro: motivoGemini };
-          return parsed;
+          return await comCascataBusca(async (degrau, i) => {
+            const messages = [{ role: 'user', content: prompt }];
+            let data, stop, cont = 0;
+            do {
+              data = await anthropic({
+                model: degrau.model, max_tokens: 32000,
+                tools: [degrau.ferramenta(webUses)],
+                system: sistema,
+                messages,
+              }, true, { retries: 0, timeoutMs: Math.max(30000, msBudget), noFallback: true });
+              stop = data?.stop_reason;
+              if (stop === 'pause_turn' && Array.isArray(data.content)) { messages.push({ role: 'assistant', content: data.content }); cont++; }
+            } while (stop === 'pause_turn' && cont < pauseCap && restante() > minReserva);
+            const txt = extractText(data);
+            const parsed = parseJSON(txt) || {};
+            // Diagnóstico PERSISTIDO (fica no result mesmo quando vazio) p/ validar o fluxo pelo
+            // banco. `modeloBusca` é novo e é o que responde "quanto este relatório custou de
+            // busca?" sem abrir a fatura: sem ele, trocar o modelo do fallback seria uma mudança
+            // que ninguém consegue verificar depois.
+            parsed.__diag = { stop: stop || null, blocos: Array.isArray(data?.content) ? data.content.length : 0, textoLen: txt.length, out_tokens: data?.usage?.output_tokens || 0, buscas: webUses, continuou: cont, geminiErro: motivoGemini, modeloBusca: degrau.model, degrauBusca: i };
+            return parsed;
+          }, {
+            // Só sobe de degrau se ainda houver orçamento: em abort/timeout o tempo JÁ foi
+            // gasto, e repetir num modelo mais lento apenas troca o instante da morte — foi o
+            // que a medição de 09/09 refutou ao ampliar o orçamento de 118s para 180s.
+            podeContinuar: () => restante() > minReserva,
+            aoFalhar: (degrau, e, subiu) => console.log('[busca-claude-degrau]', JSON.stringify({ modelo: degrau.model, erro: String(e?.message || e).slice(0, 80), subiu, imovel: String(imovelId) })),
+          });
         } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120), __geminiErro: motivoGemini }; }
       };
 
