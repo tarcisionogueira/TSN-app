@@ -50,6 +50,12 @@ const SITES = {
   GLOBOLEILOES: { base: 'https://globoleiloes.com.br', paths: PATHS_PADRAO },
   GIORDANOLEILOES: { base: 'https://giordanoleiloes.com.br', paths: PATHS_PADRAO },
   ROCHALEILOES: { base: 'https://rochaleiloes.com.br', paths: PATHS_PADRAO },
+  // Portal Bayit (09/09) — pedido do dono ("estamos integrados?"). Não havia NENHUM
+  // registro em leiloeiro_conhecimento nem em imoveis_leilao: candidato nunca visitado.
+  // Domínio oficial confirmado por busca externa (portalbayit.com.br), leiloeiro
+  // judicial/extrajudicial com catálogo pequeno em agregadores de terceiros — mesmo
+  // caminho genérico dos outros candidatos, é isto que o recon existe para descobrir.
+  BAYIT: { base: 'https://www.portalbayit.com.br', paths: PATHS_PADRAO },
 };
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
