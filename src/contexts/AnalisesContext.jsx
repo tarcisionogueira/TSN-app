@@ -130,12 +130,36 @@ export function AnalisesProvider({ children }) {
     if (!uid || !id) return true;
     fixados.current.add(id);
     const porImovel = (tabela) => supabase.from(tabela).select('*').eq('user_id', uid).eq('imovel_id', id).limit(1);
-    const [m, d, l] = await Promise.all([porImovel('analises_mercado'), porImovel('analises_documental'), porImovel('analises_laudo')]);
+    const lerAsTres = () => Promise.all([porImovel('analises_mercado'), porImovel('analises_documental'), porImovel('analises_laudo')]);
+    let [m, d, l] = await lerAsTres();
     // `{ data, error }` do postgrest-js NÃO lança em não-2xx: sem checar `error`, uma falha de
     // leitura viraria "este imóvel não tem relatório" — que é o defeito que esta função conserta.
-    const falha = m.error || d.error || l.error;
+    let falha = m.error || d.error || l.error;
+    // SESSÃO VENCIDA SE CONSERTA SOZINHA, E É A CAUSA MAIS PROVÁVEL (09/09). O token do Supabase
+    // dura pouco; numa aba aberta há horas o PostgREST recusa a leitura (PGRST301 / "JWT
+    // expired") e a tela mostra "não foi possível verificar os relatórios já gerados" — que o
+    // dono lê, com razão, como "o site parou". Uma renovação e uma segunda tentativa resolvem
+    // sem ninguém precisar recarregar a página. Uma só, para não virar laço.
+    if (falha && /jwt|expired|PGRST301|401/i.test(`${falha.code || ''} ${falha.message || ''}`)) {
+      let renovou = false;
+      try {
+        const { data: sess, error: erroRenov } = await supabase.auth.refreshSession();
+        renovou = !!sess?.session?.access_token;
+        if (!renovou) registrarEvento('sessao_expirada', { alvo: 'analises_por_imovel', detalhe: `renovacao falhou: ${String(erroRenov?.message || 'sem sessao guardada').slice(0, 80)}` });
+      } catch (e) {
+        registrarEvento('sessao_expirada', { alvo: 'analises_por_imovel', detalhe: `renovacao lancou: ${String(e?.message || e).slice(0, 80)}` });
+      }
+      if (renovou) { [m, d, l] = await lerAsTres(); falha = m.error || d.error || l.error; }
+    }
     if (falha) {
-      registrarEvento('api_erro', { alvo: 'analises_por_imovel', detalhe: `imovel=${id}: ${falha.message || 'erro'}` });
+      // O MOTIVO REAL, E POR UM CAMINHO QUE SOBREVIVE À MORTE DA SESSÃO. Antes ia como
+      // `api_erro`, que o /api/track descarta quando não reconhece o usuário fora das rotas
+      // públicas — ou seja, a falha de LEITURA POR SESSÃO era justamente a que nunca chegava ao
+      // diagnóstico, e restava adivinhar. Agora o código do PostgREST vem junto: `PGRST301` é
+      // sessão, `42P01` é tabela que não existe, `57014` é timeout. Três consertos diferentes.
+      const ehSessao = /jwt|expired|PGRST301|401/i.test(`${falha.code || ''} ${falha.message || ''}`);
+      const detalhe = `imovel=${id}: [${falha.code || 's/cod'}] ${String(falha.message || 'erro').slice(0, 140)}`;
+      registrarEvento(ehSessao ? 'sessao_expirada' : 'api_erro', { alvo: 'analises_por_imovel', detalhe });
       return false;
     }
     if (m.data?.length) mergeRows(m.data);

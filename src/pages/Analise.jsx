@@ -1644,6 +1644,13 @@ export default function Analise() {
               // Cota acabou, mas há CRÉDITO: o servidor gera e debita. Dizer isso é o que
               // faltava — quem recarregou precisa saber que pode usar, e que vai consumir saldo.
               ? `💳 Cota ${ehAmostra ? 'de amostra' : 'do mês'} esgotada — as próximas análises usam seu saldo de créditos.`
+            // COTA NÃO CARREGADA NÃO É COTA ZERO (09/09). `lerCotas` devolve null de propósito
+            // quando a leitura falha ("nunca inventa"), e a tela transformava esse null em
+            // "0/0" — que o dono leu, com razão, como "não tenho mais relatórios". É o vazio
+            // entregue como resposta, no lugar mais caro possível: o contador que diz se a
+            // pessoa ainda pode gerar. Sem número, diz que não sabe.
+            : !cotaMercado
+              ? '📊 Não conseguimos ler sua cota agora — recarregue a página. Gerar continua liberado; quem decide é o servidor.'
             : ehAmostra
               ? `📊 Relatórios de amostra: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
