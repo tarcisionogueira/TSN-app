@@ -4,6 +4,29 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 16 (09/09) — TOM DA PERSONA AJUSTADO: EMOJI OCASIONAL + PARA DE SOAR INTERROGATÓRIO
+
+**Achado ao vivo**: primeiro rascunho real gerado pela `redigir()` (resposta a um comentário de
+`@zoiacampos`) empilhou três pedidos na mesma mensagem — "qual ponto era?", "me manda o print ou
+repete a frase", "cola o link do edital" — e leu como interrogatório, mesmo a regra "UMA
+pergunta por mensagem" já existindo. Dono apontou dois ajustes: emoji ocasional (a instrução
+antiga, "sem emoji em excesso", era vaga o bastante pra IA simplesmente nunca usar) e menos tom
+de cobrança ao pedir informação faltante.
+
+**Corrigido em dado, sem deploy** (`ig_persona`, é `SELECT ... WHERE ativo=true ORDER BY
+criado_em DESC LIMIT 1` em `instagram-responder-cron.js` — trocar a linha ativa já vale na
+próxima rodada do cron). Histórico preservado: `id=1` (`v1-partida`) virou `ativo=false`, não
+foi apagado; `id=2` (`v1.1-tom-e-emoji`) é a nova ativa. Mudanças no texto: emoji explicitamente
+permitido ("de vez em quando... nunca mais de um por vez", numérico em vez de vago) e proibição
+explícita de empilhar várias exigências na mesma mensagem, reforçando por que a regra existe.
+
+**Pendente com o dono**: validar o próximo rascunho real gerado sob a persona nova antes de
+confiar — é exatamente o processo que já existe (Caixa → editar → decidir), não precisa de nada
+novo construído. A régua de promoção (`ig_taxa_sem_edicao()`) já aparece na própria tela
+(`/admin/instagram`, seção "régua") pra acompanhar o progresso rumo à autonomia por classe.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 15 (08/09) — MANYCHAT PRÓPRIO GANHA ENVIO DE VERDADE (SEND API), PRA VIABILIZAR O VÍDEO DA ANÁLISE DO APP
 
 **Contexto**: a Parte 14 fechou a dúvida de que o gargalo é o App Review, mas apontou um
