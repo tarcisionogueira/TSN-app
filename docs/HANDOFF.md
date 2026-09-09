@@ -4,6 +4,61 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 27 (09/09) — CONTRAMEDIDAS: BRECHA NOS CRONS DE ENRIQUECIMENTO + MONITORAMENTO GUARAPARI
+
+**Pedido do dono**: "coloquei para gerar novamente. monitore. veja se ha outras brechas para que
+esses erros que corrigimos possam se repetir. veja as contramedidas para evitar."
+
+**Monitoramento do relatório de Guarapari — causa raiz real, não é timeout genérico.** Falhou
+mais 2 vezes (4 no total). Log de runtime (Vercel) do request de 13:58:15 mostra exatamente
+onde o tempo foi: matrícula de **11 MB acima do limite de leitura**, edital com **3 PDFs
+candidatos** — cada um checado por visão de IA e nenhum "achou nada de substantivo" —, e
+`matricula-extrato` sozinho gastou 42,5s tentando (sem sucesso) extrair a metragem. A função
+saiu do orçamento (285s internos / 300s do Vercel) **na fase de leitura de documento, antes de
+a busca de mercado propriamente dita começar** (`mercado-cache` registrou `hit:false,n:0` —
+nunca chegou a buscar). Não é sorte ruim: é este imóvel específico (documentos pesados/
+ambíguos) sempre vai bater nesse padrão até o código mudar a prioridade entre "confirmar
+metragem no documento" (secundário) e "estimar valor de mercado" (o que o relatório entrega).
+**Não alterei o orçamento de tempo** — é lógica cuidadosamente calibrada (ver comentário
+"ORÇAMENTO DE TEMPO GLOBAL" em gerar-analise.js) e mexer nela sem entender o efeito em todo o
+resto arrisca quebrar relatórios que hoje funcionam. Fica registrado para decisão do dono.
+
+**Brecha real encontrada (não hipotética): os crons de enriquecimento dependiam da mesma
+classificação errada.** `api/enriquecer-backfill-cron.js` e `api/enriquecer-datas-cron.js`
+filtram `modalidade=not.ilike.*venda*direta*` para NÃO gastar tentando preencher `data_leilao`
+em lotes que (supostamente) não têm praça. Um lote com `modalidade` errada (como os 35 do BAYIT
+antes do fix) ficava **permanentemente fora** desse pipeline — o mesmo bug que motivou o
+relatório errado também impedia a autocorreção por outra via. Confirmado que HOJE não há
+nenhum lote nessa armadilha (query zerada), mas o padrão pode voltar com uma fonte nova.
+
+**Contramedida escolhida: invariante no banco, não regra de lint.** Cogitei uma regra nova em
+`verificar:padroes` (mesmo padrão de `medida-ausente-virando-zero`), mas o defeito real é
+multi-linha e semântico (checar se HÁ um guard de praça em algum lugar próximo) — um regex de
+uma linha teria alto risco de falso-negativo (nomes de variável diferentes) sem uma engenharia
+cuidadosa. Preferi o caminho mais robusto: `venda_direta_com_praca`, novo invariante em
+`qa_invariantes()` (`select modalidade ilike '%venda%direta%' and data_leilao is not null`) —
+pega a contradição **não importa qual código a produziu** (scraper novo, parceiro via
+`api/leiloeiro-webhook.js`, edição manual), incluindo o efeito colateral nos dois crons acima.
+Aplicado via migração, testado ao vivo: `status: ok, valor: 0`.
+
+**Auditoria de recorrência do gap de inadimplência — sem achado.** `AuthContext.jsx`
+(`fetchPerfil`, o gate de acesso REAL do cliente) já checa `inadimplente_desde` **antes** do
+role — ordem correta, diferente do bug que corrigi em `AdminFinanceiro.jsx`. Confirma que o
+padrão certo já existia no código de autenticação; só o card administrativo tinha regredido
+dele. Observação de baixa confiança, não uma correção: a janela de carência de "5 dias sem
+pagar" em `fetchPerfil` pode ser código morto na prática, já que `api/_webhook-core.js` já
+rebaixa o role no MESMO instante em que marca `inadimplente_desde` — não cheguei a confirmar
+todos os caminhos de escrita para ter certeza, e é lógica de acesso (mais arriscada de mexer
+às cegas), então fica registrado para quem for revisar depois, não alterado agora.
+
+**Auditoria de recorrência do gap de amostras — sem achado.** O PDF do relatório
+(`RelatorioPDF.jsx`) já lida bem com o caso: quando não há amostras, a seção some (não mostra
+"0"), e `mercado.comentario` + o badge do Índice BidPro já aparecem lá. `gerar-documental.js`
+nem usa esse fallback (não se aplica). O fix da Parte 26 (nota de reconciliação em
+`Analise.jsx`) já fecha o único lugar onde a lacuna existia de verdade.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 26 (09/09) — RELATÓRIO COM "0 AMOSTRAS" SEM EXPLICAR O VALOR CLASSIFICADO
 
 **Pedido do dono**: erro ao gerar relatório em 2 imóveis (ES) + "veja no Cliente 360 se outros
