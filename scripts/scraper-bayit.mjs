@@ -305,12 +305,22 @@ async function main() {
   // inclusive os já bons — só pra "prever". Um dry-run gastou a cota da semana inteira sem
   // gravar nada. Tirar o guard faz o PREVIEW mostrar (e o loop pagar) só o que é novo de
   // verdade, em dry-run ou não — o mesmo comportamento, sem custo escondido atrás do "não grava".
+  // FORÇA REPROCESSAMENTO (09/09) — pontual: o fix de classificação de documento
+  // (rotuloDoBloco) e o de modalidade (praças) corrigem a LEITURA, não os dados já gravados
+  // com a leitura antiga (77/78 lotes com anexos "anexo" genérico e/ou modalidade errada). A
+  // manutenção incremental existe pra NUNCA reprocessar quem já tem anexos — exatamente o que
+  // impediria esses 77 de serem corrigidos. BAYIT_FORCAR_TODOS=1 desliga a exclusão só nesta
+  // rodada; upsert substitui a linha inteira, então cada lote sai da rodada já com o dado
+  // CERTO, sem passar por um estado intermediário "sem documento".
+  const forcarTodos = process.env.BAYIT_FORCAR_TODOS === '1';
   const jaEnriquecidos = new Set();
-  {
+  if (!forcarTodos) {
     const { data, error } = await supabase.from('imoveis_leilao')
       .select('fonte_id').eq('fonte', 'BAYIT').not('anexos', 'is', null);
     if (!error) for (const r of data || []) jaEnriquecidos.add(r.fonte_id);
     console.log(`${jaEnriquecidos.size} lote(s) já enriquecido(s) em rodada anterior — não reprocessa.`);
+  } else {
+    console.log('BAYIT_FORCAR_TODOS=1 — ignorando manutenção incremental, reprocessando TODOS os candidatos.');
   }
 
   const feedXml = await bd(`${BASE}/sitemap.xml`);
