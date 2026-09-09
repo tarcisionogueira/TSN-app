@@ -28,8 +28,17 @@ const pluralRank = (nome, n) => {
   return s + 's';
 };
 
-function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
-  const filhos = filhosDe(nodo.id);
+function Nodo({ nodo, filhosDe, expandido, toggle, nivel, ancestrais = new Set() }) {
+  // ⚠️ 09/09 — trava contra CICLO no grafo de indicação (achado ao vivo: dois parceiros se
+  // indicando um ao outro travavam o navegador — `filhosDe` monta a árvore por `parent_id`
+  // sem saber que não é uma árvore de verdade). `indicado_por` já foi corrigido no banco pra
+  // este caso, mas a árvore nunca pode voltar a confiar cegamente que o grafo é acíclico —
+  // um clique errado em outro lugar do sistema recria o mesmo travamento pra outra dupla.
+  const filhos = filhosDe(nodo.id).filter((f) => {
+    if (!ancestrais.has(f.id)) return true;
+    console.error('[MinhaRede] ciclo de indicação detectado e cortado:', f.id, 'já é ancestral de', nodo.id);
+    return false;
+  });
   const temFilhos = filhos.length > 0;
   const aberto = expandido[nodo.id] !== false; // aberto por padrão
   const temContato = !!(nodo.telefone || nodo.email); // só vem no nível 1 (venda direta)
@@ -71,7 +80,8 @@ function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
         </div>
       </div>
       {temFilhos && aberto && filhos.map(f => (
-        <Nodo key={f.id} nodo={f} filhosDe={filhosDe} expandido={expandido} toggle={toggle} nivel={nivel + 1} />
+        <Nodo key={f.id} nodo={f} filhosDe={filhosDe} expandido={expandido} toggle={toggle} nivel={nivel + 1}
+          ancestrais={new Set(ancestrais).add(nodo.id)} />
       ))}
     </div>
   );
@@ -813,7 +823,8 @@ export default function MinhaRede() {
           </div>
         ) : (
           <div>{filhosDe(raiz.id).map(f => (
-            <Nodo key={f.id} nodo={f} filhosDe={filhosDe} expandido={expandido} toggle={toggle} nivel={0} />
+            <Nodo key={f.id} nodo={f} filhosDe={filhosDe} expandido={expandido} toggle={toggle} nivel={0}
+              ancestrais={new Set([raiz.id])} />
           ))}</div>
         )}
       </div>

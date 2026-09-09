@@ -4,6 +4,42 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 18 (09/09) — "MINHA REDE" TRAVAVA O NAVEGADOR: CICLO DE INDICAÇÃO (A INDICA B, B INDICA A)
+
+**Reportado pelo dono**: a tela de indicações (home / `MinhaRede.jsx`) travava — "Página sem
+resposta" do Chrome, "Seu link de indicação" preso em "Gerando seu link…" pra sempre.
+
+**Causa raiz, confirmada com dado real**: `perfis.indicado_por` tinha um CICLO —
+**Tarcísio (admin) indicado por João Paulo, e João Paulo indicado por Tarcísio** — os dois se
+apontando um pro outro. `Nodo` (componente recursivo de `MinhaRede.jsx`) monta a árvore via
+`filhosDe(id) = rows.filter(parent_id === id)` sem NENHUMA proteção contra ciclo — com A↔B,
+o render entra num vai-e-volta sem fim entre os dois nós, sem nunca lançar (React não detecta
+sozinho), até o navegador declarar a aba travada.
+
+**Qual lado era o corrompido, provado por data, não por suposição**: conta do Tarcísio
+criada em **16/06**; conta do João Paulo, em **14/08** — quase dois meses DEPOIS. É
+cronologicamente impossível o Tarcísio ter sido indicado por alguém que ainda nem existia.
+`indicado_por` do Tarcísio virou `NULL` (ele é o admin/raiz do sistema); o lado do João Paulo
+(`indicado_por = Tarcísio`) ficou como estava — é uma indicação real e coerente no tempo.
+Conferido com uma CTE recursiva de detecção de ciclo geral (não só pares diretos): zero ciclos
+restantes na base inteira depois do fix.
+
+**Duas camadas de correção, não uma só**:
+1. **Dado**: `perfis.indicado_por` do Tarcísio corrigido pra `NULL`.
+2. **Defesa em profundidade no front**: `Nodo`/`filhosDe` (`MinhaRede.jsx`) agora carregam um
+   `Set` de ancestrais já visitados no caminho e cortam qualquer filho que reapareça nele —
+   nunca mais confia cegamente que o grafo de indicação é uma árvore. Sem isso, o PRÓXIMO par
+   que se indicar mutuamente (erro de operação, bug em outro fluxo) trava o navegador de novo.
+3. **Invariante permanente** (`supabase/migrations/qa_invariante_indicacao_ciclica.sql`):
+   nova entrada em `qa_invariantes()` — `indicacao_ciclica` — detecta qualquer ciclo futuro no
+   grafo inteiro, não só o par que já mordeu. Zero hoje.
+
+**Sobre o botão de importar histórico do Instagram não aparecer**: o deploy da Parte 17 ainda
+estava em `BUILDING` no momento em que o dono checou (confirmado depois: `READY`). Não foi bug
+de código — é timing/cache. Vale sempre um Ctrl+Shift+R depois de uma mudança recente.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 17 (09/09) — 1º RASCUNHO REAL VALIDADO + ACHADO SÉRIO: O CORPUS DE APRENDIZADO NUNCA GRAVAVA O QUE SAÍA PELA SEND API
 
 **1. Validação ao vivo, pedida pelo dono**: rascunho #56 (comentário "👏👏👏👏👏👏" de `@lorranybello7`,
