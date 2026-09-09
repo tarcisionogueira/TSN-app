@@ -25,7 +25,7 @@
  * exato do corpo merecem conferência contra a documentação viva da Meta antes do 1º envio de
  * verdade — a mesma régua que `docs/INSTAGRAM_AUTOMACAO.md` §8 já pede pro resto do projeto.
  */
-const GRAPH_VERSION = 'v21.0';
+export const GRAPH_VERSION = 'v21.0';
 
 function envCfg() {
   return { igUserId: process.env.IG_USER_ID, pageToken: process.env.IG_PAGE_TOKEN };

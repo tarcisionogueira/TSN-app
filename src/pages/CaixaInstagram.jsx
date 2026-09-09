@@ -40,6 +40,9 @@ export default function CaixaInstagram() {
   const [resolvidos, setResolvidos] = useState(() => new Set());
   const [ocupado, setOcupado] = useState(null);
   const [copiaFalhou, setCopiaFalhou] = useState(() => new Set());
+  const [backfillOcupado, setBackfillOcupado] = useState(false);
+  const [backfillResultado, setBackfillResultado] = useState(null);
+  const [backfillCursor, setBackfillCursor] = useState(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -112,6 +115,24 @@ export default function CaixaInstagram() {
     await registrar(item, 'responder_publico', { texto });
   }
 
+  // Importação única do histórico (09/09) — pode precisar de mais de um clique numa conta
+  // ativa: `terminado:false` + `cursor_media` é como o endpoint diz "ainda tem mais, chama de
+  // novo". Reprocessar é seguro (ignore-duplicates no mid), então não tem problema clicar de novo.
+  async function importarHistorico() {
+    setBackfillOcupado(true);
+    try {
+      const r = await apiCall('/api/admin-ig-backfill-comentarios', {
+        method: 'POST', body: JSON.stringify(backfillCursor ? { cursor_media: backfillCursor } : {}),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error([j?.error, j?.detalhe].filter(Boolean).join(' — ') || `HTTP ${r.status}`);
+      setBackfillResultado(j);
+      setBackfillCursor(j.terminado ? null : j.proximo_cursor_media);
+    } catch (e) {
+      setErro(`Importação do histórico falhou (${String(e.message || e)}).`);
+    } finally { setBackfillOcupado(false); }
+  }
+
   async function mudarEstado(item, estado) {
     setOcupado(item.id);
     try {
@@ -147,6 +168,22 @@ export default function CaixaInstagram() {
       {erro && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 9, padding: '10px 12px', fontSize: 13, margin: '14px 0' }}>{erro}</div>
       )}
+
+      {/* Ação única de manutenção, não o fluxo principal — por isso discreta. Puxa comentários
+          antigos + as respostas reais do dono direto da Graph API, pra alimentar o corpus de
+          aprendizado com histórico de antes do webhook existir. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0', fontSize: 12.5, color: '#64748b' }}>
+        <button onClick={importarHistorico} disabled={backfillOcupado} style={{ ...B, fontSize: 12.5, padding: '6px 10px' }}>
+          {backfillOcupado ? 'Importando…' : backfillCursor ? 'Continuar importação do histórico →' : 'Importar histórico de comentários (90 dias)'}
+        </button>
+        {backfillResultado && (
+          <span>
+            {backfillResultado.media_verificadas} posts verificados · {backfillResultado.respostas_do_dono_encontradas} respostas suas encontradas · {backfillResultado.pares_gravados} pares gravados
+            {!backfillResultado.terminado && ' — ainda não terminou, clique de novo pra continuar'}
+            {backfillResultado.terminado && ' — concluído'}
+          </span>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '16px 0 6px' }}>
         <div style={{ fontSize: 15, fontWeight: 800 }}>{responder.length} para responder</div>
