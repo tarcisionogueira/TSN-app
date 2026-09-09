@@ -2,6 +2,7 @@ import { fmt, fmtPct, moedaOuTraco, pctOuTraco } from '../utils/calculos';
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 import { notaMetodologicaTexto } from './NotaMetodologica';
+import { vendasDe, locacoesDe } from '../lib/niveis-mercado';
 
 // Escape para o rodapé metodológico (texto montado dos dados da geração).
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -276,14 +277,14 @@ ${(() => {
   // Relatórios antigos não têm totalAmostrasVenda (saía "undefined encontradas") e o
   // servidor antigo gravava só o Nível 2 em mercado.vendas — une os dois níveis aqui
   // p/ o PDF listar as amostras de CONDOMÍNIO (nível 1), as mais relevantes.
-  const vendasPdf = [...(mercado.nivel1?.vendas||[]), ...(mercado.nivel2?.vendas||[])];
+  const vendasPdf = vendasDe(mercado);
   const lista = vendasPdf.length ? vendasPdf : (mercado.vendas||[]);
   return lista.length?`<h3>Amostras de Venda (${lista.length} encontradas)</h3>
 <table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
 ${lista.slice(0,12).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:'';
 })()}
 ${(() => {
-  const locPdf = [...(mercado.nivel1?.locacoes||[]), ...(mercado.nivel2?.locacoes||[])];
+  const locPdf = locacoesDe(mercado);
   const lista = locPdf.length ? locPdf : (mercado.locacoes||[]);
   return lista.length?`<h3>Amostras de Locação</h3>
 <table><tr><th>Imóvel</th><th class="r">Aluguel/mês</th><th>Fonte</th></tr>

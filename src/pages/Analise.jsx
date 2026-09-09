@@ -32,6 +32,7 @@ import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
+import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
 import { soAceitaAVista } from '../data/pagamento.js';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
@@ -1812,6 +1813,15 @@ export default function Analise() {
               const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean).map(kDoc));
               // Rótulo humano: só usa o "nome" se for texto de verdade (não URL, path
               // ou nome de arquivo tipo "1727787880704.pdf"); senão, rótulo genérico.
+              // Dedução de tipo SÓ para detectar duplicidade na lista (ver o uso abaixo).
+              const tipoPeloNome = (n) => {
+                const t = String(n || '').toLowerCase();
+                if (/matr[íi]cula/.test(t)) return 'matricula';
+                if (/laudo/.test(t)) return 'laudo';
+                if (/edital/.test(t)) return 'edital';
+                if (/regras/.test(t)) return 'regras_venda';
+                return null;
+              };
               const nomeLimpo = (n) => {
                 const s = (n || '').trim();
                 if (!s || /https?:|\/|\.pdf$|^\d[\d._-]*$/i.test(s) || !/[a-zà-ú]{3}/i.test(s)) return null;
@@ -1830,9 +1840,17 @@ export default function Analise() {
                 const k = kDoc(u);
                 if (urlsMostradas.has(k) || vistos.has(k)) continue;
                 // já contemplado pelos tópicos padrão? (evita duplicar laudo/edital/etc.)
-                if (topicos.includes(a.tipo) && docsView.find(d => d.t === a.tipo)?.fileUrl) continue;
+                //
+                // O `a.tipo` NÃO BASTA (09/09): os anexos que vêm do portal do leiloeiro chegam
+                // SEM tipo, então este guarda nunca disparava para eles — e o mesmo documento
+                // aparecia duas vezes, uma da nossa cópia guardada (imovel_anexos, "Matrícula") e
+                // outra do anexo do portal ("MATRÍCULA"). Aqui o tipo é deduzido do NOME quando
+                // ele não vier, só para decidir DUPLICIDADE — a classificação de verdade continua
+                // no servidor (api/_doc-scan.js).
+                const tipoDoAnexo = a.tipo || tipoPeloNome(a.nome);
+                if (topicos.includes(tipoDoAnexo) && docsView.find(d => d.t === tipoDoAnexo)?.fileUrl) continue;
                 vistos.add(k);
-                const rot = docMap[a.tipo] || nomeLimpo(a.nome) || `Documento do lote${extras.length ? ' ' + (extras.length + 1) : ''}`;
+                const rot = docMap[tipoDoAnexo] || nomeLimpo(a.nome) || `Documento do lote${extras.length ? ' ' + (extras.length + 1) : ''}`;
                 porRotulo[rot] = (porRotulo[rot] || 0) + 1;
                 const label = porRotulo[rot] > 1 ? `${rot} (${porRotulo[rot]})` : rot;
                 extras.push({ t: `extra_${extras.length}`, label, url: u, fileUrl: u, anexoId: a?.id || null });
@@ -3085,9 +3103,9 @@ export default function Analise() {
           const descAval = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
           // Quantas amostras de VENDA compõem o preço médio (transparência do tíquete)
           // e quanto a venda estimada fica abaixo dessa média (cálculo explícito).
-          const nAmostras = ((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0))
+          const nAmostras = vendasDe(mercado).length
             || Number(mercado?.totalAmostrasVenda) || (mercado?.vendas?.length || 0)
-            || ((mercado?.nivel1?.totalAmostras || 0) + (mercado?.nivel2?.totalAmostras || 0));
+            || totalAmostrasDe(mercado);
           const descSugerido = valorMedia > 0 && sugerido > 0 ? Math.round((1 - sugerido / valorMedia) * 100) : 0;
           const card = { background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' };
           const rot = { fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 };
@@ -3381,7 +3399,7 @@ export default function Analise() {
 
       {/* ── ETAPA 3: AVALIAÇÃO MERCADOLÓGICA ── */}
       <Section id="sec-mercado" step="3" title="Avaliação Mercadológica" icon={BarChart3} color="#10b981" open={openSec.mercado} onToggle={()=>toggleSec('mercado')}
-        badge={mercado ? `Nível 1: ${mercado.nivel1?.totalAmostras||0} amostras · Nível 2: ${mercado.nivel2?.totalAmostras||0} amostras` : 'Comparativos de venda e locação'}>
+        badge={mercado ? `Nível 1: ${mercado.nivel1?.totalAmostras||0} · Nível 2: ${mercado.nivel2?.totalAmostras||0}${mercado.nivel3?.totalAmostras ? ` · Nível 3: ${mercado.nivel3.totalAmostras}` : ''} amostras` : 'Comparativos de venda e locação'}>
         <div style={{ display:'flex', flexDirection:'column', gap:16, paddingTop:14 }}>
           <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
             <Info size={15} color="#16a34a" style={{flexShrink:0,marginTop:1}}/>
@@ -3605,7 +3623,7 @@ export default function Analise() {
                       ))}
                     </div>
                     {comp.taxa_aa != null && <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Valorização estimada da região: ~{comp.taxa_aa}% a.a. (curva do Índice BidPro).{comp.projetado ? ' O valor de mercado exibido é projetado para hoje a partir dos anúncios de períodos anteriores.' : ''}</div>}
-                    {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && (
+                    {!totalAmostrasDe(mercado) && (
                       <div style={{ fontSize:10.5, color:'#475569', marginTop:8, lineHeight:1.55, paddingTop:8, borderTop:'1px dashed #c7d2fe' }}>
                         Estes {comp.total_anuncios || 0} anúncio(s) vêm da <strong>nossa base própria</strong>, acumulada de análises
                         anteriores nesta praça — não da busca ao vivo. É por isso que o painel
@@ -3780,8 +3798,8 @@ export default function Analise() {
                 <summary style={{ cursor:'pointer', listStyle:'none', padding:'12px 16px', background:'#f8fafc', display:'flex', alignItems:'center', gap:10, fontSize:12.5, fontWeight:800, color:'#0f172a' }}>
                   <span style={{ width:22, height:22, borderRadius:7, background:'#10b981', color:'white', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, flexShrink:0 }}>3</span>
                   <span style={{ textTransform:'uppercase', letterSpacing:0.5 }}>Amostras e comparativos</span>
-                  <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>· Nível 1: {mercado.nivel1?.totalAmostras||0} · Nível 2: {mercado.nivel2?.totalAmostras||0} amostras</span>
-                  {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && mercado.fonteEstimativa === 'indice_bidpro' && (
+                  <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>· Nível 1: {mercado.nivel1?.totalAmostras||0} · Nível 2: {mercado.nivel2?.totalAmostras||0}{mercado.nivel3?.totalAmostras ? ` · Nível 3: ${mercado.nivel3.totalAmostras}` : ''} amostras</span>
+                  {!totalAmostrasDe(mercado) && mercado.fonteEstimativa === 'indice_bidpro' && (
                     <span style={{ fontSize:11, color:'#5b21b6', fontWeight:700 }}>· valor via Índice BidPro</span>
                   )}
                   <span style={{ marginLeft:'auto', fontSize:11, color:'#0D63DB', fontWeight:700 }}>ver detalhes ▾</span>
@@ -3796,7 +3814,7 @@ export default function Analise() {
                       nota fecha o vão bem aqui, onde o "0" apareceria sozinho e pareceria dizer
                       que o valor não tem lastro nenhum — mesmo princípio da nota de coerência do
                       aluguel (BANDA 1, acima). */}
-                  {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && mercado.fonteEstimativa === 'indice_bidpro' && (
+                  {!totalAmostrasDe(mercado) && mercado.fonteEstimativa === 'indice_bidpro' && (
                     <div style={{ background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
                       <b>Nenhuma amostra direta encontrada nesta busca</b> (nem no condomínio/endereço, nem na vizinhança). O valor de mercado deste relatório usa o <b>Índice BidPro</b> — base própria da região, consolidada de outras análises da plataforma
                       {Number(mercado.indiceBidPro?.n_amostras) > 0 ? `, com ${mercado.indiceBidPro.n_amostras} amostra(s)` : ''} — como referência, não um anúncio ao vivo específico deste imóvel.
@@ -3916,6 +3934,55 @@ export default function Analise() {
                   )}
                 </div>
               </div>
+
+              {/* NÍVEL 3 — RAIO AMPLIADO (1km a 2km). Só aparece quando foi ABERTO: ele existe
+                  porque faltou comparável perto, e mostrá-lo vazio sugeriria que a busca foi
+                  mais longe do que foi. O raio vem de RAIO_NIVEL, a mesma constante que o
+                  prompt usa — para a tela nunca prometer um alcance diferente do pedido. */}
+              {(mercado.nivel3?.vendas?.length > 0 || mercado.nivel3?.locacoes?.length > 0) && (
+              <div style={{ borderRadius:12, border:'2px solid #f59e0b', overflow:'hidden', marginTop:12 }}>
+                <div style={{ background:'#f59e0b', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
+                  <MapPin size={15} color="white"/>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Raio ampliado ({RAIO_NIVEL.nivel3})</span>
+                  <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.25)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
+                    {mercado.nivel3?.totalAmostras || (mercado.nivel3?.vendas?.length || 0) + (mercado.nivel3?.locacoes?.length || 0)} amostras
+                  </span>
+                </div>
+                <div style={{ padding:'11px 16px', background:'#fffbeb', borderBottom:'1px solid #fde68a', fontSize:11.5, color:'#92400e', lineHeight:1.6 }}>
+                  Não havia comparáveis suficientes até 1 km, então a busca foi ampliada até 2 km.
+                  Estas amostras pesam <strong>menos</strong> na média — quanto mais longe, menos elas
+                  descrevem a mesma praça.{mercado.nivel3?.descricao ? ` ${mercado.nivel3.descricao}` : ''}
+                </div>
+                <div style={{ padding:'14px 16px', display:'grid', gap:14 }}>
+                  {mercado.nivel3?.vendas?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#d97706', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel3.vendas.length} imóveis</div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        {mercado.nivel3.vendas.slice(0,8).map((v,i)=>(
+                          <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:10, padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
+                            <span style={{ color:'#334155' }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''}{Number(v.distanciaKm) > 0 ? ` · ${Number(v.distanciaKm).toFixed(1)} km` : ''})</span></span>
+                            <span style={{ fontWeight:700, color:'#d97706', whiteSpace:'nowrap' }}>R$ {fmt(v.valor)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {mercado.nivel3?.locacoes?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação, {mercado.nivel3.locacoes.length} imóveis</div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        {mercado.nivel3.locacoes.map((l,i)=>(
+                          <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''}{Number(l.distanciaKm) > 0 ? ` · ${Number(l.distanciaKm).toFixed(1)} km` : ''})</span></span>
+                            <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
 
                 </div>
               </details>

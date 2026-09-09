@@ -24,6 +24,7 @@ import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
 // "MÉTRICAS RECALCULADAS NO SERVIDOR" no parecer) — parecer e tela param de divergir.
 import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
+import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -308,9 +309,7 @@ async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal)
     // justamente o campo que diz se um relatório foi feito sobre 3 amostras ou sobre 30. É o
     // mesmo defeito de nome que o comentário acima descreve para `valorAvaliacao`, na mesma
     // função. A expressão certa já existia neste arquivo (linha ~2353, semeadura do Índice).
-    const nAmostras = ((Number(mercado?.nivel1?.totalAmostras) || 0) + (Number(mercado?.nivel2?.totalAmostras) || 0))
-      || ((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel1?.locacoes?.length || 0)
-        + (mercado?.nivel2?.vendas?.length || 0) + (mercado?.nivel2?.locacoes?.length || 0))
+    const nAmostras = totalAmostrasDe(mercado)
       || ((Array.isArray(mercado?.vendas) ? mercado.vendas.length : 0)
         + (Array.isArray(mercado?.locacoes) ? mercado.locacoes.length : 0));
     const precoM2 = Number(mercado?.precoMedioM2) || null;
@@ -558,8 +557,8 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const lngA = Number.isFinite(Number(imDb.longitude)) ? Number(imDb.longitude) : null;
     const nowMes = new Date().toISOString().slice(0, 7);
     const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
-    const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
-    const locs   = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
+    const vendas = vendasDe(mercado);
+    const locs   = locacoesDe(mercado);
     const rows = [];
     // TETO DE DISTÂNCIA NA BASE (achado do dono em 03/08): o relatório de um lote em Santana
     // de Parnaíba puxou comparáveis de Alphaville — mesma cidade, mas a >5km e de outro padrão
@@ -1318,7 +1317,7 @@ export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado
   // chegava por último e desgrudada. Agora entra DENTRO do passo 1.
   const bairroTxt = bairro ? ` (bairro ${bairro})` : '';
   const bairroTxt2 = bairro ? `${bairro}, ${cidade}/${estado}` : `${cidade}/${estado}`;
-  return `Você é um perito avaliador imobiliário. Realize a PESQUISA DE COMPARÁVEIS em DOIS NÍVEIS para o imóvel:
+  return `Você é um perito avaliador imobiliário. Realize a PESQUISA DE COMPARÁVEIS em ATÉ TRÊS NÍVEIS para o imóvel:
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
 ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
@@ -1372,14 +1371,20 @@ do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vend
 ═══ NÍVEL 2 — VIZINHANÇA (250m a ~1km) ═══
 Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. Meta: 15+ vendas e 8+ locações.
 
+═══ NÍVEL 3 — RAIO AMPLIADO (1km a 2km) — SÓ QUANDO FALTAR AMOSTRA ═══
+Abra este nível SOMENTE se os níveis 1 e 2, SOMADOS, tiverem MENOS de ${MIN_AMOSTRAS_ANTES_DO_NIVEL3}
+amostras VÁLIDAS (com preço E metragem). Com menos de 5, ele é OBRIGATÓRIO: é melhor apresentar
+dados de 2km, ditos como tal, do que devolver um relatório sem comparável nenhum.
+As amostras daqui vão no balde "nivel3" — NUNCA misturadas em nivel1/nivel2, porque a tela mostra
+o raio de cada nível, e amostra de 2km rotulada como "até 1km" é informação errada.
+OBRIGATÓRIO em cada amostra deste nível: (a) "distanciaKm" preenchido (ex.: 1.8); (b) PESO MENOR na
+média consolidada que as dos níveis 1 e 2; (c) diga no "comentario", com todas as letras, que
+faltaram comparáveis próximos e o raio foi ampliado para 2km.
+
 ═══ TETO DE DISTÂNCIA (REGRA DURA — não negocie) ═══
 O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
 mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
-• NUNCA use amostra a mais de 1km nos níveis 1 e 2.
-• Só se, somados os níveis 1 e 2, houver MENOS de 10 amostras VÁLIDAS (com preço E metragem), você pode expandir até 2km — e então,
-  OBRIGATORIAMENTE: (a) marque cada amostra assim obtida com "distanciaKm" (ex.: 1.8); (b) dê a ela
-  PESO MENOR na média; (c) escreva no "comentario", com todas as letras, que faltaram comparáveis
-  próximos e o raio foi ampliado para 2km.
+• NUNCA use amostra a mais de 1km nos níveis 1 e 2 — acima disso é NÍVEL 3, e só sob a condição acima.
 • Mais de 2km: NÃO USE, em nenhuma hipótese. Prefira devolver poucas amostras a devolver amostras
   de outra praça. Se nem a 2km houver 5 vendas, diga isso no "comentario" e alargue
   precoMinM2/precoMaxM2 para refletir a incerteza.
@@ -1429,9 +1434,10 @@ Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
   "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel3": { "descricao": "preencha SÓ se abriu o nível 3 (1km a 2km); caso contrário devolva totalAmostras 0 e listas vazias", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "fontesLocais": [{"nome":"","url":""}],
-  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."
+  "comentario": "Análise qualitativa de 3-4 frases comparando os níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."
 }`;
 }
 
@@ -1940,7 +1946,7 @@ export default async function handler(req, res) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
       // Reaproveitou pesquisa recente: as duas etapas de busca já estão "prontas" (vieram do cache).
-      const nReuso = ((mercado.nivel1?.vendas?.length || 0) + (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.vendas?.length || 0) + (mercado.nivel2?.locacoes?.length || 0)) || null;
+      const nReuso = (vendasDe(mercado).length + locacoesDe(mercado).length) || null;
       prog.comparaveis = { status: 'concluido', n: nReuso };
       prog.contexto = { status: 'concluido', n: null };
       await flush();
@@ -2068,7 +2074,7 @@ export default async function handler(req, res) {
       // sobra no banco, e a pergunta "por que não foi o Gemini?" fica sem rastro.
       diagBusca.geminiErro = compar?.__geminiErro || compar?.__diag?.geminiErro || motivoGemini || null;
       if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
-      const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
+      const semAmostrasA = (m) => (vendasDe(m).length + locacoesDe(m).length) === 0 && !(Number(m?.consolidado?.precoMedioM2) > 0);
 
       // ═══ O RETRY OLHAVA "ZERO DE QUALQUER COISA"; QUEM PRECIFICA É VENDA (30/08) ═══════════
       // Relatado pelo dono: "às vezes não traz amostras suficientes para precificação, e ao
@@ -2094,7 +2100,7 @@ export default async function handler(req, res) {
       // sobrevive aos descartes e chega às 3 — abaixo disso o relatório sai com o número da IA
       // e o aviso de base fina, que é exatamente o que o cliente reclamou.
       const MIN_VENDAS_ALVO = 4;
-      const contarVendas = (m) => (m?.nivel1?.vendas?.length || 0) + (m?.nivel2?.vendas?.length || 0);
+      const contarVendas = (m) => vendasDe(m).length;
 
       // FUNDIR, NUNCA SUBSTITUIR. O retry antigo fazia `compar = await buscarEtapa(...)`: se a
       // segunda passada voltasse MAIS POBRE que a primeira, o cliente perdia o que já tinha —
@@ -2127,7 +2133,7 @@ export default async function handler(req, res) {
         // capa lê. As LISTAS são sempre a união.
         const maior = contarVendas(extra) > contarVendas(base) ? extra : base;
         const fundido = { ...base, ...maior };
-        for (const nv of ['nivel1', 'nivel2']) {
+        for (const nv of NIVEIS) {
           if (!base?.[nv] && !extra?.[nv]) continue;
           fundido[nv] = {
             ...(base?.[nv] || {}), ...(maior?.[nv] || {}),
@@ -2150,7 +2156,7 @@ export default async function handler(req, res) {
         // anúncios e a união não soma nada — gastar a busca para redescobrir o que já se tem é o
         // mesmo que não tentar. Locação é dito explicitamente porque a 1ª passada às vezes volta
         // cheia de aluguel e vazia de venda (Santana: 1 × 4).
-        const jaTem = [...(compar?.nivel1?.vendas || []), ...(compar?.nivel2?.vendas || [])]
+        const jaTem = vendasDe(compar)
           .map(v => String(v?.endereco || v?.condominio || v?.bairro || '').trim()).filter(Boolean).slice(0, 8);
         const reforco = compar.__falhou ? '' : `
 
@@ -2194,7 +2200,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // A regra é a MESMA que o prompt já pede — mediana do `valorMensal` — só que executada
         // de forma determinística, com o mínimo de 3 amostras que o dono definiu.
         {
-          const locs = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || []), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
+          const locs = [...locacoesDe(mercado), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
           const mensais = locs.map(l => Number(l?.valorMensal) || 0).filter(v => v > 0).sort((a, b) => a - b);
           if (mensais.length >= 3) {
             const mediana = mensais.length % 2
@@ -2233,7 +2239,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         if (naoAluga) {
           mercado.locacoes = [];
           if (mercado.nivel1) mercado.nivel1.locacoes = [];
-          if (mercado.nivel2) mercado.nivel2.locacoes = [];
+          for (const k of NIVEIS) if (mercado[k]) mercado[k].locacoes = [];
           mercado.aluguelMedio = 0;
           if (mercado.consolidado) { mercado.consolidado.aluguelMedio = 0; mercado.consolidado.yieldBruto = 0; mercado.consolidado.yieldLiquido = 0; }
           // A tela precisa saber a DIFERENÇA entre "não apuramos" e "não existe": sem esta
@@ -2270,12 +2276,12 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
         // O PDF lista TODAS as amostras (nível 1 = mesmo condomínio é a mais relevante;
         // antes só o nível 2 entrava e um lote com amostras só de condomínio saía sem nenhuma).
-        mercado.vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
-        mercado.locacoes = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
+        mercado.vendas = vendasDe(mercado);
+        mercado.locacoes = locacoesDe(mercado);
         // Agregados por nível SEMPRE consistentes com as listas: o repair de JSON truncado
         // preserva os arrays e perde os agregados (que vêm depois) → a tela mostrava
         // "0 amostras · Mín/Médio/Máx R$ 0" ao lado de uma lista cheia. Recalcula no servidor.
-        for (const nv of [mercado.nivel1, mercado.nivel2].filter(Boolean)) {
+        for (const nv of NIVEIS.map((k) => mercado[k]).filter(Boolean)) {
           const vs = (nv.vendas || []).map(v => Number(v.valorM2 ?? v.valor_m2)).filter(x => x > 0).sort((a, b) => a - b);
           nv.totalAmostras = Math.max(Number(nv.totalAmostras) || 0, (nv.vendas?.length || 0) + (nv.locacoes?.length || 0));
           if (vs.length) {
@@ -2286,7 +2292,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         }
         mercado.totalAmostrasVenda = mercado.vendas.length; // o PDF imprime esta contagem (era undefined)
         mercado.pesquisaEm = new Date().toISOString();
-        const nA = (mercado.nivel1?.vendas?.length || 0) + (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.vendas?.length || 0) + (mercado.nivel2?.locacoes?.length || 0);
+        const nA = vendasDe(mercado).length + locacoesDe(mercado).length;
         prog.comparaveis = { status: 'concluido', n: nA };
       }
       prog.contexto = { status: mercado.__instavel ? 'pulado' : 'gerando', n: null };
@@ -2658,7 +2664,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     try {
       if (['residencial', 'comercial', 'industrial'].includes(baseTipo) && areaM2 > 0) {
         avalPond = avaliarMercado({
-          nivel1: mercado?.nivel1?.vendas, nivel2: mercado?.nivel2?.vendas,
+          nivel1: mercado?.nivel1?.vendas, nivel2: mercado?.nivel2?.vendas, nivel3: mercado?.nivel3?.vendas,
           // `vminImovel` só é declarado mais abaixo (const, zona morta temporal) — usar aqui
           // daria ReferenceError engolido pelo catch, desligando a trava de auto-referência EM
           // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.
@@ -2675,7 +2681,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           // Reescreve o que a tela mostra por nível, já sem as amostras descartadas — o
           // `totalAmostras` passa a bater com o que sustenta a conta (antes um anúncio SEM
           // PREÇO contava como amostra e o cliente lia "2" onde havia 1).
-          for (const [k, r] of [['nivel1', avalPond.nivel1], ['nivel2', avalPond.nivel2]]) {
+          for (const [k, r] of NIVEIS.map((k) => [k, avalPond[k]])) {
             if (!mercado[k]) continue;
             mercado[k] = { ...mercado[k], vendas: r.usadas.map(({ _valorM2, _dist, _distEstimada, _nivel, ...v }) => v),
               precoMedioM2: r.precoMedioM2, precoMinM2: r.precoMinM2, precoMaxM2: r.precoMaxM2, totalAmostras: r.n };
@@ -2724,7 +2730,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // (0,5–500 R$/m²·mês) e área conhecida; senão preserva o valor anterior. Terreno não aluga
     // (zerado acima). Recalcula o yield da renda nova sobre o valor final — yield é conta.
     if (baseTipo !== 'terreno' && areaM2 > 0 && mercado) {
-      const locs = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || []), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
+      const locs = [...locacoesDe(mercado), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
       const m2mes = locs
         .map((l) => { const v = Number(l?.valorMensal) || 0; const a = Number(l?.m2) || 0; return (v > 0 && a > 0) ? v / a : 0; })
         .filter((x) => x >= 0.5 && x <= 500)
@@ -2816,7 +2822,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     const areaTerreno = Number(mercadoInputs.areaTerrenoM2) || 0;
     const areaSeg = segIdx === 'terreno' ? (areaTerreno || areaM2) : areaM2;
     if (segIdx !== 'rural') {
-      const nAmostras = (Number(mercado.nivel1?.totalAmostras) || 0) + (Number(mercado.nivel2?.totalAmostras) || 0)
+      const nAmostras = totalAmostrasDe(mercado)
         || ((mercado.vendas?.length || 0) + (mercado.locacoes?.length || 0));
       const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaSeg > 0) ? Number(mercado.aluguelMedio) / areaSeg : null;
       await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras, segIdx);
@@ -3177,10 +3183,10 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // leu da base, quantas amostras, de que período, que documento foi lido, qual área
       // prevaleceu. Um rodapé padrão que diz sempre a mesma coisa não resguarda nada; o que
       // resguarda é ele bater com o relatório acima dele.
-      const nVend = (mercado.nivel1?.vendas?.length || 0) + (mercado.nivel2?.vendas?.length || 0);
-      const nLoc = (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.locacoes?.length || 0);
-      const datasAmostra = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || []),
-        ...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])]
+      const nVend = vendasDe(mercado).length;
+      const nLoc = locacoesDe(mercado).length;
+      const datasAmostra = [...vendasDe(mercado),
+        ...locacoesDe(mercado)]
         .map(a => String(a?.data || '')).filter(d => /^\d{4}-\d{2}/.test(d)).sort();
       mercado.metodologia = {
         geradoEm: new Date().toISOString(),
@@ -3328,7 +3334,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     try {
       const m = result.mercado || {};
       const fonte = m.fonteEstimativa === 'indice_bidpro' ? 'índice' : 'mercado ao vivo';
-      const nComp = (m.nivel1?.vendas?.length || 0) + (m.nivel2?.vendas?.length || 0);
+      const nComp = vendasDe(m).length;
       // ENTREGA INCOMPLETA: mercado veio, mas o PARECER saiu vazio (a redação falhou). Antes isso
       // ia para o 360 como 'relatorio_mercado_ok' — a falha ficava INVISÍVEL para diagnóstico. Agora
       // é um evento próprio (relatorio_parecer_vazio) com o motivo (__diagParecer), rastreável no
