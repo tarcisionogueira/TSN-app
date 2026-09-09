@@ -34,14 +34,22 @@ o envio agora (opção "a") em vez de submeter com uma demo só de recebimento (
   corpo de DM/comentário, tira o prefixo `c_`, rejeita texto vazio/campo vazio, tipo desconhecido
   nunca vira envio às cegas, e `envioConfigurado()` nas 4 combinações dos dois segredos.
 
-**Pendente com o dono**: gerar o `IG_PAGE_TOKEN` no painel da Meta (Passo 2, "Gerar token") —
-até lá `envio_disponivel` fica `false` e o botão continua escondido, sem quebrar nada, mas o
-vídeo de demonstração ainda não é gravável. Depois de confirmar um envio real funcionando,
-falta só gravar o vídeo e clicar "Ir para Análise do app".
+**✅ CONFIRMADO em produção (09/09)**: `IG_PAGE_TOKEN`/`IG_USER_ID` gerados e gravados na Vercel,
+`envio_disponivel: true` medido de verdade em `/admin/instagram` (banner e botão "Enviar agora"
+apareceram, não é dedução). A geração do token teve uma novela própria — três achados que valem
+a pena ler antes de mexer nisso de novo, todos detalhados em `docs/ENVS_VERCEL.md`: (1) o
+`IG_USER_ID` documentado desde 01/09 media a conta pelo ID errado (vínculo com Página, não
+Instagram Login — o certo é outro número); (2) o app "BidPro - Atendimento-IG" existe de verdade
+mas não aparece em todo seletor de app do painel; (3) o botão "Gerar token" da Meta (v26.0) já
+entrega token de LONGA DURAÇÃO direto — tentar trocar ele por outro (`ig_exchange_token`) só
+produz `"Session key invalid"`, com qualquer secret. O Depurador de Token da própria Meta
+(`developers.facebook.com/tools/debug/accesstoken/`) foi o que resolveu, não tentativa e erro.
 
-⚠️ **Sem confirmação contra tráfego real ainda** (sessão sem token válido no momento em que isto
-foi escrito) — `GRAPH_VERSION` e o formato exato do corpo merecem conferência contra a
-documentação viva da Meta antes do 1º envio de verdade, mesma régua que `docs/INSTAGRAM_AUTOMACAO.md` §8 já pede pro resto do projeto.
+**Ainda falta, e é 100% do dono**: com o envio confirmado, o próximo passo é gravar o vídeo do
+fluxo funcionando (comentário/DM chegando → rascunho → "Enviar agora" → resposta saindo) e
+clicar "Ir para Análise do app". Também falta uma pendência operacional sem dono ainda: o token
+expira em ~60 dias da geração e precisa ser renovado manualmente (`ig_refresh_token`) — nenhuma
+automação faz isso, e não há aviso programado antes do vencimento.
 
 ---
 
