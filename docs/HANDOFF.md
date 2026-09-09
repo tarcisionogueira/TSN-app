@@ -39,18 +39,22 @@ atual) e confirmou contra o dado real em `imoveis_leilao`:
 | Fonte | Ativos | Com doc | Causa | Ação |
 |---|---|---|---|---|
 | **SBID9 / SBID21** | 34 + poucas dezenas | 0% | **Bug real**: a chamada do scraper esquecia `{ enrich: true }` — mesma função (`scraperSuperbidNet`) e mesmo template de página que SUPERBID (74%) e SOLD (100%), só que sem o enriquecimento que visita o detalhe do lote | ✅ **Corrigido e em produção** (`scripts/scraper-puppeteer.mjs`, commit `45b43a7`) |
-| **GESTAOLEILOES** | 123 | 0% | **Bug real**: o parser decapa TODAS as tags antes de checar link de documento, e nunca visita `url_lote` (página do lote — já vem 100% populada, só não é usada) — só a página do EVENTO | Fix conhecido (portar o padrão de scan de `<a href>` que `scraper-soleon.mjs` já usa) — **não apliquei**: essa fonte é paga por request (Bright Data, sub-cota `gestao`), e visitar 1 página por LOTE significaria +100 requests/rodada contra o teto SEMANAL compartilhado com CALIL/VEGAS/RJLEILOES. É decisão de orçamento, não só de código — fica pra sua aprovação. |
+| **GESTAOLEILOES** | 123 | 0% | **Bug real**: o parser decapa TODAS as tags antes de checar link de documento, e nunca visita `url_lote` (página do lote — já vem 100% populada, só não é usada) — só a página do EVENTO | ✅ **Corrigido e em produção**, com cap — dono aprovou a versão com teto (mesmo espírito do `enrichCap` do SUPERBID/SOLD), não a versão sem limite. `GESTAO_DOC_CAP` (default 30 lotes/execução, ajustável no dispatch do workflow) — `scripts/scraper-gestao.mjs` + `.github/workflows/scraper-gestao.yml`, commit `62ff5bf`. Roda só depois do DRYRUN, só nos lotes sem `anexos`. |
 | **SATO** | 23 | 0% | Nunca implementado — é um TODO já explícito no código (`link_edital: url, // TODO(detalhe)`). Site é SPA (Quasar/Vue): fetch puro não vê nada renderizado, precisaria do mesmo Puppeteer que outras fontes já usam | Backlog — é feature nova, não bug pontual de 1 linha |
 | **EDITAL_DJEN** | 152 | 0% | Por natureza: publicação judicial (DJEN) é só texto, nunca PDF — o lote nasce sem doc de propósito (sua decisão de 03/09, fica como lembrete de trabalho pendente). O mecanismo de busca automática no site do leiloeiro já tentou 76/152 e achou 0: a URL disponível é a HOME do leiloeiro, não a página do lote — mas é isso que o texto do DJEN de fato contém, não achei uma URL mais específica pra extrair | Sem fix óbvio — funcionando como projetado; qualquer ganho aqui seria parser dedicado por leiloeiro, não uma correção geral |
 | **FERREIRALEIL** | 110 | 58% | O parser funciona de verdade (os mesmos 110 lotes têm avaliação e matrícula-texto, vindos da MESMA busca na página) — o SITE varia o que publica lote a lote | Nenhuma ação — não é bug |
 | **SUPERBID** | 1199 | 74% | Mesmo pipeline do SOLD (com enrich ligado), mas o cap diário (150 lotes/rodada) não dá conta de um acervo ~15x maior que o do SOLD | Fixável subindo `enrichCap` ou rodando backfill dedicado (mesmo molde do MEGA/BIASI de 11/07) — **não apliquei**: é mais tempo de Puppeteer por rodada, decisão de custo/duração de execução, não risco de código. |
 
-**Resumo pro dono**: 2 das 6 fontes tinham bug de 1 linha, já corrigido. As outras 4 não são "conserta e
-esquece" — 2 são decisão de orçamento (quanto vale gastar pra fechar o gap), 1 é feature nova (SATO), e
-1 já está funcionando como o desenho pede (EDITAL_DJEN). Nenhuma delas bloqueia a IA de gerar relatório
-nos imóveis que JÁ têm documento — o gap é só nesses 152+123+23+34+dezenas de lotes específicos.
+**Resumo pro dono**: 3 das 6 fontes tinham bug real, todas corrigidas (SBID9/21 sem cap extra — reuso de
+Puppeteer já rodando; GESTAOLEILOES com `GESTAO_DOC_CAP=30` — aprovado por você, é request pago). SUPERBID
+(74%) fica no ritmo atual por decisão sua — já é a maior cobertura entre as fontes com gap e fecha sozinho
+com o cap existente. SATO é feature nova (backlog) e EDITAL_DJEN já funciona como o desenho pede. Nenhuma
+delas bloqueia a IA de gerar relatório nos imóveis que JÁ têm documento — o gap é só nesses lotes específicos,
+e dois dos três bugs (SBID9/21 + GESTAOLEILOES) já estão fechando sozinhos a partir da próxima rodada do cron.
 
-**4. Produção**: dashboard (item 2) e fix SBID9/21 (item 3) — ambos em `main`, deploy Vercel `READY`.
+**4. Produção**: dashboard (item 2), fix SBID9/21 e fix GESTAOLEILOES (item 3) — tudo em `main`, deploy
+Vercel `READY`. `scripts/`/`.github/workflows/` não passam pelo `vite build`, mas o push ainda dispara
+deploy (webhook por commit); validado com `node --check` + `verificar:padroes` antes de cada push.
 
 ---
 
