@@ -212,23 +212,20 @@ async function garantirFotoCapa(fotoUrl, fonteId, existentes) {
 // buscamos o HTML cru (sem executar o JS que resolve o template), esses "documentos" são
 // URL/rótulo LITERAIS do template, nunca resolvidos: um clique bateria em ".../$%7BrowLanc
 // amento.ID_Financeiro_Lancamento%7D", 404 garantido. Achado ao vivo no 1º dry-run real —
-// aparecia em TODOS os lotes testados. Descarta antes de gravar (mesmo espírito do filtro
-// de ruído institucional que RE_DOC_INSTITUCIONAL já aplica em api/_doc-scan.js, só que
-// aqui o ruído é sintático — template não resolvido — não temático).
-const RE_TEMPLATE_NAO_RESOLVIDO = /\{if\b|\{else\}?|\{\/if\}|\$\{|%7[Bb]/i;
-function eDocumentoDeVerdade(a) {
-  return !RE_TEMPLATE_NAO_RESOLVIDO.test(a.url || '') && !RE_TEMPLATE_NAO_RESOLVIDO.test(a.nome || '');
-}
-
+// aparecia em TODOS os lotes testados.
+//
+// FILTRO MOVIDO PRA api/_doc-scan.js EM 09/09 (RE_TEMPLATE_NAO_RESOLVIDO, dentro de
+// ehDocumento()). Nasceu aqui, local — e por ser local, só protegia a coleta semanal:
+// api/enriquecer-lote.js chama o MESMO vasculharDocumentos() sob demanda (toda vez que um
+// cliente abre a ficha do imóvel) sem passar por este filtro, então o simples ato de abrir
+// o imóvel reintroduzia o lixo pela outra porta — achado ao vivo em bayit_640/bayit_627
+// (o PATCH daquele endpoint só grava `enriquecido_em`, nunca `atualizado_em`, por isso a
+// corrupção não aparecia no timestamp). Agora vasculharDocumentos() já devolve limpo pra
+// QUALQUER chamador — nada a filtrar de novo aqui.
 async function enriquecerDetalhe(urlLote, fotoAtual) {
   const html = await bd(urlLote);
   if (!html) return {};
   const docs = vasculharDocumentos(html, urlLote, fotoAtual);
-  docs.anexos = docs.anexos.filter(eDocumentoDeVerdade);
-  if (docs.matricula && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.matricula)) docs.matricula = null;
-  if (docs.edital && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.edital)) docs.edital = null;
-  if (docs.regras && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.regras)) docs.regras = null;
-  if (docs.laudo && RE_TEMPLATE_NAO_RESOLVIDO.test(docs.laudo)) docs.laudo = null;
   const txt = decodificarEntidades(
     html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
   ).replace(/\s+/g, ' ');
@@ -309,13 +306,13 @@ async function main() {
     return;
   }
 
-  // MODO INSPECIONAR (09/09) — diagnóstico pontual: cliente reportou anexos incorretos em
-  // bayit_640 (o filtro RE_TEMPLATE_NAO_RESOLVIDO deveria ter removido 2 entradas de
-  // template TrimPath não-resolvido, mas a linha gravada ainda as tem). Testado offline: o
-  // filtro remove essas 2 entradas corretamente quando aplicado às strings que JÁ ESTÃO no
-  // banco — então o bug não está no filtro em si. Isto busca a página de detalhe FRESCA (só
-  // esse lote, não o pipeline inteiro) e mostra o que vasculharDocumentos() encontra ANTES e
-  // DEPOIS do filtro, pra achar onde a divergência realmente está.
+  // MODO INSPECIONAR (09/09) — diagnóstico pontual: busca a página de detalhe FRESCA de UM
+  // lote (não o pipeline inteiro) e mostra o que vasculharDocumentos() encontra. Foi assim
+  // que se achou a causa raiz do bug de anexos incorretos (09/09): o filtro de template
+  // TrimPath não-resolvido vivia só aqui no scraper — api/enriquecer-lote.js chama o mesmo
+  // vasculharDocumentos() sob demanda, sem esse filtro, e reintroduzia o lixo toda vez que
+  // um cliente abria a ficha. Filtro agora mora em api/_doc-scan.js (ehDocumento), protege
+  // todo chamador — o que este modo mostra abaixo já sai limpo por construção.
   if (process.env.BAYIT_INSPECIONAR) {
     const alvo = process.env.BAYIT_INSPECIONAR.trim();
     const item = itens.find((it) => `bayit_${it.id}` === alvo || it.url === alvo);
@@ -324,15 +321,10 @@ async function main() {
     const html = await bd(urlLote);
     if (!html) { console.log('  (página não veio — ver erro do [bd] acima, provavelmente sem cota ou rede)'); return; }
     console.log(`  HTML recebido: ${html.length} chars.`);
-    const docsCru = vasculharDocumentos(html, urlLote, item?.fotos?.[0] || null);
-    console.log(`  anexos ANTES do filtro de template (${docsCru.anexos.length}):`);
-    console.log(JSON.stringify(docsCru.anexos, null, 2));
-    const removidos = docsCru.anexos.filter((a) => !eDocumentoDeVerdade(a));
-    const filtrados = docsCru.anexos.filter(eDocumentoDeVerdade);
-    console.log(`  REMOVIDOS pelo filtro (${removidos.length}):`);
-    console.log(JSON.stringify(removidos, null, 2));
-    console.log(`  anexos DEPOIS do filtro (${filtrados.length}):`);
-    console.log(JSON.stringify(filtrados, null, 2));
+    const docs = vasculharDocumentos(html, urlLote, item?.fotos?.[0] || null);
+    console.log(`  anexos (${docs.anexos.length}):`);
+    console.log(JSON.stringify(docs.anexos, null, 2));
+    console.log(`  matricula=${docs.matricula} · edital=${docs.edital} · regras=${docs.regras} · laudo=${docs.laudo}`);
     return;
   }
 

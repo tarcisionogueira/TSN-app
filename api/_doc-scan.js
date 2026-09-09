@@ -46,6 +46,17 @@ const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
 // MEGA anexava "Política de Privacidade" ×2 em TODO lote — 6.698 entradas em 2.340
 // imóveis; o PDF de consentimento de cookies vem de host "adopt…/disclaimer/").
 const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores|pol[ií]tica.?de.?privacidade|politica[_-]?de[_-]?privacidade|aviso.?de.?(privacidade|cookies?)|\bcookies?\b|termos?.?de.?uso|seguran[çc]a.?da.?informa[çc][ãa]o|seguranca[_-]?da[_-]?informacao|\/disclaimer\//i;
+// Template client-side NÃO resolvido (TrimPath e afins: ${var}, {if ...}{else}...{/if}) — o
+// HTML CRU capturado antes do JS rodar traz o LITERAL do template como se fosse o link/rótulo
+// do documento; um clique bateria em URL quebrada, 404 garantido. Achado no Portal Bayit
+// (09/09) — o filtro nasceu local ao scraper (scripts/scraper-bayit.mjs) e por isso só
+// protegia a coleta semanal: o enriquecimento SOB DEMANDA (api/enriquecer-lote.js, roda toda
+// vez que um cliente abre a ficha do imóvel) chama este MESMO vasculharDocumentos() sem
+// aplicar aquele filtro, então o simples ato de abrir o imóvel reintroduzia o lixo pela outra
+// porta — e o PATCH daquele endpoint só grava `enriquecido_em`, nunca `atualizado_em`, então a
+// corrupção ficava invisível ao timestamp que normalmente denuncia reescrita. Corrigido na
+// RAIZ: aqui dentro de ehDocumento() é o único ponto que TODO chamador atravessa.
+const RE_TEMPLATE_NAO_RESOLVIDO = /\{if\b|\{else\}?|\{\/if\}|\$\{|%7[Bb]/i;
 // Palavras-chave de documento no caminho/nome/âncora. laudo (avaliação) e proposta
 // viraram tipos PRÓPRIOS: o laudo de avaliação traz o valor oficial e impacta o
 // mercadológico; o modelo de proposta é o documento de venda parcelada.
@@ -174,6 +185,7 @@ function ehDocumento(url, label, baseUrl) {
   if (!/^https?:\/\//i.test(url)) return false;
   if (RE_IMG_EXT.test(url)) return false;
   if (RE_DOC_INSTITUCIONAL.test(`${url} ${label || ''}`)) return false; // ruído corporativo do site, não do lote
+  if (RE_TEMPLATE_NAO_RESOLVIDO.test(`${url} ${label || ''}`)) return false; // template client-side não resolvido (ver comentário acima)
   if (RE_DOC_EXT.test(url)) return true;                       // arquivo .pdf/.doc… → sempre
   // Daqui para baixo a URL NÃO tem extensão de documento e só entra por PALAVRA-CHAVE —
   // é exatamente aí que o tema do site (js/css), o pixel de rastreio, a página de login e
