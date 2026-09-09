@@ -244,16 +244,24 @@ async function garantirFotoCapa(fotoUrl, fonteId, existentes) {
 // (o PATCH daquele endpoint só grava `enriquecido_em`, nunca `atualizado_em`, por isso a
 // corrupção não aparecia no timestamp). Agora vasculharDocumentos() já devolve limpo pra
 // QUALQUER chamador — nada a filtrar de novo aqui.
-async function enriquecerDetalhe(urlLote, fotoAtual) {
+async function enriquecerDetalhe(urlLote, fotoAtual, nPracas = 0) {
   const html = await bd(urlLote);
   if (!html) return {};
   const docs = vasculharDocumentos(html, urlLote, fotoAtual);
   const txt = decodificarEntidades(
     html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
   ).replace(/\s+/g, ' ');
-  // Modalidade: só a página de detalhe diz — o feed não tem esse campo. Mesmo fallback de
-  // scraper-gestao.mjs (extrajudicial quando ambíguo).
-  const modalidade = /venda\s*direta/i.test(txt) ? 'venda_direta'
+  // Modalidade — ACHADO AO VIVO (09/09, dono flagrou em bayit_694): a página tem um menu de
+  // NAVEGAÇÃO/FILTRO genérico ("Judiciais Extrajudiciais Venda Direta…", "Tipo de leilão…
+  // Judicial Extrajudicial Particular Venda direta") que lista TODAS as modalidades como
+  // OPÇÕES DE FILTRO — não a modalidade DESTE lote — e aparece em toda página do site,
+  // contaminando qualquer busca de texto solto. 77 dos 78 imóveis BAYIT saíam "venda_direta"
+  // por causa disso, incluindo lotes com 1ª E 2ª praça (a assinatura estrutural de leilão
+  // formal, não venda direta — o feed já traz `pracas`, dado estruturado e confiável, ao
+  // contrário do texto). 2+ praças com datas distintas decide sozinho; só cai pro texto
+  // (mesmo assim contaminado, mas é o que existe) quando há praça única — ambíguo de verdade.
+  const modalidade = nPracas >= 2 ? 'extrajudicial'
+    : /venda\s*direta/i.test(txt) ? 'venda_direta'
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
   const numeroMatricula = (txt.match(/matr[íi]cula[:\s]*n?[ºo°.]?\s*(\d[\d.\-\/]{2,})/i) || [])[1] || null;
@@ -459,7 +467,7 @@ async function main() {
 
     if (enriquecidos < ENRICH_CAP) {
       enriquecidos++;
-      const det = await enriquecerDetalhe(it.url, row.link_foto);
+      const det = await enriquecerDetalhe(it.url, row.link_foto, it.pracas.length);
       row = { ...row, ...Object.fromEntries(Object.entries(det).filter(([, v]) => v != null)) };
       await sleep(400);
     }

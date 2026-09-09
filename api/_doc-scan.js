@@ -121,6 +121,32 @@ function absolutizar(href, baseUrl) {
   try { return new URL(href, baseUrl).href; } catch { return null; }
 }
 
+// Rótulo do BLOCO que envolve o link, quando a própria âncora não diz nada (achado no Bayit,
+// 09/09): a página lista os documentos como <li> RÓTULO <a>Visualizar</a> <a>Baixar</a> </li>
+// — "Edital do Leilão"/"Matrícula"/"Laudo de Avaliação" ficam no texto do <li>, não dentro da
+// âncora, então "Visualizar"/"Baixar" (o texto que ancoraTexto.get() enxerga) nunca carregam a
+// palavra-chave que classificar() procura, e os 3 documentos (todos DIFERENTES) caíam juntos
+// no genérico "anexo" — parecendo duplicados na tela. Busca a posição literal do href no HTML
+// bruto e lê pra trás até o início do bloco (<li>/<tr>/<div>) mais próximo; corta uma eventual
+// palavra de ação que tenha vazado do link IRMÃO (2º de um par Visualizar/Baixar do MESMO
+// item — o rótulo de verdade vem antes dela, não depois).
+function rotuloDoBloco(html, href, janela = 400) {
+  let i = html.indexOf(`href="${href}"`);
+  if (i < 0) i = html.indexOf(`href='${href}'`);
+  if (i < 0) i = html.indexOf(href);
+  if (i < 0) return '';
+  const antes = html.slice(Math.max(0, i - janela), i);
+  const inicioBloco = Math.max(antes.lastIndexOf('<li'), antes.lastIndexOf('<tr'), antes.lastIndexOf('<div'));
+  let trecho = inicioBloco >= 0 ? antes.slice(inicioBloco) : antes;
+  // A fatia sempre termina NO MEIO da tag <a …href="AQUI" — a abertura entrou sem o ">" de
+  // fechamento, e esse resto não casa com /<[^>]+>/g (que exige fechar). Descarta o fragmento
+  // de tag aberta no fim antes de decodificar, senão ele vaza pro texto ("vazio.a class=…").
+  const ultimoAbre = trecho.lastIndexOf('<');
+  if (ultimoAbre >= 0 && trecho.indexOf('>', ultimoAbre) < 0) trecho = trecho.slice(0, ultimoAbre);
+  const texto = decodificarEntidades(trecho.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  return texto.replace(/\b(visualizar|ver|abrir|baixar|download)\b\s*$/i, '').trim().slice(0, 120);
+}
+
 // decodeURIComponent explode com '%' solto (comum em URL de anúncio); aqui o pior caso
 // é comparar a URL crua, nunca derrubar a varredura.
 function decodificar(u) {
@@ -258,8 +284,14 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
     const chave = chaveDocCanonica(abs) || abs.split('#')[0];
     if (vistos.has(chave)) continue;
     vistos.add(chave);
-    const tipo = classificar(`${label} ${abs}`);
-    const nome = (label && label.length > 2 ? label : nomeDeUrl(abs)) || 'Documento';
+    let tipo = classificar(`${label} ${abs}`);
+    // Só busca o rótulo do bloco-pai quando label+url não disseram NADA (fallback puro — zero
+    // mudança de comportamento pra qualquer fonte cuja âncora já é descritiva, que é a maioria).
+    const rotuloBloco = tipo === 'anexo' ? rotuloDoBloco(html, raw) : '';
+    if (rotuloBloco) tipo = classificar(`${rotuloBloco} ${label} ${abs}`);
+    const nome = (rotuloBloco && /^(visualizar|ver|abrir|baixar|download)$/i.test(label.trim()))
+      ? rotuloBloco
+      : (label && label.length > 2 ? label : nomeDeUrl(abs)) || 'Documento';
     out.anexos.push({ nome, url: abs, tipo });
     // Primeiro de cada tipo principal vira o link "oficial".
     if (tipo === 'matricula' && !out.matricula) out.matricula = abs;
