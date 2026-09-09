@@ -3743,9 +3743,27 @@ export default function Analise() {
                   <span style={{ width:22, height:22, borderRadius:7, background:'#10b981', color:'white', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, flexShrink:0 }}>3</span>
                   <span style={{ textTransform:'uppercase', letterSpacing:0.5 }}>Amostras e comparativos</span>
                   <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>· Nível 1: {mercado.nivel1?.totalAmostras||0} · Nível 2: {mercado.nivel2?.totalAmostras||0} amostras</span>
+                  {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && mercado.fonteEstimativa === 'indice_bidpro' && (
+                    <span style={{ fontSize:11, color:'#5b21b6', fontWeight:700 }}>· valor via Índice BidPro</span>
+                  )}
                   <span style={{ marginLeft:'auto', fontSize:11, color:'#0D63DB', fontWeight:700 }}>ver detalhes ▾</span>
                 </summary>
                 <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'14px' }}>
+                  {/* RECONCILIAÇÃO (09/09, achado do dono: relatório com "0 amostras" aqui e um
+                      valor de mercado classificado, sem explicação visível no mesmo painel).
+                      Zero amostras diretas + fonteEstimativa='indice_bidpro' é o fallback já
+                      documentado acima (linha ~2812 de gerar-analise.js, regra do dono) — o valor
+                      existe, só que vem do Índice BidPro (base própria consolidada), não desta
+                      busca. `mercado.comentario` já explica isso em outra seção do relatório; esta
+                      nota fecha o vão bem aqui, onde o "0" apareceria sozinho e pareceria dizer
+                      que o valor não tem lastro nenhum — mesmo princípio da nota de coerência do
+                      aluguel (BANDA 1, acima). */}
+                  {!mercado.nivel1?.totalAmostras && !mercado.nivel2?.totalAmostras && mercado.fonteEstimativa === 'indice_bidpro' && (
+                    <div style={{ background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
+                      <b>Nenhuma amostra direta encontrada nesta busca</b> (nem no condomínio/endereço, nem na vizinhança). O valor de mercado deste relatório usa o <b>Índice BidPro</b> — base própria da região, consolidada de outras análises da plataforma
+                      {Number(mercado.indiceBidPro?.n_amostras) > 0 ? `, com ${mercado.indiceBidPro.n_amostras} amostra(s)` : ''} — como referência, não um anúncio ao vivo específico deste imóvel.
+                    </div>
+                  )}
 
               {/* Nível 1, Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
