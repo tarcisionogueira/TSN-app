@@ -207,6 +207,43 @@ export function montarMensagem({ nome, cidade, uf, quando, link, publico, tratam
   );
 }
 
+/**
+ * CONVITE PRO GRUPO — para quem JÁ SE INSCREVEU (09/09, pedido do dono: "as pessoas que se
+ * inscreveram ainda não estão no grupo. preciso de mensagens que chamem a atenção").
+ *
+ * POR QUE É UMA MENSAGEM SEPARADA, e não mais um texto da fila de cima: a fila de convite
+ * (`whatsapp_fila_live`) EXCLUI quem está em `live_inscricoes` — ela existe para chamar quem
+ * ainda NÃO se inscreveu. No instante em que a pessoa se inscreve ela sai daquela fila e não
+ * recebe mais nenhum WhatsApp: o único lugar onde o link do grupo aparece é uma linha
+ * opcional no rodapé do e-mail de confirmação ("Se quiser acompanhar os avisos por lá
+ * também"). Quem não abre o e-mail — a maioria — nunca vê o grupo existir.
+ *
+ * A RAZÃO DE ENTRAR TEM DE SER VERDADE, como nos outros quatro textos deste arquivo. Não
+ * inventa escassez ("restam N vagas no grupo") nem promete bônus que não existe: o motivo é
+ * o mecanismo real — aviso de mudança de horário e o link da sala em cima da hora chegam
+ * primeiro no grupo, e quem está só no e-mail depende de abrir o e-mail na hora certa.
+ */
+export function montarMensagemGrupo({ nome, cidade, uf, titulo, quando, linkGrupo }) {
+  if (!linkGrupo) return null; // sem grupo cadastrado não há o que convidar — nunca inventa link
+  const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
+  const ola = primeiro ? `Oi, ${primeiro}!` : 'Oi!';
+  const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
+  const linhas = (...ls) => ls.filter((l) => l !== null).join('\n');
+
+  return linhas(
+    `${ola} Aqui é o Tarcísio, da BidPro Brasil.`,
+    '',
+    `Sua vaga${titulo ? ` em *${titulo}*` : ''} está confirmada${quando ? ` — ${quando}` : ''}. Só que eu ainda não te vi no grupo do WhatsApp.`,
+    '',
+    'É lá que eu aviso na hora se mudar alguma coisa e onde eu mando o link da sala quando a aula abre. Quem fica só no e-mail depende de abrir o e-mail na hora certa.',
+    '',
+    `Entra agora, leva 10 segundos: ${linkGrupo}`,
+    '',
+    onde ? `Te espero lá — e me diga o que você procura em ${onde} que eu levo o seu caso pra aula.`
+         : 'Te espero lá — e me diga o que você procura que eu levo o seu caso pra aula.',
+  );
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
@@ -247,10 +284,16 @@ export default async function handler(req, res) {
 
   const edicao = edicaoDe(evento.data_hora);
 
+  // MODO (09/09): 'aula' (padrão, quem ainda não se inscreveu) × 'grupo' (quem JÁ se inscreveu
+  // e ainda não foi chamado pro grupo). Cada um tem fila, texto e LOG próprios — o log separado
+  // é o que permite a mesma pessoa receber os dois na mesma edição sem um bloquear o outro.
+  const modo = String((req.method === 'POST' ? req.body?.modo : new URL(req.url, 'http://x').searchParams.get('modo')) || 'aula');
+  const ehGrupo = modo === 'grupo';
+
   if (req.method === 'POST') {
     const userId = String(req.body?.user_id || '');
     if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({ error: 'user_id invalido' });
-    const r = await sb('whatsapp_disparo_log', {
+    const r = await sb(ehGrupo ? 'whatsapp_disparo_grupo_log' : 'whatsapp_disparo_log', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ evento_id: evento.id, edicao, user_id: userId, enviado_por: user.id }),
@@ -261,6 +304,53 @@ export default async function handler(req, res) {
     if (r.status === 409) return res.status(200).json({ ok: true, ja_estava: true });
     if (!r.ok) return res.status(502).json({ error: 'nao_gravou', detalhe: await r.text() });
     return res.status(200).json({ ok: true });
+  }
+
+  // ── MODO GRUPO: quem já se inscreveu e ainda não foi chamado pro grupo ──────────────────
+  // O `link_grupo` NÃO vem da `live_proxima` (RPC pública, não expõe o link de propósito) —
+  // esta rota é admin-only e busca direto na tabela pelo slug já resolvido, mesmo padrão de
+  // admin-mensagens-grupo.js. Sem link cadastrado a fila sai VAZIA com o motivo por extenso:
+  // gerar convite sem link seria mandar a pessoa para lugar nenhum.
+  if (ehGrupo) {
+    const rEvG = await sb(`eventos_live?slug=eq.${encodeURIComponent(evento.slug)}&select=link_grupo&limit=1`);
+    if (!rEvG.ok) return res.status(502).json({ error: 'evento_ilegivel', detalhe: await rEvG.text() });
+    const [evG] = await rEvG.json().catch(() => [null]);
+    const linkGrupo = evG?.link_grupo || null;
+    if (!linkGrupo) {
+      return res.status(200).json({
+        evento: { id: evento.id, slug: evento.slug, titulo: evento.titulo, data_hora: evento.data_hora, edicao, quando: quandoPorExtenso(evento.data_hora) },
+        fila: [], ja_enviados: null, modo: 'grupo',
+        motivo: 'esta aula não tem link de grupo cadastrado (Admin → Aula ao vivo)',
+      });
+    }
+
+    const rG = await sb('rpc/whatsapp_fila_grupo', {
+      method: 'POST', body: JSON.stringify({ p_evento: evento.id, p_edicao: edicao }),
+    });
+    if (!rG.ok) return res.status(502).json({ error: 'fila_ilegivel', detalhe: await rG.text() });
+    const brutoG = await rG.json();
+    const quandoG = quandoPorExtenso(evento.data_hora);
+    const filaG = (Array.isArray(brutoG) ? brutoG : []).map((p) => {
+      const texto = montarMensagemGrupo({
+        nome: p.nome, cidade: p.cidade, uf: p.uf, titulo: evento.titulo, quando: quandoG, linkGrupo,
+      });
+      return {
+        user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
+        motivo: 'inscrito, fora do grupo', prioridade: 1, publico: 'inscrito',
+        wa: `https://wa.me/${p.telefone_wa}?text=${encodeURIComponent(texto)}`,
+        texto,
+      };
+    });
+
+    const rJaG = await sb(`whatsapp_disparo_grupo_log?evento_id=eq.${evento.id}&edicao=eq.${edicao}&select=user_id`);
+    let jaG = null;
+    if (rJaG.ok) { const l = await rJaG.json().catch(() => null); jaG = Array.isArray(l) ? l.length : null; }
+    else console.error('[whatsapp-fila] nao contei os ja convidados pro grupo:', await rJaG.text());
+
+    return res.status(200).json({
+      evento: { id: evento.id, slug: evento.slug, titulo: evento.titulo, data_hora: evento.data_hora, edicao, quando: quandoG },
+      fila: filaG, ja_enviados: jaG, modo: 'grupo',
+    });
   }
 
   const rFila = await sb('rpc/whatsapp_fila_live', {

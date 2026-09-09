@@ -27,7 +27,7 @@
  * linha pessoal custa menos do que afirmar errado — é justamente ela que prova que a mensagem
  * não é disparo em massa, e errada ela prova o contrário com mais força.
  */
-import { montarMensagem, quandoPorExtenso } from '../../api/admin-whatsapp-fila.js';
+import { montarMensagem, montarMensagemGrupo, quandoPorExtenso } from '../../api/admin-whatsapp-fila.js';
 
 const BASE = { nome: 'Fulano de Tal', quando: 'amanhã (quarta), às 19h', link: 'https://x/aula' };
 let ok = 0, falhas = 0;
@@ -161,11 +161,50 @@ checa('19h30 não some', quandoPorExtenso('2026-09-02T22:30:00Z', ANTES).include
   quandoPorExtenso('2026-09-02T22:30:00Z', ANTES));
 checa('a mensagem montada não traz 19:00', !/\d{1,2}:\d{2}/.test(cli), cli.slice(0, 140));
 
+console.log('\n── 7. Convite pro GRUPO (09/09): nunca manda pra lugar nenhum, nunca afirma o que não sabe ──');
+// A regra deste arquivo vale igual aqui: toda frase que afirma algo sobre a pessoa tem de ser
+// verdade e SUMIR quando não for. O risco novo é outro e é pior — um convite sem link levaria
+// a pessoa a lugar nenhum, então a função devolve `null` e a fila fica vazia com o motivo por
+// extenso, em vez de gerar texto quebrado.
+const GBASE = { nome: 'Fulana Silva', titulo: 'Leilão na prática', quando: 'amanhã (quarta), às 19h', linkGrupo: 'https://chat.whatsapp.com/XYZ' };
+const gmsg = (extra) => montarMensagemGrupo({ ...GBASE, ...extra });
+
+checa('sem link do grupo devolve null (não inventa destino)', montarMensagemGrupo({ ...GBASE, linkGrupo: null }) === null);
+checa('sem link nem com string vazia gera texto', montarMensagemGrupo({ ...GBASE, linkGrupo: '' }) === null);
+const g = gmsg();
+checa('o link do grupo entra no texto', g.includes('https://chat.whatsapp.com/XYZ'));
+checa('usa só o primeiro nome', g.startsWith('Oi, Fulana!'), g.slice(0, 40));
+checa('sem nome não quebra', gmsg({ nome: '' }).startsWith('Oi!'));
+checa('diz que a vaga já está confirmada (o fato que separa deste público)', /vaga.*confirmada/i.test(g), g.slice(0, 160));
+// O motivo de entrar é o MECANISMO real (aviso e link da sala saem primeiro no grupo), não
+// escassez inventada: "restam N vagas no grupo" seria número que ninguém pode conferir.
+checa('dá um motivo real pra entrar', /link da sala|aviso/i.test(g), g.slice(0, 300));
+checa('não inventa escassez', !/últimas? vagas?|restam? \d|só hoje|expira/i.test(g), g);
+checa('não fala de preço', !/R\$|\bpreço\b/i.test(g));
+// Campos ausentes não podem virar "undefined"/"null" na cara do inscrito — o mesmo defeito
+// que a seção 1 trava para o plano, aqui vale para título, data e cidade.
+for (const [rot, m] of [
+  ['completo', g],
+  ['sem título', gmsg({ titulo: null })],
+  ['sem quando', gmsg({ quando: null })],
+  ['sem título nem quando', gmsg({ titulo: null, quando: null })],
+  ['com cidade', gmsg({ cidade: 'Vitória', uf: 'ES' })],
+  ['sem cidade', gmsg({ cidade: null, uf: null })],
+]) {
+  checa(`${rot}: sem undefined/null no texto`, !/undefined|null/.test(m), m.slice(0, 160));
+  checa(`${rot}: o link continua de pé`, m.includes('https://chat.whatsapp.com/XYZ'));
+  checa(`${rot}: não agrupa terceiros em bloco anônimo`,
+    AGRUPAMENTO_ANONIMO.filter((f) => m.toLowerCase().includes(f)).length === 0, m.slice(0, 200));
+}
+checa('com cidade, cita a cidade', gmsg({ cidade: 'Vitória', uf: 'ES' }).includes('Vitória/ES'));
+checa('sem cidade, a frase não cita cidade nenhuma',
+  !/em\s*\.|em\s*$/m.test(gmsg({ cidade: null, uf: null })), gmsg({ cidade: null, uf: null }).slice(-120));
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
 // Piso de asserções: um `import` quebrado ou um laço que não roda deixaria o teste "passar"
 // com zero verificações — sucesso por ausência de medição, que é o defeito que este arquivo
 // inteiro existe para pegar.
-if (ok + falhas < 80) {
+if (ok + falhas < 100) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

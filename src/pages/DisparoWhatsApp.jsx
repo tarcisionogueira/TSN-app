@@ -27,12 +27,18 @@ export default function DisparoWhatsApp() {
   const [intervalo, setIntervalo] = useState(40);
   const [espera, setEspera] = useState(0);
   const timerRef = useRef(null);
+  // DUAS FILAS, DUAS INTENÇÕES (09/09): 'aula' convida quem AINDA NÃO se inscreveu; 'grupo'
+  // chama pro WhatsApp quem JÁ se inscreveu (a fila da aula exclui essa pessoa por construção,
+  // então ela não recebia mais nada por WhatsApp depois de se inscrever). Log separado no
+  // servidor — receber um não bloqueia o outro na mesma edição.
+  const [modo, setModo] = useState('aula');
 
   useEffect(() => {
     let vivo = true;
+    setCarregando(true); setErro(''); setEnviados(new Set());
     (async () => {
       try {
-        const r = await apiCall('/api/admin-whatsapp-fila');
+        const r = await apiCall(`/api/admin-whatsapp-fila?modo=${modo}`);
         const j = await r.json().catch(() => ({}));
         // `.ok` conferido: o endpoint devolve 502 com corpo JSON quando uma LEITURA falha, e um
         // `.json()` direto viraria "fila vazia" — "ninguém para convidar" e "não consegui ler"
@@ -43,7 +49,7 @@ export default function DisparoWhatsApp() {
       finally { if (vivo) setCarregando(false); }
     })();
     return () => { vivo = false; };
-  }, []);
+  }, [modo]);
 
   // Contagem regressiva da trava. Guardada em ref para o clear acontecer no desmonte —
   // timer solto continua rodando depois que a tela sai e reabre a contagem do nada.
@@ -62,7 +68,7 @@ export default function DisparoWhatsApp() {
     setEspera(intervalo);
     try {
       const r = await apiCall('/api/admin-whatsapp-fila', {
-        method: 'POST', body: JSON.stringify({ user_id: p.user_id }),
+        method: 'POST', body: JSON.stringify({ user_id: p.user_id, modo }),
       });
       const j = await r.json().catch(() => ({}));
       // Falha ao gravar precisa VOLTAR o item para a fila: se a marcação não persistiu, ao
@@ -97,9 +103,34 @@ export default function DisparoWhatsApp() {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 18px 60px', fontFamily: 'system-ui, sans-serif', color: '#0f172a' }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Convite por WhatsApp</h1>
-      <p style={{ fontSize: 14, color: '#475569', margin: '0 0 6px' }}>
+      <p style={{ fontSize: 14, color: '#475569', margin: '0 0 10px' }}>
         {dados.evento.titulo} — <strong>{dados.evento.quando}</strong>
       </p>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, background: '#f1f5f9', padding: 5, borderRadius: 11, width: 'fit-content', flexWrap: 'wrap' }}>
+        {[['aula', '📣 Convidar pra aula', 'quem ainda não se inscreveu'],
+          ['grupo', '💬 Chamar pro grupo', 'quem já se inscreveu']].map(([k, rot, sub]) => (
+          <button key={k} onClick={() => setModo(k)} title={sub}
+            style={{
+              padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit',
+              background: modo === k ? '#fff' : 'transparent', color: modo === k ? '#0D63DB' : '#64748b',
+              boxShadow: modo === k ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            }}>
+            {rot}
+          </button>
+        ))}
+      </div>
+      {modo === 'grupo' && (
+        <p style={{ fontSize: 12.5, color: '#475569', margin: '0 0 8px', lineHeight: 1.6 }}>
+          Quem se inscreveu sai da fila de convite e só recebe o link do grupo numa linha do
+          e-mail de confirmação. Esta fila chama essas pessoas pelo WhatsApp, uma a uma.
+        </p>
+      )}
+      {dados.motivo && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 9, padding: '10px 12px', fontSize: 13, marginBottom: 12 }}>
+          {dados.motivo}
+        </div>
+      )}
       <p style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 9, padding: '10px 12px', lineHeight: 1.6 }}>
         Esta tela <strong>não envia</strong>. Cada clique abre o WhatsApp com o texto já escrito —
         você confere e aperta enviar. O contador conta conversas <strong>abertas</strong>.
