@@ -4,6 +4,34 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 26 (09/09) — RELATÓRIO COM "0 AMOSTRAS" SEM EXPLICAR O VALOR CLASSIFICADO
+
+**Pedido do dono**: erro ao gerar relatório em 2 imóveis (ES) + "veja no Cliente 360 se outros
+usuários também estão tendo dificuldade" + "relatório gerado mostrando 0 amostras e
+classificando um valor. verifique o que houve."
+
+**Erro de geração — NÃO é sistêmico.** `atividade_log` (14 dias): todos os 5 eventos de falha
+de relatório (`_erro`/`_vazio`/`_faltam_docs`) têm **1 único `user_id`** — esta conta, não outros
+clientes. Causa: "This operation was aborted" = timeout do servidor na pesquisa de mercado
+(`tempo_limite`, já tratado em `gerar-analise.js`: mensagem clara "tente gerar novamente",
+estorno automático via `estornar_analise_por`, guardado pela trava `cobranca-sem-estorno` desde
+20/08 — ver "GAP #2 FECHADO" acima). Não confundir `analises_mercado.cota_estornada=false` com
+"não foi estornado" — essa coluna é só para a idempotência do CRON de self-heal; o estorno real
+já rodou no `catch` do próprio `gerar-analise.js`, independente dela (armadilha documentada no
+GAP #2: um falso positivo idêntico já foi investigado e descartado em 20/08).
+
+**"0 amostras e classificando um valor" — causa raiz real, corrigida.** Quando a busca ao vivo
+não acha nenhum anúncio comparável, `gerar-analise.js` (regra do dono, ~linha 2812) já cai no
+fallback do **Índice BidPro** (base própria da região) e grava `mercado.comentario` explicando
+isso — mas esse texto fica na BANDA 1, enquanto o painel "Amostras e comparativos" (BANDA 3)
+mostrava só `Nível 1: 0 · Nível 2: 0` **sem nenhuma referência cruzada** — mesma classe de
+contradição que a nota de coerência do aluguel (BANDA 1) já resolve para locação, só que nunca
+tinha sido replicada pro painel de amostras em si. Fix: nota de reconciliação dentro do painel
+(mesmo estilo visual da nota do aluguel) + indicador na linha de resumo (sempre visível, mesmo
+com o `<details>` fechado) quando `nivel1+nivel2=0` e `fonteEstimativa='indice_bidpro'`.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 25 (09/09) — FINANCEIRO: INADIMPLÊNCIA SUMIA EM ASSINATURAS (CÓDIGO MORTO) + PIX SEM EXPLICAÇÃO
 
 **Pedido do dono**: "mostrando inadimplentes em um e no outro não. mostrando uma chave pix que
