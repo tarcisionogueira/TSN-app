@@ -85,6 +85,23 @@ checa('comentário guarda o username', com?.username === 'fulana');
 checa('comentário sem autor devolve null', lerComentario({ value: { id: 'x', text: 'y' } }) === null);
 checa('comentário sem id devolve null', lerComentario({ value: { from: { id: ELA } } }) === null);
 
+console.log('\n── 4a. Comentário NOSSO (resposta pública ecoada) não vira "pessoa" nem "conversa com nós mesmos" ──');
+
+// Achado 09/09: resposta pública (`responder_publico`) cria um comentário novo, e se a Meta
+// notificar esse evento pelo mesmo webhook, `from.id` é a NOSSA conta — sem esta trava, o
+// próprio texto que o bot/dono acabou de mandar voltaria como pergunta nova de "pessoa",
+// exatamente o corpus envenenado que este arquivo inteiro existe pra pegar.
+const nosso = lerComentario({ field: 'comments', value: { id: 'r1', text: 'valeu! 🙏', from: { id: NOS, username: 'tarcisionogueiraleiloes' } } }, undefined, NOS);
+checa('comentário com from.id = nossa conta devolve null (não grava errado)', nosso === null);
+
+const deOutraPessoa = lerComentario({ field: 'comments', value: { id: 'r2', text: 'oi de novo', from: { id: ELA } } }, undefined, NOS);
+checa('comentário de outra pessoa continua normal mesmo com nossaConta configurado', deOutraPessoa !== null && deOutraPessoa.autor === 'pessoa');
+
+// Sem `nossaConta` (env não configurado), nunca decide sozinho que um comentário é "nosso" —
+// evita falso-positivo silencioso que descartaria comentário de gente de verdade.
+const semNossaContaConfigurada = lerComentario({ field: 'comments', value: { id: 'r3', text: 'oi', from: { id: '999999' } } });
+checa('sem nossaConta configurado, comentário de qualquer id continua sendo lido normalmente', semNossaContaConfigurada !== null);
+
 console.log('\n── 4b. Segundos × milissegundos: errar por 1000x nao da erro, quebra a FILA ──');
 
 // A Meta manda `entry.time` em SEGUNDOS e `messaging[].timestamp` em MILISSEGUNDOS, no mesmo
@@ -229,7 +246,7 @@ checa('o booleano concorda com o nome', (await assinaturaConfere(corpo, `sha256=
   === ((await qualChaveAssina(corpo, `sha256=${hex}`, SEGREDO)) !== null));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 52) {
+if (ok + falhas < 57) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara — algo não foi executado.');
   process.exit(2);
 }

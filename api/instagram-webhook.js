@@ -35,6 +35,7 @@ export const config = { runtime: 'edge' };
 const SB  = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
 const VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
+const NOSSA_CONTA = process.env.IG_USER_ID;
 
 // ⚠️ DUAS CHAVES, E NINGUÉM DIZ QUAL ASSINA (01/09, achado ao configurar o app).
 // O painel da Meta expõe DOIS segredos para o mesmo app: a "Chave secreta do app"
@@ -197,9 +198,27 @@ export function agruparPorPessoa(linhas, usernames, agora) {
   return [...porPessoa.values()].map((c) => ({ ...c, atualizado_em: agora }));
 }
 
-export function lerComentario(ch, entryTime) {
+/**
+ * `null` quer dizer "malformado" para quem chama incrementar `nao_reconhecidos` — EXCETO no
+ * caso de comentário nosso, que também devolve `null` mas por outro motivo (ver abaixo) e
+ * exige tratamento à parte no chamador, senão polui a métrica que existe pra pegar formato
+ * que a gente não entende, não evento que a gente escolhe não guardar (mesma distinção que
+ * `read`/`delivery`/`reaction` já tem pra mensagem — ver §7.5 do INSTAGRAM_AUTOMACAO.md).
+ */
+export function lerComentario(ch, entryTime, nossaConta = NOSSA_CONTA) {
   const v = ch?.value;
   if (!v?.id || !v?.from?.id) return null;
+  // ⚠️ COMENTÁRIO NÃO TEM `is_echo` (isso é só de `messages`) — mas uma resposta PÚBLICA
+  // nossa (`responder_publico`, `_instagram-envio.js`) cria um comentário NOVO, e se a Meta
+  // notificar esse evento pelo mesmo webhook, `from.id` vem sendo a NOSSA conta. Gravar isso
+  // com o `ig_user_id` da própria conta criaria uma "conversa com nós mesmos" espúria em
+  // `ig_conversas` — o MESMO erro que o comentário de `lerMensagem` evita pro DM, usando
+  // `recipient.id`; aqui não dá pra reconstruir o autor do comentário PAI sem consulta ao
+  // banco (isto é função pura, sem rede), e o registro pro corpus já é feito no ponto de
+  // envio (`admin-ig-caixa.js`, com o `ig_user_id` certo em mãos). Então só ignora — melhor
+  // não gravar do que gravar errado. `nossaConta` é parâmetro (não lê `process.env` direto)
+  // pra a função continuar pura e testável, mesmo padrão de `envCfg()` em `_instagram-envio.js`.
+  if (!!nossaConta && String(v.from.id) === String(nossaConta)) return null;
   return {
     mid: `c_${v.id}`,                               // namespace: id de comentário e mid de DM
     ig_user_id: String(v.from.id),                  // são espaços diferentes na Meta
@@ -297,6 +316,10 @@ export default async function handler(req) {
     for (const ch of Array.isArray(entry?.changes) ? entry.changes : []) {
       campos.add(String(ch?.field || 'desconhecido'));
       if (ch?.field !== 'comments') { naoReconhecidos++; continue; }
+      // Comentário nosso (resposta pública que a Meta ecoou de volta): `lerComentario` devolve
+      // `null` de propósito — não é formato desconhecido, é evento que a gente escolhe não
+      // guardar por aqui (o registro certo já aconteceu no envio). Não conta como não reconhecido.
+      if (String(ch?.value?.from?.id) === String(NOSSA_CONTA)) continue;
       const linha = lerComentario(ch, entry?.time);
       if (!linha) { naoReconhecidos++; continue; }
       if (linha.username) usernames.set(linha.ig_user_id, linha.username);

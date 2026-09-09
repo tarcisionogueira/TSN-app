@@ -48,6 +48,35 @@ const sb = (path, init = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   },
 });
 
+/**
+ * Grava no corpus (`ig_mensagens`) o que ACABOU de sair pela Send API — é o que faz
+ * `montarExemplos()` (`_ig-motor.js`) ter algo pra ensinar a próxima redação (achado 09/09,
+ * pedido do dono: "veja se tem como deixar um agente aprender"). Sem isto, `EXEMPLOS_DO_DONO`
+ * ficava sempre vazio pra tudo que sai por aqui — o comentário em `lerMensagem`
+ * (instagram-webhook.js) já dizia "quem enviar pelo bot grava a linha ANTES", mas até agora
+ * ninguém tinha escrito esse lado.
+ *
+ * `mid` É o identificador que a Meta devolveu no envio (não um gerado por nós) — de propósito:
+ * se o ECHO do mesmo envio chegar depois pelo webhook, bate no UNIQUE de `mid` e é ignorado
+ * (mesmo mecanismo que o comentário de `lerMensagem` descreve), em vez de duplicar a linha.
+ *
+ * Best-effort: a mensagem JÁ FOI ENVIADA de verdade quando isto roda — falhar a resposta HTTP
+ * por causa de um INSERT secundário faria o admin achar que o envio falhou e tentar de novo,
+ * arriscando mandar a MESMA mensagem duas vezes pro cliente. Loga e segue, nunca lança.
+ */
+async function gravarCorpusDono({ mid, ig_user_id, origem, texto }) {
+  const r = await sb('ig_mensagens', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify({
+      mid, ig_user_id, origem, texto,
+      direcao: 'enviada', autor: 'dono', respondida: true,
+      ocorrido_em: new Date().toISOString(),
+    }),
+  }).catch((e) => ({ ok: false, text: async () => String(e?.message || e) }));
+  if (!r.ok) console.error('[ig-caixa] envio saiu mas não gravou no corpus:', await r.text());
+}
+
 /** PostgREST `in.()` com texto: aspas duplas, e o que tiver aspas dentro não entra na lista. */
 const listaIn = (vals) => vals
   .map((v) => String(v))
@@ -217,6 +246,10 @@ async function desfecho(req, res, user) {
     // NUNCA carimba enviado_em sobre um envio que a Meta recusou — a forma nº 5 do topo do
     // HANDOFF (freio/erro devolvido como se fosse sucesso), agora do lado de fora da nossa infra.
     if (!envio.ok) return res.status(502).json({ error: 'envio_falhou', motivo: envio.erro, detalhe: envio.detalhe || null });
+    await gravarCorpusDono({
+      mid: String(envio.message_id), ig_user_id: alvo.ig_user_id,
+      origem: 'dm', texto, // 'dm' mesmo pra private reply: quem sai por /messages ecoa como mensagem, não comentário — ver lerMensagem
+    });
 
     patch.enviado_em = new Date().toISOString();
     patch.texto_enviado = texto;
@@ -227,7 +260,7 @@ async function desfecho(req, res, user) {
     if (!texto) return res.status(400).json({ error: 'texto vazio' });
     if (!envioConfigurado()) return res.status(409).json({ error: 'envio_nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes na Vercel' });
 
-    const rAlvo = await sb(`ig_rascunho?id=eq.${id}&enviado_em=is.null&descartado_em=is.null&select=origem,mid_origem`);
+    const rAlvo = await sb(`ig_rascunho?id=eq.${id}&enviado_em=is.null&descartado_em=is.null&select=ig_user_id,origem,mid_origem`);
     if (!rAlvo.ok) return res.status(502).json({ error: 'rascunho_ilegivel', detalhe: await rAlvo.text() });
     const [alvo] = await rAlvo.json().catch(() => []);
     if (!alvo) return res.status(409).json({ error: 'ja_teve_desfecho' });
@@ -235,6 +268,9 @@ async function desfecho(req, res, user) {
 
     const envio = await responderComentarioPublicamente(alvo.mid_origem, texto);
     if (!envio.ok) return res.status(502).json({ error: 'envio_falhou', motivo: envio.erro, detalhe: envio.detalhe || null });
+    await gravarCorpusDono({
+      mid: `c_${envio.reply_id}`, ig_user_id: alvo.ig_user_id, origem: 'comentario', texto,
+    });
 
     patch.enviado_em = new Date().toISOString();
     patch.texto_enviado = texto;

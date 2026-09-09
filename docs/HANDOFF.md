@@ -4,6 +4,51 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 17 (09/09) — 1º RASCUNHO REAL VALIDADO + ACHADO SÉRIO: O CORPUS DE APRENDIZADO NUNCA GRAVAVA O QUE SAÍA PELA SEND API
+
+**1. Validação ao vivo, pedida pelo dono**: rascunho #56 (comentário "👏👏👏👏👏👏" de `@lorranybello7`,
+classe `elogio`) chegou 17 min depois do ajuste de tom da Parte 16. Resultado: 1 emoji (não
+zero, não vários), 1 pergunta só (não empilhada) — os dois ajustes bateram. Mas o dono pediu
+mais um ajuste: a pergunta de acompanhamento ("já deu lance ou só acompanha?") soava
+qualificação de vendas. Corrigido em dado (`ig_classe.elogio`): objetivo agora é engajamento e
+autoridade — nunca perguntar sobre estágio de compra em cima de um elogio/reação sem texto.
+
+**2. ⚠️ ACHADO SÉRIO, ao verificar "dá pra deixar um agente aprender com as respostas
+manuais": a Send API (Parte 15/16) NUNCA gravava o que saía em `ig_mensagens`.**
+`montarExemplos()`/`EXEMPLOS_DO_DONO` (`_ig-motor.js`) sempre existiram e sempre leram
+`autor='dono'` corretamente — o lado que faltava era escrever essa linha. O comentário em
+`lerMensagem` (instagram-webhook.js, escrito antes da Send API existir) já previa isso —
+*"quem enviar pelo bot grava a linha ANTES, e o echo dela bate no UNIQUE e é ignorado"* — só
+que ninguém tinha implementado esse lado até agora.
+
+- `api/admin-ig-caixa.js` ganhou `gravarCorpusDono()`, chamada logo após `enviar`/
+  `responder_publico` terem sucesso. Usa o `message_id`/`reply_id` que a PRÓPRIA Meta devolveu
+  como `mid` (não um gerado por nós) — se o echo do mesmo envio chegar depois pelo webhook,
+  bate no UNIQUE e é ignorado, sem duplicar. Best-effort: falha aqui NUNCA derruba a resposta
+  HTTP (a mensagem já foi enviada de verdade; falhar o request faria o admin reenviar e
+  arriscar mandar a MESMA coisa duas vezes pro cliente).
+- **Bug irmão, encontrado no caminho**: `lerComentario()` sempre gravava `autor:'pessoa'`,
+  mesmo quando `from.id` é a NOSSA conta — o que aconteceria se a Meta ecoar de volta a
+  PRÓPRIA resposta pública do bot pelo mesmo webhook de `comments`. Sem a trava, o texto que a
+  gente acabou de mandar voltaria como "pergunta nova de alguém" — envenena o corpus E
+  arrisca realimentar a fila com a própria resposta. `lerComentario` agora recebe `nossaConta`
+  como parâmetro (não lê `process.env` direto — continua pura/testável) e devolve `null`
+  quando `from.id` bate; o chamador não conta isso como "não reconhecido" (é escolha, não
+  formato desconhecido).
+- Testes: `testar:instagram` 57/57 (+3), `testar:ig-envio` 25/25 (sem regressão).
+
+**Por que isto importa mais do que parece**: sem o fix, o dono podia responder manualmente
+(ou automatizado) durante SEMANAS achando que estava "ensinando a IA" — e `EXEMPLOS_DO_DONO`
+continuaria vazio pra sempre, silenciosamente. É a mesma classe de defeito do topo deste
+documento: ausência que parece funcionamento normal.
+
+**3. Windsor.ai reconectado** (permissão de leitura de comentários do Instagram, bloqueada
+desde 30/08) — pendente ainda confirmar se a extração de 90 dias de comentários-resposta do
+dono funciona de ponta a ponta (schema do Windsor não expõe autor do comentário; a checagem
+de viabilidade real está em andamento nesta mesma sessão).
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 16 (09/09) — TOM DA PERSONA AJUSTADO: EMOJI OCASIONAL + PARA DE SOAR INTERROGATÓRIO
 
 **Achado ao vivo**: primeiro rascunho real gerado pela `redigir()` (resposta a um comentário de
