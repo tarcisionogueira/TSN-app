@@ -59,7 +59,8 @@
     "testar:frequencia-engajamento": "node scripts/testes/quem-nao-abre-4-emails-vira-mensal.mjs",
     "testar:webhook-leiloeiro": "node scripts/testes/webhook-leiloeiro-aceita-foto-e-anexo.mjs",
     "testar:foto-dom": "node scripts/testes/foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs",
-    "testar:foto-generica": "node scripts/testes/foto-generica-nao-pega-logo-do-site.mjs"
+    "testar:foto-generica": "node scripts/testes/foto-generica-nao-pega-logo-do-site.mjs",
+    "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

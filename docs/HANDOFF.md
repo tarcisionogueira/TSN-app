@@ -4,6 +4,59 @@
 
 ---
 
+## 🔍 SESSÃO 24 · PARTE 45 (10/09) — "REGRESSÃO" DO GESTAOLEILOES ERA UM TESTE PONTUAL, NÃO O SITE: ESCOPO REDUZIDO GANHA ETIQUETA PRÓPRIA NO MONITOR
+
+Continuação da revisão geral ("todos, um de cada vez"). `fonte_regressao_suspeita()` acusava
+GESTAOLEILOES: `total=1` contra piso aprendido de 63 (mediana 126), status `degradado`. Antes
+de mexer em parser, fui ao LOG REAL da execução que gerou essa medição (run de 09/09,
+`workflow_dispatch`) em vez de adivinhar — e a causa não era o site:
+
+```
+GESTAO_MAX_EVENTOS: 2       (padrão é 25)
+GESTAO_DOC_CAP: 8           (padrão é 30)
+GESTAO_DOMINIOS: granadoleiloes.com.br     (padrão é os 5 domínios do cluster)
+```
+
+Um teste pontual — 1 dos 5 domínios, 2 dos 9 eventos daquele domínio. O dia ANTERIOR (08/09)
+tinha 123 lotes saudáveis, e o dia seguinte confirmaria o mesmo: **o site nunca quebrou.**
+`registrarSaude` comparou o total desse teste contra o histórico de escopo CHEIO, gravou
+`status='degradado'` e — o ponto que importa — `estrategia='principal'`, **indistinguível de
+uma medição de produção de verdade** para quem lê a tabela depois. Décima instância da forma
+nº10 do CLAUDE.md nesta base: o instrumento mediu "o que um dispatch manual pediu", não "o
+que a fonte tem".
+
+**Fix, no padrão que o `sem_cota`/`parcial_cota` já usa** (excluir da comparação em vez de
+tentar adivinhar caso a caso):
+- `scraper-gestao.mjs`: detecta escopo não-padrão (`GESTAO_DOMINIOS` setado OU
+  `GESTAO_MAX_EVENTOS` abaixo do default 25) e grava `estrategia='principal-escopo-reduzido'`
+  em vez de `'principal'`.
+- `_saude-fonte.mjs` (`ehEscopoReduzido`, nova função exportada, testada em
+  `testar:escopo-reduzido`): a busca do "anterior" para comparação passa a EXCLUIR linhas com
+  esse sufixo (senão o teste pontual vira o piso que a PRÓXIMA coleta de verdade precisa
+  superar), e a própria promoção para `'degradado'` é suprimida quando a execução ATUAL é a
+  de escopo reduzido.
+- Migration `escopo_reduzido_nao_e_baseline.sql`: `fonte_baseline_aprendida()` e
+  `fonte_regressao_suspeita()` ganham `and estrategia not ilike '%escopo-reduzido%'` — mesma
+  posição do filtro de status já existente. `estrategia='principal'` puro continua servindo
+  outras 23 fontes (BIASI, RJLEILOES, VLANCE, SUPERBID…) sem NENHUMA mudança de comportamento;
+  o filtro só reconhece o sufixo novo.
+- Migration separada `correcao_pontual_gestaoleiloes_teste_09_09.sql`: corrige a ÚNICA linha
+  já contaminada (id 1536, travada por 4 condições — fonte+estrategia+total+timestamp exato —
+  além do id, então só pode afetar aquela linha, e vira no-op inofensivo num rebuild do zero).
+
+**Verificado depois de aplicar**: `fonte_regressao_suspeita()` não lista mais GESTAOLEILOES.
+Restam HASTA (zerou — bloqueio de IP de datacenter já documentado), SBID21 (regressão nova,
+ainda não investigada), RJLEILOES (regressão leve — ver Parte 44, foto já corrigida) e
+EMILIOMATOS (medição de 508h atrás — cron parado ou fonte sem novidade, a investigar).
+
+⚠️ **Padrão a vigiar, não corrigido preventivamente nos outros scrapers**: RJ/SOLEON/PECINI
+também aceitam parâmetro de escopo por `workflow_dispatch` (`max_lotes`, etc.). Não toquei
+neles agora por falta de EVIDÊNCIA de que já foram vítimas do mesmo engano — só GESTAOLEILOES
+tinha o log mostrando a causa. Se `fonte_regressao_suspeita()` voltar a acusar uma dessas
+fontes, checar o log do run antes de mexer em parser: pode ser o mesmo defeito.
+
+---
+
 ## 🖼️ SESSÃO 24 · PARTE 44 (10/09) — REVISÃO GERAL DOS SCRAPERS: FOTO E DESCRIÇÃO NUNCA EXTRAÍDAS EM 10 FONTES (família `dom`) + FALLBACK NO EXTRATOR GENÉRICO (RJLEILOES e afins)
 
 **Pedido do dono**, na sequência da Parte 43: "faça uma revisão geral do sistema e dos

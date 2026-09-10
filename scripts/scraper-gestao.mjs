@@ -59,10 +59,20 @@ import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/
 
 // vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
 // CDN d335luupugsy2.cloudfront.net) — entra no cluster (dedup global por idLote cuida de sobreposição).
-const DOMINIOS = (process.env.GESTAO_DOMINIOS ||
-  'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br')
+const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br';
+const DOMINIOS = (process.env.GESTAO_DOMINIOS || DOMINIOS_PADRAO_CLUSTER)
   .split(',').map(s => s.trim()).filter(Boolean);
-const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || 25);
+const MAX_EVENTOS_PADRAO = 25;
+const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || MAX_EVENTOS_PADRAO);
+// ESCOPO REDUZIDO (10/09): um dispatch manual com domínio/evento cortado (ex.: recon pontual
+// de 1 dos 5 domínios do cluster) não pode entrar no monitor com a MESMA etiqueta de uma
+// coleta de produção — foi exatamente isso que fez `fonte_regressao_suspeita()` acusar
+// "total=1 vs piso=63" num dia em que o cluster inteiro seguia com 123 lotes saudáveis
+// (ver HANDOFF, achado do dono pedindo revisão geral dos scrapers). `registrarSaude` e as
+// funções SQL (`fonte_baseline_aprendida`/`fonte_regressao_suspeita`) reconhecem o sufixo
+// `-escopo-reduzido` em `estrategia` e excluem essas linhas da comparação/aprendizado.
+const ESCOPO_REDUZIDO = !!process.env.GESTAO_DOMINIOS || MAX_EVENTOS < MAX_EVENTOS_PADRAO;
+const ESTRATEGIA = ESCOPO_REDUZIDO ? 'principal-escopo-reduzido' : 'principal';
 const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || 30);
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
@@ -441,7 +451,7 @@ async function main() {
     // 'sem_cota' em vez de 'falhou' e suprimir a acusação de regressão — a ação que resolve é
     // liberar cota, não mexer no parser. O exit 1 FICA nos dois casos: "não coletei" é
     // verdade em ambos, e sair com 0 seria o check verde sobre acervo parado de 11/08.
-    await registrarSaude(supabase, 'GESTAOLEILOES', [], 'principal',
+    await registrarSaude(supabase, 'GESTAOLEILOES', [], ESTRATEGIA,
       { ok: false, semCota: semCotaVisto, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCotaVisto
           ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
@@ -471,7 +481,7 @@ async function main() {
   // legitimamente menor e o teste de regressão gritaria "queda vs anterior" sobre um número
   // que a nossa própria decisão de orçamento encolheu. `semCota` suprime a acusação sem
   // mascarar o total — o número gravado continua sendo o que de fato foi coletado.
-  await registrarSaude(supabase, 'GESTAOLEILOES', prontos, 'principal',
+  await registrarSaude(supabase, 'GESTAOLEILOES', prontos, ESTRATEGIA,
     semCotaVisto ? { semCota: true } : undefined);
   await registrarConhecimento(supabase, {
     // `acesso`/`custo` são o caminho que ESTA execução usou, não o que o scraper sabe fazer:

@@ -69,6 +69,25 @@ export function motivoEhOrcamento(motivo) {
   return MOTIVOS_ORCAMENTO.test(String(motivo || ''));
 }
 
+/**
+ * ESCOPO REDUZIDO (10/09) — achado ao investigar a "regressão" que `fonte_regressao_
+ * suspeita()` acusou no GESTAOLEILOES (total=1 vs piso=63/mediana=126). A causa não era o
+ * site: era um `workflow_dispatch` manual com `GESTAO_DOMINIOS=granadoleiloes.com.br` (1 dos
+ * 5 domínios do cluster) e `GESTAO_MAX_EVENTOS=2` (padrão é 25) — um teste pontual, não uma
+ * medição de produção. `registrarSaude` comparou o `total` dessa execução contra o histórico
+ * de runs COM ESCOPO CHEIO e gravou `status='degradado'`, `estrategia='principal'` — igual a
+ * qualquer medição de verdade. É a forma nº10 do CLAUDE.md: o instrumento mediu "o que um
+ * dispatch manual pediu", não "o que a fonte tem", e reportou com o nome do segundo.
+ *
+ * `estrategia` ganha o sufixo `-escopo-reduzido` quando o coletor sabe que rodou com corte
+ * deliberado (ver scraper-gestao.mjs). Esta função centraliza o reconhecimento do sufixo —
+ * usada aqui (JS) e espelhada em `fonte_baseline_aprendida()`/`fonte_regressao_suspeita()`
+ * (SQL, migration escopo_reduzido_nao_e_baseline.sql) para as duas pontas nunca divergirem.
+ */
+export function ehEscopoReduzido(estrategia) {
+  return /escopo-reduzido/i.test(String(estrategia || ''));
+}
+
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
   // REDE DE SEGURANÇA (31/08): a flag booleana é a fonte primária, o TEXTO é o desempate.
@@ -85,6 +104,7 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   // consertar um parser intacto. A causa foi descompasso branch × main (o workflow roda em
   // `main` e o conserto ainda estava na branch), mas a lição é a de sempre: a classificação
   // acontece num lugar SÓ, então é aqui que ela tem de ser à prova de flag perdida.
+  const escopoReduzido = ehEscopoReduzido(estrategia);
   const semCotaFlag = validacao?.semCota === true;
   const flagPerdida = !semCotaFlag && motivoEhOrcamento(validacao?.motivo);
   const semCota = semCotaFlag || flagPerdida;
@@ -132,8 +152,12 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   } else if (validacao && validacao.ok === false) status = 'degradado';
   try {
     const enumerados = Number.isFinite(validacao?.enumerados) ? validacao.enumerados : null;
+    // Nunca compara contra um "anterior" de escopo reduzido (ver `ehEscopoReduzido` acima) —
+    // senão um teste pontual de 1 domínio vira o piso que a PRÓXIMA execução de verdade tem
+    // que superar, e uma queda real (ex.: 126→70) passaria batida por parecer alta perto de 1.
     const { data: ant } = await supabase.from('fonte_saude')
-      .select('total,enumerados').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
+      .select('total,enumerados').eq('fonte', fonte).not('estrategia', 'ilike', '%escopo-reduzido%')
+      .order('executado_em', { ascending: false }).limit(1).maybeSingle();
     // Compara ENUMERADOS com ENUMERADOS quando os dois lados têm o número; só cai para
     // `total` quando o coletor (ou o histórico) ainda não reporta enumeração. Misturar as
     // duas escalas seria pior que não comparar: são grandezas diferentes com o mesmo nome.
@@ -143,7 +167,7 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
     const rotulo = usaEnum ? 'listados' : 'coletados';
     // `cotaNegada` entra junto com `semCota`: comparar um total truncado pelo orçamento
     // contra a execução anterior acusa queda que o leiloeiro não teve.
-    if (anterior > 0 && atual < anterior * 0.5 && !semCota && !cotaNegada) {
+    if (anterior > 0 && atual < anterior * 0.5 && !semCota && !cotaNegada && !escopoReduzido) {
       // 'vazio' também é promovido: a fonte respondeu 200 com 0 lotes, mas ontem tinha acervo —
       // isso não é "leiloeiro sem imóvel agora", é a lista chegando vazia. Foi o caso da HASTA
       // em 29/08 (579 → 0), e sem esta linha o zero entraria como desfecho normal.
@@ -154,6 +178,8 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
       console.log(`  💰 [${fonte}] coleta parcial: ${cotaNegada} lote(s) não buscados por orçamento (anterior ${anterior}). NÃO é regressão da fonte.`);
     } else if (semCota && anterior > 0) {
       console.log(`  💰 [${fonte}] sem cota: coleta não tentada (anterior ${anterior}). NÃO é regressão da fonte.`);
+    } else if (escopoReduzido && anterior > 0 && atual < anterior * 0.5) {
+      console.log(`  🔎 [${fonte}] escopo reduzido (${rotulo} ${atual} vs ${anterior} de escopo cheio) — teste pontual, NÃO é regressão da fonte.`);
     }
     await supabase.from('fonte_saude').insert({
       fonte, total: m.n, enumerados, estrategia: estrategia || null,
