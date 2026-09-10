@@ -28,6 +28,28 @@
 // Tipos de imagem que a API da Anthropic aceita como bloco `image`.
 const IMAGEM_OK = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
+/**
+ * TETO DE TAMANHO — e por que ele era 6 MB e recusava 27% das matrículas (10/09).
+ *
+ * O dono perguntou por que a IA não leu a matrícula do terreno de Guarapari. Ela não leu
+ * porque NÓS recusamos o arquivo: matrícula de 11,2 MB contra um teto de 6 MB. O documento
+ * baixava normalmente (HTTP 200, application/pdf) e é perfeitamente legível — 4 páginas,
+ * ZERO fontes, 383 imagens JPEG, ou seja, escaneada. Sem camada de texto, a leitura por
+ * VISÃO é o único caminho possível, e era exatamente o caminho que o teto fechava. O
+ * relatório então saiu com a área do anúncio e o aviso "não foi confirmada na matrícula" —
+ * verdadeiro, e escondendo que a recusa tinha sido nossa.
+ *
+ * Medido em 11 matrículas do acervo (S3 da LJUD, únicas alcançáveis do sandbox):
+ *   0,2 · 0,4 · 0,4 · 0,5 · 0,7 · 1,6 · 2,3 · 3,6 · 11,2 · 15,2 · 15,6 MB
+ * TRÊS de onze acima de 6 MB — e são justamente as escaneadas, que são as que só a visão lê.
+ *
+ * O teto novo vem da restrição REAL, não de chute: a API da Anthropic aceita 32 MB por
+ * requisição e o documento vai em base64, que infla 4/3. 18 MB → 24 MB de base64, deixando
+ * 8 MB de folga para o resto do corpo. Cobre os 15,6 MB do maior caso medido com margem.
+ * Acima disso continua recusado COM MOTIVO — que é o contrato desta função.
+ */
+export const MAX_BYTES_VISAO = 18_000_000;
+
 /** Assinatura binária → media type. `null` quando não é um binário conhecido. */
 function porMagicBytes(buf) {
   if (!buf || buf.length < 4) return null;
@@ -51,7 +73,7 @@ function porMagicBytes(buf) {
  * `kind: 'desconhecido'` SEMPRE traz `motivo`: é o que permite ao chamador registrar
  * "não consegui ler este documento" em vez de seguir como se ele fosse vazio.
  */
-export function classificarDocumento(buf, { url = '', contentType = '', maxBytes = 6_000_000, semBase64 = false } = {}) {
+export function classificarDocumento(buf, { url = '', contentType = '', maxBytes = MAX_BYTES_VISAO, semBase64 = false } = {}) {
   if (!buf || !buf.length) return { kind: 'desconhecido', motivo: 'corpo vazio' };
   const mt = porMagicBytes(buf);
   // `semBase64` para quem só precisa saber O QUE é (o extrator de texto, que vai passar o

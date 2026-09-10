@@ -482,7 +482,7 @@ async function lerDoc(url, deadline) {
     // tira de caracteres aleatórios, ia no prompt como "texto do documento", e a IA
     // respondia sobre nada enquanto o sistema registrava que tinha lido. Agora a imagem é
     // enviada como IMAGEM — a IA lê as duas — e o que não dá para ler para aqui.
-    const doc = classificarDocumento(buf, { url, contentType: ct, maxBytes: 6_500_000 });
+    const doc = classificarDocumento(buf, { url, contentType: ct }); // teto único: MAX_BYTES_VISAO (era 6,5 MB e recusava matrícula escaneada)
     if (doc.kind === 'pdf') return { kind: 'pdf', base64: doc.base64, url };
     if (doc.kind === 'imagem') return { kind: 'imagem', base64: doc.base64, mediaType: doc.mediaType, url };
     if (ehPdfUrl) return null; // .pdf que não veio PDF = bloqueio/HTML → falha desta tentativa

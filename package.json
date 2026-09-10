@@ -38,6 +38,7 @@
     "testar:niveis": "node scripts/testes/mercadologico-tres-niveis.mjs",
     "testar:indice": "node scripts/testes/indice-de-estado-nao-precifica-lote.mjs",
     "testar:busca-modelo": "node scripts/testes/busca-cai-no-haiku-com-a-ferramenta-certa.mjs",
+    "testar:doc-teto": "node scripts/testes/matricula-grande-nao-pode-ser-recusada-por-nos.mjs",
     "testar:assessoria": "node scripts/testes/assessoria-so-para-investidor-pro.mjs",
     "testar:entrega": "node scripts/testes/toast-so-anuncia-relatorio-entregue.mjs",
     "testar:mensagem-grupo": "node scripts/testes/mensagem-de-grupo-nao-inventa-numero.mjs",

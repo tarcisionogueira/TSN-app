@@ -138,7 +138,7 @@ export async function lerTexto(url, deadline) {
     // O tipo vem do CONTEÚDO, não da URL — ~2.100 matrículas do acervo são servidas por
     // endpoint de API sem extensão nenhuma. E o que não é texto de verdade volta `null`
     // em vez de virar uma tira de bytes com cara de documento lido (ver `_doc-leitura.js`).
-    const doc = classificarDocumento(buf, { url, contentType: ct, maxBytes: 12_000_000, semBase64: true });
+    const doc = classificarDocumento(buf, { url, contentType: ct, semBase64: true }); // teto único: MAX_BYTES_VISAO
     if (doc.kind === 'pdf') {
       const PDFParse = await carregarPDFParse();
       const parser = new PDFParse({ data: buf });
