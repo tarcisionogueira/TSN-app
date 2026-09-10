@@ -4,6 +4,57 @@
 
 ---
 
+## 🔧 SESSÃO 24 · PARTE 36 (10/09) — TRÊS ACHADOS DO RITUAL DE ABERTURA, OS TRÊS CORRIGIDOS
+
+Pedido do dono: "resolva o que consegue resolver sozinho de forma eficiente e segura". Rodando
+o ritual de abertura (saúde + marketing + pendências), três achados NOVOS — nenhum estava na
+lista de pendências — todos confirmados por medição antes de mexer, e os três corrigidos.
+
+**1. `whatsapp_fila_grupo` vazava PII para QUALQUER UM, sem login.** A auditoria de segurança
+acusou a função (SECURITY DEFINER) como executável por anon. Ela devolve nome, cidade e
+TELEFONE de todo inscrito numa live — o comentário do próprio endpoint que a chama
+(`api/admin-whatsapp-fila.js`) já dizia que isso "é PII" e que a irmã `whatsapp_fila_live` só
+roda por `service_role`; esta ficou de fora quando nasceu. Corrigido com o MESMO padrão de
+`rpc_definer_revogar_anon.sql`: `revoke all ... from public, anon, authenticated` + grant só a
+`service_role` — a primeira tentativa revogou só de anon/authenticated e a auditoria continuou
+acusando, porque o Postgres concede EXECUTE a PUBLIC por padrão na criação da função (anon
+herda de PUBLIC). `auditoria_seguranca()` volta a 0 achados. Commit `56551e0`.
+
+**2. Badge de desconto exibia "-642% OFF" para o cliente.** Medido: 1.132 lotes ativos com
+`desconto_percentual` negativo (1.062 CEF, 65 TORRES3, resto espalhado) — nos piores casos da
+CEF, `valor_avaliacao` vem MUITO abaixo do `valor_minimo` (ex.: avaliação R$20mil, lance mínimo
+R$148mil), o que cheira a leitura errada do campo de avaliação na importação da CEF (NÃO
+corrigido — precisa olhar o importador; 17.353 lotes CEF ativos é acervo grande demais para
+mexer sem entender a causa primeiro). O que FOI corrigido, por ser baixo risco e alto valor:
+quatro telas testavam `desconto_percentual ?` (truthy — número negativo passa) em vez de `> 0`,
+e mostravam o percentual negativo cru: `Cliente360.jsx`, `SugestaoImovel.jsx`, o popup do mapa
+em `Busca.jsx`, e o pior caso, `GeradorMensagensGrupo.jsx` — ia direto para o texto de WhatsApp
+que o admin manda ao cliente. `ImovelDetalhe.jsx` e a grade principal do `Busca.jsx` já faziam a
+checagem certa; os quatro agora seguem o mesmo padrão. Commit `56551e0`.
+
+**3. EDITAL_DJEN (197 ativos) era ponto cego total do monitor.** `fonte_cega_no_monitor`
+acusava 1 — os lotes nascidos do Radar de Editais (DJEN, `api/radar-editais-cron.js`, a cada
+4h) nunca escreveram `fonte_saude`. Medido antes de calibrar: `atualizado_em` mais recente
+estava a 3h (bate com o cron de 4h). Entrou em `FONTES_SEM_SAUDE` (frescor pelo acervo, igual
+PECINI/VLANCE/SATO) com tolerância de 1 dia. Commit `56551e0`.
+
+**Investigado e é válido — sem bug**: `cadastro_barrado` acusou 13 em 7d (limite normal 7). As
+13 linhas em `eventos_atividade` são todas validação legítima: 7 são "senha fraca" do MESMO
+usuário tentando 7 senhas em 14 segundos (03/09 22:31-22:32), + e-mail duplicado, telefone
+incompleto, nome sem sobrenome, 2× "Failed to fetch" (rede do cliente). Nenhuma ação necessária.
+
+**Confirmado — precisa da sua máquina, não é código**: rodei `recon-hasta-zerou.mjs` e
+`recon-pestana-data.mjs` aqui — os dois batem em `ERR_TUNNEL_CONNECTION_FAILED` neste sandbox,
+mesmo bloqueio de rede que já valia para a LJUD. HASTA e PESTANA seguem na lista de pendências
+que exigem você.
+
+**Ambiente**: `node_modules` não existia neste container (clone fresco) — `npm install`
+restaurou (213 pacotes) antes de validar com `npm run build` (passou limpo). `npm audit` acusa
+7 vulnerabilidades (2 moderate, 5 high) nas dependências — NÃO mexido agora (upgrade de
+dependência pede teste próprio, fora do escopo de "resolver sozinho com segurança").
+
+---
+
 ## 🛡️ SESSÃO 24 · PARTE 35 (10/09) — A PREVENÇÃO: DETECTOR DE CLIENTE TRAVADO + A TELA QUE PARECIA CHEIA
 
 **Pergunta do dono**: "qual a melhor forma de evitar que essas situações se repitam?"
