@@ -182,16 +182,20 @@ node scripts/radar-editais-residencial.mjs \
 env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
   || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"
 
-# VENDASGOV — Imóveis da União (SPU/SERPRO). Veio do GitHub Actions em 29/08: o WAF do SERPRO
-# não deixa IP de DATACENTER nem carregar a página — as 5 rotas davam "Navigation timeout of
-# 45000 ms" e a fonte colhia ZERO desde pelo menos 15/08 (15 dias de `falhou` seguidos), com
-# 22 min por dia queimados no caminho. Daqui o IP já é residencial, que é o mesmo remédio de
-# HASTA, RJ e PECINI. Custo: zero (puppeteer local, sem Bright Data).
-# ⚠️ AINDA NÃO VERIFICADO NA PRÁTICA — a hipótese do WAF é a mais provável pelo padrão (as 5
-# rotas, todo dia, só timeout), mas não deu para provar daqui. Se ELE TAMBÉM estourar timeout
-# nesta máquina, o problema não é o IP e sim o site: aí o próximo passo é recon da SPA, não
-# outra troca de runner. A fonte falha rápido agora (aborta nas demais rotas), então testar
-# custa ~1 min em vez de 22.
+# VENDASGOV — Imóveis da União (SPU/SERPRO). Veio do GitHub Actions em 29/08 sob a hipótese de
+# que o WAF do SERPRO bloqueava IP de DATACENTER. Daqui o IP já é residencial, mesmo remédio de
+# HASTA, RJ e PECINI. Custo: zero (fetch direto, sem Bright Data — o Puppeteer saiu da função
+# em 30/08, ver o cabeçalho de `scraperVendasGov` em scraper-puppeteer.mjs).
+# ✅ A HIPÓTESE DO WAF CAIU (10/09) — e ficou provada errada por 11 dias de dado, não por
+# suposição nova: `fonte_saude.enumerados` (o que a API DECLARA ter) veio "2" em TODA execução
+# de 30/08 a 10/09, o que só é possível se o fetch daqui está funcionando (sem IP a resposta
+# nem teria total para declarar). O bloqueio nunca foi o problema depois do dia 30; o motivo
+# `total 0<3` no monitor é boilerplate do limiar de qualidade (sempre igual, zero informa) e
+# escondia isso. O que falta saber é POR DENTRO da resposta: se as 5 salas declaram tudo na
+# mesma ou 4 delas mudaram de nome/sumiram, e se os poucos itens reais caem no filtro de
+# valor/UF obrigatório do `mapImovelVG`. Diagnóstico por sala foi adicionado ao `motivo` de
+# `fonte_saude` (10/09) para a PRÓXIMA execução já trazer a resposta — leia
+# `fonte_saude` (fonte=VENDASGOV, mais recente) antes de suspeitar do IP de novo.
 rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────

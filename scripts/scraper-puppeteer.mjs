@@ -2013,6 +2013,13 @@ async function scraperVendasGov() {
   console.log('  Imóveis da União (VendasGov/SPU) — API pública, fetch direto (sem navegador)...');
   const bens = new Map();
   let declarados = 0;   // soma dos `totalElements` — quanto a FONTE diz ter, some ou não no acervo
+  // DIAGNÓSTICO POR SALA (10/09) — `enumerados` sozinho travou a investigação: 11 dias com o
+  // mesmo `enumerados=2` provam que o fetch FUNCIONA (rede/WAF não é mais a causa, o 30/08 já
+  // resolveu isso), mas não dizem qual das 5 salas responde o quê, nem por que os itens
+  // colhidos não viram `imoveis`. Console.log some — este runner é a máquina de casa, sem
+  // captura de log daqui. `porSala` fica no `motivo` de `fonte_saude` (linha abaixo), que É
+  // lido daqui, para a próxima rodada já vir com resposta em vez de outra rodada de suspeita.
+  const porSala = {};
   for (const sala of VG_SALAS) {
     const antes = bens.size;
     let recebidos = 0;
@@ -2039,15 +2046,21 @@ async function scraperVendasGov() {
       } catch (e) {
         // Falha de rede NUNCA vira "a sala está vazia": para esta sala e deixa dito por quê.
         console.log(`    VendasGov/${sala}: falha de rede na pág ${page} (${String(e.message).slice(0, 60)}) — parando esta sala`);
+        if (page === 0) porSala[sala] = 'erro-rede';
         break;
       }
       if (!r.ok) {
         console.log(`    VendasGov/${sala}: HTTP ${r.status} na pág ${page} — parando esta sala`);
+        if (page === 0) porSala[sala] = `http-${r.status}`;
         break;
       }
       const j = await r.json().catch(() => null);
       const arr = j && Array.isArray(j.content) ? j.content : null;
-      if (!arr) { console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — sala provavelmente inexistente`); break; }
+      if (!arr) {
+        console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — sala provavelmente inexistente`);
+        if (page === 0) porSala[sala] = 'sem-content';
+        break;
+      }
       // `content: []` na página 0 é resposta VÁLIDA e vazia — coisa diferente de sala
       // inexistente, e diferente de erro. Sem esta linha as duas apareciam como um `+0`
       // mudo, e foi isso que escondeu por uma rodada que o problema era o `sort`.
@@ -2074,8 +2087,10 @@ async function scraperVendasGov() {
         const total = Number(j?.totalElements ?? j?.total ?? j?.totalItems ?? NaN);
         if (Number.isFinite(total)) {
           declarados += total;
+          porSala[sala] = total;
           console.log(`    VendasGov/${sala}: a API declara ${total} imóvel(is) no total desta sala`);
         } else {
+          porSala[sala] = 'sem-total';
           console.log(`    VendasGov/${sala}: a resposta NÃO traz total — chaves recebidas: ${Object.keys(j || {}).join(', ') || '(nenhuma)'}`);
         }
       }
@@ -2106,7 +2121,14 @@ async function scraperVendasGov() {
   // array: `imoveis.declarados` sobreviveria a um `.filter()` mas não a um `.map()`, e some em
   // silêncio quando alguém mexer aqui daqui a três meses.
   console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos · a fonte declara ${declarados})`);
-  return { imoveis, declarados };
+  // `diagnostico` só existe quando `imoveis` sai vazio — é ISSO que precisa de explicação; uma
+  // rodada saudável não precisa carregar o detalhe das 5 salas para `fonte_saude`. Vai no
+  // `motivo` (ver o dispatch, seção 8): o console daqui é do runner residencial, que ninguém lê;
+  // a tabela É lida.
+  const diagnostico = imoveis.length ? null
+    : `salas: ${VG_SALAS.map(s => `${s}=${porSala[s] ?? 'sem-resposta'}`).join(' ')} · colhidos=${bens.size}`
+      + (bens.size ? ` (semValor=${perdidos.semValor} semUF=${perdidos.semUF} repetido=${perdidos.repetido})` : '');
+  return { imoveis, declarados, diagnostico };
 }
 
 // ─── PESTANA LEILÕES ──────────────────────────────────────────────────────────
@@ -3771,7 +3793,7 @@ async function main() {
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
     if (rodar('VENDASGOV')) try {
       console.log('\n📋 Imóveis da União (VendasGov)...');
-      const { imoveis, declarados } = await scraperVendasGov();
+      const { imoveis, declarados, diagnostico } = await scraperVendasGov();
       // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
       // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
       // (montados via API) — só gastaria os 8 min do deadline à toa. Edital/laudo do
@@ -3780,8 +3802,13 @@ async function main() {
       // `enumerados` = o que a API DECLARA ter (soma dos `totalElements`). Sem isto, a fonte que
       // declara 1 lote e aprova 0 porque ele está VENDIDO era acusada de `zerou` — alarme sobre
       // um zero verdadeiro, que é o que treina a ignorar alarme.
-      await registrarSaude('VENDASGOV', imoveis, 'principal',
-        { ...validarColeta(imoveis, 'VENDASGOV'), enumerados: declarados });
+      const validacaoVG = { ...validarColeta(imoveis, 'VENDASGOV'), enumerados: declarados };
+      // `diagnostico` (10/09): quando zera, o motivo do gate diz só "total 0<3" — mesmo texto
+      // desde 30/08, porque é boilerplate do limiar, não da fonte. Sem o detalhe por sala aqui
+      // dentro de `motivo`, cada rodada zerada é uma investigação do zero: o runner residencial
+      // não tem captura de log, só esta tabela sobrevive até a próxima sessão.
+      if (diagnostico) validacaoVG.motivo = [validacaoVG.motivo, diagnostico].filter(Boolean).join('; ');
+      await registrarSaude('VENDASGOV', imoveis, 'principal', validacaoVG);
     } catch (e) {
       // Fonte nova nunca pode derrubar o job (as demais já salvaram acima).
       console.log(`  ⚠️ VendasGov falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);

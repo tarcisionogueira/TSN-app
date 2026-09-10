@@ -4,6 +4,62 @@
 
 ---
 
+## 🔎 SESSÃO 24 · PARTE 53 (10/09) — VENDASGOV: A HIPÓTESE DO WAF (29/08) JÁ TINHA CAÍDO EM 30/08, E NINGUÉM VOLTOU PRA CONFERIR O RESIDENCIAL
+
+Continuando "resolva todos sequencialmente + confirme o residencial": `coleta_cliente.ultima_em`
+mostrou VENDASGOV com **null** — nunca teve UMA coleta residencial bem-sucedida, o único caso
+assim entre as fontes do runner de casa (HASTA e VLANCE ao menos JÁ tiveram sucesso antes de
+degradar). `fonte_saude` confirma: `status='falhou', total=0` em TODAS as 15+ execuções
+registradas entre 30/08 e 10/09, sempre com o mesmo `motivo: 'total 0<3; valor 0<0.6; uf 0<0.6;
+link 0<0.9'`.
+
+**O que apareceu não foi um bug novo — foi um bug já corrigido que ninguém voltou a checar onde
+ele roda de verdade.** `scripts/scraper-puppeteer.mjs` tem, desde 30/08, um cabeçalho extenso
+admitindo que a premissa original de VENDASGOV ("o WAF do SERPRO bloqueia IP de datacenter")
+estava ERRADA — o bloqueio real era mandar um User-Agent de Chrome sem o handshake TLS de
+Chrome de verdade (o site aceita `curl` honesto, mas rejeita um `fetch` fingindo ser um
+navegador que não é). O fix (remover o UA falso + o parâmetro `sort` obsoleto que apontava para
+um campo que talvez nem exista mais) foi aplicado e comitado nesse dia.
+
+Só que VENDASGOV tinha saído do GitHub Actions um dia ANTES (29/08, `leiloeiros-puppeteer.yml`,
+`SCRAPER_EXCLUIR: VENDASGOV`) para o runner residencial (`runner-residencial.sh:195`) — cujo
+comentário, escrito naquele mesmo 29/08, dizia "AINDA NÃO VERIFICADO NA PRÁTICA" com a hipótese
+do WAF como a mais provável. O fix de 30/08 resolveu o sintoma na função; o comentário
+operacional que decidiu ONDE a fonte roda nunca foi atualizado pra refletir isso — e sem essa
+atualização, a hipótese errada ficava pronta pra ser suspeitada de novo a cada nova sessão.
+
+**A prova de que o fetch FUNCIONA já estava na tabela, só não tinha nome.** `fonte_saude.
+enumerados` (quanto a API DECLARA ter, via `totalElements`) veio **"2" em TODA execução desde
+30/08** — 11 dias seguidos do mesmo número exato. Isso só é possível se o fetch está recebendo
+JSON válido com paginação: um bloqueio de rede/WAF real interromperia a exceção antes de ler
+`totalElements`, dando `enumerados=0`, não um número estável. A conectividade nunca foi o
+problema depois de 30/08. O que ficou invisível foi o PORQUÊ de só 2 itens declarados nunca
+virarem `imoveis` aprovados — o motivo do gate é boilerplate do limiar de qualidade (idêntico em
+toda execução zerada), então não diferenciava "a fonte tem só 2 mesmo mais UF/valor ausente" de
+"4 das 5 salas pararam de responder e sobrou só uma".
+
+**Fix**: `scraperVendasGov()` agora rastreia por SALA (`leilao`/`concorrencia`/`venda`/`pai`/
+`fundo`) qual respondeu com total, qual respondeu vazia, qual perdeu o campo `content` e qual
+falhou por rede/HTTP — e quando `imoveis` sai vazio, esse detalhe (mais quantos foram colhidos e
+por que cada um foi descartado: sem valor, sem UF, repetido) entra no `motivo` de `fonte_saude`,
+não só no console do runner residencial — que ninguém lê, é a máquina de casa, sem captura de
+log. Também corrigi o comentário de `runner-residencial.sh:185` pra não repetir a hipótese do
+WAF como se ainda estivesse em aberto. Nenhuma mudança na coleta/mapeamento em si (`mapImovelVG`,
+os limiares, as 5 `VG_SALAS`) — só instrumentação, pra a PRÓXIMA execução (o runner roda várias
+vezes por dia, pelos timestamps de `fonte_saude`) já trazer a resposta em vez de mais uma rodada
+de suspeita. Deliberadamente não mudei o `min: 3` do limiar nem a lista de salas: com só "2"
+declarados e sem saber se as outras 4 salas ainda existem, mexer em qualquer um dos dois seria
+adivinhar — exatamente o que a lição do SATO (Parte 50) mandou não fazer.
+
+**Confirmação do residencial, resumo até aqui (pedido explícito do dono)**: SOLEON/GESTAO/RJ/
+PECINI saudáveis (~57h desde o último sucesso, dentro do gate de 72h); radar DJEN muito ativo e
+saudável (só o "TJSP fetch failed" recorrente, já classificado como não-fatal, não trava o
+resto). **HASTA parada há 11,8 dias** e **VLANCE parada há 12,3 dias apesar de tentativa
+residencial ~1h antes da medição** (achado novo, distinto do bug de paginação já corrigido na
+Parte 48) seguem para a próxima parte da fila sequencial.
+
+---
+
 ## 🔎 SESSÃO 24 · PARTE 52 (10/09) — EDITAL_DJEN: 0% FOTO/DOC É ESTRUTURAL, NÃO BUG (E JÁ EXISTE TENTATIVA DE ENRIQUECER, MEDIDA E CONSISTENTEMENTE SEM SUCESSO)
 
 Fechando a lista de "menores" (VLANCE já coberto na Parte 48; BAYIT/SATO, feitos). Antes de
