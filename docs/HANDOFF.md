@@ -4,6 +4,35 @@
 
 ---
 
+## 🔨 SESSÃO 24 · PARTE 43 (10/09) — LEILOEIRO NASCE PARCEIRO HABILITADO (achado do dono AO VIVO, em reunião com leiloeiros)
+
+O dono acessou o portal durante uma reunião com leiloeiros e viu "Quero ser parceiro" em vez
+do link de venda — seu argumento: o leiloeiro já passa por uma barra de confiança bem mais
+alta que o opt-in genérico (CNPJ, matrícula, documentos reais subindo pela integração), então
+pedir o clique extra é atrito redundante.
+
+**Mecanismo, não gambiarra pontual**: em vez de editar cada RPC que pode gerar um leiloeiro
+(`resgatar_convite_leiloeiro`, `usar_convite_equipe`, edição manual do admin), o auto-aceite
+entrou no PRÓPRIO gatilho `proteger_campos_sensiveis_perfil()` (BEFORE UPDATE em `perfis`):
+sempre que uma linha PASSA a ter `role='leiloeiro'` e ainda não tem `parceiro_aceite_em`, o
+gatilho carimba na hora. Cobre todo caminho existente de uma vez, e qualquer papel novo que
+precisar do mesmo comportamento no futuro soma ao mesmo bloco. Testado contra dado real
+(1 conta descartável, limpa depois): `role='leiloeiro'` → `parceiro_aceite_em`/`versao`
+preenchidos no mesmo UPDATE, confirmado.
+
+⚠️ **Ressalva registrada no próprio código, para quem for auditar depois**: isto é um
+carimbo ADMINISTRATIVO, não a mesma prova de consentimento de um clique real em
+`aceitar_parceria()` (que o termo promete acompanhar de IP/dispositivo/data-hora — nada
+disso existe aqui). Por isso `parceiro_aceite_versao` usa `'leiloeiro-auto-v1'`, propositalmente
+fora do padrão `vN-AAAA-MM` do termo real — para nunca ser confundido com aceite de clique
+numa auditoria ou disputa de comissão. Decisão consciente do dono, pedida ao vivo; registrada
+aqui para não virar uma surpresa se um leiloeiro questionar os termos de comissão depois.
+
+`auditoria_seguranca()`: 0/0 depois. Sem mudança de frontend — o efeito já aparece na
+mesma tela (`ConviteParceiro`, que só olha `parceiro_aceite_em` para decidir o que mostrar).
+
+---
+
 ## 📊 SESSÃO 24 · PARTE 42 (10/09) — CONVITE DE LEILOEIRO VIRA DECISÃO DO ADMIN + PAINEL "COBERTURA DE RELATÓRIOS & INTELIGÊNCIA" REAGRUPADO
 
 **Correção do dono sobre a Parte 41**: "o leiloeiro não deve poder convidar diretamente. eu
