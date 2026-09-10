@@ -4,6 +4,305 @@
 
 ---
 
+## 🏁 FECHAMENTO DO DIA 10/09 — O QUE FICA EM ABERTO (leia isto primeiro)
+
+**Sete correções subiram** (`9b60d60` · `5976617` · `552cef6` · `e8640e9` · `2fb8c30` ·
+`df20150` · `f126b07` · `ec0137d`), todas com teste próprio. O fio que liga quase todas: **uma
+recusa nossa sendo entregue ao cliente como ausência de informação** — teto de arquivo virando
+"matrícula não confirmada", sessão vencida virando "você é cliente comum", média de estado
+virando "valor de mercado", cota não lida virando "0". Vale reler a lista de formas do CLAUDE.md
+antes de mexer em qualquer leitura externa.
+
+**Pendências que EXIGEM o dono (não dá para resolver daqui):**
+
+1. **Gemini — só o `google_search` é negado, não o projeto.** Trocar chave/projeto não resolve
+   (já testado). Rodar os dois `curl` com a mesma chave (um com `tools: google_search`, outro
+   sem): `200`/`403` confirma. Depois, no console do Google, nesta ordem: billing/tier pago no
+   projeto da chave → Generative Language API habilitada → restrição de aplicativo na chave.
+   Enquanto isso o fallback Haiku segura, a ~1,9x o custo do grounding.
+2. **LJUD, edital por leilão** — precisa de recon em `leiloesjudiciais.com.br` na máquina do
+   dono (o sandbox toma 403 no CONNECT). 45 leilões / 345 lotes ativos dependem disso.
+3. **HASTA zerou** (579 → 0 ativos) — herdado, `node scripts/recon-hasta-zerou.mjs`.
+
+**Pendências técnicas, sem bloqueio externo:**
+
+4. **Download de matrícula/edital com HTTP 403** nos lotes CEF (BH, Betim). Alcance não medido —
+   é do fornecedor ou do nosso caminho de saída? Ver `api/_edital-extrato.js`.
+5. **`api/calcular-score.js` e a 2ª praça** (herdado da PARTE 28): consome
+   `desconto_percentual`, que mede a 2ª praça, com peso 0,6/ponto. Provavelmente certo, mas
+   **não foi verificado** se o resto do score assume a 1ª.
+6. **Cartão OG 1200×630** para o WhatsApp mobile — medir as dimensões reais das fotos antes de
+   escolher o caminho (`Range: bytes=0-2047` + marcador SOF), não depois.
+7. **Resíduo do filtro de anexos**: URL-prosa CURTA ainda passa (ex.: `topoleiloes.com.br/lote/
+   35106/Declaro%20que%20assisti%20ao%20vídeo…`). O limiar (150 chars + 8 espaços) é folgado de
+   propósito para não recusar edital legítimo; se incomodar, mexer com medição, não a olho.
+
+**A pendência de NEGÓCIO, que é a maior:** em 21 dias os clientes geraram **8 relatórios** contra
+**136 contas ativas**, e dois dos quatro Investidor Pro nunca geraram nenhum. Já existe rastro
+para responder por quê — `analise_estado` registra o que a tela oferecia na chegada e
+`analise_bloqueio` registra clique em porta fechada. Cruzar esses dois diz se é falta de cota,
+falta de descoberta do botão, ou se a pessoa nem chega na tela. Custa zero.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 34 (10/09) — FIM DO PLANO LEGADO + QUEM DE FATO USA O PRODUTO
+
+**Pedido do dono**: "as cotas tínhamos reduzido a 10 cotas, porque todos têm 15 relatórios? não
+é acumulativo!" → depois: "deixe todos com 10, tire o plano legado das duas".
+
+**Eu errei o diagnóstico antes de conferir.** Disse que era "10 do plano + 5 de bônus" porque vi
+`analises_bonus = 5` no perfil e somei. O `minhas_cotas` nem lê esse campo (ele lê
+`bonus_mercado`, que na Neuma é 0). A causa real é outra: `limite_ia_efetivo` tem um ramo de avô
+— `when p.plano_legado and role in ('top2',…) then (indice → 5, demais → 15)`. Duas contas se
+encaixavam: **Neuma Nogueira (01/07)** e **Alessandra de Jesus (07/07)**, as duas anteriores à
+redução. Não era acúmulo e não era bug.
+
+**Aplicado**: `update perfis set plano_legado = false` nas duas. Todas as 6 contas pagantes agora
+em **10 mercado / 10 documental / 3 índice**, sem variação dentro de cada papel (`min` = `max`).
+Consequência que não era o pedido e foi confirmada pelo dono: o índice cai de 5 para 3 — vem no
+mesmo campo. Medido ANTES de aplicar que as duas estavam com **zero análises consumidas no mês**,
+então ninguém perdeu nada já usado.
+
+**A armadilha da verificação.** O `RETURNING` do próprio UPDATE ainda mostrava 15:
+`limite_ia_efetivo` é `STABLE` e enxerga o snapshot do início da instrução. Confirmar por ele
+seria confirmar o que não aconteceu — a checagem verdadeira veio de uma consulta separada.
+
+**Registrado em `supabase/migrations/20260910_fim_do_plano_legado.sql`**: é mudança de DADO, não
+de schema, então recriar o banco pelas migrações não a reproduziria e a decisão sumiria do
+histórico (a forma nº 7b na direção contrária). O ramo do avô fica no código de propósito: hoje
+sem nenhuma linha, mas é o mecanismo pronto para a próxima mudança de limite. Commit `ec0137d`.
+
+**O NÚMERO DESCONFORTÁVEL DO DIA** (o dono perguntou se algum cliente tinha sofrido com a queda
+do Gemini). Resposta: **nenhum** — e o motivo importa mais que a resposta. Desde 08/09 14:50,
+TODA geração de relatório partiu da conta admin. Em 21 dias, os clientes geraram **8 relatórios
+no total** (1 explorador, 7 do mesmo `top2`), contra **136 contas ativas** (131 exploradores,
+4 Investidor Pro, 2 assessorados). Dois dos quatro Pro nunca geraram nada. Um apagão de dois dias
+na função central do produto passou despercebido — isso é sorte, não resiliência. Vale notar que
+em 20/08 um pagante gerou 3 relatórios e **2 falharam**: é a única amostra recente de cliente
+pagante usando a função, e ela saiu 33% de sucesso.
+
+---
+
+## 🐛 SESSÃO 24 · PARTE 33 (10/09) — ANEXO DO LOTE NÃO É BOTÃO DE COMPARTILHAR (E O MERGE QUE RESSUSCITAVA O LIXO)
+
+**Print do dono**, lote 97989/210252 da LJUD (galpão em ruína, Feira de Santana/BA): a ficha
+mostrava como documento o **"Relatório de Transparência e Igualdade Salarial de Mulheres e
+Homens"** do Ministério do Trabalho — peça institucional do rodapé do leiloeiro. Ao lado,
+um anexo cuja URL tem **1.728 caracteres**: a descrição inteira do imóvel colada como caminho.
+
+**Três defeitos, e o terceiro é o que fazia os outros dois serem eternos.**
+
+1. **O filtro institucional já existia** — nasceu quando esse mesmo relatório vazou do SUPERBID
+   para centenas de lotes — mas casava `igualdade salarial` GRUDADO. Na LJUD a pasta é
+   `relatorio-diferencial-salarial` e o arquivo `Relatório+de+Igualdade+01º+ciclo`: as palavras
+   existem e não são vizinhas. Filtro escrito para um leiloeiro, furado no seguinte.
+2. **A URL forjada a partir da descrição passou por PALAVRA-CHAVE**: a descrição diz "matrícula
+   nº 18.486", `RE_MATRICULA` casou, e o lixo entrou vestido de matrícula. A defesa nova não
+   depende de qual palavra o texto contém — **nome de arquivo não é prosa**: caminho decodificado
+   longo (>150 chars) e com 8+ espaços é frase. Limiar folgado para não pegar "Edital 2ª praça.pdf".
+3. **A união de anexos do `enriquecer-lote` RESSUSCITAVA o lixo.** Ela preservava tudo o que já
+   estava gravado sem reexaminar — então consertar o filtro não limpava nada: o scan novo era
+   UNIDO ao lixo velho, para sempre. Agora o que já está no banco passa pelo MESMO portão do que
+   chega agora. **É isto que faz a correção alcançar o passado.**
+
+**Alcance medido, não estimado**: passei os 1.176 anexos suspeitos do acervo pelo filtro novo —
+recusa **161 em 67 lotes**, mantém 1.015 (editais da ZUK, matrículas assinadas do nosso storage,
+conferidos na amostra). E o do print era minoria: o grosso são links `wa.me` de "fale conosco"
+(**SUPERBID: 175 anexos em 60 lotes**) e `api.whatsapp.com/send` (SUPORTE, VIP), além de
+descrições viradas em URL (FRAZAO, LEILOTECH, RDLEILOES, PURCENA). Com o item 3, os 161 somem na
+próxima vez que cada lote for aberto ou recoletado.
+
+`ehDocumento` virou exportada porque é o único portão por onde todo anexo passa — e a primeira
+versão do teste chamou `m.ehDocumento`, que não existia, e imprimiu **10 de 10 "recusado"**: um
+resultado plausível e vazio, a forma nº 10 cometida dentro do próprio verificador.
+`npm run testar:anexo-lixo` — 19 asserções, metade provando que documento de verdade passa.
+Commit `df20150`.
+
+**Ponta solta**: o **edital da LJUD é por LEILÃO, não por lote** (medido). 1.243 lotes ativos,
+823 com edital (66%). Agrupando pelo id do leilão extraído do `url_lote`: **415 leilões com
+edital em TODOS os lotes, 45 sem em NENHUM, 1 misto** — 460 de 461 tudo-ou-nada. Nos 420 sem
+edital os nomes de anexo são MATRÍCULA/AVALIAÇÃO/LAUDO/DESPACHO, nenhum edital disfarçado: o
+reconhecimento não erra, o documento não está no lote. Conserto: herdar o edital do leilão
+(`it.leilao_id`) quando o lote não tiver. **Falta ver a forma da API** — o sandbox não alcança
+`leiloesjudiciais.com.br` (403 no CONNECT), precisa de recon na máquina do dono.
+
+---
+
+## 🐛 SESSÃO 24 · PARTE 32 (10/09) — A MATRÍCULA NÃO FOI LIDA PORQUE **NÓS** RECUSAMOS O ARQUIVO
+
+**Pergunta do dono** sobre o terreno de Guarapari: "por que a IA não leu a matrícula para
+confirmar as informações do lote? isso confirma metragens, confronta com o edital, confirma
+endereço… a leitura já é aproveitada para o relatório documental."
+
+**Medido no arquivo real** (baixei o PDF e inspecionei):
+
+| | |
+|---|---|
+| matrícula | **11.216.859 bytes (11,2 MB)** |
+| teto do `classificarDocumento` | **6.000.000** |
+| download | HTTP 200, `application/pdf` — o leiloeiro entregou normalmente |
+| conteúdo | 4 páginas, **ZERO fontes, 383 imagens JPEG** — escaneada |
+
+Sem camada de texto, a leitura por **VISÃO é o único caminho** — e era exatamente ele que o teto
+fechava. `blocoParaIA` devolvia `null`, e o relatório saía com a área do anúncio e o aviso "não
+foi confirmada na matrícula": verdadeiro, e escondendo que a recusa tinha sido nossa. **A forma
+nº 1 com disfarce novo — a nossa própria trava entregue ao cliente como ausência de informação.**
+
+**Não é caso isolado.** Medidas 11 matrículas do acervo:
+`0,2 · 0,4 · 0,4 · 0,5 · 0,7 · 1,6 · 2,3 · 3,6 · 11,2 · 15,2 · 15,6 MB` — **três de onze acima
+de 6 MB**, e são as escaneadas, justamente as que só a visão lê.
+
+**Teto novo tirado da restrição REAL**: a API aceita 32 MB por requisição e o documento vai em
+base64, que infla 4/3. **18 MB → 24 MB de base64, com 8 MB de folga.** E passou a ser UM SÓ:
+havia quatro números espalhados (6, 6,5, 12 MB e o default), então o mesmo documento era aceito
+por um caminho e recusado por outro — inclusive no documental, que é onde a leitura deveria ser
+aproveitada. Verificado em seco sobre o arquivo real antes de subir: com o teto antigo,
+`desconhecido | PDF de 11 MB acima do limite`; com o novo, bloco `document` de 15,0 MB.
+`npm run testar:doc-teto` — 19 asserções. Commit `2fb8c30`.
+
+**Ponta solta**: o download de matrícula/edital voltou **HTTP 403** nos lotes CEF de BH e Betim
+(`[matricula-visao] {"motivo":"download falhou","http":403}`). Alcance não estabelecido.
+
+---
+
+## 🐛 SESSÃO 24 · PARTE 31 (09-10/09) — GEMINI: SÓ O *GROUNDING* É NEGADO; FALLBACK MIGRADO PARA HAIKU
+
+**O diagnóstico de 09/09 estava incompleto e foi corrigido em 10/09 pelo ledger de custo.** A
+MESMA chave (`GEMINI_API_KEY`, mesmo header — confirmado em `_gemini.js` e `_grounding.js`):
+
+| Operação | 09/09 |
+|---|---|
+| `gemini/messages` (geração pura, o chat usa) | **12 chamadas, funcionando** ✅ |
+| `gemini/grounding` (busca com Google Search) | **última em 08/09. Zero desde então** ❌ |
+
+Logo, `"Your project has been denied access"` **não é banimento do projeto** — é negação
+específica da ferramenta `google_search`. Por isso trocar a chave e abrir outro projeto (o dono
+fez as duas coisas) não resolveu: o problema nunca esteve na chave. **Hipótese a confirmar no
+console do Google, em ordem**: (1) billing/tier pago no projeto — grounding é recurso pago;
+(2) Generative Language API habilitada; (3) restrição de aplicativo na chave. Teste decisivo:
+dois `curl` com a mesma chave, um com `tools: google_search` e outro sem — 200/403 confirma.
+
+**O CUSTO REAL, medido no nosso `uso_integracoes`** (e o comentário do `_grounding.js` estava
+desatualizado desde a troca — dizia "~4x mais caro, US$ 0,54 por geração", número da era Sonnet):
+
+| | Por chamada |
+|---|---|
+| `gemini/grounding` (13 dias, 28/08–08/09) | **US$ 0,046** |
+| `claude/web_search` com Haiku (10/09) | **US$ 0,088** |
+
+Gemini segue mais barato, mas por **~1,9x, não 10x**. A decomposição confirma que o Haiku está
+mesmo rodando: dos US$ 0,44 de 5 chamadas, US$ 0,26 são token — **exatamente** o preço do Haiku
+para 202.820 in / 11.439 out (no Sonnet seriam US$ 0,78). Os US$ 0,18 restantes são as 18 buscas
+a US$ 0,01 — taxa fixa que nenhum modelo mais barato reduz. Commit `e8640e9`.
+
+**FALLBACK MIGRADO PARA O HAIKU** (pedido do dono: "na falta do Gemini o Claude entra
+automaticamente usando um modelo econômico e eficiente"). Haiku 4.5 custa US$ 1/US$ 5 por milhão
+contra US$ 3/US$ 15 do Sonnet 4.6 — **3x mais barato** — e é mais rápido, que era o outro lado do
+problema: o fallback não abortava por ser fraco, abortava por ser lento (17 de 17 relatórios do
+dia 09/09 abortaram no teto, contra 0 em 62 nos 13 dias anteriores).
+
+**O par modelo × ferramenta é o risco real, e saiu da mão dos chamadores.** `web_search_20260209`
+(filtragem dinâmica) só existe em Opus 4.6+/5 e Sonnet 4.6/5; fora dessa lista — **Haiku entre
+eles** — vale a básica `web_search_20250305`. Mandar a nova para o Haiku é 400, e 400 na busca
+não é "sem amostras": é o relatório inteiro caindo. Agora a variante vem **pareada ao modelo**,
+de `api/_busca-modelo.js`.
+
+**A cascata só sobe de graça**: Haiku primeiro; se o Anthropic recusar por ESTRUTURA (4xx — par
+inválido, ou o contexto de 200 mil tokens do Haiku estourado pelos ~114 mil que o resultado da
+busca devolve), sobe para o Sonnet, que é exatamente o comportamento anterior — **a troca não
+pode piorar nada**. Abort/timeout NÃO sobe degrau: ali o orçamento já foi gasto, e repetir num
+modelo mais lento só troca o instante da morte (foi o que a medição refutou ao ampliar o
+orçamento de 118s para 180s e o Claude abortar no teto do mesmo jeito).
+
+**Uma régua, três chamadores** — `gerar-analise`, `indice-mercado` e `indice-reforco-cron` fazem
+a mesma queda; as constantes locais de modelo foram removidas. O cron de reforço é onde a
+economia mais pesa: varre cidade por cidade, 8 buscas cada, sem ninguém esperando na tela.
+Rastro: `__diag.modeloBusca` e `motorUsado: claude:<modelo>`. `MERCADO_MODELO_BUSCA` troca o
+primeiro degrau sem deploy. `npm run testar:busca-modelo` — 39 asserções. Commit `552cef6`.
+
+**Confirmado em produção**: o relatório do terreno de Guarapari concluiu às 00:19 de 10/09 com
+`modeloBusca: claude-haiku-4-5`, **9 comparáveis reais** (`origem: pesquisa_web`) e índice em
+nível `grid` — sem precisar subir de degrau nenhuma vez.
+
+---
+
+## 🐛 SESSÃO 24 · PARTE 30 (09-10/09) — A TELA PAROU DE ENXERGAR: SESSÃO VENCIDA EM QUATRO DIALETOS
+
+**Relatos do dono**: "não estou conseguindo gerar relatórios" (com print mostrando banner
+vermelho e contador `0/0`) e, depois, "tive que fechar e reabrir o app PWA pois meu acesso caiu
+de adm para comum".
+
+**O banco dizia o contrário do print**: quatro relatórios criados e concluídos entre 22:17 e
+22:56, incluindo o próprio lote do print (Jardim das Alterosas/Betim, R$ 158.968 às 22:48:59).
+**A geração nunca parou; a TELA é que parou de enxergar.**
+
+**Causa única, quatro reações diferentes** — o token do Supabase dura pouco e num PWA aberto há
+horas (ou em segundo plano, onde o timer de renovação não roda) o servidor recusa tudo:
+
+| Onde | O que o cliente via |
+|---|---|
+| `/analise` | "não foi possível verificar os relatórios já gerados deste imóvel" |
+| `/analises` | **"JWT expired"** cru na tela |
+| o perfil | `role` cai para `explorador` — **o ADMIN vê interface de cliente comum** |
+| `apiCall` | 401 e um botão que não faz nada |
+
+Fechar e reabrir resolvia porque forçava sessão nova. Agora o app faz isso sozinho:
+**`src/lib/sessao-expirada.js`** reconhece a falha pelo que ela É (`PGRST301`, 401, "JWT
+expired", "Auth session missing") e **não por proximidade** — tabela inexistente (`42P01`),
+timeout de statement (`57014`), RLS (`42501`) e rede caída seguem sendo o que são, cada uma com o
+seu conserto. Renova UMA vez e relê. Uma só: renovação em cadeia sobre falha em cadeia é laço.
+
+O `role` cair para `explorador` **continua** — é fail-closed e está certo; o errado era desistir
+na primeira tentativa. E agora deixa rastro (`sessao_expirada`, alvo `perfis`): sem isso, "o app
+me rebaixou" não deixava vestígio nenhum.
+
+**O evento precisava sobreviver à morte da sessão.** `api_erro` de quem não está autenticado é
+descartado pelo `/api/track` fora das rotas públicas — ou seja, **a única falha que a gente mais
+precisa ver era justamente a que o coletor se recusava a gravar**. Daí `sessao_expirada` como
+tipo próprio, isento da porteira de rota pública.
+
+**Bônus do mesmo print — o `0/0`.** `lerCotas` devolve `null` de propósito quando a leitura falha
+("nunca lança e nunca inventa") e a tela virava esse `null` em **zero**, no número mais caro
+possível: o que diz se a pessoa ainda pode gerar. Sem leitura, agora diz que não sabe. (E aquele
+contador só renderiza para não-admin: ele estar na tela do dono já era o sintoma de que o perfil
+não tinha carregado.) `npm run testar:sessao` — 34 asserções, incluindo as que impedem cada tela
+de voltar a escrever a própria detecção. Commits `5976617` e `f126b07`.
+
+---
+
+## 🐛 SESSÃO 24 · PARTE 29 (09/09) — MÉDIA DE ESTADO NÃO PRECIFICA UM LOTE
+
+**Relato do dono**: "gerei um relatório agora e o mercadológico deu muito fora".
+
+**Dois relatórios do mesmo dia, os dois com o Índice BidPro em nível `estado`:**
+
+| Lote | Índice | Valor gerado | Avaliação | Erro |
+|---|---|---|---|---|
+| Santa Mônica / BH, apto 44,98 m² | estado, **17 amostras em todo MG** | R$ 157.880 | R$ 301.000 | **−48%** |
+| São Joaquim de Bicas/MG, casa 127,24 m² | estado, **15 amostras** | R$ 480.967 | R$ 196.000 | **+145%** |
+
+O MESMO índice, no MESMO estado, errou 48% para baixo num caso e 145% para cima no outro — porque
+15 e 17 amostras para Minas Gerais inteiro não distinguem um bairro de capital de uma cidade de
+30 mil habitantes. **O número existia, era plausível, e media outra coisa: forma nº 10.**
+
+**E o dano não é o texto.** `valorMercado` alimenta o **TETO DE LANCE** e o ROI — em BH, teto de
+R$ 92.310 calculado sobre a média de um estado. É a saída mais perigosa que a plataforma produz,
+porque é nela que o cliente dá lance.
+
+**Conserto**: `src/lib/indice-precifica.js` — o nível do índice decide se ele pode virar preço, e
+a MESMA regra vale no servidor e na tela. **ALLOWLIST, não denylist**, e isso importa: o RPC
+`indice_bidpro_regiao` também devolve o nível **`uf`** (o mesmo "estado" com outra etiqueta), e
+uma lista de proibidos deixaria essa porta aberta. Rótulo desconhecido também não precifica —
+não saber o escopo de um número é motivo para não usá-lo como preço.
+
+O índice amplo **continua no relatório** como faixa de referência, com escopo e nº de amostras à
+vista, e a tela diz por que não há valor. Sem `valorMercado`, `mercadoVazio` fica true: **a cota é
+ESTORNADA**. `semIndice` passou a usar a mesma régua — senão o erro convida a clicar de novo numa
+segunda fonte que nunca vai cobrir aquele lote (foi o terreno de Guarapari, 9 cliques).
+`npm run testar:indice` — 25 asserções. Commit `9b60d60`.
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 28 (09/09) — O DESCONTO MEDIA A 2ª PRAÇA E ERA PUBLICADO COM O NOME DA 1ª
 
 **Pedido do dono**: "link de compartilhamento no whatsapp deveria aparecer uma descrição com a
