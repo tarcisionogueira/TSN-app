@@ -4,6 +4,61 @@
 
 ---
 
+## 📊 SESSÃO 24 · PARTE 42 (10/09) — CONVITE DE LEILOEIRO VIRA DECISÃO DO ADMIN + PAINEL "COBERTURA DE RELATÓRIOS & INTELIGÊNCIA" REAGRUPADO
+
+**Correção do dono sobre a Parte 41**: "o leiloeiro não deve poder convidar diretamente. eu
+como admin devo permitir a quantidade de convites determinada de acordo com a minha vontade."
+A cota de 3 convites automáticos por leiloeiro (Parte 41) foi substituída:
+
+- `convites_leiloeiro_disponiveis` nasce em **0** (era 3) — sem decisão explícita do admin,
+  ninguém convida ninguém.
+- **Blindado contra autoconcessão**: entrou na lista de campos protegidos de
+  `proteger_campos_sensiveis_perfil()` (o mesmo gatilho que já protege `role`/`ativo`/etc.).
+  Sem isto, a RLS "Usuário atualiza próprio perfil" (`auth.uid()=id`, sem WITH CHECK por
+  coluna) deixaria o PRÓPRIO leiloeiro subir a própria cota via um UPDATE direto na API REST
+  — a tela nem precisaria existir para o buraco existir.
+- Nova coluna "Convites" na tabela **Membros da Equipe** do Admin (aba Equipe → Seção A):
+  input numérico + Salvar, só para linhas `role='leiloeiro'`. Usa `.select()` para provar o
+  que o banco gravou de verdade (mesmo cuidado de `saveRole`/`toggleAtivo` — otimista sem
+  prova já mordeu esta tela antes, quando o gatilho revertia em silêncio).
+- **Achado lateral, corrigido de graça**: a query de `membros` (Admin → Equipe) nunca incluía
+  `role='leiloeiro'` no filtro — a KPI "Leiloeiros" no topo da aba sempre lia zero, mesmo com
+  contas reais. Incluído junto.
+
+**Painel "Cobertura de relatórios & inteligência"** (Admin, `PainelCoberturaRelatorios`) —
+reagrupado a pedido do dono, que reparou que "BidPro" e "Índice" apareciam espalhados:
+
+- As 4 métricas de Índice (Índice BidPro, Cidades com Índice detalhado, Território mapeado,
+  Índice cobre o acervo) agora ficam **contíguas**. Antes, as duas primeiras vinham de
+  `admin_metricas_negocio()` (síncrona) e as duas últimas de `indice_cobertura_resumo()`
+  (assíncrona, `.push()` no fim do array) — "Brasil mapeado" ficava fisicamente entre elas
+  na grade, cortando o bloco ao meio.
+- **"Brasil mapeado" virou dois cards** (Venda e Locação), cada um com o denominador
+  explícito no próprio rótulo: "% de domicílios". Antes a locação só aparecia como texto
+  secundário dentro do card de venda.
+
+**Respostas às perguntas do dono sobre esses números** (conferido direto no corpo de
+`admin_metricas_negocio()`, não por suposição):
+- **"Brasil mapeado" é território ou é imóvel/endereço?** Nenhum dos dois — o denominador é
+  **domicílio** (`cidade_socio.domicilios_ocupados`, dado do IBGE: estoque de moradias por
+  município), não área geográfica nem contagem de endereços. Território urbano é OUTRO card
+  ("Território mapeado — mancha urbana", km² de área urbanizada) — os dois medem coisas
+  diferentes de propósito, por isso continuam separados.
+- **"Índice cobre o acervo" — qual a finalidade, e não vai saturar?** Mede RELEVÂNCIA (das
+  praças onde há leilão ativo agora, quantas o Índice já cobre?) — diferente de "Território
+  mapeado", que mede EXTENSÃO (quanto do Brasil, período). O dono está certo que ela tem
+  prazo de validade: à medida que o Índice mapeia o Brasil inteiro por domicílio (não por
+  leilão), ele tende a superar o tamanho do acervo, e o % converge para perto de 100% sem
+  seguir informando nada novo — ao contrário de "Território mapeado", que sempre tem mais
+  Brasil para render. Hoje ainda distingue algo (o Índice é menor que o acervo em várias
+  praças); registrado no código como algo a reavaliar quando os dois se aproximarem, não
+  removido agora — decisão do dono, se/quando quiser.
+
+Build limpo. Sem teste `.mjs` novo (mudança é gatilho SQL + layout de admin, sem lógica pura
+nova para extrair).
+
+---
+
 ## 🤝 SESSÃO 24 · PARTE 41 (10/09) — LEILOEIRO CONVIDA LEILOEIRO (COM COMISSÃO) + BUG REAL ACHADO NO CAMINHO: `role='leiloeiro'` ERA IMPOSSÍVEL DE GRAVAR
 
 **Pedido do dono**: um leiloeiro parceiro vai convidar outros leiloeiros para integrar (foto/

@@ -119,7 +119,8 @@ export default function LeiloeiroPortal() {
             </>
           ) : (
             <div style={{ fontSize: 13, color: '#94a3b8' }}>
-              Você usou todos os seus convites. Fale com nossa equipe pelo chat para liberar mais.
+              Você não tem convites disponíveis no momento — a quantidade é liberada pela nossa
+              equipe. Fale conosco pelo chat se quiser convidar um colega leiloeiro.
             </div>
           )}
         </div>

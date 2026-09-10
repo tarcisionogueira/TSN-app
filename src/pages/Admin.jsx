@@ -5483,7 +5483,8 @@ function PainelCoberturaRelatorios() {
   const buscasZero = temSplit ? bus.cliente_zero : bus.zero_resultado;
   const buscas7d = temSplit ? bus.cliente_ult_7d : bus.ult_7d;
   const zeroPct = buscas ? Math.round((buscasZero / buscas) * 100) : 0;
-  const cards = [
+  // GRUPO 1 — relatórios & uso (o que o cliente pediu e recebeu).
+  const cardsUso = [
     ['Imóveis analisados', fmtN(cob.imoveis), 'com relatório gerado', '#0D63DB'],
     ['Cidades · Estados', `${fmtN(cob.cidades)} · ${fmtN(cob.estados)}`, 'cobertura geográfica', '#0891b2'],
     ['Relatórios gerados', fmtN(totalRel), `${fmtN(rel.mercado)} merc · ${fmtN(rel.documental)} doc · ${fmtN(rel.laudo)} laudo`, '#10b981'],
@@ -5491,8 +5492,16 @@ function PainelCoberturaRelatorios() {
     [temSplit ? 'Buscas de clientes' : 'Buscas realizadas', fmtN(buscas),
       `${zeroPct}% sem resultado · ${fmtN(buscas7d)} em 7d${temSplit && bus.internas > 0 ? ` · +${fmtN(bus.internas)} internas` : ''}`,
       zeroPct > 40 ? '#f59e0b' : '#64748b'],
-    // `com_aluguel` agora conta só o nível CIDADE, comparável com o número grande ao lado.
-    // Antes somava cidade+grid+bairro e imprimia "60 microrreg." ao lado de "53 cidades" —
+  ];
+
+  // GRUPO 2 — Índice BidPro, tudo junto (10/09, pedido do dono: "bidpro e índice devem
+  // aparecer juntos e não separado como está"). Antes "Índice BidPro" e "Cidades com Índice
+  // detalhado" saíam de `m` (síncrono) e entravam aqui; "Território mapeado" e "Índice cobre
+  // o acervo" vinham de uma 2ª RPC (`cobIdx`, assíncrona) e eram DADOS no fim do array — na
+  // grade a única coisa entre eles era "Brasil mapeado", cortando o bloco ao meio.
+  const cardsIndice = [
+    // `com_aluguel` conta só o nível CIDADE, comparável com o número grande ao lado. Antes
+    // somava cidade+grid+bairro e imprimia "60 microrreg." ao lado de "53 cidades" —
     // populações diferentes no mesmo card, e o 60 > 53 sugeria mais recortes com aluguel do
     // que cidades indexadas, quando só 12 das 53 cidades têm aluguel.
     ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} c/ locação · +${fmtN(idx.sub_com_aluguel)} bairros/grids`, '#4f46e5'],
@@ -5502,36 +5511,49 @@ function PainelCoberturaRelatorios() {
     // Brasil). O rótulo "libera desconto×índice" saiu em 12/08: o dono confirmou que essa
     // modelagem não existe, e métrica com promessa falsa colada é pior do que métrica nenhuma.
     ['Cidades com Índice detalhado', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · ≥6 bairros/grids indexados`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
-    // BRASIL MAPEADO — o denominador é POPULAÇÃO e o card diz isso. Domicílio seria melhor
-    // (é o estoque de moradias), mas `cidade_socio.domicilios` está vazio nas 5.571 linhas.
-    // Um "%" mudo aqui seria pior: cada leitor imaginaria um denominador diferente.
-    // DOMICÍLIO é o denominador do mercado imobiliário — mede estoque de moradias, não gente.
-    // Era a intenção desde o início; só passou a ser possível em 12/08, quando
-    // `domicilios_ocupados` deixou de guardar lixo (era a média de moradores × 100, e São
-    // Paulo aparecia com 265 domicílios). População fica ao lado como segunda leitura.
-    ['Brasil mapeado (domicílios)', `${Number(br.pct_dom_venda || 0).toLocaleString('pt-BR')}% venda`,
-      `${Number(br.pct_dom_aluguel || 0).toLocaleString('pt-BR')}% locação · ${Number(br.pct_pop_venda || 0).toLocaleString('pt-BR')}% da população · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
-      '#be185d'],
   ];
-
   // COBERTURA DO ÍNDICE — as duas leituras que se cobrem. Acervo mede RELEVÂNCIA (cobrimos
   // onde vendemos?), município mede EXTENSÃO. Sozinhas enganam: Cuiabá tem 4.327 km² e dá
   // 0,03% de território com 1,6% de acervo — mal coberta; Lauro de Freitas dá 6,3% de
   // território com 57,3% de acervo — concentrada onde importa. É o cruzamento que informa.
+  //
+  // "Índice cobre o acervo" mede RELEVÂNCIA, não EXTENSÃO — e por isso tem prazo de validade
+  // como termômetro: à medida que o Índice mapeia o Brasil (domicílio, não leilão), ele tende
+  // a superar o tamanho do acervo de leilões, e este % converge para perto de 100% sem dizer
+  // mais nada (ao contrário de "Território mapeado", que segue informativo por muito mais
+  // tempo — sempre há mais Brasil para mapear). Enquanto o Índice ainda é menor que o acervo
+  // em várias praças, o número segue distinguindo "cobrimos onde vendemos" de "cobrimos
+  // Brasil"; vale reavaliar se ele ainda separa alguma coisa quando os dois se aproximarem.
   if (cobIdx) {
     // A leitura em DESTAQUE é a mancha urbana: é o denominador certo para "território
     // mapeado", porque a área do município inclui zona rural que ninguém precisa mapear
     // (Cuiabá: 4.327 km² de município contra 160,6 km² de mancha urbana). A do município
     // fica ao lado como piso conservador, e o acervo responde "cobrimos onde anunciamos?".
-    cards.push(['Território mapeado (mancha urbana)',
+    cardsIndice.push(['Território mapeado (mancha urbana)',
       `${Number(cobIdx.pct_urbanizada || 0).toLocaleString('pt-BR')}%`,
       `${fmtN(cobIdx.km2_mapeado)} de ${fmtN(cobIdx.km2_urbanizada)} km² urbanizados · ${Number(cobIdx.pct_municipio || 0).toLocaleString('pt-BR')}% da área municipal`,
       '#0f766e']);
-    cards.push(['Índice cobre o acervo',
+    cardsIndice.push(['Índice cobre o acervo',
       `${Number(cobIdx.pct_acervo || 0).toLocaleString('pt-BR')}%`,
       `${fmtN(cobIdx.acervo_coberto)} de ${fmtN(cobIdx.acervo_total)} imóveis · ${fmtN(cobIdx.cidades_com_indice)} cidades com Índice`,
       '#0d9488']);
   }
+
+  // GRUPO 3 — Brasil mapeado, venda e locação em cards SEPARADOS (10/09, pedido do dono: a
+  // locação vinha só como texto secundário dentro do card de venda — "crie essa informação à
+  // parte para identificar"). O denominador dos dois é DOMICÍLIO (estoque de moradias do
+  // IBGE), não território nem endereço — cada card deixa isso explícito no rótulo para não
+  // repetir a pergunta "é área urbana ou é imóvel?". População fica como segunda leitura só
+  // no card de venda (é o denominador antigo, mantido de referência).
+  const cardsBrasil = [
+    ['Brasil mapeado — Venda (% de domicílios)', `${Number(br.pct_dom_venda || 0).toLocaleString('pt-BR')}%`,
+      `${Number(br.pct_pop_venda || 0).toLocaleString('pt-BR')}% da população · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
+      '#be185d'],
+    ['Brasil mapeado — Locação (% de domicílios)', `${Number(br.pct_dom_aluguel || 0).toLocaleString('pt-BR')}%`,
+      `${Number(br.pct_pop_aluguel || 0).toLocaleString('pt-BR')}% da população · ${fmtN(br.cidades_aluguel)} de ${fmtN(br.municipios_br)} municípios`,
+      '#9d174d'],
+  ];
+  const cards = [...cardsUso, ...cardsIndice, ...cardsBrasil];
   return (
     <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -8797,6 +8819,12 @@ function EquipeTab() {
   const [multiRoles, setMultiRoles] = useState([]);
   const [gerandoConvite, setGerandoConvite] = useState(false);
   const [linkGerado, setLinkGerado] = useState(null);
+  // Convites de leiloeiro→leiloeiro (10/09, pedido do dono): o leiloeiro NÃO decide sozinho
+  // quantos convites tem — só o admin, aqui. `convites_leiloeiro_disponiveis` nasce em 0
+  // (default da coluna) e só sobe por esta tela; `proteger_campos_sensiveis_perfil` blinda
+  // o campo contra escrita do próprio leiloeiro pelo mesmo motivo que blinda `role`.
+  const [convitesEdit, setConvitesEdit] = useState({});
+  const [salvandoConvites, setSalvandoConvites] = useState(null);
 
   // Section B state
   const [solicitacoes, setSolicitacoes] = useState([]);
@@ -8808,8 +8836,9 @@ function EquipeTab() {
 
   const carregarTudo = useCallback(async () => {
     setLoading(true);
-    // Members
-    const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado']);
+    // Members. 'leiloeiro' incluído (10/09) — antes ficava fora e a KPI "Leiloeiros" (que
+    // filtra membros.role==='leiloeiro') sempre lia zero, mesmo com contas reais existindo.
+    const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado','leiloeiro']);
     const membrosData = perfisData || [];
     setMembros(membrosData);
     if (membrosData.length > 0) {
@@ -8864,6 +8893,25 @@ function EquipeTab() {
     if (c.expira_em && new Date(c.expira_em) < new Date()) return { label: 'Expirado', bg: '#fee2e2', color: '#dc2626' };
     if (c.ativo) return { label: 'Ativo', bg: '#d1fae5', color: '#065f46' };
     return { label: 'Inativo', bg: '#fee2e2', color: '#dc2626' };
+  }
+
+  // Quota de convites de leiloeiro→leiloeiro — só o admin altera (ver comentário do state
+  // acima). `.select()` prova o que o banco de fato gravou: otimista sem prova é o mesmo
+  // erro que `saveRole`/`toggleAtivo` já documentam (o gatilho anti-escalação reverte em
+  // silêncio quem não é admin, e sem conferir a tela mostraria um número que o banco não tem).
+  async function salvarConvites(id, valor) {
+    const n = Math.max(0, Math.min(99, Math.trunc(Number(valor) || 0)));
+    setSalvandoConvites(id);
+    const { data: mudou, error } = await supabase.from('perfis')
+      .update({ convites_leiloeiro_disponiveis: n }).eq('id', id)
+      .select('id, convites_leiloeiro_disponiveis');
+    setSalvandoConvites(null);
+    if (error || !mudou?.length || mudou[0].convites_leiloeiro_disponiveis !== n) {
+      alert(`Não foi possível salvar os convites${error?.message ? `: ${error.message}` : ' (a alteração não foi aplicada pelo banco).'}`);
+      return;
+    }
+    setMembros(membros.map(m => m.id === id ? { ...m, convites_leiloeiro_disponiveis: n } : m));
+    setConvitesEdit(c => { const { [id]: _rm, ...resto } = c; return resto; });
   }
 
   async function distribuirAutomaticamente() {
@@ -9012,7 +9060,7 @@ function EquipeTab() {
       <div style={{ ...S.card, borderRadius: 14, marginBottom: 32 }}>
         <div style={S.sectionTitle}>Membros da Equipe</div>
         <table style={S.table}>
-          <thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th></tr></thead>
+          <thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th><th style={S.th}>Convites (leiloeiro)</th></tr></thead>
           <tbody>
             {membros.map(m => { const stats = chamadosMap[m.id] || { total:0, finalizados:0 }; return (
               <tr key={m.id}>
@@ -9021,9 +9069,25 @@ function EquipeTab() {
                 <td style={S.td}>{stats.total}</td>
                 <td style={S.td}>{stats.finalizados}</td>
                 <td style={{ ...S.td, color:'#64748b', fontSize:13 }}>{m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}</td>
+                <td style={S.td}>
+                  {m.role === 'leiloeiro' ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <input type="number" min={0} max={99}
+                        value={convitesEdit[m.id] ?? m.convites_leiloeiro_disponiveis ?? 0}
+                        onChange={e => setConvitesEdit(c => ({ ...c, [m.id]: e.target.value }))}
+                        style={{ width:56, padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:6, fontSize:13 }} />
+                      {(convitesEdit[m.id] ?? String(m.convites_leiloeiro_disponiveis ?? 0)) !== String(m.convites_leiloeiro_disponiveis ?? 0) && (
+                        <button onClick={() => salvarConvites(m.id, convitesEdit[m.id])} disabled={salvandoConvites === m.id}
+                          style={{ padding:'4px 10px', background:'#111111', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer', opacity: salvandoConvites === m.id ? 0.6 : 1 }}>
+                          {salvandoConvites === m.id ? '…' : 'Salvar'}
+                        </button>
+                      )}
+                    </div>
+                  ) : <span style={{ color:'#cbd5e1' }}>—</span>}
+                </td>
               </tr>
             ); })}
-            {membros.length===0&&<tr><td colSpan={5} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}
+            {membros.length===0&&<tr><td colSpan={6} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}
           </tbody>
         </table>
       </div>
