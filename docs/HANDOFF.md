@@ -4,6 +4,37 @@
 
 ---
 
+## 🕵️ SESSÃO 24 · PARTE 46 (10/09) — SBID21 INVESTIGADO E FECHADO SEM MEXER EM CÓDIGO: QUEDA REAL NA FONTE, NÃO BUG NOSSO
+
+Continuação da revisão geral. `fonte_regressao_suspeita()` também aponta SBID21 (total=2 vs
+piso 18/mediana 37). Antes de tocar em parser, fui ao log do run de produção mais recente
+(`leiloeiros-puppeteer.yml`, run 166, 10/09, schedule — não um teste pontual como a Parte 45)
+e ao histórico completo de `fonte_saude`:
+
+```
+09/02 a 09/08 (7 dias seguidos): total=0, status='falhou'
+09/09 e 09/10: total=2, status='degradado' (min. exigido é 5)
+```
+
+`scraperSuperbidNet()` é UMA função compartilhada por SUPERBID/SOLD/SBID9/SBID21, parametrizada
+só por `portalId` (`'[2]'`/`'[15]'`/`'[9]'`/`'[21]'`) — chama a API real
+`offer-query.superbid.net/offers/?portalId=...&filter=product.productType.description:imoveis`.
+No MESMO run: SUPERBID salvou 1.227, SOLD 85, SBID9 34 — todos saudáveis, código idêntico, só
+o parâmetro muda. `[SBID21 1-2]` no log confirma que a API respondeu e a ENUMERAÇÃO achou
+exatamente 2 itens de imóvel no portal 21 — não é erro de acesso nem filtro rejeitando um lote
+que deveria passar (a proporção de descarte "fora do Brasil/estado inválido" bate com a do
+SBID9 saudável).
+
+**Conclusão, sem alterar nada**: o código está correto (prova: os 3 irmãos que usam a mesma
+função passam bem no mesmo run); a API ao vivo é que está devolvendo quase nada para
+`portalId=[21]` há mais de uma semana. É queda real na FONTE (um sub-portal específico da rede
+Superbid com pouquíssimo imóvel ativo agora), não regressão do scraper — mexer em código aqui
+seria "consertar parser que está intacto". Registrado para o dono avaliar se vale confirmar
+manualmente no site (sub-portal pode estar entre leilões, ou ter sido descontinuado/fundido a
+outro portal da rede) — decisão comercial, não técnica.
+
+---
+
 ## 🔍 SESSÃO 24 · PARTE 45 (10/09) — "REGRESSÃO" DO GESTAOLEILOES ERA UM TESTE PONTUAL, NÃO O SITE: ESCOPO REDUZIDO GANHA ETIQUETA PRÓPRIA NO MONITOR
 
 Continuação da revisão geral ("todos, um de cada vez"). `fonte_regressao_suspeita()` acusava
