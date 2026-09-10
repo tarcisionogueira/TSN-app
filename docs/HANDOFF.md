@@ -4,6 +4,51 @@
 
 ---
 
+## 🔍 SESSÃO 25 · PARTE 59 (10/09) — "FLUXO REDUZIDO": O GOOGLE ADS É REAL (CPC triplicou); O "COLAPSO DE PAGAMENTO" ERA EU MEDINDO A DATA ERRADA
+
+Dono relatou impressão de fluxo reduzido e pediu para investigar marketing. Duas causas
+distintas, uma real e uma que eu mesmo quase reportei errada.
+
+**1. Google Ads — real, confirmado via Google (não só nosso banco).** Cliques da campanha
+"Pesquisa — Leilão de Imóveis (BR)" caíram de ~200/dia (01-03/09) para 56-90/dia (04-10/09) —
+o CPC médio TRIPLICOU (R$0,10-0,25 → R$0,39-0,62) no mesmo período, e `search_budget_lost_
+impression_share` (Google Ads, via Windsor.ai) subiu de ~20-40% para 65-86%: o orçamento de
+R$30/dia esgota mais cedo porque cada clique custa mais — não é problema de qualidade (CTR não
+piorou) nem de rastreamento (visitas com gclid no nosso banco batem com os cliques do Google
+quase 1:1). Google recomenda R$120/dia, estimando +956 cliques/semana e +R$338/semana de
+custo. Comparando semana barata × semana cara: 9 cadastros nas duas, custo por cadastro subiu
+~45% (R$17,71→R$25,67) — a conversão por clique não piorou, só o volume. **Dono não pode
+aumentar o orçamento agora** — registrado, nenhuma ação tomada.
+
+**2. `mp_pagamentos` "colapsando" — investiguei mais e era o instrumento, não o dinheiro.**
+Primeira leitura (por `criado_em`): 36 pagamentos aprovados na semana de 27/07 (R$4.117,50)
+caindo para 1-6/semana depois — um "colapso" de ~95% que eu quase reportei como achado real.
+**Antes de reportar, cruzei com a data real dentro do próprio `dados_mp`** (o JSON que o
+Mercado Pago devolve) e os 36 "da semana de 27/07" tinham `date_created` espalhado de
+**26/06 a 01/08** — 5 semanas de histórico. Causa: `api/backfill-mp-pagamentos-cron.js`
+(criado em 27/07, 1ª execução real em 01-02/08) espelha `/v1/payments/search` da Mercado Pago
+mas **nunca gravava `criado_em`** — caía no default da tabela (a hora do BACKFILL), não a
+data real do pagamento. A 1ª rodada descobriu meses de histórico de uma vez e carimbou tudo
+com a mesma data, inflando uma "semana" que nunca existiu — e o "colapso" seguinte era só a
+volta ao normal. Corrigindo pela data real: o fluxo de pagamento é ruidoso (1-15/semana) mas
+**não** está em queda — 10/08 (11) e 24/08 (6, R$1.566) tão saudáveis quanto início de julho.
+
+Fix: `criado_em: p.date_approved || p.date_created` no upsert do backfill (não afeta o
+webhook, que já grava perto da hora real). Migration `mp_pagamentos_criado_em_data_real.sql`
+corrigiu as 65 linhas já contaminadas usando a data que já estava em `dados_mp` — sem re-fetch
+externo. Verificado: `Admin`/`mp-admin.js` só lista os 50 mais recentes por `criado_em` (não é
+um gráfico por data), então o dono não estava vendo este artefato na tela — mas qualquer
+análise futura por data nesta tabela estaria.
+
+**3. Achado paralelo, ainda em aberto**: `api/_google-ads.js` (conversão offline do PIX pro
+Google Ads) é **dormente até as envs existirem** (`GOOGLE_ADS_DEVELOPER_TOKEN` e as outras 5),
+listadas em `docs/ENVS_VERCEL.md` como "podem estar ou não — confirme em `/api/system-status`".
+Não confirmei (rede deste ambiente não alcança o domínio de produção). Se estiver dormente,
+toda venda por PIX pago depois do checkout é invisível para o Google — o Maximize Conversions
+da campanha otimizaria com dado incompleto. Vale conferir no `/api/system-status` direto.
+
+---
+
 ## 🚨 SESSÃO 25 · PARTE 58 (10/09) — NÍVEL 3 DERRUBAVA O R$/M² PONDERADO EM SILÊNCIO: "NÍVEL 1/2 ZERO" NA TELA × VOLUME NO "POR PERÍODO" ERAM O MESMO BUG
 
 O dono relatou, lendo os próprios relatórios: no tópico de nível 1/nível 2 apareciam ZERO

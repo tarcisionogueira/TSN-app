@@ -66,6 +66,16 @@ async function handler(req) {
           // medido, 7 de 7 pagamentos com user_id tinham external_ref. Sem vinculo = nao e nosso.
           origem: !usuario ? 'terceiro' : (op === 'recurring_payment' ? 'recorrente' : 'avulso'),
           dados_mp: p,
+          // `criado_em` (10/09) — sem isto a coluna caía no default da tabela (now(), a hora do
+          // BACKFILL), não a data real do pagamento. Toda linha descoberta só pelo backfill (o
+          // caso de qualquer pagamento anterior a 27/07, dia em que o webhook passou a gravar
+          // em tempo real) saía com o mesmo carimbo — o run de 01-02/08 sozinho empilhou 5
+          // semanas de histórico (26/06 a 01/08) num único dia, e qualquer análise por
+          // criado_em enxergava um pico de 36 pagamentos numa semana que nunca existiu, seguido
+          // de um "colapso" que também nunca aconteceu. `date_approved` é quando o dinheiro de
+          // fato confirmou (o que importa para financeiro); `date_created` cobre o que nunca
+          // chegou a aprovar. Não afeta o webhook (já grava perto da hora real).
+          criado_em: p.date_approved || p.date_created || new Date().toISOString(),
           atualizado_em: new Date().toISOString(),
         }, { onConflict: 'mp_payment_id' });
         if (!error) gravados++;
