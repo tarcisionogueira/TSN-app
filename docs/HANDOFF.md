@@ -4,6 +4,38 @@
 
 ---
 
+## ✅ SESSÃO 24 · PARTE 57 (10/09) — FECHAMENTO: "O RESIDENCIAL ESTÁ RODANDO CORRETAMENTE?" (E A TRIAGEM NÃO É UM 6º PROBLEMA — É FILA ZERADA)
+
+Fecha o pedido "resolva todos sequencialmente + confirme o residencial" com o último passo do
+`runner-residencial.sh` que faltava checar: a TRIAGEM (linha 182, roda TODO dia, sem gate).
+`medido_em` mais recente também travado em 29/08 (294h) — mesma cara de HASTA/VLANCE à primeira
+vista, e por isso valia conferir antes de somar como 6º achado.
+
+**Não é bug.** `leiloeiro_triagem` tem 141 linhas, **as 141 com `bloqueado=false` e
+`plataforma` preenchida** — zero linhas pendentes. O script (`recon-triagem-jucemg.mjs`, modo
+`TRIAGEM_BLOQUEADOS=1`) só reprocessa quem está com `bloqueado=true`; com a fila zerada, ele
+imprime "nenhum site bloqueado pendente" e sai com `exit 0` sem gravar nada — é exatamente o
+comportamento correto de um backlog CONCLUÍDO, não de um passo quebrado. `medido_em` parado
+desde 29/08 é o carimbo da ÚLTIMA vez que sobrou trabalho, não a última vez que o passo rodou.
+
+**Resumo final da saúde do residencial (pedido explícito do dono, agora respondido por
+completo)**:
+| Passo | Estado | Evidência |
+|---|---|---|
+| SOLEON/GESTAO/RJ/PECINI | ✅ saudável | ~57h desde o último sucesso, dentro do gate de 72h |
+| Radar DJEN | ✅ saudável | `monitor_runs` mostra runs frequentes; só o "TJSP fetch failed" recorrente, já não-fatal |
+| Triagem | ✅ saudável (idle por conclusão) | 141/141 sites resolvidos, fila zerada — nada quebrado |
+| VLANCE | 🩹 instrumentado (Parte 55) | gate de 72h — "12 dias parado" é ~1-2 ciclos falhos, não 12 falhas diárias; próximo ciclo já grava motivo |
+| HASTA | 🩹 corrigido + instrumentado (Parte 54) | tenta com frequência (não é ausência de tentativa); double-fetch do nível 2 corrigido, eventosCount deve aparecer no próximo run |
+| VENDASGOV | 🩹 instrumentado (Parte 53) | conectividade confirmada (`enumerados=2` estável); causa exata do <3 pendente do próximo run com diagnóstico por sala |
+
+Os 3 fundos "🩹" convergem no mesmo próximo passo: ler `fonte_saude` dessas 3 fontes depois que
+o `runner-residencial.sh` rodar de novo (ele puxa este código no próprio `git pull` automático)
+— só então dá para saber se HASTA voltou a listar lotes, se VLANCE aponta uma causa por
+domínio, e se VENDASGOV revela qual das 5 salas ainda responde.
+
+---
+
 ## 🩹 SESSÃO 24 · PARTE 56 (10/09) — FERREIRALEIL/PURCENA/TMLEILOES: O MESMO BUG "TUDO-OU-NADA" QUE O runner.mjs JÁ TINHA CORRIGIDO EM 29/08, SÓ QUE NO SOLEON
 
 Últimos dois itens da fila sequencial (FERREIRALEIL: 58% documento; PURCENA/TMLEILOES: amostra
