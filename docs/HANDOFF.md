@@ -45,6 +45,50 @@ tocado aqui, exatamente como pedido.
 
 ---
 
+## 📉 CHECK-IN 10/09 — 25 FALHAS DE ANÁLISE NO DIA DA AULA, CONTRA 1 NOS 30 DIAS ANTERIORES
+
+Check-in de campanha do dia seguinte à aula de 09/09. A aula rodou: lembrete "é agora" saiu
+**09/09 20:00 UTC para os 7 inscritos**, o de véspera saíra 08/09 16:00 — a máquina de presença
+funcionou ponta a ponta, e a recorrência já rolou para **16/09 22:00 UTC**.
+
+O achado não é de marketing. É do motor de análise, e ele apareceu **no ar**:
+
+| 09/09 (UTC) | falhas | timeouts | sem comparáveis |
+|---|---|---|---|
+| 13h (manhã, preparação) | 7 | **7** | 0 |
+| 14h · 15h · 19h | 3 | 3 | 0 |
+| 20h | 9 | 3 | 6 |
+| **22h–23h (a aula, 19h–20h BRT)** | **6** | 1 | **5** |
+
+**25 falhas num dia. Nos 30 dias anteriores: 1.** Todas do mesmo usuário — consistente com quem
+estava demonstrando a plataforma. Hoje, 10/09: **zero falhas em 35 tentativas** — não está
+queimando agora, mas queimou no pior dia possível.
+
+São **dois problemas diferentes**, e misturá-los esconde os dois:
+
+1. **14 timeouts** (`Tempo limite ao gerar a análise` · `A pesquisa de mercado demorou mais que o
+   tempo…`), concentrados na manhã — 7 numa hora só. Isso é sistema, não dado, e é NOVO: só
+   houve 1 timeout em todo o mês anterior.
+2. **11 `Não encontramos anúncios comparáveis ativos de <segmento>`**, todas a partir das 17h BRT,
+   para **comercial e terreno**. Esta NÃO é bug: é a lacuna que `api/gerar-analise.js:3469`
+   descreve por extenso — sem comparáveis ativos **e** com o Índice BidPro sem cobrir aquele
+   segmento naquela região, o fallback não tem o que oferecer, e a própria mensagem pede
+   *"nos avise para incluirmos essa praça na base"*. O ponto é ONDE ela apareceu: comercial e
+   terreno são exatamente o que investidor de leilão abre numa demonstração ao vivo.
+
+⚠️ **Presença na aula continua sem medição.** `live_inscricoes.compareceu` segue **0 nas duas
+edições** porque ninguém escreve nessa coluna (registrado em 03/09). Não há rota `/live/` nos
+eventos da janela da aula — a sala não deixa rastro no nosso rastreador. Quantos apareceram só o
+dono sabe.
+
+**Campanhas, em duas linhas:** nada mudou de relevante. `TRF - SITE` e `CONV - AULA` seguem
+pausadas; o impulsionamento do post fechou 09/09 em R$ 6,56 · 79 cliques (~R$ 45 acumulados
+desde 04/09) e continua sem trazer **nenhuma** visita com `fbclid`. Placar das duas edições:
+**02/09 → 5 inscritos por R$ 160,30** · **09/09 → 7 inscritos por R$ 0**, todos pelo widget
+`acervo_aberto_leiloes`.
+
+---
+
 ## 🎓 SESSÃO 24 · PARTE 37 (10/09) — AVISO DE CONVERSÃO PARA QUEM GANHOU PLANO DE CORTESIA
 
 Pedido do dono: um curso introdutório (R$99) que concede 3 meses de Investidor Pro de bônus,
