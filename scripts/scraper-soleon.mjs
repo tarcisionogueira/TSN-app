@@ -38,6 +38,10 @@ import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-cor
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
+// `planejarAlvo` (10/09): reaproveita o planejador novos+releitura já testado (8 cenários em
+// planejar-alvo.test.mjs) que o runner.mjs ganhou em 29/08 pela MESMA razão descrita aqui —
+// ver o comentário completo acima de `coletarTenant`.
+import { planejarAlvo } from './lib/motor/runner.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -357,24 +361,47 @@ async function debugRecon() {
   console.log('\n✅ RECON concluído.');
 }
 
+// TUDO-OU-NADA ERA O MESMO BUG JÁ CORRIGIDO NO runner.mjs, SÓ QUE AQUI (10/09).
+// `alvo` era `(novos.length ? novos : urls).slice(0, MAX_LOTES)` — com QUALQUER lote novo no
+// tenant, a releitura inteira era descartada e nenhum lote JÁ CONHECIDO era revisitado. Achado
+// investigando por que FERREIRALEIL (110 ativos) tinha 58% de documento contra 100% em 10 dos
+// 12 tenants-irmãos da mesma plataforma: os 46 lotes sem documento tinham `atualizado_em`
+// TRAVADO no dia da 1ª (e única) raspagem — nunca mais revisitados, porque FERREIRALEIL é
+// grande o bastante para quase sempre ter ao menos 1 lote novo por rodada, o que zera a
+// releitura TODA vez. TORRES3 (178 ativos, 100% doc) escapou por sorte de tráfego: tenant mais
+// maduro, roda com mais frequência a rodada "0 lote novo" que liberava a releitura completa.
+// Fix: reaproveita `planejarAlvo` (mesmo módulo/mesmos 8 testes do runner.mjs) — novo lote
+// sempre vem primeiro (nunca perde captação por causa de releitura), e a folga do teto que
+// sobrar vai para o lote conhecido mais antigo (fila por `atualizado_em`), não é jogada fora.
 async function coletarTenant(tenant) {
   const { urls, via } = await enumerarLotes(tenant);
   VIA_TENANT.set(tenant.fonte, via);
   if (!urls.length) { console.log(`  [${tenant.fonte}] 0 lotes enumerados (via ${via}). Pulando.`); return []; }
-  const ids = urls.map(u => `${tenant.fonte.toLowerCase()}_${idDaUrl(u)}`);
-  const existentes = new Set();
+  const chaveDe = u => `${tenant.fonte.toLowerCase()}_${idDaUrl(u)}`;
+  const ids = urls.map(chaveDe);
+  const meta = new Map();
   for (let i = 0; i < ids.length; i += 200) {
-    const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-    for (const r of data || []) existentes.add(r.fonte_id);
+    const { data } = await supabase.from('imoveis_leilao')
+      .select('fonte_id,atualizado_em,data_fim,ativo').in('fonte_id', ids.slice(i, i + 200));
+    for (const r of data || []) meta.set(r.fonte_id, r);
   }
-  const novos = urls.filter(u => !existentes.has(`${tenant.fonte.toLowerCase()}_${idDaUrl(u)}`));
-  const alvo = (novos.length ? novos : urls).slice(0, MAX_LOTES);
-  console.log(`  [${tenant.fonte}] via ${via} · enumerados ${urls.length} · no banco ${existentes.size} · novos ${novos.length} · processando ${alvo.length}`);
+  const { novos, releitura, alvo, iReleitura } = planejarAlvo({ urls, meta, chaveDe, maxLotes: MAX_LOTES });
+  console.log(`  [${tenant.fonte}] via ${via} · enumerados ${urls.length} · no banco ${meta.size} · `
+    + `novos ${novos.length} · releitura ${releitura.length} · processando ${alvo.length}`);
 
   const prontos = [];
-  let sem = 0, reprov = 0, cotaNegada = 0;
+  let sem = 0, reprov = 0, cotaNegada = 0, pararReleitura = false;
   for (let i = 0; i < alvo.length; i++) {
+    if (pararReleitura && i >= iReleitura) break;
     const r = await fetchTenant(alvo[i]);
+    // RELEITURA NUNCA PAGA (mesma garantia do runner.mjs): a folga do teto só vale enquanto for
+    // grátis. No primeiro detalhe de releitura que cair no Bright Data, para — sem isto, "usar
+    // a sobra" viraria gasto pago num lote que já temos, e ninguém pediu essa troca.
+    if (i >= iReleitura && r?.via === 'brightdata') {
+      pararReleitura = true;
+      console.log(`  💰 [${tenant.fonte}] releitura caiu na via paga no lote ${i - iReleitura + 1} — abortada (releitura nunca paga).`);
+      break;
+    }
     // ─── O FREIO DE ORÇAMENTO NO MEIO DA COLETA (27/08) ──────────────────────────────
     // `fetchTenant` SEMPRE soube dizer qual "não" (devolve `semCota: true` quando o teto
     // recusou), e aqui o valor era jogado fora no destructuring `const { html } = …`:

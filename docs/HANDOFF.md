@@ -4,6 +4,47 @@
 
 ---
 
+## 🩹 SESSÃO 24 · PARTE 56 (10/09) — FERREIRALEIL/PURCENA/TMLEILOES: O MESMO BUG "TUDO-OU-NADA" QUE O runner.mjs JÁ TINHA CORRIGIDO EM 29/08, SÓ QUE NO SOLEON
+
+Últimos dois itens da fila sequencial (FERREIRALEIL: 58% documento; PURCENA/TMLEILOES: amostra
+pequena). Comparei os 12 tenants JUCEMG da plataforma SOLEON pelo `pct_com_doc` real do acervo:
+10 estão em 100%, e só PURCENA (33%, n=6) e FERREIRALEIL (58%, n=110) destoam — TMLEILOES está
+em 100% doc mas 33% FOTO (n=9). Amostra pequena nos dois menores; FERREIRALEIL, com 110 ativos,
+é grande demais pra ser coincidência.
+
+**Achado, olhando os 46 lotes sem documento do FERREIRALEIL por `atualizado_em`**: TODOS travados
+em 09/01 ou 09/04 — nenhum tocado no run de 09/08, embora o tenant continue rodando normalmente
+(35-39 lotes por execução). Isso é EXATAMENTE o sintoma que o `runner.mjs` já documentou e
+corrigiu em 29/08 para HASTA (comentário "A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA"): o
+`scraper-soleon.mjs` tem sua PRÓPRIA cópia, mais antiga e nunca corrigida, do mesmo cálculo
+tudo-ou-nada — `alvo = (novos.length ? novos : urls).slice(0, MAX_LOTES)`. Com qualquer lote
+NOVO no tenant (e FERREIRALEIL, por ser grande, quase sempre tem 1+ por rodada), a releitura
+inteira zerava e nenhum lote já conhecido era revisitado — os 46 sem doc ficam presos para
+sempre na primeira raspagem incompleta. TORRES3 (178 ativos, 100% doc) escapou por sorte de
+tráfego: tenant mais maduro, tem runs "0 lote novo" com mais frequência, que liberavam a
+releitura completa por acidente.
+
+**Fix**: `scraper-soleon.mjs` passa a importar e usar `planejarAlvo` (o MESMO planejador
+novos+releitura do `runner.mjs`, já validado por 8 cenários em `planejar-alvo.test.mjs`) em vez
+de reimplementar a lógica — evita duplicar o defeito uma 3ª vez em outro arquivo no futuro. Novo
+lote continua garantido primeiro (nunca perde captação); a folga do teto vai para o lote
+conhecido mais antigo em vez de ser descartada. Também portei a garantia "releitura nunca paga"
+(aborta a releitura no primeiro detalhe que cair no Bright Data) — só que com o nome real que
+`fetchTenant` usa aqui (`via: 'brightdata'`, não `'bd'` como no runner.mjs; conferido direto no
+código antes de shippar, depois de eu mesmo escrever a checagem errada na 1ª tentativa).
+Validado com `npm run testar:motor` (os mesmos 8/8, já que `planejarAlvo` não mudou) mais um
+script de conferência plugando os números reais do FERREIRALEIL (108 conhecidos + 2 novos,
+MAX_LOTES=40): confirma novos=2 preservados e releitura=38 (era 0) alcançando os lotes travados
+desde 09/01. `coletarTenant` não é exportado e depende de rede/Supabase real para um teste de
+ponta a ponta — mesmo padrão do `coletarTenant` original do `runner.mjs`, que também nunca teve
+teste próprio além do `planejarAlvo` que ele chama.
+
+Efeito esperado, a confirmar no próximo run real: os 46 lotes do FERREIRALEIL (e o punhado do
+PURCENA/TMLEILOES) entram na fila de releitura por ordem de mais antigo primeiro — não é
+instantâneo (o teto ainda é 40/tenant/rodada), mas para de ficar preso para sempre.
+
+---
+
 ## 🔎 SESSÃO 24 · PARTE 55 (10/09) — VLANCE: QUANDO OS 3 DOMÍNIOS FALHAM, A RODADA SOME SEM DEIXAR NENHUM RASTRO EM `fonte_saude`
 
 Terceiro item da fila sequencial. `coleta_cliente` mostrava VLANCE com **296,7h (12,3 dias)
