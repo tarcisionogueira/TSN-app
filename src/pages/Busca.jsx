@@ -480,7 +480,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [22, 33], iconAnchor: [11, 33], popupAnchor: [0, -33] });
         const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
         const marker = L.marker([im.latitude, im.longitude], { icon });
-        const desc = im.desconto_percentual ? Number(im.desconto_percentual).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+        const desc = im.desconto_percentual > 0 ? Number(im.desconto_percentual).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
         const pgto = im.forma_pagamento;
         const pgtoLabel = pgto === 'financiado' ? 'Financiado' : pgto === 'hipotecado' ? 'Hipotecado' : pgto === 'a_vista' ? 'À Vista' : null;
         const pgtoColor = pgto === 'financiado' ? '#16a34a' : pgto === 'hipotecado' ? '#92400e' : '#475569';

@@ -69,7 +69,10 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // envelhece, o cron pago RODA. 12 = um ciclo semanal + folga de atraso do Actions, sem mascarar.
 // Lição registrada: eu tinha silenciado um alarme VERDADEIRO por confirmar o mecanismo ("o freio
 // pegou") sem confirmar o resultado ("mas o residencial coletou?").
-const FONTES_SEM_SAUDE = { PECINI: 12, RJLEILOES: 12, GESTAOLEILOES: 12, CALIL: 12, VEGAS: 12, TORRES3: 12, VLANCE: 9, SATO: 9 };
+// EDITAL_DJEN (10/09): lotes nascidos do Radar de Editais (radar-editais-cron, a cada 4h) não
+// escreviam fonte_saude — ponto cego achado por fonte_cega_no_monitor (197 ativos invisíveis).
+// Frescor pelo acervo, igual aos outros scrapers próprios desta seção.
+const FONTES_SEM_SAUDE = { PECINI: 12, RJLEILOES: 12, GESTAOLEILOES: 12, CALIL: 12, VEGAS: 12, TORRES3: 12, VLANCE: 9, SATO: 9, EDITAL_DJEN: 1 };
 // Fontes PARADAS por decisão nossa (acervo zerado de propósito, aguardando conserto). Não
 // alerta "sem acervo ativo" — já está registrado e a repetição só vira ruído; a checagem de
 // FRESCOR continua valendo, então quando a fonte voltar e parar de novo o monitor avisa.

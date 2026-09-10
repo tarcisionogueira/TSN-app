@@ -145,7 +145,7 @@ export default function SugestaoImovel() {
       <div style={{ position: 'relative', height: 130, background: '#f1f5f9' }}>
         <FotoImovel imovel={atual} iconSize={30} />
         <span style={{ position: 'absolute', top: 8, left: 8, background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>
-          {atual.desconto_percentual ? `${atual.desconto_percentual}% OFF` : 'Oportunidade'}
+          {atual.desconto_percentual > 0 ? `${atual.desconto_percentual}% OFF` : 'Oportunidade'}
         </span>
         {suporte && (
           <span style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(15,23,42,.75)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>

@@ -965,7 +965,7 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                       <b>{[im.cidade, im.estado].filter(Boolean).join('/') || '—'}</b> · {im.titulo || 'Imóvel'}
                     </span>
                     <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                      {im.desconto_percentual ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#f0fdf4', color: '#059669' }}>{Math.round(im.desconto_percentual)}% OFF</span> : null}
+                      {im.desconto_percentual > 0 ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#f0fdf4', color: '#059669' }}>{Math.round(im.desconto_percentual)}% OFF</span> : null}
                       <span style={{ color: '#94a3b8' }}>{dataHoraBR(im.enviado_em)}</span>
                     </span>
                   </div>
