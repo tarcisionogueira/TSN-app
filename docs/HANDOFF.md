@@ -14,13 +14,20 @@ capítulos era preciso achar o eBook na lista de novo e clicar em "📖 Capítul
 no HANDOFF nem no código — só `.docx` (via `mammoth`, `src/utils/parseDocx.js`) existe hoje;
 se EPUB/DOC foram de fato decididos numa sessão anterior, não deixaram rastro aqui.
 
-**Registrado, não construído — pendente de confirmação do dono**: paginação "flutuante" do
-leitor (`LeitorEstruturado.jsx`, CSS multi-coluna) já foi delib. escolhida SEM os números de
-página do arquivo original (Parte 12, 04/09: não batem com o reflow por fonte/tela). O que É
-viável e pouco custoso: `breakBefore: 'column'` nos subtítulos (Heading 3 do Word, já
-detectados e marcados com `PREFIXO_SUBTITULO`) — hoje eles só têm `breakAfter: 'avoid'`
-(não ficam órfãos no fim da página), não uma quebra FORÇADA no início. Perguntei ao dono se é
-isso que ele quer dizer com "campos que começam no topo da página" antes de implementar.
+**Subtítulos agora abrem página nova no leitor** (confirmado pelo dono: "campos que começam
+no topo da página" = os subtítulos). `LeitorEstruturado.jsx` ganhou `breakBefore: 'column'`
+em todo subtítulo (Heading 3 do Word, `PREFIXO_SUBTITULO`) — exceto quando é o 1º bloco do
+capítulo (`i===0`), porque aí ele já vem logo abaixo do `<h2>` do capítulo, que abre página
+nova sozinho; forçar quebra ali isolaria o título do capítulo numa página vazia. Mantém o
+`breakAfter: 'avoid'` que já existia (nunca fica órfão no fim da página anterior). Paginação
+"flutuante" original do arquivo (números de página do .docx) segue deliberadamente FORA
+(Parte 12, 04/09: não bate com o reflow por fonte/tela) — só a estrutura (subtítulo) fica.
+
+⚠️ **Não testado em navegador real nesta sessão** (sem acesso a browser autenticado — o
+leitor exige login+entitlement). Validado só por build/lint e leitura do padrão já usado ao
+lado (`breakAfter:'avoid'`, mesmo mecanismo CSS, já em produção). Recomendo o dono abrir um
+capítulo com subtítulo (ex.: o livro "Lucre Antes de Arrematar", citado nas Partes 13-18) e
+confirmar visualmente antes de considerar fechado.
 
 ---
 

@@ -327,10 +327,17 @@ export default function LeitorEstruturado({
                     // Subtítulo (Heading 3 do Word) — mesmo nível de destaque de um título de
                     // seção dentro do capítulo, nunca corpo de texto: sem justificar/recuar, e
                     // "breakAfter:avoid" pra nunca ficar sozinho na última linha de uma página.
+                    // "breakBefore:column" (10/09, pedido do dono) força CADA subtítulo a abrir
+                    // página nova — não só evitar órfão, começar limpo no topo. Só NÃO quando
+                    // i===0: aí o subtítulo é o 1º bloco do capítulo, logo abaixo do <h2> do
+                    // próprio capítulo (que já abre página nova sozinho); forçar quebra aqui
+                    // deixaria o título do capítulo isolado numa página vazia.
                     return (
                       <p key={i} style={{
                         margin: i === 0 ? '0 0 0.8em' : `1.4em 0 ${ultimo ? 0 : '0.8em'}`,
-                        fontWeight: 700, textAlign: 'left', breakAfter: 'avoid', whiteSpace: 'pre-line',
+                        fontWeight: 700, textAlign: 'left', breakAfter: 'avoid',
+                        ...(i !== 0 ? { breakBefore: 'column' } : {}),
+                        whiteSpace: 'pre-line',
                       }}>{p.slice(PREFIXO_SUBTITULO.length)}</p>
                     );
                   }
