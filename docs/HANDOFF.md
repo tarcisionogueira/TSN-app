@@ -4,6 +4,44 @@
 
 ---
 
+## 📌 SESSÃO 24 · PARTE 47 (10/09) — HASTA E EMILIOMATOS: DOIS ITENS JÁ CONHECIDOS, UM DELES PIOROU
+
+Fechando a rodada desta sessão da revisão geral ("todos, um de cada vez") com os dois últimos
+itens de `fonte_regressao_suspeita()`/`medicao_velha` — nenhum dos dois recebeu código novo
+agora, mas por motivos diferentes, registrados para não reabrir a investigação do zero depois.
+
+**EMILIOMATOS (medicao_velha, 508h+)** — já tinha causa e decisão registradas no próprio
+`.github/workflows/scraper-emiliomatos.yml` (29/08): o `schedule` está **deliberadamente
+comentado** porque o recon multi-tenant provou que `/busca/segmento/imoveis` devolve o
+CATÁLOGO GLOBAL da plataforma Superbid/MBV white-label, não o acervo do leiloeiro — 4 sites
+distintos (emiliomatos/bhleiloaria/franciscodavid/denis) enumeravam os MESMOS lotes com os
+MESMOS ids. Ligar o cron de volta hoje voltaria a gravar lote de OUTRO leiloeiro sob o nome
+"Emílio Matos Leilões". `medicao_velha` aqui está correto por definição: a fonte está
+propositalmente em pausa até um recon achar o filtro por tenant (mesmo método que resolveu
+VIP e SUPORTE) — não tentei esse recon agora porque exige acesso ao vivo ao site (Cloudflare,
+só Bright Data ou residencial) e não é uma correção "encontrada", é uma investigação nova, de
+escopo aberto. Só o `workflow_dispatch` (recon) segue disponível.
+
+**HASTA (zerou) — ATUALIZAÇÃO: não é mais só "bloqueio de datacenter"**. A leitura anterior
+desta sessão (e do HANDOFF antigo) era "HASTA só funciona de IP residencial". Isso seguia
+verdade em 30/08 (584 lotes, `status='ok'`) — mas o histórico completo de `fonte_saude` mostra
+que, a partir de 04/09, a fonte passou a responder **HTTP 200 de verdade** (`status='vazio'`,
+"respondeu 200 e enumerou 0 lote(s)") repetidamente — 04/09, 05/09 (x2), 09/09 (x3), 10/09 —
+sempre com `estrategia='hasta'`, ou seja, **rodando pelo runner residencial, que alcança o
+site normalmente**, e mesmo assim enumerando ZERO eventos por 6 dias seguidos. Isso é
+estruturalmente diferente do bloqueio de rede antigo: o site responde, e é a extração de
+`extrairUrlsDeEvento` (`hasta-parse.mjs`, regex `href=.../leilao/<id>/lotes`) que não está
+achando link de leilão nenhum na home — sinal de que a ESTRUTURA da home pode ter mudado de
+novo (mesma classe do achado de 29/08, quando `/lotes/imovel` parou de listar e o catálogo
+teve que virar "por leilão"). **Não tentei consertar às cegas**: sem HTML real da home atual
+(rede bloqueada até para HASTA neste sandbox — mesmo teste de CONNECT que falhou para os
+outros leiloeiros), qualquer ajuste no regex seria só um segundo palpite sobre um palpite.
+Próximo passo depende de recon ao vivo (residencial ou `HASTA_DEBUG=1` via dispatch) —
+registrado aqui para a próxima sessão (ou o dono) não reabrir isso como "é só o bloqueio de
+sempre", porque não é mais só isso.
+
+---
+
 ## 🕵️ SESSÃO 24 · PARTE 46 (10/09) — SBID21 INVESTIGADO E FECHADO SEM MEXER EM CÓDIGO: QUEDA REAL NA FONTE, NÃO BUG NOSSO
 
 Continuação da revisão geral. `fonte_regressao_suspeita()` também aponta SBID21 (total=2 vs
