@@ -67,12 +67,39 @@ Migração no mesmo commit da função (forma nº 7b).
 
 ## 🏁 FECHAMENTO DO DIA 10/09 — O QUE FICA EM ABERTO (leia isto primeiro)
 
-**Sete correções subiram** (`9b60d60` · `5976617` · `552cef6` · `e8640e9` · `2fb8c30` ·
-`df20150` · `f126b07` · `ec0137d`), todas com teste próprio. O fio que liga quase todas: **uma
-recusa nossa sendo entregue ao cliente como ausência de informação** — teto de arquivo virando
-"matrícula não confirmada", sessão vencida virando "você é cliente comum", média de estado
-virando "valor de mercado", cota não lida virando "0". Vale reler a lista de formas do CLAUDE.md
-antes de mexer em qualquer leitura externa.
+**Dez commits subiram, todos em produção e com teste próprio:** `9b60d60` · `5976617` ·
+`552cef6` · `e8640e9` · `2fb8c30` · `df20150` · `f126b07` · `ec0137d` · `daf215c` · `3b94635`.
+Último deploy READY às 01:26:16 UTC. Onze suítes verdes (`analise-url` 27, `sessao` 34,
+`anexo-lixo` 19, `doc-teto` 19, `busca-modelo` 39, `indice` 25, `entrega` 29, `assessoria` 27,
+`niveis` 30, `whatsapp` 139, `mensagem-grupo` 73).
+
+**O FIO QUE LIGA QUASE TUDO, e que vale mais que qualquer correção isolada: uma recusa NOSSA
+sendo entregue ao cliente como ausência de informação.** Num dia só, quatro roupas diferentes:
+
+| O que era | O que o cliente lia |
+|---|---|
+| teto de 6 MB recusando o arquivo | "área não confirmada na matrícula" |
+| sessão vencida | "você é cliente comum" (admin rebaixado) |
+| média de estado como referência | "valor de mercado" — e teto de lance calculado em cima |
+| cota que não carregou | "0" |
+| `location.state` perdido no remount | botão que não faz nada, 14 vezes |
+
+Nenhuma delas apareceria em varredura de código. **Todas apareceram no rastro do banco.** É a
+lição do CLAUDE.md se confirmando pela enésima vez — e por isso a prevenção do dia (PARTE 35)
+não foi mais um teste estático, foi um detector que pergunta ao banco o que aconteceu com gente
+de verdade, ligado no health-check (2×/dia, e-mail automático).
+
+**A ÚNICA PENDÊNCIA DE HOJE QUE NÃO PODE SER DADA COMO RESOLVIDA:**
+
+0. **O conserto da tela de análise ainda NÃO foi provado contra o caso real.** O deploy
+   `daf215c` ficou READY às **01:20:18**; a última tentativa recusada da Neuma foi **01:19:18** —
+   um minuto antes. Ela esteve no build antigo o tempo todo e não voltou depois. **Ela vai tentar
+   de novo amanhã.** Pedir Ctrl+Shift+R (o PWA guarda o build) e o MESMO lote
+   (`1064fde7-14be-47e7-88ad-dfa07f832a1e`, Casa MANGABEIRA FEIRA DE SANTANA BA) — repetir o caso
+   exato é o que prova; outro lote pode passar por outro caminho e não dizer nada.
+   Verde = `select * from public.cliente_travou(1)` vazio. Se recusar de novo, a causa do remount
+   (dois pageviews de `/analise` com 1,2 s) NÃO foi a que supus, e é preciso voltar ao rastro.
+   Não depende de sessão aberta: o health-check das 22:00 UTC (19:00 BRT) avisa por e-mail.
 
 **Pendências que EXIGEM o dono (não dá para resolver daqui):**
 
@@ -98,11 +125,25 @@ antes de mexer em qualquer leitura externa.
    35106/Declaro%20que%20assisti%20ao%20vídeo…`). O limiar (150 chars + 8 espaços) é folgado de
    propósito para não recusar edital legítimo; se incomodar, mexer com medição, não a olho.
 
-**A pendência de NEGÓCIO, que é a maior:** em 21 dias os clientes geraram **8 relatórios** contra
-**136 contas ativas**, e dois dos quatro Investidor Pro nunca geraram nenhum. Já existe rastro
-para responder por quê — `analise_estado` registra o que a tela oferecia na chegada e
-`analise_bloqueio` registra clique em porta fechada. Cruzar esses dois diz se é falta de cota,
-falta de descoberta do botão, ou se a pessoa nem chega na tela. Custa zero.
+**A PENDÊNCIA DE NEGÓCIO, que continua sendo a maior — e que hoje ganhou números.** O funil de
+30 dias, só clientes logados:
+
+```
+82 abriram a home → 71 buscaram → 54 abriram a ficha de um imóvel
+   → 19 chegaram na tela de análise (−65%)  → 8 clicaram em Gerar (−58%)
+```
+
+Não é abandono: 95 dos 131 exploradores tiveram atividade em 30 dias e 71 fizeram busca. **Não é
+cadeado nem cota**: zero `analise_bloqueio`, e quem chegou viu `mercado=livre; cota=0/3`. A maior
+fuga do funil inteiro é **54 → 19**: dois terços de quem abre um imóvel nunca chega na análise —
+uma ponte de navegação, não um bloqueio. Depois, **19 → 8**: a trilha do Leonardo Oliveira mostra
+a pessoa oscilando entre as duas telas e indo para "Incluir URL / arquivos" (que é para lote que
+NÃO veio da busca) antes de achar o "Gerar".
+
+⚠️ **A medição de hoje vale menos que a próxima**, e é importante saber por quê: ela foi apurada
+com um funil que perdia gente por bug. Depois dos consertos de hoje — sessão que se renova, tela
+que se recupera pelo id, clique que não vira 401 mudo, `analise_estado` sem o ponto cego da cota —
+**re-medir daqui a uma semana** dá o número real. Só então mexer na ponte `/imovel → /analise`.
 
 ---
 
