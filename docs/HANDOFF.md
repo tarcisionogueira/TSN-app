@@ -4,6 +4,47 @@
 
 ---
 
+## ✅ SESSÃO 24 · PARTE 49 (10/09) — VALIDAÇÃO REAL DO FIX DA PARTE 44: 8/10 FONTES FORAM A 100%, 2 PRECISARAM DE UM SEGUNDO AJUSTE (SRCSET)
+
+O push da Parte 44 disparou sozinho o `scraper-dom.yml` (dry-run, Chromium de verdade, zero
+Bright Data — é exatamente a validação "rodar em seco sobre dado real antes de gravar" que o
+sandbox não permitia fazer diretamente). Resultado, lido do log depois de completar (25 min):
+
+| Fonte | Foto antes → depois | Descrição antes → depois |
+|---|---|---|
+| RIGOLONLEILOES | 0% → **100%** | 0% → **100%** |
+| GIORDANOLEILOES | 0% → **100%** | 0% → **100%** |
+| THAISTEIXEIRA | 0% → **100%** | 0% → **100%** |
+| JELEILOES | — → **100%** | — → **100%** |
+| ALFA | — → **100%** | — → **100%** |
+| ALBERTOMACEDOLEILOES | 0% → **100%** | 0% → **100%** |
+| LEJE | 0% → **100%** | 0% → **100%** |
+| ROCHALEILOES | 0% → **79%** | 0% → **100%** |
+| NORDESTE | 0% → 0% | 0% → 57% |
+| SIMONLEILOES | 0% → 0% | 0% → **100%** |
+
+8 de 10 fontes foram a 100%/100%. NORDESTE e SIMONLEILOES continuaram em 0% de foto — a
+descrição sintética funcionou nas duas (SIMONLEILOES 100%; NORDESTE só 57% porque a guarda
+"não é imóvel" desta fonte zera avaliação de boa parte do acervo — sem valor não sintetiza
+descrição completa, e isso é correto, não bug).
+
+**Segundo ajuste, mesmo commit da validação**: `fotoDeHtml()` só olhava `src`/`data-src`/
+`data-lazy-src`/`data-original` — NORDESTE (Next.js/next-image) e SIMONLEILOES usam `srcset`
+(lazy-load responsivo) sem nenhum desses atributos, então a função não tinha CANDIDATO
+nenhum pra examinar (não é filtro rejeitando errado — é ausência de sinal). Somado o
+fallback pro 1º candidato de `srcset="url 1x, url2 2x"`, mesmo filtro anti-chrome de sempre.
+Dois casos novos no teste (`testar:foto-dom`) travam o comportamento. Esta segunda rodada
+**não foi revalidada ao vivo** (evitar um 2º ciclo de 25 min de CI só por 2 fontes) — o
+`schedule` diário (8h UTC) confirma sozinho amanhã; ler o log daquele run antes de considerar
+NORDESTE/SIMONLEILOES fechados.
+
+**BAYIT** ganhou o mesmo tratamento de descrição sintética (media 0% apesar de 100% foto/doc —
+`enriquecerDetalhe()` já buscava a página do lote pra outros campos e nunca extraía
+descrição): `sintetizarDescricao` foi exportada de `dom-parse-util.mjs` e reaproveitada aqui —
+mesma função testada, sem duplicar lógica entre duas fontes de plataformas diferentes.
+
+---
+
 ## 🔁 SESSÃO 24 · PARTE 48 (10/09) — VLANCE: PAGINAÇÃO PRESA EM "PÁGINA 1" ESGOTAVA A COTA E DERRUBAVA OS OUTROS DOMÍNIOS DA MESMA RODADA
 
 Último item investigado nesta rodada da revisão geral. Antes de mexer no `foto_url()` (que já

@@ -60,6 +60,7 @@ import { buscarViaBrightData, ErroBrightData } from '../api/_brightdata.js';
 import { vasculharDocumentos } from '../api/_doc-scan.js';
 import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
 import { checarQualidade } from './lib/scraper-core.mjs';
+import { sintetizarDescricao } from './lib/dom-parse-util.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -497,6 +498,12 @@ async function main() {
     // Re-hospeda a CAPA (não em DRY-RUN — ver cabeçalho do arquivo: não gasta Bright Data
     // com foto de uma linha que não vai nem ser gravada).
     if (!DRYRUN) row.link_foto = await garantirFotoCapa(row.link_foto, row.fonte_id, fotosExistentes);
+    // DESCRIÇÃO (10/09): `descricao` nascia `null` e `enriquecerDetalhe()` nunca a preenchia —
+    // medido em produção como 0% em todo o acervo BAYIT, mesmo com foto/doc em 100%. Mesmo
+    // fallback seguro da família `dom` (área/cidade/UF/avaliação — nunca texto bruto, que já
+    // provou vir contaminado por menu/filtro genérico nesta MESMA fonte, ver `modalidade`
+    // acima): reexportado de dom-parse-util.mjs em vez de duplicado.
+    row.descricao = row.descricao || sintetizarDescricao(row);
     rows.push(row);
   }
 

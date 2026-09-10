@@ -99,7 +99,7 @@ export const UF_POR_NOME = {
 // TODA URL desta família é `.../lote/<id>`. Sem nenhum campo real preenchido, isso rotulava
 // "Terreno" um imóvel sobre o qual não se sabe NADA — plausível e errado (a mesma forma nº10
 // do CLAUDE.md). Menos rico sem o tipo, mas nunca inventa uma classificação sem lastro.
-function sintetizarDescricao(det) {
+export function sintetizarDescricao(det) {
   const partes = [];
   if (det.area_m2 > 0) partes.push(`${Math.round(det.area_m2).toLocaleString('pt-BR')} m²`);
   if (det.cidade && det.estado) partes.push(`${det.cidade}/${det.estado}`);
@@ -225,7 +225,15 @@ const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading|
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
-    const src = (tag.match(/\b(?:data-src|data-lazy-src|data-original|src)=["']([^"']+)["']/i) || [])[1];
+    let src = (tag.match(/\b(?:data-src|data-lazy-src|data-original|src)=["']([^"']+)["']/i) || [])[1];
+    // srcset="url1 1x, url2 2x…" — 1º candidato antes da vírgula/descritor de densidade.
+    // Medido 10/09: NORDESTE (Next.js/next-image) e SIMONLEILOES ficaram em 0% foto mesmo
+    // com o fix acima — plataformas que usam `srcset` sem `src` puro (lazy-load responsivo)
+    // não tinham NENHUM candidato pra esta função examinar.
+    if (!src) {
+      const srcset = (tag.match(/\bsrcset=["']([^"']+)["']/i) || [])[1];
+      if (srcset) src = srcset.split(',')[0].trim().split(/\s+/)[0];
+    }
     if (!src || /^data:/i.test(src)) continue;
     if (RE_IMG_DESCARTA.test(tag)) continue;
     if (!/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(src.split(/[?#]/)[0])) continue;

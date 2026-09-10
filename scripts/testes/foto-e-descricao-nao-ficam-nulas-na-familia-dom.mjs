@@ -55,6 +55,13 @@ console.log('\nfotoDeHtml — acha a foto de capa e descarta chrome do site');
 
   ok(fotoDeHtml('<img src="/icones/favorito.png" width="16" height="16">', BASE) === null,
     'dimensão pequena explícita (16x16, cara de ícone): descartada mesmo sem nome suspeito');
+
+  ok(fotoDeHtml('<img srcset="/fotos/lote-99-800w.jpg 800w, /fotos/lote-99-400w.jpg 400w" width="800" height="600">', BASE)
+      === 'https://exemplo-leiloes.com.br/fotos/lote-99-800w.jpg',
+    'sem src, só srcset (lazy-load responsivo — caso real de NORDESTE/SIMONLEILOES, 10/09): usa o 1º candidato');
+  ok(fotoDeHtml('<img sizes="100vw" srcset="/imgs/capa.webp 1x, /imgs/capa@2x.webp 2x">', BASE)
+      === 'https://exemplo-leiloes.com.br/imgs/capa.webp',
+    'srcset com descritor de densidade (1x/2x): pega a URL, descarta o descritor');
 }
 
 console.log('\nanexosDeHtml — passa a devolver link_foto junto (mesma varredura de HTML, zero mudança nos 8 chamadores que já espalham o retorno)');
