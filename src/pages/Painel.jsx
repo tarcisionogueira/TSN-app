@@ -321,7 +321,7 @@ export default function Painel() {
   // ── Workflow "Em Análise" (Supabase) ──
   const solicitarAvaliacao = async (im, tipo) => {
     const av = AVALIACOES.find(a => a.key === tipo);
-    if (av?.via === 'analise') { nav('/analise', { state:{ imovel:im } }); return; }
+    if (av?.via === 'analise') { nav(`/analise?imovel=${encodeURIComponent(im?.id || '')}`, { state:{ imovel:im } }); return; }
     // Processual: registra no Supabase com prazo de 24h
     const prazoAte = new Date(Date.now() + 24*3600*1000).toISOString();
     const { error } = await supabase.from('solicitacoes').insert({
@@ -754,7 +754,7 @@ export default function Painel() {
                             <Printer size={13}/> Relatório
                           </button>
                         )}
-                        <button onClick={()=>nav('/analise',{state:{imovel:im}})}
+                        <button onClick={()=>nav(`/analise?imovel=${encodeURIComponent(im?.id || '')}`,{state:{imovel:im}})}
                           style={{ padding:'7px 14px', background:'#111111', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                           <Sparkles size={13}/> Abrir análise
                         </button>

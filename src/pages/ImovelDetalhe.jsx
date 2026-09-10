@@ -1095,15 +1095,26 @@ export default function ImovelDetalhe() {
   // amostras GRÁTIS e não fazia ideia (90 disponíveis entre os 30 cadastrados, 3 usadas). Dizer
   // o que a pessoa já tem no bolso é o que muda o clique — e vale para o pagante também, que
   // precisa saber quantos relatórios do mês ainda lhe restam antes de gastar um.
+  // AÇÃO E SALDO SÃO COISAS DIFERENTES (10/09, achado do dono: "a Neuma clicou no 15 de 15
+  // relatórios disponíveis; não deve ser um campo clicável, e sim informativo").
+  // O saldo estava DENTRO do botão — "Analisar (15 de 15 deste mês)" — então quem quisesse
+  // conferir quantos relatórios ainda tinha só podia fazer isso clicando em gerar. O texto
+  // convidava a uma leitura e o elemento executava uma ação: quem lê "15 de 15" e toca está
+  // pedindo informação, não mandando gastar cota. Agora o botão diz só o que ele FAZ, e o saldo
+  // fica ao lado, em texto que não clica. Esgotado continua NO botão: ali não é contagem, é
+  // aviso de que a ação não vai funcionar, e esconder faria a pessoa clicar para descobrir.
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) {
       return cota.amostra ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
     }
-    return cota.amostra
-      ? `Analisar grátis (${cota.restantes} de ${cota.limite})`
-      : `Analisar (${cota.restantes} de ${cota.limite} deste mês)`;
+    return cota.amostra ? 'Analisar grátis' : 'Analisar imóvel';
   })();
+  // Texto informativo, fora de qualquer área clicável. `null` quando não há o que informar
+  // (cota ilimitada, saldo ainda não lido, ou esgotado — que já está dito no botão).
+  const saldoAnalise = (!cota || cota.ilimitado || cota.restantes <= 0)
+    ? null
+    : `${cota.restantes} de ${cota.limite} ${cota.restantes === 1 ? 'relatório disponível' : 'relatórios disponíveis'}${cota.amostra ? ' (amostra grátis)' : ' este mês'}`;
   // A barra fixa do mobile divide a largura com "Acessar leiloeiro" — o rótulo longo estoura.
   //
   // O CONTADOR SAIU DAQUI (14/08, dono: "fica uma barra o tempo todo com 3 de 3 análises, isso
@@ -2016,10 +2027,17 @@ export default function ImovelDetalhe() {
                     <strong>Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, o relatório não é gerado para este lote.
                   </div>
                 ) : podeFazerAnalise ? (
-                  <button onClick={() => nav('/analise', { state: { imovel } })}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                    <BarChart2 size={15} /> {rotuloAnalise}
-                  </button>
+                  <>
+                    <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(imovel?.id || '')}`, { state: { imovel } })}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      <BarChart2 size={15} /> {rotuloAnalise}
+                    </button>
+                    {saldoAnalise && (
+                      <div style={{ marginTop: 7, textAlign: 'center', fontSize: 11.5, color: '#64748b', fontWeight: 600, cursor: 'default', userSelect: 'none' }}>
+                        {saldoAnalise}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <button onClick={() => nav('/planos')}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
@@ -2103,7 +2121,7 @@ export default function ImovelDetalhe() {
               Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}
             </div>
           ) : podeFazerAnalise ? (
-            <button onClick={() => nav('/analise', { state: { imovel } })}
+            <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(imovel?.id || '')}`, { state: { imovel } })}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               <BarChart2 size={16} /> {rotuloAnaliseCurto}
             </button>

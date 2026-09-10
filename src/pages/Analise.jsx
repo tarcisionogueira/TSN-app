@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
@@ -20,6 +20,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
+import { lerComRenovacao } from '../lib/sessao-expirada';
 import { lerCotas, bloqueado } from '../utils/cotaAnalise';
 import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
@@ -155,7 +156,25 @@ export default function Analise() {
   // "atualizar pesquisa" e nada acontecia. `effectiveUserId` = impersonado no suporte, senão o
   // próprio usuário (fallback user.id). Sem suporte, é o mesmo id de antes: comportamento igual.
   const cotaUid = effectiveUserId || user?.id;
-  const imovelInicial = location.state?.imovel;
+  // O IMÓVEL NÃO PODE DEPENDER SÓ DO `location.state` (10/09 — Neuma, ao vivo). Ela clicou em
+  // "Analisar" num lote de Feira de Santana e a tela remontou 1,2 s depois (dois pageviews de
+  // /analise no rastro). Na segunda montagem o state tinha sumido, e o efeito foi silencioso e
+  // cruel: `analiseImovelId` cai para `d.id` — o id LOCAL, SEMPRE preenchido — então a tela
+  // parecia inteira (mostrou a cota 0/10, disparou os eventos), mas o formulário estava vazio.
+  // Ela clicou em Gerar SETE VEZES e as sete bateram em "imóvel sem endereço/cidade", num lote
+  // que tem endereço, bairro, cidade, UF e coordenadas no banco.
+  //
+  // A MESMA perda explicava o segundo sintoma que o dono relatou no mesmo dia: sem imóvel,
+  // `semImovelBase` fica true e a INCLUSÃO MANUAL abre sozinha — num lote que já tem documentos.
+  // Uma raiz, dois defeitos.
+  //
+  // Agora o id viaja na URL (`/analise?imovel=<uuid>`) e o state é só o caminho rápido. Com o id
+  // na URL a tela se recupera de remount, de recarregar a página e de link colado — coisas que
+  // `history.state` não garante.
+  const [params] = useSearchParams();
+  const idDaUrl = (params.get('imovel') || '').trim() || null;
+  const [imovelRecuperado, setImovelRecuperado] = useState(null);
+  const imovelInicial = location.state?.imovel || imovelRecuperado;
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
   const paraUserId = location.state?.paraUserId || null;
@@ -166,7 +185,11 @@ export default function Analise() {
   // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
   // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
   // Sem imóvel da base (entrada 100% manual) já começa ligado e não desliga.
-  const semImovelBase = !imovelInicial;
+  // Enquanto houver id na URL, este lote VEIO do acervo — mesmo que a linha ainda esteja
+  // chegando. Sem esta condição a inclusão manual abria sozinha no intervalo entre a montagem e
+  // a resposta do banco (e ficava aberta de vez quando o state se perdia): foi o "campo de
+  // inclusão manual expandido num imóvel que tem documentos anexados" relatado em 10/09.
+  const semImovelBase = !imovelInicial && !idDaUrl;
   const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase);
 
   const temCNJ = ROLES_COM_CNJ.includes(role);
@@ -258,6 +281,42 @@ export default function Analise() {
   };
 
   const [d, setD] = useState(() => sementeDoImovel(imovelInicial));
+
+  // RECUPERAÇÃO PELO ID DA URL. Só age quando o state NÃO trouxe o imóvel (ou trouxe uma versão
+  // magra, sem endereço nem cidade — é o que `MinhasAnalises` e o toast passam: {id, título,
+  // cidade, estado}). Lê a linha do acervo e re-semeia. Sem isto, a tela fica "montada e vazia",
+  // que é o estado em que a Neuma clicou sete vezes sem nada acontecer.
+  const recuperouRef = React.useRef(false);
+  useEffect(() => {
+    if (!idDaUrl || recuperouRef.current) return;
+    const jaTem = location.state?.imovel;
+    if (jaTem && String(jaTem.id) === idDaUrl && (jaTem.endereco || jaTem.cidade)) return; // state serve
+    recuperouRef.current = true;
+    let vivo = true;
+    (async () => {
+      // `{ data, error }`: falha de leitura não pode virar "imóvel sem endereço" — que é
+      // exatamente o defeito que esta recuperação existe para consertar.
+      const { data, error } = await lerComRenovacao(supabase, () => supabase
+        .from('imoveis_leilao')
+        .select('id, titulo, tipo, endereco, bairro, cidade, estado, valor_avaliacao, valor_minimo, valor_minimo_2, data_leilao, data_leilao_2, area_m2, leiloeiro, modalidade, forma_pagamento, anexos, link_edital, link_matricula, url_lote, doc_fatos')
+        .eq('id', idDaUrl).maybeSingle());
+      if (!vivo) return;
+      if (error || !data) {
+        registrarEvento('erro_ui', { alvo: 'analise_recuperar_imovel', detalhe: `${idDaUrl}: ${error?.message || 'sem linha'}`.slice(0, 120) });
+        return;
+      }
+      setImovelRecuperado({
+        id: data.id, titulo: data.titulo, tipo: data.tipo, endereco: data.endereco, bairro: data.bairro,
+        cidade: data.cidade, estado: data.estado,
+        valorAvaliacao: Number(data.valor_avaliacao) || 0, valorMinimo: Number(data.valor_minimo) || 0,
+        valorMinimo2: Number(data.valor_minimo_2) || 0, dataLeilao: data.data_leilao, dataLeilao2: data.data_leilao_2,
+        areaM2: Number(data.area_m2) || 0, leiloeiro: data.leiloeiro, modalidade: data.modalidade,
+        pagamento: data.forma_pagamento, anexos: data.anexos, linkEdital: data.link_edital,
+        linkMatricula: data.link_matricula, urlLote: data.url_lote, docFatos: data.doc_fatos,
+      });
+    })();
+    return () => { vivo = false; };
+  }, [idDaUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [textoDoc, setTextoDoc] = useState('');
   const [textoMatricula, setTextoMatricula] = useState('');
@@ -388,6 +447,12 @@ export default function Analise() {
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
   const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo, garantirCarregado } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
+  // A TELA TEM O IMÓVEL? (10/09) — a mesma condição que `gerarRelMercado` usa para recusar.
+  // Ela existia SÓ dentro do clique, então o botão continuava verde e clicável enquanto o
+  // formulário estava vazio: a Neuma clicou sete vezes em 66 segundos e as sete quicaram.
+  // Aqui ela vira estado da tela: desabilita o botão E explica, em vez de recusar depois.
+  const semDadosDoImovel = !d.endereco && !d.cidade;
+  const aindaCarregandoImovel = semDadosDoImovel && !!idDaUrl && !imovelInicial;
   // Puxa os relatórios DESTE imóvel mesmo que ele esteja fora da janela de recentes do contexto.
   // Sem isto, abrir uma análise antiga mostrava os três cards como "não gerado" — e gerar de
   // novo reprocessava a IA de um relatório que já existia.
@@ -2020,6 +2085,15 @@ export default function Analise() {
               {/* Se a leitura dos relatórios deste imóvel FALHOU, os três cards abaixo aparecem
                   como "não gerado" — e gerar de novo custaria IA sobre algo que talvez exista.
                   Avisar é obrigatório: aqui, "não achei" e "não consegui ler" se parecem. */}
+              {semDadosDoImovel && !aindaCarregandoImovel && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#b91c1c', lineHeight:1.6 }}>
+                  <strong>Não conseguimos carregar os dados deste imóvel nesta tela.</strong> O relatório
+                  mercadológico precisa do endereço ou da cidade para avaliar o mercado, então ele fica
+                  indisponível até os dados chegarem — <strong>nenhuma cota foi consumida</strong>.
+                  {' '}<button onClick={() => window.location.reload()} style={{ background:'none', border:'none', padding:0, color:'#b91c1c', fontWeight:800, textDecoration:'underline', cursor:'pointer', font:'inherit' }}>Recarregar a página</button>
+                  {' '}costuma resolver; se voltar a acontecer, abra o imóvel pela busca de novo.
+                </div>
+              )}
               {falhouCarregar && (
                 <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#b91c1c', lineHeight:1.6 }}>
                   <strong>Não foi possível verificar os relatórios já gerados deste imóvel.</strong> Recarregue a página antes de gerar de novo — se algum já existir, gerar outra vez só reprocessa o que você já tem.
@@ -2037,7 +2111,7 @@ export default function Analise() {
                   // O card do laudo só existe para quem JÁ gerou um (ver LAUDO_NOVO_ATIVO acima).
                   ...(laudoVisivel ? [{ k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa. Não é mais gerado para novas análises — o parecer agora vem do analista, na reunião.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado:false, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3, entry: laudoEntry }] : []),
                 ].map(c => {
-                  const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado || (loteEncerrado.encerrado && !c.ok);
+                  const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado || (loteEncerrado.encerrado && !c.ok) || (semDadosDoImovel && c.k === 'mercado');
                   return (
                   <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:(c.preparando||c.faltamDocs)?'#fde68a':'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -2064,6 +2138,10 @@ export default function Analise() {
                             : (loteEncerrado.encerrado && !c.ok) ? <><Lock size={14}/> Leilão encerrado</>
                             : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
                             : c.faltamDocs ? <><RefreshCw size={15}/> Tentar de novo</>
+                            : (semDadosDoImovel && c.k === 'mercado')
+                              ? (aindaCarregandoImovel
+                                  ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Carregando o imóvel…</>
+                                  : <><Lock size={14}/> Dados do imóvel indisponíveis</>)
                             : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
                         </button>
                       )}

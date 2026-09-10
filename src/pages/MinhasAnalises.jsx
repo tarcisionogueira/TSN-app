@@ -131,7 +131,7 @@ export default function MinhasAnalises() {
     return Object.values(by).sort((x, y) => ts(y.updatedAt) - ts(x.updatedAt));
   }, [lista, analises, documentais, laudos]);
 
-  const abrir = (a) => nav('/analise', { state: { imovel: a.imovel || { id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado } } });
+  const abrir = (a) => nav(`/analise?imovel=${encodeURIComponent(a.imovelId || '')}`, { state: { imovel: a.imovel || { id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado } } });
 
   // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
   // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.

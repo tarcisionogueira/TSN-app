@@ -62,7 +62,7 @@ export default function ToastRelatorioPronto() {
 
   const ver = (t) => {
     fechar(t.id);
-    nav('/analise', { state: { imovel: t.imovel || { id: t.imovelId, titulo: t.titulo, cidade: t.cidade, estado: t.estado } } });
+    nav(`/analise?imovel=${encodeURIComponent(t.imovelId || '')}`, { state: { imovel: t.imovel || { id: t.imovelId, titulo: t.titulo, cidade: t.cidade, estado: t.estado } } });
   };
 
   if (!toasts.length) return null;
