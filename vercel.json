@@ -147,6 +147,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/aviso-cortesia-vencendo-cron",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/scraper-transparencia",
       "schedule": "0 3 * * *"
     },

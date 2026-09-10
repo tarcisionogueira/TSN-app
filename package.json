@@ -18,6 +18,7 @@
     "verificar:responsivo": "node scripts/verificar-responsivo.mjs",
     "verificar:regras": "node scripts/verificar-regras-negocio.mjs",
     "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
+    "testar:cortesia-vencendo": "node scripts/testes/cortesia-vencendo-avisa-na-janela-certa.mjs",
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:praca-fim": "node scripts/testes/praca-fim-nunca-antes-da-abertura.mjs",
     "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",

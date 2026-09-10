@@ -4,6 +4,50 @@
 
 ---
 
+## 🎓 SESSÃO 24 · PARTE 37 (10/09) — AVISO DE CONVERSÃO PARA QUEM GANHOU PLANO DE CORTESIA
+
+Pedido do dono: um curso introdutório (R$99) que concede 3 meses de Investidor Pro de bônus,
+para trazer exploradores para dentro da plataforma e depois convertê-los em assinantes pagos.
+
+**Investigação de viabilidade, antes de mexer em qualquer coisa.** O mecanismo já existe
+inteiro e já roda em produção: `cursos_admin.concede_plano`/`concede_meses` +
+`conceder_plano_usuario()` (escada só sobe, vencimento estende nunca encurta, papel de equipe
+nunca tocado) + `reconciliar-assinaturas-cron` já rebaixa `plano_ciclo='cortesia'` de volta a
+Explorador no vencimento (fix de 26/08). Criar o curso é config + conteúdo, não código — o
+`/admin` já tem CRUD completo de `cursos_admin`.
+
+**O gap real**: `renovacao-avisos-cron.js` varre PREAPPROVALS do Mercado Pago — quem ganhou o
+plano de bônus não tem cartão cadastrado, então nunca aparecia lá. Sem aviso, a conversão
+dependia de a pessoa notar sozinha que perdeu o acesso — no pior momento possível para pedir
+para ela assinar.
+
+**Conserto**: `api/aviso-cortesia-vencendo-cron.js`, novo. Avisa `plano_ciclo='cortesia'` 5–7
+dias antes do `plano_vencimento` (mais folga que o aviso transacional de 3 dias do MP, porque
+decidir assinar pela primeira vez pede mais tempo que só confirmar uma cobrança que já ia
+sair). Dedup por (user, data de vencimento) em `webhook_eventos_processados` — mesma trava do
+`renovacao-avisos-cron`. Preço no e-mail vem de `planos_config` (nunca hardcoded — o mesmo
+princípio de `produto.downsell`). **Escopo hoje: só `top2`** — é o único plano que algum
+produto concede, e o texto do e-mail fala especificamente dos benefícios do Investidor Pro;
+generalizar a lista de papéis sem generalizar o texto deixaria a mensagem errada para quem
+ganhasse outro plano.
+
+**DESLIGADO por padrão** (`app_config.aviso_cortesia_ativo`, mesmo padrão do
+`ativacao-nudge-cron`) — é e-mail novo para cliente de verdade, o primeiro disparo pede
+autorização explícita no banco, não redeploy. Sem a chave configurada, roda em dry-run
+(apura e não envia) — verificado: hoje 0 candidatos, porque o curso ainda não lançou.
+
+`npm run testar:cortesia-vencendo` — 17 asserções, incluindo a régua de arredondamento
+(`Math.ceil`) que decide quem entra na janela; a régua é IMPORTADA do cron no teste, nunca
+reproduzida, para as duas cópias não poderem divergir. Registrado em `regra_negocio`
+(`produto.aviso_cortesia_vencendo`) e no `vercel.json` (`0 12 * * *`, mesmo horário do
+`ativacao-nudge-cron`).
+
+**Antes de ligar de verdade**: `update app_config set value='true' where key='aviso_cortesia_ativo'`
+(ou `insert` se a chave não existir ainda) — só depois que o curso estiver com os primeiros
+compradores reais e o texto do e-mail tiver sido revisado.
+
+---
+
 ## 🔧 SESSÃO 24 · PARTE 36 (10/09) — TRÊS ACHADOS DO RITUAL DE ABERTURA, OS TRÊS CORRIGIDOS
 
 Pedido do dono: "resolva o que consegue resolver sozinho de forma eficiente e segura". Rodando
