@@ -1,13 +1,32 @@
 name: Scraper SATO
 
-# SATO Leilões via API pública JSON (Round 35). Validado em 08/09 (dry-run ao vivo: 114
-# leilões enumerados, 24 prontos, imóveis reais, zero erro) — os 40 dias sem dado novo
-# desde 30/07 eram só o `workflow_dispatch`-only sem ninguém clicar, não uma fonte quebrada.
-# Promovido a cron diário: é API pública JSON (sem Bright Data, sem anti-bot), risco/custo
-# baixo o bastante pra não precisar do runner residencial.
+# SATO Leilões via API pública JSON (Round 35).
+#
+# ⛔ CRON SUSPENSO EM 10/09 — A URL DO LOTE É CONHECIDAMENTE INVÁLIDA (regressão)
+#
+# 02/08: `sato_lotes_com_url_inexistente.sql` provou que `/leilao/{id}` (o url_lote/link_edital
+# que este arquivo grava) é um PALPITE nunca validado — 12/12 lotes sondados voltaram HTTP
+# "Not Found". Os lotes foram desativados e a fonte saiu da fila de documentos até o padrão
+# real de URL ser descoberto por recon ao vivo.
+#
+# 08/09: este workflow foi promovido a cron diário. A validação registrada foi "114 leilões
+# enumerados, 24 prontos, zero erro" — só a LISTAGEM da API, nunca o padrão de URL do lote, que
+# continuava exatamente o mesmo. O cron voltou a gravar `ativo=true` todo dia com o link morto.
+#
+# 10/09: achado de novo (revisão geral dos scrapers) — 27 lotes ativos com link 404 confirmado
+# + 25 entradas na fila de documentos fadadas a falhar. Revertido (mesma migration de 02/08,
+# arquivo `sato_url_invalida_regrediu_na_promocao_a_cron.sql`) e o `schedule` abaixo comentado
+# de novo — desta vez com o motivo registrado aqui, não só no banco, para a PRÓXIMA promoção
+# não repetir o mesmo engano: validar "a API responde" não é o mesmo que validar "o link do
+# lote funciona", e foi exatamente essa segunda pergunta que faltou em 08/09.
+#
+# Para religar: (1) recon ao vivo confirmando o padrão real de URL do lote (não é possível
+# deste sandbox — rede bloqueada até para leiloeiro); (2) corrigir `url_lote`/`link_edital` em
+# scraper-sato.mjs; (3) `leiloeiro_conhecimento.docs_status` de volta para 'integrado'; (4)
+# só então descomentar o `schedule` abaixo. `workflow_dispatch` continua disponível pro recon.
 on:
-  schedule:
-    - cron: '30 9 * * *'   # diário — depois do CEF (9h) e antes do leiloeiros-puppeteer (10h)
+  # schedule:
+  #   - cron: '30 9 * * *'   # diário — depois do CEF (9h) e antes do leiloeiros-puppeteer (10h)
   workflow_dispatch:
     inputs:
       dryrun:

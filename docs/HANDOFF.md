@@ -4,6 +4,60 @@
 
 ---
 
+## 🚨 SESSÃO 24 · PARTE 50 (10/09) — SATO: A URL DO LOTE (CONFIRMADA 404 EM 02/08) VOLTOU AO AR SOZINHA — E O CLIENTE ESTAVA CLICANDO NELA HOJE
+
+Continuando "todos, um de cada vez" (pedido do dono: "continue com VLANCE e SATO enquanto
+isso"). Ao reabrir o `scraper-sato.mjs` para o gap de 0% documento, achei uma migration já
+existente — `sato_lotes_com_url_inexistente.sql` — que contava uma história de 02/08: o
+`url_lote`/`link_edital` deste scraper (`/leilao/{id}`) sempre foi um PALPITE, nunca validado,
+e 12/12 lotes sondados pelo `captura-documentos` voltaram HTTP "Not Found". O fix daquele dia
+foi correto: desativou os 30 lotes ativos, purgou a fila de documentos, e marcou
+`docs_status='esperado'` para a fila de documentos parar de gastar slot em algo que sempre
+falha — com a observação registrando, por extenso: **"Próximo passo: recon do padrão real de
+URL do lote antes de religar."**
+
+**O que achei ao conferir o estado atual**: em 08/09 o `scraper-sato.yml` foi promovido a cron
+diário — a validação registrada foi "114 leilões enumerados, 24 prontos, zero erro". Só que
+isso confirma que a **listagem da API** funciona, não que o **link do lote** funciona — e o
+código do `url_lote` seguia, linha por linha, o MESMO `/leilao/{id}` nunca corrigido.
+`docs_status` voltou para `'integrado'` e o cron passou a gravar `ativo=true` todo dia.
+
+**Medido hoje (10/09), antes de qualquer conserto**: 27 lotes SATO ativos, TODOS com
+`url_lote`/`link_edital` = `https://www.satoleiloes.com.br/leilao/<id>` — gravados às 13:44
+UTC de HOJE pelo cron — e 25 entradas pendentes em `documentos_fila` para esses mesmos lotes,
+fadadas a falhar. Ou seja: um cliente que clicasse em "Acessar leiloeiro" numa ficha SATO
+hoje de manhã caía numa página que não existe, e a fila de documentos estava de novo gastando
+ciclo tentando ler uma página 404.
+
+**Isto é a forma nº7 do CLAUDE.md com uma variação nova**: não foi "migração escrita e nunca
+aplicada" — foi **migração aplicada corretamente, e depois desfeita por uma promoção que
+validou a pergunta errada.** "A API responde" e "o link do lote funciona" são perguntas
+diferentes, e só a primeira foi checada em 08/09.
+
+**Fix, espelhando 02/08 (mesma migration, dados atualizados)** + **uma camada a mais desta
+vez**: além de desativar os 27 lotes e purgar a fila (confirmado no banco: 0 ativos, fila
+zerada, `docs_status='esperado'`), o `schedule` do `scraper-sato.yml` foi COMENTADO (mesmo
+padrão já usado no EMILIOMATOS) — só `workflow_dispatch` continua disponível. Da vez passada
+a defesa ficou só no banco (dado), e o cron sozinho a desfez; desta vez a defesa está também
+no CÓDIGO/CONFIG, e o comentário no workflow e no scraper deixam escrito, em letras grandes,
+que "a API funciona" não é a mesma prova que "o link funciona" — para a próxima promoção não
+repetir o mesmo engano. Recon ao vivo do padrão real de URL não é possível deste sandbox
+(mesma rede bloqueada de sempre); fica para quando alguém tiver acesso residencial ou Bright
+Data disponível para este fim específico.
+
+**VLANCE, mesma classe de achado, ainda sem fix**: `montar_row()` (`scripts/scraper_vlance.py`)
+grava `url_lote: base` (a HOME do tenant) e `link_edital: urljoin(base, "/leilao/index/imoveis")`
+(uma página de CATEGORIA genérica) — nenhum dos dois é um link para o LOTE específico. Isto é
+diferente do gap de foto/doc já registrado na Parte 48: mesmo depois do diagnóstico de campos
+brutos rodar (próxima segunda), mesmo que `fotos`/`anexos` apareçam no JSON, o cliente ainda
+cairia na home ao clicar "ver imóvel". Não apliquei fix — a plataforma é uma SPA (roteamento
+client-side), o padrão de URL por lote não está documentado em nenhum recon existente
+(`docs/RECON_LEILOEIROS_PLAYBOOK.md` não cobre isto), e um palpite errado aqui seria repetir
+o EXATO erro que acabou de ser corrigido no SATO — mesma disciplina, mesma decisão de não
+adivinhar. Registrado como pendência de recon ao vivo, mesma categoria de HASTA/EMILIOMATOS.
+
+---
+
 ## ✅ SESSÃO 24 · PARTE 49 (10/09) — VALIDAÇÃO REAL DO FIX DA PARTE 44: 8/10 FONTES FORAM A 100%, 2 PRECISARAM DE UM SEGUNDO AJUSTE (SRCSET)
 
 O push da Parte 44 disparou sozinho o `scraper-dom.yml` (dry-run, Chromium de verdade, zero

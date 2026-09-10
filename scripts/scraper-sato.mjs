@@ -179,9 +179,12 @@ function montarRow(l) {
   const { cidade, estado } = cidadeUF(l.descricao, l.titulo);
   const { valor_minimo, valor_avaliacao } = valores(l);
   const comitente = l.comitente?.nome_fantasia || null;
-  // TODO(rota): o recon não capturou a rota pública do leilão (SPA sem hrefs).
-  // /leilao/{id} é o palpite mais comum nessa plataforma — o 1º run real valida
-  // (se 404, testar /lote/{id}, /leiloes/{id} e atualizar aqui + leiloeiro_conhecimento).
+  // ⛔ CONFIRMADO 404 (02/08, reconfirmado 10/09) — NÃO é mais "TODO validar", é "sabidamente
+  // quebrado". `/leilao/{id}` foi só o palpite mais comum nessa plataforma; 12/12 lotes
+  // sondados pelo captura-documentos voltaram "Not Found" duas vezes, em datas diferentes.
+  // O cron deste scraper está SUSPENSO em scraper-sato.yml por causa disto — não religar sem
+  // antes corrigir esta linha com o padrão real (recon ao vivo; testar /lote/{id}, /leiloes/{id}
+  // e QUALQUER OUTRO candidato, e atualizar aqui + leiloeiro_conhecimento.docs_status).
   const url = l.externo === '1' && l.link_parceiro ? l.link_parceiro : `${BASE}/leilao/${l.id}`;
   const va = valor_avaliacao, vm = valor_minimo;
   return {
