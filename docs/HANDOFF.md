@@ -4,6 +4,67 @@
 
 ---
 
+## 🛡️ SESSÃO 24 · PARTE 35 (10/09) — A PREVENÇÃO: DETECTOR DE CLIENTE TRAVADO + A TELA QUE PARECIA CHEIA
+
+**Pergunta do dono**: "qual a melhor forma de evitar que essas situações se repitam?"
+
+**O DEFEITO AO VIVO QUE DEU A RESPOSTA.** Enquanto eu levantava o funil, a Neuma (pagante)
+estava na tela clicando. Rastro:
+
+```
+01:11:22.879  click    /imovel   "Analisar (10 de 10 deste mês)"
+01:11:22.880  pageview /analise
+01:11:24.077  pageview /analise            ← REMONTOU 1,2 s depois
+01:11:25      analise_estado: mercado=livre; cota=0/10    ← porta ABERTA
+01:11:30 … 01:19:18   QUATORZE cliques em "Gerar", os 14:
+                      "recusado: imovel sem endereco/cidade"
+```
+O lote (CEF, Mangabeira/Feira de Santana/BA) tem endereço, bairro, cidade, UF **e coordenadas**.
+O que faltava estava na TELA: na segunda montagem o `location.state` sumiu. E ficou invisível
+porque `analiseImovelId = imovelInicial?.id || d.id`, e `d.id` é o id LOCAL, SEMPRE preenchido —
+a tela leu a cota, disparou os eventos, desenhou os cards, **com o formulário vazio por dentro**.
+
+A MESMA perda explicava o outro sintoma do dia: sem imóvel, `semImovelBase` fica true e a
+**inclusão manual abre sozinha** num lote que já tem documentos. Uma raiz, dois defeitos.
+
+**Conserto (commit `daf215c`)**: o id viaja na URL (`/analise?imovel=<uuid>`), o state vira só o
+caminho rápido, e faltando (ou vindo magro) a tela relê `imoveis_leilao` pelo id — via
+`lerComRenovacao`, porque falha de sessão não pode virar "imóvel sem endereço", que é o defeito
+que a recuperação existe para corrigir. Bônus operacional: **recarregar a página e link colado
+passaram a funcionar**. O botão deixou de aceitar clique em vão ("sem imóvel" virou ESTADO da
+tela, não condição dentro do clique) e o saldo saiu de dentro do CTA — pedido do dono: *"ela
+clicou no 15 de 15; não deve ser campo clicável, e sim informativo"*. O texto convidava a ler e
+o elemento executava. 27 asserções em `npm run testar:analise-url`.
+
+⏱️ **O deploy ficou pronto às 01:20:18; a última tentativa dela foi 01:19:18.** Um minuto. Ela
+esteve no build antigo o tempo inteiro — **o conserto está no ar e ainda NÃO foi provado contra
+o caso dela**. Confirmar no próximo acesso.
+
+**A PREVENÇÃO DE VERDADE (commit `3b94635`)** — e ela não é mais um teste estático. Os quatro
+defeitos do dia tinham a mesma assinatura e **nenhum apareceria em varredura de código**: a tela
+parecia funcional e estava vazia por dentro; quem descobria era o cliente, clicando.
+
+`public.cliente_travou(dias)` pergunta ao BANCO o que aconteceu com gente de verdade:
+1. **clicou e a tela recusou** por motivo TÉCNICO — cota e plano ficam de fora de propósito: ali
+   a recusa é a regra de negócio funcionando, e misturar faria o alarme tocar por venda;
+2. **começou a gerar e sumiu** — "iniciou no servidor" sem desfecho no rastro E sem linha em
+   `analises_mercado` em 30 min (foi o caso do Leonardo, 31/08, o mais grave: some dos dois lados);
+3. **sessão vencida repetida** — isolada é normal, repetida é a renovação não pegando.
+
+**Ela não inventa cobertura**: cada sinal tem data de nascimento (`analise_gerar` desde 29/08,
+`sessao_expirada` desde hoje) e a janela que começa antes volta como `(sem cobertura)` em vez de
+vazio. Zero de instrumento cego é a forma nº 10 — já cometida dentro de um verificador desta base.
+
+**O que muda na operação**: entra no `/api/health-check` (2×/dia, custo zero, e-mail automático).
+Antes, cliente travado só aparecia se ele mesmo reclamasse — e a maioria não reclama, vai embora.
+E se a própria chamada falhar, o `check()` devolve `status: 'erro'` com a mensagem: **o alarme
+não pode ficar mudo**. Também entrou no ritual de abertura do CLAUDE.md.
+
+Rodada sobre dado real no minuto em que nasceu, pegou os dois casos com nome, papel e motivo.
+Migração no mesmo commit da função (forma nº 7b).
+
+---
+
 ## 🏁 FECHAMENTO DO DIA 10/09 — O QUE FICA EM ABERTO (leia isto primeiro)
 
 **Sete correções subiram** (`9b60d60` · `5976617` · `552cef6` · `e8640e9` · `2fb8c30` ·
