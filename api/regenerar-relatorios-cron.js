@@ -232,5 +232,50 @@ export default async function handler(req, res) {
   } catch { /* self-heal best-effort: nunca derruba o cron */ }
   out.analises_mercado_parecer_vazio = mktParecer;
 
+  // SELF-HEAL do R$/M² PONDERADO EM ERRO (10/09) — relatório CONCLUIU mas
+  // `mercado.valorPonderado.motivo` começa com "erro:": o refinamento determinístico por nível
+  // (api/_valor-mercado.js) lançou uma exceção que o catch de gerar-analise.js engoliu, e o
+  // relatório saiu publicado com o valor NÃO refinado da IA (a inconsistência de até 72% entre
+  // análises que aquele módulo existe para eliminar) e amostras sem o filtro de qualidade.
+  // Achado real (dono lendo os próprios relatórios): 5 casos entre 09/09 e 09/10, todos
+  // "Cannot read properties of undefined (reading 'usadas')" — nível 3 chegava sem a chave
+  // correspondente no retorno de `consolidarM2` (bug de código já corrigido). Diferente dos
+  // outros self-heals acima, não precisa de janela de assentamento (não há dado externo para
+  // esperar estabilizar) nem de teto de idade (é um defeito de código, não de fonte externa
+  // instável) — a 1ª regeração com o código corrigido resolve, e o `motivo` some sozinho.
+  // `LOTE_PONDERADO` maior que o padrão (como o do parecer em branco): backlog conhecido de 5,
+  // um só ciclo já limpa em vez de arrastar por 3 rodadas de 6h.
+  let mktErroPonderado = 0;
+  const MAX_PONDERADO = 3;
+  const LOTE_PONDERADO = 10;
+  try {
+    const q = `analises_mercado?status=eq.concluida&result->mercado->valorPonderado->>motivo=like.erro:*`
+      + `&regen_tentativas=lt.${MAX_PONDERADO}`
+      + `&order=updated_at.asc&limit=${LOTE_PONDERADO}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`;
+    const rows = await (await sb(q)).json(); // padrao-ok: leitura best-effort dentro do try/catch — não-OK vira rows=undefined, o Array.isArray abaixo pula sem derrubar o cron (mesmo padrão já usado 4x neste arquivo)
+    if (Array.isArray(rows)) {
+      await Promise.allSettled(rows.map(async (r) => {
+        if (!r?.inputs?.mercadoInputs) return; // sem os inputs originais não dá p/ regerar
+        try {
+          await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+          });
+        } catch { /* segue mesmo assim */ }
+        await fetch(`${BASE}/api/gerar-analise`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+          body: JSON.stringify({
+            imovelId: r.imovel_id, paraUserId: r.user_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
+            imovel: r.imovel || null, mercadoInputs: r.inputs.mercadoInputs, parecerInputs: r.inputs.parecerInputs,
+          }),
+          signal: AbortSignal.timeout(9000),
+        }).catch(() => {});
+        mktErroPonderado++;
+      }));
+    }
+  } catch { /* self-heal best-effort: nunca derruba o cron */ }
+  out.analises_mercado_erro_ponderado = mktErroPonderado;
+
   res.status(200).json({ ok: true, regenerados: out });
 }
