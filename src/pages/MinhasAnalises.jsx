@@ -8,6 +8,7 @@ import { apiCall } from '../utils/apiCall';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
+import { lerComRenovacao } from '../lib/sessao-expirada';
 
 // Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
 const ETAPA_CURTA = {
@@ -69,7 +70,10 @@ export default function MinhasAnalises() {
   const [erroLista, setErroLista] = React.useState(null);
   const carregarLista = React.useCallback(async () => {
     if (!effectiveUserId) return;
-    const { data, error } = await supabase.rpc('minhas_analises_lista', { p_user_id: effectiveUserId });
+    // Renova a sessão e relê antes de acusar erro: o "JWT expired" que o dono viu em 10/09
+    // era token vencido de PWA aberto há horas, não perda de dado. Ver src/lib/sessao-expirada.js.
+    const { data, error } = await lerComRenovacao(supabase, () =>
+      supabase.rpc('minhas_analises_lista', { p_user_id: effectiveUserId }));
     if (error) {
       // Lista vazia por falha de leitura é indistinguível de "você não tem análises" — e essa
       // confusão é exatamente o que faz o cliente achar que os relatórios sumiram. Diz o que houve.

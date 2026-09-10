@@ -3,8 +3,9 @@ import { supabase, marcarSimulacao } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
-import { anonId } from '../utils/tracker';
+import { anonId, registrarEvento } from '../utils/tracker';
 import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
+import { lerComRenovacao, ehErroDeSessao } from '../lib/sessao-expirada';
 
 const AuthContext = createContext(null);
 
@@ -41,12 +42,22 @@ async function fetchPerfil(userId) {
   // então nem rastro em `erros_cliente` sobrava.
   // `maybeSingle` em vez de `single`: com zero linhas devolve `{data:null,error:null}`, o que
   // separa de vez "não tem perfil" (dado) de "não consegui ler" (falha).
-  const { data, error } = await supabase
+  // SESSÃO VENCIDA SE CONSERTA SOZINHA (10/09). O `role` cair para `explorador` quando a
+  // leitura falha é fail-closed e está certo — o que estava errado era desistir na primeira
+  // tentativa: num PWA aberto há horas o token expira, e o dono ADMIN passava a ver a
+  // interface de cliente comum até fechar e reabrir o app. Renova e relê UMA vez; só depois
+  // disso o fail-closed vale. A régua mora em src/lib/sessao-expirada.js, a MESMA das outras
+  // três telas que reagiam cada uma do seu jeito.
+  const { data, error, motivoRenovacao } = await lerComRenovacao(supabase, () => supabase
     .from('perfis')
     .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito, nome, telefone, endereco_cidade, endereco_uf, plano_legado')
     .eq('id', userId)
-    .maybeSingle();
+    .maybeSingle());
   const falhouLeitura = !!error;
+  if (falhouLeitura && ehErroDeSessao(error)) {
+    // Sem isto, "o app me rebaixou" não deixa rastro nenhum — e foi assim que passou meses.
+    try { registrarEvento('sessao_expirada', { alvo: 'perfis', detalhe: `${error.code || 's/cod'} ${String(error.message || '').slice(0, 60)}${motivoRenovacao ? ` | renovacao: ${motivoRenovacao}` : ''}` }); } catch { /* nunca derruba o login */ }
+  }
 
   // Cadastro-base obrigatório: nome, telefone/WhatsApp, cidade E estado, + aceite LGPD.
   // O CPF NÃO entra aqui — só é exigido na hora de PAGAR (checkout) e de SACAR. A cidade

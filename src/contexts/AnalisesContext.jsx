@@ -5,6 +5,7 @@ import { registrarEvento } from '../utils/tracker.js';
 import { supabase } from '../utils/supabase';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { setItemSeguro } from '../utils/storageSeguro.js';
+import { ehErroDeSessao } from '../lib/sessao-expirada';
 
 // Acompanhamento GLOBAL das análises (mercadológica E documental).
 // A GERAÇÃO RODA NO SERVIDOR (/api/gerar-analise e /api/gerar-documental): o
@@ -140,7 +141,7 @@ export function AnalisesProvider({ children }) {
     // expired") e a tela mostra "não foi possível verificar os relatórios já gerados" — que o
     // dono lê, com razão, como "o site parou". Uma renovação e uma segunda tentativa resolvem
     // sem ninguém precisar recarregar a página. Uma só, para não virar laço.
-    if (falha && /jwt|expired|PGRST301|401/i.test(`${falha.code || ''} ${falha.message || ''}`)) {
+    if (falha && ehErroDeSessao(falha)) {
       let renovou = false;
       try {
         const { data: sess, error: erroRenov } = await supabase.auth.refreshSession();
@@ -157,7 +158,7 @@ export function AnalisesProvider({ children }) {
       // públicas — ou seja, a falha de LEITURA POR SESSÃO era justamente a que nunca chegava ao
       // diagnóstico, e restava adivinhar. Agora o código do PostgREST vem junto: `PGRST301` é
       // sessão, `42P01` é tabela que não existe, `57014` é timeout. Três consertos diferentes.
-      const ehSessao = /jwt|expired|PGRST301|401/i.test(`${falha.code || ''} ${falha.message || ''}`);
+      const ehSessao = ehErroDeSessao(falha);
       const detalhe = `imovel=${id}: [${falha.code || 's/cod'}] ${String(falha.message || 'erro').slice(0, 140)}`;
       registrarEvento(ehSessao ? 'sessao_expirada' : 'api_erro', { alvo: 'analises_por_imovel', detalhe });
       return false;

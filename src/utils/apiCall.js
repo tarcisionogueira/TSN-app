@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { registrarEvento } from './tracker.js';
+import { renovarSessao } from '../lib/sessao-expirada';
 
 /**
  * Wrapper para fetch das APIs internas.
@@ -58,16 +59,10 @@ export async function apiCall(path, options = {}, _jaRenovou = false) {
   let motivoRenovacao = '';
   if (res.status === 401 && !_jaRenovou) {
     let renovou = false;
-    try {
-      // `{ data, error }`: o supabase-js NÃO lança em falha de renovação. Ler só `data` fundiria
-      // "não havia sessão para renovar" com "o refresh foi recusado" — e o motivo é o que diz se
-      // a pessoa precisa entrar de novo ou se o problema é nosso.
-      const { data, error } = await supabase.auth.refreshSession();
-      renovou = !!data?.session?.access_token;
-      if (!renovou) motivoRenovacao = String(error?.message || 'sem sessao guardada').slice(0, 60);
-    } catch (e) {
-      motivoRenovacao = String(e?.message || e).slice(0, 60);
-    }
+    // Mesmo renovador das telas (src/lib/sessao-expirada.js): nunca lança e sempre devolve o
+    // motivo — sem ele, "não renovou" fica indistinguível de "não havia o que renovar".
+    const r = await renovarSessao(supabase);
+    renovou = r.ok; motivoRenovacao = r.motivo || '';
     if (renovou) return apiCall(path, options, true);
   }
   if (res.status === 401) {
