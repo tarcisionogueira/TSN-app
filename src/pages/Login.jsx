@@ -8,7 +8,7 @@ import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
 import { salvarRef, lerRef } from '../utils/ref';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO } from '../utils/convitePendente';
 import { versaoTermoProduto } from '../utils/termos';
 
 const inp = {
@@ -40,7 +40,12 @@ export default function Login() {
   const conviteParam = params.get('convite')?.toUpperCase() || '';
   const modoParam = params.get('modo');
   const nextParam = params.get('next') || '';
-  const [refCodigo] = useState(() => refParam || lerRef());
+  // Convite de leiloeiro-para-leiloeiro (10/09): o link que o leiloeiro compartilha é o
+  // PRÓPRIO código de indicação dele (?leiloeiro=CODIGO), sem pool de tokens separado. Sem
+  // ?ref= explícito, este código TAMBÉM vira a indicação (mesma pessoa nos dois papéis) —
+  // é por isso que entra no fallback do refCodigo logo abaixo.
+  const leiloeiroParam = params.get('leiloeiro')?.toUpperCase() || '';
+  const [refCodigo] = useState(() => refParam || leiloeiroParam || lerRef());
 
   const conviteEquipeParam = params.get('convite_equipe') || '';
   // O LOTE QUE TROUXE A PESSOA — hoje só MEDIDO, não usado (29/08).
@@ -69,7 +74,8 @@ export default function Login() {
     if (refParam) salvarRef(refParam); // persiste com janela de 30 dias
     if (conviteParam) salvarConvite(CHAVE_CLIENTE, conviteParam);
     if (conviteEquipeParam) salvarConvite(CHAVE_EQUIPE, conviteEquipeParam);
-  }, [refParam, conviteParam, conviteEquipeParam]);
+    if (leiloeiroParam) salvarConvite(CHAVE_LEILOEIRO, leiloeiroParam);
+  }, [refParam, conviteParam, conviteEquipeParam, leiloeiroParam]);
 
   // Processa convite de equipe após autenticação
   async function processarConviteEquipe(userId) {
@@ -95,7 +101,7 @@ export default function Login() {
     const t = pp.slice(0, i), id = pp.slice(i + 1);
     return (id && (t === 'ebook' || t === 'curso')) ? `/p/${t}/${id}` : '';
   };
-  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
+  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido || leiloeiroParam ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   // Ambientes onde o login com Google costuma FALHAR no 2FA: o Google BLOQUEIA navegadores
@@ -454,6 +460,12 @@ export default function Login() {
         {conviteEquipeParam && !planoEscolhido && (
           <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#5b21b6', fontWeight: 600 }}>
             🏢 Convite de equipe BidPro Brasil, entre ou crie sua conta para aceitar
+          </div>
+        )}
+        {/* Banner convite leiloeiro→leiloeiro (10/09) */}
+        {leiloeiroParam && !planoEscolhido && (
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#c2410c', fontWeight: 600 }}>
+            🔨 Convite de Leiloeiro Parceiro — crie sua conta para ativar sua integração
           </div>
         )}
 

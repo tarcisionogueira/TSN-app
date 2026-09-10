@@ -88,6 +88,43 @@ export default function LeiloeiroPortal() {
       {/* Programa de Parceiros — opt-in do leiloeiro (vira parceiro / pega o link de venda) */}
       <ConviteParceiro maxWidth={900} style={{ margin: '0 0 24px' }} />
 
+      {/* Convide outro leiloeiro (10/09, pedido do dono) — só depois de já ser parceiro:
+          a indicação vale comissão pela MESMA rede do Programa de Parceiros acima, então
+          convidar sem ter aceitado o termo ainda não faz sentido. O link é o PRÓPRIO código
+          de indicação — sem pool de convites separado — e a cota (resgatar_convite_leiloeiro)
+          impede que vire uma porta aberta sem controle nenhum. */}
+      {perfil?.parceiro_aceite_em && (
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 28px', marginBottom: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800, color: '#111', margin: '0 0 6px' }}>Convide outro leiloeiro</h2>
+          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, margin: '0 0 18px' }}>
+            Compartilhe o link abaixo com um colega leiloeiro. Ele cria a conta, ganha acesso a este
+            mesmo portal (integração por webhook, foto, anexo, descrição) e a indicação fica vinculada a
+            você — a comissão vale pela mesma rede do Programa de Parceiros, sem nada extra para configurar.
+          </p>
+          {(perfil?.convites_leiloeiro_disponiveis ?? 0) > 0 ? (
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 13, color: '#334155', wordBreak: 'break-all' }}>
+                  {`${window.location.origin}/#/login?leiloeiro=${encodeURIComponent(perfil.codigo_indicacao || '')}`}
+                </div>
+                <button onClick={() => copiar(`${window.location.origin}/#/login?leiloeiro=${encodeURIComponent(perfil.codigo_indicacao || '')}`, 'convite')}
+                  style={{ padding: '10px 14px', background: copiado === 'convite' ? '#10b981' : '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', color: copiado === 'convite' ? 'white' : '#475569', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                  {copiado === 'convite' ? <Check size={14} /> : <Copy size={14} />}
+                  {copiado === 'convite' ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                {perfil.convites_leiloeiro_disponiveis} convite{perfil.convites_leiloeiro_disponiveis === 1 ? '' : 's'} disponíve{perfil.convites_leiloeiro_disponiveis === 1 ? 'l' : 'is'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: '#94a3b8' }}>
+              Você usou todos os seus convites. Fale com nossa equipe pelo chat para liberar mais.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
         {[

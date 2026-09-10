@@ -4,7 +4,7 @@ import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
 import { anonId, registrarEvento } from '../utils/tracker';
-import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO } from '../utils/convitePendente';
 import { lerComRenovacao, ehErroDeSessao } from '../lib/sessao-expirada';
 
 const AuthContext = createContext(null);
@@ -348,6 +348,21 @@ export function AuthProvider({ children }) {
               if (!eEq && definitivo) limparConvite(CHAVE_EQUIPE);
               if (rEq?.ok === false) console.warn('[convite-equipe] não resgatado:', rEq?.erro);
             } catch (e) { console.warn('[convite-equipe] resgate adiado:', e?.message || e); }
+          }
+          // CONVITE DE LEILOEIRO-PARA-LEILOEIRO (10/09). Mesma disciplina do convite de
+          // equipe: só descarta o código em desfecho DEFINITIVO (sucesso, ou recusa que não
+          // seja "não autorizado" — essa é a única que pode ser a sessão ainda não ter
+          // propagado, e vale re-tentar). `sem_cota`/`codigo_inexistente`/`papel_existente`
+          // são definitivos — re-tentar não muda o resultado, e manter o código preso
+          // significaria tentar de novo para sempre sem nunca conseguir.
+          const conviteLeil = lerConvite(CHAVE_LEILOEIRO);
+          if (conviteLeil) {
+            try {
+              const { data: rLeil, error: eLeil } = await supabase.rpc('resgatar_convite_leiloeiro', { p_ref_codigo: conviteLeil, p_user_id: u.id });
+              const definitivoLeil = rLeil?.ok === true || (rLeil?.ok === false && rLeil?.motivo !== undefined && !/não autorizado/i.test(String(rLeil?.erro || '')));
+              if (!eLeil && definitivoLeil) limparConvite(CHAVE_LEILOEIRO);
+              if (rLeil?.ok === false) console.warn('[convite-leiloeiro] não resgatado:', rLeil?.erro, rLeil?.motivo);
+            } catch (e) { console.warn('[convite-leiloeiro] resgate adiado:', e?.message || e); }
           }
           // TERMOS ACEITOS NO CONVITE — carimbo no banco (28/08). A pessoa leu e aceitou antes
           // de a conta existir; aqui, na primeira sessão, o aceite vira registro. Roda DEPOIS

@@ -4,6 +4,63 @@
 
 ---
 
+## 🤝 SESSÃO 24 · PARTE 41 (10/09) — LEILOEIRO CONVIDA LEILOEIRO (COM COMISSÃO) + BUG REAL ACHADO NO CAMINHO: `role='leiloeiro'` ERA IMPOSSÍVEL DE GRAVAR
+
+**Pedido do dono**: um leiloeiro parceiro vai convidar outros leiloeiros para integrar (foto/
+anexo/descrição, Parte 40) — e essa indicação deve valer comissão, como qualquer indicação.
+Perguntou se era melhor (a) a pessoa criar conta por link de afiliado normal e depois receber
+"o link do leiloeiro" para ativar a função, ou (b) disponibilizar uma quantidade de links de
+convite de leiloeiro.
+
+**Decisão**: nem (a) nem (b) puro — porque **existem dois mecanismos de leiloeiro no
+código, e só um tem qualquer ligação com comissão**. `role='leiloeiro'` em `perfis` (Portal do
+Leiloeiro, o que mexi na Parte 40) é conta de verdade, já compatível com o Programa de
+Parceiros. O outro (`/convite-leiloeiro/:token` → tabela `leiloeiros_parceiros` →
+`/api/leiloeiro-feed`) **não cria conta nenhuma** — comentário no próprio schema: "leiloeiros
+não têm login no sistema" — sem `perfis.id`, sem `codigo_indicacao`, sem como pagar comissão
+sem duplicar todo o sistema de indicação. Construí em cima do primeiro.
+
+**Desenho final — reaproveita 100% do que já existe, sem sistema de comissão novo:**
+- O link de convite é o PRÓPRIO `codigo_indicacao` do leiloeiro (o mesmo que ele já usaria
+  para vender assinatura) — sem pool de tokens separado. `/#/login?leiloeiro=CODIGO`.
+- Cada leiloeiro nasce com `convites_leiloeiro_disponiveis=3` (nova coluna em `perfis`).
+- O cadastro em si passa pelo caminho NORMAL (`handle_new_user`) — role nasce 'explorador',
+  `indicado_por` já sai correto (isso o trigger sempre fez). **Não toquei a allowlist de
+  papel do trigger**: ela existe por um achado de bug bounty de 02/08 (metadado do cliente
+  NUNCA eleva papel — era escalação de privilégio). Em vez disso, segui o MESMO molde de
+  `usar_convite_equipe`: nova RPC `resgatar_convite_leiloeiro(p_ref_codigo, p_user_id)`,
+  chamada DEPOIS que a sessão existe (mesmo ponto do `AuthContext` que já resgata convite de
+  equipe, com a mesma disciplina de só descartar o código pendente em desfecho definitivo).
+  Valida o código, checa cota, debita ATOMICAMENTE (o WHERE do UPDATE já embute a checagem —
+  sob concorrência, a segunda tentativa não acha linha com cota>0 e falha limpo) e só então
+  eleva o papel. Uma vez `indicado_por` setado, a comissão paga pela MESMA rede multinível de
+  qualquer indicação — nada novo a construir aí.
+- Portal (`LeiloeiroPortal.jsx`): novo card "Convide outro leiloeiro", só visível depois que
+  o leiloeiro já aceitou o Programa de Parceiros (senão indicar sem estar no programa não faz
+  sentido) — link + cota restante, mesmo padrão visual do card de webhook já existente.
+
+**⚠️ ACHADO REAL no caminho, não hipotético — bug pré-existente, não introduzido por mim:**
+testei a RPC contra dado real (2 contas de teste descartáveis, teto de cota=1, os 6 casos —
+sucesso, cota esgotada, papel já definido, código inexistente, user_id não bate, tudo
+verificado e limpo depois) e o PRIMEIRO teste falhou com `violates check constraint
+"perfis_role_check"`. A constraint listava `admin/explorador/top1/top2/assessorado/clube/
+consultor/analista/advogado` — **sem 'leiloeiro' e sem 'afiliado'**, apesar dos dois serem
+papéis que a UI (Portal do Leiloeiro, `INVITE_BTNS` em Admin.jsx, `usar_convite_equipe`) já
+pressupõe funcionando. **Era por isso que existiam ZERO contas `role='leiloeiro'` no banco**
+— nunca foi possível criar uma, nem pelo convite de equipe do admin, nem por UPDATE manual.
+Corrigido junto (`perfis_role_check_inclui_leiloeiro_e_afiliado.sql`): adiciona os dois,
+remove `'top1'` (aposentado, 0 linhas usando). Conferido que `'top2_anual'` etc. NÃO
+pertencem a esta constraint — essas variantes vivem em `perfis.plano` (constraint própria,
+já as lista), a leitura delas em `conceder_plano_usuario()` é defensiva e nunca escreve nesta
+coluna, então não é um bug irmão.
+
+`auditoria_regras_negocio()` e `auditoria_seguranca()`: 0/0 nos dois, antes e depois. Build
+limpo. Sem teste `.mjs` novo (a lógica de risco real está inteira no SQL, testada contra dado
+real e descartada — não há função pura de front para extrair aqui, ao contrário das Partes
+39/40).
+
+---
+
 ## 🔨 SESSÃO 24 · PARTE 40 (10/09) — PORTAL DO LEILOEIRO: FOTO/ANEXO NO WEBHOOK, WEB ANALYTICS, E DUAS CONFIRMAÇÕES
 
 Dono revisou a tela `/portal-leiloeiro` (prints) com 4 perguntas: os campos cobrem o

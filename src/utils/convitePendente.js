@@ -19,6 +19,10 @@ const JANELA_MS = JANELA_DIAS * 24 * 60 * 60 * 1000;
 
 export const CHAVE_EQUIPE = 'tsn_convite_equipe';
 export const CHAVE_CLIENTE = 'tsn_convite_codigo';
+// Convite de leiloeiro-para-leiloeiro (10/09) — mesma doença, mesmo remédio: o link de
+// confirmação de e-mail abre noutra aba/aparelho, então o código precisa sobreviver até o
+// primeiro SIGNED_IN. Resgatado por `resgatar_convite_leiloeiro` (ver AuthContext).
+export const CHAVE_LEILOEIRO = 'tsn_convite_leiloeiro';
 // PLANO ESCOLHIDO antes do cadastro (item 7 de docs/BUGS_ABERTOS_2026-08-07.md). Mesma
 // doença dos convites: a tela promete "após o login você será direcionado para o pagamento",
 // mas o link de confirmação abre em OUTRA aba/aparelho e o sessionStorage vem vazio — a
