@@ -14,7 +14,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { buscarViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
-import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
+import { vasculharDocumentos, chaveDocCanonica , ehDocumento } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
 import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from './_texto-imovel.js';
 import { carregarPDFParse } from './_pdf-safe.js';
@@ -453,7 +453,20 @@ export default async function handler(req, res) {
     const kDe = (a) => chaveDocCanonica(a?.url) || a?.url || null;
     const vistos = new Set(achado.anexos.map(kDe).filter(Boolean));
     const merge = [...achado.anexos];
-    for (const a of atuais) { const k = kDe(a); if (k && !vistos.has(k)) { vistos.add(k); merge.push(a); } }
+    // ...MAS a união não pode RESSUSCITAR lixo (achado do dono, 10/09). O merge preservava
+    // TUDO o que já estava gravado, sem reexaminar — então um anexo que entrou por um filtro
+    // furado ficava lá para sempre, imune a qualquer conserto posterior: consertar o scan não
+    // limpava nada, porque o scan novo era UNIDO ao lixo velho. Foi assim que o "Relatório de
+    // Igualdade Salarial" e a descrição-virada-em-URL sobreviveram no lote 97989/210252, e que
+    // 161 anexos-lixo em 67 lotes continuavam na ficha do cliente. Agora o que já estava
+    // gravado passa pelo MESMO portão que o que chega agora: preservar dado bom, sim; preservar
+    // dado que o filtro atual recusa, não. É o que faz a correção do filtro alcançar o passado.
+    for (const a of atuais) {
+      const k = kDe(a);
+      if (!k || vistos.has(k)) continue;
+      if (!ehDocumento(a?.url, a?.nome || '', im.url_lote || '')) continue;
+      vistos.add(k); merge.push(a);
+    }
     patch.anexos = merge.slice(0, 25);
   }
   if (achado.matricula && !im.link_matricula) patch.link_matricula = achado.matricula;

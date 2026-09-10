@@ -16,7 +16,7 @@ import { decodificarEntidades } from './_texto-imovel.js';
 // nunca são documento. Ampliado em 03/08 pelo achado do dono (ver RE_ASSET_*): o pixel do
 // Bing (`bat.bing.com/action/0?...&tl=…abaixo%20da%20avaliação`) entrava como "Documento"
 // só porque a URL de rastreio carregava o TÍTULO do lote com a palavra "avaliação".
-const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookielaw|onetrust|facebook|fbcdn|doubleclick|hotjar|cloudflareinsights|recaptcha|youtube|ytimg|gravatar|fontawesome|bat\.bing|clarity\.ms|lpsnmedia|lpcdn|segment\.(?:io|com)|mixpanel|newrelic|sentry|criteo|taboola|outbrain|rdstation|tiktok|licdn|jsdelivr|unpkg|bootstrapcdn|jquery)\./i;
+const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookielaw|onetrust|facebook|fbcdn|doubleclick|twitter|x\.com|wa\.me|api\.whatsapp|t\.me|pinterest|addtoany|sharethis|hotjar|cloudflareinsights|recaptcha|youtube|ytimg|gravatar|fontawesome|bat\.bing|clarity\.ms|lpsnmedia|lpcdn|segment\.(?:io|com)|mixpanel|newrelic|sentry|criteo|taboola|outbrain|rdstation|tiktok|licdn|jsdelivr|unpkg|bootstrapcdn|jquery)\./i;
 // ── RUÍDO QUE VIRAVA "DOCUMENTO" (achado do dono 03/08, lote `vegas_7588`) ────────────
 // Ele clicou num anexo e recebeu CÓDIGO na tela: era `jquery.min.js`/`global.css` do bucket
 // do leiloeiro. Causa: para URL SEM extensão de documento aceitávamos o sinal genérico de
@@ -34,6 +34,19 @@ const RE_PARAM_MKT = /[?&](utm_[a-z]+|gclid|fbclid|msclkid|mc_eid)=/i;
 // URL com PREÇO no caminho é rótulo de anúncio virado link, não arquivo
 // (ex.: /item/7588/Chácara…%20-%20Lance%20Inicial:%20R$2.266.000,00).
 const RE_URL_ANUNCIO = /R\$|lance\s*inicial/i;
+// ── A DESCRIÇÃO DO LOTE VIRADA EM LINK (achado do dono, 10/09) ────────────────────────
+// Lote 97989/210252 da LJUD: um "anexo" cuja URL tem 1.728 caracteres e é a descrição
+// INTEIRA do imóvel colada como caminho (".../lote/97989/Terreno c/ 6.335,59m² - Galpão em
+// ruína -Feira de Santana/BA - Um galpão industrial…"). O `RE_URL_ANUNCIO` não pegou porque
+// aquele texto não cita preço, e o portão final aceitou por PALAVRA-CHAVE: a descrição diz
+// "matrícula nº 18.486", então `RE_MATRICULA` casou e o lixo entrou como se fosse a matrícula.
+// A defesa aqui não depende de qual palavra o texto contém: nome de ARQUIVO não é PROSA.
+// Caminho decodificado longo e cheio de espaços é frase, não arquivo. Limiar folgado
+// (150 caracteres E 8 espaços) para não pegar "Edital 2ª praça - Comarca de X.pdf".
+const RE_URL_PROSA = (u) => {
+  const caminho = decodificar(String(u || '')).split(/[?#]/)[0].replace(/^https?:\/\/[^/]+/i, '');
+  return caminho.length > 150 && (caminho.match(/ /g) || []).length >= 8;
+};
 // Extensões de documento que nos interessam.
 const RE_DOC_EXT = /\.(pdf|docx?|xlsx?|odt|rtf)(?:[?#]|$)/i;
 const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
@@ -45,7 +58,7 @@ const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
 // + privacidade/cookies/termos de uso/segurança da informação (achado do dono 01/08:
 // MEGA anexava "Política de Privacidade" ×2 em TODO lote — 6.698 entradas em 2.340
 // imóveis; o PDF de consentimento de cookies vem de host "adopt…/disclaimer/").
-const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores|pol[ií]tica.?de.?privacidade|politica[_-]?de[_-]?privacidade|aviso.?de.?(privacidade|cookies?)|\bcookies?\b|termos?.?de.?uso|seguran[çc]a.?da.?informa[çc][ãa]o|seguranca[_-]?da[_-]?informacao|\/disclaimer\//i;
+const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|(?:relat[óo]rio|diferencial|transpar[êe]ncia)[^/]{0,40}(?:salarial|igualdade)|(?:salarial|igualdade)[^/]{0,40}(?:relat[óo]rio|diferencial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores|pol[ií]tica.?de.?privacidade|politica[_-]?de[_-]?privacidade|aviso.?de.?(privacidade|cookies?)|\bcookies?\b|termos?.?de.?uso|seguran[çc]a.?da.?informa[çc][ãa]o|seguranca[_-]?da[_-]?informacao|\/disclaimer\//i;
 // Template client-side NÃO resolvido (TrimPath e afins: ${var}, {if ...}{else}...{/if}) — o
 // HTML CRU capturado antes do JS rodar traz o LITERAL do template como se fosse o link/rótulo
 // do documento; um clique bateria em URL quebrada, 404 garantido. Achado no Portal Bayit
@@ -210,7 +223,10 @@ export function ehDocInstitucional(texto) {
   return RE_DOC_INSTITUCIONAL.test(String(texto || ''));
 }
 
-function ehDocumento(url, label, baseUrl) {
+// EXPORTADA para teste (10/09): é o único portão por onde todo anexo passa, e a primeira
+// versão do teste chamou `m.ehDocumento` — que não existia — e imprimiu 10 de 10 "recusado",
+// um resultado plausível e vazio. Forma nº 10 do CLAUDE.md dentro do próprio verificador.
+export function ehDocumento(url, label, baseUrl) {
   if (!url || HOST_RUIDO.test(url)) return false;
   if (!nomeiaUmDocumento(url)) return false;
   // Só http(s): âncora "Consulte o edital" com href javascript:_gt(... passava no
@@ -219,6 +235,7 @@ function ehDocumento(url, label, baseUrl) {
   if (RE_IMG_EXT.test(url)) return false;
   if (RE_DOC_INSTITUCIONAL.test(`${url} ${label || ''}`)) return false; // ruído corporativo do site, não do lote
   if (RE_TEMPLATE_NAO_RESOLVIDO.test(`${url} ${label || ''}`)) return false; // template client-side não resolvido (ver comentário acima)
+  if (RE_URL_PROSA(url)) return false;                          // descrição do lote virada em link (ver comentário acima)
   if (RE_DOC_EXT.test(url)) return true;                       // arquivo .pdf/.doc… → sempre
   // Daqui para baixo a URL NÃO tem extensão de documento e só entra por PALAVRA-CHAVE —
   // é exatamente aí que o tema do site (js/css), o pixel de rastreio, a página de login e
