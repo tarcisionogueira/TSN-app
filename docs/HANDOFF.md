@@ -4,6 +4,26 @@
 
 ---
 
+## 🩹 SESSÃO 25 · PARTE 60 (10/09) — "NOVO EBOOK" AGORA SEGUE DIRETO PRO EDITOR DE CAPÍTULOS
+
+Pedido do dono: salvar "Novo eBook" fechava o modal e voltava pra lista — para configurar
+capítulos era preciso achar o eBook na lista de novo e clicar em "📖 Capítulos". `saveForm()`
+(`src/pages/Admin.jsx`) agora, só no caminho `modal === 'new'`, pega o `id` de volta do insert
+(`.select('id').single()`) e navega direto para `/admin/ebook-editor/${id}` — o fluxo de
+"editar" existente (PDF avulso) não muda. Confirmado: nenhum EPUB/`.doc` puro foi encontrado
+no HANDOFF nem no código — só `.docx` (via `mammoth`, `src/utils/parseDocx.js`) existe hoje;
+se EPUB/DOC foram de fato decididos numa sessão anterior, não deixaram rastro aqui.
+
+**Registrado, não construído — pendente de confirmação do dono**: paginação "flutuante" do
+leitor (`LeitorEstruturado.jsx`, CSS multi-coluna) já foi delib. escolhida SEM os números de
+página do arquivo original (Parte 12, 04/09: não batem com o reflow por fonte/tela). O que É
+viável e pouco custoso: `breakBefore: 'column'` nos subtítulos (Heading 3 do Word, já
+detectados e marcados com `PREFIXO_SUBTITULO`) — hoje eles só têm `breakAfter: 'avoid'`
+(não ficam órfãos no fim da página), não uma quebra FORÇADA no início. Perguntei ao dono se é
+isso que ele quer dizer com "campos que começam no topo da página" antes de implementar.
+
+---
+
 ## 🔍 SESSÃO 25 · PARTE 59 (10/09) — "FLUXO REDUZIDO": O GOOGLE ADS É REAL (CPC triplicou); O "COLAPSO DE PAGAMENTO" ERA EU MEDINDO A DATA ERRADA
 
 Dono relatou impressão de fluxo reduzido e pediu para investigar marketing. Duas causas

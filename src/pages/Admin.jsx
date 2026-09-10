@@ -1095,8 +1095,16 @@ function EbooksTab() {
       const completo = faltam.length === 0;
       const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
-        const { error } = await supabase.from('ebooks_admin').insert(payload);
+        // Pedido do dono (10/09): ao criar, seguir DIRETO para a tela de capítulos (upload do
+        // .docx, detecção automática) em vez de fechar o modal e obrigar a achar o eBook de
+        // novo na lista para clicar em "📖 Capítulos". `.select('id').single()` para saber
+        // para ONDE navegar — sem isto o insert devolve void e não há id pra montar a rota.
+        const { data: novo, error } = await supabase.from('ebooks_admin').insert(payload).select('id').single();
         if (error) throw error;
+        setModal(null);
+        setSaving(false); // `return` abaixo pula o setSaving(false) do fim da função — sem isto "Salvando..." travava até o admin voltar pra esta tela
+        navEbook(`/admin/ebook-editor/${novo.id}`);
+        return;
       } else {
         const { error } = await supabase.from('ebooks_admin').update(payload).eq('id', form.id);
         if (error) throw error;
