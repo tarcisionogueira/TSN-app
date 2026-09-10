@@ -1,0 +1,32 @@
+-- FIM DO GRANDFATHER: todo assinante passa a valer o limite do papel (decisão do dono, 10/09).
+--
+-- POR QUE ESTE ARQUIVO EXISTE. A mudança é de DADO, não de schema — recriar o banco a partir
+-- das migrações não a reproduziria, e ela sumiria do histórico. É a forma nº 7b do CLAUDE.md
+-- ("a migração escrita não é a migração aplicada") na direção contrária: aplicado no banco e
+-- nunca registrado aqui. Fica o registro do que foi feito e do porquê.
+--
+-- O QUE ERA. `limite_ia_efetivo` tem um ramo de avô:
+--     when p.plano_legado and p.role in ('top2', ...) then (indice -> 5, demais -> 15)
+--     else limite_ia(p.role, p_tipo)                       -- 10 / 10 / 3
+-- Ele honrava o limite antigo de quem assinou ANTES da redução para 10. Duas contas se
+-- encaixavam: Neuma Nogueira (01/07) e Alessandra de Jesus (07/07). O dono viu "15 de 15" na
+-- tela e pediu para nivelar todo mundo em 10.
+--
+-- O QUE MUDA, POR CONTA (medido antes de aplicar — as duas com ZERO análises consumidas no
+-- mês corrente, então ninguém perde nada que já tenha usado):
+--     mercado     15 -> 10
+--     documental  15 -> 10
+--     índice       5 ->  3   <- este vem junto no mesmo campo; não era o pedido, é consequência
+--
+-- O ramo do avô CONTINUA no código de propósito: ele não tem mais nenhuma linha, mas é o
+-- mecanismo pronto para a próxima vez que um limite mudar e alguém precisar ser preservado.
+-- Se um dia aparecer `plano_legado = true` de novo, é intencional — não é resíduo desta data.
+
+update public.perfis set plano_legado = false where plano_legado = true;
+
+-- Verificação (deve devolver zero):
+--   select count(*) from public.perfis where plano_legado;
+-- E o efeito (todos os pagantes em 10 / 10 / 3):
+--   select nome, limite_ia_efetivo(id,'mercado'), limite_ia_efetivo(id,'documental'),
+--          limite_ia_efetivo(id,'indice')
+--     from public.perfis where role in ('top2','assessorado');
