@@ -5,9 +5,19 @@
  * web_search para cá. O ÍNDICE ficou para trás no Claude e o preço disso apareceu em 06/08:
  * a pesquisa de "casa" em Santana de Parnaíba/Jardim Paula **abortou nas duas tentativas
  * (200s)** e o cliente recebeu "a pesquisa de mercado falhou" — enquanto o mercadológico, no
- * mesmo tipo de trabalho, conclui em 60–90s. Além do tempo, o Claude web_search custa ~4x
- * (US$ 0,54 contra US$ 0,14 por geração): o resultado da busca volta para o contexto e são
- * ~114 mil tokens de ENTRADA por chamada.
+ * mesmo tipo de trabalho, conclui em 60–90s.
+ *
+ * ── O CUSTO, MEDIDO (10/09) — e o número velho aqui já não valia ─────────────────────────
+ * Esta linha dizia "~4x mais caro (US$ 0,54 contra US$ 0,14 por geração)". Era verdade com o
+ * Sonnet; virou mentira quando o fallback passou a rodar no Haiku 4.5 (ver `_busca-modelo.js`).
+ * Números do nosso próprio ledger `uso_integracoes`, não de estimativa:
+ *   gemini/grounding      US$ 0,042–0,055 por chamada (13 dias, 28/08 a 08/09)
+ *   claude/web_search     US$ 0,088 por chamada — 5 chamadas, 18 buscas, US$ 0,44, sendo
+ *                         US$ 0,26 de token (bate EXATO com o preço do Haiku; no Sonnet seriam
+ *                         US$ 0,78) e US$ 0,18 das 18 buscas a US$ 0,01 cada.
+ * Ou seja: o Gemini segue mais barato, mas por ~1,9x, não por 10x. O que continua caro no
+ * Claude é o resultado da busca voltar para o contexto — ~114 mil tokens de ENTRADA por
+ * chamada — e a taxa fixa de US$ 0,01 por busca, que nenhum modelo mais barato reduz.
  *
  * Aqui a função vira compartilhada, e o Claude segue como FALLBACK em ambos — quem já rodava
  * assim não muda de comportamento, e o Índice ganha o caminho rápido.
