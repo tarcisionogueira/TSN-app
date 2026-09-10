@@ -27,6 +27,26 @@ const sb = (path, opts = {}) => fetch(`${SB_URL}/rest/v1/${path}`, {
   signal: AbortSignal.timeout(4000),
 });
 
+// Imóvel clicado a partir do e-mail SEMANAL de oportunidades vira sinal de preferência
+// (pedido do dono, 10/09): "aprimorar para enviar imóveis semelhantes". Mesma tabela que
+// o widget de sugestão já usa (`feedback_imovel`, sinal='interesse') — não um mecanismo
+// paralelo. Escopado a 'oportunidades' de propósito: outros e-mails com link de imóvel
+// (ex.: ativacao-nudge) não entram aqui até serem pedidos — mudar o sinal de um e-mail que
+// ninguém pediu para mudar seria efeito colateral, não melhoria.
+const RE_IMOVEL = /^\/#\/imovel\/([0-9a-f-]{36})/i;
+async function registrarInteresse(userId, tipo, caminho) {
+  if (tipo !== 'oportunidades') return;
+  const m = caminho.match(RE_IMOVEL);
+  if (!m) return;
+  try {
+    await sb('feedback_imovel?on_conflict=user_id,imovel_id,sinal', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ user_id: userId, imovel_id: m[1], sinal: 'interesse', contexto: 'email_oportunidades' }),
+    });
+  } catch { /* preferência é best-effort; nunca compete com o redirecionamento */ }
+}
+
 export default async function handler(req, res) {
   const { u, t, p, s } = req.query || {};
   const { userId, caminho } = decodificarClique(u, p);
@@ -40,6 +60,7 @@ export default async function handler(req, res) {
     try {
       const agora = new Date().toISOString();
       await Promise.all([
+        registrarInteresse(userId, tipo, caminho),
         // 1. Carimba o e-mail mais recente deste tipo que ainda não tinha clique. É o que
         //    faz `emails_log.clicado_em` deixar de ser sempre nulo — a coluna existe desde
         //    sempre e nunca foi preenchida, porque só o webhook do Resend a alimentava.

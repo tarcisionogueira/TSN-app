@@ -4,7 +4,9 @@
  * Cadência por usuário:
  *   • 1º e-mail (boas-vindas): 24h após criar a conta, em QUALQUER dia — quem se
  *     cadastra no meio da semana não fica sem oportunidade até a segunda seguinte.
- *   • Recorrente: toda SEGUNDA-feira (com trava anti-reenvio de 7 dias).
+ *   • Recorrente: toda SEGUNDA-feira, com trava anti-reenvio de 7 dias — 28 dias para
+ *     quem não abriu NENHUM dos últimos 4 envios (RPC alertas_engajamento_lote; pedido
+ *     do dono, 10/09: reduzir a cadência de quem não abre em vez de insistir toda semana).
  * Benefício de AMBOS os planos (Explorador e Investidor Pro): ATÉ 12 oportunidades.
  * Quem clicar em "cancelar" para de receber (opt-out via alertas_email.ativo=false).
  *
@@ -39,8 +41,15 @@
  *   4. Sem nenhuma referência de região → melhores do país (≤ teto);
  *      se não fechar 12, manda os que houver, por maior desconto.
  *
- * Links do e-mail: card → /#/imovel/:id (tela do imóvel) · logo e botão → /#/buscar
- * (leva o cliente direto à plataforma/busca). Remetente: noreply@bidprobrasil.com.br.
+ * TIPO PREFERIDO (10/09): dentro do passo 2 (região), quem já clicou em ≥2 imóveis de um
+ * mesmo tipo num e-mail anterior (maioria ≥50%, ver tipoPreferidoMap) tem esse tipo
+ * priorizado — nunca filtra, só reordena o que a região já ofereceria. O passo 1
+ * (contrato) nunca é tocado por isto: filtro salvo é preferência explícita.
+ *
+ * Links do e-mail: card → /#/imovel/:id (tela do imóvel, RASTREADO via linkRastreado/
+ * api/clique.js — alimenta feedback_imovel/sinal=interesse, ver TIPO PREFERIDO acima) ·
+ * logo e botão → /#/buscar (leva o cliente direto à plataforma/busca, sem rastreio).
+ * Remetente: noreply@bidprobrasil.com.br.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -48,6 +57,8 @@ import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
+import { linkRastreado } from './_link-email.js';
+import { utmEmail } from './_utm.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
@@ -70,6 +81,41 @@ const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hi
 const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
+
+// TIPO PREFERIDO por clique (pedido do dono, 10/09) — três regras PURAS, exportadas para
+// serem testadas sem banco/HTTP (ver scripts/testes/), no mesmo molde de `dentroDaJanela`/
+// `corpo` em aviso-cortesia-vencendo-cron.js: o teste importa ESTAS funções, nunca reproduz
+// a fórmula por conta própria.
+//
+// Mínimo de 2 cliques e maioria simples (≥50%): um clique isolado é curiosidade, não
+// preferência. Empate entre tipos não elege ninguém (nenhum é claramente o preferido).
+export function tipoPreferidoDeCliques(porTipo) {
+  const entradas = Object.entries(porTipo || {});
+  if (!entradas.length) return null;
+  const total = entradas.reduce((s, [, n]) => s + n, 0);
+  const [tipoTop, nTop] = entradas.sort((a, b) => b[1] - a[1])[0];
+  // Maioria ESTRITA (>0.5, não >=): um empate 50/50 não tem "o mais clicado" — usar >= aqui
+  // elegeria um tipo arbitrariamente (o que caísse primeiro no sort instável de empate),
+  // um sinal fabricado a partir de indiferença real.
+  return (total >= 2 && nTop / total > 0.5) ? tipoTop : null;
+}
+
+// Reordena SEM FILTRAR: o que combina com tipoPreferido vem primeiro, preservando a ordem
+// relativa (estável) dentro de cada grupo — a lista de entrada já chega ordenada por
+// desconto. Sem tipoPreferido, devolve a lista intacta. Esta é a invariante que mais importa
+// testar: um bug aqui transformaria "reordenar" em "filtrar" e encolheria o e-mail calado.
+export function priorizarTipo(lista, tipoPreferido) {
+  if (!tipoPreferido) return lista || [];
+  const l = lista || [];
+  return [...l.filter(im => im?.tipo === tipoPreferido), ...l.filter(im => im?.tipo !== tipoPreferido)];
+}
+
+// FREQUÊNCIA POR ENGAJAMENTO (pedido do dono, 10/09): quem não abriu NENHUM dos últimos 4
+// envios vale o piso de 28 dias, não 7. Amostra mínima de 4 de propósito — com menos, ainda
+// não houve chance real de abrir, e reduzir a cadência puniria a pessoa errada.
+export function precisaPisoMensal(engajamento) {
+  return !!engajamento && engajamento.enviados_recentes >= 4 && engajamento.abertos_recentes === 0;
+}
 
 const norm = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function centroide(cidade, uf) {
@@ -179,6 +225,9 @@ async function handler(req) {
   const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] RPC', fn, r.status, (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] RPC erro', fn, e?.message); return []; } };
 
   const seteDias = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  // Piso alternativo p/ quem não abre (ver engajamentoMap/alertas_engajamento_lote abaixo):
+  // reduz a cadência de semanal p/ mensal em vez de desligar — ainda existe chance de abrir.
+  const vinteOitoDias = new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString();
   // Inclui 'admin' (o dono acompanha os disparos) além dos planos.
   const ROLES = 'explorador,top2,top2_anual,assessorado,clube,admin';
 
@@ -277,7 +326,7 @@ async function handler(req) {
   // sempre trazer NOVAS oportunidades). Janela de 180 dias cobre qualquer leilão ativo
   // (nenhum fica ativo tanto tempo) sem deixar a consulta crescer sem limite na escala.
   const janelaDedup = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
-  const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr] = await Promise.all([
+  const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr, engajamentoArr] = await Promise.all([
     sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     // `arrematacoes` NÃO tem coluna user_id — o dono do arremate é `arrematante_id`. Com a
@@ -285,8 +334,12 @@ async function handler(req) {
     // você arrematou" NUNCA rodou. `user_id` é criado no map abaixo para o resto seguir igual.
     sbGet(`arrematacoes?arrematante_id=in.${inList}&select=arrematante_id,imovel_id`),
     sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${janelaDedup}&select=user_id,imovel_id`),
-    // Aprendizado: imóveis marcados "sem interesse" no widget/tela → excluir do e-mail.
-    sbGet(`feedback_imovel?user_id=in.${inList}&sinal=eq.sem_interesse&select=user_id,imovel_id`),
+    // Aprendizado, os DOIS sinais: 'sem_interesse' exclui (widget); 'interesse' agora também
+    // vem do CLIQUE no e-mail (api/clique.js, 10/09) e prioriza tipo semelhante — ver passo 2.
+    sbGet(`feedback_imovel?user_id=in.${inList}&sinal=in.(sem_interesse,interesse)&select=user_id,imovel_id,sinal`),
+    // Engajamento (pedido do dono, 10/09): quem não abriu NENHUM dos últimos 4 e-mails
+    // semanais passa a receber 1x/mês em vez de 1x/semana — ver o gate mais abaixo.
+    rpc('alertas_engajamento_lote', { p_user_ids: ids }),
   ]);
   const alertaMap = {}; for (const a of alertasArr || []) alertaMap[a.user_id] = a;
   // TODOS os filtros salvos por usuário (mais recentes primeiro), até 6 — o e-mail
@@ -294,8 +347,11 @@ async function handler(req) {
   const filtroListMap = {}; for (const f of fsalvosArr || []) { const l = (filtroListMap[f.user_id] = filtroListMap[f.user_id] || []); if (l.length < 6 && f.filtros) l.push(f.filtros); }
   const arremMap = {}; for (const a of arremArr || []) (arremMap[a.arrematante_id] = arremMap[a.arrematante_id] || []).push(a.imovel_id);
   const enviadosMap = {}; for (const e of enviadosArr || []) (enviadosMap[e.user_id] = enviadosMap[e.user_id] || new Set()).add(e.imovel_id);
+  const semInteresseArr = (fbArr || []).filter(f => f.sinal === 'sem_interesse');
+  const interesseArr = (fbArr || []).filter(f => f.sinal === 'interesse');
   // "Sem interesse" do widget entra na MESMA exclusão dos já-enviados: não reaparece no e-mail.
-  for (const f of fbArr || []) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
+  for (const f of semInteresseArr) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
+  const engajamentoMap = {}; for (const e of engajamentoArr || []) engajamentoMap[e.user_id] = e;
 
   // Tipos/estados dos imóveis já arrematados (para "similares")
   const arremImovelIds = [...new Set((arremArr || []).map(a => a.imovel_id).filter(Boolean))];
@@ -303,6 +359,29 @@ async function handler(req) {
   if (arremImovelIds.length) {
     const rows = await sbGet(`imoveis_leilao?id=in.(${arremImovelIds.join(',')})&select=id,tipo,estado`);
     for (const r of rows || []) arremInfo[r.id] = r;
+  }
+
+  // TIPO PREFERIDO por clique (pedido do dono, 10/09: "aprimorar para enviar imóveis
+  // semelhantes"). Sinal FRACO de propósito — nunca filtra, só reordena dentro do passo 2
+  // (região) para que, havendo mais candidatos que vagas, o tipo que a pessoa já clicou
+  // apareça primeiro. O CONTRATO (passo 1, filtro salvo) nunca é tocado por isto: filtro
+  // salvo é preferência EXPLÍCITA, mais forte que preferência inferida de clique.
+  const interesseImovelIds = [...new Set(interesseArr.map(f => f.imovel_id).filter(Boolean))];
+  const tipoDoImovel = {};
+  if (interesseImovelIds.length) {
+    const rows = await sbGet(`imoveis_leilao?id=in.(${interesseImovelIds.join(',')})&select=id,tipo`);
+    for (const r of rows || []) tipoDoImovel[r.id] = r.tipo;
+  }
+  const cliquesPorUsuario = {};
+  for (const f of interesseArr) {
+    const tipo = tipoDoImovel[f.imovel_id]; if (!tipo) continue;
+    const m = (cliquesPorUsuario[f.user_id] = cliquesPorUsuario[f.user_id] || {});
+    m[tipo] = (m[tipo] || 0) + 1;
+  }
+  const tipoPreferidoMap = {};
+  for (const [uid, porTipo] of Object.entries(cliquesPorUsuario)) {
+    const tp = tipoPreferidoDeCliques(porTipo);
+    if (tp) tipoPreferidoMap[uid] = tp;
   }
 
   const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
@@ -507,10 +586,18 @@ async function handler(req) {
           const idadeMs = perfil.created_at ? (Date.now() - new Date(perfil.created_at).getTime()) : 0;
           if (idadeMs < 24 * 3600 * 1000) continue;
         } else {
-          // Recorrente: só às segundas (ou com ?forcar=1), e não reenvia se já mandou
-          // nos últimos 7 dias.
+          // Recorrente: só às segundas (ou com ?forcar=1).
           if (!isSegunda && !forcar) continue;
-          if (a.ultimo_envio > seteDias) continue;
+          // FREQUÊNCIA POR ENGAJAMENTO (pedido do dono, 10/09): quem não abriu NENHUM dos
+          // últimos 4 e-mails semanais passa a valer o piso de 28 dias em vez de 7 — sem
+          // isto o e-mail seguia batendo toda semana na caixa de quem nunca abre, que é o
+          // padrão que mais gasta cota do Resend e mais aproxima de queixa/descadastro sem
+          // gerar clique nenhum. `engajamentoArr` (RPC alertas_engajamento_lote) só conta os
+          // últimos 4 ENVIOS DE FATO — por isso quem tem menos de 4 nunca cai aqui: a amostra
+          // ainda não fecha, e reduzir a cadência de quem ainda não teve a chance de abrir
+          // seria punir a pessoa errada, não o padrão.
+          const semAbertura = precisaPisoMensal(engajamentoMap[perfil.id]);
+          if (a.ultimo_envio > (semAbertura ? vinteOitoDias : seteDias)) continue;
         }
       }
 
@@ -540,15 +627,17 @@ async function handler(req) {
       // O e-mail SÓ leva imóveis NOVOS (nunca enviados a este usuário) — sempre novas
       // oportunidades, sem repetir. Se não houver novidade suficiente, manda menos (não
       // recicla). Cada fonte já vem ordenada por maior desconto (>40% lideram).
-      const despejar = (lista, limite, origem = 'regiao') => {
+      const despejar = (lista, limite, origem = 'regiao', tipoPreferido = null) => {
         // LEILÃO ENCERRADO nunca entra no e-mail (07/08). Mandar toda segunda um lote cujo prazo
         // já passou é pior que mandar menos: o cliente clica, se interessa e descobre que não dá
         // mais para dar lance. Ponto de estrangulamento único — TODAS as fontes de lote (filtro
         // salvo, raio, similares, país) passam por aqui.
         const frescos = (lista || []).filter(im => im && im.id && !enviadosSet.has(im.id)
           && !encerradoPorDatas(im).encerrado);
+        // TIPO PREFERIDO (clique no e-mail, 10/09): reordena sem filtrar — ver priorizarTipo.
+        const ordenados = priorizarTipo(frescos, tipoPreferido);
         let n = 0;
-        for (const im of frescos) {
+        for (const im of ordenados) {
           if (n >= limite || pool.size >= LIMITE) break;
           if (!pool.has(im.id)) { add(im, true, origem); n++; }
         }
@@ -594,6 +683,9 @@ async function handler(req) {
       const tetoPerfil = tetoEfetivo(filtroBase, tetoFaixa);
       const tiposPref = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
       const modsPref = Array.isArray(filtroBase.modalidades) ? filtroBase.modalidades.filter(Boolean) : [];
+      // Só no passo 2 (região) — ver tipoPreferidoMap acima. O passo 1 (contrato) é
+      // preferência EXPLÍCITA do cliente e não deve ser reordenado por um sinal inferido.
+      const tipoPreferido = tipoPreferidoMap[perfil.id] || null;
       // pagCanon: o filtro salvo guarda a CHAVE do checkbox ('aVista'); a RPC espera o valor
       // canônico ('a_vista'). Sem converter, a preferência de pagamento do cliente ia para a
       // RPC como string desconhecida e não casava nada.
@@ -619,7 +711,7 @@ async function handler(req) {
               lat: cen.lat, lng: cen.lng, raio_metros: raio, lim: 40, desconto_min: DESC_MIN,
               tipos_filtro: pass.tipos, modalidades_filtro: pass.mods, pagamentos_filtro: pass.pags,
               ...(tetoPerfil ? { valor_max: tetoPerfil } : {}),
-            }), LIMITE - pool.size);
+            }), LIMITE - pool.size, 'regiao', tipoPreferido);
             alcance.max = Math.max(alcance.max, raio);
           }
         }
@@ -629,7 +721,7 @@ async function handler(req) {
       if (pool.size < LIMITE) {
         for (const cid of cidadesRef.slice(0, 3)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size, 'regiao', tipoPreferido);
         }
       }
 
@@ -724,8 +816,12 @@ async function handler(req) {
           cabecalho = tituloBloco(`Da sua região — ${cidade || 'seu cadastro'}`,
             'Dentro do seu perfil de investidor, para completar a semana');
         }
-        void origem;
-        const url = `${BASE}/#/imovel/${im.id}`;
+        // Rastreado (10/09): o clique aqui é o sinal de preferência de TIPO (ver
+        // tipoPreferidoMap acima e `registrarInteresse` em api/clique.js) — por isso 'tipo'
+        // tem que ser exatamente 'oportunidades', é o que api/clique.js casa. `origem` vai
+        // como utm_content (convenção de _utm.js: posição do link dentro da peça), então dá
+        // para medir se o que o cliente PEDIU converte mais que o que foi SUGERIDO.
+        const url = linkRastreado(perfil.id, 'oportunidades', `/#/imovel/${im.id}?${utmEmail('oportunidades', origem)}`);
         const fotoUrl = fotoParaEmail(im, BASE);
         const foto = fotoUrl ? `<a href="${url}"><img src="${fotoUrl}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
         const desc = Number(im.desconto_percentual) || 0;

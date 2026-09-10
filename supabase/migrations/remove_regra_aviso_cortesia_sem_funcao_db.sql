@@ -1,0 +1,20 @@
+-- CORRIGE achado critico de auditoria_regras_negocio() (10/09): a regra
+-- 'produto.aviso_cortesia_vencendo' (migration regra_aviso_cortesia_vencendo.sql) foi
+-- cadastrada com aplicada_por=['aviso_cortesia_vencendo_cron'] -- essa funcao NUNCA existiu no
+-- banco. Copiei sem pensar o molde de 'produto.concede_plano' (onde aplicada_por sao funcoes
+-- PL/pgSQL reais, e o auditor confere com pg_proc + grep da chave no corpo), mas o aviso de
+-- cortesia-vencendo e mecanismo 100% JS/Node (api/aviso-cortesia-vencendo-cron.js) -- nao ha
+-- funcao de banco que o aplique, entao nao ha aplicada_por honesto possivel.
+--
+-- auditoria_regras_negocio() so sabe verificar regras ENFORCADAS NO BANCO (varre pg_proc).
+-- Nenhuma outra regra deste arquivo de cron (contrato-primeiro-regiao-depois, escada de raio,
+-- tipo-preferido-por-clique, frequencia-por-engajamento -- todas tambem 100% JS, pedido do
+-- dono 10/09) esta em regra_negocio, e e assim que deve ficar: a doc + a garantia de correcao
+-- destas vivem no proprio docstring do arquivo + testes que importam as funcoes puras
+-- diretamente (scripts/testes/clique-vira-preferencia-mas-nunca-filtra.mjs,
+-- scripts/testes/quem-nao-abre-4-emails-vira-mensal.mjs), no molde de dentroDaJanela/corpo.
+--
+-- Nao virou funcao-fantasma de banco so para o auditor ficar verde: isso seria o proprio
+-- defeito que regra_negocio existe para pegar (regra "aplicada" por algo que nao aplica nada
+-- de verdade), so que dentro do instrumento de verificacao -- a forma no.10 do HANDOFF.
+delete from regra_negocio where chave = 'produto.aviso_cortesia_vencendo';

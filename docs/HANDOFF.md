@@ -4,6 +4,79 @@
 
 ---
 
+## 📧 SESSÃO 24 · PARTE 39 (10/09) — PAGAMENTO RECUSADO EXPLICADO + E-MAIL SEMANAL APRENDE POR CLIQUE E RESPEITA QUEM NÃO ABRE
+
+**Pergunta 1 — o Antonio Valbeni (top2, R$ 49,90) teve o 1º pagamento aprovado e o 2º recusado
+como "cartão errado". Por quê?**
+
+Comparei os dois registros crus (`dados_mp`) em `mp_pagamentos`. Mesmo `card.id` e mesmo
+`preapproval_id` nos dois ciclos — **não é o cliente trocando de cartão nem token vencido**.
+O que muda entre os dois é o lado do PROCESSAMENTO do Mercado Pago: `merchant_account_id` e
+`statement_descriptor` diferentes entre os ciclos, e os campos de bandeira/final do cartão
+vieram nulos/mascarados no 2º pagamento onde no 1º vinham preenchidos. **Conclusão: não é bug
+nosso.** É divergência de roteamento/adquirente dentro do próprio Mercado Pago entre os dois
+ciclos de recorrência — o `cc_rejected_bad_filled_card_number` saiu do MESMO cartão que tinha
+passado no ciclo anterior, então o motivo textual devolvido pelo MP não descreve a causa real.
+Nada a corrigir no código: o webhook (`api/mp.js`) processou o evento como deveria, e o
+rebaixamento segue o fluxo padrão de recusa.
+
+**Pergunta 2 — o e-mail semanal de oportunidades está rodando 1x/semana, de verdade?**
+
+Sim — confirmado pelo RASTRO, não presumido. `alerta_estado` mostra a rodada de hoje (18
+perfis, 0 enviados — correto, hoje é quinta, o gate `isSegunda` funcionou). `emails_log`
+mostra volume forte e estável nas últimas 3 segundas-feiras: 24/08→45 · 31/08→36 · 07/09→39,
+crescendo com a base. **Uma ressalva que os próprios números entregariam de qualquer jeito**:
+17/08 teve só 10 envios contra 26 da semana anterior — um ciclo em que um grupo de usuários
+não recebeu (provável timeout pontual na cadeia de continuação, `continuar()`, que é
+best-effort/3s) e voltou ao normal no ciclo seguinte. Não é um problema ATUAL — as 3 últimas
+segundas são consistentes — e não persegui a causa raiz daquele dia específico porque não é
+recorrente (log da Vercel de 4 semanas atrás provavelmente nem está mais retido). Registrado
+aqui para constar com honestidade, não como tarefa pendente.
+
+**Os 3 pedidos de melhoria, implementados em `api/enviar-alertas-cron.js`:**
+
+1. **Clique no e-mail agora ensina o tipo de imóvel preferido.** `api/clique.js` já grava
+   `feedback_imovel(sinal='interesse')` a cada clique em card de imóvel do e-mail
+   'oportunidades'. O cron passou a ler esse histórico e, só dentro do passo 2 (região),
+   REORDENA — nunca filtra — priorizando o tipo que o cliente já clicou. Exige ≥2 cliques e
+   maioria ESTRITA (>50%; empate não elege ninguém). Funções puras `tipoPreferidoDeCliques` /
+   `priorizarTipo`, testadas em `npm run testar:clique-tipo` (17 casos). O passo 1 (contrato,
+   filtro salvo) nunca é tocado — preferência explícita sempre vence sobre a inferida.
+   **Achado ao escrever o teste, corrigido antes de produção**: a 1ª versão usava
+   `nTop/total >= 0.5`, que elegeria um tipo arbitrário num empate exato 50/50 (1 clique em
+   cada tipo já bastava) — um sinal fabricado a partir de indiferença real. Trocado para `>`.
+2. **Quem não abre nenhum dos últimos 4 e-mails passa a receber 1x/mês.** Nova RPC
+   `alertas_engajamento_lote` (SQL, `security definer`, sem acesso a anon) conta envios e
+   aberturas recentes por usuário; o gate de reenvio troca o piso de 7 para 28 dias quando
+   `enviados_recentes>=4 e abertos_recentes=0` (`precisaPisoMensal`, testado em
+   `npm run testar:frequencia-engajamento`, 9 casos). Amostra mínima de 4 de propósito — quem
+   ainda não teve 4 e-mails não é punido por amostra pequena demais para significar algo.
+   **Medido hoje: 19 de 133 usuários com histórico de envio cairiam no piso mensal.**
+3. **Os links do card do e-mail passam a ir por `/api/clique`** (antes eram diretos ao
+   `/#/imovel/:id`), com `utm_content` = origem do card (filtro vs. região). Sem isso os
+   cliques em imóvel não alimentavam nem o Cliente 360 nem o sinal do item 1 — o link
+   continuava "bonito" mas não gerava dado nenhum.
+
+**Autocorreção de auditoria (achado ao investigar o item 2, sem relação com o pedido em si):**
+`auditoria_regras_negocio()` acusava 1 crítico — a regra `produto.aviso_cortesia_vencendo`
+(Parte 37) tinha `aplicada_por=['aviso_cortesia_vencendo_cron']`, uma função que NUNCA existiu
+no banco. Copiei o molde de `produto.concede_plano` (onde `aplicada_por` são funções PL/pgSQL
+reais) sem perceber que o aviso de cortesia-vencendo é mecanismo 100% JS/cron, sem função de
+banco nenhuma para aplicá-lo — não havia `aplicada_por` honesto possível. Removida do
+`regra_negocio` (migração própria). Essa tabela só sabe verificar regra ENFORCADA NO BANCO
+(o auditor varre `pg_proc`); regra de cron puro se documenta no próprio arquivo + teste
+direto — e é por isso que NENHUMA outra regra deste mesmo cron (contrato-primeiro-região-
+depois, escada de raio, etc.) está em `regra_negocio`, e as duas regras novas desta Parte
+também não entraram, de propósito: forçar isso criaria o mesmo defeito por dentro do próprio
+instrumento de auditoria (regra "aplicada" por uma função que não aplica nada de verdade).
+`auditoria_regras_negocio()` e `auditoria_seguranca()`: 0 crítico / 0 atenção nos dois,
+confirmado depois da correção.
+
+Build limpo (`verificar:padroes-perigosos` e `verificar:sintaxe`, 0 achado novo). A migração
+da RPC e a remoção da regra quebrada viajam no mesmo commit desta Parte.
+
+---
+
 ## 🔒 SESSÃO 24 · PARTE 38 (10/09) — A OFERTA DO CURSO NÃO PODE FICAR DISPONÍVEL PRA QUEM JÁ É PRO
 
 Correção do dono sobre a Parte 37: **o curso ainda não está criado nem gravado** — a Parte 37
