@@ -4,6 +4,42 @@
 
 ---
 
+## 🔎 SESSÃO 24 · PARTE 52 (10/09) — EDITAL_DJEN: 0% FOTO/DOC É ESTRUTURAL, NÃO BUG (E JÁ EXISTE TENTATIVA DE ENRIQUECER, MEDIDA E CONSISTENTEMENTE SEM SUCESSO)
+
+Fechando a lista de "menores" (VLANCE já coberto na Parte 48; BAYIT/SATO, feitos). Antes de
+mexer em código, medi de novo a auditoria completa por fonte — os 8 fixes desta sessão ainda
+não gravaram no banco (dry-run/cron ainda não rodaram de verdade), então o número que muda de
+verdade aqui é um achado NOVO: **EDITAL_DJEN, 216 ativos, 0% foto, 0% documento, 55% link**.
+
+**0% foto é estrutural, não gap** — `api/radar-editais-cron.js` não é um scraper de site de
+leiloeiro: lê comunicações do DJEN (Diário de Justiça Eletrônico Nacional, API do CNJ) e
+extrai dado de TEXTO de intimação/edital judicial. Não existe foto para extrair — a fonte é
+um parágrafo de diário oficial, nunca uma página com imagem.
+
+**0% documento — investigado a fundo, e a resposta é mais interessante que "está quebrado"**:
+o sistema JÁ tenta enriquecer. `buscarDocumentosPendentes()` roda a cada execução do cron,
+pega lotes `fonte='EDITAL_DJEN'` sem documento e com `url_lote` preenchido, visita esse site e
+procura link de "matrícula"/"edital" (`descobrirDocumentosNoSite`). Medido agora:
+**118 dos 216 têm `url_lote`; os 118 já foram tentados (até 3x cada, negative-cache de 3
+dias); 0 dos 118 jamais encontrou documento.** Não é "nunca tentou" — é "tentou e não achou,
+sempre".
+
+**Causa provável, pelo próprio código**: `url_lote`/`link_edital` destes lotes vêm de
+`parseEdital()` extraindo `www.NOMEDOSITE.com.br` — só o DOMÍNIO, sem caminho — do texto do
+edital (o padrão real medido em 05/09: "o DJEN quase nunca escreve https://... o padrão real é
+SITE WWW.NOME.COM.BR"). `descobrirDocumentosNoSite` então varre a HOME do leiloeiro procurando
+link de edital/matrícula — mas esses links vivem na página ESPECÍFICA do lote, não na home.
+O mecanismo está correto pro que TEM disponível (nome do site); o que falta é a página exata,
+e isso o texto do DJEN nunca informa.
+
+**Por que não virou "fix"**: consertar isto de verdade exigiria uma capacidade nova — cruzar a
+descrição do imóvel do edital com o catálogo do leiloeiro pra achar a página certa (uma busca
+dentro do site, não uma varredura de home) — escopo bem maior que "revisão de foto/documento" e
+que se sobrepõe ao que os scrapers PRÓPRIOS de cada leiloeiro (quando integrados) já fazem
+melhor. Registrado como limitação estrutural conhecida, não como bug pendente.
+
+---
+
 ## 📊 SESSÃO 24 · PARTE 51 (10/09) — POR QUE O DASHBOARD APONTAVA "VÁRIOS LEILOEIRO COM PROBLEMA": O BACKEND JÁ SABIA A DIFERENÇA, O PAINEL NÃO OLHAVA
 
 O dono mostrou print do Monitor de coleta: Lanceja, Ceruli, Apice, Isaias, Torres3 (e Purcena,
