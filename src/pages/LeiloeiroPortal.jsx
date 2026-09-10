@@ -183,9 +183,17 @@ X-Leiloeiro-Key: ${webhookKey || 'SUA_CHAVE_AQUI'}
     "data_leilao": "2026-07-15T10:00:00-03:00",
     "modalidade": "judicial",
     "url_lote": "https://seuleilao.com.br/lote/12345",
-    "descricao": "Apartamento em bom estado, 1 vaga."
+    "descricao": "Apartamento em bom estado, 1 vaga.",
+    "fotos": ["https://seuleilao.com.br/fotos/12345-1.jpg", "https://seuleilao.com.br/fotos/12345-2.jpg"],
+    "anexos": [
+      { "url": "https://seuleilao.com.br/docs/matricula-12345.pdf", "nome": "Matrícula", "tipo": "matricula" },
+      { "url": "https://seuleilao.com.br/docs/edital-12345.pdf", "nome": "Edital", "tipo": "edital" }
+    ]
   }
 }`}</pre>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 10, lineHeight: 1.6 }}>
+            <strong>fotos</strong> e <strong>anexos</strong> são opcionais, mas fortemente recomendados — sem eles o lote entra na plataforma sem imagem e sem documento. A 1ª URL de <code>fotos</code> vira a capa exibida nos cards e no e-mail semanal. Em <code>anexos</code>, use <code>tipo</code> = <code>matricula</code>, <code>edital</code> ou <code>regras</code> para os documentos aparecerem também nos campos dedicados que a análise automática lê.
+          </div>
         </div>
       </div>
 

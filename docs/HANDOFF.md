@@ -4,6 +4,53 @@
 
 ---
 
+## 🔨 SESSÃO 24 · PARTE 40 (10/09) — PORTAL DO LEILOEIRO: FOTO/ANEXO NO WEBHOOK, WEB ANALYTICS, E DUAS CONFIRMAÇÕES
+
+Dono revisou a tela `/portal-leiloeiro` (prints) com 4 perguntas: os campos cobrem o
+necessário, para que servem as chaves, o programa de parceiros concede comissão, e a
+lentidão de tela é sistêmica ou é internet dele. Nenhuma das 4 era óbvia sem checar código.
+
+**1. Campos — achado real, corrigido.** `api/leiloeiro-webhook.js` aceitava `descricao` e
+`url_lote`, mas **nunca lia foto nem documento do payload**, mesmo a tabela de destino
+(`imoveis_leilao`) já tendo as colunas prontas (`fotos`, `link_foto`, `anexos`,
+`link_matricula`, `link_edital`, `link_regras_venda` — as mesmas que os scrapers preenchem).
+Todo lote de parceiro entrava mudo e sem imagem. Corrigido: `upsert_lote` agora aceita
+`fotos` (array de URL; a 1ª vira capa) e `anexos` (array de `{url,nome,tipo}`; `tipo`
+`matricula`/`edital`/`regras` também preenche as colunas dedicadas que `gerar-analise.js` e
+`verificar-doc.js` leem direto, sem vasculhar o array). Campos opcionais, validados
+(`fotosValidas`/`anexosValidos`, exportadas e testadas — 16 casos em
+`testar:webhook-leiloeiro` — lixo no array não derruba o lote, só é descartado). Exemplo de
+payload no portal atualizado para os parceiros descobrirem os campos novos.
+
+**2. Chaves — não é bug, é confusão de arquitetura, esclarecida.** O `X-Leiloeiro-Key` desta
+tela autentica o SISTEMA DO LEILOEIRO quando ELE empurra lotes pra nós (`upsert_lote`) — é
+opt-in, exige trabalho de integração do lado dele. O "nós consultamos o acervo dele" que o
+dono descreveu já existe e é o mecanismo PRINCIPAL da plataforma: o scraper
+(`api/scraper-leiloeiros.js` + parsers por site + Bright Data, registrados em
+`leiloeiro_conhecimento`), que não depende de cooperação nenhuma do leiloeiro. O webhook é um
+SEGUNDO caminho, complementar, não substitui o scraper.
+
+**3. Comissão de parceiro — já funciona, nada a fazer.** O card "Programa de Parceiros" do
+portal já é o componente genérico `ConviteParceiro` (o mesmo de `HomeCliente`/`Atendimento`):
+"Quero ser parceiro" chama `aceitar_parceria()`, a mesma RPC de qualquer usuário, com a mesma
+régua de comissão (25% assinatura, 25% curso/ebook, 10% assessoria/clube, 10% do honorário de
+êxito). Confirmado lendo o componente — nenhuma lógica especial de leiloeiro estava faltando.
+
+**4. Lentidão — achado real, parcialmente fixável, comunicado com ressalva.** Nenhuma função
+`api/` tem `regions` configurado (nem em `vercel.json`, nem por arquivo) — roda no padrão da
+Vercel (`iad1`, EUA) enquanto o Supabase é `sa-east-1` (São Paulo): toda chamada Node que fala
+com o banco paga essa viagem, pra todo mundo, não só quem tem internet ruim. Real, mas
+**não é a causa completa**: várias telas (inclusive esta) consultam o Supabase direto do
+navegador, sem passar por `api/`. Sem Web Analytics habilitado, não havia número medido —
+instalei `@vercel/analytics` (`src/main.jsx`) para passar a medir carregamento real; falta só
+o dono ativar "Web Analytics" no dashboard do projeto (Vercel não expõe esse toggle por API,
+nenhuma ferramenta MCP disponível aqui o faz). Achado lateral nos runtime logs: 13 timeouts
+(504) em 24h, mas 11 concentrados só em `/api/gerar-analise` — problema já conhecido, não é
+lentidão geral de tela. **Não mexi na região dos serverless** (`gru1`) — é decisão de infra
+que afeta o backend inteiro; o dono preferiu não aplicar agora, só medir primeiro.
+
+---
+
 ## 📧 SESSÃO 24 · PARTE 39 (10/09) — PAGAMENTO RECUSADO EXPLICADO + E-MAIL SEMANAL APRENDE POR CLIQUE E RESPEITA QUEM NÃO ABRE
 
 **Pergunta 1 — o Antonio Valbeni (top2, R$ 49,90) teve o 1º pagamento aprovado e o 2º recusado

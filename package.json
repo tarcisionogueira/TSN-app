@@ -56,10 +56,12 @@
     "testar:judicial-venda-direta": "node scripts/testes/judicial-por-venda-direta-nao-vira-so-judicial.mjs",
     "testar:edital-desatualizado": "VITE_SUPABASE_URL=http://localhost SUPABASE_SERVICE_KEY=teste CLAUDE_KEY=teste node scripts/testes/edital-desatualizado-nao-vira-manchete.mjs",
     "testar:clique-tipo": "node scripts/testes/clique-vira-preferencia-mas-nunca-filtra.mjs",
-    "testar:frequencia-engajamento": "node scripts/testes/quem-nao-abre-4-emails-vira-mensal.mjs"
+    "testar:frequencia-engajamento": "node scripts/testes/quem-nao-abre-4-emails-vira-mensal.mjs",
+    "testar:webhook-leiloeiro": "node scripts/testes/webhook-leiloeiro-aceita-foto-e-anexo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/analytics": "^2.0.1",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^1.17.0",

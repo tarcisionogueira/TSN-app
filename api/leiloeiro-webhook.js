@@ -5,6 +5,11 @@
  * Headers: X-Leiloeiro-Key: <chave gerada no portal>  (GET e POST)
  * Actions: upsert_lote, fechar_lote
  * GET    : listar_lotes (chave SEMPRE no header X-Leiloeiro-Key, nunca na URL)
+ *
+ * upsert_lote aceita `fotos` (array de URLs — a primeira vira a capa) e `anexos`
+ * (array de {url, nome, tipo}; tipo='matricula'/'edital'/'regras' também preenche as
+ * colunas dedicadas que o resto do sistema lê direto). Campos opcionais — lote sem eles
+ * continua valendo, só entra sem foto/documento.
  */
 
 export const config = { runtime: 'edge' };
@@ -31,6 +36,30 @@ async function sb(method, path, body) {
     throw new Error(t);
   }
   return res.status === 204 ? null : res.json();
+}
+
+const isUrl = (u) => typeof u === 'string' && u.length <= 1000 && /^https?:\/\//i.test(u);
+
+// Fotos e anexos (10/09, achado ao revisar o portal com o dono): a tabela de destino já tem
+// as colunas (fotos/link_foto/anexos/link_matricula/link_edital/link_regras_venda — as mesmas
+// que os scrapers preenchem), mas o webhook nunca as lia do payload. Todo lote de parceiro
+// entrava sem foto e sem documento, mesmo quando o parceiro tinha e mandava. Contrato simples
+// de propósito (array de URL em string) — é integração de terceiro, não parser de origem que
+// não controlamos.
+export function fotosValidas(lote) {
+  if (!Array.isArray(lote?.fotos)) return [];
+  return lote.fotos.filter(isUrl).slice(0, 30);
+}
+export function anexosValidos(lote) {
+  if (!Array.isArray(lote?.anexos)) return [];
+  return lote.anexos
+    .filter((a) => a && typeof a === 'object' && isUrl(a.url))
+    .slice(0, 20)
+    .map((a) => ({
+      url: a.url,
+      nome: a.nome ? String(a.nome).slice(0, 200) : null,
+      tipo: a.tipo ? String(a.tipo).slice(0, 40) : null,
+    }));
 }
 
 async function resolverLeiloeiro(key) {
@@ -87,6 +116,12 @@ export default async function handler(req) {
       const mn = lote.valor_minimo ? Number(lote.valor_minimo) : null;
       // Desconto derivado (senão o lote afunda na ordenação por desconto_percentual da busca).
       const desconto = lote.desconto ? Math.round(Number(lote.desconto)) : ((av && mn && mn < av) ? Math.round((1 - mn / av) * 100) : null);
+      const fotos = fotosValidas(lote);
+      const anexos = anexosValidos(lote);
+      // Denormaliza por tipo nas colunas link_* que o resto do sistema já lê direto (gerar-
+      // análise, verificar-doc, etc.) sem precisar vasculhar o array — mesma convenção dos
+      // scrapers. `anexos` continua a fonte completa (laudo, regras extras, etc.).
+      const linkPorTipo = (t) => anexos.find((a) => a.tipo === t)?.url || null;
       const row = {
         fonte,
         fonte_id:        `${fonte}_${String(lote.id_externo).slice(0, 200)}`,
@@ -108,6 +143,12 @@ export default async function handler(req) {
         modalidade:      normalizarModalidade(lote.modalidade),
         url_lote:        lote.url_lote ? String(lote.url_lote).slice(0, 1000) : null,
         descricao:       lote.descricao ? String(lote.descricao).slice(0, 5000) : null,
+        link_foto:       fotos[0] || null,
+        fotos:           fotos.length ? fotos : null,
+        anexos:          anexos.length ? anexos : null,
+        link_matricula:    linkPorTipo('matricula'),
+        link_edital:       linkPorTipo('edital'),
+        link_regras_venda: linkPorTipo('regras'),
         ativo:           true,
         atualizado_em:   new Date().toISOString(),
       };

@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Analytics } from '@vercel/analytics/react'
 import App from './App.jsx'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
@@ -141,5 +142,10 @@ class RootErrorBoundary extends React.Component {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <RootErrorBoundary>
     <App />
+    {/* Web Analytics da Vercel (10/09, pedido do dono: medir carregamento real em vez de
+        estimar). Client-side, best-effort — não bloqueia render nem depende de rede para o
+        app funcionar. Ainda exige ativar "Web Analytics" no dashboard do projeto (Vercel não
+        expõe esse toggle por API): sem isso o componente fica inerte, sem erro nenhum. */}
+    <Analytics />
   </RootErrorBoundary>,
 )
