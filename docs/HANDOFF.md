@@ -4,6 +4,70 @@
 
 ---
 
+## 🚨 SESSÃO 25 · PARTE 58 (10/09) — NÍVEL 3 DERRUBAVA O R$/M² PONDERADO EM SILÊNCIO: "NÍVEL 1/2 ZERO" NA TELA × VOLUME NO "POR PERÍODO" ERAM O MESMO BUG
+
+O dono relatou, lendo os próprios relatórios: no tópico de nível 1/nível 2 apareciam ZERO
+amostras, enquanto o tópico "por período" mostrava volume de amostra — e, no cabeçalho, o
+valor do m² não batia com a quantidade de amostras logo ao lado. Pediu para verificar palavra
+por palavra antes de usuários reais verem isto.
+
+**Achado — a chamada foi atualizada, a função chamada não.** `api/gerar-analise.js` já passava
+`nivel3: mercado?.nivel3?.vendas` para `avaliarMercado()` desde 09/09 (regra do dono: nível 3 =
+balde próprio de 1-2km, só aberto quando nível 1+2 somam menos de 10 amostras — ver
+`src/lib/niveis-mercado.js`, Parte anterior a esta sessão). Mas a ASSINATURA de `avaliarMercado`
+em `api/_valor-mercado.js` nunca declarou `nivel3` — `{ nivel1 = [], nivel2 = [], lote,
+minAmostras }` descartava o argumento em silêncio. Dois efeitos, dependendo do caso:
+1. Nível 1+2 genuinamente vazios (só nível 3 tem dado): `consolidado.n = 0` — é o "nível 1/2:
+   zero amostras" que o dono viu, enquanto a aba "por período" (que soma pelos helpers de
+   `niveis-mercado.js`, esses cientes do nível 3) mostrava volume de verdade.
+2. Nível 1 OU 2 com QUALQUER amostra ao lado de nível 3 populado: `gerar-analise.js:2720` já
+   iterava as TRÊS chaves (`NIVEIS.map(k => [k, avalPond[k]])`) e lia `r.usadas` — sem `nivel3`
+   no retorno de `consolidarM2`, isso é `undefined.usadas`. TypeError, engolido pelo catch.
+
+**Confirmado em produção, não só em código**: consultei `analises_mercado` — **5 relatórios
+reais**, todos entre 09/09 18:27 e 09/10 10:20 (a mesma janela em que nível 3 passou a ser
+usado), têm `valorPonderado.motivo = "erro: Cannot read properties of undefined (reading
+'usadas')"`. Nesses 5, o relatório saiu no ar com o valor NÃO refinado — voltou para o número
+livre da IA (a inconsistência de até 72% entre análises que a Parte de 13/08 existia para
+eliminar) — e as amostras mostradas nunca passaram pelo filtro de qualidade (sem preço,
+auto-referência, fora do raio, outlier): exatamente os defeitos que aquele módulo foi escrito
+para fechar, agora reabertos pela porta de nível 3. Os imóveis: Jardim Renascer/Sorocaba,
+Jardim São Marcos/Sorocaba, Pituba/Salvador, Feira de Santana/BA, Jardim Três Montanhas/Osasco.
+
+**Fix**: `consolidarM2`/`avaliarMercado` (`api/_valor-mercado.js`) ganham `nivel3` de verdade —
+preparado com `TETO_KM[3] = 2.0` (nova entrada; sem ela, amostra de nível 3 sem `distanciaKm`
+caía no fallback de nível 2 = 1km, mais perto do que o pior caso do PRÓPRIO balde, dando peso
+MAIOR do que o prompt manda — "peso menor na média"), entra no MESMO filtro de outlier do
+conjunto (não isolado por nível) e no MESMO consolidado ponderado. O peso menor exigido pelo
+prompt já sai de graça da fórmula de distância existente (`pesoProximidade`): nível 3 nunca
+fica mais perto que 1km, logo nunca pesa mais que nível 1/2. `consolidarM2` passa a devolver a
+chave `nivel3` (evita o TypeError do item 2). Retrocompatível: relatório sem nível 3 dá
+BIT-A-BIT o mesmo resultado de antes (testado).
+
+Teste novo, `npm run testar:valor-mercado` (17 asserções, `scripts/testes/valor-mercado-nivel3.mjs`)
+— não existia NENHUM teste para `_valor-mercado.js` antes disto, apesar de ser o módulo que
+calcula o número que o cliente usa para decidir. Cobre: o cenário exato do achado (nível 1+2
+vazios), a mesma iteração de 3 chaves que `gerar-analise.js` faz (não pode mais lançar), nominal
+de distância do nível 3 (2km, não 1km), teto de 2km respeitado, peso menor confirmado pela
+fórmula real, compatibilidade com relatório sem nível 3, e outlier avaliado no conjunto.
+
+**Em aberto, decisão do dono**: os 5 relatórios acima ficaram gravados com o valor NÃO
+corrigido. O fix vale para gerações NOVAS a partir do próximo deploy; os 5 existentes só
+corrigem se regenerados (gasta IA de novo). Não regerei sem confirmar — ver mensagem de chat.
+
+Investigação paralela (mesma sessão, pedido do dono): "o relatório lê a documentação para
+endereço/forma de pagamento/débitos?" — **sim, já existe e está com fiação real**, não é gap
+novo: `mercadoInputs.endereco` é sobrescrito pela identidade lida no edital/matrícula QUANDO o
+endereço do acervo sai genérico (`gerar-analise.js` ~1804-1915, pedido do dono de 06/08), a
+metragem da matrícula corrige a área ANTES da busca de comparáveis (mesma seção), e custos/
+débitos extraídos do texto do edital (`extrairCustosTexto`) alimentam a seção de débitos
+(~linha 3167-3178) ao lado dos débitos que o usuário declara manualmente (`inp.debitosAssumidos`
+— um NÃO substitui o outro: um é "o que o documento diz", outro é "o que você está assumindo
+pagar", e o prompt manda cruzar os dois). Nenhum bug confirmado aqui — infraestrutura já madura,
+com proteção de orçamento de tempo (`janelaPre`) documentada e testada desde 15/08.
+
+---
+
 ## ✅ SESSÃO 24 · PARTE 57 (10/09) — FECHAMENTO: "O RESIDENCIAL ESTÁ RODANDO CORRETAMENTE?" (E A TRIAGEM NÃO É UM 6º PROBLEMA — É FILA ZERADA)
 
 Fecha o pedido "resolva todos sequencialmente + confirme o residencial" com o último passo do

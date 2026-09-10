@@ -87,7 +87,12 @@ export function ehAutoReferencia(amostra, lote) {
       || (Number.isFinite(vaval) && vaval > 0 && Math.abs(v - vaval) < 1);
 }
 
-export const TETO_KM = { 1: 0.25, 2: 1.0, ampliado: 2.0 };
+// `3: 2.0` (10/09) — nível 3 é o balde 1km-2km que o prompt já entrega direto (regra do dono,
+// 09/09; ver src/lib/niveis-mercado.js). Sem esta entrada, uma amostra de nível 3 SEM
+// `distanciaKm` (nominal ausente) cairia no fallback `TETO_KM[2] = 1.0` — mais perto do que o
+// pior caso real do seu próprio balde (2km), dando peso MAIOR do que o prompt manda ("PESO
+// MENOR na média"). O nível 3 é sempre visto pelo pior caso do SEU raio, igual aos outros dois.
+export const TETO_KM = { 1: 0.25, 2: 1.0, 3: 2.0, ampliado: 2.0 };
 
 /**
  * Prepara as amostras de um nível: descarta o que não é comparável e resolve a distância.
@@ -188,25 +193,40 @@ export function precoM2Ponderado(usadas) {
  * 2 km: abaixo disso a base é fina demais e o chamador deve alargar o raio. Devolvemos
  * `precisaAmpliar` em vez de decidir aqui, porque quem tem como buscar mais é o chamador.
  */
-export function consolidarM2({ nivel1 = [], nivel2 = [], lote = null, ampliado = false, minAmostras = 10 } = {}) {
+export function consolidarM2({ nivel1 = [], nivel2 = [], nivel3 = [], lote = null, ampliado = false, minAmostras = 10 } = {}) {
   const teto1 = ampliado ? TETO_KM.ampliado : TETO_KM[1];
   const teto2 = ampliado ? TETO_KM.ampliado : TETO_KM[2];
   const p1 = prepararAmostras(nivel1, { nivel: 1, lote, tetoKm: teto1 });
   const p2 = prepararAmostras(nivel2, { nivel: 2, lote, tetoKm: teto2 });
+  // Nível 3 (10/09) SEMPRE no teto de 2km, dentro ou fora da passada "ampliada" — ele já É o
+  // raio ampliado, entregue direto pelo prompt (não precisa da 2ª passada para existir). Achado
+  // investigando por que o relatório mostrava "nível 1, nível 2: zero amostras" ao lado de um
+  // valor de m² plausível: `avaliarMercado` nunca recebia `nivel3` (a assinatura da função não
+  // o declarava, então o argumento já chegava aqui e era descartado em silêncio pelo
+  // destructuring) — a régua ficava cega justo no caso em que nível 3 é a ÚNICA fonte real de
+  // amostra (nível 1+2 vazios é exatamente a condição que abre nível 3 no prompt).
+  const p3 = prepararAmostras(nivel3, { nivel: 3, lote, tetoKm: TETO_KM.ampliado });
   // O outlier é avaliado sobre o CONJUNTO, não por nível: um nível com 2 amostras não tem
   // mediana confiável, e é justamente o nível pequeno que mais sofre com um comparável de
   // outra praça. Depois de filtrado, cada amostra volta para o seu nível de origem.
-  const marcados = [...p1.usadas.map(a => ({ ...a, _nivel: 1 })), ...p2.usadas.map(a => ({ ...a, _nivel: 2 }))];
+  const marcados = [
+    ...p1.usadas.map(a => ({ ...a, _nivel: 1 })),
+    ...p2.usadas.map(a => ({ ...a, _nivel: 2 })),
+    ...p3.usadas.map(a => ({ ...a, _nivel: 3 })),
+  ];
   const semOutlier = descartarOutliers(marcados);
   const u1 = semOutlier.usadas.filter(a => a._nivel === 1);
   const u2 = semOutlier.usadas.filter(a => a._nivel === 2);
+  const u3 = semOutlier.usadas.filter(a => a._nivel === 3);
   const a1 = precoM2Ponderado(u1);
   const a2 = precoM2Ponderado(u2);
+  const a3 = precoM2Ponderado(u3);
   const geral = precoM2Ponderado(semOutlier.usadas);
-  const descartadas = [...p1.descartadas, ...p2.descartadas, ...semOutlier.descartadas];
+  const descartadas = [...p1.descartadas, ...p2.descartadas, ...p3.descartadas, ...semOutlier.descartadas];
   return {
     nivel1: { ...a1, usadas: u1, descartadas: p1.descartadas },
     nivel2: { ...a2, usadas: u2, descartadas: p2.descartadas },
+    nivel3: { ...a3, usadas: u3, descartadas: p3.descartadas },
     consolidado: geral,
     precisaAmpliar: geral.n < minAmostras && !ampliado,
     descartadas,
@@ -227,10 +247,10 @@ export function consolidarM2({ nivel1 = [], nivel2 = [], lote = null, ampliado =
  * `ampliado` volta no retorno para o relatório poder DIZER que ampliou, que é o que a regra
  * escrita já exigia ("escreva no comentário, com todas as letras").
  */
-export function avaliarMercado({ nivel1 = [], nivel2 = [], lote = null, minAmostras = 10 } = {}) {
-  const estrito = consolidarM2({ nivel1, nivel2, lote, ampliado: false, minAmostras });
+export function avaliarMercado({ nivel1 = [], nivel2 = [], nivel3 = [], lote = null, minAmostras = 10 } = {}) {
+  const estrito = consolidarM2({ nivel1, nivel2, nivel3, lote, ampliado: false, minAmostras });
   if (!estrito.precisaAmpliar) return { ...estrito, ampliado: false, minAmostras };
-  const amplo = consolidarM2({ nivel1, nivel2, lote, ampliado: true, minAmostras });
+  const amplo = consolidarM2({ nivel1, nivel2, nivel3, lote, ampliado: true, minAmostras });
   // Só aceita a ampliação se ela REALMENTE trouxe amostra; senão devolve o estrito, para não
   // rotular como "raio ampliado" uma análise que continuou com a mesma base.
   if (amplo.consolidado.n > estrito.consolidado.n) {

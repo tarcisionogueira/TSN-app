@@ -37,6 +37,7 @@
     "testar:ig-backfill": "node scripts/testes/backfill-comentario-so-grava-resposta-do-dono.mjs",
     "testar:whatsapp": "node scripts/testes/whatsapp-nao-inventa-plano-do-cliente.mjs",
     "testar:niveis": "node scripts/testes/mercadologico-tres-niveis.mjs",
+    "testar:valor-mercado": "node scripts/testes/valor-mercado-nivel3.mjs",
     "testar:indice": "node scripts/testes/indice-de-estado-nao-precifica-lote.mjs",
     "testar:busca-modelo": "node scripts/testes/busca-cai-no-haiku-com-a-ferramenta-certa.mjs",
     "testar:doc-teto": "node scripts/testes/matricula-grande-nao-pode-ser-recusada-por-nos.mjs",
