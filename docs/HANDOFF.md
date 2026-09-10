@@ -4,6 +4,36 @@
 
 ---
 
+## 🚨 SESSÃO 25 · PARTE 61 (10/09) — EBOOK "ESTRUTURADO" ATIVO SUMIA DA LOJA: TRAVA DE 30/07 NUNCA SOUBE DO FORMATO DE 04/09
+
+Dono relatou: ativou "O Lance Que Muda Tudo" (título+descrição+capa+capítulos, tudo completo),
+apareceu "Ativo" no admin, mas não apareceu na Área de Membros ao lado dos outros 2 eBooks.
+
+**Causa, confirmada no banco antes de mexer em código**: `Membros.jsx` (linha 149) exige
+`ativo=true` **e** `arquivo_url` não-vazio pra listar um eBook — defesa escrita em 30/07 contra
+um registro legado "só capa" sem arquivo real. Mas o formato "estruturado" (.docx→capítulos,
+Sessão 23 Parte 10, 04/09) **nunca tem `arquivo_url`** — o conteúdo mora em `ebook_capitulos`
+— e essa trava é 5 semanas MAIS VELHA que esse formato: nunca foi atualizada pra reconhecê-lo.
+"O Lance Que Muda Tudo" foi o 1º eBook a nascer JÁ estruturado, sem nunca ter tido PDF —
+`ativo=true`, capítulos salvos, tudo certo, e mesmo assim barrado. O único estruturado
+anterior ("Lucre Antes de Arrematar") só escapava por acidente histórico: carrega um
+`arquivo_url` de antes de ele ter sido convertido pro formato novo — mascarando esta lacuna
+desde 04/09 sem ninguém notar, porque nunca tinha existido um estruturado "puro" até agora.
+
+**Fix**: `Membros.jsx` passa a listar também `tipo_conteudo='estruturado'`, sem exigir
+`arquivo_url` (a garantia de que só publica com capítulo salvo já existe em
+`Admin.jsx:toggleAtivo`, não precisa reconferir aqui). **Decisão deliberada de implementação**:
+em vez de um `.or()` com `and()` aninhado (sintaxe PostgREST que funcionaria, mas nunca foi
+usada em nenhum outro lugar deste código, e este ambiente não tem como testar contra o
+Supabase ao vivo antes de publicar — rede bloqueada pro domínio do projeto), fiz DUAS buscas
+simples (`.eq()/.not()/.neq()`, o mesmo encadeamento que já rodava sozinho) + merge por `id`
+no cliente. Mais verboso, mas cada metade usa só sintaxe já comprovada — um filtro mal
+formado aqui devolveria 400 e apagaria a loja INTEIRA, o que seria pior que o bug original
+(que só escondia 1 eBook). Validado: a lógica equivalente em SQL direto contra o banco
+confirma as 3 linhas certas (2 estruturados + 1 pdf) antes do fix ir para o código.
+
+---
+
 ## 🩹 SESSÃO 25 · PARTE 60 (10/09) — "NOVO EBOOK" AGORA SEGUE DIRETO PRO EDITOR DE CAPÍTULOS
 
 Pedido do dono: salvar "Novo eBook" fechava o modal e voltava pra lista — para configurar

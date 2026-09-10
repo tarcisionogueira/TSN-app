@@ -146,7 +146,31 @@ export default function Membros() {
       // Defesa em profundidade: além de ativo=true, exige o ARQUIVO do ebook — um registro
       // legado ativado antes da trava de rascunho (caso "só capa" de 30/07) não aparece na
       // loja mesmo que o flag esteja errado no banco.
-      const { data: es } = await supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('ativo', true).not('arquivo_url', 'is', null).neq('arquivo_url', '').order('criado_em', { ascending: false });
+      //
+      // EXCETO tipo_conteudo='estruturado' (10/09) — o formato .docx→capítulos (Sessão 23,
+      // Parte 10) NUNCA tem arquivo_url por design (o conteúdo mora em ebook_capitulos), e
+      // essa trava de 30/07 é ANTERIOR a esse formato existir — nunca foi atualizada pra ele.
+      // "O Lance Que Muda Tudo" (10/09) foi o 1º eBook criado JÁ nascendo estruturado, sem
+      // nunca ter tido PDF: ativo=true no banco, zero capítulo faltando, e mesmo assim sumia
+      // da loja — a trava de 30/07 barrava um ebook completo por engano. O único estruturado
+      // anterior ("Lucre Antes de Arrematar") escapava por acidente: carregava um arquivo_url
+      // de antes de virar estruturado, então nunca expôs esta lacuna. A garantia de que
+      // ativo=true SÓ acontece com capítulo salvo já existe no gate de publicação
+      // (Admin.jsx:toggleAtivo) — aqui não precisa reconferir count(ebook_capitulos).
+      // Duas buscas + merge por id, em vez de um `.or()` com `and()` aninhado: essa combinação
+      // nunca foi usada em nenhum outro lugar do código (só `.or()` simples existe, em
+      // Admin.jsx), e este ambiente não tem como testar a sintaxe contra o Supabase ao vivo
+      // antes de publicar. Um filtro mal formado aqui devolveria 400 e apagaria a loja INTEIRA
+      // (pior que o bug original, que só escondia 1 eBook) — cada chamada abaixo usa só
+      // encadeamento já comprovado (o `.not()/.neq()` já rodava sozinho na linha anterior).
+      const cols = 'id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em';
+      const [{ data: esEstruturado }, { data: esComArquivo }] = await Promise.all([
+        supabase.from('ebooks_admin').select(cols).eq('ativo', true).eq('tipo_conteudo', 'estruturado'),
+        supabase.from('ebooks_admin').select(cols).eq('ativo', true).not('arquivo_url', 'is', null).neq('arquivo_url', ''),
+      ]);
+      const porId = new Map();
+      for (const e of [...(esEstruturado || []), ...(esComArquivo || [])]) porId.set(e.id, e);
+      const es = [...porId.values()].sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
 
       const cursosComModulos = (cs || []).map(c => {
         const aulasC = (as || []).filter(a => a.curso_id === c.id);
