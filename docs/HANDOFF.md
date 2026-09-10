@@ -4,6 +4,65 @@
 
 ---
 
+## 📊 SESSÃO 24 · PARTE 51 (10/09) — POR QUE O DASHBOARD APONTAVA "VÁRIOS LEILOEIRO COM PROBLEMA": O BACKEND JÁ SABIA A DIFERENÇA, O PAINEL NÃO OLHAVA
+
+O dono mostrou print do Monitor de coleta: Lanceja, Ceruli, Apice, Isaias, Torres3 (e Purcena,
+fora do print) todos com "❌ Coleta zerada. Provável bloqueio, mudança de fingerprint/user-agent
+ou site fora do ar" — mesmo timestamp, 08/09 09:53. Pediu pra investigar por que vários
+leiloeiros apareciam com problema ao mesmo tempo.
+
+**Achado nº1 (o dado)**: os 6 são tenants pequenos da plataforma SOLEON (`scraper-soleon.mjs`)
+— histórico de 3 medições (01/09, 04/09, 08/09) mostra queda GRADUAL até zero em todos:
+APICE 37→18→0, CERULI 39→1→0, ISAIAS 36→22→0, LANCEJA 9→3→0, PURCENA 8→0→0, TORRES3 37→18→0.
+Os OUTROS 9 tenants da mesma plataforma (CALIL, VEGAS, DANIELGARCIA, FERREIRALEIL, JOAOEMILIO,
+TMLEILOES, AGOSTINHO, CASAMARTILLO, INFINITY) seguiam saudáveis no mesmo run — não é a
+plataforma inteira, é um subconjunto específico (a leva "JUCEMG" de 29/08, leiloeiros com
+acervo naturalmente pequeno).
+
+**Achado nº2 (a causa do ALARME, não da queda)**: `coletarTenant()` em `scraper-soleon.mjs`
+JÁ SABIA se a listagem respondeu de verdade (`via: 'gratis'/'brightdata'`) ou nunca chegou a
+responder (`via: null`) — mas só usava isso num `console.log` e jogava fora antes de chegar em
+`registrarSaude`. Resultado: TODO tenant com 0 lote virava `status='falhou'`, mesmo quando a
+listagem respondeu bem e só não tinha nada novo — o caso que `_saude-fonte.mjs` já sabe tratar
+como `'vazio'` (e promove sozinho pra `'degradado'` SE houver queda de verdade vs a execução
+anterior; ver o comentário "'vazio' também é promovido" naquele arquivo). Fix: nova
+`VIA_TENANT` (mesmo padrão de `SEM_COTA`/`ENUMERADOS`/`COTA_NEGADA`, já usado no arquivo) leva
+esse sinal até `registrarSaude`.
+
+**Achado nº3 (o bug que fazia o painel gritar mesmo quando o backend acertava)**: mesmo se
+`status` já viesse correto, `diagnosticoCaptacao()` (`src/pages/Admin.jsx`) tinha
+`if (atual.status === 'falhou' || totalAtual === 0)` — ou seja, **qualquer total zero virava
+"Provável bloqueio" independente do status**, inclusive `'sem_cota'` (o freio de orçamento do
+Bright Data recusando de propósito) e `'vazio'` (o backend dizendo "respondi bem, só não tinha
+nada agora"). Todo o investimento de meses distinguindo esses três estados (documentado
+extensivamente em `_saude-fonte.mjs`) chegava ao painel e era jogado fora numa única condição.
+**Esta é a causa real de "vários leiloeiro aparecerem com problema"**: leiloeiro pequeno sem
+lote novo num dia é NORMAL, e o painel tratava isso goal a goal igual a um site fora do ar.
+
+**Fix**: `diagnosticoCaptacao` ganha um retorno antecipado — `status IN ('sem_cota','vazio')`
+não gera problema nenhum (a função já documenta "retorna null quando está tudo bem", e agora
+os dois casos entram nessa categoria). `'falhou'` continua exatamente como antes — o alarme
+"Provável bloqueio" segue de pé para quem de fato quebrou.
+
+**O que NÃO foi feito**: reclassificar as linhas JÁ GRAVADAS de 08/09 — não tenho como saber
+com certeza, retroativamente, se cada uma foi "respondeu vazio" ou "não respondeu" (o run não
+apareceu no GitHub Actions nas últimas execuções listadas; corre pelo runner residencial, cujo
+log não fica acessível daqui). A partir da PRÓXIMA coleta de cada tenant, a classificação sai
+correta.
+
+**De brinde, mesmo giro de raciocínio aplicado ao HASTA** (pedido em paralelo — "continue com
+HASTA enquanto isso"): `motor/runner.mjs` também tinha essa mesma perda de sinal — o nível 2
+(usado por HASTA/NORDESTE) já contava quantos EVENTOS achou no catálogo (`eventos.length`) só
+para um `console.log` em modo debug, e descartava antes de `registrarSaude`. Agora
+`eventosCount` viaja até o `motivo` do status `'vazio'`: a próxima medição do HASTA vai dizer
+"0 evento(s) no catálogo" (a home parou de listar leilão — 3ª mudança estrutural do site) ou
+"N evento(s), 0 lote(s) dentro deles" (o problema está dentro do evento, não na home) — duas
+causas diferentes, duas ações diferentes, sem precisar de um dispatch de debug manual pra
+descobrir qual é. Ainda não dá pra fechar o HASTA em si (exige recon ao vivo, fora deste
+sandbox), mas a próxima pessoa a olhar não parte do zero.
+
+---
+
 ## 🚨 SESSÃO 24 · PARTE 50 (10/09) — SATO: A URL DO LOTE (CONFIRMADA 404 EM 02/08) VOLTOU AO AR SOZINHA — E O CLIENTE ESTAVA CLICANDO NELA HOJE
 
 Continuando "todos, um de cada vez" (pedido do dono: "continue com VLANCE e SATO enquanto

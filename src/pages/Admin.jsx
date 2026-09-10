@@ -4690,6 +4690,17 @@ function diagnosticoCaptacao(atual, anterior) {
   const totalAnt = anterior ? (Number(anterior.total) || 0) : null;
   const problemas = [];
 
+  // 0) sem_cota / vazio NÃO são "bloqueio provável" (achado 10/09) — o backend já investiu em
+  // separar os dois de 'falhou': 'sem_cota' é o freio de orçamento do Bright Data recusando de
+  // propósito (decisão, não quebra), e 'vazio' é a fonte respondendo bem sem lote novo AGORA
+  // (leiloeiro pequeno entre leilões) — se isso escondesse uma queda de verdade,
+  // `_saude-fonte.mjs` já promove sozinho pra 'degradado' antes de chegar aqui (ver o
+  // comentário "'vazio' também é promovido" naquele arquivo). Tratar os dois como bloqueio
+  // continuava mostrando "Provável bloqueio, mudança de fingerprint..." pra leiloeiro nenhum
+  // ter feito nada de errado — era a causa de vários aparecerem "com problema" no painel
+  // (6 tenants SOLEON pequenos, medido em 10/09) só por terem 0 lote num dia comum.
+  if (atual.status === 'sem_cota' || atual.status === 'vazio') return null;
+
   // 1) Coleta zerada / falha total → bloqueio provável (prioridade máxima).
   if (atual.status === 'falhou' || totalAtual === 0) {
     problemas.push({

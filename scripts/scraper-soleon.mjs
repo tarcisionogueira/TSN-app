@@ -296,6 +296,17 @@ const ENUMERADOS = new Map();
 // marca a fonte cuja LISTAGEM foi recusada: aqui é a coleta que começou, andou e foi cortada
 // no meio — o caso que passava despercebido até 27/08 (ver o bloco em `coletarTenant`).
 const COTA_NEGADA = new Map();
+// `via` da ENUMERAÇÃO por tenant (10/09) — 'gratis'/'brightdata' quando a listagem respondeu
+// de verdade (mesmo que com 0 lote: leiloeiro pequeno pode legitimamente ficar sem nada por um
+// tempo), `null` quando NENHUMA página chegou a devolver HTML. `coletarTenant` já calculava
+// isso e só usava para um `console.log` — descartava o sinal antes de `registrarSaude` decidir
+// o status. Efeito medido: 6 tenants pequenos (APICE/CERULI/ISAIAS/LANCEJA/PURCENA/TORRES3)
+// caindo para 0 em 08/09 sempre gravavam `status='falhou'`, e o dashboard mostrava "Coleta
+// zerada. Provável bloqueio" pra todos — mesmo quando a listagem respondeu bem e só não tinha
+// lote novo (o caso que `_saude-fonte.mjs` já sabe tratar como `'vazio'`, inclusive promovendo
+// pra `'degradado'` sozinho SE houver queda de verdade vs a execução anterior — a distinção só
+// não chegava até lá).
+const VIA_TENANT = new Map();
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -348,6 +359,7 @@ async function debugRecon() {
 
 async function coletarTenant(tenant) {
   const { urls, via } = await enumerarLotes(tenant);
+  VIA_TENANT.set(tenant.fonte, via);
   if (!urls.length) { console.log(`  [${tenant.fonte}] 0 lotes enumerados (via ${via}). Pulando.`); return []; }
   const ids = urls.map(u => `${tenant.fonte.toLowerCase()}_${idDaUrl(u)}`);
   const existentes = new Set();
@@ -429,6 +441,7 @@ async function main() {
       await registrarSaude(supabase, tenant.fonte, [], 'soleon', {
         ok: false,
         semCota,
+        vazio: !!VIA_TENANT.get(tenant.fonte),
         enumerados: ENUMERADOS.get(tenant.fonte) ?? null,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCota
@@ -477,6 +490,7 @@ async function main() {
         cotaNegada,
         ok: false,
         semCota: SEM_COTA.has(tenant.fonte),
+        vazio: !!VIA_TENANT.get(tenant.fonte),
         enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: SEM_COTA.has(tenant.fonte)

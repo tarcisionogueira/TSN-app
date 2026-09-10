@@ -32,7 +32,7 @@ const idFonte = (tenant, id) => (tenant.chaveTenant
 // respondeu (fonte pode estar vazia)" de "não consegui buscar" (challenge/teto).
 async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   const urls = new Map();
-  let fetchOk = false, via = null;
+  let fetchOk = false, via = null, eventosCount = null;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
     const r = await fetchFonte(url, { semBD });
@@ -54,6 +54,7 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
     if (r0.html) {
       const eventos = [...cfg.parse.extrairUrlsDeEvento(r0.html, tenant.base).values()]
         .slice(0, cfg.maxEventos ?? 12);
+      eventosCount = eventos.length;
       if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
       // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
       // NORDESTE, cujo evento cabe numa página. A HASTA quebrou essa premissa: o leilão 557 tem
@@ -81,7 +82,7 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
       }
     }
   }
-  return { urls: [...urls.values()], fetchOk, via };
+  return { urls: [...urls.values()], fetchOk, via, eventosCount };
 }
 
 // A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA (29/08).
@@ -140,7 +141,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
 }
 
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
-  const { urls, fetchOk, via } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
+  const { urls, fetchOk, via, eventosCount } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0;
   if (urls.length) {
@@ -217,7 +218,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada };
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -237,7 +238,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -251,11 +252,19 @@ export async function rodarFonte(cfg, opts) {
       // acervo anterior vira 'degradado' com "queda vs anterior". O mesmo conserto que o
       // `fonte_regressao_suspeita` recebeu em 29/08: "não consegui verificar" é uma LINHA.
       if (fonteVazia) {
-        console.log(`[${tenant.fonte}] respondeu e enumerou 0 lote(s) — registrando a medição.`);
+        // `eventosCount` (10/09) separa ONDE a enumeração ficou vazia, pra quem for investigar
+        // depois não ter que adivinhar nem gastar um dispatch de debug só pra saber isso: fontes
+        // NÍVEL 2 (HASTA/NORDESTE) podem estar vazias porque o CATÁLOGO não listou evento nenhum
+        // (eventosCount=0 — provável mudança na home) ou porque listou eventos e nenhum deles
+        // devolveu lote (eventosCount>0 — o problema está dentro do evento, não na home).
+        const motivo = eventosCount != null
+          ? `respondeu 200 e enumerou 0 lote(s) (${eventosCount} evento(s) no catálogo)`
+          : 'respondeu 200 e enumerou 0 lote(s)';
+        console.log(`[${tenant.fonte}] ${motivo} — registrando a medição.`);
         await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
           ok: false, vazio: true, enumerados: 0,
           metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
-          motivo: 'respondeu 200 e enumerou 0 lote(s)',
+          motivo,
         });
         continue;
       }
