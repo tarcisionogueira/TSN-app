@@ -279,17 +279,37 @@ def coletar_leiloes(session, base):
     return mapa
 
 
-def coletar_lotes(session, base, delay):
+def coletar_lotes(session, base, delay, max_paginas=60):
+    """TRAVA DE SEGURANÇA (10/09): medido em produção (run de 07/09) — bomnegocioleiloes
+    devolveu `currentPage=1` 37 VEZES SEGUIDAS mesmo com `page` pedido subindo 1,2,3…,
+    empilhando ~1.480 itens duplicados e (via Bright Data, único caminho que funciona de
+    IP de datacenter) esgotando a sub-cota 'vlance' NO MEIO da execução — os domínios
+    seguintes da mesma rodada falharam em cascata por `subcota`. Não sei ainda SE é a API
+    ignorando o parâmetro para este tenant ou um efeito colateral do Web Unlocker sem
+    continuidade de sessão entre chamadas — mas não dá pra saber às cegas, e o `while True`
+    sem teto continuava tentando até o freio de orçamento intervir, o que é tarde e caro
+    demais. `paginas_vistas` detecta a página repetida e para IMEDIATAMENTE; `max_paginas`
+    é o cinto de segurança para qualquer paginação que avance mas nunca termine.
+    """
     todos, page = [], 1
+    paginas_vistas = set()
     while True:
         dados = pedir(session, "POST", base, EP_LOTES, data={"page": str(page)})
         if not dados:
             break
         itens = dados.get("items", []) or []
-        todos.extend(itens)
         atual = int(dados.get("currentPage") or page)
         total = int(dados.get("totalPages") or atual)
-        print(f"    página {atual}/{total}: +{len(itens)} (total {len(todos)})")
+        print(f"    página {atual}/{total}: +{len(itens)} (total {len(todos) + len(itens)})")
+        if atual in paginas_vistas:
+            print(f"  ⚠️ {base}: API devolveu a página {atual} de novo (pedi page={page}) — "
+                  f"parando para não empilhar duplicata nem esgotar cota à toa.")
+            break
+        paginas_vistas.add(atual)
+        todos.extend(itens)
+        if len(paginas_vistas) >= max_paginas:
+            print(f"  ⚠️ {base}: teto de segurança de {max_paginas} páginas atingido — parando.")
+            break
         if atual >= total or not dados.get("nextPage"):
             break
         page = atual + 1
@@ -492,6 +512,15 @@ def main():
         leiloes = coletar_leiloes(session, base)
         time.sleep(args.delay)
         lotes = coletar_lotes(session, base, args.delay)
+        # DIAGNÓSTICO (10/09): VLANCE mede 0% foto/0% doc no acervo, mas `foto_url()` abaixo
+        # já sabe ler `fotos` (string, ou lista de dict com url/nm_foto/nm_arquivo/src/link) —
+        # sem ver um payload REAL não dá pra saber se o campo não vem, vem vazio, ou vem com
+        # outro nome. Mais barato imprimir os campos do 1º lote UMA vez por domínio do que
+        # arriscar um palpite errado de nome de campo (a mesma lição do CLAUDE.md sobre medir
+        # em cima de dado real antes de gravar) — isto some do próximo run assim que o campo
+        # certo for identificado e `foto_url`/`montar_row` forem ajustados.
+        if lotes:
+            print(f"    (campos do 1º lote bruto: {sorted(lotes[0].keys())})")
         if not args.todas:
             alvo = norm(args.categoria)
             lotes = [l for l in lotes if norm(l.get("nm_categoria")) == alvo]

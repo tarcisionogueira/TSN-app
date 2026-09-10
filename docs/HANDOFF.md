@@ -4,6 +4,47 @@
 
 ---
 
+## 🔁 SESSÃO 24 · PARTE 48 (10/09) — VLANCE: PAGINAÇÃO PRESA EM "PÁGINA 1" ESGOTAVA A COTA E DERRUBAVA OS OUTROS DOMÍNIOS DA MESMA RODADA
+
+Último item investigado nesta rodada da revisão geral. Antes de mexer no `foto_url()` (que já
+parecia correto na leitura de código), fui ao log real do run pago mais recente
+(`scraper-vlance.yml`, 07/09) — e achei um problema mais sério e completamente diferente do
+que eu procurava:
+
+```
+bomnegocioleiloes.com.br: "página 1/13" repetida 37 VEZES SEGUIDAS (+40 cada vez, "total"
+subindo até 1.480 — tudo duplicata da mesma página 1), até a sub-cota 'vlance' do Bright
+Data esgotar no meio da execução ("Bright Data recusado pelo freio: subcota", repetido).
+Resultado: bomnegocioleiloes fechou em 0 lote(s), e os domínios seguintes da MESMA rodada
+(get-leiloes/get-lotes de outros tenants) começaram a falhar em cascata por falta de cota.
+```
+
+`coletar_lotes()` pedia `page=1,2,3…` mas a API deste tenant específico devolvia
+`currentPage=1` toda vez — o `while True` não tinha nenhum teto nem detecção de repetição,
+só parava quando `atual >= total` (nunca, já que `atual` ficava travado em 1 contra
+`total=13`) ou quando o PRÓPRIO freio de orçamento intervinha — tarde e caro demais: 37
+chamadas pagas por NADA de novo, comendo a cota que os outros domínios da rodada precisavam.
+
+**Fix**: `coletar_lotes()` agora rastreia as páginas já vistas e para IMEDIATAMENTE se a API
+devolver uma página repetida (2 chamadas em vez de 37, sem acumular duplicata), mais um teto
+de segurança (`max_paginas=60`) como cinto de segurança para qualquer paginação que avance
+mas nunca termine. **Não é fix da causa raiz** (não sei se é a API ignorando o parâmetro só
+para este tenant, ou efeito colateral do Web Unlocker sem continuidade de sessão entre
+chamadas — não dá pra saber sem HTML/JSON real, e o sandbox não alcança a API do Vlance) —
+mas resolve o ESTRAGO (esgotar cota e derrubar os outros domínios), que é o que de fato
+prejudica o acervo. Validado com 2 cenários sintéticos (API presa × paginação normal de 3
+páginas) — sem convenção de teste Python neste repo (só JS em `scripts/testes/`), então a
+validação ficou como script pontual, não commitada, rodada localmente antes do push.
+
+**Sobre o gap original (0% foto/0% doc)**: `foto_url()` já sabe ler `fotos` (string ou lista
+de dict com url/nm_foto/nm_arquivo/src/link) — mas nenhum log deste scraper jamais mostrou o
+JSON real de um lote, então não dá pra saber se o campo não vem, vem vazio, ou tem outro nome,
+sem arriscar um palpite. Adicionado 1 log por domínio (`campos do 1º lote bruto: [...]`) —
+aparece no PRÓXIMO run agendado (segunda, sem custo extra) e resolve a dúvida com dado real
+em vez de um segundo palpite sobre um palpite.
+
+---
+
 ## 📌 SESSÃO 24 · PARTE 47 (10/09) — HASTA E EMILIOMATOS: DOIS ITENS JÁ CONHECIDOS, UM DELES PIOROU
 
 Fechando a rodada desta sessão da revisão geral ("todos, um de cada vez") com os dois últimos
