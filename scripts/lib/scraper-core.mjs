@@ -15,6 +15,7 @@
 // sob demanda (api/) também as usa. A direção scripts → api é a convenção do repo.
 import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from '../../api/_texto-imovel.js';
 import { nomeiaUmDocumento } from '../../api/_doc-scan.js';
+import { fotoDeHtml } from './dom-parse-util.mjs';
 
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
 const CLAUDE_KEY       = process.env.CLAUDE_KEY || '';
@@ -95,7 +96,13 @@ export function extrairGenerico(html, urlBase) {
     (() => { const h = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1];
               return h ? decodificarEntidades(h.replace(/<[^>]+>/g, '')).trim() : null; })() || null;
 
-  out.link_foto = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase) || null;
+  // FALLBACK <img> (10/09, revisão geral de fotos/anexos): schema.org/og:image cobre bem os
+  // sites que os publicam — mas quando faltam (medido: RJLEILOES 4% foto, mesmo com 100% doc/
+  // descrição — o resto da ficha vem de rótulo no corpo, só a foto dependia só disto), a
+  // página fica sem foto mesmo tendo imagem real no HTML. `fotoDeHtml` (dom-parse-util.mjs,
+  // mesmo filtro anti-chrome do fix da família `dom`) só entra quando os dois métodos
+  // primários não acharam nada — nunca substitui um og:image/JSON-LD que já funcionava.
+  out.link_foto = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase) || fotoDeHtml(html, urlBase);
 
   // valores: "R$ 123.456,78"
   const valores = [...html.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => parseFloat(m[1].replace(/\./g, '').replace(',', '.')));

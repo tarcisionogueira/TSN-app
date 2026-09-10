@@ -209,7 +209,13 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       await sleep(350);
     }
   }
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
+  // Cobertura de foto/descrição (10/09): visível em TODO run, dry-run incluso — sem isto, o
+  // fix de `dom-parse-util.mjs` (fotoDeHtml/sintetizarDescricao) só seria confirmado lendo
+  // `fonte_saude` depois de gravar. Mesmo princípio do "sinal de vida" já usado no laço acima.
+  const comFoto = prontos.filter(r => r.link_foto).length;
+  const comDesc = prontos.filter(r => r.descricao).length;
+  const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada };
 }

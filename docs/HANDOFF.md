@@ -4,6 +4,80 @@
 
 ---
 
+## 🖼️ SESSÃO 24 · PARTE 44 (10/09) — REVISÃO GERAL DOS SCRAPERS: FOTO E DESCRIÇÃO NUNCA EXTRAÍDAS EM 10 FONTES (família `dom`) + FALLBACK NO EXTRATOR GENÉRICO (RJLEILOES e afins)
+
+**Pedido do dono**, na sequência da Parte 43: "faça uma revisão geral do sistema e dos
+scrapers todos eles para garantir que temos os documentos, anexos, fotos e informações que
+precisamos." Rodei uma auditoria por fonte (foto/doc/descrição/link, cruzando `imoveis_leilao`
+ativo por `fonte`) e apresentei a lista de gaps; perguntado como priorizar, a resposta foi
+**"Todos, um de cada vez."** — este é o primeiro item fechado dessa lista.
+
+**ACHADO RAIZ (não é bug de UM leiloeiro — é a plataforma inteira nunca ter tentado)**: os 8
+parsers que compartilham `scripts/lib/dom-parse-util.mjs` (`leilaoindex-parse.mjs` → RIGOLON/
+GIORDANO/THAISTEIXEIRA, + `nordeste-parse.mjs`, `albertomacedo-parse.mjs`, `hasta-parse.mjs`,
+`simon-parse.mjs`, `leje-parse.mjs`, `rocha-parse.mjs`, `alfa-parse.mjs` — 10 fontes) liam
+`det.link_foto` dentro de `montarRowDom`, mas **nenhum dos 8 `parseDetalhe` jamais preenchia
+esse campo** — medido: GIORDANOLEILOES 0% foto. E 7 dos 8 cravavam `descricao: null` sem
+NUNCA tentar extrair (só HASTA lê de verdade, por ter rótulo "Descrição:" próprio no site).
+Separadamente, RJLEILOES (que usa outra família de parser, `extrairGenerico` em
+`scraper-core.mjs`) tinha 4% de foto mesmo com 100% de documento/descrição — ali a foto
+dependia SÓ de schema.org `image`/`og:image`, sem fallback quando a página não publica
+nenhum dos dois.
+
+**Fix, no menor número de lugares possível (todos os 8 parsers herdam sem serem tocados)**:
+- `fotoDeHtml()` (nova, `dom-parse-util.mjs`): varre os `<img>` do HTML já renderizado
+  (motor `dom` usa Puppeteer — diferente de `extrairGenerico`, aqui **og:tags vêm vazias por
+  design**, é SPA/shell) e descarta chrome do site por filtro (logo/ícone/favicon/banner-topo/
+  spinner/avatar/etc., `data:` URI, dimensão pequena explícita, extensão que não é foto).
+  Somada dentro de `anexosDeHtml()` — que os 8 parsers já chamam e espalham (`...docs`) no
+  retorno — então nenhum dos 8 arquivos precisou mudar uma linha.
+- `sintetizarDescricao()` (nova, mesma lógica no ponto único `montarRowDom`): quando o parser
+  não achou parágrafo real, monta uma linha a partir de área/cidade/UF/avaliação — nunca do
+  texto bruto (cidade/título já foram contaminados por banner de cookies/menu nesta mesma
+  família antes, HANDOFF 07/09) e, depois do teste pegar o problema (ver abaixo),
+  **deliberadamente sem o rótulo de tipo**.
+- `scraper-core.mjs`: `extrairGenerico()` agora cai em `fotoDeHtml()` quando og:image/JSON-LD
+  não existem — nunca substitui um og:image que já funcionava, só preenche o vazio. Beneficia
+  RJLEILOES (o caso medido), e potencialmente SOLEON/PECINI/EMILIOMATOS/LEILAOPRO/SATO (mesma
+  função compartilhada) sempre que a página não publicar meta tags.
+- `motor/runner.mjs`: o log de cada tenant ganhou `foto X% · descrição Y%` (antes só contava
+  prontos/encerrados/descartados) — sem isto o fix só seria confirmado lendo `fonte_saude`
+  depois de já ter gravado.
+
+**AUTOCORREÇÃO ANTES DO PUSH (o teste pegou, não revisão de código)**: a 1ª versão de
+`sintetizarDescricao` incluía o tipo inferido (`inferirTipo(titulo, url)`). O teste novo
+(`scripts/testes/foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs`, caso "sem NENHUM campo
+aproveitável") acusou: `inferirTipo` cai para `'terreno'` sempre que título+URL contém a
+palavra "lote" — e **toda URL desta família é `.../lote/<id>`** — então um imóvel sem NENHUM
+dado real ainda saía rotulado "Terreno". Plausível e errado, a mesma forma nº10 do CLAUDE.md,
+só que desta vez pega **antes** de virar produção porque apareceu num teste, não numa
+auditoria depois do fato. Corrigido removendo o tipo da síntese — menos rico, nunca inventa
+classificação sem lastro.
+
+**VALIDAÇÃO — limite do sandbox, registrado com transparência**: a rede deste ambiente
+recusa CONNECT para qualquer site de leiloeiro (`giordanoleiloes.com.br` incluso — 403 do
+proxy, confirmado por teste direto), então não dava para conferir o heurístico de `<img>`
+contra HTML real a partir daqui. Dois testes de função pura cobrem a LÓGICA com HTML sintético
+representativo (`testar:foto-dom` — 17 casos; `testar:foto-generica` — 4 casos, incluindo
+"og:image existente nunca é sobrescrito"), `npm run build` (prebuild com `verificar:padroes` +
+`verificar:sintaxe`) e `testar:motor` (8/8) passam. A validação contra dado real de verdade
+acontece: (a) de graça — o push nesta branch aciona `scraper-dom.yml` automaticamente (Chromium
+de verdade em Actions, zero Bright Data) para as 9 fontes `dom` do push; (b) sem gasto extra —
+RJLEILOES/SOLEON/PECINI só rodam por `schedule`/dispatch manual (Bright Data pago, cota
+deliberadamente rara por decisão do dono), então a checagem daquele lado fica para a PRÓXIMA
+coleta já agendada — não vale disparar um run pago só para autovalidar. Ler `fonte_saude`
+depois dessas rodadas (custo zero) fecha o ciclo.
+
+**Próximo da lista ("um de cada vez")**: GESTAOLEILOES (regressão de volume — `total=1` vs
+piso 63/mediana 126, `fonte_regressao_suspeita` continua acusando `degradado`), SBID21 (nova
+regressão, `total=2` vs piso 18/mediana 37), EMILIOMATOS (`medicao_velha`, 508h sem medir),
+HASTA (`zerou`, mas é o bloqueio de IP de datacenter já documentado — confirmar se segue sendo
+só isso), VLANCE (0% foto/doc — `scripts/scraper_vlance.py` já tem `foto_url()` funcional; o
+gap pode estar no FORMATO real do campo `fotos` da API, não no código) e os fontes menores
+(SATO/BAYIT/SIMONLEILOES-descrição/etc.).
+
+---
+
 ## 🔨 SESSÃO 24 · PARTE 43 (10/09) — LEILOEIRO NASCE PARCEIRO HABILITADO (achado do dono AO VIVO, em reunião com leiloeiros)
 
 O dono acessou o portal durante uma reunião com leiloeiros e viu "Quero ser parceiro" em vez

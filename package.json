@@ -57,7 +57,9 @@
     "testar:edital-desatualizado": "VITE_SUPABASE_URL=http://localhost SUPABASE_SERVICE_KEY=teste CLAUDE_KEY=teste node scripts/testes/edital-desatualizado-nao-vira-manchete.mjs",
     "testar:clique-tipo": "node scripts/testes/clique-vira-preferencia-mas-nunca-filtra.mjs",
     "testar:frequencia-engajamento": "node scripts/testes/quem-nao-abre-4-emails-vira-mensal.mjs",
-    "testar:webhook-leiloeiro": "node scripts/testes/webhook-leiloeiro-aceita-foto-e-anexo.mjs"
+    "testar:webhook-leiloeiro": "node scripts/testes/webhook-leiloeiro-aceita-foto-e-anexo.mjs",
+    "testar:foto-dom": "node scripts/testes/foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs",
+    "testar:foto-generica": "node scripts/testes/foto-generica-nao-pega-logo-do-site.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

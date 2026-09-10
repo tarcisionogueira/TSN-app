@@ -83,18 +83,46 @@ export const UF_POR_NOME = {
   'santa-catarina': 'SC', 'sao-paulo': 'SP', sergipe: 'SE', tocantins: 'TO',
 };
 
+// DESCRIÇÃO SINTÉTICA (10/09, mesma revisão geral do fix de foto acima). 7 dos 8 parsers desta
+// família cravavam `descricao: null` sem NUNCA tentar extrair (nordeste/albertomacedo/simon/
+// leje/rocha/alfa e, na prática, leilaoindex — só casa no formato de 1 linha que o próprio
+// código já documentava como raro). Só HASTA extrai de verdade (rótulo "Descrição:" próprio).
+//
+// O fallback NÃO varre o texto bruto: cidade/título já foram contaminados por banner de
+// cookies/menu nesta mesma família antes (HANDOFF 07/09, RIGOLON/GIORDANO) — repetir a
+// varredura só para descrição arriscaria o mesmo. Em vez disso monta uma linha a partir de
+// área/cidade/UF/avaliação — campos que o PRÓPRIO parser já validou.
+//
+// DELIBERADAMENTE SEM `tipo`: a 1ª versão incluía o rótulo do tipo inferido, e o teste (ver
+// scripts/testes/foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs) pegou o problema antes
+// do push — `inferirTipo` cai para "terreno" sempre que titulo+url contém a palavra "lote", e
+// TODA URL desta família é `.../lote/<id>`. Sem nenhum campo real preenchido, isso rotulava
+// "Terreno" um imóvel sobre o qual não se sabe NADA — plausível e errado (a mesma forma nº10
+// do CLAUDE.md). Menos rico sem o tipo, mas nunca inventa uma classificação sem lastro.
+function sintetizarDescricao(det) {
+  const partes = [];
+  if (det.area_m2 > 0) partes.push(`${Math.round(det.area_m2).toLocaleString('pt-BR')} m²`);
+  if (det.cidade && det.estado) partes.push(`${det.cidade}/${det.estado}`);
+  if (!partes.length) return null;
+  const local = partes.join(' — ');
+  return det.valor_avaliacao > 0
+    ? `${local} · avaliação R$ ${det.valor_avaliacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+    : local;
+}
+
 // Linha de imoveis_leilao — mesma forma do montarRow do leilaopro-parse (o runner upserta
 // por fonte_id). `id` já vem extraído pelo idDaUrl da fonte.
 export function montarRowDom(url, det, tenant, id, inferirTipo) {
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
+  const tipo = inferirTipo(det.titulo || '', url);
   return {
     fonte: tenant.fonte, fonte_id: `${tenant.fonte.toLowerCase()}_${id}`,
     titulo: det.titulo || `Imóvel ${tenant.leiloeiro} ${id}`,
-    tipo: inferirTipo(det.titulo || '', url),
+    tipo,
     modalidade: det.modalidade,
     cidade: det.cidade || null, estado: det.estado || null,
     valor_avaliacao: va, valor_minimo: vm, area_m2: det.area_m2 || 0,
-    descricao: det.descricao || null,
+    descricao: det.descricao || sintetizarDescricao(det),
     link_edital: det.link_edital || url, url_lote: url, link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula || null, link_matricula: det.link_matricula || null,
     anexos: det.anexos || [],
@@ -172,5 +200,39 @@ export function anexosDeHtml(html, urlBase) {
     if (tipo === 'edital' && !link_edital) link_edital = abs;
     if (tipo === 'matricula' && !link_matricula) link_matricula = abs;
   }
-  return { anexos, link_edital, link_matricula };
+  return { anexos, link_edital, link_matricula, link_foto: fotoDeHtml(html, urlBase) };
+}
+
+// FOTO DE CAPA (10/09, achado da revisão geral pedida pelo dono: "garantir que temos os
+// documentos, anexos, fotos e informações"). Nenhum dos 8 parsers desta família (leilaoindex/
+// nordeste/albertomacedo/hasta/simon/leje/rocha/alfa — 10 fontes) jamais tentava capturar
+// foto: o campo saía de `det.link_foto` em `montarRowDom`, mas nenhum `parseDetalhe` o
+// preenchia — medido em produção como 0% em toda a família (ex.: GIORDANOLEILOES). Diferente
+// de `extrairGenerico` (scraper-core.mjs), estas fontes são SPA/shell renderizados — og:tags
+// vêm vazias (ver cabeçalho do arquivo) — então a única saída real é varrer os <img> do HTML
+// JÁ RENDERIZADO (motor `dom`, Puppeteer) e descartar o que for chrome do site.
+//
+// Adicionada AQUI (não em cada parser) porque todo chamador já espalha o retorno desta função
+// (`...docs`) na sua `parseDetalhe` — herda o fix sem tocar nenhum dos 8 arquivos.
+//
+// Sem HTML real para validar neste sandbox (rede bloqueada até para os sites-fonte — só
+// leiloeiro pago/whitelisted responde daqui), o filtro é DELIBERADAMENTE conservador: uma
+// foto errada (logo, ícone, banner) é pior que nenhuma foto, então a lista de descarte cobre
+// os padrões de chrome mais comuns e exige extensão de imagem de verdade. Validação real
+// acontece no dry-run automático do `scraper-dom.yml` (push nesta branch, Chromium de
+// verdade, zero Bright Data) — ver HANDOFF.
+const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social/i;
+export function fotoDeHtml(html, urlBase) {
+  for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
+    const tag = m[0];
+    const src = (tag.match(/\b(?:data-src|data-lazy-src|data-original|src)=["']([^"']+)["']/i) || [])[1];
+    if (!src || /^data:/i.test(src)) continue;
+    if (RE_IMG_DESCARTA.test(tag)) continue;
+    if (!/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(src.split(/[?#]/)[0])) continue;
+    const w = Number((tag.match(/\bwidth=["']?(\d+)/i) || [])[1] || 0);
+    const h = Number((tag.match(/\bheight=["']?(\d+)/i) || [])[1] || 0);
+    if ((w && w < 80) || (h && h < 80)) continue;   // ícone com dimensão pequena explícita
+    try { return new URL(src, urlBase).href; } catch { continue; }
+  }
+  return null;
 }
