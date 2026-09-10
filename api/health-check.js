@@ -237,6 +237,33 @@ export default async function handler(req) {
     };
   }));
 
+  // ── 3b-bis. CLIENTE TRAVADO — quem tentou usar o produto e não saiu nada (10/09) ──
+  // A checagem mais próxima do dinheiro que existe aqui. Num dia só, QUATRO defeitos tinham a
+  // mesma assinatura: a tela parecia funcional e estava vazia por dentro, e o único que
+  // descobria era o cliente, clicando. A Neuma (pagante) clicou em "Gerar" QUATORZE vezes em
+  // oito minutos e as quatorze foram recusadas — num lote que tinha endereço, cidade e
+  // coordenadas no banco. Nenhuma varredura de código pegaria: só o rastro pega.
+  //
+  // Isto é ALARME, não relatório: chega por e-mail 2×/dia sem depender de ninguém abrir sessão.
+  // Antes, um cliente travado só aparecia se ele mesmo reclamasse — e a maioria não reclama,
+  // vai embora. Custo zero (uma função `stable` no banco, sem IA).
+  itens.push(await check('Cliente — tentou e não saiu nada', async () => {
+    const r = await sb(`rpc/cliente_travou`, { method: 'POST', body: JSON.stringify({ p_dias: 3 }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const casos = await r.json();
+    if (!Array.isArray(casos)) throw new Error('retorno inesperado');
+    // `(sem cobertura)` NÃO é um cliente travado: é a função avisando que a janela pedida
+    // começa antes do instrumento existir. Ignorar aqui, e nunca contar como caso.
+    const reais = casos.filter((c) => c.motivo !== '(sem cobertura)');
+    if (!reais.length) return { status: 'ok', detalhe: 'Nenhum cliente travado nos últimos 3 dias' };
+    const criticos = reais.filter((c) => c.gravidade === 'critico');
+    const linha = (c) => `${c.nome} (${c.role}) — ${c.motivo}, ${c.tentativas}× — ${String(c.detalhe || '').slice(0, 60)}`;
+    return {
+      status: criticos.length ? 'erro' : 'aviso',
+      detalhe: `${reais.length} caso(s): ${reais.slice(0, 4).map(linha).join(' | ')}${reais.length > 4 ? ` … +${reais.length - 4}` : ''}`,
+    };
+  }));
+
   // ── 3c. Uso — gaps de RLS que quebram a AÇÃO do usuário (proativo) ──
   // Detecta a classe do bug "new row violates row-level security policy": tabela de
   // dados do usuário (com coluna de dono) com RLS ligada mas SEM política de escrita

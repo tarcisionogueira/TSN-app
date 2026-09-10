@@ -27,6 +27,14 @@ curto (5–8 linhas) antes de seguir:
    >  where not resolvido and ultima_em > now() - interval '14 days' order by ultima_em desc limit 20;
    > -- incoerências que chegam ao relatório do cliente
    > select tipo, count(*), max(atualizado_em) from relatorio_anomalias where not resolvido group by 1;
+   > -- CLIENTE TRAVADO: tentou usar o produto e não saiu nada. É a checagem mais próxima do
+   > -- dinheiro que existe aqui, e nasceu em 10/09 de QUATRO defeitos com a mesma assinatura no
+   > -- mesmo dia: a tela parecia funcional e estava vazia por dentro, e quem descobria era o
+   > -- cliente, clicando. A Neuma (pagante) clicou em "Gerar" 14 vezes em 8 minutos, todas
+   > -- recusadas, num lote com endereço/cidade/coordenadas no banco. NENHUM apareceu em
+   > -- varredura de código. Verde = vazio. A linha `(sem cobertura)` não é caso: é a função
+   > -- avisando que a janela pedida começa antes de o rastro existir (29/08).
+   > select * from public.cliente_travou(7);
    > -- chamado DO CLIENTE sem resposta (proativo da IA sem retorno NÃO conta — não é dívida nossa)
    > select c.id, c.titulo, c.criado_em from chamados c where c.status='aberto'
    >   and c.criado_em < now() - interval '3 days'
