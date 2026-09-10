@@ -88,7 +88,11 @@ export default function ProdutoPublico({ tipo }) {
       if (!jaTem && !link) {
         const r = await apiCall('/api/asaas', { method: 'POST', body: JSON.stringify({ action: 'criar_cobranca_avulsa', ...payload }) });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok || j?.error) throw new Error(j?.error === 'gratuito' ? 'Este produto é gratuito para você.' : (j?.error || 'Falha ao iniciar a compra'));
+        if (!r.ok || j?.error) throw new Error(
+          j?.error === 'gratuito' ? 'Este produto é gratuito para você.'
+          : j?.error === 'plano_ja_superior' ? 'Esta oferta não está disponível para quem já é Investidor Pro ou Leilão Club.'
+          : (j?.error || 'Falha ao iniciar a compra')
+        );
         if (j.ja_tem) jaTem = true;
         else link = j.linkPagamento || null;
       }

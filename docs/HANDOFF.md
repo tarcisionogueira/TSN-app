@@ -4,6 +4,47 @@
 
 ---
 
+## 🔒 SESSÃO 24 · PARTE 38 (10/09) — A OFERTA DO CURSO NÃO PODE FICAR DISPONÍVEL PRA QUEM JÁ É PRO
+
+Correção do dono sobre a Parte 37: **o curso ainda não está criado nem gravado** — a Parte 37
+foi só a estruturação da PERMISSÃO (conceder Investidor Pro por 3 meses), não o curso em si, e
+isso continua exatamente assim (nenhum registro de curso foi criado). Pedido novo: a oferta
+**não pode ficar disponível para quem já é Investidor Pro ou Leilão Club**.
+
+**Achado ao investigar**: `comprar_produto_iniciar()` já tinha uma régua de "já tem" — mas ela
+FAZIA O CONTRÁRIO do pedido. Para quem já é `top2`/`assessorado`/`clube`, ela devolve
+`{ok:true, ja_tem:true}` e a tela DESBLOQUEIA o produto de graça (é o comportamento CERTO para
+curso de puro conteúdo — assinante já tem acesso incluído). Só que para um curso cujo produto
+principal É a virada de plano, "desbloquear de graça" não faz sentido nenhum: a pessoa não
+"já tem o curso", ela já tem ou supera o BENEFÍCIO que ele vende — e o `concede_plano` nem
+chega a rodar nesse caminho, então nem sequer os 3 meses seriam creditados.
+
+**Conserto**: nova checagem em `comprar_produto_iniciar()`, ANTES do `ja_tem` geral — quando o
+produto tem `concede_plano` setado, compara o rank do papel atual do comprador (mesma escada
+de `conceder_plano_usuario`: explorador<top2<assessorado<clube) contra o rank do plano
+concedido. Igual ou maior → recusa com `erro:'plano_ja_superior'` (distinto de `ja_tem`).
+Cursos SEM `concede_plano` continuam com o `ja_tem` de sempre — a régua só entra em ação
+para o caso que o dono pediu. Mensagem amigável na tela (`ProdutoPublico.jsx`).
+
+**Testado contra dado real, sem deixar rastro**: criei um curso de teste temporário com
+`concede_plano='top2'` e chamei a função com um `top2` de verdade — voltou `plano_ja_superior`
+e **zero linhas** em `compras_produtos` (o bloqueio retorna antes de qualquer gravação). Depois
+testei um segundo curso de teste SEM `concede_plano` contra o MESMO usuário — voltou
+`ja_tem:true`, confirmando que o comportamento antigo não quebrou. Os dois registros de teste
+foram apagados na sequência.
+
+**Achado colateral, não mexido**: já existe uma linha inativa em `cursos_admin` —
+`"Lucre antes de arrematar"` (`ativo=false`, preço R$0, `concede_plano='top2'`) — parece
+resíduo de quando esse mecanismo foi construído. Fica registrado para quando o curso de
+verdade for criado: talvez seja aproveitável, talvez seja só limpar.
+
+Regra `produto.concede_plano` atualizada (não criei uma nova chave — é extensão do mesmo
+mecanismo). **Ainda falta**: o curso em si (conteúdo/gravação) e o cadastro em `cursos_admin`
+com o preço e o `concede_plano`/`concede_meses` reais — isso é conteúdo, não código, e não foi
+tocado aqui, exatamente como pedido.
+
+---
+
 ## 🎓 SESSÃO 24 · PARTE 37 (10/09) — AVISO DE CONVERSÃO PARA QUEM GANHOU PLANO DE CORTESIA
 
 Pedido do dono: um curso introdutório (R$99) que concede 3 meses de Investidor Pro de bônus,
