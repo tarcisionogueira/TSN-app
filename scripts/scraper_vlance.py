@@ -436,13 +436,17 @@ def upsert_supabase(rows):
     registrar_saude(rows, url, key)
 
 
-def registrar_saude(rows, url, key):
+def registrar_saude(rows, url, key, motivo_zero=None):
     """SAÚDE DA FONTE (08/08) — grava 1 linha por execução em `fonte_saude`.
 
     Sem isto a VLANCE ficava INVISÍVEL ao monitor de regressão: nunca escrevia histórico, logo
     nunca ganhava piso aprendido, logo o alerta de quebra jamais dispararia para ela. Era uma das
     7 fontes no ponto cego (29 lotes ativos). Equivalente ao scripts/_saude-fonte.mjs do lado Node.
     Best-effort: falhar aqui não pode derrubar uma coleta que já gravou o acervo.
+
+    `motivo_zero` (10/09): quando os 3 domínios falham, o motivo padrão "coleta vazia" não diz
+    QUAL domínio nem POR QUÊ — e sem captura de log no runner residencial, essa é a única forma
+    de saber. Passado pelo chamador quando `todos_lotes` sai vazio (ver `main`).
     """
     n = len(rows or [])
     def pct(cond):
@@ -454,7 +458,7 @@ def registrar_saude(rows, url, key):
         "link_pct": pct(lambda r: str(r.get("link_edital") or r.get("url_lote") or "").startswith("http")),
         "foto_pct": pct(lambda r: bool(r.get("link_foto"))),
         "status": "ok" if n else "falhou",
-        "motivo": None if n else "coleta vazia",
+        "motivo": None if n else (motivo_zero or "coleta vazia"),
     }
     try:
         r = requests.post(
@@ -493,11 +497,21 @@ def main():
 
     dominios = [d.strip() for d in args.dominios.split(",") if d.strip()]
     todos_lotes, rows_acervo = [], []
+    # DIAGNÓSTICO (10/09): por que cada domínio contribuiu 0 lote — usado só se `todos_lotes`
+    # sair vazio no fim (ver o `if not todos_lotes` abaixo). Sem isto, uma rodada em que os 3
+    # domínios falham vira um `return` mudo (linha 536 original): nem CSV, nem fonte_saude, nem
+    # rastro nenhum — a MESMA classe de silêncio que este arquivo já resolveu uma vez para o
+    # caso "coletou e nenhum foi aprovado" (`registrar_saude` já existe pra isso); faltava o
+    # caso "não coletou nada em domínio NENHUM", que é justamente o que bate o gate residencial
+    # (`coleta_cliente_concluir` corretamente recusa carimbar — falta é só o rastro em
+    # fonte_saude pra dizer PORQUE, em vez do painel ficar sem nenhuma linha nova).
+    motivos_dominio = {}
 
     for dom in dominios:
         base = f"https://www.{dom.replace('www.', '')}"
         print(f"\n=== {dom} ===")
         if not checar_robots(base, args.ignorar_robots):
+            motivos_dominio[dom] = "robots.txt bloqueou"
             continue
         session = requests.Session()
         session.headers.update({
@@ -525,6 +539,8 @@ def main():
             alvo = norm(args.categoria)
             lotes = [l for l in lotes if norm(l.get("nm_categoria")) == alvo]
         print(f"  {dom}: {len(lotes)} lote(s){'' if args.todas else ' (Imóveis)'}")
+        if not lotes:
+            motivos_dominio[dom] = "API respondeu, mas 0 lote(s) (ver linhas 'página N/M' acima: pode ser pedir() sem resposta, paginação vazia, ou filtro de categoria)"
 
         for l in lotes:
             l["_dominio"] = dom
@@ -535,6 +551,12 @@ def main():
 
     if not todos_lotes:
         print("\nNenhum lote coletado.")
+        if args.supabase:
+            url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+            key = os.environ.get("SUPABASE_SERVICE_KEY")
+            if url and key:
+                detalhe = "; ".join(f"{d}: {m}" for d, m in motivos_dominio.items()) or "sem detalhe por domínio"
+                registrar_saude([], url, key, motivo_zero=detalhe)
         return
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

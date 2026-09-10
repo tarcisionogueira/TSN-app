@@ -4,6 +4,49 @@
 
 ---
 
+## 🔎 SESSÃO 24 · PARTE 55 (10/09) — VLANCE: QUANDO OS 3 DOMÍNIOS FALHAM, A RODADA SOME SEM DEIXAR NENHUM RASTRO EM `fonte_saude`
+
+Terceiro item da fila sequencial. `coleta_cliente` mostrava VLANCE com **296,7h (12,3 dias)
+sem sucesso residencial**, mas com uma TENTATIVA registrada só 1h antes da medição — ou seja,
+o gate está vivo e tentando, e mesmo assim nada conclui. Isso é diferente do bug de paginação
+já corrigido na Parte 48 (aquele inflava contagem; este aqui zera).
+
+**Investigação**: puxei todo o histórico de `fonte_saude` da VLANCE (não só as 10 últimas) —
+runs saudáveis de tempos em tempos (08/19 a 09/07, `status='ok'`, 22-28 lotes) e, DEPOIS de
+09/07, **nenhuma linha nova**, nem de sucesso nem de falha. A rodada de 09/10 20:54 (a tentativa
+que o `coleta_cliente` registrou) simplesmente não deixou marca nenhuma no monitor.
+
+**Causa, lendo `scripts/scraper_vlance.py` de novo com essa pergunta**: `main()` tem
+`if not todos_lotes: print("Nenhum lote coletado."); return` — se os `N` domínios (7 no default,
+não 3: `verdeamarelo/sudeste/capitalvalor/sanches/destak/bomnegocio/paulistana`) devolverem ZERO
+lotes cada um (robots bloqueou, API não respondeu, paginação vazia — qualquer combinação),
+o script sai ali, ANTES de qualquer chamada a `registrar_saude()`. `pedir()` (o wrapper de
+fetch com retry+fallback) nunca deixa exceção escapar — sempre devolve `None` no pior caso —
+então não é crash: é um `return` limpo, `exit 0`, e o gate do `coleta_cliente_concluir` REAGE
+CORRETAMENTE (recusa carimbar `ultima_em` por falta de prova no acervo — a proteção de 11/08
+funcionou). O que falta é só o RASTRO: o painel de saúde não ganha nem uma linha `'falhou'`
+pra dizer que a fonte tentou e não achou nada, então 12 dias de silêncio residencial não
+acendem alarme nenhum — mesma classe de "vazio sem saber que é falha" do resto da sessão,
+só que na saída ANTES de chegar em `registrar_saude`, não dentro dela.
+
+**Fix**: rastreio por domínio (`motivos_dominio`) do motivo de cada zero (robots bloqueou vs.
+API respondeu com 0 lote) e, quando `todos_lotes` sai vazio E `--supabase` foi passado, uma
+chamada a `registrar_saude([], url, key, motivo_zero=...)` com o detalhe por domínio —
+`registrar_saude` ganhou o parâmetro opcional (default `None` preserva o "coleta vazia" do
+outro call site, dentro de `upsert_supabase`, que cobre o caso diferente de "coletou lotes mas
+nenhum passou no filtro de ingerível"). Validado com script descartável que monkey-patcha
+`checar_robots`/`coletar_leiloes`/`coletar_lotes` simulando os 3+ domínios falhando: confirma
+`registrar_saude` chamado 1x com `rows=[]` e motivo citando CADA domínio, e confirma que sem
+`--supabase` o comportamento não muda. `python3 -m py_compile` limpo (não há suíte de teste
+Python no repo).
+
+Como HASTA (Parte 54), este fix é instrumentação — não resolve por que os domínios da VLANCE
+estão falhando no residencial, só garante que a PRÓXIMA falha (dentro de ~72h, pelo gate)
+finalmente aparece em `fonte_saude` com detalhe suficiente pra diagnosticar sem precisar de
+acesso a log que este ambiente não tem.
+
+---
+
 ## 🔎 SESSÃO 24 · PARTE 54 (10/09) — HASTA/NORDESTE: O NÍVEL 2 BUSCAVA O MESMO CATÁLOGO DUAS VEZES, E SÓ A 2ª BUSCA ALIMENTAVA O DIAGNÓSTICO
 
 Continuando a fila sequencial: HASTA está **11,8 dias sem coleta residencial bem-sucedida**
