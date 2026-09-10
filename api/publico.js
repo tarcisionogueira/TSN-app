@@ -396,23 +396,23 @@ footer .in{max-width:1080px;margin:0 auto}
    marcada. Form PURO — POST direto para api/live-inscrever.js, que devolve um redirect
    (?inscrito=1 / ?live_erro=1) em vez de JSON quando detecta Content-Type de formulário
    (ver o helper saida() de lá). Sem JS: funciona no robô e no celular mais simples. */
-.convite-live{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:18px;padding:24px;margin:0 0 30px}
-.convite-live-tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:#fff;background:#dc2626;padding:4px 11px;border-radius:999px;letter-spacing:.3px;text-transform:uppercase;margin-bottom:10px}
-.convite-live-t{font-size:19px;font-weight:800;margin:0 0 6px;font-family:'League Spartan','League Spartan Fallback','Inter',sans-serif}
-.convite-live-s{font-size:14px;color:#334155;margin:0 0 16px;line-height:1.55;max-width:640px}
-.convite-live form{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}
-.convite-live input{flex:1;min-width:180px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;font-family:inherit;color:inherit;background:#fff}
-.convite-live input:focus{outline:2px solid var(--azul);outline-offset:1px}
-.convite-live button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
-.convite-live button:hover{background:var(--azul-fundo)}
-.convite-live-obs{font-size:12px;color:var(--cinza);margin:0}
-.convite-live-prova{font-size:12.5px;font-weight:700;color:#166534;margin:0 0 14px;display:flex;align-items:center;gap:6px}
-.convite-live-mais{font-size:12.5px;margin:8px 0 0}
-.convite-live-mais a{font-weight:700}
+.convite-live{background:linear-gradient(135deg,var(--azul) 0%,var(--azul-fundo) 100%);border:none;border-radius:18px;padding:28px 26px;margin:0 0 30px;box-shadow:0 12px 32px rgba(11,75,166,.35)}
+.convite-live-tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:#fff;background:#dc2626;padding:4px 11px;border-radius:999px;letter-spacing:.3px;text-transform:uppercase;margin-bottom:12px}
+.convite-live-t{font-size:21px;font-weight:800;margin:0 0 8px;font-family:'League Spartan','League Spartan Fallback','Inter',sans-serif;color:#fff}
+.convite-live-s{font-size:14.5px;color:#dbeafe;margin:0 0 18px;line-height:1.55;max-width:640px}
+.convite-live form{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.convite-live input{flex:1;min-width:180px;padding:13px 15px;border:1px solid transparent;border-radius:10px;font-size:16px;font-family:inherit;color:var(--tinta);background:#fff}
+.convite-live input:focus{outline:2px solid #fff;outline-offset:1px}
+.convite-live button{padding:13px 24px;border:none;border-radius:10px;background:#fff;color:var(--azul-fundo);font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.convite-live button:hover{background:#eff6ff}
+.convite-live-obs{font-size:12px;color:#bfdbfe;margin:0}
+.convite-live-prova{font-size:12.5px;font-weight:700;color:#bbf7d0;margin:0 0 14px;display:flex;align-items:center;gap:6px}
+.convite-live-mais{font-size:12.5px;margin:8px 0 0;color:#dbeafe}
+.convite-live-mais a{font-weight:700;color:#fff;text-decoration:underline}
 .convite-live-erro{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;margin:0 0 14px}
-.convite-live-ok{display:flex;align-items:flex-start;gap:10px}
+.convite-live-ok{display:flex;align-items:flex-start;gap:10px;color:#fff}
 .convite-live-ok .ic{font-size:26px;line-height:1}
-@media(max-width:560px){.convite-live{padding:18px}.convite-live-t{font-size:17px}.convite-live form{flex-direction:column}}
+@media(max-width:560px){.convite-live{padding:20px}.convite-live-t{font-size:18px}.convite-live form{flex-direction:column}}
 </style>
 </head><body>
 <header><div class="in">
