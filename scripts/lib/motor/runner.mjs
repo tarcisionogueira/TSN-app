@@ -30,14 +30,15 @@ const idFonte = (tenant, id) => (tenant.chaveTenant
 // Enumera as URLs de lote do catálogo (pagina até MAX_PAGES ou até uma página não trazer nada
 // novo — LeilãoPro é página única; Superbid pagina de verdade). `fetchOk` distingue "a listagem
 // respondeu (fonte pode estar vazia)" de "não consegui buscar" (challenge/teto).
-async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
+export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   const urls = new Map();
-  let fetchOk = false, via = null, eventosCount = null;
+  let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
     const r = await fetchFonte(url, { semBD });
     if (!r.html) break;
     fetchOk = true; via = via || r.via;
+    if (p === 1) htmlPagina1 = r.html;
     const antes = urls.size;
     for (const [id, u] of cfg.parse.extrairUrlsDeLote(r.html, tenant.base)) urls.set(id, u);
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
@@ -49,37 +50,44 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   // nordeste: home → /leiloes/<evento> → lotes). `extrairUrlsDeEvento` devolve Map id→url de
   // evento; cada evento é buscado e passa pelo MESMO extrairUrlsDeLote. Falha de UM evento
   // não derruba a enumeração — mas zera o `fetchOk` só se NENHUMA página respondeu.
+  //
+  // REAPROVEITA `htmlPagina1` (10/09) — antes buscava a MESMA url (catálogo sem `page`) de novo
+  // aqui. `fetchOk` só fica `true` dentro do laço acima, que sempre começa em p=1 com essa
+  // URL idêntica — então, sempre que chegamos aqui, `htmlPagina1` já existe, e o 2º fetch era
+  // sempre redundante. Redundante NÃO é neutro num motor `dom` (Puppeteer, ~3,5 s de espera por
+  // página): é uma 2ª chance de a MESMA página falhar sozinha, sem o site ter mudado nada. Foi
+  // investigando por que HASTA ficou 11+ dias com `eventosCount: null` (a mesma investigação que
+  // criou esse campo) que a redundância apareceu — `fetchOk` provava que a página respondeu, e
+  // mesmo assim o nível 2 saía sem número nenhum, porque só a 2ª busca (esta, agora removida)
+  // podia falhar por conta própria.
   if (cfg.parse.extrairUrlsDeEvento && fetchOk) {
-    const r0 = await fetchFonte(`${tenant.base}${cfg.catalogo}`, { semBD });
-    if (r0.html) {
-      const eventos = [...cfg.parse.extrairUrlsDeEvento(r0.html, tenant.base).values()]
-        .slice(0, cfg.maxEventos ?? 12);
-      eventosCount = eventos.length;
-      if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
-      // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
-      // NORDESTE, cujo evento cabe numa página. A HASTA quebrou essa premissa: o leilão 557 tem
-      // ~579 lotes a 30/pág, e uma página só traria 30 — **coleta parcial com cara de completa**,
-      // que é justamente o desfecho que o `fonte_saude` acusaria como regressão sem haver
-      // regressão nenhuma. Que a plataforma pagina por `page` não é palpite: o `url_lote` que já
-      // temos no acervo é `/item/10729/detalhes?page=20`, ou seja, o link veio da página 20.
-      // O laço para sozinho quando uma página não traz id novo — então, se algum evento ignorar
-      // o parâmetro, ele degrada para o comportamento antigo (1 página) em vez de repetir à toa.
-      const maxPagEvento = cfg.maxPagesEvento ?? cfg.maxPages ?? 3;
-      for (const ev of eventos) {
-        const antesEvento = urls.size;
-        for (let p = 1; p <= maxPagEvento; p++) {
-          const sep = ev.includes('?') ? '&' : '?';
-          const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
-          if (!re.html) break;
-          const antes = urls.size;
-          for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
-          if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
-          if (urls.size === antes) break;
-          await sleep(400);
-        }
-        if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
+    const eventos = [...cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base).values()]
+      .slice(0, cfg.maxEventos ?? 12);
+    eventosCount = eventos.length;
+    if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
+    // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
+    // NORDESTE, cujo evento cabe numa página. A HASTA quebrou essa premissa: o leilão 557 tem
+    // ~579 lotes a 30/pág, e uma página só traria 30 — **coleta parcial com cara de completa**,
+    // que é justamente o desfecho que o `fonte_saude` acusaria como regressão sem haver
+    // regressão nenhuma. Que a plataforma pagina por `page` não é palpite: o `url_lote` que já
+    // temos no acervo é `/item/10729/detalhes?page=20`, ou seja, o link veio da página 20.
+    // O laço para sozinho quando uma página não traz id novo — então, se algum evento ignorar
+    // o parâmetro, ele degrada para o comportamento antigo (1 página) em vez de repetir à toa.
+    const maxPagEvento = cfg.maxPagesEvento ?? cfg.maxPages ?? 3;
+    for (const ev of eventos) {
+      const antesEvento = urls.size;
+      for (let p = 1; p <= maxPagEvento; p++) {
+        const sep = ev.includes('?') ? '&' : '?';
+        const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
+        if (!re.html) break;
+        const antes = urls.size;
+        for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
+        if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
+        if (urls.size === antes) break;
         await sleep(400);
       }
+      if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
+      await sleep(400);
     }
   }
   return { urls: [...urls.values()], fetchOk, via, eventosCount };

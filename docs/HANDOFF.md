@@ -4,6 +4,44 @@
 
 ---
 
+## 🔎 SESSÃO 24 · PARTE 54 (10/09) — HASTA/NORDESTE: O NÍVEL 2 BUSCAVA O MESMO CATÁLOGO DUAS VEZES, E SÓ A 2ª BUSCA ALIMENTAVA O DIAGNÓSTICO
+
+Continuando a fila sequencial: HASTA está **11,8 dias sem coleta residencial bem-sucedida**
+(`coleta_cliente.ultima_em` parado em 30/08). `fonte_saude` mostra `status='vazio'`, motivo
+`'respondeu 200 e enumerou 0 lote(s)'` — só que SEM o sufixo `(N evento(s) no catálogo)` que o
+`eventosCount` (instrumentação da Parte 47, mesma investigação) deveria ter acrescentado. Isso
+não batia: `fetchOk=true` prova que a página 1 respondeu, então `eventosCount` já devia ter
+algum número, nem que fosse 0.
+
+**Causa, achada lendo `enumerar()` de novo com essa pergunta**: a função busca a URL do catálogo
+(sem `page`) DUAS vezes — uma no laço de nível 1 (`extrairUrlsDeLote`, sempre p=1 primeiro) e
+outra, **idêntica**, só para alimentar o nível 2 (`extrairUrlsDeEvento`). Isso não é específico de
+HASTA: NORDESTE tem exatamente o mesmo desenho (`catalogo: '/'`, `maxPages: 1`) e está exposta
+ao mesmo risco. Num motor `dom` (Puppeteer, ~3,5 s de espera por página) — e HASTA roda por
+último na fila residencial, depois de SOLEON/GESTAO/RJ/PECINI/VLANCE/radar/triagem/VENDASGOV —
+a 2ª busca podia falhar sozinha, sem o site ter mudado nada, e como só ELA alimentava
+`eventosCount`, o diagnóstico criado bem pra separar "catálogo genuinamente vazio" de "não
+consegui nem tentar" ficava cego exatamente no caso que mais precisava dele.
+
+**Fix**: reaproveitar o HTML da página 1 (`htmlPagina1`) pro nível 2, em vez de buscar de novo —
+é sempre a MESMA url por construção (`cfg.catalogo` sem `page` é literalmente a URL de p=1), então
+a 2ª busca nunca acrescentava informação nova, só mais uma chance de falhar. Efeito colateral
+bom: metade do custo de rede/render do nível 2 em HASTA e NORDESTE some. Teste novo
+(`scripts/testes/nivel-2-nao-busca-o-catalogo-duas-vezes.mjs`, 15 asserções, com `fetchFonte`
+simulado) tranca: o catálogo é buscado no máximo 1x mesmo com nível 2 ligado; `eventosCount`
+continua correto mesmo simulando uma 2ª busca que falharia; a paginação de nível 1 não muda qual
+página alimenta o nível 2 (sempre a 1ª); fontes sem nível 2 (a maioria) seguem exatamente iguais.
+`enumerar()` precisou virar `export` pra isso — era a única função do motor sem teste direto.
+
+Esta é instrumentação/economia, não a causa-raiz de HASTA ainda estar parada — só depois da
+PRÓXIMA execução residencial (com o fix já puxado pelo `git pull` automático) é que
+`fonte_saude.motivo` vai finalmente trazer um `eventosCount` de verdade, e aí sim dará pra saber
+se o catálogo está vindo com 0 eventos (mudança de estrutura, 3ª desde 21/08) ou com eventos que
+não têm lote dentro (problema é outro). Sem live recon (sandbox bloqueia o domínio), esperar essa
+leitura é mais barato — e mais certo — que adivinhar.
+
+---
+
 ## 🔎 SESSÃO 24 · PARTE 53 (10/09) — VENDASGOV: A HIPÓTESE DO WAF (29/08) JÁ TINHA CAÍDO EM 30/08, E NINGUÉM VOLTOU PRA CONFERIR O RESIDENCIAL
 
 Continuando "resolva todos sequencialmente + confirme o residencial": `coleta_cliente.ultima_em`
