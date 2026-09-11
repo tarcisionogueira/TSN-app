@@ -1,0 +1,19 @@
+name: Recon foto DOM (NORDESTE/SIMONLEILOES)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install Puppeteer
+        run: npm i puppeteer@23 --no-save
+      - name: Chromium deps
+        run: npx puppeteer browsers install chrome
+      - name: Recon foto (pendência HANDOFF item 6)
+        run: node scripts/recon-foto-dom.mjs
