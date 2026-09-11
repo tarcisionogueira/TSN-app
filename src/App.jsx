@@ -360,7 +360,9 @@ function MainLayout() {
           <Route path="/alavancagem" element={<Alavancagem />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
-          <Route path="/buscar-veiculos" element={<PrivateRoute><BuscaVeiculos /></PrivateRoute>} />
+          {/* Piloto (11/09): fica dentro do admin (Operacional) até o dono validar o acervo —
+              ainda não é para o cliente ver. */}
+          <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />

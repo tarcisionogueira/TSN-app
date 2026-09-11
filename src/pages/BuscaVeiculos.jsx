@@ -13,6 +13,8 @@ const POR_PAGINA = 20;
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
   'valor_minimo', 'valor_avaliacao', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
+  // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
+  'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
 ].join(',');
 
 const fmtBRL = (v) => (v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
@@ -53,6 +55,17 @@ function desconto(v) {
   if (pct <= 0 || pct > 95) return null;
   return pct;
 }
+
+// Cores por severidade — "monta" é a classificação padrão do mercado segurador
+// (pequena/média/grande monta, perda total). Vem DIRETO do leiloeiro (lot_sinister), não é
+// inferência nossa.
+const SINISTRO_COR = {
+  'pequena monta': { bg: '#fef3c7', fg: '#92400e' },
+  'média monta': { bg: '#fed7aa', fg: '#9a3412' },
+  'grande monta': { bg: '#fecaca', fg: '#991b1b' },
+  'perda total': { bg: '#fecaca', fg: '#991b1b' },
+};
+const corSinistro = (s) => SINISTRO_COR[String(s || '').toLowerCase()] || { bg: '#f1f5f9', fg: '#475569' };
 
 function fotosArray(v) {
   const f = v?.fotos;
@@ -266,6 +279,33 @@ export default function BuscaVeiculos() {
                   <div style={{ fontSize: 10, color: '#64748b', display: 'flex', alignItems: 'center', gap: 3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                     <MapPin size={9} style={{ flexShrink: 0 }} />{[v.cidade, v.estado].filter(Boolean).join(', ') || '—'}
                   </div>
+                  {/* Sinal do próprio leiloeiro (11/09) — sinistro, sucata, financiamento e
+                      alerta de motor. Nunca inventado: o que ele não informa fica de fora. */}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
+                      <span title="Classificação do sinistro, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: c.bg, color: c.fg, padding: '1px 6px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
+                    ); })()}
+                    {v.is_sucata && (
+                      <span title="Vendido sem ATPV-E — só certificado de baixa; a transferência não é a padrão" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Sucata</span>
+                    )}
+                    {v.motor_alerta && (
+                      <span title="Menção de dano no motor na descrição do leiloeiro" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Motor</span>
+                    )}
+                    {v.financiavel === false && (
+                      <span title="Não financiável — só à vista, conforme o leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 8 }}>À vista</span>
+                    )}
+                    {v.financiavel === true && (
+                      <span title="Aceita financiamento, conforme o leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 8 }}>💳 Financiável</span>
+                    )}
+                    {v.ipva_situacao && (
+                      <span style={{ fontSize: 9, color: '#94a3b8' }}>IPVA {v.ipva_situacao.toLowerCase()}</span>
+                    )}
+                  </div>
+                  {(v.cambio || v.combustivel || v.cor) && (
+                    <div style={{ fontSize: 9.5, color: '#94a3b8' }}>
+                      {[v.cambio, v.combustivel, v.cor].filter(Boolean).map(s => s[0].toUpperCase() + s.slice(1)).join(' · ')}
+                    </div>
+                  )}
                   {v.descricao && (
                     <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                       {v.descricao}
@@ -308,8 +348,8 @@ export default function BuscaVeiculos() {
         </div>
       )}
 
-      <button onClick={() => nav('/buscar')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
-        ← Voltar para busca de imóveis
+      <button onClick={() => nav('/admin?aba=Scrapers')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+        ← Voltar para o Operacional
       </button>
     </div>
   );
