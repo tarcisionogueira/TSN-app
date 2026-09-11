@@ -1468,7 +1468,11 @@ const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|h
 // "Bem encontra-se: <endereço>" confirmado ao vivo (11/09, dispatch 34594681250) como a
 // frase-padrão da Sodré para dizer ONDE o veículo está fisicamente guardado — sinal de pátio
 // tão forte quanto a palavra "pátio" em si, e presente em 47/47 lotes reais da 1ª carga real.
-const SINAL_PATIO = /\b(p[áa]tio|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|bem encontra-se\s*:|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b/i;
+// "bem encontra-se\s*:" fica FORA do grupo \b...\b de propósito: o \b final não casa depois
+// de ":" seguido de espaço (dois não-alfanuméricos não formam fronteira de palavra) — testado
+// ao vivo em 11/09 (dispatch 34594866661) e confirmado como o motivo de 50/50 ficarem
+// 'indefinido' mesmo com a frase presente em toda descrição real.
+const SINAL_PATIO = /\b(p[áa]tio|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b|bem encontra-se\s*:/i;
 const SINAL_EXECUTADO = /\b(n[ãa]o localizado|sujeito a busca e apreens[ãa]o|em poder do (executado|devedor)|posse do (executado|devedor)|aguardando localiza[çc][ãa]o|bem n[ãa]o recolhido)\b/i;
 function classificarPatio(texto) {
   const t = String(texto || '');
