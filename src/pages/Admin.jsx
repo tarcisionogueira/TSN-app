@@ -4854,6 +4854,85 @@ function ScrapersMonitor() {
   );
 }
 
+// PILOTO — Leilão de veículos (11/09, pedido do dono para testar antes de decidir se entra
+// nos filtros públicos de busca). Lê `veiculos_leilao` (tabela separada de imoveis_leilao —
+// ver supabase/migrations/veiculos_leilao_piloto.sql). Só Sodré Santoro por ora, roda sob
+// demanda (SCRAPER_FONTES=SODRE_VEICULOS no workflow leiloeiros-puppeteer.yml), não na rodada
+// diária. `indefinido` some da lista por padrão — não exibir sem sinal claro de pátio é o
+// pedido do dono ("não tenho interesse em tomar veículos de executado").
+function VeiculosPilotoMonitor() {
+  const [linhas, setLinhas] = useState([]);
+  const [contagem, setContagem] = useState({ confirmado: 0, indefinido: 0, excluido: 0 });
+  const [loading, setLoading] = useState(true);
+  const [mostrarIndefinido, setMostrarIndefinido] = useState(false);
+
+  useEffect(() => {
+    supabase.from('veiculos_leilao')
+      .select('id,titulo,marca,ano_fabricacao,ano_modelo,placa,km,valor_minimo,cidade,estado,link_lote,status_patio,status_patio_motivo,atualizado_em')
+      .eq('ativo', true).order('atualizado_em', { ascending: false }).limit(300)
+      .then(({ data }) => {
+        const l = data || [];
+        setLinhas(l);
+        setContagem({
+          confirmado: l.filter(v => v.status_patio === 'confirmado').length,
+          indefinido: l.filter(v => v.status_patio === 'indefinido').length,
+          excluido: l.filter(v => v.status_patio === 'excluido').length,
+        });
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) return null;
+  if (!linhas.length) {
+    return (
+      <div style={S.card}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 6 }}>🚗 Leilão de veículos (piloto)</div>
+        <p style={{ fontSize: 12.5, color: '#64748b' }}>
+          Nenhum registro ainda. Rode o workflow "Leiloeiros — Scraper Puppeteer Diário" manualmente
+          com a entrada <code>fontes=SODRE_VEICULOS</code> para popular.
+        </p>
+      </div>
+    );
+  }
+  const exibir = linhas.filter(v => v.status_patio === 'confirmado' || (mostrarIndefinido && v.status_patio === 'indefinido'));
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🚗 Leilão de veículos (piloto — Sodré Santoro)</div>
+        <div style={{ display: 'flex', gap: 6, fontSize: 11 }}>
+          <span style={{ background: '#f0fdf4', color: '#15803d', fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{contagem.confirmado} em pátio</span>
+          <span style={{ background: '#f8fafc', color: '#64748b', fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{contagem.indefinido} indefinido</span>
+          <span style={{ background: '#fef2f2', color: '#b91c1c', fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{contagem.excluido} excluído</span>
+        </div>
+      </div>
+      <p style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 10 }}>
+        Só "em pátio" é candidato a entrar nos filtros de busca — "indefinido"/"excluído" ficam
+        fora por padrão (sem sinal claro de que o bem já foi recolhido, não exibimos).{' '}
+        {contagem.indefinido > 0 && (
+          <button onClick={() => setMostrarIndefinido(v => !v)} style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, textDecoration: 'underline', padding: 0 }}>
+            {mostrarIndefinido ? 'ocultar indefinidos' : 'ver indefinidos também'}
+          </button>
+        )}
+      </p>
+      {!exibir.length ? (
+        <p style={{ fontSize: 12.5, color: '#94a3b8' }}>Nenhum veículo confirmado em pátio ainda — revise os "indefinido" manualmente se quiser adiantar.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {exibir.slice(0, 30).map(v => (
+            <a key={v.id} href={v.link_lote} target="_blank" rel="noreferrer" style={{ padding: '8px 10px', background: v.status_patio === 'confirmado' ? '#f0fdf4' : '#f8fafc', borderRadius: 8, fontSize: 12.5, color: '#111111', textDecoration: 'none', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>
+                {v.titulo}{v.ano_modelo ? ` (${v.ano_fabricacao}/${v.ano_modelo})` : ''}{v.placa ? ` · ${v.placa}` : ''}
+                {' — '}{v.cidade || '?'}/{v.estado || '?'}
+              </span>
+              <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{v.valor_minimo ? `R$ ${Number(v.valor_minimo).toLocaleString('pt-BR')}` : '—'}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Receita MENSAL-equivalente de um plano, a partir do planos_config. ÚNICA regra de
 // MRR do dashboard — antes o marcador do topo e o detalhe por plano divergiam: o
 // detalhe rotulava a Assessoria (pacote de R$6.000/12m) e o Leilão Club (R$60.000)
@@ -6379,6 +6458,9 @@ function DashboardTab({ irParaTab }) {
 
           {/* Monitor de Scrapers */}
           <ScrapersMonitor />
+
+          {/* Leilão de veículos — piloto (11/09) */}
+          <VeiculosPilotoMonitor />
 
           {/* Infraestrutura */}
           <div style={S.card}>
