@@ -1534,28 +1534,24 @@ async function scraperSodreVeiculos(browser) {
     };
     const lotes = [...lotesMap.values()];
     console.log(`    Sodré veículos: ${lotes.length} lotes capturados`);
-    // DIAGNÓSTICO (11/09) — 1ª rodada real capturou 48 lotes e mapeou 0: nomes de campo para
-    // veículo não confirmados ao vivo (comentário no topo desta função). Sem isto, um zero
-    // aqui viraria "site mudou" quando pode ser só nome de campo diferente do de imóveis —
-    // mesma armadilha que a forma nº10 do CLAUDE.md descreve. Só imprime amostra quando o
-    // filtro abaixo vai zerar tudo, para não sujar log em execução normal.
-    if (lotes.length && !lotes.some(r => (String(r.auction_status || '').toLowerCase() === 'aberto') && (parseFloat(r.bid_initial || r.bid_actual || 0) > 0))) {
-      const amostra = lotes[0] || {};
-      console.log(`    ⚠️ Sodré veículos: nenhum lote passa no filtro auction_status/bid_*. Campos do 1º lote: ${Object.keys(amostra).join(', ')}`);
-      console.log(`    ⚠️ Amostra: auction_status=${JSON.stringify(amostra.auction_status)} bid_initial=${JSON.stringify(amostra.bid_initial)} bid_actual=${JSON.stringify(amostra.bid_actual)} lot_status=${JSON.stringify(amostra.lot_status)} status=${JSON.stringify(amostra.status)}`);
-    }
+    // Campos CONFIRMADOS ao vivo em 11/09 (dispatch manual, run 34594218044) — a rodada
+    // anterior mapeou 0/48 porque `bid_initial` vem como STRING "0.00" (lote sem lance ainda,
+    // valor corrente em bid_actual) — "0.00" é truthy em JS, então `a || b` nunca caía no
+    // fallback. Number("0.00") = 0 resolve. O segmento veículo tem campo PRÓPRIO por bem
+    // (lot_brand/lot_model/lot_plate/lot_km/lot_year_manufacture/lot_year_model/lot_location) —
+    // não reaproveita lot_city/lot_neighborhood/lot_street do segmento imóvel. Guarda REGEX como
+    // reforço só para o que a API não confirmou ter (nenhum campo de UF na lista de 11/09).
     for (const r of lotes) {
       if ((r.auction_status || '').toLowerCase() !== 'aberto') continue; // só ativos
-      const valMin = parseFloat(r.bid_initial || r.bid_actual || 0);
+      const valMin = Number(r.bid_initial) || Number(r.bid_actual) || 0;
       if (!valMin) continue;
       const titulo = String(r.lot_title || r.lot_description?.slice(0, 180) || 'Veículo Sodré').slice(0, 180);
       const descricao = String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500);
-      const textoCompleto = `${titulo} ${descricao}`;
-      const anoMatch = textoCompleto.match(REGEX_ANO);
-      const placaMatch = textoCompleto.match(REGEX_PLACA);
-      const kmMatch = textoCompleto.match(REGEX_KM);
-      const marcaMatch = textoCompleto.match(MARCAS_VEICULO);
-      const ufMatch = (titulo.match(/-\s*([A-Za-z]{2})\s*$/) || [])[1];
+      const textoCompleto = `${titulo} ${descricao} ${r.lot_location || ''}`;
+      // Sem campo de UF confirmado: lot_location costuma trazer "Cidade - UF" (mesmo formato
+      // do título de imóveis) — tenta ali primeiro, cai para o título se não achar.
+      const ufMatch = (String(r.lot_location || '').match(/-\s*([A-Za-z]{2})\s*$/) || titulo.match(/-\s*([A-Za-z]{2})\s*$/) || [])[1];
+      const cidadeBruta = String(r.lot_location || '').replace(/-\s*[A-Za-z]{2}\s*$/, '').trim();
       const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
       const pic = Array.isArray(r.lot_pictures) ? r.lot_pictures : (r.lot_pictures ? [r.lot_pictures] : []);
       const fotos = pic.map(p => {
@@ -1569,16 +1565,15 @@ async function scraperSodreVeiculos(browser) {
         leiloeiro: 'Sodré Santoro',
         titulo,
         descricao,
-        marca: marcaMatch ? marcaMatch[0].toUpperCase() : null,
-        modelo: null, // sem nome de campo confirmado; extração de modelo por texto livre é
-                       // pouco confiável (risco de pegar palavra errada) — fica para revisão manual.
-        ano_fabricacao: anoMatch ? Number(anoMatch[1]) : null,
-        ano_modelo: anoMatch ? Number(anoMatch[2]) : null,
-        placa: placaMatch ? placaMatch[1].toUpperCase().replace(/\s/g, '') : null,
-        km: kmMatch ? Number(kmMatch[1].replace(/\./g, '')) : null,
+        marca: r.lot_brand ? String(r.lot_brand).toUpperCase().slice(0, 60) : (textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null),
+        modelo: r.lot_model ? String(r.lot_model).slice(0, 100) : null,
+        ano_fabricacao: Number(r.lot_year_manufacture) || (textoCompleto.match(REGEX_ANO)?.[1] ? Number(textoCompleto.match(REGEX_ANO)[1]) : null),
+        ano_modelo: Number(r.lot_year_model) || (textoCompleto.match(REGEX_ANO)?.[2] ? Number(textoCompleto.match(REGEX_ANO)[2]) : null),
+        placa: r.lot_plate ? String(r.lot_plate).toUpperCase().replace(/\s/g, '').slice(0, 10) : (textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null),
+        km: Number(r.lot_km) || (textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null),
         valor_minimo: valMin,
-        valor_avaliacao: parseFloat(r.appraisal_value || r.reference_value || 0) || null,
-        cidade: toTitleCase(r.lot_city || ''),
+        valor_avaliacao: Number(r.appraisal_value) || Number(r.reference_value) || null,
+        cidade: toTitleCase(cidadeBruta),
         estado: (ufMatch || '').toUpperCase() || null,
         link_lote: r.auction_id
           ? `https://leilao.sodresantoro.com.br/leilao/${r.auction_id}/lote/${r.lot_id || r.id}/`
