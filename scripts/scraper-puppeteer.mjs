@@ -1443,6 +1443,168 @@ async function scraperSodre(browser) {
   }
 }
 
+// ─── SODRÉ SANTORO — VEÍCULOS (piloto, 11/09) ──────────────────────────────────
+// Mesmo mecanismo de scraperSodre (interceptar /api/search-lots), só troca o segmento de
+// 'imoveis' para 'veiculos' — Sodré é a ÚNICA fonte já integrada cujo negócio histórico é
+// veículo recuperado por instituição financeira/seguradora (já em pátio), então reaproveita
+// 100% da infra que já funciona em produção em vez de abrir site novo sem recon.
+//
+// Escreve em `veiculos_leilao` (tabela própria — schema de imóvel não serve para veículo:
+// m²/matrícula não existem aqui, e placa/km/ano não existem lá). NÃO usa `salvarEFinalizar`
+// nem `coletarFonte` (ambos assumem shape de imoveis_leilao); upsert direto nesta função.
+//
+// Nomes de campo para veículo (lot_brand/lot_model/lot_year/lot_plate/lot_mileage etc.) não
+// foram confirmados ao vivo — sessão sem acesso de rede para inspecionar a API antes de
+// escrever este código. Por isso: (a) guarda `raw` da oferta inteira, pra extrair depois se os
+// nomes forem outros; (b) marca/modelo/ano/placa/km saem por REGEX de título+descrição, que
+// não depende de nome de campo nenhum.
+const REGEX_PLACA = /\b([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/;
+const REGEX_ANO = /\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/;
+const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
+const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
+// Sinal de PÁTIO (bem já recolhido/disponível — o que o dono quer) vs sinal de EXECUTADO
+// (bem ainda a apreender — o que o dono NÃO quer). Ausência dos dois = 'indefinido', e por
+// desenho 'indefinido' não deve ser exibido por padrão (ver comentário da migração).
+const SINAL_PATIO = /\b(p[áa]tio|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b/i;
+const SINAL_EXECUTADO = /\b(n[ãa]o localizado|sujeito a busca e apreens[ãa]o|em poder do (executado|devedor)|posse do (executado|devedor)|aguardando localiza[çc][ãa]o|bem n[ãa]o recolhido)\b/i;
+function classificarPatio(texto) {
+  const t = String(texto || '');
+  if (SINAL_EXECUTADO.test(t)) return { status: 'excluido', motivo: 'sinal textual de bem ainda não recolhido/apreendido' };
+  if (SINAL_PATIO.test(t)) return { status: 'confirmado', motivo: 'sinal textual de bem já em pátio/disponível' };
+  return { status: 'indefinido', motivo: 'sem sinal textual claro nos dois sentidos — não exibir por padrão' };
+}
+
+async function scraperSodreVeiculos(browser) {
+  console.log('  Sodré Santoro (veículos) — interceptando /api/search-lots...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const lotesMap = new Map();
+  let reqInfo = null;
+  page.on('request', req => {
+    if (reqInfo) return;
+    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') {
+      reqInfo = { url: req.url(), body: req.postData() || '', headers: req.headers() };
+    }
+  });
+  page.on('response', async (resp) => {
+    if (!/\/api\/search-lots/.test(resp.url())) return;
+    try {
+      const j = await resp.json();
+      (j?.results || []).forEach(r => {
+        const id = String(r.lot_id || r.id || '');
+        if (id) lotesMap.set(id, r);
+      });
+    } catch {} // padrao-ok: resposta interceptada best-effort — payload não-JSON só significa que esta resposta não populou lotesMap; mesmo padrão de scraperSodre (imóveis)
+  });
+  const registros = [];
+  try {
+    await page.goto('https://www.sodresantoro.com.br/veiculos/lotes', { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 3500));
+    if (reqInfo?.url) {
+      let baseBody = {};
+      try { baseBody = JSON.parse(reqInfo?.body || '{}') || {}; } catch {}
+      const hdrs = { ...(reqInfo.headers || {}) };
+      ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
+      hdrs['content-type'] = hdrs['content-type'] || 'application/json';
+      const perPage = 100;
+      for (let p = 1; p <= 60; p++) {
+        const body = { ...baseBody, page: p, perPage };
+        let res = null;
+        try {
+          res = await page.evaluate(async (url, headers, b) => {
+            const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(b), credentials: 'include' });
+            if (!r.ok) return null;
+            return await r.json();
+          }, reqInfo.url, hdrs, body);
+        } catch { res = null; } // padrao-ok: falha de rede/parse na página N vira `arr` vazio logo abaixo → break natural da paginação; mesmo padrão de scraperSodre (imóveis)
+        const arr = res?.results || [];
+        if (!arr.length) break;
+        let novos = 0;
+        arr.forEach(r => { const id = String(r.lot_id || r.id || ''); if (id && !lotesMap.has(id)) { lotesMap.set(id, r); novos++; } });
+        const total = Number(res?.total || 0);
+        if (novos === 0) break;
+        if (total && lotesMap.size >= total) break;
+        await new Promise(r => setTimeout(r, 350));
+      }
+    }
+    const parseData = (s) => {
+      const m = (s || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+      return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00` : null;
+    };
+    const lotes = [...lotesMap.values()];
+    console.log(`    Sodré veículos: ${lotes.length} lotes capturados`);
+    for (const r of lotes) {
+      if ((r.auction_status || '').toLowerCase() !== 'aberto') continue; // só ativos
+      const valMin = parseFloat(r.bid_initial || r.bid_actual || 0);
+      if (!valMin) continue;
+      const titulo = String(r.lot_title || r.lot_description?.slice(0, 180) || 'Veículo Sodré').slice(0, 180);
+      const descricao = String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500);
+      const textoCompleto = `${titulo} ${descricao}`;
+      const anoMatch = textoCompleto.match(REGEX_ANO);
+      const placaMatch = textoCompleto.match(REGEX_PLACA);
+      const kmMatch = textoCompleto.match(REGEX_KM);
+      const marcaMatch = textoCompleto.match(MARCAS_VEICULO);
+      const ufMatch = (titulo.match(/-\s*([A-Za-z]{2})\s*$/) || [])[1];
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+      const pic = Array.isArray(r.lot_pictures) ? r.lot_pictures : (r.lot_pictures ? [r.lot_pictures] : []);
+      const fotos = pic.map(p => {
+        const u = typeof p === 'string' ? p : (p?.url || p?.src || p?.image || p?.path || null);
+        if (!u) return null;
+        return /^https?:\/\//.test(u) ? u : `https://www.sodresantoro.com.br${u.startsWith('/') ? '' : '/'}${u}`;
+      }).filter(Boolean);
+      registros.push({
+        fonte: 'SODRE',
+        fonte_id: `sodre_veic_${r.lot_id || r.id}`,
+        leiloeiro: 'Sodré Santoro',
+        titulo,
+        descricao,
+        marca: marcaMatch ? marcaMatch[0].toUpperCase() : null,
+        modelo: null, // sem nome de campo confirmado; extração de modelo por texto livre é
+                       // pouco confiável (risco de pegar palavra errada) — fica para revisão manual.
+        ano_fabricacao: anoMatch ? Number(anoMatch[1]) : null,
+        ano_modelo: anoMatch ? Number(anoMatch[2]) : null,
+        placa: placaMatch ? placaMatch[1].toUpperCase().replace(/\s/g, '') : null,
+        km: kmMatch ? Number(kmMatch[1].replace(/\./g, '')) : null,
+        valor_minimo: valMin,
+        valor_avaliacao: parseFloat(r.appraisal_value || r.reference_value || 0) || null,
+        cidade: toTitleCase(r.lot_city || ''),
+        estado: (ufMatch || '').toUpperCase() || null,
+        link_lote: r.auction_id
+          ? `https://leilao.sodresantoro.com.br/leilao/${r.auction_id}/lote/${r.lot_id || r.id}/`
+          : `https://www.sodresantoro.com.br/veiculos/lote/${r.lot_id || r.id}`,
+        fotos: JSON.stringify(fotos),
+        data_leilao: parseData(r.auction_date_init || r.auction_date_end),
+        status_patio: statusPatio,
+        status_patio_motivo: statusPatioMotivo,
+        ativo: true,
+        raw: JSON.stringify(r),
+        atualizado_em: new Date().toISOString(),
+      });
+    }
+    console.log(`    Sodré veículos: ${registros.length} registros mapeados (após filtro de ativos/preço)`);
+    return registros;
+  } catch (err) {
+    console.log(`  Erro Sodré veículos: ${err.message.slice(0, 100)}`);
+    return registros;
+  } finally {
+    await page.close();
+  }
+}
+
+async function salvarVeiculos(registros) {
+  if (!registros.length) { console.log('    Sodré veículos: nada para salvar.'); return 0; }
+  let salvos = 0;
+  for (let i = 0; i < registros.length; i += 200) {
+    const lote = registros.slice(i, i + 200);
+    const { error } = await supabase.from('veiculos_leilao').upsert(lote, { onConflict: 'fonte,fonte_id' });
+    if (error) { console.log(`  ⚠️ veiculos_leilao upsert falhou: ${String(error.message).slice(0, 150)}`); continue; }
+    salvos += lote.length;
+  }
+  console.log(`    Sodré veículos: ${salvos} salvos em veiculos_leilao`);
+  return salvos;
+}
+
 // ─── FRAZÃO LEILÕES ───────────────────────────────────────────────────────────
 // ASP.NET MVC server-rendered. Organiza por LEILÃO (/leilao/{id}/{slug}); cada
 // leilão de imóveis lista os lotes. Card: a.visualizar_lote[data-lote-id]
@@ -3757,6 +3919,16 @@ async function main() {
     // lote (/imoveis/lote/{id}) server-rendered → enrich captura edital/matrícula/laudo.
     if (rodar('SODRE')) console.log('\n📋 Sodré Santoro...');
     if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser), { enrich: true, enrichCap: 120 });
+
+    // 5b. Sodré Santoro — VEÍCULOS (piloto, 11/09). OPT-IN only — `rodar()` roda por padrão
+    // (ONLY vazio = todas menos EXCLUIR), o que ligaria isto na rodada diária sem querer.
+    // Exige SCRAPER_FONTES=SODRE_VEICULOS explícito até o dono validar o resultado (pedido:
+    // "vou fazer um teste"). Escreve em `veiculos_leilao` — não entra na contagem de `total`.
+    if (ONLY.includes('SODRE_VEICULOS')) {
+      console.log('\n📋 Sodré Santoro (veículos, piloto)...');
+      const veiculos = await scraperSodreVeiculos(browser);
+      await salvarVeiculos(veiculos);
+    }
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe
     // server-rendered → enriquecerDocumentosLote captura edital/matrícula/laudo.
