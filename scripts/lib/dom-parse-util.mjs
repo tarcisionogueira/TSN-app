@@ -221,7 +221,15 @@ export function anexosDeHtml(html, urlBase) {
 // os padrões de chrome mais comuns e exige extensão de imagem de verdade. Validação real
 // acontece no dry-run automático do `scraper-dom.yml` (push nesta branch, Chromium de
 // verdade, zero Bright Data) — ver HANDOFF.
-const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem-imagem|no-image/i;
+// `loading(?!=)` — NÃO `loading` solto (achado 11/09, validado em produção real): a palavra
+// batia no ATRIBUTO padrão `loading="lazy"`, que o Next.js (e boa parte da web moderna) grava
+// em QUALQUER <img>, foto de lote incluída — a regra pensada pra pegar "spinner de loading"
+// descartava a foto certa 100% das vezes em qualquer site com lazy-load nativo. Confirmado:
+// dispatch real do scraper-dom.yml em produção manteve NORDESTE em 0% foto mesmo depois do
+// fix do proxy /_next/image (abaixo), porque TODO <img> de lá tem `loading="lazy"`; SIMONLEILOES
+// só escapou porque a 1ª foto da galeria por acaso não carregava esse atributo. O negativo de
+// lookahead deixa passar `loading="lazy"` mas continua pegando `class="loading-spinner"` etc.
+const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem-imagem|no-image/i;
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
