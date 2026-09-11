@@ -3425,7 +3425,7 @@ async function scraperSuporte(browser) {
 // sempre guardado e marca/modelo/placa/km saem por REGEX, que não depende de
 // seletor nenhum). OPT-IN só (SUPORTE_VEICULOS), mesmo motivo da Sodré: piloto
 // aguardando validação de dado real antes de entrar na rodada diária.
-function mapLoteSuporteVeiculo(l, tenant) {
+function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null) {
   if (!l || !l.id) return null;
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   if (RE_SUPORTE_TESTE.test(`${titulo} ${l.href || ''}`)) return null;
@@ -3467,12 +3467,12 @@ function mapLoteSuporteVeiculo(l, tenant) {
     // de `valor_avaliacao` acima). Fica pronto para quando/se isso mudar — sem avaliação,
     // `descontoPercentualVeiculo` já devolve null sozinho, sem precisar de código extra aqui.
     desconto_percentual: descontoPercentualVeiculo(valorMin, null),
-    // 'nao_identificado' honesto: este mapper só lê a LISTAGEM leve (id/tipo/descrição/local/
-    // valor/foto), não visita a página de detalhe do veículo — não há onde ler judicial ou
-    // extrajudicial hoje. Nunca deixa o lote de fora por causa disso (mesmo princípio de
-    // classificarPatio()); só fica sem essa informação até, se o dono quiser, o scraper
-    // passar a visitar o detalhe (mesmo padrão já usado pra data de praça em mapLoteSuporte).
-    modalidade: 'nao_identificado',
+    // Rótulo ESTRUTURADO da própria página de detalhe ("Tipo Judicial"/"Tipo Extrajudicial",
+    // confirmado ao vivo em 2 lotes reais, 11/09) — não é regex tentando adivinhar por texto
+    // solto (essa forma de erro já mordeu o SOLEON hoje mais cedo). 'nao_identificado' honesto
+    // quando o detalhe não foi visitado (teto de MAX_DETALHE) ou não trouxe o rótulo — nunca
+    // deixa o lote de fora por causa disso (mesmo princípio de classificarPatio()).
+    modalidade: modalidadeDetectada || 'nao_identificado',
     cidade: cidade ? toTitleCase(cidade) : null,
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: link,
@@ -3488,13 +3488,23 @@ function mapLoteSuporteVeiculo(l, tenant) {
   };
 }
 
+// "Tipo Judicial"/"Tipo Extrajudicial" — rótulo ESTRUTURADO da página de detalhe do veículo
+// (recon-modalidade-veiculo.mjs, 11/09, 2 lotes reais confirmados: "Tipo Judicial Recebimento
+// de lances Somente online"). O leiloeiro classifica; não é inferência nossa.
+function modalidadeSuporteVeiculo(html) {
+  if (!html) return null;
+  const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const m = txt.match(/\bTipo\s+(Judicial|Extrajudicial)\b/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
 async function scraperSuporteVeiculosTenant(browser, tenant) {
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const bens = new Map();
   // Teto menor que o do bloco de imóveis: é piloto, catálogo de veículo por tenant
-  // tende a ser bem menor, e não visita página de detalhe (sem data de praça ainda).
+  // tende a ser bem menor.
   const DEADLINE = Date.now() + 3 * 60 * 1000;
   try {
     for (let p = 1; p <= 40; p++) {
@@ -3510,10 +3520,40 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
     }
   } finally { await page.close().catch(() => {}); }
 
+  // VISITA À PÁGINA DO LOTE PARA PEGAR A MODALIDADE (11/09, pedido do dono) — mesmo padrão
+  // e mesmo teto (env própria) já usado pra data de praça em `scraperSuporteTenant`
+  // (imóveis). Acesso GRÁTIS, mesma origem da listagem, sem Bright Data.
+  const MAX_DETALHE = Number(process.env.SUPORTE_VEIC_MAX_DETALHE || 60);
+  const modalidadePorLote = new Map();
+  if (bens.size) {
+    const paginaLote = await browser.newPage();
+    await paginaLote.setUserAgent(USER_AGENT);
+    let visitados = 0, comModalidade = 0;
+    try {
+      for (const l of bens.values()) {
+        if (visitados >= MAX_DETALHE) break;
+        const href = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : '';
+        if (!href || !/\/lote\//.test(href)) continue;
+        try {
+          await paginaLote.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          const html = await paginaLote.content();
+          const mod = modalidadeSuporteVeiculo(html);
+          if (mod) { modalidadePorLote.set(l.id, mod); comModalidade++; }
+          visitados++;
+          await new Promise(r => setTimeout(r, 250));
+        } catch (e) {
+          visitados++;
+          console.log(`    [${tenant.domain}] veículo ${l.id} sem detalhe: ${String(e?.message || e).slice(0, 60)}`);
+        }
+      }
+    } finally { await paginaLote.close().catch(() => {}); }
+    if (visitados) console.log(`    [${tenant.domain}] modalidade: ${comModalidade}/${visitados} identificados`);
+  }
+
   const veiculos = [];
   const seen = new Set();
   for (const l of bens.values()) {
-    const row = mapLoteSuporteVeiculo(l, tenant);
+    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null);
     if (!row || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);
     veiculos.push(row);
