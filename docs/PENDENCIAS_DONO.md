@@ -494,31 +494,45 @@ O site já lê os cinco parâmetros e grava no primeiro toque (`visita_origem`).
 conversão ao Google (*Offline Conversion Import*) para ele otimizar por **valor de venda**, não por
 clique. Ordem certa:
 
-**3a. Conta de gerente (MCC)** — o *developer token* só é emitido para conta de gerente, e a
-`475-979-5747` **não é** uma. Crie uma em **ads.google.com/home/tools/manager-accounts** (grátis) e
-**vincule** a conta 475-979-5747 a ela (a conta filha precisa aceitar o convite).
+> ⚠️ **Mudou em 09/09/2026** (confirmado no blog oficial de desenvolvedores do Google Ads —
+> ver sessão do HANDOFF com a data de hoje): o Google **desligou** a emissão de *developer
+> token* pela Central de API da conta de gerente — pedido feito lá **não é processado**. Não
+> é mais preciso ter conta de gerente (MCC) para usar a API. A gestão de acesso passou para
+> **dentro do projeto do Google Cloud**. Isto já é o caminho novo (o antigo, com MCC, foi
+> removido daqui em 11/09 para não induzir a tela que trava com "disponível apenas para
+> contas de administrador").
 
-**3b. Developer token** — na conta de gerente: **Admin → Central de API** (*API Center*). Solicite o
-token. Ele nasce com acesso **de teste** (só conta de teste); peça a elevação para **Basic access**
-descrevendo o uso (relatório interno de campanha e importação de conversões). **A aprovação leva
-dias** — é o item de maior espera, comece por ele.
-
-**3c. Credencial OAuth no Google Cloud** — em **console.cloud.google.com**:
-   1. crie um projeto (ou use um existente);
+**3a. Acesso à API + credencial OAuth, tudo no mesmo projeto do Google Cloud** — em
+**console.cloud.google.com**:
+   1. crie um projeto (ou use um existente — pode ser o mesmo do `GOOGLE_OAUTH_*`/geocode,
+      **desde que a conta de faturamento dele esteja em dia**, ver alerta de 01-02/09 no
+      HANDOFF sobre a `0134FB-CA5299-81DA09` vencida);
    2. **APIs e serviços → Biblioteca** → ative **Google Ads API**;
-   3. **Tela de permissão OAuth** → configure (modo Externo serve; pode ficar em "Teste" com o seu
-      e-mail como usuário de teste);
-   4. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador**
+   3. dentro da página da própria **Google Ads API** do projeto, procure a visão geral/overview
+      dela e solicite o nível de acesso — **Basic** já cobre conta de produção (a de **teste**
+      só funciona com conta de teste do próprio Google, não com a `475-979-5747` real). O
+      Google alega meta de **~2 dias úteis** para aprovar Basic (bem mais rápido que o processo
+      antigo, que levava semanas). É dali que sai o que substitui o antigo *developer token*
+      (`GOOGLE_ADS_DEVELOPER_TOKEN`) — **confirme o nome exato do botão/campo na tela**, a
+      mudança é de 2 dias atrás e esta sessão não conseguiu abrir `developers.google.com` para
+      validar a navegação letra por letra (proxy da sandbox bloqueia o domínio); o destino
+      (projeto do Cloud, não mais a conta de gerente) está confirmado, o rótulo pode variar;
+   4. **Tela de permissão OAuth** → configure (modo Externo serve; pode ficar em "Teste" com o
+      seu e-mail como usuário de teste);
+   5. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador**
       (é o mais simples para gerar o refresh token);
-   5. guarde **Client ID** e **Client Secret**;
-   6. gere o **refresh token** autorizando com o e-mail que tem acesso ao Ads (o fluxo do
+   6. guarde **Client ID** e **Client Secret**;
+   7. gere o **refresh token** autorizando com o e-mail que tem acesso ao Ads (o fluxo do
       `oauth2l`/playground do Google, escopo `https://www.googleapis.com/auth/adwords`).
 
-**3d. Ação de conversão para importação** — no Ads: **Metas → Conversões → Nova ação de conversão
+Como não precisa mais de conta de gerente (MCC), **`GOOGLE_ADS_LOGIN_CUSTOMER_ID` (3c) fica
+opcional** — só preencha se de fato acabar usando uma conta de gerente por outro motivo.
+
+**3b. Ação de conversão para importação** — no Ads: **Metas → Conversões → Nova ação de conversão
 → Importar → Rastreamento manual de conversões via upload**. Crie duas: **"Cadastro"** (valor 0) e
 **"Assinatura"** (valor variável). São elas que vão receber o `gclid` de volta.
 
-**3e. Variáveis no painel da Vercel** (Settings → Environment Variables, marcar Production +
+**3c. Variáveis no painel da Vercel** (Settings → Environment Variables, marcar Production +
 Preview + Development). **Cole só no painel — nunca em arquivo do repositório, que é público:**
 ```
 GOOGLE_ADS_DEVELOPER_TOKEN
@@ -526,10 +540,10 @@ GOOGLE_ADS_CLIENT_ID
 GOOGLE_ADS_CLIENT_SECRET
 GOOGLE_ADS_REFRESH_TOKEN
 GOOGLE_ADS_CUSTOMER_ID          → 4759795747 (sem traços)
-GOOGLE_ADS_LOGIN_CUSTOMER_ID    → o ID da conta de GERENTE (sem traços)
+GOOGLE_ADS_LOGIN_CUSTOMER_ID    → opcional (só se usar conta de gerente — ver 3a)
 ```
 
-**3f. Me avisar.** Com as variáveis no ar eu construo, do nosso lado:
+**3d. Me avisar.** Com as variáveis no ar eu construo, do nosso lado:
 - cron diário que puxa **custo, cliques, impressões e CTR por campanha** e grava em tabela;
 - card no painel cruzando **custo × visitantes × cadastros × receita** → custo por cadastro e por
   cliente pagante, por campanha;

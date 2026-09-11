@@ -4,6 +4,35 @@
 
 ---
 
+## 🚀 SESSÃO 25 · PARTE 62 (11/09) — SELF-HEAL CONFIRMADO + 4 FIXES EM PRODUÇÃO + GOOGLE ADS: A CENTRAL DE API DA CONTA DE GERENTE FOI DESLIGADA (09/09)
+
+**Self-heal do nível 3 (Partes 58/59)**: os 5 relatórios com `valorPonderado.motivo` iniciando em
+"erro:" foram regenerados no ciclo de cron das 00:00 UTC de hoje — os 5 saíram com `motivo: null`.
+Dois precisaram de mais de 1 tentativa (2 e 3 de 3) antes de fechar; nenhum bateu o teto sem
+resolver primeiro. Mecanismo validado em produção, sem necessidade de reprocessamento manual.
+
+**Deploy**: mesclados e publicados em `main` os 4 commits que estavam só na branch de sessão —
+`mp_pagamentos.criado_em` (Parte 59), o redirecionamento do "Novo eBook" pro editor de capítulos
+e o page-break de subtítulo no leitor (pedidos do dono, mesmo dia), e o fix da Parte 61 (eBook
+estruturado sumindo da loja). Build limpo, fast-forward sem conflito, deploy
+`dpl_388NFM3i9Lhv1CFb6V3cupFTF72N` confirmado `READY` e aliasado em `bidprobrasil.com.br`.
+
+**Google Ads — a Central de API parou de emitir *developer token* (09/09/2026)**: dono tentou abrir
+a Central de API na conta `475-979-5747` (Bidpro Brasil) e recebeu "disponível apenas para contas
+de administrador" — o que era esperado pelo PASSO 3 do `PENDENCIAS_DONO.md`, que mandava criar uma
+conta de gerente (MCC) só pra isso. Busca confirmou (blog oficial de desenvolvedores do Google
+Ads): a partir de 09/09/2026 esse fluxo **parou de processar pedidos**, e a gestão de acesso
+migrou pra dentro do projeto do Google Cloud — **MCC deixou de ser pré-requisito**. O
+`PENDENCIAS_DONO.md` (PASSO 3, itens 3a-3d) tinha instrução **desatualizada há 2 dias** sem
+ninguém saber — corrigido para o caminho novo: criar/usar projeto no Cloud, ativar a Google Ads
+API, pedir o nível de acesso (Basic já cobre conta real, aprovação em ~2 dias úteis, bem mais
+rápido que o processo antigo) na própria página da API do projeto — é dali que sai o substituto
+do developer token. **Não confirmado ao vivo**: o rótulo exato do botão/campo no Cloud Console,
+porque esta sessão não consegue abrir `developers.google.com` (proxy da sandbox bloqueia o
+domínio) — sinalizado no próprio doc para o dono conferir na tela ao chegar lá.
+
+---
+
 ## 🚨 SESSÃO 25 · PARTE 61 (10/09) — EBOOK "ESTRUTURADO" ATIVO SUMIA DA LOJA: TRAVA DE 30/07 NUNCA SOUBE DO FORMATO DE 04/09
 
 Dono relatou: ativou "O Lance Que Muda Tudo" (título+descrição+capa+capítulos, tudo completo),
