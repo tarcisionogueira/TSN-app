@@ -508,15 +508,13 @@ clique. Ordem certa:
       **desde que a conta de faturamento dele esteja em dia**, ver alerta de 01-02/09 no
       HANDOFF sobre a `0134FB-CA5299-81DA09` vencida);
    2. **APIs e serviços → Biblioteca** → ative **Google Ads API**;
-   3. dentro da página da própria **Google Ads API** do projeto, procure a visão geral/overview
-      dela e solicite o nível de acesso — **Basic** já cobre conta de produção (a de **teste**
-      só funciona com conta de teste do próprio Google, não com a `475-979-5747` real). O
-      Google alega meta de **~2 dias úteis** para aprovar Basic (bem mais rápido que o processo
-      antigo, que levava semanas). É dali que sai o que substitui o antigo *developer token*
-      (`GOOGLE_ADS_DEVELOPER_TOKEN`) — **confirme o nome exato do botão/campo na tela**, a
-      mudança é de 2 dias atrás e esta sessão não conseguiu abrir `developers.google.com` para
-      validar a navegação letra por letra (proxy da sandbox bloqueia o domínio); o destino
-      (projeto do Cloud, não mais a conta de gerente) está confirmado, o rótulo pode variar;
+   3. dentro da página **Google Ads API → Visão geral** do projeto, o nível de acesso nasce em
+      **"Teste"** (15.000 operações/dia, só funciona com conta de teste do próprio Google — não
+      opera na `475-979-5747` real). **Confirmado ao vivo em 11/09**: o próximo nível chama-se
+      **"Exploração"** (não "Basic" — nome antigo do processo descontinuado), e é ele que
+      **permite chamadas para conta de produção**. Clique **"Inscrever-se para receber acesso"**
+      no card "Exploração". É dali que sai o que substitui o antigo *developer token*
+      (`GOOGLE_ADS_DEVELOPER_TOKEN`);
    4. **Tela de permissão OAuth** → configure (modo Externo serve; pode ficar em "Teste" com o
       seu e-mail como usuário de teste);
    5. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador**
