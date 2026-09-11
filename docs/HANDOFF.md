@@ -4,6 +4,34 @@
 
 ---
 
+## ✅ PENDÊNCIAS EM ABERTO (checar ao abrir nova sessão, antes de qualquer coisa nova)
+
+Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
+acumular em paralelo com o rastro narrativo das Partes abaixo.
+
+1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
+   Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
+   já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
+   ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
+   card no painel.
+2. **eBook — page-break de subtítulo no leitor** (commit `1ad1256e`, já em produção). Dono disse
+   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. Perguntar
+   se os subtítulos abriram página nova corretamente na leitura real.
+3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
+   `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
+   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja.
+4. **Marketing — segmentação por palavra-chave/negativas**: a consulta ao Windsor.ai para nível de
+   keyword bateu numa restrição de combinação de tabelas (campos de keyword-criterion não
+   combinam com campos de métrica na mesma chamada) e ficou sem retry. Retomar com uma consulta
+   reformulada (duas chamadas separadas) se o dono quiser aprofundar qualidade de público além do
+   que já foi coberto (geo/dispositivo).
+5. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
+   desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
+   mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
+   serve antes de decidir se precisa de faturamento também.
+
+---
+
 ## 🔧 SESSÃO 25 · PARTE 63 (11/09) — GOOGLE ADS API: SETUP EM ANDAMENTO, PAUSADO NO REFRESH TOKEN
 
 Continuação da Parte 62. Dono seguiu o PASSO 3 do `PENDENCIAS_DONO.md` ao vivo, comigo guiando tela a
