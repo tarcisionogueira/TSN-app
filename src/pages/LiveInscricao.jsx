@@ -81,6 +81,16 @@ export default function LiveInscricao() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [pronto, setPronto] = useState(null);
+  // Aba do WhatsApp, aberta em BRANCO ainda dentro do clique síncrono do usuário (11/09,
+  // pedido do dono: "num único clique"). Não existe API de WhatsApp que entre a pessoa no
+  // grupo sozinha — quem confirma "Participar" é sempre um humano dentro do app, e é
+  // proteção antiabuso da própria Meta, não algo que dê para contornar (mesmo motivo
+  // documentado em api/admin-whatsapp-fila.js). O que dá para tirar do caminho é a SEGUNDA
+  // decisão da pessoa no NOSSO site: abrir a aba já no clique do formulário, e só apontar
+  // ela para o link do grupo quando a resposta chegar, em vez de esperar a pessoa notar e
+  // clicar um botão novo. `window.open` fora do gesto de clique (ex.: depois do `await`) é
+  // bloqueado por popup blocker na maioria dos navegadores — por isso abre ANTES do fetch.
+  const waTabRef = useRef(null);
   // ── CTA FIXO: por que existe (01/09) ────────────────────────────────────────────────
   // Medido renderizando a página, não estimado. O botão "Quero participar" fica ABAIXO da
   // dobra em TODOS os tamanhos testados — iPhone SE 375x667: y=1047 (380px abaixo);
@@ -170,6 +180,10 @@ export default function LiveInscricao() {
     if (!vt.ok) return setErro(vt.erro);
     if (form.cidade.trim().length < 2) return setErro('Informe a sua cidade.');
     setEnviando(true);
+    // Abre a aba AGORA, ainda dentro do clique — depois do `await` o navegador não deixa
+    // mais (não é gesto do usuário do ponto de vista dele). Fica em branco até a inscrição
+    // confirmar; se der erro ou a aula não tiver grupo, fecha sozinha logo abaixo.
+    try { waTabRef.current = window.open('', '_blank'); } catch { waTabRef.current = null; }
     try {
       const mkt = lerMarketing() || {};
       const r = await fetch('/api/live-inscrever', {
@@ -189,6 +203,12 @@ export default function LiveInscricao() {
       if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível concluir a inscrição.');
       setPronto(j);
       setInscritos(n => (typeof n === 'number' ? n + 1 : n));
+      // Aponta a aba já aberta para o grupo (ou fecha, se esta aula não tiver grupo
+      // cadastrado — nunca manda a pessoa para uma aba em branco).
+      if (waTabRef.current && !waTabRef.current.closed) {
+        if (j?.link_grupo) { try { waTabRef.current.location = j.link_grupo; } catch { /* padrao-ok: aba pode ter sido fechada pelo usuário no meio do caminho — o botão manual continua na tela como reserva */ } }
+        else { try { waTabRef.current.close(); } catch { /* padrao-ok: fechar aba best-effort, sem grupo cadastrado nada a mostrar nela */ } }
+      }
       // ── Meta: Lead do NAVEGADOR ────────────────────────────────────────────
       // Só DEPOIS do `.ok` — o evento descreve uma inscrição que existe, não uma tentativa.
       // O `event_id` vem do SERVIDOR (`lead_event_id`): os dois lados mandam o mesmo id e o
@@ -205,6 +225,9 @@ export default function LiveInscricao() {
       } catch { /* nunca quebra a inscrição */ }
     } catch (err) {
       setErro(err?.message || 'Não foi possível concluir a inscrição.');
+      // Inscrição falhou — não há grupo nenhum para mostrar. Fecha a aba em branco em vez
+      // de deixar a pessoa com uma aba vazia enquanto lê a mensagem de erro nesta tela.
+      if (waTabRef.current && !waTabRef.current.closed) { try { waTabRef.current.close(); } catch { /* padrao-ok: fechamento best-effort */ } }
     }
     setEnviando(false);
   }
@@ -359,8 +382,15 @@ export default function LiveInscricao() {
               </p>
               {pronto.link_grupo && (
                 <>
+                  {/* A aba do WhatsApp já foi aberta sozinha (waTabRef, aberta no clique do
+                      formulário) — este texto/botão é o AVISO de que ela abriu (pode ter
+                      ficado atrás da janela) e a RESERVA para quando o navegador bloqueou a
+                      aba (Safari/Firefox às vezes bloqueiam mesmo a técnica de abrir em
+                      branco antes do fetch). Nunca dá para confirmar "entrou" — só o clique
+                      dentro do próprio WhatsApp confirma, e isso é fora do nosso alcance. */}
                   <p style={{ fontSize: 14.5, color: '#0f172a', fontWeight: 600, margin: '0 0 12px' }}>
-                    Falta um passo: entre no grupo do WhatsApp para receber o link da sala e o lembrete.
+                    Abrimos o WhatsApp numa aba nova — é só confirmar lá dentro para entrar no grupo
+                    e receber o link da sala e o lembrete. Não abriu? Toque aqui:
                   </p>
                   <a href={pronto.link_grupo} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'block', textAlign: 'center', background: '#16a34a', color: '#fff', textDecoration: 'none', padding: '15px', borderRadius: 12, fontWeight: 800, fontSize: 15.5 }}>
