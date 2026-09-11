@@ -56,36 +56,81 @@ export function extrairEmailDeHtml(html) {
 
 const TRINTA_DIAS_MS = 30 * 24 * 3600 * 1000;
 
+// ── RECON: "este leiloeiro vende veículo?" (11/09) ──────────────────────────────────────────
+// Reaproveita o MESMO fetch da home (já feito para o e-mail) para procurar um link de menu
+// tipo "Veículos"/"Carros"/"Automóveis" — sem nenhum custo de rede extra. Isto NÃO é um
+// scraper de veículos: é só o sinal que decide se vale a pena escrever um, fonte por fonte,
+// depois de ver o dado real (mesma lição do CLAUDE.md que já mordeu esta base várias vezes:
+// nunca supor estrutura de site sem checar).
+const ANCORA_RE = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]{0,300}?)<\/a>/gi;
+const PALAVRA_VEICULO = /\b(ve[íi]culos?|autom[óo]veis?|carros?)\b/i;
+const HREF_VEICULO = /[/?](veiculos?|carros?|automoveis?)(?:[/?&-]|$)/i;
+
+export function detectarSegmentoVeiculos(html) {
+  if (!html) return null;
+  for (const m of html.matchAll(ANCORA_RE)) {
+    const href = String(m[1] || '');
+    if (!href || /^(javascript:|#|mailto:|tel:)/i.test(href)) continue;
+    const textoTag = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (PALAVRA_VEICULO.test(textoTag)) return { url: href, texto: textoTag.slice(0, 80) };
+    if (HREF_VEICULO.test(href)) return { url: href, texto: textoTag.slice(0, 80) || '(achado pela URL do link, sem texto claro)' };
+  }
+  return null;
+}
+
 /**
  * `urlAmostra`: qualquer URL real do site do leiloeiro (ex.: link_lote de um item recém
  * coletado) — só usamos a ORIGEM dela (protocolo+domínio) para buscar a home, onde o rodapé
- * de contato normalmente vive. Nunca lança: chamador não precisa de try/catch.
+ * de contato e o menu principal normalmente vivem. Nunca lança: chamador não precisa de
+ * try/catch. Faz UM fetch só e alimenta as duas capturas (e-mail + sinal de veículos).
  */
 export async function capturarContatoSeAusente(supabase, fonte, urlAmostra) {
   if (!fonte || !urlAmostra) return;
-  try {
-    const { data: existente, error: erroLeitura } = await supabase
-      .from('leiloeiro_contato').select('origem, atualizado_em').eq('fonte', fonte).maybeSingle();
-    // Falha de LEITURA não pode virar "não existe contato manual" — proceder sem saber
-    // arriscaria sobrescrever uma correção humana que só não conseguimos enxergar agora.
-    if (erroLeitura) return;
-    if (existente?.origem === 'manual') return; // correção humana é definitiva
-    if (existente?.origem === 'auto' && existente.atualizado_em
-        && (Date.now() - new Date(existente.atualizado_em).getTime()) < TRINTA_DIAS_MS) return;
+  let origin;
+  try { origin = new URL(urlAmostra).origin; } catch { return; }
 
-    let origin;
-    try { origin = new URL(urlAmostra).origin; } catch { return; }
+  try {
+    // Duas checagens de "já sei disso e é recente" INDEPENDENTES — uma não pode bloquear a
+    // outra. Sem isto, uma fonte com e-mail já capturado (ex.: SODRE) nunca mais teria o
+    // sinal de veículos verificado, porque o `return` antecipado do e-mail cortava tudo.
+    const [{ data: contato, error: erroContato }, { data: seg, error: erroSeg }] = await Promise.all([
+      supabase.from('leiloeiro_contato').select('origem, atualizado_em').eq('fonte', fonte).maybeSingle(),
+      supabase.from('leiloeiro_segmento_veiculos').select('atualizado_em').eq('fonte', fonte).maybeSingle(),
+    ]);
+    // Falha de LEITURA do e-mail não pode virar "não existe contato manual" — proceder sem
+    // saber arriscaria sobrescrever uma correção humana que só não conseguimos enxergar agora.
+    if (erroContato) return;
+    const emailEmDia = contato?.origem === 'manual' ||
+      (contato?.origem === 'auto' && contato.atualizado_em && (Date.now() - new Date(contato.atualizado_em).getTime()) < TRINTA_DIAS_MS);
+    // Falha de leitura do sinal de veículos É segura de ignorar (não há "correção manual" a
+    // proteger aqui) — só significa "trata como se nunca tivesse verificado".
+    const segmentoEmDia = !erroSeg && seg?.atualizado_em && (Date.now() - new Date(seg.atualizado_em).getTime()) < TRINTA_DIAS_MS;
+    if (emailEmDia && segmentoEmDia) return; // nada a atualizar — não busca a página à toa
 
     const res = await fetch(origin, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasilBot/1.0)' } }).catch(() => null);
     if (!res?.ok) return;
     const html = await res.text();
-    const achado = extrairEmailDeHtml(html);
-    if (!achado) return;
 
-    const { error } = await supabase.from('leiloeiro_contato').upsert({
-      fonte, email: achado.email, origem: 'auto', observacao: achado.contexto,
-      atualizado_em: new Date().toISOString(),
-    }, { onConflict: 'fonte' });
-    if (!error) console.log(`    📧 ${fonte}: contato capturado automaticamente (${achado.email})`);
-  } catch { /* padrao-ok: captura de contato é best-effort — nunca pode atrasar/derrubar a coleta */ }
+    if (!emailEmDia) {
+      const achado = extrairEmailDeHtml(html);
+      if (achado) {
+        const { error } = await supabase.from('leiloeiro_contato').upsert({
+          fonte, email: achado.email, origem: 'auto', observacao: achado.contexto,
+          atualizado_em: new Date().toISOString(),
+        }, { onConflict: 'fonte' });
+        if (!error) console.log(`    📧 ${fonte}: contato capturado automaticamente (${achado.email})`);
+      }
+    }
+
+    if (!segmentoEmDia) {
+      const segmento = detectarSegmentoVeiculos(html);
+      const { error: erroGravaSeg } = await supabase.from('leiloeiro_segmento_veiculos').upsert({
+        fonte, tem_sinal: !!segmento,
+        url_segmento: segmento ? new URL(segmento.url, origin).href : null,
+        texto_sinal: segmento?.texto || null,
+        atualizado_em: new Date().toISOString(),
+      }, { onConflict: 'fonte' });
+      if (!erroGravaSeg && segmento) console.log(`    🚗 ${fonte}: sinal de veículos no menu ("${segmento.texto}" → ${segmento.url})`);
+    }
+  } catch { /* padrao-ok: captura de contato/recon é best-effort — nunca pode atrasar/derrubar a coleta */ }
 }
