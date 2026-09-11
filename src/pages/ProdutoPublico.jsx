@@ -7,6 +7,8 @@ import { driveImage } from '../utils/driveUrl';
 import { apiCall } from '../utils/apiCall';
 import { salvarRef, lerRef } from '../utils/ref';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
+import { senhaForte, requisitosSenha } from '../lib/senha.js';
+import { validarNome, normalizarNome } from '../lib/nome.js';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -27,6 +29,17 @@ export default function ProdutoPublico({ tipo }) {
   const [aguardando, setAguardando] = useState(false);
   const [erroCompra, setErroCompra] = useState('');
   const [aceitouTermo, setAceitouTermo] = useState(false); // termo próprio de curso/ebook
+  // Cadastro inline (11/09, pedido do dono): visitante compra sem sair desta tela — antes
+  // era redirecionado para /login e precisava voltar e clicar em Comprar de novo. Usa o
+  // MESMO endpoint que o checkout de plano grátis já usa (/api/criar-conta-checkout, conta
+  // JÁ confirmada via Admin API) — sem isso, signUp normal exige confirmar e-mail antes de
+  // logar, e a compra ficaria travada esperando um clique que pode nunca vir.
+  const [suNome, setSuNome] = useState('');
+  const [suEmail, setSuEmail] = useState('');
+  const [suSenha, setSuSenha] = useState('');
+  const [suLgpd, setSuLgpd] = useState(false);
+  const [suErro, setSuErro] = useState('');
+  const [suLoading, setSuLoading] = useState(false);
   // Preço e janela de oferta vêm do SERVIDOR (produto_preco_vigente). A tela nunca decide
   // preço: se o relógio do visitante estiver adiantado, ou alguém editar o payload, quem
   // manda continua sendo a RPC que cobra.
@@ -62,16 +75,23 @@ export default function ProdutoPublico({ tipo }) {
 
   // Compra AVULSA (com o parceiro do ?ref): tenta Mercado Pago primeiro (Checkout Pro),
   // com fallback ao Asaas — mesma preferência de gateway do checkout de assinatura.
-  async function comprar() {
-    if (!user) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
+  // `override` (11/09): quando a conta acabou de ser criada nesta mesma tela, o contexto
+  // `user` do useAuth() ainda não re-renderizou (o onAuthStateChange é assíncrono) — esperar
+  // por ele aqui criaria uma corrida onde o clique em "Criar conta e comprar" às vezes compra
+  // e às vezes não. `apiCall` já busca a sessão nova com `getSession()` a cada chamada, então
+  // basta que o `signInWithPassword` tenha resolvido ANTES desta função ser chamada; os dados
+  // de nome/e-mail vêm por parâmetro em vez de depender do closure do contexto.
+  async function comprar(override) {
+    const emailComprador = override?.email || user?.email;
+    if (!emailComprador) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
     setErroCompra(''); setComprando(true);
     try {
       const refCod = ref || lerRef();
-      const nome = nomePerfil || user.user_metadata?.nome || user.user_metadata?.full_name || '';
+      const nome = override?.nome || nomePerfil || user?.user_metadata?.nome || user?.user_metadata?.full_name || '';
       // Só os IDs vão para o servidor. O preço de cada extra é recalculado lá pelo cadastro —
       // mandar valor daqui deixaria comprar um curso de R$ 1.497 por R$ 1,00.
       const extras = aceitos.map(a => ({ tipo: a.tipo, id: a.id }));
-      const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email, extras };
+      const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: emailComprador, extras };
       let link = null, jaTem = false;
 
       // 1) Mercado Pago (Checkout Pro hospedado)
@@ -117,6 +137,38 @@ export default function ProdutoPublico({ tipo }) {
     } catch (e) {
       setErroCompra(e?.message || 'Erro ao comprar');
     } finally { setComprando(false); }
+  }
+
+  // Cadastro inline (11/09): cria a conta JÁ CONFIRMADA (mesmo endpoint do checkout de plano
+  // grátis), loga e segue direto para `comprar()` — sem a volta ao /login que existia antes.
+  async function criarContaEComprar() {
+    setSuErro('');
+    const nomeNorm = normalizarNome(suNome);
+    const emailNorm = String(suEmail || '').trim().toLowerCase();
+    const vNome = validarNome(nomeNorm);
+    if (!vNome.ok) { setSuErro(vNome.erro); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNorm)) { setSuErro('E-mail inválido.'); return; }
+    if (!senhaForte(suSenha)) { setSuErro('A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.'); return; }
+    if (!suLgpd) { setSuErro('Aceite os termos e a política de privacidade para continuar.'); return; }
+    if (isPago && !aceitouTermo) { setSuErro('Marque o aceite do termo de contratação para continuar.'); return; }
+    setSuLoading(true);
+    try {
+      const refCod = ref || lerRef();
+      const r = await apiCall('/api/criar-conta-checkout', {
+        method: 'POST',
+        body: JSON.stringify({ nome: nomeNorm, email: emailNorm, senha: suSenha, ref_codigo: refCod || undefined }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível criar a conta.');
+      const { error: eLogin } = await supabase.auth.signInWithPassword({ email: emailNorm, password: suSenha });
+      if (eLogin) throw new Error('Conta criada, mas o login automático falhou. Use "Já tenho conta, Entrar" com a senha que você definiu.');
+      if (isPago) await comprar({ nome: nomeNorm, email: emailNorm });
+      // Produto sem preço avulso é benefício do Investidor Pro: a conta já está criada e
+      // logada, falta só assinar — mesmo destino que o botão equivalente do usuário logado.
+      else nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`);
+    } catch (e) {
+      setSuErro(e?.message || 'Erro ao criar a conta.');
+    } finally { setSuLoading(false); }
   }
 
   useEffect(() => {
@@ -681,9 +733,46 @@ export default function ProdutoPublico({ tipo }) {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => nav(`/login?modo=cadastro&produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
-                      style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
-                      {isPago ? 'Comprar agora →' : 'Criar conta e acessar →'}
+                    {/* Cadastro inline (11/09): cria a conta e compra sem sair desta tela —
+                        antes, o clique mandava para /login e a pessoa precisava voltar. */}
+                    <input type="text" placeholder="Nome completo" value={suNome} onChange={(e) => setSuNome(e.target.value)} autoComplete="name"
+                      style={{ width: '100%', padding: '12px 14px', marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+                    <input type="email" placeholder="E-mail" value={suEmail} onChange={(e) => setSuEmail(e.target.value)} autoComplete="email"
+                      style={{ width: '100%', padding: '12px 14px', marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+                    <input type="password" placeholder="Crie uma senha" value={suSenha} onChange={(e) => setSuSenha(e.target.value)} autoComplete="new-password"
+                      style={{ width: '100%', padding: '12px 14px', marginBottom: 4, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+                    {suSenha && (
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, lineHeight: 1.6 }}>
+                        {requisitosSenha(suSenha).map((r, i) => (
+                          <span key={i} style={{ marginRight: 8, color: r.ok ? '#16a34a' : '#94a3b8' }}>{r.ok ? '✓' : '○'} {r.txt}</span>
+                        ))}
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: isPago ? 6 : 10 }}>
+                      <input type="checkbox" checked={suLgpd} onChange={(e) => setSuLgpd(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                      <span>Aceito os Termos de Uso e a Política de Privacidade.</span>
+                    </label>
+                    {isPago && (
+                      /* Termo PRÓPRIO de curso/ebook (conteúdo digital, acesso imediato, CDC art. 49) */
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
+                        <input type="checkbox" checked={aceitouTermo} onChange={(e) => setAceitouTermo(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                        <span>
+                          Li e aceito o termo de contratação deste conteúdo digital.
+                          <details style={{ marginTop: 4 }}>
+                            <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
+                            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
+                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
+                            </p>
+                          </details>
+                        </span>
+                      </label>
+                    )}
+                    {suErro && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', marginBottom: 8 }}>{suErro}</div>
+                    )}
+                    <button onClick={criarContaEComprar} disabled={suLoading || comprando}
+                      style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (suLoading || comprando) ? 'default' : 'pointer', marginBottom: 10, opacity: (suLoading || comprando) ? 0.7 : 1 }}>
+                      {suLoading || comprando ? 'Só um instante…' : isPago ? `Criar conta e comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} →` : 'Criar conta e assinar Investidor Pro →'}
                     </button>
                     <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
                       style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
