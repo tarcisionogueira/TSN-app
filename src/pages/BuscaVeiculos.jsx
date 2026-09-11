@@ -27,6 +27,20 @@ const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial',
 // o leiloeiro usa, não inventadas — ficam disponíveis desde já para quando aparecerem.
 const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande monta', 'perda total'];
 
+// PRAZO DO LEILÃO — mesma regra de src/pages/Busca.jsx (imóveis, pedido do dono 11/09):
+// janelas CUMULATIVAS a partir de hoje, e 'sem_data' como opção EXPLÍCITA (não omissão) —
+// leiloeiro que ainda não marcou a praça não pode sumir da lista por causa disso.
+function calcularJanelaPrazo(opcao) {
+  if (!opcao) return null;
+  if (opcao === 'sem_data') return { tipo: 'sem_data' };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
+  if (!meses) return null;
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { tipo: 'janela', de: iso(hoje), ate: iso(fim) };
+}
+
 const fmtBRL = (v) => (v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
 
 function fmtDataLeilao(d) {
@@ -124,7 +138,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', prazo: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -162,6 +176,9 @@ export default function BuscaVeiculos() {
       if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
       if (f.tipoMonta) q = q.eq('sinistro', f.tipoMonta);
       if (f.modalidade) q = q.eq('modalidade', f.modalidade);
+      const janelaPrazo = calcularJanelaPrazo(f.prazo);
+      if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
+      else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
@@ -263,6 +280,16 @@ export default function BuscaVeiculos() {
               <option value="judicial">Judicial</option>
               <option value="extrajudicial">Extrajudicial</option>
               <option value="nao_identificado">Não identificado</option>
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Prazo do leilão</label>
+            <select style={inp} value={filtros.prazo} onChange={e => setFiltros(f => ({ ...f, prazo: e.target.value }))}>
+              <option value="">Qualquer</option>
+              <option value="este_mes">Este mês</option>
+              <option value="proximo_mes">Próximo mês</option>
+              <option value="proximo_trimestre">Próximo trimestre</option>
+              <option value="sem_data">Sem data definida</option>
             </select>
           </div>
           <div>

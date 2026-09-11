@@ -92,6 +92,29 @@ const MODALIDADE_OPTS = [
   ['judicial',      'Judicial',      'Leilão determinado dentro de um processo (execução, falência, inventário). O edital e os autos mandam.'],
   ['venda_direta',  'Venda Direta',  'Sem pregão: o banco vende direto e a proposta pode ser feita a qualquer momento, pelo valor anunciado.'],
 ];
+// PRAZO DO LEILÃO — pedido do dono (11/09): "planejar para leilão nesse mês, no próximo, ou
+// no próximo trimestre". Janelas CUMULATIVAS a partir de hoje (não meses isolados) — quem
+// filtra "próximo trimestre" quer ver tudo que acontece nos próximos ~3 meses, não só o que
+// cai exatamente no 3º mês excluindo o que vem antes; um filtro que escondesse o leilão de
+// amanhã de quem pediu "próximo trimestre" seria pior que não ter filtro.
+// 'sem_data' é opção EXPLÍCITA, não omissão — mesmo princípio de classificarPatio()/
+// modalidade de veículo: leiloeiro que ainda não marcou a praça não pode sumir da lista.
+const PRAZO_OPTS = [
+  ['este_mes', 'Este mês', 'Leilões com praça marcada até o fim deste mês.'],
+  ['proximo_mes', 'Próximo mês', 'Leilões com praça marcada até o fim do mês que vem.'],
+  ['proximo_trimestre', 'Próximo trimestre', 'Leilões com praça marcada nos próximos 3 meses.'],
+  ['sem_data', 'Sem data definida', 'O leiloeiro ainda não divulgou a data da praça — não some da lista por isso.'],
+];
+function calcularJanelaPrazo(opcao) {
+  if (!opcao) return null;
+  if (opcao === 'sem_data') return { tipo: 'sem_data' };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
+  if (!meses) return null;
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0); // dia 0 = último dia do mês anterior
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { tipo: 'janela', de: iso(hoje), ate: iso(fim) };
+}
 const PAGAMENTO_OPTS = [
   ['aVista',     'À Vista',    '',                        'Pagamento integral no prazo do edital.'],
   ['financiado', 'Financiado', 'parcela extrajudicial',   'Aceita financiamento bancário — o parcelamento típico dos leilões da Caixa.'],
@@ -247,6 +270,9 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   if (f.valorMin) q = q.gte('valor_minimo_ref', Number(String(f.valorMin).replace(/\D/g, '')));
   if (f.valorMax) q = q.lte('valor_minimo_ref', Number(String(f.valorMax).replace(/\D/g, '')));
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  const janelaPrazo = calcularJanelaPrazo(f.prazo);
+  if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
+  else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
   else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL).gte('desconto_percentual', LOCACAO_DESCONTO_MIN);
@@ -679,7 +705,7 @@ export default function Busca() {
   const analisesRestantes = mostraSelo ? Math.max(0, limiteAnalises - Number(cotaMercado.usado || 0)) : null;
   const janelaSelo = janelaLabel(cotaMercado);
 
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'' };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
@@ -1206,6 +1232,7 @@ export default function Busca() {
             valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
             descontoMin: ajInt.descontoMin,
+            prazo: filtrosAtivos.prazo || '',
           },
         };
         const resp = await fetch('/api/busca-raio', {
@@ -1565,6 +1592,20 @@ export default function Busca() {
                         const arr = filtros.modalidades || [];
                         setFiltrosPersist(p => ({ ...p, modalidades: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
                       }}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Prazo do leilão</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {PRAZO_OPTS.map(([val, label, desc]) => {
+                    const ativo = filtros.prazo === val;
+                    return (
+                      <button key={val} title={desc} onClick={() => up('prazo', ativo ? '' : val)}
                         style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
                         {label}
                       </button>
