@@ -29,6 +29,105 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
+6. **NORDESTE/SIMONLEILOES seguem em 0% de foto** mesmo com o fix de `srcset` já validado em
+   produção (Parte 64) — a hipótese de lazy-load estava errada/incompleta. Falta um recon real
+   (baixar HTML ao vivo de um lote de cada fonte) antes de tentar outro fix; não adivinhar de novo.
+7. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
+   ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
+   ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
+   desfecho no próximo cliente real que aceitar termos pendentes.
+
+---
+
+## 🧾 11/09 — O ACEITE DE TERMOS ENGOLIA A GERAÇÃO, E O DETECTOR REPETIA A MENTIRA DO EVENTO
+
+Achado do check-in diário, via `cliente_travou(7)` (que nasceu ontem). **Dois usuários no mesmo
+dia, mesmo roteiro**, medido evento a evento:
+
+```
+11:15:16  clique em "Gerar"  →  analise_gerar: "tentou" + "iniciou no servidor"
+          a tela imprime "Geração iniciada no servidor, pode até fechar a aba"
+11:15:19  popup "Li e aceito os termos atualizados"  (3 s depois)
+11:15:34  volta para o imóvel — e NADA acontece. Nenhuma linha, nenhum desfecho.
+```
+
+O segundo usuário fez igual às 12:08, **clicou em Gerar de novo às 12:09 e conseguiu**. O
+primeiro era **explorador, plano grátis — exatamente quem se quer converter** — e foi embora sem
+relatório nenhum.
+
+**Duas coisas erradas, e a segunda escondia a primeira:**
+
+1. **A promessa era impressa antes de quem podia recusar.** `Analise.jsx:1086-1087` emite
+   `iniciou no servidor` e diz *"pode até fechar a aba"*; só depois, em
+   `AnalisesContext.iniciar`, o gate de termos (regra do dono, 30/07) recusa e abre o popup.
+   Pior: a pessoa foi convidada a fechar a aba de uma geração que nunca saiu do navegador.
+2. **O rastro mentia, e o detector novo repetia.** `cliente_travou()` classifica
+   `iniciou no servidor` sem desfecho em 30 min como *"começou a gerar e sumiu"* — diagnóstico
+   **oposto** de *"foi barrado pelo aceite"*. O detector estava certo; ele reproduzia fielmente o
+   que o evento afirmava. **Forma #10 herdada** — o instrumento novo nasceu confiando num evento
+   que já mentia.
+
+⚠️ **A minha própria primeira consulta caiu na mesma armadilha.** Perguntei "houve desfecho para
+este `tentou`?" casando qualquer desfecho **do mesmo usuário em 30 min** — e creditou ao clique
+das 12:08 (que morreu) o sucesso do clique das 12:09. Só a linha do tempo crua, evento a evento,
+mostrou que eram duas tentativas. Agregar por pessoa/janela funde tentativas distintas.
+
+### O conserto, nas duas metades
+
+- **Produto** (`src/contexts/AnalisesContext.jsx`): o gate **não foi afrouxado** — continua sem
+  gerar sem aceite. O que muda é o depois: a ação fica **represada** (`{tipo, meta, payload}`), a
+  tela passa a dizer *"Aceite os termos atualizados para gerar — assim que aceitar, a geração
+  começa sozinha"*, e o listener de `termos-uso-aceitos` **retoma sozinho**, uma vez por aceite.
+  Vale para os três (`mercado`, `documental`, `laudo`), que tinham o mesmo gate copiado.
+- **Instrumento** (`supabase/migrations/cliente_travou_represado_por_termos_e_desfecho.sql`,
+  aplicada): `represado%` passa a contar como **desfecho** no alarme (2). Não é sucesso — é *"foi
+  barrado, sabe disso, e a retomada está engatilhada"*; entra porque **encerra o silêncio**, que
+  é o que aquele alarme existe para achar. Quem fecha o popup sem aceitar deixa de aparecer, e é
+  o certo: não é cliente travado por defeito nosso.
+
+**O caso de hoje continua aparecendo em `cliente_travou(7)`** — e deve: ele aconteceu antes do
+conserto e realmente ficou sem resposta. O que muda é dali para frente.
+
+### ⚠️ O QUE **NÃO** FOI CONSERTADO (de propósito, para não virar surpresa)
+
+`Analise.jsx` **continua emitindo `iniciou no servidor` antes do gate** — agora o evento
+`represado` vem logo atrás e corrige o rastro, mas a afirmação original segue prematura. Mover a
+promessa para depois do gate exige o resultado assíncrono nas três telas; fica como dívida
+nomeada. **Qualquer gate novo colocado depois desse ponto vai reproduzir o mesmo defeito.**
+
+Verificação: `npm run build` e `verificar:sintaxe` passam. **A retomada pós-aceite NÃO foi
+exercida ponta a ponta em navegador** — exige conta com termos pendentes. O sinal de que pegou é
+`represado: termos pendentes` aparecer em `eventos_atividade` no próximo aceite.
+
+---
+
+## ⚠️ SESSÃO 25 · PARTE 64 (11/09) — SRCSET NÃO ERA A CAUSA: NORDESTE/SIMONLEILOES SEGUEM EM 0% FOTO
+
+Fechamento honesto de um item que parecia resolvido. O commit `ffebc53` (10/09) somou suporte a
+`srcset` em `fotoDeHtml()` (`scripts/lib/dom-parse-util.mjs`) com a hipótese de que NORDESTE e
+SIMONLEILOES usam lazy-load responsivo em vez de `src`/`data-src` — as duas únicas fontes da
+família `dom` que ficaram de fora do fix principal (8/10 fontes a 100% foto+descrição).
+
+**Validação real, não suposição**: conferido que o cron `scraper-dom.yml` de hoje (run
+`34600432590`, 11/09 12:43-13:07 UTC) rodou com `ffebc53` já presente (confirmado via
+`git merge-base --is-ancestor` contra o `head_sha` do run, não só "deve estar na main"). Log real:
+
+```
+[NORDESTE]     7 prontos · foto 0% · descrição 57%
+[SIMONLEILOES] 12 prontos · foto 0% · descrição 100%
+```
+
+**Sem mudança nenhuma.** A hipótese do `srcset` estava errada, ou pelo menos incompleta. Descrição
+funciona bem nas duas (57% e 100%) — o parser da página em si não está quebrado; é especificamente
+a extração de imagem que falha por um motivo ainda não identificado.
+
+**Decisão deliberada: não tentar um 3º palpite às cegas sobre o HTML.** Duas hipóteses (src/data-src,
+depois srcset) já falharam ou fracassaram parcialmente — a próxima tentativa sem examinar o HTML
+real seria repetir a mesma classe de erro (medir uma suposição, não o site de verdade — a forma
+nº10 do topo deste documento). Pendência registrada na lista de PENDÊNCIAS EM ABERTO (item 6):
+próximo passo é recon real — baixar o HTML ao vivo de um lote de cada fonte e inspecionar onde a
+imagem de fato está, mesmo padrão da "OFENSIVA de captura" já prescrita na Seção 2 para fontes que
+regridem.
 
 ---
 
