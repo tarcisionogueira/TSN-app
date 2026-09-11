@@ -14,6 +14,7 @@ import MUNICIPIOS from '../api/_municipios.js';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
+import { capturarContatoSeAusente } from './_contato-leiloeiro.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -257,6 +258,12 @@ async function salvarImoveis(imoveis, fonte) {
 // ar). Trava de segurança: só desativa se a coleta foi saudável (>50), para um
 // erro de rede não zerar o acervo. Retorna a quantidade coletada.
 async function salvarEFinalizar(imoveis, fonte) {
+  // Captura automática do e-mail do leiloeiro (11/09) — best-effort, usa qualquer URL real já
+  // coletada nesta rodada; nunca lança e nunca atrasa a coleta por mais que o timeout interno
+  // (10s). Ver scripts/_contato-leiloeiro.mjs.
+  const urlAmostra = imoveis.find(i => i.url_lote)?.url_lote || imoveis.find(i => i.link_edital)?.link_edital;
+  if (urlAmostra) await capturarContatoSeAusente(supabase, fonte, urlAmostra);
+
   const runStart = new Date().toISOString();
   let salvos = 0, esperados = 0;
   for (let i = 0; i < imoveis.length; i += 500) {
@@ -1480,6 +1487,17 @@ function classificarPatio(texto) {
   if (SINAL_PATIO.test(t)) return { status: 'confirmado', motivo: 'sinal textual de bem já em pátio/disponível' };
   return { status: 'indefinido', motivo: 'sem sinal textual claro nos dois sentidos — não exibir por padrão' };
 }
+// ── SINISTRO/MOTOR/DOCUMENTAÇÃO/PAGAMENTO (11/09) ───────────────────────────────
+// Corrige a avaliação anterior de que esses dados "não existem" — eles EXISTEM, só não
+// tinham sido lidos: `lot_sinister`/`lot_is_scrap`/`lot_status_financeable` são campos
+// PRÓPRIOS da API do Sodré (confirmados em `raw` de lotes reais, 11/09), o `raw` só não
+// era exposto porque ia gravado como STRING dentro do jsonb (bug corrigido abaixo — ver
+// `fotos`/`raw` no push) em vez de objeto, então nenhuma leitura conseguia extrair nada dele.
+// `motor_alerta`/`ipva_situacao` não têm campo próprio — ficam por regex no texto, que É a
+// forma como o leiloeiro informa isso (lista "Componente: Danificado" dentro da descrição,
+// confirmada em amostra real: "Cambio: Danificado", "Motor: Danificado", "Air-Bags: Danificado").
+const REGEX_MOTOR_ALERTA = /\bmotor\b[^.]{0,25}\b(danificad|incomplet|ausente|substitu[íi]d)/i;
+const REGEX_IPVA = /IPVA\s*\d{0,4}\s*(PAGO|ATRASADO|EM ABERTO|PENDENTE|N[ÃA]O PAGO)/i;
 
 async function scraperSodreVeiculos(browser) {
   console.log('  Sodré Santoro (veículos) — interceptando /api/search-lots...');
@@ -1585,16 +1603,36 @@ async function scraperSodreVeiculos(browser) {
         link_lote: r.auction_id
           ? `https://leilao.sodresantoro.com.br/leilao/${r.auction_id}/lote/${r.lot_id || r.id}/`
           : `https://www.sodresantoro.com.br/veiculos/lote/${r.lot_id || r.id}`,
-        fotos: JSON.stringify(fotos),
+        // Objeto direto — `.upsert()` do supabase-js já serializa jsonb sozinho. Passar
+        // `JSON.stringify()` aqui gravava uma STRING dentro da coluna jsonb (double-encoding):
+        // toda leitura subsequente via `.filter/.map` num array via cliente JS recebia uma
+        // string, não um array, e a foto nunca aparecia — bug real, achado ao investigar os
+        // campos de sinistro/motor abaixo (os 70 registros já gravados tinham esse defeito).
+        fotos,
         data_leilao: parseData(r.auction_date_init || r.auction_date_end),
         status_patio: statusPatio,
         status_patio_motivo: statusPatioMotivo,
+        // Direto da API — não é inferência nossa, é o que o leiloeiro já informa por lote.
+        sinistro: r.lot_sinister ? String(r.lot_sinister).slice(0, 60) : null,
+        is_sucata: typeof r.lot_is_scrap === 'boolean' ? r.lot_is_scrap : null,
+        financiavel: typeof r.lot_status_financeable === 'boolean' ? r.lot_status_financeable : null,
+        combustivel: r.lot_fuel ? String(r.lot_fuel).slice(0, 40) : null,
+        cambio: r.lot_transmission ? String(r.lot_transmission).slice(0, 40) : null,
+        cor: r.lot_color ? String(r.lot_color).slice(0, 40) : null,
+        opcionais: Array.isArray(r.lot_optionals) ? r.lot_optionals : null,
+        // Sem campo próprio — regex sobre o texto que o próprio leiloeiro escreve (ver
+        // REGEX_MOTOR_ALERTA/REGEX_IPVA acima). Best-effort: null quando não encontra, nunca
+        // assume "motor ok"/"IPVA pago" por ausência de menção.
+        motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+        ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
         ativo: true,
-        raw: JSON.stringify(r),
+        raw: r,
         atualizado_em: new Date().toISOString(),
       });
     }
     console.log(`    Sodré veículos: ${registros.length} registros mapeados (após filtro de ativos/preço)`);
+    // Não usa salvarEFinalizar (ver comentário no topo desta função) — captura o contato aqui.
+    if (registros[0]?.link_lote) await capturarContatoSeAusente(supabase, 'SODRE', registros[0].link_lote);
     return registros;
   } catch (err) {
     console.log(`  Erro Sodré veículos: ${err.message.slice(0, 100)}`);
