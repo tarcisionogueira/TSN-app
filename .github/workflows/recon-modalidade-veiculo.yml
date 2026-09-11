@@ -1,0 +1,30 @@
+name: Recon modalidade veículo (SUPORTE, detalhe)
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs (separadas por vírgula) de páginas de detalhe de veículo'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        env:
+          RECON_URLS: ${{ github.event.inputs.urls }}
+        run: node scripts/recon-modalidade-veiculo.mjs
