@@ -203,7 +203,22 @@ function parseDetalhe(html, url) {
   const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
   const rotLance = plaus(num((txt.match(/lance\s*(?:inicial|m[íi]nimo|atual)[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const rotAval = plaus(num((txt.match(/avalia[çc][ãa]o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
-  const grandes = [...txt.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => num(m[1])).filter(v => v >= 10000 && v <= 500_000_000);
+  // ACHADO REAL (11/09, dono comparou o app com o site de origem — DANIELGARCIA item 79771):
+  // lote de VENDA DIRETA sem rótulo "Lance Mínimo" (só existe em leilão ascendente) caía no
+  // balaio genérico abaixo, que pega TODO R$ da página — e "Incremento Mínimo: R$50.000,00"
+  // entrou como se fosse candidato a valor mínimo, virando "economia potencial" de R$550mil
+  // sobre um imóvel de R$600mil (92% de desconto, número que não existe na vida real). O
+  // comentário da função já dizia a intenção ("p/ não pegar Incremento/Comissão") — só não
+  // tinha sido aplicada aqui, só no `rotLance`/`rotAval` por rótulo.
+  // Mesmo defeito, mesma origem (código copiado): `scraper-rj.mjs` (script-irmão, validado em
+  // produção) já resolve isto com `ROTULO_NAO_PRECO` — lista bem mais ampla que só
+  // incremento/comissão (caução, honorários, taxa, multa, IPTU, condomínio, débito, dívida,
+  // custas, emolumentos, ITBI, depósito prévio). Reaproveitada aqui ao pé da letra, em vez de
+  // uma lista nova e mais curta que deixaria a mesma classe de bug entrar por outra porta.
+  const ROTULO_NAO_PRECO = /(comiss|cau[çc][ãa]o|incremento|honor[áa]r|taxa|multa|iptu|condom[íi]n|d[ée]bito|d[íi]vida|custas|emolument|itbi|dep[óo]sito\s+pr[ée]vio|lance\s+m[íi]nimo\s+de\s+incremento)/i;
+  const grandes = [...txt.matchAll(/R\$\s*([\d.]+,\d{2})/g)]
+    .filter(m => !ROTULO_NAO_PRECO.test(txt.slice(Math.max(0, m.index - 60), m.index)))
+    .map(m => num(m[1])).filter(v => v >= 10000 && v <= 500_000_000);
   const avaliacao = rotAval || (grandes.length ? Math.max(...grandes) : 0);
   let valorMinimo = rotLance;
   if (!valorMinimo && grandes.length) {
@@ -345,7 +360,11 @@ async function debugRecon() {
     console.log(`  hrefs item/lote (${hrefs.length}): ${JSON.stringify(hrefs)}`);
     const lotes = extrairUrlsDeLote(html, tenant.base);
     console.log(`  extrairUrlsDeLote → ${lotes.length}: ${JSON.stringify(lotes.slice(0, 6))}`);
-    const alvo = lotes[0];
+    // SOLEON_DEBUG_URL (11/09): força o detalhe de UM lote específico em vez do 1º da
+    // listagem — necessário pra investigar um lote já achado com problema (ex.: o item
+    // 79771 do DANIELGARCIA, achado com modalidade errada pelo dono).
+    const alvoForcado = process.env.SOLEON_DEBUG_URL;
+    const alvo = (alvoForcado && alvoForcado.includes(tenant.base)) ? alvoForcado : lotes[0];
     if (alvo) {
       const { html: dh, via: dv } = await fetchTenant(alvo);
       if (dh) {
@@ -354,6 +373,12 @@ async function debugRecon() {
         console.log('     parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }));
         const t = decodificarEntidades(dh.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
         console.log('     R$ ctx:', JSON.stringify([...t.matchAll(/.{0,40}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 8)));
+        // DIAGNÓSTICO (11/09, achado real DANIELGARCIA): a modalidade é decidida varrendo a
+        // página INTEIRA por /judicial|extrajudicial|venda direta/ — se o menu/rodapé do site
+        // listar as três categorias como filtro, a palavra "judicial" aparece em toda página,
+        // mesmo em lote que É venda direta. Dumpa contexto de cada ocorrência pra confirmar
+        // antes de mudar a lógica (não supor estrutura sem checar).
+        console.log('     modalidade-ctx:', JSON.stringify([...t.matchAll(/.{0,35}(?:judicial|venda\s*direta).{0,15}/gi)].map(m => m[0].trim()).slice(0, 10)));
       }
     }
     await sleep(500);
