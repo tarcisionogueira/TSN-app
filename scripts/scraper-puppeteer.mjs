@@ -3393,6 +3393,114 @@ async function scraperSuporte(browser) {
   return todos;
 }
 
+// ─── SUPORTE LEILÕES — VEÍCULOS (piloto, 11/09) ────────────────────────────────
+// Mesma plataforma white-label do bloco de imóveis acima, mesma URL só trocando
+// `categoria=2` (imóveis) por `categoria=1` (veículos) — confirmado pelo recon de
+// e-mail/segmento desta sessão (`_contato-leiloeiro.mjs`), que achou o link
+// "Veículos" apontando exatamente para `/buscador?categoria=1` no LiderLeilões.
+// NÃO confirmado ao vivo: se o CARD de veículo usa o MESMO seletor
+// `article.lote-main` do card de imóvel (reaproveita `suporteParsePagina` por
+// suposição de mesmo template — mesma classe de risco já documentada na Sodré
+// veículos: nomes de campo/seletor não confirmados, por isso o `raw` completo é
+// sempre guardado e marca/modelo/placa/km saem por REGEX, que não depende de
+// seletor nenhum). OPT-IN só (SUPORTE_VEICULOS), mesmo motivo da Sodré: piloto
+// aguardando validação de dado real antes de entrar na rodada diária.
+function mapLoteSuporteVeiculo(l, tenant) {
+  if (!l || !l.id) return null;
+  const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
+  if (RE_SUPORTE_TESTE.test(`${titulo} ${l.href || ''}`)) return null;
+  const loc = String(l.local || '').replace(/\s+/g, ' ').trim();
+  const lm = loc.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
+  let cidade = lm ? lm[1].trim() : '';
+  let uf = lm ? lm[2].toUpperCase() : '';
+  if (!cidade || !uf) {
+    const dm = titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/)
+      || [...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*\/\s*([A-Z]{2})\b/g)].pop();
+    if (dm) { cidade = cidade || dm[1].trim(); uf = uf || dm[2].toUpperCase(); }
+  }
+  const tenantKey = tenant.domain.replace(/\..*/, '');
+  const link = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : `https://${tenant.domain}/buscador?categoria=1`;
+  const valorMin = parseBRL(l.valor || '');
+  if (!valorMin) return null;
+  const textoCompleto = `${titulo} ${loc}`;
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  return {
+    fonte: 'SUPORTE',
+    fonte_id: `slv_${tenantKey}_${l.id}`,
+    leiloeiro: tenant.leiloeiro,
+    titulo: (titulo || `Veículo ${tenant.leiloeiro}`).slice(0, 180),
+    descricao: titulo.slice(0, 500),
+    marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    modelo: null,
+    ano_fabricacao: textoCompleto.match(REGEX_ANO)?.[1] ? Number(textoCompleto.match(REGEX_ANO)[1]) : null,
+    ano_modelo: textoCompleto.match(REGEX_ANO)?.[2] ? Number(textoCompleto.match(REGEX_ANO)[2]) : null,
+    placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+    valor_minimo: valorMin,
+    valor_avaliacao: null,
+    cidade: cidade ? toTitleCase(cidade) : null,
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
+    link_lote: link,
+    fotos: (l.foto && /^https?:\/\//.test(l.foto)) ? [l.foto] : [],
+    data_leilao: null,
+    status_patio: statusPatio,
+    status_patio_motivo: statusPatioMotivo,
+    motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+    ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+    ativo: true,
+    raw: l,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+async function scraperSuporteVeiculosTenant(browser, tenant) {
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bens = new Map();
+  // Teto menor que o do bloco de imóveis: é piloto, catálogo de veículo por tenant
+  // tende a ser bem menor, e não visita página de detalhe (sem data de praça ainda).
+  const DEADLINE = Date.now() + 3 * 60 * 1000;
+  try {
+    for (let p = 1; p <= 40; p++) {
+      if (Date.now() > DEADLINE) break;
+      const antes = bens.size;
+      try {
+        await page.goto(`https://${tenant.domain}/buscador?categoria=1&pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 1200));
+      } catch { break; } // padrao-ok: mesmo padrão de scraperSuporteTenant (imóveis, linha ~3332) — falha de navegação na paginação encerra o loop, próxima rodada tenta de novo; não é I/O de dado, é fim de paginação best-effort
+      const lotes = await suporteParsePagina(page);
+      for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+      if (bens.size === antes) break; // página sem novidade → acabou
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const veiculos = [];
+  const seen = new Set();
+  for (const l of bens.values()) {
+    const row = mapLoteSuporteVeiculo(l, tenant);
+    if (!row || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    veiculos.push(row);
+  }
+  if (veiculos.length) console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${veiculos.length} veículos (${bens.size} lotes)`);
+  return veiculos;
+}
+
+async function scraperSuporteVeiculosTodos(browser) {
+  console.log('  Suporte Leilões (veículos, piloto) — /buscador?categoria=1 por tenant...');
+  const todos = [];
+  const vistos = new Set();
+  for (const tenant of SUPORTE_TENANTS) {
+    try {
+      const veiculos = await scraperSuporteVeiculosTenant(browser, tenant);
+      for (const v of veiculos) { if (!vistos.has(v.fonte_id)) { vistos.add(v.fonte_id); todos.push(v); } }
+    } catch (e) { console.log(`    [${tenant.domain}] erro (veículos): ${String(e.message).slice(0, 80)}`); }
+  }
+  console.log(`    Suporte Leilões (veículos): ${todos.length} veículos de ${SUPORTE_TENANTS.length} leiloeiros`);
+  return todos;
+}
+
 // ─── GRUPO LANCE ──────────────────────────────────────────────────────────────
 // Leiloeiro grande (MG/nacional), server-rendered (Yii2, sem Cloudflare). Catálogo
 // de imóveis em /imoveis?page=N. Cada card é .card-item[data-key={id}] com:
@@ -4102,6 +4210,15 @@ async function main() {
       await registrarSaude('SUPORTE', imoveis, 'principal', validarColeta(imoveis, 'SUPORTE'));
     } catch (e) {
       console.log(`  ⚠️ Suporte Leilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 13b. Suporte Leilões — VEÍCULOS (piloto, 11/09). Mesmo padrão de gate do
+    // Sodré veículos: OPT-IN only — exige SUPORTE_VEICULOS explícito até o dono
+    // validar o resultado. Escreve em `veiculos_leilao`, não entra na contagem de `total`.
+    if (ONLY.includes('SUPORTE_VEICULOS')) {
+      console.log('\n📋 Suporte Leilões (veículos, piloto)...');
+      const veiculosSuporte = await scraperSuporteVeiculosTodos(browser);
+      await salvarVeiculos(veiculosSuporte);
     }
 
     // 14. Grupo Lance — server-rendered (/imoveis). Foto do CDN; edital/matrícula/laudo
