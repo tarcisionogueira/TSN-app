@@ -1465,7 +1465,12 @@ async function scraperSodre(browser) {
 // escrever este código. Por isso: (a) guarda `raw` da oferta inteira, pra extrair depois se os
 // nomes forem outros; (b) marca/modelo/ano/placa/km saem por REGEX de título+descrição, que
 // não depende de nome de campo nenhum.
-const REGEX_PLACA = /\b([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/;
+// Sem separador de ESPAÇO solto (só hífen ou colado): achado ao vivo em 11/09 no piloto
+// SUPORTE — "...2P AUT 2014 2013 PRETO..." casava "AUT 2014" como placa antiga (3 letras +
+// espaço + 4 dígitos), porque "AUT" (automático) é abreviação comum em título de veículo, não
+// placa. Placa real quase nunca aparece com espaço solto em texto corrido (vem colada ou com
+// hífen); apertar para -?/nada não perde placa verdadeira e corta esse falso positivo.
+const REGEX_PLACA = /\b([A-Z]{3}-?\d[A-Z0-9]\d{2}|[A-Z]{3}-?\d{4})\b/;
 const REGEX_ANO = /\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/;
 const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
 const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
@@ -3424,6 +3429,11 @@ function mapLoteSuporteVeiculo(l, tenant) {
   if (!valorMin) return null;
   const textoCompleto = `${titulo} ${loc}`;
   const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  // SUPORTE escreve "aaaa aaaa" (espaço) em vez do "aaaa/aaaa" (barra) que REGEX_ANO espera
+  // (confirmado ao vivo: "...BRANCA 2017 2017 - SINISTRADO..."). Tenta a barra primeiro (caso
+  // algum tenant use o outro formato) e só cai no espaço se não achou — mantém REGEX_ANO
+  // (compartilhado com a Sodré) intocado, escopo só neste mapper.
+  const anoMatch = textoCompleto.match(REGEX_ANO) || textoCompleto.match(/\b(19[5-9]\d|20[0-4]\d)\s+(19[5-9]\d|20[0-4]\d)\b/);
   return {
     fonte: 'SUPORTE',
     fonte_id: `slv_${tenantKey}_${l.id}`,
@@ -3432,8 +3442,8 @@ function mapLoteSuporteVeiculo(l, tenant) {
     descricao: titulo.slice(0, 500),
     marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
     modelo: null,
-    ano_fabricacao: textoCompleto.match(REGEX_ANO)?.[1] ? Number(textoCompleto.match(REGEX_ANO)[1]) : null,
-    ano_modelo: textoCompleto.match(REGEX_ANO)?.[2] ? Number(textoCompleto.match(REGEX_ANO)[2]) : null,
+    ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+    ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
     placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
     km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
     valor_minimo: valorMin,
