@@ -974,7 +974,7 @@ async function paginaImovel(id) {
 
           <!-- "Sobre o imóvel" (Tipo/Modalidade/Cidade/Bairro) foi removido daqui (11/09,
                pedido do dono: "fica amontoado com muita informação") — os quatro campos já
-               apareciam no chip da foto e no `.sub` logo abaixo do H1; era o MESMO fato
+               apareciam no chip da foto e na linha logo abaixo do H1; era o MESMO fato
                impresso 2-3 vezes na mesma página. "Data do leilão" (o único campo que não se
                repetia em lugar nenhum) foi para dentro de Valores; o selo de contagem
                regressiva idêntico que ficava aqui também saiu — o da sidebar já é sempre
