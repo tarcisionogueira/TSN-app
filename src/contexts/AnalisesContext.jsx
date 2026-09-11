@@ -66,6 +66,48 @@ export function AnalisesProvider({ children }) {
     if (await termosUsoPendente(user?.id)) { abrirTermosModal('relatorio'); return false; }
     return true;
   }, [user?.id, impersonate]);
+
+  // ── O QUE O ACEITE DE TERMOS REPRESAVA, E SUMIA (11/09) ───────────────────────
+  // O gate acima faz o certo: sem aceite, não dispara a API. O que faltava era o DEPOIS.
+  // Medido em dois usuários no mesmo dia, o roteiro era este: clicou em "Gerar" → a tela já
+  // tinha dito *"Geração iniciada no servidor, pode até fechar a aba"* → 3 s depois o popup
+  // de termos abriu → a pessoa aceitou → **nada aconteceu**. Um dos dois clicou em Gerar de
+  // novo e conseguiu; o outro (explorador, plano grátis — exatamente quem se quer converter)
+  // voltou para o imóvel e foi embora sem relatório nenhum.
+  //
+  // Duas coisas eram entregues erradas, e a segunda escondia a primeira:
+  //   1. a promessa ("pode fechar a aba") era impressa ANTES de quem podia recusar;
+  //   2. o rastro gravava `analise_gerar / iniciou no servidor` para uma requisição que NUNCA
+  //      saiu do navegador — então `cliente_travou()` classificava o caso como "começou a
+  //      gerar e sumiu", que é diagnóstico oposto de "foi barrado pelo aceite". O detector
+  //      estava certo; ele repetia fielmente a mentira do evento (forma #10).
+  //
+  // O gate NÃO foi afrouxado: continua sem gerar sem aceite. O que muda é que a ação fica
+  // REPRESADA e roda sozinha no aceite, a tela passa a dizer que está esperando o aceite, e o
+  // rastro passa a dizer `represado: termos pendentes` — o nome do que de fato aconteceu.
+  const represado = React.useRef(null);      // { tipo, meta, payload }
+  const disparar = React.useRef({});         // preenchido abaixo, depois das três funções
+  useEffect(() => {
+    const h = () => {
+      const p = represado.current;
+      represado.current = null;               // uma retomada por aceite, nunca um laço
+      if (!p) return;
+      const f = disparar.current[p.tipo];
+      if (f) f(p.meta, p.payload);
+    };
+    window.addEventListener('termos-uso-aceitos', h);
+    return () => window.removeEventListener('termos-uso-aceitos', h);
+  }, []);
+
+  // Devolve `true` quando BARROU (e já represou a retomada). `alvo` é o mesmo vocabulário
+  // que a tela usa em `analise_gerar`, para o rastro casar dos dois lados.
+  const barrarPorTermos = useCallback(async (tipo, alvo, meta, payload, marcar) => {
+    if (await exigirTermos()) return false;
+    represado.current = { tipo, meta, payload };
+    marcar({ ...meta, status: 'erro', erro: 'Aceite os termos atualizados para gerar — assim que aceitar, a geração começa sozinha.' });
+    registrarEvento('analise_gerar', { alvo, detalhe: `represado: termos pendentes imovel=${meta.imovelId}` });
+    return true;
+  }, [exigirTermos]);
   const [analises, setAnalises] = useState(() => loadCache(LS_KEY));
   const [documentais, setDocumentais] = useState(() => loadCache(LS_KEY_DOC));
   const [laudos, setLaudos] = useState(() => loadCache(LS_KEY_LAUDO));
@@ -265,7 +307,7 @@ export function AnalisesProvider({ children }) {
   const iniciar = useCallback(async (meta, payload) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
-    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
+    if (await barrarPorTermos('mercado', 'mercado', meta, payload, upsert)) return;
     upsert({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-analise', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -284,14 +326,14 @@ export function AnalisesProvider({ children }) {
       upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
       recarregar();
     });
-  }, [upsert, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeRows]);
+  }, [upsert, recarregar, barrarPorTermos, reconciliarFalhaDeRede, mergeRows]);
 
   // Documental: dispara /api/gerar-documental (server-side, persistente).
   // payload pode trazer textoEdital/textoMatricula/processoNumero/processoNome/urlEdital.
   const iniciarDocumental = useCallback(async (meta, payload = {}) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
-    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
+    if (await barrarPorTermos('documental', 'documental', meta, payload, upsertDoc)) return;
     upsertDoc({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-documental', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -307,14 +349,14 @@ export function AnalisesProvider({ children }) {
       upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
       recarregar();
     });
-  }, [upsertDoc, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeDocRows]);
+  }, [upsertDoc, recarregar, barrarPorTermos, reconciliarFalhaDeRede, mergeDocRows]);
 
   // Laudo de viabilidade (3º documento): consolida mercadológico + documental no
   // servidor (/api/gerar-laudo-viabilidade). Não reprocessa fontes pagas.
   const iniciarLaudo = useCallback(async (meta) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
-    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
+    if (await barrarPorTermos('laudo', 'laudo', meta, undefined, upsertLaudo)) return;
     upsertLaudo({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-laudo-viabilidade', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -330,7 +372,11 @@ export function AnalisesProvider({ children }) {
       upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
       recarregar();
     });
-  }, [upsertLaudo, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeLaudoRows]);
+  }, [upsertLaudo, recarregar, barrarPorTermos, reconciliarFalhaDeRede, mergeLaudoRows]);
+
+  // Ponte para a retomada pós-aceite. Via ref, e não via dependência do useCallback, porque
+  // as três funções precisariam depender de um efeito que depende delas — ciclo.
+  disparar.current = { mercado: iniciar, documental: iniciarDocumental, laudo: iniciarLaudo };
 
   const getAnalise = useCallback((imovelId) => analises.find(a => a.imovelId === imovelId) || null, [analises]);
   const getDocumental = useCallback((imovelId) => documentais.find(a => a.imovelId === imovelId) || null, [documentais]);

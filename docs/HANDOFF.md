@@ -4,6 +4,68 @@
 
 ---
 
+## 🧾 11/09 — O ACEITE DE TERMOS ENGOLIA A GERAÇÃO, E O DETECTOR REPETIA A MENTIRA DO EVENTO
+
+Achado do check-in diário, via `cliente_travou(7)` (que nasceu ontem). **Dois usuários no mesmo
+dia, mesmo roteiro**, medido evento a evento:
+
+```
+11:15:16  clique em "Gerar"  →  analise_gerar: "tentou" + "iniciou no servidor"
+          a tela imprime "Geração iniciada no servidor, pode até fechar a aba"
+11:15:19  popup "Li e aceito os termos atualizados"  (3 s depois)
+11:15:34  volta para o imóvel — e NADA acontece. Nenhuma linha, nenhum desfecho.
+```
+
+O segundo usuário fez igual às 12:08, **clicou em Gerar de novo às 12:09 e conseguiu**. O
+primeiro era **explorador, plano grátis — exatamente quem se quer converter** — e foi embora sem
+relatório nenhum.
+
+**Duas coisas erradas, e a segunda escondia a primeira:**
+
+1. **A promessa era impressa antes de quem podia recusar.** `Analise.jsx:1086-1087` emite
+   `iniciou no servidor` e diz *"pode até fechar a aba"*; só depois, em
+   `AnalisesContext.iniciar`, o gate de termos (regra do dono, 30/07) recusa e abre o popup.
+   Pior: a pessoa foi convidada a fechar a aba de uma geração que nunca saiu do navegador.
+2. **O rastro mentia, e o detector novo repetia.** `cliente_travou()` classifica
+   `iniciou no servidor` sem desfecho em 30 min como *"começou a gerar e sumiu"* — diagnóstico
+   **oposto** de *"foi barrado pelo aceite"*. O detector estava certo; ele reproduzia fielmente o
+   que o evento afirmava. **Forma #10 herdada** — o instrumento novo nasceu confiando num evento
+   que já mentia.
+
+⚠️ **A minha própria primeira consulta caiu na mesma armadilha.** Perguntei "houve desfecho para
+este `tentou`?" casando qualquer desfecho **do mesmo usuário em 30 min** — e creditou ao clique
+das 12:08 (que morreu) o sucesso do clique das 12:09. Só a linha do tempo crua, evento a evento,
+mostrou que eram duas tentativas. Agregar por pessoa/janela funde tentativas distintas.
+
+### O conserto, nas duas metades
+
+- **Produto** (`src/contexts/AnalisesContext.jsx`): o gate **não foi afrouxado** — continua sem
+  gerar sem aceite. O que muda é o depois: a ação fica **represada** (`{tipo, meta, payload}`), a
+  tela passa a dizer *"Aceite os termos atualizados para gerar — assim que aceitar, a geração
+  começa sozinha"*, e o listener de `termos-uso-aceitos` **retoma sozinho**, uma vez por aceite.
+  Vale para os três (`mercado`, `documental`, `laudo`), que tinham o mesmo gate copiado.
+- **Instrumento** (`supabase/migrations/cliente_travou_represado_por_termos_e_desfecho.sql`,
+  aplicada): `represado%` passa a contar como **desfecho** no alarme (2). Não é sucesso — é *"foi
+  barrado, sabe disso, e a retomada está engatilhada"*; entra porque **encerra o silêncio**, que
+  é o que aquele alarme existe para achar. Quem fecha o popup sem aceitar deixa de aparecer, e é
+  o certo: não é cliente travado por defeito nosso.
+
+**O caso de hoje continua aparecendo em `cliente_travou(7)`** — e deve: ele aconteceu antes do
+conserto e realmente ficou sem resposta. O que muda é dali para frente.
+
+### ⚠️ O QUE **NÃO** FOI CONSERTADO (de propósito, para não virar surpresa)
+
+`Analise.jsx` **continua emitindo `iniciou no servidor` antes do gate** — agora o evento
+`represado` vem logo atrás e corrige o rastro, mas a afirmação original segue prematura. Mover a
+promessa para depois do gate exige o resultado assíncrono nas três telas; fica como dívida
+nomeada. **Qualquer gate novo colocado depois desse ponto vai reproduzir o mesmo defeito.**
+
+Verificação: `npm run build` e `verificar:sintaxe` passam. **A retomada pós-aceite NÃO foi
+exercida ponta a ponta em navegador** — exige conta com termos pendentes. O sinal de que pegou é
+`represado: termos pendentes` aparecer em `eventos_atividade` no próximo aceite.
+
+---
+
 ## ✅ PENDÊNCIAS EM ABERTO (checar ao abrir nova sessão, antes de qualquer coisa nova)
 
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
