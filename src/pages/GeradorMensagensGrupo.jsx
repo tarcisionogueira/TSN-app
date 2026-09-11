@@ -74,6 +74,9 @@ export default function GeradorMensagensGrupo() {
   // (ex.: mito de uma pergunta indo pra dentro de uma enquete de outra).
   const [destaqueIndex, setDestaqueIndex] = useState(0);
   const [depoimentoIndex, setDepoimentoIndex] = useState(0);
+  // -1 = usar o link da aula (padrão). Achado do dono (11/09): ele trocou o link da aula por
+  // um de "operação similar" à mão — este seletor cobre o mesmo caso de uso sem editar texto.
+  const [caseOportunidadeIndex, setCaseOportunidadeIndex] = useState(-1);
   const [imovelIndex, setImovelIndex] = useState(0);
   const [cursoIndex, setCursoIndex] = useState(0);
   const [mito, setMito] = useState('');
@@ -98,7 +101,7 @@ export default function GeradorMensagensGrupo() {
     setGerando(true); setErro(''); setTexto(''); setCopiado(false); setEstilizado(false); setLogId(null);
     const extras = {
       convite: { destaque_index: destaqueIndex },
-      case: { depoimento_index: depoimentoIndex },
+      case: { depoimento_index: depoimentoIndex, oportunidade_index: caseOportunidadeIndex },
       educacao: { mito, verdade },
       enquete: { pergunta, opcoes },
       urgencia: { estagio },
@@ -199,6 +202,22 @@ export default function GeradorMensagensGrupo() {
             </select>
           ) : (
             <div style={{ fontSize: 13, color: '#b45309' }}>Nenhum depoimento cadastrado nesta aula ainda — cadastre em Admin → Aula ao vivo.</div>
+          )}
+          {/* 11/09, pedido do dono: em vez de convidar pra aula, linkar uma oportunidade real
+              parecida com o case ("uma operação similar que foi citada"). Opcional — o padrão
+              continua sendo o convite da aula, igual sempre foi. */}
+          {dados.oportunidades?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <label style={S.label}>No lugar do link da aula, linkar uma oportunidade parecida (opcional)</label>
+              <select value={caseOportunidadeIndex} onChange={(e) => setCaseOportunidadeIndex(Number(e.target.value))} style={S.input}>
+                <option value={-1}>— usar o link da aula —</option>
+                {dados.oportunidades.map((im, i) => (
+                  <option key={i} value={i}>
+                    {im.tipo ? `${im.tipo} · ` : ''}{im.cidade}/{im.estado}{im.desconto_percentual > 0 ? ` — ${Math.round(im.desconto_percentual)}% off` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
       )}
