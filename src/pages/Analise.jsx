@@ -545,6 +545,12 @@ export default function Analise() {
   }, [relDocumentalPreparando, docEntry?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const [parecerDocumental, setParecerDocumental] = useState(null); // resultado do servidor
   const [docMsg, setDocMsg] = useState('');
+  // Pedido de informação ao leiloeiro (11/09): estado do disparo + fallback quando a fonte
+  // ainda não tem e-mail cadastrado (`leiloeiro_contato`) — nesse caso o servidor devolve o
+  // texto pronto para copiar, em vez de fingir que enviou.
+  const [pedindoLeiloeiro, setPedindoLeiloeiro] = useState(false);
+  const [pedidoLeiloeiroTexto, setPedidoLeiloeiroTexto] = useState(null); // { texto, linkLote } | null
+  const [pedidoLeiloeiroEnviado, setPedidoLeiloeiroEnviado] = useState(false);
   // Auto-poll da captura de documentos (leiloeiro integrado): quando o servidor está
   // baixando os PDFs, re-gera sozinho até ler — sem o usuário clicar de novo.
   const [preparandoDocs, setPreparandoDocs] = useState(false);
@@ -862,6 +868,25 @@ export default function Analise() {
     } finally { setEnviandoAnexo(''); }
   };
 
+  // Pede ao LEILOEIRO, por e-mail, os itens do checklist documental que ainda estão em
+  // aberto (faltando + lacunas já calculadas pela IA — nunca uma lista nova inventada aqui).
+  // Sem e-mail cadastrado para a fonte (a maioria hoje), o servidor devolve o texto pronto
+  // para copiar em vez de fingir que enviou — ver `api/pedir-documento-leiloeiro.js`.
+  const pedirAoLeiloeiro = async () => {
+    if (!imovelInicial?.id || pedindoLeiloeiro) return;
+    setPedindoLeiloeiro(true); setPedidoLeiloeiroTexto(null);
+    try {
+      const r = await apiCall('/api/pedir-documento-leiloeiro', { method: 'POST', body: JSON.stringify({ imovel_id: imovelInicial.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote }); return; }
+      if (!r.ok || j?.error) { showMsg(j?.error || 'Não foi possível enviar o pedido agora.', 'error'); return; }
+      setPedidoLeiloeiroEnviado(true);
+      showMsg(`Pedido enviado ao leiloeiro (${j.destinatario}). A resposta cai direto no seu e-mail.`, 'success');
+    } catch {
+      showMsg('Não foi possível enviar o pedido agora.', 'error');
+    } finally { setPedindoLeiloeiro(false); }
+  };
+
   // Tela DEDICADA de "documento faltante": pede SÓ o que falta (matrícula e/ou
   // edital/regras), mostra o link do leiloeiro para baixar, e deixa anexar outros
   // documentos. Reaproveitada tanto quando NÃO há nada legível (precisaDocumentos)
@@ -911,6 +936,35 @@ export default function Analise() {
             </div>
           )}
           <button onClick={()=>setModoManual(true)} style={{ background:'none', border:'none', color:'#9a3412', fontSize:12.5, fontWeight:700, cursor:'pointer', textDecoration:'underline', padding:0 }}>ou colar o texto do documento</button>
+          {/* Pedir ao leiloeiro (11/09): não pede tudo de novo, só o que o próprio checklist
+              já sinalizou como faltando/em aberto. */}
+          {pedidoLeiloeiroEnviado ? (
+            <div style={{ fontSize:12.5, color:'#15803d', fontWeight:700 }}>✓ Pedido enviado ao leiloeiro — a resposta cai no seu e-mail.</div>
+          ) : pedidoLeiloeiroTexto ? (
+            <div style={{ background:'white', border:'1px solid #fdba74', borderRadius:10, padding:'12px 14px', display:'flex', flexDirection:'column', gap:8, width:'100%', boxSizing:'border-box' }}>
+              <div style={{ fontSize:12.5, color:'#7c2d12', fontWeight:700 }}>Ainda não temos o e-mail deste leiloeiro cadastrado — copie o texto abaixo e envie pelo canal de contato dele.</div>
+              <textarea readOnly value={pedidoLeiloeiroTexto.texto} rows={6}
+                style={{ width:'100%', boxSizing:'border-box', fontSize:12, fontFamily:'inherit', border:'1px solid #fed7aa', borderRadius:8, padding:8, color:'#1e293b', resize:'vertical' }}
+                onClick={e => e.target.select()} />
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                <button onClick={() => { navigator.clipboard?.writeText(pedidoLeiloeiroTexto.texto).then(() => showMsg('Texto copiado.', 'success')).catch(() => {}); }}
+                  style={{ padding:'8px 14px', background:'#c2410c', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12.5, cursor:'pointer' }}>
+                  Copiar texto
+                </button>
+                {pedidoLeiloeiroTexto.linkLote && (
+                  <a href={pedidoLeiloeiroTexto.linkLote} target="_blank" rel="noreferrer"
+                    style={{ padding:'8px 14px', background:'white', border:'1px solid #fdba74', borderRadius:8, color:'#c2410c', fontWeight:700, fontSize:12.5, textDecoration:'none' }}>
+                    Abrir página do lote
+                  </a>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button onClick={pedirAoLeiloeiro} disabled={pedindoLeiloeiro}
+              style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'9px 15px', background:'white', border:'1px solid #fdba74', borderRadius:10, color:'#c2410c', fontWeight:800, fontSize:13, cursor: pedindoLeiloeiro?'default':'pointer', opacity: pedindoLeiloeiro?0.7:1, alignSelf:'flex-start' }}>
+              {pedindoLeiloeiro ? 'Enviando…' : '✉️ Pedir estas informações ao leiloeiro'}
+            </button>
+          )}
         </>) : (
           <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
             📎 Anexar {listaTxt}
