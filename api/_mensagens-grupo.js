@@ -46,13 +46,24 @@ export function montarConvite({ titulo, quando, destaque, link }) {
 // `depoimento` vem de `eventos_live.depoimentos` (jsonb curado à mão pelo dono, ver HANDOFF
 // 05/09): {tag, nome, local, texto, resultado}. `resultado` já é a prosa com os valores reais —
 // esta função NUNCA soma, nunca calcula percentual, só encaixa o que já está escrito.
-export function montarCase({ depoimento, link }) {
+//
+// `linkTipo` (11/09, pedido do dono): o link de fechamento pode ser o convite pra aula (padrão)
+// OU uma oportunidade real do acervo parecida com o case ("uma operação similar que foi
+// citada") — troca só a FRASE de chamada, nunca inventa link nenhum; quem decide qual link
+// entra é `admin-mensagens-grupo.js`, que já busca a lista real de oportunidades.
+const CTA_CASE = {
+  aula: (l) => `Quer aprender a fazer o mesmo? ${l}`,
+  oportunidade: (l) => `Tem uma oportunidade parecida no acervo agora — dá uma olhada:\n${l}`,
+};
+export function montarCase({ depoimento, link, linkTipo = 'aula' }) {
   const nome = String(depoimento?.nome || '').trim();
   const resultado = String(depoimento?.resultado || '').trim();
   if (!nome || !resultado) return null;
   const onde = depoimento?.local ? ` (${depoimento.local})` : '';
   const tag = depoimento?.tag ? ` — ${String(depoimento.tag).trim()}` : '';
   const texto = String(depoimento?.texto || '').trim();
+  const l = String(link || '').trim();
+  const cta = l ? (CTA_CASE[linkTipo] || CTA_CASE.aula)(l) : null;
   return linhas(
     `🏠 Case real da comunidade${onde}`,
     '',
@@ -61,7 +72,7 @@ export function montarCase({ depoimento, link }) {
     '',
     resultado,
     '',
-    link ? `Quer aprender a fazer o mesmo? ${link}` : null,
+    cta,
   );
 }
 

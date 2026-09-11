@@ -99,8 +99,11 @@ async function buscarOportunidades() {
   return lista.concat(Array.isArray(semData) ? semData : []);
 }
 
-function linkDoImovel(id, edicao) {
-  return `${BASE}/i/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-oportunidade`;
+// `conteudo` distingue no UTM se o clique veio de uma mensagem "oportunidade" pura ou de um
+// "case" que linkou pra uma oportunidade parecida (11/09, pedido do dono) — mesma campanha,
+// content diferente, pra não misturar as duas origens na leitura de marketing depois.
+function linkDoImovel(id, edicao, conteudo = 'grupo-oportunidade') {
+  return `${BASE}/i/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=${conteudo}`;
 }
 
 // `/p/curso/:id` (og-share.js) só tem preview rico pros cursos do array ESTÁTICO — os de
@@ -174,7 +177,18 @@ export default async function handler(req, res) {
     if (tipo === 'convite') {
       dados = { titulo: evento.titulo, quando: evento.quando, link, destaque: evento.apresentador_destaques[Number(extras.destaque_index)] || null };
     } else if (tipo === 'case') {
-      dados = { depoimento: evento.depoimentos[Number(extras.depoimento_index)] || null, link };
+      // Link opcional pra uma oportunidade real do acervo, em vez do link da aula (11/09,
+      // achado do dono: ele removeu o link da aula à mão para colar o de "uma operação
+      // similar" — ou seja, o caso de uso já existia, só não tinha campo pra isso). Continua
+      // 100% dado real: mesma lista de `oportunidades` que o tipo "oportunidade" já usa, e o
+      // link mantém o UTM (só o `content` muda pra "grupo-case-oportunidade", ver linkDoImovel).
+      const oportunidadeCase = Number.isInteger(extras.oportunidade_index) && extras.oportunidade_index >= 0
+        ? oportunidades[extras.oportunidade_index] || null : null;
+      dados = {
+        depoimento: evento.depoimentos[Number(extras.depoimento_index)] || null,
+        link: oportunidadeCase ? linkDoImovel(oportunidadeCase.id, evento.edicao, 'grupo-case-oportunidade') : link,
+        linkTipo: oportunidadeCase ? 'oportunidade' : 'aula',
+      };
     } else if (tipo === 'educacao') {
       dados = { mito: extras.mito, verdade: extras.verdade };
     } else if (tipo === 'enquete') {

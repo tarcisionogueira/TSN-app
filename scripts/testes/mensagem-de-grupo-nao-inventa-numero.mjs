@@ -31,6 +31,17 @@ checa('sem "resultado" no depoimento → null (não inventa case)',
   montarCase({ depoimento: { nome: 'Alguém' }, link: 'https://x' }) === null);
 checa('sem depoimento nenhum → null',
   montarCase({ depoimento: null, link: 'https://x' }) === null);
+{
+  // 11/09, pedido do dono: link opcional pra uma oportunidade real do acervo em vez do
+  // convite da aula ("uma operação similar que foi citada") — só muda a FRASE de chamada,
+  // nunca o fato (depoimento continua vindo literal, como no caso `aula` acima).
+  const dep = { nome: 'Rafael S.', resultado: 'Lance vencedor de R$ 112.949,63.' };
+  const r = montarCase({ depoimento: dep, link: 'https://x/i/abc', linkTipo: 'oportunidade' });
+  checa('linkTipo oportunidade troca a chamada (não fala de "aprender")', r?.includes('oportunidade parecida') && !r.includes('aprender a fazer o mesmo'), r);
+  checa('linkTipo oportunidade ainda cita o link real', r?.includes('https://x/i/abc'), r);
+  const semLinkTipo = montarCase({ depoimento: dep, link: 'https://x/aula/y' });
+  checa('sem linkTipo (default) continua com a chamada da aula, como antes', semLinkTipo?.includes('Quer aprender a fazer o mesmo?'), semLinkTipo);
+}
 
 console.log('\nEDUCAÇÃO (mito ou verdade) — zero fato além do que o admin escreveu');
 {
