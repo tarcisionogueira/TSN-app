@@ -30,7 +30,12 @@ function candidatosEmail(html) {
   const out = [];
   // mailto: primeiro — é o sinal mais forte de "este é o contato clicável da página", não
   // apenas um e-mail que apareceu solto em algum texto (ex.: e-mail de exemplo, de terceiro).
-  for (const m of html.matchAll(/mailto:([^"'?\s]+)/gi)) {
+  // Exclui `\` do que pode compor o e-mail (achado 11/09, dado real: LJUD capturou
+  // "contato@leiloesjudiciais.com.br\" com barra grudada). Causa: o mailto vinha dentro de um
+  // JSON serializado na própria página (`__NEXT_DATA__`-like), onde a aspa de fechamento
+  // aparece escapada (`\"`) — sem excluir `\`, a captura engolia a barra da escape ANTES da
+  // aspa real, já que só aspas/interrogação/espaço cortavam o match.
+  for (const m of html.matchAll(/mailto:([^"'\\?\s]+)/gi)) {
     const e = String(m[1] || '').trim().toLowerCase();
     if (e && !vistos.has(e)) { vistos.add(e); out.push({ email: e, forte: true, pos: m.index }); }
   }
