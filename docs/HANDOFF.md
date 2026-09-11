@@ -43,6 +43,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    perdendo um campo que existe — não decidido. Prioridade sugerida: investigar CEF primeiro
    (maior volume) e depois os 100%-sem-data (mais fácil de confirmar bug, já que 100% é sinal
    mais forte que "quase sempre").
+8. **Instagram — liberar a automação de resposta (100% burocracia da Meta, zero código)**
+   (reaberta 11/09; era a pendência #9 antiga, sumiu da lista numa compactação e voltou porque
+   segue real). Hoje o sistema só ESCUTA (webhook capturando comentários reais desde 08/09,
+   funcionando) e PREPARA rascunho de resposta por IA em `/admin/instagram` — **nunca posta
+   sozinho**. Ação imediata: **7 rascunhos parados no painel agora, nenhum enviado ainda** —
+   entrar em `/admin/instagram` e responder (copiar/editar/colar manual no Instagram). Para a
+   automação virar de verdade automática: (a) concluir **Verificação de Negócio** no Meta
+   Business Manager (CNPJ + documentos — está parada desde 26/08); (b) gravar o **vídeo do
+   fluxo funcionando** exigido pela Meta ANTES de submeter; (c) submeter o **App Review**
+   pedindo `instagram_manage_messages`/`instagram_manage_comments`; (d) aprovado, eu ligo
+   `IG_BOT_ATIVO=1`. Nada disso eu resolvo sozinho — é painel da Meta, com login da empresa.
 
 ---
 
