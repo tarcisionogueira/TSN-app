@@ -4898,6 +4898,7 @@ function ScrapersMonitor() {
 // Início: colocar aqui de propósito, com botão de disparo, pra não repetir o achado de 11/09
 // ("não localizei o botão").
 function VeiculosPilotoMonitor() {
+  const navVeic = useNavigate();
   const [linhas, setLinhas] = useState([]);
   const [contagem, setContagem] = useState({ confirmado: 0, indefinido: 0, excluido: 0 });
   const [loading, setLoading] = useState(true);
@@ -4941,10 +4942,16 @@ function VeiculosPilotoMonitor() {
           <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🚗 Leilão de veículos (piloto — Sodré Santoro)</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Só bens já em pátio (sinistro/perda total de seguradora) — nunca em posse do executado</div>
         </div>
-        <button onClick={disparar} disabled={disparo.rodando}
-          style={{ padding: '6px 14px', borderRadius: 8, background: disparo.rodando ? '#f1f5f9' : '#0D63DB', color: disparo.rodando ? '#94a3b8' : 'white', border: 'none', cursor: disparo.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-          {disparo.rodando ? '⏳ Disparando…' : '▶ Identificar veículos agora'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => navVeic('/admin/veiculos-leilao')}
+            style={{ padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            🔍 Ver lotes
+          </button>
+          <button onClick={disparar} disabled={disparo.rodando}
+            style={{ padding: '6px 14px', borderRadius: 8, background: disparo.rodando ? '#f1f5f9' : '#0D63DB', color: disparo.rodando ? '#94a3b8' : 'white', border: 'none', cursor: disparo.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            {disparo.rodando ? '⏳ Disparando…' : '▶ Identificar veículos agora'}
+          </button>
+        </div>
       </div>
       {disparo.msg && <p style={{ fontSize: 11.5, color: '#059669', marginBottom: 10, background: '#f0fdf4', padding: '6px 10px', borderRadius: 6 }}>✅ {disparo.msg}</p>}
       {disparo.erro && <p style={{ fontSize: 11.5, color: '#dc2626', marginBottom: 10, background: '#fef2f2', padding: '6px 10px', borderRadius: 6 }}>⚠️ {disparo.erro}</p>}
@@ -4982,6 +4989,102 @@ function VeiculosPilotoMonitor() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// E-mail de contato por leiloeiro (11/09) — a maioria nasce SOZINHA (captura automática no
+// scraper, scripts/_contato-leiloeiro.mjs), esta tela é só para corrigir quando vier errado.
+// Editar aqui grava origem='manual', que a captura automática nunca mais sobrescreve.
+function LeiloeiroContatoManager() {
+  const [linhas, setLinhas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [soSemContato, setSoSemContato] = useState(false);
+  const [editando, setEditando] = useState(null); // fonte em edição
+  const [valorEdicao, setValorEdicao] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const carregar = () => {
+    setLoading(true);
+    apiCall('/api/leiloeiro-contato').then(r => r.json()).then(d => { setLinhas(d.contatos || []); setLoading(false); }).catch(() => setLoading(false));
+  };
+  useEffect(carregar, []);
+
+  const salvar = async (fonte) => {
+    const email = valorEdicao.trim();
+    if (!email) return;
+    setSalvando(true); setErro('');
+    try {
+      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte, email }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d?.error) throw new Error(d?.error || 'Falha ao salvar');
+      setEditando(null); carregar();
+    } catch (e) { setErro(e.message); } finally { setSalvando(false); }
+  };
+  const remover = async (fonte) => {
+    setSalvando(true);
+    try { await apiCall('/api/leiloeiro-contato', { method: 'DELETE', body: JSON.stringify({ fonte }) }); carregar(); }
+    finally { setSalvando(false); }
+  };
+
+  const exibir = soSemContato ? linhas.filter(l => !l.email) : linhas;
+  const semContato = linhas.filter(l => !l.email).length;
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>📧 Contato dos leiloeiros</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Usado no botão "Pedir informações ao leiloeiro" da Análise. Captura automática a cada coleta — ajuste aqui só se vier errado.</div>
+        </div>
+        {semContato > 0 && (
+          <button onClick={() => setSoSemContato(v => !v)} style={{ padding: '6px 12px', borderRadius: 8, background: soSemContato ? '#0D63DB' : 'white', color: soSemContato ? 'white' : '#374151', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            {soSemContato ? 'Ver todos' : `Ver só sem contato (${semContato})`}
+          </button>
+        )}
+      </div>
+      {erro && <p style={{ fontSize: 11.5, color: '#dc2626', marginBottom: 10 }}>⚠️ {erro}</p>}
+      {loading ? <p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando…</p> : !linhas.length ? (
+        <p style={{ fontSize: 12.5, color: '#64748b' }}>Nenhuma fonte cadastrada em leiloeiro_conhecimento ainda.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {exibir.map(l => (
+            <div key={l.fonte} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: l.email ? '#fafafa' : '#fffbeb', borderRadius: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: 12, color: '#111111', minWidth: 100 }}>{l.fonte}</span>
+              {editando === l.fonte ? (
+                <>
+                  <input autoFocus type="email" value={valorEdicao} onChange={e => setValorEdicao(e.target.value)}
+                    placeholder="email@leiloeiro.com.br" style={{ flex: 1, minWidth: 180, padding: '5px 8px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12 }} />
+                  <button onClick={() => salvar(l.fonte)} disabled={salvando} style={{ padding: '5px 10px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
+                  <button onClick={() => setEditando(null)} style={{ padding: '5px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: 12, color: l.email ? '#111111' : '#b45309', fontStyle: l.email ? 'normal' : 'italic' }} title={l.observacao || ''}>
+                    {l.email || 'sem contato ainda'}
+                  </span>
+                  {l.origem && (
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, background: l.origem === 'manual' ? '#dbeafe' : '#f0fdf4', color: l.origem === 'manual' ? '#1d4ed8' : '#15803d' }}>
+                      {l.origem === 'manual' ? 'manual' : 'auto'}
+                    </span>
+                  )}
+                  <button onClick={() => { setEditando(l.fonte); setValorEdicao(l.email || ''); setErro(''); }}
+                    style={{ padding: '5px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    {l.email ? 'Corrigir' : 'Cadastrar'}
+                  </button>
+                  {l.email && l.origem === 'manual' && (
+                    <button onClick={() => remover(l.fonte)} disabled={salvando} title="Remove a correção manual — a próxima coleta pode capturar de novo automaticamente"
+                      style={{ padding: '5px 10px', background: 'white', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
+                      Remover
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -7983,6 +8086,7 @@ function ScrapersTab() {
 
           {/* Leilão de veículos — piloto (11/09) */}
           <VeiculosPilotoMonitor />
+          <LeiloeiroContatoManager />
         </div>
       )}
 
