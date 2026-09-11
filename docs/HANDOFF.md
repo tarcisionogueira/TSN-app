@@ -4,6 +4,41 @@
 
 ---
 
+## ✅ PENDÊNCIAS EM ABERTO (checar ao abrir nova sessão, antes de qualquer coisa nova)
+
+Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
+acumular em paralelo com o rastro narrativo das Partes abaixo.
+
+1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
+   Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
+   já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
+   ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
+   card no painel.
+2. **eBook — page-break de subtítulo no leitor** (commit `1ad1256e`, já em produção). Dono disse
+   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. Perguntar
+   se os subtítulos abriram página nova corretamente na leitura real.
+3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
+   `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
+   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja.
+4. **Marketing — segmentação por palavra-chave/negativas**: a consulta ao Windsor.ai para nível de
+   keyword bateu numa restrição de combinação de tabelas (campos de keyword-criterion não
+   combinam com campos de métrica na mesma chamada) e ficou sem retry. Retomar com uma consulta
+   reformulada (duas chamadas separadas) se o dono quiser aprofundar qualidade de público além do
+   que já foi coberto (geo/dispositivo).
+5. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
+   desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
+   mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
+   serve antes de decidir se precisa de faturamento também.
+6. **NORDESTE/SIMONLEILOES seguem em 0% de foto** mesmo com o fix de `srcset` já validado em
+   produção (Parte 64) — a hipótese de lazy-load estava errada/incompleta. Falta um recon real
+   (baixar HTML ao vivo de um lote de cada fonte) antes de tentar outro fix; não adivinhar de novo.
+7. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
+   ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
+   ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
+   desfecho no próximo cliente real que aceitar termos pendentes.
+
+---
+
 ## 🧾 11/09 — O ACEITE DE TERMOS ENGOLIA A GERAÇÃO, E O DETECTOR REPETIA A MENTIRA DO EVENTO
 
 Achado do check-in diário, via `cliente_travou(7)` (que nasceu ontem). **Dois usuários no mesmo
@@ -63,37 +98,6 @@ nomeada. **Qualquer gate novo colocado depois desse ponto vai reproduzir o mesmo
 Verificação: `npm run build` e `verificar:sintaxe` passam. **A retomada pós-aceite NÃO foi
 exercida ponta a ponta em navegador** — exige conta com termos pendentes. O sinal de que pegou é
 `represado: termos pendentes` aparecer em `eventos_atividade` no próximo aceite.
-
----
-
-## ✅ PENDÊNCIAS EM ABERTO (checar ao abrir nova sessão, antes de qualquer coisa nova)
-
-Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
-acumular em paralelo com o rastro narrativo das Partes abaixo.
-
-1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
-   Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
-   já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
-   ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
-   card no painel.
-2. **eBook — page-break de subtítulo no leitor** (commit `1ad1256e`, já em produção). Dono disse
-   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. Perguntar
-   se os subtítulos abriram página nova corretamente na leitura real.
-3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
-   `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
-   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja.
-4. **Marketing — segmentação por palavra-chave/negativas**: a consulta ao Windsor.ai para nível de
-   keyword bateu numa restrição de combinação de tabelas (campos de keyword-criterion não
-   combinam com campos de métrica na mesma chamada) e ficou sem retry. Retomar com uma consulta
-   reformulada (duas chamadas separadas) se o dono quiser aprofundar qualidade de público além do
-   que já foi coberto (geo/dispositivo).
-5. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
-   desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
-   mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
-   serve antes de decidir se precisa de faturamento também.
-6. **NORDESTE/SIMONLEILOES seguem em 0% de foto** mesmo com o fix de `srcset` já validado em
-   produção (Parte 64) — a hipótese de lazy-load estava errada/incompleta. Falta um recon real
-   (baixar HTML ao vivo de um lote de cada fonte) antes de tentar outro fix; não adivinhar de novo.
 
 ---
 
