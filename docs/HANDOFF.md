@@ -29,9 +29,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-6. **NORDESTE/SIMONLEILOES seguem em 0% de foto** mesmo com o fix de `srcset` já validado em
-   produção (Parte 64) — a hipótese de lazy-load estava errada/incompleta. Falta um recon real
-   (baixar HTML ao vivo de um lote de cada fonte) antes de tentar outro fix; não adivinhar de novo.
+6. **NORDESTE/SIMONLEILOES 0% de foto — recon real feito, causa achada, fix em produção (11/09)**:
+   as duas passam TODA imagem pelo proxy Next.js `/_next/image?url=...&w=..&q=..` (src nunca
+   termina em extensão de imagem). `fotoDeHtml()` corrigido para decodificar a URL real do
+   parâmetro `url=` e validar essa, descartando `_next/static/` (asset genérico do build) e
+   `comitentes/` (logo do banco/seguradora/vara, não do imóvel). Testado contra o `<img>` real
+   capturado no recon antes de subir. **Falta**: confirmar em produção no próximo `scraper-dom.yml`
+   (cron ou push) que as duas fontes saem de 0% — script de recon fica em
+   `scripts/recon-foto-dom.mjs` (workflow `recon-foto-dom.yml`) se precisar repetir noutra fonte.
 7. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
    ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
    ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
