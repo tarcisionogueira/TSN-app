@@ -221,7 +221,7 @@ export function anexosDeHtml(html, urlBase) {
 // os padrões de chrome mais comuns e exige extensão de imagem de verdade. Validação real
 // acontece no dry-run automático do `scraper-dom.yml` (push nesta branch, Chromium de
 // verdade, zero Bright Data) — ver HANDOFF.
-const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social/i;
+const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem-imagem|no-image/i;
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
@@ -236,11 +236,28 @@ export function fotoDeHtml(html, urlBase) {
     }
     if (!src || /^data:/i.test(src)) continue;
     if (RE_IMG_DESCARTA.test(tag)) continue;
-    if (!/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(src.split(/[?#]/)[0])) continue;
+
+    // Proxy de otimização do Next.js (`/_next/image?url=<encoded>&w=..&q=..`): o `src` NUNCA
+    // termina em extensão de imagem (termina em "&q=NN") — é a foto real embutida no parâmetro
+    // `url=` que decide. Confirmado em dado real (recon 11/09, HANDOFF pendência 6): NORDESTE e
+    // SIMONLEILOES (ambos Next.js) passam TODA imagem por este proxy, inclusive as fotos reais
+    // do lote — por isso ficavam 0% mesmo com o fallback de srcset acima (o candidato existia,
+    // só nunca passava no teste de extensão).
+    let alvo = src;
+    const mProxy = src.match(/\/_next\/image\?url=([^&]+)/i);
+    if (mProxy) {
+      try { alvo = decodeURIComponent(mProxy[1]); } catch { continue; }
+      // Asset ESTÁTICO do build (`_next/static/...`) é gráfico genérico do site (placeholder/
+      // fundo), nunca a foto de um lote específico — era o candidato errado do NORDESTE antes
+      // de existir a foto real. "comitentes/" é o logo do CLIENTE do leilão (banco/seguradora/
+      // vara), não do imóvel — mesmo recon, era o 1º candidato incorreto sem este descarte.
+      if (/\/_next\/static\/|\/comitentes\//i.test(alvo)) continue;
+    }
+    if (!/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(alvo.split(/[?#]/)[0])) continue;
     const w = Number((tag.match(/\bwidth=["']?(\d+)/i) || [])[1] || 0);
     const h = Number((tag.match(/\bheight=["']?(\d+)/i) || [])[1] || 0);
     if ((w && w < 80) || (h && h < 80)) continue;   // ícone com dimensão pequena explícita
-    try { return new URL(src, urlBase).href; } catch { continue; }
+    try { return new URL(alvo, urlBase).href; } catch { continue; }
   }
   return null;
 }
