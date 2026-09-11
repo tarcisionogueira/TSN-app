@@ -20,19 +20,71 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
    `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
    "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja.
-4. **Marketing — segmentação por palavra-chave/negativas**: a consulta ao Windsor.ai para nível de
-   keyword bateu numa restrição de combinação de tabelas (campos de keyword-criterion não
-   combinam com campos de métrica na mesma chamada) e ficou sem retry. Retomar com uma consulta
-   reformulada (duas chamadas separadas) se o dono quiser aprofundar qualidade de público além do
-   que já foi coberto (geo/dispositivo).
-5. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
+4. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-6. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
-   ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
-   ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
-   desfecho no próximo cliente real que aceitar termos pendentes.
+5. **Piloto de veículos SUPORTE — validar dado real antes de promover à rodada diária**
+   (11/09, ver seção "Recon de veículos" logo abaixo). Rodei `SUPORTE_VEICULOS` como teste
+   manual; falta o dono olhar a amostra em `veiculos_leilao` (fonte='SUPORTE') e decidir se o
+   seletor de card bateu certo (não confirmado ao vivo se o template do card de veículo é
+   idêntico ao de imóvel) antes de eu tirar o gate `OPT-IN` e entrar na rodada diária.
+
+---
+
+## ✅ 11/09 (tarde) — GATE DE TERMOS CONFIRMADO EM PRODUÇÃO, COM EVENTO REAL DE CLIENTE
+
+Pendência 6 (fechada, removida da lista) tinha uma ponta em aberto: o fix do "aceite de termos
+engolia a geração" (seção logo abaixo) nunca tinha sido exercido por um cliente real depois do
+deploy — só validado por `build`/`verificar:sintaxe`. Achado no rastro de hoje, sem precisar
+esperar: usuário `3ad755c4-…` bateu no gate às 14:24:14 (`analise_gerar: "represado: termos
+pendentes imovel=…"`), aceitou o popup, e **a geração concluiu sozinha 3m22s depois (14:27:41,
+"concluiu com base de mercado") sem um segundo clique em "Gerar"**. Cruzamento que prova que foi
+a MESMA ação retomada (não uma tentativa nova): `perfis.termos_uso_aceito_em = 14:24:19.235`
+bate no segundo exato do clique que fechou o popup, e não há nenhum `analise_gerar: "tentou"`
+entre o aceite e a conclusão. **Retomada automática pós-aceite funcionando ponta a ponta, dado
+real, não suposição.**
+
+## ✅ 11/09 (tarde) — MARKETING: CONSULTA DE KEYWORD AO WINDSOR.AI RESOLVIDA
+
+Pendência 4 (removida da lista): a restrição de combinação de tabelas não se repetiu pedindo
+`keyword_text + match_type + clicks + spend + conversions` numa chamada só — só `search_term`
+precisa de chamada separada (relatório diferente no Google Ads). Dados reais dos últimos 30 dias
+confirmam o que já se sabia por intuição e agora tem número: **"sites de leilão de imóveis"**
+(frase) é a keyword mais cara (900 cliques, R$ 289,49, 10 conversões) e **"imóveis de leilão"**
+(frase) tem CPA visivelmente pior (508 cliques, R$ 160,65, só 2 conversões) — candidata a revisar
+match type ou pausar se o dono quiser apertar CPA. "leilão de casas" e "leilão de apartamentos"
+(frase) são as de melhor conversão/clique. Fica registrado para quando o dono quiser priorizar.
+
+## 🚗 11/09 (tarde) — RECON DE VEÍCULOS: PLANO DE CONSTRUÇÃO E PRIMEIRO PILOTO VALIDADO
+
+Recon anterior (9 fontes gratuitas com sinal real de "vende veículo": LJUD, MEGA, SBID9, SBID21,
+SUPERBID, SODRE, SUPORTE, WEBLEILOES, ZUK) virou plano de construção por ORDEM DE ESFORÇO — a
+mesma lógica que já rendeu resultado nesta base (1 parser cobrindo várias fontes é mais barato
+que 9 parsers do zero):
+
+1. **SODRE** — já existia um scraper completo, só faltava validar. **Rodado ao vivo agora**
+   (`SODRE_VEICULOS`, sem código novo): **120 veículos**, 100% com sinistro/combustível/marca/
+   foto, 95% com câmbio, 89% com pátio confirmado, 38 com alerta de motor. Dado de produção real,
+   não amostra — pronto pra promover à rodada diária quando o dono validar.
+2. **SUPORTE (LiderLeilões + ~23 outros tenants white-label)** — mesma plataforma do bloco de
+   imóveis, só trocando `categoria=2` por `categoria=1` (confirmado pelo link "Veículos" achado
+   no recon). Construído e deployado como piloto `SUPORTE_VEICULOS` (OPT-IN, mesmo padrão do
+   Sodré) e já disparado como teste — resultado ainda não conferido nesta sessão, ver pendência 5
+   da lista acima.
+3. **SBID9/SBID21/SUPERBID** — mesma API `offer-query.superbid.net`, só mudando o filtro de
+   categoria; falta recon rápido pra confirmar se `exchange.superbid.net` (onde achamos o sinal)
+   bate na mesma API do `www.superbid.net` (onde o scraper de imóveis já roda) antes de escrever
+   código — ainda não feito.
+4. **MEGA, LJUD, WEBLEILOES, ZUK** — sem scraper de veículo hoje; cada um precisa de parser novo,
+   mas reaproveitando a arquitetura Puppeteer e os regex (`REGEX_PLACA`/`REGEX_ANO`/`REGEX_KM`/
+   `MARCAS_VEICULO`/`classificarPatio`) já validados no piloto da Sodré — ainda não feito.
+
+**4 fontes sem sinal nenhum** (não vale escrever scraper): LEILOFY, PESTANA, SOLD, TOTALLEILOES.
+
+**Gap de schema encontrado**: `veiculos_leilao` não tem coluna própria para forma de pagamento
+nem documentação/edital — hoje só cabem dentro de `raw` (jsonb). Decidir se vale migração quando
+o volume de veículo justificar.
 
 ---
 
