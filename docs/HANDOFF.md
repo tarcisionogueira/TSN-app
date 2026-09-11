@@ -29,6 +29,39 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
+6. **NORDESTE/SIMONLEILOES seguem em 0% de foto** mesmo com o fix de `srcset` já validado em
+   produção (Parte 64) — a hipótese de lazy-load estava errada/incompleta. Falta um recon real
+   (baixar HTML ao vivo de um lote de cada fonte) antes de tentar outro fix; não adivinhar de novo.
+
+---
+
+## ⚠️ SESSÃO 25 · PARTE 64 (11/09) — SRCSET NÃO ERA A CAUSA: NORDESTE/SIMONLEILOES SEGUEM EM 0% FOTO
+
+Fechamento honesto de um item que parecia resolvido. O commit `ffebc53` (10/09) somou suporte a
+`srcset` em `fotoDeHtml()` (`scripts/lib/dom-parse-util.mjs`) com a hipótese de que NORDESTE e
+SIMONLEILOES usam lazy-load responsivo em vez de `src`/`data-src` — as duas únicas fontes da
+família `dom` que ficaram de fora do fix principal (8/10 fontes a 100% foto+descrição).
+
+**Validação real, não suposição**: conferido que o cron `scraper-dom.yml` de hoje (run
+`34600432590`, 11/09 12:43-13:07 UTC) rodou com `ffebc53` já presente (confirmado via
+`git merge-base --is-ancestor` contra o `head_sha` do run, não só "deve estar na main"). Log real:
+
+```
+[NORDESTE]     7 prontos · foto 0% · descrição 57%
+[SIMONLEILOES] 12 prontos · foto 0% · descrição 100%
+```
+
+**Sem mudança nenhuma.** A hipótese do `srcset` estava errada, ou pelo menos incompleta. Descrição
+funciona bem nas duas (57% e 100%) — o parser da página em si não está quebrado; é especificamente
+a extração de imagem que falha por um motivo ainda não identificado.
+
+**Decisão deliberada: não tentar um 3º palpite às cegas sobre o HTML.** Duas hipóteses (src/data-src,
+depois srcset) já falharam ou fracassaram parcialmente — a próxima tentativa sem examinar o HTML
+real seria repetir a mesma classe de erro (medir uma suposição, não o site de verdade — a forma
+nº10 do topo deste documento). Pendência registrada na lista de PENDÊNCIAS EM ABERTO (item 6):
+próximo passo é recon real — baixar o HTML ao vivo de um lote de cada fonte e inspecionar onde a
+imagem de fato está, mesmo padrão da "OFENSIVA de captura" já prescrita na Seção 2 para fontes que
+regridem.
 
 ---
 
