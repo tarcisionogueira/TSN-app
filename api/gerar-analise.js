@@ -1707,6 +1707,13 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const { imovelId, titulo, cidade, estado, imovel, mercadoInputs, parecerInputs } = body;
   if (!imovelId || !mercadoInputs) { res.status(400).json({ error: 'imovelId e mercadoInputs obrigatórios' }); return; }
+  // Defesa contra chamada direta (bypassando o gate da tela, Analise.jsx) e contra o cron de
+  // regeneração insistir em algo que nunca vai se resolver sozinho: sem endereço NEM cidade,
+  // o pipeline de mercado (semearIndiceBidPro/centralIndiceRegiao/lerIndiceBidPro) falha mudo
+  // e devolve relatório incompleto em vez de abortar — achado do ritual de 11/09.
+  if (!String(mercadoInputs.endereco || '').trim() && !String(mercadoInputs.cidade || '').trim()) {
+    res.status(422).json({ error: 'Imóvel sem endereço/cidade — não é possível avaliar o mercado.' }); return;
+  }
 
   // Geração EM NOME DE (admin/analista ao atribuir um arremate manual): grava sob o
   // CLIENTE (para o relatório pertencer a ele) e não cobra cota — atribuição
