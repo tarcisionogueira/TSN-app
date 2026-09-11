@@ -27,6 +27,7 @@ const Atendimento = lazy(() => import('./pages/Atendimento'));
 const Termos = lazy(() => import('./pages/Termos'));
 const Privacidade = lazy(() => import('./pages/Privacidade'));
 const Busca = lazy(() => import('./pages/Busca'));
+const BuscaVeiculos = lazy(() => import('./pages/BuscaVeiculos'));
 const ImovelDetalhe = lazy(() => import('./pages/ImovelDetalhe'));
 const ImovelGate = lazy(() => import('./pages/ImovelGate'));
 const Analise = lazy(() => import('./pages/Analise'));
@@ -359,6 +360,7 @@ function MainLayout() {
           <Route path="/alavancagem" element={<Alavancagem />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
+          <Route path="/buscar-veiculos" element={<PrivateRoute><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />
