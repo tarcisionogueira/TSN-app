@@ -900,6 +900,14 @@ async function paginaImovel(id) {
   const uf = String(im.estado || '').toUpperCase();
   const t = TIPO_LABEL[String(im.tipo || '').toLowerCase()] || 'Imóvel';
   const local = [im.bairro, im.cidade, uf].filter(Boolean).join(', ');
+  // Cidade como link para o hub (SEO — pedido do dono, 11/09): reaproveita o MESMO texto que
+  // já aparecia no `.sub` abaixo do H1, só torna clicável. Sem elemento novo, sem poluir a
+  // ficha — é o link interno linkando a página de lote à página de cidade logo acima da dobra,
+  // em vez de só no rodapé (que já tinha link, só que enterrado na migalha).
+  const cidadeLinkHtml = (im.cidade_norm && UF_NOME[uf])
+    ? `<a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">${esc(im.cidade)}</a>`
+    : esc(im.cidade || '');
+  const localHtml = [esc(im.bairro), cidadeLinkHtml, esc(uf)].filter(Boolean).join(', ');
   const lance = brl(im.valor_minimo), aval = brl(im.valor_avaliacao);
   const canonical = `${SITE}/leilao/${im.id}/${slug(im.titulo || t)}`;
   const migalha = [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }];
@@ -950,7 +958,7 @@ async function paginaImovel(id) {
     // O H1 segue a mesma lógica do <title>: com mil lotes de título idêntico, um H1 repetido
     // é o segundo sinal que leva o Google a tratar as páginas como cópias.
     corpo: `<h1>${esc([im.titulo || `${t} em leilão em ${im.cidade || ''}`, im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null].filter(Boolean).join(' · '))}</h1>
-      <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade)}` : ''}</p>
+      <p class="sub">${esc(t)} em leilão · ${localHtml}${im.modalidade ? ` · ${esc(MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade)}` : ''}</p>
       ${!im.ativo ? `<p class="painel"><strong>Este lote não está mais ativo</strong> no acervo — provavelmente foi arrematado ou saiu do edital. <a href="${SITE}/leiloes/${uf.toLowerCase()}${im.cidade_norm ? `/${im.cidade_norm}` : ''}">Ver imóveis disponíveis em ${esc(im.cidade || UF_NOME[uf] || 'sua região')}</a>.</p>` : ''}
       <!-- FICHA no padrão da tela interna: 2 colunas com sidebar de ação sticky. O layout é o
            do ImovelDetalhe, mas o conteúdo respeita o gate — mapa e análise aparecem como
