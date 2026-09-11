@@ -426,9 +426,16 @@ export default function LiveInscricao() {
                   para localizar e avaliar leilões no país inteiro — entre e procure
                   {form.cidade ? <> em <strong>{form.cidade}</strong></> : ' na sua cidade'}.
                 </p>
-                <a href="/#/redefinir-senha"
+                {/* 11/09, achado do dono: este link era uma URL CRUA sem token — abria
+                    "Link inválido ou expirado" pra todo mundo, sempre. `link_acesso` (vindo
+                    de api/live-inscrever.js) é um link de acesso de verdade, gerado pela
+                    própria Supabase — clicar já autentica e cai direto no acervo filtrado
+                    pela cidade dela (RedefinirSenha.jsx ganhou a opção de pular a troca de
+                    senha e ir direto pra lá). Sem `link_acesso` (falha rara na geração),
+                    cai no login normal — nunca pior do que era. */}
+                <a href={pronto.link_acesso || '/#/login'}
                   style={{ display: 'block', textAlign: 'center', background: '#fff', color: AZUL, border: `2px solid ${AZUL}`, textDecoration: 'none', padding: '13px', borderRadius: 12, fontWeight: 800, fontSize: 15 }}>
-                  Definir minha senha e explorar →
+                  Acessar a plataforma e explorar →
                 </a>
               </div>
 

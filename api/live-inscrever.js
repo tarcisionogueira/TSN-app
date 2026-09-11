@@ -23,6 +23,7 @@
  */
 export const config = { runtime: 'nodejs' };
 
+import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { erroNome, normalizarNome } from './_nome.js';
@@ -33,6 +34,9 @@ import { enviarLeadCapi, leadEventId, capiAtivo } from './_meta-capi.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const APP_URL      = process.env.APP_BASE_URL || 'https://www.bidprobrasil.com.br';
+const supabaseAdmin = SUPABASE_URL && SERVICE_KEY
+  ? createClient(SUPABASE_URL, SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } })
+  : null;
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -306,7 +310,33 @@ export default async function handler(req, res) {
     timeZone: 'America/Bahia', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
   });
   const primeiro = nome.split(' ')[0];
-  const linkSenha = contaNova ? `${APP_URL}/#/redefinir-senha` : `${APP_URL}/#/login`;
+  // ACESSO DE VERDADE, NÃO SÓ A PROMESSA (11/09, achado do dono: "se direciona para o grupo do
+  // WhatsApp, ele não permite que a pessoa acesse a plataforma"). Antes desta mudança, esta
+  // constante era só `${APP_URL}/#/redefinir-senha` — uma URL CRUA, sem nenhum token — e
+  // `RedefinirSenha.jsx` exige uma sessão de recuperação de verdade (`supabase.auth.getSession()`
+  // ou o evento `PASSWORD_RECOVERY`) para funcionar. Sem token nenhum, a página só podia dizer
+  // "Link inválido ou expirado": o botão prometia acesso e nunca entregava. Zero erro de servidor,
+  // zero aviso — é o padrão "promessa visível, sem verificar se cumpre" que este projeto já
+  // documentou (CLAUDE.md, "este vazio é resposta, ou é falha que não sabe que falhou?").
+  // `generateLink(type:'recovery')` cria o MESMO tipo de link que `resetPasswordForEmail` (o
+  // "esqueci minha senha" real, em Login.jsx) — token de verdade, mesma rota já autorizada no
+  // redirect allowlist do Supabase. Ao abrir, a pessoa já chega AUTENTICADA (RedefinirSenha.jsx
+  // detecta a sessão antes mesmo de definir senha nova) — e ganhou ali um link para pular
+  // direto para o acervo, já filtrado pela cidade dela (perfis.endereco_cidade/uf, gravados
+  // duas dezenas de linhas acima, é o mesmo dado que Busca.jsx já usa para pré-filtrar).
+  // Falha aberta: se a geração do link falhar por qualquer motivo, cai na URL crua de sempre —
+  // nunca pior que o comportamento anterior, e a inscrição em si jamais depende disto.
+  let linkAcesso = null;
+  if (contaNova && userId && supabaseAdmin) {
+    try {
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery', email, options: { redirectTo: `${APP_URL}/#/redefinir-senha` },
+      });
+      if (linkErr) console.error('[live-inscrever] generateLink falhou:', linkErr.message);
+      else linkAcesso = linkData?.properties?.action_link || linkData?.properties?.actionLink || null;
+    } catch (e) { console.error('[live-inscrever] generateLink lançou:', e?.message || e); }
+  }
+  const linkSenha = contaNova ? (linkAcesso || `${APP_URL}/#/redefinir-senha`) : `${APP_URL}/#/login`;
   try {
     await enviarEmail({
       to: email,
@@ -351,6 +381,10 @@ export default async function handler(req, res) {
   return saida(200, {
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
     codigo_indicacao: codigoIndicacao,
+    // Link de acesso de verdade (só quando a conta é nova) — a tela usa isto no botão
+    // "explorar a plataforma" em vez da URL crua de antes. `null` quando a geração falhou
+    // ou não é conta nova; a tela cai para `/#/login` nesse caso (ver LiveInscricao.jsx).
+    link_acesso: linkAcesso,
     // O NAVEGADOR RECEBE O ID PRONTO, não a regra para calculá-lo. Pixel e CAPI mandando o
     // mesmo `event_id` fazem o Meta contar UMA conversão em vez de duas; duplicar a fórmula
     // nos dois lados seria criar duas cópias de uma regra que só funciona enquanto forem
