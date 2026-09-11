@@ -753,12 +753,20 @@ async function handler(req) {
       // qualquer que tenha sido o caminho de seleção. Exclui 1ª praça / valor perto da
       // avaliação (ex.: extrajudicial da Caixa antes da 2ª praça, desconto ~0 ou negativo).
       // Ordena por MAIOR desconto e pega até 12.
-      // ORDEM (regra do dono, 25/08): primeiro o que o cliente PEDIU (filtro salvo), depois
-      // o que a REGIÃO DELE oferece — cada bloco pelo maior desconto. Antes tudo era
-      // ordenado só por desconto, e uma sugestão de região podia abrir o e-mail à frente do
-      // imóvel que casava exatamente com o filtro que ele mesmo montou.
+      // 11/09: a mesma rede de segurança agora tambem repete o teto de capital
+      // (`tetoPerfil`), não só o desconto. Achado do invariante `alerta_acima_do_capital`:
+      // um imóvel de R$360mil (faixa "ate_150k", teto R$200mil) foi enviado a uma cliente em
+      // 08/09 — TODOS os 4 caminhos de seleção (filtro salvo, raio, nome de cidade, similares)
+      // já aplicam `tetoPerfil` corretamente hoje, e não achei o ponto exato por onde esse
+      // item escapou (o histórico mostra o MESMO imóvel vazando pra outra faixa baixa em
+      // 24/08, um dia antes do fix de 25/08 — pode ser resíduo de pool que sobreviveu a algum
+      // caminho não coberto, ou dado que só existia sob condição não reproduzida aqui). Em vez
+      // de deixar o ponto cego aberto até achar a causa exata, o filtro final — que por
+      // desenho é "qualquer que tenha sido o caminho" — passa a barrar os dois invariantes no
+      // mesmo lugar: nenhum item entra no e-mail sem desconto mínimo E sem respeitar o teto.
       const selec = [...pool.values()]
         .filter(v => (Number(v.im.desconto_percentual) || 0) >= DESC_MIN)
+        .filter(v => !tetoPerfil || (Number(v.im.valor_minimo_ref ?? v.im.valor_minimo) || 0) <= tetoPerfil)
         .sort((x, y) => {
           const px = x.origem === 'filtro' ? 0 : 1;
           const py = y.origem === 'filtro' ? 0 : 1;
