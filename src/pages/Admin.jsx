@@ -880,7 +880,7 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [] }; }
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [], concede_plano: '', concede_meses: 1 }; }
 
 // Seletor reutilizável de "planos com acesso grátis" (chips clicáveis).
 // ── BÔNUS x UPSELL (26/08) ────────────────────────────────────────────────────
@@ -1093,7 +1093,7 @@ function EbooksTab() {
       // — não aparece na loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCamposEbook(form);
       const completo = faltam.length === 0;
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: completo ? (form.ativo !== false) : false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], concede_plano: form.concede_plano || null, concede_meses: form.concede_plano ? (Number(form.concede_meses) || 1) : null, ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
         // Pedido do dono (10/09): ao criar, seguir DIRETO para a tela de capítulos (upload do
         // .docx, detecção automática) em vez de fechar o modal e obrigar a achar o eBook de
@@ -1209,6 +1209,41 @@ function EbooksTab() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />
+            </div>
+            {/* ── O QUE A COMPRA CONCEDE (11/09) ──────────────────────────────────────
+                Mesma regra `produto.concede_plano` dos cursos (Admin.jsx ~linha 645) — o
+                backend (confirmar_compra_produto) já honra ebooks_admin.concede_plano/
+                concede_meses desde 26/08; só faltava o campo aqui na tela. Pedido do dono
+                (11/09): comprar um eBook, sem ser assinante, ganha o 1º mês de Investidor
+                Pro — no 2º mês já é cobrado normalmente se não cancelar. */}
+            <div style={{ marginBottom: 14, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px' }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#334155', marginBottom:8 }}>Comprar este eBook dá acesso à plataforma?</div>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+                <select
+                  value={form.concede_plano || ''}
+                  onChange={e => setForm({ ...form, concede_plano: e.target.value })}
+                  style={{ padding:'7px 10px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:14 }}>
+                  <option value="">Não concede</option>
+                  <option value="top2">Investidor Pro</option>
+                  <option value="assessorado">Assessoria</option>
+                  <option value="clube">Leilão Club</option>
+                </select>
+                {form.concede_plano && (
+                  <label style={{ fontSize:14, color:'#374151', display:'flex', alignItems:'center', gap:6 }}>
+                    por
+                    <input type="number" min="1" max="60" value={form.concede_meses ?? 1}
+                      onChange={e => setForm({ ...form, concede_meses: e.target.value })}
+                      style={{ width:66, padding:'7px 8px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:14 }} />
+                    meses
+                  </label>
+                )}
+              </div>
+              {form.concede_plano && (
+                <div style={{ fontSize:12, color:'#64748b', marginTop:8, lineHeight:1.5 }}>
+                  O acesso <strong>vence</strong> na data e o cliente volta a Explorador. Quem já tem plano maior
+                  não é rebaixado, e quem já tem acesso pago mais longo não perde os dias que comprou.
+                </div>
+              )}
             </div>
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:20 }}>
               💡 Preço é configurado na aba <strong>Configurações</strong>.
