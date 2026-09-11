@@ -3,7 +3,7 @@
  * Busca imóveis dentro de um raio usando earthdistance (PostGIS-lite nativo do Postgres).
  * Retorna página com distância calculada no banco — sem trazer 5000 registros pro browser.
  *
- * Body: { lat, lng, raioKm, pagina, porPagina, filtros: { tipos[], estado, modalidades[], pagamento[], valorMin, valorMax } }
+ * Body: { lat, lng, raioKm, pagina, porPagina, filtros: { tipos[], estado, modalidades[], pagamento[], valorMin, valorMax, prazo } }
  * pagamento usa valores canônicos do banco (a_vista | financiado | hipotecado).
  */
 // Runtime EDGE: o handler usa a Web Request/Response (req.json() e `new Response`).
@@ -13,6 +13,20 @@ export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+// Mesma regra de src/pages/Busca.jsx `calcularJanelaPrazo` — duplicada aqui (server) de
+// propósito: é 6 linhas, e importar código de src/ num endpoint api/ não é o padrão deste
+// projeto. Janelas CUMULATIVAS a partir de hoje (ver comentário completo em Busca.jsx).
+function janelaPrazo(opcao) {
+  if (!opcao) return { semData: false, dataDe: null, dataAte: null };
+  if (opcao === 'sem_data') return { semData: true, dataDe: null, dataAte: null };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
+  if (!meses) return { semData: false, dataDe: null, dataAte: null };
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { semData: false, dataDe: iso(hoje), dataAte: iso(fim) };
+}
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -47,6 +61,7 @@ export default async function handler(req) {
   const modalidades = Array.isArray(filtros.modalidades) ? filtros.modalidades.filter(Boolean)
     : (filtros.modalidade ? [filtros.modalidade] : []);
   const pagamentos = Array.isArray(filtros.pagamento) ? filtros.pagamento.filter(Boolean) : [];
+  const { semData, dataDe, dataAte } = janelaPrazo(filtros.prazo || '');
 
   // RPC v2 via POST (JSON lida com arrays nativamente). Faz TODOS os filtros
   // simultâneos no banco e devolve o total na coluna `total`.
@@ -68,6 +83,7 @@ export default async function handler(req) {
       valor_min: filtros.valorMin || 0,
       valor_max: filtros.valorMax || 9999999999,
       desconto_min: filtros.descontoMin || 0,
+      data_de: dataDe, data_ate: dataAte, sem_data: semData,
     }),
   });
 
