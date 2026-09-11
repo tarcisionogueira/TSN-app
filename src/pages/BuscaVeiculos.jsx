@@ -12,10 +12,14 @@ const POR_PAGINA = 20;
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
 ].join(',');
+
+// 'nao_identificado' é ESTADO, não ausência — mesmo princípio de classificarPatio() (a
+// dúvida também aparece na lista, nunca vira um lote invisível).
+const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };
 
 // Opções de "tipo de monta" (11/09, filtro pedido pelo dono). As 4 classificações padrão do
 // mercado segurador — mesmas que `SINISTRO_COR` já reconhece. "grande monta"/"perda total"
@@ -120,7 +124,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -157,6 +161,7 @@ export default function BuscaVeiculos() {
       if (f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
       if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
       if (f.tipoMonta) q = q.eq('sinistro', f.tipoMonta);
+      if (f.modalidade) q = q.eq('modalidade', f.modalidade);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
@@ -252,6 +257,15 @@ export default function BuscaVeiculos() {
             </select>
           </div>
           <div>
+            <label style={lbl}>Modalidade</label>
+            <select style={inp} value={filtros.modalidade} onChange={e => setFiltros(f => ({ ...f, modalidade: e.target.value }))}>
+              <option value="">Qualquer</option>
+              <option value="judicial">Judicial</option>
+              <option value="extrajudicial">Extrajudicial</option>
+              <option value="nao_identificado">Não identificado</option>
+            </select>
+          </div>
+          <div>
             <label style={lbl}>Ordenar por</label>
             <select style={inp} value={filtros.ordenacao} onChange={e => setFiltros(f => ({ ...f, ordenacao: e.target.value }))}>
               <option value="atualizado_desc">Mais recentes</option>
@@ -327,6 +341,9 @@ export default function BuscaVeiculos() {
                   {/* Sinal do próprio leiloeiro (11/09) — sinistro, sucata, financiamento e
                       alerta de motor. Nunca inventado: o que ele não informa fica de fora. */}
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {v.modalidade && v.modalidade !== 'nao_identificado' && (
+                      <span title="Modalidade da venda, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: v.modalidade === 'judicial' ? '#ede9fe' : '#e0f2fe', color: v.modalidade === 'judicial' ? '#6d28d9' : '#075985', padding: '1px 6px', borderRadius: 8 }}>{MODALIDADE_LABEL[v.modalidade]}</span>
+                    )}
                     {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
                       <span title="Classificação do sinistro, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: c.bg, color: c.fg, padding: '1px 6px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
                     ); })()}

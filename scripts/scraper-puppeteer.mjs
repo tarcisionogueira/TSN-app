@@ -1614,6 +1614,10 @@ async function scraperSodreVeiculos(browser) {
         valor_minimo: valMin,
         valor_avaliacao: Number(r.appraisal_value) || Number(r.reference_value) || null,
         desconto_percentual: descontoPercentualVeiculo(valMin, Number(r.appraisal_value) || Number(r.reference_value) || 0),
+        // Campo PRÓPRIO da API (`lot_is_judicial`), não regex sobre texto solto — confirmado
+        // ao vivo em lote real (11/09). `nao_identificado` só entraria se a API mandasse o
+        // campo ausente (nunca visto até agora, mas não supor 100% pra sempre).
+        modalidade: r.lot_is_judicial === true ? 'judicial' : (r.lot_is_judicial === false ? 'extrajudicial' : 'nao_identificado'),
         cidade: toTitleCase(cidadeBruta),
         estado: (ufMatch || '').toUpperCase() || null,
         link_lote: r.auction_id
@@ -3463,6 +3467,12 @@ function mapLoteSuporteVeiculo(l, tenant) {
     // de `valor_avaliacao` acima). Fica pronto para quando/se isso mudar — sem avaliação,
     // `descontoPercentualVeiculo` já devolve null sozinho, sem precisar de código extra aqui.
     desconto_percentual: descontoPercentualVeiculo(valorMin, null),
+    // 'nao_identificado' honesto: este mapper só lê a LISTAGEM leve (id/tipo/descrição/local/
+    // valor/foto), não visita a página de detalhe do veículo — não há onde ler judicial ou
+    // extrajudicial hoje. Nunca deixa o lote de fora por causa disso (mesmo princípio de
+    // classificarPatio()); só fica sem essa informação até, se o dono quiser, o scraper
+    // passar a visitar o detalhe (mesmo padrão já usado pra data de praça em mapLoteSuporte).
+    modalidade: 'nao_identificado',
     cidade: cidade ? toTitleCase(cidade) : null,
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: link,
