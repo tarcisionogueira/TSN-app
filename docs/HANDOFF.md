@@ -29,14 +29,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-6. **NORDESTE/SIMONLEILOES 0% de foto — recon real feito, causa achada, fix em produção (11/09)**:
-   as duas passam TODA imagem pelo proxy Next.js `/_next/image?url=...&w=..&q=..` (src nunca
-   termina em extensão de imagem). `fotoDeHtml()` corrigido para decodificar a URL real do
-   parâmetro `url=` e validar essa, descartando `_next/static/` (asset genérico do build) e
-   `comitentes/` (logo do banco/seguradora/vara, não do imóvel). Testado contra o `<img>` real
-   capturado no recon antes de subir. **Falta**: confirmar em produção no próximo `scraper-dom.yml`
-   (cron ou push) que as duas fontes saem de 0% — script de recon fica em
-   `scripts/recon-foto-dom.mjs` (workflow `recon-foto-dom.yml`) se precisar repetir noutra fonte.
+6. **NORDESTE/SIMONLEILOES 0% de foto — DOIS bugs reais achados e corrigidos, confirmado em
+   produção (11/09)**. 1º: as duas passam toda imagem pelo proxy Next.js `/_next/image?url=...`
+   (src nunca termina em extensão) — corrigido decodificando a URL real do parâmetro `url=`.
+   Dispatch real (`scraper-dom.yml`, gravar=1) confirmou SIMONLEILOES em **75% foto** — mas
+   NORDESTE continuou 0%. 2º bug, achado só por causa desse número não bater: a palavra solta
+   `loading` em `RE_IMG_DESCARTA` batia no atributo `loading="lazy"`, presente em TODO `<img>`
+   do Next.js — descartava a foto certa sempre; SIMONLEILOES só escapou porque a 1ª foto da
+   galeria por acaso não tinha esse atributo. Corrigido para `loading(?!=)`. Dispatch de
+   confirmação do NORDESTE rodando — próxima sessão: conferir se saiu de 0%. Script de recon
+   fica em `scripts/recon-foto-dom.mjs` (workflow `recon-foto-dom.yml`) se precisar repetir.
 7. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
    ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
    ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
