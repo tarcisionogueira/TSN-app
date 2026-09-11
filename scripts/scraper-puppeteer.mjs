@@ -1534,6 +1534,16 @@ async function scraperSodreVeiculos(browser) {
     };
     const lotes = [...lotesMap.values()];
     console.log(`    Sodré veículos: ${lotes.length} lotes capturados`);
+    // DIAGNÓSTICO (11/09) — 1ª rodada real capturou 48 lotes e mapeou 0: nomes de campo para
+    // veículo não confirmados ao vivo (comentário no topo desta função). Sem isto, um zero
+    // aqui viraria "site mudou" quando pode ser só nome de campo diferente do de imóveis —
+    // mesma armadilha que a forma nº10 do CLAUDE.md descreve. Só imprime amostra quando o
+    // filtro abaixo vai zerar tudo, para não sujar log em execução normal.
+    if (lotes.length && !lotes.some(r => (String(r.auction_status || '').toLowerCase() === 'aberto') && (parseFloat(r.bid_initial || r.bid_actual || 0) > 0))) {
+      const amostra = lotes[0] || {};
+      console.log(`    ⚠️ Sodré veículos: nenhum lote passa no filtro auction_status/bid_*. Campos do 1º lote: ${Object.keys(amostra).join(', ')}`);
+      console.log(`    ⚠️ Amostra: auction_status=${JSON.stringify(amostra.auction_status)} bid_initial=${JSON.stringify(amostra.bid_initial)} bid_actual=${JSON.stringify(amostra.bid_actual)} lot_status=${JSON.stringify(amostra.lot_status)} status=${JSON.stringify(amostra.status)}`);
+    }
     for (const r of lotes) {
       if ((r.auction_status || '').toLowerCase() !== 'aberto') continue; // só ativos
       const valMin = parseFloat(r.bid_initial || r.bid_actual || 0);
