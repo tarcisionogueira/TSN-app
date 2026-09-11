@@ -29,20 +29,40 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-6. **NORDESTE/SIMONLEILOES 0% de foto — DOIS bugs reais achados e corrigidos, confirmado em
-   produção (11/09)**. 1º: as duas passam toda imagem pelo proxy Next.js `/_next/image?url=...`
-   (src nunca termina em extensão) — corrigido decodificando a URL real do parâmetro `url=`.
-   Dispatch real (`scraper-dom.yml`, gravar=1) confirmou SIMONLEILOES em **75% foto** — mas
-   NORDESTE continuou 0%. 2º bug, achado só por causa desse número não bater: a palavra solta
-   `loading` em `RE_IMG_DESCARTA` batia no atributo `loading="lazy"`, presente em TODO `<img>`
-   do Next.js — descartava a foto certa sempre; SIMONLEILOES só escapou porque a 1ª foto da
-   galeria por acaso não tinha esse atributo. Corrigido para `loading(?!=)`. Dispatch de
-   confirmação do NORDESTE rodando — próxima sessão: conferir se saiu de 0%. Script de recon
-   fica em `scripts/recon-foto-dom.mjs` (workflow `recon-foto-dom.yml`) se precisar repetir.
-7. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
+6. **Gate de termos represando geração** (achado e corrigido por outra sessão em paralelo, 11/09,
    ver entrada logo abaixo) — fix aplicado, mas a retomada pós-aceite **não foi exercida ponta a
    ponta em navegador**. Conferir `eventos_atividade` por `represado: termos pendentes` seguido de
    desfecho no próximo cliente real que aceitar termos pendentes.
+
+---
+
+## ✅ 11/09 — FECHADO: NORDESTE/SIMONLEILOES 0% DE FOTO ERAM DOIS BUGS REAIS, NÃO UM
+
+Pendência 6 (Parte 64) fechada de vez, com número confirmado em produção — não suposição.
+
+Recon ao vivo (dispatch desta sessão, `scripts/recon-foto-dom.mjs` contra um lote real de cada
+fonte) achou o 1º bug: NORDESTE e SIMONLEILOES (ambas Next.js) passam TODA imagem pelo proxy de
+otimização `/_next/image?url=<encoded>&w=..&q=..` — o `src` nunca termina em `.jpg/.png/.webp`
+(termina em `&q=75`), então `fotoDeHtml()` descartava a foto certa mesmo achando o `<img>`.
+Corrigido decodificando a URL real do parâmetro `url=`, com descarte de `_next/static/` (asset
+genérico do build) e `comitentes/` (logo do banco/seguradora/vara, não do imóvel).
+
+Dispatch real em produção (`scraper-dom.yml`, `gravar=1`, não dry-run) confirmou SIMONLEILOES em
+**75% foto** — mas NORDESTE continuou em **0%**, idêntico ao número de antes do fix. Só por
+insistir em medir o resultado real (em vez de aceitar "parece corrigido" depois do 1º fix) é que
+apareceu o 2º bug: a palavra solta `loading` em `RE_IMG_DESCARTA` batia no atributo HTML padrão
+`loading="lazy"` — presente em TODO `<img>` do NORDESTE (Next.js grava isso por padrão em
+qualquer imagem lazy-loaded), descartando a foto certa 100% das vezes. SIMONLEILOES só escapou
+do mesmo bug porque a 1ª foto da galeria, por acaso, não tinha esse atributo. Corrigido para
+`loading(?!=)` — deixa passar o atributo, continua pegando classe/arquivo tipo
+"loading-spinner.gif". Novo dispatch confirmou NORDESTE em **100% foto (7/7)**.
+
+**Padrão a levar adiante**: um fix que resolve 1 de 2 fontes com a MESMA causa aparente não prova
+a causa — prova que havia pelo menos uma causa a mais escondida atrás da primeira. O sinal foi o
+número ficar idêntico ao de antes do fix (0% → 0%), não "melhorou um pouco". Os dois bugs, os
+testes que os pegaram e o script de recon reutilizável ficam documentados nos commits de
+`scripts/lib/dom-parse-util.mjs` (11/09) e em `scripts/recon-foto-dom.mjs` /
+`.github/workflows/recon-foto-dom.yml`.
 
 ---
 
