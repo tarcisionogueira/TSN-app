@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet, Landmark } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet, Landmark, Car } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
@@ -192,6 +192,7 @@ export default function HomeCliente() {
         {/* Ações rápidas por plano */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
           <Acao Icon={Search} titulo="Buscar leilões" desc="Encontre imóveis em todo o Brasil e analise oportunidades." cor="#0D63DB" onClick={() => nav('/buscar')} />
+          <Acao Icon={Car} titulo="Leilão de Veículos" desc="Piloto: veículos já em pátio, nunca em posse do executado." cor="#111111" onClick={() => nav('/buscar-veiculos')} />
           <Acao Icon={BarChart3} titulo="Minhas Análises" desc="Retome seus relatórios e agende com o analista." cor="#0d9488" onClick={() => nav('/analises')} />
           {/* Meus Arrematados (decisão do dono 30/07): o portfólio real é a tela de
               arrematados — /painel é a tela antiga, descartada. */}
