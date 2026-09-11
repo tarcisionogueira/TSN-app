@@ -10,10 +10,20 @@ import { formatarPreco } from '../data/cursos';
  * WhatsApp" (DisparoWhatsApp.jsx) e da caixa do Instagram: a IA/o sistema não tem como postar
  * num grupo de WhatsApp sozinho (não é DM, e a API oficial exige template aprovado pela Meta).
  *
- * ZERO GERAÇÃO POR IA. Cada tipo de mensagem só reorganiza dado que já existe: o depoimento de
- * "case de sucesso" vem de `eventos_live.depoimentos` (curado à mão pelo dono), o mito/verdade
- * da educação jurídica é o que VOCÊ escreve aqui, e convite/urgência usam só título, data e
- * vagas reais do evento. Ver api/_mensagens-grupo.js para o porquê disso ser deliberado.
+ * ZERO GERAÇÃO DE FATO POR IA. Cada tipo de mensagem só reorganiza dado que já existe: o
+ * depoimento de "case de sucesso" vem de `eventos_live.depoimentos` (curado à mão pelo dono), o
+ * mito/verdade da educação jurídica é o que VOCÊ escreve aqui, e convite/urgência usam só
+ * título, data e vagas reais do evento. Ver api/_mensagens-grupo.js para o porquê disso ser
+ * deliberado.
+ *
+ * ESTILO, SIM (11/09, pedido do dono: "coloque a IA pra aprender com as edições que vou ir
+ * fazendo"). O texto abaixo é editável, e o que você mudar antes de copiar vira exemplo pra
+ * próxima geração do MESMO tipo ajustar tom/emoji/formato sozinha — nunca fato. A reescrita
+ * (api/_mensagens-grupo-estilo.js) só entra depois do texto determinístico pronto, exige pelo
+ * menos 3 edições reais anteriores, e é descartada se mudar qualquer R$/%/data/link do texto
+ * original — nesse caso você recebe o texto determinístico de sempre, sem aviso nenhum de
+ * erro (é o comportamento padrão, não uma falha). Tipo "educação" (mito/verdade jurídico)
+ * nunca passa por isto — fica sempre 100% no que você escreveu.
  */
 
 const TIPOS = [
@@ -50,6 +60,14 @@ export default function GeradorMensagensGrupo() {
   const [gerando, setGerando] = useState(false);
   const [texto, setTexto] = useState('');
   const [copiado, setCopiado] = useState(false);
+  // Aprendizado de estilo (11/09, pedido do dono): `textoMostrado` é o valor logo após gerar
+  // (antes de qualquer edição do dono) — comparar `texto` com ele na hora de copiar é como a
+  // tela sabe se houve edição de verdade pra registrar como exemplo. `textoBase` é sempre o
+  // 100% determinístico (nunca a IA), pra poder voltar a ele com um clique.
+  const [textoBase, setTextoBase] = useState('');
+  const [textoMostrado, setTextoMostrado] = useState('');
+  const [logId, setLogId] = useState(null);
+  const [estilizado, setEstilizado] = useState(false);
 
   // Campos extras por tipo — ficam todos aqui em vez de um estado por tipo, porque só um
   // tipo está ativo por vez e resetar tudo ao trocar de aba evita mensagem misturada
@@ -77,7 +95,7 @@ export default function GeradorMensagensGrupo() {
   useEffect(() => { carregar(); }, []);
 
   async function gerar() {
-    setGerando(true); setErro(''); setTexto(''); setCopiado(false);
+    setGerando(true); setErro(''); setTexto(''); setCopiado(false); setEstilizado(false); setLogId(null);
     const extras = {
       convite: { destaque_index: destaqueIndex },
       case: { depoimento_index: depoimentoIndex },
@@ -95,16 +113,30 @@ export default function GeradorMensagensGrupo() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.error) throw new Error(j?.error === 'dado_insuficiente' ? (j.detalhe || 'Falta informação pra montar esta mensagem.') : (j?.error || 'Falhou ao gerar'));
       setTexto(j.texto);
+      setTextoMostrado(j.texto);
+      setTextoBase(j.texto_base || j.texto);
+      setLogId(j.log_id ?? null);
+      setEstilizado(!!j.estilizado);
       carregar(); // atualiza "gerado hoje" sem esperar o próximo reload
     } catch (e) { setErro(String(e.message || e)); }
     finally { setGerando(false); }
   }
 
+  // Só registra edição quando o texto que vai ser copiado é DIFERENTE do que a tela mostrou —
+  // copiar sem mudar nada não ensina nada (seria ruído no aprendizado de estilo). O registro
+  // nunca atrasa nem bloqueia a cópia: dispara depois, e falha em silêncio (o dono já copiou o
+  // que precisava; perder ESTE exemplo de estilo não é motivo pra travar o fluxo de postar).
   async function copiar() {
     let ok = false;
     try { await navigator.clipboard.writeText(texto); ok = true; } catch { /* clipboard bloqueado */ }
     if (ok) { setCopiado(true); setTimeout(() => setCopiado(false), 2500); }
     else { window.prompt('Copie o texto:', texto); }
+    if (logId && texto.trim() !== textoMostrado.trim()) {
+      apiCall('/api/admin-mensagens-grupo', {
+        method: 'POST',
+        body: JSON.stringify({ acao: 'registrar_texto_final', log_id: logId, texto_final: texto }),
+      }).catch(() => {});
+    }
   }
 
   if (carregando) return <div style={{ padding: 28, fontFamily: 'system-ui' }}>Carregando…</div>;
@@ -134,7 +166,7 @@ export default function GeradorMensagensGrupo() {
         <label style={S.label}>Tipo de mensagem</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
           {TIPOS.map((t) => (
-            <button key={t.valor} onClick={() => { setTipo(t.valor); setTexto(''); setErro(''); }}
+            <button key={t.valor} onClick={() => { setTipo(t.valor); setTexto(''); setErro(''); setEstilizado(false); setLogId(null); }}
               style={{
                 padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                 border: tipo === t.valor ? '2px solid #0D63DB' : '1px solid #cbd5e1',
@@ -246,7 +278,19 @@ export default function GeradorMensagensGrupo() {
 
       {texto && (
         <div style={{ border: '2px solid #16a34a', borderRadius: 14, padding: 16, marginBottom: 22, background: '#f0fdf4' }}>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.6, background: '#fff', border: '1px solid #d1fae5', borderRadius: 10, padding: 12, margin: '0 0 14px', fontFamily: 'inherit', color: '#334155' }}>{texto}</pre>
+          {estilizado && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12, color: '#0369a1', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '6px 10px', marginBottom: 10 }}>
+              <span>✨ Ajustado ao seu estilo, aprendido das suas últimas edições</span>
+              <button onClick={() => { setTexto(textoBase); setTextoMostrado(textoBase); setEstilizado(false); }}
+                style={{ background: 'none', border: 'none', color: '#0369a1', fontWeight: 700, cursor: 'pointer', fontSize: 12, textDecoration: 'underline', fontFamily: 'inherit', flexShrink: 0 }}>
+                usar o texto original
+              </button>
+            </div>
+          )}
+          {/* Editável (11/09, pedido do dono) — o que ele mudar aqui antes de copiar vira
+              exemplo de estilo para a próxima geração deste mesmo tipo (ver `copiar()`). */}
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={10}
+            style={{ width: '100%', whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.6, background: '#fff', border: '1px solid #d1fae5', borderRadius: 10, padding: 12, margin: '0 0 14px', fontFamily: 'inherit', color: '#334155', resize: 'vertical', boxSizing: 'border-box' }} />
           <button onClick={copiar}
             style={{ width: '100%', padding: 13, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
             {copiado ? '✓ Copiado!' : 'Copiar →'}

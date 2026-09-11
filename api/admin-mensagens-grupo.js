@@ -21,6 +21,7 @@ import { getUser } from './_auth.js';
 import { escolherAulaViva, quandoPorExtenso } from './admin-whatsapp-fila.js';
 import { edicaoDe } from './_live-edicao.js';
 import { montarMensagemGrupo, TIPOS_VALIDOS } from './_mensagens-grupo.js';
+import { estilizarMensagemGrupo } from './_mensagens-grupo-estilo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -138,6 +139,23 @@ export default async function handler(req, res) {
   const [perfil] = await rPerfil.json();
   if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
 
+  // Registra o texto que o dono efetivamente copiou (11/09, pedido do dono: "coloque a IA pra
+  // aprender com as edições") — só grava quando ele MUDOU algo (a tela só chama isto nesse
+  // caso). É este dado que vira exemplo de estilo na próxima geração do mesmo tipo, em
+  // `estilizarMensagemGrupo`. Ramo separado do fluxo de geração: não depende da aula viva.
+  if (req.method === 'POST' && req.body?.acao === 'registrar_texto_final') {
+    const logId = Number(req.body?.log_id);
+    const textoFinal = String(req.body?.texto_final || '').trim();
+    if (!logId || !textoFinal) return res.status(400).json({ error: 'log_id e texto_final são obrigatórios' });
+    const r = await sb(`mensagens_grupo_log?id=eq.${logId}&gerado_por=eq.${user.id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ texto_editado: textoFinal }),
+    });
+    if (!r.ok) return res.status(502).json({ error: 'nao_gravou_edicao', detalhe: await r.text() });
+    return res.status(200).json({ ok: true });
+  }
+
   const { evento, erro } = await buscarAulaViva();
   if (erro) return res.status(erro.status).json(erro.body);
   if (!evento) return res.status(200).json({ evento: null, motivo: 'nenhuma aula futura ativa' });
@@ -180,17 +198,37 @@ export default async function handler(req, res) {
     const texto = montarMensagemGrupo(tipo, dados);
     if (!texto) return res.status(422).json({ error: 'dado_insuficiente', detalhe: 'falta informação real pra montar esta mensagem — confira o depoimento/mito/verdade/opções.' });
 
+    // APRENDER COM AS EDIÇÕES (11/09, pedido do dono). O "antes" de cada exemplo é o que a
+    // TELA mostrou (já estilizado, se estava) — o dono edita o que vê, não o determinístico
+    // cru — para o exemplo de estilo refletir a edição real. `estilizarMensagemGrupo` já
+    // recusa tipo não elegível (educacao fica sempre 100% determinístico), poucos exemplos,
+    // ou saída que mudou algum R$/%/data/link do texto base — nesses casos devolve `null` e
+    // seguimos com o `texto` determinístico, exatamente como era antes desta mudança.
+    const rExemplos = await sb(`mensagens_grupo_log?tipo=eq.${tipo}&texto_editado=not.is.null&select=texto,texto_estilizado,texto_editado&order=criado_em.desc&limit=6`);
+    const exemplos = rExemplos.ok
+      ? (await rExemplos.json().catch(() => [])).map((l) => ({ antes: l.texto_estilizado || l.texto, depois: l.texto_editado }))
+      : [];
+    const textoEstilizado = await estilizarMensagemGrupo(tipo, texto, exemplos);
+
     const rGrava = await sb('mensagens_grupo_log', {
       method: 'POST',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ evento_id: evento.id, edicao: evento.edicao, tipo, texto, gerado_por: user.id }),
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ evento_id: evento.id, edicao: evento.edicao, tipo, texto, texto_estilizado: textoEstilizado, gerado_por: user.id }),
     });
     // Falha ao GRAVAR o log não pode derrubar o texto já gerado — o operador ainda quer copiar
     // e postar. Mas precisa aparecer: sem isso, a próxima consulta de "o que já foi gerado
     // hoje" mostra menos do que realmente saiu, e o operador gera (e posta) tudo de novo.
+    let logId = null;
     if (!rGrava.ok) console.error('[mensagens-grupo] nao gravou o log:', await rGrava.text());
+    else { const [linha] = await rGrava.json().catch(() => [null]); logId = linha?.id ?? null; }
 
-    return res.status(200).json({ texto, log_gravado: rGrava.ok });
+    return res.status(200).json({
+      texto: textoEstilizado || texto,
+      texto_base: texto,
+      estilizado: !!textoEstilizado,
+      log_id: logId,
+      log_gravado: rGrava.ok,
+    });
   }
 
   const rHoje = await sb(`mensagens_grupo_log?evento_id=eq.${evento.id}&edicao=eq.${evento.edicao}&select=tipo,criado_em&order=criado_em.desc`);
