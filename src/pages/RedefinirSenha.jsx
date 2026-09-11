@@ -162,6 +162,19 @@ export default function RedefinirSenha() {
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</> : 'Salvar nova senha'}
               </button>
             </form>
+            {/* PULAR PRA DENTRO (11/09, achado do dono: quem se inscreve na aula ao vivo
+                clicava neste link só pra travar numa troca de senha obrigatória antes de
+                poder navegar). Chegar até aqui já prova posse do e-mail — `sessaoValida`
+                só vira `true` com uma sessão de recuperação de verdade (getSession() ou o
+                evento PASSWORD_RECOVERY, no efeito acima) — então já existe uma sessão
+                válida ANTES mesmo de trocar a senha. Navegar sem `signOut()` mantém essa
+                sessão: a Busca já filtra pela cidade do perfil (endereco_cidade/uf), que
+                foi gravada na inscrição. Trocar a senha continua sendo a ação PRINCIPAL —
+                isto é a saída pra quem só quer olhar o acervo agora. */}
+            <button type="button" onClick={() => nav('/buscar')}
+              style={{ width: '100%', marginTop: 12, padding: '10px', background: 'none', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
+              Prefiro explorar agora e definir a senha depois
+            </button>
           </>
         )}
 
