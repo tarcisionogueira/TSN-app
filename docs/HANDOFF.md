@@ -29,6 +29,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    manual; falta o dono olhar a amostra em `veiculos_leilao` (fonte='SUPORTE') e decidir se o
    seletor de card bateu certo (não confirmado ao vivo se o template do card de veículo é
    idêntico ao de imóvel) antes de eu tirar o gate `OPT-IN` e entrar na rodada diária.
+6. **SOLEON — `modalidade` errada em lote de venda direta** (11/09, ver seção abaixo). O item
+   79771 do DANIELGARCIA está com `modalidade='judicial'` no banco, mas o site mostra "VENDA
+   DIRETA". Recon ao vivo pra confirmar a causa exata FALHOU nesta sessão (listagem não veio —
+   challenge/cota, dispatch de datacenter) — não cheguei a corrigir a lógica por falta de
+   evidência real, só corrigi o valor (que já tinha prova). Retomar com recon de IP residencial
+   ou orçamento Bright Data liberado.
+7. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL,
+   NÃO investigado fonte a fonte): FERREIRALEIL, PECINI, LEJE, HASTA, ALBERTOMACEDOLEILOES,
+   GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES têm entre 91% e 100% dos lotes ativos (não
+   venda-direta) sem data de praça. CEF sozinha tem 14.340 lotes sem data (75% do acervo dela,
+   19.109 lotes). Pode ser normal para algumas (praça ainda não marcada) ou pode ser parser
+   perdendo um campo que existe — não decidido. Prioridade sugerida: investigar CEF primeiro
+   (maior volume) e depois os 100%-sem-data (mais fácil de confirmar bug, já que 100% é sinal
+   mais forte que "quase sempre").
 
 ---
 
@@ -87,6 +101,49 @@ nem documentação/edital — hoje só cabem dentro de `raw` (jsonb). Decidir se
 o volume de veículo justificar.
 
 ---
+
+## 🔴 11/09 (tarde) — SOLEON GRAVAVA "INCREMENTO MÍNIMO" COMO SE FOSSE VALOR MÍNIMO DO IMÓVEL
+
+Achado pelo PRÓPRIO DONO comparando o app com o site de origem (não achado por auditoria nossa)
+— e é exatamente a classe de bug mais cara que existe aqui: número plausível, visível pro
+cliente, e ERRADO. DANIELGARCIA item 79771: o app mostrava "Lance Mínimo R$50.000,00" e
+"Economia Potencial R$550.000,00" sobre um imóvel de "Avaliação R$600.000,00" — 92% de desconto.
+No site de origem, o lote é **VENDA DIRETA a R$600.000,00**, e o R$50.000,00 é o **Incremento
+Mínimo** (o degrau de cada lance, não o valor do imóvel).
+
+**Causa raiz**: `scraper-soleon.mjs` (plataforma que roda DANIELGARCIA + 13 outros tenants:
+FERREIRALEIL, JOAOEMILIO, ISAIAS, APICE, CERULI, LANCEJA, TMLEILOES, PURCENA, AGOSTINHO,
+CASAMARTILLO, INFINITY, CALIL, VEGAS, TORRES3) extrai valor por RÓTULO ("Lance Mínimo:
+R$X") quando existe, e cai num balaio genérico (todo R$ da página) quando não existe — o que
+acontece em toda venda direta, já que ela não tem "Lance Mínimo" (é preço fixo). O balaio
+genérico não excluía "Incremento"/"Comissão" como o comentário do código já dizia que devia.
+`scraper-rj.mjs` (código-irmão, mesma origem, já validado em produção) **já tinha resolvido
+isto** com uma lista bem mais ampla (`ROTULO_NAO_PRECO`: comissão, caução, incremento,
+honorários, taxa, multa, IPTU, condomínio, débito, dívida, custas, emolumentos, ITBI, depósito
+prévio) — só não tinha sido copiada para o SOLEON quando o parser foi generalizado.
+
+**Corrigido**: reaproveitada a mesma lista do RJ (testada, não uma nova lista mais curta que
+deixaria a mesma classe de bug entrar por outra porta), deployado em produção, e o registro do
+DANIELGARCIA já corrigido direto no banco (`valor_minimo = valor_avaliacao = R$600.000,00`) —
+não esperei a próxima raspagem semanal porque é o exato lote que o dono estava olhando.
+
+**Alcance medido**: 3 fontes com desconto ≥85% (sinal do mesmo defeito): DANIELGARCIA (1/61,
+corrigido), PURCENA (1/7, SOLEON também — **não corrigido, falta confirmar se é o mesmo padrão
+antes de tocar**), e LJUD (1/12, fonte DIFERENTE — parser próprio, não SOLEON, não investigado).
+A rodada semanal (segunda, 10:30 UTC) vai re-coletar todos os 14 tenants SOLEON com o parser já
+corrigido.
+
+**Ponta em aberto, não resolvida**: o MESMO lote também estava com `modalidade='judicial'`
+quando o site mostra "VENDA DIRETA". Tentei confirmar a causa com recon ao vivo
+(`SOLEON_DEBUG_URL`) mas a listagem não veio (bloqueio/challenge do lado do site, fetch de
+datacenter) — sem dado real, não mexi na lógica (seria supor estrutura sem checar, a forma nº10
+do topo deste documento). Fica para quando houver orçamento Bright Data ou acesso residencial.
+
+**Também achado, não investigado**: auditoria ampla (todos os lotes ativos) mostrou vários
+fontes com 91-100% dos lotes sem `data_leilao` (FERREIRALEIL, PECINI, LEJE, HASTA,
+ALBERTOMACEDOLEILOES, GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES) e CEF com 14.340/19.109
+(75%). Pode ser legítimo (praça não marcada ainda) ou parser perdendo campo — registrado como
+pendência 7, não decidido nesta sessão.
 
 ## ✅ 11/09 — FECHADO: NORDESTE/SIMONLEILOES 0% DE FOTO ERAM DOIS BUGS REAIS, NÃO UM
 
