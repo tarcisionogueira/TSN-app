@@ -196,7 +196,18 @@ export default function BuscaVeiculos() {
 
   useEffect(() => { buscar(1, filtros); setPagina(1); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
 
-  const aplicarFiltros = () => { setPagina(1); buscar(1, filtros); if (isMobile) setMostrarFiltros(false); };
+  // Busca reativa (11/09, pedido do dono: "retire o botão buscar, deixe interativo... como é
+  // o dos imóveis") — mesmo padrão de debounce de 600ms de Busca.jsx. `primeiraRef` evita
+  // duplicar a carga inicial (o efeito acima já busca uma vez no mount).
+  const primeiraRef = useRef(true);
+  const buscarDebounceRef = useRef(null);
+  useEffect(() => {
+    if (primeiraRef.current) { primeiraRef.current = false; return; }
+    clearTimeout(buscarDebounceRef.current);
+    buscarDebounceRef.current = setTimeout(() => { setPagina(1); buscar(1, filtros); }, 600);
+    return () => clearTimeout(buscarDebounceRef.current);
+  }, [filtros]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const limparFiltros = () => { const f = filtrosVazios(); setFiltros(f); setPagina(1); buscar(1, f); };
   const irPara = (p) => { setPagina(p); buscar(p, filtros); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -302,9 +313,11 @@ export default function BuscaVeiculos() {
               <option value="desconto_desc">Maior desconto</option>
             </select>
           </div>
-          <div style={{ display: 'flex', gap: 8, gridColumn: isMobile ? '1 / -1' : 'auto' }}>
-            <button onClick={aplicarFiltros} style={{ flex: 1, padding: '9px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Buscar</button>
-            <button onClick={limparFiltros} title="Limpar filtros" style={{ padding: '9px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', color: '#64748b' }}><X size={14} /></button>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button onClick={limparFiltros} title="Limpar filtros"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 12px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', color: '#64748b', fontSize: 12.5, fontWeight: 700 }}>
+              <X size={14} /> Limpar
+            </button>
           </div>
         </div>
       )}
