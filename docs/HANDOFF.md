@@ -4,6 +4,54 @@
 
 ---
 
+## 🔧 SESSÃO 25 · PARTE 63 (11/09) — GOOGLE ADS API: SETUP EM ANDAMENTO, PAUSADO NO REFRESH TOKEN
+
+Continuação da Parte 62. Dono seguiu o PASSO 3 do `PENDENCIAS_DONO.md` ao vivo, comigo guiando tela a
+tela. Progresso real (o que já está pronto, permanente, não precisa repetir):
+
+- **Faturamento**: conta nova `BidPro Brasil` (`0153DD-9EA04C-D4E9B0`) ativa, com Pix e R$200 de
+  crédito, vinculada ao `My First Project` e ao `Default Gemini Project`. A antiga `My Billing
+  Account` (`0134FB-CA5299-81DA09`) segue **Encerrada** — não usar.
+- **Nível de acesso da API**: `My First Project` está em **"Exploração"** (2.880 operações/dia,
+  conta de produção) — não precisa pedir "Básico" agora.
+- **Cliente OAuth**: criado tipo **Aplicativo da Web** (não "App para computador" — esse tipo não
+  aceita URI de redirecionamento customizada e quebrou a 1ª tentativa com erro 400
+  `redirect_uri_mismatch`). Client ID: `262255505852-imu05mk483sg2evkglvg5t7ofb7mq76o.apps.googleusercontent.com`,
+  redirect URI autorizada: `https://developers.google.com/oauthplayground`. Secret só com o dono
+  (nunca gravado aqui — repo é público).
+- **Achado que travou a tarde inteira**: a conta `tarcisioaraujo@reimob.com.br` tem alguma proteção
+  forte (provável Programa de Proteção Avançada — não é política do Workspace, que está com
+  2-Step Verification **"Desativar"** no admin) que **exige passkey/chave de segurança pra
+  autorizar QUALQUER app terceiro com escopo sensível**, sem fallback de senha. Removemos uma
+  passkey quebrada (auto-criada pelo Android, nunca usada) e o Google só pediu pra criar OUTRA,
+  com aviso de **até 7 dias de quarentena** antes de valer — inviável pra hoje.
+- **Contorno**: em vez de mexer mais na segurança da conta principal, adicionamos um **Gmail
+  pessoal** como usuário **Padrão** na conta de Ads (475-979-5747) — precisou primeiro liberar
+  `gmail.com` em **Acesso e segurança → Segurança → Domínios permitidos** (só tinha
+  `reimob.com.br, clubeconselheiro.com.br`). Convite aceito. Dono refez o login do OAuth
+  Playground com esse Gmail — **resultado (se o Refresh Token saiu) ainda não confirmado**,
+  sessão pausada aqui a pedido do dono pra continuar depois.
+
+> ⚠️ **Não esquecer antes de ligar isso num cron de produção**: a Tela de permissão OAuth
+> ("Google Auth Platform") está em modo **Teste**, audiência **Externo** (obrigatório, já que o
+> Gmail usado é de fora do Workspace `reimob.com.br` — "Interno" não serviria mesmo). Refresh
+> token de app em Teste **expira sozinho em 7 dias independente de uso**. Antes de gravar o
+> `GOOGLE_ADS_REFRESH_TOKEN` na Vercel pra valer, decidir: publicar o app (verificação do Google —
+> domínio verificado + política de privacidade) ou aceitar regenerar o token a cada <7 dias (não
+> serve pro cron diário). Sem resolver isso, o risco é exatamente o padrão da forma nº10 do topo
+> deste documento: parece configurado, funciona nos testes, e morre sozinho calado dali a uma
+> semana.
+
+**Retomar por aqui**: (1) confirmar/copiar o Refresh Token do Step 2 do OAuth Playground (se o
+código de autorização expirou, só refazer Authorize APIs → login Gmail → aceitar, o resto já está
+pronto); (2) decidir Teste-vs-Produção do app OAuth (ver aviso acima); (3) criar a ação de
+conversão de importação no Ads (Metas → Conversões → Nova ação → Importar); (4) gravar as 6
+variáveis na Vercel (`GOOGLE_ADS_DEVELOPER_TOKEN` ainda em aberto — ver Parte 62 sobre o modelo
+"Cloud-managed access levels", pode ser dispensável); (5) me avisar pra eu construir o cron +
+card no painel.
+
+---
+
 ## 🚀 SESSÃO 25 · PARTE 62 (11/09) — SELF-HEAL CONFIRMADO + 4 FIXES EM PRODUÇÃO + GOOGLE ADS: A CENTRAL DE API DA CONTA DE GERENTE FOI DESLIGADA (09/09)
 
 **Self-heal do nível 3 (Partes 58/59)**: os 5 relatórios com `valorPonderado.motivo` iniciando em
