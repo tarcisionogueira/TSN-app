@@ -12,10 +12,16 @@ const POR_PAGINA = 20;
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
 ].join(',');
+
+// Opções de "tipo de monta" (11/09, filtro pedido pelo dono). As 4 classificações padrão do
+// mercado segurador — mesmas que `SINISTRO_COR` já reconhece. "grande monta"/"perda total"
+// não têm ocorrência no acervo ainda (só SODRE/SUPORTE rodaram), mas são categorias REAIS que
+// o leiloeiro usa, não inventadas — ficam disponíveis desde já para quando aparecerem.
+const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande monta', 'perda total'];
 
 const fmtBRL = (v) => (v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
 
@@ -48,6 +54,9 @@ function contagemLeilao(d) {
 // omitir do que inventar um número. Trava contra outlier (avaliação absurdamente baixa
 // ou lance acima da avaliação) na mesma linha do que já existe para imóveis.
 function desconto(v) {
+  // Prefere a coluna gravada pelo scraper (11/09) — mesmo cálculo, só evita reprocessar em
+  // todo render. Recalcula só para linha antiga que ainda não passou pela migração/backfill.
+  if (v.desconto_percentual != null) return v.desconto_percentual;
   const min = Number(v.valor_minimo) || 0;
   const aval = Number(v.valor_avaliacao) || 0;
   if (!min || !aval || min >= aval) return null;
@@ -109,7 +118,10 @@ const inp = { width: '100%', padding: '9px 10px', border: '1px solid #e2e8f0', b
 const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 };
 
 function filtrosVazios() {
-  return { estado: '', cidade: '', marca: '', anoMin: '', anoMax: '', valorMax: '', ordenacao: 'atualizado_desc' };
+  return {
+    estado: '', cidade: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', ordenacao: 'atualizado_desc',
+  };
 }
 
 export default function BuscaVeiculos() {
@@ -135,12 +147,20 @@ export default function BuscaVeiculos() {
       if (f.estado) q = q.eq('estado', f.estado);
       if (f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
       if (f.marca.trim()) q = q.ilike('marca', `%${f.marca.trim()}%`);
+      // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
+      // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
+      // só em `modelo` esconderia esse leiloeiro inteiro do filtro.
+      if (f.modelo.trim()) { const t = f.modelo.trim(); q = q.or(`modelo.ilike.%${t}%,titulo.ilike.%${t}%`); }
       if (f.anoMin) q = q.gte('ano_fabricacao', Number(f.anoMin));
       if (f.anoMax) q = q.lte('ano_fabricacao', Number(f.anoMax));
       if (f.valorMax) q = q.lte('valor_minimo', Number(f.valorMax));
+      if (f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
+      if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+      if (f.tipoMonta) q = q.eq('sinistro', f.tipoMonta);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
+        : f.ordenacao === 'desconto_desc' ? ['desconto_percentual', false]
         : ['atualizado_em', false];
       q = q.order(coluna, { ascending: dir, nullsFirst: false });
       const de = (p - 1) * POR_PAGINA;
@@ -179,7 +199,7 @@ export default function BuscaVeiculos() {
       </div>
 
       {mostrarFiltros && (
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(7, 1fr)', gap: 10, alignItems: 'end' }}>
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={lbl}>Estado</label>
             <select style={inp} value={filtros.estado} onChange={e => setFiltros(f => ({ ...f, estado: e.target.value }))}>
@@ -196,6 +216,10 @@ export default function BuscaVeiculos() {
             <input style={inp} placeholder="Ex.: Fiat" value={filtros.marca} onChange={e => setFiltros(f => ({ ...f, marca: e.target.value }))} />
           </div>
           <div>
+            <label style={lbl}>Modelo</label>
+            <input style={inp} placeholder="Ex.: Uno" value={filtros.modelo} onChange={e => setFiltros(f => ({ ...f, modelo: e.target.value }))} />
+          </div>
+          <div>
             <label style={lbl}>Ano de</label>
             <input style={inp} type="number" placeholder="2010" value={filtros.anoMin} onChange={e => setFiltros(f => ({ ...f, anoMin: e.target.value }))} />
           </div>
@@ -208,12 +232,33 @@ export default function BuscaVeiculos() {
             <input style={inp} type="number" placeholder="50000" value={filtros.valorMax} onChange={e => setFiltros(f => ({ ...f, valorMax: e.target.value }))} />
           </div>
           <div>
+            <label style={lbl}>Avaliação máx. (R$)</label>
+            <input style={inp} type="number" placeholder="80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
+          </div>
+          <div>
+            <label style={lbl}>Desconto mín.</label>
+            <select style={inp} value={filtros.descontoMin} onChange={e => setFiltros(f => ({ ...f, descontoMin: e.target.value }))}>
+              <option value="">Qualquer</option>
+              <option value="20">20% ou mais</option>
+              <option value="40">40% ou mais</option>
+              <option value="60">60% ou mais</option>
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Tipo de monta</label>
+            <select style={inp} value={filtros.tipoMonta} onChange={e => setFiltros(f => ({ ...f, tipoMonta: e.target.value }))}>
+              <option value="">Qualquer</option>
+              {TIPOS_MONTA.map(t => <option key={t} value={t} style={{ textTransform: 'capitalize' }}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+            </select>
+          </div>
+          <div>
             <label style={lbl}>Ordenar por</label>
             <select style={inp} value={filtros.ordenacao} onChange={e => setFiltros(f => ({ ...f, ordenacao: e.target.value }))}>
               <option value="atualizado_desc">Mais recentes</option>
               <option value="valor_asc">Menor lance</option>
               <option value="valor_desc">Maior lance</option>
               <option value="ano_desc">Ano (mais novo)</option>
+              <option value="desconto_desc">Maior desconto</option>
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8, gridColumn: isMobile ? '1 / -1' : 'auto' }}>

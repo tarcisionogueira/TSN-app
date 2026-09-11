@@ -1503,6 +1503,16 @@ function classificarPatio(texto) {
 // confirmada em amostra real: "Cambio: Danificado", "Motor: Danificado", "Air-Bags: Danificado").
 const REGEX_MOTOR_ALERTA = /\bmotor\b[^.]{0,25}\b(danificad|incomplet|ausente|substitu[íi]d)/i;
 const REGEX_IPVA = /IPVA\s*\d{0,4}\s*(PAGO|ATRASADO|EM ABERTO|PENDENTE|N[ÃA]O PAGO)/i;
+// Mesma trava do front (BuscaVeiculos.jsx `desconto()`) e do já usado em imoveis_leilao —
+// agora também na ORIGEM do dado (11/09, pedido do dono: filtro de desconto na tela), para
+// o PostgREST poder filtrar sem trazer o acervo inteiro pro cliente. >95%/<=0 não existe na
+// vida real — melhor sem número do que com um que não é verdade.
+function descontoPercentualVeiculo(valorMinimo, valorAvaliacao) {
+  const vm = Number(valorMinimo) || 0, va = Number(valorAvaliacao) || 0;
+  if (!vm || !va || vm >= va) return null;
+  const pct = Math.round((1 - vm / va) * 100);
+  return (pct > 0 && pct <= 95) ? pct : null;
+}
 
 async function scraperSodreVeiculos(browser) {
   console.log('  Sodré Santoro (veículos) — interceptando /api/search-lots...');
@@ -1603,6 +1613,7 @@ async function scraperSodreVeiculos(browser) {
         km: Number(r.lot_km) || (textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null),
         valor_minimo: valMin,
         valor_avaliacao: Number(r.appraisal_value) || Number(r.reference_value) || null,
+        desconto_percentual: descontoPercentualVeiculo(valMin, Number(r.appraisal_value) || Number(r.reference_value) || 0),
         cidade: toTitleCase(cidadeBruta),
         estado: (ufMatch || '').toUpperCase() || null,
         link_lote: r.auction_id
@@ -3448,6 +3459,10 @@ function mapLoteSuporteVeiculo(l, tenant) {
     km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
     valor_minimo: valorMin,
     valor_avaliacao: null,
+    // Sempre null hoje: SUPORTE não expõe avaliação de veículo na listagem (mesma limitação
+    // de `valor_avaliacao` acima). Fica pronto para quando/se isso mudar — sem avaliação,
+    // `descontoPercentualVeiculo` já devolve null sozinho, sem precisar de código extra aqui.
+    desconto_percentual: descontoPercentualVeiculo(valorMin, null),
     cidade: cidade ? toTitleCase(cidade) : null,
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: link,
