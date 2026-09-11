@@ -966,12 +966,19 @@ async function paginaImovel(id) {
       <div class="ficha">
         <div class="ficha-main">
           <div class="foto-hero">
-            ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}"/>` : `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px">Sem foto disponível</div>`}
+            ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" fetchpriority="high"/>` : `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px">Sem foto disponível</div>`}
             <div class="over-tl"><span class="chip">${esc(t)}</span>${modalCurto ? `<span class="chip modal">${esc(modalCurto)}</span>` : ''}</div>
             ${pct > 0 ? `<div class="over-tr"><span class="badge-desc ${grau}">-${pct}%</span></div>` : ''}
             ${fonteLabel ? `<div class="over-bl"><span class="fonte${ehCaixa ? ' caixa' : ''}">${esc(fonteLabel)}</span></div>` : ''}
           </div>
 
+          <!-- "Sobre o imóvel" (Tipo/Modalidade/Cidade/Bairro) foi removido daqui (11/09,
+               pedido do dono: "fica amontoado com muita informação") — os quatro campos já
+               apareciam no chip da foto e no `.sub` logo abaixo do H1; era o MESMO fato
+               impresso 2-3 vezes na mesma página. "Data do leilão" (o único campo que não se
+               repetia em lugar nenhum) foi para dentro de Valores; o selo de contagem
+               regressiva idêntico que ficava aqui também saiu — o da sidebar já é sempre
+               visível (sticky) e cumpre a mesma urgência sem duplicar o selo na tela. -->
           <div class="secao">
             <h2><span class="ic">💰</span> Valores</h2>
             <div class="dados">
@@ -981,19 +988,8 @@ async function paginaImovel(id) {
               ${linha('Desconto', pct > 0 ? `${pct}%` : null)}
               ${m2 ? linha('Preço por m²', m2) : ''}
               ${linha('Área', im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null)}
-            </div>
-          </div>
-
-          <div class="secao">
-            <h2><span class="ic">📋</span> Sobre o imóvel</h2>
-            <div class="dados">
-              ${linha('Tipo', t)}
-              ${im.modalidade ? linha('Modalidade', MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade) : ''}
-              ${linha('Cidade', im.cidade ? `${im.cidade}/${uf}` : null)}
-              ${linha('Bairro', im.bairro)}
               ${linha('Data do leilão', dataBR(im.data_leilao))}
             </div>
-            ${prazoISO ? `<div style="margin-top:12px"><span class="prazo-badge" data-prazo="${prazoISO}" style="display:none"></span></div>` : ''}
           </div>
 
           ${im.descricao ? `<div class="secao"><h2><span class="ic">📝</span> Descrição do lote</h2><p style="margin:0;color:#334155">${esc(String(im.descricao).slice(0, 1200))}</p></div>` : ''}
