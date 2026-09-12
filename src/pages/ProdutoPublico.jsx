@@ -766,7 +766,7 @@ export default function ProdutoPublico({ tipo }) {
                         {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
                         cobrada no mesmo cartão. Cancele quando quiser.
                         <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
-                          {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : 'Desmarcado: você só leva o eBook, sem renovação automática.'}
+                          {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : `Desmarcado: você só leva o ${tipo === 'curso' ? 'curso' : 'eBook'}, sem renovação automática.`}
                         </strong>
                       </span>
                     </label>

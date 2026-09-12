@@ -117,8 +117,10 @@ const PLANOS_ACESSO = [
   { key: 'clube',       label: 'Leilão Club' },
 ];
 
+// Regra do dono (12/09): curso pago, por padrão, concede Investidor Pro e cobra a
+// assinatura no mês seguinte — mesmo raciocínio de defaultEbook() (Admin.jsx).
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '', downsell_tipo: '', downsell_plano: 'top2', downsell_titulo: '', downsell_texto: '', modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: 'top2', concede_meses: 6, requer_cartao_bonus: true, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '', downsell_tipo: '', downsell_plano: 'top2', downsell_titulo: '', downsell_texto: '', modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [], libera_apos_dias: 0, libera_em: null }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -402,7 +404,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: AZUL, nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], oferta_abre_em: rest.oferta_abre_em ? new Date(rest.oferta_abre_em).toISOString() : null, oferta_fecha_em: rest.oferta_fecha_em ? new Date(rest.oferta_fecha_em).toISOString() : null, oferta_preco: rest.oferta_preco === '' || rest.oferta_preco == null ? null : Number(rest.oferta_preco), downsell_oferta: rest.downsell_tipo === 'plano' ? { tipo: 'plano', plano: rest.downsell_plano || 'top2', ciclo: 'anual', titulo: rest.downsell_titulo || null, texto: rest.downsell_texto || null } : null, ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: AZUL, nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, requer_cartao_bonus: rest.concede_plano ? (rest.requer_cartao_bonus !== false) : false, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], oferta_abre_em: rest.oferta_abre_em ? new Date(rest.oferta_abre_em).toISOString() : null, oferta_fecha_em: rest.oferta_fecha_em ? new Date(rest.oferta_fecha_em).toISOString() : null, oferta_preco: rest.oferta_preco === '' || rest.oferta_preco == null ? null : Number(rest.oferta_preco), downsell_oferta: rest.downsell_tipo === 'plano' ? { tipo: 'plano', plano: rest.downsell_plano || 'top2', ciclo: 'anual', titulo: rest.downsell_titulo || null, texto: rest.downsell_texto || null } : null, ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -678,6 +680,20 @@ function CursosTab() {
                     não é rebaixado, e quem já tem acesso pago mais longo não perde os dias que comprou.
                   </div>
                 )}
+                {/* ── COBRAR A ASSINATURA DEPOIS DA CORTESIA (12/09) ──────────────
+                    Mesma regra do editor de eBook — produto PAGO que concede plano vira
+                    assinatura de verdade em vez de só expirar. */}
+                {form.concede_plano && (
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, fontSize:12.5, color:'#374151', marginTop:10, cursor:'pointer' }}>
+                    <input type="checkbox" checked={form.requer_cartao_bonus !== false}
+                      onChange={e => setForm({ ...form, requer_cartao_bonus: e.target.checked })}
+                      style={{ marginTop:2, flexShrink:0 }} />
+                    <span>
+                      Cobrar a assinatura automaticamente no mês seguinte (cartão salvo na compra;
+                      o cliente vê o aviso e pode desmarcar para levar só o curso, sem renovação).
+                    </span>
+                  </label>
+                )}
               </div>
             )}
             {!form.gratuito && catalogoErro && (
@@ -880,7 +896,10 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [], concede_plano: '', concede_meses: 1, oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '' }; }
+// Regra do dono (12/09): eBook pago, por padrão, concede Investidor Pro e cobra a
+// assinatura no mês seguinte — o admin desliga por exceção (muda concede_plano para
+// "Não concede", ou desmarca "cobrar automaticamente"), não liga por exceção.
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [], concede_plano: 'top2', concede_meses: 1, requer_cartao_bonus: true, oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '' }; }
 
 // O banco guarda timestamptz; o <input type="datetime-local"> só aceita 'YYYY-MM-DDTHH:mm' no
 // fuso LOCAL. Jogar o ISO cru no campo faz o navegador recusar em silêncio e abrir vazio — mesmo
@@ -1131,7 +1150,7 @@ function EbooksTab() {
       // — não aparece na loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCamposEbook(form);
       const completo = faltam.length === 0;
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], concede_plano: form.concede_plano || null, concede_meses: form.concede_plano ? (Number(form.concede_meses) || 1) : null, oferta_abre_em: form.oferta_abre_em ? new Date(form.oferta_abre_em).toISOString() : null, oferta_fecha_em: form.oferta_fecha_em ? new Date(form.oferta_fecha_em).toISOString() : null, oferta_preco: form.oferta_preco === '' || form.oferta_preco == null ? null : Number(form.oferta_preco), ativo: completo ? (form.ativo !== false) : false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], concede_plano: form.concede_plano || null, concede_meses: form.concede_plano ? (Number(form.concede_meses) || 1) : null, requer_cartao_bonus: form.concede_plano ? (form.requer_cartao_bonus !== false) : false, oferta_abre_em: form.oferta_abre_em ? new Date(form.oferta_abre_em).toISOString() : null, oferta_fecha_em: form.oferta_fecha_em ? new Date(form.oferta_fecha_em).toISOString() : null, oferta_preco: form.oferta_preco === '' || form.oferta_preco == null ? null : Number(form.oferta_preco), ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
         // Pedido do dono (10/09): ao criar, seguir DIRETO para a tela de capítulos (upload do
         // .docx, detecção automática) em vez de fechar o modal e obrigar a achar o eBook de
@@ -1282,6 +1301,22 @@ function EbooksTab() {
                   O acesso <strong>vence</strong> na data e o cliente volta a Explorador. Quem já tem plano maior
                   não é rebaixado, e quem já tem acesso pago mais longo não perde os dias que comprou.
                 </div>
+              )}
+              {/* ── COBRAR A ASSINATURA DEPOIS DA CORTESIA (12/09) ──────────────────
+                  Regra do dono: produto PAGO que concede plano deve virar assinatura de
+                  verdade — sem isto, o acesso só EXPIRA (volta a Explorador) e ninguém é
+                  cobrado depois. Liga o fluxo com cartão salvo (checkbox de renovação +
+                  ativar-assinatura-bonus-cron.js) — mesmo mecanismo do eBook de R$1. */}
+              {form.concede_plano && (
+                <label style={{ display:'flex', alignItems:'flex-start', gap:8, fontSize:12.5, color:'#374151', marginTop:10, cursor:'pointer' }}>
+                  <input type="checkbox" checked={form.requer_cartao_bonus !== false}
+                    onChange={e => setForm({ ...form, requer_cartao_bonus: e.target.checked })}
+                    style={{ marginTop:2, flexShrink:0 }} />
+                  <span>
+                    Cobrar a assinatura automaticamente no mês seguinte (cartão salvo na compra;
+                    o cliente vê o aviso e pode desmarcar para levar só o eBook, sem renovação).
+                  </span>
+                </label>
               )}
             </div>
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>

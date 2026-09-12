@@ -244,6 +244,10 @@ export default function Header() {
     // é servida por /api/publico via rewrite do vercel.json. Navegar com o router daria
     // tela em branco: o SPA não tem esse caminho e não há fallback para 404 interno.
     { path: '/leiloes', label: 'Buscar Leilões', icon: Search, tourId: 'leiloes-publico', externo: true },
+    // Vitrine pública de eBooks/cursos (12/09, pedido do dono) — só no menu de visitante;
+    // quem já está logado usa "Área de Membros" (linksPrivados), que é a mesma vitrine
+    // com o acesso já resolvido pelo plano.
+    { path: '/educacao', label: 'Educação', icon: GraduationCap, tourId: 'educacao-publico' },
     { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
   ];
   const linksPrivados = [
