@@ -6908,7 +6908,7 @@ function DashboardTab({ irParaTab }) {
             cor: '#10b981',
             icone: '🤖',
             justificativa: 'Arquitetura em camadas já em produção: o NÚCLEO (jurídico, documental, contratos e visão/KYC) fica no Claude pela qualidade em português; as funções não-críticas (chat de dúvidas, resumo de tickets e CNJ-chat) foram para o Gemini 2.5 Flash pelo custo, com fallback automático ao Claude se o Gemini falhar. O consumo dos dois é acompanhado no painel "Custos & Uso" acima.',
-            gatilhoTroca: 'Piloto A/B da pesquisa mercadológica (Claude vs Gemini) em andamento — migrar essa função ao vencedor ao concluir',
+            gatilhoTroca: 'Piloto A/B da pesquisa mercadológica (Claude vs Gemini) rodou uma única vez em 04/07 e está PAUSADO desde então (disparo manual, não retomado) — retomar e concluir antes de migrar essa função ao vencedor',
             atingiuGatilho: false,
             alternativa: {
               nome: 'Gemini 2.5 Flash (já em uso)',
@@ -7681,14 +7681,12 @@ function ScrapersTab() {
     }
   }
 
-  // Scrapers planejados (fila nacional — Zuk/Sodré/Frazão/LJUD já integrados)
+  // Scrapers planejados (fila nacional — Zuk/Sodré/Frazão/LJUD/Biasi/HastaPública já integrados)
   const scrapersPlanjados = [
     { nome: 'MGL Leilões (MG/SP/ES)', volume: '~800-1.5k', status: 'planejado' },
     { nome: 'CCJ Leilões (nacional)', volume: '~1-2k', status: 'planejado' },
-    { nome: 'Biasi Leilões', volume: '~3-5k', status: 'planejado' },
     { nome: 'Destak Leilões', volume: '~500-1k', status: 'planejado' },
     { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
-    { nome: 'HastaPública', volume: '~2-4k', status: 'planejado' },
     { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
   ];
