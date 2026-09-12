@@ -177,16 +177,24 @@ export default function HomeCliente() {
         <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', borderRadius: 18, padding: '26px 26px', color: 'white', boxShadow: '0 8px 24px rgba(13,99,219,0.18)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Bem-vindo, {info.nome}</div>
           <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.15 }}>Olá, {primeiroNome}! 👋</div>
-          {restantes != null && (
-            <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-              <BarChart3 size={14} /> {restantes} de {limiteCota} análises disponíveis {janelaLabel(cotaMercado)}
-            </div>
-          )}
-          {cotaMercado?.ilimitado && (
-            <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-              <BarChart3 size={14} /> Análises ilimitadas
-            </div>
-          )}
+          {/* Altura RESERVADA (11/09, achado do dono: "barra azul aparece cortada e em um
+              instante fica normal" ao entrar na Home). `cotaMercado` nasce `null` e só chega
+              depois de um fetch (lerCotas) — a cada MONTAGEM desta tela (todo clique em Home
+              remonta o componente, o estado não sobrevive à navegação). Enquanto isso, o selo
+              inteiro ficava ausente e o banner nascia mais baixo; quando a cota chegava, a
+              div aparecia do nada e EMPURRAVA o resto da tela para baixo — o "corte" que o
+              dono viu é esse pulo de altura, não um erro de render. Mantendo a MESMA caixa
+              (com um esqueleto no lugar do texto) o banner já nasce na altura final. */}
+          <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700, minWidth: 160, opacity: cotaMercado === null ? 0.55 : 1 }}>
+            <BarChart3 size={14} />
+            {cotaMercado === null
+              ? 'Carregando cota…'
+              : restantes != null
+                ? `${restantes} de ${limiteCota} análises disponíveis ${janelaLabel(cotaMercado)}`
+                : cotaMercado?.ilimitado
+                  ? 'Análises ilimitadas'
+                  : 'Sem cota de análise neste plano'}
+          </div>
         </div>
 
         {/* Ações rápidas por plano */}
