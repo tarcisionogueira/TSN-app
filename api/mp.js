@@ -376,7 +376,20 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
     },
   };
 
-  const sub = await mpPost('/preapproval', body);
+  // O MP pode recusar a criação do mandato de forma SÍNCRONA (token de cartão já usado,
+  // cartão inválido, recusa de antifraude na validação inicial) — `mpPost` lança com a
+  // mensagem CRUA da API (inglês/espanhol, às vezes um JSON de `cause`). Isso chegava ao
+  // cliente como está: um Investidor Pro real bateu nisso (2ª tentativa, `cc_rejected_high_risk`
+  // na cobrança) e viu a mensagem interna em vez de "cartão recusado, tente outro" — a 3ª
+  // tentativa (outro token, mesmo cartão) foi aprovada. O motivo técnico segue no log do
+  // servidor; o cliente recebe uma frase que diz o que fazer.
+  let sub;
+  try {
+    sub = await mpPost('/preapproval', body);
+  } catch (e) {
+    console.error('[mp] preapproval recusado:', e.message);
+    throw new Error('Não foi possível autorizar o cartão. Verifique os dados ou tente outro cartão.', { cause: e });
+  }
 
   // ATIVAÇÃO SÓ COM DINHEIRO NA CONTA (decisão do dono, 16/08).
   //
