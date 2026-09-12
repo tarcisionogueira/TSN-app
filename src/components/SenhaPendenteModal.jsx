@@ -101,15 +101,16 @@ export default function SenhaPendenteModal() {
 
         <div style={{ padding: '14px 22px 0' }}>
           <h2 style={{ fontSize: 19, fontWeight: 900, color: '#0f172a', margin: '0 0 8px' }}>
-            Bem-vindo(a) à BidPro Brasil!
+            Você já está dentro! 🎉
           </h2>
           <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: '0 0 4px' }}>
-            Obrigado por acessar a plataforma — você vai encontrar a oportunidade ideal pra você
-            por aqui, ou pode acompanhar o acervo sempre que quiser. Para aproveitar melhor, siga
-            o passo a passo do vídeo de orientação inicial que vai aparecer a seguir.
+            Seu acesso à BidPro Brasil já está liberado — e com certeza você vai encontrar por
+            aqui a oportunidade ideal pra você, ou pode acompanhar o acervo sempre que quiser.
+            Pra aproveitar melhor, dá uma olhada no vídeo de orientação inicial que vem a seguir.
           </p>
           <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: '10px 0 0' }}>
-            Antes disso, cadastre uma senha seguindo os requisitos exigidos — leva só alguns segundos:
+            Só uma coisa antes: crie sua senha para poder voltar sempre que quiser, de onde
+            estiver. É rápido — menos de 10 segundos:
           </p>
         </div>
 
@@ -133,11 +134,11 @@ export default function SenhaPendenteModal() {
           )}
           <button type="submit" disabled={salvando}
             style={{ width: '100%', padding: 13, background: salvando ? '#94a3b8' : '#0D63DB', color: '#fff', border: 'none', borderRadius: 11, fontWeight: 800, fontSize: 14.5, cursor: salvando ? 'default' : 'pointer', fontFamily: 'inherit', marginBottom: 8 }}>
-            {salvando ? 'Salvando…' : 'Salvar senha e continuar'}
+            {salvando ? 'Salvando…' : 'Criar senha e continuar explorando'}
           </button>
           <button type="button" onClick={fechar}
             style={{ width: '100%', background: 'transparent', border: 'none', color: '#64748b', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '4px' }}>
-            Agora não
+            Prefiro decidir depois
           </button>
         </form>
       </div>
