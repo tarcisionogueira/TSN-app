@@ -9,6 +9,7 @@ import { salvarRef, lerRef } from '../utils/ref';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
+import PagamentoServico from '../components/PagamentoServico';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -47,11 +48,25 @@ export default function ProdutoPublico({ tipo }) {
   const [downsell, setDownsell] = useState(null);
   const [mostrarDownsell, setMostrarDownsell] = useState(false);
   const [agora, setAgora] = useState(() => Date.now());
+  // Bônus com cartão salvo (12/09): ebook/curso com `requer_cartao_bonus` cobra na hora (preço
+  // promocional) e agenda a conversão em assinatura real quando o bônus vencer — ver
+  // api/mp-checkout.js (proposito='produto_bonus') e api/ativar-assinatura-bonus-cron.js.
+  const [mostrarPagamentoBonus, setMostrarPagamentoBonus] = useState(false);
+  const [cienteRenovacao, setCienteRenovacao] = useState(false);
+  const [precoTop2Cheio, setPrecoTop2Cheio] = useState(null);
 
   // Persiste código de referência do consultor
   useEffect(() => {
     if (ref) salvarRef(ref); // persiste com janela de 30 dias
   }, [ref]);
+
+  // Preço cheio do Investidor Pro, só para exibir o aviso de renovação do bônus (nunca para
+  // cobrar — quem cobra é sempre o servidor). Vem do banco, não hardcoded.
+  useEffect(() => {
+    if (!produto?.requer_cartao_bonus) return;
+    supabase.from('planos_config').select('preco').eq('plano_key', 'top2').single()
+      .then(({ data }) => { if (data?.preco) setPrecoTop2Cheio(Number(data.preco)); });
+  }, [produto?.requer_cartao_bonus]);
 
   // Verifica compra avulsa para produtos pagos
   useEffect(() => {
@@ -162,10 +177,17 @@ export default function ProdutoPublico({ tipo }) {
       if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível criar a conta.');
       const { error: eLogin } = await supabase.auth.signInWithPassword({ email: emailNorm, password: suSenha });
       if (eLogin) throw new Error('Conta criada, mas o login automático falhou. Use "Já tenho conta, Entrar" com a senha que você definiu.');
-      if (isPago) await comprar({ nome: nomeNorm, email: emailNorm });
-      // Produto sem preço avulso é benefício do Investidor Pro: a conta já está criada e
-      // logada, falta só assinar — mesmo destino que o botão equivalente do usuário logado.
-      else nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`);
+      if (produto?.requer_cartao_bonus) {
+        // Conta criada e logada — não abre redirecionamento nenhum. O formulário de cartão
+        // embutido (mesma seção do usuário já logado) aparece sozinho assim que `user` do
+        // AuthContext atualizar (onAuthStateChange), no próximo render deste componente.
+      } else if (isPago) {
+        await comprar({ nome: nomeNorm, email: emailNorm });
+      } else {
+        // Produto sem preço avulso é benefício do Investidor Pro: a conta já está criada e
+        // logada, falta só assinar — mesmo destino que o botão equivalente do usuário logado.
+        nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`);
+      }
     } catch (e) {
       setSuErro(e?.message || 'Erro ao criar a conta.');
     } finally { setSuLoading(false); }
@@ -194,7 +216,7 @@ export default function ProdutoPublico({ tipo }) {
           // As colunas da janela e do downsell PRECISAM estar aqui: a lista é explícita, e
           // coluna que não se pede volta `undefined` — a oferta simplesmente não existiria
           // para eBook, sem erro nenhum para acusar.
-          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos, bump_produtos, oferta_abre_em, oferta_fecha_em, oferta_preco, downsell_oferta')
+          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos, bump_produtos, oferta_abre_em, oferta_fecha_em, oferta_preco, downsell_oferta, requer_cartao_bonus, concede_plano, concede_meses')
           .eq('id', id).eq('ativo', true).single();
         if (eE && eE.code !== 'PGRST116') setErroLeitura(true);
         setProduto(e);
@@ -697,7 +719,42 @@ export default function ProdutoPublico({ tipo }) {
                         </span>
                       </label>
                     )}
-                    {isPago ? (
+                    {produto?.requer_cartao_bonus ? (
+                      /* ── Bônus com cartão salvo: paga o promocional agora, ganha N meses
+                          de Investidor Pro, e a assinatura converte sozinha (mesmo cartão)
+                          quando o bônus vencer (api/ativar-assinatura-bonus-cron.js). ── */
+                      <>
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+                          🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
+                          Depois desse período, sua assinatura Investidor Pro
+                          {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} é cobrada
+                          automaticamente no MESMO cartão para continuar — cancele quando quiser, sem multa.
+                        </div>
+                        {!mostrarPagamentoBonus ? (
+                          <>
+                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
+                              <input type="checkbox" checked={cienteRenovacao} onChange={(e) => setCienteRenovacao(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                              <span>Estou ciente de que, após o período de cortesia, a assinatura mensal do Investidor Pro será cobrada automaticamente no cartão informado.</span>
+                            </label>
+                            <button onClick={() => setMostrarPagamentoBonus(true)} disabled={!cienteRenovacao}
+                              title={!cienteRenovacao ? 'Marque a ciência da renovação para continuar' : undefined}
+                              style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: cienteRenovacao ? 'pointer' : 'default', marginBottom: 10, opacity: cienteRenovacao ? 1 : 0.7 }}>
+                              {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
+                            </button>
+                          </>
+                        ) : (
+                          <div style={{ marginBottom: 10 }}>
+                            <PagamentoServico
+                              servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus' }}
+                              soCartao
+                              parcelasMax={1}
+                              onPago={() => { setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
+                              onCancelar={() => setMostrarPagamentoBonus(false)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    ) : isPago ? (
                       /* Compra AVULSA do item (não precisa assinar) */
                       <button onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
                         title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}

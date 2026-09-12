@@ -197,7 +197,21 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: 'consulta de candidatos falhou', detalhe: await candRes.text().catch(() => '') }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   const todos = await candRes.json().catch(() => []);
-  const naJanela = (Array.isArray(todos) ? todos : []).filter((p) => dentroDaJanela(Date.parse(p.plano_vencimento), agora));
+
+  // Quem já tem conversão automática agendada (compra com cartão salvo, ver
+  // api/ativar-assinatura-bonus-cron.js) não precisa do "assine manualmente" — os dois
+  // e-mails juntos confundem mais do que ajudam. Best-effort: falhou a leitura, segue sem
+  // excluir ninguém (pior caso é um e-mail redundante, não uma falha de envio).
+  let comConversaoAutomatica = new Set();
+  try {
+    const rAuto = await sb('compras_produtos?select=user_id&mp_card_id=not.is.null&assinatura_id=is.null');
+    if (rAuto.ok) comConversaoAutomatica = new Set((await rAuto.json()).map((c) => c.user_id));
+    else console.error('[aviso-cortesia-vencendo] leitura de conversão automática devolveu', rAuto.status, '— seguindo sem excluir');
+  } catch (e) { console.error('[aviso-cortesia-vencendo] leitura de conversão automática falhou (seguindo sem excluir):', e?.message); }
+
+  const naJanela = (Array.isArray(todos) ? todos : [])
+    .filter((p) => !comConversaoAutomatica.has(p.id))
+    .filter((p) => dentroDaJanela(Date.parse(p.plano_vencimento), agora));
   resumo.elegiveis = naJanela.length;
   const lista = limite > 0 ? naJanela.slice(0, limite) : naJanela.slice(0, TETO_ENVIOS);
 

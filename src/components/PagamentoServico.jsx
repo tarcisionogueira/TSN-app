@@ -313,7 +313,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12 }) {
   const { user } = useAuth();
   const [parcelas, setParcelas] = useState(1);
   const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
@@ -414,6 +414,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
           proposito: servico.proposito || 'servico',
+          // produto_bonus (12/09): identifica QUAL produto — /api/mp-checkout usa isso pra
+          // chamar comprar_produto_iniciar e cobrar o preço que o servidor calcular, nunca
+          // o `valor` daqui. Ausente em qualquer outro propósito (undefined não vai no JSON).
+          ...(servico.produto_tipo && servico.produto_id
+            ? { produto_tipo: servico.produto_tipo, produto_id: servico.produto_id, ref: servico.ref }
+            : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -478,11 +484,15 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           Assinatura mensal de <strong>{fmtBRL(servico.valor)}</strong>, cobrança recorrente
           automática no cartão. Cancele quando quiser pela plataforma.
         </div>
+      ) : parcelasMax <= 1 ? (
+        // Pagamento único (ex.: bônus a preço promocional) — parcelar não faz sentido e o
+        // servidor cobra sempre em 1x, então nem mostra o seletor.
+        null
       ) : (
         <div>
           <label style={lbl}>Parcelas</label>
           <select value={parcelas} onChange={e => setParcelas(Number(e.target.value))} style={inp}>
-            {PARCELAS.map(n => {
+            {PARCELAS.filter(n => n <= parcelasMax).map(n => {
               const pv = calcParcelaMaisJuros(servico.valor, n);
               const total = pv * n;
               return (
@@ -546,7 +556,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12 }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -588,6 +598,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           onConfirmado={onPago}
           onVoltar={(assinatura || soCartao) ? onCancelar : () => setMetodo(null)}
           onGatewayBloqueado={onGatewayBloqueado}
+          parcelasMax={parcelasMax}
         />
       )}
     </div>
