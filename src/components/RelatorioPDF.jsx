@@ -106,6 +106,10 @@ ${(() => {
     ${cel(isUsoProprio?'Economia estimada':'Lucro líquido estimado', `R$ ${fmt(m.lucro)}`, (m.lucro>=0?'#059669':'#dc2626'))}
     ${cel('Retorno', `${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'}`,'#7c3aed')}
   </div>
+  ${!isUsoProprio && Number(d.valorMercado) > 0 && Math.abs(Number(d.valorMercado) - valorVendaPretendido) / Number(d.valorMercado) > 0.01 ? `
+  <div style="padding:7px 12px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:9.5px;color:#475569;">
+    <b>Venda estimada no mercado:</b> R$ ${fmt(Number(d.valorMercado))} — o "valor pretendido de venda" acima já aplica 10% de desconto sobre este número (para vender mais rápido); é a premissa usada no lucro líquido.
+  </div>`:''}
   <div style="background:${vBg};color:${vCor};padding:9px 12px;font-size:12px;font-weight:900;text-align:center;letter-spacing:0.5px;">
     ${isViavel?'✓':'✗'} VEREDITO: ${vereditoTxt}
   </div>
