@@ -151,6 +151,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/ativar-assinatura-bonus-cron",
+      "schedule": "0 11 * * *"
+    },
+    {
       "path": "/api/scraper-transparencia",
       "schedule": "0 3 * * *"
     },

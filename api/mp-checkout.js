@@ -13,6 +13,52 @@ import { auditLog } from './_audit.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
+// ─── Cartão salvo (produto_bonus) ───────────────────────────────────────────────
+// Padrão documentado do MP para "cartão em arquivo": cria/acha o Customer, salva o
+// cartão nele (consome o token único do formulário) e gera um TOKEN NOVO a partir do
+// cartão salvo — é esse token novo que cobra agora, e o mesmo mecanismo
+// (`POST /v1/card_tokens` com card_id+customer_id) que o cron de conversão usa um mês
+// depois. Cobrar já pelo caminho "cartão salvo" na primeira compra prova o mecanismo
+// de recobrança em produção, em vez de descobrir só na renovação que ele não funciona.
+async function mpAcharOuCriarCustomer(accessToken, email) {
+  const busca = await fetch(`${MP_BASE}/v1/customers/search?email=${encodeURIComponent(email)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (busca.ok) {
+    const d = await busca.json().catch(() => null);
+    const achado = d?.results?.[0]?.id;
+    if (achado) return String(achado);
+  }
+  const cria = await fetch(`${MP_BASE}/v1/customers`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const d = await cria.json().catch(() => null);
+  if (!cria.ok || !d?.id) throw new Error(d?.message || `customer_falhou_${cria.status}`);
+  return String(d.id);
+}
+async function mpSalvarCartao(accessToken, customerId, token) {
+  const r = await fetch(`${MP_BASE}/v1/customers/${customerId}/cards`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d?.id) throw new Error(d?.message || `card_falhou_${r.status}`);
+  return String(d.id);
+}
+async function mpTokenDoCartaoSalvo(accessToken, cardId, customerId) {
+  const r = await fetch(`${MP_BASE}/v1/card_tokens`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: cardId, customer_id: customerId }),
+  });
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d?.id) throw new Error(d?.message || `card_token_falhou_${r.status}`);
+  return String(d.id);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -26,7 +72,7 @@ export default async function handler(req, res) {
   const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!ACCESS_TOKEN) return res.status(500).json({ error: 'Pagamento não configurado' });
 
-  const { valor, descricao, email, metodoPagamento, dadosCartao } = req.body;
+  let { valor, descricao, email, metodoPagamento, dadosCartao } = req.body;
   if (!valor || !descricao || !email) {
     return res.status(400).json({ error: 'valor, descricao e email são obrigatórios' });
   }
@@ -36,8 +82,53 @@ export default async function handler(req, res) {
   // 'plano_anual' marca o PIX-anuidade do Investidor Pro (ativação verificada em
   // /api/ativar-pro-anual). O metadata.tipo continua 'servico' (o webhook NUNCA eleva
   // plano por pagamento único — a ativação é feita à parte, conferindo valor+dono+aprovação).
-  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria']);
+  // 'produto_bonus' (12/09): ebook/curso com `requer_cartao_bonus` — cartão salvo na compra
+  // pra renovar sozinho quando o bônus (concede_plano) vencer. Ver bloco abaixo e
+  // api/ativar-assinatura-bonus-cron.js.
+  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria', 'produto_bonus']);
   const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
+
+  // PRODUTO_BONUS — ebook/curso com `requer_cartao_bonus`: preço promocional + concede_plano
+  // temporário + cartão salvo para tentar virar assinatura real quando o bônus vencer (12/09,
+  // ver supabase/migrations/produto_bonus_assinatura_com_cartao.sql). MESMO cuidado do bloco de
+  // assessoria logo abaixo: preço/elegibilidade vêm SEMPRE do servidor
+  // (`comprar_produto_iniciar`, a mesma RPC de criarPreferenciaProduto em api/mp.js), nunca do
+  // body — sobrescreve `valor`/`descricao` ANTES do corte de valor mínimo logo adiante.
+  let produtoBonusCtx = null;
+  if (proposito === 'produto_bonus') {
+    const { produto_tipo, produto_id, ref } = req.body || {};
+    if (!['ebook', 'curso'].includes(produto_tipo) || !produto_id) {
+      return res.status(400).json({ error: 'produto_tipo e produto_id são obrigatórios' });
+    }
+    const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/rpc/comprar_produto_iniciar`, {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: user.id, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null, p_extras: [] }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const ini = r.ok ? await r.json() : null;
+      if (!ini?.ok) {
+        const motivo = ini?.erro || 'nao_iniciado';
+        return res.status(409).json({
+          error: motivo === 'plano_ja_superior'
+            ? 'Esta oferta não está disponível para quem já é Investidor Pro ou Leilão Club.'
+            : motivo === 'gratuito' ? 'Este produto é gratuito para você.'
+            : 'Não foi possível iniciar a compra.',
+          motivo,
+        });
+      }
+      if (ini.ja_tem) return res.status(200).json({ ok: true, jaTem: true });
+      produtoBonusCtx = { compraId: ini.compra_id, produtoTipo: produto_tipo, produtoId: produto_id };
+      // Preço/título SEMPRE do servidor a partir daqui — nunca do que o body mandou.
+      valor = ini.valor;
+      descricao = String(ini.titulo || descricao).slice(0, 250);
+    } catch (e) {
+      console.error('[mp-checkout] produto_bonus: iniciar falhou', e?.message || e);
+      return res.status(503).json({ error: 'Não consegui validar a compra agora. Tente em instantes.' });
+    }
+  }
 
   const valorCentavos = Math.round(Number(valor) * 100);
   if (valorCentavos < 100) return res.status(400).json({ error: 'Valor mínimo R$ 1,00' });
@@ -85,18 +176,42 @@ export default async function handler(req, res) {
     }
   }
 
+  // produto_bonus + cartão: salva o cartão ANTES de cobrar (troca o token único do form por
+  // um token novo gerado a partir do cartão salvo). Falhou qualquer etapa → cobra do jeito
+  // de sempre com o token original (a compra não pode depender do cartão salvar certo); só
+  // não vai converter sozinha depois — fica sem mp_customer_id/mp_card_id.
+  let mpCustomerId = null, mpCardId = null;
+  if (produtoBonusCtx && metodoPagamento === 'credit_card' && dadosCartao?.token) {
+    try {
+      mpCustomerId = await mpAcharOuCriarCustomer(ACCESS_TOKEN, String(email));
+      mpCardId = await mpSalvarCartao(ACCESS_TOKEN, mpCustomerId, dadosCartao.token);
+      const chargeToken = await mpTokenDoCartaoSalvo(ACCESS_TOKEN, mpCardId, mpCustomerId);
+      dadosCartao = { ...dadosCartao, token: chargeToken };
+    } catch (e) {
+      console.error('[mp-checkout] produto_bonus: não consegui salvar o cartão (cobrando sem salvar):', e?.message || e);
+      mpCustomerId = null; mpCardId = null;
+    }
+  }
+
   try {
     const payload = {
       transaction_amount: Number(valor),
       description: String(descricao).slice(0, 256),
       payment_method_id: metodoPagamento || 'pix',
-      payer: { email: String(email) },
+      payer: mpCustomerId ? { type: 'customer', id: mpCustomerId, email: String(email) } : { email: String(email) },
       // SEGURANÇA: este endpoint é SEMPRE pagamento avulso de serviço (tipo='servico').
       // Nunca eleva plano/role — senão um cliente pagaria 1x um valor qualquer e o
       // webhook mapearia valor→plano, virando plano vitalício de graça (pagamento único
       // não gera preapproval, então nada revoga). Assinaturas de plano vão por /api/mp
       // (preapproval), onde o preço vem do servidor (planos_config) e é recorrente.
-      metadata: { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
+      // produto_bonus é a exceção deliberada: tipo='produto' + external_reference=compra_id
+      // (uuid), pro webhook tratar como confirmação de PRODUTO (ehProdutoMp), igual ao
+      // Checkout Pro de criarPreferenciaProduto em api/mp.js — reaproveita o confirmador que
+      // já existe em vez de duplicar a lógica de concede_plano aqui.
+      metadata: produtoBonusCtx
+        ? { user_id: user.id, origem: 'tsn-app', tipo: 'produto', proposito, compra_id: produtoBonusCtx.compraId }
+        : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
+      ...(produtoBonusCtx ? { external_reference: produtoBonusCtx.compraId } : {}),
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
     };
@@ -137,6 +252,21 @@ export default async function handler(req, res) {
     }
 
     await auditLog({ acao: 'mp_checkout_criado', user_id: user.id, ip, detalhes: { payment_id: data.id, valor, metodo: metodoPagamento }, sucesso: true });
+
+    // Grava o cartão salvo na compra (best-effort — ver comentário no bloco que gerou
+    // mpCustomerId/mpCardId acima). A confirmação da compra em si (status='ativo',
+    // concede_plano) é feita pelo webhook, não aqui.
+    if (produtoBonusCtx && mpCustomerId && mpCardId && data.status === 'approved') {
+      try {
+        const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+        const patch = await fetch(`${SB_URL}/rest/v1/compras_produtos?id=eq.${produtoBonusCtx.compraId}`, {
+          method: 'PATCH',
+          headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ mp_customer_id: mpCustomerId, mp_card_id: mpCardId }),
+        });
+        if (!patch.ok) console.error('[mp-checkout] produto_bonus: gravar cartão salvo devolveu', patch.status);
+      } catch (e) { console.error('[mp-checkout] produto_bonus: gravar cartão salvo falhou:', e?.message || e); }
+    }
 
     return res.status(200).json({
       ok: true,
