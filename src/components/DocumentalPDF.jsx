@@ -181,7 +181,13 @@ ${cabecalhoBidPro({
 
 <div class="av" style="border:2px solid ${R.bd};background:${R.bg};border-radius:8px;padding:12px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:15px;font-weight:900;color:${R.cor};">${R.txt}</div>
-  ${P.preliminar ? `<div style="font-size:10px;font-weight:600;color:${R.cor};opacity:0.9;margin-top:4px;">Uma fonte pública (CNJ/DataJud, DJEN ou matrícula) ficou indisponível agora. O sistema tenta de novo automaticamente (a cada hora, por até 48h) — gere o PDF novamente após a confirmação.</div>` : ''}
+  ${P.preliminar ? `<div style="font-size:10px;font-weight:600;color:${R.cor};opacity:0.9;margin-top:4px;">${
+    P.preliminarMotivo === 'fontes_externas'
+      ? 'O processo no CNJ/DataJud e/ou os andamentos no DJEN não puderam ser confirmados agora (fonte pública indisponível). Os documentos já foram lidos.'
+      : P.preliminarMotivo === 'matricula_caixa'
+      ? 'A matrícula da Caixa ainda está sendo capturada automaticamente.'
+      : 'Uma fonte ficou indisponível agora e não deu para concluir a leitura.'
+  } O sistema tenta de novo automaticamente (a cada hora, por até 48h) — gere o PDF novamente após a confirmação.</div>` : ''}
 </div>
 
 ${bidscoreHtml}

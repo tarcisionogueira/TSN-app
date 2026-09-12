@@ -1134,8 +1134,19 @@ export default async function handler(req, res) {
     }
     // 'pulado' quando não há número/parte para consultar: é diferente de "consultei e não
     // achei nada". O cliente vê um traço, não um zero — a distinção que o CLAUDE.md cobra.
+    // 'concluido' (check verde) só quando o CNJ de fato CONFIRMOU o processo — `cnj.total>0`
+    // é o MESMO critério que o checklist final usa para "feito" (linha ~1564). Antes esta
+    // barra marcava 'concluido' sempre que uma busca era TENTADA, mesmo com o try/catch acima
+    // engolindo a falha (`cnj` fica null) ou o DataJud devolvendo zero por lag/indisponibilidade
+    // — o cliente via um check verde num passo que na verdade não confirmou nada, e o
+    // checklist final (mais abaixo, mesmo dado) já mostrava esse mesmo item como 'pendente'.
+    // Achado do dono (12/09): "aparece o check como carregando verde sendo que não conseguiu
+    // fazer a consulta". Status 'indisponivel' (e não 'pendente'): `marcarProgresso` já usa
+    // 'pendente' como o DEFAULT de etapa que ainda nem começou (linha ~92 abaixo) — reusar o
+    // mesmo nome aqui faria toda etapa "ainda não iniciada" (mercadológico incluso, mesmo
+    // componente de tela) piscar o ícone de alerta indevidamente.
     prog.processo = temBuscaCnj
-      ? { status: 'concluido', n: (cnj?.total ?? null) }
+      ? { status: (cnj && cnj.total) ? 'concluido' : 'indisponivel', n: (cnj?.total ?? null) }
       : { status: 'pulado', n: null };
     prog.parecer = { status: 'gerando', n: null };
     await flush();
@@ -1646,6 +1657,14 @@ export default async function handler(req, res) {
     // e tinhamos alinhado que deveria mostrar que o relatorio não deveria estar pronto
     // e iniciar a cronologia de retentativa."
     const preliminar = String(parsed.parecer || '').trim().length < 120 || matriculaFaltaCaixa || pendencias > 0;
+    // MOTIVO do preliminar: a tela usava UMA mensagem genérica ("anexe a matrícula/edital")
+    // para qualquer preliminar — errada quando a causa é CNJ/DJEN indisponível (os documentos
+    // já foram lidos; anexar de novo não resolve nada). Prioridade: matrícula da Caixa
+    // (accionável, o cliente pode anexar) > fontes externas (não accionável, só aguardar) >
+    // leitura genérica (parecer curto — sobra do fallback antigo).
+    const preliminarMotivo = matriculaFaltaCaixa ? 'matricula_caixa'
+      : pendencias > 0 ? 'fontes_externas'
+      : preliminar ? 'leitura' : null;
     let parecerBase = String(parsed.parecer || '').trim();
     if (parecerBase.length < 120) {
       const exx = parsed.extracao || {};
@@ -1821,6 +1840,7 @@ export default async function handler(req, res) {
       confiancaMotivo: confiancaMotivoFinal,
       diligenciaPendente: !docOk,
       preliminar,
+      preliminarMotivo,
       parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
       fontesExternas,

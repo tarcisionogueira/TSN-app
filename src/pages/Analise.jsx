@@ -1668,9 +1668,18 @@ export default function Analise() {
   // reprovado), derivado do nível de risco + pontos de atenção.
   const vereditoDoc = (() => {
     if (!parecerDocumental || parecerDocumental.precisaDocumentos) return null;
-    // Preliminar = a IA não conseguiu ler os documentos por completo desta vez. NÃO
-    // damos veredito confiante — sinalizamos que a leitura precisa ser refeita/revisada.
-    if (parecerDocumental.preliminar) return { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+    // Preliminar = algo ainda impede um veredito confiante. A causa varia — leitura de
+    // documento, matrícula da Caixa pendente, ou consulta externa (CNJ/DJEN) indisponível —
+    // e cada uma pede uma mensagem diferente: sugerir anexar a matrícula/edital quando o
+    // problema é justamente as consultas externas (documentos já lidos) é uma orientação
+    // inútil que não resolve nada. Achado do dono (12/09): "ali fala de anexar a matricula e
+    // edital sendo que o problema não esta nesses documentos".
+    if (parecerDocumental.preliminar) {
+      const motivo = parecerDocumental.preliminarMotivo;
+      if (motivo === 'fontes_externas') return { txt: 'ANÁLISE PRELIMINAR', sub: 'O processo no CNJ/DataJud e/ou os andamentos no DJEN não puderam ser confirmados agora (fonte pública indisponível). Os documentos já foram lidos — não é preciso reanexar nada. O sistema retenta sozinho de hora em hora, por até 48h.', bg: '#e0e7ff', c: '#3730a3' };
+      if (motivo === 'matricula_caixa') return { txt: 'ANÁLISE PRELIMINAR', sub: 'A matrícula da Caixa ainda está sendo capturada automaticamente. O sistema vai tentar de novo sozinho (a cada hora, por até 48h). Se preferir, anexe a matrícula em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+      return { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+    }
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
     if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
@@ -2295,7 +2304,7 @@ export default function Analise() {
                         desenha nada, exatamente como antes. */}
                     {c.gerando && Array.isArray(c.entry?.progresso?.etapas) && c.entry.progresso.etapas.length > 0 && (() => {
                       const ets = c.entry.progresso.etapas;
-                      const resolved = ets.filter(e => ['concluido','pulado','erro'].includes(e.status)).length + 0.5 * ets.filter(e => e.status==='gerando').length;
+                      const resolved = ets.filter(e => ['concluido','pulado','erro','indisponivel'].includes(e.status)).length + 0.5 * ets.filter(e => e.status==='gerando').length;
                       const pct = Math.round((resolved / ets.length) * 100);
                       return (
                         <div style={{ marginTop:2 }}>
@@ -2308,9 +2317,18 @@ export default function Analise() {
                               const ic = st==='concluido' ? <CheckCircle2 size={13} color="#15803d"/>
                                 : st==='gerando' ? <Loader2 size={13} color={c.cor} style={{ animation:'spin 1s linear infinite' }}/>
                                 : st==='erro' ? <AlertTriangle size={13} color="#b45309"/>
+                                // 'indisponivel' = a etapa RODOU, mas a fonte não confirmou (ex.: CNJ/
+                                // DataJud fora do ar) — diferente de 'concluido' (confirmou), 'pulado'
+                                // (nem havia o que consultar) e do 'pendente' (etapa que ainda NEM
+                                // COMEÇOU — default de marcarProgresso). Precisa de ícone PRÓPRIO: antes
+                                // caía no círculo vazio genérico (mesma cara de "ainda não começou") ou,
+                                // pior, ficava marcado 'concluido' com check verde — achado do dono
+                                // (12/09): "aparece o check como carregando verde sendo que não
+                                // conseguiu fazer a consulta".
+                                : st==='indisponivel' ? <span style={{ fontSize:12, color:'#d97706' }}>⏳</span>
                                 : st==='pulado' ? <span style={{ fontSize:12, color:'#94a3b8', fontWeight:800 }}>—</span>
                                 : <span style={{ width:12, height:12, borderRadius:'50%', border:'2px solid #cbd5e1', display:'inline-block' }}/>;
-                              const cor = st==='concluido' ? '#15803d' : st==='gerando' ? '#111' : st==='erro' ? '#b45309' : '#94a3b8';
+                              const cor = st==='concluido' ? '#15803d' : st==='gerando' ? '#111' : st==='erro' ? '#b45309' : st==='indisponivel' ? '#92400e' : '#94a3b8';
                               return (
                                 <div key={e.key} style={{ display:'flex', alignItems:'center', gap:8, fontSize:11.5, color:cor, fontWeight: st==='gerando'?800:600 }}>
                                   <span style={{ width:14, display:'flex', justifyContent:'center', flexShrink:0 }}>{ic}</span>
