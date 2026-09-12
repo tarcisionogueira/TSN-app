@@ -15,3 +15,7 @@ dist
 # Python
 __pycache__/
 *.pyc
+
+# Rascunho de prévias/mockups (ex.: HTML gerado só para publicar como Artifact) — não é
+# código do app, não precisa de histórico de commit (12/09).
+scratchpad/
