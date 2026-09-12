@@ -29,6 +29,24 @@ const TRF_MAP = {
   // no tratamento de erro por-tribunal sem quebrar a consulta.
   MG: 'trf6',
 };
+// JUSTIÇA DO TRABALHO (12/09) — a busca por UF nunca consultava a Justiça do Trabalho:
+// só somava TJ (estadual) + TRF (federal) + STJ. Achado real: um processo de execução
+// trabalhista (0000199-97.2016.5.05.0195, TRT5/BA) que o dono achou na hora no site
+// oficial do CNJ (comunica.pje.jus.br) saiu "0 processos" no nosso sistema — não porque
+// o DataJud estivesse fora do ar, mas porque `tribunais` nunca incluía `trt5`. Mapa
+// oficial de jurisdição (estável, publicado pelo CNJ — SP e os pares PA/AP, DF/TO,
+// AM/RR, RO/AC dividem região).
+const TRT_MAP = {
+  AC: ['trt14'], AL: ['trt19'], AP: ['trt8'], AM: ['trt11'], BA: ['trt5'],
+  CE: ['trt7'], DF: ['trt10'], ES: ['trt17'], GO: ['trt18'], MA: ['trt16'],
+  MT: ['trt23'], MS: ['trt24'], MG: ['trt3'], PA: ['trt8'], PB: ['trt13'],
+  PR: ['trt9'], PE: ['trt6'], PI: ['trt22'], RJ: ['trt1'], RN: ['trt21'],
+  RS: ['trt4'], RO: ['trt14'], RR: ['trt11'], SC: ['trt12'],
+  SP: ['trt2', 'trt15'], SE: ['trt20'], TO: ['trt10'],
+};
+// Todos os 24 TRTs — para o modo `nacional` (que hoje também pulava a Justiça do
+// Trabalho por completo, mesmo varrendo "todos os tribunais").
+const TODOS_TRT = Array.from({ length: 24 }, (_, i) => `trt${i + 1}`);
 
 const RISCOS_MAP = [
   // BLOQUEANTES
@@ -66,8 +84,8 @@ const CATEGORIAS_SUSPENSIVAS = ['Suspensão', 'Nulidade', 'Embargos', 'Ação An
 
 // Tribunais superiores disponíveis na API pública do DataJud
 const SUPERIORES = ['stj', 'tst', 'tse'];
-// Conjunto nacional: todos os TJs + todos os TRFs + superiores (deduplicado)
-const TODOS_TRIBUNAIS = [...new Set([...Object.values(TRIBUNAL_ESTADUAL), ...Object.values(TRF_MAP), ...SUPERIORES])];
+// Conjunto nacional: todos os TJs + todos os TRFs + todos os TRTs + superiores (deduplicado)
+const TODOS_TRIBUNAIS = [...new Set([...Object.values(TRIBUNAL_ESTADUAL), ...Object.values(TRF_MAP), ...TODOS_TRT, ...SUPERIORES])];
 
 const FASES_RISCO = {
   'Execução': 'alto', 'Cumprimento de Sentença': 'alto', 'Execução Fiscal': 'alto',
@@ -225,10 +243,25 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
     return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([], { erros: ['sem critério de busca'], modalidade }) };
   }
 
-  // Por UF: TJ da UF + TRF da região + STJ. MG também consulta o trf1 (base legada
-  // anterior ao TRF6). No modo nacional TODOS_TRIBUNAIS já cobre trf1..trf6.
+  // Por UF: TJ da UF + TRF da região + TRT da região (12/09, ver TRT_MAP acima) + STJ
+  // (+ TST quando há TRT). MG também consulta o trf1 (base legada anterior ao TRF6).
+  // No modo nacional TODOS_TRIBUNAIS já cobre trf1..trf6 e trt1..trt24.
   const trfLegado = ufUp === 'MG' ? 'trf1' : null;
-  const tribunais = nacional ? TODOS_TRIBUNAIS : [estadual, trf, trfLegado, 'stj'].filter(Boolean);
+  const trtsUf = TRT_MAP[ufUp] || [];
+  const tribunais = nacional ? [...TODOS_TRIBUNAIS]
+    : [estadual, trf, trfLegado, ...trtsUf, trtsUf.length ? 'tst' : null, 'stj'].filter(Boolean);
+  // Quando o NÚMERO do processo está disponível, o próprio número já diz a Justiça
+  // (segmento J) e a região (segmento TR) — mais confiável que inferir pela UF do
+  // imóvel (o executado pode ter ajuizado/ser executado em região diferente). Formato
+  // CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO (20 dígitos). J=5 → Justiça do Trabalho.
+  if (numero_processo) {
+    const dig = String(numero_processo).replace(/\D/g, '');
+    if (dig.length === 20 && dig[13] === '5') {
+      const trtExato = `trt${parseInt(dig.slice(14, 16), 10)}`;
+      if (!tribunais.includes(trtExato)) tribunais.push(trtExato);
+      if (!tribunais.includes('tst')) tribunais.push('tst');
+    }
+  }
   // Em modo nacional são ~36 tribunais — roda em lotes para não estourar conexões.
   const resultados = [];
   const LOTE = 8;
