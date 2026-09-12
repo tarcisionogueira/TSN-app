@@ -255,8 +255,18 @@ export function editalValoresBatem({ avalDb, extratoAvaliacao, p1Valor }) {
 // inventaria um número plausível e ERRADO) e só quando o PRÓPRIO edital já mostrava DUAS praças
 // (a estrutura existe; só o valor envelheceu) — não inventa uma 2ª praça que o documento nunca
 // disse existir.
-export function derivarPracasDoAnuncio({ modalidade, avalDb, valorMinimo, valorMinimo2, p1, p2 }) {
-  if (modalidade !== 'judicial' || !(Number(avalDb) > 0) || !p1 || !p2) return null;
+//
+// `dataLeilao2` (12/09, achado do dono): exige que o ACERVO AO VIVO confirme uma 2ª praça, não
+// só o PDF. Achado real: o lote LJUD dfc5ab9b tinha o edital de OUTRO imóvel anexado por engano
+// (bug do scraper, fora deste arquivo) — um edital de 3 praças de uma casa em Ilhéus, sem relação
+// com o galpão de Feira de Santana. Como o PDF errado tinha `p1`+`p2`, esta função fabricava uma
+// "2ª praça" com data do documento errado, enquanto `imDb.data_leilao_2` (o acervo real) é NULO —
+// ou seja, este leilão especificamente É de praça única. O card "Condições lidas no edital"
+// mostrava 2 praças; o card "Valores de referência" (que lê `imDb` direto) mostrava "praça
+// única" — a mesma tela se contradizendo. Mesmo com o documento CERTO, um PDF pode estar
+// desatualizado a ponto de descrever uma estrutura de praças que o leilão, hoje, não tem mais.
+export function derivarPracasDoAnuncio({ modalidade, avalDb, valorMinimo, valorMinimo2, dataLeilao2, p1, p2 }) {
+  if (modalidade !== 'judicial' || !(Number(avalDb) > 0) || !p1 || !p2 || !dataLeilao2) return null;
   const vm = Number(valorMinimo) || 0;
   const vm2 = Number(valorMinimo2) || 0;
   // Praça 2 do ANÚNCIO ATUAL: prefere valor_minimo_2 (quando o card do leiloeiro já emparelhou
@@ -2645,15 +2655,30 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // Antes de desistir do valor, tenta DERIVAR do que o próprio anúncio já confirma
       // (`derivarPracasDoAnuncio` — ver comentário na função, mesmo achado do dono 03/09).
       const pracasDerivadas = valoresBatem ? null : derivarPracasDoAnuncio({
-        modalidade: imDb?.modalidade, avalDb, valorMinimo: imDb?.valor_minimo, valorMinimo2: imDb?.valor_minimo_2, p1, p2,
+        modalidade: imDb?.modalidade, avalDb, valorMinimo: imDb?.valor_minimo, valorMinimo2: imDb?.valor_minimo_2,
+        dataLeilao2: imDb?.data_leilao_2, p1, p2,
       });
       // A DATA EXIBIDA é a que a reconciliação ACIMA (linhas 2612-2629) decidiu gravar
       // (imDb.data_leilao/_2), não a bruta do PDF (p1.data/p2.data) — achado do dono, 12/09:
       // quando o edital está desatualizado e a reconciliação conclui "MANTIDO o acervo" (o
       // documento erra a data), o cartão "Condições lidas no edital" seguia mostrando a data
       // velha do PDF, divergindo da data real já corrigida e exibida no resto da MESMA tela.
-      const dataParaExibir = (n) => (n === 1 ? imDb?.data_leilao : n === 2 ? imDb?.data_leilao_2 : null);
-      const pracasParaExibir = (valoresBatem ? pracasEd : (pracasDerivadas || pracasEd.map(p => ({ ...p, valor: null }))))
+      // `imDb.data_leilao` é timestamptz completo ("2026-09-15T09:00:00-03:00"); `p.data` e o
+      // formatador da tela (`dataBr`, Analise.jsx) esperam "AAAA-MM-DD" puro. Sem o `slice(0,10)`
+      // o texto saía quebrado ("03:00/15T09:00:00/09/2026" em vez de "15/09/2026") — regressão
+      // do próprio fix acima, pega na mesma sessão ao conferir o resultado no imóvel real.
+      const dataParaExibir = (n) => {
+        const v = n === 1 ? imDb?.data_leilao : n === 2 ? imDb?.data_leilao_2 : null;
+        return v ? String(v).slice(0, 10) : null;
+      };
+      // Sem 2ª praça no acervo real (imDb.data_leilao_2 nulo) E o documento não é confiável
+      // (valoresBatem=false), não fabrica uma — mesmo que o PDF (possivelmente de outro lote,
+      // possivelmente só desatualizado) descreva duas. Quando valoresBatem=true (documento
+      // confere com o anúncio atual), a leitura de `pracasEd` segue confiável por si e não
+      // passa por este filtro — o scraper às vezes não captura a 2ª data isoladamente, e isso
+      // não pode apagar uma 2ª praça real que o PRÓPRIO documento correto confirma.
+      const pracasParaExibir = (valoresBatem ? pracasEd : (pracasDerivadas || pracasEd.map(p => ({ ...p, valor: null })))
+        .filter(p => p.n !== 2 || imDb?.data_leilao_2))
         .map(p => ({ ...p, data: dataParaExibir(p.n) || p.data }));
       mercado.condicoesEdital = {
         pracas: pracasParaExibir,

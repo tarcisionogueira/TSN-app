@@ -47,6 +47,31 @@ const parseValor = (s) => {
   return Number.isFinite(v) && v >= 1000 && v < 100000000 ? v : 0;
 };
 
+// EDITAIS JUDICIAIS FREQUENTEMENTE REÚNEM VÁRIOS LOTES NUM PDF SÓ (achado do dono, 12/09 — Lote
+// 37, galpão de Feira de Santana/BA: o texto trazia identidade e datas de OUTRO lote do MESMO
+// PDF, uma casa em Ilhéus/BA). `extrairCondicoes`/`extrairIdentidadeTexto`/etc. sempre leram o
+// documento INTEIRO — sem noção de onde um lote acaba e o outro começa —, e o `pertence` calculado
+// depois (em extratoEdital) só compara VALORES numa banda solta (0,3x–3,4x / 0,5x–2x, deliberada
+// para tolerar as combinações reais de praça 1/2); a avaliação deste lote coube na banda por
+// coincidência, e arrastou junto a identidade/datas do bloco vizinho. Isolar o bloco do lote ANTES
+// de extrair elimina a dependência dessa coincidência. Só entra quando o documento tem 2+
+// marcações "Lote N" E algum bloco contém um valor conhecido deste lote (avaliação/lance mínimo) —
+// um edital de lote único (o caso comum, e a esmagadora maioria) devolve null e nada muda.
+function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
+  const marcas = [...String(texto || '').matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
+  if (marcas.length < 2) return null;
+  const fmtBr = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const alvo = [valorAvaliacao, valorMinimo].map(Number).filter((v) => v > 0).map(fmtBr);
+  if (!alvo.length) return null; // sem valor conhecido deste lote para casar — não arrisca escolher o bloco errado
+  for (let i = 0; i < marcas.length; i++) {
+    const inicio = marcas[i].index;
+    const fimBloco = i + 1 < marcas.length ? marcas[i + 1].index : texto.length;
+    const bloco = texto.slice(inicio, fimBloco);
+    if (alvo.some((v) => bloco.includes(v))) return bloco;
+  }
+  return null; // nenhum bloco bate com os valores deste lote — mantém o texto inteiro, como sempre
+}
+
 // Extrai praças/pagamento/avaliação de TEXTO plano (PDF com camada de texto ou HTML).
 // Exportada para teste isolado (scripts) e reuso.
 export function extrairCondicoes(texto) {
@@ -462,29 +487,39 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
         // `cond` segue null de propósito: condições de arremate NÃO foram lidas, e fabricá-las
         // para "completar o registro" seria exatamente o defeito que este arquivo combate.
       } else {
-      cond = extrairCondicoes(txt);
+      // Isola o bloco DESTE lote quando o PDF reúne vários (ver isolarBlocoDoLote acima).
+      // `null` = documento de lote único (ou nenhum bloco bateu com os valores conhecidos) —
+      // usa o texto inteiro, exatamente como sempre foi.
+      const blocoLote = isolarBlocoDoLote(txt, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+      const txtLote = blocoLote || txt;
+      cond = extrairCondicoes(txtLote);
       if (!cond) continue;
       // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as
       // praças não trouxeram data; vão à parte, sem interferir no que já existia.
-      try { const d = extrairDatasLeilao(txt, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
+      try { const d = extrairDatasLeilao(txtLote, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
       // Pagamento ESTRUTURADO (fluxo de caixa) e metragem que o EDITAL às vezes traz —
       // grátis, no mesmo texto já baixado. Grava no cache pelas DUAS chaves: URL
       // (lookup pré-download) e conteúdo (idempotência entre URLs do mesmo PDF).
-      pagamento = extrairPagamentoTexto(txt);
+      pagamento = extrairPagamentoTexto(txtLote);
       // CUSTOS declarados (taxa administrativa, IPTU, condomínio — comissão vem no
       // `pagamento`) e IDENTIDADE (condomínio/logradouro/bairro). Os custos entram na
       // PROJEÇÃO; a identidade ancora a BUSCA e a classificação de tipo/padrão.
-      custos = extrairCustosTexto(txt);
-      identidade = extrairIdentidadeTexto(txt);
+      custos = extrairCustosTexto(txtLote);
+      identidade = extrairIdentidadeTexto(txtLote);
       // NÚMERO DO PROCESSO (CNJ) — grátis, no texto que já está em mãos. É a chave que abre a
       // consulta de movimentação e responde "este processo anda rápido?". Até 15/08 só a IA do
       // relatório documental o lia, e por isso 1.782 lotes judiciais tinham 3 números.
-      processo = extrairNumeroProcessoTexto(txt);
-      const mat = extrairMatriculaTexto(txt);
+      processo = extrairNumeroProcessoTexto(txtLote);
+      const mat = extrairMatriculaTexto(txtLote);
       const campos = { condicoes: cond, datas, pagamento, custos, identidade, ...(processo ? { processo } : {}), ...(mat ? { matricula: mat } : {}) };
       const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
-      await cacheGravar(chaveUrl(url), meta);
-      await cacheGravar(chaveConteudo(txt), meta);
+      // MULTI-LOTE NÃO PODE CACHEAR POR URL: o mesmo PDF serve outros lotes, cada um com seu
+      // próprio bloco — gravar por `chaveUrl` faria o PRÓXIMO lote a ler esta URL herdar o
+      // bloco DESTE lote (a mesma poluição cruzada que este fix resolve, só que via cache em
+      // vez de via extração). Cacheia só pelo CONTEÚDO DO BLOCO, que já é específico do lote —
+      // a próxima geração/regeneração DESTE mesmo lote ainda reaproveita, sem custo.
+      if (!blocoLote) await cacheGravar(chaveUrl(url), meta);
+      await cacheGravar(chaveConteudo(txtLote), meta);
       }
     }
     const vmin = Number(im.valor_minimo) || 0;
