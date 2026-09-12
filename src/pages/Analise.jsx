@@ -3528,13 +3528,16 @@ export default function Analise() {
               A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Não consumimos sua cota</strong> e o sistema vai <strong>tentar de novo automaticamente</strong> (a cada poucas horas, por até 48h) — quando preencher, aparece aqui sozinho. Se preferir na hora, <strong>gere novamente</strong> (grátis) ou informe o valor de mercado. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
             </div>
           )}
-          <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
+          {/* SÓ "DESCONTO VS. MERCADO" AQUI (12/09, pedido do dono: remover campo repetitivo).
+              ROI/ROE e TIR saíram deste resumo — apareciam de novo, com o MESMO valor, na seção
+              "Indicadores de retorno" logo abaixo (que ainda traz VPL/Payback/Múltiplo junto, e é
+              o lugar mais completo pra essa leitura). O desconto é o único número que só existe
+              aqui, então fica sozinho, sem grid de 3 pra não sobrar espaço vazio ao lado dele. */}
+          <div style={{ display:'flex', justifyContent: isMobile?'stretch':'flex-start' }}>
             {[
               [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
-              [isAVista?'Retorno (ROI)':'Retorno (ROE)', mercadoSemDados ? '—' : fmtPct(metricas.roi), mercadoSemDados ? '#94a3b8' : (metricas.roi>=0?'#10b981':'#ef4444')],
-              ['Rentabilidade anual (TIR)', indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed'],
             ].map(([l,v,c])=>(
-              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0' }}>
+              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0', width: isMobile?'100%':220 }}>
                 <div style={{ fontSize:9, color:'#64748b', fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
                 <div style={{ fontSize:20, fontWeight:900, color:c }}>{v}</div>
               </div>
