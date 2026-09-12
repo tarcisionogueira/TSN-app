@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
-import { AZUL, corDoProduto } from '../utils/marca';
+import { AZUL, NAVY, LATAO, VERDE, corDoProduto, corSuave } from '../utils/marca';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
 import { apiCall } from '../utils/apiCall';
@@ -435,7 +435,7 @@ export default function ProdutoPublico({ tipo }) {
                   <strong> Você escolhe no pagamento.</strong></>
               )}
             </div>
-            <button onClick={() => { setMostrarDownsell(false); nav(`/checkout?plano=${downsell.plano}${ref ? `&ref=${ref}` : ''}`); }}
+            <button className="bp-btn-hover" onClick={() => { setMostrarDownsell(false); nav(`/checkout?plano=${downsell.plano}${ref ? `&ref=${ref}` : ''}`); }}
               style={{ width: '100%', padding: '13px', background: cor, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>
               Assinar o {downsell.nome} →
             </button>
@@ -455,7 +455,7 @@ export default function ProdutoPublico({ tipo }) {
                 produto, e a RPC de compra só precifica extras que estão na lista de ofertas
                 deste aqui. Um botão de carrinho que o servidor recusaria seria uma venda
                 perdida sem erro visível. Para somar ao carrinho, cadastre como upsell. */}
-            <button onClick={() => { setMostrarDownsell(false); nav(`/p/${downsell.produto_tipo}/${downsell.produto_id}${ref ? `?ref=${ref}` : ''}`); }}
+            <button className="bp-btn-hover" onClick={() => { setMostrarDownsell(false); nav(`/p/${downsell.produto_tipo}/${downsell.produto_id}${ref ? `?ref=${ref}` : ''}`); }}
               style={{ width: '100%', padding: '13px', background: cor, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>
               Ver {downsell.nome} →
             </button>
@@ -485,18 +485,18 @@ export default function ProdutoPublico({ tipo }) {
   // mesma distinção da forma nº 1 do CLAUDE.md, aplicada aqui.
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6' }}>
-        <div style={{ width: 34, height: 34, border: '3px solid #e2e8f0', borderTopColor: '#0D63DB', borderRadius: '50%', animation: 'bp-spin 0.8s linear infinite' }} />
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <div style={{ width: 34, height: 34, border: '3px solid #e2e8f0', borderTopColor: AZUL, borderRadius: '50%', animation: 'bp-spin 0.8s linear infinite' }} />
         <style>{'@keyframes bp-spin{to{transform:rotate(360deg)}}'}</style>
       </div>
     );
   }
   if (!produto) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6', padding: 24 }}>
-        <div style={{ background: 'white', borderRadius: 16, padding: '36px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: 24 }}>
+        <div style={{ background: 'white', borderRadius: 18, padding: '36px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: `0 8px 28px ${corSuave(NAVY, '14')}` }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>{erroLeitura ? '⚠️' : '📭'}</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: NAVY }}>
             {erroLeitura ? 'Não conseguimos carregar este produto' : 'Produto não disponível'}
           </h2>
           <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#64748b', lineHeight: 1.6 }}>
@@ -504,8 +504,8 @@ export default function ProdutoPublico({ tipo }) {
               ? 'Pode ter sido uma falha momentânea de conexão. Tente novamente.'
               : 'Este produto não existe ou não está mais disponível.'}
           </p>
-          <button onClick={() => (erroLeitura ? window.location.reload() : nav('/'))}
-            style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
+          <button className="bp-btn-hover" onClick={() => (erroLeitura ? window.location.reload() : nav('/'))}
+            style={{ padding: '12px 26px', background: AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
             {erroLeitura ? 'Tentar de novo' : 'Ir para o início'}
           </button>
         </div>
@@ -514,18 +514,19 @@ export default function ProdutoPublico({ tipo }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f3f4f6', color: '#111111' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#111111' }}>
       {/* Header — logo CLICÁVEL (→ início) + botão de navegação de volta à plataforma. Antes a
-          página não tinha nenhuma forma de voltar. paddingTop com safe-area (rota fora do MainLayout). */}
-      <header style={{ background: '#0f172a', padding: '12px 20px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'sticky', top: 0, zIndex: 20 }}>
+          página não tinha nenhuma forma de voltar. paddingTop com safe-area (rota fora do MainLayout).
+          Navy da marca (marca.js) — antes era um slate genérico sem relação com a identidade. */}
+      <header style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #0d2a50 100%)`, padding: '12px 20px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'sticky', top: 0, zIndex: 20, boxShadow: '0 1px 0 rgba(255,255,255,0.06)' }}>
         <button onClick={irInicio} title="Ir para o início" style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          <span style={{ background: '#0D63DB', color: '#fff', fontWeight: 900, fontSize: 18, width: 34, height: 34, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>B</span>
+          <span style={{ background: AZUL, color: '#fff', fontWeight: 900, fontSize: 18, width: 34, height: 34, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>B</span>
           <span style={{ textAlign: 'left' }}>
             <span style={{ display: 'block', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: 0.5 }}>BidPro Brasil</span>
-            <span style={{ display: 'block', fontSize: 9.5, color: '#94a3b8', letterSpacing: 1.5, textTransform: 'uppercase' }}>Leilão & Investimentos</span>
+            <span style={{ display: 'block', fontSize: 9.5, color: LATAO, letterSpacing: 1.5, textTransform: 'uppercase' }}>Leilão & Investimentos</span>
           </span>
         </button>
-        <button onClick={irInicio} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 9, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        <button onClick={irInicio} className="bp-btn-ghost" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 9, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           {user ? '🏠 Ir para o início' : '← Voltar ao site'}
         </button>
       </header>
@@ -534,8 +535,9 @@ export default function ProdutoPublico({ tipo }) {
 
         {/* Coluna esquerda, apresentação (estilo Amazon: capa inteira, título, autor, "sobre") */}
         <div>
-          {/* Capa em card branco, INTEIRA (objectFit contain) — antes cortava o topo da imagem. */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 20, display: 'flex', justifyContent: 'center', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          {/* Capa em card branco, INTEIRA (objectFit contain) — antes cortava o topo da imagem.
+              Sombra com tinta navy da marca em vez de preto genérico. */}
+          <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #e5e7eb', padding: 20, display: 'flex', justifyContent: 'center', marginBottom: 24, boxShadow: `0 4px 20px ${corSuave(NAVY, '14')}` }}>
             {produto.capa_url
               ? <img src={driveImage(produto.capa_url)} alt={produto.titulo} style={{ maxWidth: '100%', maxHeight: 440, objectFit: 'contain', borderRadius: 8 }} />
               : <div style={{ width: '100%', height: 280, borderRadius: 8, background: `linear-gradient(135deg, ${cor} 0%, ${cor}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>{tipo === 'curso' ? produto.emoji || '🎓' : '📖'}</div>}
@@ -543,11 +545,11 @@ export default function ProdutoPublico({ tipo }) {
 
           <div style={{ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 }}>{tipo === 'curso' ? 'Curso' : 'eBook'}</div>
           <h1 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.25, margin: '0 0 6px', color: '#111111' }}>{produto.titulo}</h1>
-          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>por <strong style={{ color: '#0D63DB' }}>BidPro Brasil</strong></div>
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>por <strong style={{ color: AZUL }}>BidPro Brasil</strong></div>
           {produto.subtitulo && <p style={{ color: '#374151', fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>{produto.subtitulo}</p>}
           {produto.descricao && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, borderBottom: '1px solid #e5e7eb', paddingBottom: 6 }}>Sobre este {tipo === 'curso' ? 'curso' : 'eBook'}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, paddingLeft: 10, borderLeft: `3px solid ${AZUL}` }}>Sobre este {tipo === 'curso' ? 'curso' : 'eBook'}</div>
               <p style={{ color: '#374151', fontSize: 14.5, lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{produto.descricao}</p>
             </div>
           )}
@@ -555,15 +557,15 @@ export default function ProdutoPublico({ tipo }) {
           {/* Conteúdo do curso */}
           {tipo === 'curso' && aulas.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12, borderBottom: '1px solid #e5e7eb', paddingBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12, paddingLeft: 10, borderLeft: `3px solid ${AZUL}` }}>
                 Conteúdo do curso · {aulas.length} aulas
               </div>
               {Object.entries(modulos).map(([mod, licoes]) => (
                 <div key={mod} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#374151', marginBottom: 4, padding: '7px 10px', background: '#eef2f7', borderRadius: 6 }}>{mod}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#fff', marginBottom: 4, padding: '8px 12px', background: NAVY, borderRadius: 8 }}>{mod}</div>
                   {licoes.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', fontSize: 13, color: '#4b5563', borderBottom: '1px solid #f3f4f6' }}>
-                      <span style={{ fontSize: 11, color: l.gratis ? '#059669' : '#9ca3af' }}>{l.gratis ? '▶ Grátis' : '🔒'}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', fontSize: 13, color: '#4b5563', borderBottom: '1px solid #f3f4f6' }}>
+                      <span style={{ fontSize: 11, color: l.gratis ? VERDE : '#9ca3af', fontWeight: l.gratis ? 700 : 400 }}>{l.gratis ? '▶ Grátis' : '🔒'}</span>
                       <span>{l.titulo}</span>
                       {l.duracao && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{l.duracao}</span>}
                     </div>
@@ -580,10 +582,10 @@ export default function ProdutoPublico({ tipo }) {
             nunca sai desta página. */}
         {isPago && upsell.length > 0 && (
           <div style={{ marginTop: 36, paddingTop: 28, borderTop: '1px solid #e5e7eb' }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, paddingLeft: 10, borderLeft: `3px solid ${LATAO}` }}>
               Leve também
             </div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, paddingLeft: 13 }}>
               Marque o que quiser levar junto — soma no mesmo pagamento, sem sair daqui.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
@@ -591,8 +593,8 @@ export default function ProdutoPublico({ tipo }) {
                 const noCarrinho = aceitos.some(a => a.id === u.id && a.tipo === u.tipo);
                 return (
                   <div key={`up-${u.tipo}-${u.id}`}
-                    style={{ border: `1px solid ${noCarrinho ? '#10b981' : '#e5e7eb'}`, borderRadius: 12, overflow: 'hidden',
-                      background: noCarrinho ? '#f0fdf4' : '#fff', display: 'flex', flexDirection: 'column' }}>
+                    style={{ border: `1px solid ${noCarrinho ? VERDE : '#e5e7eb'}`, borderRadius: 14, overflow: 'hidden',
+                      background: noCarrinho ? corSuave(VERDE, '0d') : '#fff', display: 'flex', flexDirection: 'column', boxShadow: noCarrinho ? `0 4px 14px ${corSuave(VERDE, '20')}` : '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}>
                     {u.capa_url
                       ? <img src={u.capa_url} alt="" style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
                       : <div style={{ height: 118, background: `linear-gradient(135deg, ${AZUL} 0%, ${AZUL}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
@@ -613,20 +615,20 @@ export default function ProdutoPublico({ tipo }) {
                               R$ {u.valor_cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           )}
-                          <strong style={{ color: '#047857', fontSize: 15.5 }}>
+                          <strong style={{ color: VERDE, fontSize: 15.5 }}>
                             R$ {u.valor_com_desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </strong>
                           {u.desconto_pct > 0 && (
                             <span style={{ color: '#B45309', fontWeight: 700, marginLeft: 6, fontSize: 12.5 }}>−{u.desconto_pct}%</span>
                           )}
                         </div>
-                        <button type="button"
+                        <button type="button" className="bp-btn-hover"
                           onClick={() => setAceitos(noCarrinho
                             ? aceitos.filter(a => !(a.id === u.id && a.tipo === u.tipo))
                             : [...aceitos, u])}
                           style={{ width: '100%', padding: '9px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                            border: noCarrinho ? '1px solid #10b981' : '1px solid #cbd5e1',
-                            background: noCarrinho ? '#10b981' : '#fff', color: noCarrinho ? '#fff' : '#334155' }}>
+                            border: noCarrinho ? `1px solid ${VERDE}` : '1px solid #cbd5e1',
+                            background: noCarrinho ? VERDE : '#fff', color: noCarrinho ? '#fff' : '#334155' }}>
                           {noCarrinho ? '✓ No carrinho — remover' : '+ Incluir na compra'}
                         </button>
                       </div>
@@ -640,14 +642,15 @@ export default function ProdutoPublico({ tipo }) {
 
         {/* Coluna direita, CTA (buy box estilo Amazon) */}
         <div style={{ position: 'sticky', top: 88 }}>
-          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: '26px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ background: 'white', borderRadius: 18, border: '1px solid #e5e7eb', padding: '28px 24px', boxShadow: `0 8px 28px ${corSuave(NAVY, '12')}`, borderTop: `3px solid ${AZUL}` }}>
             {/* ── GATILHO 1: A JANELA ESTÁ ABERTA ────────────────────────────
                 Preço cheio riscado + quanto falta para fechar. A contagem fica ACIMA do
-                preço porque é ela que explica por que o número está mais baixo hoje. */}
+                preço porque é ela que explica por que o número está mais baixo hoje.
+                Urgência em vermelho é convenção (não é decoração de marca — é estado). */}
             {vigente?.em_janela && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                  Oferta por tempo limitado
+                  ⏳ Oferta por tempo limitado
                 </div>
                 <div style={{ fontSize: 13.5, color: '#991b1b', fontWeight: 700, marginTop: 3 }}>
                   {restante ? `Encerra em ${restante}` : 'Encerrando agora'}
@@ -679,10 +682,10 @@ export default function ProdutoPublico({ tipo }) {
             {temAcesso ? (
               /* Já tem acesso */
               <>
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+                <div style={{ background: corSuave(VERDE, '10'), border: `1px solid ${corSuave(VERDE, '40')}`, borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: VERDE, fontWeight: 700 }}>
                   ✅ Você já tem acesso a este conteúdo
                 </div>
-                <button onClick={() => nav(tipo === 'curso' ? `/membros/curso/${id}` : `/membros/ebook/${id}`)}
+                <button className="bp-btn-hover" onClick={() => nav(tipo === 'curso' ? `/membros/curso/${id}` : `/membros/ebook/${id}`)}
                   style={{ width: '100%', padding: '14px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
                   {tipo === 'curso' ? 'Acessar curso →' : 'Ler eBook →'}
                 </button>
@@ -690,7 +693,7 @@ export default function ProdutoPublico({ tipo }) {
             ) : (
               /* Não tem acesso */
               <>
-                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#084BA6' }}>
+                <div style={{ background: corSuave(AZUL, '0d'), border: `1px solid ${corSuave(AZUL, '30')}`, borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: AZUL, fontWeight: 600 }}>
                   {isPago
                     ? '📦 Adquira o acesso a este conteúdo'
                     : '⭐ Disponível para assinantes Investidor Pro'}
@@ -730,8 +733,8 @@ export default function ProdutoPublico({ tipo }) {
                 {aceitos.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     {aceitos.map(a => (
-                      <div key={`ac-${a.tipo}-${a.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 9, padding: '9px 11px', marginBottom: 6 }}>
-                        <div style={{ fontSize: 13, color: '#166534', fontWeight: 600, lineHeight: 1.3 }}>
+                      <div key={`ac-${a.tipo}-${a.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: corSuave(VERDE, '0d'), border: `1px solid ${corSuave(VERDE, '40')}`, borderRadius: 9, padding: '9px 11px', marginBottom: 6 }}>
+                        <div style={{ fontSize: 13, color: VERDE, fontWeight: 600, lineHeight: 1.3 }}>
                           ✓ {a.titulo}
                           <span style={{ display: 'block', fontWeight: 700, marginTop: 2 }}>
                             + R$ {a.valor_com_desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -753,10 +756,12 @@ export default function ProdutoPublico({ tipo }) {
                     AQUI, ANTES do fork logado/visitante — achado do dono: quem chega pelo
                     link da campanha está DESLOGADO, e o checkbox só aparecia depois de criar
                     conta, então parecia não existir. Agora aparece pra todo mundo, e quem
-                    desmarcar já vê a reflexão abaixo, antes mesmo de decidir criar a conta. */}
+                    desmarcar já vê a reflexão abaixo, antes mesmo de decidir criar a conta.
+                    Banner em dourado (LATAO, marca.js) — é um benefício-presente, o mesmo
+                    acento "quente" que a marca reserva para esse tipo de destaque. */}
                 {produto?.requer_cartao_bonus && (
                   <>
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+                    <div style={{ background: corSuave(LATAO, '14'), border: `1px solid ${corSuave(LATAO, '55')}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#7a5a13', lineHeight: 1.6 }}>
                       🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
                     </div>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
@@ -765,7 +770,7 @@ export default function ProdutoPublico({ tipo }) {
                         Continuar automaticamente com a assinatura Investidor Pro
                         {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
                         cobrada no mesmo cartão. Cancele quando quiser.
-                        <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
+                        <strong style={{ display: 'block', marginTop: 3, color: AZUL }}>
                           {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : `Desmarcado: você só leva o ${tipo === 'curso' ? 'curso' : 'eBook'}, sem renovação automática.`}
                         </strong>
                       </span>
@@ -804,9 +809,9 @@ export default function ProdutoPublico({ tipo }) {
                     )}
                     {produto?.requer_cartao_bonus ? (
                       !mostrarPagamentoBonus ? (
-                        <button onClick={() => setMostrarPagamentoBonus(true)} disabled={!aceitouTermo}
+                        <button className="bp-btn-hover" onClick={() => setMostrarPagamentoBonus(true)} disabled={!aceitouTermo}
                           title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
-                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: aceitouTermo ? 'pointer' : 'default', marginBottom: 10, opacity: aceitouTermo ? 1 : 0.7 }}>
+                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: aceitouTermo ? 'pointer' : 'default', marginBottom: 10, opacity: aceitouTermo ? 1 : 0.7, boxShadow: aceitouTermo ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
                           {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
                         </button>
                       ) : (
@@ -822,14 +827,14 @@ export default function ProdutoPublico({ tipo }) {
                       )
                     ) : isPago ? (
                       /* Compra AVULSA do item (não precisa assinar) */
-                      <button onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
+                      <button className="bp-btn-hover" onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
                         title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
-                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !aceitouTermo) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !aceitouTermo) ? 0.7 : 1 }}>
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !aceitouTermo) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !aceitouTermo) ? 0.7 : 1, boxShadow: (comprando || aguardando || !aceitouTermo) ? 'none' : `0 4px 14px ${corSuave(AZUL, '35')}` }}>
                         {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </button>
                     ) : (
-                      <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
-                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
+                      <button className="bp-btn-hover" onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10, boxShadow: `0 4px 14px ${corSuave(AZUL, '35')}` }}>
                         Assinar Investidor Pro →
                       </button>
                     )}
@@ -840,13 +845,13 @@ export default function ProdutoPublico({ tipo }) {
                     {isPago && (downsell ? (
                       <div style={{ marginBottom: 12 }}><CartaoDownsell compacto /></div>
                     ) : (
-                      <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
+                      <button className="bp-btn-hover-ghost" onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
                         style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
                         Ou assine e desbloqueie todo o acervo
                       </button>
                     ))}
                     {aguardando && (
-                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#92400e', marginBottom: 8 }}>
+                      <div style={{ background: corSuave(LATAO, '14'), border: `1px solid ${corSuave(LATAO, '55')}`, borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#7a5a13', marginBottom: 8 }}>
                         Finalize o pagamento na aba que abriu. Esta página libera o acesso sozinha assim que o Asaas confirmar.
                       </div>
                     )}
@@ -858,16 +863,16 @@ export default function ProdutoPublico({ tipo }) {
                   <>
                     {/* Cadastro inline (11/09): cria a conta e compra sem sair desta tela —
                         antes, o clique mandava para /login e a pessoa precisava voltar. */}
-                    <input type="text" placeholder="Nome completo" value={suNome} onChange={(e) => setSuNome(e.target.value)} autoComplete="name"
+                    <input className="bp-input" type="text" placeholder="Nome completo" value={suNome} onChange={(e) => setSuNome(e.target.value)} autoComplete="name"
                       style={{ width: '100%', padding: '12px 14px', marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
-                    <input type="email" placeholder="E-mail" value={suEmail} onChange={(e) => setSuEmail(e.target.value)} autoComplete="email"
+                    <input className="bp-input" type="email" placeholder="E-mail" value={suEmail} onChange={(e) => setSuEmail(e.target.value)} autoComplete="email"
                       style={{ width: '100%', padding: '12px 14px', marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
-                    <input type="password" placeholder="Crie uma senha" value={suSenha} onChange={(e) => setSuSenha(e.target.value)} autoComplete="new-password"
+                    <input className="bp-input" type="password" placeholder="Crie uma senha" value={suSenha} onChange={(e) => setSuSenha(e.target.value)} autoComplete="new-password"
                       style={{ width: '100%', padding: '12px 14px', marginBottom: 4, border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
                     {suSenha && (
                       <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, lineHeight: 1.6 }}>
                         {requisitosSenha(suSenha).map((r, i) => (
-                          <span key={i} style={{ marginRight: 8, color: r.ok ? '#16a34a' : '#94a3b8' }}>{r.ok ? '✓' : '○'} {r.txt}</span>
+                          <span key={i} style={{ marginRight: 8, color: r.ok ? VERDE : '#94a3b8' }}>{r.ok ? '✓' : '○'} {r.txt}</span>
                         ))}
                       </div>
                     )}
@@ -893,11 +898,11 @@ export default function ProdutoPublico({ tipo }) {
                     {suErro && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', marginBottom: 8 }}>{suErro}</div>
                     )}
-                    <button onClick={criarContaEComprar} disabled={suLoading || comprando}
-                      style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (suLoading || comprando) ? 'default' : 'pointer', marginBottom: 10, opacity: (suLoading || comprando) ? 0.7 : 1 }}>
+                    <button className="bp-btn-hover" onClick={criarContaEComprar} disabled={suLoading || comprando}
+                      style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (suLoading || comprando) ? 'default' : 'pointer', marginBottom: 10, opacity: (suLoading || comprando) ? 0.7 : 1, boxShadow: (suLoading || comprando) ? 'none' : `0 4px 14px ${corSuave(AZUL, '35')}` }}>
                       {suLoading || comprando ? 'Só um instante…' : isPago ? `Criar conta e comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} →` : 'Criar conta e assinar Investidor Pro →'}
                     </button>
-                    <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
+                    <button className="bp-btn-hover-ghost" onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
                       style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
                       Já tenho conta, Entrar
                     </button>
@@ -928,9 +933,9 @@ export default function ProdutoPublico({ tipo }) {
           garante que ela não volte. */}
       {mostrarDownsell && downsell && !temAcesso && (
         <div role="dialog" aria-modal="true" onClick={() => setMostrarDownsell(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+          style={{ position: 'fixed', inset: 0, background: `${NAVY}cc`, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%', padding: '22px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            style={{ background: '#fff', borderRadius: 18, maxWidth: 420, width: '100%', padding: '22px 20px', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
             <button onClick={() => setMostrarDownsell(false)} aria-label="Fechar"
               style={{ float: 'right', background: 'none', border: 'none', fontSize: 20, color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>×</button>
             <CartaoDownsell />
@@ -942,7 +947,14 @@ export default function ProdutoPublico({ tipo }) {
         </div>
       )}
 
-      <style>{`@media (max-width: 700px) { .produto-grid { grid-template-columns: 1fr !important; } }`}</style>
+      <style>{`
+        @media (max-width: 700px) { .produto-grid { grid-template-columns: 1fr !important; } }
+        .bp-btn-hover:not(:disabled):hover { filter: brightness(0.93); transform: translateY(-1px); }
+        .bp-btn-hover:not(:disabled):active { transform: translateY(0); filter: brightness(0.87); }
+        .bp-btn-hover-ghost:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; }
+        .bp-btn-ghost:hover { background: rgba(255,255,255,0.16) !important; }
+        .bp-input:focus { outline: none; border-color: ${AZUL} !important; box-shadow: 0 0 0 3px ${corSuave(AZUL, '20')}; }
+      `}</style>
     </div>
   );
 }
