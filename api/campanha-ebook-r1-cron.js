@@ -90,7 +90,7 @@ export function corpo({ nome, ebook, precoTop2, unsubUrl, userId }) {
         <p style="font-size:15px;font-weight:700;margin:0 0 12px;">${saudacao}</p>
         <p style="font-size:14px;line-height:1.7;color:#334155;margin:0 0 14px;">
           Por tempo limitado, o eBook <strong>"${esc(ebook.titulo)}"</strong> sai por
-          <strong>${brl(ebook.oferta_preco)}</strong> (de ${brl(ebook.preco)}) — e vem com um bônus:
+          <strong>${brl(ebook.oferta_preco)}</strong> (de ${brl(ebook.preco)}), e vem com um bônus:
           <strong>${ebook.concede_meses} mês${ebook.concede_meses > 1 ? 'es' : ''} de Investidor Pro de cortesia</strong>,
           o plano com relatório completo de mercado, edital e riscos para cada imóvel.
         </p>
@@ -108,8 +108,8 @@ export function corpo({ nome, ebook, precoTop2, unsubUrl, userId }) {
         </table>
         <p style="font-size:12.5px;line-height:1.7;color:#64748b;margin:0 0 18px;">
           Depois do ${ebook.concede_meses}º mês, a assinatura Investidor Pro
-          (${brl(precoTop2)}/mês) é cobrada automaticamente no mesmo cartão para continuar —
-          isso fica claro antes de você pagar, e dá para cancelar quando quiser, sem multa.
+          (${brl(precoTop2)}/mês) é cobrada automaticamente no mesmo cartão para continuar.
+          Isso fica claro antes de você pagar, e dá para cancelar quando quiser, sem multa.
         </p>
         <div style="text-align:center;margin:22px 0 10px;">
           <a href="${cta}" target="_blank" style="display:inline-block;background:#0D63DB;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Quero o eBook por ${brl(ebook.oferta_preco)} →</a>
