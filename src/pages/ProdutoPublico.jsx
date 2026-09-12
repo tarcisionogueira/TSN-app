@@ -52,7 +52,9 @@ export default function ProdutoPublico({ tipo }) {
   // promocional) e agenda a conversão em assinatura real quando o bônus vencer — ver
   // api/mp-checkout.js (proposito='produto_bonus') e api/ativar-assinatura-bonus-cron.js.
   const [mostrarPagamentoBonus, setMostrarPagamentoBonus] = useState(false);
-  const [cienteRenovacao, setCienteRenovacao] = useState(false);
+  // Ligado por padrão (é o caminho que o bônus foi desenhado para incentivar), mas a pessoa
+  // pode desmarcar e levar só o produto — ver o bloco `requer_cartao_bonus` mais abaixo.
+  const [cienteRenovacao, setCienteRenovacao] = useState(true);
   const [precoTop2Cheio, setPrecoTop2Cheio] = useState(null);
 
   // Persiste código de referência do consultor
@@ -379,6 +381,14 @@ export default function ProdutoPublico({ tipo }) {
   // visual. `produto.cor` continua no banco e é ignorado aqui de propósito.
   const cor = corDoProduto(produto);
   const bgCor = cor + '20';
+
+  // Descreve o mecanismo do bônus no termo (12/09) — o termo precisa dizer o que é proposto,
+  // independente de qual escolha a pessoa vai fazer no checkbox `cienteRenovacao` mais abaixo.
+  const bonusTermo = produto?.requer_cartao_bonus ? {
+    meses: produto.concede_meses || 1,
+    planoNome: 'Investidor Pro',
+    precoAssinatura: precoTop2Cheio ? `R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : undefined,
+  } : undefined;
 
   // ── O CARTÃO DO DOWNSELL ───────────────────────────────────────────────────
   // Usado em dois lugares (dentro da buy box e no aviso de saída), então mora aqui.
@@ -750,39 +760,47 @@ export default function ProdutoPublico({ tipo }) {
                           <details style={{ marginTop: 4 }}>
                             <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
                             <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
-                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
+                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, bonus: bonusTermo }).texto}
                             </p>
                           </details>
                         </span>
                       </label>
                     )}
                     {produto?.requer_cartao_bonus ? (
-                      /* ── Bônus com cartão salvo: paga o promocional agora, ganha N meses
-                          de Investidor Pro, e a assinatura converte sozinha (mesmo cartão)
-                          quando o bônus vencer (api/ativar-assinatura-bonus-cron.js). ── */
+                      /* ── Bônus com cartão salvo: paga o promocional agora, ganha N meses de
+                          Investidor Pro. A pessoa ESCOLHE (checkbox abaixo, ligado por padrão)
+                          se a assinatura converte sozinha (mesmo cartão) quando o bônus vencer
+                          (api/ativar-assinatura-bonus-cron.js) — desmarcando, compra só o
+                          produto: o cartão não é salvo e, ao fim da cortesia, a conta volta
+                          para Explorador normalmente, sem cobrança nenhuma. Achado do dono
+                          (12/09): antes não havia como aceitar o produto sem aceitar também a
+                          assinatura futura. ── */
                       <>
                         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
                           🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
-                          Depois desse período, sua assinatura Investidor Pro
-                          {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} é cobrada
-                          automaticamente no MESMO cartão para continuar — cancele quando quiser, sem multa.
                         </div>
                         {!mostrarPagamentoBonus ? (
                           <>
-                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
+                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
                               <input type="checkbox" checked={cienteRenovacao} onChange={(e) => setCienteRenovacao(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
-                              <span>Estou ciente de que, após o período de cortesia, a assinatura mensal do Investidor Pro será cobrada automaticamente no cartão informado.</span>
+                              <span>
+                                Continuar automaticamente com a assinatura Investidor Pro
+                                {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
+                                cobrada no mesmo cartão — cancele quando quiser.
+                                <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
+                                  {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : 'Desmarcado: você só leva o produto, sem renovação automática.'}
+                                </strong>
+                              </span>
                             </label>
-                            <button onClick={() => setMostrarPagamentoBonus(true)} disabled={!cienteRenovacao}
-                              title={!cienteRenovacao ? 'Marque a ciência da renovação para continuar' : undefined}
-                              style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: cienteRenovacao ? 'pointer' : 'default', marginBottom: 10, opacity: cienteRenovacao ? 1 : 0.7 }}>
+                            <button onClick={() => setMostrarPagamentoBonus(true)}
+                              style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
                               {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
                             </button>
                           </>
                         ) : (
                           <div style={{ marginBottom: 10 }}>
                             <PagamentoServico
-                              servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus' }}
+                              servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
                               soCartao
                               parcelasMax={1}
                               onPago={() => { setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
@@ -855,7 +873,7 @@ export default function ProdutoPublico({ tipo }) {
                           <details style={{ marginTop: 4 }}>
                             <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
                             <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
-                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
+                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, bonus: bonusTermo }).texto}
                             </p>
                           </details>
                         </span>

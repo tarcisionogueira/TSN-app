@@ -76,7 +76,7 @@ export function versaoTermoProduto(key) {
 // resguardo sobre o que é comercializado. Os parâmetros são opcionais: sem eles o texto
 // sai com o rótulo genérico do produto — suficiente para o comprovante; no checkout,
 // passe nome/valor/modelo reais.
-export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
+export function termoDoProduto(key, { nome, valorLabel, modelo, inclui, bonus } = {}) {
   const fam = familiaTermo(key);
   if (fam === 'termos_uso') {
     // Re-aceite dos termos da plataforma (não é compra): declaração simples e ampla.
@@ -126,7 +126,18 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
   // 5. Riscos do leilão
   c.push('5. RISCOS DO LEILÃO. O usuário declara ciência de que a arrematação de imóveis em leilão envolve riscos inerentes — entre eles ocupação do imóvel, débitos e ônus, ações judiciais, suspensão ou anulação do certame, atraso de registro e custos adicionais (ITBI, cartório, desocupação, reforma) — e que tais riscos correm por conta do arrematante, cabendo-lhe avaliá-los, com apoio profissional próprio quando entender necessário.');
   // 6. Pagamento / cancelamento / arrependimento
-  if (mod === 'recorrente') {
+  // BÔNUS COM CARTÃO SALVO (12/09) — produto que concede plano temporário e pode converter
+  // em assinatura real quando o bônus vencer (requer_cartao_bonus). O termo PRECISA descrever
+  // as DUAS coisas propostas na mesma compra (o pagamento único do produto E a renovação
+  // condicional), independente de qual escolha a pessoa vai fazer no checkbox do pagamento —
+  // achado do dono (12/09): o termo genérico de "pagamento único" não mencionava a assinatura
+  // nem dizia que dava para recusar só ela.
+  if (bonus) {
+    const { meses = 1, planoNome = 'Investidor Pro', precoAssinatura } = bonus;
+    const mesLabel = `${meses} ${meses > 1 ? 'meses' : 'mês'}`;
+    const precoLabel = precoAssinatura ? ` (${precoAssinatura}/mês)` : '';
+    c.push(`6. PAGAMENTO E BÔNUS. Pagamento único de ${valor}, com acesso ao conteúdo liberado após a confirmação. Esta compra inclui ${mesLabel} de cortesia da assinatura ${planoNome}. Por padrão, ao continuar autorizo que o cartão informado seja salvo e, ao final do período de cortesia, a assinatura ${planoNome}${precoLabel} seja cobrada automaticamente nele — posso RECUSAR essa renovação automática desmarcando a opção correspondente antes de pagar, e nesse caso, ao final da cortesia, minha conta apenas retorna ao plano Explorador, sem qualquer cobrança adicional. Optando pela renovação automática, posso cancelá-la a qualquer momento, sem multa, pela própria plataforma. Nos termos do art. 49 do CDC, posso desistir desta compra em até 7 dias corridos, com estorno integral.`);
+  } else if (mod === 'recorrente') {
     c.push('6. PAGAMENTO E CANCELAMENTO. Autorizo a cobrança recorrente no meio de pagamento escolhido. Posso cancelar a assinatura a qualquer momento pela própria plataforma, sem multa, cessando as cobranças seguintes e mantendo o acesso até o fim do período já pago. Nos termos do art. 49 do CDC, posso desistir da contratação em até 7 dias corridos da primeira contratação, com estorno integral.');
   } else if (mod === 'parcelado') {
     c.push('6. PAGAMENTO. O valor é pago à vista ou parcelado em até 12×, conforme escolhido no checkout. Nos termos do art. 49 do CDC, posso desistir em até 7 dias corridos da contratação, com estorno integral, ressalvada a remuneração proporcional de serviços já efetivamente prestados a meu pedido nesse período.');
