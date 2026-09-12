@@ -880,7 +880,18 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [], concede_plano: '', concede_meses: 1 }; }
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [], concede_plano: '', concede_meses: 1, oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '' }; }
+
+// O banco guarda timestamptz; o <input type="datetime-local"> só aceita 'YYYY-MM-DDTHH:mm' no
+// fuso LOCAL. Jogar o ISO cru no campo faz o navegador recusar em silêncio e abrir vazio — mesmo
+// helper que o editor de curso já usa (Admin.jsx ~linha 320) para a mesma janela de oferta.
+function paraCampoDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
 
 // Seletor reutilizável de "planos com acesso grátis" (chips clicáveis).
 // ── BÔNUS x UPSELL (26/08) ────────────────────────────────────────────────────
@@ -1035,7 +1046,15 @@ function EbooksTab() {
   useEffect(() => { loadEbooks(); }, [loadEbooks]);
 
   function openNew() { setForm(defaultEbook()); setModal('new'); }
-  function openEdit(e) { setForm({ ...e }); setModal('edit'); }
+  function openEdit(e) {
+    setForm({
+      ...e,
+      oferta_abre_em: paraCampoDataHora(e.oferta_abre_em),
+      oferta_fecha_em: paraCampoDataHora(e.oferta_fecha_em),
+      oferta_preco: e.oferta_preco ?? '',
+    });
+    setModal('edit');
+  }
 
   async function deleteEbook(id) {
     if (!window.confirm('Deletar este eBook?')) return;
@@ -1112,7 +1131,7 @@ function EbooksTab() {
       // — não aparece na loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCamposEbook(form);
       const completo = faltam.length === 0;
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], concede_plano: form.concede_plano || null, concede_meses: form.concede_plano ? (Number(form.concede_meses) || 1) : null, ativo: completo ? (form.ativo !== false) : false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], concede_plano: form.concede_plano || null, concede_meses: form.concede_plano ? (Number(form.concede_meses) || 1) : null, oferta_abre_em: form.oferta_abre_em ? new Date(form.oferta_abre_em).toISOString() : null, oferta_fecha_em: form.oferta_fecha_em ? new Date(form.oferta_fecha_em).toISOString() : null, oferta_preco: form.oferta_preco === '' || form.oferta_preco == null ? null : Number(form.oferta_preco), ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
         // Pedido do dono (10/09): ao criar, seguir DIRETO para a tela de capítulos (upload do
         // .docx, detecção automática) em vez de fechar o modal e obrigar a achar o eBook de
@@ -1265,8 +1284,40 @@ function EbooksTab() {
                 </div>
               )}
             </div>
-            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:20 }}>
-              💡 Preço é configurado na aba <strong>Configurações</strong>.
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
+              💡 Preço cheio é configurado na aba <strong>Configurações</strong>.
+            </div>
+            {/* ── JANELA DE OFERTA (12/09) ────────────────────────────────────────
+                Mesmo bloco do editor de curso (Admin.jsx ~linha 715) — o backend
+                (produto_preco_vigente, ProdutoPublico.jsx) já honra oferta_abre_em/
+                fecha_em/preco de ebooks_admin desde que a coluna existe; só faltava o
+                campo aqui na tela. Sem isto, promoção em eBook exigia SQL direto no
+                banco (foi o caso do eBook de R$1). Quem cobra é o servidor — mexer no
+                relógio do computador não compra mais barato. */}
+            <div style={{ border:'1px solid #fecaca', background:'#fff7f7', borderRadius:10, padding:'14px 15px', marginBottom:14 }}>
+              <div style={{ fontSize:13.5, fontWeight:800, color:'#991b1b', marginBottom:3 }}>Janela de oferta (promoção)</div>
+              <div style={{ fontSize:11.5, color:'#7f1d1d', marginBottom:11, lineHeight:1.5 }}>
+                Preencha os três para valer. Sem preço promocional OU sem fechamento, não há
+                janela — o eBook segue no preço cheio.
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10 }}>
+                <div>
+                  <label style={S.label}>Abre em</label>
+                  <input type="datetime-local" style={S.input} value={form.oferta_abre_em || ''}
+                    onChange={e => setForm({ ...form, oferta_abre_em: e.target.value })} />
+                </div>
+                <div>
+                  <label style={S.label}>Fecha em</label>
+                  <input type="datetime-local" style={S.input} value={form.oferta_fecha_em || ''}
+                    onChange={e => setForm({ ...form, oferta_fecha_em: e.target.value })} />
+                </div>
+                <div>
+                  <label style={S.label}>Preço na janela (R$)</label>
+                  <input type="number" step="0.01" min="0" style={S.input} value={form.oferta_preco ?? ''}
+                    placeholder="ex.: 1.00"
+                    onChange={e => setForm({ ...form, oferta_preco: e.target.value })} />
+                </div>
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
