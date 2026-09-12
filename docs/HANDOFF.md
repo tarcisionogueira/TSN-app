@@ -25598,3 +25598,141 @@ dono, que não respondeu ainda se quer a fusão completa mesmo assim.
 main (fast-forward em cada commit, sem conflito). 10 commits, todos com build limpo e
 deploy de produção confirmado READY em bidprobrasil.com.br. Nenhum trigger/rotina nova
 pendente desta parte da sessão.*
+
+---
+
+## 🏁 ENCERRAMENTO DA SESSÃO DE 12/09 (parte 4) — SAC/PRICE em lote judicial, o
+## documental "viável" sem confirmar nada, CNJ nunca via a Justiça do Trabalho, e o
+## orçamento do Bright Data deixa de travar relatório de cliente
+═══════════════════════════════════════════════════════════════════════════════════════
+
+**Continuação direta da parte 3, mesma branch.** Depois do fechamento anterior, o dono
+seguiu testando o PDF do mesmo relatório (galpão de Feira de Santana) e, separadamente,
+regerou o **documental** de um apartamento — e os dois puxaram mais uma cascata real: três
+achados são a MESMA forma do CLAUDE.md de sempre (nº 10, "o instrumento mede uma coisa e
+reporta com o nome de outra") aplicada ao documental desta vez; um é uma categoria nova —
+**lacuna de cobertura na integração com o CNJ** (não falha, ausência silenciosa de um ramo
+inteiro da Justiça); e o último é uma correção de POLÍTICA, não de bug: o dono decidiu que
+orçamento de coleta nunca pode ser motivo de um cliente pagante não receber o relatório
+dele. Todo o trabalho commitado, buildado e em produção (`bidprobrasil.com.br`), branch
+`claude/eager-wright-cj8i5j` == `main`.
+
+1. **SAC vs PRICE aparecendo em lote judicial hipotecado** (commit `0c7eb5b`). Achado do
+   dono no PDF: "leilão judicial hipotecado. não se aplica. deveria ser extrajudicial e
+   permitindo financiamento para aparecer esse campo". "SAC vs PRICE" é linguagem de
+   FINANCIAMENTO BANCÁRIO (contrato e taxa reais, escolha de sistema de amortização); o
+   parcelamento do art. 895 CPC é saldo hipotecado ao juízo, dividido por lei, sem contrato
+   e sem escolha — e com CET=0% (fix da parte 3, item 10), SAC e PRICE davam a MESMA
+   parcela, uma comparação vazia com cara de análise ("Diferença: R$ 0,00" sem dizer por
+   quê). Removida a seção "Tabelas de Financiamento, SAC vs PRICE" do PDF
+   (`RelatorioPDF.jsx`) e do componente equivalente na tela (`Analise.jsx`,
+   `TabelaAmortizacao`) quando `origemCondicoesPagamento === 'padrao_legal'`.
+
+2. **O ACHADO PRINCIPAL — documental saía "viável" mesmo com CNJ/DJEN nunca confirmados**
+   (commit `7451ba4`). Achado do dono ao regerar o documental de um apartamento: 2
+   pendências no checklist (CNJ/DataJud + DJEN "indisponível agora"), mas o relatório saía
+   `status='concluida'` com veredito **"APROVADO COM RESSALVAS — Viável, com pontos a
+   confirmar"** — como se estivesse pronto. Pior: o próprio checklist da tela PROMETIA "o
+   sistema também reprocessa as fontes automaticamente" — mas isso era **falso**:
+   `documental-retry-cron` só retenta `result->>preliminar=eq.true`, e `preliminar` só
+   considerava parecer curto da IA ou matrícula da Caixa faltando — nunca as consultas
+   externas pendentes. Um processo judicial nunca confirmado no CNJ podia ficar "pronto"
+   para sempre, sem cronologia de retentativa nenhuma — a MESMA pergunta do dono de 10/08
+   ("este vazio é resposta, ou é falha que não sabe que falhou?") se aplicava aqui.
+   `preliminar` (`api/gerar-documental.js`) agora também é `true` quando `pendencias > 0`
+   — a mesma condição que o cron de retentativa usa (hora em hora, até 48h, teto de 3
+   tentativas). O veredito de topo (`vereditoDoc`, `Analise.jsx`) já sabia mostrar "ANÁLISE
+   PRELIMINAR" nesse caso; passou a disparar corretamente. Novo campo `preliminarMotivo`
+   (`'fontes_externas' | 'matricula_caixa' | 'leitura'`) para a mensagem certa por causa —
+   achado seguinte explica por quê isso importava.
+
+3. **Barra de progresso mostrava check verde numa consulta que não confirmou nada** (commit
+   `2aba51e`). Segundo achado do dono, no mesmo documental: a etapa "Consulta do processo
+   no CNJ" aparecia com ✓ verde mesmo quando `cnj.total===0` — `prog.processo` virava
+   `'concluido'` sempre que uma busca era TENTADA, não quando CONFIRMAVA algo (o mesmo
+   critério que o checklist final já usava para "feito"). Corrigido com um status NOVO,
+   `'indisponivel'` (ícone ⏳ âmbar) — **não** reaproveitando o nome `'pendente'`, que
+   `marcarProgresso` já usa como default de "etapa que ainda nem começou": reusar teria
+   feito etapas futuras (inclusive do mercadológico, mesmo componente de tela) piscarem
+   alerta indevido. Terceiro achado no mesmo card: o banner "ANÁLISE PRELIMINAR" sempre
+   dizia "anexe a matrícula/edital" — errado quando a causa real é CNJ/DJEN indisponível
+   (documentos já lidos, reanexar não resolve nada). É para isso que serve o
+   `preliminarMotivo` do item 2: tela e PDF (`DocumentalPDF.jsx`) agora escolhem a
+   mensagem certa por causa.
+
+4. **CNJ/DataJud nunca consultava a Justiça do Trabalho** (commit `b89b1b4`) — achado do
+   PRÓPRIO DONO, não por auditoria nossa: ele consultou no site oficial do CNJ
+   (comunica.pje.jus.br) o processo `0000199-97.2016.5.05.0195` e achou na hora (TRT5,
+   Bahia, execução trabalhista) — no MESMO instante em que nosso sistema tinha acabado de
+   voltar "0 processos" para esse número, no mesmo documental do item 2/3. Não era o
+   DataJud fora do ar (conferido: `cnj.erros` sempre `null` nas últimas gerações — as
+   buscas rodavam sem falha técnica). O bug: `buscarProcessosCNJ` (`api/_cnj.js`) só somava
+   TJ (estadual) + TRF (federal) + STJ na busca por UF — a Justiça do Trabalho **nunca**
+   entrava na lista de tribunais consultados, nem no modo por UF nem no modo "nacional"
+   (que deveria varrer tudo). Qualquer penhora/execução trabalhista sobre um imóvel de
+   leilão judicial — bem comum — era invisível para o nosso CNJ, sempre saindo "não
+   localizado" mesmo com o processo bem público. Dois reforços: (a) novo `TRT_MAP`
+   (UF → TRT da região, mapa oficial e estável do CNJ) somado à lista por UF, com TST
+   junto quando há TRT; (b) quando o NÚMERO do processo está disponível, o segmento J.TR
+   do próprio número (formato CNJ padrão) já diz a Justiça e a região exatas — mais
+   confiável que inferir pela UF do imóvel (o processo pode tramitar em região diferente)
+   — J=5 soma o TRT exato + TST, sobrepondo o palpite por UF. `TODOS_TRIBUNAIS` (modo
+   nacional) passou a incluir `trt1..trt24`. ⚠️ Só este UM caso real foi validado
+   (confirmado pelo dono no portal oficial); nenhum outro processo trabalhista foi
+   conferido depois do fix.
+
+5. **Orçamento do Bright Data — por que o DJEN saía "indisponível" e o que mudou (dois
+   commits, o segundo substitui o primeiro na prática)**. Investigação disparada pelo dono
+   perguntando "confirme se o cnj esta mesmo fora do ar" — resposta, pelo banco
+   (`brightdata_uso_proposito`, `brightdata_reserva`, `brightdata_decisao`): o DJEN já
+   bloqueia o IP do servidor com HTTP 403 (conhecido, tem fallback via Bright Data/IP
+   residencial em `consultarComunicaDJEN`), mas o fallback **não estava rodando** — o
+   propósito `certidao` (que cobre o DJEN) tinha `reserva=0`, e na semana de 12/09, com o
+   teto global (720) já em 660 usados e os 60 livres reservados inteiros para `rj` (única
+   fonte sem via grátis), `brightdata_decisao` recusava TODA chamada de certidao/DJEN com
+   `reservado_para_outros` — mesmo sem `certidao` ter consumido nada essa semana.
+   - **Primeiro passo (commit `69239ca`, migração `brightdata_reserva_certidao_djen.sql`):**
+     reserva de 20/semana para `certidao` — resolveu o caso imediato, mas ainda era "fatia
+     maior do mesmo bolo", vulnerável a ficar sem crédito numa semana pior.
+   - **Decisão do dono, mais forte: "os relatorios não devem ser travados pelo teto de
+     gasto semanal. resolva isso. Atribua tudo de consumo apenas a busca dos leiloeiros."**
+     (commit `adc9975`, migração `brightdata_relatorio_isento_do_teto.sql`): nova coluna
+     `isento_teto` em `brightdata_reserva`; `certidao` marcado `true`; `brightdata_decisao`
+     checa a isenção ANTES de qualquer rateio diário/sub-cota/teto global e devolve
+     `permitido:true` sempre — o uso continua CONTADO no ledger (visibilidade de custo
+     preservada), só deixou de ser motivo de bloqueio. Nenhum outro propósito foi tocado
+     (`bayit`, `docs`, `emiliomatos`, `gestao`, `leilaopro`, `ljud`, `pecini`, `radar`,
+     `recon`, `rj`, `soleon`, `vlance`, `geral`, `geral_cliente` seguem sob o teto real de
+     coleta) — e como bônus, a reserva de um propósito isento parou de "roubar" espaço do
+     bolo comum dos demais (`reservado_alheio` agora ignora propósitos isentos). Verificado
+     ao vivo nos dois passos: `brightdata_decisao('certidao')` foi de `reservado_para_outros`
+     → `permitido:true` (com a reserva) → `permitido:true, motivo:'isento_relatorio'` (com
+     a isenção), sem alterar a resposta de nenhum outro propósito testado.
+
+### Fica para a próxima sessão / para o dono
+
+- **`geral_cliente`** (enriquecimento on-demand quando o cliente abre a tela de um imóvel)
+  **não foi tornado isento do teto** — o pedido do dono falava especificamente de
+  "relatórios", e `geral_cliente` é enriquecimento de catálogo, não geração de relatório.
+  Se o dono achar que isso TAMBÉM nunca deveria travar (o cliente abrindo um imóvel e não
+  vendo proximidades por falta de cota, por exemplo), é só marcar `isento_teto=true` para
+  esse propósito também — o mecanismo já suporta.
+- **Auditar se o mercadológico e o laudo têm a mesma lacuna do item 2** (relatório saindo
+  "pronto"/"viável" sem uma fonte externa ter confirmado nada, sem cronologia de
+  retentativa de verdade por trás da promessa na tela). Só o documental foi verificado e
+  corrigido nesta sessão.
+- **`TRT_MAP` (item 4) foi validado contra UM processo real só** (o que o dono conferiu no
+  portal oficial). Vale observar os próximos documentais de leilão judicial com penhora
+  trabalhista para confirmar que a Justiça do Trabalho realmente aparece encontrada agora,
+  e que o `TST` não está gerando ruído/erro por tribunal indevido.
+- Pendências herdadas da parte 3 continuam abertas (fusão dos cartões financeiros, editais
+  multi-lote em outros leiloeiros, parser de "Hastas Realizadas", prompt anti-duplicata) —
+  ver seção acima, nada delas foi tocado nesta parte 4.
+
+*Sessão de 12/09 (parte 4) encerrada. Branch de trabalho claude/eager-wright-cj8i5j ==
+main (fast-forward em cada commit, sem conflito). 6 commits (2 código + 4 migração/dado),
+todos com build/lint limpo e deploy de produção confirmado READY em bidprobrasil.com.br
+(exceto as duas migrações de Bright Data, que são só banco — aplicadas e verificadas
+direto via Supabase MCP, sem depender de deploy). Nenhum trigger/rotina nova pendente
+desta parte da sessão (os dois check-ins de deploy que rodaram já dispararam e foram
+confirmados).*
