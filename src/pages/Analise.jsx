@@ -272,16 +272,23 @@ export default function Analise() {
       // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
       taxaLeiloeiroPercentual: /venda[_ ]?direta|licitac/i.test(imovelInicial.modalidade||'') ? 0 : 5,
-      // PADRÃO LEGAL DO LOTE JUDICIAL (31/08). O parcelado do VAZIO — 5% de entrada em 360
-      // meses — é financiamento BANCÁRIO, e num leilão judicial esse produto não existe: o que
-      // existe é o art. 895 do CPC (entrada mínima de 25%, saldo em até 30 meses, imóvel
-      // hipotecado ao juízo até quitar). Deixar o default bancário fazia o cenário parcelado
-      // sair plausível e errado — parcela pequena, payback longo e capital de entrada
-      // subestimado em 20 pontos. Quando o edital trouxer as condições reais, `aplicarExtracao`
-      // sobrescreve estes números; até lá, o piso da LEI descreve melhor o negócio do que um
-      // financiamento de 30 anos que ninguém vai conseguir.
+      // PADRÃO LEGAL DO LOTE JUDICIAL (31/08, ampliado 12/09). O parcelado do VAZIO — 5% de
+      // entrada em 360 meses a 12% a.a. — é financiamento BANCÁRIO, e num leilão judicial esse
+      // produto não existe: o que existe é o art. 895 do CPC (entrada mínima de 25%, saldo em
+      // até 30 meses, imóvel hipotecado ao juízo até quitar). Deixar o default bancário fazia o
+      // cenário parcelado sair plausível e errado — parcela pequena, payback longo e capital de
+      // entrada subestimado em 20 pontos.
+      //
+      // 12/09 (achado do dono, relendo a projeção do galpão de Feira de Santana): o parcelamento
+      // do art. 895 NÃO cobra JUROS — é saldo dividido em parcelas mensais sujeitas apenas a
+      // CORREÇÃO MONETÁRIA (o índice vem do edital; sem ele publicado, tratar como 0% real é
+      // mais correto do que herdar uma taxa de financiamento bancário). Manter `cetAnual: 12`
+      // aqui inflava a parcela em ~28% (R$ 16.588 em vez de ~R$ 13.459 — a AMORTIZAÇÃO pura,
+      // sem juros nenhum) e subestimava o lucro projetado na mesma proporção. Quando o edital
+      // trouxer a taxa/índice real, `aplicarExtracao` sobrescreve; até lá, 0% descreve o
+      // parcelamento judicial melhor do que um financiamento que ninguém está cobrando.
       ...(String(imovelInicial.modalidade || '').toLowerCase() === 'judicial'
-        ? { sinalPercentual: 25, prazoMeses: 30, origemCondicoesPagamento: 'padrao_legal' }
+        ? { sinalPercentual: 25, prazoMeses: 30, cetAnual: 0, origemCondicoesPagamento: 'padrao_legal' }
         : {}),
     };
   };
@@ -3263,9 +3270,13 @@ export default function Analise() {
                   <option value="sim">Exclusivamente À Vista</option>
                 </select>
               </div>
-              <Field label="Sinal (%)" name="sinalPercentual" value={d.sinalPercentual||5} onChange={upN} type="number"/>
-              <Field label="Prazo (meses)" name="prazoMeses" value={d.prazoMeses||360} onChange={upN} type="number"/>
-              <Field label="CET / Juros a.a. (%)" name="cetAnual" value={d.cetAnual||12} onChange={upN} type="number"/>
+              <Field label="Sinal (%)" name="sinalPercentual" value={d.sinalPercentual ?? 5} onChange={upN} type="number"/>
+              <Field label="Prazo (meses)" name="prazoMeses" value={d.prazoMeses ?? 360} onChange={upN} type="number"/>
+              {/* `?? 12`, não `|| 12` (12/09): parcelamento judicial (art. 895 CPC) grava
+                  cetAnual=0 de propósito (sem juros, só correção monetária) — `||` trataria o
+                  zero LEGÍTIMO como "vazio" e mostraria 12% na tela mesmo a conta usando 0%,
+                  exatamente a confusão que motivou este default existir. */}
+              <Field label="CET / Juros a.a. (%)" name="cetAnual" value={d.cetAnual ?? 12} onChange={upN} type="number"/>
               <div>
                 <label style={lbl}>Tabela</label>
                 <div style={{ display:'flex', gap:6 }}>
