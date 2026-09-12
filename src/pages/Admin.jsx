@@ -7053,44 +7053,9 @@ function DashboardTab({ irParaTab }) {
 function SystemStatusCard() {
   const [status, setStatus] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [gcalTest, setGcalTest] = React.useState(null);
-  const [gcalTesting, setGcalTesting] = React.useState(false);
-  const [cpfMig, setCpfMig] = React.useState(null);
-  const [cpfMigrando, setCpfMigrando] = React.useState(false);
   React.useEffect(() => {
     apiCall('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
-  const testarGcal = async () => {
-    setGcalTesting(true); setGcalTest(null);
-    try {
-      const r = await apiCall('/api/sistema-debug?modulo=gcal');
-      const d = await r.json();
-      setGcalTest(d.gcal || { ok: false, erro: 'Sem resposta' });
-    } catch (e) {
-      setGcalTest({ ok: false, erro: e.message });
-    }
-    setGcalTesting(false);
-  };
-  // Backfill da criptografia de CPF: cifra os CPFs antigos (que só têm texto
-  // claro) em lotes. Roda quantas vezes precisar até 'restantes' zerar.
-  const migrarCPF = async () => {
-    setCpfMigrando(true);
-    let migrados = 0, erros = 0, voltas = 0;
-    try {
-      while (voltas < 40) {
-        voltas++;
-        const r = await apiCall('/api/cpf-migrar', { method: 'POST' });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { setCpfMig({ ok: false, erro: d.error || `Erro ${r.status}` }); setCpfMigrando(false); return; }
-        migrados += d.migrados || 0; erros += d.erros || 0;
-        if ((d.restantes_neste_lote || 0) <= 0) break;
-      }
-      setCpfMig({ ok: true, migrados, erros });
-    } catch (e) {
-      setCpfMig({ ok: false, erro: e.message });
-    }
-    setCpfMigrando(false);
-  };
   // Grupos por FUNÇÃO DE NEGÓCIO + IMPACTO — dá para varrer o painel pelo que
   // importa (o que derruba o sistema, o que afeta receita, o que traz cliente).
   const GRUPOS = {
@@ -7102,12 +7067,6 @@ function SystemStatusCard() {
     operacao:    { label: '⚙️ Operação',                    cor: '#64748b', items: ['video', 'coleta', 'onr'] },
     agenda:      { label: '📅 Agenda Google',               cor: '#f59e0b', items: ['gcalClient', 'gcalConectada'] },
   };
-  const DOMINIO_PENDENTE = [
-    { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
-    { label: 'Verificar domínio no Resend', desc: 'Adicionar registros DNS após definir o domínio.' },
-    { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "BidPro Brasil <alertas@seudominio.com.br>"' },
-    { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
-  ];
   // % configurado conta só o OBRIGATÓRIO (itens opcionais — ex.: API avançada de
   // anúncios, cartório — não penalizam a saúde do sistema).
   const envItems = status ? Object.values(status).filter(v => v && typeof v.ok === 'boolean' && v.label) : [];
@@ -7168,62 +7127,6 @@ function SystemStatusCard() {
           })}
         </div>
       )}
-      {!loading && (
-        <div style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', marginBottom: 16, fontSize: 12, color: '#1e40af' }}>
-          <span style={{ fontSize: 14, flexShrink: 0 }}>🔐</span>
-          <div style={{ lineHeight: 1.5 }}>
-            <strong>Criptografia de CPF:</strong> cifra os CPFs já cadastrados (que ainda estão em texto claro). Rode uma vez, após ter salvo a variável <code>CPF_ENC_KEY</code> na Vercel e redeployado. Novos cadastros já entram cifrados automaticamente.
-            <div style={{ marginTop: 8 }}>
-              <button onClick={migrarCPF} disabled={cpfMigrando}
-                style={{ padding: '5px 12px', borderRadius: 8, background: 'white', color: '#1e40af', border: '1px solid #bfdbfe', cursor: cpfMigrando ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700 }}>
-                {cpfMigrando ? '⏳ Migrando…' : '🔐 Migrar CPFs antigos'}
-              </button>
-              {cpfMig && (
-                <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: cpfMig.ok ? '#059669' : '#dc2626' }}>
-                  {cpfMig.ok
-                    ? `✅ Concluído: ${cpfMig.migrados} cifrado(s)${cpfMig.erros ? `, ${cpfMig.erros} erro(s)` : ''}.`
-                    : `❌ Falhou: ${cpfMig.erro || 'erro desconhecido'}`}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {!loading && (
-        <div style={{ display: 'flex', gap: 10, padding: '10px 12px', background: status?.gcalConectada?.ok ? '#ecfdf5' : '#f5f3ff', borderRadius: 10, border: `1px solid ${status?.gcalConectada?.ok ? '#a7f3d0' : '#ddd6fe'}`, marginBottom: 16, fontSize: 12, color: status?.gcalConectada?.ok ? '#065f46' : '#5b21b6' }}>
-          <span style={{ fontSize: 14, flexShrink: 0 }}>📅</span>
-          <div style={{ lineHeight: 1.5 }}>
-            <strong>Agenda Google (OAuth):</strong> {status?.gcalConectada?.ok
-              ? 'conectada — convites e lembretes nativos ativos no agendamento.'
-              : 'ainda não conectada — defina GOOGLE_OAUTH_CLIENT_ID / _SECRET / _REFRESH_TOKEN na Vercel.'}{' '}
-            Hoje via conta @gmail (OAuth). <strong>Ao escalar, migrar para Google Workspace</strong> no domínio próprio dá convites nativos por service account, sem depender de refresh token pessoal.
-            <div style={{ marginTop: 8 }}>
-              <button onClick={testarGcal} disabled={gcalTesting}
-                style={{ padding: '5px 12px', borderRadius: 8, background: 'white', color: '#5b21b6', border: '1px solid #ddd6fe', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
-                {gcalTesting ? '⏳ Testando…' : '🔌 Testar conexão'}
-              </button>
-              {gcalTest && (
-                <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: gcalTest.ok ? '#059669' : '#dc2626' }}>
-                  {gcalTest.ok
-                    ? '✅ Conectado — evento de teste criado e removido.'
-                    : `❌ Falhou: ${gcalTest.erro || 'erro desconhecido'}`}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>⏳ Aguardando definição do domínio</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
-          {DOMINIO_PENDENTE.map((item, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>📋</span>
-              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{item.label}</div><div style={{ fontSize: 11, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>{item.desc}</div></div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
