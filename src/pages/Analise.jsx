@@ -2537,7 +2537,7 @@ export default function Analise() {
                   </div>
                   {parecerDocumental.pendencias > 0 && (
                     <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
-                      Algumas consultas públicas não retornaram de forma conclusiva automaticamente agora. Liberamos o relatório com o que já temos; os itens pendentes entram na validação do analista e do jurídico antes do lance (o sistema também reprocessa as fontes automaticamente).
+                      Algumas consultas públicas não retornaram de forma conclusiva automaticamente agora — por isso este parecer está marcado como PRELIMINAR (veja o aviso acima). Mostramos o que já temos, mas o veredito ainda não é definitivo: o sistema retenta sozinho de hora em hora (até 48h) e o analista/jurídico confirma antes do lance.
                     </div>
                   )}
                 </div>

@@ -1635,7 +1635,17 @@ export default async function handler(req, res) {
       }
     }
 
-    const preliminar = String(parsed.parecer || '').trim().length < 120 || matriculaFaltaCaixa;
+    // PRELIMINAR também quando CNJ/DataJud ou DJEN ficaram indisponíveis agora
+    // (checklist com item 'pendente'). Antes, `pendencias>0` só rebaixava a
+    // CONFIANÇA (ver tetoServidor abaixo) e o relatório saía com status 'concluida'
+    // igual a um caso 100% verificado — a tela lia "APROVADO COM RESSALVAS/viável" e
+    // o texto da tela prometia "o sistema também reprocessa as fontes automaticamente",
+    // mas o documental-retry-cron só retenta `result->>preliminar=eq.true`: a promessa
+    // era falsa e o relatório de um processo judicial nunca confirmado no CNJ ficava
+    // "pronto" para sempre. Achado do dono (12/09): "continua aparecendo como viável
+    // e tinhamos alinhado que deveria mostrar que o relatorio não deveria estar pronto
+    // e iniciar a cronologia de retentativa."
+    const preliminar = String(parsed.parecer || '').trim().length < 120 || matriculaFaltaCaixa || pendencias > 0;
     let parecerBase = String(parsed.parecer || '').trim();
     if (parecerBase.length < 120) {
       const exx = parsed.extracao || {};

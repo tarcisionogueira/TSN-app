@@ -39,11 +39,17 @@ export const ESTILOS_DOCUMENTAL = `
 // documento completo e imprime.
 export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb = null, cab = {} }) {
   const risco = P.nivelRisco || 'amarelo';
-  const R = {
-    verde:    { txt: 'RISCO BAIXO',   cor: '#065f46', bg: '#d1fae5', bd: '#10b981' },
-    amarelo:  { txt: 'RISCO MÉDIO',   cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' },
-    vermelho: { txt: 'RISCO ALTO',    cor: '#b91c1c', bg: '#fee2e2', bd: '#ef4444' },
-  }[risco] || { txt: 'RISCO MÉDIO', cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' };
+  // Espelha o veredito da TELA (Analise.jsx): quando o parecer é PRELIMINAR (fonte
+  // externa como CNJ/DJEN indisponível, ou matrícula da Caixa pendente), o PDF não
+  // pode estampar um risco definitivo — senão o cliente lê "risco médio" como
+  // veredito fechado num relatório que o sistema ainda vai retentar sozinho.
+  const R = P.preliminar
+    ? { txt: 'ANÁLISE PRELIMINAR — AGUARDANDO CONFIRMAÇÃO', cor: '#3730a3', bg: '#e0e7ff', bd: '#4338ca' }
+    : ({
+      verde:    { txt: 'RISCO BAIXO',   cor: '#065f46', bg: '#d1fae5', bd: '#10b981' },
+      amarelo:  { txt: 'RISCO MÉDIO',   cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' },
+      vermelho: { txt: 'RISCO ALTO',    cor: '#b91c1c', bg: '#fee2e2', bd: '#ef4444' },
+    }[risco] || { txt: 'RISCO MÉDIO', cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' });
 
   const corCamada = (n) => n >= 7 ? '#16a34a' : n >= 4 ? '#b45309' : '#dc2626';
 
@@ -175,6 +181,7 @@ ${cabecalhoBidPro({
 
 <div class="av" style="border:2px solid ${R.bd};background:${R.bg};border-radius:8px;padding:12px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:15px;font-weight:900;color:${R.cor};">${R.txt}</div>
+  ${P.preliminar ? `<div style="font-size:10px;font-weight:600;color:${R.cor};opacity:0.9;margin-top:4px;">Uma fonte pública (CNJ/DataJud, DJEN ou matrícula) ficou indisponível agora. O sistema tenta de novo automaticamente (a cada hora, por até 48h) — gere o PDF novamente após a confirmação.</div>` : ''}
 </div>
 
 ${bidscoreHtml}
