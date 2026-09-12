@@ -14,15 +14,18 @@ function Capa({ url, titulo, emoji }) {
   const [c1, c2] = tons[titulo ? titulo.charCodeAt(0) % tons.length : 0];
   if (!url || erro) {
     return (
-      <div style={{ width: '100%', aspectRatio: '3/4', background: `linear-gradient(135deg,${c1},${c2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
+      <div style={{ width: '100%', aspectRatio: '2/3', background: `linear-gradient(135deg,${c1},${c2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
         {emoji || '📘'}
       </div>
     );
   }
   // aspectRatio vai no CONTAINER, não na <img> (Safari usa a proporção do arquivo, não a
   // CSS, quando aplicada direto na imagem — padrão banido por verificar:padroes).
+  // 2/3 (não 3/4): é a proporção REAL das capas de ebook/curso usada em toda a plataforma
+  // (Membros.jsx, EbookCover). Com 3/4 (mais baixa) o object-fit:cover cortava topo/base da
+  // imagem 2/3 para caber na caixa — achado do dono, 12/09 (capas de ebook cortadas na vitrine).
   return (
-    <div style={{ width: '100%', aspectRatio: '3/4', overflow: 'hidden', background: '#f1f5f9' }}>
+    <div style={{ width: '100%', aspectRatio: '2/3', overflow: 'hidden', background: '#f1f5f9' }}>
       <img src={driveImage(url)} alt={titulo}
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         onError={() => setErro(true)}
