@@ -156,7 +156,7 @@
     },
     {
       "path": "/api/campanha-ebook-r1-cron",
-      "schedule": "0 15 13 9 *"
+      "schedule": "0 11 13 9 *"
     },
     {
       "path": "/api/scraper-transparencia",
