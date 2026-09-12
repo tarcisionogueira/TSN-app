@@ -2922,6 +2922,34 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     }
     mercado.socio = await pSocio;
 
+    // ALUGUEL AUSENTE COM ÍNDICE DISPONÍVEL (12/09, achado do dono no galpão de Feira de
+    // Santana/BA — o card "Aluguel médio" saía zerado/errado enquanto o Índice BidPro, logo
+    // abaixo, mostrava R$ 16,20/m²/mês). A auditoria (`aluguel_ausente_com_indice`,
+    // _auditoria-relatorio.js) JÁ sinalizava exatamente isto como ressalva desde antes — só
+    // ninguém agia sobre o sinal. O fallback de índice para VENDA (linhas abaixo) só entra
+    // quando NEM venda nem aluguel foram achados; aluguel não tinha o espelho disso: uma busca
+    // que acha venda mas não acha locação (comum — poucos anúncios de aluguel ficam ativos)
+    // deixava o aluguel em 0 mesmo com referência de cidade disponível. "Não apuramos" virava
+    // "não existe" — a mesma forma que já mordeu venda, mercado vazio e parecer.
+    if (!(Number(mercado.aluguelMedio) > 0) && segIdx !== 'terreno' && segIdx !== 'rural') {
+      const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
+      if (aluIdx > 0 && areaSeg > 0) {
+        mercado.aluguelMedio = Math.round(aluIdx * areaSeg);
+        if (mercado.consolidado) mercado.consolidado.aluguelMedio = mercado.aluguelMedio;
+        // A TELA PRECISA DISTINGUIR "amostra ao vivo" de "estimado pelo índice de cidade" — um
+        // aluguel vindo de comparável real e um vindo da média da cidade carregam confiança
+        // MUITO diferente, e apresentá-los com a mesma cara é o "instrumento medindo uma coisa
+        // e reportando com o nome de outra" (CLAUDE.md, forma nº 10).
+        mercado.aluguelEstimadoPorIndice = true;
+        const valImovel = Number(mercado.consolidado?.valorEstimadoImovel) || 0;
+        if (valImovel > 0 && mercado.consolidado) {
+          const yBruto = Number(((mercado.aluguelMedio * 12 / valImovel) * 100).toFixed(2));
+          mercado.consolidado.yieldBruto = yBruto;
+          mercado.consolidado.yieldLiquido = Number((yBruto * 0.85).toFixed(2)); // mesma regra da linha ~2309 (15% vacância/despesas)
+        }
+      }
+    }
+
     // COLHEITA de outras tipologias (aproveitamento da busca): semeia o Índice dos OUTROS
     // segmentos da região com o que a IA já viu (nível cidade, sem leilão). Só em busca FRESCA
     // (o reaproveitado não traz esse bloco). Independe do segmento-alvo (mesmo p/ alvo rural,
