@@ -180,8 +180,15 @@ export default async function handler(req, res) {
   // um token novo gerado a partir do cartão salvo). Falhou qualquer etapa → cobra do jeito
   // de sempre com o token original (a compra não pode depender do cartão salvar certo); só
   // não vai converter sozinha depois — fica sem mp_customer_id/mp_card_id.
+  // `manterAssinatura` (12/09, achado do dono): a pessoa pode recusar a renovação automática
+  // e levar só o produto — default true (o caminho que o bônus foi desenhado para incentivar,
+  // mesmo default do checkbox em ProdutoPublico.jsx), só pula o salvamento se vier `false`
+  // explícito. Sem o cartão salvo, a cortesia concedida (concede_plano/concede_meses) segue
+  // idêntica — só não há o que o cron de conversão (ativar-assinatura-bonus-cron.js) encontre
+  // depois, e a cortesia expira sozinha pelo mecanismo que já existe (reconciliar-assinaturas).
+  const manterAssinatura = req.body?.manterAssinatura !== false;
   let mpCustomerId = null, mpCardId = null;
-  if (produtoBonusCtx && metodoPagamento === 'credit_card' && dadosCartao?.token) {
+  if (produtoBonusCtx && manterAssinatura && metodoPagamento === 'credit_card' && dadosCartao?.token) {
     try {
       mpCustomerId = await mpAcharOuCriarCustomer(ACCESS_TOKEN, String(email));
       mpCardId = await mpSalvarCartao(ACCESS_TOKEN, mpCustomerId, dadosCartao.token);

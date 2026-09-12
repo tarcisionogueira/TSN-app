@@ -418,7 +418,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           // chamar comprar_produto_iniciar e cobrar o preço que o servidor calcular, nunca
           // o `valor` daqui. Ausente em qualquer outro propósito (undefined não vai no JSON).
           ...(servico.produto_tipo && servico.produto_id
-            ? { produto_tipo: servico.produto_tipo, produto_id: servico.produto_id, ref: servico.ref }
+            ? { produto_tipo: servico.produto_tipo, produto_id: servico.produto_id, ref: servico.ref, manterAssinatura: servico.manterAssinatura }
             : {}),
         }),
       });
