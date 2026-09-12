@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
+import { trackCadastro } from '../utils/gtag';
 
 const PLANOS_INFO = {
   top2: {
@@ -298,6 +299,9 @@ function CapturaLanding({ id }) {
         setEnviando(false);
         return;
       }
+      // Cadastro real (conta confirmada) — mesma conversão do Login/Checkout (12/09, auditoria
+      // de rastreamento: esta tela de captura gratuita não disparava NENHUM evento).
+      trackCadastro(form.email.trim(), form.nome.trim());
       setStep('sucesso');
     } catch (_) {
       setErro('Erro inesperado. Tente novamente.');

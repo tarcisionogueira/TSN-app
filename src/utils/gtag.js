@@ -105,6 +105,16 @@ export function trackImovelVisualizado(imovelId, tipo, valor) {
   openaiTrack('contents_viewed');
 }
 
+// ViewContent genérico para produto digital (ebook/curso avulso) — mesmo padrão de
+// `trackImovelVisualizado`, mas sem `item_category` de imóvel. Página de produto público
+// (ProdutoPublico.jsx) não tinha NENHUM evento de funil até 12/09 (achado do dono, auditoria
+// de rastreamento das páginas de Educação).
+export function trackProdutoVisualizado(produtoId, tipo, valor, nome) {
+  gtag('event', 'view_item', { currency: 'BRL', value: valor, items: [{ item_id: produtoId, item_category: tipo, item_name: nome }], send_to: AW_ID });
+  metaTrack('ViewContent', { currency: 'BRL', value: valor, content_ids: [produtoId], content_type: tipo, content_name: nome });
+  openaiTrack('contents_viewed');
+}
+
 export function trackBuscaRealizada(filtros) {
   gtag('event', 'search', { search_term: JSON.stringify(filtros), send_to: AW_ID });
   metaTrack('Search');

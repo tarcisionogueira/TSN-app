@@ -90,7 +90,14 @@ export default async function handler(req, res) {
     // Medido antes da correção: `visita_origem` tinha ZERO linhas com landing `/live/%`,
     // desde sempre. Não dava para distinguir "o anúncio não traz ninguém" de "não estamos
     // medindo" — os dois diagnósticos opostos de sempre.
-    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|r\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    // `educacao` entrou em 12/09 e é a QUARTA vez que esta lista fica desatualizada assim que
+    // uma página pública nova nasce — mesmo padrão de `leiloes`/`leilao`/`live` acima, achado
+    // numa auditoria pedida pelo dono ("todas as páginas têm que ser tagueadas") em vez de por
+    // um número que sumiu sozinho. `/educacao` é a vitrine pública de cursos/ebooks
+    // (EducacaoPublico.jsx) — sem esta palavra, visitante anônimo que só via a vitrine e saía
+    // não deixava rastro nenhum: nem pageview/clique em eventos_atividade, nem gclid/fbclid/utm
+    // em visita_origem (o `return` de lista vazia acontece ANTES do bloco de origem, mais abaixo).
+    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|educacao|r\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }

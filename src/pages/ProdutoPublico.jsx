@@ -10,6 +10,7 @@ import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import PagamentoServico from '../components/PagamentoServico';
+import { trackProdutoVisualizado, trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -62,6 +63,16 @@ export default function ProdutoPublico({ tipo }) {
     if (ref) salvarRef(ref); // persiste com janela de 30 dias
   }, [ref]);
 
+  // ViewContent/view_item (12/09, auditoria de rastreamento): esta página de venda não tinha
+  // NENHUM evento de funil — só o page_view genérico. Dispara uma vez por produto carregado,
+  // mesmo que `precoBase` (que depende de `vigente`, ainda em outra chamada) só resolva depois;
+  // melhor um ViewContent com valor 0 momentâneo do que nenhum ViewContent.
+  useEffect(() => {
+    if (!produto?.id) return;
+    trackProdutoVisualizado(String(produto.id), tipo, Number(vigente?.preco ?? produto.preco) || 0, produto.titulo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produto?.id]);
+
   // Preço cheio do Investidor Pro, só para exibir o aviso de renovação do bônus (nunca para
   // cobrar — quem cobra é sempre o servidor). Vem do banco, não hardcoded.
   useEffect(() => {
@@ -85,7 +96,14 @@ export default function ProdutoPublico({ tipo }) {
     const t = setInterval(async () => {
       const { data } = await supabase.from('compras_produtos')
         .select('id').eq('user_id', effectiveUserId || user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo').limit(1);
-      if (data?.length) { setComprouAvulso(true); setAguardando(false); }
+      if (data?.length) {
+        // Purchase/purchase (12/09): só AQUI, no polling que detecta a compra ACABADA DE
+        // CONCLUIR — nunca no check de posse pré-existente (useEffect acima, que só lê se o
+        // cliente já tinha o produto antes de abrir esta tela) nem no branch `jaTem` de
+        // `comprar()` (que também significa "já tinha", não "comprou agora").
+        trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase);
+        setComprouAvulso(true); setAguardando(false);
+      }
     }, 5000);
     return () => clearInterval(t);
   }, [aguardando, user, id, tipo]);
@@ -101,6 +119,9 @@ export default function ProdutoPublico({ tipo }) {
   async function comprar(override) {
     const emailComprador = override?.email || user?.email;
     if (!emailComprador) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
+    // InitiateCheckout/begin_checkout (12/09): a compra avulsa (sem o bônus com cartão) não
+    // tinha nenhum sinal de "começou a pagar" para GA4/Ads/Meta — só o Purchase, quando havia.
+    trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase);
     setErroCompra(''); setComprando(true);
     try {
       const refCod = ref || lerRef();
@@ -809,7 +830,7 @@ export default function ProdutoPublico({ tipo }) {
                     )}
                     {produto?.requer_cartao_bonus ? (
                       !mostrarPagamentoBonus ? (
-                        <button className="bp-btn-hover" onClick={() => setMostrarPagamentoBonus(true)} disabled={!aceitouTermo}
+                        <button className="bp-btn-hover" onClick={() => { trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase); setMostrarPagamentoBonus(true); }} disabled={!aceitouTermo}
                           title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
                           style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: aceitouTermo ? 'pointer' : 'default', marginBottom: 10, opacity: aceitouTermo ? 1 : 0.7, boxShadow: aceitouTermo ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
                           {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
@@ -820,7 +841,7 @@ export default function ProdutoPublico({ tipo }) {
                             servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
                             soCartao
                             parcelasMax={1}
-                            onPago={() => { setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
+                            onPago={() => { trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase); setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
                             onCancelar={() => setMostrarPagamentoBonus(false)}
                           />
                         </div>
