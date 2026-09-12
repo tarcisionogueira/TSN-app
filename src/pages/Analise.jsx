@@ -4595,8 +4595,13 @@ export default function Analise() {
             </table>
           </div>
 
-          {/* SAC / PRICE */}
-          {!d.somenteAVista && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
+          {/* SAC / PRICE — não se aplica ao parcelamento judicial (12/09, achado do dono, mesmo
+              motivo do PDF: RelatorioPDF.jsx). "SAC vs PRICE" é linguagem de financiamento
+              BANCÁRIO, com contrato e taxa reais; o parcelamento do art. 895 do CPC é saldo
+              hipotecado ao juízo, dividido por lei, sem escolha de sistema — e com CET=0%
+              (default judicial) os dois sistemas nem chegam a divergir. O cronograma mês a mês
+              já aparece no Fluxo de Caixa Mensal, logo acima. */}
+          {!d.somenteAVista && d.origemCondicoesPagamento !== 'padrao_legal' && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
         </div>
       </Section>
 

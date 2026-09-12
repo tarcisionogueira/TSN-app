@@ -313,7 +313,17 @@ ${fluxo.linhas.map((r,i)=>`<tr style="background:${i%2===0?'white':'#f8fafc'}">
 </table>
 </div>
 
-${!isAVista&&sacTab?.length>0?`<div class="pb av">
+${/* SAC VS PRICE NÃO SE APLICA AO PARCELAMENTO JUDICIAL (12/09, achado do dono: "não se
+    aplica... deveria ser extrajudicial e permitindo financiamento"). `origemCondicoesPagamento
+    === 'padrao_legal'` é o marcador que sementeDoImovel() (Analise.jsx) grava quando o lote é
+    judicial e o parcelamento vem do art. 895 do CPC — saldo dividido em parcelas fixas por lei,
+    hipotecado ao juízo, sem escolha de sistema de amortização nem taxa de mercado. "SAC vs
+    PRICE" é linguagem de FINANCIAMENTO BANCÁRIO (extrajudicial, com contrato e taxa reais); numa
+    tabela hipotecada ao juízo os dois sistemas nem chegam a divergir de verdade (com juros 0%,
+    SAC e PRICE dão a MESMA parcela — a própria seção imprimia "Diferença: R$ 0,00" sem dizer que
+    o motivo é não haver escolha nenhuma). O cronograma mês a mês do parcelamento judicial já
+    aparece no Fluxo de Caixa Mensal logo acima; esta seção só soma confusão para esse caso. */
+  !isAVista&&sacTab?.length>0&&d.origemCondicoesPagamento!=='padrao_legal'?`<div class="pb av">
 <h2>Tabelas de Financiamento, SAC vs PRICE</h2>
 <p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${fmtPct(d.cetAnual)} a.a. · Prazo: ${d.prazoMeses} meses</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
