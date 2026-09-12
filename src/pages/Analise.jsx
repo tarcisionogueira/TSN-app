@@ -2381,6 +2381,23 @@ export default function Analise() {
                 )}
               </div>
 
+              {/* CONSULTA JURÍDICA AINDA PENDENTE (12/09, pedido do dono): "Risco"/"Confiança"
+                  acima descrevem o que JÁ foi verificado — sem isto, um relatório com o CNJ/DJEN
+                  ainda pendente lia como veredito fechado. O aviso deixa claro que a parte
+                  documental está liberada, mas a jurídica (processo/andamentos) segue em
+                  tentativa automática — o servidor reagenda sozinho (30min→1h→2h→4h→6h, depois
+                  a cada 6h) até a fonte pública responder, e o e-mail sai só a partir de quando a
+                  espera alcança 2h (api/juridico-retry-cron.js) — instabilidade de minutos não
+                  precisa incomodar ninguém. */}
+              {(parecerDocumental.checklist || []).some(c => /CNJ|DJEN/i.test(c.label || '') && c.status === 'pendente') && (
+                <div style={{ display:'flex', gap:10, background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 14px' }}>
+                  <span style={{ fontSize:16, flexShrink:0 }}>⏳</span>
+                  <div style={{ fontSize:12.5, color:'#92400e', lineHeight:1.55 }}>
+                    <strong>Consulta jurídica ainda em andamento.</strong> A fonte pública (CNJ/DataJud ou DJEN) está indisponível no momento — a parte documental já foi conferida e está liberada abaixo, mas o processo/andamentos judiciais seguem sendo tentados automaticamente. Assim que a fonte responder, você recebe um e-mail com o relatório atualizado.
+                  </div>
+                </div>
+              )}
+
               {/* BidScore (0 a 10): potencial de oportunidade, com a camada jurídica
                   desta análise já incorporada. */}
               {bidscoreDoc && (() => {

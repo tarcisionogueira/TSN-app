@@ -60,7 +60,13 @@ export default async function handler(req, res) {
   for (const { tabela, endpoint } of AGENTES) {
     let rows = [];
     try {
-      const q = `${tabela}?status=eq.concluida&regen_motivo=not.is.null&regen_tentativas=lt.${MAX_TENT}`
+      // `cnj_nao_consultado` PURO (nenhum outro vício junto) fica de FORA daqui: tem escalada
+      // e cron próprios (juridico-retry-cron.js), sem teto — é indisponibilidade de FONTE
+      // PÚBLICA, não dado ausente. Quando vem MISTURADO com outro vício (ex.: matrícula não
+      // lida + cnj_nao_consultado), o problema NÃO é só a fonte pública — o documental também
+      // tem pendência própria — então a linha continua aqui, com teto (12/09: achado real em
+      // produção, 2 linhas paradas há 43 e 8 dias; sem este corte, virariam retry eterno).
+      const q = `${tabela}?status=eq.concluida&regen_motivo=not.is.null&regen_motivo=not.eq.cnj_nao_consultado&regen_tentativas=lt.${MAX_TENT}`
         + `&updated_at=lt.${encodeURIComponent(settle)}&updated_at=gt.${encodeURIComponent(janela)}`
         + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,regen_tentativas`;
       rows = await (await sb(q)).json();
