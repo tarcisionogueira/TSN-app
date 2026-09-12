@@ -1016,12 +1016,14 @@ function PlanosGratisSelector({ valor, onChange }) {
 
 function EbooksTab() {
   const navEbook = useNavigate();
+  const { user } = useAuth();
   const [ebooks, setEbooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(defaultEbook());
   const [saving, setSaving] = useState(false);
   const [anunciando, setAnunciando] = useState(null);
+  const [testandoCampanha, setTestandoCampanha] = useState(null);
 
   const loadEbooks = useCallback(async () => {
     setLoading(true);
@@ -1056,6 +1058,23 @@ function EbooksTab() {
       alert('Erro ao anunciar: ' + (err?.message || err));
     }
     setAnunciando(null);
+  }
+
+  // Campanha do bônus com cartão salvo (12/09, ver api/campanha-ebook-r1-cron.js). Manda o
+  // e-mail REAL da campanha só para o admin logado — clicar aqui É a autorização (mesmo
+  // raciocínio do `anunciar` acima), sem precisar de CRON_SECRET nem curl.
+  async function testarCampanhaBonus(e) {
+    if (!e?.id || !user?.email) return;
+    setTestandoCampanha(e.id);
+    try {
+      const r = await apiCall(`/api/campanha-ebook-r1-cron?somenteEmail=${encodeURIComponent(user.email)}`, { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
+      alert(j?.enviados ? `✅ E-mail de teste enviado para ${user.email}` : `Não enviou: ${j?.erro || 'motivo desconhecido'}`);
+    } catch (err) {
+      alert('Erro ao testar campanha: ' + (err?.message || err));
+    }
+    setTestandoCampanha(null);
   }
 
   // COMPLETUDE p/ publicar um EBOOK: título + descrição + capa + arquivo (PDF). Incompleto = rascunho.
@@ -1147,6 +1166,7 @@ function EbooksTab() {
                           <button style={S.btn('outline')} onClick={() => navEbook(`/admin/ebook-editor/${e.id}`)} title="Subir .docx, ajustar e editar capítulos">📖 Capítulos</button>
                           <button style={S.btn('outline')} onClick={() => toggleAtivo(e.id, e.ativo)}>{e.ativo ? 'Desativar' : 'Ativar'}</button>
                           {e.ativo && <button style={S.btn('outline')} disabled={anunciando === e.id} onClick={() => anunciar(e)} title="Enviar e-mail de apresentação para os clientes">{anunciando === e.id ? 'Enviando…' : '📣 Anunciar'}</button>}
+                          {e.requer_cartao_bonus && <button style={S.btn('outline')} disabled={testandoCampanha === e.id} onClick={() => testarCampanhaBonus(e)} title="Manda o e-mail REAL da campanha só para você, para validar antes do disparo geral">{testandoCampanha === e.id ? 'Enviando…' : '🎁 Testar campanha (envia pra mim)'}</button>}
                           <button style={S.btn('danger')} onClick={() => deleteEbook(e.id)}>Deletar</button>
                         </div>
                       </td>

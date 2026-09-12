@@ -4,8 +4,10 @@
  * supabase/migrations/produto_bonus_assinatura_com_cartao.sql, api/mp-checkout.js (proposito
  * 'produto_bonus') e api/ativar-assinatura-bonus-cron.js (conversão em assinatura real).
  *
- * NÃO é cron agendado (de propósito — não entra no vercel.json): é uma campanha de disparo
- * único, disparada manualmente pelo dono quando ele decidir, não todo dia. Dois modos:
+ * Campanha de DISPARO ÚNICO, não recorrente — o agendamento em vercel.json (quando existir)
+ * é uma data EXATA (dia/mês fixos), não uma cadência diária como os outros crons, e deve ser
+ * removido do vercel.json depois de disparar (senão refire no mesmo dia/mês do ano seguinte).
+ * Dois modos:
  *
  *   ?somenteEmail=alguem@x.com  → TESTE: manda só para este endereço, ignorando elegibilidade
  *                                  e dedup. É o "me manda pra eu testar" antes de validar.
@@ -20,12 +22,22 @@
  * (`compras_produtos` ativo). DEDUP por (user_id) em `webhook_eventos_processados`
  * (gateway='campanha') — rodar duas vezes não manda duas vezes.
  *
- * Autorizado por CRON_SECRET (mesmo mecanismo dos demais crons — só quem tem o segredo do
- * painel da Vercel consegue disparar).
+ * AUTORIZAÇÃO — dois caminhos, mesmo padrão de api/anunciar-produto.js + os crons de
+ * e-mail novo (ativacao-nudge/aviso-cortesia-vencendo):
+ *   1. Sessão de ADMIN logado (botão "🎁 Testar campanha" em Admin → eBooks) — um clique do
+ *      dono É a autorização, mesmo espírito do confirm() de api/anunciar-produto.js. Vale
+ *      pros dois modos (teste e envio).
+ *   2. CRON_SECRET (Vercel Cron, disparo agendado — ver vercel.json) — só o modo ENVIO passa
+ *      pelo interruptor `app_config.campanha_ebook_r1_ativo` (default 'false' = DRY-RUN, não
+ *      manda nada e só relata quem receberia). Diferente dos outros e-mails "novos", aqui o
+ *      interruptor existe especificamente para o disparo AGENDADO sem humano por perto no
+ *      momento — o dono aprova no chat, eu ligo o interruptor no banco, e só DEPOIS disso o
+ *      cron de amanhã manda de verdade. Sem essa aprovação, o disparo agendado nunca sai
+ *      sozinho, mesmo já estando no ar.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
-import { isCronAuthorized } from './_auth.js';
+import { isCronAuthorized, getAuthUser, getUserRoleById } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { linkRastreado } from './_link-email.js';
@@ -132,7 +144,15 @@ async function precoTop2() {
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
-  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
+  const viaCron = isCronAuthorized(req);
+  let viaAdmin = false;
+  if (!viaCron) {
+    try {
+      const u = await getAuthUser(req);
+      if (u?.id) viaAdmin = (await getUserRoleById(u.id)) === 'admin';
+    } catch { /* sem sessão válida → segue não-autorizado */ }
+  }
+  if (!viaCron && !viaAdmin) return new Response('unauthorized', { status: 401 });
   if (!SUPABASE_URL || !SERVICE_KEY) {
     return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
@@ -164,7 +184,23 @@ async function handler(req) {
     return new Response(JSON.stringify({ ok: !!r?.ok, ...resumo, erro: r?.ok ? undefined : r?.error }), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // ── MODO ENVIO: Exploradores que ainda não têm o ebook ─────────────────────────────────
+  // ── MODO ENVIO: disparo agendado (CRON_SECRET) respeita o interruptor no banco. Admin
+  // clicando é a própria autorização (mesmo raciocínio de api/anunciar-produto.js) — não
+  // precisa do interruptor. Falha de leitura do interruptor => DESLIGADO (mesmo padrão dos
+  // demais e-mails novos: sem certeza de que foi aprovado, não manda para cliente).
+  if (!viaAdmin) {
+    let ligado = false;
+    try {
+      const r = await sb('app_config?key=eq.campanha_ebook_r1_ativo&select=value');
+      if (r.ok) ligado = String((await r.json())?.[0]?.value ?? '').toLowerCase() === 'true';
+      else console.error('[campanha-ebook-r1] leitura do interruptor devolveu', r.status, '— assumindo desligado');
+    } catch (e) { console.error('[campanha-ebook-r1] leitura do interruptor falhou (assumindo desligado):', e?.message); }
+    if (!ligado) {
+      return new Response(JSON.stringify({ ok: true, dry_run: true, motivo: 'app_config.campanha_ebook_r1_ativo != true' }), { headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // Exploradores que ainda não têm o ebook.
   // PostgREST não faz subquery correlata na query string — duas leituras e filtra em
   // memória, mais simples e sem risco de sintaxe incorreta.
   const todosRes = await sb(`perfis?select=id,nome&role=eq.explorador&ativo=eq.true&limit=${TETO_LOTE}`);

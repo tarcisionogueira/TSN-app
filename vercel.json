@@ -155,6 +155,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/campanha-ebook-r1-cron",
+      "schedule": "0 15 13 9 *"
+    },
+    {
       "path": "/api/scraper-transparencia",
       "schedule": "0 3 * * *"
     },
