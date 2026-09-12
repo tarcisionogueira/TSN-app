@@ -749,6 +749,37 @@ export default function ProdutoPublico({ tipo }) {
                     </div>
                   </div>
                 )}
+                {/* ── Bônus com cartão salvo (12/09): banner + checkbox de renovação ficam
+                    AQUI, ANTES do fork logado/visitante — achado do dono: quem chega pelo
+                    link da campanha está DESLOGADO, e o checkbox só aparecia depois de criar
+                    conta, então parecia não existir. Agora aparece pra todo mundo, e quem
+                    desmarcar já vê a reflexão abaixo, antes mesmo de decidir criar a conta. */}
+                {produto?.requer_cartao_bonus && (
+                  <>
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+                      🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+                      <input type="checkbox" checked={cienteRenovacao} onChange={(e) => setCienteRenovacao(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                      <span>
+                        Continuar automaticamente com a assinatura Investidor Pro
+                        {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
+                        cobrada no mesmo cartão — cancele quando quiser.
+                        <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
+                          {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : 'Desmarcado: você só leva o eBook, sem renovação automática.'}
+                        </strong>
+                      </span>
+                    </label>
+                    {/* Reflexão ao desmarcar (pedido do dono, 12/09): não é bloqueio — a pessoa
+                        pode seguir sem a assinatura — é um pattern-interrupt de vendas, mesmo
+                        espírito do popup de saída (CartaoDownsell) que já existe nesta tela. */}
+                    {!cienteRenovacao && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.6, fontWeight: 600 }}>
+                        Antes de desmarcar: isso é dizer que você não tem interesse em continuar aprendendo a arrematar com segurança, nem em transformar seu resultado financeiro e construir patrimônio através dos leilões. Tem certeza?
+                      </div>
+                    )}
+                  </>
+                )}
                 {user ? (
                   <>
                     {isPago && (
@@ -767,48 +798,23 @@ export default function ProdutoPublico({ tipo }) {
                       </label>
                     )}
                     {produto?.requer_cartao_bonus ? (
-                      /* ── Bônus com cartão salvo: paga o promocional agora, ganha N meses de
-                          Investidor Pro. A pessoa ESCOLHE (checkbox abaixo, ligado por padrão)
-                          se a assinatura converte sozinha (mesmo cartão) quando o bônus vencer
-                          (api/ativar-assinatura-bonus-cron.js) — desmarcando, compra só o
-                          produto: o cartão não é salvo e, ao fim da cortesia, a conta volta
-                          para Explorador normalmente, sem cobrança nenhuma. Achado do dono
-                          (12/09): antes não havia como aceitar o produto sem aceitar também a
-                          assinatura futura. ── */
-                      <>
-                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
-                          🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
+                      !mostrarPagamentoBonus ? (
+                        <button onClick={() => setMostrarPagamentoBonus(true)} disabled={!aceitouTermo}
+                          title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
+                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: aceitouTermo ? 'pointer' : 'default', marginBottom: 10, opacity: aceitouTermo ? 1 : 0.7 }}>
+                          {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
+                        </button>
+                      ) : (
+                        <div style={{ marginBottom: 10 }}>
+                          <PagamentoServico
+                            servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
+                            soCartao
+                            parcelasMax={1}
+                            onPago={() => { setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
+                            onCancelar={() => setMostrarPagamentoBonus(false)}
+                          />
                         </div>
-                        {!mostrarPagamentoBonus ? (
-                          <>
-                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
-                              <input type="checkbox" checked={cienteRenovacao} onChange={(e) => setCienteRenovacao(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
-                              <span>
-                                Continuar automaticamente com a assinatura Investidor Pro
-                                {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
-                                cobrada no mesmo cartão — cancele quando quiser.
-                                <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
-                                  {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : 'Desmarcado: você só leva o produto, sem renovação automática.'}
-                                </strong>
-                              </span>
-                            </label>
-                            <button onClick={() => setMostrarPagamentoBonus(true)}
-                              style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
-                              {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
-                            </button>
-                          </>
-                        ) : (
-                          <div style={{ marginBottom: 10 }}>
-                            <PagamentoServico
-                              servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
-                              soCartao
-                              parcelasMax={1}
-                              onPago={() => { setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
-                              onCancelar={() => setMostrarPagamentoBonus(false)}
-                            />
-                          </div>
-                        )}
-                      </>
+                      )
                     ) : isPago ? (
                       /* Compra AVULSA do item (não precisa assinar) */
                       <button onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
