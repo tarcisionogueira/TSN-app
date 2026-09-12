@@ -23,17 +23,40 @@ export default function RedefinirSenha() {
   const [sessaoValida, setSessaoValida] = useState(null); // null=verificando, true, false
 
   useEffect(() => {
+    let cancelado = false;
+
+    // Pedido do dono (12/09): "simplifica pra só esse popup, sem a etapa intermediária". Quem
+    // vem do link de acesso direto da inscrição na aula (api/live-inscrever.js) nunca digitou
+    // senha própria — `perfis.senha_pendente` marca essa dívida (ver
+    // supabase/migrations/perfis_senha_pendente.sql). Pra essa pessoa, a troca de senha formal
+    // aqui embaixo é uma etapa a mais entre ela e o acervo que ela veio ver; o popup de
+    // boas-vindas (SenhaPendenteModal, em /buscar) já pede a senha de um jeito mais simples e
+    // convidativo, na própria tela de destino. Então em vez de mostrar o formulário, esta tela
+    // vira um pass-through: confirma a sessão e manda direto pra lá. Quem chega aqui por um
+    // "esqueci minha senha" de verdade (Login.jsx) tem `senha_pendente=false` — continua vendo
+    // o formulário normal, sem nenhuma mudança de comportamento pra esse caso.
+    async function aoConfirmarSessao(sessao) {
+      if (!sessao?.user?.id) { if (!cancelado) setSessaoValida(true); return; }
+      try {
+        const { data } = await supabase.from('perfis').select('senha_pendente').eq('id', sessao.user.id).single(); // padrao-ok: data nulo (erro OU senha_pendente=false) cai no mesmo desfecho correto — mostrar o formulário normal; nunca pior que o comportamento antigo
+        if (cancelado) return;
+        if (data?.senha_pendente) { nav('/buscar', { replace: true }); return; }
+      } catch { /* padrao-ok: leitura lançou — cai no formulário normal, nunca pior que antes */ }
+      if (!cancelado) setSessaoValida(true);
+    }
+
     // Supabase injeta a sessão automaticamente via hash fragment quando o usuário clica no link
     supabase.auth.getSession().then(({ data }) => {
-      setSessaoValida(!!data?.session);
+      if (data?.session) aoConfirmarSessao(data.session);
+      else if (!cancelado) setSessaoValida(false);
     });
 
     // Ouve o evento PASSWORD_RECOVERY para quando o Supabase processa o hash
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setSessaoValida(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') aoConfirmarSessao(session);
     });
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => { cancelado = true; subscription.unsubscribe(); };
+  }, [nav]);
 
   const handleRedefinir = async (e) => {
     e.preventDefault();
@@ -170,19 +193,6 @@ export default function RedefinirSenha() {
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</> : 'Salvar nova senha'}
               </button>
             </form>
-            {/* PULAR PRA DENTRO (11/09, achado do dono: quem se inscreve na aula ao vivo
-                clicava neste link só pra travar numa troca de senha obrigatória antes de
-                poder navegar). Chegar até aqui já prova posse do e-mail — `sessaoValida`
-                só vira `true` com uma sessão de recuperação de verdade (getSession() ou o
-                evento PASSWORD_RECOVERY, no efeito acima) — então já existe uma sessão
-                válida ANTES mesmo de trocar a senha. Navegar sem `signOut()` mantém essa
-                sessão: a Busca já filtra pela cidade do perfil (endereco_cidade/uf), que
-                foi gravada na inscrição. Trocar a senha continua sendo a ação PRINCIPAL —
-                isto é a saída pra quem só quer olhar o acervo agora. */}
-            <button type="button" onClick={() => nav('/buscar')}
-              style={{ width: '100%', marginTop: 12, padding: '10px', background: 'none', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
-              Prefiro explorar agora e definir a senha depois
-            </button>
           </>
         )}
 
