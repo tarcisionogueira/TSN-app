@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet, Landmark } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet, Landmark, PlayCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
@@ -48,6 +48,7 @@ export default function HomeCliente() {
   const [cotaMercado, setCotaMercado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
+  const [cursoBoasVindas, setCursoBoasVindas] = useState(null);
   const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
   const [refCodigo, setRefCodigo] = useState(''); // código curto de indicação (link enxuto)
   const [showTermo, setShowTermo] = useState(false);
@@ -70,6 +71,23 @@ export default function HomeCliente() {
     lerCotas(supabase, effectiveUserId, { roleSimulado }).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
     return () => { vivo = false; };
   }, [effectiveUserId, roleSimulado]);
+
+  // ATALHO "REVER VÍDEO DE BOAS-VINDAS" (12/09). Achado real: Neuma ligou perguntando por
+  // ele — o `BoasVindasModal` marca o convite como visto assim que os vídeos são concluídos
+  // e NUNCA mais reaparece sozinho (por desenho: quem já assistiu não deveria ser incomodado
+  // de novo). O vídeo continua acessível em /membros/curso/:id (Curso.jsx não bloqueia
+  // reassistir uma aula concluída), mas nada na tela dizia isso — ela não tinha como saber
+  // que precisava ir procurar o curso "Comece aqui" na Área de Membros. Este link resolve a
+  // DESCOBERTA, sem duplicar a lógica do modal nem mexer no que já funciona (o "fechar volta
+  // no próximo acesso" e o "concluiu, some para sempre" continuam intactos).
+  useEffect(() => {
+    if (!effectiveUserId) { setCursoBoasVindas(null); return; }
+    let vivo = true;
+    supabase.from('cursos_admin').select('id, titulo')
+      .eq('onboarding', true).eq('ativo', true).order('ordem').limit(1).maybeSingle()
+      .then(({ data }) => { if (vivo) setCursoBoasVindas(data || null); });
+    return () => { vivo = false; };
+  }, [effectiveUserId]);
 
   // Sem cota carregada não mostra selo nenhum. Melhor nenhum número que um número errado.
   const temSelo = !!cotaMercado && !cotaMercado.ilimitado && Number(cotaMercado.limite || 0) > 0;
@@ -222,6 +240,14 @@ export default function HomeCliente() {
             <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: 10 relatórios mercadológicos e 10 documentais e jurídicos por mês." cor="#0D63DB" onClick={() => nav('/planos')} />
           )}
         </div>
+
+        {/* "Rever vídeo de boas-vindas" — ver comentário do useEffect acima. */}
+        {cursoBoasVindas && (
+          <button onClick={() => nav(`/membros/curso/${cursoBoasVindas.id}`)}
+            style={{ marginTop: 4, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', color: '#0D63DB', fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: '4px 2px' }}>
+            <PlayCircle size={15} /> Rever vídeo de boas-vindas
+          </button>
+        )}
 
         {/* Meus acompanhamentos, casos do cliente (inclui arremates atribuídos pela equipe) */}
         {meusCasos.length > 0 && (
