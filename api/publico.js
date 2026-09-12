@@ -1100,6 +1100,67 @@ async function paginaImovel(id) {
   });
 }
 
+// ── /ebook/:id/:slug e /curso/:id/:slug — PRÉVIA, ainda sem rota pública ────
+// Pedido do dono (12/09): mesmo problema que /leilao/:id tinha antes deste arquivo
+// existir — a vitrine de venda avulsa hoje só existe em `/#/p/ebook/:id` (hash router),
+// então o Google não lê nada. Esta função monta a VITRINE de SEO; a compra em si
+// continua 100% no app de sempre (`/#/p/:tipo/:id`, ProdutoPublico.jsx), sem mudar
+// nada do checkout. Ainda não está ligada em `handler()` nem no vercel.json — é a
+// prévia pedida antes de decidir publicar.
+async function paginaProduto(tipo, id) {
+  const tabela = tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
+  const camposCurso = tipo === 'curso' ? ',subtitulo,nivel' : '';
+  const campos = `id,titulo,descricao,capa_url,preco,gratuito,ativo,slug${camposCurso}`;
+  const { linhas } = await sb(`${tabela}?id=eq.${encodeURIComponent(id)}&ativo=eq.true&select=${campos}&limit=1`);
+  const p = Array.isArray(linhas) ? linhas[0] : null;
+  if (!p) return null;
+
+  const rotulo = tipo === 'curso' ? 'Curso' : 'eBook';
+  const canonical = `${SITE}/${tipo}/${p.id}/${slug(p.titulo)}`;
+  const preco = brl(p.preco);
+  const descTexto = String(p.descricao || '').trim();
+  const descCurta = descTexto.replace(/\s+/g, ' ').slice(0, 155);
+  const paragrafos = descTexto.split(/\n+/).map((par) => par.trim()).filter(Boolean);
+
+  return pagina({
+    titulo: `${p.titulo} — ${rotulo} BidPro Brasil${preco ? ` | ${preco}` : ''}`,
+    desc: `${descCurta}${descTexto.length > 155 ? '…' : ''}`,
+    canonical,
+    migalha: [
+      { nome: 'Início', url: `${SITE}/` },
+      { nome: tipo === 'curso' ? 'Cursos' : 'Ebooks' },
+      { nome: p.titulo },
+    ],
+    corpo: `<div class="ficha">
+      <div class="ficha-main">
+        ${p.capa_url ? `<div class="foto-hero"><img src="${esc(p.capa_url)}" alt="Capa do ${rotulo.toLowerCase()} ${esc(p.titulo)}" fetchpriority="high"/></div>` : ''}
+        ${p.subtitulo ? `<p class="sub">${esc(p.subtitulo)}</p>` : ''}
+        <div class="secao">
+          <h2><span class="ic">📖</span> Sobre o ${rotulo.toLowerCase()}</h2>
+          ${paragrafos.map((par) => `<p style="margin:0 0 12px;color:#334155;line-height:1.7">${esc(par)}</p>`).join('')}
+        </div>
+      </div>
+      <aside class="ficha-side">
+        <div class="acao">
+          ${preco ? `<div class="lance-lbl">Valor</div><div class="lance-val">${esc(preco)}</div>` : ''}
+          ${p.nivel ? `<div style="margin:8px 0"><span class="chip">${esc(p.nivel)}</span></div>` : ''}
+          <a class="cta" href="${SITE}/#/p/${tipo}/${esc(p.id)}">Comprar agora</a>
+        </div>
+      </aside>
+    </div>`,
+    jsonld: {
+      '@context': 'https://schema.org',
+      '@type': tipo === 'curso' ? 'Course' : 'Book',
+      name: p.titulo,
+      description: descCurta,
+      url: canonical,
+      ...(p.capa_url ? { image: p.capa_url } : {}),
+      ...(Number(p.preco) > 0 ? { offers: { '@type': 'Offer', price: Number(p.preco), priceCurrency: 'BRL', availability: 'https://schema.org/InStock', url: canonical } } : {}),
+      ...(tipo === 'curso' ? { provider: { '@type': 'Organization', name: 'BidPro Brasil', sameAs: SITE } } : {}),
+    },
+  });
+}
+
 export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).send('indisponível');
   const u = new URL(req.url, 'http://x');
