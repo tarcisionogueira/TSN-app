@@ -770,10 +770,15 @@ export default function ProdutoPublico({ tipo }) {
                         </strong>
                       </span>
                     </label>
-                    {/* Reflexão ao desmarcar (pedido do dono, 12/09): não é bloqueio — a pessoa
-                        pode seguir sem a assinatura — é um pattern-interrupt de vendas, mesmo
+                    {/* Reflexão conforme o estado do checkbox (pedido do dono, 12/09): marcado
+                        reforça o benefício (positivo); desmarcado questiona a desistência —
+                        nenhuma das duas bloqueia, é só o pattern-interrupt de vendas, mesmo
                         espírito do popup de saída (CartaoDownsell) que já existe nesta tela. */}
-                    {!cienteRenovacao && (
+                    {cienteRenovacao ? (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 12.5, color: '#166534', lineHeight: 1.6, fontWeight: 600 }}>
+                        Boa escolha: você vai continuar com acesso aos relatórios completos de mercado, edital e riscos — para tomar suas próximas decisões de arrematação com segurança e seguir construindo patrimônio.
+                      </div>
+                    ) : (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.6, fontWeight: 600 }}>
                         Antes de desmarcar: isso é dizer que você não tem interesse em continuar aprendendo a arrematar com segurança, nem em transformar seu resultado financeiro e construir patrimônio através dos leilões. Tem certeza?
                       </div>
