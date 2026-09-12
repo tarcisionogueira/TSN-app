@@ -25179,3 +25179,114 @@ alvo=antigos (agendado 24/08 15h UTC) · revisão Google Ads ~26/08.
 
 *Sessão de 21/08 encerrada. Branch de trabalho claude/handoff-bidpro-brasil-verificacoes-7h3pat
 == main (tudo mergeado). Nenhum trigger/rotina pendente desta sessão.*
+
+═══════════════════════════════════════════════════════════════════════════════════════
+## 🏁 ENCERRAMENTO DA SESSÃO DE 12/09 — bônus do ebook R$1 + assinatura, e um bug antigo achado no caminho
+═══════════════════════════════════════════════════════════════════════════════════════
+
+**O dia em uma linha:** construído o mecanismo completo "ebook por R$1 + 1 mês de
+Investidor Pro cortesia, convertendo sozinho em assinatura real" (pedido do dono);
+testando o fluxo real pela primeira vez, apareceu um bug de produção que existia desde
+sempre e afetava QUALQUER visitante não logado tentando abrir a página de um produto — a
+loja pública nunca funcionou para quem não tem conta. **A campanha está agendada para
+amanhã (13/09) 8h de Brasília, mas o pagamento em si NUNCA foi testado de ponta a ponta
+com dinheiro real** — ver "O QUE FICOU EM ABERTO" abaixo, é o primeiro item de amanhã.
+
+### O que entrou em produção hoje (tudo em main, branch de trabalho == main)
+1. **Mecanismo do bônus com cartão salvo** (pedido do dono, ebook "O Lance Que Muda
+   Tudo", id `5c78ab35-9810-48b2-8801-16d50bc94f50`, R$1,00 promocional, concede 1 mês de
+   Investidor Pro): `supabase/migrations/produto_bonus_assinatura_com_cartao.sql` (flag
+   `requer_cartao_bonus` + colunas de rastro em `compras_produtos`); `api/mp-checkout.js`
+   ganhou o propósito `produto_bonus` — preço/elegibilidade sempre do servidor
+   (`comprar_produto_iniciar`), cobra pelo caminho "cartão em arquivo" do Mercado Pago
+   (Customer + Card, gera token novo do cartão salvo) já na primeira compra, e reaproveita
+   o confirmador de produto que já existia (`external_reference=compra_id` → o webhook
+   trata como produto, igual ao Checkout Pro — zero código novo de confirmação);
+   `api/ativar-assinatura-bonus-cron.js` (novo, 1x/dia) gera token novo do cartão salvo
+   perto do vencimento da cortesia e cria a assinatura real — só `authorized`, quem ativa
+   o plano continua sendo o webhook, com pagamento confirmado (mesma regra de 16/08).
+   Regra "Investidor Pro não pode comprar para ganhar desconto": já existia
+   (`plano_ja_superior` em `comprar_produto_iniciar`), zero código novo precisou.
+2. **Checkbox de recusa da renovação automática** (achado do dono: a pessoa tem que
+   poder comprar só o produto, sem aceitar a assinatura futura): `ProdutoPublico.jsx`
+   ganhou o checkbox ANTES do fork logado/visitante (achado: só aparecia depois de criar
+   conta — quem chega pelo link do e-mail está deslogado, então "não existia" na
+   prática), ligado por padrão, com reflexão positiva quando marcado ("boa escolha,
+   você vai continuar com relatórios...") e reflexão de reconsideração quando desmarcado
+   ("isso é dizer que você não tem interesse em...") — pattern-interrupt de vendas, não
+   bloqueio. `api/mp-checkout.js` só salva o cartão quando `manterAssinatura !== false`.
+   `src/utils/termos.js` ganhou o parâmetro `bonus` em `termoDoProduto()`: o termo de
+   contratação agora descreve as DUAS partes do negócio (pagamento único + renovação
+   condicional) e o mecanismo de recusa, no lugar do texto genérico "pagamento único"
+   que não mencionava a assinatura futura.
+3. **BUG DE PRODUÇÃO ACHADO E CORRIGIDO — visitante não logado não conseguia abrir
+   NENHUM produto público.** `ebooks_admin`/`aulas_admin` tinham a política de RLS
+   "Leitura pública" (`qual=true`), mas nunca tiveram o GRANT SELECT base para `anon` —
+   RLS só filtra linhas de uma consulta que já passou pelo GRANT; sem ele, o PostgREST
+   recusa a consulta inteira, sempre, pra qualquer visitante sem sessão. Auditei TODAS as
+   tabelas com política de leitura pública (qual=true, role public) e só essas duas
+   tinham a lacuna — as demais (cursos_admin, licoes, modulos, planos_config,
+   imoveis_leilao, veiculos_leilao, etc.) já estavam corretas. Migração
+   `anon_select_ebooks_aulas_admin.sql`. Consequência prática: `/#/p/ebook/:id` e
+   `/#/p/curso/:id` SEMPRE quebraram para quem não tem conta — não só na campanha nova,
+   em qualquer link (SEO, WhatsApp, indicação de parceiro). Corrigido junto:
+   `ProdutoPublico.jsx` não tinha guarda de carregamento (acessava `produto.capa_url`
+   sem optional chaining) — agora mostra "carregando" e, se a leitura falhar de
+   verdade, um estado tratado (distingue "não consegui ler" de "produto inexistente").
+4. **Campanha de e-mail do bônus** — `api/campanha-ebook-r1-cron.js` (disparo de data
+   exata, não recorrente — `vercel.json` tem uma entrada com dia/mês fixos, **REMOVER
+   depois de confirmado o envio** para não refirar no mesmo dia/mês do ano que vem).
+   Aceita sessão de ADMIN (botão "🎁 Testar campanha" em Admin → eBooks, só para o
+   dono/quem tem o cargo — manda pra si mesmo) OU `CRON_SECRET` (disparo agendado, que
+   respeita `app_config.campanha_ebook_r1_ativo` como interruptor — **já LIGADO** pelo
+   dono nesta sessão). Horário do disparo real: **13/09, 8h de Brasília (11h UTC)** —
+   antecipado de meio-dia a pedido do dono. Oferta do ebook fecha em 14/09 11h UTC (24h
+   depois do envio — era 89 dias antes da correção, sem nenhum senso de urgência).
+5. **Efetividade da campanha (pedido do dono — "abertura" para saber o retorno):**
+   NÃO é preciso construir nada novo — o webhook do Resend (`api/resend-webhook.js`) já
+   trata `email.delivered`/`email.opened`/`email.clicked` e grava em
+   `emails_log.entregue_em`/`aberto_em`/`clicado_em`; confirmado ATIVO agora (423 aberturas
+   reais já casadas no histórico, não é só teoria). Cliques também caem em `atividade_log`
+   (evento='email_clique') via `api/clique.js`. Query pronta pra checar esta campanha:
+   ```sql
+   select count(*) enviados, count(*) filter (where entregue_em is not null) entregues,
+          count(*) filter (where aberto_em is not null) abertos,
+          count(*) filter (where clicado_em is not null) clicaram
+     from emails_log where tipo = 'campanha_ebook_r1';
+   select count(*) conversoes from compras_produtos
+     where produto_tipo='ebook' and produto_id='5c78ab35-9810-48b2-8801-16d50bc94f50'
+       and status='ativo' and pago_em >= '2026-09-13 11:00:00+00';
+   ```
+
+### O QUE FICOU EM ABERTO — começar por AQUI na próxima sessão (pedido do dono)
+1. **CONCLUIR A VALIDAÇÃO DO BÔNUS — prioridade nº 1.** `compras_produtos` e
+   `mp_pagamentos` estão ZERADOS para qualquer valor de R$1: **nenhuma compra avulsa de
+   produto (com ou sem bônus) jamais foi concluída nesta plataforma.** O dono chegou só
+   até conferir os checkboxes/reflexões na tela — não completou o pagamento (precisaria
+   de uma conta nova, e a própria conta admin dele já "tem" qualquer produto de graça
+   via `comprar_produto_iniciar`, então não dá pra testar cobrança com ela). Fazer AGORA
+   com calma: criar conta com um alias `+` do Gmail (ex.: `email+teste1@dominio.com`,
+   cai na mesma caixa, o cadastro não normaliza fora o `+`), comprar o ebook por R$1 de
+   verdade, e conferir: (a) `compras_produtos` ganhou status='ativo' + plano_concedido;
+   (b) `mp_customer_id`/`mp_card_id` preenchidos (cartão salvo, se marcado); (c) o perfil
+   virou top2/cortesia por 1 mês. Só depois disso o mecanismo está PROVADO, não só lido.
+   A campanha (interruptor ligado, disparo 13/09 8h) SEGUE ARMADA enquanto isso não
+   acontece — decisão do dono foi registrar e seguir, não pausar o disparo.
+2. **Depois de concluído o item 1, retomar Google Ads e o resto** (pedido do dono,
+   "na sequência vamos ao Google e demais") — decisões que ficaram em aberto de sessões
+   anteriores sobre o funil do bônus: reaproveitar a campanha de tráfego já rodando ou
+   criar uma nova; qual framing/nome usar (cogitado "pré Black Friday"); se depois de
+   validado o mecanismo vale estender para os outros 2 ebooks.
+3. **`paginaProduto()` em `api/publico.js`** (prévia de SEO para ebook/curso, sessão
+   anterior a esta): construída, validada com dado real, mas NUNCA foi ligada a nenhuma
+   rota pública nem ao sitemap — segue morta de propósito até aprovação final do dono
+   sobre o formato.
+4. **Remover a entrada de data fixa do `campanha-ebook-r1-cron` em `vercel.json`**
+   assim que o envio de 13/09 for confirmado (ver item 4 da lista de cima).
+5. **`api/ativar-assinatura-bonus-cron.js` também nunca rodou contra uma compra real**
+   (não existe nenhuma ainda) — depois que o item 1 acontecer, vale acompanhar essa
+   compra de teste até o cron converter (ou falhar) quando a cortesia dela vencer.
+
+*Sessão de 12/09 encerrada. Branch de trabalho claude/handoff-bidpro-brasil-checks-bzbupz
+== main (tudo mergeado, deploys em produção). Um trigger real pendente: o Vercel Cron do
+disparo da campanha em 13/09 8h — armado, `app_config.campanha_ebook_r1_ativo=true`.*
