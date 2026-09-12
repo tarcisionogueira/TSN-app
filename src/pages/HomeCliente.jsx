@@ -8,6 +8,7 @@ import TriagemPerfil from '../components/TriagemPerfil';
 import VitrineMaterial from '../components/VitrineMaterial';
 import ConvideAmigo from '../components/ConvideAmigo';
 import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO } from '../components/ConviteParceiro';
+import { LATAO } from '../utils/marca';
 
 // Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
 // SÓ NOME E COR. O limite saiu daqui em 09/08: esta tabela dava `limite: null` ao CONSULTOR,
@@ -217,6 +218,15 @@ export default function HomeCliente() {
 
         {/* Ações rápidas por plano */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {/* "Rever vídeo de boas-vindas" — PRIMEIRO card (pedido do dono, 12/09: ficou
+              discreto demais como link de texto). Achado real que motivou o link: Neuma ligou
+              perguntando pelo vídeo — os 2 concluídos em 9s de diferença (cliques em sequência,
+              não visualização), e o BoasVindasModal nunca mais reabre sozinho para quem já
+              concluiu, por desenho (11/08). O vídeo continua em /membros/curso/:id; este card
+              só torna isso achável sem precisar ligar. */}
+          {cursoBoasVindas && (
+            <Acao Icon={PlayCircle} titulo="Rever vídeo de boas-vindas" desc="Assista de novo a introdução à plataforma, quando quiser." cor={LATAO} onClick={() => nav(`/membros/curso/${cursoBoasVindas.id}`)} />
+          )}
           <Acao Icon={Search} titulo="Buscar leilões" desc="Encontre imóveis em todo o Brasil e analise oportunidades." cor="#0D63DB" onClick={() => nav('/buscar')} />
           <Acao Icon={BarChart3} titulo="Minhas Análises" desc="Retome seus relatórios e agende com o analista." cor="#0d9488" onClick={() => nav('/analises')} />
           {/* Meus Arrematados (decisão do dono 30/07): o portfólio real é a tela de
@@ -240,14 +250,6 @@ export default function HomeCliente() {
             <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: 10 relatórios mercadológicos e 10 documentais e jurídicos por mês." cor="#0D63DB" onClick={() => nav('/planos')} />
           )}
         </div>
-
-        {/* "Rever vídeo de boas-vindas" — ver comentário do useEffect acima. */}
-        {cursoBoasVindas && (
-          <button onClick={() => nav(`/membros/curso/${cursoBoasVindas.id}`)}
-            style={{ marginTop: 4, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', color: '#0D63DB', fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: '4px 2px' }}>
-            <PlayCircle size={15} /> Rever vídeo de boas-vindas
-          </button>
-        )}
 
         {/* Meus acompanhamentos, casos do cliente (inclui arremates atribuídos pela equipe) */}
         {meusCasos.length > 0 && (
