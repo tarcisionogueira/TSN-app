@@ -3451,7 +3451,28 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // números. Recomputa como ÚLTIMO passo, imediatamente antes de gravar, para nenhuma etapa
     // no meio do caminho desfazer isto de novo — o `vendas`/`locacoes`/`totalAmostrasVenda` do
     // topo voltam a ser, de verdade, a soma dos níveis (o propósito de niveis-mercado.js).
+    // DEDUP ENTRE NÍVEIS (12/09, mesmo achado — galpão de Feira de Santana): o nível 2 trazia
+    // os DOIS MESMOS imóveis do nível 1 (mesmo endereço, mesmo valor, mesma descrição), com o
+    // próprio texto admitindo "duplicado nível 1, replicado conforme base própria" — o modelo,
+    // sem comparável genuíno na faixa de 250m-1km, preencheu o nível copiando o nível mais
+    // próximo em vez de deixar o nível mais fino. Resultado: "8 amostras" onde só 6 imóveis
+    // ÚNICOS existem — a mediana de R$/m² sai enviesada pelas duas contadas em dobro, e ninguém
+    // vê isso: os badges e o card de referência concordam entre si, só que no número errado.
+    // Assinatura = valor+m2+endereço (imóveis genuinamente diferentes não colidem nisso); mantém
+    // a ocorrência do nível MAIS PRÓXIMO (nível 1 vence) e descarta a repetição dos níveis 2/3.
     if (result.mercado) {
+      const vistos = new Set();
+      const assinatura = (v) => `${Number(v?.valor) || 0}|${Number(v?.m2) || 0}|${String(v?.endereco || v?.bairro || '').toLowerCase().trim()}`;
+      for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
+        if (!Array.isArray(nv.vendas)) continue;
+        nv.vendas = nv.vendas.filter((v) => {
+          const chave = assinatura(v);
+          if (!chave.trim() || chave === '0|0|') return true; // sem dado suficiente p/ comparar, não arrisca descartar
+          if (vistos.has(chave)) return false;
+          vistos.add(chave);
+          return true;
+        });
+      }
       for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
         nv.totalAmostras = (nv.vendas?.length || 0) + (nv.locacoes?.length || 0);
       }
