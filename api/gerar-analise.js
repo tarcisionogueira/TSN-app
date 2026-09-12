@@ -2647,8 +2647,16 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       const pracasDerivadas = valoresBatem ? null : derivarPracasDoAnuncio({
         modalidade: imDb?.modalidade, avalDb, valorMinimo: imDb?.valor_minimo, valorMinimo2: imDb?.valor_minimo_2, p1, p2,
       });
+      // A DATA EXIBIDA é a que a reconciliação ACIMA (linhas 2612-2629) decidiu gravar
+      // (imDb.data_leilao/_2), não a bruta do PDF (p1.data/p2.data) — achado do dono, 12/09:
+      // quando o edital está desatualizado e a reconciliação conclui "MANTIDO o acervo" (o
+      // documento erra a data), o cartão "Condições lidas no edital" seguia mostrando a data
+      // velha do PDF, divergindo da data real já corrigida e exibida no resto da MESMA tela.
+      const dataParaExibir = (n) => (n === 1 ? imDb?.data_leilao : n === 2 ? imDb?.data_leilao_2 : null);
+      const pracasParaExibir = (valoresBatem ? pracasEd : (pracasDerivadas || pracasEd.map(p => ({ ...p, valor: null }))))
+        .map(p => ({ ...p, data: dataParaExibir(p.n) || p.data }));
       mercado.condicoesEdital = {
-        pracas: valoresBatem ? pracasEd : (pracasDerivadas || pracasEd.map(p => ({ ...p, valor: null }))),
+        pracas: pracasParaExibir,
         valoresDesatualizados: !valoresBatem,
         datas: extratoDoc.datas || null,
         formaPagamento: extratoDoc.formaPagamento || null,
@@ -3377,6 +3385,27 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         await registrarAnomalia('relatorio_incoerente', '', imovelId, c.chave, c.msg).catch(() => {});
       }
     } catch (e) { console.warn('[auditoria-relatorio] falhou:', e?.message); }
+
+    // CONSISTÊNCIA FINAL DAS CONTAGENS DE AMOSTRA (12/09, achado do dono: "a quantidade de
+    // amostras esta variando... na comparação por quadrimestre e na etapa zona 1/2/3 mostra
+    // outra quantidade"). O recompute de `nivel.totalAmostras` roda logo após a pesquisa (linha
+    // ~2329), mas etapas SEGUINTES (refinamento por matrícula/edital, filtro do valor ponderado,
+    // remoção de terreno-não-aluga) podem alterar `vendas`/`locacoes` de um nível sem re-somar o
+    // total — o campo fica com o número de QUANDO foi calculado, não o de agora. Achado real
+    // neste relatório: nível 1 tinha 4 vendas + 1 locação (5 comparáveis) e `totalAmostras`
+    // gravava 4 — os badges "Nível 1/2/3" (que leem o campo declarado) contavam diferente do
+    // card "Valores de referência" (que soma os arrays de venda direto). Mesmo dado, dois
+    // números. Recomputa como ÚLTIMO passo, imediatamente antes de gravar, para nenhuma etapa
+    // no meio do caminho desfazer isto de novo — o `vendas`/`locacoes`/`totalAmostrasVenda` do
+    // topo voltam a ser, de verdade, a soma dos níveis (o propósito de niveis-mercado.js).
+    if (result.mercado) {
+      for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
+        nv.totalAmostras = (nv.vendas?.length || 0) + (nv.locacoes?.length || 0);
+      }
+      result.mercado.vendas = vendasDe(result.mercado);
+      result.mercado.locacoes = locacoesDe(result.mercado);
+      result.mercado.totalAmostrasVenda = result.mercado.vendas.length;
+    }
 
     // ENTREGA INCOMPLETA HONESTA (21/08 — caso Marcelo): quando o mercado veio mas o PARECER
     // saiu vazio (a redação falhou), o relatório era salvo como 'concluida' e o cliente via um

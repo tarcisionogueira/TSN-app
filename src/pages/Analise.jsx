@@ -1525,12 +1525,26 @@ export default function Analise() {
   // AUTO-HEAL do parecer vazio (caso Marcelo): ao abrir um relatório concluído com o parecer em
   // branco, dispara UMA regeração — sem custo (isNovo=false) e sem loop (ref por imóvel). Fecha a
   // janela em que o cliente veria um relatório "pronto" sem texto/PDF, em vez de esperar o cron.
+  //
+  // O "ref por imóvel" só durava enquanto a PÁGINA ficava montada — um F5 ou sair/voltar zera o
+  // ref e, se o vício persistir (a redação falha de novo), a tela dispara OUTRA regeração automática
+  // sozinha, e outra a cada nova visita. Do lado do cliente isso aparece como "o relatório fica
+  // pronto e volta a gerar sozinho" (achado do dono, 12/09): visto no mesmo imóvel enquanto eu
+  // testava outra correção nele, cada regeração passava por 'gerando' de novo. O cron
+  // (regenerar-relatorios-cron.js) já tem teto de tentativas para este mesmo vício
+  // (MAX_PARECER=4) — a tela não tinha nenhum, então sozinha ela nunca para. Persistir a tentativa
+  // no localStorage (sobrevive a reload/nova visita, sem servidor) faz a tela se comportar como o
+  // comentário sempre disse que ela se comportava: UMA tentativa automática por imóvel, de verdade,
+  // não uma por carregamento de página. O botão "Gerar novamente" abaixo continua liberado sempre.
   const autoHealRef = React.useRef(null);
   useEffect(() => {
     if (!relMercadoIncompleto || gerandoMercado || analisesBloqueado) return;
     if (!(d?.endereco || d?.cidade)) return;              // espera os dados do imóvel carregarem
-    if (autoHealRef.current === analiseImovelId) return;  // já tentou p/ este imóvel nesta sessão
+    if (autoHealRef.current === analiseImovelId) return;  // já tentou p/ este imóvel nesta montagem
+    const chaveTentativa = `bidpro_autoheal_mercado_${analiseImovelId}`;
+    try { if (localStorage.getItem(chaveTentativa)) { autoHealRef.current = analiseImovelId; return; } } catch { /* sem storage, segue e tenta uma vez */ }
     autoHealRef.current = analiseImovelId;
+    try { localStorage.setItem(chaveTentativa, String(Date.now())); } catch { /* best-effort */ }
     gerarRelMercado();
   }, [relMercadoIncompleto, gerandoMercado, analisesBloqueado, d?.endereco, d?.cidade, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1743,10 +1757,17 @@ export default function Analise() {
   const auditoria = d?.result?.auditoria || mercado?.auditoria || null;
   const suprimido = (campo) => Array.isArray(auditoria?.suprimir) && auditoria.suprimir.includes(campo);
   const areaAlerta = mercado?.areaAlerta || null;
+  // A MESMA condição do gerador (api/gerar-analise.js, `areaFonte !== 'matricula'`): quando a
+  // matrícula já confirmou a área, o servidor deliberadamente NÃO levanta este alerta — uma
+  // avaliação de leilão bem abaixo do mercado é normal (é o desconto do leilão), não indício de
+  // área errada. Sem esta guarda, o "reforço" cliente reacendia o aviso já resolvido pelo
+  // servidor: achado real 12/09, galpão de Feira de Santana — matrícula confirmou 2.500 m²,
+  // mercado.areaAlerta saiu null, e mesmo assim a tela mostrava "área não confirmada".
+  const areaConfirmadaPelaMatricula = mercado?.metodologia?.area?.fonte === 'matricula';
   const _aArea = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
   const _aPm2 = Number(mercado?.precoMedioM2) || 0;
   const _aAvalM2 = Number(d.valorAvaliacao) > 0 && _aArea > 0 ? Number(d.valorAvaliacao) / _aArea : 0;
-  const areaSuspeita = !!areaAlerta || (_aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
+  const areaSuspeita = !!areaAlerta || (!areaConfirmadaPelaMatricula && _aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
   // A "área privativa implícita" (avaliação ÷ R$/m²) continua no `areaAlerta` do gerador
   // como sinal de diagnóstico, mas NÃO é mais exibida: número derivado impresso em m² é
   // lido como metragem do imóvel, e não é medida de lugar nenhum. Ver o aviso abaixo.
