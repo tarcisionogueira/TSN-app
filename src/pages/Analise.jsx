@@ -3384,6 +3384,23 @@ export default function Analise() {
                   <div style={sub}>quanto tende a vender no mercado (conservador)</div>
                 </div>
               </div>
+              {/* VALOR SUGERIDO DE VENDA (12/09, pedido do dono na simulação de redesign): a conta
+                  de lucro/ROI (calculosMercado, `valorRef = isUsoProprio ? vMercado : vMercado*0.90`)
+                  já assume vender 10% abaixo da "venda estimada" acima — para sair mais rápido —,
+                  mas essa premissa nunca aparecia como número visível: ficava escondida dentro do
+                  lucro projetado. Só mostra quando difere de verdade do card acima (>1%); quando
+                  `sugerido` já É o valor com desconto (ex.: vindo de d.valorMercado já ajustado),
+                  repetir o mesmo número na tela seria a duplicação que este ajuste existe pra evitar. */}
+              {(() => {
+                const valorVendaSugerida = valorMedia > 0 ? Math.round(valorMedia * 0.9) : 0;
+                if (!valorVendaSugerida || !sugerido || Math.abs(valorVendaSugerida - sugerido) / sugerido < 0.01) return null;
+                return (
+                  <div style={{ marginTop:10, background:'rgba(255,255,255,0.10)', borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+                    <span style={{ fontSize:11.5, opacity:0.9 }}>Valor sugerido de venda (10% abaixo do mercado, para vender mais rápido — é a premissa usada no lucro projetado)</span>
+                    <span style={{ fontSize:15, fontWeight:900 }}>R$ {fmt(valorVendaSugerida)}</span>
+                  </div>
+                );
+              })()}
               {areaSuspeita ? (
                 <div style={{ fontSize:10.5, marginTop:10, lineHeight:1.5, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'8px 10px' }}>
                   {/* 15/08: este aviso IMPRIMIA a área implícita como se fosse a metragem do
