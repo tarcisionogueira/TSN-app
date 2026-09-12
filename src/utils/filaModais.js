@@ -27,7 +27,11 @@ import { useEffect, useState } from 'react';
  * motivo que já estava no comentário do App.jsx; o tour fica atrás das boas-vindas porque
  * explicar a tela por cima de um vídeo não ensina nada.
  */
-const PRIORIDADE = ['contrato', 'cadastro', 'bonus', 'boas-vindas', 'tour', 'sugestao'];
+// 'senha-pendente' (11-12/09): entra logo após 'cadastro' — é uma dívida de conta (senha
+// aleatória de quem acessou pela inscrição na aula), não uma sugestão, mas menos urgente que
+// contrato/cadastro incompleto (que podem travar a conta de verdade). Fica ANTES de
+// 'boas-vindas' de propósito: o texto do popup já anuncia "o vídeo vai aparecer a seguir".
+const PRIORIDADE = ['contrato', 'cadastro', 'senha-pendente', 'bonus', 'boas-vindas', 'tour', 'sugestao'];
 
 const querem = new Set();
 const ouvintes = new Set();

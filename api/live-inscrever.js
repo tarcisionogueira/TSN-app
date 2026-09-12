@@ -217,6 +217,11 @@ export default async function handler(req, res) {
             headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify({
               id: userId, nome, telefone: whatsapp, role: 'explorador',
+              // Conta nasce com senha ALEATÓRIA (a pessoa nunca digita uma aqui) — sem isto
+              // marcado, ela só teria como definir senha própria lembrando de "Esqueci minha
+              // senha". `senha_pendente` dispara o popup (SenhaPendenteModal) na primeira
+              // navegação e some sozinho quando ela definir (RedefinirSenha.jsx/Perfil.jsx).
+              senha_pendente: true,
               // O vínculo entra AQUI, na criação — e só quando há parceiro de verdade. Nunca
               // sobrescreve nada: esta linha só roda para conta NOVA. `indicacao_origem`
               // carimba a procedência, para o painel não confundir com o upline padrão.
