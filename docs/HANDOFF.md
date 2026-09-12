@@ -25384,3 +25384,217 @@ mecanismo de atribuição de marketing já resolve sozinho o que parecia lacuna.
 *Sessão de 12/09 (parte 2) encerrada. Branch de trabalho claude/eager-wright-cj8i5j ==
 main (fast-forward, sem conflito). Deploy de produção confirmado READY
 (`dpl_GAykWB3f...`). Nenhum trigger/rotina nova pendente desta parte da sessão.*
+
+═══════════════════════════════════════════════════════════════════════════════════════
+## 🏁 ENCERRAMENTO DA SESSÃO DE 12/09 (parte 3) — Educação, bônus universal, redesign de
+## produto, e uma cascata de achados reais no relatório mercadológico
+═══════════════════════════════════════════════════════════════════════════════════════
+
+**O dia em uma linha:** entrada pública "Educação" + bônus de assinatura generalizado para
+todo produto pago + redesign visual da tela de produto, e depois uma investigação disparada
+por UM relatório real (galpão de Feira de Santana/BA, Lote 37, LJUD) que puxou o fio de
+**6 bugs distintos** empilhados no mesmo mercadológico — a maioria eram instâncias novas da
+forma nº 10 do CLAUDE.md ("o instrumento mede uma coisa e reporta com o nome de outra"), e
+uma delas (edital multi-lote) é uma categoria de bug NOVA para este projeto, digna de entrar
+no catálogo se o dono concordar. Todo o trabalho está commitado, buildado e em produção
+(`bidprobrasil.com.br`), branch `claude/eager-wright-cj8i5j` == `main`.
+
+### Bloco 1 — Educação, bônus universal, redesign de produto (produtos digitais)
+
+1. **`src/pages/EducacaoPublico.jsx` (novo) — vitrine pública de eBooks/cursos, sem login**
+   (commits `231da9d7`, `9b4d70a9`). Mesmo espírito do Acervo Aberto de imóveis: lista
+   `cursos_admin`+`ebooks_admin` ativos, filtra **só produtos pagos** (`!gratuito &&
+   preco>0` — o curso de boas-vindas é onboarding do assinante, não vitrine de venda),
+   mostra preço promocional dentro da janela de oferta e um selo "+N meses Investidor Pro"
+   quando o produto concede o bônus. Paleta 100% `src/utils/marca.js` (pedido do dono:
+   "seguir as cores do sistema/marca em todas as telas"). Link "Educação" novo no menu de
+   visitante (`Header.jsx`).
+   - **Corrigido no mesmo dia (commit `e9947b2`): capas apareciam cortadas.** O componente
+     `Capa` usava caixa `aspectRatio:'3/4'` com `object-fit:cover` para uma imagem que é
+     SEMPRE `2/3` (mesma proporção de `Membros.jsx`/`EbookCover`) — a caixa mais baixa
+     cortava topo/base da capa real. Ajustado para `2/3`, igual ao resto da plataforma.
+2. **Bônus de assinatura generalizado — TODO produto pago vira Investidor Pro** (commit
+   `231da9d7`). Pedido do dono: o mecanismo (compra → ganha N meses de Investidor Pro →
+   cobra a partir do mês seguinte) já existia no backend só para o eBook de R$1
+   (`comprar_produto_iniciar`/`ativar-assinatura-bonus-cron.js` já tratavam ebook e curso
+   igual desde 26/08) — faltava a TELA de configurar. `Admin.jsx` (commit `28646528`):
+   editor de eBook ganhou o mesmo bloco "Janela de oferta" (preço promocional +
+   abre/fecha) que o editor de curso já tinha, e os dois ganharam o checkbox "Cobrar a
+   assinatura automaticamente no mês seguinte" (`requer_cartao_bonus`). Novo padrão de
+   default: produto pago já nasce com `concede_plano:'top2', concede_meses:1,
+   requer_cartao_bonus:true` — admin desliga, não liga.
+3. **`ProdutoPublico.jsx` — redesign visual completo com a paleta oficial** (commit
+   `6d154f3`). Pedido do dono ao ver a Educação: "podemos melhorar e deixar mais agradável
+   visualmente" a tela de produto também. Reskin completo verificado por `git diff` linha
+   a linha — **zero mudança de lógica, handler ou estado**: header e overlays em navy
+   (`NAVY`), sombras com tinta navy em vez de preto puro, cabeçalhos de seção com barra de
+   acento lateral, banner de bônus em dourado (`LATAO` — é benefício-presente, o acento
+   quente que a marca reserva pra isso), estados de sucesso/preço em verde (`VERDE`),
+   hover/focus consistentes (`bp-btn-hover`, `bp-input`). Vermelho (urgência) e roxo
+   (order bump) mantidos de propósito — são cor de ESTADO/FUNÇÃO, não decoração de marca.
+
+### Bloco 2 — scraper e auditoria (achados menores, corrigidos na hora)
+
+4. **GESTAOLEILOES gravava link morto como documento válido** (commit `6d90d463`). 30 de
+   153 imóveis tinham `link_edital`/`link_matricula` = `javascript:void(0);` — o site abre
+   esses documentos por botão/AJAX sem `href` real, e `extrairDocsDoHtml()` aceitava
+   qualquer esquema porque `new URL()` não rejeita `javascript:`. Agora só aceita
+   http/https; os 30 registros afetados foram limpos (`link_edital`/`link_matricula` →
+   null) para voltarem elegíveis à próxima coleta.
+5. **Falso positivo de segurança em `documental_pedidos_leiloeiro`** (commit `73da0c3b`).
+   O health-check apontou RLS sem política de escrita do usuário — mas a tabela nasceu
+   com `for all using (false)` deliberado (só service_role escreve, mesmo padrão de
+   `leiloeiro_contato`). Incluída na allowlist de "só-servidor" que `auditoria_uso()` já
+   previa para este caso.
+6. **`Admin.jsx` — dois textos estáticos desatualizados** (commit `098b505b`): roadmap
+   ainda listava BIASI/HASTA como "planejado" (já são fontes integradas com milhares de
+   imóveis ativos), e o texto do piloto A/B Claude×Gemini dizia "em andamento" quando na
+   verdade rodou uma vez em 04/07 e nunca mais — agora diz "pausado".
+
+### Bloco 3 — a cascata do relatório mercadológico (Lote 37, LJUD, galpão de Feira de
+### Santana/BA) — o achado principal do dia
+
+O dono reportou, sobre o MESMO relatório, uma lista de sintomas que pareciam desconexos:
+aviso de metragem que voltava sozinho, data de praça errada mesmo após regerar, valores de
+aluguel contraditórios entre seções, contagem de amostras diferente em cartões diferentes,
+relatório "voltando a gerar sozinho" na tela Minhas Análises, popup "Ver relatório" sem
+efeito, e uma parcela de financiamento que "deveria ser uns 13 mil" e saía R$ 16.588. Cada
+sintoma tinha causa própria — nenhum era o mesmo bug com nome diferente:
+
+6. **Aviso de área obsoleto reaparecendo** (commit `07303d4`). `Analise.jsx` recalculava a
+   suspeita de área ("comparáveis incompatíveis com a avaliação") no CLIENTE, sem checar
+   se a matrícula já tinha confirmado a área — reacendia um aviso que o SERVIDOR já tinha
+   resolvido e suprimido corretamente (`mercado.areaAlerta=null`). Corrigido com a mesma
+   guarda (`metodologia.area.fonte==='matricula'`) que o servidor usa.
+7. **Datas de praça não reconciliadas no card "Condições lidas no edital"** (commit
+   `07303d4`, com duas regressões da própria correção pegas na mesma sessão via commit
+   `fae88fc`): a reconciliação de datas (que decide se a data do PDF ou a do acervo ao
+   vivo prevalece) já rodava certo, mas o card de exibição continuava montado a partir da
+   data BRUTA do documento, ignorando a decisão. Ao corrigir, apareceram dois efeitos
+   colaterais: (a) `imDb.data_leilao` é timestamptz completo — sem truncar para
+   `AAAA-MM-DD` o texto saía quebrado ("03:00/15T09:00:00/09/2026"); (b)
+   `derivarPracasDoAnuncio()` fabricava uma "2ª praça" sempre que o PDF (possivelmente
+   errado) tinha duas, mesmo quando o acervo real confirma praça única — produzindo a
+   contradição "1ª/2ª praça" num card e "praça única" no outro, na MESMA tela. Os dois
+   corrigidos: trunca a data antes de usar; só fabrica 2ª praça quando `data_leilao_2` do
+   acervo confirma que ela existe de verdade.
+8. **O ACHADO PRINCIPAL — edital JUDICIAL MULTI-LOTE, nunca segmentado** (commit `fae88fc`).
+   Diagnóstico inicial errado (corrigido pelo dono): não era "edital de outro imóvel" — é
+   o MESMO edital, correto, mas um PDF judicial que reúne **96 lotes num documento só**
+   (confirmado baixando e parseando o PDF real). `extrairCondicoes()`/
+   `extrairIdentidadeTexto()` sempre leram o DOCUMENTO INTEIRO — sem noção de onde um lote
+   termina e o outro começa —, e o `pertence` (banda solta 0,5x-2x, deliberadamente larga
+   para tolerar as combinações reais de praça 1/2) deixou passar por coincidência a
+   avaliação certa junto com a IDENTIDADE e as DATAS de um lote vizinho (uma casa em
+   Ilhéus/BA). Nova `isolarBlocoDoLote()` em `_edital-extrato.js`: quando o documento tem
+   2+ marcações "Lote N" E algum bloco contém o valor de avaliação/lance mínimo conhecido
+   deste lote, isola só esse bloco antes de extrair qualquer coisa (condições, pagamento,
+   custos, identidade, processo, matrícula). Documento de lote único (o caso comum) não
+   muda em nada. Cache: multi-lote não grava mais por `chaveUrl` (o mesmo PDF serve outros
+   lotes com blocos diferentes) — só pelo conteúdo do bloco isolado, específico do lote.
+   **Validado contra o PDF real** (baixado e parseado fora do pipeline, rodando as mesmas
+   funções de produção): identidade, processo (`0000199-97.2016.5.05.0195`) e matrícula
+   (2.500 m²) saem certos após o isolamento. Ressalva: as praças deste lote vêm como
+   "Hastas Realizadas: 07/07 - 15/09 - 20/10" (3 datas sem o padrão "1º/2º leilão" que o
+   extrator reconhece) — o extrator agora fica honestamente SEM datas em vez de errado;
+   **não implementado** um parser para esse formato específico (ver pendências).
+   ⚠️ **Não auditado se outros leiloeiros (além do LJUD) também publicam editais
+   multi-lote** — pode haver mais lotes silenciosamente afetados por este MESMO defeito
+   antes da correção; cache antigo (`doc_extracoes`, chave `u:`) expira em 30 dias sozinho,
+   mas quem já leu um edital multi-lote antes de hoje pode ter identidade/datas erradas
+   até regenerar.
+9. **Aluguel médio zerado com Índice BidPro disponível** (commit `0c59ca9`). A auditoria
+   (`_auditoria-relatorio.js`, achado `aluguel_ausente_com_indice`) JÁ sinalizava esta
+   exata contradição como ressalva — só ninguém tinha agido. O fallback de Índice BidPro
+   para VENDA só entrava quando NEM venda nem aluguel eram achados; uma busca que acha
+   venda mas não acha locação ativa (comum: poucos anúncios de aluguel ficam no ar)
+   deixava "Aluguel médio" e as duas rentabilidades zeradas mesmo com o índice tendo
+   referência de R$/m²/mês para a cidade. Agora cai no índice quando só falta o aluguel
+   (marcado `aluguelEstimadoPorIndice:true` para a tela distinguir confiança).
+10. **Parcelamento judicial cobrando juros que não existem** (commit `1b5cbce`) — acha do
+    dono lendo a própria projeção: *"leilão judicial é parcelado sem juros, de onde vem
+    esses 12% a.a.?"*. O art. 895 do CPC divide o saldo em parcelas sujeitas a CORREÇÃO
+    MONETÁRIA, não a juros bancários — mas `sementeDoImovel()` (Analise.jsx) só
+    sobrescrevia sinal (25%) e prazo (30 meses) para o padrão legal (fix de 31/08),
+    deixando `cetAnual` herdar o default genérico de 12%. Inflava a parcela em ~28%
+    (R$ 16.588 em vez da amortização pura de ~R$ 13.459) e subestimava o lucro projetado
+    na mesma proporção. Default vira `cetAnual:0` para modalidade judicial (editável, se o
+    edital específico trouxer um índice real). Bug irmão pego no caminho: os campos de
+    Sinal/Prazo/CET na tela liam com `valor || padrao`, que trata `0` como "vazio" — um
+    `cetAnual=0` LEGÍTIMO aparecia como 12% na tela mesmo a conta usando 0%. Trocado por
+    `?? padrao` nos três campos.
+11. **Comparáveis duplicados entre níveis — "8 amostras" eram 6 imóveis únicos** (commit
+    `a545adc`). Ao montar a lista de amostras pedida pelo dono, achado: o Nível 2 trazia
+    os DOIS MESMOS imóveis do Nível 1 (mesmo endereço, mesmo valor), com o próprio texto
+    GERADO admitindo *"duplicado nível 1, replicado conforme base própria"* — sem
+    comparável genuíno na faixa de 250m-1km, o modelo preencheu o nível copiando o mais
+    próximo em vez de deixar o nível mais fino/vazio. A mediana de R$/m² saía enviesada
+    pelas duas contadas em dobro, e os badges concordavam entre si — só que no número
+    errado. Dedup determinístico por assinatura (valor+m²+endereço) entre os três níveis,
+    mantendo a ocorrência do nível MAIS PRÓXIMO, no mesmo passo final que recomputa
+    totalAmostras/vendas/locacoes (item 12 abaixo). **Não alterado o prompt** — a IA pode
+    voltar a inventar duplicatas noutro relatório; o dedup pós-processamento é a rede de
+    segurança permanente, não uma correção pontual.
+12. **Contagem de amostras variando entre seções do mesmo relatório** (commit `07303d4`).
+    `nivel.totalAmostras` era recomputado logo após a pesquisa, mas etapas SEGUINTES
+    (refinamento por matrícula/edital, filtro de valor ponderado) alteravam
+    `vendas`/`locacoes` sem re-somar o total — o card "Valores de referência" (que soma os
+    arrays direto) contava diferente dos badges "Nível 1/2/3" (que leem o campo
+    declarado). Recomputa como ÚLTIMO passo, imediatamente antes de gravar.
+13. **Auto-heal do parecer vazio podia entrar em loop entre visitas** (commit `07303d4`).
+    Quando o mercado sai mas o parecer (redação) fica em branco, a tela dispara UMA
+    regeração automática — mas o controle de "só uma vez" vivia só num `React.useRef`, que
+    zera a cada F5/nova visita. Se o vício persistisse, cada visita disparava outra
+    regeração sozinha (o "loop" que o dono viu — coincidiu com eu estar regenerando este
+    mesmo relatório manualmente durante os testes acima, então não deu pra confirmar se
+    era 100% este mecanismo ou também efeito colateral do meu teste). Persistida a
+    tentativa em `localStorage` — agora sobrevive a reload, como o comentário original já
+    dizia que deveria.
+14. **"Valor sugerido de venda" agora exibido** (commit `38b630c`) — pedido do dono ao
+    aprovar uma simulação de redesign do relatório (ver abaixo). A conta de lucro/ROI já
+    assumia vender 10% abaixo da "venda estimada no mercado" (linha `valorRef =
+    vMercado*0.90` em `calculosMercado`) para sair mais rápido, mas essa premissa nunca
+    aparecia como número — ficava escondida dentro do lucro projetado. Nova linha logo
+    abaixo do card "Venda estimada no mercado", só quando difere de verdade dele (>1% —
+    evita duplicar o mesmo número, que era justamente a queixa que motivou o pedido).
+
+### Sobre o pedido de "redesign completo" do relatório — o que foi e não foi feito
+
+O dono pediu uma revisão geral do relatório removendo campos repetitivos. Montei uma
+**simulação em HTML** (artifact) com os dados reais do Lote 37, consolidando os cartões de
+lucro/indicadores num painel só — o dono aprovou ("ficou bom!") e pediu para aplicar em
+produção. Ao entrar de fato no código de `Analise.jsx` para aplicar, a avaliação mudou: a
+tela real é bem mais robusta que a maquete simplificada — ROI/TIR aparecem em 3 lugares
+(resumo pra leigo → indicadores técnicos → veredito de viabilidade), mas cada um cumpre uma
+função de leitura diferente num fluxo de ~20 correções sutis já feitas ao longo de vários
+meses. **Decisão tomada nesta sessão: aplicar só as peças concretas e seguras** (item 14
+acima) e **não fundir os cartões financeiros** sem confirmação explícita — reportei isso ao
+dono, que não respondeu ainda se quer a fusão completa mesmo assim.
+
+### Fica para a próxima sessão / para o dono
+
+- **Decidir sobre a fusão completa dos cartões financeiros** da tela de mercadológico
+  (ROI/TIR repetido em 3 lugares) — ver seção acima. Não fazer sem confirmação explícita,
+  dado o histórico de correções sutis na página.
+- **Auditar se OUTRAS fontes/leiloeiros também têm editais multi-lote** — só o LJUD foi
+  investigado hoje; o defeito (item 8) pode estar silenciosamente presente em relatórios
+  antigos de outras fontes.
+- **Parser de "Hastas Realizadas: d1 - d2 - d3"** (formato do LJUD, sem o padrão "1º/2º
+  leilão") não foi implementado — o extrator fica honestamente sem praças nesse caso, mas
+  um parser dedicado recuperaria a informação real em vez de deixar o card vazio.
+- **Considerar instrução no prompt do mercadológico** pedindo explicitamente para nunca
+  duplicar um comparável entre níveis — hoje só há a rede de segurança determinística
+  (item 11), não uma correção na raiz do prompt.
+- Regenerar (ou aguardar o self-heal de ~6h) o relatório do galpão de Feira de Santana
+  (`dfc5ab9b-6c5d-49ba-97ec-57d704bc70ab`) e conferir ao vivo, na tela, que identidade,
+  datas, aluguel, amostras e parcela saem todos corretos juntos — hoje só foi validado via
+  SQL/script fora do pipeline (o ambiente não tinha `CRON_SECRET` para forçar a regeração).
+- Avaliar se os achados 6-13 acima (a cascata do "instrumento medindo uma coisa e
+  reportando com o nome de outra", mais a categoria nova de "documento multi-lote") merecem
+  entrar no catálogo de formas do `CLAUDE.md` — não editei o arquivo sozinho por não ser
+  código, mas o padrão se repetiu 3x só nesta sessão.
+
+*Sessão de 12/09 (parte 3) encerrada. Branch de trabalho claude/eager-wright-cj8i5j ==
+main (fast-forward em cada commit, sem conflito). 10 commits, todos com build limpo e
+deploy de produção confirmado READY em bidprobrasil.com.br. Nenhum trigger/rotina nova
+pendente desta parte da sessão.*
