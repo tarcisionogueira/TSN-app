@@ -764,7 +764,7 @@ export default function ProdutoPublico({ tipo }) {
                       <span>
                         Continuar automaticamente com a assinatura Investidor Pro
                         {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
-                        cobrada no mesmo cartão — cancele quando quiser.
+                        cobrada no mesmo cartão. Cancele quando quiser.
                         <strong style={{ display: 'block', marginTop: 3, color: '#0D63DB' }}>
                           {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : 'Desmarcado: você só leva o eBook, sem renovação automática.'}
                         </strong>
@@ -776,7 +776,7 @@ export default function ProdutoPublico({ tipo }) {
                         espírito do popup de saída (CartaoDownsell) que já existe nesta tela. */}
                     {cienteRenovacao ? (
                       <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 12.5, color: '#166534', lineHeight: 1.6, fontWeight: 600 }}>
-                        Boa escolha: você vai continuar com acesso aos relatórios completos de mercado, edital e riscos — para tomar suas próximas decisões de arrematação com segurança e seguir construindo patrimônio.
+                        Boa escolha: você vai continuar com acesso aos relatórios completos de mercado, edital e riscos, para tomar suas próximas decisões de arrematação com segurança e seguir construindo patrimônio.
                       </div>
                     ) : (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.6, fontWeight: 600 }}>
