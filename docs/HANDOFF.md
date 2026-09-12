@@ -25290,3 +25290,97 @@ com dinheiro real** — ver "O QUE FICOU EM ABERTO" abaixo, é o primeiro item d
 *Sessão de 12/09 encerrada. Branch de trabalho claude/handoff-bidpro-brasil-checks-bzbupz
 == main (tudo mergeado, deploys em produção). Um trigger real pendente: o Vercel Cron do
 disparo da campanha em 13/09 8h — armado, `app_config.campanha_ebook_r1_ativo=true`.*
+
+═══════════════════════════════════════════════════════════════════════════════════════
+## 🏁 ENCERRAMENTO DA SESSÃO DE 12/09 (parte 2) — ritual de verificações + 4 correções
+═══════════════════════════════════════════════════════════════════════════════════════
+
+**O dia em uma linha:** ritual de abertura completo (fontes, clientes travados, erros de
+cliente, Cliente 360, marketing, saúde do sistema) rendeu 4 correções reais em produção —
+mensagem de recusa de cartão em vez de erro 500, alarme falso do EMILIOMATOS suprimido,
+confirmação de que o bug da Neuma (10/09) já estava corrigido, e confirmação de que o
+mecanismo de atribuição de marketing já resolve sozinho o que parecia lacuna.
+
+### O que entrou em produção hoje (commit `6b8ce33`, deploy READY em bidprobrasil.com.br)
+
+1. **`api/mp.js` — recusa de cartão não vira mais erro 500.** Achado investigando os 6
+   "Failed to fetch" de `/checkout`: é o MESMO usuário do item 6 (novo Investidor Pro,
+   ver abaixo). 1ª tentativa: falha de rede real (Failed to fetch, já tratada). 2ª
+   tentativa: o Mercado Pago recusou o cartão por antifraude (`cc_rejected_high_risk`,
+   linha em `mp_pagamentos`), mas `criarAssinaturaTransparente()` relaiava a mensagem
+   CRUA da API do MP como erro genérico — o cliente via texto técnico em vez de "cartão
+   recusado, tente outro". 3ª tentativa (mesmo cartão, outro token): aprovada. Sem
+   cobrança duplicada, sem ativação falsa (a trava "só ativa com dinheiro recebido",
+   de 16/08, segurou certo). Agora a mensagem é acionável; o motivo técnico completo
+   segue só no log do servidor.
+2. **Migração `fonte_suspensa_nao_e_regressao.sql` — EMILIOMATOS para de gritar alarme
+   falso.** `fonte_regressao_suspeita()` não distinguia "cron suspenso de propósito"
+   (EMILIOMATOS está desligado desde 29/08 porque o catálogo multi-tenant do Superbid
+   grava lote de OUTRO leiloeiro sob esse nome — ver `scraper-emiliomatos.yml`) de fonte
+   esquecida, e acusava "medicao_velha" a cada rodada (chegou a 551h sem medir). Nova
+   coluna `leiloeiro_conhecimento.suspenso` (dado, não comentário — mesmo princípio de
+   `regra_negocio`) e a função passa a excluir fonte suspensa do alarme. Validado:
+   EMILIOMATOS sumiu da lista de `fonte_regressao_suspeita()`.
+3. **Confirmado: o bug da Neuma (14 recusas em "imóvel sem endereço/cidade", 10/09) já
+   estava corrigido no mesmo dia**, antes desta sessão — o id do imóvel passou a viajar
+   na URL (`/analise?imovel=<uuid>`) com recuperação server-side quando o
+   `location.state` do React Router se perde. Verifiquei o imóvel dela
+   (`1064fde7-...`, Feira de Santana/BA): segue ativo, com endereço/cidade completos —
+   ela conseguiria gerar se tentasse de novo. Não tentou desde o incidente. **Fica só a
+   ação humana: contato pessoal do dono** (ela é top2 desde julho e nunca recebeu um
+   relatório).
+4. **Marketing "sem origem" — nada para corrigir, mecanismo já existe e funciona.** Ia
+   propor uma ponte `anon_id` entre `visita_origem` e `perfis`; achei que ela **já
+   existe** desde 27/08-30/08 (`mkt_reconciliar_gclid()`, rodando no cron de ingestão de
+   ads, mais o fallback via `p_anon_id` em `registrar_marketing()` no cadastro).
+   Conferido ao vivo: `qa_invariantes_atribuicao_perdida() = 0` — zero backlog. O "57%
+   sem origem" nos cadastros de 30 dias é tráfego genuinamente direto/orgânico sem
+   clique de anúncio, não uma falha de rastreamento.
+
+### Investigado, sem ação de código possível ou necessária
+
+- **HASTA zerado** (579→4 imóveis ativos desde 04/09): confirmado que o bloqueio a IP
+  de datacenter é estrutural e documentado no próprio workflow ("de datacenter falha
+  sempre") — só o dono, rodando `node scripts/recon-hasta-zerou.mjs` na máquina
+  residencial, resolve.
+- **LEJE zerado**: rodei o scraper de verdade (GitHub Actions, sem bloqueio anti-bot
+  nesta fonte) — respondeu HTTP 200, mas enumerou 0 lotes. Descarta bloqueio de acesso;
+  não dá para separar "parser quebrou" de "leiloeiro pequeno genuinamente sem lote
+  agora" sem abrir a página na mão. Baixo volume (baseline de 3-5 lotes) — não priorizei
+  recon dedicado; monitorar mais alguns dias.
+- **SBID21** (regressão 37→2): rodei o scraper ao vivo, confirmado — o portal 21 da
+  Superbid genuinamente devolveu 1 oferta aberta agora; os outros 4 sites da mesma rede
+  (SUPERBID, SBID9, SOLD) seguem saudáveis com a MESMA função. Escassez real do portal,
+  não bug.
+- **JOAOEMILIO/RJLEILOES**: oscilação dentro do normal (leilões expirando), sem sinal de
+  regressão real.
+- **Lais Melo** (explorador, "começou a gerar e sumiu" 11/09): sem rastro de causa
+  determinística (nem erro de API nem falha de rede registrados) — não consumiu cota,
+  parece falha de rede pontual do lado dela. Sem ação.
+- **Cliente 360 — outros 5 pagantes sem relatório em 14 dias**: nenhum deles tem sequer
+  um evento `analise_gerar` no período — não é bug, é engajamento (nunca clicaram em
+  Gerar).
+- **Investidor Pro novo identificado**: `3ad755c4-...`, cadastrou 11/09, virou top2 na
+  madrugada de 12/09 (3ª tentativa de pagamento, após os dois eventos do item 1). Veio
+  de **Google orgânico** (referrer `www.google.com`, aterrissagem
+  `/leiloes/sp/sumare`) — sem gclid/fbclid, então **não é conversão de anúncio pago**.
+  Google Ads corretamente não atribuiu (sem gclid não há o que atribuir). Meta Pixel/CAPI
+  está ativo e configurado; o evento `Purchase` dispara incondicionalmente no webhook e
+  não há erro nos logs da Vercel no horário da cobrança — o evento deve ter chegado ao
+  Meta por correspondência de e-mail hasheado.
+- **Matheus Barros (assessorado, id `0e0d7b7f-...`) NÃO contratou o Investidor Pro** —
+  role segue `assessorado`, zero linhas em `mp_pagamentos` e nenhum evento de
+  checkout/pagamento para top2. Ele é um dos 5 "pagantes sem relatório" do item acima —
+  segue assessorado, sem tentativa de upgrade.
+
+### Fica para a próxima sessão / para o dono
+
+- Rodar `scripts/recon-hasta-zerou.mjs` na máquina residencial (HASTA zerado há 8+ dias).
+- Contato pessoal com a Neuma — o produto já funciona para ela, falta ela saber disso.
+- Monitorar LEJE por mais alguns dias antes de decidir se abre recon.
+- `qa_invariantes()` e `fonte_regressao_suspeita()` seguem a fonte de verdade para
+  reconferir estes pontos na próxima sessão — nenhum deles precisa ser relido do zero.
+
+*Sessão de 12/09 (parte 2) encerrada. Branch de trabalho claude/eager-wright-cj8i5j ==
+main (fast-forward, sem conflito). Deploy de produção confirmado READY
+(`dpl_GAykWB3f...`). Nenhum trigger/rotina nova pendente desta parte da sessão.*
