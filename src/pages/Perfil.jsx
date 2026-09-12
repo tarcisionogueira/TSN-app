@@ -807,6 +807,9 @@ export default function Perfil() {
         endereco_uf: end.uf || null,
       };
       if (temComissao) perfilUpdate.chave_pix = chavePix || null;
+      // Desliga a mesma flag de RedefinirSenha.jsx — definir a senha por AQUI também conta
+      // como "resolvido" pro SenhaPendenteModal parar de pedir.
+      if (novaSenha) perfilUpdate.senha_pendente = false;
 
       const { error: e2 } = await supabase.from('perfis').update(perfilUpdate).eq('id', uid);
       if (e2) throw e2;

@@ -15,6 +15,7 @@ import TermosAtualizadosModal from './components/TermosAtualizadosModal';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 import ChatSuporte from './components/ChatSuporte';
 import BoasVindasModal from './components/BoasVindasModal';
+import SenhaPendenteModal from './components/SenhaPendenteModal';
 import { useVezDoModal } from './utils/filaModais';
 import SugestaoImovel from './components/SugestaoImovel';
 import PwaInstall from './components/PwaInstall.jsx';
@@ -330,6 +331,7 @@ function MainLayout() {
       {isLoggedIn && <TourGuia />}
       {user && <ContratoObrigatorio userId={user.id} />}
       {user && <CompletarCadastroModal />}
+      {user && <SenhaPendenteModal />}
       {user && <KycParceiroModal />}
       {user && <TermosAtualizadosModal />}
       {user && <ToastRelatorioPronto />}

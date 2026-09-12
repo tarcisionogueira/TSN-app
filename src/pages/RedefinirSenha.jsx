@@ -47,6 +47,14 @@ export default function RedefinirSenha() {
     try {
       const { error } = await supabase.auth.updateUser({ password: senha });
       if (error) throw error;
+      // Desliga a dívida de "conta com senha aleatória" (ver perfis_senha_pendente.sql) —
+      // sem isto, o SenhaPendenteModal continuaria pedindo senha pra quem já definiu a dela
+      // por aqui. Best-effort: a senha JÁ foi trocada (o que importa), perder este UPDATE só
+      // faz o popup voltar por engano uma vez — não derruba a troca de senha em si.
+      try {
+        const { data: { user: u } } = await supabase.auth.getUser();
+        if (u?.id) await supabase.from('perfis').update({ senha_pendente: false }).eq('id', u.id);
+      } catch { /* padrao-ok: best-effort, ver comentário acima */ }
       setSucesso(true);
       await supabase.auth.signOut();
       // Redireciona para o login automaticamente após redefinir a senha
