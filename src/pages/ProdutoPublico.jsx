@@ -466,6 +466,43 @@ export default function ProdutoPublico({ tipo }) {
 
   const irInicio = () => nav('/'); // '/' resolve p/ HOME (logado) ou LANDING (deslogado)
 
+  // GUARDA CONTRA CRASH DE RENDER (achado 12/09, via erros_cliente): o corpo desta tela
+  // acessa `produto.capa_url`/`produto.titulo`/`produto.emoji` sem optional chaining — sem
+  // este retorno antecipado, o PRIMEIRO render (antes do useEffect de carga resolver, com
+  // `produto` ainda null) derrubava a página inteira com "null is not an object" — confirmado
+  // em produção, rota /p/ebook/:id, vindo do link da campanha do bônus. `erroLeitura`
+  // distingue "não consegui ler" (tentar de novo) de "realmente não existe/inativo" — a
+  // mesma distinção da forma nº 1 do CLAUDE.md, aplicada aqui.
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6' }}>
+        <div style={{ width: 34, height: 34, border: '3px solid #e2e8f0', borderTopColor: '#0D63DB', borderRadius: '50%', animation: 'bp-spin 0.8s linear infinite' }} />
+        <style>{'@keyframes bp-spin{to{transform:rotate(360deg)}}'}</style>
+      </div>
+    );
+  }
+  if (!produto) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6', padding: 24 }}>
+        <div style={{ background: 'white', borderRadius: 16, padding: '36px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>{erroLeitura ? '⚠️' : '📭'}</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+            {erroLeitura ? 'Não conseguimos carregar este produto' : 'Produto não disponível'}
+          </h2>
+          <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#64748b', lineHeight: 1.6 }}>
+            {erroLeitura
+              ? 'Pode ter sido uma falha momentânea de conexão. Tente novamente.'
+              : 'Este produto não existe ou não está mais disponível.'}
+          </p>
+          <button onClick={() => (erroLeitura ? window.location.reload() : nav('/'))}
+            style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
+            {erroLeitura ? 'Tentar de novo' : 'Ir para o início'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f3f4f6', color: '#111111' }}>
       {/* Header — logo CLICÁVEL (→ início) + botão de navegação de volta à plataforma. Antes a
