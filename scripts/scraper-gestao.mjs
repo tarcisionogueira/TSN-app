@@ -331,8 +331,14 @@ function extrairDocsDoHtml(html, urlBase) {
     const href = m[1];
     const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
-      let abs; try { abs = new URL(href, urlBase).href; } catch { continue; }
-      docs.push({ url: abs, label: label.slice(0, 60) });
+      let abs; try { abs = new URL(href, urlBase); } catch { continue; }
+      // 12/09: alguns botões do site não têm link real — são "javascript:void(0)" com o
+      // documento aberto via onclick/AJAX. `new URL()` aceita esse esquema sem erro, e o
+      // rótulo casava "edital"/"matrícula" — gravava um link MORTO como se fosse documento
+      // (30 de 153 imóveis com link_edital=link_matricula='javascript:void(0);'). Melhor
+      // ficar sem link (cai em "não lido", categoria correta) do que um link que não abre.
+      if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue;
+      docs.push({ url: abs.href, label: label.slice(0, 60) });
     }
   }
   const findDoc = re => (docs.find(d => re.test(d.label) || re.test(d.url)) || {}).url || null;
