@@ -3390,10 +3390,16 @@ export default function Analise() {
                   mas essa premissa nunca aparecia como número visível: ficava escondida dentro do
                   lucro projetado. Só mostra quando difere de verdade do card acima (>1%); quando
                   `sugerido` já É o valor com desconto (ex.: vindo de d.valorMercado já ajustado),
-                  repetir o mesmo número na tela seria a duplicação que este ajuste existe pra evitar. */}
+                  repetir o mesmo número na tela seria a duplicação que este ajuste existe pra evitar.
+                  BASE = `sugerido` (o valor JÁ adotado/exibido), NUNCA `valorMedia` (a média bruta
+                  de `mercado.precoMedioM2`) — achado real, mesma sessão: quando o valor final vem
+                  REFINADO por tipo (`mercado.consolidado.precoMedioM2`, avaliador type-correct),
+                  ele diverge do `precoMedioM2` bruto do topo, e usar o bruto aqui produziu um
+                  "sugerido" MAIOR que a própria venda estimada (R$ 17,6 milhões contra R$ 7,8
+                  milhões de mercado) — o oposto do que "10% abaixo" promete. */}
               {(() => {
-                const valorVendaSugerida = valorMedia > 0 ? Math.round(valorMedia * 0.9) : 0;
-                if (!valorVendaSugerida || !sugerido || Math.abs(valorVendaSugerida - sugerido) / sugerido < 0.01) return null;
+                if (!(sugerido > 0)) return null;
+                const valorVendaSugerida = Math.round(sugerido * 0.9);
                 return (
                   <div style={{ marginTop:10, background:'rgba(255,255,255,0.10)', borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
                     <span style={{ fontSize:11.5, opacity:0.9 }}>Valor sugerido de venda (10% abaixo do mercado, para vender mais rápido — é a premissa usada no lucro projetado)</span>

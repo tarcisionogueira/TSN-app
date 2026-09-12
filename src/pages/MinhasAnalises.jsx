@@ -116,8 +116,18 @@ export default function MinhasAnalises() {
       // Só sobrepõe quando o contexto sabe de algo que o banco ainda não mostra: geração em
       // curso, imóvel que nem linha tem, ou erro sobre algo que NÃO está concluído. Um 'erro'
       // velho no cache local não pode apagar da tela um relatório concluído no banco.
+      //
+      // FALTAVA A TRANSIÇÃO PARA 'concluida' (12/09, achado do dono): o popup "Relatório
+      // pronto!" (ToastRelatorioPronto, que lê o MESMO contexto) acendia, mas o card aqui
+      // seguia "Gerando…" — a lista (`minhas_analises_lista`, via RPC) só é relida no mount;
+      // o contexto sabe da conclusão ANTES da lista ser recarregada, e como `a.status` já não
+      // era 'gerando' nem 'erro', a condição acima nunca deixava o card acompanhar. Se o
+      // contexto está MAIS NOVO que o que a lista já tem para este imóvel, ele vence mesmo
+      // sendo 'concluida' — sem isto, "pronto" no popup e "gerando" na lista descreviam o
+      // MESMO estado de forma contraditória, a mesma tela se desmentindo.
       const vale = a.status === 'gerando' || !persistido
-        || (a.status === 'erro' && persistido.status !== 'concluida');
+        || (a.status === 'erro' && persistido.status !== 'concluida')
+        || (a.status === 'concluida' && persistido.status !== 'concluida' && ts(a.updatedAt) > ts(it.updatedAt));
       if (vale) {
         it.reports[tipo] = { status: a.status, flags: flagsDe(tipo, a.result) };
         it.updatedAt = Math.max(ts(it.updatedAt), ts(a.updatedAt));

@@ -302,7 +302,7 @@ async function gravarProcessoDoLote(imovelId, numero) {
  * `max_tokens` é maior que o da matrícula porque aqui se pede a descrição do imóvel e as
  * praças, não um punhado de números.
  */
-async function editalPorVisao(url, imovelId, fim) {
+async function editalPorVisao(url, imovelId, fim, alvo = {}) {
   const diag = (motivo, extra = {}) => console.log('[edital-visao]', JSON.stringify({ imovel: String(imovelId), motivo, ...extra }));
   // Toda desistência REGISTRADA — foi a ausência disso que deixou o edital não-lido invisível
   // por meses. `CLAUDE_KEY` é o nome usado no projeto inteiro; ver a nota em matriculaPorVisao
@@ -323,6 +323,19 @@ async function editalPorVisao(url, imovelId, fim) {
     bloco = blocoParaIA(doc, 'edital');
     if (!bloco) { diag('formato não legível', { kind: doc.kind, detalhe: doc.motivo || null }); return null; }
   } catch (e) { diag('erro no download', { erro: String(e?.message || e).slice(0, 120) }); return null; }
+  // EDITAIS JUDICIAIS MULTI-LOTE TAMBÉM ATINGEM A VISÃO (12/09, mesmo achado do
+  // `isolarBlocoDoLote` — Lote 37, galpão de Feira de Santana/BA). Quando a extração de
+  // TEXTO não tem orçamento/tempo (documento grande — este tem 96 lotes, 575 KB) e cai
+  // aqui, o modelo recebe o PDF INTEIRO sem saber qual dos vários lotes é o pedido — e lê
+  // "o que aparece primeiro" (no caso real, um lote de OUTRO processo, uma casa em
+  // Ilhéus/BA, nada a ver com o imóvel sendo analisado). Dando a avaliação/lance mínimo
+  // JÁ CONHECIDOS deste lote, o próprio modelo consegue localizar o bloco certo entre
+  // vários — o mesmo princípio do isolamento por texto, aplicado à leitura por imagem.
+  const alvoAval = Number(alvo?.valorAvaliacao) || 0;
+  const alvoMin = Number(alvo?.valorMinimo) || 0;
+  const instrucaoLote = (alvoAval > 0 || alvoMin > 0)
+    ? `ATENÇÃO: este documento pode reunir VÁRIOS LOTES de leilão (um edital judicial cobrindo vários processos). Encontre e leia SOMENTE o lote cuja Avaliação seja aproximadamente R$ ${alvoAval || '?'}${alvoMin ? ` e/ou Lance Mínimo aproximadamente R$ ${alvoMin}` : ''} — ignore os demais lotes do documento, mesmo que apareçam antes. Se nenhum lote bater com esses valores (tolerância de ~5%), devolva os campos vazios em vez de descrever outro lote.\n\n`
+    : '';
   try {
     const resp = await anthropicFetch({
       method: 'POST',
@@ -332,7 +345,7 @@ async function editalPorVisao(url, imovelId, fim) {
         system: 'Você é um EXTRATOR de dados de edital de leilão de imóvel. Leia com máxima atenção, INCLUSIVE páginas escaneadas/em imagem. Retorne SOMENTE JSON.',
         messages: [{ role: 'user', content: [
           bloco,
-          { type: 'text', text: 'Extraia do edital, SOBRE O IMÓVEL DESTE LOTE:\n'
+          { type: 'text', text: instrucaoLote + 'Extraia do edital, SOBRE O IMÓVEL DESTE LOTE:\n'
             + '• "descricaoImovel": a descrição do bem como o edital a redige (texto corrido, até 600 caracteres). É o campo mais importante.\n'
             + '• "tipoImovel": um de casa, apartamento, terreno, comercial, rural, galpao, outro.\n'
             + '• "areaConstruidaM2": área construída/edificada/privativa, em m². NÃO é a do terreno.\n'
@@ -456,7 +469,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // de `doc_extracoes` não ter UMA linha de edital em toda a história, enquanto a matrícula
       // tinha 18 pela via de visão. Agora o edital ganha a mesma segunda chance.
       if (!txt) {
-        const vis = await editalPorVisao(url, imovelId, fim);
+        const vis = await editalPorVisao(url, imovelId, fim, { valorAvaliacao: im.valor_avaliacao, valorMinimo: im.valor_minimo });
         if (!vis) continue;
         identidade = {
           ...(vis.enderecoCompleto ? { endereco: vis.enderecoCompleto } : {}),
@@ -482,8 +495,24 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
         pracasVisao = (vis.pracas || [])
           .map((p) => ({ n: Number(p.ordem) || null, valor: Number(p.valor) || 0, data: p.data || null, fim: p.fim || null }))
           .filter((p) => p.n && (p.valor > 0 || p.data));
-        const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}) }, via: 'visao', confianca: 80 };
-        await cacheGravar(chaveUrl(url), metaVis);
+        // REDE DE SEGURANÇA CONTRA LOTE ERRADO NA VISÃO (12/09, mesmo achado do galpão de
+        // Feira de Santana): a instrução acima pede pro modelo procurar o lote certo, mas um
+        // modelo pode ignorar a instrução — e diferente do caminho de texto, `cond` fica NULL
+        // aqui, então o `pertence` computado mais abaixo (que só olha `cond?.pracas`) NUNCA
+        // barrava uma identidade de outro lote vinda da visão. Confere aqui, na hora: se a
+        // visão devolveu alguma praça com valor, ele PRECISA bater com este lote (mesma banda
+        // 0,3x-3,4x do lance mínimo usada no caminho de texto) — senão a identidade/datas são
+        // descartadas antes mesmo de chegar no `pertence` genérico.
+        const vminChk = Number(im.valor_minimo) || 0;
+        const visPertence = !(vminChk > 0 && pracasVisao.some((p) => p.valor > 0))
+          || pracasVisao.some((p) => p.valor > 0 && p.valor >= vminChk * 0.3 && p.valor <= vminChk * 3.4);
+        if (!visPertence) {
+          console.log('[edital-visao]', JSON.stringify({ imovel: String(imovelId), motivo: 'praca da visao fora da banda do lance minimo — descartada', vmin: vminChk, pracasVisao }));
+          identidade = null; datas = null; pracasVisao = [];
+        } else {
+          const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}) }, via: 'visao', confianca: 80 };
+          await cacheGravar(chaveUrl(url), metaVis);
+        }
         // `cond` segue null de propósito: condições de arremate NÃO foram lidas, e fabricá-las
         // para "completar o registro" seria exatamente o defeito que este arquivo combate.
       } else {
