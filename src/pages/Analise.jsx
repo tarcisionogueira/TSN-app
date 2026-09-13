@@ -2012,7 +2012,18 @@ export default function Analise() {
               // Dedup por ARQUIVO (chave canônica): o mesmo edital com querystring volátil
               // (?v=/assinatura regenerada a cada scrape) aparecia como 7 linhas "Edital".
               const kDoc = (u) => chaveDocCanonica(u) || u;
-              const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean).map(kDoc));
+              // Além da URL que a tela ESCOLHEU mostrar (docsView.fileUrl — às vezes uma cópia
+              // nossa, com URL própria), inclui as URLs BRUTAS de link_edital/link_matricula.
+              // Achado real (LJUD): o scraper grava o mesmo PDF duas vezes — uma vez no campo
+              // dedicado, outra dentro de `anexos[]` com tipo genérico 'anexo' (sem classificar).
+              // Sem isto, o dedup só pega o duplicado quando a URL exibida É a bruta; quando o
+              // servidor copiou o arquivo pro nosso Storage (URL diferente), o mesmo edital/
+              // matrícula reaparecia como "Documento do lote" — o cliente via o MESMO PDF 2x.
+              const urlsMostradas = new Set([
+                ...docsView.map(d => d.fileUrl).filter(Boolean).map(kDoc),
+                kDoc(imovelInicial?.linkEdital),
+                kDoc(imovelInicial?.linkMatricula),
+              ].filter(Boolean));
               // Rótulo humano: só usa o "nome" se for texto de verdade (não URL, path
               // ou nome de arquivo tipo "1727787880704.pdf"); senão, rótulo genérico.
               // Dedução de tipo SÓ para detectar duplicidade na lista (ver o uso abaixo).
