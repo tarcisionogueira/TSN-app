@@ -1652,6 +1652,122 @@ async function scraperPortalZukVeiculos(browser) {
   }
 }
 
+// ─── LJUD (LEILÕES JUDICIAIS) — VEÍCULOS (piloto, 13/09) ───────────────────────
+// Confirmado ao vivo (recon-ljud-carros-cards.mjs, 13/09) após 3 rounds de recon que
+// falharam adivinhando endpoint de API: `/veiculos/carros` é HTML renderizado no servidor,
+// SEM chamada de API nenhuma pra imitar — card real é `.base-card > a.card-lote-leilao`,
+// sem botão "carregar mais" visível (catálogo cresce por scroll, como Zuk/Mega). O texto
+// inteiro do card já traz nº do lote, status, título/ano/cor do veículo, cidade/UF e os 3
+// valores (avaliação/mínimo/atual) concatenados sem separador — regexes abaixo validadas
+// em seco contra 7 amostras reais capturadas no recon antes de ir pra produção.
+// NOTA: a listagem não traz texto de "está com o executado" (isso só aparia no detalhe do
+// lote, não visitado aqui) — por segurança o pátio fica 'indefinido' por padrão, nunca
+// 'confirmado' sem sinal explícito, então nenhum entra na tela (que só mostra confirmado)
+// e a exclusão crítica do dono continua garantida (só filtra 'excluido', nunca promove).
+const REGEX_LJUD_CIDADE_UF = /([A-ZÀ-Ÿ][a-zà-ÿ'-]+(?:[\s-][A-ZÀ-Ÿ][a-zà-ÿ'-]+)*)\/([A-Z]{2})\b/g;
+const REGEX_LJUD_ANO_PAR = /\b(\d{2})\/(\d{2})\b/;
+// Ano isolado de 4 dígitos (ex.: "GWM Haval - 2024 - Cinza") — cobre o caso sem par
+// fabricação/modelo, distinto do REGEX_ANO existente (que exige o par no formato XXXX/XXXX).
+const REGEX_ANO_ISOLADO_VEICULO = /\b(20[0-4]\d|19[5-9]\d)\b/;
+function expandeAno2Digitos(yy) {
+  const n = Number(yy);
+  return n <= 30 ? 2000 + n : 1900 + n;
+}
+
+async function scraperLJUDVeiculos(browser) {
+  console.log('  LJUD (Leilões Judiciais, veículos, piloto) — scroll infinito...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  try {
+    await page.goto('https://www.leiloesjudiciais.com.br/veiculos/carros', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise((r) => setTimeout(r, 2000));
+
+    let prev = 0, estavel = 0;
+    for (let i = 0; i < 400 && estavel < 3; i++) {
+      const n = await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        return document.querySelectorAll('.base-card').length;
+      });
+      await new Promise((r) => setTimeout(r, 1600));
+      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+    }
+
+    const cards = await page.evaluate(() => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const out = [];
+      document.querySelectorAll('.base-card').forEach((card) => {
+        const a = card.querySelector('a[href]');
+        const href = a?.href || '';
+        if (!href) return;
+        const img = card.querySelector('img')?.getAttribute('src') || null;
+        out.push({ href, img, textoCard: norm(card.textContent).slice(0, 600) });
+      });
+      return out;
+    });
+
+    console.log(`    LJUD (veículos): ${cards.length} cards`);
+    const seen = new Set();
+    const veiculos = cards.map((c) => {
+      const idm = c.href.match(/\/lote\/(\d+)\/(\d+)/);
+      const id = idm ? idm[2] : c.href;
+      if (seen.has(id)) return null;
+      seen.add(id);
+      const tituloMatch = c.textoCard.match(/Aberto para Lance\s*\d+\s*(.+?)Avalia[cç][ãa]o/i);
+      const tituloBruto = tituloMatch ? tituloMatch[1] : c.textoCard.replace(/^#\d+/, '').slice(0, 120);
+      const anoParMatch = tituloBruto.match(REGEX_LJUD_ANO_PAR);
+      const anoIsoladoMatch = tituloBruto.match(REGEX_ANO_ISOLADO_VEICULO);
+      const anoFab = anoParMatch ? expandeAno2Digitos(anoParMatch[1]) : (anoIsoladoMatch ? Number(anoIsoladoMatch[1]) : null);
+      const anoMod = anoParMatch ? expandeAno2Digitos(anoParMatch[2]) : anoFab;
+      const locMatches = [...tituloBruto.matchAll(REGEX_LJUD_CIDADE_UF)];
+      const loc = locMatches[locMatches.length - 1];
+      const avaliacaoMatch = c.textoCard.match(/Avalia[cç][ãa]o\s*R\$\s*([\d.,]+)/i);
+      const minimoMatch = c.textoCard.match(/Lance m[ií]nimo\s*R\$\s*([\d.,]+)/i);
+      const valAval = avaliacaoMatch ? parseBRL(`R$ ${avaliacaoMatch[1]}`) : 0;
+      const valMin = minimoMatch ? parseBRL(`R$ ${minimoMatch[1]}`) : 0;
+      if (!valMin && !valAval) return null;
+      const numeroLote = c.textoCard.match(/#(\d+)/)?.[1];
+      const titulo = (tituloBruto || `Veículo LJUD ${numeroLote || id}`).slice(0, 180);
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(c.textoCard);
+      return {
+        fonte: 'LJUD', fonte_id: `ljud_veic_${id}`, leiloeiro: 'Leilões Judiciais (LJUD)',
+        titulo, descricao: titulo,
+        marca: c.textoCard.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+        modelo: null,
+        ano_fabricacao: anoFab,
+        ano_modelo: anoMod,
+        placa: c.textoCard.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+        km: c.textoCard.match(REGEX_KM)?.[1] ? Number(c.textoCard.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+        valor_minimo: valMin || valAval,
+        valor_avaliacao: valAval > valMin ? valAval : null,
+        desconto_percentual: descontoPercentualVeiculo(valMin || valAval, valAval > valMin ? valAval : null),
+        modalidade: 'nao_identificado',
+        cidade: loc ? toTitleCase(loc[1].trim()) : null,
+        estado: loc ? loc[2].toUpperCase() : null,
+        link_lote: c.href,
+        fotos: c.img ? [c.img] : [],
+        anexos: undefined,
+        forma_pagamento: 'a_vista',
+        data_leilao: null,
+        status_patio: statusPatio,
+        status_patio_motivo: statusPatioMotivo,
+        motor_alerta: REGEX_MOTOR_ALERTA.test(c.textoCard) || null,
+        ipva_situacao: (c.textoCard.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+        ativo: true,
+        raw: c,
+        atualizado_em: new Date().toISOString(),
+      };
+    }).filter(Boolean);
+    console.log(`    LJUD (veículos): ${veiculos.length} mapeados`);
+    return veiculos;
+  } catch (err) {
+    console.log(`  Erro LJUD (veículos): ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 // ─── SODRÉ SANTORO ────────────────────────────────────────────────────────────
 // Nuxt SPA. Os lotes vêm de POST /api/search-lots (results[] com campos ricos:
 // lot_title, lot_category, lot_description, bid_initial, lot_city/state,
@@ -4766,6 +4882,13 @@ async function main() {
       console.log('\n📋 PortalZuk (veículos, piloto)...');
       const veiculosZuk = await scraperPortalZukVeiculos(browser);
       await salvarVeiculos(veiculosZuk);
+    }
+
+    // LJUD — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado.
+    if (ONLY.includes('LJUD_VEICULOS')) {
+      console.log('\n📋 LJUD (veículos, piloto)...');
+      const veiculosLJUD = await scraperLJUDVeiculos(browser);
+      await salvarVeiculos(veiculosLJUD);
     }
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
