@@ -43,6 +43,14 @@ async function sbUpsert(tabela, linha) {
 
 // Descobre a origem (protocolo+domínio) de cada fonte ainda não checada a partir de
 // qualquer url_lote real já coletado — mesma técnica de `capturarContatoSeAusente`.
+//
+// UMA CONSULTA SÓ, com LIMIT global, não serve aqui: fontes gigantes (CEF sozinha tem
+// ~19 mil url_lote) ocupam o limite inteiro antes da ordenação alfabética chegar às
+// fontes de nome posterior — 1ª versão (13/09) devolveu só 6 de ~49 candidatas por
+// isso (parou em "BIASI"), sem erro nenhum, com cara de "poucas fontes restam" (a
+// forma nº 10 do CLAUDE.md: o número saiu plausível e media outra coisa). Corrigido
+// consultando fonte por fonte, cada uma com seu próprio LIMIT 1 — não depende de
+// quantas linhas as fontes anteriores (alfabeticamente) têm.
 async function candidatos() {
   if (process.env.RECON_FONTES) {
     return process.env.RECON_FONTES.split(',').map(par => {
@@ -51,16 +59,21 @@ async function candidatos() {
     });
   }
   const jaChecadas = new Set((await sbGet('leiloeiro_segmento_veiculos?select=fonte')).map(r => r.fonte));
-  const amostras = await sbGet(
-    'imoveis_leilao?select=fonte,url_lote&url_lote=not.is.null&order=fonte.asc,criado_em.desc&limit=5000'
-  );
-  const porFonte = new Map();
-  for (const { fonte, url_lote } of amostras) {
-    if (jaChecadas.has(fonte) || porFonte.has(fonte)) continue;
-    if (!/^https?:\/\//i.test(url_lote || '')) continue;
-    try { porFonte.set(fonte, new URL(url_lote).origin); } catch { /* padrao-ok: url_lote malformado, fonte fica sem candidato */ }
+  // Lista canônica de fontes conhecidas — não `imoveis_leilao` direto: um `select=fonte`
+  // sem filtro ali também tropeça no default LIMIT do PostgREST (1000), e CEF sozinha
+  // (~19 mil linhas) pode preencher a página inteira antes de outra fonte aparecer.
+  const todasFontes = [...new Set((await sbGet('leiloeiro_conhecimento?select=fonte&suspenso=eq.false')).map(r => r.fonte))];
+  const faltantes = todasFontes.filter((f) => !jaChecadas.has(f));
+  const out = [];
+  for (const fonte of faltantes) {
+    const [row] = await sbGet(
+      `imoveis_leilao?select=url_lote&fonte=eq.${encodeURIComponent(fonte)}&url_lote=not.is.null&limit=1`
+    );
+    const url = row?.url_lote;
+    if (!/^https?:\/\//i.test(url || '')) continue;
+    try { out.push({ fonte, origin: new URL(url).origin }); } catch { /* padrao-ok: url_lote malformado, fonte fica sem candidato */ }
   }
-  return [...porFonte.entries()].map(([fonte, origin]) => ({ fonte, origin }));
+  return out;
 }
 
 async function main() {
