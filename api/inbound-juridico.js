@@ -22,6 +22,16 @@ const ANEXO_MAX_BYTES = 10 * 1024 * 1024;
 const ANEXO_MAX_QTD = 5;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const WH_SECRET    = process.env.INBOUND_WEBHOOK_SECRET; // whsec_... (Svix)
+const ADMIN_EMAIL  = (process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br').trim().toLowerCase();
+// Remetente que não é cliente de verdade: o próprio dono testando, ou notificação automática
+// que caiu na caixa de suporte (ex.: e-mail do Google Ads). `tempo_processo()`/`cliente_travou`
+// contam só autor_tipo='cliente' como "o cliente falou" — gravar esses como 'cliente' infla a
+// métrica de chamado-sem-resposta-humana com o que nunca precisou de resposta (achado real:
+// 5 dos 7 chamados "sem resposta" eram testes do dono ou notificação automática, não cliente).
+function remetenteInterno(endereco) {
+  const e = String(endereco || '').toLowerCase();
+  return e === ADMIN_EMAIL || /^(no-?reply|notifications?|mailer-daemon|postmaster|donotreply)@/i.test(e);
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
@@ -411,7 +421,8 @@ async function encaminharParaAtendimento(data, headers, messageId) {
     method: 'POST', prefer: 'return=representation',
     body: {
       chamado_id: chamado.id, autor_id: null, autor_nome: nome || endereco,
-      autor_tipo: 'cliente', conteudo: corpo || `[mensagem sem texto — ler no painel do Resend, id ${data?.email_id || '?'}]`,
+      autor_tipo: remetenteInterno(endereco) ? 'sistema' : 'cliente',
+      conteudo: corpo || `[mensagem sem texto — ler no painel do Resend, id ${data?.email_id || '?'}]`,
       // Versão HTML do e-mail (parágrafos, links, imagens), quando a API a devolveu. A tela
       // do Atendimento a renderiza SÓ dentro de iframe sandbox — ver o comentário da coluna.
       // `conteudo` (texto) segue sendo a fonte para IA, busca e notificação.
