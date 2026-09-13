@@ -194,6 +194,24 @@ disso acontecer, sobrando mais dos 100/dia pra Auth por não gastarmos tudo com 
 alertas/etc. Pra proteger o `/signup` de verdade sem pagar, a única forma seria interceptar via
 Auth Hook "Send Email" do Supabase (não implementado — mudança maior, ficou fora do pedido).
 
+### 🎨 Marca nos e-mails do Auth do Supabase (13/09, fim da tarde)
+
+Dono reportou o e-mail de confirmação de cadastro (`/signup`) com o mesmo problema dos 6
+templates do código: texto plano "BidPro Brasil", sem logo — porque esse e-mail é gerado pelo
+**GoTrue direto** (Authentication → Emails → Templates no painel do Supabase), fora do
+repositório, fora do alcance dos 6 arquivos já corrigidos.
+
+Preparado e **colado pelo dono, confirmado linha a linha nos 4 templates** (mesmo cabeçalho —
+logo + "Leilão & Investimentos" — que os e-mails do código):
+- **Confirm signup** — subject já em português: "Confirme seu e-mail — BidPro Brasil".
+- **Magic Link or OTP**, **Reset Password**, **Change Email Address** — corpo confirmado certo
+  nos três; **subject ainda no padrão em inglês** do Supabase ("Your sign-in link", "Reset your
+  password", "Confirm your new email address") — sugestões em português dadas, dono ainda não
+  decidiu se troca.
+
+Não é código nem migração — é configuração de plataforma, só documentado aqui porque não tem
+onde mais registrar (não versiona com o repo).
+
 ---
 
 ## 🚗 13/09 — VEÍCULOS: 5 FONTES NOVAS CONSTRUÍDAS, ANEXOS+FORMA_PAGAMENTO, E EXCLUSÃO CRÍTICA DE EXECUTADO GARANTIDA NO BANCO
