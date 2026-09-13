@@ -180,6 +180,12 @@ export default function Planos() {
     </div>
   );
 
+  // Cabeçalho de grupo dentro do card do Investidor Pro — quebra o checklist único em blocos
+  // temáticos (autoridade: cada bloco nomeia uma COMPETÊNCIA, não só empilha frase solta).
+  const GroupLabel = ({ txt }) => (
+    <div style={{ fontSize: 10.5, fontWeight: 800, color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: 1, marginTop: 6 }}>{txt}</div>
+  );
+
   // Preço comercial: a PARCELA em DESTAQUE (visão de acessibilidade — mais
   // comercial) e o valor à vista com o % OFF em texto secundário. `mensal` mostra
   // a parcela como /mês (Leilão Club); senão como 12× (Assessoria). Sem juros até 3×.
@@ -328,21 +334,42 @@ export default function Planos() {
             <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.7 }}>
               Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 10 relatórios de cada tipo por mês, e relatórios adicionais por crédito quando precisar.
             </p>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <CheckItem txt="Tudo do Explorador" light />
+
+              <GroupLabel txt="📑 Análise & Relatórios com IA" />
               {[
-                'Tudo do Explorador',
                 'Relatório de viabilidade com IA',
                 'Análise de edital, matrícula e processo',
+                'Análise processual do imóvel',
+                'Alertas de risco (penhora, ônus reais)',
+              ].map(t => <CheckItem key={t} txt={t} light />)}
+
+              <GroupLabel txt="📈 Inteligência de mercado" />
+              {[
                 'Comparativos de mercado (condomínio/rua)',
                 'Projeções financeiras SAC e Price',
                 'Rentabilidade do aluguel (mensal e anual)',
-                'Análise processual do imóvel',
-                'Alertas de risco (penhora, ônus reais)',
+                '3 gerações de Índice de mercado/mês',
+              ].map(t => <CheckItem key={t} txt={t} light />)}
+
+              <GroupLabel txt="⚡ Volume incluso todo mês" />
+              {[
                 '10 relatórios mercadológicos/mês',
                 '10 relatórios documentais e jurídicos/mês',
-                '3 gerações de Índice de mercado/mês',
-                'Relatórios adicionais por crédito (sem limite)',
+                'Relatórios adicionais por crédito, sem limite',
               ].map(t => <CheckItem key={t} txt={t} light />)}
+
+              {/* Educação em destaque (pedido do dono, 13/09): bônus real, não é rodapé de
+                  lista — ganha caixa própria pra não se perder entre os outros itens. */}
+              <div style={{ marginTop: 8, padding: '12px 14px', background: 'rgba(96,165,250,0.14)', border: '1px solid rgba(96,165,250,0.32)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: '#bfdbfe', textTransform: 'uppercase', letterSpacing: 1 }}>🎓 Educação — bônus exclusivo</div>
+                {[
+                  'Todos os eBooks da plataforma inclusos, sem custo extra',
+                  'Cursos gratuitos de introdução ao método',
+                  'Desconto exclusivo em cursos pagos premium',
+                ].map(t => <CheckItem key={t} txt={t} light />)}
+              </div>
             </div>
             <button onClick={() => ctaTipo('top2') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
