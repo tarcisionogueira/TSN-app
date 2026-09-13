@@ -63,9 +63,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     novo `202533617967~824546261951`, PAUSADO, no ad group "Grupo de anúncios 1". Status ao sair
     desta sessão: `REVIEW_IN_PROGRESS` (Google ainda não deu veredito). Quando aprovar, decidir se
     ativa substituindo o anúncio reprovado (`Aula Ao Vivo Grátis...`, MISLEADING_CONTENT).
-11. **Confirmar disparo do e-mail da campanha ebook R$1** — agendado 13/09 11h UTC
-    (`app_config.campanha_ebook_r1_ativo=true`, ver seção específica mais abaixo no documento).
-    Não confirmado antes do fim desta sessão (sessão terminou antes do horário do disparo).
+11. ~~**Confirmar disparo do e-mail da campanha ebook R$1**~~ — **RESOLVIDO (13/09, 11h20 UTC)**:
+    disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
+    conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
+    subir nas próximas horas. Vale um novo check mais tarde no dia se quiser o número final.
 12. **Confirmar pausa da campanha Meta Ads "O novo luxo"** — o dono pediu pra pausar "amanhã";
     ficou agendada via Rotina (`trig_01H1Jak4VXyLCkov2CN2XhmX`, 13/09 13h UTC). Não confirmado
     antes do fim desta sessão se a pausa de fato ocorreu.
