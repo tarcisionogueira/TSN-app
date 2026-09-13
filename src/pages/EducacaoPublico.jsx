@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, BookOpen, Gift } from 'lucide-react';
+import { GraduationCap, BookOpen, Gift, Sparkles } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { driveImage } from '../utils/driveUrl';
 import { AZUL, NAVY, LATAO, VERDE, corSuave } from '../utils/marca';
@@ -106,6 +106,23 @@ export default function EducacaoPublico() {
       </div>
 
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 20px 60px' }}>
+        {/* Vitrine da campanha mensal — pedido do dono (13/09): todo mês há uma campanha de
+            conscientização sobre o mercado de leilões, com algum produto sempre em promoção
+            para quem quer aprender e começar a investir. Isto é a "descrição atrativa" que
+            comunica o RITMO da vitrine (sempre tem algo novo em oferta), não uma promoção
+            específica — a oferta em si já aparece riscada no card do produto (precoVigente). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: corSuave(LATAO, '14'), border: `1px solid ${corSuave(LATAO, '45')}`, borderRadius: 14, padding: '16px 20px', marginBottom: 28 }}>
+          <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: corSuave(LATAO, '28'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Sparkles size={19} color={LATAO} />
+          </div>
+          <p style={{ margin: 0, fontSize: 13.5, color: '#374151', lineHeight: 1.5 }}>
+            <strong style={{ color: '#111' }}>Todo mês tem campanha nova por aqui.</strong> Lançamos
+            uma campanha de conscientização sobre o mercado de leilões e colocamos sempre algum
+            eBook ou curso em promoção — para quem está disposto a aprender e dar o primeiro passo
+            para investir com segurança.
+          </p>
+        </div>
+
         {itens === null && <p style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>Carregando...</p>}
         {erro && <p style={{ textAlign: 'center', color: '#dc2626', padding: 20 }}>{erro}</p>}
         {itens && itens.length === 0 && !erro && (
