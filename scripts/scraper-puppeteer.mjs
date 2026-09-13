@@ -1866,8 +1866,13 @@ async function scraperSodreVeiculos(browser) {
   }
 }
 
-async function salvarVeiculos(registros) {
-  if (!registros.length) { console.log('    Sodré veículos: nada para salvar.'); return 0; }
+// `rotulo` (13/09): antes fixo em "Sodré veículos" mesmo chamado para Suporte/Superbid/Mega/
+// WebLeilões — todo log de salvamento dizia "Sodré" não importa qual fonte tivesse rodado.
+// Deriva da própria fonte do 1º registro quando não informado, então chamadas antigas sem o
+// parâmetro continuam funcionando (e corretas, já que passam a usar o `fonte` real).
+async function salvarVeiculos(registros, rotulo) {
+  const nome = rotulo || (registros[0]?.fonte ? `${registros[0].fonte} veículos` : 'veículos');
+  if (!registros.length) { console.log(`    ${nome}: nada para salvar.`); return 0; }
   let salvos = 0;
   for (let i = 0; i < registros.length; i += 200) {
     const lote = registros.slice(i, i + 200);
@@ -1875,7 +1880,7 @@ async function salvarVeiculos(registros) {
     if (error) { console.log(`  ⚠️ veiculos_leilao upsert falhou: ${String(error.message).slice(0, 150)}`); continue; }
     salvos += lote.length;
   }
-  console.log(`    Sodré veículos: ${salvos} salvos em veiculos_leilao`);
+  console.log(`    ${nome}: ${salvos} salvos em veiculos_leilao`);
   return salvos;
 }
 
