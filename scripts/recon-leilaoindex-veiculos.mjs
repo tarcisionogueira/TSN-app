@@ -7,11 +7,14 @@
  * "deveria" existir pode dar 400 (erro da própria aplicação) e o catálogo real estar só na
  * home (`/`). Não repete esse chute pro lado do veículo: visita os dois (`/` e
  * `/leilao/index/veiculos`) nos 3 tenants, conta quantos links batem no padrão de lote
- * (`/leilao/index/leilao_id/<id>/lote/<id2>`), e imprime as 6 primeiras linhas de texto
- * renderizado de até 2 detalhes por tenant — é onde mora o rótulo "Tipo do bem" que pode
- * classificar carro/moto/caminhão sem inferência nossa (mesmo princípio já usado no
- * Suporte: "Tipo Judicial/Extrajudicial" é rótulo do leiloeiro, não regex adivinhando).
- * Só leitura, não grava nada.
+ * (`/leilao/index/leilao_id/<id>/lote/<id2>`), e imprime as linhas de texto renderizado de
+ * até 2 detalhes por tenant — é onde mora o rótulo "Tipo do bem" que pode classificar
+ * carro/moto/caminhão sem inferência nossa. Só leitura, não grava nada.
+ *
+ * CORREÇÃO 13/09 (1ª rodada): usava `waitUntil:'domcontentloaded'` — cedo demais nesta SPA;
+ * a 1ª rodada só enxergou o banner de cookies (OneTrust), nunca o conteúdo real do lote.
+ * `criarMotorDom` (a produção, scripts/lib/motor/fetch-dom.mjs) usa `networkidle2` +
+ * `esperaMs` depois — mesma config replicada aqui, para não repetir o mesmo engano.
  *
  * Uso: node scripts/recon-leilaoindex-veiculos.mjs
  */
@@ -19,12 +22,13 @@ import puppeteer from 'puppeteer';
 import { TENANTS, extrairUrlsDeLote } from './lib/leilaoindex-parse.mjs';
 import { textoComLinhas } from './lib/dom-parse-util.mjs';
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+const ESPERA_MS = 3000;
 
 async function visitar(page, url) {
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await new Promise((r) => setTimeout(r, 3000));
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise((r) => setTimeout(r, ESPERA_MS));
     return await page.content();
   } catch (e) {
     console.log(`    erro ao visitar ${url}: ${String(e?.message || e).slice(0, 120)}`);
@@ -39,33 +43,31 @@ async function main() {
       console.log(`\n════ ${tenant.fonte} (${tenant.base}) ════`);
       const page = await browser.newPage();
       await page.setUserAgent(UA);
+      await page.setViewport({ width: 1366, height: 900 });
       await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-      try {
-        for (const caminho of ['/leilao/index/veiculos', '/']) {
-          const url = `${tenant.base}${caminho}`;
-          const html = await visitar(page, url);
-          const urls = html ? extrairUrlsDeLote(html, tenant.base) : new Map();
-          console.log(`  [${caminho}] ${urls.size} link(s) de lote encontrados`);
-          if (urls.size) {
-            const amostra = [...urls.values()].slice(0, 3);
-            for (const u of amostra) console.log(`      ${u}`);
-          }
-          // Achou lote em '/leilao/index/veiculos' — não precisa cair pra home também.
-          if (caminho === '/leilao/index/veiculos' && urls.size) break;
-        }
-      } finally { /* segue pro detalhe usando a mesma page */ }
 
-      // Detalhe de até 2 lotes achados (qualquer um dos dois caminhos acima) — pra ver o
-      // formato real da 1ª linha (onde mora "Tipo do bem" nos imóveis desta plataforma).
-      const htmlListagem = await visitar(page, `${tenant.base}/leilao/index/veiculos`);
-      const urls = [...extrairUrlsDeLote(htmlListagem, tenant.base).values()];
-      const fallback = urls.length ? urls : [...extrairUrlsDeLote(await visitar(page, tenant.base), tenant.base).values()];
-      for (const url of fallback.slice(0, 2)) {
+      let urlsAchados = [];
+      for (const caminho of ['/leilao/index/veiculos', '/']) {
+        const url = `${tenant.base}${caminho}`;
+        const html = await visitar(page, url);
+        const urls = html ? extrairUrlsDeLote(html, tenant.base) : new Map();
+        console.log(`  [${caminho}] ${urls.size} link(s) de lote encontrados`);
+        if (urls.size) {
+          const amostra = [...urls.values()].slice(0, 3);
+          for (const u of amostra) console.log(`      ${u}`);
+          urlsAchados = [...urls.values()];
+          if (caminho === '/leilao/index/veiculos') break; // achou catálogo próprio — não precisa da home
+        }
+      }
+
+      for (const url of urlsAchados.slice(0, 2)) {
         console.log(`  ── detalhe: ${url}`);
         const htmlDet = await visitar(page, url);
         if (!htmlDet) continue;
-        const linhas = textoComLinhas(htmlDet).split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 8);
-        linhas.forEach((l, i) => console.log(`      [${i}] ${l.slice(0, 140)}`));
+        const linhas = textoComLinhas(htmlDet).split('\n').map((l) => l.trim()).filter(Boolean);
+        // Pula o banner de cookies (OneTrust) se aparecer — mostra as primeiras linhas ÚTEIS.
+        const uteis = linhas.filter((l) => !/^(centro de prefer|sua privacidade|cookies? (essenci|de |necess)|aceitar|rejeitar|configurar|x)$/i.test(l));
+        uteis.slice(0, 10).forEach((l, i) => console.log(`      [${i}] ${l.slice(0, 160)}`));
       }
       await page.close().catch(() => {});
     }
