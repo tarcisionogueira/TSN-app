@@ -30,14 +30,24 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    challenge/cota, dispatch de datacenter) — não cheguei a corrigir a lógica por falta de
    evidência real, só corrigi o valor (que já tinha prova). Retomar com recon de IP residencial
    ou orçamento Bright Data liberado.
-6. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL,
-   NÃO investigado fonte a fonte): FERREIRALEIL, PECINI, LEJE, HASTA, ALBERTOMACEDOLEILOES,
-   GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES têm entre 91% e 100% dos lotes ativos (não
-   venda-direta) sem data de praça. CEF sozinha tem 14.340 lotes sem data (75% do acervo dela,
-   19.109 lotes). Pode ser normal para algumas (praça ainda não marcada) ou pode ser parser
-   perdendo um campo que existe — não decidido. Prioridade sugerida: investigar CEF primeiro
-   (maior volume) e depois os 100%-sem-data (mais fácil de confirmar bug, já que 100% é sinal
-   mais forte que "quase sempre").
+6. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL) —
+   **CEF + FERREIRALEIL + GESTAOLEILOES + PECINI: causa raiz confirmada em 13/09, NÃO é parser.**
+   Diagnóstico real (não suposição): CEF via 3 execuções reais do `enriquecer-datas-cef.yml` (logs
+   do GitHub Actions) mostrando 0–2,5% de sucesso — bloqueio de IP de datacenter da Caixa (o cron
+   `0 * * * *` também dispara só ~5-6x/dia na prática, não 24x — GitHub atrasa/derruba cron exato
+   de hora popular sob carga). FERREIRALEIL/GESTAOLEILOES/PECINI via novo workflow
+   `diagnostico-datas-fontes.yml` (fetch direto, 3 lotes por fonte, sem gravar nada): **9 de 9
+   amostras deram HTTP 403** direto na página do lote. Código de extração de data de cada uma
+   (`extrairDatasLeilao`, `scraper-gestao.mjs`, `scraper-pecini.mjs`, `scraper-soleon.mjs`) foi
+   lido e é legítimo — não é `null` hardcoded. **Fix recomendado**: rotear a busca de data por
+   `scripts/lib/fetch-residencial.mjs` (IP residencial) ou Bright Data, já validado em produção
+   para cobertura de documentos de GESTAOLEILOES/RJLEILOES — não precisa de parser novo.
+   **Ainda não testados individualmente** (lista original): LEJE, ALBERTOMACEDOLEILOES,
+   GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES (91-100% sem data cada) — HASTA já é
+   conhecida como IP-bloqueada por investigação anterior. GRUPOLANCE/BIASI/WEBLEILOES tiveram
+   recon em 29/08 (`recon-datas-fontes.mjs`) com achado DIFERENTE na época (mapeador escrevendo
+   `data_leilao: null` literal, não bloqueio) — precisa reconfirmar se ainda procede no código
+   atual antes de assumir que é o mesmo bloqueio de IP.
 7. **Instagram — liberar a automação de resposta (100% burocracia da Meta, zero código)**
    (reaberta 11/09; era a pendência #9 antiga, sumiu da lista numa compactação e voltou porque
    segue real). Hoje o sistema só ESCUTA (webhook capturando comentários reais desde 08/09,
