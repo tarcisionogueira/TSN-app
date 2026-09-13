@@ -67,9 +67,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
     conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
     subir nas próximas horas. Vale um novo check mais tarde no dia se quiser o número final.
-12. **Confirmar pausa da campanha Meta Ads "O novo luxo"** — o dono pediu pra pausar "amanhã";
-    ficou agendada via Rotina (`trig_01H1Jak4VXyLCkov2CN2XhmX`, 13/09 13h UTC). Não confirmado
-    antes do fim desta sessão se a pausa de fato ocorreu.
+12. ~~**Confirmar pausa da campanha Meta Ads "O novo luxo"**~~ — **RESOLVIDO (13/09, 13h UTC)**:
+    Rotina disparou na hora agendada, `pause_campaign` confirmado com sucesso (campanha
+    `120249473454390420`, conta `702903610061448`).
 
 ---
 
