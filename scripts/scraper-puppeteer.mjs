@@ -668,7 +668,7 @@ async function scraperMegaLeiloes(browser) {
 // de categoria (só lê título/preço/localização/foto do card), então é reaproveitada tal como
 // está. Só o mapeamento muda: em vez de área/praças de imóvel, extrai marca/ano/placa/km do
 // título (regex compartilhado com os outros pilotos de veículo) e grava em `veiculos_leilao`.
-function mapearMegaVeiculo(c) {
+function mapearMegaVeiculo(c, textoDetalhe = '') {
   const valores = (c.valores || []).filter(v => v > 0);
   if (!valores.length) return null;
   const valAval = Math.max(...valores);
@@ -683,7 +683,10 @@ function mapearMegaVeiculo(c) {
   const titulo = (c.titulo || 'Veículo Mega').slice(0, 180);
   const descricao = [c.titulo, c.numero, c.instTitle].filter(Boolean).join(' — ').slice(0, 500);
   const textoCompleto = `${titulo} ${descricao}`;
-  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  // Pátio recebe TAMBÉM o texto da página de detalhe (visitarTextoDetalhe, bounded) — mesmo
+  // motivo do ajuste da Suporte (13/09): a listagem é curta demais pro sinal aparecer.
+  // Isolado de propósito: só entra aqui, nunca em `textoCompleto` (marca/ano/placa/km).
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoDetalhe ? `${textoCompleto} ${textoDetalhe}` : textoCompleto);
   const anoMatch = textoCompleto.match(REGEX_ANO);
   const modalidade = /judicial/i.test(c.instTitle) && !/extra/i.test(c.instTitle)
     ? 'judicial' : (/extra/i.test(c.instTitle) ? 'extrajudicial' : 'nao_identificado');
@@ -721,8 +724,7 @@ async function scraperMegaVeiculos(browser) {
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-  const veiculos = [];
-  const seen = new Set();
+  const cardsPorId = new Map();
   const MAX_PAGINAS = 100; // catálogo de veículo tende a ser bem menor que o de imóvel
   try {
     for (let p = 1; p <= MAX_PAGINAS; p++) {
@@ -737,24 +739,24 @@ async function scraperMegaVeiculos(browser) {
       const cards = await coletarMegaPagina(page);
       if (!cards.length) { console.log(`    Mega veículos p${p}: 0 cards — fim da paginação`); break; }
       let novos = 0;
-      for (const c of cards) {
-        if (!c.id || seen.has(c.id)) continue;
-        seen.add(c.id);
-        const v = mapearMegaVeiculo(c);
-        if (v) { veiculos.push(v); novos++; }
-      }
-      console.log(`    Mega veículos p${p}: ${cards.length} ativos (${novos} novos, acumulado ${veiculos.length})`);
+      for (const c of cards) { if (c.id && !cardsPorId.has(c.id)) { cardsPorId.set(c.id, c); novos++; } }
+      console.log(`    Mega veículos p${p}: ${cards.length} ativos (${novos} novos, acumulado ${cardsPorId.size})`);
       if (novos === 0) break;
       await new Promise(r => setTimeout(r, 1000));
     }
-    console.log(`  Mega Leilões (veículos): ${veiculos.length} coletados`);
-    return veiculos;
   } catch (err) {
     console.log(`  Erro Mega Leilões (veículos): ${err.message.slice(0, 100)}`);
-    return veiculos;
   } finally {
     await page.close();
   }
+
+  const cards = [...cardsPorId.values()];
+  const textoPorId = await visitarTextoDetalhe(browser, cards, {
+    getUrl: (c) => c.href, getId: (c) => c.id, max: 60, label: 'Mega veículos',
+  });
+  const veiculos = cards.map((c) => mapearMegaVeiculo(c, textoPorId.get(c.id) || '')).filter(Boolean);
+  console.log(`  Mega Leilões (veículos): ${veiculos.length} coletados`);
+  return veiculos;
 }
 
 // ─── SOLD LEILÕES ─────────────────────────────────────────────────────────────
@@ -1116,7 +1118,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     console.log(`    ${leiloeiro} (veículos): ${lista.length} offers coletadas (categoria ${comFiltro ? '"veiculos" confirmada' : 'NÃO confirmada — filtrando aqui por productType/subCategory'})`);
     const str = (v) => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
     const seen = new Set();
-    const registros = [];
+    const pendentes = [];
     for (const of of lista) {
       const p = of.product || {};
       const id = of.id || of.offerId;
@@ -1139,35 +1141,48 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
       const linkURL = str(of.linkURL);
       const link_lote = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
-      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
       const anoMatch = textoCompleto.match(REGEX_ANO);
       const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0) || null;
-      registros.push({
-        fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro, titulo, descricao,
-        marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
-        modelo: null,
-        ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
-        ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
-        placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
-        km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
-        valor_minimo: valMin,
-        valor_avaliacao: valAval,
-        desconto_percentual: descontoPercentualVeiculo(valMin, valAval),
-        modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s)) && !/extra/i.test(str(s))) ? 'judicial' : 'extrajudicial',
-        cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),
-        estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2) || null,
-        link_lote,
-        fotos: p.thumbnailUrl ? [p.thumbnailUrl] : [],
-        data_leilao: of.endDate || of.endDateTime || null,
-        status_patio: statusPatio,
-        status_patio_motivo: statusPatioMotivo,
-        motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
-        ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
-        ativo: true,
-        raw: of,
-        atualizado_em: new Date().toISOString(),
+      pendentes.push({
+        id, link_lote, textoCompleto,
+        base: {
+          fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro, titulo, descricao,
+          marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+          modelo: null,
+          ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+          ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+          placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+          km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+          valor_minimo: valMin,
+          valor_avaliacao: valAval,
+          desconto_percentual: descontoPercentualVeiculo(valMin, valAval),
+          modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s)) && !/extra/i.test(str(s))) ? 'judicial' : 'extrajudicial',
+          cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),
+          estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2) || null,
+          link_lote,
+          fotos: p.thumbnailUrl ? [p.thumbnailUrl] : [],
+          data_leilao: of.endDate || of.endDateTime || null,
+          motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+          ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+          ativo: true,
+          raw: of,
+          atualizado_em: new Date().toISOString(),
+        },
       });
     }
+    // Pátio recebe TAMBÉM o texto da página do lote (mesmo motivo do ajuste da Suporte,
+    // 13/09) — a API já entrega descrição rica, mas a página do lote pode ter texto que a
+    // API não expõe (ex.: seção "Documentação"/condição do bem). Bounded: com 3.200+ ofertas
+    // num catálogo só, visitar todas seria caro — 60 por rodada já é ganho sobre 0, e o
+    // upsert diário vai cobrindo mais lotes ao longo do tempo.
+    const textoPorId = await visitarTextoDetalhe(browser, pendentes, {
+      getUrl: (x) => x.link_lote, getId: (x) => x.id, max: 60, label: `${leiloeiro} veículos`,
+    });
+    const registros = pendentes.map((x) => {
+      const extra = textoPorId.get(x.id);
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(extra ? `${x.textoCompleto} ${extra}` : x.textoCompleto);
+      return { ...x.base, status_patio: statusPatio, status_patio_motivo: statusPatioMotivo };
+    });
     console.log(`    ${leiloeiro} (veículos): ${registros.length} registros mapeados`);
     return registros;
   } catch (err) {
@@ -3058,7 +3073,7 @@ async function scraperWebLeiloes(browser) {
 // filtra de verdade é `tipo=Veículos` (100% dos 20 resultados vieram com "/veiculos/" no
 // href, 0 com "/imoveis/"). Por isso o path aqui é DIFERENTE do de imóvel, não uma cópia com
 // "imoveis"→"veiculos" no meio da URL.
-function mapLoteWebLeiloesVeiculo(l) {
+function mapLoteWebLeiloesVeiculo(l, textoDetalhe = '') {
   const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
   const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
   const valor = pm ? parseBRL(pm[1]) : 0;
@@ -3071,7 +3086,9 @@ function mapLoteWebLeiloesVeiculo(l) {
   const titulo = (String(l.alt || '').replace(/\s+/g, ' ').trim() || `Veículo WebLeilões${cidade ? ' em ' + cidade : ''}`).slice(0, 180);
   const descricao = String(l.alt || l.texto || '').slice(0, 500);
   const textoCompleto = `${titulo} ${descricao}`;
-  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  // Pátio recebe TAMBÉM o texto da página de detalhe — mesmo motivo do ajuste da Suporte
+  // (13/09). Isolado: só entra aqui, nunca em `textoCompleto` (marca/ano/placa/km).
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoDetalhe ? `${textoCompleto} ${textoDetalhe}` : textoCompleto);
   const anoMatch = textoCompleto.match(REGEX_ANO);
   const modalidade = /venda-direta/.test(String(l.href)) ? 'venda_direta'
     : (/\bextrajudicial\b/i.test(l.texto || '') ? 'extrajudicial'
@@ -3142,7 +3159,12 @@ async function scraperWebLeiloesVeiculos(browser) {
       console.log(`    WebLeilões veículos: ${lotes.length} coletados`);
     } catch (e) { console.log(`    WebLeilões veículos: ${String(e.message).slice(0, 80)}`); }
   } finally { await page.close(); }
-  const veiculos = [...bens.values()].map(mapLoteWebLeiloesVeiculo).filter(v => v.valor_minimo > 0);
+  const lista = [...bens.values()];
+  const textoPorId = await visitarTextoDetalhe(browser, lista, {
+    getUrl: (l) => (String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`),
+    getId: (l) => l.id, max: 60, label: 'WebLeilões veículos',
+  });
+  const veiculos = lista.map((l) => mapLoteWebLeiloesVeiculo(l, textoPorId.get(l.id) || '')).filter(v => v.valor_minimo > 0);
   console.log(`  ✅ WebLeilões (veículos): ${veiculos.length} mapeados`);
   return veiculos;
 }
@@ -3805,9 +3827,42 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
 // Texto puro da página de detalhe (tags fora) — usado tanto pra achar a modalidade
 // estruturada quanto pra dar a classificarPatio() o texto que ela precisa (13/09, ver
 // motivo em textoDetalhePorLote/scraperSuporteVeiculosTenant abaixo).
-function textoPlanoDetalheSuporte(html) {
+function htmlParaTextoPlano(html) {
   if (!html) return '';
   return String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+}
+
+// Visita a página de DETALHE de até `max` itens (bounded, best-effort) para dar a
+// classificarPatio() texto além do título/localização da LISTAGEM — mesmo princípio
+// aplicado à Suporte (13/09): o sinal de pátio ("pátio", "comitente: banco" etc.) costuma
+// estar na página do lote, não na listagem, e a listagem sozinha é curta demais pra conter.
+// `getUrl`/`getId` extraem URL e chave de dedup de cada item; devolve Map id→texto plano.
+async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, label = '' }) {
+  const mapa = new Map();
+  if (!itens.length) return mapa;
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  let visitados = 0;
+  try {
+    for (const item of itens) {
+      if (visitados >= max) break;
+      const url = getUrl(item);
+      const id = getId(item);
+      if (!url || !id) continue;
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        mapa.set(id, htmlParaTextoPlano(await page.content()));
+        visitados++;
+        await new Promise(r => setTimeout(r, 250));
+      } catch (e) {
+        visitados++;
+        console.log(`    ${label} detalhe ${id}: ${String(e?.message || e).slice(0, 60)}`);
+      }
+    }
+  } finally { await page.close().catch(() => {}); } // padrao-ok: fechar página best-effort, mesmo padrão de scraperSuporteVeiculosTenant
+  if (visitados) console.log(`    ${label}: ${visitados} páginas de detalhe visitadas (pátio)`);
+  return mapa;
 }
 
 // "Tipo Judicial"/"Tipo Extrajudicial" — rótulo ESTRUTURADO da página de detalhe do veículo
@@ -3860,7 +3915,7 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
         if (!href || !/\/lote\//.test(href)) continue;
         try {
           await paginaLote.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          const txt = textoPlanoDetalheSuporte(await paginaLote.content());
+          const txt = htmlParaTextoPlano(await paginaLote.content());
           textoDetalhePorLote.set(l.id, txt);
           const mod = modalidadeSuporteVeiculo(txt);
           if (mod) { modalidadePorLote.set(l.id, mod); comModalidade++; }
