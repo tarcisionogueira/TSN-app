@@ -1,0 +1,28 @@
+name: Diagnóstico — cascata de geocodificação para 1 imóvel (não grava)
+
+# Roda scripts/diagnostico-geocode-lote.mjs: reproduz cada rota GRATUITA da cascata
+# de api/_geo.js para um único imóvel e imprime o que cada uma devolveu, isolada —
+# para achar em qual passo o pino saiu do endereço real. Só leitura, não grava nada.
+on:
+  workflow_dispatch:
+    inputs:
+      imovel_id:
+        description: 'UUID do imóvel em imoveis_leilao'
+        required: true
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Diagnóstico
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DIAG_IMOVEL_ID: ${{ github.event.inputs.imovel_id }}
+        run: node scripts/diagnostico-geocode-lote.mjs
