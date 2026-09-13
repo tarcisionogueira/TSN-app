@@ -1532,6 +1532,109 @@ async function scraperPortalZuk(browser) {
   }
 }
 
+// ─── PORTALZUK — VEÍCULOS (piloto, 13/09) ──────────────────────────────────────
+// Confirmado ao vivo (recon-veiculos-ljud-zuk-v3.mjs, 13/09): `/leilao-de-veiculos` usa o
+// MESMO `.card-property` da listagem de imóvel (30 cards achados) — mesma infra de
+// scroll+clique em "Carregar mais". Diferença deliberada do mapeamento de imóvel: o link do
+// card NÃO é filtrado por `/imovel/` (não confirmado que veículo siga o mesmo padrão de URL
+// com UF/cidade — carro não costuma navegar por cidade como imóvel), e UF/cidade viram
+// best-effort via texto do card, não via segmento da URL.
+async function scraperPortalZukVeiculos(browser) {
+  console.log('  PortalZuk (Zukerman, veículos, piloto) — scroll infinito...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  try {
+    await page.goto('https://www.portalzuk.com.br/leilao-de-veiculos', { waitUntil: 'networkidle2', timeout: 45000 });
+    try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch { /* padrao-ok: página pode não ter veículo ativo agora — o length check logo abaixo já trata isso */ }
+
+    let prev = 0, estavel = 0;
+    for (let i = 0; i < 400 && estavel < 3; i++) {
+      const n = await page.evaluate(() => {
+        const btn = document.querySelector('#btn_carregarMais');
+        if (btn && btn.offsetParent !== null) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
+        else { window.scrollTo(0, document.body.scrollHeight); }
+        return document.querySelectorAll('.card-property').length;
+      });
+      await new Promise(r => setTimeout(r, 1600));
+      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+    }
+
+    const cards = await page.evaluate(() => {
+      const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+      const out = [];
+      document.querySelectorAll('.card-property').forEach(card => {
+        const a = card.querySelector('a[href]');
+        const href = (a?.href || '').split('?')[0];
+        if (!href) return;
+        const title = a?.getAttribute('title') || norm(card.querySelector('[class*="title"]')?.textContent) || '';
+        const addr = norm(card.querySelector('.card-property-address')?.textContent);
+        const news = norm(card.querySelector('.card-property-news')?.textContent);
+        const img = card.querySelector('img')?.getAttribute('src') || null;
+        const valores = (card.textContent.match(/R\$\s*[\d.]+,\d{2}/g) || []);
+        const textoCard = norm(card.textContent).slice(0, 500);
+        out.push({ href, title, addr, news, img, valores, textoCard });
+      });
+      return out;
+    });
+
+    console.log(`    PortalZuk (veículos): ${cards.length} cards`);
+    const seen = new Set();
+    const veiculos = cards.map(c => {
+      const idm = c.href.match(/(\d+(?:-\d+)?)\/?$/);
+      const id = idm ? idm[1] : c.href;
+      if (seen.has(id)) return null;
+      seen.add(id);
+      const vals = c.valores.map(v => parseBRL(v)).filter(v => v > 0);
+      const valAval = vals.length ? Math.max(...vals) : 0;
+      const valMin = vals.length ? Math.min(...vals) : 0;
+      if (!valMin) return null;
+      const titulo = (c.title || 'Veículo PortalZuk').slice(0, 180);
+      const descricao = [c.title, c.addr, c.news].filter(Boolean).join(' · ').slice(0, 500) || c.textoCard;
+      const textoCompleto = `${titulo} ${descricao} ${c.textoCard}`;
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+      const anoMatch = textoCompleto.match(REGEX_ANO);
+      // UF/cidade best-effort — "Cidade, UF" ou "Cidade/UF" no endereço do card, quando existe.
+      const locMatch = (c.addr || c.textoCard || '').match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*[,/]\s*([A-Z]{2})\b/);
+      return {
+        fonte: 'ZUK', fonte_id: `zuk_veic_${id}`, leiloeiro: 'Zukerman (PortalZuk)',
+        titulo, descricao,
+        marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+        modelo: null,
+        ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+        ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+        placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+        km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+        valor_minimo: valMin,
+        valor_avaliacao: valAval > valMin ? valAval : null,
+        desconto_percentual: descontoPercentualVeiculo(valMin, valAval > valMin ? valAval : null),
+        modalidade: (/judicial/i.test(c.title) && !/extra/i.test(c.title || '')) ? 'judicial' : (/extra/i.test(c.title || '') ? 'extrajudicial' : 'nao_identificado'),
+        cidade: locMatch ? toTitleCase(locMatch[1].trim()) : null,
+        estado: locMatch ? locMatch[2].toUpperCase() : null,
+        link_lote: c.href,
+        fotos: c.img ? [c.img] : [],
+        anexos: undefined,
+        forma_pagamento: 'a_vista',
+        data_leilao: null,
+        status_patio: statusPatio,
+        status_patio_motivo: statusPatioMotivo,
+        motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+        ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+        ativo: true,
+        raw: c,
+        atualizado_em: new Date().toISOString(),
+      };
+    }).filter(Boolean);
+    console.log(`    PortalZuk (veículos): ${veiculos.length} mapeados`);
+    return veiculos;
+  } catch (err) {
+    console.log(`  Erro PortalZuk (veículos): ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 // ─── SODRÉ SANTORO ────────────────────────────────────────────────────────────
 // Nuxt SPA. Os lotes vêm de POST /api/search-lots (results[] com campos ricos:
 // lot_title, lot_category, lot_description, bid_initial, lot_city/state,
@@ -4639,6 +4742,14 @@ async function main() {
     // edital/matrícula/laudo para as IAs lerem e para o mapa exato (endereço da matrícula).
     if (rodar('ZUK')) console.log('\n📋 PortalZuk (Zukerman)...');
     if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser), { enrich: true, enrichCap: 120 });
+
+    // PortalZuk — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado dos
+    // outros pilotos de veículo (ver .github/workflows/veiculos-puppeteer.yml).
+    if (ONLY.includes('ZUK_VEICULOS')) {
+      console.log('\n📋 PortalZuk (veículos, piloto)...');
+      const veiculosZuk = await scraperPortalZukVeiculos(browser);
+      await salvarVeiculos(veiculosZuk);
+    }
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
     // lote (/imoveis/lote/{id}) server-rendered → enrich captura edital/matrícula/laudo.
