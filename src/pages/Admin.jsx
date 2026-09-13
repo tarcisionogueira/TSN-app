@@ -11362,7 +11362,29 @@ function QualidadeTab() {
     if (error) { console.error('[aprendizado] aplicar sugestão:', error.message); return; }
     setSug(s => s.map(x => x.id === id ? { ...x, aplicado } : x));
   };
-  React.useEffect(() => { carregar(); carregarSug(); }, [carregar, carregarSug]);
+  // Anomalias de relatório (achado 13/09): `relatorio_anomalias` era gravada pelo gerador
+  // e só LIDA (health-check e o cron de aprendizado) — nada marcava `resolvido`, então a
+  // fila só crescia (42 abertas, 2 resolvidas em 14 dias) e o alerta do painel de saúde
+  // nunca apagava. Esta lista dá o botão que faltava.
+  const [anom, setAnom] = React.useState([]);
+  const [loadingAnom, setLoadingAnom] = React.useState(true);
+  const [resolvendoAnom, setResolvendoAnom] = React.useState('');
+  const carregarAnom = React.useCallback(() => {
+    setLoadingAnom(true);
+    supabase.from('relatorio_anomalias').select('id,tipo,fonte,imovel_id,campo,detalhe,ocorrencias,criado_em,atualizado_em')
+      .eq('resolvido', false).order('criado_em', { ascending: false }).limit(100)
+      .then(({ data, error }) => { if (!error) setAnom(data || []); })
+      .finally(() => setLoadingAnom(false));
+  }, []);
+  const resolverAnom = async (id) => {
+    setResolvendoAnom(id);
+    const { error } = await supabase.from('relatorio_anomalias')
+      .update({ resolvido: true, atualizado_em: new Date().toISOString() }).eq('id', id);
+    setResolvendoAnom('');
+    if (error) { console.error('[anomalias] resolver:', error.message); return; }
+    setAnom(a => a.filter(x => x.id !== id));
+  };
+  React.useEffect(() => { carregar(); carregarSug(); carregarAnom(); }, [carregar, carregarSug, carregarAnom]);
   const alertas = (inv || []).filter(i => i.status === 'alerta');
   const listaSug = (d) => {
     const arr = d?.sugestoes?.sugestoes || d?.sugestoes || [];
@@ -11435,6 +11457,55 @@ function QualidadeTab() {
             </ul>
           </div>
         ))}
+      </div>
+
+      {/* Anomalias de relatório (incoerência de valor/data/área/CNJ detectada na geração).
+          Sem esta lista, nada marcava `resolvido` e a fila só crescia (achado 13/09). */}
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
+          <div>
+            <h3 style={{ margin:0, fontSize:15 }}>📋 Anomalias de relatório</h3>
+            <span style={{ fontSize:12, color:'#64748b' }}>Incoerências detectadas na geração (valor, data, área, CNJ). Confira o caso e marque como resolvida.</span>
+          </div>
+          <button onClick={carregarAnom} style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #e2e8f0', background:'white', cursor:'pointer' }}>↻</button>
+        </div>
+        {loadingAnom ? (
+          <div style={{ fontSize:13, color:'#94a3b8' }}>Carregando…</div>
+        ) : !anom.length ? (
+          <div style={{ fontSize:13, color:'#059669', background:'#f0fdf4', border:'1px solid #a7f3d0', borderRadius:10, padding:'12px 14px' }}>
+            ✓ Nenhuma anomalia aberta.
+          </div>
+        ) : (
+          <div style={{ overflowX:'auto', border:'1px solid #e2e8f0', borderRadius:12 }}>
+            <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
+              <thead><tr style={{ background:'#f8fafc' }}>
+                {['Tipo','Fonte','Imóvel','Detalhe','Ocorr.','Aberta em',''].map((h,i)=>(
+                  <th key={i} style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, color:'#475569', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {anom.map(a => (
+                  <tr key={a.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                    <td style={{ padding:'8px 10px', fontWeight:700 }}>{a.tipo}</td>
+                    <td style={{ padding:'8px 10px', color:'#64748b' }}>{a.fonte || '—'}</td>
+                    <td style={{ padding:'8px 10px' }}>
+                      {a.imovel_id ? <a href={`/#/imovel/${a.imovel_id}`} target="_blank" rel="noreferrer" style={{ color:'#0D63DB' }}>{a.imovel_id.slice(0,8)}…</a> : '—'}
+                    </td>
+                    <td style={{ padding:'8px 10px', color:'#334155', maxWidth:320 }}>{a.detalhe || a.campo || '—'}</td>
+                    <td style={{ padding:'8px 10px' }}>{a.ocorrencias ?? 1}</td>
+                    <td style={{ padding:'8px 10px', color:'#94a3b8' }}>{a.criado_em ? new Date(a.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td style={{ padding:'8px 10px' }}>
+                      <button onClick={() => resolverAnom(a.id)} disabled={resolvendoAnom === a.id}
+                        style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:8, border:'1px solid #a7f3d0', background:'#ecfdf5', color:'#059669', cursor: resolvendoAnom === a.id ? 'default' : 'pointer', opacity: resolvendoAnom === a.id ? 0.6 : 1 }}>
+                        {resolvendoAnom === a.id ? '…' : '✓ Resolver'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
