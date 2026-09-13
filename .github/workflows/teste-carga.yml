@@ -1,0 +1,31 @@
+name: Teste de carga (rampa segura)
+
+# Roda um teste de carga controlado contra produção. NÃO agendado — só manual,
+# de propósito (é um teste, não uma rotina). Ver scripts/teste-carga.mjs para
+# o desenho de segurança (rampa que aborta sozinha, custo real limitado na
+# fase completa).
+on:
+  workflow_dispatch:
+    inputs:
+      fase:
+        description: 'publicas (só páginas públicas, zero custo) ou completo (+ cadastro/login/geração real, custo pequeno e fixo)'
+        required: false
+        default: 'publicas'
+
+jobs:
+  carga:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rodar teste de carga
+        env:
+          TESTE_CARGA_FASE: ${{ github.event.inputs.fase || 'publicas' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/teste-carga.mjs
