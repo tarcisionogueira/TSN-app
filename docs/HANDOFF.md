@@ -69,12 +69,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 12. **Confirmar pausa da campanha Meta Ads "O novo luxo"** — o dono pediu pra pausar "amanhã";
     ficou agendada via Rotina (`trig_01H1Jak4VXyLCkov2CN2XhmX`, 13/09 13h UTC). Não confirmado
     antes do fim desta sessão se a pausa de fato ocorreu.
-13. **Plano/cota do Resend ainda não confirmado** (13/09, ver seção "Teste de carga" logo abaixo).
-    O e-mail de confirmação de cadastro estourou com `550 "You have reached your daily email
-    sending quota"` — mensagem de teto DIÁRIO, o que sugere plano Free (3.000/mês **e** 100/dia)
-    em vez do que o dono lembrava (só 3.000/mês). Dono foi checar o painel do Resend
-    (Billing/Usage) e decidiu segurar a decisão de upgrade por enquanto. Retomar: confirmar plano
-    real e se o teto diário ainda existe depois de qualquer mudança.
+13. ~~Plano/cota do Resend ainda não confirmado~~ **RESOLVIDO (13/09, tarde)** — confirmado
+    plano Free (3.000/mês, 100/dia; hoje já estava em 201/100 no diário, então o estouro é
+    do USO NORMAL, não só do teste de carga). Dono decidiu NÃO assinar o pago agora ($20/mês
+    Pro removeria o teto diário) e, em vez disso, pediu para represar o excedente do dia pra
+    amanhã. Implementado: ver seção "Orçamento diário de e-mail" logo abaixo.
 14. **Decidir upgrade de compute do Supabase (Micro → Small/Medium) antes do lançamento** — não é
     urgente HOJE (uso real 20/60 conexões = 33%, zero erro de "too many connections" em 24h,
     incluindo durante o teste de carga), mas o teto de 60 conexões diretas pode virar gargalo num
@@ -155,6 +154,38 @@ sentido fazer isso antes de resolver os dois primeiros.
 **Correção lateral**: `scripts/teste-carga.mjs` tinha um `catch` mudo (`catch { return false }`
 sem nenhum rastro do motivo) que o próprio `verificar:padroes` pegou, travando o build de preview
 da branch. Corrigido (loga o motivo antes de retornar), commit `005b7ff`.
+
+### 💰 Orçamento diário de e-mail — represa o excedente para o dia seguinte (commit `abf8aa6`)
+
+Decisão do dono, direta: não pagar o Resend agora ($20/mês tira o teto de 100/dia), usar o
+máximo do teto grátis e mandar o resto amanhã. `RESERVA_AUTH = 20` (constante em `api/_email.js`)
+é margem às cegas pro `/signup` do Supabase Auth — que manda e-mail pela MESMA conta Resend mas
+NUNCA passa pelo nosso código (é o GoTrue falando SMTP direto), então não tem como enfileirar
+aquele. Sobram 80/dia pro que passa por `enviarEmail`.
+
+- **`api/_email.js`**: `enviarEmail()` agora checa `orcamentoRestanteHoje()` (conta `emails_log`
+  desde meia-noite UTC) antes de mandar. Sem margem → grava em `emails_fila` (tabela nova) e loga
+  `status='enfileirado'`, não `'falha'`. `enviarEmailAgora()` é o envio de verdade, exportado à
+  parte — **quem drena a fila chama ESTA, nunca `enviarEmail`**, senão um segundo estouro no meio
+  da drenagem re-enfileiraria o mesmo e-mail como linha nova em vez de deixar a atual pendente.
+- **`api/enviar-alertas-cron.js`** (maior volume da casa, fala com o Resend direto, não passa por
+  `enviarEmail`): mesmo orçamento aplicado no início do loop de envio, junto do corte por tempo já
+  existente. Corta o loop cedo SEM re-chamar o Resend; quem fica de fora não é marcado como
+  enviado (nem `ultimo_envio` nem `alertas_enviados`), então o cron de amanhã (`0 11 * * *`)
+  reconsidera essas pessoas sozinho — **não precisou de fila própria pra este arquivo**, só do
+  corte. Corte por orçamento nunca encadeia via `continuar()` (ao contrário do corte por tempo),
+  pra não ficar se rechamando à toa batendo no mesmo teto zerado.
+- **`api/drenar-fila-emails-cron.js`** (novo, `15 */3 * * *`): drena `emails_fila` dentro do
+  orçamento que sobrar, mais antigo primeiro. 5 tentativas sem sucesso = desiste (marca `falha`)
+  pra não represar pra sempre algo definitivamente quebrado.
+- **Migração**: `emails_fila` — RLS sem política, mesmo padrão de `emails_log` (só service role).
+
+**Limite conhecido e aceito pelo dono**: isto NÃO protege o `/signup` do Supabase Auth em si — se
+o orçamento estourar por sends do PRÓPRIO GoTrue (fora do nosso controle), o cadastro ainda falha
+com 500 na hora, igual ao achado do teste de carga. O que este mecanismo faz é reduzir a chance
+disso acontecer, sobrando mais dos 100/dia pra Auth por não gastarmos tudo com relatório-pronto/
+alertas/etc. Pra proteger o `/signup` de verdade sem pagar, a única forma seria interceptar via
+Auth Hook "Send Email" do Supabase (não implementado — mudança maior, ficou fora do pedido).
 
 ---
 
