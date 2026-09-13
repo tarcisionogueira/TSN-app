@@ -1,0 +1,26 @@
+name: Recon — LJUD paginação por URL (não grava)
+
+# Roda scripts/recon-ljud-paginacao-url.mjs: /veiculos/carros é server-rendered, sem XHR e
+# sem "carregar mais" visível — testa se a paginação é por query string (?pagina=2 etc.).
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        run: node scripts/recon-ljud-paginacao-url.mjs
