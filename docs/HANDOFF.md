@@ -59,22 +59,32 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    fluxo funcionando** exigido pela Meta ANTES de submeter; (c) submeter o **App Review**
    pedindo `instagram_manage_messages`/`instagram_manage_comments`; (d) aprovado, eu ligo
    `IG_BOT_ATIVO=1`. Nada disso eu resolvo sozinho — é painel da Meta, com login da empresa.
-8. ~~**LJUD veículos — cobertura parcial (42 de ~570)**~~ — **CAUSA RAIZ ACHADA E CORRIGIDA
-   (13/09, tarde)**. Não era scroll infinito nenhum: `/veiculos/carros` é 100%
-   server-rendered, sem XHR (0 requisições capturadas ao interceptar rede) e sem contêiner
-   interno de scroll — é **paginação tradicional por query string**, `?pagina=N`
-   (0-indexada). Confirmado ao vivo: `?pagina=2` devolveu 42 IDs **totalmente diferentes** da
-   página base, e o próprio HTML já trazia os links (`?pagina=0/2/25`). O scraper "scroll
-   infinito" de antes sempre revisitava a MESMA página 0 — por isso travava sempre em ~42,
-   nunca em menos nem em mais. Reescrito para iterar `?pagina=0,1,2,...` até uma página não
-   trazer nenhum ID novo (teto de segurança: 60 páginas). **Junto**, corrigido um 2º defeito
-   que a cobertura maior sozinha não resolveria: os 42 antigos SEMPRE saíam
+8. ~~**LJUD veículos — cobertura parcial (42 de ~570)**~~ — **CAUSA RAIZ ACHADA, CORRIGIDA E
+   VALIDADA AO VIVO (13/09, tarde)**. Não era scroll infinito nenhum: `/veiculos/carros` é
+   100% server-rendered, sem XHR (0 requisições capturadas ao interceptar rede) e sem
+   contêiner interno de scroll — é **paginação tradicional por query string**, `?pagina=N`
+   (0-indexada, com uma pegadinha: `pagina=0` e `pagina=1` devolvem a MESMA página — só
+   `pagina=2` em diante é conteúdo novo — por isso o fix exige 2 páginas seguidas sem
+   novidade antes de parar, não 1). O scraper "scroll infinito" de antes sempre revisitava a
+   MESMA página 0 — por isso travava sempre em ~42. **Rodada real de validação**: 28 páginas
+   (0 a 27), **1.036 veículos coletados e salvos** (antes: 42 — 24,7x mais).
+   **2º defeito, mais grave, também corrigido**: os 42 antigos SEMPRE saíam
    `status_patio='indefinido'` (o card da listagem não carrega o sinal de "já em pátio"), e
    `/veiculos` só mostra `status_patio='confirmado'` — ou seja, **nenhum veículo do LJUD
-   jamais apareceu pro cliente**, mesmo com o extrator "funcionando". Agora visita o detalhe
-   de até 60 lotes por rodada (mesmo padrão já usado em Mega/Superbid/Suporte) pra dar esse
-   sinal a `classificarPatio()`. **Ainda não validado em produção** — próxima rodada do cron
-   (`veiculos-puppeteer.yml`, 12h UTC) confirma o número real coletado.
+   jamais apareceu pro cliente**, mesmo com o extrator "funcionando". Passou a visitar o
+   detalhe de até 60 lotes/rodada (mesmo padrão de Mega/Superbid/Suporte): 1ª rodada real deu
+   **11 confirmados** (de 0). **Achado ao medir, corrigido no mesmo commit**: sem rotação, os
+   MESMOS ~60 primeiros lotes (sempre a página 0 em diante, `cards` reconstruído do zero toda
+   rodada) seriam revisitados todo dia — prenderia a confirmação em ~60/1.036 pra sempre, os
+   outros ~976 nunca teriam chance. Corrigido com **janela rotativa pelo dia do ano**: cobre o
+   catálogo inteiro em ~17 dias (1.036/60), depois recomeça.
+   > ⚠️ **O MESMO problema de "sempre os primeiros ~60, nunca rotaciona" existe em TODAS as
+   > outras fontes de veículo** (medido no banco, 13/09): SUPERBID só 36 confirmados de 3.200
+   > (1,1%), MEGA 1/48, ZUK 0/56, WEBLEILOES 0/20. SODRE (155/168, 92%) e SUPORTE (27/121,
+   > 22%) escapam porque pegam o sinal de fonte estruturada/API, não de visita de detalhe.
+   > **Só corrigi a rotação no LJUD** (era o caso mais extremo, 1.025 presos em indefinido) —
+   > aplicar a MESMA janela rotativa em Superbid/Mega/Zuk/WebLeilões é o próximo passo óbvio,
+   > não feito ainda por escopo.
 9. **Zuk veículos — fix de timeout validado só 1x** (13/09). Corrigido visitando a home antes da
    listagem (mesma mitigação do recon v3) — rodada de validação deu 56 veículos sem timeout, mas
    é só uma amostra. Acompanhar as próximas 2-3 rodadas do cron diário (12h UTC,

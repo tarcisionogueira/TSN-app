@@ -1749,7 +1749,18 @@ async function scraperLJUDVeiculos(browser) {
     // nunca teve o sinal de "já em pátio"/"com o executado" — os 42 antigos ficavam TODOS
     // 'indefinido' e, por isso, NUNCA apareciam em /veiculos (que só mostra
     // status_patio='confirmado'). Sem isso, cobertura maior não adianta nada pro cliente.
-    const detalhePorId = await visitarTextoDetalhe(browser, cards, {
+    //
+    // JANELA ROTATIVA POR DIA (achado ao validar a 1ª rodada real): com >1.000 lotes e
+    // `cards` reconstruído do zero a cada rodada NA MESMA ORDEM (página 0, 1, 2...), sem
+    // rotação os mesmos ~60 primeiros lotes seriam visitados TODO dia, prendendo a
+    // confirmação de pátio para sempre em ~60/1.036 — os outros ~976 nunca teriam chance.
+    // Desloca a janela pelo dia do ano (módulo do tamanho do acervo) para que, ao longo de
+    // ~17 dias (1.036/60), o catálogo inteiro passe pela visita de detalhe pelo menos uma
+    // vez, e depois recomece — atualização contínua, não uma corrida única.
+    const diaDoAno = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86_400_000);
+    const offset = cards.length > 60 ? diaDoAno % cards.length : 0;
+    const janelaDetalhe = offset ? [...cards.slice(offset), ...cards.slice(0, offset)] : cards;
+    const detalhePorId = await visitarTextoDetalhe(browser, janelaDetalhe, {
       getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 60, label: 'LJUD veículos',
     });
     const seen = new Set();
