@@ -1,0 +1,35 @@
+name: Diagnóstico — data_leilao ausente (amostra por fonte, não grava)
+
+# Roda scripts/diagnostico-datas-fontes.mjs: busca a página de uma amostra de lotes
+# sem data_leilao (fetch direto, sem Bright Data) e compara o que o extrator de
+# produção acha com as datas cruas presentes no HTML — separa "site não publica"
+# de "nós não lemos direito". Só leitura, não grava nada no banco.
+on:
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'Fontes a checar, separadas por vírgula'
+        required: false
+        default: 'GRUPOLANCE,BIASI,VIP,WEBLEILOES,SUPORTE,GESTAOLEILOES'
+      por_fonte:
+        description: 'Quantos lotes amostrar por fonte'
+        required: false
+        default: '3'
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Diagnóstico
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DIAG_FONTES: ${{ github.event.inputs.fontes }}
+          DIAG_POR_FONTE: ${{ github.event.inputs.por_fonte }}
+        run: node scripts/diagnostico-datas-fontes.mjs
