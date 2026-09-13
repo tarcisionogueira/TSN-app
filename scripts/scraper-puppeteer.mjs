@@ -662,6 +662,101 @@ async function scraperMegaLeiloes(browser) {
   }
 }
 
+// ─── MEGA LEILÕES — VEÍCULOS (piloto, 13/09) ───────────────────────────────────
+// Confirmado ao vivo (recon-veiculos-4fontes.mjs, 13/09): `/veiculos?pagina=N` usa o MESMO
+// template/seletor `div[data-key] .card` que `/imoveis` — `coletarMegaPagina` já é agnóstico
+// de categoria (só lê título/preço/localização/foto do card), então é reaproveitada tal como
+// está. Só o mapeamento muda: em vez de área/praças de imóvel, extrai marca/ano/placa/km do
+// título (regex compartilhado com os outros pilotos de veículo) e grava em `veiculos_leilao`.
+function mapearMegaVeiculo(c) {
+  const valores = (c.valores || []).filter(v => v > 0);
+  if (!valores.length) return null;
+  const valAval = Math.max(...valores);
+  const valMin = Math.min(...valores);
+  if (!valMin) return null;
+
+  let cidade = '', uf = '';
+  const loc = (c.localidade || '').match(/^(.*?),?\s*([A-Z]{2})\s*$/);
+  if (loc) { cidade = loc[1].trim(); uf = loc[2]; }
+  if (!uf) { const ufPath = (c.href.match(/\/veiculos\/[a-z-]+\/([a-z]{2})\//) || [])[1]; if (ufPath) uf = ufPath.toUpperCase(); }
+
+  const titulo = (c.titulo || 'Veículo Mega').slice(0, 180);
+  const descricao = [c.titulo, c.numero, c.instTitle].filter(Boolean).join(' — ').slice(0, 500);
+  const textoCompleto = `${titulo} ${descricao}`;
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  const anoMatch = textoCompleto.match(REGEX_ANO);
+  const modalidade = /judicial/i.test(c.instTitle) && !/extra/i.test(c.instTitle)
+    ? 'judicial' : (/extra/i.test(c.instTitle) ? 'extrajudicial' : 'nao_identificado');
+
+  return {
+    fonte: 'MEGA', fonte_id: `mega_veic_${c.id}`, leiloeiro: 'Mega Leilões',
+    titulo, descricao,
+    marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    modelo: null,
+    ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+    ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+    placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+    valor_minimo: valMin,
+    valor_avaliacao: valAval > valMin ? valAval : null,
+    desconto_percentual: descontoPercentualVeiculo(valMin, valAval > valMin ? valAval : null),
+    modalidade,
+    cidade: toTitleCase(cidade),
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
+    link_lote: c.href,
+    fotos: c.foto ? [c.foto] : [],
+    data_leilao: c.dataLeilao,
+    status_patio: statusPatio,
+    status_patio_motivo: statusPatioMotivo,
+    motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+    ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+    ativo: true,
+    raw: c,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+async function scraperMegaVeiculos(browser) {
+  console.log('  Mega Leilões (veículos, piloto) — varrendo todas as páginas...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const veiculos = [];
+  const seen = new Set();
+  const MAX_PAGINAS = 100; // catálogo de veículo tende a ser bem menor que o de imóvel
+  try {
+    for (let p = 1; p <= MAX_PAGINAS; p++) {
+      const url = `https://www.megaleiloes.com.br/veiculos?pagina=${p}`;
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        try { await page.waitForSelector('div[data-key] .card', { timeout: 8000 }); } catch { /* padrao-ok: página pode ter 0 cards no fim da paginação — o length check logo abaixo já trata isso */ }
+      } catch (e) {
+        console.log(`    Mega veículos p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`);
+        break;
+      }
+      const cards = await coletarMegaPagina(page);
+      if (!cards.length) { console.log(`    Mega veículos p${p}: 0 cards — fim da paginação`); break; }
+      let novos = 0;
+      for (const c of cards) {
+        if (!c.id || seen.has(c.id)) continue;
+        seen.add(c.id);
+        const v = mapearMegaVeiculo(c);
+        if (v) { veiculos.push(v); novos++; }
+      }
+      console.log(`    Mega veículos p${p}: ${cards.length} ativos (${novos} novos, acumulado ${veiculos.length})`);
+      if (novos === 0) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    console.log(`  Mega Leilões (veículos): ${veiculos.length} coletados`);
+    return veiculos;
+  } catch (err) {
+    console.log(`  Erro Mega Leilões (veículos): ${err.message.slice(0, 100)}`);
+    return veiculos;
+  } finally {
+    await page.close();
+  }
+}
+
 // ─── SOLD LEILÕES ─────────────────────────────────────────────────────────────
 
 async function scraperSold(browser, pageNum = 1) {
@@ -2952,6 +3047,101 @@ async function scraperWebLeiloes(browser) {
   return imoveis;
 }
 
+// ─── WEBLEILÕES — VEÍCULOS (piloto, 13/09) ─────────────────────────────────────
+// Confirmado ao vivo (recon-veiculos-4fontes.mjs, 13/09): `categoria=imoveis`/`categoria=
+// veiculos` NÃO filtram nada no servidor (as duas devolvem o mesmo catálogo misto) — quem
+// filtra de verdade é `tipo=Veículos` (100% dos 20 resultados vieram com "/veiculos/" no
+// href, 0 com "/imoveis/"). Por isso o path aqui é DIFERENTE do de imóvel, não uma cópia com
+// "imoveis"→"veiculos" no meio da URL.
+function mapLoteWebLeiloesVeiculo(l) {
+  const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
+  const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
+  const valor = pm ? parseBRL(pm[1]) : 0;
+  const dm = String(l.descPct || l.texto || '').match(/(\d{1,3})\s*%/);
+  const desc = dm ? Math.min(99, Math.max(0, Number(dm[1]))) : 0;
+  const avaliacao = (desc > 0 && desc < 100 && valor > 0) ? Math.round(valor / (1 - desc / 100)) : null;
+  let { cidade, uf } = cidadeUfWL(l.local);
+  if (!uf) ({ cidade, uf } = cidadeUfWL(l.alt));
+  if (!uf) { const ms = url.match(/-([a-z\- ]+)-([a-z]{2})(?:$|[/?#])/i); if (ms) { cidade = toTitleCase(ms[1].replace(/-/g, ' ')); uf = ms[2].toUpperCase(); } }
+  const titulo = (String(l.alt || '').replace(/\s+/g, ' ').trim() || `Veículo WebLeilões${cidade ? ' em ' + cidade : ''}`).slice(0, 180);
+  const descricao = String(l.alt || l.texto || '').slice(0, 500);
+  const textoCompleto = `${titulo} ${descricao}`;
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  const anoMatch = textoCompleto.match(REGEX_ANO);
+  const modalidade = /venda-direta/.test(String(l.href)) ? 'venda_direta'
+    : (/\bextrajudicial\b/i.test(l.texto || '') ? 'extrajudicial'
+    : (/\bjudicial\b/i.test(l.texto || '') ? 'judicial' : 'nao_identificado'));
+  const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
+  return {
+    fonte: 'WEBLEILOES', fonte_id: `webleiloes_veic_${l.id}`, leiloeiro: 'WebLeilões',
+    titulo, descricao,
+    marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    modelo: null,
+    ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+    ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+    placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+    valor_minimo: valor,
+    valor_avaliacao: avaliacao,
+    desconto_percentual: descontoPercentualVeiculo(valor, avaliacao),
+    modalidade,
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
+    cidade: cidade ? toTitleCase(cidade) : null,
+    link_lote: url,
+    fotos: foto ? [foto] : [],
+    data_leilao: null,
+    status_patio: statusPatio,
+    status_patio_motivo: statusPatioMotivo,
+    motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+    ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+    ativo: true,
+    raw: l,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+async function scraperWebLeiloesVeiculos(browser) {
+  console.log('  WebLeilões (veículos, piloto) — busca?tipo=Veículos...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bens = new Map();
+  try {
+    try {
+      await page.goto(`${WEBLEILOES_BASE}/busca?tipo=Ve%C3%ADculos`, { waitUntil: 'networkidle2', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 2500));
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {}); // padrao-ok: scroll best-effort pra disparar lazy-load; sem ele a página segue com os cards já carregados
+      await new Promise(r => setTimeout(r, 1500));
+      const lotes = await page.evaluate(() => {
+        const out = []; const vistos = new Set();
+        const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
+        document.querySelectorAll('a[href*="/oferta/"][href*="/veiculos/"]').forEach((a) => {
+          const href = a.getAttribute('href') || '';
+          const mid = href.match(/id-(\d+)/); const id = mid ? mid[1] : null;
+          if (!id || vistos.has(id)) return; vistos.add(id);
+          const card = a.closest('article') || a.closest('li, [class*="card"]') || a.parentElement;
+          const q = (sel) => card ? clean(card.querySelector(sel)?.textContent) : '';
+          const imgEl = card ? card.querySelector('img') : null;
+          out.push({
+            href, id,
+            descPct: q('.r1 small'),
+            local: q('.cont-infos ul li') || q('ul li'),
+            alt: imgEl ? (imgEl.getAttribute('alt') || '') : '',
+            img: imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '',
+            texto: card ? clean(card.textContent).slice(0, 400) : '',
+          });
+        });
+        return out;
+      }).catch(() => []); // padrao-ok: falha de evaluate vira lista vazia, tratado como "sem lotes nesta página" logo abaixo
+      for (const l of lotes) if (l.id && !bens.has(l.id)) bens.set(l.id, l);
+      console.log(`    WebLeilões veículos: ${lotes.length} coletados`);
+    } catch (e) { console.log(`    WebLeilões veículos: ${String(e.message).slice(0, 80)}`); }
+  } finally { await page.close(); }
+  const veiculos = [...bens.values()].map(mapLoteWebLeiloesVeiculo).filter(v => v.valor_minimo > 0);
+  console.log(`  ✅ WebLeilões (veículos): ${veiculos.length} mapeados`);
+  return veiculos;
+}
+
 // ─── LEILÃO VIP (VIP Leilões) ─────────────────────────────────────────────────
 // Server-rendered (.NET). Modelo em 2 níveis, confirmado por captura real:
 //   /agenda?segmento=Imóveis   → cards .card-evento com links /evento/detalhes/{id}
@@ -4230,6 +4420,14 @@ async function main() {
     }
     }
 
+    // Mega Leilões — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado dos
+    // outros pilotos de veículo (ver .github/workflows/veiculos-puppeteer.yml).
+    if (ONLY.includes('MEGA_VEICULOS')) {
+      console.log('\n📋 Mega Leilões (veículos, piloto)...');
+      const veiculosMega = await scraperMegaVeiculos(browser);
+      await salvarVeiculos(veiculosMega);
+    }
+
     // Coleta + salva + registra saúde de uma fonte (validação de qualidade).
     // opts.enrich: roda enriquecerDocumentosLote antes de salvar (captura edital/
     // matrícula/laudo da página do lote — para fontes cujo detalhe é server-rendered).
@@ -4467,6 +4665,14 @@ async function main() {
       await registrarSaude('WEBLEILOES', imoveis, 'principal', validarColeta(imoveis, 'WEBLEILOES'));
     } catch (e) {
       console.log(`  ⚠️ WebLeilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // WebLeilões — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado dos
+    // outros pilotos de veículo (ver .github/workflows/veiculos-puppeteer.yml).
+    if (ONLY.includes('WEBLEILOES_VEICULOS')) {
+      console.log('\n📋 WebLeilões (veículos, piloto)...');
+      const veiculosWebLeiloes = await scraperWebLeiloesVeiculos(browser);
+      await salvarVeiculos(veiculosWebLeiloes);
     }
 
   } finally {
