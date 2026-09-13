@@ -69,6 +69,92 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 12. **Confirmar pausa da campanha Meta Ads "O novo luxo"** — o dono pediu pra pausar "amanhã";
     ficou agendada via Rotina (`trig_01H1Jak4VXyLCkov2CN2XhmX`, 13/09 13h UTC). Não confirmado
     antes do fim desta sessão se a pausa de fato ocorreu.
+13. **Plano/cota do Resend ainda não confirmado** (13/09, ver seção "Teste de carga" logo abaixo).
+    O e-mail de confirmação de cadastro estourou com `550 "You have reached your daily email
+    sending quota"` — mensagem de teto DIÁRIO, o que sugere plano Free (3.000/mês **e** 100/dia)
+    em vez do que o dono lembrava (só 3.000/mês). Dono foi checar o painel do Resend
+    (Billing/Usage) e decidiu segurar a decisão de upgrade por enquanto. Retomar: confirmar plano
+    real e se o teto diário ainda existe depois de qualquer mudança.
+14. **Decidir upgrade de compute do Supabase (Micro → Small/Medium) antes do lançamento** — não é
+    urgente HOJE (uso real 20/60 conexões = 33%, zero erro de "too many connections" em 24h,
+    incluindo durante o teste de carga), mas o teto de 60 conexões diretas pode virar gargalo num
+    pico de lançamento com 20 mil pessoas. Ficou pendente até resolver o item 13 (Resend) — decidir
+    junto, não em paralelo.
+15. **Rampa de carga mais agressiva (milhares) para achar o teto real** — o teste de 13/09 só foi
+    até 400 concorrentes e NUNCA abortou (0% erro o tempo todo), ou seja, não achamos onde o
+    sistema quebra de verdade. Só vale rodar depois de resolver os itens 13 e 14 — subir a
+    concorrência agora só redescobriria o mesmo teto de conexão do banco ou estouraria a cota de
+    e-mail de novo.
+
+---
+
+## 🚦 13/09 (tarde) — FAXINA DE RLS + TESTE DE CARGA REAL + AJUSTES DE AUTH PARA O LANÇAMENTO
+
+Pedido do dono: limpar políticas RLS duplicadas, rodar teste de carga real pra ter números
+concretos de capacidade, e só depois decidir ajustes. Nessa ordem.
+
+**1. Faxina de RLS** — Supabase Advisor caía de 495 achados de `multiple_permissive_policies` +
+5 de `auth_rls_initplan` para **0 nos dois**. Três migrações (`consolidar_politicas_rls_
+duplicadas`, `consolidar_rls_all_vs_especifica` em duas partes, `consolidar_rls_eventos_live`),
+cada uma verificada linha a linha antes de aplicar pra nunca deixar uma tabela sem política numa
+ação (SELECT/INSERT/UPDATE/DELETE) nem vazar condição de uma ação pra outra.
+
+**2. Teste de carga** — `scripts/teste-carga.mjs` + `.github/workflows/teste-carga.yml` (roda só
+por `workflow_dispatch`, nunca agendado; a rede deste ambiente Claude bloqueia acesso direto a
+produção, por isso via GitHub Actions). Rampa segura (10→400 concorrentes, aborta sozinha se erro
+>10% ou p95 >6s) + fase completa (cadastro/confirmação/login/geração real, 10 contas de teste
+`tarcisioaraujo+carga*@reimob.com.br`, limpas do banco ao final de cada rodada bem-sucedida).
+
+**Resultado — páginas públicas**: 0% erro, 10→400 concorrentes, em 5 rodadas seguidas. p95 ficou
+em ~500-550ms mesmo no degrau mais alto. A rampa **nunca abortou** — não achamos o teto real, só
+confirmamos que aguenta folgado uma fração pequena do alvo de 20 mil do lançamento.
+
+**Resultado — fluxo completo**: numa rodada isolada, 10/10 cadastro + 10/10 confirmação + 10/10
+login — mas geração de relatório saiu 0/5, todas 400 `"imovelId e mercadoInputs obrigatórios"`
+(o teste mandava payload incompleto; corrigido, commit sobre `mercadoInputs`). Na rodada seguinte
+já com o payload corrigido, **cadastro caiu para 0/10, todos com status 500** — achado novo,
+investigado a fundo (ver abaixo). Geração de relatório sob carga real **nunca chegou a ser
+validada** por causa dessa cadeia de bloqueios — não vale insistir mais nisso sem antes resolver
+o item 13 da lista de pendências (plano do Resend).
+
+**Causa real do 500 no cadastro — NÃO é capacidade do banco.** Direto no log do Supabase Auth no
+segundo exato da falha: `error_code: unexpected_failure`, `"gomail: could not send email 1: 550
+\"You have reached your daily email sending quota.\""`. O `/signup` dispara o e-mail de
+confirmação de forma SÍNCRONA — se o envio falha, o cadastro inteiro falha com 500. O teste (10
+cadastros × 5 rodadas em ~15 min) estourou a cota de envio usada pelo Auth. Confirmado que nenhum
+cliente real foi afetado (zero linhas em `erros_cliente` na janela). **Por que isso importa mais
+que o teste em si**: é exatamente o gargalo que um pico de cadastro no lançamento reproduziria —
+apagão de cadastro, silencioso, assim que a cota estourar.
+
+**Ajustes já aplicados no painel do Supabase (confirmados pelo dono, 13/09):**
+- `Authentication → Rate Limits → Rate limit for sending emails`: **100/h → 10.000/h** (esse
+  teto é do PRÓPRIO Supabase, separado da cota de conta do Resend — sozinho já explicava por que
+  10 cadastros em rajada travavam).
+- `Authentication → Performance → Connection management → Allocation strategy`: **Absolute (10
+  conexões fixas) → Percentage (25%)**. Achado via `get_advisors` (performance): "Auth server
+  configured to use at most 10 connections... Increasing the instance size without manually
+  adjusting this number will not improve the performance of the Auth server." Agora escala
+  sozinho com qualquer upgrade futuro de compute, em vez de ficar travado em 10 pra sempre.
+- **Upstash Redis já estava ativo em Produção desde julho** (`upstash-kv-coral-jacket`, plano
+  Pay As You Go) — `UPSTASH_REDIS_REST_URL`/`TOKEN` confirmados em "All Environments" no painel
+  da Vercel. `api/_rate-limit.js` já foi escrito esperando exatamente essas variáveis. Ou seja,
+  o rate-limit L2 distribuído (entre instâncias) já protege produção — nenhuma ação necessária.
+
+**Uso real medido no compute Micro (não é suposição)**: 20 de 60 conexões diretas (33%) no
+momento da checagem, **zero erros "too many connections" nas últimas 24h** — janela que inclui o
+horário do próprio teste de carga. Ou seja: **não estamos no limite hoje**, o risco é
+especificamente para o pico de cadastro/login simultâneo do dia do lançamento, não para a
+operação atual (717 visitas/semana).
+
+**Ficou pendente (itens 13-15 da lista de pendências)**: confirmar o plano real do Resend (o erro
+"daily quota" sugere Free, não os 3.000/mês que o dono lembrava — ele foi checar o painel e
+segurou a decisão), decidir se vale upgrade de compute (Micro→Small/Medium, não urgente hoje), e
+só depois rodar uma rampa mais agressiva (milhares) pra achar o teto real de conexão — não faz
+sentido fazer isso antes de resolver os dois primeiros.
+
+**Correção lateral**: `scripts/teste-carga.mjs` tinha um `catch` mudo (`catch { return false }`
+sem nenhum rastro do motivo) que o próprio `verificar:padroes` pegou, travando o build de preview
+da branch. Corrigido (loga o motivo antes de retornar), commit `005b7ff`.
 
 ---
 
