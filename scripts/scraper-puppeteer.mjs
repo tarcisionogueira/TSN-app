@@ -1677,43 +1677,73 @@ function expandeAno2Digitos(yy) {
   return n <= 30 ? 2000 + n : 1900 + n;
 }
 
+// ID do lote a partir do href do card ("/lote/<leilaoId>/<loteId>") — usado pra
+// deduplicar e casar com o texto de detalhe visitado (visitarTextoDetalhe).
+const idLoteLJUD = (href) => (String(href || '').match(/\/lote\/(\d+)\/(\d+)/) || [])[2] || href;
+
 async function scraperLJUDVeiculos(browser) {
-  console.log('  LJUD (Leilões Judiciais, veículos, piloto) — scroll infinito...');
+  // CORREÇÃO 13/09 (HANDOFF pendência #8): a página NÃO usa scroll infinito — é 100%
+  // server-rendered com paginação por QUERY STRING (`?pagina=N`, 0-indexado; confirmado
+  // ao vivo: `?pagina=2` devolveu 42 IDs totalmente diferentes da página base, e o próprio
+  // HTML tem links `?pagina=0/2/25`). O scroll de antes travava sempre nos mesmos ~42
+  // cards da página 0 — nunca era "carregou pouco", era "nunca pediu a página seguinte".
+  console.log('  LJUD (Leilões Judiciais, veículos, piloto) — paginação por URL (?pagina=N)...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const cardsPorId = new Map();
+  // Teto generoso (~2.500 lotes) sobre o total real observado (~570-1000, a depender do
+  // dia) — para se o catálogo crescer, sem risco de loop eterno se a paginação repetir.
+  const MAX_PAGINAS = 60;
   try {
-    await page.goto('https://www.leiloesjudiciais.com.br/veiculos/carros', { waitUntil: 'networkidle2', timeout: 45000 });
-    await new Promise((r) => setTimeout(r, 2000));
-
-    let prev = 0, estavel = 0;
-    for (let i = 0; i < 400 && estavel < 3; i++) {
-      const n = await page.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-        return document.querySelectorAll('.base-card').length;
+    for (let p = 0; p < MAX_PAGINAS; p++) {
+      try {
+        await page.goto(`https://www.leiloesjudiciais.com.br/veiculos/carros?pagina=${p}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        await new Promise((r) => setTimeout(r, 1500));
+      } catch (e) { console.log(`    LJUD veículos p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`); break; }
+      const cardsPagina = await page.evaluate(() => {
+        const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+        const out = [];
+        document.querySelectorAll('.base-card').forEach((card) => {
+          const a = card.querySelector('a[href]');
+          const href = a?.href || '';
+          if (!href) return;
+          const img = card.querySelector('img')?.getAttribute('src') || null;
+          out.push({ href, img, textoCard: norm(card.textContent).slice(0, 600) });
+        });
+        return out;
       });
-      await new Promise((r) => setTimeout(r, 1600));
-      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+      if (!cardsPagina.length) { console.log(`    LJUD veículos p${p}: 0 cards — fim da paginação`); break; }
+      let novos = 0;
+      for (const c of cardsPagina) {
+        const id = idLoteLJUD(c.href);
+        if (!cardsPorId.has(id)) { cardsPorId.set(id, c); novos++; }
+      }
+      console.log(`    LJUD veículos p${p}: ${cardsPagina.length} cards (${novos} novos, acumulado ${cardsPorId.size})`);
+      // Página repetida (mesmos IDs da anterior) = chegou ao fim real da paginação.
+      if (novos === 0) break;
+      await new Promise((r) => setTimeout(r, 500));
     }
+  } catch (err) {
+    console.log(`  Erro LJUD (veículos, listagem): ${err.message.slice(0, 100)}`);
+  } finally {
+    await page.close().catch(() => {});
+  }
 
-    const cards = await page.evaluate(() => {
-      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-      const out = [];
-      document.querySelectorAll('.base-card').forEach((card) => {
-        const a = card.querySelector('a[href]');
-        const href = a?.href || '';
-        if (!href) return;
-        const img = card.querySelector('img')?.getAttribute('src') || null;
-        out.push({ href, img, textoCard: norm(card.textContent).slice(0, 600) });
-      });
-      return out;
-    });
-
+  const cards = [...cardsPorId.values()];
+  try {
     console.log(`    LJUD (veículos): ${cards.length} cards`);
+    // Visita o DETALHE de até 60 lotes para dar a classificarPatio() texto além do card da
+    // listagem (13/09, mesmo motivo já corrigido em Mega/Superbid/Suporte): o card sozinho
+    // nunca teve o sinal de "já em pátio"/"com o executado" — os 42 antigos ficavam TODOS
+    // 'indefinido' e, por isso, NUNCA apareciam em /veiculos (que só mostra
+    // status_patio='confirmado'). Sem isso, cobertura maior não adianta nada pro cliente.
+    const detalhePorId = await visitarTextoDetalhe(browser, cards, {
+      getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 60, label: 'LJUD veículos',
+    });
     const seen = new Set();
     const veiculos = cards.map((c) => {
-      const idm = c.href.match(/\/lote\/(\d+)\/(\d+)/);
-      const id = idm ? idm[2] : c.href;
+      const id = idLoteLJUD(c.href);
       if (seen.has(id)) return null;
       seen.add(id);
       const tituloMatch = c.textoCard.match(/Aberto para Lance\s*\d+\s*(.+?)Avalia[cç][ãa]o/i);
@@ -1731,7 +1761,13 @@ async function scraperLJUDVeiculos(browser) {
       if (!valMin && !valAval) return null;
       const numeroLote = c.textoCard.match(/#(\d+)/)?.[1];
       const titulo = (tituloBruto || `Veículo LJUD ${numeroLote || id}`).slice(0, 180);
-      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(c.textoCard);
+      // Pátio recebe TAMBÉM o texto da página de detalhe (bounded, até 60/rodada) — o card
+      // da listagem é curto demais pro sinal aparecer (mesmo motivo do ajuste em Mega/
+      // Superbid/Suporte). Isolado de propósito: só entra aqui, nunca no texto usado por
+      // marca/ano/placa/km/tipo_veiculo acima.
+      const detalhe = detalhePorId.get(id);
+      const textoParaPatio = detalhe?.texto ? `${c.textoCard} ${detalhe.texto}` : c.textoCard;
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoParaPatio);
       return {
         fonte: 'LJUD', fonte_id: `ljud_veic_${id}`, leiloeiro: 'Leilões Judiciais (LJUD)',
         titulo, descricao: titulo,
@@ -1750,7 +1786,7 @@ async function scraperLJUDVeiculos(browser) {
         estado: loc ? loc[2].toUpperCase() : null,
         link_lote: c.href,
         fotos: c.img ? [c.img] : [],
-        anexos: undefined,
+        anexos: detalhe?.anexos,
         forma_pagamento: 'a_vista',
         data_leilao: null,
         status_patio: statusPatio,
@@ -1765,10 +1801,8 @@ async function scraperLJUDVeiculos(browser) {
     console.log(`    LJUD (veículos): ${veiculos.length} mapeados`);
     return veiculos;
   } catch (err) {
-    console.log(`  Erro LJUD (veículos): ${err.message.slice(0, 100)}`);
+    console.log(`  Erro LJUD (veículos, mapeamento): ${err.message.slice(0, 100)}`);
     return [];
-  } finally {
-    await page.close();
   }
 }
 

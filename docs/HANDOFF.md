@@ -59,12 +59,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    fluxo funcionando** exigido pela Meta ANTES de submeter; (c) submeter o **App Review**
    pedindo `instagram_manage_messages`/`instagram_manage_comments`; (d) aprovado, eu ligo
    `IG_BOT_ATIVO=1`. Nada disso eu resolvo sozinho — é painel da Meta, com login da empresa.
-8. **LJUD veículos — cobertura parcial (42 de ~570)** (13/09, ver seção "Veículos" logo abaixo).
-   O extrator DOM está certo (dado real validado: título/ano/cidade/UF/valores batendo), mas o
-   scroll infinito não dispara o carregamento além do lote inicial (~42 cards) — mecanismo
-   diferente do que funciona em Zuk/Mega, ainda não identificado. Retomar com recon de rede
-   (ver se existe requisição XHR que o scroll deveria disparar, ou se é paginação por URL tipo
-   `?pagina=2`) antes de tentar de novo às cegas.
+8. ~~**LJUD veículos — cobertura parcial (42 de ~570)**~~ — **CAUSA RAIZ ACHADA E CORRIGIDA
+   (13/09, tarde)**. Não era scroll infinito nenhum: `/veiculos/carros` é 100%
+   server-rendered, sem XHR (0 requisições capturadas ao interceptar rede) e sem contêiner
+   interno de scroll — é **paginação tradicional por query string**, `?pagina=N`
+   (0-indexada). Confirmado ao vivo: `?pagina=2` devolveu 42 IDs **totalmente diferentes** da
+   página base, e o próprio HTML já trazia os links (`?pagina=0/2/25`). O scraper "scroll
+   infinito" de antes sempre revisitava a MESMA página 0 — por isso travava sempre em ~42,
+   nunca em menos nem em mais. Reescrito para iterar `?pagina=0,1,2,...` até uma página não
+   trazer nenhum ID novo (teto de segurança: 60 páginas). **Junto**, corrigido um 2º defeito
+   que a cobertura maior sozinha não resolveria: os 42 antigos SEMPRE saíam
+   `status_patio='indefinido'` (o card da listagem não carrega o sinal de "já em pátio"), e
+   `/veiculos` só mostra `status_patio='confirmado'` — ou seja, **nenhum veículo do LJUD
+   jamais apareceu pro cliente**, mesmo com o extrator "funcionando". Agora visita o detalhe
+   de até 60 lotes por rodada (mesmo padrão já usado em Mega/Superbid/Suporte) pra dar esse
+   sinal a `classificarPatio()`. **Ainda não validado em produção** — próxima rodada do cron
+   (`veiculos-puppeteer.yml`, 12h UTC) confirma o número real coletado.
 9. **Zuk veículos — fix de timeout validado só 1x** (13/09). Corrigido visitando a home antes da
    listagem (mesma mitigação do recon v3) — rodada de validação deu 56 veículos sem timeout, mas
    é só uma amostra. Acompanhar as próximas 2-3 rodadas do cron diário (12h UTC,
