@@ -109,6 +109,24 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     pra qualquer proteção que a Vercel tenha (risco de o próprio runner ser bloqueado, o que
     invalidaria o dado). Páginas públicas: **não é mais preocupação para o lançamento** — 3.000
     simultâneos já é 15% do alvo de 20 mil, com folga.
+16. **Pino de mapa errado (Mega Leilões, Santana de Parnaíba) — causa raiz corrigida (13/09)**.
+    Achado do dono: lote "Terreno 150 m² - Rua das Magnólia Brancas, 53 - Jaguari (Jardim das
+    Flores)" mostrava o pino em "Residencial Jardim Das Flores" (Estr. Jaguari), um lugar
+    DIFERENTE na mesma cidade. Diagnóstico (via GitHub Actions, reproduzindo cada rota gratuita
+    da cascata isolada — `scripts/diagnostico-geocode-lote.mjs`): nenhuma rota gratuita
+    reproduziu a coordenada errada, então ela veio da rota PAGA (Google, liberada porque o
+    endereço "tem dígito"). Causa raiz: `parseLogradouro` (api/_geo.js) só reconhecia número no
+    formato do CEF ("N. 548") — nos formatos do Mega ("s/nº (Cadastro Municipal nº 53)" e "53 -
+    Bairro") o número **nunca** era extraído, e o Google geocodificava só o nome da rua, sem
+    número. Sem o número, a rua nova/pouco indexada perdeu a briga para um loteamento de nome
+    parecido em outra rua, e o Google devolveu ROOFTOP (precisão máxima) pro lugar errado.
+    Corrigido: `parseLogradouro` agora reconhece número solto logo após a vírgula e "nº NN" em
+    qualquer ponto do segmento, sem regredir nenhum formato existente (testado contra os 4
+    padrões conhecidos, incluindo "S/n" que deve continuar vazio). Lote afetado já está
+    `geocod_nivel='refazer'` — corrige sozinho na próxima visita à página (on-demand) ou no
+    próximo lote do cron `/api/geocodificar` (roda só 3h-7h UTC). **Não verificado com o Google
+    real** (sem a chave neste ambiente de diagnóstico) — confirmar abrindo o lote de novo depois
+    do próximo reprocessamento.
 
 ---
 

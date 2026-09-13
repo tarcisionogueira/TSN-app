@@ -130,9 +130,22 @@ export function nivelGoogle(r) {
 export const capNivel = (alvo, match) =>
   (match && (NIVEL_RANK[match] ?? 9) < (NIVEL_RANK[alvo] ?? 0) ? match : alvo);
 
-// Extrai "logradouro + número" do endereço bagunçado do CEF.
-// "Rua Raposos, N. 548, Cs 01 Lt 22 Qd 58"  -> { via:'Rua Raposos', numero:'548' }
-// "Rua 20, N. S/n"                           -> { via:'Rua 20',     numero:'' }
+// Extrai "logradouro + número" do endereço bagunçado do CEF — e, desde 13/09, também
+// dos formatos do Mega Leilões, que não usam o prefixo "N.".
+// "Rua Raposos, N. 548, Cs 01 Lt 22 Qd 58"                    -> { via:'Rua Raposos',           numero:'548' }
+// "Rua 20, N. S/n"                                             -> { via:'Rua 20',                numero:''    }
+// "Rua das Magnólias Brancas, s/nº (Cadastro Municipal nº 53)" -> { via:'Rua das Magnólias Brancas', numero:'53' }
+// "Rua das Magnólia Brancas, 53 - Jaguari (Jardim das Flores)" -> { via:'Rua das Magnólia Brancas',  numero:'53' }
+//
+// ACHADO 13/09 (pino errado, lote Mega/Santana de Parnaíba): a versão anterior só
+// reconhecia número no formato "N. 548" (CEF) — nos dois formatos acima o número
+// nunca era extraído (numero='' sempre), e a cascata mandava o Google geocodificar
+// SÓ o nome da rua, sem número. Sem o número, "Rua das Magnólias Brancas" (rua nova,
+// mal indexada) perdeu a briga para "Residencial Jardim Das Flores" — um loteamento
+// de nome parecido, mas em outra rua — e o Google devolveu ROOFTOP (precisão máxima)
+// para o lugar ERRADO. Corrigido para reconhecer também "NN - resto" (número solto
+// logo após a vírgula) e "nº NN" em qualquer ponto do segmento (não só no início) —
+// sem tocar no comportamento de "s/nº" (sem número), que continua vazio.
 export function parseLogradouro(endereco) {
   const raw = String(endereco || '').trim();
   if (!raw) return { via: '', numero: '' };
@@ -140,12 +153,15 @@ export function parseLogradouro(endereco) {
   const via = (segs[0] || '').replace(/\s+/g, ' ').trim();
   let numero = '';
   for (const s of segs.slice(1)) {
-    const m = s.match(/^n\.?\s*º?\s*(.+)$/i); // segmento "N. 548" / "Nº 548"
-    if (m) {
-      const v = m[1].trim();
-      if (!/^s\/?n$/i.test(v) && /\d/.test(v)) numero = (v.match(/\d+/) || [''])[0];
-      break;
-    }
+    // "N. 548" / "Nº 548" / "53 - Bairro" — número (com ou sem prefixo "N.") logo no
+    // início do segmento. "s/nº..." não bate aqui: depois do prefixo opcional exige
+    // dígito na sequência, e "s/nº" não tem dígito colado.
+    const mInicio = s.match(/^(?:n\.?\s*º?\.?\s*)?(\d{1,6})\b/i);
+    if (mInicio) { numero = mInicio[1]; break; }
+    // "nº 53" no MEIO do segmento (ex.: "(Cadastro Municipal nº 53)") — cobre o caso
+    // em que o número real vem depois de um "s/nº" inicial na mesma string.
+    const mMeio = s.match(/n[º°.]\s*(\d{1,6})\b/i);
+    if (mMeio) { numero = mMeio[1]; break; }
   }
   return { via, numero };
 }
