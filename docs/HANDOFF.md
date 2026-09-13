@@ -21,21 +21,27 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    servidos antes de qualquer rewrite, então não quebra nada. Validado ao vivo em produção depois do
    deploy: as 7 rotas voltaram 200 com `index.html` real. Isso provavelmente afetava QUALQUER
    compartilhamento de link direto ou F5 numa rota do app — não só as duas do print.
+   > ⚠️ **Pegadinha para lembrar**: o app usa `HashRouter` (`src/App.jsx`) — a rota de verdade
+   > vive DEPOIS do `#` (`bidprobrasil.com.br/#/membros`), que o navegador NUNCA manda pro
+   > servidor. Depois do fix acima, uma URL SEM o `#` (ex.: `.../membros`, sem hash) não dá mais
+   > 404 — mas também não abre a rota certa: o servidor só vê `/`, entrega o `index.html`, e o
+   > app inicializa em "/" (Home), porque não há hash nenhum pra rotear. Foi exatamente isso que
+   > aconteceu quando passei os links sem `#` pro dono testar — os dois prints mostraram Home
+   > duas vezes, com cara de bug novo, mas era só o formato errado do link. **Ao mandar link de
+   > rota interna para o dono testar, sempre com `#`.**
 1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
    Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
    já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
    ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
    card no painel.
-2. **eBook — page-break de subtítulo no leitor** (commit `1ad1256e`, já em produção). Dono disse
-   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. **Estava
-   bloqueado pelo bug de 404 do item 0 acima até 13/09 (tarde)** — ao acessar direto
-   `/membros/ebook/<id>` a Vercel dava 404 real antes mesmo de a página carregar. Corrigido agora;
-   falta o dono testar de novo, ao vivo.
-3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
-   `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
-   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja. **Mesma observação do
-   item 2**: `/membros` também dava 404 direto até o fix de 13/09 (tarde) — se o dono tentou
-   confirmar antes disso, pode ter visto o 404 da Vercel em vez da loja.
+2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
+   **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
+   (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
+   e a página renderizou normal, capa + título + conteúdo.
+3. ~~**eBook — listagem na Área de Membros**~~ (commit `2d1d3262`, já em produção). —
+   **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros`, a Área de Membros renderizou
+   normal com o contador "3 EBOOKS"; confirmado também no banco que "O Lance Que Muda Tudo"
+   está `ativo=true`.
 4. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
@@ -117,23 +123,6 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     título "Compre Abaixo do Mercado" era a alegação financeira categórica mais provável de ter
     disparado o alerta; "Direto do WhatsApp"/"grupo do WhatsApp" **é verdade** (conferido em
     `LiveInscricao.jsx` — a live acontece mesmo no grupo, por decisão do dono), não mexido.
-11. **`relatorio_anomalias` é uma gaveta sem fundo — nada nunca marca `resolvido`** (achado
-    13/09 à noite, checando o alerta "⚠ Relatórios — anomalias detectadas" do painel de saúde).
-    **42 linhas abertas**, crescendo ~5-10/dia desde 09/09, só **2 resolvidas em 14 dias**.
-    Rastreei as 3 únicas rotas que tocam a tabela: `api/gerar-analise.js` ESCREVE quando detecta
-    incoerência (valor de praça, data vs edital, área, CNJ vazio etc.); `api/health-check.js` só
-    LÊ pra alertar; `api/indice-aprendizado-cron.js` só LÊ pra agregar contagem semanal. **Não
-    existe NENHUMA tela ou rota que marque `resolvido=true`** — nem no `src/` (busquei
-    `relatorio_anomalias` no front, zero resultado) nem em outro cron. O alerta do painel vai
-    continuar vermelho pra sempre, porque estruturalmente NADA pode resolvê-lo hoje. Decisão do
-    dono necessária: construir uma tela de revisão (lista + botão "resolver", equipe confere
-    caso a caso) ou o health-check parar de tratar isso como alerta acionável enquanto não houver
-    como agir. Não construí a tela sem confirmar qual caminho o dono quer.
-    > O outro alerta do mesmo painel ("✗ Cliente — tentou e não saiu nada") **é falso-alarme,
-    > não bug novo**: os dois casos que aparecem (Neuma 10/09, Lais 11/09) já são exatamente os
-    > bugs #1 e #2 desta lista, JÁ corrigidos. `cliente_travou(2)` (últimos 2 dias) veio vazio —
-    > confirma que não há recorrência. O alerta só continua aparecendo porque a função olha 7
-    > dias pra trás e esses dois casos ainda não saíram da janela; vai sumir sozinho.
     **Alternativa D criada** (`202533617967~824473588218`, PAUSADA, mesmo ad group): só trocou
     "Compre Abaixo do Mercado" → **"Análise Antes do Lance"** (mesma tagline já `APPROVED` no
     anúncio principal da conta — reuso de texto já aceito pelo Google, risco menor que texto
@@ -235,8 +224,50 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     marca+modelo sem palavra reconhecível — modelo de carro não tem lista fechada como moto),
     carro 71 (só via palavra explícita), máquina 22, van/utilitário 21, caminhão 15, ônibus 14,
     reboque 13.
+19. **`relatorio_anomalias` era uma gaveta sem fundo — RESOLVIDO (13/09, noite)**. Achado
+    checando o alerta "⚠ Relatórios — anomalias detectadas" do painel de saúde: 42 linhas
+    abertas, crescendo ~5-10/dia desde 09/09, só 2 resolvidas em 14 dias. Rastreei as 3 únicas
+    rotas que tocam a tabela: `api/gerar-analise.js` ESCREVE quando detecta incoerência (valor
+    de praça, data vs edital, área, CNJ vazio etc.); `api/health-check.js` e
+    `api/indice-aprendizado-cron.js` só LEEM. **Nenhuma tela ou rota marcava `resolvido=true`**
+    — o alerta ficaria vermelho pra sempre. **Corrigido**: painel de Qualidade (`/admin` →
+    Operacional → Qualidade) ganhou a seção "Anomalias de relatório" com botão "✓ Resolver" por
+    linha (RLS já restringia a tabela a admin, então é leitura/escrita client-side direta, mesmo
+    padrão das sugestões do supervisor de IA na mesma aba). Não limpa as 42 antigas sozinho —
+    fica para o dono revisar caso a caso agora que o botão existe.
+    > O outro alerta do mesmo painel ("✗ Cliente — tentou e não saiu nada") **era falso-alarme,
+    > não bug novo**: os dois casos que aparecem (Neuma 10/09 "imóvel sem endereço/cidade", Lais
+    > 11/09 "começou a gerar e sumiu") já eram os dois bugs corrigidos no início desta sessão.
+    > `cliente_travou(2)` (últimos 2 dias) veio vazio — sem recorrência. O alerta só continuava
+    > aparecendo porque a função olha 7 dias pra trás; some sozinho quando a janela passar.
 
 ---
+
+## 🌙 13/09 (fim da noite) — RESUMO DO DIA E ENCERRAMENTO DA SESSÃO
+
+Sessão longa, muita coisa validada AO VIVO (não só suposição). Resumo do que fechou hoje, do
+mais recente pro mais antigo — detalhe completo de cada um na seção própria abaixo ou no item
+correspondente da lista de pendências:
+
+- ✅ **404 de rotas SPA** (item 0 da lista) — `vercel.json` sem catch-all, corrigido e validado
+  em produção. **Lição pra não repetir**: o app é `HashRouter` — link de rota interna pro dono
+  testar precisa do `#` (`.../#/membros`), senão abre a Home sem erro nenhum (ver nota no item 0).
+- ✅ **Anexos duplicados na Análise** (Edital/Matrícula reaparecendo como "Documento do lote") —
+  causa raiz achada e corrigida, validado com os dados reais do imóvel que o dono reportou.
+- ✅ **`relatorio_anomalias` sem jeito de resolver** (item 19) — painel de Qualidade ganhou botão
+  "Resolver"; o outro alerta do mesmo painel ("Cliente travou") era falso-alarme, explicado.
+- ✅ **eBook — os dois itens 2 e 3** confirmados ao vivo pelo dono, depois do fix do 404 +
+  link com `#` correto.
+- ✅ **Veículos — LJUD, rotação nas 5 fontes, filtro de tipo** (itens 8, 9, 18) — todos
+  corrigidos e validados nesta sessão; item 8 ainda acompanha o cron rodar mais vezes pra
+  medir o ganho real de `status_patio='confirmado'` (checado de novo à noite: números iguais
+  aos da última rodada manual — o cron diário ainda não rodou de novo, nada a corrigir, só
+  esperar as próximas execuções naturais, 12h UTC).
+
+**Não mexido, dependem de algo fora do meu alcance nesta sessão** (itens 1, 4, 5, 6, 7, 10 da
+lista): login OAuth do Google Ads, investigação de projeto no console do Google Cloud, e as
+duas pendências de coleta (SOLEON/`data_leilao`) que precisam de IP residencial ou orçamento
+Bright Data liberado — não usados sem autorização, por serem cota paga compartilhada.
 
 ## 📎 13/09 (noite) — ANEXOS DUPLICADOS NA ANÁLISE: EDITAL/MATRÍCULA REAPARECIAM COMO "DOCUMENTO DO LOTE"
 
@@ -255,7 +286,12 @@ Storage, a URL exibida divergia da URL bruta do `anexos[]`, e o dedup por URL n�
 **Corrigido:** o set de URLs já mostradas (`urlsMostradas`) agora inclui também as URLs BRUTAS
 de `link_edital`/`link_matricula`, além da que a tela decidiu exibir — cobre os dois casos
 (URL bruta idêntica E cópia nossa com URL diferente). Só existe essa lógica em `Analise.jsx`
-(não há cópia em `ImovelDetalhe.jsx`). Ainda não validado ao vivo pelo dono no mesmo imóvel.
+(não há cópia em `ImovelDetalhe.jsx`).
+
+> ✅ **VALIDADO (13/09, mais tarde)**: rodei a lógica nova contra os dados reais gravados para
+> esse exato imóvel (`anexos[]` do LJUD) — antes do fix, os 3 PDFs do array viravam 3
+> "Documento do lote" (2 duplicados de Edital/Matrícula); depois do fix, sobra só 1 (o PDF
+> genuíno, distinto). Deploy em produção confirmado `READY`.
 
 ## 🚦 13/09 (tarde) — FAXINA DE RLS + TESTE DE CARGA REAL + AJUSTES DE AUTH PARA O LANÇAMENTO
 
