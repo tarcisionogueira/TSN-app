@@ -240,6 +240,28 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     > 11/09 "começou a gerar e sumiu") já eram os dois bugs corrigidos no início desta sessão.
     > `cliente_travou(2)` (últimos 2 dias) veio vazio — sem recorrência. O alerta só continuava
     > aparecendo porque a função olha 7 dias pra trás; some sozinho quando a janela passar.
+20. **Atratividade comercial do Investidor Pro — bônus de eBook divulgado, leitura no
+    Dashboard, e desconto pra cursos pagos futuros (13/09, noite)**. Pedido do dono, 3 partes:
+    - **eBooks como bônus**: já era assim no servidor (`ebook_tem_acesso` libera top2+ pra
+      todo eBook), só faltava DIVULGAR. Adicionado no `recursos` do plano (`data/cursos.js`),
+      que alimenta Planos/Checkout/Membros: "🎁 Todos os eBooks da plataforma inclusos".
+    - **Leitura no Dashboard**: `leitura_progresso` já existia (grava progresso de leitura,
+      alimenta "continuar de onde parou" em Membros) mas ninguém agregava. RPC nova
+      `admin_ebooks_leitura()` + painel "📖 Leitura dos eBooks" no Dashboard admin (quem
+      começou/terminou de ler, por eBook).
+    - **Desconto em curso pago futuro**: coluna nova `cursos_admin.desconto_investidor_pro_pct`
+      (editável por curso na tela de preços do admin, `ConfigTab`) + aplicado de verdade no
+      checkout (`ProdutoPublico.jsx`). **Decisão confirmada com o dono**: o vídeo introdutório
+      gratuito continua igual pra todo mundo (`curso.gratuito`, role nenhum importa); só os
+      cursos PAGOS cadastrados DAQUI PRA FRENTE deixam de ser 100% grátis pro Investidor Pro
+      (`top2`) — ele passa a pagar com o % configurado (0 por padrão, o dono decide por curso).
+      Os demais planos pagos (Assessoria, Leilão Club) e a equipe interna (analista/consultor/
+      advogado/admin) **continuam com acesso total a tudo, sem nenhuma mudança** — só o `top2`
+      saiu da lista `PLANOS_PAGOS` do gate de assistir aula (`Curso.jsx`) e do `temPlano` da
+      página de venda (`ProdutoPublico.jsx`, só para `tipo='curso'` — eBook não muda).
+      **Sem impacto hoje**: os 2 únicos cursos no banco são o gratuito de onboarding e um
+      rascunho inativo — a mudança só passa a valer quando um curso pago de verdade for
+      cadastrado e publicado.
 
 ---
 
