@@ -9,6 +9,78 @@ const RESEND_KEY = process.env.RESEND_API_KEY;
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 
+// ─── ORÇAMENTO DIÁRIO (13/09) ────────────────────────────────────────────────────────────
+// Plano Free do Resend: 100 e-mails/dia, sem contrato de plano pago por decisão do dono (usar
+// o máximo do teto grátis agora, decidir upgrade quando o volume pedir). O `/signup` do
+// Supabase Auth manda e-mail de confirmação SÍNCRONO pela MESMA conta Resend, e um cadastro
+// não pode esperar até amanhã — mas aquele envio não passa por este arquivo (é o GoTrue
+// falando SMTP direto) e por isso NUNCA aparece em `emails_log`. RESERVA_AUTH é uma margem às
+// cegas para não deixar nosso próprio volume (relatório pronto, alertas, etc.) engolir a cota
+// que o cadastro de cliente novo precisa no mesmo instante.
+const TETO_DIARIO_RESEND = 100;
+const RESERVA_AUTH = 20;
+const ORCAMENTO_ENVIAREMAIL = TETO_DIARIO_RESEND - RESERVA_AUTH;
+
+// Quantos e-mails (por este helper OU por qualquer outro caminho que grave em `emails_log`,
+// como `enviar-alertas-cron.js`) já saíram desde a meia-noite UTC — que é a janela que o
+// Resend usa pro teto diário. `null` = não consegui checar; tratado como "sem margem" pelo
+// chamador (fail-closed aqui, ao contrário do resto do arquivo, porque estourar a cota real
+// bloqueia o cadastro de cliente novo pra todo mundo, não só um envio nosso).
+async function enviadosHojeUTC() {
+  if (!SB_URL || !SB_KEY) return null;
+  try {
+    const inicioDia = new Date();
+    inicioDia.setUTCHours(0, 0, 0, 0);
+    const r = await fetch(
+      `${SB_URL}/rest/v1/emails_log?select=id&status=in.(enviado,entregue)&enviado_em=gte.${inicioDia.toISOString()}`,
+      {
+        method: 'HEAD',
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, Prefer: 'count=exact' },
+        signal: AbortSignal.timeout(4000),
+      },
+    );
+    if (!r.ok) return null;
+    const total = Number(String(r.headers.get('content-range') || '').split('/').pop());
+    return Number.isFinite(total) ? total : null;
+  } catch { // padrao-ok: falha de rede vira null de propósito — orcamentoRestanteHoje() trata null como "sem margem" (fail-closed, ver comentário acima)
+    return null;
+  }
+}
+
+// Exportado para `enviar-alertas-cron.js` (maior volume da casa, não passa por `enviarEmail`)
+// aplicar o MESMO orçamento — ver o gate no início do loop de envio daquele arquivo.
+export async function orcamentoRestanteHoje() {
+  const enviados = await enviadosHojeUTC();
+  if (enviados == null) return 0; // não sei quanto já saiu → melhor represar que estourar
+  return Math.max(0, ORCAMENTO_ENVIAREMAIL - enviados);
+}
+
+// Represa um e-mail que não coube no orçamento de hoje. Guarda o payload inteiro pra
+// `drenar-fila-emails-cron.js` chamar `enviarEmail` de novo amanhã — inclusive reaplicando a
+// supressão (a lista pode ter mudado entre hoje e o dia do envio real).
+async function enfileirar({ to, cc, subject, html, text, replyTo, meta }) {
+  if (!SB_URL || !SB_KEY) return false;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/emails_fila`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destinatario: (Array.isArray(to) ? to : [to]).filter(Boolean).join(','),
+        cc: cc?.length ? (Array.isArray(cc) ? cc : [cc]) : null,
+        assunto: (subject || '').slice(0, 300),
+        html: html || null,
+        texto_plano: text || null,
+        reply_to: replyTo || null,
+        tipo: meta?.tipo || null,
+        user_id: meta?.userId || null,
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 // Registra o histórico de e-mails enviados (o Resend só retém por tempo limitado).
 // Só metadados — assunto/tipo/status, nunca o corpo. Best-effort: NUNCA quebra o
 // envio. Alimenta o card "E-mails recebidos" do Cliente 360.
@@ -77,7 +149,31 @@ export async function consultarSupressao(destinos, tipo) {
 }
 
 // meta (opcional): { tipo, userId } — categoriza e vincula o e-mail ao cliente.
+// Checa o orçamento diário ANTES de tudo; represa em `emails_fila` quando estoura. Quem
+// precisa mandar de verdade AGORA e já sabe que o orçamento permite (o cron que drena a
+// fila, logo abaixo) chama `enviarEmailAgora` direto — nunca esta função, senão um segundo
+// estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
 export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
+  const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  const restante = await orcamentoRestanteHoje();
+  if (restante <= 0) {
+    const enfileirou = await enfileirar({ to: destinos, cc, subject, html, text, replyTo, meta });
+    await registrarEmailLog(destinos.map((dest) => ({
+      user_id: meta?.userId || null,
+      destinatario: String(dest).toLowerCase().slice(0, 200),
+      assunto: (subject || '').slice(0, 300),
+      tipo: meta?.tipo || null,
+      status: 'enfileirado',
+      erro: enfileirou ? 'orcamento diario do Resend excedido — represado p/ envio no dia seguinte' : 'orcamento excedido E falha ao enfileirar — e-mail perdido',
+    })));
+    return { ok: false, error: 'orcamento_diario_excedido', enfileirado: enfileirou };
+  }
+  return enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta });
+}
+
+// Envio de verdade, sem checar orçamento (quem chama já garantiu isso). Exportado só para
+// `drenar-fila-emails-cron.js` — todo o resto deve chamar `enviarEmail`.
+export async function enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!RESEND_KEY) {
     // Sem a key não sai e-mail nenhum — e, sem este registro, isso era INVISÍVEL (o return

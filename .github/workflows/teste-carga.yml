@@ -11,6 +11,10 @@ on:
         description: 'publicas (só páginas públicas, zero custo) ou completo (+ cadastro/login/geração real, custo pequeno e fixo)'
         required: false
         default: 'publicas'
+      anon_key:
+        description: 'Opcional: chave anon do Supabase, só para a fase completo (é uma chave PUBLICÁVEL por natureza — o próprio navegador de qualquer visitante já a expõe — por isso passá-la aqui, em vez de gravá-la num arquivo do repositório, não é vazamento de credencial). Sem secret VITE_SUPABASE_ANON_KEY configurado, é o único jeito de rodar a fase completo.'
+        required: false
+        default: ''
 
 jobs:
   carga:
@@ -27,5 +31,6 @@ jobs:
         env:
           TESTE_CARGA_FASE: ${{ github.event.inputs.fase || 'publicas' }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || github.event.inputs.anon_key }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/teste-carga.mjs

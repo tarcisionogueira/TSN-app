@@ -9,6 +9,7 @@
  */
 import { escapeHtml } from './_sanitize.js';
 import { linkRastreado } from './_link-email.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -54,17 +55,12 @@ export function corpoEmailProduto({ tipo, produto, nome, contexto = 'novidade', 
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-  <a href="${L('/#/membros')}" style="text-decoration:none;">
-    <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>
-    </div>
-  </a>
+  <a href="${L('/#/membros')}" style="text-decoration:none;">${cabecalhoEmailHTML()}</a>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="font-size:11px;font-weight:800;color:${esc(cor)};text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">${esc(selo)}</div>
     <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a;line-height:1.3;">${esc(produto.titulo || 'Material')}</h2>
     <p style="margin:0 0 14px;color:#475569;font-size:14px;">${abertura}</p>
-    ${capa ? `<a href="${link}"><img src="${esc(capa)}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-bottom:18px;display:block;"></a>` : ''}
+    ${capa ? `<a href="${link}"><img src="${esc(capa)}" alt="" style="width:100%;max-height:340px;object-fit:cover;object-position:top;border-radius:12px;margin-bottom:18px;display:block;"></a>` : ''}
     ${desc ? `<p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.7;">${esc(desc)}${produto.descricao && produto.descricao.length > 320 ? '…' : ''}</p>` : ''}
     <div style="font-size:13px;color:#64748b;margin-bottom:18px;"><strong style="color:#0f172a;${isPago ? 'font-size:18px;' : ''}">${preco}</strong></div>
     <div style="text-align:center;margin:8px 0 6px;">

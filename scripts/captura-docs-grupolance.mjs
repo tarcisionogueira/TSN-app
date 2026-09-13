@@ -15,6 +15,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { loginGrupoLance, sessaoAnonima, coletarDocsGrupoLance, baixarDoc, resolverDocUrl } from '../api/_grupolance-auth.js';
+import { loginGrupoLanceNavegador } from './lib/gl-login-navegador.mjs';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -66,7 +67,15 @@ async function alvos() {
 
 async function main() {
   console.log(`\n📄 Captura de documentos Grupo Lance (login) — ${new Date().toISOString()}`);
-  const jar = await loginGrupoLance();
+  // 13/09: o WAF do site passou a barrar o fetch simples na PRIMEIRA requisição de /entrar
+  // (403 antes de ver o formulário) — confirmado por recon que o MESMO IP de Actions loga
+  // sem problema com um navegador de verdade (não é bloqueio de IP, como o do HASTA). Tenta
+  // o caminho leve primeiro (sem custo de Chromium) e só recorre ao navegador se ele falhar.
+  let jar = await loginGrupoLance();
+  if (!jar) {
+    console.log('Login (fetch) falhou — tentando via navegador (Puppeteer)…');
+    jar = await loginGrupoLanceNavegador();
+  }
   if (!jar) { console.error('Login falhou — verifique GL_EMAIL/GL_SENHA (ou ZUK_*).'); process.exit(1); }
   console.log('Login OK.');
   // Sessão anônima separada só para LER as páginas (logado o GL esconde os .doc-link).

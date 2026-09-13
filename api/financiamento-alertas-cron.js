@@ -8,6 +8,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { alertarErro } from './_error-alert.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end();
@@ -96,10 +97,7 @@ export default async function handler(req, res) {
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-  <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
-    <div style="font-size:20px;font-weight:800;color:#fff;">BidPro Brasil</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Lembrete de vencimento</div>
-  </div>
+  ${cabecalhoEmailHTML({ subtitulo: 'Lembrete de vencimento' })}
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
       Você tem ${vencimentos.length > 1 ? 'pagamentos' : 'um pagamento'} vencendo <strong>hoje</strong>:

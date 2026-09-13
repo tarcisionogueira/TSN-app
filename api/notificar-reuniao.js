@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -50,10 +51,7 @@ export default async function handler(req) {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:580px;margin:0 auto;padding:24px 16px;">
-    <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:28px 32px;text-align:center;">
-      <div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.02em;">BidPro Brasil</div>
-      <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Assessoria em Imóveis de Leilão</div>
-    </div>
+    ${cabecalhoEmailHTML({ subtitulo: 'Assessoria em Imóveis de Leilão' })}
     <div style="background:#fff;padding:32px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
       <h2 style="margin:0 0 6px;font-size:20px;color:#0f172a;">Olá${clienteNome ? ', ' + clienteNome : ''}!</h2>
       <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">
