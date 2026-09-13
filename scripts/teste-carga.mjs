@@ -165,7 +165,10 @@ async function confirmarEmailAdmin(userId) {
       signal: AbortSignal.timeout(15000),
     });
     return r.ok;
-  } catch { return false; }
+  } catch (e) {
+    console.log(`   confirmarEmailAdmin falhou: ${String(e?.message || e).slice(0, 150)}`);
+    return false;
+  }
 }
 
 async function loginUmaConta(email, senha) {
