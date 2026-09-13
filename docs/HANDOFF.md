@@ -74,16 +74,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     do USO NORMAL, não só do teste de carga). Dono decidiu NÃO assinar o pago agora ($20/mês
     Pro removeria o teto diário) e, em vez disso, pediu para represar o excedente do dia pra
     amanhã. Implementado: ver seção "Orçamento diário de e-mail" logo abaixo.
-14. **Decidir upgrade de compute do Supabase (Micro → Small/Medium) antes do lançamento** — não é
-    urgente HOJE (uso real 20/60 conexões = 33%, zero erro de "too many connections" em 24h,
-    incluindo durante o teste de carga), mas o teto de 60 conexões diretas pode virar gargalo num
-    pico de lançamento com 20 mil pessoas. Ficou pendente até resolver o item 13 (Resend) — decidir
-    junto, não em paralelo.
-15. **Rampa de carga mais agressiva (milhares) para achar o teto real** — o teste de 13/09 só foi
-    até 400 concorrentes e NUNCA abortou (0% erro o tempo todo), ou seja, não achamos onde o
-    sistema quebra de verdade. Só vale rodar depois de resolver os itens 13 e 14 — subir a
-    concorrência agora só redescobriria o mesmo teto de conexão do banco ou estouraria a cota de
-    e-mail de novo.
+14. ~~Decidir upgrade de compute do Supabase (Micro → Small/Medium) antes do lançamento~~ —
+    **DECIDIDO (13/09)**: manter Micro por enquanto (não é urgente hoje — 33% de uso, zero erro
+    de conexão em 24h). Decisão de upgrade fica para mais perto da data do lançamento,
+    revisitando os números então.
+15. ~~Rampa de carga mais agressiva (milhares) para achar o teto real~~ — **RODADA (13/09,
+    15h47 UTC)**: DEGRAUS estendido para `[..., 800, 1500, 3000]` (só fase pública, sem
+    cadastro/e-mail — ver commit `7a96527`). **Ainda não achou o teto**: 0% erro até 3.000
+    concorrentes (9.000 requisições no degrau), p95 chegou a 5.014ms (limite era 6.000ms —
+    quase abortou, mas não abortou). Latência cresce mais rápido que a concorrência (400→3.000
+    é 7,5x tráfego, mas o p95 subiu quase 10x) — sinal de estar perto de uma curva, mesmo sem
+    erro. **Decisão: parar aqui.** Acima de 3.000 requisições do MESMO IP (o runner do GitHub
+    Actions) o teste deixa de ser realista — 20 mil usuários reais vêm de 20 mil IPs, não de
+    um só, e concentrar tanto tráfego num ponto começa a parecer ataque de negação de serviço
+    pra qualquer proteção que a Vercel tenha (risco de o próprio runner ser bloqueado, o que
+    invalidaria o dado). Páginas públicas: **não é mais preocupação para o lançamento** — 3.000
+    simultâneos já é 15% do alvo de 20 mil, com folga.
 
 ---
 
