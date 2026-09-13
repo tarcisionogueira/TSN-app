@@ -108,7 +108,7 @@ async function rodarDegrau(concorrencia) {
 
 async function faseePublicas() {
   console.log(`\n📊 FASE PÚBLICAS — rampa segura contra ${BASE}\n`);
-  const DEGRAUS = [10, 25, 50, 100, 150, 250, 400];
+  const DEGRAUS = [10, 25, 50, 100, 150, 250, 400, 800, 1500, 3000];
   const LIMIAR_ERRO = 0.10; // 10% de erro no degrau aborta a rampa
   const LIMIAR_P95_MS = 6000; // p95 acima de 6s aborta a rampa
 
