@@ -205,9 +205,10 @@ Preparado e **colado pelo dono, confirmado linha a linha nos 4 templates** (mesm
 logo + "Leilão & Investimentos" — que os e-mails do código):
 - **Confirm signup** — subject já em português: "Confirme seu e-mail — BidPro Brasil".
 - **Magic Link or OTP**, **Reset Password**, **Change Email Address** — corpo confirmado certo
-  nos três; **subject ainda no padrão em inglês** do Supabase ("Your sign-in link", "Reset your
-  password", "Confirm your new email address") — sugestões em português dadas, dono ainda não
-  decidiu se troca.
+  nos três; subject **trocado para português e confirmado** ("Seu link de acesso — BidPro
+  Brasil", "Redefinir sua senha — BidPro Brasil", "Confirme seu novo e-mail — BidPro Brasil").
+
+Os 4 templates do Auth ficaram 100% consistentes com a marca (corpo + subject).
 
 Não é código nem migração — é configuração de plataforma, só documentado aqui porque não tem
 onde mais registrar (não versiona com o repo).
