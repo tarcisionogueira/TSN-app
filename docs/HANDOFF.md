@@ -78,13 +78,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    rodada) seriam revisitados todo dia — prenderia a confirmação em ~60/1.036 pra sempre, os
    outros ~976 nunca teriam chance. Corrigido com **janela rotativa pelo dia do ano**: cobre o
    catálogo inteiro em ~17 dias (1.036/60), depois recomeça.
-   > ⚠️ **O MESMO problema de "sempre os primeiros ~60, nunca rotaciona" existe em TODAS as
-   > outras fontes de veículo** (medido no banco, 13/09): SUPERBID só 36 confirmados de 3.200
-   > (1,1%), MEGA 1/48, ZUK 0/56, WEBLEILOES 0/20. SODRE (155/168, 92%) e SUPORTE (27/121,
-   > 22%) escapam porque pegam o sinal de fonte estruturada/API, não de visita de detalhe.
-   > **Só corrigi a rotação no LJUD** (era o caso mais extremo, 1.025 presos em indefinido) —
-   > aplicar a MESMA janela rotativa em Superbid/Mega/Zuk/WebLeilões é o próximo passo óbvio,
-   > não feito ainda por escopo.
+   > ⚠️ **CORRIGIDO PARA TODAS AS FONTES (mesmo dia, ainda mais tarde)** — o mesmo problema
+   > ("sempre os primeiros ~60, nunca rotaciona") media o mesmo padrão no banco: SUPERBID só
+   > 36 confirmados de 3.200 (1,1%), MEGA 1/48, ZUK 0/56 (ZUK nunca visitava detalhe
+   > NENHUM — pátio vinha só do card curto da listagem). SODRE (155/168, 92%) e SUPORTE
+   > (27/121, 22%) escapam porque pegam o sinal de fonte estruturada/API, não de visita de
+   > detalhe. Em vez de repetir a janela rotativa em cada scraper, movida para DENTRO da
+   > função compartilhada `visitarTextoDetalhe()` (`janelaRotativaPorDia()`) — Mega, Superbid
+   > e WebLeilões já chamam essa função, então ganharam a correção automaticamente, sem
+   > mexer no código deles. ZUK ganhou a chamada de detalhe que nunca teve (mesmo padrão de
+   > Mega/Superbid/LJUD/Suporte). **Ainda não validado ao vivo** — próxima rodada do cron
+   > (`veiculos-puppeteer.yml`, 12h UTC) confirma o ganho real de `status_patio='confirmado'`.
 9. **Zuk veículos — fix de timeout validado só 1x** (13/09). Corrigido visitando a home antes da
    listagem (mesma mitigação do recon v3) — rodada de validação deu 56 veículos sem timeout, mas
    é só uma amostra. Acompanhar as próximas 2-3 rodadas do cron diário (12h UTC,

@@ -1598,10 +1598,18 @@ async function scraperPortalZukVeiculos(browser) {
     });
 
     console.log(`    PortalZuk (veículos): ${cards.length} cards`);
+    const idCardZuk = (href) => (String(href || '').match(/(\d+(?:-\d+)?)\/?$/) || [])[1] || href;
+    // Visita o DETALHE de até 60 lotes (13/09, mesmo motivo já corrigido em Mega/Superbid/
+    // LJUD/Suporte): o card da listagem nunca teve o sinal de "já em pátio"/"com o
+    // executado" — sem isto, os 56 coletados hoje ficam TODOS 'indefinido' e nenhum aparece
+    // em /veiculos (só mostra status_patio='confirmado'). `visitarTextoDetalhe` já rotaciona
+    // a fatia visitada pelo dia do ano quando o acervo cresce além de 60.
+    const detalhePorId = await visitarTextoDetalhe(browser, cards, {
+      getUrl: (c) => c.href, getId: (c) => idCardZuk(c.href), max: 60, label: 'PortalZuk veículos',
+    });
     const seen = new Set();
     const veiculos = cards.map(c => {
-      const idm = c.href.match(/(\d+(?:-\d+)?)\/?$/);
-      const id = idm ? idm[1] : c.href;
+      const id = idCardZuk(c.href);
       if (seen.has(id)) return null;
       seen.add(id);
       const vals = c.valores.map(v => parseBRL(v)).filter(v => v > 0);
@@ -1611,7 +1619,11 @@ async function scraperPortalZukVeiculos(browser) {
       const titulo = (c.title || 'Veículo PortalZuk').slice(0, 180);
       const descricao = [c.title, c.addr, c.news].filter(Boolean).join(' · ').slice(0, 500) || c.textoCard;
       const textoCompleto = `${titulo} ${descricao} ${c.textoCard}`;
-      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+      // Pátio recebe TAMBÉM o texto do detalhe — isolado de propósito, nunca entra em
+      // textoCompleto (usado por marca/ano/placa/km/tipo_veiculo acima).
+      const detalhe = detalhePorId.get(id);
+      const textoParaPatio = detalhe?.texto ? `${textoCompleto} ${detalhe.texto}` : textoCompleto;
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoParaPatio);
       const anoMatch = textoCompleto.match(REGEX_ANO);
       // UF/cidade best-effort — "Cidade, UF" ou "Cidade/UF" no endereço do card, quando existe.
       const locMatch = (c.addr || c.textoCard || '').match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*[,/]\s*([A-Z]{2})\b/);
@@ -1633,7 +1645,7 @@ async function scraperPortalZukVeiculos(browser) {
         estado: locMatch ? locMatch[2].toUpperCase() : null,
         link_lote: c.href,
         fotos: c.img ? [c.img] : [],
-        anexos: undefined,
+        anexos: detalhe?.anexos,
         forma_pagamento: 'a_vista',
         data_leilao: null,
         status_patio: statusPatio,
@@ -1749,18 +1761,10 @@ async function scraperLJUDVeiculos(browser) {
     // nunca teve o sinal de "já em pátio"/"com o executado" — os 42 antigos ficavam TODOS
     // 'indefinido' e, por isso, NUNCA apareciam em /veiculos (que só mostra
     // status_patio='confirmado'). Sem isso, cobertura maior não adianta nada pro cliente.
-    //
-    // JANELA ROTATIVA POR DIA (achado ao validar a 1ª rodada real): com >1.000 lotes e
-    // `cards` reconstruído do zero a cada rodada NA MESMA ORDEM (página 0, 1, 2...), sem
-    // rotação os mesmos ~60 primeiros lotes seriam visitados TODO dia, prendendo a
-    // confirmação de pátio para sempre em ~60/1.036 — os outros ~976 nunca teriam chance.
-    // Desloca a janela pelo dia do ano (módulo do tamanho do acervo) para que, ao longo de
-    // ~17 dias (1.036/60), o catálogo inteiro passe pela visita de detalhe pelo menos uma
-    // vez, e depois recomece — atualização contínua, não uma corrida única.
-    const diaDoAno = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86_400_000);
-    const offset = cards.length > 60 ? diaDoAno % cards.length : 0;
-    const janelaDetalhe = offset ? [...cards.slice(offset), ...cards.slice(0, offset)] : cards;
-    const detalhePorId = await visitarTextoDetalhe(browser, janelaDetalhe, {
+    // `visitarTextoDetalhe` já rotaciona a fatia visitada pelo dia do ano quando o acervo
+    // é maior que `max` (ver `janelaRotativaPorDia`) — sem isso, com >1.000 lotes e `cards`
+    // reconstruído do zero a cada rodada, os mesmos ~60 primeiros seriam visitados todo dia.
+    const detalhePorId = await visitarTextoDetalhe(browser, cards, {
       getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 60, label: 'LJUD veículos',
     });
     const seen = new Set();
@@ -4255,15 +4259,31 @@ function extrairAnexosPdfDeHtml(html) {
 // `getUrl`/`getId` extraem URL e chave de dedup de cada item; devolve Map id→texto plano.
 // Devolve Map id → { texto, anexos } — texto pro reforço de classificarPatio(), anexos
 // (13/09, pedido do dono) pros PDFs (edital/laudo) que a página do lote exponha.
+// JANELA ROTATIVA POR DIA (13/09, achado ao validar o fix do LJUD ao vivo): sem isto,
+// catálogos maiores que `max` visitam SEMPRE a mesma fatia inicial (`itens` é reconstruído
+// do zero em toda rodada, na mesma ordem) — prende status_patio='confirmado' pra sempre
+// numa fração pequena do acervo. Medido em produção no mesmo dia: LJUD 11 confirmados de
+// 1.036 (1,1%) antes da rotação; SUPERBID 36 de 3.200 (1,1%) — mesmo padrão, ainda sem
+// corrigir ali. Desloca o início da fatia pelo dia do ano; ao longo de
+// ceil(total/max) dias o catálogo inteiro passa pela visita de detalhe pelo menos 1 vez, e
+// então recomeça. Sem efeito quando o catálogo já cabe inteiro em `max` (offset sempre 0).
+function janelaRotativaPorDia(itens, max) {
+  if (itens.length <= max) return itens;
+  const diaDoAno = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86_400_000);
+  const offset = diaDoAno % itens.length;
+  return offset ? [...itens.slice(offset), ...itens.slice(0, offset)] : itens;
+}
+
 async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, label = '' }) {
   const mapa = new Map();
   if (!itens.length) return mapa;
+  const janela = janelaRotativaPorDia(itens, max);
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   let visitados = 0;
   try {
-    for (const item of itens) {
+    for (const item of janela) {
       if (visitados >= max) break;
       const url = getUrl(item);
       const id = getId(item);
