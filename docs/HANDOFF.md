@@ -117,6 +117,23 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     título "Compre Abaixo do Mercado" era a alegação financeira categórica mais provável de ter
     disparado o alerta; "Direto do WhatsApp"/"grupo do WhatsApp" **é verdade** (conferido em
     `LiveInscricao.jsx` — a live acontece mesmo no grupo, por decisão do dono), não mexido.
+11. **`relatorio_anomalias` é uma gaveta sem fundo — nada nunca marca `resolvido`** (achado
+    13/09 à noite, checando o alerta "⚠ Relatórios — anomalias detectadas" do painel de saúde).
+    **42 linhas abertas**, crescendo ~5-10/dia desde 09/09, só **2 resolvidas em 14 dias**.
+    Rastreei as 3 únicas rotas que tocam a tabela: `api/gerar-analise.js` ESCREVE quando detecta
+    incoerência (valor de praça, data vs edital, área, CNJ vazio etc.); `api/health-check.js` só
+    LÊ pra alertar; `api/indice-aprendizado-cron.js` só LÊ pra agregar contagem semanal. **Não
+    existe NENHUMA tela ou rota que marque `resolvido=true`** — nem no `src/` (busquei
+    `relatorio_anomalias` no front, zero resultado) nem em outro cron. O alerta do painel vai
+    continuar vermelho pra sempre, porque estruturalmente NADA pode resolvê-lo hoje. Decisão do
+    dono necessária: construir uma tela de revisão (lista + botão "resolver", equipe confere
+    caso a caso) ou o health-check parar de tratar isso como alerta acionável enquanto não houver
+    como agir. Não construí a tela sem confirmar qual caminho o dono quer.
+    > O outro alerta do mesmo painel ("✗ Cliente — tentou e não saiu nada") **é falso-alarme,
+    > não bug novo**: os dois casos que aparecem (Neuma 10/09, Lais 11/09) já são exatamente os
+    > bugs #1 e #2 desta lista, JÁ corrigidos. `cliente_travou(2)` (últimos 2 dias) veio vazio —
+    > confirma que não há recorrência. O alerta só continua aparecendo porque a função olha 7
+    > dias pra trás e esses dois casos ainda não saíram da janela; vai sumir sozinho.
     **Alternativa D criada** (`202533617967~824473588218`, PAUSADA, mesmo ad group): só trocou
     "Compre Abaixo do Mercado" → **"Análise Antes do Lance"** (mesma tagline já `APPROVED` no
     anúncio principal da conta — reuso de texto já aceito pelo Google, risco menor que texto
