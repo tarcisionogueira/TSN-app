@@ -1695,6 +1695,13 @@ async function scraperLJUDVeiculos(browser) {
   // Teto generoso (~2.500 lotes) sobre o total real observado (~570-1000, a depender do
   // dia) — para se o catálogo crescer, sem risco de loop eterno se a paginação repetir.
   const MAX_PAGINAS = 60;
+  // TOLERÂNCIA DE 1 PÁGINA REPETIDA (achado ao validar ao vivo, 13/09): `?pagina=0` e
+  // `?pagina=1` devolvem os MESMOS 42 IDs (o site clampa/duplica o índice 0↔1) — só
+  // `?pagina=2` em diante é conteúdo novo de verdade. Parar no 1º "0 novos" (como o
+  // primeiro fix fazia) parava bem cedo demais, na página 1, achando que tinha acabado.
+  // Exigir 2 páginas SEGUIDAS sem novidade absorve essa duplicidade de borda sem precisar
+  // hardcodar "pule a página 1" (mais frágil se o site mudar o índice de novo).
+  let semNovidadeSeguidas = 0;
   try {
     for (let p = 0; p < MAX_PAGINAS; p++) {
       try {
@@ -1720,8 +1727,12 @@ async function scraperLJUDVeiculos(browser) {
         if (!cardsPorId.has(id)) { cardsPorId.set(id, c); novos++; }
       }
       console.log(`    LJUD veículos p${p}: ${cardsPagina.length} cards (${novos} novos, acumulado ${cardsPorId.size})`);
-      // Página repetida (mesmos IDs da anterior) = chegou ao fim real da paginação.
-      if (novos === 0) break;
+      if (novos === 0) {
+        semNovidadeSeguidas++;
+        if (semNovidadeSeguidas >= 2) { console.log(`    LJUD veículos: 2 páginas seguidas sem novidade — fim real da paginação`); break; }
+      } else {
+        semNovidadeSeguidas = 0;
+      }
       await new Promise((r) => setTimeout(r, 500));
     }
   } catch (err) {
