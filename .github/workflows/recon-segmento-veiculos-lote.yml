@@ -1,0 +1,32 @@
+name: Recon — sinal de veículos nas fontes ainda não checadas
+
+# Roda scripts/recon-segmento-veiculos-lote.mjs: para cada fonte de imóvel que ainda não
+# tem linha em leiloeiro_segmento_veiculos, busca a home (fetch direto) e procura um link
+# de menu tipo "Veículos"/"Carros" — mesma detecção (detectarSegmentoVeiculos) que já roda
+# em produção via _contato-leiloeiro.mjs, só que em lote para as fontes que aquele caminho
+# não alcança (scraper próprio, ou 0 itens coletados na janela recente). Grava direto na
+# tabela de produção; não mexe em imoveis_leilao nem em nenhum scraper.
+on:
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'Opcional: força a lista "FONTE=https://origem.com.br,FONTE2=https://..." em vez de auto-descobrir'
+        required: false
+        default: ''
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Recon segmento veículos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RECON_FONTES: ${{ github.event.inputs.fontes }}
+        run: node scripts/recon-segmento-veiculos-lote.mjs
