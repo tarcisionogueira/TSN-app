@@ -9,17 +9,33 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+0. ✅ **RESOLVIDO 13/09 (tarde) — TODA rota client-side (exceto a home) dava 404 real da Vercel ao
+   acessar direto**. Dono reportou com print ao tentar abrir `/membros` e `/membros/ebook/<id>` —
+   não era 404 do app, era a plataforma Vercel dizendo "página não existe" antes de a SPA carregar.
+   Causa: `vercel.json` define uma lista de `rewrites` específicos (og-share, `/leiloes/*`, `/api/*`)
+   mas nenhum catch-all para `index.html` — e ter rewrites explícitos desliga o fallback automático
+   de SPA da Vercel. Testado ao vivo (recon via GitHub Actions) em `/`, `/membros`,
+   `/membros/ebook/<id>`, `/login`, `/busca`, `/planos`, `/cadastro`: só `/` funcionava, as outras 6
+   davam 404 puro. Corrigido com uma regra `{"source": "/((?!api/).*)", "destination": "/index.html"}`
+   como última entrada de `rewrites` — arquivos estáticos reais (JS/CSS/imagens) continuam sendo
+   servidos antes de qualquer rewrite, então não quebra nada. Validado ao vivo em produção depois do
+   deploy: as 7 rotas voltaram 200 com `index.html` real. Isso provavelmente afetava QUALQUER
+   compartilhamento de link direto ou F5 numa rota do app — não só as duas do print.
 1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
    Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
    já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
    ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
    card no painel.
 2. **eBook — page-break de subtítulo no leitor** (commit `1ad1256e`, já em produção). Dono disse
-   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. Perguntar
-   se os subtítulos abriram página nova corretamente na leitura real.
+   que ia testar no navegador (exige login + entitlement) e não confirmou o resultado. **Estava
+   bloqueado pelo bug de 404 do item 0 acima até 13/09 (tarde)** — ao acessar direto
+   `/membros/ebook/<id>` a Vercel dava 404 real antes mesmo de a página carregar. Corrigido agora;
+   falta o dono testar de novo, ao vivo.
 3. **eBook — listagem na Área de Membros** (commit `2d1d3262`, já em produção, deploy confirmado
    `READY`). Validado só por SQL direto no banco antes do fix; falta o dono confirmar ao vivo que
-   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja.
+   "O Lance Que Muda Tudo" aparece normalmente ao lado dos outros na loja. **Mesma observação do
+   item 2**: `/membros` também dava 404 direto até o fix de 13/09 (tarde) — se o dono tentou
+   confirmar antes disso, pode ter visto o 404 da Vercel em vez da loja.
 4. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
