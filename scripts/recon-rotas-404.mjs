@@ -11,14 +11,24 @@
 const BASE = 'https://bidprobrasil.com.br';
 const ROTAS = ['/', '/membros', '/membros/ebook/5c78ab35-9810-48b2-8801-16d50bc94f50', '/login', '/busca', '/planos', '/cadastro'];
 
+async function checar(url, salto = 0) {
+  const res = await fetch(url, { redirect: 'manual' });
+  const txt = await res.text();
+  const loc = res.headers.get('location');
+  const ehVercel404 = /404: NOT_FOUND|This deployment cannot be found/i.test(txt);
+  const ehIndexHtml = /<div id="root">|<script type="module"/i.test(txt);
+  const prefixo = '  '.repeat(salto);
+  console.log(`${prefixo}[${res.status}] ${url} — vercel404=${ehVercel404} indexHtml=${ehIndexHtml} (${txt.length} bytes)${loc ? ` -> ${loc}` : ''}`);
+  if (loc && res.status >= 300 && res.status < 400 && salto < 5) {
+    const proxima = new URL(loc, url).toString();
+    await checar(proxima, salto + 1);
+  }
+}
+
 async function main() {
   for (const rota of ROTAS) {
     try {
-      const res = await fetch(`${BASE}${rota}`, { redirect: 'manual' });
-      const txt = await res.text();
-      const ehVercel404 = /404: NOT_FOUND|This deployment cannot be found/i.test(txt);
-      const ehIndexHtml = /<div id="root">|<script type="module"/i.test(txt);
-      console.log(`[${res.status}] ${rota} — vercel404=${ehVercel404} indexHtml=${ehIndexHtml} (${txt.length} bytes)`);
+      await checar(`${BASE}${rota}`);
     } catch (e) {
       console.log(`  ${rota}: erro ${String(e?.message || e).slice(0, 120)}`);
     }
