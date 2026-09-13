@@ -37,11 +37,13 @@ const FASE = process.env.TESTE_CARGA_FASE || 'publicas';
 const RUN_ID = Date.now().toString(36);
 
 // Imóveis reais já confirmados no banco (usados em investigações anteriores desta sessão) —
-// evita gastar um request adivinhando um id que não existe.
+// evita gastar um request adivinhando um id que não existe. cidade/estado/tipo são o mínimo
+// que api/gerar-analise.js exige em mercadoInputs (sem isso, 400/422 — descoberto na 2ª
+// rodada real: "imovelId e mercadoInputs obrigatórios").
 const IMOVEIS_REAIS = [
-  '/leilao/2509dc8a-659c-4424-8d60-6e7146581b4c/imovel-ararangua-sc',
-  '/leilao/dcbcc81a-16bb-4613-97ec-a501a77563cf/casa-campo-alegre-juazeiro-do-norte-ce',
-  '/leilao/511316d4-45e7-4709-8bc9-977b373d6496/imovel',
+  { path: '/leilao/2509dc8a-659c-4424-8d60-6e7146581b4c/imovel-ararangua-sc', id: '2509dc8a-659c-4424-8d60-6e7146581b4c', cidade: 'Araranguá', estado: 'SC' },
+  { path: '/leilao/dcbcc81a-16bb-4613-97ec-a501a77563cf/casa-campo-alegre-juazeiro-do-norte-ce', id: 'dcbcc81a-16bb-4613-97ec-a501a77563cf', cidade: 'Juazeiro do Norte', estado: 'CE' },
+  { path: '/leilao/511316d4-45e7-4709-8bc9-977b373d6496/imovel', id: '511316d4-45e7-4709-8bc9-977b373d6496', cidade: null, estado: null },
 ];
 
 const ROTAS_PUBLICAS = [
@@ -50,7 +52,7 @@ const ROTAS_PUBLICAS = [
   '/leiloes/buscar',
   '/leiloes/sp/saopaulo',
   '/leiloes/ba/salvador',
-  ...IMOVEIS_REAIS,
+  ...IMOVEIS_REAIS.map((i) => i.path),
 ];
 
 function agora() { return Date.now(); }
@@ -182,13 +184,17 @@ async function loginUmaConta(email, senha) {
   }
 }
 
-async function gerarRelatorio(token, imovelId) {
+async function gerarRelatorio(token, imovel) {
   const t0 = agora();
   try {
+    // mercadoInputs mínimo exigido pelo endpoint (api/gerar-analise.js linha ~1719): sem
+    // cidade/endereço, cai em 422 "sem endereço/cidade" (a mesma trava que protege contra o
+    // bug da Neuma, 10/09 — aqui é o teste que precisa respeitá-la, não contorná-la).
+    const mercadoInputs = { tipoImovel: 'apartamento', cidade: imovel.cidade, estado: imovel.estado, areaM2: 60 };
     const r = await fetch(`${BASE}/api/gerar-analise`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imovelId }),
+      body: JSON.stringify({ imovelId: imovel.id, cidade: imovel.cidade, estado: imovel.estado, mercadoInputs }),
       signal: AbortSignal.timeout(60000),
     });
     const txt = await r.text().catch(() => '');
@@ -235,8 +241,9 @@ async function faseCompleta() {
     return;
   }
   const alvo = tokensValidos.slice(0, N_RELATORIOS);
+  const imoveisComCidade = IMOVEIS_REAIS.filter((i) => i.cidade);
   const relatorios = await Promise.all(
-    alvo.map((tok, i) => gerarRelatorio(tok, IMOVEIS_REAIS[i % IMOVEIS_REAIS.length].split('/')[2]))
+    alvo.map((tok, i) => gerarRelatorio(tok, imoveisComCidade[i % imoveisComCidade.length]))
   );
   const okRelatorio = relatorios.filter((r) => r.ok).length;
   console.log(`\ngeração de relatório: ${okRelatorio}/${relatorios.length} ok`);
