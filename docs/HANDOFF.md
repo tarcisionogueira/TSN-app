@@ -127,6 +127,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     "Compre Abaixo do Mercado" → **"Análise Antes do Lance"** (mesma tagline já `APPROVED` no
     anúncio principal da conta — reuso de texto já aceito pelo Google, risco menor que texto
     novo). Resto idêntico. Aguardando veredito do Google; se aprovar, decidir se ativa.
+    > ⚠️ **Tentativa de checar o veredito (13/09, 23h40 UTC) NÃO deu resultado — e o motivo é
+    > estrutural, não passageiro.** Windsor.ai (`google_ads`) devolveu **zero linhas** pro
+    > `ad_id 824473588218`, em qualquer janela de data testada, mesmo sem filtro nenhum além do
+    > `ad_group_id`. Comparando com o irmão de ad group: `824427819065` (Alternativa C, também
+    > PAUSADA) TEM linha (1 dia, 38 impressões) — a diferença é que ela chegou a rodar um
+    > pouquinho antes de ser reprovada. A Alternativa D nasceu PAUSADA e, ao que tudo indica,
+    > **nunca serviu nenhuma impressão** — e o conector do Windsor sincroniza por linha
+    > diária de MÉTRICA (impressions/clicks/etc.), não por atributo puro do anúncio; sem
+    > nenhum dia com impressão, não existe linha nenhuma pra carregar `policy_summary`,
+    > aprovado ou não. **Isso não é "ainda não chegou o veredito" — é "esta ferramenta não
+    > enxerga o veredito de um anúncio pausado com zero impressão", e reagendar a mesma
+    > checagem não vai resolver sozinho.** Pra ver se já foi revisada, é direto no painel do
+    > Google Ads (Ads → esse ad group → coluna Status de aprovação) — 30 segundos pro dono, ou
+    > eu tentaria de novo se ele ATIVAR o anúncio (aí ele roda/nega de verdade e vira linha).
 11. ~~**Confirmar disparo do e-mail da campanha ebook R$1**~~ — **RESOLVIDO (13/09, 11h20 UTC)**:
     disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
     conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
