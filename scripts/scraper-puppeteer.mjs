@@ -1545,7 +1545,24 @@ async function scraperPortalZukVeiculos(browser) {
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   try {
-    await page.goto('https://www.portalzuk.com.br/leilao-de-veiculos', { waitUntil: 'networkidle2', timeout: 45000 });
+    // Visita a HOME primeiro (estabelece cookies/sessão antes de ir à listagem) — confirmado
+    // por recon-veiculos-ljud-zuk-v3.mjs que isso evita o desafio Cloudflare que causou o
+    // timeout de navegação da 1ª tentativa em produção (13/09). Até 2 tentativas na listagem.
+    await page.goto('https://www.portalzuk.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise((r) => setTimeout(r, 2000));
+    const linkMenu = await page.evaluate(() => {
+      const a = [...document.querySelectorAll('a[href]')].find((el) => /ve[ií]culo/i.test(el.textContent || '') || /veiculo/i.test(el.getAttribute('href') || ''));
+      return a ? a.href : null;
+    });
+    const urlListagem = linkMenu || 'https://www.portalzuk.com.br/leilao-de-veiculos';
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      await page.goto(urlListagem, { waitUntil: 'networkidle2', timeout: 45000 });
+      await new Promise((r) => setTimeout(r, 1500));
+      const n = await page.evaluate(() => document.querySelectorAll('.card-property').length);
+      if (n > 0) break;
+      if (tentativa === 1) console.log('    PortalZuk (veículos): 1ª tentativa sem cards, tentando de novo...');
+    }
     try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch { /* padrao-ok: página pode não ter veículo ativo agora — o length check logo abaixo já trata isso */ }
 
     let prev = 0, estavel = 0;
