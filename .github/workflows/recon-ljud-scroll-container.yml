@@ -1,0 +1,27 @@
+name: Recon — LJUD contêiner de scroll real (não grava)
+
+# Roda scripts/recon-ljud-scroll-container.mjs: acha o contêiner com overflow próprio
+# (se houver) e tenta rolar ELE em vez da janela, além de interceptar XHR relevante — pra
+# achar por que o LJUD trava em 42 de ~570 veículos anunciados. Só leitura.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        run: node scripts/recon-ljud-scroll-container.mjs
