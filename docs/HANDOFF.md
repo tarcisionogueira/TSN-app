@@ -221,6 +221,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 ---
 
+## 📎 13/09 (noite) — ANEXOS DUPLICADOS NA ANÁLISE: EDITAL/MATRÍCULA REAPARECIAM COMO "DOCUMENTO DO LOTE"
+
+Dono reportou print (imóvel LJUD, Feira de Santana/BA): a seção "Documentos do leiloeiro"
+mostrava "Edital" e "Matrícula" normalmente, MAS também 3 "Documento do lote N" extras — e
+dois deles eram o MESMO PDF do Edital/Matrícula, duplicado.
+
+**Causa raiz (confirmada por query no banco):** o scraper do LJUD grava o mesmo arquivo DUAS
+vezes — uma no campo dedicado (`link_edital`/`link_matricula`) e outra dentro do array
+genérico `anexos[]`, com `tipo: "anexo"` (nunca classificado como 'edital'/'matricula'). O
+dedup em `Analise.jsx` só comparava a URL de cada anexo contra a URL que a TELA escolheu
+mostrar no card (`docsView.fileUrl` — às vezes uma cópia nossa, com URL diferente da bruta) —
+nunca contra a URL bruta original. Quando o servidor tinha copiado o arquivo pro nosso
+Storage, a URL exibida divergia da URL bruta do `anexos[]`, e o dedup por URL não pegava.
+
+**Corrigido:** o set de URLs já mostradas (`urlsMostradas`) agora inclui também as URLs BRUTAS
+de `link_edital`/`link_matricula`, além da que a tela decidiu exibir — cobre os dois casos
+(URL bruta idêntica E cópia nossa com URL diferente). Só existe essa lógica em `Analise.jsx`
+(não há cópia em `ImovelDetalhe.jsx`). Ainda não validado ao vivo pelo dono no mesmo imóvel.
+
 ## 🚦 13/09 (tarde) — FAXINA DE RLS + TESTE DE CARGA REAL + AJUSTES DE AUTH PARA O LANÇAMENTO
 
 Pedido do dono: limpar políticas RLS duplicadas, rodar teste de carga real pra ter números
