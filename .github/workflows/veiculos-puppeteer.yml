@@ -1,8 +1,8 @@
-name: Leiloeiros — Veículos (Sodré + Suporte)
+name: Leiloeiros — Veículos (Sodré, Suporte, Superbid)
 
 # Job PRÓPRIO e separado do `leiloeiros-puppeteer.yml` (imóveis), de propósito (13/09).
-# Os dois pilotos de veículo (Sodré, Suporte) ficaram meses opt-in — só rodavam quando alguém
-# disparava SCRAPER_FONTES=SODRE_VEICULOS/SUPORTE_VEICULOS na mão — porque colocá-los DENTRO
+# Os pilotos de veículo (Sodré, Suporte, Superbid) ficaram opt-in — só rodavam quando alguém
+# disparava SCRAPER_FONTES=SODRE_VEICULOS/SUPORTE_VEICULOS/SUPERBID_VEICULOS na mão — porque colocá-los DENTRO
 # da rodada diária de imóvel arriscava estourar o timeout-minutes daquele job (que já foi
 # cancelado no meio 3 dias seguidos em 10-12/08 por passar de 90 min) e truncar as fontes que
 # vêm depois na lista (SUPORTE, GRUPOLANCE, WEBLEILOES — o próprio incidente documentado ali).
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'Fontes a rodar (vazio = as duas). Ex.: SODRE_VEICULOS ou SUPORTE_VEICULOS'
+        description: 'Fontes a rodar (vazio = todas). Ex.: SODRE_VEICULOS ou SUPERBID_VEICULOS'
         required: false
         default: ''
 
@@ -49,10 +49,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          # Sem input manual, roda os DOIS pilotos — é o comportamento do disparo por schedule
+          # Sem input manual, roda TODOS os pilotos — é o comportamento do disparo por schedule
           # e do disparo manual default. `ONLY.includes(...)` em scraper-puppeteer.mjs já trata
           # este valor como lista exclusiva, então nenhuma fonte de IMÓVEL roda neste job.
-          SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS' }}
+          SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS,SUPERBID_VEICULOS' }}
         run: node scripts/scraper-puppeteer.mjs
 
       - name: Notify on failure

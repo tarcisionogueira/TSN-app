@@ -974,6 +974,115 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
   }
 }
 
+// ─── REDE SUPERBID — VEÍCULOS (piloto, 13/09) ──────────────────────────────────
+// Mesma API do scraperSuperbidNet (offer-query.superbid.net/offers) — só troca o filtro de
+// categoria. DIFERENÇA DELIBERADA do modo imóvel: lá o filtro `product.productType.
+// description:imoveis;` (linha ~824) é usado com confiança porque já foi confirmado em
+// produção há meses. O valor equivalente para veículo NUNCA foi confirmado ao vivo — não dá
+// pra reescrever este scraper apostando num nome de categoria adivinhado ("forma nº 10" do
+// CLAUDE.md: número plausível medindo a coisa errada, aqui seria "0 veículos" por string
+// errada, lido como "sem veículo à venda"). Por isso: tenta "veiculos" primeiro e, se a 1ª
+// página vier vazia, cai para SEM filtro de categoria + filtro CLIENT-SIDE por productType/
+// subCategory — o MESMO mecanismo que o modo `stores` já usa (linha ~859) para separar
+// imóvel do catálogo inteiro (imóvel+veículo+equipamento+sucata). Mais lento no pior caso,
+// nunca silenciosamente vazio por nome de categoria errado.
+async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leiloeiro, prefix, baseSite }) {
+  console.log(`  ${leiloeiro} (veículos, piloto) — API offers (portal ${portalId})...`);
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  try {
+    await page.goto(`${baseSite}/categorias/carros-motos`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 2000));
+
+    const { offers: lista, comFiltro } = await page.evaluate(async (portal) => {
+      const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+      const apiUrl = (n, comFiltro) =>
+        `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
+      const buscar = async (n, comFiltro) => {
+        try { const r = await fetch(apiUrl(n, comFiltro), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
+        catch { return null; } // padrao-ok: falha de rede/parse na página N vira array vazio e quebra a paginação naturalmente logo abaixo — mesmo padrão de scraperSuperbidNet (imóveis, linha ~827) e scraperSodreVeiculos
+      };
+      let comFiltro = true;
+      let first = await buscar(1, true);
+      if (!first || !first.length) { comFiltro = false; first = await buscar(1, false); }
+      const all = [...(first || [])];
+      if (first && first.length >= 100) {
+        for (let n = 2; n <= 100; n++) {
+          const arr = await buscar(n, comFiltro);
+          if (!arr || !arr.length) break;
+          all.push(...arr);
+          if (arr.length < 100) break;
+        }
+      }
+      return { offers: all, comFiltro };
+    }, portalId);
+
+    console.log(`    ${leiloeiro} (veículos): ${lista.length} offers coletadas (categoria ${comFiltro ? '"veiculos" confirmada' : 'NÃO confirmada — filtrando aqui por productType/subCategory'})`);
+    const str = (v) => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
+    const seen = new Set();
+    const registros = [];
+    for (const of of lista) {
+      const p = of.product || {};
+      const id = of.id || of.offerId;
+      if (!id || seen.has(id)) continue;
+      if (!comFiltro) {
+        const sinal = `${str(p.productType)} ${str(p.subCategory)}`.toLowerCase();
+        if (!/ve[ií]cul|autom[oó]vel|\bcarro\b|moto(?:cicleta)?|caminh[ãa]o|caminhonete/.test(sinal)) continue;
+      }
+      seen.add(id);
+      const loc = (p.location && typeof p.location === 'object') ? p.location : {};
+      const locStr = typeof p.location === 'string' ? p.location : (loc.city || '');
+      const det = of.offerDetail || {};
+      const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
+      if (!valMin) continue;
+      const titulo = (str(p.shortDesc) || str(of.title) || `Veículo ${leiloeiro}`).slice(0, 180);
+      const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
+        .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+      const descricao = (partesDesc.join(' — ') || titulo).slice(0, 500);
+      const textoCompleto = `${titulo} ${descricao}`;
+      const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
+      const linkURL = str(of.linkURL);
+      const link_lote = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+      const anoMatch = textoCompleto.match(REGEX_ANO);
+      const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0) || null;
+      registros.push({
+        fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro, titulo, descricao,
+        marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+        modelo: null,
+        ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
+        ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+        placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+        km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
+        valor_minimo: valMin,
+        valor_avaliacao: valAval,
+        desconto_percentual: descontoPercentualVeiculo(valMin, valAval),
+        modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s)) && !/extra/i.test(str(s))) ? 'judicial' : 'extrajudicial',
+        cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),
+        estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2) || null,
+        link_lote,
+        fotos: p.thumbnailUrl ? [p.thumbnailUrl] : [],
+        data_leilao: of.endDate || of.endDateTime || null,
+        status_patio: statusPatio,
+        status_patio_motivo: statusPatioMotivo,
+        motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
+        ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
+        ativo: true,
+        raw: of,
+        atualizado_em: new Date().toISOString(),
+      });
+    }
+    console.log(`    ${leiloeiro} (veículos): ${registros.length} registros mapeados`);
+    return registros;
+  } catch (err) {
+    console.log(`  Erro ${leiloeiro} (veículos): ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 // ─── BANCO DO BRASIL ──────────────────────────────────────────────────────────
 
 async function scraperBancoBrasil(browser, pageNum = 1) {
@@ -4139,6 +4248,15 @@ async function main() {
     // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
     if (rodar('SUPERBID')) console.log('\n📋 Superbid...');
     if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150 });
+
+    // Superbid — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado do
+    // SODRE_VEICULOS/SUPORTE_VEICULOS (ver comentários lá e .github/workflows/
+    // veiculos-puppeteer.yml) — fora de `rodar()`, roda pelo job diário dedicado de veículos.
+    if (ONLY.includes('SUPERBID_VEICULOS')) {
+      console.log('\n📋 Superbid (veículos, piloto)...');
+      const veiculosSuperbid = await scraperSuperbidVeiculos(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' });
+      await salvarVeiculos(veiculosSuperbid);
+    }
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
     if (rodar('SOLD')) console.log('\n📋 Sold Leilões...');
