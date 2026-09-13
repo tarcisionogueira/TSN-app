@@ -11,6 +11,7 @@ import {
   processarReembolso,
   eventoJaProcessado,
   removerEventoProcessado,
+  registrarConversaoAnuncio,
 } from './_webhook-core.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -42,6 +43,20 @@ async function rpcProduto(fn, payload) {
     });
     return r.ok ? await r.json() : { ok: false, http: r.status };
   } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
+}
+
+// Título do produto (para o `content_name` da conversão) — best-effort: sem título a
+// conversão ainda sai, só sem o rótulo legível no Meta (nunca vale bloquear a venda por isso).
+async function tituloDoProduto(tipo, id) {
+  try {
+    const tabela = tipo === 'curso' ? 'cursos_admin' : tipo === 'ebook' ? 'ebooks_admin' : null;
+    if (!tabela) return null;
+    const r = await fetch(`${SB_URL}/rest/v1/${tabela}?id=eq.${encodeURIComponent(id)}&select=titulo`, {
+      headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` }, signal: AbortSignal.timeout(5000),
+    });
+    const [row] = r.ok ? await r.json() : [];
+    return row?.titulo || null;
+  } catch { return null; } // padrao-ok: título é só o rótulo legível da conversão (content_name); sem ele o Purchase ainda sai, com o fallback `${tipo} ${id}` — nunca vale bloquear a venda por uma falha de leitura de nome
 }
 
 export default async function handler(req, res) {
@@ -141,6 +156,20 @@ export default async function handler(req, res) {
           // (não há cron de reconciliação de compras_produtos).
           await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
           return res.status(502).json({ error: 'confirmar_compra_produto_falhou', detalhe: result });
+        }
+        // Conversão de anúncio (Meta CAPI + Google Ads offline) — só na ativação DE VERDADE
+        // (nunca em `ja_ativo`, reenvio do Asaas sobre compra já confirmada antes — contar de
+        // novo infla o faturamento reportado ao anúncio). Best-effort, nunca bloqueia a resposta.
+        if (result?.ok && !result.ja_ativo && result.user_id) {
+          try {
+            const titulo = await tituloDoProduto(result.produto_tipo, result.produto_id);
+            await registrarConversaoAnuncio({
+              userId: result.user_id, valor: result.valor, gateway: 'asaas', email: custEmail,
+              base: `${result.produto_tipo}_${result.produto_id}`,
+              contentName: titulo || `${result.produto_tipo} ${result.produto_id}`,
+              contentIds: [result.produto_id], contentType: result.produto_tipo,
+            });
+          } catch (e) { console.error('[asaas-webhook] conversao produto:', e?.message || e); }
         }
         return res.status(200).json({ ok: true, produto: result });
       }

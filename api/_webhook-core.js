@@ -164,12 +164,18 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
  * Best-effort por contrato: qualquer falha aqui é logada e engolida — medir venda nunca pode
  * impedir a venda de ser ativada.
  */
-async function registrarConversaoAnuncio({ userId, valor, base, gateway, email }) {
+// `contentName`/`contentIds`/`contentType` (12/09): exportada para os webhooks poderem
+// chamá-la direto na compra de PRODUTO avulso (ebook/curso) — esse fluxo nunca passa por
+// `processarConfirmado` (que já chama isto para plano/serviço) porque é deliberadamente
+// separado do de assinatura (não pode elevar role nem repetir NFS-e/comissão de plano).
+// Sem isto, a venda de produto não gerava Purchase em lugar nenhum — achado da auditoria
+// de rastreamento pedida pelo dono.
+export async function registrarConversaoAnuncio({ userId, valor, base, gateway, email, contentName, contentIds, contentType }) {
   const v = Number(valor) || 0;
   if (!userId || !(v > 0)) return;
   const eventId = purchaseEventId(userId, base);
   try {
-    await enviarPurchaseCapi({ userId, email, valor: v, planoBase: base, gateway, eventId });
+    await enviarPurchaseCapi({ userId, email, valor: v, planoBase: base, gateway, eventId, contentName, contentIds, contentType });
   } catch (e) { console.error(`[${gateway}] meta capi:`, e?.message || e); }
   try {
     // Só consulta o gclid se o Google Ads estiver ligado — enquanto dormente, zero leitura extra.

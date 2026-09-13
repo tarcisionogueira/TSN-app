@@ -39,12 +39,19 @@ export function purchaseEventId(userId, planoBase, date = new Date()) {
   return `pur_${userId}_${planoBase || 'plano'}_${dia}`;
 }
 
-export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gateway, eventId, testCode } = {}) {
+// `contentName`/`contentIds`/`contentType` (12/09): até aqui só existia `planoBase`, que
+// serve DOIS papéis (chave do event_id de dedup E rótulo mostrado no Meta) — bom para plano
+// (top2/clube são os dois ao mesmo tempo), ruim para produto avulso (a chave de dedup precisa
+// ser `${tipo}_${id}`, estável, mas o rótulo legível é o TÍTULO do ebook/curso). Os três novos
+// campos são opcionais e não mudam nenhuma chamada existente (planos continuam só com
+// `planoBase`, que vira `content_name` como antes quando `contentName` não é passado).
+export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gateway, eventId, testCode, contentName, contentIds, contentType } = {}) {
   if (!capiAtivo() || !userId) return { skipped: capiAtivo() ? 'sem_user' : 'capi_inativo' };
   const user_data = {};
   const ext = sha256(userId); if (ext) user_data.external_id = ext;
   const em = sha256(email); if (em) user_data.em = em;
   const evId = eventId || purchaseEventId(userId, planoBase);
+  const nomeConteudo = contentName || planoBase;
   const evento = {
     event_name: 'Purchase',
     event_time: Math.floor(Date.now() / 1000),
@@ -52,7 +59,12 @@ export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gate
     event_source_url: SITE_URL,
     event_id: evId,
     user_data,
-    custom_data: { currency: 'BRL', value: Number(valor) || 0, ...(planoBase ? { content_name: planoBase } : {}) },
+    custom_data: {
+      currency: 'BRL', value: Number(valor) || 0,
+      ...(nomeConteudo ? { content_name: nomeConteudo } : {}),
+      ...(Array.isArray(contentIds) && contentIds.length ? { content_ids: contentIds } : {}),
+      ...(contentType ? { content_type: contentType } : {}),
+    },
   };
   // testCode por chamada (diagnóstico) tem prioridade sobre a env META_CAPI_TEST_CODE.
   const codigoTeste = (testCode || TEST_CODE || '').trim();

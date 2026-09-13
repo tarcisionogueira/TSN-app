@@ -101,7 +101,14 @@ export default function ProdutoPublico({ tipo }) {
         // CONCLUIR — nunca no check de posse pré-existente (useEffect acima, que só lê se o
         // cliente já tinha o produto antes de abrir esta tela) nem no branch `jaTem` de
         // `comprar()` (que também significa "já tinha", não "comprou agora").
-        trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase);
+        // event_id determinístico p/ DEDUP com o servidor (Meta CAPI) — MESMO formato do
+        // backend (api/_meta-capi.js → purchaseEventId, base=`${tipo}_${id}` no webhook de
+        // produto): pur_<userId>_<tipo>_<id>_<YYYYMMDD UTC>. `effectiveUserId` porque é quem
+        // a compra é PARA (modo suporte compra em nome do cliente, não do admin).
+        const uidCompra = effectiveUserId || user?.id;
+        const diaCompra = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const eventID = uidCompra ? `pur_${uidCompra}_${tipo}_${id}_${diaCompra}` : undefined;
+        trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase, eventID, { email: user?.email, nome: nomePerfil || user?.user_metadata?.nome });
         setComprouAvulso(true); setAguardando(false);
       }
     }, 5000);
@@ -841,7 +848,14 @@ export default function ProdutoPublico({ tipo }) {
                             servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
                             soCartao
                             parcelasMax={1}
-                            onPago={() => { trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase); setComprouAvulso(true); setMostrarPagamentoBonus(false); }}
+                            onPago={() => {
+                              // Mesmo formato de event_id do polling acima (dedup com o CAPI do servidor).
+                              const uidCompra = effectiveUserId || user?.id;
+                              const diaCompra = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                              const eventID = uidCompra ? `pur_${uidCompra}_${tipo}_${id}_${diaCompra}` : undefined;
+                              trackPlanContratado(produto?.titulo || `${tipo} ${id}`, precoBase, eventID, { email: user?.email, nome: nomePerfil || user?.user_metadata?.nome });
+                              setComprouAvulso(true); setMostrarPagamentoBonus(false);
+                            }}
                             onCancelar={() => setMostrarPagamentoBonus(false)}
                           />
                         </div>
