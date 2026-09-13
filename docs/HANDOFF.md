@@ -59,10 +59,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    listagem (mesma mitigação do recon v3) — rodada de validação deu 56 veículos sem timeout, mas
    é só uma amostra. Acompanhar as próximas 2-3 rodadas do cron diário (12h UTC,
    `veiculos-puppeteer.yml`) pra confirmar que não é só sorte daquela hora específica.
-10. **Google Ads — Alternativa C criada, aguardando aprovação + decisão do dono** (13/09). Anúncio
-    novo `202533617967~824546261951`, PAUSADO, no ad group "Grupo de anúncios 1". Status ao sair
-    desta sessão: `REVIEW_IN_PROGRESS` (Google ainda não deu veredito). Quando aprovar, decidir se
-    ativa substituindo o anúncio reprovado (`Aula Ao Vivo Grátis...`, MISLEADING_CONTENT).
+10. **Google Ads — Alternativa D aguardando revisão do Google** (13/09, fim da tarde). Checado: a
+    "Alternativa C" (`824427819065`, nome real "Teste B - Convite Live" — o ID `...261951`
+    anotado antes estava errado, corrigido aqui) foi **REVISADA e REPROVADA** pelo mesmo motivo
+    do anúncio original (`PROHIBITED/MISLEADING_CONTENT`) — era quase texto idêntico ao
+    reprovado, não uma reformulação real. Texto completo puxado via Windsor (Google Ads):
+    título "Compre Abaixo do Mercado" era a alegação financeira categórica mais provável de ter
+    disparado o alerta; "Direto do WhatsApp"/"grupo do WhatsApp" **é verdade** (conferido em
+    `LiveInscricao.jsx` — a live acontece mesmo no grupo, por decisão do dono), não mexido.
+    **Alternativa D criada** (`202533617967~824473588218`, PAUSADA, mesmo ad group): só trocou
+    "Compre Abaixo do Mercado" → **"Análise Antes do Lance"** (mesma tagline já `APPROVED` no
+    anúncio principal da conta — reuso de texto já aceito pelo Google, risco menor que texto
+    novo). Resto idêntico. Aguardando veredito do Google; se aprovar, decidir se ativa.
 11. ~~**Confirmar disparo do e-mail da campanha ebook R$1**~~ — **RESOLVIDO (13/09, 11h20 UTC)**:
     disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
     conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
