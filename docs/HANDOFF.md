@@ -24,18 +24,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-5. **Piloto de veículos SUPORTE — validar dado real antes de promover à rodada diária**
-   (11/09, ver seção "Recon de veículos" logo abaixo). Rodei `SUPORTE_VEICULOS` como teste
-   manual; falta o dono olhar a amostra em `veiculos_leilao` (fonte='SUPORTE') e decidir se o
-   seletor de card bateu certo (não confirmado ao vivo se o template do card de veículo é
-   idêntico ao de imóvel) antes de eu tirar o gate `OPT-IN` e entrar na rodada diária.
-6. **SOLEON — `modalidade` errada em lote de venda direta** (11/09, ver seção abaixo). O item
+5. **SOLEON — `modalidade` errada em lote de venda direta** (11/09, ver seção abaixo). O item
    79771 do DANIELGARCIA está com `modalidade='judicial'` no banco, mas o site mostra "VENDA
    DIRETA". Recon ao vivo pra confirmar a causa exata FALHOU nesta sessão (listagem não veio —
    challenge/cota, dispatch de datacenter) — não cheguei a corrigir a lógica por falta de
    evidência real, só corrigi o valor (que já tinha prova). Retomar com recon de IP residencial
    ou orçamento Bright Data liberado.
-7. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL,
+6. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL,
    NÃO investigado fonte a fonte): FERREIRALEIL, PECINI, LEJE, HASTA, ALBERTOMACEDOLEILOES,
    GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES têm entre 91% e 100% dos lotes ativos (não
    venda-direta) sem data de praça. CEF sozinha tem 14.340 lotes sem data (75% do acervo dela,
@@ -43,7 +38,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    perdendo um campo que existe — não decidido. Prioridade sugerida: investigar CEF primeiro
    (maior volume) e depois os 100%-sem-data (mais fácil de confirmar bug, já que 100% é sinal
    mais forte que "quase sempre").
-8. **Instagram — liberar a automação de resposta (100% burocracia da Meta, zero código)**
+7. **Instagram — liberar a automação de resposta (100% burocracia da Meta, zero código)**
    (reaberta 11/09; era a pendência #9 antiga, sumiu da lista numa compactação e voltou porque
    segue real). Hoje o sistema só ESCUTA (webhook capturando comentários reais desde 08/09,
    funcionando) e PREPARA rascunho de resposta por IA em `/admin/instagram` — **nunca posta
@@ -54,6 +49,119 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    fluxo funcionando** exigido pela Meta ANTES de submeter; (c) submeter o **App Review**
    pedindo `instagram_manage_messages`/`instagram_manage_comments`; (d) aprovado, eu ligo
    `IG_BOT_ATIVO=1`. Nada disso eu resolvo sozinho — é painel da Meta, com login da empresa.
+8. **LJUD veículos — cobertura parcial (42 de ~570)** (13/09, ver seção "Veículos" logo abaixo).
+   O extrator DOM está certo (dado real validado: título/ano/cidade/UF/valores batendo), mas o
+   scroll infinito não dispara o carregamento além do lote inicial (~42 cards) — mecanismo
+   diferente do que funciona em Zuk/Mega, ainda não identificado. Retomar com recon de rede
+   (ver se existe requisição XHR que o scroll deveria disparar, ou se é paginação por URL tipo
+   `?pagina=2`) antes de tentar de novo às cegas.
+9. **Zuk veículos — fix de timeout validado só 1x** (13/09). Corrigido visitando a home antes da
+   listagem (mesma mitigação do recon v3) — rodada de validação deu 56 veículos sem timeout, mas
+   é só uma amostra. Acompanhar as próximas 2-3 rodadas do cron diário (12h UTC,
+   `veiculos-puppeteer.yml`) pra confirmar que não é só sorte daquela hora específica.
+10. **Google Ads — Alternativa C criada, aguardando aprovação + decisão do dono** (13/09). Anúncio
+    novo `202533617967~824546261951`, PAUSADO, no ad group "Grupo de anúncios 1". Status ao sair
+    desta sessão: `REVIEW_IN_PROGRESS` (Google ainda não deu veredito). Quando aprovar, decidir se
+    ativa substituindo o anúncio reprovado (`Aula Ao Vivo Grátis...`, MISLEADING_CONTENT).
+11. **Confirmar disparo do e-mail da campanha ebook R$1** — agendado 13/09 11h UTC
+    (`app_config.campanha_ebook_r1_ativo=true`, ver seção específica mais abaixo no documento).
+    Não confirmado antes do fim desta sessão (sessão terminou antes do horário do disparo).
+12. **Confirmar pausa da campanha Meta Ads "O novo luxo"** — o dono pediu pra pausar "amanhã";
+    ficou agendada via Rotina (`trig_01H1Jak4VXyLCkov2CN2XhmX`, 13/09 13h UTC). Não confirmado
+    antes do fim desta sessão se a pausa de fato ocorreu.
+
+---
+
+## 🚗 13/09 — VEÍCULOS: 5 FONTES NOVAS CONSTRUÍDAS, ANEXOS+FORMA_PAGAMENTO, E EXCLUSÃO CRÍTICA DE EXECUTADO GARANTIDA NO BANCO
+
+Pedido direto do dono, com uma frase marcada como crítica: *"Lembre de trazer descrição, fotos,
+anexos, forma de pagamento. Ao pegar a descrição descartar os veículos que estão com o executado.
+Isso é crítico e não tenho a intenção de mostrar veículos que estão nessa situação."*
+
+**Construído e validado com dado real, um de cada vez (recon antes de código, nunca adivinhando
+seletor/parâmetro):**
+- **Superbid** (`scraperSuperbidVeiculos`) — API `offer-query`, com fallback (filtro nomeado →
+  sem filtro + regex client-side) porque o filtro de categoria de veículo não veio confirmado no
+  recon. **3.200 veículos coletados**, 36 confirmados no pátio, 62 com anexo. Visita de detalhe
+  (pra anexo + pátio) limitada a 60 por rodada — cobertura completa vai se acumulando ao longo de
+  vários dias do cron diário, não é bug.
+- **Mega** (`scraperMegaVeiculos`) — **48-49 veículos**, todos com visita de detalhe.
+- **WebLeilões** (`scraperWebLeiloesVeiculos`) — `?tipo=Ve%C3%ADculos` confirmado no recon (não
+  `categoria=`, que era o chute óbvio). **20 veículos**.
+- **Zuk** (`scraperPortalZukVeiculos`) — mesmo mecanismo de scroll do imóvel. Ver seção própria
+  logo abaixo (timeout corrigido).
+- **LJUD** (`scraperLJUDVeiculos`) — sem API, extrator DOM. Ver seção própria logo abaixo.
+- **Sodré** (já existia, só ganhou `anexos`/`forma_pagamento` no mesmo commit).
+
+**Schema novo** (`veiculos_leilao_anexos_forma_pagamento.sql`, aplicada): colunas `anexos` (jsonb)
+e `forma_pagamento` (text) — não existiam antes, então nenhuma fonte de veículo trazia essa
+informação apesar de já estar disponível na maioria dos sites de origem.
+
+**A exclusão crítica** — implementada como PORTA ÚNICA, não fonte por fonte: `salvarVeiculos()`
+(o upsert compartilhado por TODAS as fontes de veículo) agora filtra
+`registros.filter(r => r.status_patio !== 'excluido')` **antes** de gravar, logando quantos foram
+descartados. Escolha deliberada: se a exclusão vivesse dentro de cada scraper, uma fonte nova
+esqueceria — centralizada no ponto de gravação, é estruturalmente impossível esquecer.
+`classificarPatio()` (já existia, usa `SINAL_EXECUTADO`/`SINAL_PATIO`) decide `confirmado` /
+`indefinido` / `excluido`; só `confirmado` aparece na tela `/admin/veiculos-leilao` (filtro que já
+existia na tela, anterior a hoje).
+
+**Achado durante a própria validação, não pelo dono**: uma linha com `status_patio='excluido'`
+sobrevivia no banco — rastreada até um dispatch de teste que rodou ANTES do commit do filtro
+chegar em produção (o filtro só vale pra escritas novas, não limpa o que já estava lá). Corrigida
+na hora com um `DELETE` manual, confirmado em 0 antes de considerar o pedido do dono atendido —
+dado o "isso é crítico" da frase original, tratei como tolerância zero, não como pendência.
+
+**Todos os 7 pilotos (Sodré, Suporte, Superbid, Mega, WebLeilões, Zuk, LJUD) foram promovidos à
+rodada diária** (`veiculos-puppeteer.yml`, cron próprio `0 12 * * *`, separado do job de imóvel
+de propósito — nunca soma risco de timeout entre os dois). A pendência antiga #5 (validar o
+piloto SUPORTE antes de promover) está resolvida por isso.
+
+## 🔧 13/09 — ZUK VEÍCULOS: TIMEOUT DE NAVEGAÇÃO CORRIGIDO (VISITAR A HOME ANTES)
+
+A 1ª rodada real em produção do piloto Zuk deu `Navigation timeout of 45000 ms exceeded` indo
+direto pra `/leilao-de-veiculos` — 0 veículos coletados. Recon (`recon-veiculos-ljud-zuk-v3.mjs`,
+já existia de uma investigação anterior) tinha achado a causa: desafio Cloudflare intermitente,
+que desaparece se a home for visitada primeiro (estabelece cookies/sessão, como faria uma pessoa
+navegando) antes de ir à listagem. Aplicada a mesma mitigação no scraper de produção, com até 2
+tentativas. Validado ao vivo: **56 veículos salvos, sem timeout**. Só uma rodada de validação —
+ver pendência #9 acima (acompanhar mais 2-3 rodadas do cron antes de considerar definitivo).
+
+## 🔧 13/09 — LJUD VEÍCULOS: SEM API NENHUMA, EXTRATOR DOM IMPLEMENTADO (COBERTURA PARCIAL 42/~570)
+
+Pedido do dono pra insistir no LJUD depois de 4 rounds de recon sem resultado (adivinhar
+`tipo=`/`categoria=` na API, achar que `/veiculos` seria um hub sem listagem própria). O 5º recon
+(entrar em "Carros" e interceptar rede) resolveu a dúvida de vez: **não existe API nenhuma** —
+`/veiculos/carros` é HTML renderizado no servidor, 0 chamadas de rede, card real
+`.base-card > a.card-lote-leilao`, sem botão "carregar mais" visível.
+
+Regexes de extração (ano em par de 2 dígitos "XX/XX" — formato diferente do `REGEX_ANO` já
+existente, que exige 4 dígitos — e cidade/UF, que aparece às vezes duplicada e grudada sem
+separador no texto do card) foram **validados em seco contra 7 amostras reais** capturadas no
+próprio recon antes de escrever o extrator final, seguindo o princípio do item 10 deste documento
+("rodar em seco sobre dado real antes de gravar").
+
+**Resultado em produção: 42 veículos coletados e salvos, dado real correto** (título/ano/cidade/
+valores batendo com o site). Mas o catálogo total anunciado na página é ~570 — o scroll infinito
+(mesmo mecanismo que funciona em Zuk/Mega) não disparou carregamento além do lote inicial. Extrator
+funcionando, cobertura parcial — ver pendência #8 acima. Todos os 42 vieram com `status_patio =
+'indefinido'` (nunca `confirmado`): a listagem não traz texto de "está com o executado", só o
+detalhe do lote (não visitado ainda) teria esse sinal — por segurança, sem esse sinal explícito
+nada é promovido a confirmado, então a exclusão crítica continua garantida mesmo sem cobertura
+total.
+
+## 📢 13/09 — GOOGLE ADS: CAMPANHA ZERADA REATIVADA + ALTERNATIVA C CRIADA PRA SUBSTITUIR O ANÚNCIO REPROVADO
+
+Dono reportou "o Google caiu muito hoje". Diagnosticado: o anúncio aprovado da campanha "Pesquisa
+— Leilão de Imóveis (BR)" estava pausado e o outro anúncio do mesmo grupo tinha sido reprovado
+(`DISAPPROVED`, motivo `MISLEADING_CONTENT` — headlines tipo "Aula Ao Vivo Grátis... Aula Toda
+Semana... Aprenda a Arrematar"), zerando o gasto da campanha inteira. Reativado o anúncio aprovado
+via Windsor.ai (`enable_ad`). Anúncio reprovado mantido pausado (não pode reativar um reprovado).
+
+**Alternativa C** criada como anúncio novo (`create_responsive_search_ad`), **pausado**, no mesmo
+ad group, removendo as afirmações que provavelmente motivaram a reprovação (sem "toda semana", sem
+promessa de aprendizado garantido) — linguagem factual, no mesmo estilo do anúncio aprovado. Status
+ao fim da sessão: `REVIEW_IN_PROGRESS` (Google ainda analisando). Ver pendência #10 acima.
 
 ---
 
