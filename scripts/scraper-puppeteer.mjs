@@ -696,6 +696,7 @@ function mapearMegaVeiculo(c, detalhe = null) {
     fonte: 'MEGA', fonte_id: `mega_veic_${c.id}`, leiloeiro: 'Mega Leilões',
     titulo, descricao,
     marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    tipo_veiculo: classificarTipoVeiculo(textoCompleto),
     modelo: null,
     ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
     ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
@@ -1151,6 +1152,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
         base: {
           fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro, titulo, descricao,
           marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+          tipo_veiculo: classificarTipoVeiculo(textoCompleto),
           modelo: null,
           ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
           ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
@@ -1617,6 +1619,7 @@ async function scraperPortalZukVeiculos(browser) {
         fonte: 'ZUK', fonte_id: `zuk_veic_${id}`, leiloeiro: 'Zukerman (PortalZuk)',
         titulo, descricao,
         marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+        tipo_veiculo: classificarTipoVeiculo(textoCompleto),
         modelo: null,
         ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
         ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
@@ -1733,6 +1736,7 @@ async function scraperLJUDVeiculos(browser) {
         fonte: 'LJUD', fonte_id: `ljud_veic_${id}`, leiloeiro: 'Leilões Judiciais (LJUD)',
         titulo, descricao: titulo,
         marca: c.textoCard.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+        tipo_veiculo: classificarTipoVeiculo(c.textoCard),
         modelo: null,
         ano_fabricacao: anoFab,
         ano_modelo: anoMod,
@@ -1942,6 +1946,35 @@ const REGEX_PLACA = /\b([A-Z]{3}-?\d[A-Z0-9]\d{2}|[A-Z]{3}-?\d{4})\b/;
 const REGEX_ANO = /\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/;
 const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
 const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
+// ── CATEGORIA DO VEÍCULO (carro/moto/caminhão/...) — 13/09, pedido do dono: "inclua um
+// filtro para selecionar por tipo de veículo (moto, carro, caminhão, etc)". Nenhuma fonte
+// grava isso hoje (nem coluna existia — ver migração veiculos_leilao_tipo_veiculo.sql). Sem
+// sinal ESTRUTURADO de nenhuma API (diferente de `lot_is_judicial`, campo próprio da Sodré
+// pra modalidade): é palavra no título/descrição do próprio leiloeiro, igual `marca`.
+//
+// MOTO tem 2 níveis porque a amostra real mediu 94% de NULL só com palavra explícita
+// ("moto"/"motocicleta") — um título real quase nunca diz isso, diz marca+modelo ("HONDA
+// CG 160 START", "HONDA NXR125 BROS"). O 2º nível reconhece os nomes de modelo de moto mais
+// comuns no Brasil — vocabulário fechado e bem conhecido, diferente de tentar enumerar
+// modelo de CARRO (espaço grande demais pra ser seguro adivinhar; por isso não existe).
+// De propósito, NÃO há fallback "marca → carro": uma marca como Chevrolet vende tanto sedã
+// quanto picape (achado real: "CHEVROLET D20", uma picape) — melhor ficar sem categoria do
+// que rotular picape/utilitário como carro errado.
+const TIPO_VEICULO_REGEX = [
+  ['moto', /\bmoto(?:cicleta|neta)?s?\b|\bscooter\b|\btricic(?:lo|los)?\b|\bquadricic(?:lo|los)?\b|\b(?:cg|titan|bros|nxr|fan|biz|pop|pcx|xre|cbr?|lead|elite|fazer|ybr|factor|crypton|xtz|tenere|nmax|crosser|hornet|twister|falcon|burgman|shineray|traxx|neo)\b/i],
+  ['onibus', /\b[oô]nibus\b|\bmicro-?[oô]nibus\b/i],
+  ['caminhao', /\bcaminh(?:[ãa]o|[õo]es)\b|\bcarreta\b|\bcavalo\s*mec[âa]nico\b/i],
+  ['van_utilitario', /\bvan\b|\bfurg[ãa]o\b|\bkombi\b|\butilit[áa]rio\b/i],
+  ['maquina', /\btrator(?:es)?\b|\bm[áa]quina\s*(?:agr[íi]cola|pesada)\b|\bretroescavadeira\b|\bp[áa]\s*carregadeira\b|\bmotoniveladora\b|\bempilhadeira\b|\bcolheitadeira\b/i],
+  ['reboque', /\bsemi-?reboque\b|\breboque\b/i],
+  ['embarcacao', /\blancha\b|\bembarca[çc][ãa]o\b|\bbarco\b|\bjet-?ski\b/i],
+  ['carro', /\bcaminhonete\b|\bpick-?up\b|\bautom[óo]vel\b|\bcarro\b|\bpicape\b/i],
+];
+function classificarTipoVeiculo(texto) {
+  const t = String(texto || '');
+  for (const [tipo, re] of TIPO_VEICULO_REGEX) if (re.test(t)) return tipo;
+  return null;
+}
 // Sinal de PÁTIO (bem já recolhido/disponível — o que o dono quer) vs sinal de EXECUTADO
 // (bem ainda a apreender — o que o dono NÃO quer). Ausência dos dois = 'indefinido', e por
 // desenho 'indefinido' não deve ser exibido por padrão (ver comentário da migração).
@@ -2073,6 +2106,7 @@ async function scraperSodreVeiculos(browser) {
         leiloeiro: 'Sodré Santoro',
         titulo,
         descricao,
+        tipo_veiculo: classificarTipoVeiculo(textoCompleto),
         marca: r.lot_brand ? String(r.lot_brand).toUpperCase().slice(0, 60) : (textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null),
         modelo: r.lot_model ? String(r.lot_model).slice(0, 100) : null,
         ano_fabricacao: Number(r.lot_year_manufacture) || (textoCompleto.match(REGEX_ANO)?.[1] ? Number(textoCompleto.match(REGEX_ANO)[1]) : null),
@@ -3363,6 +3397,7 @@ function mapLoteWebLeiloesVeiculo(l, detalhe = null) {
     fonte: 'WEBLEILOES', fonte_id: `webleiloes_veic_${l.id}`, leiloeiro: 'WebLeilões',
     titulo, descricao,
     marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    tipo_veiculo: classificarTipoVeiculo(textoCompleto),
     modelo: null,
     ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
     ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
@@ -4059,6 +4094,7 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
     titulo: (titulo || `Veículo ${tenant.leiloeiro}`).slice(0, 180),
     descricao: titulo.slice(0, 500),
     marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+    tipo_veiculo: classificarTipoVeiculo(textoCompleto),
     modelo: null,
     ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
     ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,

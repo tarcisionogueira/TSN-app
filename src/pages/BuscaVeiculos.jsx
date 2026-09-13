@@ -15,7 +15,20 @@ const COLUNAS = [
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
+  // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
+  'tipo_veiculo',
 ].join(',');
+
+// "Tipo de veículo" (13/09, pedido do dono) — NÃO é o mesmo campo que `tipoMonta`
+// (severidade de dano/sucata, coluna `sinistro`) nem `modalidade` (judicial/extrajudicial).
+// Sem opção "não classificado" de propósito: ao contrário de `modalidade`, `tipo_veiculo`
+// é inferência best-effort (igual `marca`) — muita coisa ainda fica NULL (marca+modelo sem
+// nenhuma palavra de categoria reconhecível), e "Qualquer" já cobre esse caso sem precisar
+// de uma opção própria para "não sei".
+const TIPOS_VEICULO_LABEL = {
+  carro: 'Carro', moto: 'Moto', caminhao: 'Caminhão', onibus: 'Ônibus',
+  van_utilitario: 'Van/Utilitário', maquina: 'Máquina/Trator', reboque: 'Reboque', embarcacao: 'Embarcação',
+};
 
 // 'nao_identificado' é ESTADO, não ausência — mesmo princípio de classificarPatio() (a
 // dúvida também aparece na lista, nunca vira um lote invisível).
@@ -137,7 +150,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 
 function filtrosVazios() {
   return {
-    estado: '', cidade: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
+    estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
     valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', prazo: '', ordenacao: 'atualizado_desc',
   };
 }
@@ -164,6 +177,7 @@ export default function BuscaVeiculos() {
         .eq('status_patio', 'confirmado');
       if (f.estado) q = q.eq('estado', f.estado);
       if (f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
+      if (f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
       if (f.marca.trim()) q = q.ilike('marca', `%${f.marca.trim()}%`);
       // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
       // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
@@ -243,6 +257,13 @@ export default function BuscaVeiculos() {
           <div>
             <label style={lbl}>Cidade</label>
             <input style={inp} placeholder="Ex.: Campinas" value={filtros.cidade} onChange={e => setFiltros(f => ({ ...f, cidade: e.target.value }))} />
+          </div>
+          <div>
+            <label style={lbl}>Tipo de veículo</label>
+            <select style={inp} value={filtros.tipoVeiculo} onChange={e => setFiltros(f => ({ ...f, tipoVeiculo: e.target.value }))}>
+              <option value="">Qualquer</option>
+              {Object.entries(TIPOS_VEICULO_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </select>
           </div>
           <div>
             <label style={lbl}>Marca</label>

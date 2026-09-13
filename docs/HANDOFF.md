@@ -144,8 +144,40 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     BAYIT, CEF, LEILOTECH, PURCENA, JELEILOES, INFINITY, RJLEILOES, HASTA, GRUPOLANCE,
     FERREIRALEIL, CASAMARTILLO, CALIL, GESTAOLEILOES, TMLEILOES, VEGAS, TORRES3, JOAOEMILIO,
     DANIELGARCIA, LANCEJA, ISAIAS, CERULI, PECINI, VIP — maioria SOLEON (`cloudflare_parcial`),
-    exigiria Bright Data/IP residencial para checar, não fetch direto grátis. Próximo passo
-    sugerido: escrever o scraper para os 5 confirmados (o do "leilao/index" cobre 3 de uma vez).
+    exigiria Bright Data/IP residencial para checar, não fetch direto grátis.
+
+    > ⚠️ **CORREÇÃO (mesmo dia, à tarde) — o plano "1 scraper cobre 3" não se sustentou no
+    > recon.** `/leilao/index/veiculos` (RIGOLON/GIORDANO/THAISTEIXEIRA) devolveu **0 lotes**
+    > nas 3 fontes, com `networkidle2` + espera (mesma config de `criarMotorDom`, produção) —
+    > mesmo padrão que já tinha mordido `/leilao/index/imoveis` (também vazio, catálogo real é
+    > a HOME). Nos 8 lotes da home amostrados (o único catálogo real desta plataforma), 7 são
+    > **imóvel** (m²/matrícula) e 1 é um lote de SUCATA em bloco ("211 automóveis e 144
+    > motocicletas", peso pra reciclagem — não cabe no modelo de veículo individual). O sinal
+    > "Veículos" existe no MENU do site; o catálogo enumerável (a home) hoje não tem nenhum
+    > veículo individual à venda nessas 3 fontes. **Não escrevi o scraper** — coletaria zero
+    > linhas hoje, e o próprio HANDOFF já tem 3 achados este mês do padrão "número plausível
+    > que mede outra coisa" (forma nº 10). Fica documentado para reconsiderar se/quando o
+    > inventário de veículo aparecer na home. **Candidatos melhores para a PRÓXIMA vaga**:
+    > LEFFA (achou uma URL de EVENTO especificamente de veículo, com `/lotes/lista` — sinal de
+    > catálogo de verdade, não só menu) e SIMONLEILOES (`/leiloes/veiculos`, path próprio,
+    > plataforma "Própria" sem o histórico de catálogo fantasma do leilao/index).
+
+18. **Filtro "Tipo de veículo" (carro/moto/caminhão/etc) — implementado (13/09)**. Pedido do
+    dono. Coluna nova `tipo_veiculo` (`veiculos_leilao_tipo_veiculo.sql`) + classificador
+    `classificarTipoVeiculo()` (scripts/scraper-puppeteer.mjs, reaproveitado nas 7 fontes de
+    veículo existentes) + filtro em `BuscaVeiculos.jsx`. Nenhuma API expõe categoria como
+    campo próprio (diferente de `lot_is_judicial` da Sodré para modalidade) — é inferência por
+    palavra, como `marca`. **Achado ao medir** (não por suposição): a 1ª versão só olhava
+    palavra EXPLÍCITA ("moto"/"caminhão") e ficou 94% `NULL` — título real quase nunca diz
+    "moto", diz marca+modelo ("HONDA CG 160 START"). 2º nível reconhecendo nomes de modelo de
+    moto comuns no Brasil (CG/Titan/Bros/Fan/Biz/...) subiu a cobertura de moto de 51 para
+    1.953 linhas (maioria do acervo do Superbid É moto, não carro — bate com o padrão real de
+    apreensão no Brasil). **De propósito, sem fallback "marca → carro"**: Chevrolet vende sedã
+    E picape (achado real: "CHEVROLET D20"), então ficar `NULL` é mais seguro que arriscar
+    rotular picape como carro. Hoje: moto 1.953, NULL 1.546 (42%, majoritariamente carro por
+    marca+modelo sem palavra reconhecível — modelo de carro não tem lista fechada como moto),
+    carro 71 (só via palavra explícita), máquina 22, van/utilitário 21, caminhão 15, ônibus 14,
+    reboque 13.
 
 ---
 
