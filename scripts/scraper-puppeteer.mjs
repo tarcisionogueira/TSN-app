@@ -668,7 +668,7 @@ async function scraperMegaLeiloes(browser) {
 // de categoria (só lê título/preço/localização/foto do card), então é reaproveitada tal como
 // está. Só o mapeamento muda: em vez de área/praças de imóvel, extrai marca/ano/placa/km do
 // título (regex compartilhado com os outros pilotos de veículo) e grava em `veiculos_leilao`.
-function mapearMegaVeiculo(c, textoDetalhe = '') {
+function mapearMegaVeiculo(c, detalhe = null) {
   const valores = (c.valores || []).filter(v => v > 0);
   if (!valores.length) return null;
   const valAval = Math.max(...valores);
@@ -686,6 +686,7 @@ function mapearMegaVeiculo(c, textoDetalhe = '') {
   // Pátio recebe TAMBÉM o texto da página de detalhe (visitarTextoDetalhe, bounded) — mesmo
   // motivo do ajuste da Suporte (13/09): a listagem é curta demais pro sinal aparecer.
   // Isolado de propósito: só entra aqui, nunca em `textoCompleto` (marca/ano/placa/km).
+  const textoDetalhe = detalhe?.texto || '';
   const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoDetalhe ? `${textoCompleto} ${textoDetalhe}` : textoCompleto);
   const anoMatch = textoCompleto.match(REGEX_ANO);
   const modalidade = /judicial/i.test(c.instTitle) && !/extra/i.test(c.instTitle)
@@ -708,6 +709,8 @@ function mapearMegaVeiculo(c, textoDetalhe = '') {
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: c.href,
     fotos: c.foto ? [c.foto] : [],
+    anexos: detalhe?.anexos,
+    forma_pagamento: 'a_vista',
     data_leilao: c.dataLeilao,
     status_patio: statusPatio,
     status_patio_motivo: statusPatioMotivo,
@@ -751,10 +754,10 @@ async function scraperMegaVeiculos(browser) {
   }
 
   const cards = [...cardsPorId.values()];
-  const textoPorId = await visitarTextoDetalhe(browser, cards, {
+  const detalhePorId = await visitarTextoDetalhe(browser, cards, {
     getUrl: (c) => c.href, getId: (c) => c.id, max: 60, label: 'Mega veículos',
   });
-  const veiculos = cards.map((c) => mapearMegaVeiculo(c, textoPorId.get(c.id) || '')).filter(Boolean);
+  const veiculos = cards.map((c) => mapearMegaVeiculo(c, detalhePorId.get(c.id))).filter(Boolean);
   console.log(`  Mega Leilões (veículos): ${veiculos.length} coletados`);
   return veiculos;
 }
@@ -1161,6 +1164,11 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
           estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2) || null,
           link_lote,
           fotos: p.thumbnailUrl ? [p.thumbnailUrl] : [],
+          // Anexos: a API já traz PDF quando existe (mesmo walker do imóvel Superbid,
+          // 13/09, pedido do dono) — a visita à página do lote (abaixo) só completa
+          // quando a API não trouxe nada.
+          anexos: extrairAnexosPdfDeObjeto(of),
+          forma_pagamento: 'a_vista',
           data_leilao: of.endDate || of.endDateTime || null,
           motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
           ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
@@ -1175,13 +1183,18 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     // API não expõe (ex.: seção "Documentação"/condição do bem). Bounded: com 3.200+ ofertas
     // num catálogo só, visitar todas seria caro — 60 por rodada já é ganho sobre 0, e o
     // upsert diário vai cobrindo mais lotes ao longo do tempo.
-    const textoPorId = await visitarTextoDetalhe(browser, pendentes, {
+    const detalhePorId = await visitarTextoDetalhe(browser, pendentes, {
       getUrl: (x) => x.link_lote, getId: (x) => x.id, max: 60, label: `${leiloeiro} veículos`,
     });
     const registros = pendentes.map((x) => {
-      const extra = textoPorId.get(x.id);
+      const detalhe = detalhePorId.get(x.id);
+      const extra = detalhe?.texto || '';
       const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(extra ? `${x.textoCompleto} ${extra}` : x.textoCompleto);
-      return { ...x.base, status_patio: statusPatio, status_patio_motivo: statusPatioMotivo };
+      return {
+        ...x.base,
+        anexos: x.base.anexos || detalhe?.anexos,
+        status_patio: statusPatio, status_patio_motivo: statusPatioMotivo,
+      };
     });
     console.log(`    ${leiloeiro} (veículos): ${registros.length} registros mapeados`);
     return registros;
@@ -1848,6 +1861,10 @@ async function scraperSodreVeiculos(browser) {
         // string, não um array, e a foto nunca aparecia — bug real, achado ao investigar os
         // campos de sinistro/motor abaixo (os 70 registros já gravados tinham esse defeito).
         fotos,
+        // Mesmo walker da Superbid/imóvel (13/09, pedido do dono) sobre o `raw` da API —
+        // pega qualquer PDF (edital/laudo) que o lote já traga, sem requisição extra.
+        anexos: extrairAnexosPdfDeObjeto(r),
+        forma_pagamento: 'a_vista',
         data_leilao: parseData(r.auction_date_init || r.auction_date_end),
         status_patio: statusPatio,
         status_patio_motivo: statusPatioMotivo,
@@ -1888,9 +1905,20 @@ async function scraperSodreVeiculos(browser) {
 async function salvarVeiculos(registros, rotulo) {
   const nome = rotulo || (registros[0]?.fonte ? `${registros[0].fonte} veículos` : 'veículos');
   if (!registros.length) { console.log(`    ${nome}: nada para salvar.`); return 0; }
+  // FILTRO CRÍTICO (13/09, pedido explícito do dono): "não tenho a intenção de mostrar
+  // veículos que estão nessa situação" — bem ainda em poder do executado/devedor,
+  // sujeito a busca e apreensão, não localizado (classificarPatio() já marca isso como
+  // 'excluido', via SINAL_EXECUTADO). Antes, esses registros eram gravados normalmente e
+  // só ficavam de fora da TELA (BuscaVeiculos.jsx filtra por status_patio='confirmado').
+  // Ponto único aqui, e não em cada scraper: garante que NENHUMA fonte, presente ou
+  // futura, guarde esse tipo de lote — mesmo que uma tela futura esqueça de filtrar.
+  const aptos = registros.filter((r) => r.status_patio !== 'excluido');
+  const descartados = registros.length - aptos.length;
+  if (descartados) console.log(`    ${nome}: ${descartados} descartado(s) — bem ainda com o executado/devedor (status_patio='excluido')`);
+  if (!aptos.length) { console.log(`    ${nome}: nada para salvar (tudo excluído).`); return 0; }
   let salvos = 0;
-  for (let i = 0; i < registros.length; i += 200) {
-    const lote = registros.slice(i, i + 200);
+  for (let i = 0; i < aptos.length; i += 200) {
+    const lote = aptos.slice(i, i + 200);
     const { error } = await supabase.from('veiculos_leilao').upsert(lote, { onConflict: 'fonte,fonte_id' });
     if (error) { console.log(`  ⚠️ veiculos_leilao upsert falhou: ${String(error.message).slice(0, 150)}`); continue; }
     salvos += lote.length;
@@ -3073,7 +3101,7 @@ async function scraperWebLeiloes(browser) {
 // filtra de verdade é `tipo=Veículos` (100% dos 20 resultados vieram com "/veiculos/" no
 // href, 0 com "/imoveis/"). Por isso o path aqui é DIFERENTE do de imóvel, não uma cópia com
 // "imoveis"→"veiculos" no meio da URL.
-function mapLoteWebLeiloesVeiculo(l, textoDetalhe = '') {
+function mapLoteWebLeiloesVeiculo(l, detalhe = null) {
   const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
   const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
   const valor = pm ? parseBRL(pm[1]) : 0;
@@ -3088,6 +3116,7 @@ function mapLoteWebLeiloesVeiculo(l, textoDetalhe = '') {
   const textoCompleto = `${titulo} ${descricao}`;
   // Pátio recebe TAMBÉM o texto da página de detalhe — mesmo motivo do ajuste da Suporte
   // (13/09). Isolado: só entra aqui, nunca em `textoCompleto` (marca/ano/placa/km).
+  const textoDetalhe = detalhe?.texto || '';
   const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoDetalhe ? `${textoCompleto} ${textoDetalhe}` : textoCompleto);
   const anoMatch = textoCompleto.match(REGEX_ANO);
   const modalidade = /venda-direta/.test(String(l.href)) ? 'venda_direta'
@@ -3111,6 +3140,8 @@ function mapLoteWebLeiloesVeiculo(l, textoDetalhe = '') {
     cidade: cidade ? toTitleCase(cidade) : null,
     link_lote: url,
     fotos: foto ? [foto] : [],
+    anexos: detalhe?.anexos,
+    forma_pagamento: 'a_vista',
     data_leilao: null,
     status_patio: statusPatio,
     status_patio_motivo: statusPatioMotivo,
@@ -3160,11 +3191,11 @@ async function scraperWebLeiloesVeiculos(browser) {
     } catch (e) { console.log(`    WebLeilões veículos: ${String(e.message).slice(0, 80)}`); }
   } finally { await page.close(); }
   const lista = [...bens.values()];
-  const textoPorId = await visitarTextoDetalhe(browser, lista, {
+  const detalhePorId = await visitarTextoDetalhe(browser, lista, {
     getUrl: (l) => (String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`),
     getId: (l) => l.id, max: 60, label: 'WebLeilões veículos',
   });
-  const veiculos = lista.map((l) => mapLoteWebLeiloesVeiculo(l, textoPorId.get(l.id) || '')).filter(v => v.valor_minimo > 0);
+  const veiculos = lista.map((l) => mapLoteWebLeiloesVeiculo(l, detalhePorId.get(l.id))).filter(v => v.valor_minimo > 0);
   console.log(`  ✅ WebLeilões (veículos): ${veiculos.length} mapeados`);
   return veiculos;
 }
@@ -3751,7 +3782,7 @@ async function scraperSuporte(browser) {
 // sempre guardado e marca/modelo/placa/km saem por REGEX, que não depende de
 // seletor nenhum). OPT-IN só (SUPORTE_VEICULOS), mesmo motivo da Sodré: piloto
 // aguardando validação de dado real antes de entrar na rodada diária.
-function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetalhe = '') {
+function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetalhe = '', anexosDetalhe = undefined) {
   if (!l || !l.id) return null;
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   if (RE_SUPORTE_TESTE.test(`${titulo} ${l.href || ''}`)) return null;
@@ -3813,6 +3844,8 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: link,
     fotos: (l.foto && /^https?:\/\//.test(l.foto)) ? [l.foto] : [],
+    anexos: anexosDetalhe,
+    forma_pagamento: 'a_vista',
     data_leilao: null,
     status_patio: statusPatio,
     status_patio_motivo: statusPatioMotivo,
@@ -3832,11 +3865,68 @@ function htmlParaTextoPlano(html) {
   return String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 }
 
+// ── ANEXOS (PDF) — dois extratores, mesmo padrão do anexos da Superbid/imóvel (13/09,
+// pedido do dono: "lembre de trazer... anexos"), generalizados pra qualquer piloto de
+// veículo. Nunca derruba a coleta: falha vira `undefined` (sem anexos), nunca erro.
+//
+// (a) De um OBJETO (payload de API já em JSON, como a oferta da Superbid ou o `raw` da
+// Sodré) — varre recursivamente por qualquer URL .pdf, rotulando pelo objeto que a contém.
+function extrairAnexosPdfDeObjeto(obj) {
+  try {
+    const out = [], vis = new Set(), objSeen = new Set();
+    const add = (url, label) => {
+      if (!url || typeof url !== 'string') return;
+      const u = url.startsWith('//') ? `https:${url}` : url;
+      if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u)) return;
+      vis.add(u);
+      const t = `${label || ''} ${u}`.toLowerCase();
+      const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
+                 : /(edital|regulament|condi[çc])/.test(t) ? 'edital' : 'outro';
+      out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url: u, tipo });
+    };
+    const walk = (node, depth) => {
+      if (!node || typeof node !== 'object' || depth > 5) return;
+      if (Array.isArray(node)) { for (const it of node) walk(it, depth + 1); return; }
+      const url = node.url || node.link || node.href || node.fileUrl || node.path || node.value || node.document || node.attachmentUrl;
+      if (typeof url === 'string' && /\.pdf(\?|#|$)/i.test(url)) add(url, JSON.stringify(node));
+      for (const k in node) { const v = node[k]; if (v && typeof v === 'object' && !objSeen.has(v)) { objSeen.add(v); walk(v, depth + 1); } }
+    };
+    walk(obj, 0);
+    for (const m of (JSON.stringify(obj).match(/https?:\\?\/\\?\/[^"'\s\\]*\.pdf/gi) || [])) add(m.replace(/\\\//g, '/'), '');
+    return out.length ? out.slice(0, 12) : undefined;
+  } catch { return undefined; } // padrao-ok: best-effort — falha em achar anexo nunca pode derrubar a coleta do lote
+}
+
+// (b) De um HTML cru (página de detalhe DOM-based — Suporte/Mega/WebLeilões) — regex
+// direto na string, classificando pelo texto NAS PROXIMIDADES do link (a página não tem
+// um objeto JS pra ler `label` como no caso da API).
+function extrairAnexosPdfDeHtml(html) {
+  if (!html) return undefined;
+  try {
+    const out = []; const vis = new Set();
+    const re = /https?:\/\/[^\s"'<>]+\.pdf(?:\?[^\s"'<>]*)?/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      const url = m[0];
+      if (vis.has(url)) continue;
+      vis.add(url);
+      const contexto = html.slice(Math.max(0, m.index - 120), m.index).toLowerCase();
+      const tipo = /matr[ií]cul/.test(contexto) ? 'matricula' : /(laudo|avalia)/.test(contexto) ? 'laudo'
+                 : /(edital|regulament|condi[çc])/.test(contexto) ? 'edital' : 'outro';
+      out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url, tipo });
+      if (out.length >= 12) break;
+    }
+    return out.length ? out : undefined;
+  } catch { return undefined; } // padrao-ok: best-effort — falha em achar anexo nunca pode derrubar a coleta do lote
+}
+
 // Visita a página de DETALHE de até `max` itens (bounded, best-effort) para dar a
 // classificarPatio() texto além do título/localização da LISTAGEM — mesmo princípio
 // aplicado à Suporte (13/09): o sinal de pátio ("pátio", "comitente: banco" etc.) costuma
 // estar na página do lote, não na listagem, e a listagem sozinha é curta demais pra conter.
 // `getUrl`/`getId` extraem URL e chave de dedup de cada item; devolve Map id→texto plano.
+// Devolve Map id → { texto, anexos } — texto pro reforço de classificarPatio(), anexos
+// (13/09, pedido do dono) pros PDFs (edital/laudo) que a página do lote exponha.
 async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, label = '' }) {
   const mapa = new Map();
   if (!itens.length) return mapa;
@@ -3852,7 +3942,8 @@ async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, la
       if (!url || !id) continue;
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        mapa.set(id, htmlParaTextoPlano(await page.content()));
+        const html = await page.content();
+        mapa.set(id, { texto: htmlParaTextoPlano(html), anexos: extrairAnexosPdfDeHtml(html) });
         visitados++;
         await new Promise(r => setTimeout(r, 250));
       } catch (e) {
@@ -3861,7 +3952,7 @@ async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, la
       }
     }
   } finally { await page.close().catch(() => {}); } // padrao-ok: fechar página best-effort, mesmo padrão de scraperSuporteVeiculosTenant
-  if (visitados) console.log(`    ${label}: ${visitados} páginas de detalhe visitadas (pátio)`);
+  if (visitados) console.log(`    ${label}: ${visitados} páginas de detalhe visitadas (pátio + anexos)`);
   return mapa;
 }
 
@@ -3904,6 +3995,8 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   // Texto puro da página de detalhe, por lote — reaproveitado pela classificação de pátio
   // em mapLoteSuporteVeiculo (ver comentário lá). Mesma visita da modalidade, custo zero extra.
   const textoDetalhePorLote = new Map();
+  // Anexos PDF (edital/laudo), da mesma visita (13/09, pedido do dono) — custo zero extra.
+  const anexosPorLote = new Map();
   if (bens.size) {
     const paginaLote = await browser.newPage();
     await paginaLote.setUserAgent(USER_AGENT);
@@ -3915,8 +4008,10 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
         if (!href || !/\/lote\//.test(href)) continue;
         try {
           await paginaLote.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          const txt = htmlParaTextoPlano(await paginaLote.content());
+          const html = await paginaLote.content();
+          const txt = htmlParaTextoPlano(html);
           textoDetalhePorLote.set(l.id, txt);
+          anexosPorLote.set(l.id, extrairAnexosPdfDeHtml(html));
           const mod = modalidadeSuporteVeiculo(txt);
           if (mod) { modalidadePorLote.set(l.id, mod); comModalidade++; }
           visitados++;
@@ -3933,7 +4028,7 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   const veiculos = [];
   const seen = new Set();
   for (const l of bens.values()) {
-    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null, textoDetalhePorLote.get(l.id) || '');
+    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null, textoDetalhePorLote.get(l.id) || '', anexosPorLote.get(l.id));
     if (!row || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);
     veiculos.push(row);
