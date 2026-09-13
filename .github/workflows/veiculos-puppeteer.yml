@@ -1,0 +1,70 @@
+name: Leiloeiros — Veículos (Sodré + Suporte)
+
+# Job PRÓPRIO e separado do `leiloeiros-puppeteer.yml` (imóveis), de propósito (13/09).
+# Os dois pilotos de veículo (Sodré, Suporte) ficaram meses opt-in — só rodavam quando alguém
+# disparava SCRAPER_FONTES=SODRE_VEICULOS/SUPORTE_VEICULOS na mão — porque colocá-los DENTRO
+# da rodada diária de imóvel arriscava estourar o timeout-minutes daquele job (que já foi
+# cancelado no meio 3 dias seguidos em 10-12/08 por passar de 90 min) e truncar as fontes que
+# vêm depois na lista (SUPORTE, GRUPOLANCE, WEBLEILOES — o próprio incidente documentado ali).
+# Suporte sozinho, com a visita à página de detalhe de cada veículo (12 tenants x até 60
+# detalhes), pode levar a maior parte de uma hora — não é seguro somar isso ao orçamento do
+# job de imóvel. Isolado aqui, um timeout ou lentidão neste job nunca atrasa imóvel, e vice-versa.
+on:
+  schedule:
+    - cron: '0 12 * * *'   # DIÁRIO, 12h UTC — 2h depois do job de imóveis (10h UTC), para não
+                            # competir por runner nem se confundir nos logs.
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'Fontes a rodar (vazio = as duas). Ex.: SODRE_VEICULOS ou SUPORTE_VEICULOS'
+        required: false
+        default: ''
+
+jobs:
+  scraper-veiculos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Run Puppeteer scraper (veículos)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # Sem input manual, roda os DOIS pilotos — é o comportamento do disparo por schedule
+          # e do disparo manual default. `ONLY.includes(...)` em scraper-puppeteer.mjs já trata
+          # este valor como lista exclusiva, então nenhuma fonte de IMÓVEL roda neste job.
+          SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS' }}
+        run: node scripts/scraper-puppeteer.mjs
+
+      - name: Notify on failure
+        if: failure() || cancelled()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento no job de veiculos (Sodre/Suporte).' || 'Erro na execucao do job de veiculos.' }}"
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Scraper Veiculos","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true

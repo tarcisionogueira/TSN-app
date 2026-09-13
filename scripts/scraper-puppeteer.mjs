@@ -3425,7 +3425,7 @@ async function scraperSuporte(browser) {
 // sempre guardado e marca/modelo/placa/km saem por REGEX, que não depende de
 // seletor nenhum). OPT-IN só (SUPORTE_VEICULOS), mesmo motivo da Sodré: piloto
 // aguardando validação de dado real antes de entrar na rodada diária.
-function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null) {
+function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetalhe = '') {
   if (!l || !l.id) return null;
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   if (RE_SUPORTE_TESTE.test(`${titulo} ${l.href || ''}`)) return null;
@@ -3443,7 +3443,17 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null) {
   const valorMin = parseBRL(l.valor || '');
   if (!valorMin) return null;
   const textoCompleto = `${titulo} ${loc}`;
-  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoCompleto);
+  // Classificação de pátio recebe TAMBÉM o texto da página de detalhe (13/09) — antes ia só
+  // título+local da LISTAGEM, texto curto demais pra conter qualquer um dos sinais que
+  // classificarPatio() procura ("pátio", "comitente: banco" etc.), e por isso 118 dos 120
+  // veículos capturados na primeira carga saíam 'indefinido' mesmo quando o leiloeiro tinha
+  // escrito o sinal — só que na página do lote, não na listagem. O detalhe já era visitado
+  // (é de lá que vem a modalidade, logo abaixo); isto só aproveita a MESMA visita, sem
+  // requisição nova. Escopo isolado de propósito: só entra no texto de classificarPatio(),
+  // nunca em `textoCompleto` (usado por marca/ano/placa/km/ipva/motor_alerta) — a página
+  // inteira do lote tem menu/rodapé que poderia inventar marca ou ano errado nesses campos.
+  const textoParaPatio = textoDetalhe ? `${textoCompleto} ${textoDetalhe}` : textoCompleto;
+  const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoParaPatio);
   // SUPORTE escreve "aaaa aaaa" (espaço) em vez do "aaaa/aaaa" (barra) que REGEX_ANO espera
   // (confirmado ao vivo: "...BRANCA 2017 2017 - SINISTRADO..."). Tenta a barra primeiro (caso
   // algum tenant use o outro formato) e só cai no espaço se não achou — mantém REGEX_ANO
@@ -3488,12 +3498,19 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null) {
   };
 }
 
+// Texto puro da página de detalhe (tags fora) — usado tanto pra achar a modalidade
+// estruturada quanto pra dar a classificarPatio() o texto que ela precisa (13/09, ver
+// motivo em textoDetalhePorLote/scraperSuporteVeiculosTenant abaixo).
+function textoPlanoDetalheSuporte(html) {
+  if (!html) return '';
+  return String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+}
+
 // "Tipo Judicial"/"Tipo Extrajudicial" — rótulo ESTRUTURADO da página de detalhe do veículo
 // (recon-modalidade-veiculo.mjs, 11/09, 2 lotes reais confirmados: "Tipo Judicial Recebimento
 // de lances Somente online"). O leiloeiro classifica; não é inferência nossa.
-function modalidadeSuporteVeiculo(html) {
-  if (!html) return null;
-  const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+function modalidadeSuporteVeiculo(txt) {
+  if (!txt) return null;
   const m = txt.match(/\bTipo\s+(Judicial|Extrajudicial)\b/i);
   return m ? m[1].toLowerCase() : null;
 }
@@ -3525,6 +3542,9 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   // (imóveis). Acesso GRÁTIS, mesma origem da listagem, sem Bright Data.
   const MAX_DETALHE = Number(process.env.SUPORTE_VEIC_MAX_DETALHE || 60);
   const modalidadePorLote = new Map();
+  // Texto puro da página de detalhe, por lote — reaproveitado pela classificação de pátio
+  // em mapLoteSuporteVeiculo (ver comentário lá). Mesma visita da modalidade, custo zero extra.
+  const textoDetalhePorLote = new Map();
   if (bens.size) {
     const paginaLote = await browser.newPage();
     await paginaLote.setUserAgent(USER_AGENT);
@@ -3536,8 +3556,9 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
         if (!href || !/\/lote\//.test(href)) continue;
         try {
           await paginaLote.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          const html = await paginaLote.content();
-          const mod = modalidadeSuporteVeiculo(html);
+          const txt = textoPlanoDetalheSuporte(await paginaLote.content());
+          textoDetalhePorLote.set(l.id, txt);
+          const mod = modalidadeSuporteVeiculo(txt);
           if (mod) { modalidadePorLote.set(l.id, mod); comModalidade++; }
           visitados++;
           await new Promise(r => setTimeout(r, 250));
@@ -3553,7 +3574,7 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   const veiculos = [];
   const seen = new Set();
   for (const l of bens.values()) {
-    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null);
+    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null, textoDetalhePorLote.get(l.id) || '');
     if (!row || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);
     veiculos.push(row);
@@ -4153,10 +4174,14 @@ async function main() {
     if (rodar('SODRE')) console.log('\n📋 Sodré Santoro...');
     if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser), { enrich: true, enrichCap: 120 });
 
-    // 5b. Sodré Santoro — VEÍCULOS (piloto, 11/09). OPT-IN only — `rodar()` roda por padrão
-    // (ONLY vazio = todas menos EXCLUIR), o que ligaria isto na rodada diária sem querer.
-    // Exige SCRAPER_FONTES=SODRE_VEICULOS explícito até o dono validar o resultado (pedido:
-    // "vou fazer um teste"). Escreve em `veiculos_leilao` — não entra na contagem de `total`.
+    // 5b. Sodré Santoro — VEÍCULOS (validado, 13/09). Continua fora de `rodar()` de propósito
+    // (ONLY vazio aqui SEMPRE significaria "não pedi veículo" — não dá pra reusar o mesmo
+    // sinal de "rodar tudo" do bloco de imóvel). Roda diariamente, mas por um workflow
+    // SEPARADO (`.github/workflows/veiculos-puppeteer.yml`), não dentro desta rodada de
+    // imóvel — juntar os dois arriscaria estourar o timeout-minutes do job de imóvel (que já
+    // foi cancelado no meio 3 dias seguidos em 10-12/08) e truncar as fontes do fim da lista.
+    // Esse workflow passa `SCRAPER_FONTES=SODRE_VEICULOS,SUPORTE_VEICULOS`; continua possível
+    // rodar só esta na mão com o mesmo valor. Escreve em `veiculos_leilao` — não entra em `total`.
     if (ONLY.includes('SODRE_VEICULOS')) {
       console.log('\n📋 Sodré Santoro (veículos, piloto)...');
       const veiculos = await scraperSodreVeiculos(browser);
@@ -4287,9 +4312,12 @@ async function main() {
       console.log(`  ⚠️ Suporte Leilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
-    // 13b. Suporte Leilões — VEÍCULOS (piloto, 11/09). Mesmo padrão de gate do
-    // Sodré veículos: OPT-IN only — exige SUPORTE_VEICULOS explícito até o dono
-    // validar o resultado. Escreve em `veiculos_leilao`, não entra na contagem de `total`.
+    // 13b. Suporte Leilões — VEÍCULOS (validado, 13/09). Mesmo motivo e mesmo workflow
+    // separado do comentário de SODRE_VEICULOS acima (`veiculos-puppeteer.yml`) — este é o
+    // mais caro dos dois (12 tenants, cada um visitando a página de detalhe de até 60
+    // veículos para achar modalidade E o sinal de pátio, ver mapLoteSuporteVeiculo/
+    // classificarPatio), então é o que mais faria sentido estourar o job de imóvel se
+    // estivesse dentro dele. Escreve em `veiculos_leilao`, não entra na contagem de `total`.
     if (ONLY.includes('SUPORTE_VEICULOS')) {
       console.log('\n📋 Suporte Leilões (veículos, piloto)...');
       const veiculosSuporte = await scraperSuporteVeiculosTodos(browser);
