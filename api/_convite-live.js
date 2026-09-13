@@ -30,6 +30,7 @@ import { FUSO_AULA, edicaoDe } from './_live-edicao.js';
 import { linkRastreado } from './_link-email.js';
 import { utmEmail } from './_utm.js';
 import { escapeHtml } from './_sanitize.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -92,10 +93,7 @@ export function corpoConviteLive({ aula, nome, link, linkAmigo }) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-  <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
-    <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>
-  </div>
+  ${cabecalhoEmailHTML()}
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="font-size:11px;font-weight:800;color:${esc(cor)};text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">Aula ao vivo · ${esc(diaCurto)}</div>
     <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a;line-height:1.3;">${esc(aula.titulo || 'Aula ao vivo')}</h2>

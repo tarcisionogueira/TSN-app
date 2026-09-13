@@ -16,6 +16,7 @@ import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { lanceVitrine } from './_lance-vitrine.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 
 export const GET = handler;
 export const POST = handler;
@@ -96,12 +97,7 @@ async function handler(req) {
       const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <a href="${BASE}/leiloes" style="text-decoration:none;">
-    <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:24px 28px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>
-    </div>
-  </a>
+  <a href="${BASE}/leiloes" style="text-decoration:none;">${cabecalhoEmailHTML()}</a>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Novos imóveis em ${escapeHtml(local)} 🏠</h2>
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">Você pediu para ser avisado — separamos <strong>${frescos.length}</strong> ${frescos.length > 1 ? 'oportunidades' : 'oportunidade'} para você:</p>
