@@ -385,6 +385,10 @@
     {
       "path": "/api/instagram-responder-cron",
       "schedule": "*/20 * * * *"
+    },
+    {
+      "path": "/api/drenar-fila-emails-cron",
+      "schedule": "15 */3 * * *"
     }
   ]
 }

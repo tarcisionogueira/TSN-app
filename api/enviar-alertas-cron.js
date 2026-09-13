@@ -277,10 +277,18 @@ async function handler(req) {
   // por dia por endereço morto: isso trocaria e-mail repetido por log repetido. O que sai
   // daqui é o CONTADOR no rastro da varredura, que é onde se olha.
   let suprimidosNoLote = new Set();
+  let orcamentoEmailRestante = Infinity;
   try {
-    const { consultarSupressao } = await import('./_email.js');
+    const { consultarSupressao, orcamentoRestanteHoje } = await import('./_email.js');
     const r = await consultarSupressao([...emailMap.values()], 'oportunidades');
     suprimidosNoLote = r.suprimidos;
+    // ─── ORÇAMENTO DIÁRIO DO RESEND (13/09) ───────────────────────────────────────────────
+    // Este é o MAIOR volume de e-mail da casa — é ele quem mais rápido bate no teto de
+    // 100/dia do plano Free. Corta o loop cedo em vez de deixar o Resend devolver erro pra
+    // cada envio; quem ficar de fora não é marcado como enviado (nem `ultimo_envio` nem
+    // `alertas_enviados`), então o cron de AMANHÃ (0 11 * * *) reconsidera essas pessoas
+    // normalmente — dispensa fila própria pra este arquivo.
+    if (!testeEmail) orcamentoEmailRestante = await orcamentoRestanteHoje();
   } catch { /* não consegui checar: segue enviando, como antes deste commit */ }
 
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
@@ -304,7 +312,10 @@ async function handler(req) {
     // este lote no meio (há gente AQUI que ainda não foi tratada). No corte, o cursor é o
     // último processado — não o fim do lote, senão os não tratados seriam pulados.
     const cursorProx = cortadoPorTempo ? ultimoProcessado : ultimoIdLote;
-    if ((!loteCheio && !cortadoPorTempo) || !cursorProx || testeEmail || !CRON) return;
+    // Corte por orçamento de E-MAIL nunca encadeia: a próxima invocação bateria no mesmo
+    // teto do dia sem enviar nada, só gastando função à toa. Quem ficou de fora reaparece
+    // sozinho no cron de amanhã (não foi marcado como enviado).
+    if ((!loteCheio && !cortadoPorTempo) || !cursorProx || testeEmail || !CRON || cortadoPorOrcamentoEmail) return;
     const q = new URLSearchParams({ cursor: cursorProx, batch: String(BATCH) });
     if (forcar) q.set('forcar', '1');
     // Força www: o apex responde 308 e o redirect pode perder o header x-cron-secret.
@@ -564,13 +575,17 @@ async function handler(req) {
 
   let enviados = 0;
   let suprimidos = 0;
+  let cortadoPorOrcamentoEmail = false;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
 
   for (const perfil of perfis) {
-    // Corte por ORÇAMENTO antes de começar mais um usuário. `ultimoProcessado` só avança
-    // depois que o `try` termina, então o corte nunca "pula" quem estava em andamento: ele
-    // volta a ser o primeiro do próximo lote.
+    // Corte por ORÇAMENTO DE TEMPO antes de começar mais um usuário. `ultimoProcessado` só
+    // avança depois que o `try` termina, então o corte nunca "pula" quem estava em
+    // andamento: ele volta a ser o primeiro do próximo lote.
     if (!testeEmail && Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
+    // Corte por ORÇAMENTO DE E-MAIL (13/09): sem chamar o Resend de novo, sem chained
+    // `continuar()` (ver abaixo) — quem ficou de fora entra de novo no cron de amanhã.
+    if (!testeEmail && orcamentoEmailRestante <= 0) { cortadoPorOrcamentoEmail = true; break; }
     try {
       const email = emailMap.get(perfil.id); if (!email || !RESEND_KEY) continue;
       // Endereço morto: não insiste. Fica ANTES de qualquer trabalho caro (RPC de raio,
@@ -910,6 +925,7 @@ async function handler(req) {
           } catch { /* dedup é best-effort */ }
         }
         enviados++;
+        orcamentoEmailRestante--;
         // Push com o mesmo resumo do e-mail (best-effort, não bloqueia o loop).
         if (!testeEmail) {
           await enviarPushOportunidades(
@@ -935,11 +951,11 @@ async function handler(req) {
       headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
         chave: 'enviar_alertas_cron',
-        assinatura: JSON.stringify({ enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
+        assinatura: JSON.stringify({ enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
         atualizado_em: new Date().toISOString(),
       }),
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }
