@@ -99,9 +99,9 @@ export default function EducacaoPublico() {
         <h1 style={{ fontSize: 30, fontWeight: 900, color: '#fff', margin: '0 0 10px', maxWidth: 620, marginLeft: 'auto', marginRight: 'auto' }}>
           Aprenda a arrematar com segurança
         </h1>
-        <p style={{ fontSize: 14.5, color: '#a8b8d0', maxWidth: 540, margin: '0 auto' }}>
+        <p style={{ fontSize: 16, lineHeight: 1.55, color: '#a8b8d0', maxWidth: 540, margin: '0 auto' }}>
           eBooks e cursos para quem quer entender leilões de imóveis antes de investir. Compre
-          livremente — o acesso é imediato e não depende de assinatura.
+          livremente: o acesso é imediato e não depende de assinatura.
         </p>
       </div>
 
@@ -115,10 +115,10 @@ export default function EducacaoPublico() {
           <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: corSuave(LATAO, '28'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Sparkles size={19} color={LATAO} />
           </div>
-          <p style={{ margin: 0, fontSize: 13.5, color: '#374151', lineHeight: 1.5 }}>
+          <p style={{ margin: 0, fontSize: 15, color: '#374151', lineHeight: 1.6 }}>
             <strong style={{ color: '#111' }}>Todo mês tem campanha nova por aqui.</strong> Lançamos
             uma campanha de conscientização sobre o mercado de leilões e colocamos sempre algum
-            eBook ou curso em promoção — para quem está disposto a aprender e dar o primeiro passo
+            eBook ou curso em promoção, para quem está disposto a aprender e dar o primeiro passo
             para investir com segurança.
           </p>
         </div>
@@ -145,7 +145,7 @@ export default function EducacaoPublico() {
                     <div style={{ fontSize: 10, fontWeight: 800, color: AZUL, textTransform: 'uppercase', letterSpacing: 1 }}>
                       {it.tipo === 'curso' ? 'Curso' : 'eBook'}
                     </div>
-                    <div style={{ fontSize: 14.5, fontWeight: 700, color: '#111', lineHeight: 1.3 }}>{it.titulo}</div>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: '#111', lineHeight: 1.35 }}>{it.titulo}</div>
                     {temBonus && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#7a5a13', background: corSuave(LATAO, '1f'), border: `1px solid ${corSuave(LATAO, '55')}`, borderRadius: 8, padding: '4px 8px', width: 'fit-content' }}>
                         <Gift size={11} /> +{it.concede_meses || 1} {(it.concede_meses || 1) > 1 ? 'meses' : 'mês'} Investidor Pro
@@ -168,7 +168,7 @@ export default function EducacaoPublico() {
           </div>
         )}
 
-        <div style={{ marginTop: 40, textAlign: 'center', fontSize: 12.5, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <div style={{ marginTop: 40, textAlign: 'center', fontSize: 13.5, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <BookOpen size={14} /> Já é assinante? Acesse pela <a href="#/membros" style={{ color: AZUL, fontWeight: 700 }}>Área de Membros</a>.
         </div>
       </div>
