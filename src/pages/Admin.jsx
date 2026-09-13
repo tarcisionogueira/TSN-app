@@ -2712,6 +2712,11 @@ function ConfigTab() {
             preco_vista: (Number(c.preco) > 0 && Number(c.desconto_vista_pct) > 0)
               ? Math.round(Number(c.preco) * (1 - Number(c.desconto_vista_pct) / 100) * 100) / 100 : null,
             desconto_vista_pct: c.desconto_vista_pct ?? 0,
+            // Desconto para quem já é Investidor Pro (role top2) — só existe em cursos_admin,
+            // por isso fica fora do objeto `comum` compartilhado (mandar coluna que a tabela
+            // não tem pra plano/ebook é o mesmo 400 silencioso que já mordeu desconto_vista_pct
+            // em 02/09; ver comentário em salvarTudo/gravar).
+            desconto_investidor_pro_pct: c.desconto_investidor_pro_pct ?? 0,
             assinatura: c.assinatura ?? false,
             ativo: c.ativo ?? true,
             comissao_pct: c.comissao_pct ?? 0,
@@ -2797,7 +2802,11 @@ function ConfigTab() {
       } else if (p._tipo === 'curso') {
         // `gratuito` acompanha o preço: é o critério que o servidor usa para liberar o
         // arquivo (obter_arquivo_ebook) e o que a vitrine de /membros passou a ler.
-        q = supabase.from('cursos_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
+        q = supabase.from('cursos_admin').update({
+          ...comum,
+          gratuito: !(preco > 0),
+          desconto_investidor_pro_pct: Number(p.desconto_investidor_pro_pct) || 0,
+        }).eq('id', p._id);
       } else {
         q = supabase.from('ebooks_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
       }
@@ -2878,7 +2887,7 @@ function ConfigTab() {
 
   const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-  const COLS = '2fr 110px 200px 90px 70px';
+  const COLS = '2fr 110px 200px 110px 90px 70px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -2902,7 +2911,7 @@ function ConfigTab() {
           <div style={{ overflowX: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', minWidth: 700 }}>
-              {['Produto', 'Valor R$', 'À vista (% ou R$)', 'Assinatura', 'Ativo'].map(h => (
+              {['Produto', 'Valor R$', 'À vista (% ou R$)', 'Desc. Investidor Pro', 'Assinatura', 'Ativo'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
@@ -2985,7 +2994,32 @@ function ConfigTab() {
                     )}
                   </div>
 
-                  {/* Col 4: Assinatura */}
+                  {/* Col 4 (nova): Desconto para quem já é Investidor Pro — só cursos, e só
+                      com preço definido (sem preço, desconto não tem o que descontar). */}
+                  <div>
+                    {r._tipo === 'curso' && Number(r.preco) > 0 ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input type="number" min="0" max="100" step="0.01"
+                            title="Desconto % aplicado no checkout quando quem compra já é Investidor Pro (role top2)"
+                            value={Number(r.desconto_investidor_pro_pct || 0) === 0 ? '' : r.desconto_investidor_pro_pct}
+                            placeholder="0"
+                            onChange={e => updateRow(r._id, r._tipo, 'desconto_investidor_pro_pct', e.target.value)}
+                            style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 60 }} />
+                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>%</span>
+                        </div>
+                        {Number(r.desconto_investidor_pro_pct) > 0 && (
+                          <div style={{ fontSize: 10, color: '#0D63DB', marginTop: 3, fontWeight: 600 }}>
+                            {fmtBRL(Number(r.preco) * (1 - Number(r.desconto_investidor_pro_pct) / 100))} pro
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#cbd5e1', paddingTop: 8 }}>—</div>
+                    )}
+                  </div>
+
+                  {/* Col 5: Assinatura */}
                   <div style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={!!r.assinatura}
                       onChange={e => updateRow(r._id, r._tipo, 'assinatura', e.target.checked)}
@@ -2995,7 +3029,7 @@ function ConfigTab() {
                     </div>
                   </div>
 
-                  {/* Col 5: Ativo */}
+                  {/* Col 6: Ativo */}
                   <div style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={!!r.ativo}
                       onChange={e => updateRow(r._id, r._tipo, 'ativo', e.target.checked)}
@@ -5928,6 +5962,56 @@ function PainelCoberturaRelatorios() {
   );
 }
 
+// Quantas pessoas já leram cada eBook (RPC admin_ebooks_leitura → leitura_progresso, a
+// mesma tabela que já alimenta "continuar de onde parou" em Membros.jsx — nunca tinha um
+// agregado admin). Pedido do dono (13/09, noite): parte da atratividade do plano Investidor
+// Pro é o bônus de eBooks — medir leitura real ajuda a ver se o bônus está sendo usado.
+function PainelLeituraEbooks() {
+  const [linhas, setLinhas] = React.useState(null);
+  const [erro, setErro] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    supabase.rpc('admin_ebooks_leitura').then(({ data, error }) => {
+      if (!vivo) return;
+      if (error) setErro(true); else setLinhas(Array.isArray(data) ? data : []);
+    });
+    return () => { vivo = false; };
+  }, []);
+  if (erro) return null;
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>📖 Leitura dos eBooks</div>
+        <span style={{ fontSize: 11, color: '#94a3b8' }}>quem abriu e quem terminou de ler</span>
+      </div>
+      {!linhas ? (
+        <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando…</div>
+      ) : !linhas.length ? (
+        <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhum eBook ativo ainda.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+            <thead><tr style={{ background: '#f8fafc' }}>
+              {['eBook', 'Começaram a ler', 'Terminaram'].map((h, i) => (
+                <th key={i} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontWeight: 700, color: '#475569', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {linhas.map(l => (
+                <tr key={l.ebook_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px 10px' }}>{l.titulo}</td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0D63DB' }}>{l.leitores}</td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669' }}>{l.concluiram}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Cobertura DOCUMENTAL por leiloeiro (RPC admin_docs_por_leiloeiro): imóveis, fotos,
 // matrículas, editais, regras, anexos + sinalizadores de CONFUSÃO de documento (edital=
 // matrícula, edital=página do lote, matrícula=página). Nasceu do caso "botão Edital abria
@@ -6512,6 +6596,9 @@ function DashboardTab({ irParaTab }) {
 
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
       <PainelCoberturaRelatorios />
+
+      {/* Leitura dos eBooks (bônus do Investidor Pro) — quem começou/terminou de ler */}
+      <PainelLeituraEbooks />
 
       {/* Cobertura documental por leiloeiro + sinalizadores de confusão de documento */}
       <PainelDocsLeiloeiro />

@@ -319,6 +319,7 @@ export const PLANOS = {
       '✅ 10 relatórios mercadológicos/mês',
       '✅ 10 relatórios documentais e jurídicos/mês',
       '✅ Acesso à Calculadora de Arrematação',
+      '🎁 Todos os eBooks da plataforma inclusos, sem pagar nada a mais',
     ],
     limite_analises: 10,
     relatorio: true,
