@@ -29,6 +29,10 @@ const BASE = process.env.TESTE_CARGA_BASE_URL || 'https://www.bidprobrasil.com.b
 // completa é pulada sozinha (ver faseCompleta) — a fase pública não depende delas.
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+// Service key: só para confirmar o e-mail das contas de teste via Admin API (o projeto
+// exige confirmação de e-mail antes do login — sem isso a fase completa nunca chegaria
+// no login/geração de verdade). Mesmo padrão já usado nos outros workflows deste repo.
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const FASE = process.env.TESTE_CARGA_FASE || 'publicas';
 const RUN_ID = Date.now().toString(36);
 
@@ -141,10 +145,25 @@ async function signupUmaConta(i) {
       signal: AbortSignal.timeout(15000),
     });
     const j = await r.json().catch(() => ({}));
-    return { ok: r.ok, status: r.status, ms: agora() - t0, email, senha, access_token: j?.access_token || null };
+    return { ok: r.ok, status: r.status, ms: agora() - t0, email, senha, userId: j?.user?.id || j?.id || null, access_token: j?.access_token || null };
   } catch (e) {
     return { ok: false, status: 0, ms: agora() - t0, email, senha, erro: String(e?.message || e).slice(0, 150) };
   }
+}
+
+// Confirma o e-mail de uma conta de teste via Admin API (exige service key). Sem isso, o
+// login trava em "email not confirmed" — descoberto na 1ª rodada real (0/10 logins, status 400).
+async function confirmarEmailAdmin(userId) {
+  if (!SERVICE_KEY || !userId) return false;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_confirm: true }),
+      signal: AbortSignal.timeout(15000),
+    });
+    return r.ok;
+  } catch { return false; }
 }
 
 async function loginUmaConta(email, senha) {
@@ -157,7 +176,7 @@ async function loginUmaConta(email, senha) {
       signal: AbortSignal.timeout(15000),
     });
     const j = await r.json().catch(() => ({}));
-    return { ok: r.ok, status: r.status, ms: agora() - t0, access_token: j?.access_token || null };
+    return { ok: r.ok, status: r.status, ms: agora() - t0, access_token: j?.access_token || null, erro: r.ok ? null : (j?.error_description || j?.msg || j?.error || JSON.stringify(j).slice(0, 150)) };
   } catch (e) {
     return { ok: false, status: 0, ms: agora() - t0, erro: String(e?.message || e).slice(0, 150) };
   }
@@ -195,9 +214,16 @@ async function faseCompleta() {
   console.log(`\ncadastro: ${okCadastro}/${N_CONTAS} ok`);
   cadastros.filter((c) => !c.ok).slice(0, 3).forEach((c) => console.log(`   erro cadastro: status=${c.status} ${c.erro || ''}`));
 
-  // Supabase pode exigir confirmação de e-mail antes do login — tenta mesmo assim,
-  // é sinal relevante (se falhar por "email not confirmed", isso é esperado, não bug).
-  await new Promise((s) => setTimeout(s, 2000));
+  // 1ª rodada real (13/09) achou: login trava em "email not confirmed" sem isto —
+  // confirma via Admin API antes de tentar logar (achado, não bug: é a configuração
+  // padrão de segurança do projeto, não algo a desligar em produção de verdade).
+  if (SERVICE_KEY) {
+    const confirmados = await Promise.all(cadastros.filter((c) => c.ok && c.userId).map((c) => confirmarEmailAdmin(c.userId)));
+    console.log(`confirmação de e-mail (admin): ${confirmados.filter(Boolean).length}/${confirmados.length} ok`);
+  } else {
+    console.log('⚠️  SUPABASE_SERVICE_KEY ausente — não dá para confirmar e-mail, login provavelmente vai falhar.');
+  }
+  await new Promise((s) => setTimeout(s, 1000));
   const logins = await Promise.all(cadastros.filter((c) => c.ok).map((c) => loginUmaConta(c.email, c.senha)));
   const okLogin = logins.filter((l) => l.ok).length;
   console.log(`login: ${okLogin}/${logins.length} ok`);

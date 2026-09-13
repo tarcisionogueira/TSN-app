@@ -32,4 +32,5 @@ jobs:
           TESTE_CARGA_FASE: ${{ github.event.inputs.fase || 'publicas' }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || github.event.inputs.anon_key }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/teste-carga.mjs
