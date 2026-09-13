@@ -127,6 +127,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     próximo lote do cron `/api/geocodificar` (roda só 3h-7h UTC). **Não verificado com o Google
     real** (sem a chave neste ambiente de diagnóstico) — confirmar abrindo o lote de novo depois
     do próximo reprocessamento.
+17. **Veículos — cobertura hoje é 7 de 62 leiloeiros, 87% concentrado no Superbid (13/09)**.
+    Levantamento pedido pelo dono ("estamos com muitos poucos carros"): só SUPERBID (3.200),
+    SODRE (168), SUPORTE (121), ZUK (56), MEGA (48), LJUD (42), WEBLEILOES (20) captam veículo
+    hoje — total 3.655 ativos, e o piloto (`veiculos-puppeteer.yml`) começou HOJE. Recon em lote
+    (`scripts/recon-segmento-veiculos-lote.mjs`, novo — reaproveita a mesma
+    `detectarSegmentoVeiculos` que já roda em produção via `_contato-leiloeiro.mjs`) checou as
+    fontes que aquele caminho automático nunca alcança (scraper próprio, ou bloqueadas por IP) e
+    achou **5 leiloeiros NOVOS com sinal confirmado de veículo, ainda sem scraper**: GIORDANOLEILOES
+    (51 imóveis ativos hoje), THAISTEIXEIRA (21), LEFFA (16), RIGOLONLEILOES (15), SIMONLEILOES
+    (13) — os 3 primeiros no MESMO vendor "leilao/index" (S3 compartilhado Rigolon/Giordano/
+    Thaisteixeira), todos achados em `/leilao/index/veiculos`, então um scraper serve aos 3 (mesmo
+    padrão do imóvel deles). Confirmados SEM veículo: ALFA, BIASI, FRAZAO, SATO, NORDESTE,
+    VENDASGOV, LEJE, ROCHALEILOES. **Não deu para checar** (403/Cloudflare/timeout, mesmo padrão
+    de bloqueio da pendência do `data_leilao` acima): AGOSTINHO, ALBERTOMACEDOLEILOES, APICE,
+    BAYIT, CEF, LEILOTECH, PURCENA, JELEILOES, INFINITY, RJLEILOES, HASTA, GRUPOLANCE,
+    FERREIRALEIL, CASAMARTILLO, CALIL, GESTAOLEILOES, TMLEILOES, VEGAS, TORRES3, JOAOEMILIO,
+    DANIELGARCIA, LANCEJA, ISAIAS, CERULI, PECINI, VIP — maioria SOLEON (`cloudflare_parcial`),
+    exigiria Bright Data/IP residencial para checar, não fetch direto grátis. Próximo passo
+    sugerido: escrever o scraper para os 5 confirmados (o do "leilao/index" cobre 3 de uma vez).
 
 ---
 
