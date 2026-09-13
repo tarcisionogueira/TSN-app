@@ -357,8 +357,18 @@ export default function ProdutoPublico({ tipo }) {
 
   const proximoBump = bumps.find(b =>
     !aceitos.some(a => a.id === b.id && a.tipo === b.tipo));
-  // `precoBase` é o do servidor quando ele respondeu; o do cadastro é a rede de segurança.
-  const precoBase = Number(vigente?.preco ?? produto?.preco) || 0;
+  // `precoCheio` é o do servidor quando ele respondeu; o do cadastro é a rede de segurança.
+  const precoCheio = Number(vigente?.preco ?? produto?.preco) || 0;
+  // Investidor Pro (top2) paga curso PAGO com o % cadastrado em `desconto_investidor_pro_pct`
+  // (pedido do dono, 13/09: só vale pra cursos com preço de verdade, cadastrados daqui pra
+  // frente — o vídeo introdutório gratuito é `cursoGratuito` e nem passa por aqui, `isPago`
+  // já dá false pra ele). Aplica sobre o preço VIGENTE (já considerando janela promocional,
+  // se houver) — os dois descontos empilham, o pro nunca some por causa de uma promoção.
+  const descontoProPct = (tipo === 'curso' && role === 'top2')
+    ? Number(produto?.desconto_investidor_pro_pct || 0) : 0;
+  const precoBase = descontoProPct > 0
+    ? Math.round(precoCheio * (1 - descontoProPct / 100) * 100) / 100
+    : precoCheio;
   const totalComExtras = precoBase
     + aceitos.reduce((soma, a) => soma + (Number(a.valor_com_desconto) || 0), 0);
 
@@ -374,7 +384,14 @@ export default function ProdutoPublico({ tipo }) {
     return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}min ${String(sec).padStart(2, '0')}s`;
   })();
 
-  const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
+  // Investidor Pro (top2) continua com eBook 100% grátis (bônus do plano), mas NÃO tem mais
+  // curso pago automático de graça (pedido do dono, 13/09) — passa a pagar com o desconto
+  // configurado no curso. Os demais planos pagos e a equipe interna seguem com acesso total
+  // a tudo, sem mudança nenhuma.
+  const PLANOS_ACESSO_TOTAL_CURSO = ['assessorado', 'clube', 'analista', 'advogado', 'admin'];
+  const temPlano = user && (tipo === 'curso'
+    ? PLANOS_ACESSO_TOTAL_CURSO.includes(role)
+    : ['top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'].includes(role));
   const temAcesso = temPlano || comprouAvulso;
   const isPago = precoBase > 0;
 
@@ -687,12 +704,22 @@ export default function ProdutoPublico({ tipo }) {
             )}
             <div style={{ fontSize: 32, fontWeight: 900, color: '#111111', marginBottom: 2 }}>
               {isPago ? `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito'}
-              {vigente?.em_janela && Number(vigente.preco_cheio) > precoBase && (
+              {vigente?.em_janela && Number(vigente.preco_cheio) > precoCheio && (
                 <span style={{ fontSize: 17, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginLeft: 10 }}>
                   R$ {Number(vigente.preco_cheio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
+              {descontoProPct > 0 && (
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginLeft: 10 }}>
+                  R$ {precoCheio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
+            {descontoProPct > 0 && (
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0D63DB', marginBottom: 6 }}>
+                🎁 {descontoProPct % 1 === 0 ? descontoProPct : descontoProPct.toLocaleString('pt-BR')}% de desconto por você já ser Investidor Pro
+              </div>
+            )}
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 22 }}>
               {isPago ? 'Pagamento único' : 'Incluído na assinatura Investidor Pro'}
             </div>

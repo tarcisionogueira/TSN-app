@@ -24,7 +24,11 @@ function salvarProgressoLocal(id, feito) {
 }
 function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
 
-const PLANOS_PAGOS = ['top2','assessorado','clube','analista','consultor','advogado','admin'];
+// Investidor Pro (top2) NÃO entra mais aqui: curso pago passa a ter desconto (não gratuidade
+// automática) para ele — pedido do dono, 13/09. Os demais planos pagos e a equipe interna
+// continuam com acesso total, sem mudança. `top2` ainda pode ganhar um curso específico de
+// graça via `planos_gratis` no cadastro do curso (linha abaixo), ou comprando avulso.
+const PLANOS_PAGOS = ['assessorado','clube','analista','consultor','advogado','admin'];
 const MAT_ICON = { excel: '📊', word: '📝', ppt: '📽️', pdf: '📄', link: '🔗' };
 
 function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = [], cursoGratuito = false) {
