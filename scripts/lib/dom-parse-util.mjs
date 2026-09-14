@@ -229,7 +229,20 @@ export function anexosDeHtml(html, urlBase) {
 // fix do proxy /_next/image (abaixo), porque TODO <img> de lá tem `loading="lazy"`; SIMONLEILOES
 // só escapou porque a 1ª foto da galeria por acaso não carregava esse atributo. O negativo de
 // lookahead deixa passar `loading="lazy"` mas continua pegando `class="loading-spinner"` etc.
-const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem-imagem|no-image/i;
+// LISTA DESALINHADA COM O TRIGGER DO BANCO (14/09, achado ao investigar por que o log do run
+// dizia "GIORDANOLEILOES foto 100%" e o banco continuava com a mesma fatia sem foto). Existe
+// `public.foto_placeholder()`/`trg_foto_placeholder_nula` justamente para pegar a imagem
+// GENÉRICA de "sem imagem" que o PRÓPRIO site do leiloeiro serve pra lote sem foto — e ela
+// nula o `link_foto` DEPOIS de gravar. O problema: a extração aqui só continha `sem-imagem` e
+// `no-image` (com hífen); o SQL cobre `sem_imagem`, `sem-foto`, `nao-disponivel`,
+// `indisponivel`, `lote-default`/`default-lote` e `img-padrao` também — 14 dos 37 lotes
+// relidos do GIORDANOLEILOES nesta rodada bateram nesses padrões que só o SQL conhecia. Cada
+// um: `fotoDeHtml` aceitava a URL do placeholder como se fosse foto real (contava "100%" no
+// log), o trigger corrigia o dado no banco, e a fila (`planejarAlvo`) só enxergava "sem foto"
+// de novo no próximo ciclo — o log mentia sobre o que a extração realmente achou. Trazer o
+// MESMO léxico pra cá deixa o log honesto E dá a `fotoDeHtml` uma chance real de achar outra
+// imagem da galeria quando a página tem um placeholder ANTES da foto de verdade.
+const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem[-_]?imagem|sem[-_]?foto|no[-_]?image|n[ãa]o[-_]?dispon[íi]vel|indispon[íi]vel|lote[-_]?default|default[-_]?lote|img[-_]?padrao/i;
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];

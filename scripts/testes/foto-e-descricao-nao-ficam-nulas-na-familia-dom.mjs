@@ -62,6 +62,28 @@ console.log('\nfotoDeHtml — acha a foto de capa e descarta chrome do site');
   ok(fotoDeHtml('<img sizes="100vw" srcset="/imgs/capa.webp 1x, /imgs/capa@2x.webp 2x">', BASE)
       === 'https://exemplo-leiloes.com.br/imgs/capa.webp',
     'srcset com descritor de densidade (1x/2x): pega a URL, descarta o descritor');
+
+  // 14/09: léxico alinhado com o trigger do banco (`public.foto_placeholder()`) — medido em
+  // produção, GIORDANOLEILOES aceitava estes como "foto" (contava no "100%" do log) e o
+  // banco corrigia depois, silenciosamente, deixando a fila sempre reaprendendo "sem foto".
+  ok(fotoDeHtml('<img src="/img/sem_imagem.jpg" width="600" height="400">', BASE) === null,
+    'placeholder com underscore (sem_imagem): descartado — antes só "sem-imagem" com hífen pegava');
+  ok(fotoDeHtml('<img src="/lotes/sem-foto-disponivel.png" width="600" height="400">', BASE) === null,
+    '"sem-foto": ausente do léxico antigo, presente no trigger do banco');
+  ok(fotoDeHtml('<img src="/assets/nao-disponivel.jpg" width="600" height="400">', BASE) === null,
+    '"nao-disponivel": idem');
+  ok(fotoDeHtml('<img src="/assets/indisponivel.jpg" width="600" height="400">', BASE) === null,
+    '"indisponivel": idem');
+  ok(fotoDeHtml('<img src="/img/lote-default.jpg" width="600" height="400">', BASE) === null,
+    '"lote-default": idem (template de CMS compartilhado por 3 tenants — RIGOLON/GIORDANO/THAIS)');
+  ok(fotoDeHtml('<img src="/img/img-padrao.jpg" width="600" height="400">', BASE) === null,
+    '"img-padrao": idem');
+  // O ganho real: quando o placeholder vem ANTES da foto de verdade no HTML, descartá-lo
+  // deixa a função continuar procurando em vez de aceitar o primeiro <img> que combina.
+  const placeholderAntesDaFotoReal =
+    '<img src="/img/sem-imagem.jpg" width="600" height="400"><img src="/uploads/lote-42-real.jpg" width="800" height="600">';
+  ok(fotoDeHtml(placeholderAntesDaFotoReal, BASE) === 'https://exemplo-leiloes.com.br/uploads/lote-42-real.jpg',
+    'placeholder seguido da foto real: pula o placeholder e acha a foto de verdade');
 }
 
 console.log('\nanexosDeHtml — passa a devolver link_foto junto (mesma varredura de HTML, zero mudança nos 8 chamadores que já espalham o retorno)');
