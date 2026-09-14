@@ -5,6 +5,11 @@ import { compararRostoDocumento, verificarSelfieComDocumento, dataUrlParaImagem,
 // Nome do signatário e título do contrato entram no HTML do e-mail — escapar é obrigatório:
 // o nome vem do formulário público de assinatura (qualquer um com o link escreve o que quiser).
 import { escapeHtml } from './_sanitize.js';
+// Mesma fonte da regra "assessoria só para Investidor Pro" usada por Planos/Checkout/
+// api/_assessoria.js (14/09, achado do ritual de abertura: CriarContrato.jsx não filtra o
+// dropdown por papel do cliente, e este arquivo promovia o role e liberava o acesso direto de
+// explorador→assessorado, pulando o Pro — a regra "absoluta" do dono só existia no autoatendimento).
+import { acessoAssessoria } from '../src/lib/assessoria-acesso.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -225,7 +230,16 @@ export default async function handler(req) {
         const perf = await sb(`perfis?id=eq.${encodeURIComponent(userId)}&select=role`).then(x => x.json()).catch(() => []);
         const atual = perf?.[0]?.role;
         const rankAtual = RANK_TIER[atual]; // equipe/desconhecido → undefined → não mexe
-        if (atual !== undefined && rankAtual !== undefined && rankAtual < RANK_TIER[tier]) {
+        // GATE DA ASSESSORIA (14/09): mesma regra absoluta do autoatendimento — só promove para
+        // 'assessorado' quem o papel ATUAL já permite (Pro, equipe, ou já assessorado). Contrato
+        // com cliente que nunca foi Pro não promove sozinho: fica registrado (audit_logs) para a
+        // equipe decidir — cobrar o Pro à parte, ou uma promoção manual deliberada via Admin.
+        const bloqueadoPorPro = tier === 'assessorado' && acessoAssessoria(atual) === 'requer_pro';
+        if (bloqueadoPorPro) {
+          sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ acao: 'contrato_assessoria_sem_gate_pro', ip, sucesso: false,
+              detalhes: { contrato_id: contrato.id, user_id: userId, papel_atual: atual, motivo: 'assinante não é Investidor Pro nem equipe — role não promovido e assinatura de assessoria não registrada' } }) }).catch(() => {});
+        } else if (atual !== undefined && rankAtual !== undefined && rankAtual < RANK_TIER[tier]) {
           const up = await sb(`perfis?id=eq.${encodeURIComponent(userId)}`, {
             method: 'PATCH', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ role: tier }),
@@ -258,20 +272,33 @@ export default async function handler(req) {
         if (rid2.ok) uid = await rid2.json().catch(() => null);
       }
       if (uid) {
-        const ra = await sb('rpc/registrar_assinatura_manual', {
-          method: 'POST',
-          body: JSON.stringify({
-            p_user_id: uid, p_plano_key: tierAss, p_forma_pagamento: 'contrato',
-            // O imóvel vem do próprio contrato quando ele traz um: é o vínculo que o dono pediu
-            // ("poder vincular um imóvel"), e vindo daqui ninguém precisa digitá-lo de novo.
-            p_imovel_id: contrato.arremate_imovel_id || null,
-            p_notas: `contrato ${contrato.id} assinado em ${assinado_em}`,
-            p_inicio: assinado_em,
-          }),
-        });
-        sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
-          body: JSON.stringify({ acao: 'contrato_criou_assinatura', ip, sucesso: ra.ok,
-            detalhes: { contrato_id: contrato.id, user_id: uid, plano: tierAss } }) }).catch(() => {});
+        // MESMO GATE do bloco de promoção de role acima: se o papel atual (já refletindo a
+        // promoção, quando ela aconteceu) não permite assessoria, não cria a assinatura —
+        // senão o cliente ganharia o ACESSO real (plano_assinaturas) mesmo com o role barrado.
+        const perfAss = tierAss === 'assessorado'
+          ? await sb(`perfis?id=eq.${encodeURIComponent(uid)}&select=role`).then(x => x.json()).catch(() => [])
+          : null;
+        const bloqueadoPorPro = tierAss === 'assessorado' && acessoAssessoria(perfAss?.[0]?.role) === 'requer_pro';
+        if (bloqueadoPorPro) {
+          sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ acao: 'contrato_assessoria_sem_gate_pro', ip, sucesso: false,
+              detalhes: { contrato_id: contrato.id, user_id: uid, papel_atual: perfAss?.[0]?.role, etapa: 'registrar_assinatura_manual' } }) }).catch(() => {});
+        } else {
+          const ra = await sb('rpc/registrar_assinatura_manual', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_user_id: uid, p_plano_key: tierAss, p_forma_pagamento: 'contrato',
+              // O imóvel vem do próprio contrato quando ele traz um: é o vínculo que o dono pediu
+              // ("poder vincular um imóvel"), e vindo daqui ninguém precisa digitá-lo de novo.
+              p_imovel_id: contrato.arremate_imovel_id || null,
+              p_notas: `contrato ${contrato.id} assinado em ${assinado_em}`,
+              p_inicio: assinado_em,
+            }),
+          });
+          sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ acao: 'contrato_criou_assinatura', ip, sucesso: ra.ok,
+              detalhes: { contrato_id: contrato.id, user_id: uid, plano: tierAss } }) }).catch(() => {});
+        }
       }
     }
   } catch { /* a assinatura do contrato já está válida; isto é o encanamento do plano */ }
