@@ -290,6 +290,41 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
       **Sem impacto hoje**: os 2 únicos cursos no banco são o gratuito de onboarding e um
       rascunho inativo — a mudança só passa a valer quando um curso pago de verdade for
       cadastrado e publicado.
+21. **Backlog residual de foto no GIORDANOLEILOES (14/09)** — depois do fix do léxico de
+    placeholder (item da sessão 14/09, ver seção própria abaixo), caiu de 47% para 34% sem
+    foto numa rodada só, mas ainda sobram ~17 lotes. A fila (`SEM_FOTO_TETO=15`/rodada) segue
+    corrigindo sozinha nos próximos ciclos automáticos — **acompanhar se converge para perto
+    de 0%** (extração ok) ou estaciona num platô (sinal de mais casos legítimos de "sem foto
+    no site" ainda não identificados no léxico).
+22. **RIGOLONLEILOES — 58% sem foto é majoritariamente REAL, não bug (14/09)**. Medido depois
+    do fix do léxico: `fotoDeHtml` (já descartando placeholder) só encontra foto de verdade em
+    36% dos lotes relidos — bate com o que sobra no banco. Não é mais prioridade de código; é
+    característica da fonte (o site publica poucas fotos). Não fazer nada aqui sem novo dado.
+23. **RJLEILOES (fonte PAGA) — 96% sem foto, ainda não investigado (14/09)**. Achado ao
+    levantar o panorama geral de foto ausente no acervo — puxa atenção por ser cota PAGA
+    (RJLEILOES é leiloeiro pago, conforme já registrado neste HANDOFF). Não teve a mesma
+    investigação de causa raiz que a família `leilaoindex` recebeu nesta sessão.
+24. **Causa estrutural da contaminação de débito entre lotes (14/09) — mitigada, não
+    corrigida**. `publicarFatosDoPdf()` (`scripts/captura-documentos.mjs`) continua lendo o
+    PDF do edital INTEIRO sem recortar por lote (ao contrário de `api/_edital-extrato.js`, que
+    já escopa por `txtLote`) — a causa raiz de valores de um lote vazarem pro registro de
+    outro em editais judiciais multi-lote. O que foi feito (PR #342, commit `6682b7f`): teto
+    de sanidade mais apertado (R$50M→R$2M) + invariante novo em `qa_invariantes()`
+    (`doc_debito_maior_que_avaliacao`) que vigia o acervo e pega o padrão mesmo abaixo do
+    teto. Isso reduz o dano e avisa quando acontecer de novo, mas não impede a contaminação
+    em si. Avaliar o recorte por lote em `publicarFatosDoPdf()` se o dono quiser priorizar —
+    é refator no fluxo de captura, não pequeno.
+25. **Corridas de e-mail duplicado corrigidas por leitura de código + dado histórico, não
+    observadas ao vivo reproduzindo o bug de propósito (14/09)**. `boas_vindas` (corrida
+    check-then-act, `api/boas-vindas.js`, PR #343 commit `3401d8b`) e `live_inscricao`
+    (reenvio de form sem debounce, `api/live-inscrever.js`, mesma PR commit `6318441`) foram
+    corrigidos com base em 8 e 2 casos reais respectivamente nos últimos 30 dias — mas o fix
+    em si só foi validado por leitura/lógica (mesmo padrão já comprovado em produção para
+    orçamento de Bright Data/e-mail), não testado forçando a corrida de novo. Acompanhar
+    `emails_log` daqui a ~30 dias: `select user_id, tipo, date_trunc('day', enviado_em) dia,
+    count(*) from emails_log where enviado_em > now() - interval '30 days' and user_id is not
+    null group by 1,2,3 having count(*) > 1;` deve vir vazio (ou muito mais raro) pros dois
+    tipos.
 
 ---
 
@@ -26236,3 +26271,127 @@ todos com build/lint limpo e deploy de produção confirmado READY em bidprobras
 direto via Supabase MCP, sem depender de deploy). Nenhum trigger/rotina nova pendente
 desta parte da sessão (os dois check-ins de deploy que rodaram já dispararam e foram
 confirmados).*
+
+## 🏁 ENCERRAMENTO DA SESSÃO DE 14/09 — débito contaminado entre lotes, backlog de foto
+## ausente (3 causas raiz diferentes, achadas em cascata) e 2 e-mails duplicados
+
+Sessão puxada por dois achados do dono via print/observação direta na plataforma, mais um
+pedido de levantamento que puxou um terceiro bug no caminho. PRs #342 e #343, ambas
+mergeadas em `main`. Branch de trabalho `claude/laughing-babbage-la8sf9`.
+
+### 1) Débito de IPTU/condomínio contaminado entre lotes do mesmo PDF (PR #342, commit `6682b7f`)
+
+Dono reportou print do imóvel Giordano Leilões (Guarulhos/SP): "IPTU em aberto: R$
+21.438.724,24" na aba "Confirmado na documentação" — 37x o valor de avaliação (R$ 572.434),
+e a dívida não existe no site do leiloeiro (conferido pelo dono direto na fonte).
+
+**Causa raiz**: `publicarFatosDoPdf()` (`scripts/captura-documentos.mjs`) lê o PDF do edital
+inteiro e chama `extrairCustosTexto()` sem recortar o texto por lote — diferente do fluxo
+irmão em `api/_edital-extrato.js`, que já escopa por `txtLote`. Em editais judiciais que
+reúnem vários lotes do mesmo processo no mesmo PDF, um valor de outro lote (ou uma dívida
+agregada) pode ser gravado no imóvel errado. O teto de sanidade de `extrairCustosTexto()`
+para débito de IPTU/condomínio aceitava qualquer valor até R$ 50 milhões — não pegava esse
+caso.
+
+**Corrigido** (mitigação, não a causa estrutural — ver pendência 24 da lista no topo): teto
+apertado para R$ 2 milhões; novo invariante em `qa_invariantes()`
+(`doc_debito_maior_que_avaliacao`) que dispara sempre que o débito extraído for maior que o
+valor do próprio imóvel — pega o padrão mesmo abaixo do teto absoluto. Varredura do acervo
+ativo achou mais 2 casos com a MESMA assinatura (dois imóveis do SODRE em Cotia com o mesmo
+`condominioDebito` de R$ 1.045.702,85 estampado nos dois) — os 3 registros corrigidos.
+
+### 2) Backlog de foto ausente — 3 causas raiz diferentes, achadas em cascata (PR #342 + #343)
+
+Dono pediu para checar se o mesmo tipo de erro do item 1 se repetia em outros imóveis; ao
+investigar foto ausente no MESMO imóvel (Giordano Leilões sem foto na tela), a investigação
+foi encontrando uma causa, corrigindo, medindo em produção, achando que não bastava, e
+repetindo — 3 rodadas até o número mexer de verdade. Método usado em toda a cadeia: nunca
+corrigir sem antes medir com dado real (dry-run/rodada real do `scraper-dom.yml`, zero Bright
+Data), princípio já registrado neste HANDOFF várias vezes.
+
+**Causa 1 — fila de releitura não priorizava quem falhou** (commit `a4bcca1`). GIORDANOLEILOES
+estava com 47% dos lotes ativos sem foto. `planejarAlvo()` (`scripts/lib/motor/runner.mjs`)
+ordena a releitura por "mais velho primeiro" (`atualizado_em`) — mas um lote que falha em
+pegar a foto ainda tem `atualizado_em` avançado (a captura "funcionou", só a foto que não
+veio), então parece recém-tocado e cai pro fim da fila, perdendo pra registros realmente
+parados há mais tempo. Um lote que falhou uma vez podia levar semanas para ser tentado de
+novo. Corrigido: fura a fila para lotes sem `link_foto`, com teto de segurança
+(`SEM_FOTO_TETO=15`/rodada) — sem o teto, uma fonte que legitimamente nunca tem foto (edital
+em texto puro) sequestraria a releitura inteira todo dia sem nunca resolver.
+
+**Causa 2 — léxico de placeholder desalinhado entre JS e SQL** (commit `0d2ef1e`). Rodando o
+fix acima em produção de verdade, o log dizia "GIORDANOLEILOES foto 100%" e o banco continuou
+com a MESMA fatia sem foto (47%→46%, dentro da margem de ruído). Rastreei: já existe um
+trigger no banco (`trg_foto_placeholder_nula`/`public.foto_placeholder()`) que reconhece
+quando a "foto" extraída é a imagem genérica de "sem imagem disponível" que o PRÓPRIO site do
+leiloeiro serve, e zera `link_foto` — correto e intencional, pra não mostrar imagem falsa
+como se fosse foto real. O problema: o léxico da extração (`fotoDeHtml`,
+`scripts/lib/dom-parse-util.mjs`) estava desatualizado em relação ao do banco — só reconhecia
+`sem-imagem`/`no-image` com hífen; o SQL cobre `sem_imagem`, `sem-foto`, `nao-disponivel`,
+`indisponivel`, `lote-default`/`default-lote`, `img-padrao` também. 14 dos 37 lotes relidos
+do GIORDANOLEILOES numa única rodada bateram nos padrões que só o SQL conhecia — a extração
+"aceitava" o placeholder (log mentindo "100%"), o banco corrigia em silêncio, e a fila nunca
+aprendia a diferença. Corrigido: léxico alinhado. Efeito medido em rodada de produção real
+logo depois: GIORDANOLEILOES 47%→34% sem foto numa rodada só (13 pontos), THAISTEIXEIRA
+38%→33%.
+
+**Causa 3 — não é bug, é o site mesmo (achado, não corrigido, ao pedido do dono "confirma se
+é real")**. Depois do fix do léxico, RIGOLONLEILOES continuou em ~58% sem foto e ROCHALEILOES
+em 20% (nenhuma mudança). Confirmado pelo PRÓPRIO log da rodada (já com o filtro de
+placeholder correto): `fotoDeHtml` só encontra foto de verdade em 36% dos lotes do
+RIGOLONLEILOES e 75% do ROCHALEILOES — bate exatamente com o que sobra sem foto no banco. Não
+dava pra confirmar abrindo o site direto (proxy bloqueia domínio de leiloeiro neste sandbox,
+mesma restrição de sempre), mas o log pós-fix é a evidência mais forte possível sem acesso
+direto: é o leiloeiro que não publica foto pra boa parte do acervo, não extração quebrada.
+**Ver pendências 21-23 da lista no topo** para o que ainda falta observar aqui.
+
+### 3) Frequência/tipo de e-mail por usuário — 2 bugs de duplicidade achados (PR #343)
+
+Pedido do dono: levantar a frequência e o tipo de e-mail por usuário. 1.510 e-mails/30 dias
+para 172 usuários, volume normal (~15 no máximo por usuário) — mas o levantamento (agrupando
+por `user_id, tipo, dia` com `count(*) > 1`) achou dois padrões de duplicidade:
+
+- **`boas_vindas` 2-3x no mesmo dia, <400ms de diferença, 8 usuários/30 dias** (commit
+  `3401d8b`). `api/boas-vindas.js` já tinha intenção de idempotência
+  (`perfis.boas_vindas_em`), mas o guard era ler → decidir → marcar em passos separados:
+  duas chamadas concorrentes no mesmo `SIGNED_IN` liam a trava como "ainda não enviado" AS
+  DUAS antes de qualquer PATCH voltar — corrida check-then-act clássica, mesma classe já
+  corrigida nesta base pro orçamento de Bright Data e de e-mail. Corrigido com o mesmo
+  padrão: o filtro `boas_vindas_em=is.null` entra no PRÓPRIO PATCH
+  (`Prefer: return=representation`) — reserva atômica.
+- **`live_inscricao` 2x em 700ms-3s, 2 casos/30 dias, origem sempre
+  `acervo_aberto_leiloes`** (commit `6318441`). O form HTML cru da página de SEO (`/leiloes`)
+  não tem JS nem `disabled` no botão (diferente da landing dedicada, que já trava com
+  `disabled={enviando}`) — clique duplo dispara duas requisições POST completas e
+  sequenciais. O upsert em `live_inscricoes` já era `merge-duplicates` de propósito (reenvio
+  deve ATUALIZAR os dados, não dar erro), mas o bloco de confirmação por e-mail rodava
+  incondicionalmente a cada chamada. Corrigido: lê se já existia inscrição pra este
+  e-mail+edição ANTES do upsert; se já existia, atualiza normalmente mas pula o e-mail.
+
+Nenhum admin/conta interna recebendo e-mail de marketing/retenção (a trava de 08/08 continua
+funcionando) — conferido antes de fechar o levantamento.
+
+### 4) Cancelamento do assinante Marcelo Santos — confirmado que foi ele, não bug (informativo)
+
+Dono mostrou print de cancelamento (Investidor Pro) e pediu para checar se foi o cliente ou
+algo errado. Cruzado com a fonte mais confiável (`webhook_eventos_processados`, o evento cru
+que a própria Mercado Pago manda): `subscription_preapproval:cancelled`, recebido direto da
+MP. Sem falha de pagamento (só 1 cobrança no histórico, aprovada; semáforo da MP verde; a
+próxima cobrança só venceria 3 dias depois, ele cancelou antes dela ser tentada); sem ação
+nossa (`audit_logs` vazio para o usuário); ele estava ativo na plataforma (cliques em e-mail)
+minutos antes de cancelar. Conclusão: cancelamento voluntário, direto na Mercado Pago — não
+precisa de ação de código.
+
+### Fica para a próxima sessão
+
+Ver itens 21-25 da lista de pendências no topo deste documento (backlog residual de foto,
+RJLEILOES pago ainda não investigado, causa estrutural da contaminação de débito não
+corrigida — só mitigada, e as 2 corridas de e-mail que precisam de ~30 dias de dado real pra
+confirmar zero recorrência).
+
+*Sessão de 14/09 encerrada. Branch `claude/laughing-babbage-la8sf9`, reiniciado do `main`
+depois de cada merge (PRs #342 e #343, ambas mergeadas). 7 commits de código no total (4 na
+#342 incluindo a migração aplicada via MCP, 3 na #343), todos com `npm run build` limpo;
+suítes `planejar-alvo.test.mjs` (10/10) e `foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs`
+(25/25) verdes. CI (`verificar-padroes.yml`/`verificar-schema.yml`) verde nas duas PRs antes
+do merge. Migração de dados do item 1 aplicada e verificada direto via Supabase MCP.*
