@@ -223,7 +223,16 @@ export function extrairCustosTexto(texto) {
     const vm = valorDoEncargo(depois);
     if (!vm) continue;
     const ctx = `${antes} ${depois}`, v = numBr(vm[1]);
-    if (ehDebito(ctx)) { if (out.iptuDebito == null) out.iptuDebito = faixa(v, 50, 50000000); }
+    // Teto de 50 MILHÕES (14/09, achado real): um leilão JUDICIAL costuma reunir vários
+    // lotes/imóveis no MESMO PDF (mesmo processo de execução), e publicarFatosDoPdf() lê o
+    // documento inteiro (até 120k caracteres) sem recortar por lote — um valor de OUTRO lote,
+    // ou o valor da CAUSA do processo, perto de qualquer menção a "IPTU" no texto passava
+    // pela janela e pelo filtro de RUÍDO. R$ 21.438.724,24 de "débito de IPTU" foi extraído
+    // assim (imóvel avaliado em R$ 572 mil — dívida 37x o valor do imóvel), confirmado pelo
+    // dono contra o site do leiloeiro: não existe. R$ 2.000.000 é generoso (cobre até imóvel
+    // grande com anos de atraso) e não é a correção completa do recorte por lote — só para de
+    // deixar passar o extremo implausível enquanto isso não é resolvido.
+    if (ehDebito(ctx)) { if (out.iptuDebito == null) out.iptuDebito = faixa(v, 50, 2000000); }
     else if (/mensal|por\s+m[êe]s|ao\s+m[êe]s/i.test(ctx)) { if (out.iptuMensal == null) out.iptuMensal = faixa(v, 10, 50000); }
     else if (out.iptuAnual == null) out.iptuAnual = faixa(v, 50, 2000000);
   }
@@ -233,7 +242,9 @@ export function extrairCustosTexto(texto) {
     const vm = valorDoEncargo(depois);
     if (!vm) continue;
     const v = numBr(vm[1]);
-    if (ehDebito(`${antes} ${depois}`)) { if (out.condominioDebito == null) out.condominioDebito = faixa(v, 50, 50000000); }
+    // Mesmo teto e mesmo motivo do iptuDebito acima (comentário lá) — condomínio tem a
+    // mesma exposição a contaminação entre lotes do mesmo PDF de leilão judicial.
+    if (ehDebito(`${antes} ${depois}`)) { if (out.condominioDebito == null) out.condominioDebito = faixa(v, 50, 2000000); }
     else if (out.condominioMensal == null) out.condominioMensal = faixa(v, 30, 100000);
   }
   return Object.values(out).some((v) => v !== null) ? out : null;
