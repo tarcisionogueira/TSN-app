@@ -143,10 +143,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     > eu tentaria de novo se ele ATIVAR o anúncio (aí ele roda/nega de verdade e vira linha).
     > ✅ **ATIVADO a pedido do dono (13/09, 23h58 UTC)** — `enable_ad` via Windsor.ai
     > (`google_ads`, conta `475-979-5747`, `202533617967~824473588218`), confirmado com sucesso
-    > pela própria API. **Pendência para AMANHÃ, no início da sessão**: checar de novo via
-    > Windsor (`get_data`, campos `ad_group_ad_status` + `ad_group_ad_policy_summary_*`,
-    > filtro `ad_id eq 824473588218`) — agora que está ativo, deve gerar impressão e finalmente
-    > aparecer o veredito de revisão. Reversível com `pause_ad` se precisar.
+    > pela própria API. Orçamento CONFIRMADO na mesma checagem: campanha "Pesquisa — Leilão de
+    > Imóveis (BR)" (`24089433745`), **R$ 30,00/dia**, compartilhado entre todos os anúncios do
+    > ad group — ativar a Alternativa D não aumenta verba, só a coloca pra competir pelo mesmo
+    > orçamento já configurado.
+    > **JANELA DE MONITORAMENTO: 3 dias (13/09 a 16/09), decisão do dono.** Em cada sessão
+    > aberta nesse intervalo, checar via Windsor (`get_data`, campos `ad_group_ad_status` +
+    > `ad_group_ad_policy_summary_*`, filtro `ad_id eq 824473588218`, mais `impressions`/
+    > `clicks`/`spend` do ad_group pra comparar com o anúncio principal `818774598363`): (a)
+    > veredito de revisão (aprovado/reprovado — se reprovado de novo, trazer o motivo e não
+    > insistir num 3º texto igual); (b) performance real nesses 3 dias. **16/09 é o prazo pra
+    > decidir**: manter ativo, pausar, ou tentar nova alternativa — não deixar rodando
+    > indefinidamente sem revisão.
 11. ~~**Confirmar disparo do e-mail da campanha ebook R$1**~~ — **RESOLVIDO (13/09, 11h20 UTC)**:
     disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
     conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
