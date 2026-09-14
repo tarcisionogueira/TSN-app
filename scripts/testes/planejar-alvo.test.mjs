@@ -17,7 +17,8 @@ const AGORA = Date.parse('2026-08-29T22:00:00Z');
 const dia = (n) => new Date(AGORA + n * 864e5).toISOString().slice(0, 10);
 const chaveDe = (u) => `f_${u}`;
 const metaDe = (defs) => new Map(defs.map(d => [`f_${d.u}`,
-  { fonte_id: `f_${d.u}`, atualizado_em: d.tocado, data_fim: d.fim ?? null, ativo: d.ativo !== false }]));
+  { fonte_id: `f_${d.u}`, atualizado_em: d.tocado, data_fim: d.fim ?? null, ativo: d.ativo !== false,
+    link_foto: d.foto ? 'https://x/y.jpg' : null }]));
 
 let falhas = 0;
 const eq = (nome, a, b) => {
@@ -79,5 +80,31 @@ const eq = (nome, a, b) => {
   eq('empate de data desempata estável', um.releitura, dois.releitura);
 }
 
-console.log(falhas ? `\n${falhas} FALHA(S)` : '\n8/8 cenários passam');
+// 9) SEM FOTO fura a fila do mais-velho (achado 14/09: GIORDANOLEILOES 47% sem foto porque um
+//    lote que falha em pegar a foto ainda "envelhece" normal e nunca é priorizado de volta)
+{
+  const meta = metaDe([
+    { u: 'velho_com_foto', tocado: '2026-01-01T00:00:00Z', foto: true },
+    { u: 'novo_sem_foto',  tocado: '2026-08-29T00:00:00Z', foto: false },
+  ]);
+  const r = planejarAlvo({ urls: ['velho_com_foto','novo_sem_foto'], meta, chaveDe, maxLotes: 1, agora: AGORA });
+  eq('sem foto (mesmo mais novo) fura a fila do mais velho', r.releitura, ['novo_sem_foto']);
+}
+// 10) O TETO do furo-de-fila não deixa uma fonte 100% sem foto sequestrar a releitura inteira —
+//     além do teto, volta a valer a ordem normal (mais velho primeiro)
+{
+  const semFoto = Array.from({ length: 20 }, (_, i) => ({ u: `sf${i}`, tocado: '2026-08-01T00:00:00Z', foto: false }));
+  const comFotoVelho = { u: 'com_foto_bem_velho', tocado: '2026-01-01T00:00:00Z', foto: true };
+  const meta = metaDe([...semFoto, comFotoVelho]);
+  const urls = [...semFoto.map(d => d.u), comFotoVelho.u];
+  const r = planejarAlvo({ urls, meta, chaveDe, maxLotes: 21, agora: AGORA });
+  // 20 sem-foto > teto de 15 furam a fila; o mais velho com foto (fora do teto) ainda entra
+  // antes dos 5 sem-foto que sobraram do lado de fora do furo.
+  const semFotoNaFrente = r.releitura.slice(0, 15).every(u => u.startsWith('sf'));
+  eq('teto do furo respeitado (15 sem-foto na frente, resto some pela ordem normal)', semFotoNaFrente, true);
+  eq('mais velho com foto entra antes do resto de sem-foto que ficou de fora do teto',
+    r.releitura[15], 'com_foto_bem_velho');
+}
+
+console.log(falhas ? `\n${falhas} FALHA(S)` : '\n10/10 cenários passam');
 process.exit(falhas ? 1 : 0);
