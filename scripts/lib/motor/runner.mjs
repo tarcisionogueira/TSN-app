@@ -112,6 +112,22 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
 // acervo cicla inteiro em tempo limitado em vez de reler sempre os mesmos.
 const DIAS_IMINENTE = 21;
 
+// SEM FOTO FURA A FILA, ATÉ UM TETO (14/09, achado do dono: imóvel real do GIORDANOLEILOES sem
+// foto). Medido em produção: relendo AGORA os mesmos lotes que o banco tinha com `link_foto`
+// nulo, quase todos vieram com foto — a extração (`fotoDeHtml`) não está quebrada, é falha
+// TRANSITÓRIA de carregamento da página. O problema é a fila: um lote que falha em pegar a foto
+// ainda tem `atualizado_em` avançado (a captura "funcionou", só a foto que não veio) — então ele
+// parece recém-tocado e cai pro FIM da fila de releitura (que ordena do mais velho pro mais
+// novo), perdendo pra registros realmente parados há mais tempo. Sem prioridade própria, um lote
+// que falhou uma vez pode levar semanas pra ser tentado de novo — foi assim que GIORDANOLEILOES
+// acumulou 47% sem foto.
+// TETO, não prioridade absoluta: fontes que legitimamente NUNCA têm foto (editais em texto puro)
+// ficariam para sempre no topo da fila, tomando toda a folga de releitura de fontes saudáveis a
+// cada rodada — outro lote de meio caminho tentando forçar dado que nunca vai vir. Limitar a
+// N por rodada garante que o backlog de falha transitória é corrigido em poucos ciclos, sem
+// sequestrar o orçamento de quem só está velho.
+const SEM_FOTO_TETO = 15;
+
 /**
  * PLANEJA O QUE O RUN VAI BUSCAR — puro, exportado, e é isto que os testes exercitam.
  * A conta de orçamento é a parte que erra em silêncio (um off-by-one aqui gasta crédito ou
@@ -121,12 +137,13 @@ const DIAS_IMINENTE = 21;
 export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora = Date.now() }) {
   const novos = urls.filter(u => !meta.has(chaveDe(u)));
   const limite = agora + DIAS_IMINENTE * 864e5;
-  const conhecidas = urls
+  const porOrdemBase = urls
     .filter(u => meta.has(chaveDe(u)))
     .map((u) => {
       const m = meta.get(chaveDe(u));
       return { url: u, id: m.fonte_id, tocado: Date.parse(m.atualizado_em) || 0,
-               fim: m.data_fim ? Date.parse(m.data_fim) : null, ativo: m.ativo !== false };
+               fim: m.data_fim ? Date.parse(m.data_fim) : null, ativo: m.ativo !== false,
+               temFoto: !!m.link_foto };
     })
     .filter(c => c.ativo)              // lote já desativado não volta pela releitura
     .sort((a, b) => {
@@ -137,6 +154,11 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
       if (ia !== ib) return ia - ib;
       return (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1);
     });
+  // Extrai, respeitando a ordem acima, até SEM_FOTO_TETO lotes sem foto e recoloca na frente —
+  // o resto da fila segue exatamente como já era (ver garantia de compatibilidade no teste).
+  const semFotoBoost = porOrdemBase.filter(c => !c.temFoto).slice(0, SEM_FOTO_TETO);
+  const boostIds = new Set(semFotoBoost.map(c => c.id));
+  const conhecidas = [...semFotoBoost, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
   const usadosPorNovos = Math.min(novos.length, maxLotes);
   const folga = maxLotes - usadosPorNovos;
   const teto = maxRefresh === undefined ? folga : Math.max(0, Math.min(folga, maxRefresh));
@@ -158,7 +180,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de dedup; erro → reprocessa lote conhecido (upsert idempotente), nunca corrompe. Mesmo padrão dos scrapers de origem.
       const { data } = await supabase.from('imoveis_leilao')
-        .select('fonte_id,atualizado_em,data_fim,ativo').in('fonte_id', ids.slice(i, i + 200));
+        .select('fonte_id,atualizado_em,data_fim,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
       for (const r of data || []) meta.set(r.fonte_id, r);
     }
     // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
