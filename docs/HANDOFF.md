@@ -408,6 +408,36 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     IDENTIDADE inteiro vazando de um PDF multi-lote pro outro. Reforça: o recorte por lote em
     `publicarFatosDoPdf()` (item 24) é a correção que falta; sem ela, este tipo de achado vai
     continuar aparecendo em lotes novos.
+32. **E-mail de resgate no cancelamento — implementado (14/09), pedido do dono**. Em vez do
+    envio individual pro Marcelo (item 26, superado), `mp-webhook.js` agora distingue cobrança
+    RECUSADA de cancelamento GENUÍNO (`preapproval.status === 'cancelled'`) e dispara
+    `enviarEmailResgateCancelamento()` (`api/_webhook-core.js`) pra QUALQUER assinante pago que
+    cancelar de verdade — sinaliza a importância de monitorar praça/imóveis de leilão, sem
+    gesto comercial (desconto/crédito não incluído, é decisão do dono). Guarda de 24h contra
+    reenvio via `emails_log` (tipo `resgate_cancelamento`), além da idempotência do evento MP.
+    Commit `623f867`, em produção. **Limitação conhecida**: só cobre o gateway Mercado Pago
+    (principal); o webhook do Asaas (backup) não tem um branch de cancelamento de assinatura
+    equivalente — se o volume de assinaturas via Asaas crescer, replicar lá. **Não testado
+    contra um cancelamento real ainda** (não dá pra forçar sem cancelar uma assinatura de
+    verdade) — validar no próximo cancelamento genuíno que acontecer.
+33. **Monitoramento de falha de AUTH generalizado pra base inteira (14/09), pedido do dono**.
+    O fix de `cadastro_falha` (item 27) resolveu só UM catch de UMA tela — o dono pediu pra
+    melhorar de verdade "sabermos tudo o que acontece". Extraída a extração de status+code pra
+    `motivoErroAuth()` (`src/lib/erroAuth.js`, companheira de `traduzErroAuth`): a mesma causa
+    raiz (`@supabase/auth-js` cai pra `"{}"` quando o corpo não tem campo de erro reconhecido)
+    vale pra QUALQUER `supabase.auth.*`, não só `signUp`. Aplicado nos 4 OUTROS catches de
+    `Login.jsx` que ainda usavam só `.message` (recuperação de senha, OAuth Google, reenvio de
+    confirmação, login) — e, o achado mais valioso, em DOIS catches de `Checkout.jsx` que não
+    tinham NENHUM registro (nem a versão fraca): o cadastro Explorador dentro do checkout e o
+    fluxo PAGO `assinarComCadastro` (cadastro + cobrança num passo só) — esse último é o ponto
+    de maior risco de venda perdida em silêncio de todo o app, e até este commit uma falha ali
+    não deixava rastro nenhum em `eventos_atividade`. Commit `72f6e54`, em produção.
+    **Honestidade sobre o escopo**: isto cobre o SURFACE de autenticação (onde estava o buraco
+    que gerou a queixa original). NÃO é uma varredura de todo `catch` do app — o checker
+    `catch-que-engole-o-motivo` (`verificar:padroes`) já cobre ocorrências NOVAS em qualquer
+    lugar, mas o acervo histórico (666 ocorrências na linha de base) não foi reauditado nesta
+    sessão. Se aparecer outro "situação parecida" fora de auth, é a mesma receita: extrair pro
+    helper certo, aplicar em todo catch do mesmo tipo, não só no que reclamaram.
 
 ---
 
