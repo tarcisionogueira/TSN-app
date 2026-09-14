@@ -24,5 +24,12 @@ export function traduzErroAuth(msg = '') {
   if (/invalid email|unable to validate email|email address.*invalid/i.test(m)) return 'E-mail inválido. Confira o endereço digitado.';
   if (/new password should be different/i.test(m)) return 'A nova senha deve ser diferente da anterior.';
   if (/same_password|should be different from the old/i.test(m)) return 'A nova senha deve ser diferente da anterior.';
-  return m || 'Ocorreu um erro. Tente novamente.';
+  // GUARDA CONTRA TEXTO CRU NÃO-HUMANO (14/09, achado no ritual de abertura): medido em produção
+  // — 2 pessoas viram literalmente "{}" na tela (11 de 17 recusas de cadastro em 7 dias) e
+  // clicaram de novo repetidas vezes (8x e 3x em menos de 2 minutos cada) tentando entender o
+  // que aconteceu. `err.message` do Supabase Auth às vezes vem vazio/objeto quando o corpo da
+  // resposta não tem o formato esperado (ex.: rate limit num nível que não devolve JSON do
+  // GoTrue) — sem esta guarda, esse lixo caía direto no `return m || ...` de baixo.
+  if (!m.trim() || /^[{[]/.test(m.trim())) return 'Ocorreu um erro. Tente novamente em instantes ou fale com o suporte.';
+  return m;
 }

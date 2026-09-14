@@ -49,7 +49,7 @@ export default function HomeCliente() {
   const [cotaMercado, setCotaMercado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
-  const [cursoBoasVindas, setCursoBoasVindas] = useState(null);
+  const [cursoBoasVindas, setCursoBoasVindas] = useState(undefined); // undefined=carregando · null=sem curso · obj=achado
   const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
   const [refCodigo, setRefCodigo] = useState(''); // código curto de indicação (link enxuto)
   const [showTermo, setShowTermo] = useState(false);
@@ -224,9 +224,14 @@ export default function HomeCliente() {
               não visualização), e o BoasVindasModal nunca mais reabre sozinho para quem já
               concluiu, por desenho (11/08). O vídeo continua em /membros/curso/:id; este card
               só torna isso achável sem precisar ligar. */}
-          {cursoBoasVindas && (
+          {cursoBoasVindas === undefined ? (
+            // Esqueleto do MESMO tamanho do card real (mesma causa do "corte" da barra azul
+            // acima: sem isso, o card nasce ausente e SURGE ~1s depois, empurrando os cards
+            // abaixo — reflow visível toda vez que a Home monta).
+            <div aria-hidden style={{ minHeight: 96, background: '#f8fafc', border: '1px solid #eef2f6', borderRadius: 14 }} />
+          ) : cursoBoasVindas ? (
             <Acao Icon={PlayCircle} titulo="Rever vídeo de boas-vindas" desc="Assista de novo a introdução à plataforma, quando quiser." cor={LATAO} onClick={() => nav(`/membros/curso/${cursoBoasVindas.id}`)} />
-          )}
+          ) : null}
           <Acao Icon={Search} titulo="Buscar leilões" desc="Encontre imóveis em todo o Brasil e analise oportunidades." cor="#0D63DB" onClick={() => nav('/buscar')} />
           <Acao Icon={BarChart3} titulo="Minhas Análises" desc="Retome seus relatórios e agende com o analista." cor="#0d9488" onClick={() => nav('/analises')} />
           {/* Meus Arrematados (decisão do dono 30/07): o portfólio real é a tela de
