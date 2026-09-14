@@ -278,18 +278,23 @@ async function handler(req) {
   // por dia por endereço morto: isso trocaria e-mail repetido por log repetido. O que sai
   // daqui é o CONTADOR no rastro da varredura, que é onde se olha.
   let suprimidosNoLote = new Set();
-  let orcamentoEmailRestante = Infinity;
+  let reservarOrcamentoEmail = null;
   try {
-    const { consultarSupressao, orcamentoRestanteHoje } = await import('./_email.js');
-    const r = await consultarSupressao([...emailMap.values()], 'oportunidades');
+    const mod = await import('./_email.js');
+    const r = await mod.consultarSupressao([...emailMap.values()], 'oportunidades');
     suprimidosNoLote = r.suprimidos;
-    // ─── ORÇAMENTO DIÁRIO DO RESEND (13/09) ───────────────────────────────────────────────
+    // ─── ORÇAMENTO DIÁRIO DO RESEND (13/09, reserva atômica desde 14/09) ──────────────────
     // Este é o MAIOR volume de e-mail da casa — é ele quem mais rápido bate no teto de
     // 100/dia do plano Free. Corta o loop cedo em vez de deixar o Resend devolver erro pra
     // cada envio; quem ficar de fora não é marcado como enviado (nem `ultimo_envio` nem
     // `alertas_enviados`), então o cron de AMANHÃ (0 11 * * *) reconsidera essas pessoas
     // normalmente — dispensa fila própria pra este arquivo.
-    if (!testeEmail) orcamentoEmailRestante = await orcamentoRestanteHoje();
+    // Era uma FOTO lida uma vez aqui e decrementada em memória (linha do loop, abaixo) — sem
+    // saber de `enviarEmail`/`drenar-fila-emails-cron.js` reservando o MESMO orçamento ao
+    // mesmo tempo. Cada chamador "tinha margem" isoladamente e, somados, estouravam o teto
+    // real (4 falhas reais do Resend em 13/09). Agora cada envio deste loop reserva 1 slot
+    // ATOMICAMENTE no banco (mesma RPC que `enviarEmail` usa) bem antes do fetch ao Resend.
+    reservarOrcamentoEmail = mod.reservarOrcamentoEmail;
   } catch { /* não consegui checar: segue enviando, como antes deste commit */ }
 
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
@@ -584,9 +589,9 @@ async function handler(req) {
     // avança depois que o `try` termina, então o corte nunca "pula" quem estava em
     // andamento: ele volta a ser o primeiro do próximo lote.
     if (!testeEmail && Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
-    // Corte por ORÇAMENTO DE E-MAIL (13/09): sem chamar o Resend de novo, sem chained
-    // `continuar()` (ver abaixo) — quem ficou de fora entra de novo no cron de amanhã.
-    if (!testeEmail && orcamentoEmailRestante <= 0) { cortadoPorOrcamentoEmail = true; break; }
+    // Corte por ORÇAMENTO DE E-MAIL: a reserva de verdade agora é ATÔMICA e acontece logo
+    // antes do fetch ao Resend, dentro do try (ver `reservarOrcamentoEmail()` abaixo) — não
+    // dá mais pra checar aqui em cima com uma foto em memória (era a fonte da corrida).
     try {
       const email = emailMap.get(perfil.id); if (!email || !RESEND_KEY) continue;
       // Endereço morto: não insiste. Fica ANTES de qualquer trabalho caro (RPC de raio,
@@ -882,6 +887,16 @@ async function handler(req) {
   </div>
 </div></body></html>`;
 
+      // RESERVA ATÔMICA (14/09) — logo antes do fetch de verdade, não mais uma foto lida no
+      // topo do lote. `enviarEmail`/`drenar-fila-emails-cron.js` reservam no MESMO contador;
+      // sem isto os três liam orçamento desatualizado e, somados, estouravam o teto real do
+      // Resend (4 falhas reais de "daily email sending quota" em 13/09, mesmo com represamento
+      // ativo). Corta o loop aqui — sem chamar o Resend, sem chained `continuar()` (ver
+      // abaixo) — quem ficou de fora entra de novo no cron de amanhã.
+      if (!testeEmail) {
+        const reserva = reservarOrcamentoEmail ? await reservarOrcamentoEmail() : { permitido: true };
+        if (!reserva.permitido) { cortadoPorOrcamentoEmail = true; break; }
+      }
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST', headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: FROM, to: email, subject: `🏠 ${top.length} oportunidades em ${local} esta semana`, html }),
@@ -921,7 +936,6 @@ async function handler(req) {
           } catch { /* dedup é best-effort */ }
         }
         enviados++;
-        orcamentoEmailRestante--;
         // Push com o mesmo resumo do e-mail (best-effort, não bloqueia o loop).
         if (!testeEmail) {
           await enviarPushOportunidades(

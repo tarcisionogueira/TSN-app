@@ -392,6 +392,16 @@ export default function CriarContrato() {
                 {produtos.map(p => <option key={`${p.tipo}:${p.chave}`} value={`${p.tipo}:${p.chave}`}>{({ plano: 'Plano', curso: 'Curso', ebook: 'eBook' }[p.tipo] || p.tipo)} — {p.nome}</option>)}
               </select>
               <p style={{ fontSize: 11, color: '#94a3b8', margin: '6px 0 0' }}>Vinculado, aparece como "contrato atribuído" na tela de Produtos (Admin), para consulta.</p>
+              {produtoSel === 'plano:assessorado' && (
+                // Regra absoluta do dono: assessoria só para quem já é Investidor Pro (ou
+                // equipe/já assessorado) — src/lib/assessoria-acesso.js. O servidor
+                // (assinar-contrato.js) aplica o MESMO gate na assinatura: se o cliente não for
+                // elegível, o contrato é assinado normalmente mas NÃO promove o role nem cria o
+                // acesso — fica registrado em audit_logs para a equipe resolver manualmente.
+                <p style={{ fontSize: 11.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', margin: '8px 0 0' }}>
+                  ⚠️ A Assessoria é exclusiva de quem já é Investidor Pro. Se o cliente ainda não for, a assinatura NÃO concede o acesso automaticamente — verifique o plano dele antes de enviar.
+                </p>
+              )}
             </div>
 
             {/* Modo assinar: upload do arquivo */}

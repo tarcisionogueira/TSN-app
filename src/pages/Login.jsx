@@ -424,7 +424,10 @@ export default function Login() {
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no
       // funil público — é exatamente o que se perde quando "mandei links e ninguém cadastrou".
-      registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      // Status do erro junto com a mensagem (14/09): quando err.message vem vazio/lixo
+      // ("{}", achado no ritual de abertura — ver traduzErroAuth), o status HTTP é o único
+      // jeito de diferenciar rate-limit (429) de falha de servidor (500) na próxima leitura.
+      registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: `${err?.status ? `[${err.status}] ` : ''}${String(err?.message || '(sem mensagem)')}`.slice(0, 150) });
       setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
