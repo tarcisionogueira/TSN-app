@@ -25,7 +25,7 @@ export default function AdvogadoPortal() {
   // gate no convite deixaria de fora quem foi promovido a advogado pelo Admin, que é como o
   // primeiro deles provavelmente vai entrar.
   //
-  // BLOQUEANTE de propósito. Este termo é o que define o repasse de 2,5% do valor arrematado
+  // BLOQUEANTE de propósito. Este termo é o que define o repasse de 4,75% do valor arrematado
   // e o dever de sigilo sobre documento de cliente; deixar navegar antes de aceitar seria dar
   // acesso a matrícula e processo de terceiro sem contrato nenhum assinado.
   const [aceite, setAceite] = useState(undefined);   // undefined = ainda lendo
