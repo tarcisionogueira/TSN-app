@@ -141,6 +141,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     > checagem não vai resolver sozinho.** Pra ver se já foi revisada, é direto no painel do
     > Google Ads (Ads → esse ad group → coluna Status de aprovação) — 30 segundos pro dono, ou
     > eu tentaria de novo se ele ATIVAR o anúncio (aí ele roda/nega de verdade e vira linha).
+    > ✅ **ATIVADO a pedido do dono (13/09, 23h58 UTC)** — `enable_ad` via Windsor.ai
+    > (`google_ads`, conta `475-979-5747`, `202533617967~824473588218`), confirmado com sucesso
+    > pela própria API. **Pendência para AMANHÃ, no início da sessão**: checar de novo via
+    > Windsor (`get_data`, campos `ad_group_ad_status` + `ad_group_ad_policy_summary_*`,
+    > filtro `ad_id eq 824473588218`) — agora que está ativo, deve gerar impressão e finalmente
+    > aparecer o veredito de revisão. Reversível com `pause_ad` se precisar.
 11. ~~**Confirmar disparo do e-mail da campanha ebook R$1**~~ — **RESOLVIDO (13/09, 11h20 UTC)**:
     disparou. Checado ~20min depois: 146 enviados, 141 entregues, 4 abertos, 0 clicaram, 0
     conversões desde 11h UTC — números normais pra tão pouco tempo depois do envio, tendem a
