@@ -248,6 +248,18 @@ export default async function handler(req, res) {
   }
 
   // ── A inscrição ────────────────────────────────────────────────────────────
+  // JÁ EXISTIA, ANTES do upsert (14/09, achado do dono ao levantar frequência de e-mail):
+  // decide se a confirmação abaixo é reenvio ou primeira vez. Causa raiz medida em produção:
+  // o FORM HTML CRU do acervo aberto (`isFormPost`, sem JS, sem "disabled" no botão) deixa
+  // passar clique duplo — duas requisições POST completas e sequenciais (700ms-3s de
+  // intervalo no dado real), cada uma reprocessando o handler inteiro e mandando a
+  // confirmação de novo. Não é corrida de milissegundos como a de `boas-vindas.js` (duas
+  // chamadas do MESMO processo/tick): aqui são dois requests HTTP distintos, então uma
+  // leitura antes do upsert já fecha o caso real, sem precisar de reserva atômica em RPC —
+  // mesmo espírito best-effort já documentado na contagem de vagas acima.
+  const jaInscritoRes = await sb(`live_inscricoes?evento_id=eq.${ev.id}&email=eq.${encodeURIComponent(email)}&edicao=eq.${edicao}&select=id`);
+  const jaInscrito = jaInscritoRes.ok ? (await jaInscritoRes.json().catch(() => [])).length > 0 : false;
+
   // `merge-duplicates` sobre (evento_id, email, edicao): reenviar o formulário atualiza os
   // dados em vez de estourar erro na cara de quem só clicou duas vezes. A `edicao` entrou na
   // chave em 03/09 — sem ela, a MESMA pessoa não conseguia se inscrever na aula da semana
@@ -309,8 +321,18 @@ export default async function handler(req, res) {
   } catch { /* rastro best-effort: nunca derruba a inscrição */ }
 
   // ── Confirmação por e-mail ─────────────────────────────────────────────────
+  // SÓ na primeira vez (`!jaInscrito`, ver acima) — reenvio de formulário (clique duplo,
+  // "corrigi meu telefone e mandei de novo") já ATUALIZOU os dados no upsert acima; a pessoa
+  // não precisa de uma segunda confirmação na caixa de entrada.
   // Falha de e-mail NÃO derruba a inscrição (ela já está gravada, que é o que importa),
   // mas vai para o log: uma confirmação que não chega vira falta na aula.
+  if (jaInscrito) {
+    return saida(200, {
+      ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
+      codigo_indicacao: null, link_acesso: null, lead_event_id: evId, meta_capi: capiAtivo(),
+      whatsapp_direto: String(ev.whatsapp_direto || '').replace(/\D/g, '') || null,
+    });
+  }
   const quando = new Date(ev.data_hora).toLocaleString('pt-BR', {
     timeZone: 'America/Bahia', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
   });
