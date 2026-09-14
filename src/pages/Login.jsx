@@ -424,10 +424,21 @@ export default function Login() {
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no
       // funil público — é exatamente o que se perde quando "mandei links e ninguém cadastrou".
-      // Status do erro junto com a mensagem (14/09): quando err.message vem vazio/lixo
-      // ("{}", achado no ritual de abertura — ver traduzErroAuth), o status HTTP é o único
-      // jeito de diferenciar rate-limit (429) de falha de servidor (500) na próxima leitura.
-      registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: `${err?.status ? `[${err.status}] ` : ''}${String(err?.message || '(sem mensagem)')}`.slice(0, 150) });
+      // MOTIVO de verdade, não só status (14/09, 2ª rodada — achado no painel de qualidade: 8
+      // falhas seguidas gravaram só "{}", zero diagnóstico). Causa raiz lida na própria lib
+      // (@supabase/auth-js/src/lib/fetch.ts, _getErrorMessage): quando o corpo do erro não tem
+      // `msg`/`message`/`error_description`/`error`, ela cai para `JSON.stringify(err)` — um
+      // corpo vazio vira literalmente a string "{}", sem informação nenhuma. Mas a MESMA lib
+      // extrai um `code` estável À PARTE (`data.code`/`data.error_code` — ex.: "weak_password",
+      // "over_email_send_rate_limit", "email_exists") e grava em `err.code`, que sobrevive
+      // mesmo quando `.message` vem vazio. Prioriza status+code; só usa `.message` quando ela
+      // não é o mesmo lixo cru ("{" ou "[" — mesmo guard de src/lib/erroAuth.js).
+      { const partes = [];
+        if (err?.status) partes.push(`status=${err.status}`);
+        if (err?.code) partes.push(`code=${err.code}`);
+        const msg = String(err?.message || '').trim();
+        if (msg && !/^[{[]/.test(msg)) partes.push(msg);
+        registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: (partes.join(' · ') || '(sem mensagem)').slice(0, 150) }); }
       setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
