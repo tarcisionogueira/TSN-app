@@ -47,6 +47,21 @@ import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-cor
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
+// RELEITURA (14/09) — mesma função do motor compartilhado, reaproveitada aqui porque o RJ tem
+// scraper PRÓPRIO (não passa por `rodarFonte`/`coletarTenant`) e carregava a MESMA armadilha
+// "tudo-ou-nada" que `planejarAlvo` já corrigiu para as outras fontes em 29/08: `alvo` era
+// `novos.length ? novos : urls` — havendo QUALQUER lote novo, nenhum lote antigo (inclusive os
+// sem foto) era tocado; sem lote novo, sempre os MESMOS primeiros `MAX_LOTES` da listagem, nunca
+// o resto. Medido: o lote sem foto mais antigo do RJLEILOES estava parado 18 dias sem releitura
+// nenhuma. `MAX_LOTES` continua o mesmo teto de sempre — reusar `planejarAlvo` não aumenta o
+// gasto semanal de Bright Data, só usa melhor a MESMA cota (novo sempre primeiro, sobra vai pra
+// releitura por idade/sem-foto em vez de reprocessar os mesmos 40 ou não reprocessar nada).
+// NÃO importa o `pararReleitura`/"releitura nunca paga" do motor: aquela regra existe pra
+// fontes com caminho GRÁTIS, onde só a releitura que cai na via paga precisa parar. Aqui TODA
+// requisição já é Bright Data — não existe fetch "grátis" pra distinguir — então o teto que
+// protege o bolso é só o `MAX_LOTES` (mesmo de sempre) e a reserva semanal do propósito 'rj'
+// (`brightdata_reserva`), que o `bd()` abaixo já respeita por fora, sem mudança nenhuma aqui.
+import { planejarAlvo } from './lib/motor/runner.mjs';
 
 const BASE = 'https://www.rjleiloes.com.br';
 const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
@@ -385,19 +400,23 @@ async function main() {
   }
   console.log(`Enumerados ${urlsLote.length} lote(s)${enumeracaoCompleta ? '' : ' (ENUMERAÇÃO INCOMPLETA)'}.`);
 
-  // Prioriza os NOVOS (fonte_id ainda não no banco). O `error` é checado: `{data}` sozinho
-  // funde "não achou" com "não consegui ler" (forma #2 do CLAUDE.md) e, aqui, um erro de
-  // leitura faria TODO o acervo parecer novo e reprocessar 40 lotes pagos à toa.
+  // Prioriza os NOVOS (fonte_id ainda não no banco) e usa a SOBRA do teto pra releitura dos
+  // antigos (mais velho/sem-foto primeiro), em vez do tudo-ou-nada de antes. O `error` é
+  // checado: `{data}` sozinho funde "não achou" com "não consegui ler" (forma #2 do
+  // CLAUDE.md) e, aqui, um erro de leitura faria TODO o acervo parecer novo e reprocessar
+  // `MAX_LOTES` lotes pagos à toa.
   const ids = urlsLote.map(u => `rj_${idDaUrl(u)}`);
-  const existentes = new Set();
+  const meta = new Map();
   for (let i = 0; i < ids.length; i += 200) {
-    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('fonte_id,atualizado_em,data_fim,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
     if (error) throw new FalhaDeAcesso('supabase', `leitura de fonte_id: ${error.message}`);
-    for (const r of data || []) existentes.add(r.fonte_id);
+    for (const r of data || []) meta.set(r.fonte_id, r);
   }
-  const novos = urlsLote.filter(u => !existentes.has(`rj_${idDaUrl(u)}`));
-  const alvo = (novos.length ? novos : urlsLote).slice(0, MAX_LOTES);
-  console.log(`no banco: ${existentes.size} · novos: ${novos.length} · processando: ${alvo.length}`);
+  const { novos, releitura, alvo } = planejarAlvo({
+    urls: urlsLote, meta, chaveDe: u => `rj_${idDaUrl(u)}`, maxLotes: MAX_LOTES,
+  });
+  console.log(`no banco: ${meta.size} · novos: ${novos.length} · releitura: ${releitura.length} · processando: ${alvo.length}`);
 
   // 2) Detalhe de cada lote alvo.
   const prontos = [];
