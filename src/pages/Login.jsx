@@ -22,7 +22,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // regra que vai divergir. Ver o comentário do botão de cadastro sobre por que o gate existe.
 // Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
 import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
-import { traduzErroAuth } from '../lib/erroAuth.js';
+import { traduzErroAuth, motivoErroAuth } from '../lib/erroAuth.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import { validarTelefone } from '../lib/telefone.js';
 
@@ -219,7 +219,7 @@ export default function Login() {
       if (error) throw error;
       setModo('recuperar_sucesso');
     } catch (err) {
-      registrarEvento('api_erro', { alvo: 'recuperacao_senha_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      registrarEvento('api_erro', { alvo: 'recuperacao_senha_falha', detalhe: motivoErroAuth(err) });
       setErro(traduzErroAuth(err.message) || 'Erro ao enviar email de recuperação.');
     }
     setLoading(false);
@@ -292,7 +292,7 @@ export default function Login() {
       if (error) throw error;
       // Em sucesso, o browser redireciona para o Google (não volta aqui).
     } catch (err) {
-      registrarEvento('api_erro', { alvo: 'oauth_google_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      registrarEvento('api_erro', { alvo: 'oauth_google_falha', detalhe: motivoErroAuth(err) });
       setErro(traduzErroAuth(err.message) || 'Não foi possível conectar com o Google. Tente novamente.');
       setGoogleLoading(false);
     }
@@ -313,7 +313,7 @@ export default function Login() {
       setReenviado(true); setErro('');
       setCooldownReenvio(30); // evita o "only request this after N seconds" no clique seguinte
     } catch (err) {
-      registrarEvento('api_erro', { alvo: 'reenvio_confirmacao_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      registrarEvento('api_erro', { alvo: 'reenvio_confirmacao_falha', detalhe: motivoErroAuth(err) });
       // Se o próprio Supabase disse "after N seconds", respeita o N no contador.
       const seg = Number((String(err?.message || '').match(/after (\d+) seconds?/i) || [])[1]);
       if (seg > 0) setCooldownReenvio(seg);
@@ -355,7 +355,7 @@ export default function Login() {
       }
     } catch (err) {
       // Falha de LOGIN agora deixa rastro (antes: zero registro — gap da auditoria E1.6).
-      registrarEvento('api_erro', { alvo: 'login_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      registrarEvento('api_erro', { alvo: 'login_falha', detalhe: motivoErroAuth(err) });
       if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
       if (/invalid login credentials/i.test(err.message || '')) setCredencialInvalida(true);
       setErro(traduzErroAuth(err.message));
@@ -424,21 +424,10 @@ export default function Login() {
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no
       // funil público — é exatamente o que se perde quando "mandei links e ninguém cadastrou".
-      // MOTIVO de verdade, não só status (14/09, 2ª rodada — achado no painel de qualidade: 8
-      // falhas seguidas gravaram só "{}", zero diagnóstico). Causa raiz lida na própria lib
-      // (@supabase/auth-js/src/lib/fetch.ts, _getErrorMessage): quando o corpo do erro não tem
-      // `msg`/`message`/`error_description`/`error`, ela cai para `JSON.stringify(err)` — um
-      // corpo vazio vira literalmente a string "{}", sem informação nenhuma. Mas a MESMA lib
-      // extrai um `code` estável À PARTE (`data.code`/`data.error_code` — ex.: "weak_password",
-      // "over_email_send_rate_limit", "email_exists") e grava em `err.code`, que sobrevive
-      // mesmo quando `.message` vem vazio. Prioriza status+code; só usa `.message` quando ela
-      // não é o mesmo lixo cru ("{" ou "[" — mesmo guard de src/lib/erroAuth.js).
-      { const partes = [];
-        if (err?.status) partes.push(`status=${err.status}`);
-        if (err?.code) partes.push(`code=${err.code}`);
-        const msg = String(err?.message || '').trim();
-        if (msg && !/^[{[]/.test(msg)) partes.push(msg);
-        registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: (partes.join(' · ') || '(sem mensagem)').slice(0, 150) }); }
+      // MOTIVO de verdade, não só status (14/09 — achado no painel de qualidade: 8 falhas
+      // seguidas gravaram só "{}", zero diagnóstico). `motivoErroAuth` (lib/erroAuth.js)
+      // generaliza esse fix pra qualquer chamada de supabase.auth.* — ver o comentário lá.
+      registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: motivoErroAuth(err) });
       setErro(traduzErroAuth(err.message));
     }
     setLoading(false);

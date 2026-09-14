@@ -13,6 +13,8 @@ import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
+import { registrarEvento } from '../utils/tracker';
+import { motivoErroAuth } from '../lib/erroAuth.js';
 import { salvarRef } from '../utils/ref';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
@@ -673,6 +675,11 @@ export default function Checkout() {
       trackCadastro(email, nome); // mesma conversão do Login — ver comentário na tela paga
       setContaCriada(true);
     } catch (e) {
+      // 14/09: mesmo gap que `cadastro_falha` em Login.jsx tinha (achado generalizando o fix
+      // pro resto da base) — este cadastro (Explorador grátis dentro do Checkout) não deixava
+      // NENHUM rastro em falha, nem a versão fraca. `motivoErroAuth` extrai status+code mesmo
+      // quando `.message` vem "{}" vazio (ver lib/erroAuth.js).
+      registrarEvento('api_erro', { alvo: 'cadastro_checkout_falha', detalhe: motivoErroAuth(e) });
       const m = String(e?.message || '');
       setSuErro(/already|registered|exists/i.test(m)
         ? 'Este e-mail já tem conta. Clique em "Já tenho conta, Entrar".'
@@ -785,6 +792,9 @@ export default function Checkout() {
       const m = String(e?.message || '');
       const bloqueado = e?.sdkBloqueado || /failed to fetch|load failed|networkerror|net::err|fetch/i.test(m);
       if (bloqueado) { assinandoRef.current = false; await recuperarVisitanteComAsaas(); return; }
+      // 14/09: fluxo PAGO (cadastro + cobrança num passo só) sem NENHUM registro de falha —
+      // era o caminho mais valioso pra ficar invisível (mesmo gap generalizado de Login.jsx).
+      registrarEvento('api_erro', { alvo: 'assinatura_com_cadastro_falha', detalhe: motivoErroAuth(e) });
       setSuErro(m || 'Erro ao processar a assinatura.');
     } finally {
       assinandoRef.current = false;

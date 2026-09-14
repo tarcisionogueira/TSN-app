@@ -33,3 +33,22 @@ export function traduzErroAuth(msg = '') {
   if (!m.trim() || /^[{[]/.test(m.trim())) return 'Ocorreu um erro. Tente novamente em instantes ou fale com o suporte.';
   return m;
 }
+
+// MOTIVO DE VERDADE pro monitoramento, não só pro usuário (14/09, generalizado do fix de
+// `cadastro_falha` em Login.jsx pro resto da base). Mesma causa raiz vale pra QUALQUER chamada
+// de `supabase.auth.*` (login, cadastro, recuperação de senha, nova senha, OAuth): a lib
+// (@supabase/auth-js/src/lib/fetch.ts, _getErrorMessage) cai para `JSON.stringify(err)` quando
+// o corpo não tem `msg`/`message`/`error_description`/`error` — um corpo vazio vira "{}"
+// literal, zero diagnóstico. Mas a MESMA lib extrai um `code` estável À PARTE
+// (`data.code`/`data.error_code` — "weak_password", "over_email_send_rate_limit",
+// "email_exists"...) que sobrevive mesmo quando `.message` falha. Usar em TODO catch de
+// `supabase.auth.*` que loga pra `eventos_atividade`/`erros_cliente` — sem isto, cada tela
+// reinventa (ou esquece) a mesma extração, e o gap volta um catch de cada vez.
+export function motivoErroAuth(err) {
+  const partes = [];
+  if (err?.status) partes.push(`status=${err.status}`);
+  if (err?.code) partes.push(`code=${err.code}`);
+  const msg = String(err?.message || '').trim();
+  if (msg && !/^[{[]/.test(msg)) partes.push(msg);
+  return (partes.join(' · ') || '(sem mensagem)').slice(0, 150);
+}
