@@ -7,7 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
@@ -252,14 +252,25 @@ export default async function handler(req, res) {
         if (temOutraAtiva) return res.status(200).json({ ok: true, ignorado: 'outro_mandato_ativo' });
         const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago' });
         if (result?.suspenso && preapproval.payer_email) {
-          try {
-            await enviarEmail({
-              from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
-              to: preapproval.payer_email,
-              subject: 'Falha no pagamento da sua assinatura — BidPro Brasil',
-              html: `<p>Olá!</p><p>Não conseguimos processar a cobrança da sua assinatura <strong>${preapproval.reason || 'BidPro Brasil'}</strong>. Seu acesso foi temporariamente reduzido ao plano Explorador.</p><p>Para reativar, atualize os dados do cartão na plataforma (Perfil → Assinatura). Assim que o pagamento for aprovado, seu plano volta automaticamente.</p><p>BidPro Brasil</p>`,
-            });
-          } catch { /* não bloqueia */ }
+          // 14/09, pedido do dono: cobrança RECUSADA e CANCELAMENTO de verdade são coisas
+          // diferentes pro cliente — mandar "não conseguimos processar sua cobrança" pra quem
+          // cancelou de propósito é mensagem errada (e não cumpre o pedido: alertar sobre o
+          // risco de perder o timing de praça/leilão sem monitoramento). Só o cancelamento
+          // GENUÍNO (preapproval.status === 'cancelled', não 'paused' nem cobrança recusada)
+          // dispara o e-mail de RESGATE — geral, pra QUALQUER assinante pago, não só um caso.
+          if (assinaturaMorta && preapproval.status === 'cancelled') {
+            await enviarEmailResgateCancelamento({ userId, email: preapproval.payer_email }).catch(() => {});
+          } else {
+            try {
+              await enviarEmail({
+                from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+                to: preapproval.payer_email,
+                subject: 'Falha no pagamento da sua assinatura — BidPro Brasil',
+                html: `<p>Olá!</p><p>Não conseguimos processar a cobrança da sua assinatura <strong>${preapproval.reason || 'BidPro Brasil'}</strong>. Seu acesso foi temporariamente reduzido ao plano Explorador.</p><p>Para reativar, atualize os dados do cartão na plataforma (Perfil → Assinatura). Assim que o pagamento for aprovado, seu plano volta automaticamente.</p><p>BidPro Brasil</p>`,
+                meta: { userId, tipo: 'falha_pagamento_assinatura' },
+              });
+            } catch { /* não bloqueia */ }
+          }
         }
         return res.status(200).json(result);
       }

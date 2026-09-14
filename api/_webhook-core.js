@@ -389,6 +389,54 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
   return { ok: true, suspenso: true, inadimplente: temFidelidade };
 }
 
+// ── E-MAIL DE RESGATE NO CANCELAMENTO (14/09, pedido do dono) ──────────────────────────────
+// "Não vou enviar e-mail ao Marcelo diretamente. Podemos colocar um e-mail de resgate para ele
+// e qualquer assinante pago que venha a cancelar, sinalizando a importância de monitorar e
+// acompanhar uma praça e imóveis de leilão." Dispara para QUALQUER assinante pago cujo mandato
+// MP vire `cancelled` de verdade (chamado só por `mp-webhook.js`, depois de confirmar
+// `suspenderPlanoDireto` rebaixou alguém que ERA pagante — nunca para quem nunca pagou).
+// Sem gesto comercial (desconto/crédito): decisão do dono, não incluído aqui de propósito
+// (mesma reserva já registrada no HANDOFF sobre o rascunho do Marcelo).
+export async function enviarEmailResgateCancelamento({ userId, email }) {
+  if (!userId || !email) return { skipped: 'sem_referencia' };
+  // Guarda por HIGIENE, além da idempotência do evento MP em mp-webhook.js: um mesmo cliente
+  // não recebe este e-mail duas vezes em 24h, mesmo se o mandato oscilar authorized→cancelled
+  // mais de uma vez no mesmo dia (troca de cartão, retry do MP).
+  try {
+    const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: jaEnviado } = await supabase // padrao-ok: guarda best-effort — falha de leitura aqui só faz tentar enviar de novo (fail-open deliberado), o teto de verdade é a idempotência do evento MP em mp-webhook.js
+      .from('emails_log').select('id').eq('user_id', userId).eq('tipo', 'resgate_cancelamento')
+      .gte('enviado_em', desde).limit(1).maybeSingle();
+    if (jaEnviado) return { ok: true, ignorado: 'ja_enviado_24h' };
+  } catch { /* checagem best-effort: na dúvida, segue e tenta enviar */ }
+
+  const { data: perfil } = await supabase.from('perfis').select('nome').eq('id', userId).maybeSingle(); // padrao-ok: só personalização da saudação — falha aqui não muda o envio, cai pro "Olá!" genérico
+  const primeiroNome = String(perfil?.nome || '').trim().split(/\s+/)[0] || null;
+  const saudacao = primeiroNome ? `Olá, ${primeiroNome}!` : 'Olá!';
+
+  const html = `
+    <p>${saudacao}</p>
+    <p>Sua assinatura BidPro Brasil foi cancelada e seu acesso voltou ao plano Explorador.</p>
+    <p>Antes de você ir, um ponto que vale a pena considerar: leilão de imóvel é uma janela que
+    se fecha — uma praça tem data marcada, e o desconto real (às vezes 40-70% abaixo do valor de
+    mercado) só existe enquanto ela está aberta. Sem acompanhamento ativo, é fácil perder o
+    timing certo de lance, ou arrematar sem ter visto a análise documental e mercadológica que
+    aponta se aquele imóvel vale a pena.</p>
+    <p>Foi exatamente pra isso que o BidPro existe: monitorar praças e imóveis de leilão por
+    você, todos os dias, e avisar quando o que importa muda.</p>
+    <p>Se quiser voltar a acompanhar, é só reativar quando fizer sentido:
+    <a href="https://bidprobrasil.com.br/#/planos">bidprobrasil.com.br/#/planos</a>.</p>
+    <p>BidPro Brasil</p>`;
+
+  return enviarEmail({
+    from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+    to: email,
+    subject: 'Sua assinatura foi cancelada — não perca o timing da próxima praça',
+    html,
+    meta: { userId, tipo: 'resgate_cancelamento' },
+  });
+}
+
 // ── ESTORNO DE COMISSÃO (chargeback / reembolso) ──────────────────────────────
 // Reverte a comissão de afiliado de um pagamento que foi revertido: cancela a
 // comissão e lança um ESTORNO NEGATIVO no saldo (fonte do saque). Sem isto o
