@@ -98,6 +98,7 @@ export default function Cliente360() {
   const [dossieDe, setDossieDe] = useState('');   // filtro de período do dossiê (vazio = tudo)
   const [dossieAte, setDossieAte] = useState('');
   const [dossieGerando, setDossieGerando] = useState(false);
+  const [resolvendoErroId, setResolvendoErroId] = useState('');   // erro da LISTA (stats), não do dossiê aberto
 
   // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
   useEffect(() => {
@@ -166,6 +167,34 @@ export default function Cliente360() {
     } catch (e) {
       setErro(`Não consegui marcar os erros como resolvidos: ${String(e?.message || e).slice(0, 100)}`);
     } finally { setResolvendo(false); }
+  };
+
+  // Resolve um erro da LISTA da tela de estatísticas (14/09, achado do dono: o painel
+  // mostrava só a CONTAGEM de "clientes c/ erro" — o erro que fez o Marcelo cancelar a
+  // assinatura ficou 20s invisível ali dentro até virar investigação manual). Mesma rota
+  // de `resolverErros` acima (admin_resolver_erros_usuario resolve TODOS os erros abertos
+  // do usuário, não só esta linha — é o mesmo contrato que o dossiê já usa). Anônimo
+  // (user_id nulo) não tem o que resolver por aqui: não há como marcar "resolvido" um
+  // visitante sem conta.
+  const resolverErroDaLista = async (userId) => {
+    if (!userId || resolvendoErroId) return;
+    setResolvendoErroId(userId);
+    try {
+      const r = await apiCall('/api/admin-usuario-360', { method: 'POST', body: JSON.stringify({ acao: 'resolver_erros', user_id: userId }) });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.ok) {
+        setStats((s) => s && ({
+          ...s,
+          erros_abertos_lista: (s.erros_abertos_lista || []).filter((e) => e.user_id !== userId),
+          erros_abertos_total: Math.max(0, (s.erros_abertos_total || 0) - (j.resolvidos || 0)),
+          clientes_com_erro: Math.max(0, (s.clientes_com_erro || 0) - 1),
+        }));
+      } else {
+        setErro(`Não consegui marcar como resolvido (${j?.error || `HTTP ${r.status}`}).`);
+      }
+    } catch (e) {
+      setErro(`Não consegui marcar como resolvido: ${String(e?.message || e).slice(0, 100)}`);
+    } finally { setResolvendoErroId(''); }
   };
 
   // Gera o DOSSIÊ do cliente (aceites/datas + indicações + saques + relatórios + atividade)
@@ -394,6 +423,39 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                 <div><div style={{ ...label, marginBottom: 5 }}>Tipos mais buscados</div>
                   <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_tipos.map((t) => `${t.tipo_imovel} (${t.n})`).join(' · ')}</div></div>
               )}
+            </div>
+          )}
+          {/* ERROS ABERTOS — lista, não só contagem (14/09, achado do dono: "mesmo fazendo
+              verificação diária esse erro passou" — o painel mostrava "Clientes c/ erro: N"
+              e parava aí; foi assim que o erro que fez o Marcelo cancelar a assinatura ficou
+              invisível até virar investigação manual). Cada linha diz QUEM, QUAL ROTA e A
+              MENSAGEM exata — o suficiente pra reconhecer "isso é bug nosso" sem abrir o
+              banco. Visitante sem conta (user_id nulo) aparece na lista mas sem botão de
+              resolver — não há usuário pra marcar. */}
+          {stats.erros_abertos_lista?.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ ...label, marginBottom: 6, color: '#b91c1c' }}>
+                Erros abertos — {stats.erros_abertos_total} no total · {stats.clientes_com_erro} cliente(s) logado(s)
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {stats.erros_abertos_lista.map((e, i) => (
+                  <div key={i} style={{ fontSize: 11.5, color: '#7f1d1d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                      <b>{e.nome || 'Visitante sem login'}</b>{e.role ? ` (${e.role})` : ''} · <code style={{ color: '#991b1b' }}>{e.rota}</code>
+                      {e.ocorrencias > 1 ? ` · ${e.ocorrencias}×` : ''} · <span style={{ color: '#b45309' }}>{e.msg}</span>
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ color: '#94a3b8' }}>{dataHoraBR(e.ultima_em)}</span>
+                      {e.user_id && (
+                        <button onClick={() => resolverErroDaLista(e.user_id)} disabled={resolvendoErroId === e.user_id}
+                          style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 6, border: '1px solid #fca5a5', background: 'white', color: '#b91c1c', cursor: 'pointer' }}>
+                          {resolvendoErroId === e.user_id ? '…' : '✓ Resolver'}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {/* COBERTURA INCOMPLETA — cliente cujo e-mail semanal saiu com menos de 12 imóveis
