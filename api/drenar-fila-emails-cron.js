@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
-import { enviarEmailAgora, orcamentoRestanteHoje } from './_email.js';
+import { enviarEmailAgora, orcamentoRestanteHoje, reservarOrcamentoEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -41,7 +41,13 @@ async function handler(req) {
 
   let enviados = 0, falhas = 0;
   for (const item of fila) {
-    if (restante <= 0) break;
+    // RESERVA ATÔMICA por item (14/09): a foto de `restante` lida antes do loop pode já estar
+    // velha — `enviarEmail` (requests comuns) e `enviar-alertas-cron.js` reservam no MESMO
+    // contador enquanto esta drenagem roda. Sem reservar aqui item a item, os três chamadores
+    // concorrentes liam contagens desatualizadas e, juntos, estouravam o teto real do Resend
+    // (foi o que causou as falhas reais de "daily email sending quota" de 13/09).
+    const reserva = await reservarOrcamentoEmail();
+    if (!reserva.permitido) break; // sem margem agora — os que sobrarem seguem 'pendente'
     let res;
     try {
       res = await enviarEmailAgora({

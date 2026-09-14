@@ -47,12 +47,43 @@ async function enviadosHojeUTC() {
   }
 }
 
-// Exportado para `enviar-alertas-cron.js` (maior volume da casa, não passa por `enviarEmail`)
-// aplicar o MESMO orçamento — ver o gate no início do loop de envio daquele arquivo.
+// Exportado para `enviar-alertas-cron.js` e `drenar-fila-emails-cron.js` — usar SÓ como
+// leitura informativa (ex.: decidir se vale a pena nem começar um lote). NÃO é mais o gate
+// que decide se um envio individual pode sair: ver `reservarOrcamentoEmail` abaixo.
 export async function orcamentoRestanteHoje() {
   const enviados = await enviadosHojeUTC();
   if (enviados == null) return 0; // não sei quanto já saiu → melhor represar que estourar
   return Math.max(0, ORCAMENTO_ENVIAREMAIL - enviados);
+}
+
+// ─── RESERVA ATÔMICA (14/09) ──────────────────────────────────────────────────────────────
+// `orcamentoRestanteHoje()` é uma LEITURA (conta emails_log) — três chamadores independentes
+// (esta função, `enviar-alertas-cron.js` num loop de minutos, `drenar-fila-emails-cron.js`)
+// cada um lia sua própria foto do orçamento e decidia sozinho, sem trava nenhuma entre eles.
+// Enquanto o cron de alertas processa um lote, os outros dois continuam vendo uma contagem
+// que ainda não reflete os envios em andamento — e cada um, isoladamente, "tinha margem".
+// Resultado real (13/09): 4 e-mails devolvidos pelo Resend com "daily email sending quota"
+// mesmo com o represamento ativo. MESMA classe de bug do Bright Data (sub-cota em memória,
+// sem reserva — ver api/_brightdata.js), MESMA correção: um único INSERT...ON CONFLICT...WHERE
+// no banco, que soma e checa o teto na MESMA operação — dois chamadores concorrentes não
+// conseguem os dois passar pelo mesmo slot. Todo envio de verdade (`enviarEmail`, o loop de
+// `enviar-alertas-cron.js`, a drenagem da fila) precisa reservar AQUI antes de mandar.
+export async function reservarOrcamentoEmail() {
+  if (!SB_URL || !SB_KEY) return { permitido: false, motivo: 'sem_credencial' };
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/reservar_orcamento_email`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_teto: ORCAMENTO_ENVIAREMAIL }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return { permitido: false, motivo: 'rpc_indisponivel', detalhe: `HTTP ${r.status}` };
+    const j = await r.json().catch(() => null);
+    if (!j || typeof j !== 'object') return { permitido: false, motivo: 'rpc_sem_corpo' };
+    return j;
+  } catch (e) { // fail-closed: não saber se há margem é tratado como "sem margem"
+    return { permitido: false, motivo: 'rpc_indisponivel', detalhe: String(e?.message || e).slice(0, 120) };
+  }
 }
 
 // Represa um e-mail que não coube no orçamento de hoje. Guarda o payload inteiro pra
@@ -155,8 +186,8 @@ export async function consultarSupressao(destinos, tipo) {
 // estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
 export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
-  const restante = await orcamentoRestanteHoje();
-  if (restante <= 0) {
+  const reserva = await reservarOrcamentoEmail();
+  if (!reserva.permitido) {
     const enfileirou = await enfileirar({ to: destinos, cc, subject, html, text, replyTo, meta });
     await registrarEmailLog(destinos.map((dest) => ({
       user_id: meta?.userId || null,
