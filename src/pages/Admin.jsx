@@ -2118,7 +2118,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                         {/* TERMO DO JURÍDICO (28/08). Só aparece para quem é ou foi advogado —
                             numa ficha de cliente comum a linha seria ruído. A ausência do aceite
                             num advogado ATIVO é achado, não detalhe: é ele que autoriza o repasse
-                            de 4,5% e firma o dever de sigilo sobre documento de terceiro. */}
+                            de 4,75% e firma o dever de sigilo sobre documento de terceiro. */}
                         {(pf.role === 'advogado' || pf.juridico_aceite_em) && (
                           <div style={linha}>
                             <span>{pf.juridico_aceite_em ? '✅' : '⚠️'} <b>Termo de Adesão — Advogado Parceiro</b>{pf.juridico_aceite_em ? ` — aderiu em ${dtHora(pf.juridico_aceite_em)}${pf.juridico_aceite_versao ? ` (termo ${pf.juridico_aceite_versao})` : ''}` : ' — NÃO aderiu (o portal exige o aceite no próximo acesso)'}</span>
@@ -2523,7 +2523,7 @@ function ConfigTab() {
   // fee_payer='collector'), e o percentual sai só sobre os pagamentos que trouxeram o
   // detalhe — dividir pelo bruto inteiro daria um número menor e com cara de medição.
   const [taxasReais, setTaxasReais] = useState(null);
-  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 5.0, analista_pct: 0.5, consultor_pct: 0 });
+  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.75, advogado_pct: 4.75, analista_pct: 0, consultor_pct: 0.5 });
   const [honorariosSaved, setHonorariosSaved] = useState(false);
   const [honorariosErr, setHonorariosErr] = useState('');
   // Fidelidade e cancelamento
@@ -3079,8 +3079,8 @@ function ConfigTab() {
 
           {/* Distribuição por papel */}
           {[
-            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação (4,5%)' },
-            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica (5%)' },
+            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação (4,75%)' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica (4,75%)' },
             { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
             { key: 'consultor_pct', label: 'Consultor', cor: '#059669', desc: 'captação do cliente' },
           ].map(({ key, label, cor, desc }) => (

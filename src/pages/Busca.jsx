@@ -262,9 +262,13 @@ const normCidade = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-
 // (pins) e pela lista SEM raio. O caminho COM raio passa pela RPC buscar_por_raio_v2
 // (SQL); ao ADICIONAR UM FILTRO NOVO, inclua-o AQUI **e** na RPC + api/busca-raio.js.
 // A cidade é resolvida por quem chama (no modo raio ela é só o CENTRO, não filtra).
-function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
+// O ESTADO (UF) tem a MESMA regra desde 14/09 (pedido do dono, "raio cruza estado"):
+// no modo raio ele só serve pra geocodificar o centro (a cidade escolhida), nunca pra
+// filtrar o resultado — um imóvel do lado da divisa, dentro do raio, não pode sumir só
+// por estar numa UF vizinha. Fora do raio, UF continua um filtro normal.
+function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   let q = base.eq('ativo', true);
-  if (f.estado) q = q.eq('estado', f.estado);
+  if (f.estado && !raioAtivo) q = q.eq('estado', f.estado);
   if (f.tipos?.length) q = q.in('tipo', [...f.tipos, 'imovel']);
   if (f.modalidades?.length) q = q.in('modalidade', f.modalidades);
   if (f.valorMin) q = q.gte('valor_minimo_ref', Number(String(f.valorMin).replace(/\D/g, '')));
@@ -334,7 +338,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // Fonte única de filtros. No modo raio a cidade é só o CENTRO (a área vem do
       // haversine abaixo), então não filtra por cidade.
       const aplicarFiltros = (base) =>
-        aplicarFiltrosImoveis(base, filtros, (!raioAtivo && filtros.cidades?.length) ? filtros.cidades : null);
+        aplicarFiltrosImoveis(base, filtros, (!raioAtivo && filtros.cidades?.length) ? filtros.cidades : null, raioAtivo);
 
       // ═══ A CAIXA GEOGRÁFICA VAI NO SERVIDOR (14/08) ═══════════════════════════════════
       // Antes: `.limit(2000)` SEM recorte geográfico e SEM `order by`, e o raio era aplicado
@@ -1225,8 +1229,9 @@ export default function Busca() {
           filtros: {
             // Todos os filtros aplicados no servidor (RPC v2): múltiplos tipos,
             // modalidades e formas de pagamento — Financiado + Hipotecado juntos.
+            // SEM `estado` de propósito (14/09): raio cruza UF — api/busca-raio.js não
+            // filtra mais por estado, `filtrosAtivos.estado` aqui só escolheu o CENTRO.
             tipos: ajInt.tipos,
-            estado: filtrosAtivos.estado || '',
             modalidades: filtrosAtivos.modalidades || [],
             pagamento: pagamentoParaCanon(filtrosAtivos.pagamento || []),
             valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,

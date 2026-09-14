@@ -77,7 +77,10 @@ export default async function handler(req) {
       lim: porPagina,
       off: offset,
       tipos_filtro: tipos,
-      estado_filtro: filtros.estado || '',
+      // RAIO CRUZA ESTADO (14/09, pedido do dono): este endpoint é usado só pelo modo raio —
+      // travar por UF escondia imóvel do lado da divisa, dentro do raio pedido, só por estar
+      // na UF vizinha da cidade-centro. '' aqui é "sem filtro de UF" pro RPC (buscar_por_raio_v2).
+      estado_filtro: '',
       modalidades_filtro: modalidades,
       pagamentos_filtro: pagamentos,
       valor_min: filtros.valorMin || 0,
