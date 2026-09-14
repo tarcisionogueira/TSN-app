@@ -46,14 +46,25 @@ export default async function handler(req, res) {
   const perfil = Array.isArray(linhas) ? linhas[0] : null;
   if (perfil?.boas_vindas_em) return res.status(200).json({ ok: true, enviado: false, motivo: 'ja_enviado' });
 
-  // Marca ANTES de enviar (guarda contra corrida/duplo-envio em logins concorrentes).
+  // Marca ATOMICAMENTE (14/09: o guard acima — ler, depois decidir, depois marcar — ainda
+  // deixa a corrida passar. Medido em produção: mesmo usuário recebeu boas_vindas 2-3x em
+  // menos de 400ms, porque duas chamadas concorrentes ao SIGNED_IN liam boas_vindas_em nulo
+  // AS DUAS antes de qualquer PATCH voltar. O filtro `boas_vindas_em=is.null` no PRÓPRIO
+  // PATCH resolve: o Postgres só aplica a atualização, e só devolve a linha, para quem
+  // encontra a condição ainda válida NO INSTANTE do UPDATE — a 2ª chamada concorrente já
+  // não encontra a linha (outra já marcou) e volta vazia. Mesmo padrão já usado pro
+  // orçamento de Bright Data e de e-mail: reserva atômica, não leitura-depois-escrita.
   // 19/08: a marca era best-effort — se o PATCH falhasse, o e-mail sairia de novo a CADA
   // login (a idempotência prometida no cabeçalho deixava de existir). Sem marca, sem envio.
-  const marca = await sb(`perfis?id=eq.${encodeURIComponent(user.id)}`, {
-    method: 'PATCH', headers: { Prefer: 'return=minimal' },
+  const marca = await sb(`perfis?id=eq.${encodeURIComponent(user.id)}&boas_vindas_em=is.null`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ boas_vindas_em: new Date().toISOString() }),
   }).catch(() => null);
   if (!marca?.ok) return res.status(200).json({ ok: false, enviado: false, motivo: 'marca_falhou' });
+  const marcadas = await marca.json().catch(() => []);
+  if (!Array.isArray(marcadas) || marcadas.length === 0) {
+    return res.status(200).json({ ok: true, enviado: false, motivo: 'ja_enviado' });
+  }
 
   const r = await enviarBoasVindas({ to: user.email, nome: perfil?.nome, origin, userId: user.id }).catch(() => ({ ok: false }));
   return res.status(200).json({ ok: true, enviado: !!r?.ok });
