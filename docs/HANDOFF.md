@@ -333,15 +333,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     count(*) from emails_log where enviado_em > now() - interval '30 days' and user_id is not
     null group by 1,2,3 having count(*) > 1;` deve vir vazio (ou muito mais raro) pros dois
     tipos.
-26. **Rascunho de e-mail pro Marcelo Santos parado no Gmail, NÃO enviado (14/09)**. Achado ao
-    investigar o cancelamento dele (assinante Investidor Pro): a causa real era um bug de
-    verdade — `relatorio_comissoes_rede()` com coluna errada, quebrando a tela `/perfil` em
-    SILÊNCIO pra qualquer Investidor Pro, 20s antes do cancelamento dele especificamente. O bug
-    já foi corrigido (migração `relatorio_comissoes_rede_coluna_data_correta.sql`, aplicada em
-    produção). Redigi um rascunho de e-mail (pedido de desculpas + aviso de correção + convite
-    pra reativar) e deixei como DRAFT no Gmail — não enviei sem revisão do dono. **Decidir**: se
-    manda como está, edita o texto, ou acrescenta algum gesto comercial (desconto/crédito —
-    não incluí nada disso, é decisão do dono).
+26. **SUPERADO (14/09) — não vai mais o e-mail individual pro Marcelo; virou feature de resgate
+    geral**. O achado original segue válido: o cancelamento do Marcelo (Investidor Pro) teve
+    causa real — `relatorio_comissoes_rede()` com coluna errada, quebrando `/perfil` em SILÊNCIO
+    pra qualquer Investidor Pro; já corrigido (`relatorio_comissoes_rede_coluna_data_correta.sql`,
+    em produção). Eu tinha deixado um rascunho pessoal de e-mail pro Marcelo como DRAFT no Gmail
+    (pedido de desculpas + convite pra reativar) esperando aprovação do dono. **Decisão do dono:
+    não enviar esse e-mail individual** — em vez disso, construir um e-mail de RESGATE
+    AUTOMÁTICO que dispara pra QUALQUER assinante pago que cancelar (não só o Marcelo),
+    reforçando a importância de acompanhar praça e imóveis de leilão. Ver item 32 (e-mail de
+    resgate no cancelamento) para o desenho/implementação dessa feature. O draft do Gmail fica
+    parado, sem enviar — pode servir de referência de tom pro template automático.
 27. **Log de `cadastro_falha` corrigido pra capturar o motivo real (14/09, achado numa 2ª
     varredura do painel de qualidade)** — commit `6ca0aaa`, no ar desde ~22h UTC. 8 falhas de
     cadastro em 13/09 (22:11-22:14, mesma pessoa) tinham gravado `detalhe: "{}"` — zero
@@ -362,13 +364,50 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     item 27 só resolve o PRÓXIMO caso (vai vir com motivo legível); os 8 antigos já aconteceram
     sem deixar rastro utilizável. Se a pessoa nunca conseguiu se cadastrar, é um lead perdido
     sem explicação até hoje — não dá pra investigar mais sem um caso novo.
-29. **`relatorio_anomalias` tipo `data_divergente_edital` — 12 linhas abertas, mas são
-    falso-alarme confirmado (14/09), não bug**. Toda linha mostra
-    `"MANTIDO o acervo (o edital aponta praça já encerrada — o leiloeiro publica data futura)"`
-    — o sistema está CORRETAMENTE resistindo a sobrescrever a data real por um edital velho
-    reaproveitado pelo leiloeiro. Não fiz nada de código (não há bug). Fica pendente só a
-    limpeza administrativa: ninguém marcou essas 12 como `resolvido=true`, então o alerta
-    continua "aberto" no painel de qualidade por higiene, não por risco ao cliente.
+29. ✅ **RESOLVIDO (14/09, reconfirmado)** — `relatorio_anomalias` tipo `data_divergente_edital`,
+    as 12 linhas abertas eram falso-alarme confirmado, não bug. Reconfirmado uma a uma nesta
+    sessão (não só confiei no texto gravado): cruzei o `data_leilao` ATUAL de cada imóvel contra
+    o que a anomalia registrou como "mantido" — bateu nos 12, nada tinha driftado desde o
+    registro — e conferi que toda data de EDITAL rejeitada é mesmo passada frente a hoje
+    (14/09). 3 dos 12 (MEGA) já saíram `ativo=false` naturalmente. Marcadas `resolvido=true`.
+    Padrão a notar: 8 das 12 são MEGA — o leiloeiro publica edital velho reaproveitado com
+    frequência; não é bug daqui, é característica da fonte.
+30. **Forma de pagamento — 554 lotes ativos corrigidos, gap estrutural fechado (14/09)**.
+    Investigando a queixa do dono ("ainda ocorre divergência na forma de pagamento na leitura do
+    edital"): achei que `registrar_doc_fatos` (chamado em `api/gerar-analise.js`, ~linha 3417)
+    só gravava a leitura do documento DENTRO do JSON `doc_fatos` — a coluna PLANA
+    `forma_pagamento` (a que `Busca.jsx` filtra e a que trava o cenário financiado em
+    `ImovelDetalhe`/`Analise`) nunca era sincronizada. Resultado: **554 lotes ATIVOS** com
+    `forma_pagamento='a_vista'` enquanto o próprio documento já extraído (financiável e/ou FGTS
+    e/ou parcelado) dizia o contrário — o audit `pagamento_contradiz_documento` só pega quem
+    GERA relatório (3 casos abertos achados), os outros 550+ nunca corrigiam. Backfill aplicado
+    direto no banco (só quando o sinal é forte: `financiavel=true` OU `parcelas>=2` OU
+    `fgts=true` — 554 linhas). Fix estrutural em `api/gerar-analise.js`: agora faz `PATCH` da
+    coluna no mesmo ponto onde grava o `doc_fatos`, então não volta a acumular.
+    De caminho, corrigido um FALSO-POSITIVO real no mesmo audit (`api/_auditoria-relatorio.js`):
+    `sinalPct>0` sozinho disparava "contradiz o documento" mesmo quando o MESMO `doc_fatos` já
+    dizia `aVista:true` (caso VIP `fe2cf9fb` — sinal + saldo no ato continua sendo à vista);
+    `parcelas`/`financiavel` continuam valendo mesmo com `aVista:true` junto (caso real do
+    TORRES3 `20f6cc89`, que tinha os dois no mesmo doc_fatos — contradição genuína). Anomalia
+    `id=52` (o falso-positivo) marcada `resolvido=true`; as outras 2 abertas
+    (`pagamento_contradiz_documento`, ids 124 e 51) são reais e continuam abertas — cada uma tem
+    doc_fatos com sinal forte de fato.
+    Commit `acd4994`, em produção (push direto pro `main`).
+31. **Metragem/matrícula — investigado, sem bug de extração encontrado, mas achado um caso
+    NOVO e grave de contaminação entre lotes (14/09)**. As 2 aberturas de `area_divergente`/
+    `mercado_area_incoerente` investigadas são comportamento CORRETO: o sistema prioriza a área
+    PRIVATIVA/CONSTRUÍDA da matrícula sobre a do anúncio (que costuma ser terreno/total) — no
+    caso LJUD `dfc5ab9b` (12 ocorrências, o mais visitado), o anúncio anuncia o TERRENO
+    (6.335,59 m²) e a matrícula tem a área CONSTRUÍDA do galpão (2.500 m²); ambos os números
+    estão certos, só descrevem coisas diferentes — não mexi no código, é o item 24 (contaminação
+    entre lotes) que continua sendo a lacuna estrutural real.
+    **Achado colateral relevante**: TORRES3 `20f6cc89` (usado como exemplo no item 30) tem o
+    `doc_fatos` INTEIRO contaminado por outro lote — matrícula 99543, endereço "Rua Alice Além
+    Saadi, Arapiraca/AL" e área privativa 534,6 m² gravados num imóvel que é "SÃO JOAQUIM DE
+    BICAS/MG" (`area_m2` real = 127,24). Não é só custo (como o item 24 já cobria) — é o bloco de
+    IDENTIDADE inteiro vazando de um PDF multi-lote pro outro. Reforça: o recorte por lote em
+    `publicarFatosDoPdf()` (item 24) é a correção que falta; sem ela, este tipo de achado vai
+    continuar aparecendo em lotes novos.
 
 ---
 
