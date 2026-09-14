@@ -300,10 +300,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     do fix do léxico: `fotoDeHtml` (já descartando placeholder) só encontra foto de verdade em
     36% dos lotes relidos — bate com o que sobra no banco. Não é mais prioridade de código; é
     característica da fonte (o site publica poucas fotos). Não fazer nada aqui sem novo dado.
-23. **RJLEILOES (fonte PAGA) — 96% sem foto, ainda não investigado (14/09)**. Achado ao
-    levantar o panorama geral de foto ausente no acervo — puxa atenção por ser cota PAGA
-    (RJLEILOES é leiloeiro pago, conforme já registrado neste HANDOFF). Não teve a mesma
-    investigação de causa raiz que a família `leilaoindex` recebeu nesta sessão.
+23. ~~RJLEILOES (fonte PAGA) — 96% sem foto~~ **CAUSA ACHADA E CORRIGIDA (14/09, mesmo dia,
+    mais tarde), mas AINDA NÃO VALIDADA COM RODADA REAL**. Recon mínimo (`RJ_DEBUG=1`, 1 lote,
+    custo de ~2 requests Bright Data) mostrou que a extração de foto funciona normal — o
+    problema era a fila: `scraper-rj.mjs` tinha a mesma armadilha "tudo-ou-nada" já corrigida
+    em 29/08 pro motor compartilhado (`alvo = novos.length ? novos : urlsLote` — havendo
+    QUALQUER lote novo, nenhum antigo era relido; sem novo, sempre os mesmos primeiros
+    `MAX_LOTES` da listagem). Lote sem foto mais antigo estava parado 18 dias. Corrigido
+    reaproveitando `planejarAlvo()` do motor (`scripts/lib/motor/runner.mjs`) — mesmo
+    `MAX_LOTES` de sempre, não aumenta gasto semanal de Bright Data. **Pendente**: nenhuma
+    rodada de produção (`gravar=1`) rodou depois do fix pra medir o número real antes/depois
+    — RJ é 100% pago, então isso custa cota de verdade; rodar quando o dono autorizar ou na
+    próxima janela natural do cron (`scraper-rj.yml`, terça 11h UTC / sexta rede de segurança).
 24. **Causa estrutural da contaminação de débito entre lotes (14/09) — mitigada, não
     corrigida**. `publicarFatosDoPdf()` (`scripts/captura-documentos.mjs`) continua lendo o
     PDF do edital INTEIRO sem recortar por lote (ao contrário de `api/_edital-extrato.js`, que
@@ -325,6 +333,42 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     count(*) from emails_log where enviado_em > now() - interval '30 days' and user_id is not
     null group by 1,2,3 having count(*) > 1;` deve vir vazio (ou muito mais raro) pros dois
     tipos.
+26. **Rascunho de e-mail pro Marcelo Santos parado no Gmail, NÃO enviado (14/09)**. Achado ao
+    investigar o cancelamento dele (assinante Investidor Pro): a causa real era um bug de
+    verdade — `relatorio_comissoes_rede()` com coluna errada, quebrando a tela `/perfil` em
+    SILÊNCIO pra qualquer Investidor Pro, 20s antes do cancelamento dele especificamente. O bug
+    já foi corrigido (migração `relatorio_comissoes_rede_coluna_data_correta.sql`, aplicada em
+    produção). Redigi um rascunho de e-mail (pedido de desculpas + aviso de correção + convite
+    pra reativar) e deixei como DRAFT no Gmail — não enviei sem revisão do dono. **Decidir**: se
+    manda como está, edita o texto, ou acrescenta algum gesto comercial (desconto/crédito —
+    não incluí nada disso, é decisão do dono).
+27. **Log de `cadastro_falha` corrigido pra capturar o motivo real (14/09, achado numa 2ª
+    varredura do painel de qualidade)** — commit `6ca0aaa`, no ar desde ~22h UTC. 8 falhas de
+    cadastro em 13/09 (22:11-22:14, mesma pessoa) tinham gravado `detalhe: "{}"` — zero
+    diagnóstico, mesmo depois de um fix anterior do mesmo dia (`63ac816`) que só acrescentava o
+    status HTTP. Causa raiz lida na própria lib (`@supabase/auth-js`): quando o corpo do erro
+    não tem `message`/`msg`/`error`, ela cai pra `JSON.stringify(err)` — vira `"{}"` literal se
+    o corpo vier vazio. Mas a MESMA lib extrai um `code` estável à parte (`weak_password`,
+    `over_email_send_rate_limit`, `email_exists`...), que sobrevive mesmo quando `.message`
+    falha — o log agora prioriza esse `code` + `status`. **Pendente**: não teve como testar
+    contra uma falha real (precisa de um cadastro genuinamente falhando em produção) — criada
+    uma Rotina (`trig_01RDv1zTNuSaL1wpYaPv3QiB`, a cada 6h, self-bind nesta sessão) que confere
+    `eventos_atividade` por `cadastro_falha` novo e avisa o dono se achar, silenciosa se não
+    achar. ⚠️ A criação da trigger avisou que pode não ter os conectores MCP (Supabase) quando
+    disparar — como é self-bind (resume esta mesma sessão, já conectada), deve funcionar, mas
+    sem garantia; se a rotina falhar em consultar o banco, precisa recriar de outro jeito (UI
+    de rotinas do claude.ai, ou uma sessão nova que já nasça com o conector).
+28. **Ainda não sabemos por que aquelas 8 tentativas de cadastro de 13/09 falharam** — o fix do
+    item 27 só resolve o PRÓXIMO caso (vai vir com motivo legível); os 8 antigos já aconteceram
+    sem deixar rastro utilizável. Se a pessoa nunca conseguiu se cadastrar, é um lead perdido
+    sem explicação até hoje — não dá pra investigar mais sem um caso novo.
+29. **`relatorio_anomalias` tipo `data_divergente_edital` — 12 linhas abertas, mas são
+    falso-alarme confirmado (14/09), não bug**. Toda linha mostra
+    `"MANTIDO o acervo (o edital aponta praça já encerrada — o leiloeiro publica data futura)"`
+    — o sistema está CORRETAMENTE resistindo a sobrescrever a data real por um edital velho
+    reaproveitado pelo leiloeiro. Não fiz nada de código (não há bug). Fica pendente só a
+    limpeza administrativa: ninguém marcou essas 12 como `resolvido=true`, então o alerta
+    continua "aberto" no painel de qualidade por higiene, não por risco ao cliente.
 
 ---
 
