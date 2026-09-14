@@ -181,7 +181,13 @@ export function auditarMercadologico(result, ctx = {}) {
   // Vale para o inverso também (relatório parcelado num lote que o edital exige à vista) e
   // para a hipoteca, que muda quem paga o quê.
   const pag = ctx.pagamentoDoc || {};
-  const parcelavel = n(pag.parcelas) >= 2 || n(pag.sinalPct) > 0 || pag.financiavel === true;
+  // 14/09: `sinalPct` sozinho SEM `aVista:true` no mesmo doc_fatos vira o gatilho — achado ao
+  // investigar a queixa do dono sobre forma de pagamento: o caso VIP fe2cf9fb tinha
+  // `{aVista:true, sinalPct:25}` (sinal + saldo NO ATO, ainda à vista) e disparava
+  // "contradiz o documento" contra o PRÓPRIO documento. `parcelas`/`financiavel` continuam
+  // valendo mesmo com `aVista:true` (é exatamente o caso real do TORRES3 20f6cc89: o mesmo
+  // doc_fatos tinha `aVista:true` E `financiavel:true` — sinal contraditório de verdade).
+  const parcelavel = n(pag.parcelas) >= 2 || pag.financiavel === true || (n(pag.sinalPct) > 0 && pag.aVista !== true);
   if (parcelavel && ctx.somenteAVista) {
     criticos.push({
       chave: 'pagamento_contradiz_documento',

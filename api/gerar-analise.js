@@ -3424,6 +3424,17 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
           await sb(`rpc/registrar_doc_fatos`, { method: 'POST', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ p_imovel_id: String(imovelId), p_fatos: { pagamento: pagamentoDoc, em: new Date().toISOString() } }) }).catch(() => {});
         }
+        // 14/09: o `registrar_doc_fatos` acima só grava dentro do JSON — a coluna PLANA
+        // `forma_pagamento` (a que a Busca filtra e a que trava o cenário financiado na tela)
+        // nunca era atualizada. Achado ao investigar a queixa do dono sobre forma de pagamento:
+        // 554 lotes ATIVOS tinham `forma_pagamento='a_vista'` com o próprio documento já
+        // extraído dizendo o contrário (financiável/FGTS/parcelado) — o audit `pagamento_
+        // contradiz_documento` só pega quem gera relatório; o filtro de busca e a ficha do
+        // imóvel para os outros 550+ nunca corrigiam. `sinalPct` sozinho fica de fora (é sinal
+        // fraco: entrada + saldo à vista continua sendo à vista) — só sinal FORTE reescreve.
+        if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.fgts === true)) {
+          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ forma_pagamento: 'financiado' }) }); } catch { /* best-effort */ }
+        }
       } catch { /* sinais opcionais da auditoria */ }
       const aud = auditarMercadologico(result, { temMatricula, pagamentoDoc, somenteAVista });
       // Gravada nos DOIS lugares de propósito: a tela carrega `mercado` num estado próprio
