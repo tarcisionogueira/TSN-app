@@ -75,6 +75,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    "Conecte uma fonte de dados" que aparece na tela de detalhes da ação é o estado padrão de
    ação nova sem upload ainda — não precisa clicar em "Conectar fonte de dados" (isso é para
    conectores prontos tipo Zapier/HubSpot; o envio daqui é direto pela API do Google Ads).
+1b. ✅ **RESOLVIDO 15/09 — Sentry conectado e instrumentado, envs gravadas na Vercel.** Projeto
+   `tsn-app` criado na org `bidpro-brasil` (`https://bidpro-brasil.sentry.io`). Código plugado
+   nos funis de erro que já existiam (sem duplicar filtro/dedup): front dentro de
+   `reportarErroCliente` (`src/utils/sentry.js`), back dentro de `alertarErro` (`api/_sentry.js`
+   — cobre só os 9 arquivos que já chamam `alertarErro`, núcleo de pagamento + alguns crons; os
+   demais ~180 endpoints não foram tocados, ampliar é escopo à parte). `VITE_SENTRY_DSN` e
+   `SENTRY_DSN` confirmadas gravadas na Vercel pelo dono (print, 15/09) — este commit dispara o
+   redeploy que as pega. **Pendente**: confirmar no Sentry que o primeiro evento real chegou
+   (org `bidpro-brasil` → projeto `tsn-app` → Issues).
+   Também conectado nesta sessão: **Resend** (mesma conta já usada em `api/_email.js` — MCP dá
+   visão de entrega/bounce/domínio, sem mudar nada do que já funcionava). Verificação inicial:
+   domínio `bidprobrasil.com.br` verified, 98,68% de entrega nos últimos 7 dias, 0 supressões.
 2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
    (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
