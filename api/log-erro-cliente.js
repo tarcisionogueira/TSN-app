@@ -50,6 +50,17 @@ function ehStackDeTerceiro(stack = '', url = '') {
   return !(origem && s.includes(origem));
 }
 
+// Espelho servidor do RUIDO por mensagem em src/utils/reportarErro.js (15/09): scripts de
+// Reader Mode do Firefox e de extensão de carteira cripto se injetam na página e o stack
+// aparece como "global code" na NOSSA url — sem domínio de terceiro para ehStackDeTerceiro
+// pegar. Igual ao motivo de o filtro do cliente existir: aba antiga aberta ainda manda direto
+// pra cá, sem passar pelo bundle novo.
+const RUIDO_MSG = ['window.__firefox__', "can't find variable: __firefox__", 'window.ethereum'];
+function ehRuidoMsg(msg = '') {
+  const m = String(msg).toLowerCase();
+  return RUIDO_MSG.some((r) => m.includes(r));
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
   try {
@@ -62,6 +73,11 @@ export default async function handler(req, res) {
     if (ehStackDeTerceiro(b.stack, url)) {
       console.warn('[erro-cliente] descartado (stack de terceiro)', JSON.stringify({ msg, rota }));
       res.status(200).json({ ok: true, ignorado: 'stack_de_terceiro' });
+      return;
+    }
+    if (ehRuidoMsg(msg)) {
+      console.warn('[erro-cliente] descartado (ruído por mensagem)', JSON.stringify({ msg, rota }));
+      res.status(200).json({ ok: true, ignorado: 'ruido_msg' });
       return;
     }
 

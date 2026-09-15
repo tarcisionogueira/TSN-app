@@ -15,12 +15,22 @@ let contador = 0; // teto por sessão (anti-flood + economia)
 const TETO = 20;
 
 // Ruído conhecido que não é bug acionável (extensões, cross-origin, abort de navegação).
+//
+// `window.__firefox__`/`window.ethereum` (15/09, achado no Cliente 360): script de Reader
+// Mode do Firefox e de extensão de carteira cripto (MetaMask) se injetam na página e
+// referenciam seus PRÓPRIOS globais — o stack aparece como "global code" na NOSSA url
+// (ex.: `global code@https://www.bidprobrasil.com.br/:1:19`), então `ehStackDeTerceiro`
+// (que só descarta stack de domínio DE FORA) não pega: não há domínio de terceiro nenhum,
+// só um global inexistente no NOSSO documento. Filtro por MENSAGEM, não por stack.
 const RUIDO = [
   'resizeobserver loop',
   'script error.',
   'load failed',
   'networkerror when attempting to fetch',
   'the operation was aborted',
+  'window.__firefox__',
+  "can't find variable: __firefox__",
+  'window.ethereum',
 ];
 
 function ehRuido(msg = '') {
