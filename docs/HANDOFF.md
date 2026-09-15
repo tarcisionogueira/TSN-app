@@ -534,11 +534,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
       /home/tarcisio/bidpro-runner.log 2>&1`, `PATH=/usr/local/bin:/usr/bin:/bin` (node do WSL
       é instalação de sistema em `/usr/bin/node`, não nvm — mais simples que o exemplo genérico
       do doc). Confirmado com `crontab -l` no terminal do dono.
-    - **Pendente (Passo 6 do doc, decisão do dono)**: quando ele tiver confiança de alguns dias
-      de log limpo, desligar os `cron:` dos workflows pagos (`scraper-soleon.yml`,
-      `scraper-gestao.yml`, `scraper-rj.yml`, `scraper-pecini.yml`, `scraper-vlance.yml`) pra
-      não gastar Bright Data em paralelo — mantendo disparo manual como reserva. Não fiz isso
-      ainda, é opt-in dele.
+    - ✅ **Passo 6 feito no mesmo dia** — o dono não quis esperar: "desliga os crons pagos agora
+      mesmo, eles só devem rodar se em 7 dias não rodar o residencial". `schedule:` comentado
+      nos 5 workflows (`scraper-soleon/gestao/rj/pecini/vlance.yml`), `workflow_dispatch`
+      mantido (é o canal que `api/coleta-oportunista.js` já usa pra disparar no login do staff
+      — o gatilho automático não sumiu, só o disparo redundante de calendário). 4 dos 5 já
+      tinham o freio "Freio residencial" (`coleta-recente.mjs FONTE 7` — só gasta BD se o
+      residencial não coletou em 7 dias); VLANCE usava `--pular-se-fresco 48` (sem o freio JS),
+      alinhado pra `168` (7 dias) pra bater com as outras 4. YAML validado (`python3 -c "import
+      yaml"` nos 5 arquivos) antes de subir. Commit `01e0f01`, em produção.
 
 ---
 
