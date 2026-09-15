@@ -55,10 +55,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    `GOOGLE_ADS_REFRESH_TOKEN` (as duas últimas marcadas "Needs Attention" pela Vercel — sugestão
    de segurança pra virar tipo "Secret" em vez de "Plain", não bloqueia o funcionamento).
    **Pendente**: (a) confirmar que o próximo deploy pegou as envs e a primeira venda real mandou
-   a conversão (checar em Ads → Assinatura, status deve sair de "Conversões pendentes"); (b) a
-   ação de conversão de **Cadastro** não tem código enviando ainda — só a de venda/Assinatura
-   está com o pipeline pronto; (c) decidir Teste-vs-Produção mais adiante, quando o volume
-   justificar (token expira em 7 dias em Teste).
+   a conversão (checar em Ads → Assinatura, status deve sair de "Conversões pendentes"); (c)
+   decidir Teste-vs-Produção mais adiante, quando o volume justificar (token expira em 7 dias em
+   Teste).
+   **(b) RESOLVIDO 15/09 (código) — Cadastro (lead) ganhou pipeline server-side, mesmo padrão da
+   Assinatura**: `api/_google-ads.js` ganhou `enviarCadastroOffline()`/`googleAdsCadastroAtivo()`
+   (ação separada, `actionId` próprio — `enviarConversaoOffline()` agora aceita `actionId` e não
+   recusa mais valor 0, que é o caso legítimo de um lead) e `api/marketing-confirmar-cadastro.js`
+   (novo, chamado pelo `AuthContext` no `SIGNED_IN`, logo depois de `registrar_marketing` gravar
+   `perfis.mkt_gclid` — é POR ISSO que não dava pra reaproveitar o `trackCadastro()` do navegador:
+   ele dispara ANTES da confirmação de e-mail, antes de o gclid existir no banco). Idempotente por
+   `UPDATE ... WHERE mkt_cadastro_ads_enviado = false RETURNING` (migração
+   `mkt_cadastro_ads_enviado.sql`, já aplicada) — login repetido não manda a conversão de novo.
+   **FALTA SÓ A ENV**: `GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO` com o `ctId` numérico da ação
+   **"Cadastro"** criada no Ads em 15/09 (categoria Enviar formulário de lead) — não foi anotado
+   na sessão que criou a ação, só o da Assinatura (`7769928673`) ficou registrado acima. **Depende
+   do dono**: abrir Google Ads → Metas → Conversões → "Cadastro" → Ver detalhes, pegar o `ctId` da
+   URL (mesmo lugar de onde saiu o `7769928673`) e gravar como env na Vercel. Sem essa env,
+   `googleAdsCadastroAtivo()` fica `false` e a rota só faz `skipped: 'google_ads_cadastro_inativo'`
+   — não quebra nada, só fica dormente até a env existir.
 2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
    (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
