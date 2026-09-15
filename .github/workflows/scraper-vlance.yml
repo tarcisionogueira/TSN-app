@@ -10,8 +10,14 @@ name: Scraper VLANCE (Bright Data)
 # ou seja, o painel cobra por ele e o nosso teto semanal nem enxerga. Por isso desce para 1x,
 # junto das demais fontes pagas.
 on:
-  schedule:
-    - cron: '30 12 * * 1'   # 1x/semana (segunda), 12:30 UTC — após o scraper principal
+  # `schedule:` DESLIGADO (15/09, decisão do dono — runner residencial validado ao vivo no
+  # mesmo dia: VLANCE gravou 20 linhas via fetch residencial, zero Bright Data). "Só deve
+  # rodar se em 7 dias o residencial não rodar" — o `--pular-se-fresco` abaixo foi alinhado de
+  # 48h pra 168h (7 dias) pra bater com o mesmo critério das outras 4 fontes pagas.
+  # `coleta-oportunista.js` continua disparando via `workflow_dispatch` no login do staff — só
+  # o disparo redundante de calendário saiu.
+  # schedule:
+  #   - cron: '30 12 * * 1'   # era 1x/semana (segunda), 12:30 UTC — após o scraper principal
   workflow_dispatch:
     inputs:
       dryrun:
@@ -41,10 +47,11 @@ jobs:
           # CI = datacenter → o direto sempre dá 403; força Bright Data e não desperdiça tentativa.
           VLANCE_FORCE_BD: '1'
         run: |
-          # FALLBACK: se o runner RESIDENCIAL do dono já atualizou o VLANCE nas últimas 48h,
-          # pula e não gasta Bright Data. Só coleta quando o residencial não rodou (rede de segurança).
+          # FALLBACK: se o runner RESIDENCIAL do dono já atualizou o VLANCE nos últimos 7 dias
+          # (168h — mesmo critério das outras 4 fontes pagas, 15/09), pula e não gasta Bright
+          # Data. Só coleta quando o residencial não rodou (rede de segurança).
           if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then
             python3 scripts/scraper_vlance.py --ignorar-robots
           else
-            python3 scripts/scraper_vlance.py --supabase --ignorar-robots --pular-se-fresco 48
+            python3 scripts/scraper_vlance.py --supabase --ignorar-robots --pular-se-fresco 168
           fi

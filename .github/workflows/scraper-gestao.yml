@@ -5,8 +5,13 @@ name: Scraper Gestão de Leilões (PHP · Bright Data)
 # Só via Bright Data. Fluxo recon-first: DEBUG → dry-run → gravação. No cron GRAVA; no
 # dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
 on:
-  schedule:
-    - cron: '0 12 * * 4'   # 1x/semana (quinta), 12 UTC — fonte PAGA
+  # `schedule:` DESLIGADO (15/09, decisão do dono — runner residencial validado ao vivo no
+  # mesmo dia: GESTAO gravou 125 linhas via Chromium residencial, zero Bright Data). "Só deve
+  # rodar se em 7 dias o residencial não rodar" — é o que o passo "Freio residencial" abaixo já
+  # checa (`coleta-recente.mjs GESTAO 7`). `coleta-oportunista.js` continua disparando via
+  # `workflow_dispatch` no login do staff — só o disparo redundante de calendário saiu.
+  # schedule:
+  #   - cron: '0 12 * * 4'   # era 1x/semana (quinta), 12 UTC — fonte PAGA
   workflow_dispatch:
     inputs:
       forcar:

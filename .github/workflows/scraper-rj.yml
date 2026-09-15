@@ -14,14 +14,13 @@ name: Scraper RJ Leilões (Bright Data)
 # 02/08 a 11/08 gastaram cota do Bright Data e não gravaram uma linha — todos verdes.
 # Quem quiser inspecionar sem gravar passa dryrun=1 explicitamente.
 on:
-  schedule:
-    # 1x POR SEMANA (29/08, decisão do dono: "os que usam bright data coloque para rodar
-    # somente 1x por semana"). Era terça E sexta. A segunda rodada era "rede de segurança se o
-    # residencial não passou" — mas ela custava uma cota inteira toda semana para cobrir um
-    # caso que o monitor de fontes já denuncia (`fonte_regressao_suspeita`), sem gastar nada.
-    # Se a terça falhar, o disparo manual resolve; pagar por uma segunda passada preventiva
-    # toda semana, em uma cota que vive saturada, é o oposto de economia.
-    - cron: '0 11 * * 2'   # terça, 11 UTC — fonte PAGA (Bright Data)
+  # `schedule:` DESLIGADO (15/09, decisão do dono — runner residencial validado ao vivo no
+  # mesmo dia: RJ gravou 40 linhas "via Chromium residencial", zero Bright Data). "Só deve
+  # rodar se em 7 dias o residencial não rodar" — é o que o passo "Freio residencial" abaixo já
+  # checa (`coleta-recente.mjs RJ 7`). `coleta-oportunista.js` continua disparando via
+  # `workflow_dispatch` no login do staff — só o disparo redundante de calendário saiu.
+  # schedule:
+  #   - cron: '0 11 * * 2'   # era terça, 11 UTC — fonte PAGA (Bright Data)
   workflow_dispatch:
     inputs:
       forcar:

@@ -5,8 +5,16 @@ name: Scraper SOLEON (multi-tenant)
 # só o 3torres cai no Bright Data. Fluxo recon-first: DEBUG → dry-run → gravação.
 # No cron GRAVA; no dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
 on:
-  schedule:
-    - cron: '30 10 * * 1'   # 1x/semana (segunda), 10:30 UTC
+  # `schedule:` DESLIGADO (15/09, decisão do dono — runner residencial validado ao vivo no
+  # mesmo dia: SOLEON gravou 86 linhas via fetch direto, zero Bright Data). "Só deve rodar se
+  # em 7 dias o residencial não rodar" — e isso já é o que o passo "Freio residencial" abaixo
+  # checa (`coleta-recente.mjs SOLEON 7`). O `coleta-oportunista.js` continua disparando este
+  # workflow via `workflow_dispatch` no login do staff (~20h de espaçamento), então o gatilho
+  # automático não sumiu — só o disparo REDUNDANTE de calendário, que rodava toda semana
+  # mesmo quando o residencial já tinha coletado. Reserva: `workflow_dispatch` manual sempre
+  # disponível (rodar com `forcar=1` p/ ignorar o freio de propósito).
+  # schedule:
+  #   - cron: '30 10 * * 1'   # era 1x/semana (segunda), 10:30 UTC
   workflow_dispatch:
     inputs:
       forcar:
