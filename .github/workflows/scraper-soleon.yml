@@ -39,6 +39,12 @@ on:
         description: 'csv de fontes (vazio = todos). Ex.: CALIL,VEGAS'
         required: false
         default: ''
+      debug_url:
+        # 15/09: `SOLEON_DEBUG_URL` já existia no script (11/09, pro caso DANIELGARCIA 79771)
+        # mas nunca tinha sido ligado a um input do workflow — só dava pra forçar rodando local.
+        description: 'URL exata do lote a inspecionar no modo debug (força o detalhe, não o 1º da listagem)'
+        required: false
+        default: ''
 
 jobs:
   scraper-soleon:
@@ -75,4 +81,5 @@ jobs:
           SOLEON_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           SOLEON_MAX_LOTES: ${{ github.event.inputs.max_lotes || '60' }}
           SOLEON_TENANTS: ${{ github.event.inputs.tenants || '' }}
+          SOLEON_DEBUG_URL: ${{ github.event.inputs.debug_url || '' }}
         run: node scripts/scraper-soleon.mjs
