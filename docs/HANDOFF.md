@@ -599,6 +599,68 @@ rodou sozinho, sem precisar que ele mande o log manualmente.
 
 ---
 
+## 🌙 15/09 (continuação) — RITUAL DE ABERTURA + LISTA FECHADA DO QUE DEPENDE DO DONO
+
+Segunda sessão do mesmo dia (heartbeat carimbado, diagnóstico completo rodado). Pedido: "resolva
+tudo que você consegue sozinho, indo pelo crítico e o mais simples, e traga a lista do que
+depende de mim". Resultado:
+
+**✅ Corrigido e em produção (commits `132fe28` + `555b0c8`, merge `main` + deploy `READY`
+confirmado):**
+- **`emails_fila` com GRANT de escrita exposto** a anon/authenticated (tabela só-servidor,
+  mesmo padrão já resolvido em `divulgacao_envio` e nas 6 tabelas de
+  `tabelas_so_do_servidor_perdem_o_grant_de_escrita.sql`) — revogado. `auditoria_uso()`
+  confirma 0 gaps.
+- **`api/gerar-analise.js` — defesa extra contra "imóvel sem endereço/cidade"**: quando o
+  cliente manda os dois campos vazios, o servidor agora busca a linha real do imóvel no banco
+  antes de recusar. **Nota de honestidade**: ao investigar o caso da Neuma (abaixo) achei que a
+  Parte 2 da sessão de 12/09 já tinha corrigido a causa raiz real (id do imóvel viajando na URL
+  com recuperação server-side quando `location.state` do React Router se perde) — este fix é
+  redundante com aquele, não conflita, só adiciona uma segunda camada.
+
+**✅ Investigado, já estava certo ou já resolvido por sessão anterior (nada a fazer):**
+- RPC `relatorio_comissoes_rede` (coluna "cria") — já corrigida.
+- Cliente **Lais Melo** ("começou a gerar e sumiu", 11/09) — bug do aceite de termos represando
+  a geração já corrigido no mesmo dia (`AnalisesContext.jsx`, represa e retoma sozinho).
+- `relatorios_falha_24h`/`erros_invisiveis_recentes` do Cliente 360 — não são bugs: são
+  `faltam_docs` (gate legítimo, retry automático) e `geracao_recuperada` (recuperação
+  silenciosa **por decisão do dono**, 14/08).
+- `cadastro_barrado` (16 recusas/7d) — causa raiz já corrigida em 14/09 (item 27); alerta é
+  resíduo da janela de 7 dias, some sozinho.
+- **SBID21** (regressão, 1 ativo contra piso ~19) — **já investigado e fechado na Parte 46
+  (10/09): é queda real na fonte** (API do sub-portal respondendo quase vazio há mais de uma
+  semana, os 3 irmãos que usam o mesmo código — SUPERBID/SOLD/SBID9 — passam bem no mesmo run).
+  Não é bug nosso; mexer em parser aqui seria consertar o que está intacto.
+
+**🟡 Depende de você — lista fechada desta sessão (substitui/atualiza a de 15/09 parte 1):**
+1. **Neuma Nogueira** (top2, pagante desde julho) — travou 14x em 10/09, bug já corrigido no
+   mesmo dia, imóvel segue ativo com endereço/cidade completos: ela conseguiria gerar se
+   tentasse de novo, mas não tentou desde o incidente. **Fica só o contato pessoal** — cliente
+   pagante que nunca recebeu um relatório.
+2. **Google Ads API** — setup pausado no Refresh Token / OAuth Playground (item 1, sem
+   novidade).
+3. **Google Cloud "BidPro métricas diárias"** — sem rastro em Gmail/Drive; só abrindo o Console
+   (IAM & Admin ou Faturamento) você descobre quem/quando criou (itens 4/39).
+4. **Instagram — Verificação de Negócio no Meta Business Manager** — 100% burocracia da Meta,
+   zero código (item 7); 7 rascunhos de resposta seguem parados em `/admin/instagram`.
+5. **Google Ads "Alternativa D"** — aprovada pelo Google; decisão de manter/pausar/trocar é sua,
+   **prazo que você mesmo pôs é amanhã, 16/09** (item 38).
+6. **HASTA (zerou)** — não é mais só bloqueio de IP datacenter: o runner residencial ALCANÇA o
+   site (HTTP 200) mas a extração encontra 0 eventos há dias — sinal de que a estrutura da home
+   pode ter mudado de novo. Rodei o recon simplificado hoje e ele também voltou vazio (len=0),
+   mas por um caminho que não usa a rota residencial — não prova nada novo. Precisa de recon ao
+   vivo de verdade (`HASTA_DEBUG=1` via dispatch, ou olhar o HTML atual da home) — decisão de
+   priorizar/gastar tempo nisso é sua.
+7. **SBID21** — decisão comercial, não técnica: vale confirmar manualmente no site se o
+   sub-portal está entre leilões ou foi descontinuado/fundido a outro da rede Superbid?
+8. **PECINI** (runner residencial) — passa pelo Cloudflare mas volta com página genérica; não é
+   bloqueio, fica pendente de investigação futura, não urgente (item 40).
+
+Não fiz nenhuma alteração de código para os itens 2-8 acima — todos exigem ação humana (login,
+painel externo, decisão de negócio, ou recon ao vivo que este ambiente não alcança).
+
+---
+
 ## 🌙 13/09 (fim da noite) — RESUMO DO DIA E ENCERRAMENTO DA SESSÃO
 
 Sessão longa, muita coisa validada AO VIVO (não só suposição). Resumo do que fechou hoje, do
