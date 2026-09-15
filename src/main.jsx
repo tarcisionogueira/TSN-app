@@ -12,6 +12,10 @@ import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPor
 import { instalarTracker } from './utils/tracker.js'
 import { initMetaPixel, initOpenAIPixel, capturarMarketing } from './utils/marketing.js'
 import { resgatarDestinoDaCampanha } from './utils/destinoDaCampanha.js'
+import { initSentry } from './utils/sentry.js'
+
+// Antes de qualquer captura de erro — sem isso, um erro cedo no boot nunca chegaria ao Sentry.
+initSentry();
 
 // Registra o service worker em produção e VIGIA atualização: sem isso o PWA instalado
 // segue rodando a versão que baixou (fechar e reabrir NÃO busca versão nova — ver

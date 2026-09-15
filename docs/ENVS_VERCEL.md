@@ -130,5 +130,29 @@ ele mostra em segundos se já é de longa duração, evitando repetir esta novel
 (token precisa ter pelo menos 24h). Nenhuma automação faz isso ainda — é manual, e sem aviso
 programado. Achado a registrar como pendência, não resolvido nesta sessão.
 
+## ⏳ PENDENTE — `VITE_SENTRY_DSN` / `SENTRY_DSN` (Sentry, conectado + instrumentado em 15/09)
+
+Conector Sentry autorizado pelo dono e projeto `tsn-app` criado na org `bidpro-brasil`
+(`https://bidpro-brasil.sentry.io`). Código já plugado e dormente até as envs existirem:
+
+- **Front** (`src/utils/sentry.js`, chamado de dentro de `reportarErroCliente` em
+  `src/utils/reportarErro.js`): usa `VITE_SENTRY_DSN`. Herda de graça o filtro de
+  ruído/terceiro/produção que `reportarErroCliente` já tinha — não duplica nada, só manda o
+  MESMO evento também pro Sentry, com stack trace completo.
+- **Back** (`api/_sentry.js`, chamado de dentro de `alertarErro` em `api/_error-alert.js`):
+  usa `SENTRY_DSN` (sem `VITE_`, só roda no servidor). Cobertura: só os 9 arquivos que já
+  chamam `alertarErro()` hoje — núcleo de pagamento (`_webhook-core.js`, chargeback/reembolso/
+  comissão) e alguns crons (contrato, preço agendado, garantia, financiamento). Os demais
+  ~180 endpoints seguem só com o log próprio (`erros_cliente`/console) — ampliar não foi feito
+  aqui, é decisão de escopo à parte.
+
+**As duas envs precisam ser criadas na Vercel** (valor do DSN, pego ao criar o projeto —
+mesmo texto nas duas, front e back podem usar o MESMO DSN):
+```
+VITE_SENTRY_DSN=<DSN do projeto tsn-app>
+SENTRY_DSN=<mesmo DSN>
+```
+Sem elas os dois lados ficam mudos (não quebra nada — só não manda nada pro Sentry).
+
 **Como conferir se a escuta está configurada, sem segredo nenhum:**
 `GET /api/instagram-webhook` devolve `{ configurado: true|false }`.

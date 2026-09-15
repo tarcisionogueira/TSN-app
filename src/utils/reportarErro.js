@@ -8,6 +8,7 @@
 // tudo fire-and-forget (nunca bloqueia nem quebra o app).
 
 import { supabase } from './supabase.js';
+import { capturarNoSentry } from './sentry.js';
 
 const enviados = new Set(); // dedupe dentro da sessão do navegador
 let contador = 0; // teto por sessão (anti-flood + economia)
@@ -84,6 +85,8 @@ export async function reportarErroCliente({ msg, stack = '', url } = {}) {
     if (enviados.has(chave)) return;
     enviados.add(chave);
     contador++;
+
+    capturarNoSentry({ msg, stack, url: href });
 
     let token;
     try { token = (await supabase.auth.getSession())?.data?.session?.access_token; } catch { /* anônimo */ }

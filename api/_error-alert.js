@@ -3,6 +3,7 @@
  * Fire-and-forget: nunca bloqueia a resposta principal.
  * Só envia em produção para evitar spam em desenvolvimento.
  */
+import { capturarErroServidor } from './_sentry.js';
 
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
@@ -20,12 +21,18 @@ const DEBOUNCE_MS = 5 * 60 * 1000; // 5 minutos
  * @param {object} [params.extra] - dados adicionais (sem PII)
  */
 export function alertarErro({ rota, erro, extra }) {
-  if (!RESEND_KEY || !IS_PROD) return;
+  if (!IS_PROD) return; // preview/dev: nem e-mail nem Sentry — mesmo motivo do `ehProducao` no cliente
 
   const chave = `${rota}:${erro}`.slice(0, 100);
   const agora = Date.now();
   if (recentAlerts.has(chave) && agora - recentAlerts.get(chave) < DEBOUNCE_MS) return;
   recentAlerts.set(chave, agora);
+
+  // Sentry independe de RESEND_KEY — canal separado, com stack trace completo em vez de
+  // só a mensagem que cabe no e-mail.
+  capturarErroServidor(erro, { rota, ...(extra || {}) });
+
+  if (!RESEND_KEY) return;
 
   const html = `
     <div style="font-family:monospace;padding:16px;">

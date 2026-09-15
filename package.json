@@ -64,6 +64,8 @@
     "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs"
   },
   "dependencies": {
+    "@sentry/node": "^10.74.0",
+    "@sentry/react": "^10.74.0",
     "@supabase/supabase-js": "^2.108.2",
     "@vercel/analytics": "^2.0.1",
     "leaflet": "^1.9.4",
