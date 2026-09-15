@@ -462,18 +462,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     padrão de convergência gradual do GIORDANOLEILOES (item 21). **Custo**: orçamento semanal
     do propósito `rj` está em 2 de 120 (reserva de 60 nem tocada) — a validação aconteceu
     DENTRO do cron normal, não precisei autorizar rodada extra. Segue convergindo sozinho.
-36. **Runner residencial — já está TODO pronto no código, só falta o dono ativar (15/09)**.
-    Resposta ao pedido "traga pra residencial pra economizar cota": isso já foi construído
-    numa sessão anterior (`docs/RUNNER_RESIDENCIAL.md`, `scripts/runner-residencial.sh`) e
-    **eu não consigo rodar nem testar daqui** — confirmado de novo nesta sessão (`curl` direto a
-    um leiloeiro devolveu bloqueio do próprio proxy de saída deste ambiente, nem chega a tentar
-    o Cloudflare). O plano: SOLEON (fetch direto) + GESTAOLEILOES/RJ (Chromium headless) rodando
-    2x/semana numa máquina de CASA do dono zerariam o gasto de Bright Data dessas 3 fontes — o
-    resíduo pago viraria só `docs`(PDF)/`radar`(geo), que são baixo volume por natureza. Passo a
-    passo completo já está no doc; falta só o dono clonar o repo numa máquina sempre ligada em
-    IP residencial e seguir os 6 passos de ativação. **Confirmado nesta sessão**: o passo 3 do
-    doc ("[CLAUDE] confirmar Vlance na 1ª coleta") — `VLANCE` tem 50 lotes coletados no total,
-    20 ativos hoje, via client-side (staff logado) — funcionando, sem gastar Bright Data.
+36. ✅ **ATIVADO E VALIDADO — runner residencial rodando de verdade (15/09)**. Resposta ao
+    pedido "traga pra residencial pra economizar cota": já estava todo pronto no código
+    (`docs/RUNNER_RESIDENCIAL.md`, `scripts/runner-residencial.sh`) desde sessão anterior — só
+    faltava o dono ativar numa máquina de casa, porque **eu não consigo rodar nem testar daqui**
+    (confirmado de novo: `curl` direto a um leiloeiro bate no proxy de saída deste ambiente, nem
+    chega a tentar o Cloudflare). Nesta sessão o dono clonou o repo no WSL (Windows, IP
+    residencial de casa) e seguimos os passos juntos, ao vivo. Ver item 40 (detalhe completo da
+    ativação + validação + agendamento no cron).
     **Achado extra, baixo volume**: `fonte_regressao_suspeita()` sinalizou LEJE (zerou, piso 3/
     mediana 4 — números pequenos, acompanhar) e SBID21 (regressão, 1 ativo hoje contra piso 19 —
     fonte residual do cluster Superbid, baixa prioridade) e BAYIT (medição com 131h de atraso,
@@ -507,6 +503,42 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     não achei nenhum rastro — nem e-mail de criação, nem notificação de faturamento. Isso
     genuinamente depende de você abrir o Google Cloud Console (IAM & Admin → Configurações, ou
     Faturamento) e checar quem/quando criou.
+40. ✅ **Runner residencial — ativação completa, validada ao vivo, agendada no cron (15/09)**.
+    Continuação do item 36. Passo a passo seguido no WSL do dono (Ubuntu, Windows), em tempo
+    real:
+    - `npm ci` + `python3-requests` (já vinha instalado no WSL) — ok.
+    - `~/.bidpro-runner.env` criado com a `service_role` key do Supabase (219 caracteres,
+      conferido sem imprimir a chave na tela).
+    - **1º teste real ficou vazio** (SOLEON/GESTAO/RJ/PECINI/VLANCE "NÃO é a hora — pulando") —
+      não por falha, mas porque o gate `coleta_cliente` (72h por fonte) já tinha sido carimbado
+      ~3,6h antes pela medição diária (`monitor-fontes-cron`). Para VALIDAR de verdade sem
+      esperar 3 dias, recuei o carimbo (`ultima_em`) das 5 fontes pra 73h atrás direto no banco
+      — decisão consciente, um empurrão único e reversível só pra abrir a janela de teste, não
+      uma mudança de comportamento.
+    - **2º teste (o que provou o mecanismo)**: SOLEON gravou **86 linhas** (14 tenants: CALIL,
+      VEGAS, TORRES3, FERREIRALEIL, DANIELGARCIA, ISAIAS, APICE, CERULI, TMLEILOES, PURCENA,
+      AGOSTINHO, CASAMARTILLO, INFINITY, JOAOEMILIO — "via gratis", fetch direto); GESTAO
+      gravou **125 linhas** (Chromium residencial, 3 domínios: granadoleiloes, lancenoleilao,
+      extrajustleiloes); RJ Leilões gravou **40 linhas** ("via Chromium residencial" explícito
+      no log); VLANCE gravou **20 linhas** (1 sub-site com 404, resto ok). **Zero menções a
+      "brightdata" no log inteiro** (`grep -i brightdata` vazio) — confirmado que as 4 fontes
+      rodaram 100% de graça.
+    - **PECINI falhou, mas por motivo DIFERENTE de bloqueio**: passou pelo Cloudflare (21 URLs
+      responderam HTTP 200 via fetch puro, 0 precisaram do Chromium de reserva), mas o conteúdo
+      veio "página genérica/sem lote" ou com valor R$0 (descartado por segurança, não por erro)
+      — o site parece servir uma página diferente da esperada pro fetch residencial nesse
+      momento. Gate não fechou (`falhou — NÃO concluído`), vai tentar de novo sozinho na próxima
+      janela. **Pendente**: investigar `scraper-pecini.mjs` se continuar falhando — não é
+      urgente, as outras 4 fontes já provam o mecanismo.
+    - **Cron agendado**: `0 8 * * * /home/tarcisio/tsn-app/scripts/runner-residencial.sh >>
+      /home/tarcisio/bidpro-runner.log 2>&1`, `PATH=/usr/local/bin:/usr/bin:/bin` (node do WSL
+      é instalação de sistema em `/usr/bin/node`, não nvm — mais simples que o exemplo genérico
+      do doc). Confirmado com `crontab -l` no terminal do dono.
+    - **Pendente (Passo 6 do doc, decisão do dono)**: quando ele tiver confiança de alguns dias
+      de log limpo, desligar os `cron:` dos workflows pagos (`scraper-soleon.yml`,
+      `scraper-gestao.yml`, `scraper-rj.yml`, `scraper-pecini.yml`, `scraper-vlance.yml`) pra
+      não gastar Bright Data em paralelo — mantendo disparo manual como reserva. Não fiz isso
+      ainda, é opt-in dele.
 
 ---
 
