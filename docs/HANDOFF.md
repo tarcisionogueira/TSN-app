@@ -29,11 +29,36 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    > aconteceu quando passei os links sem `#` pro dono testar — os dois prints mostraram Home
    > duas vezes, com cara de bug novo, mas era só o formato errado do link. **Ao mandar link de
    > rota interna para o dono testar, sempre com `#`.**
-1. **Google Ads API — setup pausado no refresh token** (detalhe completo na Parte 63 logo abaixo).
-   Retomar por: confirmar/gerar o Refresh Token no OAuth Playground (login com o Gmail pessoal
-   já cadastrado) → decidir Teste-vs-Produção do app OAuth (risco de expirar em 7 dias) → criar
-   ação de conversão de importação no Ads → gravar variáveis na Vercel → eu construo o cron +
-   card no painel.
+1. ✅ **Google Ads API — refresh token gerado e variáveis gravadas na Vercel (15/09, retomado ao
+   vivo, guiado tela a tela)**. Fluxo completo desta vez: Client OAuth "Aplicativo da Web" já
+   existia (corrigido no `PENDENCIAS_DONO.md`, o tipo "App para computador" testado antes quebra
+   com `redirect_uri_mismatch`); gerada uma **nova Client Secret** (a antiga, de 10/09, não pode
+   mais ser visualizada — Google só mostra uma vez); login no OAuth Playground travava com
+   "Chaves de acesso e segurança" na conta `reimob.com.br` — resolvido usando o **Gmail pessoal**
+   (`cisioaraujo@gmail.com`), que precisou ser adicionado como **usuário de teste** na tela
+   "Público-alvo" (Google Auth Platform, novo nome da tela de permissão OAuth) — sem isso dava
+   `Erro 403: access_denied`. **Ficou em modo Teste** (decisão do dono, 15/09): não vale a pena
+   verificar em produção pro nível de tráfego atual; token expira em 7 dias, precisa regenerar
+   manualmente até decidir publicar.
+   Criadas as 2 ações de conversão no Ads: **"Cadastro"** (categoria Enviar formulário de lead,
+   secundária — travada como primária pelo próprio Ads, não editável nessa tela; valor fixo 0;
+   contagem "Uma") e **"Assinatura"** (categoria Compra, ação primária de verdade — é essa que
+   deve guiar os lances; valor variável; contagem "Todas"; `ctId=7769928673`).
+   **Achado que destravou tudo**: `api/_google-ads.js` já existia PRONTO de sessão anterior
+   (`enviarConversaoOffline`, chamado automaticamente em `_webhook-core.js` a cada venda
+   confirmada, usando `perfis.mkt_gclid`) — só faltava as envs. Mas `googleAdsAtivo()` exigia
+   `GOOGLE_ADS_DEVELOPER_TOKEN`, que **o Google desativou em 09/09/2026** (acesso migrou pro
+   nível do projeto Cloud — "Exploração", que a conta já tinha). Corrigido: developer token virou
+   opcional, não bloqueia mais (commit `454768d`).
+   **5 variáveis gravadas na Vercel**: `GOOGLE_ADS_CUSTOMER_ID=4759795747`,
+   `GOOGLE_ADS_CONVERSION_ACTION_ID=7769928673`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`,
+   `GOOGLE_ADS_REFRESH_TOKEN` (as duas últimas marcadas "Needs Attention" pela Vercel — sugestão
+   de segurança pra virar tipo "Secret" em vez de "Plain", não bloqueia o funcionamento).
+   **Pendente**: (a) confirmar que o próximo deploy pegou as envs e a primeira venda real mandou
+   a conversão (checar em Ads → Assinatura, status deve sair de "Conversões pendentes"); (b) a
+   ação de conversão de **Cadastro** não tem código enviando ainda — só a de venda/Assinatura
+   está com o pipeline pronto; (c) decidir Teste-vs-Produção mais adiante, quando o volume
+   justificar (token expira em 7 dias em Teste).
 2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
    (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
