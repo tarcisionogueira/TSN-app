@@ -20,12 +20,14 @@
  * plano NUNCA depende disto. Sem as envs, todas as funções viram no-op silencioso.
  *
  * ENVS (todas no painel da Vercel; nenhuma no repo — o repositório é público):
- *   GOOGLE_ADS_DEVELOPER_TOKEN     token de desenvolvedor da conta MCC (API Center)
  *   GOOGLE_ADS_CUSTOMER_ID         id da conta que roda os anúncios, só dígitos (sem hífens)
  *   GOOGLE_ADS_CONVERSION_ACTION_ID  id numérico da ação de conversão "importada" (offline)
  *   GOOGLE_ADS_REFRESH_TOKEN       refresh token OAuth com escopo .../auth/adwords
  *   GOOGLE_ADS_CLIENT_ID/SECRET    opcionais — sem eles reusa o GOOGLE_OAUTH_CLIENT_ID/SECRET
  *   GOOGLE_ADS_LOGIN_CUSTOMER_ID   opcional — id da MCC, quando o acesso é via gerenciadora
+ *   GOOGLE_ADS_DEVELOPER_TOKEN     opcional — o Google desativou developer token em 09/09/2026
+ *                                  (acesso passou a ser por nível do projeto Cloud); se enviado,
+ *                                  o servidor apenas ignora. Não bloqueia mais a ativação.
  */
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -40,13 +42,12 @@ const LOGIN_CID = soDigitos(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
 const API_VER = (process.env.GOOGLE_ADS_API_VERSION || 'v18').trim();
 
 export function googleAdsAtivo() {
-  return !!(DEV_TOKEN && CUSTOMER_ID && ACTION_ID && REFRESH && CLIENT_ID && CLIENT_SECRET);
+  return !!(CUSTOMER_ID && ACTION_ID && REFRESH && CLIENT_ID && CLIENT_SECRET);
 }
 
 /** Diagnóstico legível: o que falta para ligar (sem revelar valor de env). */
 export function googleAdsFaltando() {
   const faltas = [];
-  if (!DEV_TOKEN) faltas.push('GOOGLE_ADS_DEVELOPER_TOKEN');
   if (!CUSTOMER_ID) faltas.push('GOOGLE_ADS_CUSTOMER_ID');
   if (!ACTION_ID) faltas.push('GOOGLE_ADS_CONVERSION_ACTION_ID');
   if (!REFRESH) faltas.push('GOOGLE_ADS_REFRESH_TOKEN');
@@ -120,7 +121,7 @@ export async function enviarConversaoOffline({ gclid, valor, orderId, quando } =
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
-        'developer-token': DEV_TOKEN,
+        ...(DEV_TOKEN ? { 'developer-token': DEV_TOKEN } : {}),
         ...(LOGIN_CID ? { 'login-customer-id': LOGIN_CID } : {}),
         'Content-Type': 'application/json',
       },
