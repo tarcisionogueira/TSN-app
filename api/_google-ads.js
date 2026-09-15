@@ -21,7 +21,9 @@
  *
  * ENVS (todas no painel da Vercel; nenhuma no repo — o repositório é público):
  *   GOOGLE_ADS_CUSTOMER_ID         id da conta que roda os anúncios, só dígitos (sem hífens)
- *   GOOGLE_ADS_CONVERSION_ACTION_ID  id numérico da ação de conversão "importada" (offline)
+ *   GOOGLE_ADS_CONVERSION_ACTION_ID  id numérico da ação "Assinatura" (compra, importada/offline)
+ *   GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO  id numérico da ação "Cadastro" (lead, importada) —
+ *                                  opcional; sem ela só a conversão de Assinatura funciona
  *   GOOGLE_ADS_REFRESH_TOKEN       refresh token OAuth com escopo .../auth/adwords
  *   GOOGLE_ADS_CLIENT_ID/SECRET    opcionais — sem eles reusa o GOOGLE_OAUTH_CLIENT_ID/SECRET
  *   GOOGLE_ADS_LOGIN_CUSTOMER_ID   opcional — id da MCC, quando o acesso é via gerenciadora
@@ -35,14 +37,25 @@ const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 const DEV_TOKEN = (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '').trim();
 const CUSTOMER_ID = soDigitos(process.env.GOOGLE_ADS_CUSTOMER_ID);
 const ACTION_ID = soDigitos(process.env.GOOGLE_ADS_CONVERSION_ACTION_ID);
+const ACTION_ID_CADASTRO = soDigitos(process.env.GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO);
 const REFRESH = (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim();
 const CLIENT_ID = (process.env.GOOGLE_ADS_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
 const CLIENT_SECRET = (process.env.GOOGLE_ADS_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim();
 const LOGIN_CID = soDigitos(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
 const API_VER = (process.env.GOOGLE_ADS_API_VERSION || 'v18').trim();
 
+function credenciaisBaseOk() {
+  return !!(CUSTOMER_ID && REFRESH && CLIENT_ID && CLIENT_SECRET);
+}
+
 export function googleAdsAtivo() {
-  return !!(CUSTOMER_ID && ACTION_ID && REFRESH && CLIENT_ID && CLIENT_SECRET);
+  return credenciaisBaseOk() && !!ACTION_ID;
+}
+
+// Cadastro usa uma ação DIFERENTE da de Assinatura (categorias distintas no Ads: lead vs
+// compra) — precisa da própria env e liga/desliga independente da de cima.
+export function googleAdsCadastroAtivo() {
+  return credenciaisBaseOk() && !!ACTION_ID_CADASTRO;
 }
 
 /** Diagnóstico legível: o que falta para ligar (sem revelar valor de env). */
@@ -90,22 +103,26 @@ function dataGoogle(d = new Date()) {
  * Envia UMA conversão offline. Devolve sempre um objeto (nunca lança).
  * @param {object} p
  * @param {string} p.gclid      clique do anúncio (perfis.mkt_gclid). Sem ele não há o que enviar.
- * @param {number} p.valor      valor da venda em BRL
+ * @param {number} [p.valor]    valor da venda em BRL. 0/ausente é legítimo (ex.: Cadastro,
+ *                              cujo valor é fixo na própria ação do Ads) — mesmo princípio
+ *                              já usado no Lead do Meta CAPI (_meta-capi.js).
  * @param {string} [p.orderId]  id determinístico p/ dedup com o evento do navegador
  * @param {Date}   [p.quando]   momento da conversão (padrão: agora)
+ * @param {string} [p.actionId] id da ação de conversão; padrão ACTION_ID (Assinatura)
  */
-export async function enviarConversaoOffline({ gclid, valor, orderId, quando } = {}) {
-  if (!googleAdsAtivo()) return { skipped: 'google_ads_inativo' };
+export async function enviarConversaoOffline({ gclid, valor, orderId, quando, actionId } = {}) {
+  const acao = actionId || ACTION_ID;
+  if (!credenciaisBaseOk() || !acao) return { skipped: 'google_ads_inativo' };
   const clique = String(gclid || '').trim();
   if (!clique) return { skipped: 'sem_gclid' };          // venda orgânica: nada a atribuir
-  const v = Number(valor) || 0;
-  if (!(v > 0)) return { skipped: 'valor_zero' };
+  const vNum = Number(valor);
+  const v = Number.isFinite(vNum) && vNum >= 0 ? vNum : 0;
 
   const url = `https://googleads.googleapis.com/${API_VER}/customers/${CUSTOMER_ID}:uploadClickConversions`;
   const corpo = {
     conversions: [{
       gclid: clique,
-      conversionAction: `customers/${CUSTOMER_ID}/conversionActions/${ACTION_ID}`,
+      conversionAction: `customers/${CUSTOMER_ID}/conversionActions/${acao}`,
       conversionDateTime: dataGoogle(quando instanceof Date ? quando : new Date()),
       conversionValue: v,
       currencyCode: 'BRL',
@@ -141,4 +158,18 @@ export async function enviarConversaoOffline({ gclid, valor, orderId, quando } =
     console.error('[google-ads] falha:', e?.message || e);
     return { ok: false, erro: String(e?.message || e) };
   }
+}
+
+/**
+ * Conversão OFFLINE de CADASTRO (lead) — ação separada da de Assinatura. Complementa o
+ * `gtag` do navegador (`trackCadastro`, disparado logo após `signUp()`) do mesmo jeito que
+ * o CAPI complementa o Pixel do Meta: bloqueador de anúncio, aba fechada entre o cadastro e
+ * a confirmação de e-mail, ou in-app browser sem `gtag` apagam o sinal do navegador — este
+ * é o sinal do servidor, chamado por `api/marketing-confirmar-cadastro.js` quando
+ * `perfis.mkt_gclid` já foi gravado. Valor sempre 0 — a ação "Cadastro" tem valor fixo,
+ * configurado no próprio Google Ads.
+ */
+export async function enviarCadastroOffline({ gclid, orderId, quando } = {}) {
+  if (!googleAdsCadastroAtivo()) return { skipped: 'google_ads_cadastro_inativo' };
+  return enviarConversaoOffline({ gclid, valor: 0, orderId, quando, actionId: ACTION_ID_CADASTRO });
 }

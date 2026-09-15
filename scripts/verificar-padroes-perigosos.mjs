@@ -599,6 +599,9 @@ const ENV_PARES_LEGITIMOS = new Set([
   'ONR_ALERT_EMAIL~ONR_EMAIL',
   'GOOGLE_ADS_LOGIN_CUSTOMER_ID~GOOGLE_ADS_CUSTOMER_ID',
   'ADMIN_ALERT_EMAIL~ADMIN_EMAIL',
+  // Duas ações de conversão DISTINTAS no Ads (Cadastro × Assinatura) — cada uma com o
+  // próprio id numérico, não um erro de digitação da outra.
+  'GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO~GOOGLE_ADS_CONVERSION_ACTION_ID',
 ]);
 function envsSuspeitas() {
   // COMENTÁRIO É IGNORADO POR LINHA, não por parser de estado. A primeira tentativa usou o

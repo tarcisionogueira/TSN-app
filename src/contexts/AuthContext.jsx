@@ -311,6 +311,13 @@ export function AuthProvider({ children }) {
             if (eMkt) console.warn('[atribuicao] nao registrada:', eMkt.message || eMkt);
             else if (rMkt && rMkt.ok === false) console.warn('[atribuicao] recusada:', rMkt.motivo);
           } catch (e) { console.warn('[atribuicao] excecao:', e?.message || e); }
+          // Conversão OFFLINE de Cadastro ao Google Ads — complementa o gtag do navegador
+          // (trackCadastro), mesmo princípio do CAPI pro Meta. Idempotente no servidor
+          // (api/marketing-confirmar-cadastro.js); só no SIGNED_IN (login novo), mesmo gate
+          // do boas-vindas acima — não em toda reabertura (INITIAL_SESSION).
+          if (event === 'SIGNED_IN') {
+            fetch('/api/marketing-confirmar-cadastro', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
+          }
           // INDICAÇÃO DE CLIENTE — o mesmo tratamento que o convite de EQUIPE ganhou em 05/08
           // (bloco logo abaixo) e que este nunca recebeu (31/08).
           //
