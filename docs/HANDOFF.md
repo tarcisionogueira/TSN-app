@@ -67,13 +67,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    ele dispara ANTES da confirmação de e-mail, antes de o gclid existir no banco). Idempotente por
    `UPDATE ... WHERE mkt_cadastro_ads_enviado = false RETURNING` (migração
    `mkt_cadastro_ads_enviado.sql`, já aplicada) — login repetido não manda a conversão de novo.
-   **FALTA SÓ A ENV**: `GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO` com o `ctId` numérico da ação
-   **"Cadastro"** criada no Ads em 15/09 (categoria Enviar formulário de lead) — não foi anotado
-   na sessão que criou a ação, só o da Assinatura (`7769928673`) ficou registrado acima. **Depende
-   do dono**: abrir Google Ads → Metas → Conversões → "Cadastro" → Ver detalhes, pegar o `ctId` da
-   URL (mesmo lugar de onde saiu o `7769928673`) e gravar como env na Vercel. Sem essa env,
-   `googleAdsCadastroAtivo()` fica `false` e a rota só faz `skipped: 'google_ads_cadastro_inativo'`
-   — não quebra nada, só fica dormente até a env existir.
+   **RESOLVIDO 15/09 (env) — `GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO=7769902316`** (o `ctId` da
+   ação "Cadastro", pego pelo dono ao vivo em Google Ads → Metas → Conversões → "Cadastro" → Ver
+   detalhes) gravada na Vercel. **Pendente**: confirmar no próximo deploy que a env foi pega
+   (`googleAdsCadastroAtivo()` passa a `true`) e que o próximo cadastro real com `gclid` manda a
+   conversão (checar em Ads → Cadastro, status deve sair de "Conversões pendentes"). O aviso
+   "Conecte uma fonte de dados" que aparece na tela de detalhes da ação é o estado padrão de
+   ação nova sem upload ainda — não precisa clicar em "Conectar fonte de dados" (isso é para
+   conectores prontos tipo Zapier/HubSpot; o envio daqui é direto pela API do Google Ads).
 2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
    (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
