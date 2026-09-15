@@ -46,12 +46,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
    mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
    serve antes de decidir se precisa de faturamento também.
-5. **SOLEON — `modalidade` errada em lote de venda direta** (11/09, ver seção abaixo). O item
-   79771 do DANIELGARCIA está com `modalidade='judicial'` no banco, mas o site mostra "VENDA
-   DIRETA". Recon ao vivo pra confirmar a causa exata FALHOU nesta sessão (listagem não veio —
-   challenge/cota, dispatch de datacenter) — não cheguei a corrigir a lógica por falta de
-   evidência real, só corrigi o valor (que já tinha prova). Retomar com recon de IP residencial
-   ou orçamento Bright Data liberado.
+5. ✅ **RESOLVIDO (15/09)** — SOLEON `modalidade` errada no item 79771 do DANIELGARCIA. Causa
+   e correção completas no item 37 mais abaixo.
 6. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL) —
    **CEF + FERREIRALEIL + GESTAOLEILOES + PECINI: causa raiz confirmada em 13/09, NÃO é parser.**
    Diagnóstico real (não suposição): CEF via 3 execuções reais do `enriquecer-datas-cef.yml` (logs
@@ -438,6 +434,79 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     lugar, mas o acervo histórico (666 ocorrências na linha de base) não foi reauditado nesta
     sessão. Se aparecer outro "situação parecida" fora de auth, é a mesma receita: extrair pro
     helper certo, aplicar em todo catch do mesmo tipo, não só no que reclamaram.
+34. **Auditoria de segurança do banco (15/09), pedido do dono — 1 fix aplicado, resto
+    confirmado sem risco real**. Rodei `mcp__Supabase__get_advisors` (lint nativo do Supabase,
+    242 achados) por cima do que `auditoria_seguranca()` já dava como 0 crítico/0 atenção —
+    são instrumentos diferentes, o nativo enxerga GRANT/config que o auditor caseiro não cobre.
+    **Corrigido**: 16 funções sem `search_path` fixo (`function_search_path_mutable`) —
+    principalmente triggers de `imoveis_leilao`/`perfis` — ganharam `SET search_path = 'public'`
+    (migração `fixar_search_path_funcoes_mutaveis.sql`, testada em transação antes de aplicar).
+    **Investigado e descartado como falso-positivo** (não mudei nada): o lint aponta 14 funções
+    `admin_*` SECURITY DEFINER como "executável por qualquer autenticado" — mas ele só lê o
+    GRANT EXECUTE, não o corpo da função. Puxei `pg_get_functiondef` de cada uma: TODAS têm
+    guarda de role (`eh_admin()` ou `select role ... if v_role is distinct from 'admin' then
+    raise exception`) escrita no início — quem não é admin recebe exceção. Falso alarme real.
+    **Não mexido, considerado aceitável**: `salvar_kyc_equipe` (SECURITY DEFINER sem guarda de
+    role, mas token-gated e write-once — `where token=p_token and kyc_fotos is null`, mesmo
+    padrão já revisado em `seguranca_convites_kyc_enumeracao.sql`/`convites_sem_enumeracao.sql`
+    de sessão anterior); extensões `cube`/`earthdistance` fora do schema `extensions` (usadas
+    pela busca por raio — mover tem risco de quebrar `buscar_por_raio_v2` sem eu conseguir
+    testar a busca ao vivo daqui, fica pra quando puder validar); 93 tabelas com RLS ligada e
+    ZERO política (`rls_enabled_no_policy`, nível INFO — é *default-deny*, ninguém além do
+    `service_role` lê/escreve, risco é funcional não vazamento).
+35. **RJLEILOES (item 23) — VALIDADO, convergindo, sem gastar Bright Data extra (15/09)**.
+    Cobertura de foto real (consultada direto em `imoveis_leilao`, não só a amostra do
+    `fonte_saude`): **35,6% dos 73 lotes ativos já têm foto** (26 de 73), contra ~4% antes do
+    fix da fila (14/09). A medição diária (`fonte_saude`) mostra `status=ok, foto_pct=1.000`
+    nos lotes tocados na última rodada — a fila está priorizando corretamente o backlog, mesmo
+    padrão de convergência gradual do GIORDANOLEILOES (item 21). **Custo**: orçamento semanal
+    do propósito `rj` está em 2 de 120 (reserva de 60 nem tocada) — a validação aconteceu
+    DENTRO do cron normal, não precisei autorizar rodada extra. Segue convergindo sozinho.
+36. **Runner residencial — já está TODO pronto no código, só falta o dono ativar (15/09)**.
+    Resposta ao pedido "traga pra residencial pra economizar cota": isso já foi construído
+    numa sessão anterior (`docs/RUNNER_RESIDENCIAL.md`, `scripts/runner-residencial.sh`) e
+    **eu não consigo rodar nem testar daqui** — confirmado de novo nesta sessão (`curl` direto a
+    um leiloeiro devolveu bloqueio do próprio proxy de saída deste ambiente, nem chega a tentar
+    o Cloudflare). O plano: SOLEON (fetch direto) + GESTAOLEILOES/RJ (Chromium headless) rodando
+    2x/semana numa máquina de CASA do dono zerariam o gasto de Bright Data dessas 3 fontes — o
+    resíduo pago viraria só `docs`(PDF)/`radar`(geo), que são baixo volume por natureza. Passo a
+    passo completo já está no doc; falta só o dono clonar o repo numa máquina sempre ligada em
+    IP residencial e seguir os 6 passos de ativação. **Confirmado nesta sessão**: o passo 3 do
+    doc ("[CLAUDE] confirmar Vlance na 1ª coleta") — `VLANCE` tem 50 lotes coletados no total,
+    20 ativos hoje, via client-side (staff logado) — funcionando, sem gastar Bright Data.
+    **Achado extra, baixo volume**: `fonte_regressao_suspeita()` sinalizou LEJE (zerou, piso 3/
+    mediana 4 — números pequenos, acompanhar) e SBID21 (regressão, 1 ativo hoje contra piso 19 —
+    fonte residual do cluster Superbid, baixa prioridade) e BAYIT (medição com 131h de atraso,
+    51 expirados recentes — vale um olhar quando sobrar tempo, não é urgente).
+37. ✅ **RESOLVIDO — SOLEON/DANIELGARCIA item 79771, modalidade errada (item 5), causa achada
+    E corrigida (15/09)**. Recon ao vivo (dry-run, `workflow_dispatch` com `debug=1` — o
+    propósito `soleon` tinha 0 de 150 requests usados na semana, margem toda livre) no lote
+    EXATO que o dono reportou confirmou a causa: a varredura da página INTEIRA batia primeiro
+    em "LEILÃO JUDICIAL Online & Presencial", banner FIXO do site sem relação com o lote,
+    enquanto "Venda Direta" (a classificação real deste lote) aparecia 3x colada ao preço
+    ("Venda Direta R$600.000,00"). Corrigido em `scripts/scraper-soleon.mjs`: a janela ANCORADA
+    no preço principal (mesmo princípio do `ROTULO_NAO_PRECO` já usado ali) é checada primeiro
+    — só cai no scan de página inteira (comportamento antigo) se a janela não tiver nenhuma
+    palavra de modalidade. **Validado com 2 rodadas de recon ao vivo antes de subir pro main**:
+    79771 agora dá `modalidade=venda_direta` (era `judicial`); 79754 (caso que já funcionava)
+    confirmado `extrajudicial`, sem regressão. Registro da 79771 já corrigido direto no banco
+    (não esperei o próximo ciclo do cron). De brinde, `SOLEON_DEBUG_URL` — que já existia no
+    script desde 11/09 mas nunca tinha sido ligado ao workflow — agora é um input de verdade
+    (`debug_url`), então investigar um lote específico não exige mais rodar local.
+    Commits `8a4cd00` (fix) + `76cdcaa` (input do workflow), em produção.
+38. **Google Ads "Alternativa D" (item 10) — APROVADA pelo Google, ainda com pouco dado
+    (15/09)**. Conferido via Windsor: `ad_group_ad_status=ENABLED`,
+    `policy_summary_approval_status=APPROVED`, `review_status=REVIEWED` — passou na revisão
+    desta vez (ao contrário da Alternativa C). Só rodou 1 dia até agora (13/09: 2 impressões, 0
+    clique, R$0 gasto) porque foi ativada tarde naquele dia. O anúncio principal
+    (`818774598363`) segue saudável no período (129 a 719 impressões/dia, CTR ~20-25%).
+    **Decisão de manter/pausar/trocar segue com você** — é escolha de marketing, não uma
+    correção técnica; o prazo que você mesmo pôs (13/09) é amanhã, 16/09.
+39. **Google Cloud "BidPro métricas diárias" (item 4) — não consegui investigar mais**. Busquei
+    no Gmail por "BidPro métricas diárias" e pelo ID do projeto (`sys-046065754726285290...`) e
+    não achei nenhum rastro — nem e-mail de criação, nem notificação de faturamento. Isso
+    genuinamente depende de você abrir o Google Cloud Console (IAM & Admin → Configurações, ou
+    Faturamento) e checar quem/quando criou.
 
 ---
 
