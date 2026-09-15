@@ -1721,6 +1721,24 @@ export default async function handler(req, res) {
   // regeneração insistir em algo que nunca vai se resolver sozinho: sem endereço NEM cidade,
   // o pipeline de mercado (semearIndiceBidPro/centralIndiceRegiao/lerIndiceBidPro) falha mudo
   // e devolve relatório incompleto em vez de abortar — achado do ritual de 11/09.
+  //
+  // 15/09: cliente top2 (Neuma Nogueira) travou 14x nesse gate com um lote que TEM endereço e
+  // cidade no banco desde a criação — o front (Analise.jsx) mandou os dois campos vazios por
+  // alguma race de estado não reproduzida ao vivo. Em vez de confiar cegamente no que o cliente
+  // mandou, quando vier vazio busca a linha real do imóvel antes de recusar — o dado de origem
+  // é o banco, não o que o navegador conseguiu montar.
+  if (!String(mercadoInputs.endereco || '').trim() && !String(mercadoInputs.cidade || '').trim()) {
+    try {
+      const rImv = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=endereco,cidade&limit=1`);
+      if (rImv.ok) {
+        const [rowImv] = await rImv.json();
+        if (rowImv && (String(rowImv.endereco || '').trim() || String(rowImv.cidade || '').trim())) {
+          mercadoInputs.endereco = mercadoInputs.endereco || rowImv.endereco || '';
+          mercadoInputs.cidade = mercadoInputs.cidade || rowImv.cidade || '';
+        }
+      }
+    } catch { /* segue para a recusa abaixo se a busca falhar */ }
+  }
   if (!String(mercadoInputs.endereco || '').trim() && !String(mercadoInputs.cidade || '').trim()) {
     res.status(422).json({ error: 'Imóvel sem endereço/cidade — não é possível avaliar o mercado.' }); return;
   }
