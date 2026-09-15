@@ -233,9 +233,33 @@ function parseDetalhe(html, url) {
   // comitente). `extrairData` já é o extrator de data ANCORADO em leilão/praça (scraper-
   // core.mjs) — reaproveitado aqui como sinal, calculado 1x, e de novo no retorno.
   const dataLeilaoDetectada = base.data_leilao || extrairData(html);
-  const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
-    : /extrajudicial/i.test(txt) ? 'extrajudicial'
-    : (!dataLeilaoDetectada && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
+  // CONFIRMADO POR RECON REAL (15/09, DANIELGARCIA 79771 — modalidade-ctx dumpado ao vivo):
+  // a varredura da página INTEIRA batia primeiro em "LEILÃO JUDICIAL Online & Presencial",
+  // um banner FIXO do site (aparece perto do rodapé/cabeçalho, sem relação com o lote) —
+  // enquanto o texto que DE FATO qualifica ESTE lote ("Venda Direta") aparecia colado ao
+  // preço 3x: "Venda Direta R$600.000,00", "Venda Direta - 4ª Vara do Trabalho de
+  // Cubatão/SP" (2x, no breadcrumb). Mesmo princípio já usado em `ROTULO_NAO_PRECO` acima:
+  // o que qualifica O LOTE fica perto do R$ dele, não em qualquer canto da página. Por
+  // isso a janela ao redor do PREÇO PRINCIPAL (mesma âncora de `rotLance`/`rotAval`) é
+  // checada PRIMEIRO; só cai na varredura da página inteira (comportamento antigo) se a
+  // janela não tiver nenhuma das três palavras — nunca fica sem classificar.
+  const anchorPreco = txt.match(/(?:lance\s*(?:inicial|m[íi]nimo|atual)|avalia[çc][ãa]o|venda\s*direta)[^R]{0,25}R\$\s*[\d.]+,\d{2}/i);
+  const janelaModalidade = anchorPreco
+    ? txt.slice(Math.max(0, anchorPreco.index - 60), anchorPreco.index + anchorPreco[0].length + 20)
+    : '';
+  // A janela ANCORADA no preço é sinal FORTE (o texto que qualifica ESTE lote fica colado ao
+  // R$ dele — mesmo princípio do ROTULO_NAO_PRECO acima) — por isso NÃO passa pela trava de
+  // data: essa trava (09/09, achado APICE) existia pra barrar "venda direta" de um match
+  // SOLTO em qualquer canto da página, sinal fraco de verdade. Sinal ancorado no preço não é
+  // esse caso — ela só se aplica ao fallback de página inteira (sinal fraco, comportamento
+  // de antes, preservado).
+  const modalidadeDeJanela = (t) => /(?<!extra)judicial/i.test(t) ? 'judicial'
+    : /extrajudicial/i.test(t) ? 'extrajudicial'
+    : /venda\s*direta/i.test(t) ? 'venda_direta' : null;
+  const modalidadeDePagina = (t) => /(?<!extra)judicial/i.test(t) ? 'judicial'
+    : /extrajudicial/i.test(t) ? 'extrajudicial'
+    : (!dataLeilaoDetectada && /venda\s*direta/i.test(t)) ? 'venda_direta' : null;
+  const modalidade = modalidadeDeJanela(janelaModalidade) || modalidadeDePagina(txt) || 'extrajudicial';
   // ACHADO DO BLOCO 3 (03/09): `[\d.]+,\d{2}` exige DECIMAL colado ("1.813,00"), e "1.813M²"
   // (sem decimal) caía no fallback `\d+` — que não aceita ponto, então casava só "813",
   // perdendo o "1." e reportando 1/33 da área real (confirmado em CALIL, VEGAS, FERREIRALEIL,
