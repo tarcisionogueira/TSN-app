@@ -449,3 +449,42 @@ FIXO (§12.8).
 
 **Pendência de ação:** redigir **brief de 1 página** para contador/advogado decidirem
 (PJ/MEI B2B vs SCP vs intermediação) com as 6 regras acima + teto MEI + provisão do saldo.
+
+### 12.9.1 Atualização 15/09 — brief entregue ao contador; base da comissão passa a ser o líquido recebido
+
+O dono levou a decisão de SCP-vs-PJ para o contador nesta sessão (PDF com os números reais —
+volume histórico, linha do tempo, % por nível — gerado e enviado). Confirmações do dono, a
+registrar como resposta ao ponto 6 acima:
+
+- **Rota PJ-B2B contra nota está confirmada** como a direção (não SCP) — bate com a decisão de
+  planejamento de 26/07.
+- **"Não fazer retenção nenhuma, mas também não assumir o imposto de ninguém"** — o dono quer
+  pagar o VALOR CHEIO da comissão calculada contra a NF, sem descontar IRRF/ISS no ato do saque,
+  e que cada parceiro PJ declare/pague o seu. **Isto NÃO foi implementado como retenção
+  automática no código** (nenhuma dedução foi adicionada em `saque_avaliar`/
+  `solicitar_saque_ledger`) — está alinhado com a regra 6 já registrada aqui ("condição de
+  pagamento, não retenção arbitrária"). **Ponto em aberto, não resolvido nesta sessão**: a
+  retenção de 1,5% de IRRF sobre comissão/corretagem/intermediação (histórico: Lei 7.450/85 art.
+  53, revogado 01/01/2026 pela MP 1.303/2025; reintroduzido pela IN RFB 2.331/2026, de
+  23/06/2026, mirando plataformas digitais) é, pela pesquisa feita nesta sessão, um dever da
+  FONTE PAGADORA por lei — não fica resolvido só por existir NF do parceiro. A IN 2.331/2026 tem
+  um mecanismo de antecipação centralizada pela própria plataforma (opção abre 01/10/2026,
+  reportada via EFD-Reinf até 15/11/2026, caráter anual e IRREVOGÁVEL) que pode servir — não
+  confirmado em detalhe (acesso ao texto oficial bloqueado no ambiente desta sessão). **Fica
+  como a pergunta central para o contador antes de decidir**: pagar o valor cheio contra NF,
+  sem retenção nenhuma, expõe a BidPro a autuação pela retenção não feita?
+- **Pagamento só para PJ**: já está em produção desde 08/08 (`saque.destino_sempre_pj`,
+  `saque_avaliar`) — nenhuma mudança necessária, só confirmado nesta sessão.
+
+**Implementado nesta sessão (commit, em produção)**: a BASE de cálculo da comissão de rede
+passou de bruto (valor cobrado do cliente) para **líquido recebido** (valor que efetivamente
+entra na conta da BidPro, depois da taxa do gateway) — pedido do dono ("se eu recebo líquido
+R$47, o cálculo é sobre esse valor"). `distribuir_comissao_rede`/`comissao_venda_assessoria`
+continuam inalteradas (só recebem um `p_valor` menor); o cálculo do valor líquido foi movido
+para quem já tem o pagamento completo do gateway à mão: `mp-webhook.js` (3 pontos: pagamento
+avulso/serviço, cobrança recorrente de assinatura, PIX anual), `asaas-webhook.js` e
+`ativar-pro-anual.js`. Sempre com fallback seguro pro bruto se o campo do gateway não vier
+(`transaction_details.net_received_amount` no MP, `netValue` no Asaas) — nunca quebra a
+ativação do plano por falta desse dado. **Não migrados** (seguem no bruto, por serem caminhos
+de reconciliação/backstop, não o fluxo principal — baixo risco, mas registrado para não
+esquecer): `reconciliar-assinaturas-cron.js` e `reconciliar-asaas-cron.js`.

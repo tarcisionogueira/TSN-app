@@ -297,9 +297,21 @@ export default async function handler(req, res) {
         // carrega a cobrança p/ o motor comissionar cada mensalidade. A mera autorização do
         // mandato (subscription_preapproval, sem ap) passa cobranca=null → ativa sem comissão.
         // Usa ap.payment.id (não ap.id) p/ idempotência e alinhamento com o estorno.
-        const cobranca = (tipo === 'subscription_authorized_payment' && ap?.status === 'processed' && ap?.payment?.id)
-          ? { gatewayPaymentId: String(ap.payment.id), valor: ap.transaction_amount ?? ap.payment?.transaction_amount }
-          : null;
+        let cobranca = null;
+        if (tipo === 'subscription_authorized_payment' && ap?.status === 'processed' && ap?.payment?.id) {
+          const valorBrutoAp = ap.transaction_amount ?? ap.payment?.transaction_amount;
+          // O corpo do webhook de assinatura não traz transaction_details (só a API de
+          // pagamento traz) — busca o pagamento completo só para achar o valor LÍQUIDO que
+          // vira base da comissão. Falha aqui NUNCA bloqueia a cobrança: cai pro bruto, que já
+          // era o comportamento de sempre.
+          let valorLiquidoAp = null;
+          try {
+            const pagCompleto = await mpGet(`/v1/payments/${ap.payment.id}`);
+            const liq = Number(pagCompleto?.transaction_details?.net_received_amount);
+            if (liq > 0) valorLiquidoAp = liq;
+          } catch { /* segue com o bruto */ }
+          cobranca = { gatewayPaymentId: String(ap.payment.id), valor: valorBrutoAp, valorLiquido: valorLiquidoAp ?? valorBrutoAp };
+        }
         const result = await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago', cobranca });
         return res.status(200).json(result);
       }
@@ -346,6 +358,12 @@ export default async function handler(req, res) {
   }
 
   const status = pagamento.status;
+  // BASE DA COMISSÃO = valor líquido recebido, não o bruto cobrado do cliente (15/09, pedido do
+  // dono). `transaction_details.net_received_amount` só existe (e só é > 0) quando o dinheiro
+  // REALMENTE entrou — reserva não capturada vem com ele em 0 (mesmo sinal que `ativar-pro-anual`
+  // já trata à parte); aqui só interessa como base de comissão, então um 0/ausente cai pro bruto.
+  const valorLiquidoMp = Number(pagamento.transaction_details?.net_received_amount) > 0
+    ? Number(pagamento.transaction_details.net_received_amount) : null;
 
   // Espelho local do pagamento (financeiro) — todas as transições de status. Recorrente vs
   // avulso pelo operation_type do MP. Idempotente por mp_payment_id; roda antes do corte de
@@ -379,6 +397,7 @@ export default async function handler(req, res) {
   const contexto = {
     gateway: 'mercadopago',
     valor: pagamento.transaction_amount || 0,
+    valorLiquido: valorLiquidoMp ?? (pagamento.transaction_amount || 0),
     descricao: pagamento.description || '',
     email: payer.email || null,
     gatewayCustomerId: payer.id ? String(payer.id) : null,
@@ -417,7 +436,7 @@ export default async function handler(req, res) {
           return res.status(200).json({ ok: true, duplicado: 'plano_anual' });
         }
         try {
-          const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: 'top2_anual', gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual } });
+          const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: 'top2_anual', gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual, valorLiquido: valorLiquidoMp ?? vAnual } });
           return res.status(200).json({ ok: true, plano_anual: r });
         } catch (e) {
           // O CLIENTE PAGOU: o reenvio do MP PRECISA reprocessar (regra do dono, 05/08).

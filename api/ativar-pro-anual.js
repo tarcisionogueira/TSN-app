@@ -80,6 +80,9 @@ export default async function handler(req, res) {
   if (Math.abs(valor - precoAnual) > Math.max(1, precoAnual * 0.01)) {
     return res.status(409).json({ error: 'valor_incompativel', esperado: precoAnual, recebido: valor });
   }
+  // BASE DA COMISSÃO = valor líquido recebido, não o bruto (15/09, pedido do dono).
+  const valorLiquido = Number(pg.transaction_details?.net_received_amount) > 0
+    ? Number(pg.transaction_details.net_received_amount) : valor;
 
   // 3) Idempotência: um pagamento ativa UMA vez.
   const evento = 'pix_plano_anual';
@@ -93,7 +96,7 @@ export default async function handler(req, res) {
       userId: user.id,
       planoKey: 'top2_anual',
       gateway: 'mercadopago',
-      cobranca: { gatewayPaymentId: String(paymentId), valor },
+      cobranca: { gatewayPaymentId: String(paymentId), valor, valorLiquido },
     });
     await auditLog({ acao: 'ativar_pro_anual_pix', user_id: user.id, ip, detalhes: { payment_id: paymentId, valor }, sucesso: true });
     return res.status(200).json({ ok: true, ...result });

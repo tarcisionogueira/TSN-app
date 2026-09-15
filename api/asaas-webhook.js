@@ -126,9 +126,13 @@ export default async function handler(req, res) {
   const custId    = typeof cust === 'string' ? cust : (cust?.id || null);
   const custEmail = (cust && typeof cust === 'object') ? (cust.email || null) : null;
   const extRef = String(pagReal.externalReference || '').trim();
+  // BASE DA COMISSÃO = valor líquido recebido, não o bruto cobrado do cliente (15/09, pedido do
+  // dono). `netValue` é o que o Asaas efetivamente repassa após a taxa; cai pro bruto se ausente.
+  const valorLiquido = Number(pagReal.netValue ?? valor) > 0 ? Number(pagReal.netValue ?? valor) : valor;
   const contexto  = {
     gateway:           'asaas',
     valor,
+    valorLiquido,
     descricao:         pagReal.description || '',
     email:             custEmail,
     gatewayCustomerId: custId,

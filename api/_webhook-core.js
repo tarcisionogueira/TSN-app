@@ -278,8 +278,14 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
     try {
       const p_tipo = ['assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(planoKey)
         ? 'venda_direta' : 'assinatura';
+      // BASE DA COMISSÃO = VALOR LÍQUIDO recebido, não o bruto cobrado do cliente (15/09,
+      // pedido do dono: "pagar de acordo com o que recebemos"). `cobranca.valorLiquido` vem do
+      // gateway (MP: transaction_details.net_received_amount; Asaas: netValue) quando o chamador
+      // já o tem à mão; sem ele, cai no bruto — nunca quebra por falta do dado, só comissiona
+      // sobre um valor maior do que o ideal até o chamador passar a fornecer o líquido.
+      const p_valor = Number(cobranca.valorLiquido ?? cobranca.valor);
       const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
-        p_comprador: userId, p_tipo, p_valor: Number(cobranca.valor), p_gateway_payment_id: String(cobranca.gatewayPaymentId),
+        p_comprador: userId, p_tipo, p_valor, p_gateway_payment_id: String(cobranca.gatewayPaymentId),
       });
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede (recorrente):`, JSON.stringify(dist).slice(0, 200));
       // VENDA DA ASSESSORIA pelo advogado que conduziu a reunião (28/08). Chamada à parte, e não
@@ -288,7 +294,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
       // elegível — `sem_advogado_elegivel` é resposta correta, não erro.
       if (planoBase(planoKey) === 'assessorado') {
         const { data: cv, error: eCv } = await supabase.rpc('comissao_venda_assessoria', {
-          p_comprador: userId, p_valor: Number(cobranca.valor), p_gateway_payment_id: String(cobranca.gatewayPaymentId),
+          p_comprador: userId, p_valor, p_gateway_payment_id: String(cobranca.gatewayPaymentId),
         });
         if (eCv) console.error(`[${gateway}] comissao_venda_assessoria:`, eCv.message);
         else if (cv?.sem_comissao) console.warn(`[${gateway}] venda assessoria sem comissao: ${cv.sem_comissao}`);
@@ -492,7 +498,11 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
 }
 
 // ── PAGAMENTO CONFIRMADO ──────────────────────────────────────────────────────
-export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
+// `valorLiquido` (15/09): valor líquido recebido do gateway (após taxa), usado como BASE da
+// comissão de rede — `valor` (bruto) segue sendo o que BidPro cobrou do cliente e o que vai na
+// NFS-e própria (imposto da BidPro incide sobre o que ela faturou, não sobre o que sobrou depois
+// da taxa do gateway). Sem `valorLiquido`, cai no bruto — nunca quebra por falta do dado.
+export async function processarConfirmado({ valor, valorLiquido, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (!cliente) {
     console.log(`[${gateway}] perfil não encontrado — id=${gatewayCustomerId} email=${email}`);
@@ -609,8 +619,9 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       // REDUZIDA (protege a eficiência); os demais (Investidor Pro) usam 'assinatura' (atrativo).
       const p_tipo = ['assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(mapeado.plano)
         ? 'venda_direta' : 'assinatura';
+      const p_valor = Number(valorLiquido ?? valor);
       const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
-        p_comprador: cliente.id, p_tipo, p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
+        p_comprador: cliente.id, p_tipo, p_valor, p_gateway_payment_id: gatewayPaymentId,
       });
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
       // Mesma comissão de venda da assessoria, no outro caminho de pagamento. Precisa estar nos
@@ -619,7 +630,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       // porque parece funcionar na metade dos casos.
       if (mapeado.plano === 'assessorado') {
         const { data: cv, error: eCv } = await supabase.rpc('comissao_venda_assessoria', {
-          p_comprador: cliente.id, p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
+          p_comprador: cliente.id, p_valor, p_gateway_payment_id: gatewayPaymentId,
         });
         if (eCv) console.error(`[${gateway}] comissao_venda_assessoria:`, eCv.message);
         else if (cv?.sem_comissao) console.warn(`[${gateway}] venda assessoria sem comissao: ${cv.sem_comissao}`);
