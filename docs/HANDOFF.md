@@ -546,6 +546,59 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 ---
 
+## 🌙 15/09 — RESUMO DO DIA E ENCERRAMENTO DA SESSÃO
+
+Sessão de duas rodadas: (1) "resolva o que consegue sozinho, revise o que depende de mim,
+Bright Data na fila, veja eficiência/segurança" e (2) ativação do runner residencial ao vivo,
+terminando com o desligamento dos crons pagos. Detalhe completo em cada item numerado (29-40)
+mais acima; aqui só o mapa de onde cada coisa ficou:
+
+- ✅ **12 anomalias `data_divergente_edital`** reconfirmadas uma a uma e marcadas resolvidas
+  (item 29).
+- ✅ **Forma de pagamento** — 554 lotes ativos corrigidos (acervo mentia `a_vista` contra o
+  próprio documento já lido) + fix estrutural pra não voltar a acumular + falso-positivo do
+  audit corrigido (item 30).
+- ✅ **Metragem/matrícula** — investigado, sem bug de extração; achado colateral grave
+  (contaminação de doc_fatos inteiro entre lotes no TORRES3, reforça o item 24) (item 31).
+- ✅ **E-mail de resgate de cancelamento** — implementado e em produção, geral pra qualquer
+  assinante pago, ainda sem validar contra um cancelamento real (item 32).
+- ✅ **Monitoramento de falha de auth** generalizado da UMA tela que tinha o fix (Login
+  cadastro) pra toda a superfície de autenticação, incluindo dois pontos do Checkout sem
+  NENHUM registro antes — um deles o fluxo pago mais valioso do app (item 33).
+- ✅ **Auditoria de segurança do banco** — 16 funções sem `search_path` fixo corrigidas; 14
+  funções `admin_*` que o lint apontou como "sem proteção" verificadas uma a uma e confirmadas
+  com guarda de role (falso-positivo do lint automático) (item 34).
+- ✅ **RJLEILOES validado** convergindo sozinho (35,6% de foto, era ~4%), sem gastar Bright
+  Data fora do orçamento normal (item 35).
+- ✅ **SOLEON/DANIELGARCIA 79771** — causa real da modalidade errada achada por recon ao vivo
+  (banner fixo do site vencendo o texto que qualifica o lote) e corrigida, validada com 2
+  rodadas de recon antes de subir, registro já corrigido no banco (item 37).
+- 📌 **Google Ads Alternativa D** aprovada pelo Google — decisão de manter/pausar/trocar
+  segue com o dono, prazo 16/09 (item 38).
+- 📌 **Google Cloud "BidPro métricas diárias"** — sem rastro no Gmail/Drive, só o dono
+  checando o Console resolve (item 39).
+- ✅✅ **Runner residencial — ativado, validado AO VIVO e com os crons pagos desligados no
+  mesmo dia** (itens 36/40, o bloco mais longo da sessão): passo a passo seguido em tempo real
+  no WSL do dono, incluindo um empurrão consciente e reversível no gate pra provar o mecanismo
+  na hora em vez de esperar 3 dias. Resultado real: SOLEON 86 linhas, GESTAO 125, RJ 40, VLANCE
+  20 — **zero Bright Data** (`grep` vazio no log inteiro). PECINI passou pelo Cloudflare mas
+  voltou com conteúdo genérico (não é bloqueio, fica pendente). Cron diário confirmado
+  (`crontab -l`). No mesmo dia, a pedido do dono, os 5 workflows pagos tiveram o `schedule:`
+  desligado — só rodam agora se o residencial ficar 7+ dias sem coletar (freio já existente em
+  4 das 5 fontes; VLANCE alinhado de 48h pra 168h).
+
+**Pendências reais que sobraram, todas fora do meu alcance nesta sessão** (itens 1, 4, 7, 10,
+38, 39): login OAuth do Google Ads, investigação do projeto no console do Google Cloud,
+Verificação de Negócio do Instagram no Meta Business Manager, e a decisão de marketing sobre
+a Alternativa D (prazo 16/09).
+
+**Acompanhamento agendado**: check-in automático na 1ª manhã seguinte (13h30 UTC / ~10h30
+Brasília — depois que o cron das 8h locais já teria rodado, com folga) pra ler
+`coleta_cliente`/`fonte_saude` no banco e confirmar se o runner residencial do dono realmente
+rodou sozinho, sem precisar que ele mande o log manualmente.
+
+---
+
 ## 🌙 13/09 (fim da noite) — RESUMO DO DIA E ENCERRAMENTO DA SESSÃO
 
 Sessão longa, muita coisa validada AO VIVO (não só suposição). Resumo do que fechou hoje, do
