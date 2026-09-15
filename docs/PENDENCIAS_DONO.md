@@ -517,11 +517,15 @@ clique. Ordem certa:
       (`GOOGLE_ADS_DEVELOPER_TOKEN`);
    4. **Tela de permissão OAuth** → configure (modo Externo serve; pode ficar em "Teste" com o
       seu e-mail como usuário de teste);
-   5. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador**
-      (é o mais simples para gerar o refresh token);
-   6. guarde **Client ID** e **Client Secret**;
-   7. gere o **refresh token** autorizando com o e-mail que tem acesso ao Ads (o fluxo do
-      `oauth2l`/playground do Google, escopo `https://www.googleapis.com/auth/adwords`).
+   5. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **Aplicativo da Web**
+      (⚠️ correção de 11/09, achada ao vivo: "App para computador" NÃO aceita URI de
+      redirecionamento customizada e quebra com erro 400 `redirect_uri_mismatch`), com URI de
+      redirecionamento autorizada `https://developers.google.com/oauthplayground`;
+   6. guarde **Client ID** e **Client Secret** (nunca neste repositório, que é público);
+   7. gere o **refresh token** pelo [OAuth Playground](https://developers.google.com/oauthplayground)
+      autorizando com o e-mail que tem acesso ao Ads, escopo
+      `https://www.googleapis.com/auth/adwords` — em **Step 2**, use engrenagem → "Use your own
+      OAuth credentials" com o Client ID/Secret acima antes de autorizar.
 
 Como não precisa mais de conta de gerente (MCC), **`GOOGLE_ADS_LOGIN_CUSTOMER_ID` (3c) fica
 opcional** — só preencha se de fato acabar usando uma conta de gerente por outro motivo.
