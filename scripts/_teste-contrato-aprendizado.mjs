@@ -25,7 +25,7 @@ async function mintarSessao() {
   const r2 = await fetch(`${SB}/auth/v1/verify`, {
     method: 'POST',
     headers: { apikey: KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'magiclink', token: hashed_token }),
+    body: JSON.stringify({ type: 'magiclink', token_hash: hashed_token }),
   });
   const d2 = await r2.json();
   if (!r2.ok || !d2?.access_token) throw new Error(`verify falhou: ${r2.status} ${JSON.stringify(d2).slice(0, 300)}`);
