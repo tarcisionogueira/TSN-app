@@ -27475,3 +27475,26 @@ fila de publicação do espelho ainda não ter alcançado (reordenada por urgên
 essas fontes não têm imóveis arrematados/com relatório para subir de prioridade) em vez de
 integração quebrada; **candidato a reverificar em ~1 semana** antes de investigar a fundo. Todas
 as demais fontes com ≥5 ativos têm 100% de cobertura de link.
+
+## 16/09 (2ª parte) — causa-raiz confirmada: GESTAOLEILOES/VLANCE nunca entram no espelho
+
+Não era fila atrasada (hipótese da entrada anterior) — é filtro que exclui as duas fontes por
+completo. `documento_espelho` tem **zero linhas** para GESTAOLEILOES e VLANCE.
+`enfileirar_espelho_documentos()` só aceita `link_edital`/anexo quando a URL termina em
+`.pdf` (regex `~* '\.pdf(\?|#|$)'`). GESTAOLEILOES aponta para a página HTML do lote
+(`lancenoleilao.com.br/leilao.php?idLeilao=…`, o PDF fica dentro dela — a fila nunca abre a
+página pra achar o link real); VLANCE aponta para a LISTAGEM inteira do site
+(`…leilao/index/imoveis`, igual para vários lotes — mesmo achado já registrado do site ser SPA
+renderizado em JS). **Não corrigido ainda** — precisa de recon por fonte (GESTAOLEILOES: seguir
+o link e extrair o PDF real da página; VLANCE: já documentado como bloqueio de scraping por JS,
+exige render de browser). Fica como pendência técnica, não como "esperar a fila".
+
+**Split 2×50% no pagamento de honorários — descartado pelo dono.** Sai da lista de pendências
+(nunca foi construído, nada a reverter).
+
+**Leiloeiros do EDITAL_DJEN sem anexo/foto — mapeados.** 100% dos 344 imóveis ativos da fonte
+estão sem anexo e sem foto (desenho da fonte: só o aviso do edital, nunca o PDF/imagem). 75
+leiloeiros distintos por nome; 171 imóveis (metade) sem nem o nome do leiloeiro registrado.
+Achado colateral de qualidade de dado: grafias duplicadas da mesma pessoa (ex.: "Jorge Vitório
+Espolador"/"Jorge V"/"Jorge Vitorio Espolador") fazem a contagem por nome bruto subestimar quem
+concentra volume — não normalizado, não foi pedido.
