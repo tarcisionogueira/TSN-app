@@ -54,7 +54,12 @@ export function tituloDeSlug(slug) {
 // Cidade/UF do fim do slug: "…-em-manhumirim-mg", "…-campo-grande-ms". Palavras compostas
 // entram na cidade até um conector; melhor esforço — quem tem rótulo no DOM sobrescreve.
 export function cidadeUFDeSlug(slug) {
-  const s = String(slug || '');
+  // Descarta um TIPO genérico no início ("imovel-são-josé-...-pr", KLEILOES 16/09): sem
+  // conector em/no/na/de/do/da antes da cidade, o 3º fallback (sem âncora no início) captura
+  // TUDO antes do UF — inclusive a palavra de tipo, que não é cidade ("Imovel Sao Jose Dos
+  // Pinhais" em vez de "Sao Jose Dos Pinhais"). Nas fontes com conector isso já não acontecia
+  // (o conector isola a cidade); aqui é rede de segurança pro caso sem conector nenhum.
+  const s = String(slug || '').replace(/^(?:imovel|imoveis|casa|apartamento|apto|terreno|sala|loja|galpao|predio|chacara|sitio|fazenda|barracao)-/i, '');
   // `.*` GULOSO antes do conector: pega o ÚLTIMO "em/no/na…" — senão "leilao-de-fazenda-
   // em-manhumirim-mg" capturava "fazenda-em-manhumirim" como cidade (teste de mesa 21/08).
   // "de/do/da" tentam DEPOIS, separado: nome de cidade composto em português frequentemente

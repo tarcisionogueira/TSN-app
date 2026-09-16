@@ -1,6 +1,21 @@
 /**
- * Parser puro — JELEILOES (jeleiloes.com.br). Fonte `dom`: server-rendered, mas o motor de
- * fetch já é Puppeteer no runner (mesmo custo zero do ALFA/HASTA).
+ * Parser puro — família "Suporte Leilões" (front-end novo, `/imoveis?page=N`, URL de lote
+ * `/oferta(s)/leilao/imoveis/<cat>/<id>/(id-)?<id2>/<slug>`). Fonte `dom`: server-rendered,
+ * mas o motor de fetch já é Puppeteer no runner (mesmo custo zero do ALFA/HASTA). Cobre 2
+ * tenants: JELEILOES (jeleiloes.com.br) e KLEILOES (kleiloes.com.br, Werno Klöckner Júnior —
+ * candidato do EDITAL_DJEN, recon 16/09).
+ *
+ * 16/09 — recon do KLEILOES confirmou MESMA URL/estrutura de tabela do JELEILOES, com 2
+ * divergências pontuais entre os dois tenants (mesma plataforma, front-ends gerados por
+ * leiloeiro divergem no rótulo):
+ *   • JELEILOES usa "Lance Inicial" pro valor mínimo; KLEILOES usa "Valor Inicial" (mesma
+ *     posição na tabela: Lote | Tipo do Bem | Valor de Avaliação | <mínimo> | Status | …).
+ *     `linhaTabelaLote`/`valorJanela` abaixo aceitam os dois rótulos.
+ *   • Slug do KLEILOES não tem conector em/no/na antes da cidade ("imovel-sao-jose-dos-
+ *     pinhais-pr"), o que faria `cidadeUFDeSlug` capturar "Imovel" como parte do nome da
+ *     cidade. `parseDetalhe` agora tenta o TEXTO renderizado primeiro (tem acento correto e
+ *     já filtra "Comarca/Vara/Tribunal" — `cidadeUF` de leilaopro-parse.mjs) e só cai pro
+ *     slug se o texto não tiver "Cidade/UF" reconhecível.
  *
  * ORIGEM (07/09): candidato achado por cruzamento de edital do DJEN (14 editais, 13 já
  * promovidos sem foto/doc — a maior taxa de promoção do lote de 13 candidatos). Recon real
@@ -29,6 +44,7 @@ import { num, plaus, textoDe, tituloDeSlug, cidadeUFDeSlug, montarRowDom } from 
 
 export const TENANTS = {
   jeleiloes: { fonte: 'JELEILOES', leiloeiro: 'JE Leilões', base: 'https://jeleiloes.com.br' },
+  kleiloes: { fonte: 'KLEILOES', leiloeiro: 'Klöckner Leilões', base: 'https://kleiloes.com.br' },
 };
 
 export function extrairUrlsDeLote(html, base) {
@@ -51,12 +67,15 @@ function linhaTabelaLote(html) {
   const linhas = [...String(html || '').matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((tr) =>
     [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((td) =>
       td[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()));
+  // Rótulo do mínimo varia por tenant da mesma plataforma: JELEILOES usa "Lance Inicial",
+  // KLEILOES usa "Valor Inicial" (mesma posição na tabela, mesmo significado — 16/09).
+  const RE_MINIMO = /(?:Lance|Valor)\s+Inicial/i;
   const iCab = linhas.findIndex((cols) => cols.some((c) => /Valor\s+de\s+Avalia[çc][ãa]o/i.test(c))
-    && cols.some((c) => /Lance\s+Inicial/i.test(c)));
+    && cols.some((c) => RE_MINIMO.test(c)));
   if (iCab < 0) return null;
   const cab = linhas[iCab];
   const iAval = cab.findIndex((c) => /Valor\s+de\s+Avalia[çc][ãa]o/i.test(c));
-  const iLance = cab.findIndex((c) => /Lance\s+Inicial/i.test(c));
+  const iLance = cab.findIndex((c) => RE_MINIMO.test(c));
   for (let i = iCab + 1; i < linhas.length; i++) {
     const cols = linhas[i];
     if (cols.length < cab.length - 2) continue;   // não é linha de dado da mesma tabela
@@ -112,17 +131,21 @@ export function parseDetalhe(html, url) {
   let minimo = tab?.minimo || 0;
   if (!avaliacao && !minimo) {
     avaliacao = valorJanela(txt, /Valor\s+de\s+Avalia[çc][ãa]o/i);
-    minimo = valorJanela(txt, /Lance\s+Inicial/i);
+    minimo = valorJanela(txt, /(?:Lance|Valor)\s+Inicial/i);
   }
   if (!minimo) minimo = avaliacao;
   if (!avaliacao) avaliacao = minimo;
 
   const titulo = tituloDeSlug(slug);
-  let { cidade, estado } = cidadeUFDeSlug(slug);
+  // Texto PRIMEIRO (16/09): tem acento correto e já filtra Comarca/Vara/Tribunal (`cidadeUF`
+  // de leilaopro-parse.mjs); o slug vira fallback só quando o texto não tem "Cidade/UF"
+  // reconhecível — um slug sem conector em/no/na (KLEILOES: "imovel-sao-jose-...-pr") captura
+  // palavra de TIPO junto da cidade, então nunca deve vencer o texto quando o texto responde.
+  let { cidade, estado } = cidadeUF('', txt.slice(0, 3000));
   if (!cidade) {
-    const doTexto = cidadeUF('', txt.slice(0, 3000));
-    cidade = doTexto.cidade || null;
-    estado = estado || doTexto.estado || null;
+    const doSlug = cidadeUFDeSlug(slug);
+    cidade = doSlug.cidade || null;
+    estado = estado || doSlug.estado || null;
   }
 
   const descricao = descricaoDe(txt);
