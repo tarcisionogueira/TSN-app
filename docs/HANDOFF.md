@@ -27613,3 +27613,58 @@ contra `select distinct fonte from imoveis_leilao` — o segundo esconde qualque
 sob um rótulo agregador. **KLEILOES (implementado na 4ª parte desta sessão) não está em
 nenhuma lista de tenant existente — era candidato de verdade, confirmado antes de escrever
 código.**
+
+## 16/09 (6ª parte) — KRONLEILOES integrado de graça (era Superbid disfarçado); FERNANDOLEILOEIRO/JONASLEILOEIRO fecham como SPA sem atalho barato
+
+**Pedido do dono: "Faça ele [saraiva] e siga com os demais sequencialmente"** — os 3 últimos
+candidatos do EDITAL_DJEN marcados "100% bloqueado por Cloudflare" em 07/09: KRONLEILOES,
+FERNANDOLEILOEIRO, JONASLEILOEIRO. Antes de qualquer Bright Data, dono aprovou o gasto **com
+uma condição**: "Implemente via bright data e em seguida traremos para o residencial. O bright
+data só deve rodar caso o residencial não rode por 7 dias" (mesmo padrão freio-residencial já
+usado no GESTAOLEILOES).
+
+**KRONLEILOES — Bright Data aprovado, mas acabou desnecessário.** `kronleiloes.com.br` bloqueia
+fetch cru (403 Cloudflare), mas o recon com Chromium real (`recon-crepaldi.mjs`, o mesmo script
+que achou o `stores.id` do CREPALDI) revelou que o site é **white-label da rede Superbid
+Exchange**: interceptando ao vivo, ele mesmo chama `offer-query.superbid.net` com
+`stores.id:16180` (444 ofertas confirmadas por teste direto na API pública). Zero Cloudflare,
+zero Bright Data — é a MESMA API pública já usada por TOTALLEILOES/CREPALDI. Reaproveitado
+`scraperSuperbidNet()` com **1 linha nova** em `scraper-puppeteer.mjs`. Testado em produção de
+verdade: 444 ofertas coletadas, 151 mapeadas, 9 barradas por fração ideal, **142 salvas**, 141
+ativas confirmadas. `leiloeiro_conhecimento` atualizado (`docs_status='ok'`). O gasto de Bright
+Data aprovado pelo dono não chegou a ser usado — achado "grátis" via reaproveitamento de infra
+existente, sem freio residencial necessário (não há Bright Data rodando aqui pra ter freio).
+
+**FERNANDOLEILOEIRO e JONASLEILOEIRO — fecham DEPRIORIZADOS, com evidência, não suposição.**
+Investigação em 3 camadas, todas negativas:
+1. **Hipótese Vlance (achado retroativo)**: `scripts/scraper_vlance.py` já tinha os dois no
+   backlog desde 20/08 — fingerprinted por HTML como plataforma Vlance, mas REMOVIDOS de
+   `TENANTS_PADRAO` porque a validação ao vivo devolvia 0 lote (API não-JSON). Nunca se testou
+   o endpoint de API (`/core/api/get-leiloes`) especificamente via Bright Data — só a página
+   HTML. Testado agora: **devolveu a casca HTML do site (200 OK), não JSON, nos dois domínios**.
+   Confirma que NÃO é Vlance (fingerprint de 20/08 errado ou plataforma trocada desde então) —
+   hipótese descartada com prova, não só suposição.
+2. **Cloudflare via Bright Data Web Unlocker**: ~50% de sucesso em 6 tentativas contra o
+   Fernando (roda variável, sem padrão claro de rota/horário) — não é "sempre bloqueado" como o
+   registro de 07/09 dizia, mas também não é confiável.
+3. **Quando PASSA o Cloudflare, ainda não adianta**: `/categorias/imoveis` via Bright Data veio
+   limpo (230KB, sem marca de challenge) mas com **ZERO ocorrência de "R$" no texto** — é só a
+   página-casca com o menu de categorias (~50 `ID_Categoria`). O site roteia por
+   **hash na URL** (`/busca/#Engine=Start&Pagina=1&ID_Categoria=N`) — o `#` nunca chega ao
+   servidor, então NENHUM fetch HTTP puro (Bright Data incluso) traz lote, **mesmo passando o
+   Cloudflare**. Os dados só existem via chamada AJAX disparada pelo JS no navegador.
+
+**Conclusão**: pra capturar de verdade precisaria do tier "Scraping Browser" do Bright Data
+(execução JS completa, produto mais caro/diferente do Web Unlocker já aprovado) ou de um runner
+residencial com Chromium real interceptando a chamada AJAX (mesma técnica do
+`recon-crepaldi.mjs`, mas contra um Cloudflare que nem o Puppeteer de datacenter passa). Isso é
+decisão de custo/engenharia NOVA, não o gasto já aprovado — por isso não foi escalado sem
+confirmar com o dono. Combinado com volume baixo (~10 + 5 editais), os dois ficam
+**deprioritizados** (não descartados). `leiloeiro_conhecimento` atualizado nos dois com a cadeia
+completa de evidência, pra não repetir a investigação do zero numa sessão futura.
+
+**Higiene**: todos os scripts de recon temporários desta parte (`_recon-saraiva.mjs`,
+`_recon-kron.mjs`, `_recon-kron-bd.mjs`, `_recon-fernando-bd.mjs`, `_recon-vlance-cf.mjs`, e os
+workflows `_teste-recon-*.yml` correspondentes) foram criados, usados e **removidos** — só
+`recon-crepaldi.mjs` (reusável, já genérico via `RECON_SITE`) e o KRON/1-linha em
+`scraper-puppeteer.mjs` ficaram no repositório.
