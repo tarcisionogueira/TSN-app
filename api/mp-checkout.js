@@ -85,7 +85,7 @@ export default async function handler(req, res) {
   // 'produto_bonus' (12/09): ebook/curso com `requer_cartao_bonus` — cartão salvo na compra
   // pra renovar sozinho quando o bônus (concede_plano) vencer. Ver bloco abaixo e
   // api/ativar-assinatura-bonus-cron.js.
-  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria', 'produto_bonus']);
+  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria', 'produto_bonus', 'honorario_exito']);
   const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
 
   // PRODUTO_BONUS — ebook/curso com `requer_cartao_bonus`: preço promocional + concede_plano
@@ -127,6 +127,36 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('[mp-checkout] produto_bonus: iniciar falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar a compra agora. Tente em instantes.' });
+    }
+  }
+
+  // HONORÁRIOS DE ÊXITO (16/09) — cobrança feita pelo próprio arrematante, num checkout
+  // Transparente com a cara do BidPro (src/pages/PagarHonorario.jsx), não mais um link
+  // hospedado do MP. Preço SEMPRE do servidor (arrematacoes.honorarios_valor), nunca do
+  // body — mesmo cuidado do produto_bonus acima. Confere também que quem está pagando é
+  // o PRÓPRIO arrematante desta arrematação (IDOR: sem isso, qualquer logado poderia pagar
+  // — ou pior, ler o valor de — a arrematação de outra pessoa).
+  let honorarioCtx = null;
+  if (proposito === 'honorario_exito') {
+    const { arrematacao_id } = req.body || {};
+    if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
+    const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+      });
+      const [arr] = r.ok ? await r.json().catch(() => []) : [];
+      if (!arr) return res.status(404).json({ error: 'Arrematação não encontrada.' });
+      if (arr.arrematante_id !== user.id) return res.status(403).json({ error: 'Esta cobrança não pertence a este usuário.' });
+      if (['pago', 'distribuido'].includes(arr.honorarios_status)) return res.status(409).json({ error: 'Os honorários desta arrematação já foram pagos.' });
+      const v = Number(arr.honorarios_valor) || 0;
+      if (v <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
+      valor = v;
+      descricao = 'Honorários de êxito — BidPro Brasil';
+      honorarioCtx = { arrematacaoId: arr.id };
+    } catch (e) {
+      console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
+      return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
     }
   }
 
@@ -187,15 +217,21 @@ export default async function handler(req, res) {
   // idêntica — só não há o que o cron de conversão (ativar-assinatura-bonus-cron.js) encontre
   // depois, e a cortesia expira sozinha pelo mecanismo que já existe (reconciliar-assinaturas).
   const manterAssinatura = req.body?.manterAssinatura !== false;
+  // Upsell Investidor Pro junto do checkout de honorários (16/09): "quero também virar
+  // Investidor Pro" — só faz sentido pagando com cartão (assinatura recorrente do MP não
+  // aceita PIX). Mesmo mecanismo do produto_bonus: salva o cartão ANTES de cobrar, com um
+  // token novo gerado a partir do cartão salvo — o cron ativar-promo-pro-honorario-cron.js
+  // usa esse mesmo cartão pra tentar a 1ª mensalidade 30 dias depois.
+  const querSalvarCartaoProHonorario = !!honorarioCtx && metodoPagamento === 'credit_card' && req.body?.tambem_pro === true;
   let mpCustomerId = null, mpCardId = null;
-  if (produtoBonusCtx && manterAssinatura && metodoPagamento === 'credit_card' && dadosCartao?.token) {
+  if ((produtoBonusCtx && manterAssinatura || querSalvarCartaoProHonorario) && metodoPagamento === 'credit_card' && dadosCartao?.token) {
     try {
       mpCustomerId = await mpAcharOuCriarCustomer(ACCESS_TOKEN, String(email));
       mpCardId = await mpSalvarCartao(ACCESS_TOKEN, mpCustomerId, dadosCartao.token);
       const chargeToken = await mpTokenDoCartaoSalvo(ACCESS_TOKEN, mpCardId, mpCustomerId);
       dadosCartao = { ...dadosCartao, token: chargeToken };
     } catch (e) {
-      console.error('[mp-checkout] produto_bonus: não consegui salvar o cartão (cobrando sem salvar):', e?.message || e);
+      console.error('[mp-checkout] não consegui salvar o cartão (cobrando sem salvar):', e?.message || e);
       mpCustomerId = null; mpCardId = null;
     }
   }
@@ -215,9 +251,14 @@ export default async function handler(req, res) {
       // (uuid), pro webhook tratar como confirmação de PRODUTO (ehProdutoMp), igual ao
       // Checkout Pro de criarPreferenciaProduto em api/mp.js — reaproveita o confirmador que
       // já existe em vez de duplicar a lógica de concede_plano aqui.
+      // honorario_exito: metadata.tipo é o que api/mp-webhook.js (ehHonorarioMp) usa para
+      // marcar honorarios_status='pago' — mesmo branch que já atende o Checkout Pro
+      // hospedado, agora também alimentado por um pagamento Transparente.
       metadata: produtoBonusCtx
         ? { user_id: user.id, origem: 'tsn-app', tipo: 'produto', proposito, compra_id: produtoBonusCtx.compraId }
-        : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
+        : honorarioCtx
+          ? { user_id: user.id, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: user.id }
+          : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
       ...(produtoBonusCtx ? { external_reference: produtoBonusCtx.compraId } : {}),
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
@@ -273,6 +314,21 @@ export default async function handler(req, res) {
         });
         if (!patch.ok) console.error('[mp-checkout] produto_bonus: gravar cartão salvo devolveu', patch.status);
       } catch (e) { console.error('[mp-checkout] produto_bonus: gravar cartão salvo falhou:', e?.message || e); }
+    }
+
+    // Upsell Investidor Pro: grava o cartão salvo na arrematação + a data em que o cron
+    // (ativar-promo-pro-honorario-cron.js) deve tentar a 1ª mensalidade (30 dias).
+    if (querSalvarCartaoProHonorario && mpCustomerId && mpCardId && data.status === 'approved') {
+      try {
+        const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+        const inicioEm = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+        const patch = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${honorarioCtx.arrematacaoId}`, {
+          method: 'PATCH',
+          headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ promo_pro_mp_customer_id: mpCustomerId, promo_pro_mp_card_id: mpCardId, promo_pro_inicio_em: inicioEm }),
+        });
+        if (!patch.ok) console.error('[mp-checkout] honorario: gravar cartão do upsell Pro devolveu', patch.status);
+      } catch (e) { console.error('[mp-checkout] honorario: gravar cartão do upsell Pro falhou:', e?.message || e); }
     }
 
     return res.status(200).json({

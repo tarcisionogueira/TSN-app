@@ -311,159 +311,6 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
 }
 
 /**
- * Link de pagamento (Checkout Pro) dos HONORÁRIOS DE ÊXITO de uma arrematação —
- * gerado pela equipe (advogado/analista/admin) e compartilhado com o arrematante, que
- * escolhe livremente PIX ou cartão (parcelado) na própria página hospedada do MP; não
- * exige o arrematante logado no BidPro. Preço SEMPRE do servidor (arrematacoes.honorarios_valor
- * já calculado no registro do arremate), nunca do body. external_reference = arrematacao_id
- * (uuid, sem pipe) + metadata.tipo='honorario_exito' — o webhook casa por AMBOS antes de
- * checar `ehProdutoMp` (mesmo formato de uuid), para não colidir com o fluxo de produto.
- */
-const HONORARIO_LINK_VALIDADE_H = 48; // pedido do dono (16/09): link usável por até 2 dias
-
-async function criarPreferenciaHonorario({ arrematacao_id }) {
-  if (!arrematacao_id) throw new Error('arrematacao_id obrigatório');
-
-  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,honorarios_valor,honorarios_status,honorarios_link_pagamento,honorarios_link_expira_em`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
-  });
-  const [arr] = arrRes.ok ? await arrRes.json() : [];
-  if (!arr) throw new Error('Arrematação não encontrada');
-  if (['pago', 'distribuido'].includes(arr.honorarios_status)) throw new Error('Os honorários desta arrematação já foram pagos.');
-  const valor = Number(arr.honorarios_valor) || 0;
-  if (valor <= 0) throw new Error('Honorários ainda não calculados para esta arrematação.');
-
-  // Link ainda válido: devolve o MESMO (continua disponível/copiável sem gerar de novo a
-  // cada clique — o arrematante pode ter fechado a conversa e o link precisa seguir o mesmo).
-  if (arr.honorarios_link_pagamento && arr.honorarios_link_expira_em && new Date(arr.honorarios_link_expira_em) > new Date()) {
-    return { initPoint: arr.honorarios_link_pagamento, valor, expiraEm: arr.honorarios_link_expira_em, reaproveitado: true };
-  }
-
-  const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=nome,email,cpf,cpf_enc`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
-  });
-  const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
-  const cpfArrematante = perfil ? await cpfDoRegistro(perfil).catch(() => null) : null;
-
-  const agora = new Date();
-  const expiraEm = new Date(agora.getTime() + HONORARIO_LINK_VALIDADE_H * 3600 * 1000);
-
-  const back = `${BASE_URL}/#/caso`;
-  const pref = await mpPost('/checkout/preferences', {
-    items: [{ id: `honorario-${arr.id}`, title: 'Honorários de êxito — BidPro Brasil', quantity: 1, currency_id: 'BRL', unit_price: valor }],
-    payer: {
-      name: perfil?.nome || undefined,
-      email: perfil?.email || undefined,
-      identification: cpfArrematante ? { type: 'CPF', number: cpfArrematante.replace(/\D/g, '') } : undefined,
-    },
-    back_urls: {
-      success: `${back}?honorario=pago`,
-      pending: `${back}?honorario=pending`,
-      failure: `${back}?honorario=fail`,
-    },
-    auto_return: 'approved',
-    notification_url: WEBHOOK,
-    statement_descriptor: 'BIDPRO BRASIL',
-    external_reference: String(arr.id),
-    // Prazo pedido pelo dono (16/09): até 2 dias. Passado isso, o link para de aceitar
-    // pagamento no MP e o próximo clique em "gerar" acima cria um novo (honorarios_valor
-    // pode até ter mudado nesse meio tempo).
-    expires: true,
-    expiration_date_from: agora.toISOString(),
-    expiration_date_to: expiraEm.toISOString(),
-    // Sem `excluded_payment_types`: o arrematante escolhe PIX ou cartão (inclusive
-    // parcelado) livremente na página hospedada do MP — não mesclamos os dois métodos
-    // numa preferência só (o MP não suporta split PIX+cartão num único checkout; o
-    // mecanismo de `split` deste arquivo cria 2 links separados, um por método — ver
-    // criarPreferencia/criarPreferenciaSimples). O juro de parcelamento acima de 1x segue
-    // a config de "parcelamento sem juros" da própria conta MP do BidPro — mesma regra
-    // já em vigor nas preferências hospedadas de plano (criarPreferenciaSimples).
-    payment_methods: { installments: 12 },
-    metadata: { tipo: 'honorario_exito', arrematacao_id: arr.id, arrematante_id: arr.arrematante_id, user_id: arr.arrematante_id },
-  });
-
-  await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arr.id}`, {
-    method: 'PATCH',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({
-      honorarios_mp_preference_id: pref.id,
-      honorarios_link_pagamento: pref.init_point || pref.sandbox_init_point || null,
-      honorarios_link_expira_em: expiraEm.toISOString(),
-    }),
-  });
-
-  return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, valor, expiraEm: expiraEm.toISOString() };
-}
-
-/**
- * Upsell "Investidor Pro" oferecido junto ao link de honorários de uma arrematação: o
- * arrematante autoriza o cartão agora (link de assinatura hospedado do MP), mas a
- * PRIMEIRA cobrança da mensalidade só acontece 30 dias depois (`auto_recurring.start_date`
- * — confirmado na doc do MP: é a data em que os ciclos recorrentes COMEÇAM, não só um
- * metadado). Só cartão: assinatura recorrente do MP não aceita PIX como funding — é por
- * isso que esse fluxo não existe hoje via PIX (confirmado ao dono, 16/09).
- *
- * `external_reference` sai no MESMO formato `${userId}|top2` que qualquer outra assinatura
- * de plano já usa — quando a 1ª cobrança acontecer (payment normal, `operation_type:
- * 'recurring_payment'`), o webhook genérico (`processarConfirmado`) ativa o Pro sem
- * nenhuma rota nova: nenhuma mudança em api/mp-webhook.js foi necessária.
- */
-async function criarAssinaturaPromoPro({ arrematacao_id }) {
-  if (!arrematacao_id) throw new Error('arrematacao_id obrigatório');
-
-  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,promo_pro_link`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
-  });
-  const [arr] = arrRes.ok ? await arrRes.json() : [];
-  if (!arr) throw new Error('Arrematação não encontrada');
-
-  // Link já gerado: devolve o MESMO (a assinatura fica 'pending' até o arrematante
-  // preencher o cartão no MP — gerar de novo criaria uma segunda pendente solta).
-  if (arr.promo_pro_link) return { initPoint: arr.promo_pro_link, reaproveitado: true };
-
-  const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=nome,email,role`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
-  });
-  const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
-  if (!perfil) throw new Error('Arrematante não encontrado.');
-  const JA_TEM_PRO_OU_MAIS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
-  if (JA_TEM_PRO_OU_MAIS.includes(perfil.role)) throw new Error('Este cliente já tem acesso igual ou superior ao Investidor Pro.');
-  if (!perfil.email) throw new Error('Arrematante sem e-mail cadastrado — não é possível criar a assinatura.');
-
-  const cfg = (await carregarPrecos()).top2;
-  if (!cfg || !cfg.recorrente) throw new Error('Plano Investidor Pro indisponível para assinatura no momento.');
-
-  const inicio = new Date(Date.now() + 30 * 24 * 3600 * 1000);
-  const sub = await mpPost('/preapproval', {
-    reason: cfg.nome,
-    auto_recurring: {
-      frequency: cfg.frequency ?? 1,
-      frequency_type: cfg.frequency_type ?? 'months',
-      transaction_amount: cfg.valor,
-      currency_id: 'BRL',
-      start_date: inicio.toISOString(),
-    },
-    payer_email: perfil.email,
-    back_url: `${BASE_URL}/#/checkout?plano=top2&status=assinatura`,
-    notification_url: WEBHOOK,
-    external_reference: `${arr.arrematante_id}|top2`,
-    status: 'pending',
-    metadata: { userId: arr.arrematante_id, planoKey: 'top2', origem: 'promo_pro_honorario', arrematacao_id: arr.id },
-    // Assinaturas: somente cartão de crédito (igual criarAssinatura) — não existe PIX
-    // recorrente no MP, então este upsell não tem versão PIX.
-    payment_methods_allowed: [{ payment_type: 'credit_card' }],
-  });
-
-  await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arr.id}`, {
-    method: 'PATCH',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ promo_pro_mp_preapproval_id: sub.id, promo_pro_link: sub.init_point, promo_pro_inicio_em: inicio.toISOString() }),
-  });
-
-  return { assinaturaId: sub.id, initPoint: sub.init_point, inicioEm: inicio.toISOString() };
-}
-
-/**
  * Cria assinatura recorrente (Preapproval) para planos mensais.
  * MP cobra automaticamente todo mês no cartão salvo.
  */
@@ -641,19 +488,11 @@ export default async function handler(req) {
     if (!gate.podeContratar) return new Response(JSON.stringify({ error: 'assessoria_bloqueada', motivo: gate.motivo }), { status: 409, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Link de honorários / upsell Investidor Pro: só a equipe do caso gera (nunca o próprio
-  // cliente/arrematante).
-  if (['criar_preferencia_honorario', 'criar_assinatura_promo_pro'].includes(action) && !['admin', 'analista', 'advogado', 'consultor'].includes(roleAtual)) {
-    return new Response(JSON.stringify({ error: 'Apenas a equipe pode gerar este link.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
-  }
-
   try {
     let result;
     switch (action) {
       case 'criar_preferencia':  result = await criarPreferencia(params);   break;
       case 'criar_preferencia_produto': result = await criarPreferenciaProduto(params); break;
-      case 'criar_preferencia_honorario': result = await criarPreferenciaHonorario(params); break;
-      case 'criar_assinatura_promo_pro': result = await criarAssinaturaPromoPro(params); break;
       case 'criar_assinatura':   result = await criarAssinatura(params);    break;
       case 'criar_assinatura_transparente': result = await criarAssinaturaTransparente(params); break;
       case 'verificar':          result = await verificar(params);           break;

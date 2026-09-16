@@ -434,9 +434,9 @@ export default async function handler(req, res) {
   // Produto avulso? external_reference é o uuid da compra (sem pipe).
   const extRefMp = String(pagamento.external_reference || '').trim();
   const ehProdutoMp = UUID_RE.test(extRefMp);
-  // Honorário de êxito (link gerado em api/mp.js:criarPreferenciaHonorario): external_reference
-  // também é um uuid (arrematacao_id) — checado ANTES de ehProdutoMp (metadata.tipo é o
-  // discriminador real; sem isto colidiria com o fluxo de produto, que casa só pelo formato).
+  // Honorário de êxito (pagamento Transparente via api/mp-checkout.js, proposito
+  // 'honorario_exito' — src/pages/PagarHonorario.jsx): checado ANTES de ehProdutoMp por
+  // metadata.tipo, que é o discriminador real (external_reference não é usado aqui).
   const ehHonorarioMp = pagamento.metadata?.tipo === 'honorario_exito' && !!pagamento.metadata?.arrematacao_id;
 
   try {
@@ -491,8 +491,8 @@ export default async function handler(req, res) {
         const esperado = Number(arr.honorarios_valor) || 0;
         const pago = Number(pagamento.transaction_amount) || 0;
         // Tolerância pequena só para arredondamento — o preço nasceu no servidor
-        // (criarPreferenciaHonorario lê honorarios_valor direto do banco), então um
-        // valor fora disso é sinal de preferência antiga/adulterada, não de arredondamento.
+        // (api/mp-checkout.js lê honorarios_valor direto do banco, nunca do body), então um
+        // valor fora disso é sinal de algo errado, não de arredondamento.
         if (esperado <= 0 || Math.abs(pago - esperado) > Math.max(1, esperado * 0.01)) {
           console.error('[mp-webhook] honorario valor incompatível', { arrId, pago, esperado });
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });

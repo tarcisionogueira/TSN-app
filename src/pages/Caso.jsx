@@ -557,14 +557,7 @@ export default function Caso() {
   };
   const [arrFileNome, setArrFileNome] = useState('');
   const [salvandoArr, setSalvandoArr] = useState(false);
-  const [gerandoLinkHon, setGerandoLinkHon] = useState(false);
-  const [linkHonorario, setLinkHonorario] = useState('');
-  const [linkHonorarioExpiraEm, setLinkHonorarioExpiraEm] = useState('');
   const [linkHonorarioCopiado, setLinkHonorarioCopiado] = useState(false);
-  const [ofertarPro, setOfertarPro] = useState(false);
-  const [gerandoLinkPro, setGerandoLinkPro] = useState(false);
-  const [linkPro, setLinkPro] = useState('');
-  const [linkProCopiado, setLinkProCopiado] = useState(false);
 
   // ─── Honorários ──────────────────────────────────────────────────────────
   const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1 });
@@ -593,19 +586,6 @@ export default function Caso() {
     return () => { cancel = true; };
   }, [role, arrematacao?.id]);
 
-  // O link de honorários já gerado (dentro do prazo) precisa continuar disponível ao
-  // reabrir o caso — sem isto, sair e voltar da tela fazia parecer que o link tinha sumido.
-  useEffect(() => {
-    const valido = arrematacao?.honorarios_link_pagamento && arrematacao?.honorarios_link_expira_em && new Date(arrematacao.honorarios_link_expira_em) > new Date();
-    setLinkHonorario(valido ? arrematacao.honorarios_link_pagamento : '');
-    setLinkHonorarioExpiraEm(valido ? arrematacao.honorarios_link_expira_em : '');
-  }, [arrematacao?.honorarios_link_pagamento, arrematacao?.honorarios_link_expira_em]);
-
-  // Upsell Investidor Pro (assinatura à parte — não expira, fica pendente até o
-  // arrematante preencher o cartão no MP): mesma lógica de "continua disponível".
-  useEffect(() => {
-    setLinkPro(arrematacao?.promo_pro_link || '');
-  }, [arrematacao?.promo_pro_link]);
 
   // ─── Carregar caso ────────────────────────────────────────────────────────
   const carregarCaso = useCallback(async () => {
@@ -992,58 +972,16 @@ export default function Caso() {
     }
   };
 
-  // ─── Link de pagamento dos honorários (Checkout Pro — PIX ou cartão, à escolha do
-  // arrematante, na própria página do Mercado Pago) ─────────────────────────────
-  const gerarLinkHonorario = async () => {
-    if (!arrematacao) return;
-    setGerandoLinkHon(true);
-    setLinkHonorarioCopiado(false);
-    setMsg('');
-    try {
-      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_preferencia_honorario', arrematacao_id: arrematacao.id }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link de pagamento');
-      setLinkHonorario(d.initPoint || d.sandboxPoint || '');
-      setLinkHonorarioExpiraEm(d.expiraEm || '');
-    } catch (e) {
-      setMsg(`Erro: ${e.message}`);
-    } finally {
-      setGerandoLinkHon(false);
-    }
-  };
-
+  // ─── Link de pagamento dos honorários — checkout Transparente próprio (não é mais um
+  // link hospedado do MP: é só a URL do BidPro; o cliente escolhe PIX/cartão e o upsell do
+  // Investidor Pro DENTRO da própria página, ver src/pages/PagarHonorario.jsx) ──────────
+  const linkHonorario = arrematacao ? `${window.location.origin}/#/honorario/${arrematacao.id}` : '';
   const copiarLinkHonorario = async () => {
     try {
       await navigator.clipboard.writeText(linkHonorario);
       setLinkHonorarioCopiado(true);
       setTimeout(() => setLinkHonorarioCopiado(false), 2500);
     } catch { /* padrao-ok: clipboard indisponível (http/permissão) — o link já está visível e selecionável na tela */ }
-  };
-
-  // ─── Upsell Investidor Pro: cartão autorizado agora, 1ª cobrança em 30 dias ──────
-  const gerarLinkPro = async () => {
-    if (!arrematacao) return;
-    setGerandoLinkPro(true);
-    setLinkProCopiado(false);
-    setMsg('');
-    try {
-      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_assinatura_promo_pro', arrematacao_id: arrematacao.id }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link do Investidor Pro');
-      setLinkPro(d.initPoint || '');
-    } catch (e) {
-      setMsg(`Erro: ${e.message}`);
-    } finally {
-      setGerandoLinkPro(false);
-    }
-  };
-
-  const copiarLinkPro = async () => {
-    try {
-      await navigator.clipboard.writeText(linkPro);
-      setLinkProCopiado(true);
-      setTimeout(() => setLinkProCopiado(false), 2500);
-    } catch { /* padrao-ok: clipboard indisponível — o link já está visível e selecionável na tela */ }
   };
 
   // ─── Gerar procuração ─────────────────────────────────────────────────────
@@ -1785,75 +1723,27 @@ export default function Caso() {
                 </div>
               )}
 
-              {/* Link de pagamento dos honorários — equipe gera e compartilha com o
-                  arrematante, que paga PIX ou cartão na própria página do Mercado Pago,
-                  sem precisar estar logado no BidPro. */}
+              {/* Link de pagamento dos honorários — página do próprio BidPro (checkout
+                  Transparente, nossas cores). O arrematante escolhe PIX ou cartão e o
+                  upsell do Investidor Pro DENTRO da página; não é mais um link do MP. */}
               {isStaff && arrematacao.honorarios_status !== 'pago' && arrematacao.honorarios_status !== 'distribuido' && (
                 <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
                   <div style={{ fontSize:12.5, fontWeight:800, color:'#111', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
                     <Link2 size={13}/> Link de pagamento dos honorários
                   </div>
-                  {!linkHonorario ? (
-                    <button onClick={gerarLinkHonorario} disabled={gerandoLinkHon} style={{ ...btn('#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
-                      {gerandoLinkHon ? <Loader2 size={13} style={{animation:'spin 1s linear infinite'}}/> : <Link2 size={13}/>}
-                      Gerar link para o arrematante
+                  <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>
+                    Envie ao arrematante — ele escolhe PIX ou cartão (e pode aderir ao Investidor Pro) na página do BidPro:
+                  </div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                    <input readOnly value={linkHonorario} onFocus={e=>e.target.select()} style={{ ...inp, flex:'1 1 260px', fontSize:11, color:'#475569' }}/>
+                    <button onClick={copiarLinkHonorario} style={{ ...btn(linkHonorarioCopiado ? '#059669' : '#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
+                      {linkHonorarioCopiado ? <Check size={13}/> : <Copy size={13}/>}
+                      {linkHonorarioCopiado ? 'Copiado' : 'Copiar'}
                     </button>
-                  ) : (
-                    <div>
-                      <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>
-                        Envie ao arrematante — ele escolhe PIX ou cartão (parcelado) na página do Mercado Pago:
-                      </div>
-                      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                        <input readOnly value={linkHonorario} onFocus={e=>e.target.select()} style={{ ...inp, flex:'1 1 260px', fontSize:11, color:'#475569' }}/>
-                        <button onClick={copiarLinkHonorario} style={{ ...btn(linkHonorarioCopiado ? '#059669' : '#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
-                          {linkHonorarioCopiado ? <Check size={13}/> : <Copy size={13}/>}
-                          {linkHonorarioCopiado ? 'Copiado' : 'Copiar'}
-                        </button>
-                        <a href={linkHonorario} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#0D63DB', fontWeight:700, textDecoration:'none' }}>
-                          <ExternalLink size={12}/> Abrir
-                        </a>
-                      </div>
-                      {linkHonorarioExpiraEm && (
-                        <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:6 }}>
-                          Válido até {new Date(linkHonorarioExpiraEm).toLocaleString('pt-BR')}. Depois disso, clique em gerar de novo.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Upsell Investidor Pro: cartão autorizado agora, 1ª cobrança só em 30 dias.
-                      Não existe versão PIX — assinatura recorrente do MP não aceita PIX. */}
-                  {!linkPro ? (
-                    <label style={{ display:'flex', gap:8, alignItems:'flex-start', marginTop:12, paddingTop:12, borderTop:'1px solid #e2e8f0', cursor:'pointer' }}>
-                      <input type="checkbox" checked={ofertarPro} onChange={e=>setOfertarPro(e.target.checked)} style={{ marginTop:2 }}/>
-                      <span style={{ fontSize:11.5, color:'#475569', lineHeight:1.45 }}>
-                        Também oferecer o <strong>Investidor Pro</strong> — o arrematante autoriza o cartão agora e a 1ª mensalidade só é cobrada em 30 dias. Só cartão (assinatura recorrente do MP não aceita PIX).
-                      </span>
-                    </label>
-                  ) : null}
-                  {ofertarPro && !linkPro && (
-                    <button onClick={gerarLinkPro} disabled={gerandoLinkPro} style={{ ...btn('#7c3aed'), marginTop:8, display:'flex', alignItems:'center', gap:6 }}>
-                      {gerandoLinkPro ? <Loader2 size={13} style={{animation:'spin 1s linear infinite'}}/> : <Link2 size={13}/>}
-                      Gerar link do Investidor Pro
-                    </button>
-                  )}
-                  {linkPro && (
-                    <div style={{ marginTop:12, paddingTop:12, borderTop:'1px solid #e2e8f0' }}>
-                      <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>
-                        Link do Investidor Pro (1ª cobrança em 30 dias, só cartão):
-                      </div>
-                      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                        <input readOnly value={linkPro} onFocus={e=>e.target.select()} style={{ ...inp, flex:'1 1 260px', fontSize:11, color:'#475569' }}/>
-                        <button onClick={copiarLinkPro} style={{ ...btn(linkProCopiado ? '#059669' : '#7c3aed'), display:'flex', alignItems:'center', gap:6 }}>
-                          {linkProCopiado ? <Check size={13}/> : <Copy size={13}/>}
-                          {linkProCopiado ? 'Copiado' : 'Copiar'}
-                        </button>
-                        <a href={linkPro} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#7c3aed', fontWeight:700, textDecoration:'none' }}>
-                          <ExternalLink size={12}/> Abrir
-                        </a>
-                      </div>
-                    </div>
-                  )}
+                    <a href={linkHonorario} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#0D63DB', fontWeight:700, textDecoration:'none' }}>
+                      <ExternalLink size={12}/> Abrir
+                    </a>
+                  </div>
                 </div>
               )}
 

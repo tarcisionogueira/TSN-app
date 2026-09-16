@@ -189,7 +189,7 @@ export default async function handler(req) {
   // 4) HONORÁRIOS DE ÊXITO (16/09) — só quando o admin marcou "contratou de fato" (a
   //    atribuição de ESTUDO, sem a caixa, segue sem cobrança, regra de 30/07 intacta).
   //    Cria a linha em `arrematacoes` (mesma tabela que Caso.jsx usa) para habilitar o
-  //    link de pagamento (api/mp.js:criarPreferenciaHonorario) — sem isto, um arremate
+  //    checkout de honorários (src/pages/PagarHonorario.jsx) — sem isto, um arremate
   //    atribuído aqui e promovido não tinha NENHUM jeito de cobrar o cliente.
   let arrematacao_id = null, honorarios_valor = null;
   if (promover_assessorado === true && valor > 0 && caso?.id) {

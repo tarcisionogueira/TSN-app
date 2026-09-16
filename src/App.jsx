@@ -82,6 +82,7 @@ const Perfil = lazy(() => import('./pages/Perfil'));
 const Creditos = lazy(() => import('./pages/Creditos'));
 const Comissoes = lazy(() => import('./pages/Comissoes'));
 const Caso = lazy(() => import('./pages/Caso'));
+const PagarHonorario = lazy(() => import('./pages/PagarHonorario'));
 const CriarContrato = lazy(() => import('./pages/CriarContrato'));
 const ContratosTemplates = lazy(() => import('./pages/ContratosTemplates'));
 const OnrRegistro = lazy(() => import('./pages/OnrRegistro'));
@@ -374,6 +375,7 @@ function MainLayout() {
           <Route path="/arrematados" element={<PrivateRoute><Arrematados /></PrivateRoute>} />
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
+          <Route path="/honorario/:arrematacaoId" element={<PrivateRoute><PagarHonorario /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           {/* Sem gate por papel: a capacidade de vender pode estar em qualquer papel
               (cliente pagante ou equipe). O componente autoriza por papel OU vendedor_tipo. */}

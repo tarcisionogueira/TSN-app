@@ -1460,22 +1460,11 @@ function UsuariosTab() {
   };
   const [atribLoad, setAtribLoad] = useState(false);
   // Painel pós-atribuição: link de pagamento dos honorários (só quando promoveu com valor).
+  // É só a URL do BidPro (checkout Transparente, PIX/cartão + upsell Investidor Pro dentro
+  // da própria página) — não precisa gerar nada no Mercado Pago para existir.
   const [linkHonorarioAtrib, setLinkHonorarioAtrib] = useState(null); // { arrematacao_id, honorarios_valor, alvoId, alvoNome, imovelId, casoId, end, tipo, cid, est, valorNum }
-  const [gerandoLinkHonorarioAtrib, setGerandoLinkHonorarioAtrib] = useState(false);
-  const [linkHonorarioAtribUrl, setLinkHonorarioAtribUrl] = useState('');
   const [linkHonorarioAtribCopiado, setLinkHonorarioAtribCopiado] = useState(false);
-  const gerarLinkHonorarioAtrib = async () => {
-    if (!linkHonorarioAtrib?.arrematacao_id) return;
-    setGerandoLinkHonorarioAtrib(true);
-    try {
-      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_preferencia_honorario', arrematacao_id: linkHonorarioAtrib.arrematacao_id }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link');
-      setLinkHonorarioAtribUrl(d.initPoint || d.sandboxPoint || '');
-    } catch (e) {
-      alert(`Não gerei o link: ${e.message}`);
-    } finally { setGerandoLinkHonorarioAtrib(false); }
-  };
+  const linkHonorarioAtribUrl = linkHonorarioAtrib ? `${window.location.origin}/#/honorario/${linkHonorarioAtrib.arrematacao_id}` : '';
   const copiarLinkHonorarioAtrib = async () => {
     try {
       await navigator.clipboard.writeText(linkHonorarioAtribUrl);
@@ -1483,34 +1472,9 @@ function UsuariosTab() {
       setTimeout(() => setLinkHonorarioAtribCopiado(false), 2500);
     } catch { /* padrao-ok: clipboard indisponível — o link já está visível e selecionável na tela */ }
   };
-  // Upsell Investidor Pro junto do mesmo painel: cartão autorizado agora, 1ª cobrança em 30 dias.
-  const [ofertarProAtrib, setOfertarProAtrib] = useState(false);
-  const [gerandoLinkProAtrib, setGerandoLinkProAtrib] = useState(false);
-  const [linkProAtribUrl, setLinkProAtribUrl] = useState('');
-  const [linkProAtribCopiado, setLinkProAtribCopiado] = useState(false);
-  const gerarLinkProAtrib = async () => {
-    if (!linkHonorarioAtrib?.arrematacao_id) return;
-    setGerandoLinkProAtrib(true);
-    try {
-      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_assinatura_promo_pro', arrematacao_id: linkHonorarioAtrib.arrematacao_id }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link');
-      setLinkProAtribUrl(d.initPoint || '');
-    } catch (e) {
-      alert(`Não gerei o link do Investidor Pro: ${e.message}`);
-    } finally { setGerandoLinkProAtrib(false); }
-  };
-  const copiarLinkProAtrib = async () => {
-    try {
-      await navigator.clipboard.writeText(linkProAtribUrl);
-      setLinkProAtribCopiado(true);
-      setTimeout(() => setLinkProAtribCopiado(false), 2500);
-    } catch { /* padrao-ok: clipboard indisponível — o link já está visível e selecionável na tela */ }
-  };
   const prosseguirGerarRelatorios = () => {
     const d = linkHonorarioAtrib;
-    setLinkHonorarioAtrib(null); setLinkHonorarioAtribUrl(''); setLinkHonorarioAtribCopiado(false);
-    setOfertarProAtrib(false); setLinkProAtribUrl(''); setLinkProAtribCopiado(false);
+    setLinkHonorarioAtrib(null); setLinkHonorarioAtribCopiado(false);
     if (!d) return;
     iniciarSuporte({ id: d.alvoId, nome: d.alvoNome, role: 'assessorado' });
     navSup('/analise', { state: { manual: true, autoGerar: true, paraUserId: d.alvoId, imovel: { id: d.imovelId || d.casoId, endereco: d.end, cidade: d.cid, estado: d.est, valorMinimo: d.valorNum, modalidade: /judicial/i.test(d.tipo) ? 'judicial' : 'extrajudicial' } } });
@@ -1900,10 +1864,10 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
 
       const proximo = { alvoId, alvoNome, imovelId, casoId, end, tipo, cid, est, valorNum };
       // Honorários calculados (promoveu + valor informado) → o próximo passo é cobrar o
-      // arrematante antes de sair da tela, não depois de lembrar. O painel abre com o
-      // botão de gerar o link; "gerar os 3 relatórios" continua disponível nele.
+      // arrematante antes de sair da tela, não depois de lembrar. O painel abre já com o
+      // link (é só a URL do BidPro); "gerar os 3 relatórios" continua disponível nele.
       if (data.arrematacao_id && Number(data.honorarios_valor) > 0) {
-        setLinkHonorarioAtribUrl(''); setLinkHonorarioAtribCopiado(false);
+        setLinkHonorarioAtribCopiado(false);
         setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor });
         return;
       }
@@ -2137,53 +2101,17 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
           <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>✅ Arremate atribuído e {linkHonorarioAtrib.alvoNome} promovido</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
-              Honorários de êxito: <strong>R$ {Number(linkHonorarioAtrib.honorarios_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Gere o link para o arrematante pagar PIX ou cartão.
+              Honorários de êxito: <strong>R$ {Number(linkHonorarioAtrib.honorarios_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Envie o link ao arrematante — ele escolhe PIX ou cartão (e pode aderir ao Investidor Pro) na página do BidPro.
             </div>
-            {!linkHonorarioAtribUrl ? (
-              <button onClick={gerarLinkHonorarioAtrib} disabled={gerandoLinkHonorarioAtrib} style={{ width: '100%', padding: '10px', background: gerandoLinkHonorarioAtrib ? '#cbd5e1' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: gerandoLinkHonorarioAtrib ? 'default' : 'pointer' }}>
-                {gerandoLinkHonorarioAtrib ? 'Gerando…' : '🔗 Gerar link de pagamento'}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input readOnly value={linkHonorarioAtribUrl} onFocus={e => e.target.select()} style={{ ...S.input, flex: '1 1 240px', fontSize: 11, color: '#475569' }} />
+              <button onClick={copiarLinkHonorarioAtrib} style={{ padding: '8px 14px', background: linkHonorarioAtribCopiado ? '#059669' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {linkHonorarioAtribCopiado ? '✓ Copiado' : 'Copiar'}
               </button>
-            ) : (
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>Envie ao arrematante — válido por até 2 dias:</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input readOnly value={linkHonorarioAtribUrl} onFocus={e => e.target.select()} style={{ ...S.input, flex: '1 1 240px', fontSize: 11, color: '#475569' }} />
-                  <button onClick={copiarLinkHonorarioAtrib} style={{ padding: '8px 14px', background: linkHonorarioAtribCopiado ? '#059669' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {linkHonorarioAtribCopiado ? '✓ Copiado' : 'Copiar'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Upsell Investidor Pro: cartão autorizado agora, 1ª cobrança só em 30 dias.
-                Não existe versão PIX — assinatura recorrente do MP não aceita PIX. */}
-            {!linkProAtribUrl ? (
-              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, paddingTop: 14, borderTop: '1px solid #e2e8f0', cursor: 'pointer' }}>
-                <input type="checkbox" checked={ofertarProAtrib} onChange={e => setOfertarProAtrib(e.target.checked)} style={{ marginTop: 2 }} />
-                <span style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.45 }}>
-                  Também oferecer o <strong>Investidor Pro</strong> — o arrematante autoriza o cartão agora e a 1ª mensalidade só é cobrada em 30 dias. Só cartão.
-                </span>
-              </label>
-            ) : null}
-            {ofertarProAtrib && !linkProAtribUrl && (
-              <button onClick={gerarLinkProAtrib} disabled={gerandoLinkProAtrib} style={{ width: '100%', marginTop: 8, padding: '10px', background: gerandoLinkProAtrib ? '#cbd5e1' : '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: gerandoLinkProAtrib ? 'default' : 'pointer' }}>
-                {gerandoLinkProAtrib ? 'Gerando…' : '🔗 Gerar link do Investidor Pro'}
-              </button>
-            )}
-            {linkProAtribUrl && (
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>Link do Investidor Pro (1ª cobrança em 30 dias, só cartão):</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input readOnly value={linkProAtribUrl} onFocus={e => e.target.select()} style={{ ...S.input, flex: '1 1 240px', fontSize: 11, color: '#475569' }} />
-                  <button onClick={copiarLinkProAtrib} style={{ padding: '8px 14px', background: linkProAtribCopiado ? '#059669' : '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {linkProAtribCopiado ? '✓ Copiado' : 'Copiar'}
-                  </button>
-                </div>
-              </div>
-            )}
+            </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button onClick={() => { setLinkHonorarioAtrib(null); setLinkHonorarioAtribUrl(''); setOfertarProAtrib(false); setLinkProAtribUrl(''); }} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
+              <button onClick={() => setLinkHonorarioAtrib(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
               <button onClick={prosseguirGerarRelatorios} style={{ flex: 2, padding: '10px', background: '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
                 Gerar os 3 relatórios agora
               </button>

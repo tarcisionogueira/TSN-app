@@ -134,7 +134,7 @@ function EscolhaMetodo({ servico, onEscolha }) {
 }
 
 /* ── Tela: PIX ── */
-function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
+function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {} }) {
   const { user } = useAuth();
   const [etapa, setEtapa] = useState('gerando'); // gerando | pronto | confirmado | erro | expirado
   const [copiado, setCop] = useState('');
@@ -162,6 +162,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
           email: user?.email,
           metodoPagamento: 'pix',
           proposito: servico.proposito || 'servico',
+          ...extra,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -313,7 +314,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12 }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {} }) {
   const { user } = useAuth();
   const [parcelas, setParcelas] = useState(1);
   const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
@@ -420,6 +421,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           ...(servico.produto_tipo && servico.produto_id
             ? { produto_tipo: servico.produto_tipo, produto_id: servico.produto_id, ref: servico.ref, manterAssinatura: servico.manterAssinatura }
             : {}),
+          ...extra,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -556,7 +558,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12 }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {} }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -589,7 +591,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
       )}
 
       {metodo === 'pix' && (
-        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} />
+        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} extra={extra} />
       )}
       {metodo === 'cartao' && (
         <PagamentoCartao
@@ -599,6 +601,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           onVoltar={(assinatura || soCartao) ? onCancelar : () => setMetodo(null)}
           onGatewayBloqueado={onGatewayBloqueado}
           parcelasMax={parcelasMax}
+          extra={extra}
         />
       )}
     </div>

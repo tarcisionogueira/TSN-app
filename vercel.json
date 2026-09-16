@@ -159,6 +159,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/ativar-promo-pro-honorario-cron",
+      "schedule": "0 11 * * *"
+    },
+    {
       "path": "/api/campanha-ebook-r1-cron",
       "schedule": "0 11 13 9 *"
     },
