@@ -111,10 +111,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros`, a Área de Membros renderizou
    normal com o contador "3 EBOOKS"; confirmado também no banco que "O Lance Que Muda Tudo"
    está `ativo=true`.
-4. **Projeto `BidPro métricas diárias`** no Google Cloud (`sys-046065754726285290...`, faturamento
-   desativado) apareceu na lista de projetos do `reimob.com.br` sem explicação conhecida — não
-   mexido, não é o mesmo projeto usado pro Ads (esse é o `My First Project`). Entender pra que
-   serve antes de decidir se precisa de faturamento também.
+4. ✅ **RESOLVIDO 16/09 — Projeto `BidPro métricas diárias` no Google Cloud (`sys-046065754726285290...`)
+   é infraestrutura interna do próprio Google, não algo criado por ninguém da reimob.com.br.**
+   Confirmado ao vivo pelo dono: ao abrir o projeto no Console, a tela dá "Você precisa de acesso
+   adicional" — nem o dono (owner da organização) tem permissão de proprietário nele, só pode
+   PEDIR papéis de leitura (Leitor/Administrador/Consumidor do Service Usage). Um projeto criado
+   manualmente sempre dá ownership automático a quem cria; a ausência total de acesso é a prova de
+   que é um projeto-sombra que o Google provisiona sozinho (padrão comum ligado a registro de
+   API/OAuth Client) — não um recurso esquecido ligado, sem risco de cobrança surpresa (ninguém
+   consegue nem ativar API paga nele sem passar por essa mesma trava). **Não precisa de ação —
+   ignorar.**
 5. ✅ **RESOLVIDO (15/09)** — SOLEON `modalidade` errada no item 79771 do DANIELGARCIA. Causa
    e correção completas no item 37 mais abaixo.
 6. **Padrão amplo de `data_leilao` ausente em várias fontes** (11/09, achado por auditoria SQL) —
