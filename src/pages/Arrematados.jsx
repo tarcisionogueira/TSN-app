@@ -72,6 +72,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [docsLoading, setDocsLoading] = React.useState(true);
   const [enviando, setEnviando] = React.useState(false);
   const [docTipo, setDocTipo] = React.useState('auto_arrematacao');
+  // Descrição opcional do anexo (16/09, pedido do dono: comprovante de pagamento do
+  // leiloeiro varia de propósito — sinal, saldo, taxa — e sem descrição a lista de
+  // documentos perde a rastreabilidade de qual é qual).
+  const [docDescricao, setDocDescricao] = React.useState('');
   const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
   const [nums, setNums] = React.useState({ avaliacao: null, valorMercado: null });
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
@@ -116,7 +120,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     if (!ehUuid(imovelId)) { setDocs([]); setDocsLoading(false); return; }
     setDocsLoading(true);
     const { data } = await supabase.from('imovel_anexos')
-      .select('id,tipo,nome,storage_path,validacao,criado_em')
+      .select('id,tipo,nome,storage_path,validacao,descricao,criado_em')
       .eq('imovel_id', imovelId).order('criado_em', { ascending: true });
     setDocs(Array.isArray(data) ? data : []);
     setDocsLoading(false);
@@ -189,6 +193,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
           const imId = await garantirAncora();
           const fd = new FormData();
           fd.append('file', comprovanteFile); fd.append('imovel_id', imId); fd.append('tipo', 'comprovante_pagamento');
+          if (novo.descricao.trim()) fd.append('descricao', novo.descricao.trim());
           const { data: { session } } = await supabase.auth.getSession();
           const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
           const d = await res.json().catch(() => ({}));
@@ -240,10 +245,12 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
       const imId = await garantirAncora();
       const fd = new FormData();
       fd.append('file', file); fd.append('imovel_id', imId); fd.append('tipo', docTipo); fd.append('arrematado', 'true');
+      if (docDescricao.trim()) fd.append('descricao', docDescricao.trim());
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
+      setDocDescricao('');
       await carregarDocs();
       // A IA confere automaticamente se o anexo é desta arrematação (etiqueta na
       // lista); se for divergente, o cliente remove pela lixeira.
@@ -417,7 +424,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                         obrigação nossa). A tela mandava fazer o que o banco não permite. */}
                     Selecione o tipo e anexe o PDF (auto de arrematação, carta, escritura, matrícula registrada…). Os documentos ficam <b>permanentes</b> e alimentam a IA. Ao anexar, a IA <b>confere automaticamente</b> se o documento é desta arrematação — se sinalizar que <b>não é</b>, {podeRemover ? <>remova pelo ícone de lixeira.</> : <>peça a remoção ao suporte: a guarda do documento é nossa e quem executa é a equipe.</>}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                     <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
                       {DOC_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
@@ -426,6 +433,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                       <input type="file" accept="application/pdf,.pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
                     </label>
                   </div>
+                  <input placeholder="Descrição (opcional) — ex.: comprovante do sinal, taxa do leiloeiro" value={docDescricao} onChange={e => setDocDescricao(e.target.value)} maxLength={300} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 14 }} />
                 </>
               )}
               {docsLoading ? (
@@ -439,6 +447,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                       <FileText size={17} color="#1e3a8a" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <button onClick={() => abrirDoc(d)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1e3a8a', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>{d.nome}</button>
+                        {d.descricao && <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.descricao}</div>}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           {d.tipo && d.tipo !== 'outro' && <span style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</span>}
                           {d.validacao?.status === 'coerente' && <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>✓ confere</span>}

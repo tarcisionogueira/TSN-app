@@ -98,6 +98,9 @@ export default async function handler(req) {
   const imovel_id = form.get('imovel_id');
   const tipo = String(form.get('tipo') || '').toLowerCase();
   const data_leilao = form.get('data_leilao') || null;
+  // Descrição livre opcional (16/09, pedido do dono: "comprovante de pagamento" varia de
+  // propósito — sinal, saldo, taxa — e sem descrição a rastreabilidade da lista some).
+  const descricao = String(form.get('descricao') || '').trim().slice(0, 300) || null;
   // Documentos de arremate são PERMANENTES (nunca apagados pela retenção). NÃO confiar
   // no campo do cliente (antes: arrematado='true' fixava doc permanente em imóvel
   // alheio). Deriva no servidor: tipo de doc de arremate, staff, ou usuário que REALMENTE
@@ -197,6 +200,7 @@ export default async function handler(req) {
     origem_url: null,
     data_leilao: data_leilao || null,
     arrematado: arrematadoPerm,
+    descricao,
     tamanho_kb: Math.round(buffer.byteLength / 1024),
     criado_por: user.id,
     role_criador: perfil.role,
