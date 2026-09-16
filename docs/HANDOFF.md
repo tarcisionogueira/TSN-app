@@ -26978,3 +26978,35 @@ específico prevalece) pronto para reuso. Nenhum dos dois precisou de uma linha 
   `promo_pro_mp_customer_id`/`promo_pro_mp_card_id`.
 
 Build limpo (padrões/sintaxe/eslint/vite build). Deploy disparado.
+
+### 16/09 (continuação 4) — teste real revelou um piso prometido e nunca aplicado
+
+Testei o fluxo criando uma arrematação de teste (R$1,00, vinculada à própria conta do dono,
+apagada depois) e mandando o link — o dono não pagou (testaria no dia seguinte com um
+cliente real), mas ao ler os termos na tela achou o problema:  a cláusula 7 (`utils/termos.js`,
+decisão do dono de **30/07**) já promete **"HONORÁRIO MÍNIMO de R$ 7.000,00 sempre que o
+valor apurado pelo percentual resultar inferior a esse montante"** — e **nenhum lugar do
+código aplicava esse piso**. `Caso.jsx`, `api/atribuir-arremate.js` e a distribuição interna
+(`api/_honorarios.js`) sempre calculavam só `valor_arrematado × 10%`, mesmo quando isso dava
+menos de R$7.000. O termo prometia uma coisa; o cálculo fazia outra — a mesma classe de "o
+instrumento mede uma coisa e reporta com o nome de outra" já catalogada neste documento, só
+que na direção do dinheiro que a empresa deveria receber, não do que o cliente vê.
+
+**Corrigido** (commit `ee4c81f`):
+- `config_honorarios.honorario_minimo` (novo, default 7000) — parametrizado como
+  `total_pct`, não hardcoded, para o piso poder mudar sem deploy.
+- `Caso.jsx`: `Math.max(valor×pct/100, mínimo)` no cálculo que salva a arrematação E na
+  estimativa exibida durante a digitação (mostra "(honorário mínimo aplicado)" quando o piso
+  entra em ação).
+- `api/atribuir-arremate.js`: mesmo `Math.max` no cálculo do fluxo "Atribuir arremate".
+- `api/_honorarios.js` (distribuição interna do êxito): cada linha da equipe agora recebe
+  `pct/total` do **honorário REAL** (já com o piso), não `valor×pct/100` direto — sem isso,
+  o total distribuído à equipe ficaria menor que o valor efetivamente cobrado do cliente
+  sempre que o mínimo incidisse (o cliente pagaria R$7.000, a equipe dividiria um valor
+  menor entre si — a diferença ficaria sem dono nenhum).
+
+Também pedido do dono ao ver a tela: dropdown "Ver termo" no checkbox do Investidor Pro em
+`PagarHonorario.jsx`, no mesmo padrão visual do termo de honorários (`termoDoProduto('top2',
+...)`, texto já existente em `utils/termos.js` — nada novo a escrever).
+
+**Teste real com cliente**: o dono vai testar amanhã (17/09) com um arremate de verdade.
