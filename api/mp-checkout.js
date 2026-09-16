@@ -229,14 +229,8 @@ export default async function handler(req, res) {
   // idêntica — só não há o que o cron de conversão (ativar-assinatura-bonus-cron.js) encontre
   // depois, e a cortesia expira sozinha pelo mecanismo que já existe (reconciliar-assinaturas).
   const manterAssinatura = req.body?.manterAssinatura !== false;
-  // Upsell Investidor Pro junto do checkout de honorários (16/09): "quero também virar
-  // Investidor Pro" — só faz sentido pagando com cartão (assinatura recorrente do MP não
-  // aceita PIX). Mesmo mecanismo do produto_bonus: salva o cartão ANTES de cobrar, com um
-  // token novo gerado a partir do cartão salvo — o cron ativar-promo-pro-honorario-cron.js
-  // usa esse mesmo cartão pra tentar a 1ª mensalidade 30 dias depois.
-  const querSalvarCartaoProHonorario = !!honorarioCtx && metodoPagamento === 'credit_card' && req.body?.tambem_pro === true;
   let mpCustomerId = null, mpCardId = null;
-  if ((produtoBonusCtx && manterAssinatura || querSalvarCartaoProHonorario) && metodoPagamento === 'credit_card' && dadosCartao?.token) {
+  if (produtoBonusCtx && manterAssinatura && metodoPagamento === 'credit_card' && dadosCartao?.token) {
     try {
       mpCustomerId = await mpAcharOuCriarCustomer(ACCESS_TOKEN, String(email));
       mpCardId = await mpSalvarCartao(ACCESS_TOKEN, mpCustomerId, dadosCartao.token);
@@ -329,21 +323,6 @@ export default async function handler(req, res) {
         });
         if (!patch.ok) console.error('[mp-checkout] produto_bonus: gravar cartão salvo devolveu', patch.status);
       } catch (e) { console.error('[mp-checkout] produto_bonus: gravar cartão salvo falhou:', e?.message || e); }
-    }
-
-    // Upsell Investidor Pro: grava o cartão salvo na arrematação + a data em que o cron
-    // (ativar-promo-pro-honorario-cron.js) deve tentar a 1ª mensalidade (30 dias).
-    if (querSalvarCartaoProHonorario && mpCustomerId && mpCardId && data.status === 'approved') {
-      try {
-        const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
-        const inicioEm = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
-        const patch = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${honorarioCtx.arrematacaoId}`, {
-          method: 'PATCH',
-          headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ promo_pro_mp_customer_id: mpCustomerId, promo_pro_mp_card_id: mpCardId, promo_pro_inicio_em: inicioEm }),
-        });
-        if (!patch.ok) console.error('[mp-checkout] honorario: gravar cartão do upsell Pro devolveu', patch.status);
-      } catch (e) { console.error('[mp-checkout] honorario: gravar cartão do upsell Pro falhou:', e?.message || e); }
     }
 
     return res.status(200).json({

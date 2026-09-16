@@ -1460,8 +1460,8 @@ function UsuariosTab() {
   };
   const [atribLoad, setAtribLoad] = useState(false);
   // Painel pós-atribuição: link de pagamento dos honorários (só quando promoveu com valor).
-  // É só a URL do BidPro (checkout Transparente, PIX/cartão + upsell Investidor Pro dentro
-  // da própria página) — não precisa gerar nada no Mercado Pago para existir.
+  // É só a URL do BidPro (checkout Transparente, PIX/cartão) — não precisa gerar nada no
+  // Mercado Pago para existir.
   const [linkHonorarioAtrib, setLinkHonorarioAtrib] = useState(null); // { arrematacao_id, honorarios_valor, alvoId, alvoNome, imovelId, casoId, end, tipo, cid, est, valorNum }
   const [linkHonorarioAtribCopiado, setLinkHonorarioAtribCopiado] = useState(false);
   const linkHonorarioAtribUrl = linkHonorarioAtrib ? `${window.location.origin}/#/honorario/${linkHonorarioAtrib.arrematacao_id}` : '';
@@ -2101,7 +2101,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
           <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>✅ Arremate atribuído e {linkHonorarioAtrib.alvoNome} promovido</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
-              Honorários de êxito: <strong>R$ {Number(linkHonorarioAtrib.honorarios_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Envie o link ao arrematante — ele escolhe PIX ou cartão (e pode aderir ao Investidor Pro) na página do BidPro.
+              Honorários de êxito: <strong>R$ {Number(linkHonorarioAtrib.honorarios_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Envie o link ao arrematante — ele escolhe PIX ou cartão na página do BidPro.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <input readOnly value={linkHonorarioAtribUrl} onFocus={e => e.target.select()} style={{ ...S.input, flex: '1 1 240px', fontSize: 11, color: '#475569' }} />

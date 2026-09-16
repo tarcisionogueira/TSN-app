@@ -975,8 +975,8 @@ export default function Caso() {
   };
 
   // ─── Link de pagamento dos honorários — checkout Transparente próprio (não é mais um
-  // link hospedado do MP: é só a URL do BidPro; o cliente escolhe PIX/cartão e o upsell do
-  // Investidor Pro DENTRO da própria página, ver src/pages/PagarHonorario.jsx) ──────────
+  // link hospedado do MP: é só a URL do BidPro; o cliente escolhe PIX/cartão, ver
+  // src/pages/PagarHonorario.jsx) ──────────
   const linkHonorario = arrematacao ? `${window.location.origin}/#/honorario/${arrematacao.id}` : '';
   const copiarLinkHonorario = async () => {
     try {
@@ -1726,15 +1726,14 @@ export default function Caso() {
               )}
 
               {/* Link de pagamento dos honorários — página do próprio BidPro (checkout
-                  Transparente, nossas cores). O arrematante escolhe PIX ou cartão e o
-                  upsell do Investidor Pro DENTRO da página; não é mais um link do MP. */}
+                  Transparente, nossas cores); não é mais um link do MP. */}
               {isStaff && arrematacao.honorarios_status !== 'pago' && arrematacao.honorarios_status !== 'distribuido' && (
                 <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
                   <div style={{ fontSize:12.5, fontWeight:800, color:'#111', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
                     <Link2 size={13}/> Link de pagamento dos honorários
                   </div>
                   <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>
-                    Envie ao arrematante — ele escolhe PIX ou cartão (e pode aderir ao Investidor Pro) na página do BidPro:
+                    Envie ao arrematante — ele escolhe PIX ou cartão na página do BidPro:
                   </div>
                   <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                     <input readOnly value={linkHonorario} onFocus={e=>e.target.select()} style={{ ...inp, flex:'1 1 260px', fontSize:11, color:'#475569' }}/>
