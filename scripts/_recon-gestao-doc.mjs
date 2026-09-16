@@ -93,8 +93,13 @@ async function main() {
       console.log(`  href="${m[1]}"  label="${label.slice(0, 60)}"`);
       n3++;
     }
-    console.log('--- amostra crua (primeiros 1500 chars) ---');
-    console.log(html2.slice(0, 1500));
+    if (html2.length <= 20000) {
+      console.log('--- HTML completo (≤20kb) ---');
+      console.log(html2);
+    } else {
+      console.log('--- amostra crua (primeiros 1500 chars) ---');
+      console.log(html2.slice(0, 1500));
+    }
   }
 }
 main();
