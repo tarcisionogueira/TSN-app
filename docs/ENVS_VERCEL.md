@@ -156,3 +156,21 @@ Sem elas os dois lados ficam mudos (não quebra nada — só não manda nada pro
 
 **Como conferir se a escuta está configurada, sem segredo nenhum:**
 `GET /api/instagram-webhook` devolve `{ configurado: true|false }`.
+
+## ⏳ `VITE_TURNSTILE_SITE_KEY` — PENDENTE (16/09), ainda não criada
+
+Cadastro (`Login.jsx`) tem o widget Turnstile pronto no código (`TurnstileWidget.jsx`), mas
+**sem a env var ele não renderiza nada** e o cadastro segue exatamente como antes — rollout
+seguro, não quebra nada estar sem. Pra ligar de verdade:
+
+1. Criar um widget em https://dash.cloudflare.com/ → Turnstile (conta Cloudflare grátis, o
+   site NÃO precisa estar na Cloudflare — Turnstile funciona standalone). Domínio:
+   `bidprobrasil.com.br`. Modo: Managed (recomendado).
+2. Criar `VITE_TURNSTILE_SITE_KEY` na Vercel com a **Site Key** (pública).
+3. A **Secret Key** NÃO vai na Vercel — cola em Supabase → Authentication → Settings → Bot
+   and Abuse Protection → habilita Turnstile → cola a secret ali. Sem isso o Supabase Auth
+   não valida o token (o front manda, mas o backend não confere) — as duas pontas precisam
+   estar configuradas pro captcha valer alguma coisa.
+
+**Como conferir se está ligado**: cadastro mostra o widget do Turnstile logo acima do botão
+"Criar conta grátis". Se não aparecer, `VITE_TURNSTILE_SITE_KEY` não foi criada/redeployada.

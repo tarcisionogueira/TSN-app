@@ -25,6 +25,7 @@ import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
 import { traduzErroAuth, motivoErroAuth } from '../lib/erroAuth.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import { validarTelefone } from '../lib/telefone.js';
+import TurnstileWidget, { turnstileConfigurado } from '../components/TurnstileWidget.jsx';
 
 export default function Login() {
   const planosCtx = usePlanos();
@@ -135,6 +136,11 @@ export default function Login() {
   const [telDuplicado, setTelDuplicado] = useState(false);
 
   const [aceite, setAceite] = useState(false);
+  // Turnstile: token do desafio + contador que força o widget a recarregar depois de um
+  // submit malsucedido (o token é de uso único — reenviar o mesmo depois de um erro de
+  // senha/e-mail duplicado seria recusado pelo Supabase sem nenhuma mensagem clara).
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const [turnstileTentativa, setTurnstileTentativa] = useState(0);
   // Conta regressiva do cooldown de reenvio (1 tick/s até zerar).
   useEffect(() => {
     if (cooldownReenvio <= 0) return;
@@ -387,6 +393,10 @@ export default function Login() {
         password: form.senha,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          // Só envia captchaToken quando o Turnstile está configurado (env var presente) — do
+          // contrário o Supabase recusaria por token ausente numa instância que nem pede
+          // captcha. Ver TurnstileWidget.jsx sobre o rollout seguro sem a site key.
+          ...(turnstileConfigurado ? { captchaToken } : {}),
           data: {
             nome: normalizarNome(form.nome), telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
             lgpd_aceito: true, lgpd_data: new Date().toISOString(),
@@ -429,6 +439,9 @@ export default function Login() {
       // generaliza esse fix pra qualquer chamada de supabase.auth.* — ver o comentário lá.
       registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: motivoErroAuth(err) });
       setErro(traduzErroAuth(err.message));
+      // Token do Turnstile é de uso único — some do estado e o widget recarrega (resetKey),
+      // senão o PRÓXIMO clique reenviaria um token já consumido e o botão pareceria travado.
+      if (turnstileConfigurado) { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); }
     }
     setLoading(false);
   };
@@ -441,6 +454,7 @@ export default function Login() {
   // variável só, usada nos três lugares, e a divergência deixa de ser possível.
   const cadastroBloqueado = loading || !aceite || !SENHA_FORTE.test(form.senha)
     || emailDuplicado || telDuplicado
+    || (turnstileConfigurado && !captchaToken)
     || ((produtoParam || planoEscolhido) && cpfCheck?.temConta);
 
   return (
@@ -716,6 +730,13 @@ export default function Login() {
                   Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
                 </span>
               </label>
+              {turnstileConfigurado && (
+                <TurnstileWidget
+                  resetKey={turnstileTentativa}
+                  onVerify={setCaptchaToken}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              )}
               {/* Aviso CPF já cadastrado */}
               {cpfChecking && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Verificando CPF…</div>}
 
