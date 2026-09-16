@@ -18,6 +18,11 @@ export function traduzErroAuth(msg = '') {
   // provável e a saída, sem AFIRMAR qual campo repetiu. O aviso preciso é o do formulário, que
   // consulta antes de enviar; esta linha é a rede para quando ele não rodou (Enter direto,
   // corrida entre dois cadastros no mesmo segundo).
+  // Domínio de e-mail descartável (16/09) — trigger `trg_bloquear_email_descartavel` em
+  // auth.users. Checado ANTES do "database error saving new user" genérico abaixo, senão essa
+  // regex mais ampla (que também casa "Database error saving new user") capturaria primeiro e
+  // mostraria o texto errado (aponta telefone/CPF, não domínio de e-mail).
+  if (/dominio_email_bloqueado/i.test(m)) return 'Este domínio de e-mail não é aceito para cadastro. Use um e-mail pessoal ou corporativo.';
   if (/database error saving new user/i.test(m)) return 'Não conseguimos criar a conta. A causa mais comum é telefone ou CPF já cadastrado — se você já tem conta aqui, faça login ou recupere a senha. Se não for o caso, fale com o suporte.';
   if (/email rate limit|over_email_send_rate/i.test(m)) return 'Muitas tentativas de envio de e-mail. Aguarde alguns minutos e tente novamente.';
   if (/for security purposes|rate limit|too many requests/i.test(m)) return 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.';
