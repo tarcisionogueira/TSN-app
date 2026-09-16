@@ -27498,3 +27498,40 @@ leiloeiros distintos por nome; 171 imóveis (metade) sem nem o nome do leiloeiro
 Achado colateral de qualidade de dado: grafias duplicadas da mesma pessoa (ex.: "Jorge Vitório
 Espolador"/"Jorge V"/"Jorge Vitorio Espolador") fazem a contagem por nome bruto subestimar quem
 concentra volume — não normalizado, não foi pedido.
+
+## 16/09 (3ª parte) — GESTAOLEILOES corrigido (recon → causa-raiz → fix testado em produção) + análise de dificuldade de 3 leiloeiros candidatos
+
+**GESTAOLEILOES: causa-raiz achada e corrigida.** Recon ao vivo (workflow temporário no GH
+Actions, removido depois) provou que a página do LOTE nunca teve o link do documento em
+`<a href>` — "Edital" e "Matrícula e anexos" são botões `javascript:void(0)` que abrem, num
+fancybox/iframe, uma página SEPARADA (`loteAnexos.php?idLote=N` / `leilaoAnexos.php?idLeilao=N
+&action=0`), e DENTRO dela o link real está em `onClick="anexoCarregar('./sishp/.../arquivo.pdf')"`,
+não em `href`. Três camadas de indireção — não era o parser errando formato, era o documento
+morando em duas páginas que `enriquecerDocumentos()` (item 8, 09/09) nunca visitava, por isso
+ficou 1 semana inteira gravando `anexos=null` em 100% dos lotes sem erro nenhum aparecer.
+`scraper-gestao.mjs` reescrito (commit `2a1218a`) pra buscar as duas páginas certas;
+`leilaoAnexos.php` é por EVENTO (compartilhado entre todos os lotes do mesmo leilão) e
+cacheado por execução pra não pagar 1 request Bright Data extra por lote à toa. **Testado de
+verdade em produção** (dispatch manual, escopo reduzido: 1 evento, cap 5, `dryrun=0`):
+**5/5 lotes com matrícula E edital reais** gravados (confirmado por SQL direto). `leiloeiro_
+conhecimento.docs_estrategia` atualizado pra RESOLVIDO. Roda normalmente via runner
+residencial (GESTAO_HEADLESS=1) nas próximas coletas — mesma correção vale lá, é o mesmo `bd()`.
+
+**Análise de dificuldade dos leiloeiros do EDITAL_DJEN sem scraper** (pedido do dono: "veja o
+site deles e faça a análise pra ver o grau de dificuldade"). Recon leve (fetch puro, zero
+Bright Data) nos 3 maiores candidatos por volume que ainda não tinham sido tentados:
+
+| Leiloeiro | Site | Achado | Dificuldade |
+|---|---|---|---|
+| Werno Klöckner Júnior (KLEILOES) | kleiloes.com.br | `/imoveis` responde 200 com HTML real, mesma rede "Suporte Leilões" do JELEILOES (já integrado) | **Baixa** — parser provavelmente reaproveitável |
+| Angela Saraiva Portes Souza (SARAIVA) | saraivaleiloes.com.br | Home 200, mesma rede "Suporte Leilões", mas caminhos padrão deram 404 — catálogo está noutro caminho (como o JELEILOES precisou descobrir) | **Baixa-moderada** — precisa de 1 recon mais fundo |
+| Marco Antônio B. de Oliveira Jr. (MARCOANTONIO) | marcoantonioleiloeiro.com.br | SPA (Nuxt/Next) — fetch puro só pega a casca, dado vem de API JSON no cliente | **Moderada** — precisa Puppeteer/interceptar XHR |
+
+Já documentados anteriormente (07/09), sem nova tentativa (evitar gasto redundante):
+**KRONLEILOES, FERNANDOLEILOEIRO, JONASLEILOEIRO** — 100% bloqueados por Cloudflare challenge,
+precisam de Bright Data Web Unlocker ou runner residencial; **JELEILOES, SIMONLEILOES,
+THAISTEIXEIRA** já são fontes integradas — as entradas do EDITAL_DJEN pra esses três nomes são
+sobreposição (mesmo leiloeiro, casos captados pelo radar de editais em vez do scraper próprio),
+não candidatos novos. Os ~65 leiloeiros restantes do EDITAL_DJEN têm 1-4 imóveis cada — volume
+não justifica scraper dedicado; ficam cobertos só pelo radar de editais (sem doc/foto, por
+desenho da fonte). Registrado em `leiloeiro_conhecimento` (KLEILOES/SARAIVA/MARCOANTONIO).
