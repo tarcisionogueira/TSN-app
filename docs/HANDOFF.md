@@ -9,6 +9,33 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-1. ✅ **CONCLUÍDO 16/09 — recon do Franco Leilões (francoleiloes.com.br): SPA, não integrável com
+   scraper de fetch cru.** Dono perguntou se já estávamos integrados (não estávamos — zero scraper,
+   zero parser, zero cron, zero imóvel em `imoveis_leilao`) e pediu o recon, no mesmo método já
+   usado no Hasta: HOME crua via Bright Data Web Unlocker, conta sinais de `R$` no HTML e tenta 5
+   padrões de URL de lote (`/lote/`, `/leilao/`, `/imovel/`, `/bem/`, `?id=`). Resultado da 2ª
+   rodada (a que rodou de verdade — ver bug abaixo): `HOME 200 len=214296`, **0 sinais de R$ no
+   HTML cru**, **161kb de 209kb do corpo são `<script>`** (77%), **0 padrões de lote reconhecidos**,
+   **0 sinais de paginação**. Veredito: o conteúdo dos lotes só existe depois do JS rodar no
+   navegador — fetch cru (mesmo via Web Unlocker) não vê nada. Integrar exigiria scraper com
+   renderização (headless/Playwright ou modo "render" do Bright Data), classe de custo e
+   complexidade diferente dos scrapers atuais (leem HTML servidor-renderizado direto). **Não
+   integrado — decisão de arquitetura pendente do dono se vale o investimento em headless.**
+   > ⚠️ **Bug encontrado no caminho, corrigido em `recon-francoleiloes.yml` e `recon-hasta.yml`
+   > (commit `3544086`)**: a 1ª rodada do recon do Franco Leilões voltou vazia
+   > (`HOME 0 len=0`, `erro: brightdata:cota_indisponivel — sem credencial do Supabase`) — o
+   > workflow tinha só `BRIGHTDATA_API_TOKEN`/`BRIGHTDATA_ZONE` nos secrets, mas
+   > `fetchUnlockerContado` (`scripts/lib/bd-ledger.mjs`) checa cota via RPC no Supabase ANTES de
+   > chamar o Bright Data de verdade — sem `VITE_SUPABASE_URL`/`SUPABASE_SERVICE_KEY` no `env:` do
+   > workflow, TODA chamada falha nesse gate e devolve corpo vazio, indistinguível de "site não
+   > respondeu". Mesmo achado documentado em 07/09 em `recon-novos-leiloeiros.yml`
+   > (JONASLEILOEIRO/FERNANDOLEILOEIRO), mas nunca propagado para os outros `recon-*.yml`. Isso
+   > **retroativamente explica** o "HOME 0 len=0 — não prova nada novo" registrado em 21/08 no
+   > recon do Hasta como suposto bloqueio de IP — era este mesmo gate de orçamento, nunca
+   > conseguindo se autorizar. Corrigidos apenas estes dois workflows (os diretamente relevantes
+   > agora); ~8 outros `recon-*.yml` com a mesma lacuna ficam **pendentes**, fora de escopo desta
+   > sessão.
+
 0. ✅ **RESOLVIDO 13/09 (tarde) — TODA rota client-side (exceto a home) dava 404 real da Vercel ao
    acessar direto**. Dono reportou com print ao tentar abrir `/membros` e `/membros/ebook/<id>` —
    não era 404 do app, era a plataforma Vercel dizendo "página não existe" antes de a SPA carregar.
