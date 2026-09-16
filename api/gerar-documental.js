@@ -24,6 +24,7 @@ import { cacheGravar } from './_doc-extracao.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
+import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1230,6 +1231,11 @@ export default async function handler(req, res) {
         if (linhas.length) aprendizados = `\n\nAPRENDIZADOS COM ADVOGADOS (correções reais de devolutivas anteriores — aplique estas lições e NÃO repita os mesmos erros):\n${linhas.join('\n')}`;
       }
     } catch { /* aprendizado é best-effort, nunca trava o parecer */ }
+    // Fluxo PROCESSUAL real de arremates da mesma modalidade (desembaraço no CNJ —
+    // 18/09, pedido do dono: a IA deve aprender com o processo, não só com o preço).
+    // gerar-analise.js já injeta o lado mercadológico deste mesmo corpus; aqui faltava
+    // o lado jurídico. No-op enquanto não há arremates reais com desfecho registrado.
+    try { aprendizados += await resumoAprendizadoTexto(im.modalidade || row?.modalidade || null); } catch { /* best-effort */ }
 
     // A chamada principal NUNCA pode derrubar o laudo. Em leilão JUDICIAL lemos até
     // 8 anexos grandes → a chamada pode estourar o timeout e o AbortError ("This
