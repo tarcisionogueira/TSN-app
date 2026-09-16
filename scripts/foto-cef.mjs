@@ -7,44 +7,59 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const BUCKET = 'imoveis-fotos';
-const BATCH_SIZE = 250;
+// 18/09: virou GALERIA (era só a capa) — pedido do dono, CEF é 72% do acervo ativo
+// (a maior fonte, de longe) e é onde o padrão "risco de acessão/benfeitoria" (área
+// construída não averbada) mais aparece — o cruzamento com foto no relatório
+// documental só funciona se houver mais de uma foto pra olhar. Cada propriedade
+// agora faz VÁRIOS uploads (1 por foto da galeria), então o lote por rodada cai —
+// era 250 (1 upload cada), o tempo por item aumentou.
+const BATCH_SIZE = 120;
+const MAX_FOTOS_POR_IMOVEL = 8;
 const PAGE_TIMEOUT = 15000;
 const DELAY_MS = 600;
 
-async function extrairFotoUrl(page, numero) {
+// Antes retornava a PRIMEIRA <img> que batesse no padrão — agora retorna TODAS (dedup por
+// src), pra virar galeria. Mesmo critério de sempre: CEF usa src com "foto"/"Foto"/"imovel",
+// e o fallback (tamanho>100, sem logo/ícone/banner) cobre o resto.
+async function extrairFotosUrls(page, numero) {
   try {
     const url = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numero}`;
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
 
-    const src = await page.evaluate(() => {
+    const srcs = await page.evaluate(() => {
       const imgs = Array.from(document.querySelectorAll('img'));
+      const vistos = new Set();
+      const ordenados = [];
+      const bate = (s) => s && (
+        s.includes('foto') || s.includes('Foto') ||
+        s.includes('imovel') || s.includes('FotoImovel') ||
+        s.includes('/fotos/')
+      );
       for (const img of imgs) {
         const s = img.src || '';
-        // CEF usa src com "foto", "Foto", "imovel" ou blob dinâmico
-        if (s && (
-          s.includes('foto') || s.includes('Foto') ||
-          s.includes('imovel') || s.includes('FotoImovel') ||
-          s.includes('/fotos/')
-        )) return s;
+        if (bate(s) && !vistos.has(s)) { vistos.add(s); ordenados.push(s); }
       }
-      // Fallback: primeira imagem que não seja logo/ícone
+      if (ordenados.length) return ordenados;
+      // Fallback: nenhuma bateu no padrão — pega candidatas genéricas (mesmo critério de antes).
       const candidates = imgs.filter(i => {
         const s = i.src || '';
         return s.startsWith('http') &&
           !s.includes('logo') && !s.includes('icon') &&
           !s.includes('banner') && !s.includes('btn') &&
-          !s.includes('gif') && i.width > 100;
+          !s.includes('gif') && i.width > 100 && !vistos.has(s);
       });
-      return candidates[0]?.src || null;
+      return candidates.map(c => c.src);
     });
 
-    return src || null;
+    return Array.isArray(srcs) ? srcs.slice(0, MAX_FOTOS_POR_IMOVEL) : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-async function uploadFoto(imgUrl, fonteId) {
+// Ganhou `indice`: cada foto da galeria precisa de um path próprio no Storage
+// (`cef/${fonteId}_1.ext`, `_2.ext`...) — sem isto a 2ª foto sobrescreveria a 1ª.
+async function uploadFoto(imgUrl, fonteId, indice) {
   try {
     const res = await fetch(imgUrl, {
       headers: {
@@ -59,7 +74,7 @@ async function uploadFoto(imgUrl, fonteId) {
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.length < 500) return null;
 
-    const path = `cef/${fonteId}.${ext}`;
+    const path = `cef/${fonteId}_${indice}.${ext}`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
       contentType, upsert: true,
     });
@@ -80,39 +95,50 @@ async function limparFotosExpiradas() {
   // 03/09). `ativo=false` + idade de `atualizado_em` já cobrem "fora do acervo há 90 dias".
   const { data, error } = await supabase
     .from('imoveis_leilao')
-    .select('fonte_id, link_foto')
+    .select('fonte_id, link_foto, fotos')
     .eq('fonte', 'CEF')
     .eq('ativo', false)
     .lt('atualizado_em', noventa)
-    .not('link_foto', 'is', null);
+    .or('link_foto.not.is.null,fotos.not.is.null');
   if (error) { console.error('limparFotosExpiradas falhou:', error.message); return; }
 
   if (!data?.length) return;
 
-  const paths = data
-    .filter(im => im.link_foto?.includes(SUPABASE_URL))
-    .map(im => im.link_foto.split(`${BUCKET}/`)[1])
-    .filter(Boolean);
+  // Path derivado da URL pública (`cef/<fonte_id>...`), cobre tanto o `link_foto` isolado
+  // (formato antigo) quanto cada entrada de `fotos` (galeria) — mesmo bucket, mesmo prefixo.
+  const paths = new Set();
+  for (const im of data) {
+    for (const u of [im.link_foto, ...(Array.isArray(im.fotos) ? im.fotos : [])]) {
+      if (u?.includes(SUPABASE_URL)) {
+        const p = u.split(`${BUCKET}/`)[1];
+        if (p) paths.add(p);
+      }
+    }
+  }
 
-  if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
-  console.log(`🗑️  ${paths.length} fotos expiradas removidas do Storage`);
+  if (paths.size) await supabase.storage.from(BUCKET).remove([...paths]);
+  console.log(`🗑️  ${paths.size} fotos expiradas removidas do Storage`);
 }
 
 async function main() {
-  console.log(`\n📸 Scraper de fotos CEF — ${new Date().toISOString()}\n`);
+  console.log(`\n📸 Scraper de GALERIA de fotos CEF — ${new Date().toISOString()}\n`);
 
-  // Busca imóveis CEF sem foto no Storage
+  // Alvo: imóveis CEF ativos que AINDA não têm galeria capturada — cobre tanto quem nunca
+  // teve foto quanto quem só tem a capa (`link_foto`) hotlinkada pelo scraper principal
+  // (`api/scraper-caixa.js`, que só traz 1 foto do feed). `fotos` fica null até este
+  // script rodar pela primeira vez naquele imóvel; depois disso, mesmo que a galeria
+  // encontrada tenha só 1 foto, ela é gravada — não reprocessa à toa.
   const { data: imoveis, error } = await supabase
     .from('imoveis_leilao')
     .select('id, fonte_id, link_foto')
     .eq('fonte', 'CEF')
     .eq('ativo', true)
-    .is('link_foto', null)
+    .is('fotos', null)
     .limit(BATCH_SIZE);
 
   if (error) { console.error('Erro ao buscar imóveis:', error.message); process.exit(1); }
   if (!imoveis?.length) {
-    console.log('Nenhum imóvel CEF sem foto. Verificando limpeza...');
+    console.log('Nenhum imóvel CEF sem galeria. Verificando limpeza...');
     await limparFotosExpiradas();
     return;
   }
@@ -132,9 +158,9 @@ async function main() {
 
   for (const im of imoveis) {
     const numero = im.fonte_id.replace('cef_', '');
-    const imgUrl = await extrairFotoUrl(page, numero);
+    const urlsGaleria = await extrairFotosUrls(page, numero);
 
-    if (!imgUrl) {
+    if (!urlsGaleria.length) {
       bloqueados++;
       // Se bloqueou 5 seguidos provavelmente IP bloqueado — para
       if (bloqueados >= 5) {
@@ -145,11 +171,20 @@ async function main() {
     }
 
     bloqueados = 0; // reset contador de bloqueios
-    const storedUrl = await uploadFoto(imgUrl, im.fonte_id);
-    if (storedUrl) {
-      await supabase.from('imoveis_leilao').update({ link_foto: storedUrl }).eq('id', im.id);
+    const fotosArmazenadas = [];
+    for (let i = 0; i < urlsGaleria.length; i++) {
+      const storedUrl = await uploadFoto(urlsGaleria[i], im.fonte_id, i + 1);
+      if (storedUrl) fotosArmazenadas.push(storedUrl);
+    }
+
+    if (fotosArmazenadas.length) {
+      // `link_foto` só é sobrescrito se ainda não existia — a capa hotlinkada pelo
+      // scraper principal continua servindo normalmente, não precisa trocar.
+      const patch = { fotos: fotosArmazenadas };
+      if (!im.link_foto) patch.link_foto = fotosArmazenadas[0];
+      await supabase.from('imoveis_leilao').update(patch).eq('id', im.id);
       salvos++;
-      if (salvos % 10 === 0) console.log(`  ${salvos} fotos salvas...`);
+      if (salvos % 10 === 0) console.log(`  ${salvos} galerias salvas...`);
     }
 
     await new Promise(r => setTimeout(r, DELAY_MS));
@@ -158,9 +193,9 @@ async function main() {
   await browser.close();
   await limparFotosExpiradas();
 
-  console.log(`\n✅ Concluído: ${salvos}/${imoveis.length} fotos salvas\n`);
+  console.log(`\n✅ Concluído: ${salvos}/${imoveis.length} galerias salvas\n`);
   if (salvos === 0) {
-    console.log('ℹ️  Nenhuma foto salva — CEF possivelmente bloqueia IPs do GitHub Actions.');
+    console.log('ℹ️  Nenhuma galeria salva — CEF possivelmente bloqueia IPs do GitHub Actions.');
     console.log('   Solução alternativa: rodar scraper de foto localmente ou via VPS.');
   }
 }

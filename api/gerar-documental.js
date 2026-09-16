@@ -528,6 +528,8 @@ ESCOPO: leitura dos documentos e situação processual. NÃO faça análise de m
 
 CRUZAMENTO DE DOCUMENTOS (assertividade — o objetivo é GARANTIR A SEGURANÇA DA ARREMATAÇÃO): use TODOS os documentos anexados EM CONJUNTO, nunca isoladamente. Analise CADA anexo individualmente e depois CRUZE as informações entre eles, apontando CONVERGÊNCIAS e DIVERGÊNCIAS relevantes (ex.: valor ou área do edital diferente da matrícula; ocupação declarada no edital que não bate com o registro; débito citado num documento e ausente no outro; parte/CPF do executado no auto de penhora diferente do proprietário da matrícula). Havendo divergência, indique qual fonte prevalece (em regra: a matrícula do cartório para a situação registrária; o edital para as condições da venda) e registre o conflito em "riscos" (severidade conforme as regras abaixo) e em "lacunas". Quanto mais documentos cruzados, mais assertivo o parecer.
 
+CRUZAMENTO COM AS FOTOS DO IMÓVEL (18/09, pedido do dono): quando houver bloco(s) rotulado(s) "FOTO DO IMÓVEL" — são fotos reais divulgadas pelo leiloeiro no anúncio, NÃO são documento cartorário — observe o ESTADO CONSTRUTIVO visível (obra pronta/acabada, em construção, terreno vazio, ruína) e CRUZE com o que a matrícula/edital REGISTRAM sobre a construção (ex.: matrícula descreve só "terreno" ou área construída pequena/nula, sem nenhuma averbação de construção posterior; ou o edital classifica o lote como "terreno"/"em construção"). Se a foto mostra uma edificação PRONTA e SUBSTANCIAL que a matrícula não registra como construída (nenhuma averbação "Av-" de construção/ampliação), isso é sinal de ÁREA CONSTRUÍDA NÃO AVERBADA — risco jurídico real e específico: quem construiu pode ter, por acessão (art. 1.253 e seguintes do Código Civil), direito de RETENÇÃO ou INDENIZAÇÃO pelo valor da construção (art. 1.219 e 1.255 do CC) antes de desocupar, e a prefeitura pode cobrar IPTU/ITBI retroativo sobre a área não regularizada. Registre esse achado em "riscos" com categoria "Área construída não averbada (risco de acessão/benfeitoria)", severidade "alerta" (ou "bloqueante" se a discrepância for extrema — ex.: matrícula de terreno vazio com prédio de múltiplos pavimentos pronto na foto, sem QUALQUER menção a obra em nenhum documento), explicando em linguagem simples que o arrematante pode ter de indenizar quem construiu antes de conseguir a posse efetiva. NÃO faça esse cruzamento se não houver foto disponível — não é lacuna, é simplesmente ausência de material para essa checagem específica.
+
 LEILÃO JUDICIAL COM MÚLTIPLOS ANEXOS (análise apurada): no leilão judicial é comum haver, além da matrícula e do edital, vários anexos — auto/laudo de AVALIAÇÃO, auto de PENHORA, DECISÃO/despacho que designou a hasta, certidões (ônus, distribuidores, negativas), ata da praça anterior, matrícula atualizada e petições. LEIA e CRUZE todos os que estiverem anexados. Verifique especificamente, para dar segurança à arrematação: (a) se o EXECUTADO/proprietário é o mesmo em matrícula, penhora e edital; (b) se o BEM penhorado/avaliado é exatamente o mesmo imóvel da matrícula (número, área, confrontações); (c) se há recurso/embargos ou ação anulatória do próprio leilão pendente; (d) se a penhora e as indisponibilidades estão averbadas e serão levantadas com a carta de arrematação; (e) se o valor da avaliação e o lance mínimo do edital são coerentes com o auto de avaliação. Sinalize QUALQUER incoerência entre os anexos. A AUSÊNCIA de um anexo esperado é DILIGÊNCIA PENDENTE (lacuna), não um bloqueio.
 
 LEILÃO EXTRAJUDICIAL (Lei 9.514/97, alienação fiduciária — típico Caixa/bancos): aqui NÃO há processo judicial prévio, então a segurança depende de verificar CONTESTAÇÕES do ex-mutuário e o estado dos gravames. Avalie e destaque, sempre em linguagem para leigos: (a) EX-MUTUÁRIO ACIONOU O BANCO/CREDOR? Verifique, pelo nome do ex-mutuário no CNJ (andamentos consultados), se há AÇÃO contra o credor fiduciário questionando a consolidação da propriedade ou o leilão — ação ANULATÓRIA/DECLARATÓRIA, REVISIONAL do contrato, CONSIGNAÇÃO em pagamento (tentativa de quitar a dívida) ou pedido de LIMINAR suspendendo a venda. Uma ação dessas EM CURSO, sobretudo com liminar, é risco relevante (a arrematação pode ser suspensa/anulada) — classifique conforme o risco concreto e explique o que significa. Se NÃO localizar ação, registre como diligência: "não localizamos ação do ex-mutuário contra o banco nas bases públicas, confirmar antes do lance". (b) OUTRAS PENHORAS/GRAVAMES na matrícula além da alienação fiduciária do leilão: há OUTRA penhora, arresto, indisponibilidade, hipoteca de terceiro ou usufruto? Para CADA uma, informe QUEM é o credor/beneficiário, se está ATIVA ou já baixada, e se será extinta com a arrematação ou se ACOMPANHA o imóvel (explique a diferença em palavras simples). (c) Prazos do ex-mutuário (purgação da mora / direito de preferência) e se já se esgotaram. Coloque cada verificação pendente em "lacunas" e cite na seção de situação registrária/processual do parecer.
@@ -1019,6 +1021,27 @@ export default async function handler(req, res) {
     // Texto colado manualmente (inclusão manual / fallback).
     if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
     if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 12000)}` });
+
+    // FOTOS DO IMÓVEL (18/09, pedido do dono): até então o documental só lia DOCUMENTOS
+    // (matrícula/edital/anexos) — nunca a foto do anúncio. Sem isso, uma edificação pronta
+    // e substancial numa matrícula registrada só como "terreno" (área construída não
+    // averbada — risco de acessão/benfeitoria, ver instrução no prompt) passava batida: o
+    // cruzamento exige VER a foto, e nenhum documento sozinho revela isso. `fotos` (array,
+    // quando a fonte captura galeria) tem prioridade sobre `link_foto` (só a capa); cap de
+    // 4 fotos e teto de tempo próprio — não pode competir com a leitura dos documentos, que
+    // é a peça central da análise jurídica.
+    try {
+      const listaFotos = (Array.isArray(row?.fotos) && row.fotos.length ? row.fotos : [row?.link_foto].filter(Boolean)).slice(0, 4);
+      const deadlineFotos = Math.min(deadline, Date.now() + 15000);
+      for (const urlFoto of listaFotos) {
+        if (Date.now() > deadlineFotos) break;
+        const doc = await lerDoc(urlFoto, deadlineFotos);
+        if (doc?.kind !== 'imagem') continue;
+        lidos.push({ rotulo: 'Foto do imóvel', url: urlFoto, kind: 'imagem', cache: false, tipo: 'foto_imovel', charsTexto: null });
+        blocos.push({ type: 'text', text: `=== FOTO DO IMÓVEL (divulgada pelo leiloeiro no anúncio, NÃO é documento cartorário) ===` });
+        blocos.push({ type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } });
+      }
+    } catch (e) { console.warn('[documental] leitura de fotos falhou (segue sem elas):', e?.message || e); }
 
     // GATE: a análise jurídica EXIGE a MATRÍCULA E o EDITAL (as duas peças centrais).
     // Um anexo genérico ou só uma delas NÃO basta — sem a matrícula não há CPF do

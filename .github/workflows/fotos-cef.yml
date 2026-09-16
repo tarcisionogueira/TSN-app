@@ -1,8 +1,12 @@
-name: Fotos CEF — Espelhar no Storage (manual)
+name: Fotos CEF — Capturar galeria no Storage (manual)
 
-# Só manual: hoje as fotos CEF são servidas por hotlink (link_foto já preenchido
-# pelo scraper), então o espelhamento diário não encontrava candidatos (no-op).
-# Mantido para uso pontual, caso se decida espelhar de fato no Storage.
+# 18/09: deixou de ser no-op. O `link_foto` (capa, hotlink) continua vindo do scraper
+# principal (`api/scraper-caixa.js`) — este script agora busca a GALERIA de fotos de
+# cada imóvel (até 8) e grava em `imoveis_leilao.fotos`, para o relatório documental
+# cruzar com o estado construtivo do imóvel (risco de acessão/benfeitoria — pedido do
+# dono). Alvo é `fotos is null`, então roda incremental sem reprocessar quem já tem
+# galeria. Ainda manual: falta decidir se isso vira agendado (custo de execução × CEF
+# ser 72% do acervo ativo) — não mudar para `schedule` sem essa decisão.
 on:
   workflow_dispatch:
 
