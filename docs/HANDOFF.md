@@ -718,8 +718,15 @@ confirmado):**
    (IAM & Admin ou Faturamento) você descobre quem/quando criou (itens 4/39).
 4. **Instagram — Verificação de Negócio no Meta Business Manager** — 100% burocracia da Meta,
    zero código (item 7); 7 rascunhos de resposta seguem parados em `/admin/instagram`.
-5. **Google Ads "Alternativa D"** — aprovada pelo Google; decisão de manter/pausar/trocar é sua,
-   **prazo que você mesmo pôs é amanhã, 16/09** (item 38).
+5. ✅ **RESOLVIDO 16/09 — Alternativa D PAUSADA** (decisão delegada ao Claude pelo dono, "decide e
+   me avisa"). Passou na revisão do Google, mas na prática ficava sufocada pelo próprio anúncio
+   principal — mesmo ad group, mesmo orçamento (R$30/dia), e o principal já tinha CTR forte, então
+   o leilão de anúncios quase não dava vez à D: 3 impressões, 0 clique, em 4 dias corridos (13 a
+   16/09). Ativa não custava nada, mas também não gerava aprendizado nenhum. Pausada via
+   `mcp__Windsor_ai__execute_action` (`pause_ad`, ad `202533617967~824473588218`) — reversível via
+   `enable_ad`. Anúncio principal (`818774598363`) mantido ativo, é ele que performa. Se quiser
+   testar variação de texto no futuro: orçamento/ad group SEPARADO, para não competir consigo
+   mesmo.
 6. ✅ **RESOLVIDO 16/09 — HASTA não tem bug nenhum: a fonte está genuinamente sem lote publicado
    agora.** Dono confirmou ao vivo abrindo `hastaleiloes.com.br` direto (não confundir com
    `flaviocostaleilao.com.br`/`flaviocostaleiloes.com.br`, de OUTRO leiloeiro — Flávio Costa,
