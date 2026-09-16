@@ -66,8 +66,17 @@ export default async function handler(req, res) {
   const rl = await checkRateLimit(`mp-checkout:${ip}`, 10, 60_000);
   if (!rl.ok) return res.status(429).json({ error: 'Muitas tentativas. Aguarde.' });
 
+  // honorario_exito é a ÚNICA cobrança que dispensa login (18/09, pedido do dono): o
+  // arrematante pode repassar o link a outra pessoa pagar em seu nome (raro, mas acontece)
+  // — mesma lógica de acesso do antigo link hospedado do MP. O `arrematacao_id` (uuid
+  // imprevisível, conhecido só por quem recebeu o link) faz o papel de credencial; todo o
+  // resto do endpoint (preço, dono da cobrança, ativação do plano) continua vindo do banco,
+  // nunca do que o requisitante alega — ver o bloco HONORÁRIOS DE ÊXITO logo abaixo.
+  const propositoBruto = String(req.body?.proposito || '');
+  const honorarioSemLogin = propositoBruto === 'honorario_exito';
+
   const user = await getUser(req);
-  if (!user) return res.status(401).json({ error: 'Não autorizado' });
+  if (!user && !honorarioSemLogin) return res.status(401).json({ error: 'Não autorizado' });
 
   const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!ACCESS_TOKEN) return res.status(500).json({ error: 'Pagamento não configurado' });
@@ -130,12 +139,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // HONORÁRIOS DE ÊXITO (16/09) — cobrança feita pelo próprio arrematante, num checkout
-  // Transparente com a cara do BidPro (src/pages/PagarHonorario.jsx), não mais um link
-  // hospedado do MP. Preço SEMPRE do servidor (arrematacoes.honorarios_valor), nunca do
-  // body — mesmo cuidado do produto_bonus acima. Confere também que quem está pagando é
-  // o PRÓPRIO arrematante desta arrematação (IDOR: sem isso, qualquer logado poderia pagar
-  // — ou pior, ler o valor de — a arrematação de outra pessoa).
+  // HONORÁRIOS DE ÊXITO (16/09, sem login desde 18/09) — checkout Transparente com a cara
+  // do BidPro (src/pages/PagarHonorario.jsx), não um link hospedado do MP. Preço SEMPRE do
+  // servidor (arrematacoes.honorarios_valor), nunca do body — mesmo cuidado do produto_bonus
+  // acima. A identidade de quem PAGA não importa (pode ser o arrematante ou alguém a quem ele
+  // repassou o link) — o que a IDOR precisa proteger é o DONO da cobrança, que vem sempre do
+  // banco (arr.arrematante_id), nunca do requisitante. Só bloqueia por dono divergente quando
+  // HÁ sessão logada e ela não bate (ex.: outro cliente logado tentando pagar por engano/má-fé
+  // a arrematação de terceiro) — requisição sem sessão nenhuma segue, pois a posse do link
+  // (uuid imprevisível) já é a credencial neste fluxo.
   let honorarioCtx = null;
   if (proposito === 'honorario_exito') {
     const { arrematacao_id } = req.body || {};
@@ -147,13 +159,13 @@ export default async function handler(req, res) {
       });
       const [arr] = r.ok ? await r.json().catch(() => []) : [];
       if (!arr) return res.status(404).json({ error: 'Arrematação não encontrada.' });
-      if (arr.arrematante_id !== user.id) return res.status(403).json({ error: 'Esta cobrança não pertence a este usuário.' });
+      if (user && arr.arrematante_id !== user.id) return res.status(403).json({ error: 'Esta cobrança não pertence a este usuário.' });
       if (['pago', 'distribuido'].includes(arr.honorarios_status)) return res.status(409).json({ error: 'Os honorários desta arrematação já foram pagos.' });
       const v = Number(arr.honorarios_valor) || 0;
       if (v <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
       valor = v;
       descricao = 'Honorários de êxito — BidPro Brasil';
-      honorarioCtx = { arrematacaoId: arr.id };
+      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -257,7 +269,9 @@ export default async function handler(req, res) {
       metadata: produtoBonusCtx
         ? { user_id: user.id, origem: 'tsn-app', tipo: 'produto', proposito, compra_id: produtoBonusCtx.compraId }
         : honorarioCtx
-          ? { user_id: user.id, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: user.id }
+          // dono da cobrança vem do banco (honorarioCtx.arrematanteId), não de `user` — pode
+          // não haver sessão nenhuma neste fluxo (ver comentário acima).
+          ? { user_id: honorarioCtx.arrematanteId, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: honorarioCtx.arrematanteId }
           : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
       ...(produtoBonusCtx ? { external_reference: produtoBonusCtx.compraId } : {}),
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
@@ -278,7 +292,8 @@ export default async function handler(req, res) {
     //   (que pode ter expirado/sido cancelado), quebrando o fluxo do cliente. Por isso
     //   a chave leva um componente único por tentativa (idempotencyKey do front, se
     //   enviado, ou timestamp). PIX não gera cobrança automática — cada QR é pago à parte.
-    const idemBase = `tsn-${user.id}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`;
+    const payerAnchor = user?.id || honorarioCtx?.arrematanteId || 'anon';
+    const idemBase = `tsn-${payerAnchor}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`;
     const idemKey = payload.token
       ? idemBase
       : `${idemBase}-${String(req.body?.idempotencyKey || Date.now()).slice(0, 40)}`;
@@ -299,7 +314,7 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'Pagamento recusado', codigo: data?.cause?.[0]?.code || 'unknown' });
     }
 
-    await auditLog({ acao: 'mp_checkout_criado', user_id: user.id, ip, detalhes: { payment_id: data.id, valor, metodo: metodoPagamento }, sucesso: true });
+    await auditLog({ acao: 'mp_checkout_criado', user_id: payerAnchor === 'anon' ? null : payerAnchor, ip, detalhes: { payment_id: data.id, valor, metodo: metodoPagamento }, sucesso: true });
 
     // Grava o cartão salvo na compra (best-effort — ver comentário no bloco que gerou
     // mpCustomerId/mpCardId acima). A confirmação da compra em si (status='ativo',

@@ -375,7 +375,9 @@ function MainLayout() {
           <Route path="/arrematados" element={<PrivateRoute><Arrematados /></PrivateRoute>} />
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
-          <Route path="/honorario/:arrematacaoId" element={<PrivateRoute><PagarHonorario /></PrivateRoute>} />
+          {/* Sem PrivateRoute (18/09): o arrematante pode repassar o link a outra pessoa pagar —
+              a própria página valida a cobrança via /api/honorario-info (uuid imprevisível). */}
+          <Route path="/honorario/:arrematacaoId" element={<PagarHonorario />} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           {/* Sem gate por papel: a capacidade de vender pode estar em qualquer papel
               (cliente pagante ou equipe). O componente autoriza por papel OU vendedor_tipo. */}

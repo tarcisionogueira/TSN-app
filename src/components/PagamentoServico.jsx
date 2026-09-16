@@ -134,8 +134,9 @@ function EscolhaMetodo({ servico, onEscolha }) {
 }
 
 /* ── Tela: PIX ── */
-function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {} }) {
+function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emailProp }) {
   const { user } = useAuth();
+  const email = emailProp || user?.email;
   const [etapa, setEtapa] = useState('gerando'); // gerando | pronto | confirmado | erro | expirado
   const [copiado, setCop] = useState('');
   const [msgErro, setMsgErro] = useState('');
@@ -159,7 +160,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {} }) {
         body: JSON.stringify({
           valor: servico.valor,
           descricao: servico.nome || servico.descricao || 'Pagamento BidPro Brasil',
-          email: user?.email,
+          email,
           metodoPagamento: 'pix',
           proposito: servico.proposito || 'servico',
           ...extra,
@@ -314,8 +315,9 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {} }) {
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {} }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {}, email: emailProp }) {
   const { user } = useAuth();
+  const email = emailProp || user?.email;
   const [parcelas, setParcelas] = useState(1);
   const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
   const [processando, setProcessando] = useState(false);
@@ -376,7 +378,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           body: JSON.stringify({
             action: 'criar_assinatura_transparente',
             plano: planoKey,
-            email: user?.email,
+            email,
             cardTokenId: token.id,
           }),
         });
@@ -410,7 +412,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         body: JSON.stringify({
           valor: totalFinal,
           descricao: `${servico.nome} (${parcelas}x)`,
-          email: user?.email,
+          email,
           metodoPagamento: 'credit_card',
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
@@ -558,7 +560,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {} }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {}, email }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -591,7 +593,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
       )}
 
       {metodo === 'pix' && (
-        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} extra={extra} />
+        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} extra={extra} email={email} />
       )}
       {metodo === 'cartao' && (
         <PagamentoCartao
@@ -602,6 +604,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           onGatewayBloqueado={onGatewayBloqueado}
           parcelasMax={parcelasMax}
           extra={extra}
+          email={email}
         />
       )}
     </div>

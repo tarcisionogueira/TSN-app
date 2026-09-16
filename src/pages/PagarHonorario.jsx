@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, AlertCircle, Sparkles, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
@@ -11,41 +10,53 @@ import { AZUL, VERDE } from '../utils/marca';
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Checkout dos honorários de êxito de uma arrematação — nossa própria página (Transparente),
-// não um link hospedado do Mercado Pago. Quem chega aqui é sempre o próprio arrematante,
-// autenticado (a rota exige login em App.jsx; quem não estiver logado é mandado ao /login e
-// volta pra cá sozinho — mesmo mecanismo de qualquer outra rota privada do BidPro).
+// não um link hospedado do Mercado Pago. NÃO exige login (18/09, pedido do dono): o
+// arrematante pode repassar o link a outra pessoa pagar em seu nome (raro, mas acontece) —
+// mesmo modelo de acesso do antigo link hospedado do MP. O uuid da arrematação (imprevisível,
+// conhecido só por quem recebeu o link) é a credencial deste fluxo; os dados vêm de
+// /api/honorario-info (público, service key, só os 3 campos que a tela precisa — ver o
+// comentário daquele arquivo) em vez do supabase-js client (que dependeria de sessão pra
+// passar pela RLS). Quando HÁ sessão logada, o e-mail vem pré-preenchido; sem sessão, quem
+// está pagando digita o próprio.
 export default function PagarHonorario() {
   const { arrematacaoId } = useParams();
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const [arr, setArr] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [aceite, setAceite] = useState(false);
   const [ofertarPro, setOfertarPro] = useState(false);
   const [pago, setPago] = useState(false);
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (user?.email) setEmail(e => e || user.email);
+  }, [user]);
+
+  useEffect(() => {
     let cancel = false;
     (async () => {
-      const { data, error } = await supabase.from('arrematacoes')
-        .select('id,arrematante_id,valor_arrematado,honorarios_valor,honorarios_status')
-        .eq('id', arrematacaoId).maybeSingle();
-      if (cancel) return;
-      if (error) { setErro('Não foi possível carregar esta cobrança agora. Tente novamente em instantes.'); setCarregando(false); return; }
-      if (!data || data.arrematante_id !== user.id) { setErro('Esta cobrança não foi encontrada para esta conta.'); setCarregando(false); return; }
-      setArr(data);
-      setCarregando(false);
+      try {
+        const res = await fetch(`/api/honorario-info?id=${encodeURIComponent(arrematacaoId)}`);
+        const data = await res.json().catch(() => ({}));
+        if (cancel) return;
+        if (!res.ok || !data?.id) { setErro('Esta cobrança não foi encontrada.'); setCarregando(false); return; }
+        setArr(data);
+        setCarregando(false);
+      } catch (e) {
+        console.error('[PagarHonorario] carregar cobrança falhou:', e?.message || e);
+        if (!cancel) { setErro('Não foi possível carregar esta cobrança agora. Tente novamente em instantes.'); setCarregando(false); }
+      }
     })();
     return () => { cancel = true; };
-  }, [user, authLoading, arrematacaoId]);
+  }, [arrematacaoId]);
 
   const registrarAceite = async () => {
     try {
       await apiCall('/api/registrar-aceite', {
         method: 'POST',
         body: JSON.stringify({
-          plano_key: 'assessorado', valor: arr.honorarios_valor,
+          plano_key: 'assessorado', valor: arr.honorarios_valor, arrematacao_id: arr.id,
           termos_versao: versaoTermoProduto('assessorado'), gateway: 'mercadopago',
         }),
       });
@@ -60,7 +71,7 @@ export default function PagarHonorario() {
   const wrap = { minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 16px' };
   const card = { background: 'white', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 460, width: '100%' };
 
-  if (authLoading || carregando) {
+  if (carregando) {
     return (
       <div style={wrap}>
         <div style={{ ...card, textAlign: 'center', color: '#64748b' }}>
@@ -120,6 +131,14 @@ export default function PagarHonorario() {
           <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(arr.honorarios_valor)}</div>
         </div>
 
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            E-mail de quem está pagando
+          </label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seuemail@exemplo.com"
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+        </div>
+
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop: 2 }} />
           <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
@@ -151,14 +170,15 @@ export default function PagarHonorario() {
           </span>
         </label>
 
-        {!aceite ? (
+        {!aceite || !/\S+@\S+\.\S+/.test(email) ? (
           <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>
-            Aceite os termos acima para continuar com o pagamento.
+            {!aceite ? 'Aceite os termos acima' : 'Informe um e-mail válido'} para continuar com o pagamento.
           </div>
         ) : (
           <PagamentoServico
             servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
             extra={{ arrematacao_id: arr.id, tambem_pro: ofertarPro }}
+            email={email}
             onPago={handlePago}
           />
         )}
