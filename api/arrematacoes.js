@@ -54,6 +54,12 @@ async function equipeDoCaso(imovel_id, cliente_id) {
 // A projeção (quem recebe e quanto) vem de calcularDistribuicao (api/_honorarios.js).
 async function distribuirHonorarios(arr) {
   if (!arr || arr.honorarios_status === 'distribuido') return null;
+  // GATE (16/09, pedido do dono): a equipe só pode ser creditada DEPOIS que o cliente pagou
+  // os honorários de êxito (honorarios_status='pago', setado pelo webhook do MP em
+  // api/mp-webhook.js ao confirmar o link de pagamento de criarPreferenciaHonorario). Antes
+  // desta trava, `status='finalizado'` sozinho já disparava o crédito — nada no código
+  // verificava se o cliente de fato pagou.
+  if (arr.honorarios_status !== 'pago') return { erro: 'honorario_nao_pago', distribuido: false };
   const valor = Number(arr.valor_arrematado || 0);
   if (valor <= 0) return null;
 

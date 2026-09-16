@@ -6,6 +6,7 @@ import {
   Calendar, Video, MessageSquare, ChevronDown, ChevronUp,
   Lock, ExternalLink,
   Check, Send, ClipboardList, Save, Upload, Sparkles, Scale,
+  Copy, Link2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -555,6 +556,9 @@ export default function Caso() {
   };
   const [arrFileNome, setArrFileNome] = useState('');
   const [salvandoArr, setSalvandoArr] = useState(false);
+  const [gerandoLinkHon, setGerandoLinkHon] = useState(false);
+  const [linkHonorario, setLinkHonorario] = useState('');
+  const [linkHonorarioCopiado, setLinkHonorarioCopiado] = useState(false);
 
   // ─── Honorários ──────────────────────────────────────────────────────────
   const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1 });
@@ -966,6 +970,33 @@ export default function Caso() {
     } finally {
       setSalvandoArr(false);
     }
+  };
+
+  // ─── Link de pagamento dos honorários (Checkout Pro — PIX ou cartão, à escolha do
+  // arrematante, na própria página do Mercado Pago) ─────────────────────────────
+  const gerarLinkHonorario = async () => {
+    if (!arrematacao) return;
+    setGerandoLinkHon(true);
+    setLinkHonorarioCopiado(false);
+    setMsg('');
+    try {
+      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_preferencia_honorario', arrematacao_id: arrematacao.id }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link de pagamento');
+      setLinkHonorario(d.initPoint || d.sandboxPoint || '');
+    } catch (e) {
+      setMsg(`Erro: ${e.message}`);
+    } finally {
+      setGerandoLinkHon(false);
+    }
+  };
+
+  const copiarLinkHonorario = async () => {
+    try {
+      await navigator.clipboard.writeText(linkHonorario);
+      setLinkHonorarioCopiado(true);
+      setTimeout(() => setLinkHonorarioCopiado(false), 2500);
+    } catch { /* padrao-ok: clipboard indisponível (http/permissão) — o link já está visível e selecionável na tela */ }
   };
 
   // ─── Gerar procuração ─────────────────────────────────────────────────────
@@ -1704,6 +1735,39 @@ export default function Caso() {
               {!arrematacao.em_nome_proprio && (
                 <div style={{ padding:'10px 12px', background:'#f8fafc', borderRadius:8, fontSize:12, color:'#475569' }}>
                   <strong>Beneficiário:</strong> {arrematacao.beneficiario_nome} (CPF: {arrematacao.beneficiario_cpf})
+                </div>
+              )}
+
+              {/* Link de pagamento dos honorários — equipe gera e compartilha com o
+                  arrematante, que paga PIX ou cartão na própria página do Mercado Pago,
+                  sem precisar estar logado no BidPro. */}
+              {isStaff && arrematacao.honorarios_status !== 'pago' && arrematacao.honorarios_status !== 'distribuido' && (
+                <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
+                  <div style={{ fontSize:12.5, fontWeight:800, color:'#111', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                    <Link2 size={13}/> Link de pagamento dos honorários
+                  </div>
+                  {!linkHonorario ? (
+                    <button onClick={gerarLinkHonorario} disabled={gerandoLinkHon} style={{ ...btn('#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
+                      {gerandoLinkHon ? <Loader2 size={13} style={{animation:'spin 1s linear infinite'}}/> : <Link2 size={13}/>}
+                      Gerar link para o arrematante
+                    </button>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>
+                        Envie ao arrematante — ele escolhe PIX ou cartão (parcelado) na página do Mercado Pago:
+                      </div>
+                      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                        <input readOnly value={linkHonorario} onFocus={e=>e.target.select()} style={{ ...inp, flex:'1 1 260px', fontSize:11, color:'#475569' }}/>
+                        <button onClick={copiarLinkHonorario} style={{ ...btn(linkHonorarioCopiado ? '#059669' : '#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
+                          {linkHonorarioCopiado ? <Check size={13}/> : <Copy size={13}/>}
+                          {linkHonorarioCopiado ? 'Copiado' : 'Copiar'}
+                        </button>
+                        <a href={linkHonorario} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#0D63DB', fontWeight:700, textDecoration:'none' }}>
+                          <ExternalLink size={12}/> Abrir
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

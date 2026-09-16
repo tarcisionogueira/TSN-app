@@ -311,6 +311,71 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
 }
 
 /**
+ * Link de pagamento (Checkout Pro) dos HONORÁRIOS DE ÊXITO de uma arrematação —
+ * gerado pela equipe (advogado/analista/admin) e compartilhado com o arrematante, que
+ * escolhe livremente PIX ou cartão (parcelado) na própria página hospedada do MP; não
+ * exige o arrematante logado no BidPro. Preço SEMPRE do servidor (arrematacoes.honorarios_valor
+ * já calculado no registro do arremate), nunca do body. external_reference = arrematacao_id
+ * (uuid, sem pipe) + metadata.tipo='honorario_exito' — o webhook casa por AMBOS antes de
+ * checar `ehProdutoMp` (mesmo formato de uuid), para não colidir com o fluxo de produto.
+ */
+async function criarPreferenciaHonorario({ arrematacao_id }) {
+  if (!arrematacao_id) throw new Error('arrematacao_id obrigatório');
+
+  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  const [arr] = arrRes.ok ? await arrRes.json() : [];
+  if (!arr) throw new Error('Arrematação não encontrada');
+  if (['pago', 'distribuido'].includes(arr.honorarios_status)) throw new Error('Os honorários desta arrematação já foram pagos.');
+  const valor = Number(arr.honorarios_valor) || 0;
+  if (valor <= 0) throw new Error('Honorários ainda não calculados para esta arrematação.');
+
+  const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=nome,email,cpf,cpf_enc`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
+  const cpfArrematante = perfil ? await cpfDoRegistro(perfil).catch(() => null) : null;
+
+  const back = `${BASE_URL}/#/caso`;
+  const pref = await mpPost('/checkout/preferences', {
+    items: [{ id: `honorario-${arr.id}`, title: 'Honorários de êxito — BidPro Brasil', quantity: 1, currency_id: 'BRL', unit_price: valor }],
+    payer: {
+      name: perfil?.nome || undefined,
+      email: perfil?.email || undefined,
+      identification: cpfArrematante ? { type: 'CPF', number: cpfArrematante.replace(/\D/g, '') } : undefined,
+    },
+    back_urls: {
+      success: `${back}?honorario=pago`,
+      pending: `${back}?honorario=pending`,
+      failure: `${back}?honorario=fail`,
+    },
+    auto_return: 'approved',
+    notification_url: WEBHOOK,
+    statement_descriptor: 'BIDPRO BRASIL',
+    external_reference: String(arr.id),
+    expires: false,
+    // Sem `excluded_payment_types`: o arrematante escolhe PIX ou cartão (inclusive
+    // parcelado) livremente na página hospedada do MP — não mesclamos os dois métodos
+    // numa preferência só (o MP não suporta split PIX+cartão num único checkout; o
+    // mecanismo de `split` deste arquivo cria 2 links separados, um por método — ver
+    // criarPreferencia/criarPreferenciaSimples). O juro de parcelamento acima de 1x segue
+    // a config de "parcelamento sem juros" da própria conta MP do BidPro — mesma regra
+    // já em vigor nas preferências hospedadas de plano (criarPreferenciaSimples).
+    payment_methods: { installments: 12 },
+    metadata: { tipo: 'honorario_exito', arrematacao_id: arr.id, arrematante_id: arr.arrematante_id, user_id: arr.arrematante_id },
+  });
+
+  await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arr.id}`, {
+    method: 'PATCH',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ honorarios_mp_preference_id: pref.id }),
+  });
+
+  return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, valor };
+}
+
+/**
  * Cria assinatura recorrente (Preapproval) para planos mensais.
  * MP cobra automaticamente todo mês no cartão salvo.
  */
@@ -488,11 +553,17 @@ export default async function handler(req) {
     if (!gate.podeContratar) return new Response(JSON.stringify({ error: 'assessoria_bloqueada', motivo: gate.motivo }), { status: 409, headers: { 'Content-Type': 'application/json' } });
   }
 
+  // Link de honorários: só a equipe do caso gera (nunca o próprio cliente/arrematante).
+  if (action === 'criar_preferencia_honorario' && !['admin', 'analista', 'advogado', 'consultor'].includes(roleAtual)) {
+    return new Response(JSON.stringify({ error: 'Apenas a equipe pode gerar o link de pagamento dos honorários.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+
   try {
     let result;
     switch (action) {
       case 'criar_preferencia':  result = await criarPreferencia(params);   break;
       case 'criar_preferencia_produto': result = await criarPreferenciaProduto(params); break;
+      case 'criar_preferencia_honorario': result = await criarPreferenciaHonorario(params); break;
       case 'criar_assinatura':   result = await criarAssinatura(params);    break;
       case 'criar_assinatura_transparente': result = await criarAssinaturaTransparente(params); break;
       case 'verificar':          result = await verificar(params);           break;

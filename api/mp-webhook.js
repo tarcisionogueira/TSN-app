@@ -29,6 +29,30 @@ async function rpcProduto(fn, payload) {
   } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
 }
 
+// Estorno/chargeback de honorário de êxito: se ainda não foi distribuído à equipe, reverte
+// para 'pendente' (o cliente pode gerar outro link e pagar de novo). Se JÁ foi distribuído
+// (saldo_lancamentos creditado), reverter sozinho aqui seria mexer em saldo de terceiro sem
+// as mesmas guardas de `distribuirHonorarios` — fica registrado no log para conferência manual,
+// nunca falha silenciosa (mesma regra do "catch que engole o motivo").
+async function reverterHonorarioEstornado(arrId, evento) {
+  const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_status`, {
+    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
+  });
+  const [arr] = arrRes.ok ? await arrRes.json() : [];
+  if (arr?.honorarios_status === 'pago') {
+    await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}`, {
+      method: 'PATCH',
+      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ honorarios_status: 'pendente', honorarios_pago_em: null }),
+    });
+    return { revertido: true };
+  }
+  if (arr?.honorarios_status === 'distribuido') {
+    console.error(`[mp-webhook] ${evento} de honorário já distribuído à equipe — requer conferência manual`, { arrId });
+  }
+  return { revertido: false };
+}
+
 // Título do produto (para o `content_name` da conversão) — best-effort: sem título a
 // conversão ainda sai, só sem o rótulo legível no Meta (nunca vale bloquear a venda por isso).
 async function tituloDoProduto(tipo, id) {
@@ -410,6 +434,10 @@ export default async function handler(req, res) {
   // Produto avulso? external_reference é o uuid da compra (sem pipe).
   const extRefMp = String(pagamento.external_reference || '').trim();
   const ehProdutoMp = UUID_RE.test(extRefMp);
+  // Honorário de êxito (link gerado em api/mp.js:criarPreferenciaHonorario): external_reference
+  // também é um uuid (arrematacao_id) — checado ANTES de ehProdutoMp (metadata.tipo é o
+  // discriminador real; sem isto colidiria com o fluxo de produto, que casa só pelo formato).
+  const ehHonorarioMp = pagamento.metadata?.tipo === 'honorario_exito' && !!pagamento.metadata?.arrematacao_id;
 
   try {
     let result;
@@ -450,6 +478,41 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'plano_anual_ativacao_falhou' });
         }
       }
+      if (ehHonorarioMp) {
+        const arrId = pagamento.metadata.arrematacao_id;
+        const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_valor,honorarios_status`, {
+          headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
+        });
+        const [arr] = arrRes.ok ? await arrRes.json() : [];
+        if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
+        if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
+          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
+        }
+        const esperado = Number(arr.honorarios_valor) || 0;
+        const pago = Number(pagamento.transaction_amount) || 0;
+        // Tolerância pequena só para arredondamento — o preço nasceu no servidor
+        // (criarPreferenciaHonorario lê honorarios_valor direto do banco), então um
+        // valor fora disso é sinal de preferência antiga/adulterada, não de arredondamento.
+        if (esperado <= 0 || Math.abs(pago - esperado) > Math.max(1, esperado * 0.01)) {
+          console.error('[mp-webhook] honorario valor incompatível', { arrId, pago, esperado });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
+        }
+        const patchRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}`, {
+          method: 'PATCH',
+          headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            honorarios_status: 'pago',
+            honorarios_pago_em: new Date().toISOString(),
+            honorarios_gateway_payment_id: String(pagamento.id),
+          }),
+        });
+        if (!patchRes.ok) {
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(502).json({ error: 'honorario_patch_falhou' });
+        }
+        return res.status(200).json({ ok: true, honorario: { arrematacao_id: arrId, pago: true } });
+      }
       if (ehProdutoMp) {
         result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRefMp, p_gateway: 'mercadopago', p_gateway_payment_id: String(pagamento.id) });
         if (result && result.ok === false) {
@@ -482,6 +545,7 @@ export default async function handler(req, res) {
       // tinham), o assinante em dia que abandonava um PIX de produto era rebaixado a explorador
       // com inadimplente_desde marcado. Mesmo defeito corrigido no asaas-webhook nesta sessão.
       if (ehProdutoMp) return res.status(200).json({ ok: true, ignorado: `produto_${status}` });
+      if (ehHonorarioMp) return res.status(200).json({ ok: true, ignorado: `honorario_${status}` });
       result = await processarRecusado({ ...contexto, motivo: pagamento.status_detail || status });
     } else if (status === 'charged_back') {
       if (ehProdutoMp) {
@@ -491,6 +555,10 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
+      }
+      if (ehHonorarioMp) {
+        const r = await reverterHonorarioEstornado(pagamento.metadata.arrematacao_id, 'chargeback');
+        return res.status(200).json({ ok: true, honorario_estorno: r });
       }
       result = await processarChargeback({
         ...contexto,
@@ -502,6 +570,11 @@ export default async function handler(req, res) {
       // Reembolso: estorna a comissão de rede e (no total) suspende o acesso. Antes caía no
       // 'ignored' → a comissão ficava paga sobre dinheiro devolvido (perda dupla / fraude).
       const parcial = status === 'partially_refunded';
+      if (ehHonorarioMp) {
+        if (parcial) return res.status(200).json({ ok: true, ignorado: 'honorario_reembolso_parcial' });
+        const r = await reverterHonorarioEstornado(pagamento.metadata.arrematacao_id, 'reembolso');
+        return res.status(200).json({ ok: true, honorario_estorno: r });
+      }
       if (ehProdutoMp) {
         if (parcial) return res.status(200).json({ ok: true, ignorado: 'reembolso_parcial_produto' });
         result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
