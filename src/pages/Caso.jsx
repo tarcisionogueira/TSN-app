@@ -1448,8 +1448,8 @@ export default function Caso() {
           color="#7c3aed"
           open={secOpen.reuniao}
           onToggle={() => toggleSec('reuniao')}
-          badge={reuniao1 ? (reuniao1.status === 'realizada' ? (reuniao1.parecer_arrematacao === 'aprovado' ? 'Realizada · Aprovada' : reuniao1.parecer_arrematacao === 'reprovado' ? 'Realizada · Reprovada' : 'Realizada') : `Agendada: ${fmtDate(reuniao1.data_hora)}`) : 'Aguardando relatórios'}
-          disabled={!analisesConcluidas && !reuniao1}
+          badge={reuniao1 ? (reuniao1.status === 'realizada' ? (reuniao1.parecer_arrematacao === 'aprovado' ? 'Realizada · Aprovada' : reuniao1.parecer_arrematacao === 'reprovado' ? 'Realizada · Reprovada' : 'Realizada') : `Agendada: ${fmtDate(reuniao1.data_hora)}`) : caso.status_etapa === 'arrematado' ? 'Não se aplica (arremate atribuído)' : 'Aguardando relatórios'}
+          disabled={!analisesConcluidas && !reuniao1 && caso.status_etapa !== 'arrematado'}
         >
           {reuniao1 ? (
             <div style={{ paddingTop:14 }}>
@@ -1527,6 +1527,28 @@ export default function Caso() {
                 <div style={{ marginTop:12, padding:'12px', background:'#fef2f2', borderRadius:8, fontSize:12, color:'#991b1b' }}>
                   A análise jurídica está disponível apenas nos planos Assessorado e Leilão Club.
                   <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#0D63DB', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
+                </div>
+              )}
+            </div>
+          ) : caso.status_etapa === 'arrematado' ? (
+            // Caso ATRIBUÍDO manualmente pela equipe (atribuir-arremate.js): já é uma
+            // arrematação real, nunca passa pela reunião — "aprovar para arrematação"
+            // não faz sentido aqui, o arremate já aconteceu de verdade. Sem este ramo, o
+            // botão "Encaminhar ao Jurídico" nunca aparecia para este tipo de caso (18/09,
+            // achado ao investigar o caso do Marcos).
+            <div style={{ paddingTop:14 }}>
+              <div style={{ fontSize:12, color:'#64748b', marginBottom:12 }}>
+                Este caso foi atribuído diretamente pela equipe (arremate já realizado) — não passa por reunião de aprovação.
+              </div>
+              {isAnalista && !juridica && podeSolicitarJuridico && (
+                <div style={{ padding:'14px', background:'#fefce8', borderRadius:10, border:'1px solid #fde68a' }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:4 }}>Encaminhar para análise jurídica</div>
+                  <div style={{ fontSize:11, color:'#a16207', marginBottom:8 }}>Um clique envia ao advogado, por e-mail, todos os anexos + a avaliação documental. A devolutiva dele volta automaticamente para o Atendimento.</div>
+                  <button onClick={encaminharJuridico} disabled={!!solicitando.juridico} style={{ ...btn('#d97706'), fontSize:12, opacity: solicitando.juridico?0.6:1 }}>
+                    {solicitando.juridico
+                      ? <><Loader2 size={13} style={{marginRight:6,verticalAlign:'middle',animation:'spin 1s linear infinite'}}/>Enviando…</>
+                      : <><ClipboardList size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Encaminhar ao Jurídico</>}
+                  </button>
                 </div>
               )}
             </div>
