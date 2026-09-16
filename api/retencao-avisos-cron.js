@@ -8,8 +8,9 @@
  * Regras (do dono):
  *   • Regra 2 (não arrematado + 3 relatórios): avisa que precisa sinalizar o
  *     arremate; senão, os docs saem 15 dias após o 3º relatório (mín. 7d de carência).
- *   • Regra 1 (arrematado + assinatura em atraso): avisa; docs saem 30 dias após
- *     parar de pagar. Se regularizar/sinalizar, o aviso é revalidado e nada é apagado.
+ *   • Regra 1 (arrematado + assinatura em atraso): avisa; docs saem 90 dias após
+ *     parar de pagar (18/09, pedido do dono — era 30). Se regularizar/sinalizar, o
+ *     aviso é revalidado e nada é apagado.
  *
  * SEGURANÇA / ROLLOUT: LIGADO por padrão (dono autorizou 22/07). Para PAUSAR, setar
  * env RETENCAO_AVISOS_ATIVO=0 → volta ao dry-run (só conta, sem enviar nem gravar) e

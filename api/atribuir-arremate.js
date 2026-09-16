@@ -73,28 +73,45 @@ export default async function handler(req) {
   // digitado pela equipe era gravado como 'judicial' — modalidade errada no imóvel).
   const modalidade = /judicial/i.test(tipo_leilao || '') && !/extra/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial';
 
-  // 1) Cria o IMÓVEL-ÂNCORA oculto (ativo=false → fora da busca pública). É ele que
-  //    habilita anexar o auto de arrematação/documentos (imovel_anexos exige imovel_id)
-  //    e a geração dos 3 relatórios da IA, que ficam de base para aprendizado.
-  const imovelRow = {
-    fonte: 'atribuido_manual',
-    fonte_id: crypto.randomUUID(),
-    titulo: imovel_endereco || 'Arremate atribuído pela equipe',
-    tipo: tipo_imovel || null,
-    modalidade,
-    estado: estado || null,
-    cidade: cidade || null,
-    endereco: imovel_endereco || null,
-    valor_minimo: valor,
-    valor_avaliacao: avaliacao,
-    numero_processo: numProc,
-    descricao: 'Arrematação real atribuída pela equipe (sem cobrança) para gerar os laudos e servir de aprendizado à IA.',
-    ativo: false,
-  };
-  const imRes = await sb('imoveis_leilao', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(imovelRow) });
-  if (!imRes.ok) return json({ error: 'Falha ao criar o imóvel do arremate', detalhe: await imRes.text().catch(() => '') }, 500);
-  const [imovel] = await imRes.json().catch(() => []);
-  const imovelId = imovel?.id || null;
+  // 0) REAPROVEITA o imóvel se ele JÁ está no nosso acervo (18/09, pedido do dono: "deve
+  //    usar o mesmo arquivo... não pode haver duplicidades"). Antes, TODA atribuição manual
+  //    criava um imóvel-âncora em branco, mesmo quando o lote já existia (com matrícula/
+  //    edital já capturados pelo espelho) — foi a causa-raiz de dois bugs no mesmo imóvel
+  //    (16/09: relatórios ficaram órfãos do caso; 18/09: os anexos "não vieram"). Casa só
+  //    por número de processo (sinal mais confiável que temos aqui) e só quando há exatamente
+  //    UM candidato — ambíguo ou sem processo informado segue no caminho antigo (cria âncora),
+  //    para nunca arriscar prender o cliente ao imóvel ERRADO.
+  let imovelId = null, reaproveitado = false;
+  if (numProc) {
+    const jaRes = await sb(`imoveis_leilao?numero_processo=eq.${encodeURIComponent(numProc)}&select=id&limit=2`);
+    const candidatos = jaRes.ok ? await jaRes.json().catch(() => []) : [];
+    if (Array.isArray(candidatos) && candidatos.length === 1) { imovelId = candidatos[0].id; reaproveitado = true; }
+  }
+
+  // 1) Sem candidato único, cria o IMÓVEL-ÂNCORA oculto (ativo=false → fora da busca
+  //    pública). É ele que habilita anexar o auto de arrematação/documentos (imovel_anexos
+  //    exige imovel_id) e a geração dos 3 relatórios da IA, que ficam de base para aprendizado.
+  if (!imovelId) {
+    const imovelRow = {
+      fonte: 'atribuido_manual',
+      fonte_id: crypto.randomUUID(),
+      titulo: imovel_endereco || 'Arremate atribuído pela equipe',
+      tipo: tipo_imovel || null,
+      modalidade,
+      estado: estado || null,
+      cidade: cidade || null,
+      endereco: imovel_endereco || null,
+      valor_minimo: valor,
+      valor_avaliacao: avaliacao,
+      numero_processo: numProc,
+      descricao: 'Arrematação real atribuída pela equipe (sem cobrança) para gerar os laudos e servir de aprendizado à IA.',
+      ativo: false,
+    };
+    const imRes = await sb('imoveis_leilao', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(imovelRow) });
+    if (!imRes.ok) return json({ error: 'Falha ao criar o imóvel do arremate', detalhe: await imRes.text().catch(() => '') }, 500);
+    const [imovel] = await imRes.json().catch(() => []);
+    imovelId = imovel?.id || null;
+  }
 
   // 2) Cria o CASO já marcado como arrematado, vinculado ao imóvel-âncora (habilita
   //    o acompanhamento/lançamentos e conecta os anexos/relatórios ao mesmo id).
@@ -217,5 +234,5 @@ export default async function handler(req) {
     } catch (e) { console.error('[atribuir-arremate] honorarios', e?.message || e); } // best-effort: a atribuição já foi feita: equipe pode registrar o arremate depois em Caso.jsx se isto falhar
   }
 
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor });
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor });
 }
