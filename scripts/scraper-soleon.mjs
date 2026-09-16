@@ -288,7 +288,13 @@ function parseDetalhe(html, url) {
     valor_avaliacao: avaliacao, valor_minimo: valorMinimo,
     modalidade, area_m2: area,
     descricao: (base.descricao || '').slice(0, 500) || null,
-    data_leilao: dataLeilaoDetectada,
+    // 16/09 (achado no painel de invariantes — venda_direta_com_praca): o override de
+    // `modalidadeDeJanela` (15/09, âncora no preço) pode classificar venda_direta MESMO com
+    // `dataLeilaoDetectada` preenchida (é feito de propósito, pro sinal forte não ficar refém
+    // da trava fraca) — mas o `data_leilao` final não tinha o mesmo guard e saía preenchido
+    // junto. Regra do dono: "venda direta é compra imediata, sem prazo" — praça e venda_direta
+    // são mutuamente exclusivos por definição, então a data nunca pode sobreviver aqui.
+    data_leilao: modalidade === 'venda_direta' ? null : dataLeilaoDetectada,
     numero_matricula: mat,
     link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i),
     anexos,
