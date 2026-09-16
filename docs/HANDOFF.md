@@ -9,6 +9,12 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-2. 🔴 **AÇÃO PENDENTE DO DONO — HASTA zerada há 18 dias (29/08).** Rodar
+   `node scripts/recon-hasta-zerou.mjs` da máquina residencial (com `~/.bidpro-runner.env`
+   carregado) e colar a saída aqui. Detalhe completo na Parte 7 (16/09) mais abaixo. Nenhum
+   ambiente que a sessão do Claude alcança (sandbox, GitHub Actions) passa pelo bloqueio de
+   IP de datacenter da HASTA — só o dono pode rodar este recon.
+
 -1. 📌 **DECISÃO PENDENTE DO DONO (retomar amanhã) — Franco Leilões (francoleiloes.com.br): recon
    feito, site é SPA, não integrável com scraper de fetch cru.** Dono perguntou se já estávamos integrados (não estávamos — zero scraper,
    zero parser, zero cron, zero imóvel em `imoveis_leilao`) e pediu o recon, no mesmo método já
@@ -27668,3 +27674,52 @@ completa de evidência, pra não repetir a investigação do zero numa sessão f
 workflows `_teste-recon-*.yml` correspondentes) foram criados, usados e **removidos** — só
 `recon-crepaldi.mjs` (reusável, já genérico via `RECON_SITE`) e o KRON/1-linha em
 `scraper-puppeteer.mjs` ficaram no repositório.
+
+## 16/09 (7ª parte) — ritual de abertura completo: HASTA zerada há 18 dias (achado grave); CEF/JOAOEMILIO/SBID21 confirmados saudáveis
+
+**Pedido do dono: rodar a auditoria completa de início de sessão** (seção "🩺 Ritual de início de
+sessão" deste HANDOFF). Heartbeat registrado, baterias 1/1b/1c/2/2b/3 rodadas. `0 crítico` em
+segurança e em regras de negócio — sem achado novo nesses dois. O achado que importa saiu de
+`fonte_regressao_suspeita()`, e o dono pediu pra resolver os leiloeiros antes dos invariantes.
+
+**🔴 HASTA — ZERADA HÁ 18 DIAS, achado mais grave da auditoria.** `fonte_saude` mostra **29
+medições seguidas desde 29/08** (a mais recente, 2h antes desta auditoria) todas idênticas:
+`"respondeu 200 e enumerou 0 lote(s) (8 evento(s) no catálogo)"` — `ultimo_com_lote: null` no
+histórico inteiro da tabela. `coleta_cliente.ultima_em` (última coleta que REALMENTE gravou,
+com prova) trava em **30/08**. `imoveis_leilao` tem só 4 ativos, todos com `atualizado_em` de
+30/08 — o resto do acervo (~579 lotes históricos, comitente CAIXA) foi expirando por retenção
+sem reposição. **18 dias de acervo CAIXA via HASTA invisível ao cliente, tudo verde em
+qualquer olhada superficial** (o runner residencial "roda" todo dia, só não grava nada).
+
+**Por que eu não consegui diagnosticar além disso NESTA sessão**: HASTA é `acesso:
+dom-puppeteer-residencial` — bloqueia IP de datacenter por design (confirmado desde 21/08), e
+nenhum ambiente que eu alcanço (este sandbox, GitHub Actions) é residencial. O script de recon
+JÁ EXISTE e já foi escrito pra exatamente este cenário — `scripts/recon-hasta-zerou.mjs` (29/08,
+nunca rodado desde então) — mas só roda de verdade na máquina do dono, com
+`~/.bidpro-runner.env` carregado. **Ação pendente do DONO**: rodar
+`node scripts/recon-hasta-zerou.mjs` de casa e colar a saída aqui. O script já separa as 4
+hipóteses possíveis (render lento / listagem mudou de rota / lote sumiu de verdade / acesso
+bloqueado) e diz a ação certa pra cada uma — não adianta eu especular sem o dado.
+
+**Confirmados SAUDÁVEIS, com evidência (não suposição) — três achados que pareciam regressão e
+não eram:**
+- **CEF** (`motivo: regressao`, 8094 ativos vs piso 12647): descontando expiração legítima
+  (`expirados_recentes: 4471`), o `faltando` real é 82 num acervo de 25294 — 0,3%. Ruído de
+  medição, não bug.
+- **JOAOEMILIO** (SOLEON, caiu de 179→18 ativos ao longo da semana): testado `/lotes/imovel` ao
+  vivo (grátis + Bright Data) — o HTML devolve, **escrito pelo próprio site**, "NENHUM LOTE
+  ENCONTRADO NO MOMENTO". Parser intacto (`extrairUrlsDeLote` está certo em achar zero); é o
+  leiloeiro mesmo que ficou sem lote publicado. Sem ação.
+- **SBID21** (Superbid sub-portal 21, preso em "2" por 6 dias segundo `fonte_saude`): disparei a
+  coleta real (`leiloeiros-puppeteer.yml`, filtro SBID21) — API respondeu normal, 1 oferta aberta
+  agora. Inventário baixo genuíno desse sub-portal pequeno, API funcionando. Sem ação.
+
+**Método usado nos três**: em vez de mexer no parser por suspeita, testei o que a fonte
+_realmente_ diz agora (recon read-only ou re-coleta real) antes de qualquer diagnóstico — a
+mesma lição do LEILOFY (27/08) e do CALIL/VEGAS/TORRES3 (12/08): "parser errado" e "acervo
+zerou de verdade" pedem ações opostas, e só dá pra saber lendo a fonte, não o histórico.
+
+**BAYIT/SATO/LEFFA** (`motivo: medicao_velha`, 150-176h sem medição real): não investigados
+nesta parte — é "não consigo verificar", não "confirmado quebrado", e o teto de idade
+(`MAX_IDADE_H`) deve resolver sozinho na próxima rodada normal de cada um. Ficam para o próximo
+ritual se persistirem.
