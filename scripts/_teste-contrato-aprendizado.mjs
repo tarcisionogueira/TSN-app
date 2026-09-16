@@ -54,9 +54,14 @@ async function main() {
   const original = iaData.contrato;
   console.log(`   ok, ${original.length} caracteres gerados.`);
 
-  console.log('3) Editando a minuta (simula correção real do staff)...');
-  const marcador = '\n\nCLÁUSULA DE TESTE AUTOMATIZADO: o valor da multa rescisória foi corrigido manualmente para 25% (vinte e cinco por cento) sobre o valor total do contrato, em vez do percentual original, para validar o aprendizado do gerador — este texto não é uma cláusula de negócio real.';
-  const textoFinal = original + marcador;
+  console.log('3) Editando a minuta (simula correção real do staff, sem linguagem de teste dentro do texto)...');
+  // Edição sem se auto-declarar "teste" dentro do contrato — senão a IA extratora,
+  // seguindo a própria instrução de ignorar o que não é correção de negócio real,
+  // corretamente descarta a mudança (foi o que aconteceu na 1ª tentativa deste teste).
+  let textoFinal = original.replace(/R\$\s?1\.000,00/g, 'R$ 1.500,00');
+  if (textoFinal === original) {
+    textoFinal = original + '\n\n16. Fica ajustado entre as partes que o valor mensal dos serviços será de R$ 1.500,00 (mil e quinhentos reais), reajustado anualmente pelo IGP-M/FGV, com vencimento todo dia 5 (cinco) de cada mês.';
+  }
 
   console.log('4) Enviando para assinatura via /api/gerar-contrato (conteudoDireto)...');
   const sendRes = await fetch(`${APP_URL}/api/gerar-contrato`, {

@@ -195,6 +195,7 @@ export default async function handler(req, res) {
       if (geradoPorIA && contratoOriginalIA) {
         try {
           const correcoes = await extrairCorrecoesContrato(tipo, contratoOriginalIA, conteudoDireto);
+          console.log('[gerar-contrato] aprendizado: correcoes extraidas =', correcoes.length);
           if (correcoes.length) {
             const { error: errAprend } = await supabase.from('contrato_aprendizado').insert(correcoes.map(c => ({
               contrato_grupo_id: grupoId, tipo: tipo || null,
