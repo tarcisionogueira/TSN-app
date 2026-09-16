@@ -159,6 +159,7 @@ export default function PagarHonorario() {
             servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
             extra={{ arrematacao_id: arr.id }}
             email={email}
+            parcelasSemJuros={1}
             onPago={handlePago}
           />
         )}

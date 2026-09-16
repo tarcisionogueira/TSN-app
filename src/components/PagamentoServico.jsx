@@ -20,9 +20,10 @@ const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || '';
 
 const fmtBRL = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const calcParcelaMaisJuros = (valor, n) => {
-  // Até 3x sem juros; a partir de 4x o cliente assume os juros
-  if (n <= 3) return valor / n;
+// `semJurosAte` é 3 por padrão (assessoria, Leilão Club, etc. — decisão do dono de 16/09);
+// os honorários de êxito passam 1 (18/09): só PIX ou 1x sem juros, 2x em diante já assume.
+const calcParcelaMaisJuros = (valor, n, semJurosAte = 3) => {
+  if (n <= semJurosAte) return valor / n;
   const taxa = n <= 6 ? 0.0249 : n <= 9 ? 0.0299 : 0.0349;
   return (valor * Math.pow(1 + taxa, n / 12)) / n;
 };
@@ -315,7 +316,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emai
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {}, email: emailProp }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email: emailProp }) {
   const { user } = useAuth();
   const email = emailProp || user?.email;
   const [parcelas, setParcelas] = useState(1);
@@ -324,7 +325,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const [erro, setErro] = useState('');
   const pollingRef = useRef(null);
 
-  const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas);
+  const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas, parcelasSemJuros);
   const totalFinal = assinatura ? servico.valor : parcelaValor * parcelas;
 
   const upd = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
@@ -497,16 +498,16 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           <label style={lbl}>Parcelas</label>
           <select value={parcelas} onChange={e => setParcelas(Number(e.target.value))} style={inp}>
             {PARCELAS.filter(n => n <= parcelasMax).map(n => {
-              const pv = calcParcelaMaisJuros(servico.valor, n);
+              const pv = calcParcelaMaisJuros(servico.valor, n, parcelasSemJuros);
               const total = pv * n;
               return (
                 <option key={n} value={n}>
-                  {n}× de {fmtBRL(pv)}{n <= 3 ? ', sem juros' : ` (total ${fmtBRL(total)})`}
+                  {n}× de {fmtBRL(pv)}{n <= parcelasSemJuros ? ', sem juros' : ` (total ${fmtBRL(total)})`}
                 </option>
               );
             })}
           </select>
-          {parcelas > 3 && (
+          {parcelas > parcelasSemJuros && (
             <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
               ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(2)}% assumidas pelo cliente.
             </div>
@@ -560,7 +561,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, extra = {}, email }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -603,6 +604,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           onVoltar={(assinatura || soCartao) ? onCancelar : () => setMetodo(null)}
           onGatewayBloqueado={onGatewayBloqueado}
           parcelasMax={parcelasMax}
+          parcelasSemJuros={parcelasSemJuros}
           extra={extra}
           email={email}
         />
