@@ -41,26 +41,24 @@ async function main() {
   }
   if (!html) { console.log('\nTodas as rotas ficaram em challenge.'); return; }
 
-  // Plataforma "Sua Plataforma de Leilão / Degrau Publicidade" — menu usa
-  // /busca/#Engine=Start&...&ID_Categoria=N. Extrai LABEL + ID de cada link de categoria.
-  console.log('\n--- Links de categoria (label + ID_Categoria) ---');
-  for (const m of html.matchAll(/<a[^>]+href=["'][^"']*ID_Categoria=(\d+)["'][^>]*>([\s\S]{0,60}?)<\/a>/gi)) {
-    const label = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    if (label) console.log(`  ID_Categoria=${m[1]} -> "${label}"`);
-  }
-  console.log('\n--- Qualquer texto perto de "imov" no HTML (até 10 janelas) ---');
-  let n = 0;
-  for (const m of html.matchAll(/.{0,50}imov[eé]i?s?.{0,50}/gi)) {
-    if (n >= 10) break;
-    console.log(`  …${m[0].replace(/\s+/g, ' ').trim()}…`);
-    n++;
-  }
-  console.log('\n--- <a href> únicos que mencionam categoria/busca (até 40) ---');
+  // Achou "IMÓVEIS" no menu (icon-svg-imoveis) mas sem ID_Categoria ao lado — a própria
+  // página /categorias/imoveis pode já SER a listagem. Procura cards/links de LOTE.
+  console.log('\n--- <a href> que parecem lote (com número/id, até 50) ---');
   const vistos = new Set();
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
     const h = m[1];
-    if (vistos.has(h) || !/categoria|busca|imov|leilao/i.test(h)) continue;
-    vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 40) break;
+    if (vistos.has(h)) continue;
+    if (/\.(css|js|png|jpe?g|svg|ico|woff2?)(\?|$)/i.test(h)) continue;
+    if (/facebook|google|bing|analytics|criar-conta|login|usuario|cadastr/i.test(h)) continue;
+    vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 50) break;
+  }
+  console.log(`\n--- Amostra de texto perto de "R$" (indica card de lote, até 8) ---`);
+  let n2 = 0;
+  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  for (const m of txt.matchAll(/.{0,60}R\$\s*[\d.,]+.{0,60}/g)) {
+    if (n2 >= 8) break;
+    console.log(`  …${m[0].trim()}…`);
+    n2++;
   }
 }
 main();
