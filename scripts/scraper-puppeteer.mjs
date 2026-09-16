@@ -4977,6 +4977,14 @@ async function main() {
     // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
     if (rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(browser, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }));
     if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }));
+    // KRONLEILOES (16/09): candidato do EDITAL_DJEN, site próprio (kronleiloes.com.br)
+    // bloqueia Cloudflare direto (403 em fetch puro) — parecia exigir Bright Data pago. Recon
+    // com Chromium real (recon-crepaldi.mjs, que passa o Cloudflare) mostrou que o site é só
+    // um front-end white-label da rede Superbid: interceptado ao vivo, ele mesmo chama
+    // offer-query.superbid.net com stores.id:16180 (444 ofertas na loja, confirmado por
+    // teste direto na API pública). Zero Cloudflare, zero Bright Data — mesma API grátis que
+    // TOTALLEILOES/CREPALDI já usam.
+    if (rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(browser, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }));
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
     if (rodar('LEILOFY')) console.log('\n📋 Leiloaria Smart (Leilofy)...');
