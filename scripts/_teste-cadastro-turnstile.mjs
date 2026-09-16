@@ -47,15 +47,24 @@ async function main() {
   await new Promise(r => setTimeout(r, 3000)); // dá tempo do Turnstile carregar/resolver
 
   // Turnstile carrega um script externo (challenges.cloudflare.com) e SÓ ENTÃO chama
-  // window.turnstile.render() — dar mais tempo antes de checar, e também tentar achar o
-  // <div> alvo mesmo antes do iframe nascer dentro dele.
-  await new Promise(r => setTimeout(r, 4000));
-  const diag = await page.evaluate(() => ({
-    temTurnstileWindow: typeof window.turnstile !== 'undefined',
-    temIframe: !!document.querySelector('iframe[src*="challenges.cloudflare.com"]'),
-    scriptsTurnstile: [...document.querySelectorAll('script')].filter(s => /turnstile/i.test(s.src)).map(s => s.src),
-  }));
+  // window.turnstile.render() — em vez de espera fixa, faz polling até 15s (CI pode ter
+  // latência maior de rede até o Cloudflare do que um navegador real).
+  let diag = null;
+  for (let i = 0; i < 15; i++) {
+    diag = await page.evaluate(() => ({
+      temTurnstileWindow: typeof window.turnstile !== 'undefined',
+      temIframe: !!document.querySelector('iframe[src*="challenges.cloudflare.com"]'),
+      scriptsTurnstile: [...document.querySelectorAll('script')].filter(s => /turnstile/i.test(s.src)).map(s => s.src),
+    }));
+    if (diag.temIframe) break;
+    await new Promise(r => setTimeout(r, 1000));
+  }
   console.log('diagnóstico turnstile:', JSON.stringify(diag));
+
+  // Rola até o widget/botão pra garantir que aparece no print, mesmo que o fullPage
+  // decida um recorte diferente.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await new Promise(r => setTimeout(r, 500));
 
   await page.screenshot({ path: 'print-cadastro.png', fullPage: true });
   console.log('print salvo.');
