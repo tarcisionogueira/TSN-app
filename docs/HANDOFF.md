@@ -27799,11 +27799,19 @@ nem captcha.
 3. **Turnstile no cadastro** (pedido explícito seguinte do dono): `TurnstileWidget.jsx` novo +
    `Login.jsx` manda `captchaToken` no `signUp()`. **Rollout seguro**: sem
    `VITE_TURNSTILE_SITE_KEY` configurada, o widget não renderiza e o cadastro segue igual —
-   pode ir pro ar antes da chave existir. **Pendência do dono, não automatizável daqui**: (a)
-   criar o widget no dashboard Cloudflare (grátis, não precisa migrar DNS) e pôr a Site Key na
-   Vercel; (b) colar a Secret Key no painel do Supabase (Authentication → Bot and Abuse
-   Protection) — sem isso o backend não valida o token, só o front manda. Passo a passo em
-   `docs/ENVS_VERCEL.md`.
+   pode ir pro ar antes da chave existir.
+
+   **✅ CONFIGURADO E CONFIRMADO EM PRODUÇÃO no mesmo dia.** O dono criou o widget no
+   Cloudflare (guiado passo a passo, print a print — a seção do painel do Supabase mudou de
+   nome pra "Attack Protection", não "Bot and Abuse Protection" como a doc antiga dizia) e
+   configurou as duas pontas: Site Key na Vercel, Secret Key no Supabase. Push de doc serviu
+   de gatilho pro redeploy (env var nova só entra no PRÓXIMO build, não retroage). Verificado
+   de verdade via GH Actions contra o site ao vivo: o bundle publicado
+   (`assets/Login-DtQpuRbw.js`, chunk code-split do Login) contém a Site Key certa e a string
+   "turnstile" — não bastava conferir só a env var, o teste real evitou o mesmo erro de
+   "achar que configurou" que este HANDOFF já documentou noutras vezes (o `index.js` principal
+   NÃO tem o Turnstile — está no chunk do Login, achado ao investigar por que o 1º teste deu
+   falso-negativo). Detalhe/setup fica em `docs/ENVS_VERCEL.md`.
 
 **Fora de escopo, registrado pra não esquecer**: rate-limit de IP no próprio endpoint de
 cadastro não foi feito — o `signUp()` não passa por `api/_rate-limit.js` hoje. O Turnstile
