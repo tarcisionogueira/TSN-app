@@ -155,13 +155,17 @@ export default function PagarHonorario() {
             {!aceite ? 'Aceite os termos acima' : 'Informe um e-mail válido'} para continuar com o pagamento.
           </div>
         ) : (
-          <PagamentoServico
-            servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
-            extra={{ arrematacao_id: arr.id }}
-            email={email}
-            parcelasSemJuros={1}
-            onPago={handlePago}
-          />
+          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Como você quer pagar?</div>
+            <PagamentoServico
+              servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
+              extra={{ arrematacao_id: arr.id }}
+              email={email}
+              parcelasSemJuros={1}
+              embutido
+              onPago={handlePago}
+            />
+          </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>

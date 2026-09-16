@@ -84,14 +84,18 @@ const btn = (cor, texto, onClick, disabled, icon) => (
 );
 
 /* ── Tela: escolha do método ── */
-function EscolhaMetodo({ servico, onEscolha }) {
+// ocultarResumo: quando o chamador já mostra valor/nome do serviço em destaque logo acima
+// (ex.: PagarHonorario.jsx), repetir aqui é redundante — pula direto pras opções.
+function EscolhaMetodo({ servico, onEscolha, ocultarResumo = false }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
-        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Valor a pagar</div>
-        <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(servico.valor)}</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{servico.nome}</div>
-      </div>
+      {!ocultarResumo && (
+        <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Valor a pagar</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(servico.valor)}</div>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{servico.nome}</div>
+        </div>
+      )}
 
       <button onClick={() => onEscolha('pix')} style={{
         width: '100%', padding: '18px 20px', background: 'white', border: '2px solid #e2e8f0',
@@ -135,7 +139,7 @@ function EscolhaMetodo({ servico, onEscolha }) {
 }
 
 /* ── Tela: PIX ── */
-function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emailProp }) {
+function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emailProp, ocultarResumo = false }) {
   const { user } = useAuth();
   const email = emailProp || user?.email;
   const [etapa, setEtapa] = useState('gerando'); // gerando | pronto | confirmado | erro | expirado
@@ -245,11 +249,13 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emai
         <ChevronLeft size={16} /> Voltar
       </button>
 
-      {/* Valor destaque */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 28, fontWeight: 800, color: '#059669' }}>{fmtBRL(servico.valor)}</div>
-        <div style={{ fontSize: 12, color: '#64748b' }}>{servico.nome}</div>
-      </div>
+      {/* Valor destaque (pulado quando o chamador já mostra valor/nome acima) */}
+      {!ocultarResumo && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#059669' }}>{fmtBRL(servico.valor)}</div>
+          <div style={{ fontSize: 12, color: '#64748b' }}>{servico.nome}</div>
+        </div>
+      )}
 
       {etapa === 'gerando' && (
         <div style={{ textAlign: 'center', padding: '28px 0', color: '#64748b', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -561,30 +567,32 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email, embutido = false }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
   // mensalidade recorrente, que segue outro caminho). Vai direto ao PIX, sem escolha de método.
   const [metodo, setMetodo] = useState(assinatura || soCartao ? 'cartao' : soPix ? 'pix' : null);
 
-  return (
-    <div style={{
-      background: 'white', borderRadius: 16, padding: '28px 24px',
-      boxShadow: '0 4px 24px rgba(0,0,0,0.10)', maxWidth: 460, margin: '0 auto',
-    }}>
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>Finalizar pagamento</div>
-        {assinatura && (
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Assinatura recorrente · Somente cartão de crédito
-          </div>
-        )}
-      </div>
+  // embutido (18/09): o chamador já tem seu próprio card com título e valor em destaque
+  // (ex.: PagarHonorario.jsx) — sem isto, a tela repetia "Valor a pagar" e o nome do
+  // serviço 2-3x seguidas. Sem card/título próprios aqui, e sem repetir valor/nome.
+  const conteudo = (
+    <>
+      {!embutido && (
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>Finalizar pagamento</div>
+          {assinatura && (
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+              Assinatura recorrente · Somente cartão de crédito
+            </div>
+          )}
+        </div>
+      )}
 
       {!metodo && (
         <>
-          <EscolhaMetodo servico={servico} onEscolha={setMetodo} />
+          <EscolhaMetodo servico={servico} onEscolha={setMetodo} ocultarResumo={embutido} />
           {onCancelar && (
             <button onClick={onCancelar} style={{ width: '100%', marginTop: 12, padding: '10px', background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
               Cancelar
@@ -594,7 +602,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
       )}
 
       {metodo === 'pix' && (
-        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} extra={extra} email={email} />
+        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} extra={extra} email={email} ocultarResumo={embutido} />
       )}
       {metodo === 'cartao' && (
         <PagamentoCartao
@@ -609,6 +617,17 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           email={email}
         />
       )}
+    </>
+  );
+
+  if (embutido) return conteudo;
+
+  return (
+    <div style={{
+      background: 'white', borderRadius: 16, padding: '28px 24px',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.10)', maxWidth: 460, margin: '0 auto',
+    }}>
+      {conteudo}
     </div>
   );
 }
