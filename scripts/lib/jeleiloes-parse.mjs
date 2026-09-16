@@ -94,8 +94,13 @@ function valorJanela(txt, rotuloRe, janela = 400) {
   return m ? plaus(num(m[1])) : 0;
 }
 
+// Rótulo da descrição também varia por tenant (16/09, achado testando KLEILOES de verdade —
+// area saía 0 em 39/39 lotes): JELEILOES usa "DESCRIÇÃO DO LOTE"; KLEILOES não tem esse
+// rótulo, o texto vem direto sob "Observação:". Sem a 2ª tentativa, `descricaoDe` volta null e
+// `extrairArea` (que lê título+descrição) nunca tem onde achar o "X m²" do imóvel.
 function descricaoDe(txt) {
-  const m = txt.match(/DESCRI[ÇC][ÃA]O DO LOTE\s*([\s\S]{0,1500}?)(?:LOCAL PARA VISITA[ÇC][ÃA]O|OBSERVA[ÇC][ÃA]O|$)/i);
+  const m = txt.match(/DESCRI[ÇC][ÃA]O DO LOTE\s*([\s\S]{0,1500}?)(?:LOCAL PARA VISITA[ÇC][ÃA]O|OBSERVA[ÇC][ÃA]O|$)/i)
+    || txt.match(/Observa[çc][ãa]o:\s*([\s\S]{0,1500}?)(?:\d\.\s*[A-ZÀ-Ú]{4,}|LOCAL PARA VISITA[ÇC][ÃA]O|$)/i);
   return m ? m[1].trim().slice(0, 1500) || null : null;
 }
 
@@ -137,15 +142,20 @@ export function parseDetalhe(html, url) {
   if (!avaliacao) avaliacao = minimo;
 
   const titulo = tituloDeSlug(slug);
-  // Texto PRIMEIRO (16/09): tem acento correto e já filtra Comarca/Vara/Tribunal (`cidadeUF`
-  // de leilaopro-parse.mjs); o slug vira fallback só quando o texto não tem "Cidade/UF"
-  // reconhecível — um slug sem conector em/no/na (KLEILOES: "imovel-sao-jose-...-pr") captura
-  // palavra de TIPO junto da cidade, então nunca deve vencer o texto quando o texto responde.
-  let { cidade, estado } = cidadeUF('', txt.slice(0, 3000));
+  // SLUG primeiro (revertido 16/09 — ver nota abaixo). Tentei inverter pra "texto primeiro"
+  // no mesmo dia, achando que resolvia o prefixo de tipo no slug do KLEILOES sem quebrar nada
+  // — mas rodar de VERDADE em produção provou o oposto: 39/39 lotes gravados, e vários com
+  // cidade "Cri de Maringá" (o texto tem "…2º CRI de Maringá", referência de CARTÓRIO — a
+  // regex de cidade/UF do texto não filtra "CRI", só Comarca/Vara/Tribunal/Foro/Juízo) em vez
+  // da cidade real do lote, que o SLUG ("imovel-paicandu-pr") já tinha certa. `cidadeUFDeSlug`
+  // já ganhou o strip do tipo genérico (ver a função) — isso sozinho já resolve o caso que
+  // motivou a inversão, sem o efeito colateral do ruído de cartório no texto. Texto continua
+  // como fallback, só quando o slug não tem UF reconhecível.
+  let { cidade, estado } = cidadeUFDeSlug(slug);
   if (!cidade) {
-    const doSlug = cidadeUFDeSlug(slug);
-    cidade = doSlug.cidade || null;
-    estado = estado || doSlug.estado || null;
+    const doTexto = cidadeUF('', txt.slice(0, 3000));
+    cidade = doTexto.cidade || null;
+    estado = estado || doTexto.estado || null;
   }
 
   const descricao = descricaoDe(txt);
