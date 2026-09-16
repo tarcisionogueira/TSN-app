@@ -26864,3 +26864,36 @@ adaptar o mecanismo de `split` já existente (2 links, um por método, somando o
 juro de parcelamento acima de 1x no link hospedado segue a config de "parcelamento sem juros"
 da própria conta MP (não é parametrizável por chamada de API) — mesma regra já em vigor no
 link hospedado de planos, não é uma lacuna nova desta entrega.
+
+### 16/09 (continuação) — o fluxo REAL era outro: "Atribuir arremate" (Admin.jsx), não Caso.jsx
+
+O dono mostrou o modal que efetivamente usou hoje para o galpão de Feira de Santana: **"🏷
+Atribuir arremate"** em Admin → Usuários (`api/atribuir-arremate.js`), não a seção
+"Registrar Arrematação" do Caso.jsx. Esse modal é histórico **"sem cobrança"** (regra de
+30/07: só promove a Assessorado, nunca cria linha em `arrematacoes`) — então o link de
+pagamento entregue na Parte anterior não tinha NENHUMA arrematação para se apoiar no caso
+real de hoje. Achado só porque o dono mandou o print; nenhuma varredura de código pegaria
+(o modal está "certo" para o que foi desenhado em 30/07 — só não é mais isso).
+
+**Consertado no mesmo commit** (`e9e4a80`):
+- `api/atribuir-arremate.js`: quando o admin marca **"Promover para Assessorado"** (=
+  "contratou de fato", a mesma frase que já estava na tela) com um valor de arremate
+  informado, agora TAMBÉM cria a linha em `arrematacoes` com `honorarios_valor`
+  (`config_honorarios.total_pct`) — é o que falta para o link de pagamento existir. Sem a
+  marcação (atribuição de estudo, alimentar a IA), continua sem cobrança nenhuma.
+- `src/pages/Admin.jsx`: o modal agora abre, na sequência, um painel para **gerar e copiar
+  o link na hora** (mesma action `criar_preferencia_honorario` de api/mp.js), sem precisar
+  navegar até o caso — "Gerar os 3 relatórios" continua disponível ali do lado.
+- **Máscara de moeda ao digitar** (`src/utils/moeda.js`, pedido do dono ao ver
+  "54835515" sem separador nenhum no campo "Valor arrematado"): dígitos entram pelos
+  centavos, como caixa eletrônico — 54835515 digitado vira 548.355,15. Aplicada nos dois
+  campos de valor de arremate (Admin.jsx e Caso.jsx); a extração automática por PDF já
+  formatava certo, só a digitação manual estava crua.
+- **Link passa a ter prazo e sobreviver a reabrir a tela** (pedido do dono): `criarPreferenciaHonorario`
+  agora nasce com `expires`/`expiration_date_*` de 48h no MP, e o próprio link (não só o id
+  da preferência) fica gravado em `arrematacoes.honorarios_link_pagamento` — enquanto
+  válido, um novo clique em "gerar" devolve o MESMO link em vez de criar outro; Caso.jsx
+  carrega esse link salvo ao abrir o caso (antes só existia na memória da sessão que gerou).
+  Migração: `honorarios_link_pagamento`, `honorarios_link_expira_em`.
+
+Build limpo de novo (padrões/sintaxe/eslint/vite build), commit `e9e4a80`, deploy disparado.
