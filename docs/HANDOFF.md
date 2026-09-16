@@ -27265,3 +27265,59 @@ sem validação de máximo. As travas reais ficam fora do nosso controle:
 Build limpo antes de cada push (`fddd25c`). Ainda **não disparado** um piloto real do
 `foto-cef.mjs` reescrito via GitHub Actions — recomendado antes de considerar a galeria CEF
 "em produção de verdade".
+
+## 18/09 (tarde) — o galpão do Marcos também expôs por que os documentos "não vieram"
+
+O dono voltou ao caso do Marcos (print de `Arrematados.jsx` em modo suporte: "O assinante
+ainda não anexou documentos") perguntando por que a matrícula/edital que geraram o relatório
+documental não apareciam ali, e pedindo retenção permanente de documentos enquanto pagante +
+atualização das projeções ao anexar + a IA aprender com o processo real. Investigação por SQL
+direto (MCP Supabase) achou **duas causas, não uma**:
+
+**1) `registrar_anexos_do_espelho()` deixou o `storage_path` nulo para este imóvel.** O
+cron `espelhar-docs-cron` já tinha baixado matrícula e edital (`documento_espelho`,
+`status='copiado'`, 16/08) e a função de publicação existe desde 29/08 exatamente para ligar
+isso a `imovel_anexos` — mas ela processa em lotes de até 500 **sem ORDER BY determinístico**,
+e o backlog geral é maior que isso (confirmado: rodar de novo processou 500+500 e NÃO pegou
+este imóvel). Não é regressão nova, é fila grande sem prioridade — **candidato a next step**:
+dar à fila da publicação a MESMA lógica de priorização por data de leilão que a fila de
+captura já tem (ver `proximos_espelho_documentos`), ou rodar em lotes maiores/mais frequentes.
+
+**2) `atribuir-arremate.js` sempre cria um imóvel-âncora EM BRANCO, mesmo quando o imóvel já
+está no nosso acervo.** Este é o achado mais importante: o galpão (LJUD, `dfc5ab9b...`,
+"Terreno c/ 6.335,59m² - Galpão em **ruína**" — reparem no título, é o próprio scraper
+descrevendo o estado registrário/do anúncio, possivelmente desatualizado frente à foto que o
+dono mandou, mas não investigado a fundo agora) **já existia no acervo**, com matrícula/
+edital, quando a equipe atribuiu o arremate ao Marcos. Mas `atribuir-arremate.js` não tem como
+saber disso — ele sempre grava um `imoveis_leilao` novo e vazio (`900e6779...`, sem endereço/
+cidade) e conecta caso/arrematados/arrematações A ELE. É a MESMA causa-raiz do bug de 16/09
+("relatórios órfãos"), só que hoje apareceu em `imovel_anexos` em vez de `analises_mercado`:
+qualquer coisa pendurada no imóvel REAL fica invisível para o cliente, porque a tela do
+cliente lê pelo âncora, não pelo imóvel real. **Ainda não corrigido no código** — ver decisão
+pendente abaixo.
+
+**Reparo imediato para o Marcos** (dado, não migração): `imovel_anexos` do imóvel real
+(`dfc5ab9b...`) preenchido via UPDATE direto a partir de `documento_espelho` (mesma lógica da
+função) + `arrematado=true`; e as MESMAS 2 linhas (edital/matrícula) inseridas também no
+imóvel-âncora (`900e6779...`, com `arrematacao_id` preenchido), que é o que `Arrematados.jsx`
+lê. Confirmar visualmente na tela do Marcos após o deploy — não foi possível verificar por
+aqui se o ARQUIVO ainda existe fisicamente no bucket (só o registro no banco).
+
+**Achado à parte, sem ação ainda:** hoje `imovel_anexos.arrematado=true` é **permanente para
+sempre**, sem nenhuma checagem de status de pagamento — a "cronologia de apagar se o cliente
+deixar de pagar" que o dono pediu **não existe**; é feature nova, não bug.
+
+**Corrigido nesta sessão:** `api/gerar-documental.js` não injetava o aprendizado de arremates
+reais (`arremate_aprendizado`) no parecer — só `gerar-analise.js` (mercadológico) fazia isso.
+Adicionado `resumoAprendizadoTexto()` ao prompt documental (commit `0b1dc86`), fechando a
+lacuna do lado jurídico/processual que o dono pediu. É no-op hoje (poucos arremates reais com
+desfecho no CNJ ainda), mas passa a valer à medida que a base cresce.
+
+**Decisões em aberto, levadas ao dono (não decidir sozinho — são política/produto, não bug):**
+1. Como ligar a atribuição manual a um imóvel JÁ no acervo (evita este bug se repetir a cada
+   nova atribuição) — campo simples (colar o UUID) × busca por endereço/matrícula/processo.
+2. Janela de retenção dos documentos permanentes depois que o cliente deixa de ser pagante
+   (hoje: nunca apaga).
+3. Novo tipo de documento "laudo de avaliação" + se o valor deve ser extraído automaticamente
+   (IA lê o PDF) ou digitado manualmente pelo staff, para alimentar o card "Avaliação" (hoje
+   "—" porque `imoveis_leilao.valor_avaliacao` do âncora nunca é preenchido).
