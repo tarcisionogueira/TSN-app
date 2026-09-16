@@ -32,22 +32,30 @@ export async function recalcularArremate(imovelId) {
     const [row] = await (await sb(`arremate_aprendizado?imovel_id=eq.${enc}&limit=1`)).json().catch(() => []);
     if (!row) return;
 
-    // PREVISTO: último mercadológico + laudo concluídos deste imóvel.
+    // PREVISTO: último mercadológico concluído deste imóvel.
     const merc = await (await sb(`analises_mercado?imovel_id=eq.${enc}&status=eq.concluida&select=result&order=updated_at.desc&limit=1`)).json().catch(() => []);
-    const laudo = await (await sb(`analises_laudo?imovel_id=eq.${enc}&status=eq.concluida&select=result&order=updated_at.desc&limit=1`)).json().catch(() => []);
     const mr = merc?.[0]?.result || {};
-    const lr = laudo?.[0]?.result || {};
     // ZERO NÃO É PREVISÃO (07/08). Um mercadológico que concluiu sem estimar valor
     // (`mercadoVazio`) entrava aqui como "previu R$ 0" e o previsto×realizado registrava
     // -100% de desvio contra o arremate real — envenenando a calibração que volta ao prompt
     // de TODOS os relatórios daquela modalidade. Sem estimativa, o previsto fica null (a
     // linha existe, o campo é reconhecidamente desconhecido) e não entra na média.
-    // O mesmo vale para o veredito de um laudo que na verdade era o aviso "faltam relatórios".
     const positivo = (v) => { const n = num(v); return n != null && n > 0 ? n : null; };
+    // VEREDITO: o Laudo de Viabilidade parou de ser gerado para análises novas (18/09 — "o
+    // parecer agora vem do analista, na reunião", Analise.jsx). Tenta o laudo primeiro (cobre
+    // o histórico de quem ainda tem um); sem laudo, cai para o parecer da reunião (aprovado/
+    // reprovado), que é quem substituiu o veredito da IA para os arremates de agora em diante.
+    const laudo = await (await sb(`analises_laudo?imovel_id=eq.${enc}&status=eq.concluida&select=result&order=updated_at.desc&limit=1`)).json().catch(() => []);
+    const lr = laudo?.[0]?.result || {};
+    let veredito = lr.precisaRelatorios === true ? null : (lr.veredito || null);
+    if (!veredito && row.caso_id) {
+      const reu = await (await sb(`reunioes?caso_id=eq.${row.caso_id}&numero=eq.1&select=parecer_arrematacao&limit=1`)).json().catch(() => []); // padrao-ok: leitura best-effort, a função inteira já é try/catch "nunca lança"
+      veredito = reu?.[0]?.parecer_arrematacao || null;
+    }
     const previsto = {
       valor_mercado: mr.mercadoVazio === true ? null : positivo(mr.valorMercado),
       valor_locacao: positivo(mr.valorLocacao),
-      veredito: lr.precisaRelatorios === true ? null : (lr.veredito || null),
+      veredito,
     };
 
     // REALIZADO: preserva o que já há (valor arrematado semeado; revenda/aluguel são

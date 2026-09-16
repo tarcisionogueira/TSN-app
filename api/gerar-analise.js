@@ -10,7 +10,7 @@ import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { groundingGemini } from './_grounding.js';
-import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
+import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { avaliarMercado, explicarCalculo } from './_valor-mercado.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
@@ -3523,6 +3523,15 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     else if (result.parecerPendente) delete result.parecerPendente;
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
+    // FECHA O LOOP previsto×realizado quando este é o ÚLTIMO dos 2 relatórios do arremate
+    // (18/09): o Laudo de Viabilidade parou de ser gerado para análises novas — "o parecer
+    // agora vem do analista, na reunião" — e era ELE quem disparava recalcularArremate() ao
+    // terminar. Sem este gatilho, o corpus de aprendizado (arremate_aprendizado) nunca mais
+    // seria recalculado para nenhum arremate novo. Best-effort, nunca bloqueia a entrega.
+    try {
+      const docOk = await (await sb(`analises_documental?imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json().catch(() => []);
+      if (Array.isArray(docOk) && docOk.length) await recalcularArremate(String(imovelId));
+    } catch { /* best-effort */ }
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os
     // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").

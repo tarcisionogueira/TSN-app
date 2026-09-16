@@ -24,7 +24,7 @@ import { cacheGravar } from './_doc-extracao.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
-import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
+import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1908,6 +1908,15 @@ export default async function handler(req, res) {
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
     persistidoNestaRodada = result;
     await logAtividade(ownerId, 'relatorio_documental_ok', `Documental concluído (risco ${result.nivelRisco || '?'})`, { imovel_id: String(imovelId), nivelRisco: result.nivelRisco, alertasAntifraude: (result.antifraude?.alertas || []).length });
+    // FECHA O LOOP previsto×realizado quando este é o ÚLTIMO dos 2 relatórios do arremate
+    // (18/09): o Laudo de Viabilidade parou de ser gerado para análises novas — "o parecer
+    // agora vem do analista, na reunião" — e era ELE quem disparava recalcularArremate() ao
+    // terminar. Sem este gatilho, o corpus de aprendizado (arremate_aprendizado) nunca mais
+    // seria recalculado para nenhum arremate novo. Best-effort, nunca bloqueia a entrega.
+    try {
+      const mercOk = await (await sb(`analises_mercado?imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json().catch(() => []);
+      if (Array.isArray(mercOk) && mercOk.length) await recalcularArremate(String(imovelId));
+    } catch { /* best-effort */ }
     // CUSTO REAL desta geração (ver _uso.js). O documental é o mais caro dos três — lê PDF
     // por visão —, e é justamente o que o agregado diário escondia ao se somar ao
     // mercadológico do mesmo dia.
