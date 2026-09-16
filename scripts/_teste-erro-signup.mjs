@@ -9,7 +9,7 @@ async function main() {
   const r = await fetch(`${URL}/auth/v1/signup`, {
     method: 'POST',
     headers: { apikey: ANON, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `teste_bloqueio_${Date.now()}@mailinator.com`, password: 'SenhaForte123!@#' }),
+    body: JSON.stringify({ email: `teste_bloqueio_${Date.now()}@mailinator.com`, password: `Xk9#mQ2v${Date.now()}Zp!` }),
   });
   console.log('status:', r.status);
   console.log('body:', await r.text());
