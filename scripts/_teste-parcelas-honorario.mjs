@@ -16,9 +16,14 @@ try {
   await page.goto(`${BASE}/#/honorario/${ARREMATACAO_ID}`, { waitUntil: 'networkidle2', timeout: 30000 });
   await new Promise(r => setTimeout(r, 2000));
 
-  // Aceita os termos (checkbox 1) para revelar o PagamentoServico.
+  // Preenche o e-mail (obrigatório, sem sessão) e aceita os termos — os dois juntos
+  // liberam o PagamentoServico.
+  const emailInput = await page.$('input[type=email]');
+  if (emailInput) await emailInput.type('teste@bidprobrasil.com.br');
+  console.log('Preencheu e-mail?', !!emailInput);
   const checkboxes = await page.$$('input[type=checkbox]');
   if (checkboxes[0]) await checkboxes[0].click();
+  console.log('Clicou no checkbox de aceite?', !!checkboxes[0]);
   await new Promise(r => setTimeout(r, 1000));
 
   // Escolhe "Cartão de crédito".
