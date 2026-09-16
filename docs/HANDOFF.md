@@ -27381,3 +27381,47 @@ esse tipo de caso — o do Marcos — o botão nunca aparecia, mesmo com plano e
 Corrigido: novo ramo em `Caso.jsx` que mostra o mesmo botão quando `!reuniao1` mas
 `caso.status_etapa === 'arrematado'`; ajustado também o `disabled`/badge da seção para não
 aparecer "bloqueada" nesse cenário.
+
+## 18/09 (fim do dia) — comprovante vinculável + 3 agentes de IA ganham aprendizado
+
+**Dois ajustes rápidos, mesmo caso do Marcos:**
+- **Rótulo errado**: "Boleto do sinal/aquisição **(extrajudicial)**" — leilão judicial também
+  tem sinal e aquisição à vista; o dono corrigiu. Removido o sufixo em `Arrematados.jsx` e no
+  comentário de `api/upload-anexo.js`.
+- **Comprovante sem onde vincular**: `arrematado_lancamentos` ganhou `anexo_id` (FK opcional
+  para `imovel_anexos`, novo tipo `comprovante_pagamento`, permanente). "Novo lançamento" ganha
+  upload opcional; a lista mostra um clipe clicável quando há comprovante.
+
+**Os 3 agentes de IA pedidos pelo dono, contrato primeiro (prioridade explícita):**
+
+1. **Gerador de contrato aprende com o que o staff usa de fato.** Antes a minuta da IA era
+   SÓ LEITURA na revisão — sem poder editar, não havia o que aprender. Virou editável
+   (textarea); o texto original da IA fica preservado à parte. Ao enviar, se o final difere do
+   original, o servidor extrai as correções via IA (Haiku, só quando há diferença de verdade) e
+   grava em `contrato_aprendizado` (tabela nova) — mesmo padrão do `juridico_aprendizado`. A
+   próxima geração do MESMO tipo de contrato lê essas correções.
+
+2. **O Laudo de Viabilidade (3º relatório) foi absorvido, não substituído por um novo agente.**
+   Achado ao investigar: `Analise.jsx` já diz por extenso que o laudo "não é mais gerado para
+   novas análises — o parecer agora vem do analista, na reunião" — mas era ELE quem fechava o
+   loop de aprendizado (`recalcularArremate()`, previsto×realizado) só depois de ver os 3
+   prontos, e fornecia o "veredito" a partir do próprio resultado. Sem essa peça, o corpus
+   `arremate_aprendizado` tinha silenciosamente parado de recalcular para qualquer arremate
+   NOVO. Absorvido pelos 2 relatórios que sobraram: `gerar-analise.js`/`gerar-documental.js`
+   agora checam, ao concluir, se o OUTRO já terminou para o mesmo imóvel — quem fechar por
+   último dispara `recalcularArremate()`. O "veredito" tenta o Laudo primeiro (cobre histórico
+   antigo) e cai para `reunioes.parecer_arrematacao` (aprovado/reprovado do analista) — o
+   substituto real do veredito automático.
+
+3. **`leiloeiro_conhecimento` passa a aprender com DESFECHO real, não só dado operacional.**
+   Pedido do dono: "um leiloeiro cujos imóveis geram mais risco jurídico confirmado depois não
+   fica mais 'caro' na próxima triagem". Nova função determinística (sem IA, mesma filosofia do
+   moderador) `atualizar_confiabilidade_leiloeiro()` cruza, por fonte: `risco_confirmado_pct`
+   (% dos documentais concluídos com risco REALMENTE confirmado) e `divergencia_juridica_pct`
+   (% dos imóveis revisados por advogado com divergência real da leitura da IA). Amostra mínima
+   5 por fonte. Chamada semanalmente por `moderador-cron.js`; `gerar-documental.js` lê os dois
+   números na dica de antifraude e alerta o próprio parecer quando a fonte do lote tem histórico
+   medido acima do normal.
+
+Todos os 3 são **no-op hoje** (poucos contratos editados, poucos arremates com desfecho,
+amostra de documental por fonte ainda pequena) — passam a valer com o uso.
