@@ -18,9 +18,9 @@ async function mintarSessao() {
     body: JSON.stringify({ type: 'magiclink', email: EMAIL }),
   });
   const d1 = await r1.json();
-  if (!r1.ok) throw new Error(`generate_link falhou: ${r1.status} ${JSON.stringify(d1).slice(0, 300)}`);
-  const hashed_token = d1?.properties?.hashed_token;
-  if (!hashed_token) throw new Error('generate_link sem hashed_token: ' + JSON.stringify(d1).slice(0, 300));
+  if (!r1.ok) throw new Error(`generate_link falhou: ${r1.status} ${JSON.stringify(d1).slice(0, 500)}`);
+  const hashed_token = d1?.hashed_token || d1?.properties?.hashed_token || d1?.email_otp;
+  if (!hashed_token) throw new Error('generate_link sem hashed_token — chaves: ' + Object.keys(d1 || {}).join(',') + ' | corpo: ' + JSON.stringify(d1).slice(0, 800));
 
   const r2 = await fetch(`${SB}/auth/v1/verify`, {
     method: 'POST',
