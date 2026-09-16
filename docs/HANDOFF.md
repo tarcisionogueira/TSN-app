@@ -27455,3 +27455,23 @@ confirmado nos dois lados: o log em produção mostrou `aprendizado injetado: 51
 (`gerar-contrato-ia.js`, mesmo padrão de diagnóstico agora nos dois arquivos) e o contrato
 gerado saiu com **R$ 1.500,00** — a IA aplicou a lição em vez do valor pedido na descrição.
 Loop fechado ponta a ponta. Lição de teste removida depois de confirmar.
+
+## 16/09 — descrição no anexo (comprovante de pagamento) + mapeamento de leiloeiros sem documentos
+
+**Descrição opcional em qualquer anexo** (pedido do dono, print do comprovante de pagamento
+flagrado como "⚠️ não parece desta arrematação" sem contexto do que era): migração
+`imovel_anexos_descricao.sql` adiciona `imovel_anexos.descricao` (texto livre, opcional).
+`api/upload-anexo.js` aceita e sanitiza (trim, até 300 chars); `Arrematados.jsx` ganha o campo
+na aba Documentos (geral, não só comprovante) e no upload de comprovante do "Novo lançamento"
+(reaproveita `novo.descricao`, já existente para o próprio lançamento); a lista de documentos
+mostra a descrição sob o nome do arquivo. Commit `b53ada6`, build limpo, push direto a `main`.
+
+**Mapeamento de leiloeiros sem documentos da automação** (pedido do dono), cruzando
+`imoveis_leilao` × `imovel_anexos` por fonte (ativos ≥5): `EDITAL_DJEN` (344 ativos, 1% com
+QUALQUER link, 0 publicados — mas é o radar de editais do DJEN, não site de leiloeiro, então
+pode ser desenho da fonte, não bug); `GESTAOLEILOES` (154 ativos, 100% com link_edital, **0
+anexos publicados**) e `VLANCE` (20 ativos, 100% com link, **0 publicados**) — ambos podem ser
+fila de publicação do espelho ainda não ter alcançado (reordenada por urgência em 18/09, mas
+essas fontes não têm imóveis arrematados/com relatório para subir de prioridade) em vez de
+integração quebrada; **candidato a reverificar em ~1 semana** antes de investigar a fundo. Todas
+as demais fontes com ≥5 ativos têm 100% de cobertura de link.
