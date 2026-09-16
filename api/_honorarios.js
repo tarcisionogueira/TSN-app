@@ -19,9 +19,15 @@
 // `db` → função REST (retorna { data }). `arr` → linha de arrematacoes.
 export async function calcularDistribuicao(db, arr) {
   const valor = Number(arr.valor_arrematado || 0);
-  const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,admin_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
-    || { total_pct: 10, admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
+  const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,admin_pct,advogado_pct,analista_pct,consultor_pct,honorario_minimo')).data?.[0]
+    || { total_pct: 10, admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0, honorario_minimo: 7000 };
   const total = Number(cfg.total_pct) || 10;
+  // HONORÁRIO MÍNIMO (termo de adesão, decisão do dono 30/07): o texto que o cliente aceita
+  // promete R$ 7.000,00 sempre que 10% do valor arrematado ficar abaixo disso. O total
+  // distribuído tem que refletir o que foi de fato cobrado — nunca o percentual cru.
+  const minimo = Number(cfg.honorario_minimo) || 7000;
+  const honorarioBase = valor * total / 100;
+  const honorarioReal = Math.max(honorarioBase, minimo);
   const adminRow = (await db('perfis?role=eq.admin&ativo=eq.true&select=id,nome&order=criado_em.asc&limit=1')).data?.[0];
 
   // Envolvidos designados no fluxo daquele cliente.
@@ -113,9 +119,13 @@ export async function calcularDistribuicao(db, arr) {
   // linha "analista … 0% … R$ 0,00" para a mesma pessoa que já aparece como advogado. Num
   // documento financeiro isso não informa nada e sugere um pagamento que não existe. Quem
   // participou do caso está registrado em `casos`, que é onde essa informação pertence.
+  // Cada linha recebe a fração pct/total do honorário REAL (já com o piso aplicado) — não
+  // valor*pct/100 direto, que ignoraria o mínimo. Quando o piso não incide, o resultado é
+  // idêntico ao cálculo direto (honorarioBase*pct/total === valor*pct/100).
+  const valorDaFatia = pct => +(honorarioReal * pct / total).toFixed(2);
   const linhas = [
-    { papel: 'admin', id: adminRow?.id || null, nome: adminRow?.nome || 'Admin (backup)', pct: adminPct, valor: +(valor * adminPct / 100).toFixed(2) },
-    ...envolvidos.filter(e => e.pct > 0).map(e => ({ ...e, valor: +(valor * e.pct / 100).toFixed(2) })),
+    { papel: 'admin', id: adminRow?.id || null, nome: adminRow?.nome || 'Admin (backup)', pct: adminPct, valor: valorDaFatia(adminPct) },
+    ...envolvidos.filter(e => e.pct > 0).map(e => ({ ...e, valor: valorDaFatia(e.pct) })),
   ];
-  return { total, valor, adminPct, linhas };
+  return { total, valor, adminPct, honorarioReal, linhas };
 }

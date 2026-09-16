@@ -560,7 +560,7 @@ export default function Caso() {
   const [linkHonorarioCopiado, setLinkHonorarioCopiado] = useState(false);
 
   // ─── Honorários ──────────────────────────────────────────────────────────
-  const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1 });
+  const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1, honorario_minimo:7000 });
   const [monitorExito, setMonitorExito] = useState(null); // distribuição do êxito (só admin)
 
   // ─── Procuração ──────────────────────────────────────────────────────────
@@ -934,7 +934,9 @@ export default function Caso() {
       const valor = parseFloat(String(arrForm.valor_arrematado).replace(/\./g,'').replace(',','.')) || 0;
       if (!valor) { setMsg('Informe o valor de arrematação.'); return; }
 
-      const honorariosValor = valor * (honorariosConfig.total_pct / 100);
+      // HONORÁRIO MÍNIMO (termo de adesão, decisão do dono 30/07): o texto já promete
+      // R$ 7.000,00 sempre que 10% ficar abaixo disso — o cálculo tinha que aplicar o piso.
+      const honorariosValor = Math.max(valor * (honorariosConfig.total_pct / 100), Number(honorariosConfig.honorario_minimo) || 7000);
 
       // 19/08: `user.id` aqui era o defeito de identidade do modo suporte — o staff
       // registrando pelo cliente gravava a arrematação EM NOME DO ADMIN (e o rateio de
@@ -1812,14 +1814,21 @@ export default function Caso() {
                   <label style={lbl}>Valor Arrematado (R$)</label>
                   <input value={arrForm.valor_arrematado} onChange={e=>setArrForm(p=>({...p,valor_arrematado:maskMoedaDigitando(e.target.value)}))} style={inp} placeholder="0,00"/>
                 </div>
-                {arrForm.valor_arrematado && (
-                  <div style={{ padding:'10px 14px', background:'#f0fdf4', borderRadius:8, fontSize:12, color:'#166534' }}>
-                    Honorários estimados ({Number(honorariosConfig.total_pct).toFixed(2)}%): <strong>{fmt(parseFloat(String(arrForm.valor_arrematado).replace(/\./g,'').replace(',','.'))*honorariosConfig.total_pct/100)}</strong>
-                    <div style={{ fontSize:11, marginTop:4, color:'#64748b' }}>
-                      Admin {Number(honorariosConfig.admin_pct).toFixed(2)}% · Advogado {Number(honorariosConfig.advogado_pct).toFixed(2)}% · Analista {Number(honorariosConfig.analista_pct).toFixed(2)}%
+                {arrForm.valor_arrematado && (() => {
+                  const valorNum = parseFloat(String(arrForm.valor_arrematado).replace(/\./g,'').replace(',','.')) || 0;
+                  const minimo = Number(honorariosConfig.honorario_minimo) || 7000;
+                  const estimado = Math.max(valorNum * honorariosConfig.total_pct / 100, minimo);
+                  const aplicouMinimo = estimado === minimo && valorNum * honorariosConfig.total_pct / 100 < minimo;
+                  return (
+                    <div style={{ padding:'10px 14px', background:'#f0fdf4', borderRadius:8, fontSize:12, color:'#166534' }}>
+                      Honorários estimados ({Number(honorariosConfig.total_pct).toFixed(2)}%): <strong>{fmt(estimado)}</strong>
+                      {aplicouMinimo && <span style={{ marginLeft:6, fontSize:10.5, color:'#92400e', fontWeight:700 }}>(honorário mínimo aplicado)</span>}
+                      <div style={{ fontSize:11, marginTop:4, color:'#64748b' }}>
+                        Admin {Number(honorariosConfig.admin_pct).toFixed(2)}% · Advogado {Number(honorariosConfig.advogado_pct).toFixed(2)}% · Analista {Number(honorariosConfig.analista_pct).toFixed(2)}%
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 <div>
                   <label style={lbl}>Compra em nome</label>
                   <div style={{ display:'flex', gap:10 }}>

@@ -99,6 +99,7 @@ export default function PagarHonorario() {
   }
 
   const termo = termoDoProduto('assessorado', { valorLabel: fmtBRL(arr.honorarios_valor), modelo: 'parcelado' });
+  const termoPro = termoDoProduto('top2', { modelo: 'recorrente' });
 
   return (
     <div style={wrap}>
@@ -141,6 +142,12 @@ export default function PagarHonorario() {
             Busca de imóveis em leilão, relatórios mercadológico, documental e laudo de viabilidade,
             e demais recursos do plano. Autorizo o cartão agora; a <strong>1ª mensalidade só é
             cobrada em 30 dias</strong>. Disponível apenas pagando com cartão nesta tela.
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ color: '#7c3aed', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {termoPro.versao})</summary>
+              <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: 'white', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
+                {termoPro.texto}
+              </p>
+            </details>
           </span>
         </label>
 

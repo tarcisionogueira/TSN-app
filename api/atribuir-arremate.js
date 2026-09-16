@@ -194,10 +194,13 @@ export default async function handler(req) {
   let arrematacao_id = null, honorarios_valor = null;
   if (promover_assessorado === true && valor > 0 && caso?.id) {
     try {
-      const cfgRes = await sb('config_honorarios?id=eq.1&select=total_pct');
+      const cfgRes = await sb('config_honorarios?id=eq.1&select=total_pct,honorario_minimo');
       const [cfg] = cfgRes.ok ? await cfgRes.json().catch(() => []) : [];
       const totalPct = Number(cfg?.total_pct) || 10;
-      honorarios_valor = Math.round(valor * (totalPct / 100) * 100) / 100;
+      // HONORÁRIO MÍNIMO (termo de adesão, decisão do dono 30/07): R$ 7.000,00 sempre que
+      // o percentual resultar em valor inferior a esse montante.
+      const minimo = Number(cfg?.honorario_minimo) || 7000;
+      honorarios_valor = Math.max(Math.round(valor * (totalPct / 100) * 100) / 100, minimo);
       const arrRes = await sb('arrematacoes?on_conflict=caso_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
