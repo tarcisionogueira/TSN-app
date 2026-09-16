@@ -27445,3 +27445,13 @@ temporário no GitHub Actions (removido depois, run `35119673449`):**
 
 Log de diagnóstico ficou em `gerar-contrato.js` (`console.log` do nº de correções extraídas,
 mesmo quando zero) — barato e evita "silêncio parece sucesso" no futuro.
+
+**Cenário 2, pedido do dono ("testa mais um cenário"): confirma o lado da LEITURA, não só da
+escrita.** O 1º teste só provou que a correção é gravada; faltava provar que ela volta e MUDA
+o próximo contrato do mesmo tipo. Inserida uma lição real em `contrato_aprendizado` ("para
+este tipo de serviço, o valor de mercado é R$ 1.500,00, nunca R$ 1.000,00") e gerado um
+contrato NOVO com a mesma descrição do teste anterior (que pede R$ 1.000,00). Resultado
+confirmado nos dois lados: o log em produção mostrou `aprendizado injetado: 511 chars`
+(`gerar-contrato-ia.js`, mesmo padrão de diagnóstico agora nos dois arquivos) e o contrato
+gerado saiu com **R$ 1.500,00** — a IA aplicou a lição em vez do valor pedido na descrição.
+Loop fechado ponta a ponta. Lição de teste removida depois de confirmar.
