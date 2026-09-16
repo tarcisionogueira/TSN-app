@@ -76,7 +76,12 @@ export function cidadeUF(titulo = '', descricao = '') {
     if (m) return { cidade: titleCase(m[1].trim()).slice(0, 60), estado: m[2].toUpperCase() };
   }
   for (const s of fontes) {
-    const limpo = String(s || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo)[^/]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
+    // 16/09 — achado em produção (KLEILOES): matrícula cita "2º CRI de Maringá/PR" (Cartório
+    // de Registro de Imóveis) antes da cidade REAL do lote (Paicandu/PR); sem filtrar "CRI"
+    // igual já filtra Comarca/Vara/Tribunal, essa referência de cartório vencia como "última
+    // Cidade/UF do texto" e a cidade gravada saía errada. `cri` como palavra isolada (\b…\b),
+    // não substring — não risca nomes de cidade que por acaso contenham essas letras juntas.
+    const limpo = String(s || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo|cri|circunscri[çc][ãa]o|cart[óo]rio)[^/]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
     const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})\s*\/\s*([A-Z]{2})\b/g)];
     if (ms.length) {
       const m = ms[ms.length - 1];
