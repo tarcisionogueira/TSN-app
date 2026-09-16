@@ -39,17 +39,24 @@ async function main() {
   for (const m of lotes.slice(0, 5)) console.log(`  ${m[1]}`);
 
   if (!lotes.length) {
-    console.log('\n--- Todos os <a href> que parecem lote/imóvel (até 40) ---');
+    console.log('\n--- Todos os <a href> (até 40, sem filtro) ---');
     const vistos = new Set();
-    for (const m of home.matchAll(/href=["']([^"']+)["']/gi)) {
+    for (const m of home.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
       const h = m[1];
       if (vistos.has(h) || /\.(css|js|png|jpe?g|svg|ico|woff2?)(\?|$)/i.test(h)) continue;
-      if (/imov|lote|oferta|leilao\/|bem\//i.test(h)) { vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 40) break; }
+      vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 40) break;
     }
-    console.log('\n--- amostra (primeiros 2000 chars de texto limpo) ---');
-    const txt = home.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
-    console.log(txt.slice(0, 2000));
+    console.log('\n--- Assinaturas de SPA/framework ---');
+    console.log('  id="app" vazio:', /<div id=["']app["']>\s*<\/div>/i.test(home));
+    console.log('  id="root" vazio:', /<div id=["']root["']>\s*<\/div>/i.test(home));
+    console.log('  Vue:', /vue(\.min)?\.js|__VUE__|v-cloak/i.test(home));
+    console.log('  React:', /react-dom|__NEXT_DATA__/i.test(home));
+    console.log('  Angular:', /ng-app|angular\.js/i.test(home));
+    console.log('  buscador/categoria=2 mencionado:', /buscador\?categoria=2|buscador%3fcategoria%3d2/i.test(home));
+    console.log('\n--- HTML CRU (primeiros 3000 chars, sem strip) ---');
+    console.log(home.slice(0, 3000));
+    console.log('\n--- HTML CRU (últimos 1500 chars) ---');
+    console.log(home.slice(-1500));
     return;
   }
 
