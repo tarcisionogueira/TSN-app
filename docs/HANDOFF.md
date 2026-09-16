@@ -27817,3 +27817,14 @@ nem captcha.
 cadastro não foi feito — o `signUp()` não passa por `api/_rate-limit.js` hoje. O Turnstile
 cobre o mesmo problema (repetição em escala) por outro ângulo; se um dia fizer sentido
 também limitar por IP, o utilitário já existe, só falta ligar no fluxo de auth.
+
+**⚠️ Achado no MESMO dia, ao pedir o print de confirmação visual**: o widget carregava a tag
+`<script>` mas `window.turnstile` nunca era definido e nenhum iframe aparecia — o CSP
+(`vercel.json`) não incluía `challenges.cloudflare.com` em `script-src`/`frame-src`. **Mesmo
+padrão do incidente do Pixel do Meta** já documentado aqui: CSP bloqueando script novo em
+silêncio total, sem erro visível no console para quem não abre o DevTools. Corrigido
+(commit `32d0ebe`) e **reconfirmado com print real em produção** depois do redeploy: o
+checkbox "Verify you are human" aparece corretamente entre o aceite de termos e o botão
+"Criar conta grátis". Scripts temporários de teste removidos após a confirmação.
+**Lição para qualquer script de terceiro novo**: checar o CSP de `vercel.json` faz parte do
+checklist — script de terceiro sem entrada no CSP é a mesma classe de falha do Pixel.
