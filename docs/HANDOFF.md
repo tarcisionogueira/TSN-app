@@ -27773,3 +27773,39 @@ que o trigger mascararia).
 **Método, de novo**: em cada um, o veredito saiu de LER a fonte/o log/o trigger relevante, não
 de aceitar o número do painel como já sendo o diagnóstico — mesma lição da Parte 7 (HASTA/
 CEF/JOAOEMILIO/SBID21).
+
+## 16/09 (9ª parte) — contas de teste no Admin: investigadas, bloqueadas, e Turnstile no cadastro
+
+**Pedido do dono**: viu no Admin duas contas "Testando Teste" (print anexado) e perguntou se
+representavam risco. Investigado com dado, não suposição: mesmo `anon_id` de navegador,
+telefones sequenciais, uma com e-mail de serviço descartável (`@meonvr.com`) — UMA pessoa
+clicando manualmente por todo o menu público em ~10min. Sem SQLi/XSS, sem escalação de
+privilégio, sem checkout. Risco desta ocorrência: baixo. Mas o vetor ficava aberto —
+`supabase.auth.signUp()` é chamado direto do navegador, sem passar por `api/_rate-limit.js`
+nem captcha.
+
+**Ações tomadas:**
+1. As 2 contas inativadas (`perfis.ativo=false`, mesmo caminho do botão "Inativar" do Admin —
+   bloqueia login em qualquer rota via `PrivateRoute`/`App.jsx`).
+2. **Migração `bloqueia_cadastro_email_descartavel.sql`**: trigger BEFORE INSERT em
+   `auth.users` recusa cadastro com domínio de e-mail descartável (tabela
+   `dominios_email_bloqueados`, mailinator/guerrillamail/yopmail/etc + o domínio achado).
+   Testado ao vivo contra a API real do GoTrue (script temporário, removido depois): a
+   mensagem customizada do trigger chega **verbatim** ao navegador (`P0001:
+   dominio_email_bloqueado: ...`) — diferente do `handle_new_user()`, que o comentário de
+   `erroAuth.js` já documentava como achatado pelo GoTrue. São pontos de falha diferentes no
+   código do GoTrue (INSERT em `auth.users` falhando vs. trigger AFTER numa tabela própria) —
+   por isso a tradução nova em `erroAuth.js` funciona, e não é dado por certo sem o teste.
+3. **Turnstile no cadastro** (pedido explícito seguinte do dono): `TurnstileWidget.jsx` novo +
+   `Login.jsx` manda `captchaToken` no `signUp()`. **Rollout seguro**: sem
+   `VITE_TURNSTILE_SITE_KEY` configurada, o widget não renderiza e o cadastro segue igual —
+   pode ir pro ar antes da chave existir. **Pendência do dono, não automatizável daqui**: (a)
+   criar o widget no dashboard Cloudflare (grátis, não precisa migrar DNS) e pôr a Site Key na
+   Vercel; (b) colar a Secret Key no painel do Supabase (Authentication → Bot and Abuse
+   Protection) — sem isso o backend não valida o token, só o front manda. Passo a passo em
+   `docs/ENVS_VERCEL.md`.
+
+**Fora de escopo, registrado pra não esquecer**: rate-limit de IP no próprio endpoint de
+cadastro não foi feito — o `signUp()` não passa por `api/_rate-limit.js` hoje. O Turnstile
+cobre o mesmo problema (repetição em escala) por outro ângulo; se um dia fizer sentido
+também limitar por IP, o utilitário já existe, só falta ligar no fluxo de auth.
