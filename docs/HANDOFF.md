@@ -27296,28 +27296,48 @@ qualquer coisa pendurada no imóvel REAL fica invisível para o cliente, porque 
 cliente lê pelo âncora, não pelo imóvel real. **Ainda não corrigido no código** — ver decisão
 pendente abaixo.
 
-**Reparo imediato para o Marcos** (dado, não migração): `imovel_anexos` do imóvel real
-(`dfc5ab9b...`) preenchido via UPDATE direto a partir de `documento_espelho` (mesma lógica da
-função) + `arrematado=true`; e as MESMAS 2 linhas (edital/matrícula) inseridas também no
-imóvel-âncora (`900e6779...`, com `arrematacao_id` preenchido), que é o que `Arrematados.jsx`
-lê. Confirmar visualmente na tela do Marcos após o deploy — não foi possível verificar por
-aqui se o ARQUIVO ainda existe fisicamente no bucket (só o registro no banco).
+**Reparo do Marcos, versão FINAL (consolidada, sem duplicidade)** — o primeiro reparo (UPDATE em
+`dfc5ab9b` + INSERT de 2 linhas espelhadas no âncora `900e6779`) funcionava mas violava a
+instrução do dono ("não pode haver duplicidades"). Substituído por uma CONSOLIDAÇÃO real: `casos`,
+`arrematados`, `arrematacoes`, `arremate_aprendizado`, `analises_mercado` e `analises_documental`
+do Marcos foram todos re-apontados para o imóvel REAL (`dfc5ab9b...`, LJUD, o galpão de Feira de
+Santana); as 2 linhas duplicadas de `imovel_anexos` no âncora foram apagadas; o âncora em branco
+(`900e6779...`) foi apagado por inteiro. Hoje existe **UM único imóvel, um único conjunto de
+documentos** — exatamente o que o código corrigido abaixo passa a fazer sozinho da próxima vez.
+Ainda não foi possível confirmar visualmente aqui se o ARQUIVO segue existindo no bucket (só o
+registro no banco) — conferir na tela do Marcos.
 
-**Achado à parte, sem ação ainda:** hoje `imovel_anexos.arrematado=true` é **permanente para
-sempre**, sem nenhuma checagem de status de pagamento — a "cronologia de apagar se o cliente
-deixar de pagar" que o dono pediu **não existe**; é feature nova, não bug.
+**Decisões do dono (18/09) e o que cada uma virou:**
+1. *"deve usar o mesmo arquivo... não pode haver duplicidades"* → `api/atribuir-arremate.js`
+   (commit `6a63ff4`): antes de criar um imóvel-âncora em branco, busca por `numero_processo` no
+   acervo; havendo **exatamente um** candidato, reaproveita esse `imovel_id` (documentos,
+   análises e aprendizado nascem todos no MESMO lugar, sem duplicar nada); ambíguo ou sem
+   processo informado segue no caminho antigo (cria âncora) — nunca arrisca vincular ao imóvel
+   errado. Resposta do dono não escolheu entre "campo" e "busca" na UI; optei pelo caminho que já
+   existia (processo já é capturado no formulário) por ser mais barato e não exigir decisão de UX
+   nova — o formulário pode ganhar uma busca visual depois, sem mudar o backend.
+2. *"90 dias"* de retenção após deixar de pagar → **já existia uma Regra 1 completa** (avisa por
+   e-mail/push, só apaga com aviso enviado + carência vencida, revalida no momento de apagar) —
+   só a janela estava em 30 dias, não 90 como o HANDOFF anterior desta sessão erroneamente
+   registrou ("nunca apaga"; eu tinha conferido só a Etapa 1 e não a Etapa 2 notify-first).
+   Corrigido nas DUAS funções que calculam o número (`retencao_candidatos_aviso` e
+   `anexos_expirados_avisados` — têm que mudar juntas, senão o aviso promete uma data e a
+   deleção revalida outra), migração `retencao_r1_inadimplente_90_dias.sql`, aplicada.
+3. *"o laudo de avaliação vem junto com a documentação e deve ser lido pela IA"* — minha pergunta
+   estava mal colocada (perguntei sobre um tipo de upload separado que o dono nunca pediu).
+   Corrigido: `api/gerar-documental.js` ganhou o campo `valorAvaliacaoOficial` na extração (a IA
+   já lê o auto/laudo de avaliação dentro do PDF do edital, agora também extrai o número) e um
+   write-back que preenche `imoveis_leilao.valor_avaliacao` **só quando está vazio** (nunca
+   sobrescreve um valor real já existente) — alimenta o card "Avaliação" de `Arrematados.jsx`,
+   que ficava sempre "—" em arremate atribuído manualmente.
 
-**Corrigido nesta sessão:** `api/gerar-documental.js` não injetava o aprendizado de arremates
+Também corrigido nesta sessão: `api/gerar-documental.js` não injetava o aprendizado de arremates
 reais (`arremate_aprendizado`) no parecer — só `gerar-analise.js` (mercadológico) fazia isso.
-Adicionado `resumoAprendizadoTexto()` ao prompt documental (commit `0b1dc86`), fechando a
-lacuna do lado jurídico/processual que o dono pediu. É no-op hoje (poucos arremates reais com
-desfecho no CNJ ainda), mas passa a valer à medida que a base cresce.
+Adicionado `resumoAprendizadoTexto()` ao prompt documental (commit `0b1dc86`), fechando a lacuna
+do lado jurídico/processual que o dono pediu. É no-op hoje (poucos arremates reais com desfecho
+no CNJ ainda), mas passa a valer à medida que a base cresce.
 
-**Decisões em aberto, levadas ao dono (não decidir sozinho — são política/produto, não bug):**
-1. Como ligar a atribuição manual a um imóvel JÁ no acervo (evita este bug se repetir a cada
-   nova atribuição) — campo simples (colar o UUID) × busca por endereço/matrícula/processo.
-2. Janela de retenção dos documentos permanentes depois que o cliente deixa de ser pagante
-   (hoje: nunca apaga).
-3. Novo tipo de documento "laudo de avaliação" + se o valor deve ser extraído automaticamente
-   (IA lê o PDF) ou digitado manualmente pelo staff, para alimentar o card "Avaliação" (hoje
-   "—" porque `imoveis_leilao.valor_avaliacao` do âncora nunca é preenchido).
+**Ainda pendente, não decidido:** a fila de `registrar_anexos_do_espelho()` (achado 1 acima) não
+tem prioridade — processa em lotes de 500 sem ordenação, e o backlog é maior que isso. Candidato
+a próximo passo: dar a ela a mesma priorização por data de leilão que `proximos_espelho_documentos`
+já tem, ou aumentar a frequência/lote.
