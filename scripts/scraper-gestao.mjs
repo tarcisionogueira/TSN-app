@@ -25,10 +25,23 @@
  *
  * 09/09: item 8 — parseCard() só lia matrícula em TEXTO (nº solto, sem link) e link_edital
  * sempre apontava pra página do EVENTO (placeholder repetido pra todos os lotes do mesmo
- * leilão) — link_matricula/anexos ficavam null em 100% dos casos, mesmo a página do LOTE
- * (url_lote, sempre populada) nunca sendo visitada. enriquecerDocumentos() fecha esse gap
- * visitando url_lote pra um subconjunto (GESTAO_DOC_CAP) dos lotes sem documento, com o
- * MESMO padrão de scan de `<a href>` que scraper-soleon.mjs já usa.
+ * leilão) — link_matricula/anexos ficavam null em 100% dos casos. enriquecerDocumentos()
+ * tentou fechar esse gap visitando url_lote com o MESMO padrão de scan de `<a href>` que
+ * scraper-soleon.mjs usa — mas ficou em produção 1 semana inteira (09 a 16/09) sem achar
+ * NADA (confirmado: 0 imóveis com anexo em nenhum domínio do cluster).
+ *
+ * 16/09: causa-raiz achada por recon ao vivo (workflow temporário, GH Actions). A página do
+ * LOTE NUNCA tem o link em `<a href>` — "Edital" e "Matrícula e anexos" são botões
+ * javascript:void(0) que abrem, num fancybox/iframe, uma página SEPARADA
+ * (loteAnexos.php?idLote=N / leilaoAnexos.php?idLeilao=N&action=0) — e DENTRO dela o link
+ * ainda não é `<a href>`, é `onClick="anexoCarregar('./sishp/.../arquivo.pdf')"`
+ * (`function anexoCarregar(path){window.open(path)}`). Três camadas de indireção, nenhuma
+ * delas um link estático — não é o parser errando formato, é o documento morando em duas
+ * páginas que o scraper nunca visitava. enriquecerDocumentos() reescrita pra buscar as DUAS
+ * páginas certas (extrairAnexosCarregar) em vez de url_lote; leilaoAnexos é por EVENTO
+ * (compartilhado entre lotes do mesmo leilão) e cacheado por execução pra não pagar 1
+ * request por lote à toa. Custo sobe de ~1 pra ~2 requests Bright Data por lote sem doc
+ * (mais barato que parece: o 2º é amortizado entre todos os lotes do mesmo leilão).
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
@@ -316,6 +329,30 @@ function parseCard(card, ctx) {
 
 // Rótulo curto do imóvel: 1º pelo início da DESCRIÇÃO; senão pela 1ª palavra-tipo do card
 // (cobre venda direta, que usa "Descrição legal: Imóvel Urbano: Prédio Comercial…").
+// Recon 16/09 (workflow temporário, confirmado ao vivo): a página do LOTE (url_lote) NUNCA
+// tem o link do documento em `<a href>` — "Edital" e "Matrícula e anexos" são botões
+// javascript:void(0) que abrem, num fancybox/iframe, uma página SEPARADA:
+//   - loteAnexos.php?idLote=<idLote>      → matrícula/anexos do LOTE
+//   - leilaoAnexos.php?idLeilao=<idLeilao>&action=0 → edital/regras do EVENTO (idLeilao),
+//     compartilhado por todos os lotes do mesmo leilão
+// E DENTRO dessas páginas o link ainda não é `<a href>` — é
+//   <a ... onClick="anexoCarregar('./sishp/leilao/<idLeilao>/anexos/<arquivo>.pdf');">RÓTULO</a>
+// com `function anexoCarregar(path){ window.open(path); }`. extrairDocsDoHtml() (scan de
+// `<a href>`) nunca poderia achar isso — não é o parser errando um formato, é o documento
+// morando em outra página. Esta função lê ESSE padrão.
+function extrairAnexosCarregar(html, urlBase) {
+  const docs = [];
+  for (const m of html.matchAll(/<a\b[\s\S]*?anexoCarregar\((['"])([^'"]+)\1\)[\s\S]*?>([\s\S]*?)<\/a>/gi)) {
+    const caminho = m[2];
+    const label = decodificarEntidades((m[3] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    let abs; try { abs = new URL(caminho, urlBase); } catch { continue; }
+    if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue;
+    const tipo = /matr[íi]cula/i.test(label) ? 'matricula' : (/edital/i.test(label) ? 'edital' : (/laudo/i.test(label) ? 'laudo' : 'outro'));
+    docs.push({ tipo, nome: (label || 'Documento').slice(0, 80), url: abs.href });
+  }
+  return docs;
+}
+
 function inferirRotulo(txt) {
   const TIPOS = /\b(CASA|APARTAMENTO|APTO|TERRENO|SALA|LOJA|GALP[ÃA]O|PR[ÉE]DIO|CH[ÁA]CARA|S[ÍI]TIO|FAZENDA|BARRAC[ÃA]O|IM[ÓO]VEL)\b/i;
   const m = txt.match(new RegExp(`DESCRI[ÇC][ÃA]O:[^.]*?${TIPOS.source}`, 'i')) || txt.match(TIPOS);
@@ -350,24 +387,49 @@ function extrairDocsDoHtml(html, urlBase) {
   return { link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i), anexos };
 }
 
-// Visita url_lote (página do LOTE, já populada mas nunca usada) pra um subconjunto dos
-// lotes SEM documento — cap pequeno de propósito (GESTAO_DOC_CAP, default 30): é 1 request
-// Bright Data por lote, contra o MESMO teto semanal que CALIL/VEGAS/RJLEILOES dependem.
-// Mesmo espírito do enrichCap que scraper-puppeteer.mjs já usa pra SUPERBID/SOLD/ZUK/SODRE.
+// Busca o documento real pra um subconjunto dos lotes SEM documento — cap pequeno de
+// propósito (GESTAO_DOC_CAP, default 30): contra o MESMO teto semanal que CALIL/VEGAS/
+// RJLEILOES dependem. Mesmo espírito do enrichCap que scraper-puppeteer.mjs já usa pra
+// SUPERBID/SOLD/ZUK/SODRE.
+// 16/09: recon confirmou que o documento NUNCA está na página do LOTE (url_lote) — está em
+// duas páginas separadas (ver extrairAnexosCarregar acima). `leilaoAnexos.php` é por EVENTO
+// (idLeilao), não por lote: cacheado aqui pra não pagar 1 request por lote do mesmo leilão.
 async function enriquecerDocumentos(rows) {
   const alvo = rows.filter(r => !(r.anexos && r.anexos.length)).slice(0, DOC_CAP);
   if (!alvo.length) return;
-  console.log(`\n📄 Buscando documento na página do lote (${alvo.length}/${rows.length} sem doc, cap ${DOC_CAP})...`);
+  console.log(`\n📄 Buscando documento (loteAnexos/leilaoAnexos) pra ${alvo.length}/${rows.length} sem doc, cap ${DOC_CAP}...`);
+  const cacheEdital = new Map(); // idLeilao -> docs[] (edital/regras), evita refetch por lote
   let achados = 0;
   for (const row of alvo) {
-    const html = await bd(row.url_lote, { valido: h => !!h && h.length > 500 });
-    if (html) {
-      const doc = extrairDocsDoHtml(html, row.url_lote);
-      if (doc.link_matricula) row.link_matricula = doc.link_matricula;
-      if (doc.link_edital) row.link_edital = doc.link_edital; // substitui o placeholder do evento
-      if (doc.anexos.length) { row.anexos = doc.anexos; achados++; }
-    }
+    const docs = [];
+
+    // 1) Matrícula/anexos do LOTE — sempre 1 request por lote (não dá pra cachear).
+    const urlLoteAnexos = row.url_lote.replace(/lote\.php\?idLote=/, 'loteAnexos.php?idLote=');
+    const htmlLote = await bd(urlLoteAnexos, { valido: h => !!h && h.length > 500 });
+    if (htmlLote) docs.push(...extrairAnexosCarregar(htmlLote, urlLoteAnexos), ...extrairDocsDoHtml(htmlLote, urlLoteAnexos).anexos);
     await sleep(400);
+
+    // 2) Edital/regras do EVENTO — compartilhado por todos os lotes do mesmo leilão.
+    const mLeilao = row.link_edital && row.link_edital.match(/leilao\.php\?idLeilao=(\d+)/);
+    if (mLeilao) {
+      const idLeilao = mLeilao[1];
+      if (!cacheEdital.has(idLeilao)) {
+        const urlLeilaoAnexos = row.link_edital.replace(/leilao\.php\?idLeilao=(\d+)/, 'leilaoAnexos.php?idLeilao=$1') + '&action=0';
+        const htmlLeilao = await bd(urlLeilaoAnexos, { valido: h => !!h && h.length > 500 });
+        cacheEdital.set(idLeilao, htmlLeilao ? extrairAnexosCarregar(htmlLeilao, urlLeilaoAnexos) : []);
+        await sleep(400);
+      }
+      docs.push(...cacheEdital.get(idLeilao));
+    }
+
+    if (docs.length) {
+      row.anexos = docs;
+      const matr = docs.find(d => d.tipo === 'matricula');
+      const ed = docs.find(d => d.tipo === 'edital');
+      if (matr) row.link_matricula = matr.url;
+      if (ed) row.link_edital = ed.url; // substitui o placeholder do evento
+      achados++;
+    }
   }
   console.log(`  ${achados}/${alvo.length} lote(s) com documento encontrado.`);
 }
