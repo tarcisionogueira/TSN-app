@@ -46,12 +46,26 @@ async function main() {
 
   await new Promise(r => setTimeout(r, 3000)); // dá tempo do Turnstile carregar/resolver
 
-  // Confirma via DOM se o iframe do Turnstile está presente.
-  const temTurnstile = await page.evaluate(() => !!document.querySelector('iframe[src*="challenges.cloudflare.com"]'));
-  console.log('iframe do Turnstile presente no DOM?', temTurnstile);
+  // Turnstile carrega um script externo (challenges.cloudflare.com) e SÓ ENTÃO chama
+  // window.turnstile.render() — dar mais tempo antes de checar, e também tentar achar o
+  // <div> alvo mesmo antes do iframe nascer dentro dele.
+  await new Promise(r => setTimeout(r, 4000));
+  const diag = await page.evaluate(() => ({
+    temTurnstileWindow: typeof window.turnstile !== 'undefined',
+    temIframe: !!document.querySelector('iframe[src*="challenges.cloudflare.com"]'),
+    scriptsTurnstile: [...document.querySelectorAll('script')].filter(s => /turnstile/i.test(s.src)).map(s => s.src),
+  }));
+  console.log('diagnóstico turnstile:', JSON.stringify(diag));
 
   await page.screenshot({ path: 'print-cadastro.png', fullPage: true });
   console.log('print salvo.');
+
+  const fs = await import('node:fs');
+  const b64 = fs.readFileSync('print-cadastro.png').toString('base64');
+  console.log(`BASE64_PNG_INICIO(${b64.length} chars)`);
+  // Quebra em linhas de 2000 chars pra não estourar limite de linha do log.
+  for (let i = 0; i < b64.length; i += 2000) console.log(b64.slice(i, i + 2000));
+  console.log('BASE64_PNG_FIM');
 
   await browser.close();
 }
