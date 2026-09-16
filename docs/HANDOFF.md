@@ -27585,3 +27585,31 @@ como próximo passo se o dono quiser, fora do escopo do pedido de hoje.
 100% com cidade/UF e valor, 96,6% com foto, 99,1% com matrícula real (PDF), 26,5% com área
 (rótulo "Observação:" nem sempre traz "X m²" no formato esperado — aceitável, não bloqueia).
 `leiloeiro_conhecimento` atualizado (`docs_status='ok'`) com o relato completo.
+
+## 16/09 (5ª parte) — SARAIVA e MARCOANTONIO já estavam integrados (correção de achado anterior)
+
+**Pedido do dono: "implementa o scraper do saraiva agora".** Recon achou a causa do 404 nos
+caminhos padrão: SARAIVA usa o template **ANTIGO** da plataforma Suporte Leilões
+(`/buscador?categoria=2`, renderizado — precisa de Puppeteer), não o novo (`/imoveis`) que o
+JELEILOES/KLEILOES usam. E o template antigo **já tem parser pronto**: `scraper-puppeteer.mjs`
+→ `SUPORTE_TENANTS`. Conferindo a lista, `saraivaleiloes.com.br` **já estava lá** desde 20/08
+(recon-suporte) — confirmado no banco: **25 lotes ativos, atualizados no mesmo dia** (cron
+`leiloeiros-puppeteer.yml`, diário 10h UTC, grátis). Nada a implementar.
+
+**Achado colateral, mesma checagem: MARCOANTONIO também já estava integrado.** A análise de
+dificuldade de 16/09 (2ª parte) tinha classificado SARAIVA e MARCOANTONIO como "candidatos"
+(baixa/moderada dificuldade) comparando só contra o radar EDITAL_DJEN — **sem cruzar primeiro
+com as fontes já integradas sob um rótulo agregador** (`fonte='SUPORTE'` cobre ~40 leiloeiros
+num `fonte` só, diferenciados por `fonte_id`/`leiloeiro`, não por `fonte` própria — por isso
+`select distinct fonte` não os revela). `marcoantonioleiloeiro.com.br` está em
+`SUPORTE_TENANTS` desde antes de 08/09 (marcado "PGFN na home", mas com lotes reais
+confirmados): **16 lotes ativos**, atualizado em 13/09. `leiloeiro_conhecimento` corrigido pros
+dois (`docs_status='ok'`, aponta pro scraper real) — o registro anterior de "candidato" ficava
+incorreto e induziria a implementar de novo algo que já existe.
+
+**Lição do próprio método:** antes de classificar um nome do EDITAL_DJEN como "candidato sem
+scraper", cruzar primeiro contra `SUPORTE_TENANTS`/outras listas de tenant agregadas, não só
+contra `select distinct fonte from imoveis_leilao` — o segundo esconde qualquer fonte coletada
+sob um rótulo agregador. **KLEILOES (implementado na 4ª parte desta sessão) não está em
+nenhuma lista de tenant existente — era candidato de verdade, confirmado antes de escrever
+código.**
