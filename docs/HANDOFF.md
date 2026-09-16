@@ -26923,9 +26923,58 @@ começam** a cobrar — não é metadado decorativo.
 **Confirmado ao dono, sobre juros de parcelamento**: no fluxo Transparente (cartão coletado
 dentro do BidPro — `PagamentoServico.jsx`), a regra já em produção é **1x a 3x sem juros; a
 partir da 4ª parcela o cliente assume os juros** (2,49% a.a. até 6x, 2,99% até 9x, 3,49% até
-12x — `calcParcelaMaisJuros`). Já nos links HOSPEDADOS do Mercado Pago (o link de
-honorários e agora este de Investidor Pro), quem decide a régua de juros por parcela é a
-config de **"parcelamento sem juros" da própria conta MP** (painel do Mercado Pago), não uma
-chamada de API nossa — vale a pena o dono confirmar lá que está espelhando a mesma regra
-(3x sem juros / 4x+ com juros) para não haver duas políticas divergentes entre os dois
-fluxos.
+12x — `calcParcelaMaisJuros`).
+
+### 16/09 (continuação 3) — o dono pediu para refazer: sem link do MP, checkout Transparente próprio
+
+Depois de ver a versão hospedada em funcionamento, o dono pediu para refazer por completo:
+**"a ideia não é gerar um segundo link"** — o pagamento dos honorários devia ser uma única
+página COM A CARA DO BIDPRO (Checkout Transparente), explicando que o cliente agora é
+assessorado e pagando 10% de êxito, com termos de aceite, e o upsell do Investidor Pro
+selecionável DENTRO dessa mesma tela — não mais um link hospedado do Mercado Pago, e não
+mais uma assinatura separada com link próprio.
+
+**Descoberta que economizou a reconstrução do zero**: o mecanismo exato já existia no
+código para outro produto. `api/mp-checkout.js` (proposito `produto_bonus`) já sabia: (a)
+cobrar direto (PIX ou cartão, com QR/parcelas) sem sair do site, e (b) **salvar o cartão**
+(Customer+Card do MP) ANTES de cobrar quando o cliente aceita renovação automática, gerando
+um TOKEN NOVO a partir do cartão salvo para a cobrança em si. E `api/ativar-assinatura-bonus-
+cron.js` já sabia usar esse cartão salvo, dias depois, para criar uma assinatura de verdade
+sem pedir o cartão de novo. **O upsell do Investidor Pro é exatamente esse mesmo mecanismo**,
+só que disparado pelo pagamento dos honorários em vez de por uma compra de bônus — zero
+código novo de tokenização, zero novo fluxo de cartão salvo, só reaproveitar.
+
+Também descoberto por grep, evitando reescrever do zero: `api/registrar-aceite.js` +
+`aceites_plano` já é o mecanismo genérico de registrar "aceitei o termo X, versão Y, valor Z,
+com o IP" que `Checkout.jsx`/`ProdutoPublico.jsx` já usam — e `utils/termos.js` já tem o texto
+jurídico completo da família `assessorado` (10% de honorários, obrigação de meio, contrato
+específico prevalece) pronto para reuso. Nenhum dos dois precisou de uma linha nova.
+
+**O que foi construído** (commit `65fe87b`):
+- `src/pages/PagarHonorario.jsx` (rota `/honorario/:arrematacaoId`, logada — quem chega sem
+  sessão é mandado ao `/login?next=...` e volta sozinho, mesmo mecanismo de qualquer rota
+  privada do BidPro): explica "você agora é assessorado(a)", mostra o valor, os termos de
+  adesão com checkbox de aceite, o upsell Investidor Pro com benefícios, e embute
+  `PagamentoServico` (PIX ou cartão) para cobrar.
+- `api/mp-checkout.js`: novo propósito `honorario_exito` — preço SEMPRE do servidor
+  (`arrematacoes.honorarios_valor`), confere que quem está pagando é o PRÓPRIO arrematante
+  (IDOR). Se cartão + "também Investidor Pro": salva o cartão (mesmo mecanismo do
+  produto_bonus) ANTES de cobrar e grava `promo_pro_mp_customer_id`/`promo_pro_mp_card_id`/
+  `promo_pro_inicio_em` (+30 dias) em `arrematacoes`.
+- `api/ativar-promo-pro-honorario-cron.js` (novo, mirror do cron do bônus): na data marcada,
+  gera um token novo a partir do cartão salvo e cria a assinatura (`preapproval`,
+  `authorized`). Quem ativa de verdade é sempre o webhook, só com pagamento confirmado —
+  **nenhuma mudança em `api/mp-webhook.js` foi necessária**: o branch de honorário já
+  existente casa por `metadata.tipo`, indiferente ao gateway ser hospedado ou Transparente, e
+  a ativação do plano usa o mesmo `external_reference` `userId|top2` de qualquer assinatura.
+- `PagamentoServico.jsx` ganhou uma prop genérica `extra` (mesclada no body de
+  `/api/mp-checkout`) — não muda nenhum chamador existente.
+- `api/mp.js`: removido o link hospedado de honorários e a assinatura hospedada do upsell
+  (código morto da entrega anterior).
+- Em `Caso.jsx`/`Admin.jsx`, "gerar link" virou "copiar link" — é só a URL do BidPro, não
+  precisa mais chamar o Mercado Pago para existir.
+- Migração: dropa as colunas do link hospedado (`honorarios_mp_preference_id`,
+  `honorarios_link_pagamento`, `honorarios_link_expira_em`, `promo_pro_link`); adiciona
+  `promo_pro_mp_customer_id`/`promo_pro_mp_card_id`.
+
+Build limpo (padrões/sintaxe/eslint/vite build). Deploy disparado.
