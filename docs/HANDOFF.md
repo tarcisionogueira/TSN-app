@@ -27109,3 +27109,84 @@ scrapers atuais (leem HTML servidor-renderizado direto). **Decisão de investir 
 do dono** — retomar este ponto na abertura da próxima sessão.
 
 *Sessão de 16/09 encerrada (2ª vez, depois do recon do Franco Leilões).*
+
+## 16/09 (3ª sessão) — Marcos Araujo (galpão Feira de Santana): relatórios órfãos, honorários
+## sem lembrete no app, e o link de pagamento reformado para dispensar login
+
+Sessão puxada pelo dono ao atribuir de verdade o arremate do galpão de Feira de Santana
+(HANDOFF de 16/09, sessões anteriores) ao cliente Marcos Araujo e observar 4 sintomas ao
+vivo. Branch `claude/handoff-bidpro-brasil-checks-w4hrwz`, mergeado direto em `main` (2
+commits de código, `60dc380` e `5dde8e3`) com autorização explícita do dono para colocar em
+produção.
+
+**1) "Atribuir 1 arremate liberou 10 relatórios para o Marcos" — não é bug, é a regra do
+próprio dono (29/08).** `Marcos Araujo` nasceu `explorador` em 12/09; a atribuição de hoje
+marcou "Promover para Assessorado", que aplica exatamente `regra_negocio
+['atribuicao.promove_assessorado']` — Assessoria (R$6.000+10%) é desenhada como "tudo do
+Investidor Pro" (`PLANOS.assessorado.recursos`, `limite_ia(role,tipo)` dá 10/10/3 igual a
+`top2`). Perguntado ao dono se queria mudar isso: **decisão — manter como está** (o preço já
+embute o Pro) **até a imissão de posse**; depois disso, **abrir um recall automático**
+oferecendo manter o Investidor Pro separadamente. **Este recall não foi construído nesta
+sessão** — não existe hoje gatilho ligado a `status_etapa` de posse; fica como próximo passo,
+quando o dono quiser desenhar o texto/momento exato do recall.
+
+**2) Relatórios do galpão gerados no usuário do DONO ficaram órfãos do caso do Marcos.**
+`analises_mercado`/`analises_documental` (imóvel real `dfc5ab9b...`, gerados em 09/09 e
+12/09 no user_id do dono) nunca apareceriam no caso do Marcos porque `Caso.jsx`/
+`AnalisesContext` casam por `(user_id, imovel_id)` **exato**, e a atribuição de hoje criou um
+imóvel-âncora **diferente** e vazio (`900e6779...`, sem endereço/cidade). **Corrigido via
+UPDATE direto** (não é migração de schema, é dado): as 2 linhas passaram a
+`user_id=94f63957... (Marcos)` + `imovel_id=900e6779...` (o âncora do caso dele). Confirmado
+que a mudança não tem efeito colateral em cota (contadores de cota não retroagem por linha
+movida, e admin/dono não é limitado por cota mesmo).
+
+**3) Cliente não tinha NENHUM jeito de reabrir o link de pagamento dentro do app** (commit
+`60dc380`). `Caso.jsx` já mostrava o link persistente pro lado da equipe (`isStaff`), mas o
+bloco `isCliente` só tinha um aviso passivo — o arrematante dependia de guardar a mensagem de
+WhatsApp/e-mail. Adicionado botão "Pagar honorários agora" + copiar link no mesmo bloco,
+reaproveitando o `linkHonorario` que já existia no arquivo.
+
+**4) O link de pagamento exigia login — o dono pediu para tirar, porque o arrematante pode
+repassar o link a outra pessoa pagar (raro, mas acontece)** (commit `5dde8e3`, mudança maior
+de segurança/arquitetura):
+- `api/honorario-info.js` (novo, público, service key): substitui a leitura via
+  `supabase-js`/RLS (que dependia de sessão) por um endpoint mínimo — só `id`, `valor_
+  arrematado`, `honorarios_valor`, `honorarios_status`. O uuid da arrematação (imprevisível)
+  vira a credencial do fluxo, mesmo modelo do antigo link hospedado do Mercado Pago.
+- `api/mp-checkout.js`: `proposito='honorario_exito'` dispensa `getUser` (único propósito que
+  dispensa). A checagem de dono da cobrança só bloqueia quando HÁ sessão logada e ela diverge
+  (protege contra outro cliente logado tentando pagar por engano/má-fé a cobrança alheia);
+  sem sessão nenhuma, segue — a posse do link já é a prova. `metadata.user_id`/
+  `arrematante_id` e o alvo do upsell "Investidor Pro" passam a vir SEMPRE de
+  `arrematacoes.arrematante_id` (nunca de `user.id`), então o pagamento e a eventual
+  assinatura Pro continuam corretamente atribuídos ao Marcos mesmo que um terceiro pague.
+- `api/registrar-aceite.js`: aceite sem sessão só é aceito para `plano_key='assessorado'` +
+  `arrematacao_id`, e é gravado em nome do `arrematante_id` da cobrança (nunca de quem
+  clicou) — mantém a prova de aceite (defesa de chargeback) mesmo sem login.
+- `src/pages/PagarHonorario.jsx`: perde o gate de login; ganha um campo de e-mail (pré-
+  preenchido se houver sessão, editável se não) para quem está de fato pagando.
+- `src/components/PagamentoServico.jsx`: ganha prop `email` opcional (fallback pro usuário
+  logado) — nenhum chamador existente muda de comportamento.
+- `src/App.jsx`: rota `/honorario/:arrematacaoId` sai do `PrivateRoute`.
+
+**5) SBID21 — re-verificado hoje, mesma conclusão de 10/09 (não é bug).** Disparado
+`leiloeiros-puppeteer.yml` (`fontes=SBID21`, **0 Bright Data**, é o cron grátis) para uma
+leitura fresca em vez de reabrir a investigação do zero. Resultado: 1 ativo, total=2 na
+medição — idêntico ao padrão de 01/08, 01/09, 04/09 e 10/09. Continua sendo **decisão
+comercial, não técnica** (confirmar manualmente no site se o sub-portal 21 da rede Superbid
+foi descontinuado/fundido) — não tocado em código, não vale gastar Bright Data numa pergunta
+já respondida 4x pelo log de produção.
+
+**6) JOAOEMILIO — verificado, mesma classe de achado (provável, não 100% confirmado).**
+Comparado com fontes-irmãs do MESMO scraper (`scraper-soleon.mjs`): CALIL (42 ativos),
+VEGAS (12), GESTAOLEILOES (154) saudáveis na mesma janela de coleta — código não está
+quebrado. JOAOEMILIO caiu a 0 ativos, com os 18 que existiam na última medição (15/09)
+expirando legitimamente nos últimos 3 dias, e o status da medição foi `'vazio'` (rodou e
+achou pouco), não `'falhou'`. Leitura: catálogo do leiloeiro esvaziou sem reposição — mesmo
+padrão do HASTA/LEILOFY. **Diferente do SBID21, não foi possível confirmar direto no site**
+(domínio de leiloeiro bloqueado neste sandbox) nem justifica um recon pago pra uma leitura já
+bem sustentada pelas 3 fontes-irmãs saudáveis — fica como leitura de alta confiança, não
+certeza absoluta.
+
+Build limpo (`padrões`/`sintaxe`/`eslint`/`vite build`) antes de cada push. Deploy de
+`5dde8e3` disparado em produção — conferir `state=READY` na próxima checagem de saúde.
