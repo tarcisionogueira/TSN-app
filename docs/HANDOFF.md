@@ -26815,3 +26815,52 @@ depois de cada merge (PRs #342 e #343, ambas mergeadas). 7 commits de código no
 suítes `planejar-alvo.test.mjs` (10/10) e `foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs`
 (25/25) verdes. CI (`verificar-padroes.yml`/`verificar-schema.yml`) verde nas duas PRs antes
 do merge. Migração de dados do item 1 aplicada e verificada direto via Supabase MCP.*
+
+## 16/09 — Cobrança dos honorários de êxito: link de pagamento MP (PIX ou cartão)
+
+**Pedido do dono**: hoje arrematou o galpão de Feira de Santana (caso já gerado antes); o
+arrematante (agora assessorado) paga os honorários amanhã. Pediu para, ao atribuir arremate,
+poder informar o valor e gerar um link compartilhável para o arrematante pagar via PIX ou
+cartão, e confirmou a suspeita: **essa etapa nunca foi configurada**. Confirmado por grep
+exaustivo antes de codar: `honorarios_status` chegava a `'pendente'` na criação e a
+`'distribuido'` ao creditar a equipe — **nunca existia código nenhum que gravasse `'pago'`**.
+Pior: `distribuirHonorarios()` (api/arrematacoes.js) disparava só com `status='finalizado'`,
+sem checar se o cliente pagou — a equipe podia ser creditada mesmo sem pagamento nenhum.
+
+Duas decisões travadas com o dono via pergunta direta ANTES de codar (dinheiro real, sem
+espaço para retrabalho): **link único** (não a versão com split PIX+cartão em 2 links, que já
+existe como mecanismo em `criarPreferencia`/`split` mas fica fora desta entrega por prazo) e
+**ambos os efeitos automáticos** — marcar `pago` e travar a distribuição interna até o
+pagamento confirmar.
+
+**O que foi construído** (commit `e7e0c64`):
+- Migração `honorarios_exito_link_pagamento.sql`: `honorarios_pago_em`,
+  `honorarios_gateway_payment_id`, `honorarios_mp_preference_id` em `arrematacoes`.
+- `api/mp.js` → `criarPreferenciaHonorario()` / action `criar_preferencia_honorario`: gera um
+  link Checkout Pro (MP hospedado) com o preço **sempre lido do servidor**
+  (`arrematacoes.honorarios_valor`, nunca do body). Só a equipe do caso gera (gate de role:
+  admin/analista/advogado/consultor) — nunca o próprio arrematante. O arrematante recebe o
+  link (WhatsApp/e-mail) e paga **sem precisar estar logado no BidPro** — escolhe PIX ou
+  cartão (parcelado) livremente na página do MP.
+- `api/mp-webhook.js`: nova branch `ehHonorarioMp` (`metadata.tipo==='honorario_exito'`),
+  checada **antes** de `ehProdutoMp` (o `external_reference` também é um uuid —
+  `arrematacao_id` — e colidiria com o formato do fluxo de produto se não fosse checado
+  primeiro). Confere o valor pago contra `honorarios_valor` (tolerância só de arredondamento;
+  o preço nasceu no servidor, então divergência real é sinal de preferência antiga/adulterada)
+  e marca `pago` + `pago_em` + `gateway_payment_id`. Chargeback/reembolso reverte para
+  `pendente` se ainda não distribuído; se já distribuído, fica logado para conferência manual
+  (não mexe em `saldo_lancamentos` sem as mesmas guardas de `distribuirHonorarios`).
+- `api/arrematacoes.js`: `distribuirHonorarios()` agora **exige `honorarios_status==='pago'`**
+  antes de creditar a equipe — o gap de crédito sem pagamento fica fechado.
+- `src/pages/Caso.jsx`: botão "Gerar link para o arrematante" na seção Arrematação (copiar +
+  abrir), visível à equipe enquanto os honorários não estiverem pagos.
+
+**Build limpo** (`verificar:padroes` sem ocorrência nova, `verificar:sintaxe`/eslint sem erro,
+`vite build` ok). Deploy disparado; conferir `state=READY` na próxima checagem de saúde.
+
+**Fica para depois, não bloqueia o pagamento de amanhã**: (a) mesclar PIX+cartão numa cobrança
+só não é suportado pelo MP num checkout único — se algum dia for pedido de verdade, a rota é
+adaptar o mecanismo de `split` já existente (2 links, um por método, somando o total); (b) o
+juro de parcelamento acima de 1x no link hospedado segue a config de "parcelamento sem juros"
+da própria conta MP (não é parametrizável por chamada de API) — mesma regra já em vigor no
+link hospedado de planos, não é uma lacuna nova desta entrega.
