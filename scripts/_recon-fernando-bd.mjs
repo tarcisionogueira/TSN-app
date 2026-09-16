@@ -30,11 +30,16 @@ function assinatura(html) {
 }
 
 async function main() {
-  console.log(`\n=== ${BASE}/ via Bright Data ===`);
-  const html = await bd(`${BASE}/`);
-  if (!html) return;
-  console.log(`HTML: ${html.length} bytes · marcas: [${assinatura(html).join(', ') || 'nenhuma'}]`);
-  if (/Um momento|challenge-platform/i.test(html)) { console.log('ainda em challenge.'); return; }
+  let html = null;
+  for (const rota of ['/categorias/imoveis', '/imoveis', '/', '/busca']) {
+    console.log(`\n=== ${BASE}${rota} via Bright Data ===`);
+    const h = await bd(`${BASE}${rota}`);
+    if (!h) continue;
+    console.log(`HTML: ${h.length} bytes · marcas: [${assinatura(h).join(', ') || 'nenhuma'}]`);
+    if (!/Um momento|challenge-platform/i.test(h)) { html = h; break; }
+    console.log('  ainda em challenge, tentando próxima rota...');
+  }
+  if (!html) { console.log('\nTodas as rotas ficaram em challenge.'); return; }
 
   // Plataforma "Sua Plataforma de Leilão / Degrau Publicidade" — menu usa
   // /busca/#Engine=Start&...&ID_Categoria=N. Extrai LABEL + ID de cada link de categoria.
