@@ -396,6 +396,74 @@ async function criarPreferenciaHonorario({ arrematacao_id }) {
 }
 
 /**
+ * Upsell "Investidor Pro" oferecido junto ao link de honorários de uma arrematação: o
+ * arrematante autoriza o cartão agora (link de assinatura hospedado do MP), mas a
+ * PRIMEIRA cobrança da mensalidade só acontece 30 dias depois (`auto_recurring.start_date`
+ * — confirmado na doc do MP: é a data em que os ciclos recorrentes COMEÇAM, não só um
+ * metadado). Só cartão: assinatura recorrente do MP não aceita PIX como funding — é por
+ * isso que esse fluxo não existe hoje via PIX (confirmado ao dono, 16/09).
+ *
+ * `external_reference` sai no MESMO formato `${userId}|top2` que qualquer outra assinatura
+ * de plano já usa — quando a 1ª cobrança acontecer (payment normal, `operation_type:
+ * 'recurring_payment'`), o webhook genérico (`processarConfirmado`) ativa o Pro sem
+ * nenhuma rota nova: nenhuma mudança em api/mp-webhook.js foi necessária.
+ */
+async function criarAssinaturaPromoPro({ arrematacao_id }) {
+  if (!arrematacao_id) throw new Error('arrematacao_id obrigatório');
+
+  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,promo_pro_link`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  const [arr] = arrRes.ok ? await arrRes.json() : [];
+  if (!arr) throw new Error('Arrematação não encontrada');
+
+  // Link já gerado: devolve o MESMO (a assinatura fica 'pending' até o arrematante
+  // preencher o cartão no MP — gerar de novo criaria uma segunda pendente solta).
+  if (arr.promo_pro_link) return { initPoint: arr.promo_pro_link, reaproveitado: true };
+
+  const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=nome,email,role`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
+  if (!perfil) throw new Error('Arrematante não encontrado.');
+  const JA_TEM_PRO_OU_MAIS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+  if (JA_TEM_PRO_OU_MAIS.includes(perfil.role)) throw new Error('Este cliente já tem acesso igual ou superior ao Investidor Pro.');
+  if (!perfil.email) throw new Error('Arrematante sem e-mail cadastrado — não é possível criar a assinatura.');
+
+  const cfg = (await carregarPrecos()).top2;
+  if (!cfg || !cfg.recorrente) throw new Error('Plano Investidor Pro indisponível para assinatura no momento.');
+
+  const inicio = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+  const sub = await mpPost('/preapproval', {
+    reason: cfg.nome,
+    auto_recurring: {
+      frequency: cfg.frequency ?? 1,
+      frequency_type: cfg.frequency_type ?? 'months',
+      transaction_amount: cfg.valor,
+      currency_id: 'BRL',
+      start_date: inicio.toISOString(),
+    },
+    payer_email: perfil.email,
+    back_url: `${BASE_URL}/#/checkout?plano=top2&status=assinatura`,
+    notification_url: WEBHOOK,
+    external_reference: `${arr.arrematante_id}|top2`,
+    status: 'pending',
+    metadata: { userId: arr.arrematante_id, planoKey: 'top2', origem: 'promo_pro_honorario', arrematacao_id: arr.id },
+    // Assinaturas: somente cartão de crédito (igual criarAssinatura) — não existe PIX
+    // recorrente no MP, então este upsell não tem versão PIX.
+    payment_methods_allowed: [{ payment_type: 'credit_card' }],
+  });
+
+  await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arr.id}`, {
+    method: 'PATCH',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ promo_pro_mp_preapproval_id: sub.id, promo_pro_link: sub.init_point, promo_pro_inicio_em: inicio.toISOString() }),
+  });
+
+  return { assinaturaId: sub.id, initPoint: sub.init_point, inicioEm: inicio.toISOString() };
+}
+
+/**
  * Cria assinatura recorrente (Preapproval) para planos mensais.
  * MP cobra automaticamente todo mês no cartão salvo.
  */
@@ -573,9 +641,10 @@ export default async function handler(req) {
     if (!gate.podeContratar) return new Response(JSON.stringify({ error: 'assessoria_bloqueada', motivo: gate.motivo }), { status: 409, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Link de honorários: só a equipe do caso gera (nunca o próprio cliente/arrematante).
-  if (action === 'criar_preferencia_honorario' && !['admin', 'analista', 'advogado', 'consultor'].includes(roleAtual)) {
-    return new Response(JSON.stringify({ error: 'Apenas a equipe pode gerar o link de pagamento dos honorários.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  // Link de honorários / upsell Investidor Pro: só a equipe do caso gera (nunca o próprio
+  // cliente/arrematante).
+  if (['criar_preferencia_honorario', 'criar_assinatura_promo_pro'].includes(action) && !['admin', 'analista', 'advogado', 'consultor'].includes(roleAtual)) {
+    return new Response(JSON.stringify({ error: 'Apenas a equipe pode gerar este link.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
 
   try {
@@ -584,6 +653,7 @@ export default async function handler(req) {
       case 'criar_preferencia':  result = await criarPreferencia(params);   break;
       case 'criar_preferencia_produto': result = await criarPreferenciaProduto(params); break;
       case 'criar_preferencia_honorario': result = await criarPreferenciaHonorario(params); break;
+      case 'criar_assinatura_promo_pro': result = await criarAssinaturaPromoPro(params); break;
       case 'criar_assinatura':   result = await criarAssinatura(params);    break;
       case 'criar_assinatura_transparente': result = await criarAssinaturaTransparente(params); break;
       case 'verificar':          result = await verificar(params);           break;
