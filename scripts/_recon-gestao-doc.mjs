@@ -62,5 +62,39 @@ async function main() {
     console.log(`  …${m[0].replace(/\s+/g, ' ').trim()}…`);
     n2++;
   }
+
+  console.log('\n--- URLs completas de fancybox.open (navEdital/navAnexo), sem truncar ---');
+  for (const m of html.matchAll(/\$\("#(navEdital|navAnexo)"\)\.click\(function\(\)\{\$\.fancybox\.open\(\{href\s*:\s*'([^']+)'/gi)) {
+    console.log(`  ${m[1]} -> ${m[2]}`);
+  }
+  console.log('\n--- Qualquer .php?...Anexos... na página ---');
+  for (const m of html.matchAll(/[a-zA-Z0-9_/.-]*[Aa]nexos\.php\?[^'")\s]*/g)) {
+    console.log(`  ${m[0]}`);
+  }
+
+  // URL secundária opcional (ex.: o endpoint AJAX de anexos achado na 1ª rodada) — busca e
+  // dumpa os <a href> dela também, pra confirmar se É ali que mora o PDF de verdade.
+  const url2 = process.argv[3];
+  if (url2) {
+    console.log(`\n\n=== 2ª URL: ${url2} ===`);
+    let r2;
+    try { r2 = await buscarViaBrightData(url2, { proposito: 'gestao', timeoutMs: 60000, exigirOk: false }); }
+    catch (e) { console.error('ErroBrightData (2ª url):', e instanceof ErroBrightData ? e.message : e); return; }
+    if (!r2 || !r2.ok) { console.error('2ª url não ok:', r2?.status); return; }
+    const buf2 = await r2.arrayBuffer();
+    const html2 = new TextDecoder('windows-1252').decode(buf2);
+    console.log(`HTML: ${html2.length} bytes`);
+    console.log('Docs achados:', JSON.stringify(extrairDocsDoHtml(html2, url2), null, 2));
+    console.log('--- <a href> (até 30) ---');
+    let n3 = 0;
+    for (const m of html2.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      if (n3 >= 30) break;
+      const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+      console.log(`  href="${m[1]}"  label="${label.slice(0, 60)}"`);
+      n3++;
+    }
+    console.log('--- amostra crua (primeiros 1500 chars) ---');
+    console.log(html2.slice(0, 1500));
+  }
 }
 main();
