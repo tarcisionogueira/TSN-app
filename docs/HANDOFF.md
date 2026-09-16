@@ -27190,3 +27190,78 @@ certeza absoluta.
 
 Build limpo (`padrões`/`sintaxe`/`eslint`/`vite build`) antes de cada push. Deploy de
 `5dde8e3` disparado em produção — conferir `state=READY` na próxima checagem de saúde.
+
+## 18/09 — mesma sessão do Marcos: confirmação em produção, juros, código morto, e o galpão
+## de Feira de Santana empurra 2 melhorias no relatório documental
+
+Continuação direta da sessão de 16/09 acima. Confirmado em produção via Puppeteer contra
+`bidprobrasil.com.br` (link não exige mais login, e-mail pré-preenchido quando há sessão,
+sem quando não há).
+
+**Juros do link de honorários.** O dono confirmou a regra: **o cliente assume os juros**;
+só PIX ou **1x no cartão** saem sem juros — 2x a 12x já embutem juros (parcelamento normal
+de cartão, taxa do MP repassada ao pagador). `PagamentoServico.jsx` ganhou
+`parcelasSemJuros` parametrizável (era fixo em 3x); `PagarHonorario.jsx` passa
+`parcelasSemJuros={1}`. Um print do dono mostrando "1x/2x/3x sem juros" foi investigado e
+era **atraso de deploy** (screenshot tirado antes do build daquele commit ficar `READY` na
+Vercel), não bug — reconfirmado limpo depois.
+
+**Tela de pagamento menos repetitiva** (commit `7a9ee24`): `PagamentoServico` ganhou modo
+`embutido` (sem o card/sombra duplicado quando já está dentro de outro card, como em
+`PagarHonorario`) e `ocultarResumo` (não repete "Valor a pagar" que a tela-mãe já mostra).
+
+**Código morto removido** (commits `1d90c57`/`b537643`, pedido do dono: "não faz sentido já
+que vamos liberar como assessorado pelo período da operação"): o checkbox "Quero também ser
+Investidor Pro" saiu de `PagarHonorario.jsx`; `api/ativar-promo-pro-honorario-cron.js`
+deletado; cron removido do `vercel.json`; colunas `promo_pro_mp_preapproval_id`/
+`promo_pro_inicio_em`/`promo_pro_mp_customer_id`/`promo_pro_mp_card_id` de `arrematacoes`
+dropadas (migração `promo_pro_honorario_removido.sql`, 0 linhas usavam antes de dropar).
+
+**O galpão de Feira de Santana (mesmo imóvel do Marcos) expôs 2 lacunas no relatório
+documental, ambas a partir de foto real do leiloeiro:** matrícula 35.839 (Comeng Comercio e
+Engenharia) não registra construção, e a foto do anúncio mostra prédio comercial pronto,
+2-3 pavimentos — risco de **acessão/benfeitoria não averbada** (arts. 1.219, 1.253, 1.255 do
+CC: quem construiu pode ter direito de retenção/indenização) que o relatório documental
+nunca sinalizava porque nunca olhava a foto.
+
+- `api/gerar-documental.js`: prompt passa a receber as fotos do imóvel (até 4, mesmo
+  formato de bloco multimodal já usado pra PDF/imagem de documento) com instrução explícita
+  de cruzar estado construtivo da foto × o que a matrícula/edital registram, categorizando
+  risco "Área construída não averbada" quando a foto mostra edificação pronta não
+  registrada.
+- `scripts/foto-cef.mjs`: reescrito de captura de 1 foto (capa) pra **galeria inteira** (até
+  8/imóvel) — sem mais de 1 foto por imóvel o cruzamento acima não tem o que cruzar. CEF é
+  72% do acervo ativo (18.843 de ~26.042 imóveis ativos) — piloto pela fonte de maior
+  volume, por decisão do dono ("começar pelas fontes de maior volume"); as demais fontes de
+  alto volume (SUPERBID, PESTANA, LJUD, MEGA, ZUK, BIASI, GRUPOLANCE) ficam para depois.
+  Alvo passa a ser `fotos is null` (pega quem só tinha a capa hotlinkada pelo scraper
+  principal `api/scraper-caixa.js`, que continua intocado); 1 path de Storage por foto
+  (`cef/<fonte_id>_<indice>.ext`); limpeza de expiradas passa a varrer `link_foto` **e**
+  `fotos`. `.github/workflows/fotos-cef.yml` continua **manual** — falta decidir se vira
+  agendado (ainda não disparado nem uma vez após a reescrita; recomendado rodar 1x manual
+  antes de confiar no fluxo).
+
+**Pergunta do dono: há trava de valor no pagamento de honorários? Podem ser R$50-100 mil.**
+Conferido em `api/mp-checkout.js`: **não há teto de valor no nosso código** —
+`transaction_amount` vem direto de `arrematacoes.honorarios_valor` (gravado pelo servidor),
+sem validação de máximo. As travas reais ficam fora do nosso controle:
+- **PIX**: o limite é do BANCO de quem paga, não do Mercado Pago recebedor — a maioria dos
+  bancos tem limite de PIX (diário/noturno) bem abaixo de R$50-100 mil por padrão, e aplica
+  carência de horas para elevar o limite ou para 1ª transferência a um novo favorecido em
+  valor alto (regra antifraude do BC). **Orientação prática: o pagador precisa aumentar o
+  próprio limite de PIX no app do banco dele COM ANTECEDÊNCIA**, antes de tentar pagar.
+- **Cartão**: sujeito ao limite disponível do cartão do pagador; já parcela em até 12x
+  (1x sem juros, 2x-12x com juros do pagador) — ajuda a caber no limite mas não elimina o
+  teto do cartão.
+- **Nosso lado (conta MP recebedora)**: valor muito acima do padrão histórico da conta pode
+  disparar retenção/revisão automática antifraude do próprio MP — não bloqueia o pagamento,
+  mas pode atrasar a liberação do saldo alguns dias. Não existe "notificação prévia" via
+  API/self-service para isso; o canal, se cair em análise, é abrir chamado no suporte MP.
+- **Split 2×50%**: reduziria o valor de cada operação isolada, mas **não existe hoje** — o
+  link sempre gera o valor CHEIO de `honorarios_valor`; parcial exigiria rastrear quanto já
+  foi pago da mesma arrematação (feature nova, não construída). Workaround imediato sem
+  mexer em código: cartão parcelado (já suportado) em vez de PIX.
+
+Build limpo antes de cada push (`fddd25c`). Ainda **não disparado** um piloto real do
+`foto-cef.mjs` reescrito via GitHub Actions — recomendado antes de considerar a galeria CEF
+"em produção de verdade".
