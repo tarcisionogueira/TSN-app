@@ -27010,3 +27010,50 @@ Também pedido do dono ao ver a tela: dropdown "Ver termo" no checkbox do Invest
 ...)`, texto já existente em `utils/termos.js` — nada novo a escrever).
 
 **Teste real com cliente**: o dono vai testar amanhã (17/09) com um arremate de verdade.
+
+### 16/09 — Cliente 360 a fundo (verificação de encerramento)
+
+Pedido do dono ao encerrar a sessão. Custo zero (leitura de banco).
+
+- **`admin_360_estatisticas()`**: `clientes_com_erro: 1`, `erros_abertos_total: 3` — os TRÊS já
+  eram conhecidos, nenhum novo: (1) Marcos Oliveira / "Failed to fetch" em `/checkout`, 6
+  ocorrências — já documentado como artefato de agregação por `msg+rota` sem `user_id` (a 1ª
+  ocorrência é de outro cliente, some ficou "dono" do erro por ter sido o último logado a
+  bater nele; achado da sessão de 15/09, sem ação nova); (2) `minhas_analises_lista: JWT
+  expired`, 1 ocorrência — sessão expirada, comportamento normal; (3) `vite:preloadError
+  PRESO`, 2 ocorrências de 31/08–02/09 — antigo, sem recorrência desde então.
+  `relatorios_falha_24h: 0` (verde).
+- **`cliente_travou(7)`**: 2 linhas, Neuma Nogueira e Lais Melo — **ambos incidentes de
+  10-11/09, já investigados e corrigidos nesta mesma base** (o fix "busca endereço/cidade no
+  banco antes de recusar" already em produção desde 15/09, commit `555b0c8`). Sem incidente
+  NOVO na janela.
+- **`relatorio_anomalias` não resolvidas**: 33 linhas, espalhadas em 7 tipos diferentes
+  (`valor_praca_incoerente` 10, `relatorio_incoerente` 9, `avaliacao_ausente` 4, `cnj_vazio`
+  4, `mercado_area_incoerente` 3, `avaliacao_incoerente` 2, `area_divergente` 1) — **nenhum
+  motivo dominando isoladamente** (o padrão de alarme real seria um tipo só respondendo por
+  quase tudo, sinal de fonte/gate quebrado). Lê como ruído de qualidade de dado de origem
+  (editais/documentos incompletos), não pipeline quebrado. Sem ação nesta sessão; candidato a
+  acompanhar se a distribuição mudar de cara.
+- **Pagante sem entrega (14 dias sem análise nova)**: 4 clientes — investigados
+  individualmente (contagem de casos/arremates + data da última análise) antes de soar
+  alarme, porque o sinal cru mede "não gerou análise", que é esperado para quem já está em
+  etapas posteriores do funil, não só para quem travou:
+  - **Airton do Carmo Cezar (Investidor Pro, assinou 03/09)** — **0 casos, 0 arremates, 0
+    análises. Zero uso desde que assinou há 13 dias.** É o único dos quatro que é
+    genuinamente "pagou e não usou nada" — candidato real a contato do dono, os outros três
+    não.
+  - Matheus Barros (assessorado, assinou 15/07): 1 caso aberto, última análise 21/07 — normal
+    para quem já está no meio do processo de assessoria (não repete análise por repetir).
+  - Rafael da Silva Pereira (assessorado, assinou 06/07): 4 casos, última análise 04/08 —
+    engajado, provavelmente em etapas jurídicas/arremate de algum dos 4 casos.
+  - Alessandra de Jesus dos Santos (Investidor Pro, assinou 07/07): 5 casos, última análise
+    25/08 — uso ativo e recente, só não gerou análise NOVA nas últimas 2 semanas.
+
+**Resumo do dia**: 6 commits de código + 6 de docs no fluxo de honorários (link hospedado →
+checkout Transparente próprio → honorário mínimo parametrizado), todos com `npm run build`
+limpo antes do push, deploy `READY` confirmado em produção após cada um. Teste end-to-end
+real ficou para o dono validar com um cliente de verdade em 17/09. Cliente 360 revisado no
+encerramento: 1 pendência real (Airton, zero uso) para o dono decidir se quer contatar;
+nenhum incidente técnico novo.
+
+*Sessão de 16/09 encerrada.*
