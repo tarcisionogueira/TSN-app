@@ -720,12 +720,17 @@ confirmado):**
    zero código (item 7); 7 rascunhos de resposta seguem parados em `/admin/instagram`.
 5. **Google Ads "Alternativa D"** — aprovada pelo Google; decisão de manter/pausar/trocar é sua,
    **prazo que você mesmo pôs é amanhã, 16/09** (item 38).
-6. **HASTA (zerou)** — não é mais só bloqueio de IP datacenter: o runner residencial ALCANÇA o
-   site (HTTP 200) mas a extração encontra 0 eventos há dias — sinal de que a estrutura da home
-   pode ter mudado de novo. Rodei o recon simplificado hoje e ele também voltou vazio (len=0),
-   mas por um caminho que não usa a rota residencial — não prova nada novo. Precisa de recon ao
-   vivo de verdade (`HASTA_DEBUG=1` via dispatch, ou olhar o HTML atual da home) — decisão de
-   priorizar/gastar tempo nisso é sua.
+6. ✅ **RESOLVIDO 16/09 — HASTA não tem bug nenhum: a fonte está genuinamente sem lote publicado
+   agora.** Dono confirmou ao vivo abrindo `hastaleiloes.com.br` direto (não confundir com
+   `flaviocostaleilao.com.br`/`flaviocostaleiloes.com.br`, de OUTRO leiloeiro — Flávio Costa,
+   Pernambuco/DDD81 — que aparece em buscas por "hasta leilão" por coincidência de nome; o real é
+   Hasta Leilões, Bahia/DDD71, JUCEB). Print do site mostrou **Imóveis: 0 · Veículos: 0 ·
+   Diversos: 0** no menu, e os 4 leilões em destaque (Caixa, Prefeitura de Camaçari, CROBA, SAEB)
+   todos com status **"EM BREVE"** — nenhum aberto ainda. O motor está certo: enumera os 8
+   eventos do catálogo e não acha lote porque REALMENTE não tem lote publicado em nenhum — os
+   leilões ainda não começaram. Mesmo princípio já documentado no caso LEILOFY (25/08): parser
+   intacto, "consertá-lo" seria o pior desfecho de um alarme. **Sem ação de código — resolve
+   sozinho quando algum desses leilões abrir.**
 7. **SBID21** — decisão comercial, não técnica: vale confirmar manualmente no site se o
    sub-portal está entre leilões ou foi descontinuado/fundido a outro da rede Superbid?
 8. **PECINI** (runner residencial) — passa pelo Cloudflare mas volta com página genérica; não é
