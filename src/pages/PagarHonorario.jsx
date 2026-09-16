@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, Loader2, AlertCircle, Sparkles, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
@@ -25,7 +25,6 @@ export default function PagarHonorario() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [aceite, setAceite] = useState(false);
-  const [ofertarPro, setOfertarPro] = useState(false);
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
 
@@ -110,7 +109,6 @@ export default function PagarHonorario() {
   }
 
   const termo = termoDoProduto('assessorado', { valorLabel: fmtBRL(arr.honorarios_valor), modelo: 'parcelado' });
-  const termoPro = termoDoProduto('top2', { modelo: 'recorrente' });
 
   return (
     <div style={wrap}>
@@ -152,24 +150,6 @@ export default function PagarHonorario() {
           </span>
         </label>
 
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '12px 14px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={ofertarPro} onChange={e => setOfertarPro(e.target.checked)} style={{ marginTop: 2 }} />
-          <span style={{ fontSize: 12, color: '#581c87', lineHeight: 1.5 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, marginBottom: 3 }}>
-              <Sparkles size={13} /> Quero também ser Investidor Pro
-            </span>
-            Busca de imóveis em leilão, relatórios mercadológico, documental e laudo de viabilidade,
-            e demais recursos do plano. Autorizo o cartão agora; a <strong>1ª mensalidade só é
-            cobrada em 30 dias</strong>. Disponível apenas pagando com cartão nesta tela.
-            <details style={{ marginTop: 4 }}>
-              <summary style={{ color: '#7c3aed', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {termoPro.versao})</summary>
-              <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: 'white', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
-                {termoPro.texto}
-              </p>
-            </details>
-          </span>
-        </label>
-
         {!aceite || !/\S+@\S+\.\S+/.test(email) ? (
           <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>
             {!aceite ? 'Aceite os termos acima' : 'Informe um e-mail válido'} para continuar com o pagamento.
@@ -177,7 +157,7 @@ export default function PagarHonorario() {
         ) : (
           <PagamentoServico
             servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
-            extra={{ arrematacao_id: arr.id, tambem_pro: ofertarPro }}
+            extra={{ arrematacao_id: arr.id }}
             email={email}
             onPago={handlePago}
           />
