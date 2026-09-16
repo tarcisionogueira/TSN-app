@@ -141,6 +141,7 @@ FORO OBRIGATÓRIO deste contrato: ${foroFinal} (eleja este foro com renúncia a 
 Gere o contrato completo e pronto para uso.`;
 
   const aprendizado = await resumoAprendizadoContrato(tipoFinal);
+  console.log('[gerar-contrato-ia] aprendizado injetado:', aprendizado ? `${aprendizado.length} chars` : '(nenhum)');
 
   try {
     const r = await anthropicFetch({
