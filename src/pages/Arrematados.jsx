@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp } from 'lucide-react';
+import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -19,11 +19,14 @@ const CATEGORIAS = ['Arrematação', 'Honorários advocatícios', 'Taxa do leilo
 // Documentos do ciclo do arremate — ficam permanentes (nunca apagados) e alimentam
 // a IA. Judicial: auto/carta. Extrajudicial: boleto sinal/aquisição, contrato do
 // banco (financiado), escritura (lavratura) e matrícula registrada.
+// 18/09: "(extrajudicial)" saiu de boleto_sinal/boleto_aquisicao — leilão judicial também tem
+// sinal e aquisição à vista, o rótulo antigo estava errado (correção do dono).
 const DOC_TIPOS = [
   ['auto_arrematacao', 'Auto de arrematação (judicial)'],
   ['carta_arrematacao', 'Carta de arrematação (judicial)'],
-  ['boleto_sinal', 'Boleto do sinal (extrajudicial)'],
-  ['boleto_aquisicao', 'Boleto da aquisição (extrajudicial)'],
+  ['boleto_sinal', 'Boleto do sinal'],
+  ['boleto_aquisicao', 'Boleto da aquisição'],
+  ['comprovante_pagamento', 'Comprovante de pagamento'],
   ['contrato_banco', 'Contrato do banco (financiado)'],
   ['escritura', 'Escritura / lavratura'],
   ['matricula_registrada', 'Matrícula registrada'],
@@ -72,6 +75,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
   const [nums, setNums] = React.useState({ avaliacao: null, valorMercado: null });
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
+  // Comprovante do lançamento (18/09, pedido do dono: "não tem um campo aqui de comprovante
+  // para vincular aos pagamentos") — opcional, sobe junto com o "Adicionar" abaixo.
+  const [comprovanteFile, setComprovanteFile] = React.useState(null);
+  const [enviandoLanc, setEnviandoLanc] = React.useState(false);
   // Revenda: valor real de venda do imóvel arrematado → amostra do Índice + gabarito.
   const [revenda, setRevenda] = React.useState({ open: false, valor: '', mes: new Date().toISOString().slice(0, 7), enviando: false, ok: !!arr.revenda_valor, erro: '' });
   const enviarRevenda = async () => {
@@ -172,10 +179,28 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const addLanc = async () => {
     const valor = Number(String(novo.valor).replace(/\./g, '').replace(',', '.'));
     if (!valor || valor <= 0) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    const row = { arrematado_id: arr.id, user_id: user.id, tipo: novo.tipo, categoria: novo.categoria, descricao: novo.descricao.trim() || null, valor, data: novo.data || null }; // padrao-ok: o form "Novo lançamento" inteiro fica oculto sob suporte (soLeitura = !!impersonate)
-    const { data, error } = await supabase.from('arrematado_lancamentos').insert(row).select().single();
-    if (!error && data) { setLancs(prev => [data, ...prev]); setNovo(n => ({ ...n, descricao: '', valor: '' })); }
+    setEnviandoLanc(true);
+    try {
+      // Comprovante opcional: sobe ANTES do lançamento (precisa do anexo_id pra vincular).
+      // Falha no upload não perde o lançamento — só segue sem o comprovante e avisa.
+      let anexoId = null;
+      if (comprovanteFile) {
+        try {
+          const imId = await garantirAncora();
+          const fd = new FormData();
+          fd.append('file', comprovanteFile); fd.append('imovel_id', imId); fd.append('tipo', 'comprovante_pagamento');
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
+          const d = await res.json().catch(() => ({}));
+          if (res.ok && d.anexo_id) { anexoId = d.anexo_id; await carregarDocs(); }
+          else alert(d.error || 'Comprovante não pôde ser anexado — o lançamento segue sem ele.');
+        } catch (e) { console.error('[Arrematados] upload comprovante falhou:', e?.message || e); alert('Comprovante não pôde ser anexado — o lançamento segue sem ele.'); }
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      const row = { arrematado_id: arr.id, user_id: user.id, tipo: novo.tipo, categoria: novo.categoria, descricao: novo.descricao.trim() || null, valor, data: novo.data || null, anexo_id: anexoId }; // padrao-ok: o form "Novo lançamento" inteiro fica oculto sob suporte (soLeitura = !!impersonate)
+      const { data, error } = await supabase.from('arrematado_lancamentos').insert(row).select().single();
+      if (!error && data) { setLancs(prev => [data, ...prev]); setNovo(n => ({ ...n, descricao: '', valor: '' })); setComprovanteFile(null); }
+    } finally { setEnviandoLanc(false); }
   };
   const delLanc = async (id) => {
     // 19/08: delete sem `.select()` — RLS que filtra linhas devolve error:null com ZERO
@@ -337,9 +362,18 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                   <input type="date" value={novo.data} onChange={e => setNovo(n => ({ ...n, data: e.target.value }))} style={inp} />
                 </div>
                 <input placeholder="Descrição (opcional)" value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} style={{ ...inp, marginBottom: 8 }} />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', border: '1.5px dashed #cbd5e1', borderRadius: 9, cursor: 'pointer', color: comprovanteFile ? '#059669' : '#64748b', fontWeight: 600, fontSize: 12.5 }}>
+                    <Paperclip size={14} /> {comprovanteFile ? comprovanteFile.name : 'Comprovante (opcional)'}
+                    <input type="file" accept="application/pdf,image/*" onChange={e => setComprovanteFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+                  </label>
+                  {comprovanteFile && <button onClick={() => setComprovanteFile(null)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><X size={14} /></button>}
+                </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input placeholder="Valor (R$)" inputMode="decimal" value={novo.valor} onChange={e => setNovo(n => ({ ...n, valor: e.target.value }))} style={{ ...inp, flex: 1 }} />
-                  <button onClick={addLanc} style={{ padding: '9px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Adicionar</button>
+                  <button onClick={addLanc} disabled={enviandoLanc} style={{ padding: '9px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: enviandoLanc ? 'default' : 'pointer', opacity: enviandoLanc ? 0.7 : 1 }}>
+                    {enviandoLanc ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', verticalAlign: 'middle' }} /> : 'Adicionar'}
+                  </button>
                 </div>
               </div>
               )}
@@ -355,6 +389,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{l.data ? new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: l.tipo === 'entrada' ? '#059669' : '#dc2626' }}>{l.tipo === 'entrada' ? '+' : '−'} {brl(l.valor)}</div>
+                      {l.anexo_id && <button onClick={() => abrirDoc({ id: l.anexo_id })} title="Ver comprovante" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><Paperclip size={15} /></button>}
                       {!soLeitura && <button onClick={() => delLanc(l.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}

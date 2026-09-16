@@ -29,9 +29,12 @@ const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
 // Documentos do CICLO do arremate (prova + pós-leilão) — atribuição pela equipe
 // alimenta a IA com o caso real e ficam PERMANENTES (arrematado=true → o cron nunca
 // apaga). Aceitam múltiplos arquivos e podem ser anexados ao longo do tempo.
-// Judicial: auto/carta de arrematação. Extrajudicial: boleto do sinal/aquisição,
-// contrato do banco (financiado), escritura (lavratura) e matrícula registrada.
-const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada'];
+// Auto/carta de arrematação: exclusivos do judicial. Boleto do sinal/aquisição,
+// contrato do banco (financiado), escritura (lavratura), matrícula registrada e
+// comprovante de pagamento: existem em QUALQUER modalidade — judicial também tem
+// sinal e aquisição à vista (18/09, correção do dono: rótulo antigo dizia
+// "extrajudicial" e não fazia sentido para leilão judicial).
+const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'comprovante_pagamento'];
 const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
