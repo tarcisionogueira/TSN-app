@@ -23,6 +23,31 @@ import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { anthropicFetch } from './_claude.js';
 
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+
+// APRENDIZADO (18/09): correções reais que o staff fez em contratos anteriores do MESMO
+// tipo, extraídas por api/gerar-contrato.js ao enviar. Mesmo padrão do jurídico
+// (juridico_aprendizado → resumoAprendizadoTexto em gerar-documental.js). No-op enquanto
+// não há correções registradas para o tipo.
+async function resumoAprendizadoContrato(tipo) {
+  if (!SUPABASE_URL || !SERVICE_KEY || !tipo) return '';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/contrato_aprendizado?tipo=eq.${encodeURIComponent(tipo)}&select=clausula,texto_ia,texto_final,motivo&order=criado_em.desc&limit=15`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    });
+    if (!r.ok) return '';
+    const licoes = await r.json().catch(() => []);
+    if (!Array.isArray(licoes) || !licoes.length) return '';
+    const linhas = licoes
+      .filter(l => l && (l.clausula || l.motivo))
+      .slice(0, 12)
+      .map(l => `- ${l.clausula ? l.clausula + ': ' : ''}a IA escreveu "${String(l.texto_ia || '—').slice(0, 140)}", o que de fato foi enviado foi "${String(l.texto_final || '—').slice(0, 140)}"${l.motivo ? ` — ${String(l.motivo).slice(0, 200)}` : ''}`);
+    if (!linhas.length) return '';
+    return `\n\nAPRENDIZADOS COM CONTRATOS REAIS DESTE TIPO (correções que o staff já fez em minutas anteriores — aplique estas lições e não repita os mesmos ajustes):\n${linhas.join('\n')}`;
+  } catch (e) { console.error('[gerar-contrato-ia] aprendizado nao lido', e?.message); return ''; }
+}
+
 const ROLES_STAFF = ['admin', 'consultor', 'analista', 'advogado'];
 
 const FORO_PADRAO = process.env.CONTRATO_FORO || 'Comarca de Feira de Santana, Estado da Bahia';
@@ -115,6 +140,8 @@ FORO OBRIGATÓRIO deste contrato: ${foroFinal} (eleja este foro com renúncia a 
 
 Gere o contrato completo e pronto para uso.`;
 
+  const aprendizado = await resumoAprendizadoContrato(tipoFinal);
+
   try {
     const r = await anthropicFetch({
       method: 'POST',
@@ -125,7 +152,7 @@ Gere o contrato completo e pronto para uso.`;
         // vez de deixar colchetes, então a saída é bem maior que a de um contrato genérico.
         // Em 4000 uma renovação de contrato longo terminava cortada no meio de uma cláusula.
         max_tokens: 8000,
-        system: SYSTEM_PROMPT,
+        system: SYSTEM_PROMPT + aprendizado,
         messages: [{ role: 'user', content: userMessage }],
       }),
       // Limitado de propósito: com o padrão (3 retries × 120s) o pior caso passa de 6 min e

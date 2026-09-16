@@ -50,6 +50,32 @@ const PADROES = {
   },
 };
 
+// APRENDIZADO DO GERADOR DE CONTRATOS (18/09, pedido do dono: "é bom aprender visto que ele
+// pode aprimorar com os contratos que vamos utilizando"). Mesmo padrão do jurídico
+// (inbound-juridico.js/compilarComIA): compara o rascunho da IA com o texto que o staff de
+// fato mandou para assinatura e extrai correções estruturadas. Best-effort — nunca derruba
+// o envio do contrato, que já aconteceu quando esta função roda.
+async function extrairCorrecoesContrato(tipo, textoIA, textoFinal) {
+  const apiKey = process.env.CLAUDE_KEY;
+  if (!apiKey || !textoIA || !textoFinal || textoIA === textoFinal) return [];
+  try {
+    const sys = `Você compara a MINUTA gerada por IA com o CONTRATO FINAL que o staff de fato enviou para assinatura, e extrai as correções reais que o staff fez. Responda SOMENTE com JSON válido: {"correcoes":[{"clausula":"nome curto da cláusula/trecho","texto_ia":"o que a IA escreveu (resumido)","texto_final":"o que ficou de fato (resumido)","motivo":"por que a mudança, na sua leitura"}]}. Ignore mudanças triviais (só formatação, só um placeholder preenchido com dado que a IA já deveria ter transcrito). Liste no máximo 5 correções, as mais substantivas. Se não houver correção de conteúdo real, responda {"correcoes":[]}.`;
+    const userMsg = `Tipo de contrato: ${tipo || 'não informado'}\n\n## MINUTA DA IA:\n${String(textoIA).slice(0, 12000)}\n\n## CONTRATO FINAL ENVIADO:\n${String(textoFinal).slice(0, 12000)}`;
+    const r = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1500, system: sys, messages: [{ role: 'user', content: userMsg }] }),
+    }, { retries: 1, timeoutMs: 30000 });
+    if (!r.ok) { console.error('[gerar-contrato] extração de aprendizado falhou', r.status); return []; }
+    const data = await r.json().catch(() => null);
+    const txt = data?.content?.[0]?.text || '';
+    const ini = txt.indexOf('{'), fim = txt.lastIndexOf('}');
+    if (ini < 0 || fim < 0) return [];
+    const parsed = JSON.parse(txt.slice(ini, fim + 1));
+    return Array.isArray(parsed?.correcoes) ? parsed.correcoes.slice(0, 5) : [];
+  } catch (e) { console.error('[gerar-contrato] extração de aprendizado erro', e?.message); return []; }
+}
+
 export default async function handler(req, res) {
   const ip = getIP(req);
   const rl = await checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
@@ -70,7 +96,7 @@ export default async function handler(req, res) {
   const {
     descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas,
     // Novo fluxo CriarContrato
-    conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA,
+    conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA, contratoOriginalIA,
     // Reformulação: multi-signatário + atribuição a plano/produto + testemunha + partes
     signatarios, planoKey, produtoTipo, produtoId, partes, requerTestemunha,
     // Atribuição a uma ARREMATAÇÃO (o documento assinado aparece nos docs do arremate)
@@ -163,6 +189,22 @@ export default async function handler(req, res) {
       ));
 
       await auditLog({ acao: 'contrato_criado', user_id: user.id, ip, detalhes: { titulo: tituloFinal, signatarios: links.length, plano: planoKey || null, verificacao: verificacaoIdentidade }, sucesso: true });
+
+      // Aprendizado (18/09): staff editou a minuta da IA antes de enviar? Extrai a correção e
+      // grava — best-effort, já aconteceu o envio, uma falha aqui não afeta a resposta.
+      if (geradoPorIA && contratoOriginalIA) {
+        try {
+          const correcoes = await extrairCorrecoesContrato(tipo, contratoOriginalIA, conteudoDireto);
+          if (correcoes.length) {
+            const { error: errAprend } = await supabase.from('contrato_aprendizado').insert(correcoes.map(c => ({
+              contrato_grupo_id: grupoId, tipo: tipo || null,
+              clausula: c.clausula || null, texto_ia: c.texto_ia || null, texto_final: c.texto_final || null, motivo: c.motivo || null,
+            })));
+            if (errAprend) console.error('[gerar-contrato] aprendizado nao gravado', errAprend.message);
+          }
+        } catch (e) { console.error('[gerar-contrato] aprendizado nao gravado', e?.message); }
+      }
+
       // Compat: mantém `token` (1º) e adiciona `links` (todos os assinantes).
       return res.status(200).json({ ok: true, token: links[0]?.token, grupo_id: grupoId, links });
     } catch (e) {

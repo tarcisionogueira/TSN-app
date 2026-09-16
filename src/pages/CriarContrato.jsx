@@ -106,6 +106,10 @@ export default function CriarContrato() {
   const [descricaoIA, setDescricaoIA] = useState(_preState.contexto || '');
   const [partesInfo, setPartesInfo] = useState('');
   const [contratoGerado, setContratoGerado] = useState('');
+  // Rascunho ORIGINAL da IA, nunca mutado — preserva o "antes" para o aprendizado (18/09):
+  // se o staff editar contratoGerado antes de enviar, a diferença entre os dois vira lição
+  // para as próximas gerações do mesmo tipo de contrato (mesmo padrão do jurídico).
+  const [contratoGeradoOriginal, setContratoGeradoOriginal] = useState('');
   const [gerandoIA, setGerandoIA] = useState(false);
   const [lendoDocs, setLendoDocs] = useState(false);
   // Arquivo anexado que não deu para ler: vira aviso NA TELA. Não é erro (a geração segue
@@ -219,7 +223,9 @@ export default function CriarContrato() {
       if (data.truncado) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}O texto atingiu o tamanho máximo e pode ter ficado incompleto no fim — role até o final e confira antes de enviar.`);
       }
-      setContratoGerado(data.contrato || data.conteudo || '');
+      const textoGerado = data.contrato || data.conteudo || '';
+      setContratoGerado(textoGerado);
+      setContratoGeradoOriginal(textoGerado);
       setPasso('revisao');
     } catch (e) {
       // AbortSignal.timeout dispara TimeoutError — a mensagem nativa ("signal timed out")
@@ -286,6 +292,9 @@ export default function CriarContrato() {
         arquivoUrl: modo === 'assinar' ? arquivoUrl : null,
         arquivoNome: modo === 'assinar' ? arquivoDoc?.name : null,
         conteudo: modo === 'gerar' ? contratoGerado : `Documento anexo: ${arquivoDoc?.name || 'contrato'}`,
+        // Rascunho original da IA (18/09) — só quando difere do enviado, o servidor extrai a
+        // correção e alimenta o aprendizado do gerador. Best-effort, nunca bloqueia o envio.
+        contratoOriginalIA: (modo === 'gerar' && contratoGeradoOriginal && contratoGeradoOriginal !== contratoGerado) ? contratoGeradoOriginal : null,
       };
 
       // Mesma régua do gerarComIA: apiCall (token + rastro no Cliente 360) e parse defensivo.
@@ -603,13 +612,20 @@ export default function CriarContrato() {
             )}
 
             {modo === 'gerar' && contratoGerado && (
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: 12.5, lineHeight: 1.8, color: '#334155', background: '#f8fafc', borderRadius: 10, padding: 16, border: '1px solid #e2e8f0', maxHeight: 320, overflowY: 'auto' }}>
-                {contratoGerado}
-              </div>
+              <>
+                <textarea
+                  value={contratoGerado}
+                  onChange={e => setContratoGerado(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', whiteSpace: 'pre-wrap', fontSize: 12.5, lineHeight: 1.8, color: '#334155', background: '#f8fafc', borderRadius: 10, padding: 16, border: '1px solid #e2e8f0', minHeight: 320, maxHeight: 520, fontFamily: 'inherit', resize: 'vertical' }}
+                />
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  Você pode editar o texto antes de enviar. O que você corrigir aqui ajuda a IA a acertar mais nas próximas gerações deste tipo de contrato.
+                </div>
+              </>
             )}
 
             {modo === 'gerar' && (
-              <button onClick={() => { setContratoGerado(''); setPasso('identidade'); }} style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+              <button onClick={() => { setContratoGerado(''); setContratoGeradoOriginal(''); setPasso('identidade'); }} style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
                 <Sparkles size={12} /> Regerar contrato
               </button>
             )}
