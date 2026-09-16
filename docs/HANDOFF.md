@@ -27425,3 +27425,23 @@ aparecer "bloqueada" nesse cenário.
 
 Todos os 3 são **no-op hoje** (poucos contratos editados, poucos arremates com desfecho,
 amostra de documental por fonte ainda pequena) — passam a valer com o uso.
+
+**Testados de verdade em produção (pedido do dono: "dispara um teste real"), via workflow
+temporário no GitHub Actions (removido depois, run `35119673449`):**
+- **Laudo absorvido**: chamado `recalcularArremate()` de verdade contra o imóvel real do
+  Marcos (2 relatórios concluídos, sem laudo, sem reunião). Antes: `previsto: null`. Depois:
+  `previsto.valor_mercado = 7.284.975` (do mercadológico) + `assertividade.desconto_real_pct =
+  92,5%` calculados corretamente; `veredito` ficou `null` como esperado (sem laudo nem reunião
+  para este caso específico — a função não quebrou, só não tinha de onde tirar o veredito).
+- **Aprendizado do contrato**: gerada uma minuta real via `/api/gerar-contrato-ia` (sessão
+  mintada para o próprio dono via magic link administrativo, sem senha), editado um valor real
+  (R$ 1.000,00 → R$ 1.500,00) e enviado via `/api/gerar-contrato`. O servidor extraiu e gravou
+  a correção estruturada (`clausula: "Valor e Forma de Pagamento - Valor Mensal"`, `texto_ia`,
+  `texto_final`, `motivo`) em `contrato_aprendizado` — confirmado e depois limpo (era teste).
+  **1ª tentativa do teste falhou por desenho do teste, não do código**: o texto de teste se
+  autodeclarava "não é uma cláusula de negócio real" dentro do próprio contrato, e a IA
+  extratora, seguindo a própria instrução de ignorar o que não é correção real, corretamente
+  devolveu zero correções — bom sinal do filtro funcionando, mau sinal do teste.
+
+Log de diagnóstico ficou em `gerar-contrato.js` (`console.log` do nº de correções extraídas,
+mesmo quando zero) — barato e evita "silêncio parece sucesso" no futuro.
