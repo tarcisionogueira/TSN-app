@@ -26897,3 +26897,35 @@ real de hoje. Achado só porque o dono mandou o print; nenhuma varredura de cód
   Migração: `honorarios_link_pagamento`, `honorarios_link_expira_em`.
 
 Build limpo de novo (padrões/sintaxe/eslint/vite build), commit `e9e4a80`, deploy disparado.
+
+### 16/09 (continuação 2) — upsell Investidor Pro no mesmo link: cartão agora, 1ª cobrança em 30 dias
+
+Pedido do dono: junto do link de honorários, oferecer ao arrematante virar Investidor Pro —
+autoriza o cartão AGORA, e a mensalidade só é cobrada no MÊS SEGUINTE. Confirmado ao dono:
+**não existe versão PIX** — assinatura recorrente do Mercado Pago não aceita PIX como
+funding, então esse upsell é sempre cartão. Pesquisado antes de codar (doc oficial do MP,
+via SDK Go): `auto_recurring.start_date` é a data em que os ciclos recorrentes **de fato
+começam** a cobrar — não é metadado decorativo.
+
+- `api/mp.js` → `criarAssinaturaPromoPro()` / action `criar_assinatura_promo_pro`: cria uma
+  assinatura Checkout Pro (plano `top2`) com `start_date` = +30 dias. `external_reference`
+  sai no MESMO formato `userId|top2` de qualquer assinatura — quando a 1ª cobrança
+  acontecer (30 dias depois, como um `payment` normal), o webhook GENÉRICO que já ativa
+  qualquer assinatura de plano cuida disso sozinho; **nenhuma mudança em
+  api/mp-webhook.js foi necessária**. Bloqueia se o cliente já tem acesso igual/superior
+  (top2/assessorado/clube — não cobra por um upgrade que ele já tem). Reaproveita o link já
+  gerado (fica `pending` no MP até o arrematante preencher o cartão).
+- Checkbox "Também oferecer o Investidor Pro" em Caso.jsx e Admin.jsx, ao lado do link de
+  honorários — gera um SEGUNDO link (assinatura e pagamento avulso são produtos MP
+  diferentes, não cabem no mesmo checkout).
+- Migração: `promo_pro_mp_preapproval_id`, `promo_pro_link`, `promo_pro_inicio_em`.
+
+**Confirmado ao dono, sobre juros de parcelamento**: no fluxo Transparente (cartão coletado
+dentro do BidPro — `PagamentoServico.jsx`), a regra já em produção é **1x a 3x sem juros; a
+partir da 4ª parcela o cliente assume os juros** (2,49% a.a. até 6x, 2,99% até 9x, 3,49% até
+12x — `calcParcelaMaisJuros`). Já nos links HOSPEDADOS do Mercado Pago (o link de
+honorários e agora este de Investidor Pro), quem decide a régua de juros por parcela é a
+config de **"parcelamento sem juros" da própria conta MP** (painel do Mercado Pago), não uma
+chamada de API nossa — vale a pena o dono confirmar lá que está espelhando a mesma regra
+(3x sem juros / 4x+ com juros) para não haver duas políticas divergentes entre os dois
+fluxos.
