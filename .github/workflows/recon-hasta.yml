@@ -14,4 +14,13 @@ jobs:
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          # 16/09: achado ao rodar o recon do Franco Leilões — faltavam estas duas aqui também.
+          # A Web Unlocker (fetchUnlockerContado/bd-ledger.mjs) checa cota via RPC no Supabase
+          # ANTES de chamar o Bright Data de verdade; sem isto, TODA chamada falha com
+          # "brightdata:cota_indisponivel — sem credencial do Supabase" (mesmo achado de 07/09
+          # em recon-novos-leiloeiros.yml). Isto explica o "HOME 0 len=0" registrado em 21/08
+          # como "não prova nada novo" — não era bloqueio de IP, era este gate de orçamento
+          # nunca conseguindo se autorizar, e a resposta vazia foi lida como "site não respondeu".
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-hasta.mjs
