@@ -27535,3 +27535,53 @@ sobreposição (mesmo leiloeiro, casos captados pelo radar de editais em vez do 
 não candidatos novos. Os ~65 leiloeiros restantes do EDITAL_DJEN têm 1-4 imóveis cada — volume
 não justifica scraper dedicado; ficam cobertos só pelo radar de editais (sem doc/foto, por
 desenho da fonte). Registrado em `leiloeiro_conhecimento` (KLEILOES/SARAIVA/MARCOANTONIO).
+
+## 16/09 (4ª parte) — scraper do KLEILOES implementado (testado 3x em produção, 2 bugs achados e corrigidos ao vivo)
+
+**Pedido do dono: "implementa o scraper do kleiloes primeiro".** Recon confirmou mesma
+plataforma "Suporte Leilões" do JELEILOES (já integrado) — mesma URL de lote
+(`/oferta/leilao/imoveis/<cat>/<id>/id-<id2>/<slug>`), mesma estrutura de tabela de valores,
+anexos já rotulados (Matrícula/Edital/Laudo) em `static.suporteleiloes.com.br`. Em vez de
+parser novo, KLEILOES entrou como **tenant novo** de `lib/jeleiloes-parse.mjs`
+(`TENANTS.kleiloes`) — zero infra nova: `scraper-dom.yml` já roda `scraper-jeleiloes.mjs`
+todo dia às 8h UTC gravando de verdade (`Object.values(TENANTS)`), então KLEILOES entra
+automaticamente no agendamento existente.
+
+**3 divergências entre os 2 tenants da mesma plataforma, achadas testando de verdade (não em
+dry-run) e generalizadas no parser compartilhado:**
+1. Rótulo do valor mínimo: KLEILOES usa "Valor Inicial", JELEILOES usa "Lance Inicial" —
+   `linhaTabelaLote`/`valorJanela` aceitam os dois agora.
+2. Rótulo da descrição: KLEILOES não tem "DESCRIÇÃO DO LOTE" (JELEILOES tem), o texto vem
+   direto sob "Observação:" — sem isso `extrairArea` não tinha onde buscar "X m²" e os 39
+   primeiros lotes gravados saíram com `area_m2=0` em 100% dos casos. `descricaoDe` agora
+   tenta os dois rótulos.
+3. Slug sem conector em/no/na ("imovel-sao-jose-dos-pinhais-pr") fazia `cidadeUFDeSlug`
+   capturar "Imovel" junto do nome da cidade. `cidadeUFDeSlug` ganhou um strip de tipo
+   genérico no início (rede de segurança, não exclusiva do KLEILOES).
+
+**Erro cometido E corrigido durante o próprio teste real (registrado com a mesma honestidade
+que o resto deste HANDOFF exige):** a 1ª tentativa de corrigir o item 3 inverteu a prioridade
+cidade pra "texto primeiro" (achando que era mais confiável, com acento certo) — rodei de
+verdade contra a rede e **39/39 lotes gravados saíram com cidade "Cri de Maringá"** em vez da
+cidade real do lote: o texto da matrícula cita "2º CRI de Maringá" (Cartório de Registro de
+Imóveis) ANTES da cidade real, e o filtro de ruído do texto só excluía Comarca/Vara/Tribunal/
+Foro/Juízo, não CRI/Circunscrição/Cartório. Corrigido em duas camadas, ambas testadas de novo
+em produção até confirmar: (a) revertida a prioridade pro SLUG primeiro (o strip do item 3
+sozinho já resolve o caso original, sem o efeito colateral do ruído de cartório no texto); (b)
+`cidadeUF` (leilaopro-parse.mjs, usada como fallback por VÁRIAS fontes, não só JELEILOES/
+KLEILOES) ganhou o filtro de CRI/Circunscrição/Cartório — defesa adicional que beneficia todo
+mundo que usa essa função. Os 39 registros com cidade errada foram sobrescritos na rodada
+seguinte (upsert por `fonte_id`, mesmo mecanismo de sempre).
+
+**Limitação CONHECIDA, não corrigida agora** (documentada, não escondida): cidade cujo nome
+tem "do/da/de" no MEIO sem conector em/no/na antes sai truncada — "São Félix do Araguaia"
+grava só "Araguaia", "Tuneiras do Oeste" grava só "Oeste". É bug PRÉ-EXISTENTE da mesma função
+(`cidadeUFDeSlug`), já documentado no próprio código antes desta sessão (exemplo citado:
+"Nova América da Colina" → "Colina"), afeta JELEILOES igualmente, não é regressão desta
+sessão. Corrigir exigiria repensar a heurística de slug pra nomes de cidade compostos — fica
+como próximo passo se o dono quiser, fora do escopo do pedido de hoje.
+
+**Resultado final, confirmado por SQL direto em produção:** 117 imóveis ativos do KLEILOES,
+100% com cidade/UF e valor, 96,6% com foto, 99,1% com matrícula real (PDF), 26,5% com área
+(rótulo "Observação:" nem sempre traz "X m²" no formato esperado — aceitável, não bloqueia).
+`leiloeiro_conhecimento` atualizado (`docs_status='ok'`) com o relato completo.
