@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { assinarAnexos } from '../utils/docUrl';
 import { apiCall } from '../utils/apiCall';
+import { maskMoedaDigitando } from '../utils/moeda';
 import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
@@ -558,6 +559,7 @@ export default function Caso() {
   const [salvandoArr, setSalvandoArr] = useState(false);
   const [gerandoLinkHon, setGerandoLinkHon] = useState(false);
   const [linkHonorario, setLinkHonorario] = useState('');
+  const [linkHonorarioExpiraEm, setLinkHonorarioExpiraEm] = useState('');
   const [linkHonorarioCopiado, setLinkHonorarioCopiado] = useState(false);
 
   // ─── Honorários ──────────────────────────────────────────────────────────
@@ -586,6 +588,14 @@ export default function Caso() {
     }).catch(() => {});
     return () => { cancel = true; };
   }, [role, arrematacao?.id]);
+
+  // O link de honorários já gerado (dentro do prazo) precisa continuar disponível ao
+  // reabrir o caso — sem isto, sair e voltar da tela fazia parecer que o link tinha sumido.
+  useEffect(() => {
+    const valido = arrematacao?.honorarios_link_pagamento && arrematacao?.honorarios_link_expira_em && new Date(arrematacao.honorarios_link_expira_em) > new Date();
+    setLinkHonorario(valido ? arrematacao.honorarios_link_pagamento : '');
+    setLinkHonorarioExpiraEm(valido ? arrematacao.honorarios_link_expira_em : '');
+  }, [arrematacao?.honorarios_link_pagamento, arrematacao?.honorarios_link_expira_em]);
 
   // ─── Carregar caso ────────────────────────────────────────────────────────
   const carregarCaso = useCallback(async () => {
@@ -984,6 +994,7 @@ export default function Caso() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link de pagamento');
       setLinkHonorario(d.initPoint || d.sandboxPoint || '');
+      setLinkHonorarioExpiraEm(d.expiraEm || '');
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {
@@ -1766,6 +1777,11 @@ export default function Caso() {
                           <ExternalLink size={12}/> Abrir
                         </a>
                       </div>
+                      {linkHonorarioExpiraEm && (
+                        <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:6 }}>
+                          Válido até {new Date(linkHonorarioExpiraEm).toLocaleString('pt-BR')}. Depois disso, clique em gerar de novo.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1834,7 +1850,7 @@ export default function Caso() {
                 </div>
                 <div>
                   <label style={lbl}>Valor Arrematado (R$)</label>
-                  <input value={arrForm.valor_arrematado} onChange={e=>setArrForm(p=>({...p,valor_arrematado:e.target.value}))} style={inp} placeholder="0,00"/>
+                  <input value={arrForm.valor_arrematado} onChange={e=>setArrForm(p=>({...p,valor_arrematado:maskMoedaDigitando(e.target.value)}))} style={inp} placeholder="0,00"/>
                 </div>
                 {arrForm.valor_arrematado && (
                   <div style={{ padding:'10px 14px', background:'#f0fdf4', borderRadius:8, fontSize:12, color:'#166534' }}>

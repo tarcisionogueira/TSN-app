@@ -185,5 +185,34 @@ export default async function handler(req) {
         aviso: `caso criado, mas a promocao para assessorado FALHOU (HTTP ${r.status}) — promova pela tela de usuarios` }, 200);
     }
   }
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: roleFinal, role_alterado: rolePromovido });
+
+  // 4) HONORÁRIOS DE ÊXITO (16/09) — só quando o admin marcou "contratou de fato" (a
+  //    atribuição de ESTUDO, sem a caixa, segue sem cobrança, regra de 30/07 intacta).
+  //    Cria a linha em `arrematacoes` (mesma tabela que Caso.jsx usa) para habilitar o
+  //    link de pagamento (api/mp.js:criarPreferenciaHonorario) — sem isto, um arremate
+  //    atribuído aqui e promovido não tinha NENHUM jeito de cobrar o cliente.
+  let arrematacao_id = null, honorarios_valor = null;
+  if (promover_assessorado === true && valor > 0 && caso?.id) {
+    try {
+      const cfgRes = await sb('config_honorarios?id=eq.1&select=total_pct');
+      const [cfg] = cfgRes.ok ? await cfgRes.json().catch(() => []) : [];
+      const totalPct = Number(cfg?.total_pct) || 10;
+      honorarios_valor = Math.round(valor * (totalPct / 100) * 100) / 100;
+      const arrRes = await sb('arrematacoes?on_conflict=caso_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify({
+          caso_id: caso.id, cliente_id: user_id, arrematante_id: user_id, imovel_id: imovelId,
+          status: 'registrado', tipo_leilao: modalidade, valor_arrematado: valor,
+          honorarios_valor, honorarios_status: 'pendente', em_nome_proprio: true,
+          documento_tipo: modalidade === 'judicial' ? 'auto_arrematacao' : 'boleto',
+          criado_por: user.id,
+        }),
+      });
+      const [arr] = arrRes.ok ? await arrRes.json().catch(() => []) : [];
+      arrematacao_id = arr?.id || null;
+    } catch (e) { console.error('[atribuir-arremate] honorarios', e?.message || e); } // best-effort: a atribuição já foi feita: equipe pode registrar o arremate depois em Caso.jsx se isto falhar
+  }
+
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor });
 }

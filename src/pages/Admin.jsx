@@ -15,6 +15,7 @@ import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteP
 import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO } from '../components/TermoJuridico';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 import { arquivoParaBase64 } from '../utils/arquivo';
+import { maskMoedaDigitando } from '../utils/moeda';
 import { setItemSeguro } from '../utils/storageSeguro.js';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
@@ -1458,6 +1459,37 @@ function UsuariosTab() {
     setAtribExtraindo(algum ? 'ok' : 'erro');
   };
   const [atribLoad, setAtribLoad] = useState(false);
+  // Painel pós-atribuição: link de pagamento dos honorários (só quando promoveu com valor).
+  const [linkHonorarioAtrib, setLinkHonorarioAtrib] = useState(null); // { arrematacao_id, honorarios_valor, alvoId, alvoNome, imovelId, casoId, end, tipo, cid, est, valorNum }
+  const [gerandoLinkHonorarioAtrib, setGerandoLinkHonorarioAtrib] = useState(false);
+  const [linkHonorarioAtribUrl, setLinkHonorarioAtribUrl] = useState('');
+  const [linkHonorarioAtribCopiado, setLinkHonorarioAtribCopiado] = useState(false);
+  const gerarLinkHonorarioAtrib = async () => {
+    if (!linkHonorarioAtrib?.arrematacao_id) return;
+    setGerandoLinkHonorarioAtrib(true);
+    try {
+      const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_preferencia_honorario', arrematacao_id: linkHonorarioAtrib.arrematacao_id }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao gerar o link');
+      setLinkHonorarioAtribUrl(d.initPoint || d.sandboxPoint || '');
+    } catch (e) {
+      alert(`Não gerei o link: ${e.message}`);
+    } finally { setGerandoLinkHonorarioAtrib(false); }
+  };
+  const copiarLinkHonorarioAtrib = async () => {
+    try {
+      await navigator.clipboard.writeText(linkHonorarioAtribUrl);
+      setLinkHonorarioAtribCopiado(true);
+      setTimeout(() => setLinkHonorarioAtribCopiado(false), 2500);
+    } catch { /* padrao-ok: clipboard indisponível — o link já está visível e selecionável na tela */ }
+  };
+  const prosseguirGerarRelatorios = () => {
+    const d = linkHonorarioAtrib;
+    setLinkHonorarioAtrib(null); setLinkHonorarioAtribUrl(''); setLinkHonorarioAtribCopiado(false);
+    if (!d) return;
+    iniciarSuporte({ id: d.alvoId, nome: d.alvoNome, role: 'assessorado' });
+    navSup('/analise', { state: { manual: true, autoGerar: true, paraUserId: d.alvoId, imovel: { id: d.imovelId || d.casoId, endereco: d.end, cidade: d.cid, estado: d.est, valorMinimo: d.valorNum, modalidade: /judicial/i.test(d.tipo) ? 'judicial' : 'extrajudicial' } } });
+  };
   const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
   const [comAfiliado, setComAfiliado] = useState(null); // editor do % de comissão do afiliado/consultor (modal)
   const [conceder, setConceder] = useState(null); // modal: conceder consultas extras (bônus) ao cliente
@@ -1840,11 +1872,21 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
       }
       atribFilesRef.current = [];
       setAtribUser(null);
+
+      const proximo = { alvoId, alvoNome, imovelId, casoId, end, tipo, cid, est, valorNum };
+      // Honorários calculados (promoveu + valor informado) → o próximo passo é cobrar o
+      // arrematante antes de sair da tela, não depois de lembrar. O painel abre com o
+      // botão de gerar o link; "gerar os 3 relatórios" continua disponível nele.
+      if (data.arrematacao_id && Number(data.honorarios_valor) > 0) {
+        setLinkHonorarioAtribUrl(''); setLinkHonorarioAtribCopiado(false);
+        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor });
+        return;
+      }
       // A atribuição NÃO exige contrato (só planos/produtos/serviços com contrato
       // atribuído exigem). Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
       // ÂNCORA) para gerar os 3 relatórios EM NOME DO cliente — o material real
       // alimenta o aprendizado da IA.
-      if ((imovelId || casoId) && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise e GERAR OS 3 RELATÓRIOS automaticamente (mercadológico → documental → laudo), lendo os anexos?')) {
+      if ((imovelId || casoId) && window.confirm('Arremate atribuído' + (data.role_alterado ? ' e usuário promovido a Assessorado' : '') + '.\n\nAbrir a análise e GERAR OS 3 RELATÓRIOS automaticamente (mercadológico → documental → laudo), lendo os anexos?')) {
         iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
         navSup('/analise', { state: { manual: true, autoGerar: true, paraUserId: alvoId, imovel: { id: imovelId || casoId, endereco: end, cidade: cid, estado: est, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
@@ -2037,7 +2079,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
               {/* Único campo a informar — o resto vem dos documentos. */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Valor arrematado (R$)</label>
-                <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
+                <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: maskMoedaDigitando(e.target.value) }))} placeholder="0,00" style={S.input} />
               </div>
             </div>
             {/* 29/08 — O RÓTULO DO BOTÃO DIZIA "Atribuir e tornar Assessorado" E NÃO TORNAVA:
@@ -2059,6 +2101,42 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
               <button onClick={atribuirArremate} disabled={atribLoad} style={{ flex: 2, padding: '10px', background: atribLoad ? '#cbd5e1' : '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
                 {atribLoad ? 'Atribuindo…' : (atribForm.promover && atribUser?.role === 'explorador' ? 'Atribuir e promover a Assessorado' : 'Atribuir arremate')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — link de pagamento dos honorários (abre logo após atribuir+promover com valor) */}
+      {linkHonorarioAtrib && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>✅ Arremate atribuído e {linkHonorarioAtrib.alvoNome} promovido</div>
+            <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
+              Honorários de êxito: <strong>R$ {Number(linkHonorarioAtrib.honorarios_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Gere o link para o arrematante pagar PIX ou cartão.
+            </div>
+            {!linkHonorarioAtribUrl ? (
+              <button onClick={gerarLinkHonorarioAtrib} disabled={gerandoLinkHonorarioAtrib} style={{ width: '100%', padding: '10px', background: gerandoLinkHonorarioAtrib ? '#cbd5e1' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: gerandoLinkHonorarioAtrib ? 'default' : 'pointer' }}>
+                {gerandoLinkHonorarioAtrib ? 'Gerando…' : '🔗 Gerar link de pagamento'}
+              </button>
+            ) : (
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>Envie ao arrematante — válido por até 2 dias:</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input readOnly value={linkHonorarioAtribUrl} onFocus={e => e.target.select()} style={{ ...S.input, flex: '1 1 240px', fontSize: 11, color: '#475569' }} />
+                  <button onClick={copiarLinkHonorarioAtrib} style={{ padding: '8px 14px', background: linkHonorarioAtribCopiado ? '#059669' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {linkHonorarioAtribCopiado ? '✓ Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button onClick={() => { setLinkHonorarioAtrib(null); setLinkHonorarioAtribUrl(''); }} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
+              <button onClick={prosseguirGerarRelatorios} style={{ flex: 2, padding: '10px', background: '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+                Gerar os 3 relatórios agora
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 10 }}>
+              O link também fica disponível na página do caso (seção Arrematação), mesmo se você fechar esta janela.
             </div>
           </div>
         </div>

@@ -319,10 +319,12 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
  * (uuid, sem pipe) + metadata.tipo='honorario_exito' — o webhook casa por AMBOS antes de
  * checar `ehProdutoMp` (mesmo formato de uuid), para não colidir com o fluxo de produto.
  */
+const HONORARIO_LINK_VALIDADE_H = 48; // pedido do dono (16/09): link usável por até 2 dias
+
 async function criarPreferenciaHonorario({ arrematacao_id }) {
   if (!arrematacao_id) throw new Error('arrematacao_id obrigatório');
 
-  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+  const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrematacao_id}&select=id,arrematante_id,honorarios_valor,honorarios_status,honorarios_link_pagamento,honorarios_link_expira_em`, {
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
   });
   const [arr] = arrRes.ok ? await arrRes.json() : [];
@@ -331,11 +333,20 @@ async function criarPreferenciaHonorario({ arrematacao_id }) {
   const valor = Number(arr.honorarios_valor) || 0;
   if (valor <= 0) throw new Error('Honorários ainda não calculados para esta arrematação.');
 
+  // Link ainda válido: devolve o MESMO (continua disponível/copiável sem gerar de novo a
+  // cada clique — o arrematante pode ter fechado a conversa e o link precisa seguir o mesmo).
+  if (arr.honorarios_link_pagamento && arr.honorarios_link_expira_em && new Date(arr.honorarios_link_expira_em) > new Date()) {
+    return { initPoint: arr.honorarios_link_pagamento, valor, expiraEm: arr.honorarios_link_expira_em, reaproveitado: true };
+  }
+
   const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=nome,email,cpf,cpf_enc`, {
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
   });
   const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
   const cpfArrematante = perfil ? await cpfDoRegistro(perfil).catch(() => null) : null;
+
+  const agora = new Date();
+  const expiraEm = new Date(agora.getTime() + HONORARIO_LINK_VALIDADE_H * 3600 * 1000);
 
   const back = `${BASE_URL}/#/caso`;
   const pref = await mpPost('/checkout/preferences', {
@@ -354,7 +365,12 @@ async function criarPreferenciaHonorario({ arrematacao_id }) {
     notification_url: WEBHOOK,
     statement_descriptor: 'BIDPRO BRASIL',
     external_reference: String(arr.id),
-    expires: false,
+    // Prazo pedido pelo dono (16/09): até 2 dias. Passado isso, o link para de aceitar
+    // pagamento no MP e o próximo clique em "gerar" acima cria um novo (honorarios_valor
+    // pode até ter mudado nesse meio tempo).
+    expires: true,
+    expiration_date_from: agora.toISOString(),
+    expiration_date_to: expiraEm.toISOString(),
     // Sem `excluded_payment_types`: o arrematante escolhe PIX ou cartão (inclusive
     // parcelado) livremente na página hospedada do MP — não mesclamos os dois métodos
     // numa preferência só (o MP não suporta split PIX+cartão num único checkout; o
@@ -369,10 +385,14 @@ async function criarPreferenciaHonorario({ arrematacao_id }) {
   await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arr.id}`, {
     method: 'PATCH',
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ honorarios_mp_preference_id: pref.id }),
+    body: JSON.stringify({
+      honorarios_mp_preference_id: pref.id,
+      honorarios_link_pagamento: pref.init_point || pref.sandbox_init_point || null,
+      honorarios_link_expira_em: expiraEm.toISOString(),
+    }),
   });
 
-  return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, valor };
+  return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, valor, expiraEm: expiraEm.toISOString() };
 }
 
 /**
