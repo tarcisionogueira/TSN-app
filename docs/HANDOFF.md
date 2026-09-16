@@ -27337,7 +27337,47 @@ Adicionado `resumoAprendizadoTexto()` ao prompt documental (commit `0b1dc86`), f
 do lado jurídico/processual que o dono pediu. É no-op hoje (poucos arremates reais com desfecho
 no CNJ ainda), mas passa a valer à medida que a base cresce.
 
-**Ainda pendente, não decidido:** a fila de `registrar_anexos_do_espelho()` (achado 1 acima) não
-tem prioridade — processa em lotes de 500 sem ordenação, e o backlog é maior que isso. Candidato
-a próximo passo: dar a ela a mesma priorização por data de leilão que `proximos_espelho_documentos`
-já tem, ou aumentar a frequência/lote.
+**Fila de publicação do espelho — resolvido no mesmo dia (pedido explícito do dono: "pode dar
+prioridade a fila também").** `registrar_anexos_do_espelho()` reescrita 3 vezes em sequência,
+aplicada via MCP Supabase (funções, sem migração destrutiva):
+1. **Prioridade** (era achado pendente acima): passa a processar por urgência — imóvel
+   REALMENTE arrematado > com relatório gerado > ativo no acervo > resto, mais antigo primeiro
+   dentro do nível. Mesmo princípio da fila de captura (`proximos_espelho_documentos`, 11/08),
+   adaptado: aqui não é "antes do leilão" (o arquivo já foi baixado), é "quem depende dele agora".
+2. **"Trazer todos os anexos, para rastreabilidade"** (pedido do dono): antes só matrícula/
+   edital/laudo/regras eram publicados; qualquer anexo do leiloeiro fora desses 4 tipos nunca
+   virava documento visível — foi assim que o laudo de avaliação do Marcos ficou de fora (o
+   espelho tinha capturado, só nunca foi classificado como "laudo"). Passo novo publica
+   qualquer anexo 'copiado' ainda não representado no imóvel, como tipo "outro".
+3. **Achado ao testar o passo 2, corrigido ANTES de rodar em escala**: medi quantos imóveis
+   DIFERENTES compartilham o mesmo anexo no acervo inteiro e o resultado era grave — o mesmo
+   PDF aparece em **1.201 imóveis** (documento institucional do Superbid), 380 (relatório de
+   blog), 246 (modelo de proposta do Mega Leilões), 162 (cartilha do arrematante + currículo da
+   empresa), **120 (aviso de cookies!)**. Não são anexos do LOTE, são material do SITE inteiro
+   do leiloeiro — publicar isso sem filtro teria espalhado documentos irrelevantes (e, no caso
+   do aviso de cookies, embaraçosos) por milhares de páginas de cliente. Corrigido: o passo 3 só
+   publica um anexo genérico se ele aparecer em **no máximo 15 imóveis distintos** (cobre um
+   leilão real de porte médio, exclui material institucional do site). Achado concreto que
+   confirmou o problema: um anexo do próprio galpão do Marcos era um **relatório de
+   transparência salarial da EMPRESA do leiloeiro** (nada a ver com o lote) — removido na mão.
+4. **Achado ao rodar de verdade**: nenhum dos 3 passos marcava `arrematado=true` mesmo quando o
+   imóvel já tem linha em `arrematados` — reabriria o MESMO risco do dia (documento de arremate
+   real exposto à retenção de curto prazo, não à Regra 1/90 dias). Corrigido nas 3 inserções +
+   um backfill do que já tinha sido publicado errado nas rodadas de teste.
+
+Confirmado rodando de verdade contra o imóvel do Marcos: os 2 anexos genéricos legítimos (guia
+e comprovante de pagamento do sinal, que a equipe já tinha subido manualmente) ficaram
+`arrematado=true`; o anexo institucional foi excluído/removido.
+
+**"Encaminhar ao Jurídico" para arremate atribuído manualmente.** O dono pediu para poder
+enviar todos os anexos ao jurídico para diligência, com a resposta voltando pelo sistema — **já
+existe** (`api/enviar-juridico-email.js` + `api/inbound-juridico.js`): um clique manda TODOS os
+`imovel_anexos` + a avaliação documental por e-mail ao advogado do caso, a resposta dele volta
+por e-mail para um endereço próprio do caso e é ingerida automaticamente, aparecendo no
+Atendimento interno. O problema não era a feature — era que ela só renderizava dentro do ramo
+`reuniao1 ? (...)` de `Caso.jsx`, e um caso atribuído manualmente (`atribuir-arremate.js`) NUNCA
+cria reunião (o arremate já é real, não há "aprovar para arrematação" a fazer). Resultado: para
+esse tipo de caso — o do Marcos — o botão nunca aparecia, mesmo com plano e role corretos.
+Corrigido: novo ramo em `Caso.jsx` que mostra o mesmo botão quando `!reuniao1` mas
+`caso.status_etapa === 'arrematado'`; ajustado também o `disabled`/badge da seção para não
+aparecer "bloqueada" nesse cenário.
