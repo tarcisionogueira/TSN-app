@@ -97,6 +97,15 @@ export default async function handler(req, res) {
       });
     } catch { /* não bloqueia o relatório */ }
 
+    // CONFIABILIDADE DO LEILOEIRO por DESFECHO real (18/09, pedido do dono): recalibra
+    // leiloeiro_conhecimento com risco jurídico confirmado + divergência real do advogado,
+    // em vez de só dado operacional (custo/anti-bot). Determinística, zero IA. Best-effort.
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/atualizar_confiabilidade_leiloeiro`, {
+        method: 'POST', headers: h, body: '{}', signal: AbortSignal.timeout(15000),
+      });
+    } catch { /* não bloqueia o relatório */ }
+
     // Relatório completo (ordenado: crítico → atenção → info) + e-mail semanal ao admin.
     const cr = await fetch(`${SUPABASE_URL}/rest/v1/moderador_insights?select=categoria,severidade,agente,titulo,detalhe&order=severidade.asc`, {
       headers: h, signal: AbortSignal.timeout(15000),

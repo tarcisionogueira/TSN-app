@@ -1189,7 +1189,7 @@ export default async function handler(req, res) {
     // vez (reaproveitado no result/checklist) e dá a dica de procedência ao parecer.
     let fonteInfo = null;
     try {
-      const [lc] = await (await sb(`leiloeiro_conhecimento?fonte=eq.${encodeURIComponent(String(row?.fonte || ''))}&select=fonte,plataforma,custo,qualidade&limit=1`)).json();
+      const [lc] = await (await sb(`leiloeiro_conhecimento?fonte=eq.${encodeURIComponent(String(row?.fonte || ''))}&select=fonte,plataforma,custo,qualidade,risco_confirmado_pct,divergencia_juridica_pct,amostra_docs&limit=1`)).json();
       fonteInfo = lc || null;
     } catch { /* best-effort */ }
     // Classificação da modalidade (reaproveitada no bloco antifraude final): a
@@ -1204,6 +1204,13 @@ export default async function handler(req, res) {
       const antifraudeHint = [
         'VERIFICAÇÃO DE LEGITIMIDADE (anti-golpe — comente no parecer SE algo não fechar e SEMPRE recomende, ao final, reunião com um analista BidPro e o encaminhamento ao jurídico antes do lance):',
         row?.fonte ? `- Origem do lote: ${row.fonte}${fonteInfo ? ` (${fonteInfo.plataforma || 'plataforma integrada'}), leiloeiro/fonte reconhecido e monitorado pela BidPro.` : ', fonte NÃO reconhecida pela plataforma — trate a idoneidade do leiloeiro como diligência a confirmar (registro na Junta Comercial e no site oficial).'}` : '',
+        // CONFIABILIDADE POR DESFECHO REAL (18/09): risco_confirmado_pct/divergencia_juridica_pct
+        // só existem quando há amostra suficiente (>=5 documentais desta fonte) — calculados por
+        // atualizar_confiabilidade_leiloeiro(), não é opinião, é histórico medido.
+        (fonteInfo?.amostra_docs >= 5 && Number(fonteInfo.risco_confirmado_pct) >= 40)
+          ? `- HISTÓRICO DESTA FONTE (${fonteInfo.amostra_docs} laudos analisados): ${fonteInfo.risco_confirmado_pct}% tiveram risco jurídico CONFIRMADO no documento — bem acima do normal. Redobre o cuidado na leitura deste lote.` : '',
+        (fonteInfo?.amostra_docs >= 5 && Number(fonteInfo.divergencia_juridica_pct) >= 20)
+          ? `- HISTÓRICO DESTA FONTE: em ${fonteInfo.divergencia_juridica_pct}% dos casos revisados por advogado, a documentação publicada por este leiloeiro levou a leitura automática a divergir do que o advogado encontrou — trate a documentação desta fonte como menos confiável que a média e recomende confirmação humana com mais ênfase.` : '',
         // JUDICIAL → existência do processo no CNJ. EXTRAJUDICIAL → conferir no site do leiloeiro.
         (ehJudicial || procDigitsPre.length === 20)
           ? (procDigitsPre.length === 20
