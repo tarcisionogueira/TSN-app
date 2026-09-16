@@ -9,8 +9,8 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
--1. ✅ **CONCLUÍDO 16/09 — recon do Franco Leilões (francoleiloes.com.br): SPA, não integrável com
-   scraper de fetch cru.** Dono perguntou se já estávamos integrados (não estávamos — zero scraper,
+-1. 📌 **DECISÃO PENDENTE DO DONO (retomar amanhã) — Franco Leilões (francoleiloes.com.br): recon
+   feito, site é SPA, não integrável com scraper de fetch cru.** Dono perguntou se já estávamos integrados (não estávamos — zero scraper,
    zero parser, zero cron, zero imóvel em `imoveis_leilao`) e pediu o recon, no mesmo método já
    usado no Hasta: HOME crua via Bright Data Web Unlocker, conta sinais de `R$` no HTML e tenta 5
    padrões de URL de lote (`/lote/`, `/leilao/`, `/imovel/`, `/bem/`, `?id=`). Resultado da 2ª
@@ -27083,4 +27083,29 @@ real ficou para o dono validar com um cliente de verdade em 17/09. Cliente 360 r
 encerramento: 1 pendência real (Airton, zero uso) para o dono decidir se quer contatar;
 nenhum incidente técnico novo.
 
-*Sessão de 16/09 encerrada.*
+### 16/09 (continuação, depois do "vamos encerrar") — recon do Franco Leilões
+
+Dono perguntou se já estávamos integrados com francoleiloes.com.br (Fernanda de Mello Franco,
+leiloeira registrada na JUCEMG) — não estávamos (zero scraper/parser/cron/imóvel) — e pediu o
+recon, mesmo método já usado no Hasta.
+
+- **1ª rodada voltou vazia** (`HOME 0 len=0`, `erro: brightdata:cota_indisponivel — sem
+  credencial do Supabase`) — bug real: `fetchUnlockerContado` (`scripts/lib/bd-ledger.mjs`)
+  checa cota via RPC no Supabase ANTES de chamar o Bright Data de verdade, e o workflow só
+  tinha `BRIGHTDATA_API_TOKEN`/`BRIGHTDATA_ZONE` nos secrets. Corrigido em
+  `recon-francoleiloes.yml` **e** `recon-hasta.yml` (mesma lacuna lá — explica
+  retroativamente o "HOME 0 len=0 — não prova nada novo" registrado em 21/08 como suposto
+  bloqueio de IP). Commit `3544086`.
+- **2ª rodada (a que valeu)**: `HOME 200 len=214296`, **0 sinais de R$ no HTML cru**, **161kb
+  de 209kb do corpo são `<script>`** (77%), **0 dos 5 padrões de URL de lote reconhecidos**
+  (`/lote/`, `/leilao/`, `/imovel/`, `/bem/`, `?id=`), 0 sinais de paginação. **Veredito: site
+  é SPA — o conteúdo dos lotes só existe depois do JS rodar no navegador; fetch cru (mesmo via
+  Bright Data Web Unlocker) não alcança.**
+- Registrado como item **-1** em PENDÊNCIAS EM ABERTO (topo deste documento).
+
+**Franco Leilões fica para amanhã**: integrar exigiria scraper com renderização
+(headless/Playwright ou modo "render" do Bright Data) — custo e complexidade diferentes dos
+scrapers atuais (leem HTML servidor-renderizado direto). **Decisão de investir ou não nisso é
+do dono** — retomar este ponto na abertura da próxima sessão.
+
+*Sessão de 16/09 encerrada (2ª vez, depois do recon do Franco Leilões).*
