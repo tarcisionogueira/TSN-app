@@ -1,4 +1,4 @@
-name: _teste recon fernando via bright data (temporario)
+name: _teste recon vlance api fernando+jonas (temporario)
 on:
   workflow_dispatch:
 jobs:
@@ -16,4 +16,4 @@ jobs:
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/_recon-fernando-bd.mjs
+        run: node scripts/_recon-vlance-cf.mjs
