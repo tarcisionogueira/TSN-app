@@ -81,12 +81,28 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    `reportarErroCliente` (`src/utils/sentry.js`), back dentro de `alertarErro` (`api/_sentry.js`
    — cobre só os 9 arquivos que já chamam `alertarErro`, núcleo de pagamento + alguns crons; os
    demais ~180 endpoints não foram tocados, ampliar é escopo à parte). `VITE_SENTRY_DSN` e
-   `SENTRY_DSN` confirmadas gravadas na Vercel pelo dono (print, 15/09) — este commit dispara o
-   redeploy que as pega. **Pendente**: confirmar no Sentry que o primeiro evento real chegou
-   (org `bidpro-brasil` → projeto `tsn-app` → Issues).
+   `SENTRY_DSN` confirmadas gravadas na Vercel pelo dono (print, 15/09), deploy `6c122a7`
+   confirmado `READY`. Primeira varredura (`is:unresolved`, 24h e depois 90d): 0 issues — normal,
+   projeto novo, ainda sem tráfego suficiente para gerar evento real.
+   **✅ RESOLVIDO 15/09 (alerta por e-mail)**: 2 regras ativas em Sentry → Alerts → projeto
+   `tsn-app`: a padrão `"Send a notification for high priority issues"` (já vinha com o projeto)
+   e a nova `"Notify tarcisioaraujo@reimob.com.br"` (`WHEN a new issue is created` → `Notify
+   Member → tarcisioaraujo@reimob.com.br`), essa cobrindo QUALQUER issue nova, não só as de
+   prioridade alta. Testada ao vivo com "Send Test Notification" — e-mail confirmado recebido
+   (`TSN-APP-1 - Test Issue`, de `noreply@md.getsentry.com`, 15/09 23:59).
    Também conectado nesta sessão: **Resend** (mesma conta já usada em `api/_email.js` — MCP dá
    visão de entrega/bounce/domínio, sem mudar nada do que já funcionava). Verificação inicial:
    domínio `bidprobrasil.com.br` verified, 98,68% de entrega nos últimos 7 dias, 0 supressões.
+   Também nesta sessão: inspecionados os 7 erros abertos do Cliente 360 (`erros_cliente`) —
+   nenhum cliente real ficou travado (o único cliente identificado, Marcos Oliveira/top2, pagou
+   3 min depois do erro de checkout). 4 marcados `resolvido=true`: 1 já corrigido em código
+   (`ProdutoPublico.jsx`, guarda de crash de 12/09) e 3 de ruído de extensão (Firefox Reader Mode/
+   MetaMask injetando globais na nossa própria URL — `ehStackDeTerceiro` não pegava por não haver
+   domínio de terceiro no stack). Filtro por mensagem adicionado em `reportarErro.js` (cliente) e
+   espelhado em `log-erro-cliente.js` (servidor), commit `dfa2424`. Achado também documentado:
+   `erros_cliente` agrega por `fingerprint = msg+rota` SEM `user_id` — o `user_id` exibido é só o
+   último logado a bater no erro, não necessariamente quem gerou todas as ocorrências (RPC
+   `registrar_erro_cliente` faz `coalesce(novo, antigo)`).
 2. ~~**eBook — page-break de subtítulo no leitor**~~ (commit `1ad1256e`, já em produção). —
    **CONFIRMADO AO VIVO (13/09, noite)**: dono abriu `/#/membros/ebook/<id>` com o link correto
    (o app usa `HashRouter` — precisa do `#`, o 404 do item 0 não era mais a barreira nesse ponto)
