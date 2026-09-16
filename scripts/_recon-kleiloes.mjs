@@ -57,6 +57,20 @@ async function main() {
     console.log('tem <table> com "Valor de Avaliação":', /<table[\s\S]*?Valor\s+de\s+Avalia[çc][ãa]o[\s\S]*?<\/table>/i.test(html));
     console.log('tem "Lance Inicial":', /Lance\s+Inicial/i.test(html));
     console.log('tem link .pdf:', (html.match(/href=["'][^"']+\.pdf[^"']*["']/gi) || []).length, 'ocorrência(s)');
+
+    console.log('\n--- Linhas da(s) <table> com <tr>/<td|th>, texto limpo ---');
+    for (const tr of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const cols = [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((td) =>
+        td[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim());
+      if (cols.some((c) => c)) console.log('  [' + cols.join(' | ') + ']');
+    }
+
+    console.log('\n--- Breadcrumb / Cidade-UF no texto (primeiros 2000 chars limpos) ---');
+    const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+    console.log(txt.slice(0, 2000));
+    const mCidUf = txt.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/);
+    console.log('\ncidadeUFBare-like match:', mCidUf ? mCidUf[0] : '(nenhum)');
     for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]{0,80}?)<\/a>/gi)) {
       console.log(`  pdf: ${m[1]} · label: ${m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}`);
     }
