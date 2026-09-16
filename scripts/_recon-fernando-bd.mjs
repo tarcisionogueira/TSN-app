@@ -30,28 +30,32 @@ function assinatura(html) {
 }
 
 async function main() {
-  for (const rota of ['/categorias/imoveis', '/imoveis', '/']) {
-    console.log(`\n=== ${BASE}${rota} via Bright Data ===`);
-    const html = await bd(`${BASE}${rota}`);
-    if (!html) continue;
-    console.log(`HTML: ${html.length} bytes · marcas: [${assinatura(html).join(', ') || 'nenhuma'}]`);
-    if (!/Um momento|challenge-platform/i.test(html)) {
-      // Passou! Procura URLs de lote no padrão conhecido + qualquer coisa que pareça oferta.
-      const lotesJE = [...html.matchAll(/href=["']([^"']*\/ofertas?\/leilao\/imoveis\/[a-z0-9-]+\/\d+\/(?:id-)?(\d+)\/[a-z0-9-]+)\/?["']/gi)];
-      console.log(`URLs padrão JELEILOES: ${lotesJE.length}`);
-      console.log('\n--- <a href> únicos (até 30) ---');
-      const vistos = new Set();
-      for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
-        const h = m[1];
-        if (vistos.has(h) || /\.(css|js|png|jpe?g|svg|ico|woff2?)(\?|$)/i.test(h)) continue;
-        vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 30) break;
-      }
-      console.log('\n--- HTML cru (primeiros 2000 chars) ---');
-      console.log(html.slice(0, 2000));
-      break;
-    } else {
-      console.log('  ainda em challenge, tentando próxima rota...');
-    }
+  console.log(`\n=== ${BASE}/ via Bright Data ===`);
+  const html = await bd(`${BASE}/`);
+  if (!html) return;
+  console.log(`HTML: ${html.length} bytes · marcas: [${assinatura(html).join(', ') || 'nenhuma'}]`);
+  if (/Um momento|challenge-platform/i.test(html)) { console.log('ainda em challenge.'); return; }
+
+  // Plataforma "Sua Plataforma de Leilão / Degrau Publicidade" — menu usa
+  // /busca/#Engine=Start&...&ID_Categoria=N. Extrai LABEL + ID de cada link de categoria.
+  console.log('\n--- Links de categoria (label + ID_Categoria) ---');
+  for (const m of html.matchAll(/<a[^>]+href=["'][^"']*ID_Categoria=(\d+)["'][^>]*>([\s\S]{0,60}?)<\/a>/gi)) {
+    const label = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (label) console.log(`  ID_Categoria=${m[1]} -> "${label}"`);
+  }
+  console.log('\n--- Qualquer texto perto de "imov" no HTML (até 10 janelas) ---');
+  let n = 0;
+  for (const m of html.matchAll(/.{0,50}imov[eé]i?s?.{0,50}/gi)) {
+    if (n >= 10) break;
+    console.log(`  …${m[0].replace(/\s+/g, ' ').trim()}…`);
+    n++;
+  }
+  console.log('\n--- <a href> únicos que mencionam categoria/busca (até 40) ---');
+  const vistos = new Set();
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
+    const h = m[1];
+    if (vistos.has(h) || !/categoria|busca|imov|leilao/i.test(h)) continue;
+    vistos.add(h); console.log(`  ${h}`); if (vistos.size >= 40) break;
   }
 }
 main();
