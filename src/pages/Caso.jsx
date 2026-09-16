@@ -1792,8 +1792,19 @@ export default function Caso() {
                 </div>
               )}
               {arrematacao.honorarios_status !== 'pago' && isCliente && (
-                <div style={{ marginTop:12, padding:'12px', background:'#eff6ff', borderRadius:8, fontSize:12, color:'#084BA6' }}>
-                  Após a confirmação do pagamento dos honorários, o botão de gerar procuração será liberado.
+                <div style={{ marginTop:12, padding:'12px 14px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
+                  <div style={{ fontSize:12, color:'#084BA6', marginBottom:10 }}>
+                    Após a confirmação do pagamento dos honorários, o botão de gerar procuração será liberado.
+                  </div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                    <a href={linkHonorario} style={{ ...btn('#0D63DB'), display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none' }}>
+                      <ExternalLink size={13}/> Pagar honorários agora
+                    </a>
+                    <button onClick={copiarLinkHonorario} style={{ ...btn(linkHonorarioCopiado ? '#059669' : '#64748b'), display:'flex', alignItems:'center', gap:6 }}>
+                      {linkHonorarioCopiado ? <Check size={13}/> : <Copy size={13}/>}
+                      {linkHonorarioCopiado ? 'Copiado' : 'Copiar link'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
