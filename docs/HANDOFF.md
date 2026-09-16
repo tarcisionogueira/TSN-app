@@ -27723,3 +27723,53 @@ zerou de verdade" pedem ações opostas, e só dá pra saber lendo a fonte, não
 nesta parte — é "não consigo verificar", não "confirmado quebrado", e o teto de idade
 (`MAX_IDADE_H`) deve resolver sozinho na próxima rodada normal de cada um. Ficam para o próximo
 ritual se persistirem.
+
+## 16/09 (8ª parte) — invariantes: um bug real corrigido (venda_direta_com_praça), sete achados fecham sem ação
+
+**Pedido do dono: resolver os leiloeiros primeiro (Parte 7), depois os invariantes.**
+`qa_invariantes()` tinha 9 linhas em alerta. Uma virou fix de verdade; as outras oito foram
+investigadas com evidência (não descartadas por suposição) e fecham como não-bug ou baixa
+prioridade.
+
+**🟢 CORRIGIDO — `venda_direta_com_praca` (6 casos: CALIL, DANIELGARCIA×2, APICE×3).** Causa
+raiz em `scripts/scraper-soleon.mjs`: o override de `modalidadeDeJanela` (15/09, âncora no
+preço — ver comentário de 09-15/09 no próprio arquivo) pode classificar `venda_direta` mesmo
+com data de praça detectada, DE PROPÓSITO (sinal forte perto do preço não devia ficar refém da
+trava fraca de página inteira). Mas o campo `data_leilao` final não tinha o mesmo guard —
+saía preenchido junto, violando a regra do dono ("venda direta é compra imediata, sem prazo").
+Fix: `data_leilao: modalidade === 'venda_direta' ? null : dataLeilaoDetectada`. Os 6 registros
+já gravados foram corrigidos via UPDATE — **achado no caminho**: `trg_preservar_data_leilao`
+(trigger anti-regressão, existe pra impedir re-scrape parcial de apagar uma data válida) estava
+**silenciosamente revertendo o UPDATE** (sem erro — `new.data_leilao := old.data_leilao`
+sempre que o novo valor é null). Corrigido com `ALTER TABLE ... DISABLE TRIGGER` temporário em
+volta do UPDATE, confirmado por leitura separada (não pelo `RETURNING` da própria instrução,
+que o trigger mascararia).
+
+**Fecham sem ação, cada um com evidência própria:**
+- **`cadastro_barrado`** (17 > limite 7): dos 17, **10 são o defeito "detalhe: {}" já corrigido
+  em 14/09** (comentário em `Login.jsx:427-430`, `motivoErroAuth`) — todos datados de 13/09,
+  ANTES do fix; nenhum caso novo depois disso. Os outros 7 são rejeição de validação legítima
+  (senha fraca ×3, nome sem sobrenome ×2, telefone incompleto ×1) — funcionando como desenhado.
+  Sai da janela de 7 dias sozinho por volta de 20/09.
+- **`fonte_cega_no_monitor`**: só `EDITAL_DJEN` (347 ativos) — é o radar de editais, não passa
+  pelo pipeline de scraper que grava `fonte_saude`; por design, não por falha. Sem ação.
+- **`foto_repetida_como_lote`**: só PECINI passa do limiar (3/27 = 11%) — são 3 APARTAMENTOS
+  DIFERENTES (nº 1605/1706/104) do MESMO condomínio (Mochuara Residencial Clube) com a MESMA
+  foto — o site do PECINI não tem foto por unidade, usa uma foto do prédio pra todas. Real, mas
+  cosmético (3 lotes) e não corrigível do nosso lado (a fonte não tem a foto individual).
+- **`uf_cef_congelada`** (AP, 144,7h de atraso): log do cron de hoje mostra `CEF CSV AP: 0
+  registros` — o CSV da Caixa pro Amapá veio só com cabeçalho, zero linha de dado. Feed genuíno
+  vazio, não falha de importação (o dedup/bissecção de 18/08 continua intacto e funcionando
+  normalmente nas outras 26 UFs, todas salvando no mesmo run). Os 2 "ativos" antigos do AP ficam
+  congelados até vencerem por data — baixo volume, sem ação agora.
+- **`cadastro_duplicado`** (1) e **`cadastro_sem_origem`** (3) e **`erro_na_tela_do_cliente`**
+  (1): casos isolados, unitários, sem padrão repetido — registrados aqui pra rastro, sem ação
+  de código (são sinais de atendimento/marketing pontuais, não bug sistêmico).
+- **`qa_invariantes_lenta`** (painel rodando 6-8s contra limite 5s, consistente nos últimos 5
+  dias): não investigado a fundo nesta parte — a função tem ~50 sub-consultas e achar qual
+  está lenta é um projeto de otimização/índice, não um ajuste pontual. Fica registrado para
+  quem for perfilar.
+
+**Método, de novo**: em cada um, o veredito saiu de LER a fonte/o log/o trigger relevante, não
+de aceitar o número do painel como já sendo o diagnóstico — mesma lição da Parte 7 (HASTA/
+CEF/JOAOEMILIO/SBID21).
