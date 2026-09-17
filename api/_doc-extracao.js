@@ -161,6 +161,19 @@ export function extrairPagamentoTexto(texto) {
     prazoDias: (() => { const m = t.match(/prazo\s+(?:de|para)\s+(?:pagamento|dep[óo]sito|quita[çc][ãa]o)[^.;]{0,30}?(\d{1,3})\s*(?:dias?|horas?)/i); if (!m) return null; const n = Number(m[1]); const horas = /horas?/i.test(m[0]); return n > 0 ? (horas ? Math.max(1, Math.round(n / 24)) : n) : null; })(),
     financiavel: /financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad/i.test(t) || null,
     fgts: /\bfgts\b/i.test(t) || null,
+    // PARCELAMENTO GENÉRICO (17/09) — sinal PRÓPRIO, separado de `parcelas` (que exige o
+    // número explícito de vezes). O edital do lote ZUK dizia "é permitido o parcelamento
+    // do valor..." sem citar quantas parcelas, e nem `parcelas` nem `financiavel` (que só
+    // reconhece financiamento bancário) casavam — o campo estruturado saía inteiro `null`
+    // com a palavra "parcelamento" presente no texto. Guarda contra negação próxima
+    // ("não é permitido o parcelamento", "vedado o parcelamento") para não inverter o sinal.
+    parcelamentoPermitido: (() => {
+      const m = t.match(/parcelament\w*/i);
+      if (!m) return null;
+      const antes = t.slice(Math.max(0, m.index - 40), m.index);
+      if (/n[ãa]o|vedad|proibid|sem\s+direito|indeferid/i.test(antes)) return null;
+      return true;
+    })(),
   };
   return Object.values(out).some((v) => v !== null) ? out : null;
 }

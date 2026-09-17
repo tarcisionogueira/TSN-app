@@ -880,6 +880,69 @@ pra função de ~50 checks).
 
 ---
 
+## 🖼️ 17/09 — SUPERBID (7 fontes): GALERIA COMPLETA DE FOTOS EM PRODUÇÃO
+
+Continuação do LJUD (parte anterior): Superbid/SOLD/SBID9/SBID21/TOTALLEILOES/CREPALDI/
+KRONLEILOES só gravavam a foto de capa (`linkURL` do fieldList da API). Recon ao vivo (6
+rodadas via GitHub Actions, sandbox não alcança a API do Superbid) achou o campo real da
+galeria: `product.galleryJson` — só vem numa chamada SEM `fieldList` (adicioná-lo à chamada
+existente QUEBRA `linkURL`, confirmado no Teste 6). Fix: segunda passada de paginação,
+opcional via `SUPERBID_GALERIA=1`, que busca só `id`+`galleryJson` e cruza pelo id.
+
+**Validação com dado real antes de ligar no cron** (`scripts/scraper-puppeteer.mjs` +
+`.github/workflows/leiloeiros-puppeteer.yml`, dispatch manual `fontes=SUPERBID,
+superbid_galeria=1`, run `35223093477`): 1439 ofertas, galeria capturada em 1415 (98%),
+~7,5 min de execução, sem regressão em `linkURL`. Conferido no banco depois:
+1.110 de 1.403 lotes ativos (79%) passaram a ter `fotos[]` com mais de 1 imagem — os ~22%
+restantes são o resíduo esperado (oferta sem galeria própria ou fora da janela do recorte).
+Commit em `main`, deploy confirmado.
+
+**Pendente (decisão do dono, não travar)**: ligar `SUPERBID_GALERIA=1` no cron diário —
+dobra as requisições dessas 7 fontes; avaliar o tempo extra (~7 min medidos só pro Superbid;
+as outras 6 fontes do grupo ainda não testadas) antes de tornar padrão.
+
+---
+
+## 💳 17/09 — RELATÓRIO MERCADOLÓGICO IGNORAVA "PARCELAMENTO" DO EDITAL — 3 BUGS NA MESMA CADEIA
+
+Queixa do dono: lote ZUK, edital permite parcelamento, relatório saiu com `forma_pagamento:
+'a_vista'`. Não consegui baixar o PDF do edital deste sandbox (Supabase Storage e o domínio
+do leiloeiro estão fora do alcance de rede aqui) — a conclusão abaixo vem de ler o código de
+extração + o resultado JÁ GRAVADO no banco (`analises_mercado.result.mercado.condicoesEdital`
+saiu com `formaPagamento:null, regrasPagamento:null` para este lote, num relatório gerado
+horas antes da queixa — prova de que a falha é sistemática, não um PDF ilegível).
+
+**Três defeitos na mesma cadeia, cada um mascarando o anterior:**
+1. `api/_edital-extrato.js` — o regex que cita as frases do edital (`reKw`) reconhecia
+   "parcelado/parcelada/parcela(s)" mas não o substantivo **"parcelamento"**, a forma mais
+   comum de anúncio de condição de pagamento. `formaPagamento` saía `''` com a palavra
+   presente no texto.
+2. `api/_doc-extracao.js` — a extração estruturada (`extrairPagamentoTexto`) só tinha
+   `parcelas` (exige número explícito de vezes, ex. "60x") e `financiavel` (só financiamento
+   bancário/habitacional) — nenhum campo cobria "é permitido o parcelamento" sem número.
+3. `api/gerar-analise.js` — o bug que neutralizava os dois de cima mesmo se corrigidos: a
+   INSPEÇÃO FINAL (self-correction que reescreve `forma_pagamento` de `a_vista` para
+   `financiado` quando o documento contradiz) lia `result?.mercado?.condicoesEdital?.pagamento`
+   — chave que **nunca existiu** (a chave real, montada linhas acima no mesmo arquivo, é
+   `.regrasPagamento`). O sinal mais forte da cadeia (leitura do próprio edital) nunca
+   chegava a disparar a correção, para nenhuma fonte, não só ZUK.
+
+**Fix**: (1) `reKw`: `parcelad` → `parcel` (stem mais largo, cobre parcelamento/parcelar/
+parceladamente); (2) novo campo `parcelamentoPermitido` em `extrairPagamentoTexto` —
+detecta "parcelamento" com guarda contra negação próxima ("não é permitido o parcelamento",
+"vedado o parcelamento") num raio de 40 chars antes do match; (3) `.pagamento` →
+`.regrasPagamento` na leitura da INSPEÇÃO FINAL, e `parcelamentoPermitido === true` somado
+às condições de correção (grava `doc_fatos` e reescreve `forma_pagamento`) em
+`gerar-analise.js` e ao `parcelavel` de `api/_auditoria-relatorio.js` (o que dispara o
+achado `pagamento_contradiz_documento`). `npm run build` limpo (0 padrão novo, CSP/sintaxe
+ok). Commit em `main`, deploy confirmado.
+
+**Não verificado ainda**: se o novo relatório do lote ZUK específico sai corrigido — precisa
+gerar de novo (ou aguardar o próximo cron/pedido de cliente) e reler `condicoesEdital` depois,
+já que o relatório já existente no banco não é regerado retroativamente por este fix.
+
+---
+
 ## 🌙 15/09 — RESUMO DO DIA E ENCERRAMENTO DA SESSÃO
 
 Sessão de duas rodadas: (1) "resolva o que consegue sozinho, revise o que depende de mim,

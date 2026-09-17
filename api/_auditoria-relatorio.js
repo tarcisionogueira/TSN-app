@@ -187,7 +187,7 @@ export function auditarMercadologico(result, ctx = {}) {
   // "contradiz o documento" contra o PRÓPRIO documento. `parcelas`/`financiavel` continuam
   // valendo mesmo com `aVista:true` (é exatamente o caso real do TORRES3 20f6cc89: o mesmo
   // doc_fatos tinha `aVista:true` E `financiavel:true` — sinal contraditório de verdade).
-  const parcelavel = n(pag.parcelas) >= 2 || pag.financiavel === true || (n(pag.sinalPct) > 0 && pag.aVista !== true);
+  const parcelavel = n(pag.parcelas) >= 2 || pag.financiavel === true || pag.parcelamentoPermitido === true || (n(pag.sinalPct) > 0 && pag.aVista !== true);
   if (parcelavel && ctx.somenteAVista) {
     criticos.push({
       chave: 'pagamento_contradiz_documento',

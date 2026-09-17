@@ -3433,12 +3433,19 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         // Ordem de força: o que a leitura do documento apurou > o edital > a ficha oficial
         // da Caixa > o que o leiloeiro anunciou no título.
         pagamentoDoc = ix?.doc_fatos?.pagamento
-          || result?.mercado?.condicoesEdital?.pagamento
+          // 17/09: a chave real do objeto é `regrasPagamento` (ver montagem em
+          // `condicoesEdital` logo acima) — `.pagamento` nunca existiu, e por isso este
+          // sinal (o mais forte da cadeia, a leitura do PRÓPRIO edital) nunca disparava.
+          // Achado ao investigar lote ZUK com "parcelamento" no edital gravado como
+          // `a_vista`: `regrasPagamento` já vinha `null` porque o regex de citação e o de
+          // extração estruturada (abaixo) também não reconheciam "parcelamento" — os três
+          // defeitos se somavam e o sinal nunca chegava a existir.
+          || result?.mercado?.condicoesEdital?.regrasPagamento
           || pagCef
           || (ix?.titulo ? { ...(extrairPagamentoTexto(String(ix.titulo)) || {}), origem: 'titulo' } : null);
         // Publica na ficha do imóvel para a TELA parar de travar o cenário financiado e o
         // cliente ver a condição real — foi por não estar publicada que ela se perdeu.
-        if (pagamentoDoc && (Number(pagamentoDoc.parcelas) >= 2 || Number(pagamentoDoc.sinalPct) > 0 || pagamentoDoc.financiavel === true)) {
+        if (pagamentoDoc && (Number(pagamentoDoc.parcelas) >= 2 || Number(pagamentoDoc.sinalPct) > 0 || pagamentoDoc.financiavel === true || pagamentoDoc.parcelamentoPermitido === true)) {
           await sb(`rpc/registrar_doc_fatos`, { method: 'POST', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ p_imovel_id: String(imovelId), p_fatos: { pagamento: pagamentoDoc, em: new Date().toISOString() } }) }).catch(() => {});
         }
@@ -3450,7 +3457,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         // contradiz_documento` só pega quem gera relatório; o filtro de busca e a ficha do
         // imóvel para os outros 550+ nunca corrigiam. `sinalPct` sozinho fica de fora (é sinal
         // fraco: entrada + saldo à vista continua sendo à vista) — só sinal FORTE reescreve.
-        if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.fgts === true)) {
+        if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.fgts === true || pagamentoDoc.parcelamentoPermitido === true)) {
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ forma_pagamento: 'financiado' }) }); } catch { /* best-effort */ }
         }
       } catch { /* sinais opcionais da auditoria */ }

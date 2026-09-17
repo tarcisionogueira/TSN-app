@@ -137,7 +137,11 @@ export function extrairCondicoes(texto) {
   out.pracas.sort((a, b) => a.n - b.n);
   // Forma de pagamento: FRASES ORIGINAIS do edital com termos de condição (fiel, sem
   // IA) — o parecer e o front citam o texto, nunca uma paráfrase.
-  const reKw = /(à\s*vista|a\s*vista|parcelad|parcelas?\b|sinal\b|entrada\s+de|cau[çc][ãa]o|fgts|financiament|itbi|comiss[ãa]o\s+d[oe]\s+leiloeiro|comiss[ãa]o\s+de\s+\d|carta\s+de\s+arremata|prazo\s+de\s+pagamento)/i;
+  // `parcel` (era `parcelad`) — a forma anterior não casava com "parcelamento", o
+  // substantivo que os editais mais usam para anunciar a condição ("é permitido o
+  // parcelamento do valor..."). Achado em 17/09: lote ZUK com parcelamento no edital
+  // gravava `formaPagamento: ''` porque nenhuma frase batia no regex de citação.
+  const reKw = /(à\s*vista|a\s*vista|parcel|sinal\b|entrada\s+de|cau[çc][ãa]o|fgts|financiament|itbi|comiss[ãa]o\s+d[oe]\s+leiloeiro|comiss[ãa]o\s+de\s+\d|carta\s+de\s+arremata|prazo\s+de\s+pagamento)/i;
   const frases = [];
   for (const fr of t.split(/(?<=[.;])\s+/)) {
     if (frases.length >= 4) break;
