@@ -198,6 +198,15 @@ env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mj
 # `fonte_saude` (fonte=VENDASGOV, mais recente) antes de suspeitar do IP de novo.
 rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 
+# GLOBOLEILOES (17/09) — site ganhou Cloudflare (não tinha em 07/09), em cima da migração
+# pra SPA Inertia.js: nem CI/datacenter nem Bright Data Web Unlocker passam (confirmado, ver
+# leiloeiro_conhecimento). De IP residencial passa direto, mesmo remédio de RJ/GESTAO/PECINI —
+# fetch `dom` (Puppeteer puro), sem Bright Data. Parser reescrito e já confirmado gravando
+# dado real em produção nesta sessão (1 imóvel real, Votorantim/SP). Excluído do `schedule`
+# de scraper-dom.yml de propósito (roda só no push, como sinalizador) — este runner é o
+# caminho de produção enquanto o site continuar atrás do Cloudflare.
+rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
+
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
 # HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
 # IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.

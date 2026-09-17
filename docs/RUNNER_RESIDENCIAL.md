@@ -163,6 +163,7 @@ Duas propriedades que valem entender:
 | **LJUD** + MEGA/ZUK/GRUPOLANCE/SUPERBID/SODRÉ/FRAZÃO | ~0 | `scraper-puppeteer.mjs` já usa **navegador real** (0 BD) | ✅ **já grátis** (na própria CI) |
 | **GESTAOLEILOES** (granado/vinco/…) | ~150 | runner residencial **headless** (`GESTAO_HEADLESS=1`) | ✅ **no runner** |
 | **RJ Leilões** | ~120 | runner residencial **headless** (`RJ_HEADLESS=1`) | ✅ **no runner** |
+| **GLOBOLEILOES** | 0 (nunca gastou BD — CI ficava em 0 lotes por Cloudflare, sem custar nada) | runner residencial, fetch `dom` puro (Puppeteer, zero BD) | ✅ **no runner** (17/09) |
 | **radar / docs** | 250 / 150 | — (autocomplete-geo / download de PDF) | manter (propósito distinto, baixo volume) |
 
 ## 🔎 TRIAGEM RESIDENCIAL — trazer os leiloeiros que o Cloudflare esconde (29/08)

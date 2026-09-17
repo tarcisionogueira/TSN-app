@@ -150,9 +150,12 @@ jobs:
         run: node scripts/scraper-simon.mjs
 
       - name: Globo
-        # NÃO entra em env.RODA_TUDO (07/09): site virou SPA Inertia.js, 0 lotes sempre —
-        # ver globo-parse.mjs. Continua rodando no PUSH (sinaliza sozinho se/quando o site
-        # mudar de novo) mas fica fora do `schedule` de produção até ter parser novo.
+        # NÃO entra em env.RODA_TUDO (17/09, atualizado): parser já reescrito e confirmado
+        # gravando dado real (ver globo-parse.mjs) — mas o site ganhou Cloudflare, e daqui
+        # (datacenter) a página fica em 0 lotes por bloqueio, não por parser quebrado. A
+        # produção de verdade é scripts/runner-residencial.sh (IP residencial, mesmo remédio
+        # de RJ/GESTAO/PECINI). Continua rodando no PUSH como sinalizador — se o Cloudflare
+        # cair um dia, o push mostra lotes de novo e vale reconsiderar entrar no RODA_TUDO.
         if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'globo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
