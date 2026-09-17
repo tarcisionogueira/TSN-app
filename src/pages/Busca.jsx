@@ -1226,6 +1226,10 @@ export default function Busca() {
         const body = {
           lat: centro.lat, lng: centro.lng, raioKm: raioKmBusca,
           pagina: paginaAlvo, porPagina: POR_PAGINA,
+          // 17/09 (achado do dono): faltava — o modo raio nunca recebia a ordenação
+          // escolhida no dropdown ("Menor valor primeiro" etc.), então sempre saía por
+          // distância independente do que a tela mostrava selecionado.
+          sortAtivo,
           filtros: {
             // Todos os filtros aplicados no servidor (RPC v2): múltiplos tipos,
             // modalidades e formas de pagamento — Financiado + Hipotecado juntos.

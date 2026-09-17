@@ -3,8 +3,10 @@
  * Busca imóveis dentro de um raio usando earthdistance (PostGIS-lite nativo do Postgres).
  * Retorna página com distância calculada no banco — sem trazer 5000 registros pro browser.
  *
- * Body: { lat, lng, raioKm, pagina, porPagina, filtros: { tipos[], estado, modalidades[], pagamento[], valorMin, valorMax, prazo } }
+ * Body: { lat, lng, raioKm, pagina, porPagina, sortAtivo, filtros: { tipos[], estado, modalidades[], pagamento[], valorMin, valorMax, prazo } }
  * pagamento usa valores canônicos do banco (a_vista | financiado | hipotecado).
+ * sortAtivo: mesmos valores do dropdown da Busca (desconto_desc | desconto_asc | valor_asc |
+ * data_asc) — repassado direto pra `ordenacao` da RPC, que usa os MESMOS nomes.
  */
 // Runtime EDGE: o handler usa a Web Request/Response (req.json() e `new Response`).
 // SEM esta linha a função rodava no Node, onde o `return new Response()` é IGNORADO
@@ -47,7 +49,7 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Body inválido' }), { status: 400 }); }
 
-  const { lat, lng, raioKm = 50, pagina = 1, porPagina = 24, filtros = {} } = body;
+  const { lat, lng, raioKm = 50, pagina = 1, porPagina = 24, filtros = {}, sortAtivo } = body;
 
   if (!lat || !lng) return new Response(JSON.stringify({ error: 'lat e lng são obrigatórios' }), { status: 400 });
 
@@ -87,6 +89,9 @@ export default async function handler(req) {
       valor_max: filtros.valorMax || 9999999999,
       desconto_min: filtros.descontoMin || 0,
       data_de: dataDe, data_ate: dataAte, sem_data: semData,
+      // 17/09 (achado do dono): faltava — a RPC sempre ordenava por distância e o dropdown
+      // "Menor valor primeiro"/desconto/data não tinha efeito nenhum no modo raio.
+      ordenacao: sortAtivo || 'distancia',
     }),
   });
 

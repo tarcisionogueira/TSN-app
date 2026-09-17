@@ -28186,3 +28186,38 @@ próximo passo dedicado, não algo pra decidir às cegas no meio de outros 5 fix
 RLS (EXECUTE supérfluo em 11 funções de trigger; extensions `cube`/`earthdistance` em schema
 público) não foram tocados — são não-exploráveis (confirmado pelo próprio agente) e a
 migração de revogação de EXECUTE fica pra quando o dono quiser essa limpeza.
+
+## 17/09 (3ª parte) — ordenação não funcionava no modo raio (achado do dono, com print)
+
+**Pedido do dono**: print da Busca com "Menor valor primeiro" selecionado e a lista claramente
+fora de ordem (R$249mil, R$25,1 milhões, R$286mil, R$241mil...). Causa raiz: **duas ordenações
+que nunca se falaram**. O modo NORMAL da Busca (`Busca.jsx`) manda `sortAtivo` certinho pro
+Supabase (`.order(coluna, {ascending: dir})`), mas o modo RAIO (busca por proximidade — é o que
+o print mostra, com "3 km"/"5 km" nos cards) vai por `POST /api/busca-raio` → RPC
+`buscar_por_raio_v2`, que **nunca recebia nem repassava ordenação nenhuma** — o SQL tinha
+`ORDER BY distancia_km ASC` fixo. O próprio comentário da função já avisava (`REGRA ABSOLUTA:
+todo filtro da Busca deve valer TAMBÉM aqui`) mas ordenação nunca entrou nessa lista.
+
+**Corrigido nos 3 pontos** (`buscar_por_raio_v2_respeita_ordenacao.sql`,
+`api/busca-raio.js`, `Busca.jsx`): a RPC ganhou o parâmetro `ordenacao` (mesmos 4 valores do
+dropdown: `valor_asc`/`desconto_desc`/`desconto_asc`/`data_asc`, com `ORDER BY` dinâmico via
+`CASE`, distância como critério padrão/desempate final); `Busca.jsx` passou a mandar `sortAtivo`
+no corpo da chamada; `busca-raio.js` repassa pra RPC. Testado direto no banco com dado real
+(São Paulo, raio 50km) antes de mexer no front: `valor_asc` saiu 3.277 → 3.391 → 3.900 →
+5.310 → 5.310, e o default (sem ordenação) continuou por distância — comportamento antigo
+preservado.
+
+**Achado no caminho, fora do escopo de hoje**: a função tinha DUAS assinaturas órfãs (12 e 15
+parâmetros — a de 12 ficou pra trás quando `data_de/data_ate/sem_data` foram adicionados sem
+dropar a versão anterior). As duas foram removidas nesta migração; só a versão nova (16
+parâmetros) fica.
+
+## 17/09 (4ª parte) — pendência de fotos, quantificada
+
+**Pedido do dono** (reforçado com print mostrando um card "Sem foto"): leiloeiro publica mais
+fotos do que o sistema traz. Já diagnosticado em 17/09 (1ª parte da sessão): é arquitetura,
+não bug pontual — a coluna `fotos` (jsonb, pensada pra galeria) existe mas só 26 de 26.228
+imóveis ativos a usam, e a tela do cliente nem lê esse campo. Quantificando o problema de
+ZERO foto (distinto de "só 1 em vez de galeria"): **LJUD (954 ativos) tem 216 sem foto
+nenhuma (22,6%)**, GIORDANOLEILOES 31,4%, THAISTEIXEIRA 41,2%, LEFFA/PURCENA 70%+. Fica como
+pendência priorizada por volume — LJUD é o maior estoque afetado.
