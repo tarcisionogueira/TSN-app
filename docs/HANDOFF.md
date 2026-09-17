@@ -49,6 +49,55 @@ nesta mesma conversa.
    15 dias hoje) — primeira desativação real só daqui a alguns dias; vale conferir que rodou
    sem erro no log do `veiculos-puppeteer.yml` quando tiver histórico suficiente.
 
+### 📋 Sessão adicional 17/09 (noite) — honorário de êxito em partes + cobrança avulsa
+
+**Pedido do dono**: o Marcos (honorário de êxito, link gerado no dia anterior) fez Pix de
+~R$2.000 direto na conta pessoal do dono (fora do sistema), vai pagar ~R$19.000 em cheque
+(sistema não suporta), e o saldo no cartão — à vista sem juros ou parcelado com os juros por
+conta dele. Faltava: (a) onde registrar um recebimento por fora e abater contra uma cobrança
+existente, e (b) uma ferramenta de cobrança avulsa genérica pra motivo/valor fora do catálogo
+fixo de `PROPOSITOS` do `api/mp-checkout.js`.
+
+**Construído e no ar** (commit `b98292b`, migração `honorarios_recebimentos_e_cobranca_avulsa.sql`
+já aplicada em produção via MCP):
+- `honorarios_recebimentos`: cada parte de um honorário (Pix externo, cheque, cartão via link,
+  dinheiro, transferência), com justificativa obrigatória + comprovante opcional. Trigger no
+  banco (`honorarios_recebimentos_valida_teto`) trava a soma no valor total; outro
+  (`honorarios_recebimentos_fecha_se_completo`) fecha `honorarios_status='pago'` sozinho quando
+  bate, e REABRE pra `pendente` se um recebimento é estornado/apagado antes de `distribuido`.
+- `api/mp-checkout.js` e `api/mp-webhook.js`: o link `/honorario/:id` de sempre agora cobra e
+  grava o SALDO RESTANTE (total menos partes já confirmadas), não o valor cheio — o cartão do
+  Marcos vai cobrar só o que falta, sem ele nunca precisar digitar o cartão pra você (o link é
+  dele digitar, tokenização no navegador dele — decisão deliberada, cartão de terceiro por
+  telefone não deveria passar pela sua tela).
+- `api/honorario-recebimento.js` (admin registra o manual) + painel "Recebimentos" na tela do
+  caso (`Caso.jsx`, dentro da seção de Arrematação) — mostra saldo restante e histórico.
+- `cobrancas_avulsas` + link público `/cobranca/:id` (`src/pages/CobrarAvulso.jsx`) — motivo/
+  valor livres, preço sempre do banco. Admin cria pela nova aba "🧾 Cobrança avulsa" em
+  `AdminFinanceiro.jsx` (`src/components/CobrancaAvulsaAdmin.jsx`).
+
+**Validado com dado real antes de subir** (doutrina do projeto: não confiar em código que
+"parece certo"): rodei os dois triggers direto contra uma arrematação real de produção
+(`fb02770c-...`, R$54.835,52 de honorário), dentro de transação com ROLLBACK — a trava de teto
+rejeitou um valor acima do saldo com a mensagem certa, e o fechamento automático só funcionou
+quando simulei o MESMO contexto `service_role` que o webhook usa de verdade (achado no processo:
+existe um trigger anti-tampering pré-existente, `arrematacoes_protege_honorarios`, que reverte
+`honorarios_status` pra quem não é `service_role`/admin/analista — meu teste inicial, rodado como
+superuser direto, caiu nessa trava e por um instante deixou `honorarios_pago_em` preenchido com
+`honorarios_status` ainda `pendente` numa arrematação real; **limpo na mesma sessão**, confirmado
+0 linhas residuais e os dois campos de volta ao estado original antes de seguir). **Efeito
+colateral notado, não corrigido** (fora do escopo de hoje): esse trigger antigo protege
+`honorarios_status`/`honorarios_split` mas NÃO protege `honorarios_pago_em` — nunca é alcançado
+pelos caminhos reais (webhook e `honorario-recebimento.js` sempre usam a service key), então não
+é urgente, mas vale endurecer se algum dia um código novo tocar `arrematacoes` fora desses dois
+caminhos.
+
+**Ainda não testado**: um pagamento real de ponta a ponta pelo link (Pix ou cartão) desde a
+migração — a lógica foi validada por trigger direto no banco, não pelo fluxo HTTP completo
+(`mp-checkout.js` → Mercado Pago → `mp-webhook.js`). Primeira cobrança real (do Marcos ou de
+outro caso) é o teste de fogo; se o webhook não gravar a parte certa, conferir
+`honorarios_recebimentos` e os logs da function antes de suspeitar de outra coisa.
+
 ### 📋 Sessão adicional 17/09 (tarde) — dono reportou "financiado" na tela do imóvel × "à vista"
 no relatório para um imóvel que ele esperava ser judicial/hipotecado
 
