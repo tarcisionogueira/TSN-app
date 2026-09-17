@@ -28759,3 +28759,70 @@ posterior) e marcados `resolvido=true`.
 Não foi possível gerar um relatório novo de ponta a ponta num browser (mesma limitação deste
 ambiente) — a mudança foi validada por leitura de código + dado real (os 3 casos reais de
 `pagamento_contradiz_documento` no banco), não por execução ao vivo.
+
+## 17/09 (8ª parte) — hipotecado×financiado (achado latente), crash que travava TODO o scraper
+Puppeteer, e limpeza de endereço duplicado
+
+**Pedido do dono**: confirmar deploy, checar troca hipotecado×financiado, verificar descrições/
+fotos incompletas (LJUD priorizado por volume); depois "verifica os outros bugs médios
+pendentes" enquanto uma recoleta rodava.
+
+**1. Hipotecado (art. 895 CPC, leilão judicial) sendo gravado como `financiado` — corrigido
+antes de acontecer de verdade.** A correção automática de `forma_pagamento` (14/09, já em
+produção) sempre escrevia `'financiado'` quando o documento contradiz o à-vista — inclusive em
+leilão JUDICIAL, onde parcelamento sem financiamento bancário explícito é `hipotecado` (forma
+canônica própria, `src/data/pagamento.js`), não `financiado`. Gravar `financiado` num lote
+judicial ficaria PERMANENTE (o gatilho `default_forma_pagamento_judicial` só corrige quando o
+valor novo é null/a_vista). Conferido: **nenhum dos 8.258 lotes judiciais (ativos ou não) está
+com esse erro hoje** — o gatilho sempre pegou os casos até agora — mas o código sempre teve essa
+falha latente. Corrigido (commit `8840305`): agora escolhe `hipotecado` vs `financiado` pela
+modalidade do lote.
+
+**2. O achado real do dia — crash fatal travava o scraper Puppeteer inteiro, pulando LJUD e
+tudo depois dele na fila.** Investigando a galeria de fotos do LJUD, notei que a execução
+AGENDADA de hoje (run #195, 14:47 UTC) tinha FALHADO. `scripts/scraper-puppeteer.mjs:123`
+(`salvarImoveis`) tinha um `return;` sem valor quando TODOS os lotes de um bloco de 500 são
+descartados por "fora do Brasil/estado inválido" — diferente dos outros dois early-return da
+mesma função, que devolvem `{ salvos, esperados }`. Aconteceu de verdade: SBID21 trouxe 6
+lotes, os 6 descartados, `salvarImoveis` devolveu `undefined`, `salvarEFinalizar` quebrou em
+`r.salvos`. Este coletor genérico atende MEGA, SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI e
+PESTANA numa única chamada — SBID21 roda ANTES de LJUD na fila, então o crash impediu a coleta
+de LJUD e de tudo depois dele hoje (`fonte_saude` confirma: zero registro de LJUD hoje, o mais
+recente era de ontem). Corrigido (commit `36f547a`): `return { salvos: 0, esperados: 0 };`.
+Re-disparada a coleta de hoje manualmente após o fix.
+
+**3. Galeria de fotos do LJUD — ainda sem veredito.** Tentei confirmar via a API pública 3x
+(inclusive reusando `recon-ljud-foto.mjs`, já validado em 27/08) e todas bateram no mesmo erro
+de rede de dentro do navegador (`Failed to fetch` na chamada à API, mesmo com a página principal
+carregando normal, `navigator.onLine: true`, HEAD na home respondendo 200) — sugere bloqueio do
+lado do LJUD pro IP do GitHub Actions, não bug nosso (mesma classe do bloqueio já documentado
+para a CEF quanto a curl direto do sandbox). `scripts/recon-ljud-galeria.mjs` +
+`.github/workflows/recon-ljud-galeria.yml` ficam prontos (mesmo padrão do recon-ljud-foto.mjs)
+para re-rodar quando a rede permitir. Bright Data tem cota livre pro propósito `ljud` (0/720
+hoje) se precisar da rota paga.
+
+**4. "Bugs médios pendentes" — checagem de rotina (custo zero) enquanto a recoleta rodava.**
+`auditoria_seguranca()` = 0/0. Cruzando `qa_invariantes()`/`fonte_regressao_suspeita()` de hoje
+com o HANDOFF de ontem (16/09, 7ª e 8ª partes): quase tudo já tinha sido investigado e fechado
+ontem com evidência (HASTA zerada = bloqueio residencial confirmado, ação pendente do DONO rodar
+`recon-hasta-zerou.mjs` de casa; SBID21/JOAOEMILIO/LEILOFY/SATO = saudáveis ou medição velha;
+cadastro_barrado/fonte_cega_no_monitor/foto_repetida_como_lote(PECINI)/uf_cef_congelada(AP)/
+cadastro_duplicado/cadastro_sem_origem/erro_na_tela_do_cliente/qa_invariantes_lenta = sem ação,
+cada um com motivo próprio já registrado). Só duas linhas eram novas desde ontem:
+- **`sem_cidade`** (42 > limite 30): espalhado por 8 fontes, nenhuma dominante (máx. 12) — cauda
+  longa de lotes individuais sem cidade publicada, não um padrão sistêmico. Sem ação agora.
+- **`pino_generico_como_rua`** (35 > limite 25): 34 dos 35 eram CEF. Investigando os pares de
+  endereço na MESMA coordenada, a maior causa não era pin genérico de verdade — era o CSV da
+  própria Caixa gravando o tipo de logradouro duas vezes ("Rua Rua Abrahao Barretto"), o que
+  também quebra o casamento de endereço entre unidades do mesmo prédio (extração de via lê
+  "rua x" ≠ "x"). **Corrigido** (commit `0351dbd`): `scripts/scraper.js` colapsa a duplicata na
+  origem; 56 lotes ativos já gravados corrigidos no banco. `qa_pinos_genericos()` caiu de 35
+  para 26 — ainda 1 acima do limite (casos de abreviação como "Mal." × "Marechal", não cobertos
+  por este fix pontual; fica para quem for atrás do resto).
+- **Crash em `/caso/:id` do próprio dono (19:37 hoje, "Cannot access 'Bt' before
+  initialization")**: bundle `Caso-CHCqw5Er.js` — build atual gera `Caso-Buu0RN7C.js`, hash
+  diferente. Confirmado cache do navegador servindo bundle ANTERIOR ao fix de TDZ já aplicado
+  nesta mesma sessão (mais cedo), não recorrência. Marcado resolvido.
+
+**Validação**: `verificar:sintaxe`/`verificar:padroes`/`npm run build` limpos em todos os
+commits desta parte.
