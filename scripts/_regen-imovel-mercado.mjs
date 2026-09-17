@@ -38,7 +38,7 @@ const r = await fetch(`${BASE}/api/gerar-analise`, {
     mercadoInputs: row.inputs.mercadoInputs,
     parecerInputs: row.inputs.parecerInputs,
   }),
-  signal: AbortSignal.timeout(120000),
+  signal: AbortSignal.timeout(310000), // api/gerar-analise.js maxDuration=300s — dar folga real
 });
 
 const txt = await r.text();

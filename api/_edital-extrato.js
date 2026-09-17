@@ -530,14 +530,34 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as
       // praças não trouxeram data; vão à parte, sem interferir no que já existia.
       try { const d = extrairDatasLeilao(txtLote, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
+      // PAGAMENTO/CUSTOS/COMISSÃO EM EDITAL MULTI-LOTE (17/09) — a cláusula de forma de
+      // pagamento costuma ser GERAL, escrita UMA VEZ antes da lista de lotes ("Das condições
+      // de pagamento: ..."), e `isolarBlocoDoLote` corta exatamente a partir do "Lote N"
+      // deste imóvel — o preâmbulo fica de fora. Achado real: lote ZUK Z37342 ("Apartamentos
+      // e Flats em leilão"), identidade/praças isoladas corretamente (são por lote), mas
+      // pagamento/custos saíam sempre null porque a cláusula mora antes do 1º "Lote N". O
+      // preâmbulo é seguro de somar — não carrega dado NUMÉRICO de outro lote específico, só
+      // cláusula contratual comum a todos. Ordem txtLote+preâmbulo (não o contrário): se ESTE
+      // lote tiver uma condição própria que diverge da geral, ela casa primeiro no regex.
+      let txtPagamento = txtLote;
+      if (blocoLote) {
+        const primeiraMarca = txt.search(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/i);
+        if (primeiraMarca > 0) txtPagamento = `${txtLote} ${txt.slice(0, primeiraMarca)}`;
+      }
+      if (!cond.formaPagamento && txtPagamento !== txtLote) {
+        try { cond.formaPagamento = extrairCondicoes(txtPagamento)?.formaPagamento || ''; } catch { /* mantém vazio */ }
+      }
       // Pagamento ESTRUTURADO (fluxo de caixa) e metragem que o EDITAL às vezes traz —
       // grátis, no mesmo texto já baixado. Grava no cache pelas DUAS chaves: URL
       // (lookup pré-download) e conteúdo (idempotência entre URLs do mesmo PDF).
-      pagamento = extrairPagamentoTexto(txtLote);
+      pagamento = extrairPagamentoTexto(txtPagamento);
       // CUSTOS declarados (taxa administrativa, IPTU, condomínio — comissão vem no
       // `pagamento`) e IDENTIDADE (condomínio/logradouro/bairro). Os custos entram na
-      // PROJEÇÃO; a identidade ancora a BUSCA e a classificação de tipo/padrão.
-      custos = extrairCustosTexto(txtLote);
+      // PROJEÇÃO; a identidade ancora a BUSCA e a classificação de tipo/padrão. Identidade
+      // fica só em `txtLote` de propósito — é dado NUMÉRICO/descritivo por lote, o preâmbulo
+      // nunca a contém, e ampliar aqui reabriria o risco que `isolarBlocoDoLote` existe para
+      // fechar (identidade de outro lote vizinho).
+      custos = extrairCustosTexto(txtPagamento);
       identidade = extrairIdentidadeTexto(txtLote);
       // NÚMERO DO PROCESSO (CNJ) — grátis, no texto que já está em mãos. É a chave que abre a
       // consulta de movimentação e responde "este processo anda rápido?". Até 15/08 só a IA do
