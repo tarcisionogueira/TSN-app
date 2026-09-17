@@ -9,11 +9,28 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
--2. 🔴 **AÇÃO PENDENTE DO DONO — HASTA zerada há 18 dias (29/08).** Rodar
-   `node scripts/recon-hasta-zerou.mjs` da máquina residencial (com `~/.bidpro-runner.env`
-   carregado) e colar a saída aqui. Detalhe completo na Parte 7 (16/09) mais abaixo. Nenhum
-   ambiente que a sessão do Claude alcança (sandbox, GitHub Actions) passa pelo bloqueio de
-   IP de datacenter da HASTA — só o dono pode rodar este recon.
+-2. ✅ **RESOLVIDO 17/09 — HASTA zerada há 18+ dias: NÃO é bug, é leilão real ainda não aberto.**
+   Dono rodou `node scripts/recon-hasta-zerou.mjs` do runner residencial (WSL). Veredito do
+   próprio script: `detalhesOk > 0` (3/3 páginas de lote JÁ conhecidas abriram normal) e
+   listagem por evento em 0 nos 8 eventos do catálogo — separador "acervo existe × listagem
+   não mostra" apontou ROTA, não extração. Confirmada a coleta real (`HASTA_DRYRUN=0
+   HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs`): mesmo resultado, 0 lotes nos 8
+   eventos — sistemático, não amostra parcial. Para desambiguar "rota quebrada" de "leilão
+   genuinamente sem lote ainda", o dono abriu `hastaleiloes.com.br/leilao/569/lotes` direto no
+   navegador (não no recon): página mostra **"EM BREVE"**, **"AGUARDE EDITAL!"** e, na seção de
+   lotes, **"NENHUM LOTE ENCONTRADO NO MOMENTO"** — texto do PRÓPRIO SITE. É a hipótese que o
+   cabeçalho do recon já previa ("se a listagem filtra por leilão em aberto, os lotes saem dela
+   e só voltam na 2ª praça") confirmada com evidência direta, não suposição. **Parser intacto,
+   nenhuma ação de código** — resolve sozinho quando a CAIXA abrir a praça deste lote de
+   eventos. Mesmo princípio já visto no LEILOFY (25/08) e reafirma o achado de 15/09 (que tinha
+   sido reaberto em 16/09 por precaução, já que "EM BREVE" persistindo por quase 3 semanas
+   merecia reconfirmação com dado fresco, não só reaproveitar a checagem antiga).
+   > ⚠️ **Lacuna menor achada no próprio recon, registrada para quem for revisar o script**: o
+   > laço da seção 4 (que testa cada evento) chama só `extrairUrlsDeLote` e não roda
+   > `radiografia()`/MARCADORES naquele HTML — por isso não reportou `vazio_ux` mesmo o texto
+   > "NENHUM LOTE ENCONTRADO" batendo no próprio regex já existente. Não invalida o veredito
+   > desta vez (a leitura manual no navegador supriu o gap), mas vale adicionar a checagem de
+   > marca na seção 4 para a próxima vez que este recon for usado.
 
 -1. 📌 **DECISÃO PENDENTE DO DONO (retomar amanhã) — Franco Leilões (francoleiloes.com.br): recon
    feito, site é SPA, não integrável com scraper de fetch cru.** Dono perguntou se já estávamos integrados (não estávamos — zero scraper,
