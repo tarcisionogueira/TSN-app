@@ -56,6 +56,26 @@ const SITES = {
   // judicial/extrajudicial com catálogo pequeno em agregadores de terceiros — mesmo
   // caminho genérico dos outros candidatos, é isto que o recon existe para descobrir.
   BAYIT: { base: 'https://www.portalbayit.com.br', paths: PATHS_PADRAO },
+  // Cauda longa do radar de editais (18/09, pedido do dono: "segue pelos domínios pequenos")
+  // — cada um com 1-2 editais só, nenhum ainda em leiloeiro_conhecimento. Mesmos caminhos
+  // genéricos; é exatamente o que este recon existe pra descobrir antes de escrever parser.
+  LEILAOBRASIL: { base: 'https://leilaobrasil.com.br', paths: PATHS_PADRAO },
+  GALERIAPEREIRA: { base: 'https://galeriapereira.com.br', paths: PATHS_PADRAO },
+  GESTORNACIONAL: { base: 'https://www.gestornacional.com.br', paths: PATHS_PADRAO },
+  SAULOJULIOLEILOEIRO: { base: 'https://saulojulioleiloeiro.com.br', paths: PATHS_PADRAO },
+  KRONBERGLEILOES: { base: 'https://kronbergleiloes.com.br', paths: PATHS_PADRAO },
+  NAKAKOGUELEILOES: { base: 'https://www.nakakogueleiloes.com.br', paths: PATHS_PADRAO },
+  NETEDITAIS: { base: 'https://neteditais.com.br', paths: PATHS_PADRAO },
+  MONZONLEILOES: { base: 'https://monzonleiloes.com.br', paths: PATHS_PADRAO },
+  LEGISLEILOES: { base: 'https://legisleiloes.com.br', paths: PATHS_PADRAO },
+  JMFLEILOES: { base: 'https://jmfleiloes.com.br', paths: PATHS_PADRAO },
+  RAFAELLEILOEIRO: { base: 'https://rafaelleiloeiro.com.br', paths: PATHS_PADRAO },
+  LEILOESJUDICIAISMG: { base: 'https://leiloesjudiciaismg.com.br', paths: PATHS_PADRAO },
+  VIVALEILOES: { base: 'https://vivaleiloes.com.br', paths: PATHS_PADRAO },
+  ACTLEILOES: { base: 'https://actleiloes.com.br', paths: PATHS_PADRAO },
+  ELEILOEIRO: { base: 'https://www.e-leiloeiro.com.br', paths: PATHS_PADRAO },
+  AGSLEILOES: { base: 'https://agsleiloes.com.br', paths: PATHS_PADRAO },
+  SUPERBIDJUDICIAL: { base: 'https://superbidjudicial.com.br', paths: PATHS_PADRAO },
 };
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
