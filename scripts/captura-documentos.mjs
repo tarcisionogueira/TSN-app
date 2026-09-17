@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
+import { isolarBlocoDoLote } from '../api/_edital-extrato.js';
 import { ehDocInstitucional } from '../api/_doc-scan.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -66,7 +67,15 @@ function classificar(url, nome = '', fonte = '') {
  * não rende nada e fica para a leitura por visão do documental — como antes.
  * Best-effort absoluto: qualquer falha aqui não pode derrubar a captura.
  */
-async function publicarFatosDoPdf(imovelId, buffer, tipo) {
+// `valores` = { valorMinimo, valorAvaliacao } DESTE imóvel (14/09→17/09, causa raiz do item
+// 24/31 do HANDOFF): PDF de edital judicial pode reunir DEZENAS de lotes num documento só —
+// sem isolar, `extrairIdentidadeTexto`/`extrairMatriculaTexto` liam o documento INTEIRO e
+// publicavam o bloco de OUTRO lote na ficha deste imóvel (achado real, TORRES3: endereço e
+// área de Arapiraca/AL gravados num imóvel de São Joaquim de Bicas/MG). `api/_edital-
+// extrato.js` já resolve exatamente isso para o mercadológico via `isolarBlocoDoLote` — reusa
+// aqui em vez de duplicar a lógica. Sem `valores` (chamador não os tem) ou documento de lote
+// único, `isolarBlocoDoLote` devolve `null` e o comportamento é idêntico ao de antes.
+async function publicarFatosDoPdf(imovelId, buffer, tipo, valores = {}) {
   try {
     const PDFParse = await carregarPDFParse();
     const parser = new PDFParse({ data: buffer });
@@ -74,15 +83,17 @@ async function publicarFatosDoPdf(imovelId, buffer, tipo) {
     try { txt = String((await parser.getText())?.text || '').slice(0, 120000); }
     finally { await parser.destroy().catch(() => {}); }
     if (txt.length < 200) return;
-    const fatos = { identidade: extrairIdentidadeTexto(txt) };
-    if (tipo === 'matricula') fatos.matricula = extrairMatriculaTexto(txt);
-    else { fatos.custos = extrairCustosTexto(txt); fatos.pagamento = extrairPagamentoTexto(txt); fatos.matricula = extrairMatriculaTexto(txt); }
+    const blocoLote = isolarBlocoDoLote(txt, { valorMinimo: valores.valorMinimo, valorAvaliacao: valores.valorAvaliacao });
+    const txtLote = blocoLote || txt;
+    const fatos = { identidade: extrairIdentidadeTexto(txtLote) };
+    if (tipo === 'matricula') fatos.matricula = extrairMatriculaTexto(txtLote);
+    else { fatos.custos = extrairCustosTexto(txtLote); fatos.pagamento = extrairPagamentoTexto(txtLote); fatos.matricula = extrairMatriculaTexto(txtLote); }
     if (!Object.values(fatos).some(Boolean)) return;
     await supabase.rpc('registrar_doc_fatos', { p_imovel_id: imovelId, p_fatos: { ...fatos, em: new Date().toISOString() } });
   } catch { /* enriquecer a ficha nunca bloqueia a captura */ }
 }
 
-async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
+async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}) {
   // Caminho ENDEREÇADO POR CONTEÚDO (hash do PDF), NÃO por Date.now(). Assim uma
   // recaptura do MESMO documento reaproveita o mesmo objeto (upsert sobrescreve) em vez
   // de criar uma cópia nova a cada run — era a causa do inchaço do bucket (lotes de
@@ -99,7 +110,7 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
   // Lê o PDF que acabou de chegar e publica os fatos na ficha (nome do condomínio,
   // despesas mensais, custos do edital, área da matrícula). Antes do return de dedup:
   // documento já cadastrado continua valendo, e o merge da RPC é idempotente.
-  await publicarFatosDoPdf(imovelId, buffer, tipo);
+  await publicarFatosDoPdf(imovelId, buffer, tipo, valores);
   // Mesmo conteúdo já cadastrado (qualquer tipo) → só atualiza a linha, não duplica.
   if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); await sincronizarJsonbAnexos(imovelId, tipo, url); return; }
   // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.
@@ -216,7 +227,7 @@ async function baixarPdf(page, url, referer) {
 
 async function processar(browser, item) {
   const { data: im } = await supabase.from('imoveis_leilao')
-    .select('link_edital, link_matricula, link_regras_venda, anexos, fonte, url_lote').eq('id', item.imovel_id).single();
+    .select('link_edital, link_matricula, link_regras_venda, anexos, fonte, url_lote, valor_minimo, valor_avaliacao').eq('id', item.imovel_id).single();
   if (!im) throw new Error('imovel_nao_encontrado');
 
   const page = await browser.newPage();
@@ -248,7 +259,8 @@ async function processar(browser, item) {
     // Classificados: 1 por tipo. 'outro' é genérico → pode haver vários (edital +
     // matrícula que não classificaram); cada um vira uma linha própria.
     if (tipo !== 'outro' && salvos.has(tipo)) return;
-    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`, tipo === 'outro' ? ++nOutro : 0);
+    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`, tipo === 'outro' ? ++nOutro : 0,
+      { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
     urlsSalvas.add(url);
     if (tipo !== 'outro') salvos.add(tipo);
     capturados.push(tipo);

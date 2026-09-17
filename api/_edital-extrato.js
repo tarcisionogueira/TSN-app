@@ -57,7 +57,7 @@ const parseValor = (s) => {
 // de extrair elimina a dependência dessa coincidência. Só entra quando o documento tem 2+
 // marcações "Lote N" E algum bloco contém um valor conhecido deste lote (avaliação/lance mínimo) —
 // um edital de lote único (o caso comum, e a esmagadora maioria) devolve null e nada muda.
-function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
+export function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
   const marcas = [...String(texto || '').matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
   if (marcas.length < 2) return null;
   const fmtBr = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

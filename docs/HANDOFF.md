@@ -48,14 +48,49 @@ nesta mesma conversa.
 
 **Pendências antigas, sem mudança hoje (lista amarela, baixa prioridade)**: `data_leilao`
 ausente em CEF/FERREIRALEIL/GESTAOLEILOES/PECINI (bloqueio de IP, decisão de investimento
-pendente); PECINI no runner residencial (passa Cloudflare, página genérica); contaminação de
-dados entre lotes em PDFs multi-lote (refator maior, aguarda priorização); e-mail de resgate
+pendente); PECINI no runner residencial (passa Cloudflare, página genérica); e-mail de resgate
 no cancelamento / corridas de e-mail duplicado (corrigidos por leitura de código, não
 validados contra caso real); cobertura de veículos baixa (7 de 62 leiloeiros, 5 fontes novas
 identificadas sem scraper); `cadastro_barrado` (residual, some sozinho ~20/09);
 `qa_invariantes_lenta` (painel lento, índice pendente); `fonte_cega_no_monitor` (falso-
 positivo permanente do EDITAL_DJEN no invariante SQL, documentado, não corrigido — risco alto
-pra função de ~50 checks).
+pra função de ~50 checks). **RISCADA hoje**: contaminação de dados entre lotes em PDFs
+multi-lote — `publicarFatosDoPdf` corrigido, ver seção própria abaixo.
+
+---
+
+## 🩹 17/09 — CONTAMINAÇÃO DE DADOS ENTRE LOTES: `publicarFatosDoPdf` TAMBÉM CORRIGIDO (pendência antiga, item 24/31)
+
+Item da lista amarela ("contaminação de dados entre lotes em PDFs multi-lote, refator maior,
+aguarda priorização") — pedido do dono pra entrar nele. Causa raiz já estava documentada
+(itens 24 e 31, 14/09): `scripts/captura-documentos.mjs`'s `publicarFatosDoPdf()` lia o PDF do
+edital INTEIRO, sem recortar por lote, e publicava identidade/matrícula/custos de QUALQUER
+lote do documento na ficha do imóvel errado — achado real em produção (TORRES3): endereço
+"Rua Aristopho Saadi, Arapiraca/AL" e área 534,60 m² gravados num imóvel que é "São Joaquim de
+Bicas/MG" (área real 127,24 m²). `api/_edital-extrato.js` (usado pelo mercadológico) já
+resolvia exatamente isso via `isolarBlocoDoLote` desde 12/09 — o defeito era essa função nunca
+ter sido reaproveitada no caminho da CAPTURA de documento (`doc_fatos`, que alimenta a ficha
+do imóvel e o documental).
+
+**Fix**: `isolarBlocoDoLote` exportada de `_edital-extrato.js`; `captura-documentos.mjs` agora
+busca `valor_minimo`/`valor_avaliacao` do imóvel (`processar()`) e passa adiante até
+`publicarFatosDoPdf`, que isola o bloco do lote ANTES de rodar `extrairIdentidadeTexto`/
+`extrairMatriculaTexto`/`extrairCustosTexto`/`extrairPagamentoTexto`. Documento de lote único
+(o caso comum — `isolarBlocoDoLote` exige 2+ marcações "Lote N" pra sequer tentar) ou chamador
+sem os valores: comportamento idêntico a antes, sem regressão.
+
+**Teste dedicado** (`scripts/testes/publicar-fatos-nao-vaza-entre-lotes.mjs`,
+`npm run testar:fatos-multi-lote`): reproduz o formato real do TORRES3 (2 lotes, cada um com
+Avaliação + endereço), prova que SEM o isolamento o vazamento acontece de verdade (o texto de
+teste vaza "Aristopho Saadi" — confirma que o teste testa o defeito certo) e que COM o
+isolamento ele para; e confirma que documento de lote único continua extraindo normal.
+`npm run build` limpo (0 padrão novo, sintaxe/CSP ok, teste novo passando 7/7).
+
+**Não auditado ainda** (mesma ressalva do item 24/31 original): se o vazamento já contaminou
+`doc_fatos` de outros imóveis, antes deste fix — o cache de `doc_extracoes` (usado pelo
+mercadológico, já protegido) expira em 30 dias sozinho, mas a ficha (`doc_fatos`) publicada
+pela captura não tem expiração — um re-scan do documento (próxima captura do mesmo PDF) agora
+corrige sozinho, mas não há re-processamento retroativo automático dos já publicados.
 
 ---
 
