@@ -3438,7 +3438,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // relatório errado. Best-effort: se a leitura falhar, a auditoria roda sem esse sinal.
       let temMatricula = false, pagamentoDoc = null, somenteAVista = false;
       try {
-        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos,ficha_cef&limit=1`)).json();
+        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos,ficha_cef,modalidade&limit=1`)).json();
         temMatricula = !!(ix?.link_matricula || (Array.isArray(ix?.anexos) && ix.anexos.some((a) => a?.tipo === 'matricula')));
         somenteAVista = String(ix?.forma_pagamento || '') === 'a_vista';
         // A CAIXA JÁ PUBLICA A CONDIÇÃO, E NÓS JÁ GUARDAMOS (15/08). `ficha_cef` traz
@@ -3481,8 +3481,22 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         // contradiz_documento` só pega quem gera relatório; o filtro de busca e a ficha do
         // imóvel para os outros 550+ nunca corrigiam. `sinalPct` sozinho fica de fora (é sinal
         // fraco: entrada + saldo à vista continua sendo à vista) — só sinal FORTE reescreve.
+        //
+        // 18/09: esta correção gravava `'financiado'` SEMPRE, mesmo em leilão JUDICIAL — onde
+        // o parcelamento (quando não há financiamento bancário explícito) é o do art. 895 do
+        // CPC, imóvel hipotecado ao JUÍZO, não financiamento bancário. É uma forma canônica
+        // PRÓPRIA (`hipotecado`, ver src/data/pagamento.js e o gatilho
+        // `default_forma_pagamento_judicial`), com rótulo e risco diferentes do financiamento.
+        // Gravar `'financiado'` num lote judicial fica PERMANENTE: o gatilho só reescreve
+        // quando o valor novo é `null`/`a_vista`, e `'financiado'` não é nenhum dos dois — a
+        // mesma classe de troca de rótulo que o dono relatou (hipotecado aparecendo como
+        // financiamento). Nenhum lote judicial ATIVO está com esse valor hoje (conferido:
+        // 2437/2437 corretamente `hipotecado`), mas o código sempre escreveu o rótulo errado
+        // por baixo — corrigido antes que aconteça de verdade.
         if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.fgts === true || pagamentoDoc.parcelamentoPermitido === true)) {
-          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ forma_pagamento: 'financiado' }) }); } catch { /* best-effort */ }
+          const ehJudicialSemBancoExplicito = String(ix?.modalidade || '').toLowerCase() === 'judicial' && pagamentoDoc.financiavel !== true;
+          const formaCorrigida = ehJudicialSemBancoExplicito ? 'hipotecado' : 'financiado';
+          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ forma_pagamento: formaCorrigida }) }); } catch { /* best-effort */ }
         }
       } catch { /* sinais opcionais da auditoria */ }
       const aud = auditarMercadologico(result, { temMatricula, pagamentoDoc, somenteAVista });
