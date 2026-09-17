@@ -129,9 +129,19 @@ export default function PagarHonorario() {
             api/mp-checkout.js efetivamente cobra. Mostrar o total sem o abatimento faria a
             pessoa ver um valor e o cartão cobrar outro, menor. */}
         {arr.honorarios_recebido > 0 && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#166534' }}>
-            Já recebemos <strong>{fmtBRL(arr.honorarios_recebido)}</strong> do total de {fmtBRL(arr.honorarios_valor)}.
-            O valor abaixo é o <strong>saldo restante</strong>.
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#166534' }}>
+            <div style={{ marginBottom: 8 }}>
+              Já recebemos <strong>{fmtBRL(arr.honorarios_recebido)}</strong> do total de {fmtBRL(arr.honorarios_valor)}:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {(arr.honorarios_partes || []).map((p, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
+                  <span>{{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}</span>
+                  <span style={{ fontWeight: 700 }}>{fmtBRL(p.valor)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8, fontWeight: 700 }}>O valor abaixo é o saldo restante.</div>
           </div>
         )}
 

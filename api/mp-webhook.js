@@ -573,6 +573,19 @@ export default async function handler(req, res) {
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
           return res.status(502).json({ error: 'honorario_patch_falhou' });
         }
+        // O INSERT acima já disparou a trigger `honorarios_recebimentos_fecha_se_completo`
+        // (mesma transação) — se a soma bateu o total, `honorarios_status` já está 'pago'
+        // neste ponto. Recibo é best-effort: nunca falha a resposta ao MP por causa de e-mail.
+        try {
+          const posRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=honorarios_status`, {
+            headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
+          });
+          const [pos] = posRes.ok ? await posRes.json() : [];
+          if (pos?.honorarios_status === 'pago') {
+            const { enviarReciboHonorario } = await import('./_honorario-recibo.js');
+            await enviarReciboHonorario(arrId);
+          }
+        } catch (e) { console.error('[mp-webhook] recibo honorário falhou:', e?.message || e); }
         return res.status(200).json({ ok: true, honorario: { arrematacao_id: arrId, recebido: pago, saldo_restante: Math.max(0, esperado - pago) } });
       }
       if (ehCobrancaAvulsaMp) {

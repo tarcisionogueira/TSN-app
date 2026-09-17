@@ -93,6 +93,18 @@ export default async function handler(req, res) {
       }
       const [criado] = await ins.json();
       await auditLog({ acao: 'honorario_recebimento_manual', user_id: user.id, ip, detalhes: { arrematacao_id, metodo, valor: v, status: statusFinal }, sucesso: true });
+      // Recebimento manual pode ele mesmo fechar o honorário (ex.: cheque completando o
+      // total sem precisar de cartão) — mesma checagem best-effort do webhook do cartão.
+      if (statusFinal === 'confirmado') {
+        try {
+          const posRes = await sb(`arrematacoes?id=eq.${arrematacao_id}&select=honorarios_status`);
+          const [pos] = posRes.ok ? await posRes.json() : [];
+          if (pos?.honorarios_status === 'pago') {
+            const { enviarReciboHonorario } = await import('./_honorario-recibo.js');
+            await enviarReciboHonorario(arrematacao_id);
+          }
+        } catch (e) { console.error('[honorario-recebimento] recibo falhou:', e?.message || e); }
+      }
       return res.status(200).json({ ok: true, recebimento: criado });
     } catch (e) {
       console.error('[honorario-recebimento] POST falhou:', e?.message || e);
