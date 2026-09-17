@@ -20,15 +20,17 @@ import { buscarViaBrightData, ErroBrightData } from '../api/_brightdata.js';
 // 2ª rodada (18/09): URLs específicas de LISTAGEM (não só a home) para os 3 domínios que a
 // 1ª rodada confirmou como HTML estático com listagem — precisamos ver a página que lista
 // TODOS os lotes de imóvel, com paginação, antes de escrever o parser de verdade.
+// 3ª rodada: 1 leilão de verdade da HastaPública (pra ver se lista lotes individuais dentro),
+// e um DUMP maior do corpo de joserodovalho/hdleiloes (o link de lote pode não bater no regex
+// de amostra — melhor olhar o HTML cru que adivinhar de novo) + www.dilsonmoreira com /imoveis.
 const ALVOS = (process.env.RECON_DOMINIOS || [
-  'hastapublica.com.br',
-  'hastapublica.com.br/busca',
-  'hastapublica.com.br/leiloes',
+  'hastapublica.com.br/leilao/18182/Juizado-Especial-Cível-do-Foro-da-Comarca-de-Araraquara',
   'joserodovalholeiloes.com.br/leilao/index/imoveis',
   'hdleiloes.com.br/leilao/index/imoveis',
-  'dilsonmoreira.com.br',
-  'www.dilsonmoreira.com.br',
+  'www.dilsonmoreira.com.br/imoveis',
+  'www.dilsonmoreira.com.br/leiloes',
 ].join(',')).split(',').map((s) => s.trim()).filter(Boolean);
+const DUMP = process.env.RECON_DUMP === '1';
 
 const RE_CHALLENGE = /just a moment|cf-browser-verification|checking your browser|attention required|cf-chl/i;
 const RE_LOTE = /\/(lote|imovel|leilao|imoveis)\//i;
@@ -68,6 +70,13 @@ async function reconDominio(dominio) {
     // arquivo inteiro no log.
     const idxPreco = html.search(RE_PRECO);
     if (idxPreco >= 0) console.log(`  trecho ao redor do 1º R$: ${JSON.stringify(html.slice(Math.max(0, idxPreco - 300), idxPreco + 200))}`);
+    if (DUMP) {
+      // Corpo cru, sem <script>/<style> (só o que interessa pro parser), truncado — evita
+      // adivinhar seletor: o achado sai do HTML real, não de suposição.
+      const limpo = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
+      const corpoIdx = limpo.search(/<body/i);
+      console.log(`  DUMP (2000 chars a partir do <body>): ${JSON.stringify(limpo.slice(corpoIdx, corpoIdx + 2000))}`);
+    }
   }
   let veredito = 'indefinido';
   if (challenge) veredito = 'cloudflare_bloqueado';
