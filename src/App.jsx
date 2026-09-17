@@ -83,7 +83,6 @@ const Creditos = lazy(() => import('./pages/Creditos'));
 const Comissoes = lazy(() => import('./pages/Comissoes'));
 const Caso = lazy(() => import('./pages/Caso'));
 const PagarHonorario = lazy(() => import('./pages/PagarHonorario'));
-const PagarHonorarioAsaas = lazy(() => import('./pages/PagarHonorarioAsaas'));
 const CobrarAvulso = lazy(() => import('./pages/CobrarAvulso'));
 const CriarContrato = lazy(() => import('./pages/CriarContrato'));
 const ContratosTemplates = lazy(() => import('./pages/ContratosTemplates'));
@@ -380,8 +379,6 @@ function MainLayout() {
           {/* Sem PrivateRoute (18/09): o arrematante pode repassar o link a outra pessoa pagar —
               a própria página valida a cobrança via /api/honorario-info (uuid imprevisível). */}
           <Route path="/honorario/:arrematacaoId" element={<PagarHonorario />} />
-          {/* TESTE (17/09) — mesmo honorário, via Asaas em vez de MP (isolar recusa de cartão). */}
-          <Route path="/honorario-asaas-teste/:arrematacaoId" element={<PagarHonorarioAsaas />} />
           {/* Cobrança avulsa (17/09) — mesmo raciocínio: link pode ir a quem não tem conta. */}
           <Route path="/cobranca/:cobrancaId" element={<CobrarAvulso />} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />

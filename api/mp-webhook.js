@@ -9,6 +9,7 @@
 import crypto from 'crypto';
 import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
+import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -29,69 +30,9 @@ async function rpcProduto(fn, payload) {
   } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
 }
 
-// Estorno/chargeback de honorário de êxito. Desde 17/09 (honorarios_recebimentos, partes
-// do honorário) o estorno é da PARTE específica paga por este payment_id, não do honorário
-// inteiro — um cliente pode ter Pix+cheque legítimos recebidos por fora e só a fatia do
-// cartão sendo estornada; reverter tudo para 'pendente' apagaria o rastro do que já foi
-// recebido de verdade. Marca a linha 'estornado' e deixa a trigger do banco
-// (honorarios_recebimentos_fecha_se_completo) recalcular e reabrir 'pendente' se a soma
-// cair abaixo do total. Sem linha correspondente (registro anterior a esta migração,
-// pago 100% de uma vez pelo caminho antigo): cai no fallback direto, igual antes.
-// Se JÁ foi distribuído à equipe (saldo_lancamentos creditado), reverter sozinho aqui seria
-// mexer em saldo de terceiro sem as mesmas guardas de `distribuirHonorarios` — fica
-// registrado no log para conferência manual, nunca falha silenciosa.
-async function reverterHonorarioEstornado(arrId, evento, paymentId) {
-  const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_status`, {
-    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
-  });
-  const [arr] = arrRes.ok ? await arrRes.json() : [];
-  if (arr?.honorarios_status === 'distribuido') {
-    console.error(`[mp-webhook] ${evento} de honorário já distribuído à equipe — requer conferência manual`, { arrId });
-    return { revertido: false };
-  }
-  if (paymentId) {
-    const recRes = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${arrId}&gateway_payment_id=eq.${paymentId}&status=eq.confirmado&select=id`, {
-      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
-    });
-    const [rec] = recRes.ok ? await recRes.json() : [];
-    if (rec) {
-      await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?id=eq.${rec.id}`, {
-        method: 'PATCH',
-        headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'estornado' }),
-      });
-      return { revertido: true, parte: rec.id };
-    }
-  }
-  // Fallback (sem linha de recebimento correspondente): comportamento antigo.
-  if (arr?.honorarios_status === 'pago') {
-    await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}`, {
-      method: 'PATCH',
-      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ honorarios_status: 'pendente', honorarios_pago_em: null }),
-    });
-    return { revertido: true };
-  }
-  return { revertido: false };
-}
-
-// Estorno/chargeback de cobrança avulsa: mais simples que honorário — não existe conceito
-// de "distribuído à equipe" nem de partes múltiplas, é 1 cobrança = 1 pagamento. Só reabre
-// se ainda estava 'paga' por ESTE payment_id (idempotência básica).
-async function reverterCobrancaAvulsaEstornada(cobrancaId, evento) {
-  const r = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&select=id,status`, {
-    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
-  });
-  const [cob] = r.ok ? await r.json() : [];
-  if (cob?.status !== 'paga') return { revertido: false };
-  await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}`, {
-    method: 'PATCH',
-    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ status: 'aberta', pago_em: null }),
-  });
-  console.error(`[mp-webhook] cobranca_avulsa ${evento} — reaberta para nova cobrança`, { cobrancaId });
-  return { revertido: true };
-}
+// reverterHonorarioEstornado / reverterCobrancaAvulsaEstornada (18/09): movidas pra
+// ./_honorario-estorno.js, compartilhadas com api/asaas-webhook.js — mesmo estorno,
+// os dois gateways precisam se comportar igual.
 
 // Título do produto (para o `content_name` da conversão) — best-effort: sem título a
 // conversão ainda sai, só sem o rótulo legível no Meta (nunca vale bloquear a venda por isso).

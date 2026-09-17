@@ -154,43 +154,68 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ── Cobrança do SALDO de honorários via Asaas — TESTE (17/09) ──────────────────────
-    // Objetivo: descobrir se um cartão que o Mercado Pago recusa passa pelo Asaas. Mesmo
-    // modelo de confiança de api/mp-checkout.js (proposito='honorario_exito'): a posse do
-    // link (arrematacao_id imprevisível) É a credencial, sem exigir login — nome/email vêm
-    // do formulário (mesmo padrão da tela /honorario/:id, que já pede e-mail ao pagador).
-    // Preço SEMPRE recalculado aqui, nunca aceito do corpo da requisição.
-    // ⚠️ Ainda NÃO reconciliado automaticamente: o webhook do Asaas não sabe creditar
-    // honorarios_recebimentos por este caminho — confirmar o pagamento e lançar à mão até
-    // este fluxo virar definitivo (se o teste confirmar que o Asaas resolve o caso).
-    if (action === 'criar_cobranca_honorario_teste') {
-      const { arrematacao_id, nome, email, cpf: cpfBody } = body;
-      if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
+    // ── Fallback de gateway (18/09, pedido do dono): Asaas TRANSPARENTE quando o MP recusa
+    // o cartão em honorário/cobrança avulsa — mesmo modelo já usado em Checkout.jsx pra
+    // assinatura de plano ("Continuar pelo Asaas" com 1 clique), estendido aqui pros dois
+    // fluxos SEM LOGIN (a posse do link — arrematacao_id/cobranca_id imprevisível — é a
+    // credencial, mesmo modelo de api/mp-checkout.js). Preço SEMPRE recalculado aqui, nunca
+    // aceito do corpo da requisição. `externalReference` segue a MESMA convenção de
+    // `servico|`/`[servico]` já usada no webhook: `honorario|<arrematacao_id>` e
+    // `cobranca_avulsa|<cobranca_id>` — api/asaas-webhook.js reconhece os dois e credita
+    // honorarios_recebimentos/cobrancas_avulsas automaticamente (mesma lógica de
+    // api/mp-webhook.js), sem depender de alguém dar baixa manual.
+    if (action === 'criar_cobranca_fallback') {
+      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody } = body;
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
-      const r = await fetch(`${SB}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
-        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
-      });
-      const [arr] = r.ok ? await r.json().catch(() => []) : [];
-      if (!arr) return res.status(404).json({ error: 'Arrematação não encontrada.' });
-      if (['pago', 'distribuido'].includes(arr.honorarios_status)) return res.status(409).json({ error: 'Os honorários desta arrematação já foram pagos.' });
-      const total = Number(arr.honorarios_valor) || 0;
-      if (total <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
-      const recR = await fetch(`${SB}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${encodeURIComponent(arrematacao_id)}&status=eq.confirmado&select=valor`, {
-        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
-      });
-      const confirmados = recR.ok ? await recR.json().catch(() => []) : [];
-      const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
-      const saldo = Math.round((total - jaRecebido) * 100) / 100;
-      if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
-      // O Asaas EXIGE cpfCnpj pra criar a cobrança (achado no 1º teste: "Erro interno no
-      // processamento" escondia "é necessário preencher o CPF ou CNPJ do cliente"). Tenta o
-      // cadastro do arrematante primeiro; a tela (sem login) também pode enviar o CPF direto
-      // — Marcos Araujo, por exemplo, nunca passou pela verificação de identidade e não tem
-      // CPF cadastrado, então SEM este fallback o link nunca conseguiria cobrar nada dele.
-      const cpfCadastro = await cpfAutenticado(arr.arrematante_id, null);
+      let saldo, descricao, externalReference, arrematanteId = null;
+
+      if (propFallback === 'honorario_exito') {
+        if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
+        const r = await fetch(`${SB}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+          headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
+        });
+        const [arr] = r.ok ? await r.json().catch(() => []) : [];
+        if (!arr) return res.status(404).json({ error: 'Arrematação não encontrada.' });
+        if (['pago', 'distribuido'].includes(arr.honorarios_status)) return res.status(409).json({ error: 'Os honorários desta arrematação já foram pagos.' });
+        const total = Number(arr.honorarios_valor) || 0;
+        if (total <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
+        const recR = await fetch(`${SB}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${encodeURIComponent(arrematacao_id)}&status=eq.confirmado&select=valor`, {
+          headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
+        });
+        const confirmados = recR.ok ? await recR.json().catch(() => []) : [];
+        const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
+        saldo = Math.round((total - jaRecebido) * 100) / 100;
+        if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
+        descricao = 'Honorários de êxito (saldo restante) — BidPro Brasil';
+        externalReference = `honorario|${arr.id}`;
+        arrematanteId = arr.arrematante_id;
+      } else if (propFallback === 'cobranca_avulsa') {
+        if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
+        const r = await fetch(`${SB}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status`, {
+          headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
+        });
+        const [cob] = r.ok ? await r.json().catch(() => []) : [];
+        if (!cob) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+        if (cob.status !== 'aberta') return res.status(409).json({ error: 'Esta cobrança já foi paga ou cancelada.' });
+        const total = Number(cob.valor) || 0;
+        if (total <= 0) return res.status(400).json({ error: 'Cobrança sem valor válido.' });
+        const jaPagoPix = Number(cob.valor_pago_pix) || 0;
+        saldo = Math.round((total - jaPagoPix) * 100) / 100;
+        if (saldo <= 0) return res.status(409).json({ error: 'Esta cobrança já foi coberta.' });
+        descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
+        externalReference = `cobranca_avulsa|${cob.id}`;
+      } else {
+        return res.status(400).json({ error: 'proposito inválido para fallback (honorario_exito ou cobranca_avulsa)' });
+      }
+
+      // O Asaas EXIGE cpfCnpj pra criar a cobrança. Tenta o cadastro do arrematante primeiro
+      // (quando há um, ex.: honorário); a tela também pode enviar o CPF direto — cliente sem
+      // verificação de identidade não tem CPF cadastrado, e sem este fallback o link nunca
+      // conseguiria cobrar dele (achado real, 17/09).
+      const cpfCadastro = arrematanteId ? await cpfAutenticado(arrematanteId, null) : null;
       const cpf = cpfCadastro || String(cpfBody || '').replace(/\D/g, '');
-      if (!cpf || cpf.length !== 11) return res.status(400).json({ error: 'CPF obrigatório e inválido — necessário pro Asaas gerar a cobrança.' });
+      if (!cpf || cpf.length !== 11) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF válido — o Asaas exige pra gerar a cobrança.' });
 
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
@@ -201,9 +226,9 @@ export default async function handler(req, res) {
         const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf });
         customerId = customer.id;
       } else if (!existente.cpfCnpj) {
-        // Cliente já existia no Asaas sem CPF (ex.: criado numa tentativa anterior antes
-        // desta cobrança exigir o campo) — sem atualizar, o Asaas segue recusando a cobrança
-        // pra sempre, mesmo com o CPF certo vindo agora do formulário.
+        // Cliente já existia no Asaas sem CPF (ex.: cadastro antigo, ou o customer criado
+        // numa tentativa anterior a esta cobrança exigir o campo) — sem atualizar, o Asaas
+        // segue recusando a cobrança pra sempre, mesmo com o CPF certo vindo agora.
         await asaasPut(`/customers/${customerId}`, { cpfCnpj: cpf });
       }
       const cobranca = await asaasPost('/payments', {
@@ -211,10 +236,10 @@ export default async function handler(req, res) {
         billingType: 'UNDEFINED',
         value: saldo,
         dueDate: new Date().toISOString().split('T')[0],
-        description: 'Honorários de êxito (saldo restante) — BidPro Brasil [TESTE Asaas]',
-        externalReference: `honorario_teste|${arr.id}`,
+        description: descricao,
+        externalReference,
       });
-      auditLog({ acao: 'asaas_cobranca_honorario_teste', user_id: null, ip, detalhes: { arrematacao_id, saldo, customerId }, sucesso: true });
+      auditLog({ acao: 'asaas_cobranca_fallback', user_id: null, ip, detalhes: { proposito: propFallback, arrematacao_id, cobranca_id, saldo, customerId }, sucesso: true });
       return res.status(200).json({ linkPagamento: cobranca.invoiceUrl || cobranca.bankSlipUrl, paymentId: cobranca.id, valor: saldo });
     }
 

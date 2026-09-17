@@ -13,6 +13,7 @@ import {
   removerEventoProcessado,
   registrarConversaoAnuncio,
 } from './_webhook-core.js';
+import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
 const EVENTOS_CHARGEBACK = [
   'PAYMENT_CHARGEBACK_REQUESTED',
@@ -150,6 +151,14 @@ export default async function handler(req, res) {
   // fluxo de PRODUTO (nunca para o de plano) — não pode elevar assinatura.
   const ehProduto = UUID_RE.test(extRef);
 
+  // Honorário de êxito / cobrança avulsa pagos via Asaas (18/09, fallback automático do MP
+  // recusado — api/asaas.js ação 'criar_cobranca_fallback'). Mesma convenção de
+  // externalReference que aquela ação grava; mesma lógica de crédito de
+  // api/mp-webhook.js (idempotente por gateway_payment_id, valor não pode passar do saldo,
+  // trigger do banco fecha o honorário quando a soma bate).
+  const mHonorario = extRef.match(/^honorario\|(.+)$/);
+  const mCobrancaAvulsa = extRef.match(/^cobranca_avulsa\|(.+)$/);
+
   try {
     if (tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') {
       if (ehProduto) {
@@ -177,6 +186,93 @@ export default async function handler(req, res) {
         }
         return res.status(200).json({ ok: true, produto: result });
       }
+      if (mHonorario) {
+        const arrId = mHonorario[1];
+        const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_valor,honorarios_status`, {
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
+        });
+        const [arr] = arrRes.ok ? await arrRes.json() : [];
+        if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
+        if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
+          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
+        }
+        const jaRes = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos?gateway_payment_id=eq.${pagReal.id}&select=id&limit=1`, {
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
+        });
+        const [ja] = jaRes.ok ? await jaRes.json() : [];
+        if (ja) return res.status(200).json({ ok: true, duplicado: 'honorario_recebimento' });
+
+        const recR = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${arrId}&status=eq.confirmado&select=valor`, {
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
+        });
+        const confirmados = recR.ok ? await recR.json() : [];
+        const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
+        const total = Number(arr.honorarios_valor) || 0;
+        const esperado = Math.max(0, Math.round((total - jaRecebido) * 100) / 100);
+        if (esperado <= 0 || valor <= 0 || valor > esperado + Math.max(1, esperado * 0.01)) {
+          console.error('[asaas-webhook] honorario valor incompatível', { arrId, valor, esperado, total, jaRecebido });
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
+        }
+        const metodoReal = pagReal.billingType === 'PIX' ? 'pix_asaas' : 'cartao_asaas';
+        const insRes = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos`, {
+          method: 'POST',
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            arrematacao_id: arrId, metodo: metodoReal, valor, status: 'confirmado',
+            justificativa: `Pago via ${pagReal.billingType || 'Asaas'} pelo link de honorários (fallback Asaas — MP recusado)`,
+            gateway_payment_id: String(pagReal.id),
+          }),
+        });
+        if (!insRes.ok) {
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(502).json({ error: 'honorario_insert_falhou' });
+        }
+        try {
+          const posRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=honorarios_status`, {
+            headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
+          });
+          const [pos] = posRes.ok ? await posRes.json() : [];
+          if (pos?.honorarios_status === 'pago') {
+            const { enviarReciboHonorario } = await import('./_honorario-recibo.js');
+            await enviarReciboHonorario(arrId);
+          }
+        } catch (e) { console.error('[asaas-webhook] recibo honorário falhou:', e?.message || e); }
+        return res.status(200).json({ ok: true, honorario: { arrematacao_id: arrId, recebido: valor, saldo_restante: Math.max(0, esperado - valor) } });
+      }
+      if (mCobrancaAvulsa) {
+        const cobId = mCobrancaAvulsa[1];
+        const cobRes = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}&select=id,valor,valor_pago_pix,status,gateway_payment_id`, {
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
+        });
+        const [cob] = cobRes.ok ? await cobRes.json() : [];
+        if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
+        if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
+        if (String(cob.gateway_payment_id || '') === String(pagReal.id)) {
+          return res.status(200).json({ ok: true, duplicado: 'cobranca_avulsa_mesmo_payment' });
+        }
+        const total = Number(cob.valor) || 0;
+        const jaPagoPix = Number(cob.valor_pago_pix) || 0;
+        const esperado = Math.max(0, Math.round((total - jaPagoPix) * 100) / 100);
+        if (esperado <= 0 || valor <= 0 || valor > esperado + Math.max(1, esperado * 0.01)) {
+          console.error('[asaas-webhook] cobranca_avulsa valor incompatível', { cobId, valor, esperado, total, jaPagoPix });
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel' });
+        }
+        const completou = valor >= esperado - Math.max(1, esperado * 0.01);
+        const patchRes = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}`, {
+          method: 'PATCH',
+          headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify(completou
+            ? { status: 'paga', pago_em: new Date().toISOString(), gateway_payment_id: String(pagReal.id), valor_pago_pix: pagReal.billingType === 'PIX' ? jaPagoPix + valor : jaPagoPix }
+            : { valor_pago_pix: jaPagoPix + valor, gateway_payment_id: String(pagReal.id) }),
+        });
+        if (!patchRes.ok) {
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(502).json({ error: 'cobranca_avulsa_patch_falhou' });
+        }
+        return res.status(200).json({ ok: true, cobranca_avulsa: { id: cobId, pago: completou, saldo_restante: completou ? 0 : Math.max(0, esperado - valor) } });
+      }
       const result = await processarConfirmado(contexto);
       return res.status(200).json(result);
     }
@@ -187,11 +283,15 @@ export default async function handler(req, res) {
       // plano_vencimento zerado e documentos com prazo de expiração. Os fluxos de confirmação,
       // chargeback e reembolso já separavam produto × plano; overdue/refused ficaram de fora.
       if (ehProduto) return res.status(200).json({ ok: true, ignorado: 'produto_vencido' });
+      if (mHonorario) return res.status(200).json({ ok: true, ignorado: 'honorario_vencido' });
+      if (mCobrancaAvulsa) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_vencido' });
       const result = await processarVencido(contexto);
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_REFUSED') {
       if (ehProduto) return res.status(200).json({ ok: true, ignorado: 'produto_recusado' });
+      if (mHonorario) return res.status(200).json({ ok: true, ignorado: 'honorario_recusado' });
+      if (mCobrancaAvulsa) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_recusado' });
       const result = await processarRecusado({
         ...contexto,
         motivo: pag?.refusedReason || 'PAYMENT_REFUSED',
@@ -206,6 +306,14 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
+      }
+      if (mHonorario) {
+        const r = await reverterHonorarioEstornado(mHonorario[1], 'chargeback', String(pagReal.id));
+        return res.status(200).json({ ok: true, honorario_estorno: r });
+      }
+      if (mCobrancaAvulsa) {
+        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'chargeback');
+        return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       const result = await processarChargeback({
         ...contexto,
@@ -228,6 +336,16 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
+      }
+      if (mHonorario) {
+        if (parcial) return res.status(200).json({ ok: true, ignorado: 'honorario_reembolso_parcial' });
+        const r = await reverterHonorarioEstornado(mHonorario[1], 'reembolso', String(pagReal.id));
+        return res.status(200).json({ ok: true, honorario_estorno: r });
+      }
+      if (mCobrancaAvulsa) {
+        if (parcial) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_reembolso_parcial' });
+        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'reembolso');
+        return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       const result = await processarReembolso({ ...contexto, suspender: !parcial });
       return res.status(200).json(result);

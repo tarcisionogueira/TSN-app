@@ -360,6 +360,47 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas, parcelasSemJuros);
   const totalFinal = assinatura ? servico.valor : parcelaValor * parcelas;
 
+  // Fallback Asaas (18/09, pedido do dono) — MESMO padrão que Checkout.jsx já usa pra
+  // assinatura de plano ("Continuar pelo Asaas" com 1 clique), estendido aqui pros dois
+  // fluxos sem login que api/asaas.js sabe cobrar (ver ação 'criar_cobranca_fallback'):
+  // honorário de êxito e cobrança avulsa. Sem isso, uma recusa REAL do MP (não só bloqueio
+  // de SDK) virava beco sem saída — precisava alguém gerar um link à parte manualmente
+  // (achado real, 17/09: cliente recusado 4x, escalado até o dono).
+  const propositoFallback = extra.arrematacao_id ? 'honorario_exito' : extra.cobranca_id ? 'cobranca_avulsa' : null;
+  const [mostrarAsaas, setMostrarAsaas] = useState(false);
+  const [cpfAsaas, setCpfAsaas] = useState('');
+  const [enviandoAsaas, setEnviandoAsaas] = useState(false);
+  const [linkAsaasGerado, setLinkAsaasGerado] = useState(false);
+
+  const pagarViaAsaas = async () => {
+    const cpfLimpo = cpfAsaas.replace(/\D/g, '');
+    if (cpfLimpo.length !== 11) { setErro('Informe um CPF válido para continuar pelo Asaas.'); return; }
+    setEnviandoAsaas(true);
+    setErro('');
+    try {
+      const res = await apiCall('/api/asaas', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'criar_cobranca_fallback',
+          proposito: propositoFallback,
+          arrematacao_id: extra.arrematacao_id,
+          cobranca_id: extra.cobranca_id,
+          nome: form.nome || email,
+          email,
+          cpf: cpfLimpo,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.linkPagamento) throw new Error(data?.mensagem || data?.error || 'Não foi possível gerar a cobrança pelo Asaas.');
+      window.open(data.linkPagamento, '_blank', 'noopener');
+      setLinkAsaasGerado(true);
+    } catch (e) {
+      setErro(e.message || 'Erro ao gerar cobrança pelo Asaas.');
+    } finally {
+      setEnviandoAsaas(false);
+    }
+  };
+
   const upd = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
   const fmtNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
   const fmtVal = v => v.replace(/\D/g, '').replace(/^(\d{2})/, '$1/').slice(0, 5);
@@ -498,6 +539,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         return;
       }
       setErro('Pagamento não aprovado. Verifique os dados ou tente outro cartão.');
+      if (propositoFallback) setMostrarAsaas(true);
     } catch (e) {
       // Achado 04/09: mesma classe de falha do assinarComCadastro (Checkout.jsx) - SDK barrado
       // ou createCardToken bloqueado (adblock/privacidade) -, so que aqui a assinatura nao tem
@@ -512,6 +554,9 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       setErro(bloqueado
         ? 'Não conseguimos processar o cartão (ele costuma ser barrado por bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo.'
         : (m || 'Erro ao processar pagamento.'));
+      // Recusa real (não bloqueio de SDK) num fluxo com fallback Asaas disponível — oferece
+      // na hora, sem precisar de alguém gerar um link à parte manualmente.
+      if (!bloqueado && propositoFallback) setMostrarAsaas(true);
     } finally {
       setProcessando(false);
     }
@@ -588,7 +633,27 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         </div>
       )}
 
-      {btn('#0D63DB',
+      {/* Fallback Asaas — cartão recusado no MP, mesma tela oferece continuar pelo backup
+          (18/09, pedido do dono: transparente, sem precisar gerar um segundo link). */}
+      {mostrarAsaas && !linkAsaasGerado && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12.5, color: '#1e40af' }}>
+            O Mercado Pago não aprovou. Você pode tentar pelo <strong>Asaas</strong> (backup seguro) — só precisamos do seu CPF.
+          </div>
+          <input style={inp} placeholder="CPF (000.000.000-00)" value={cpfAsaas}
+            onChange={e => setCpfAsaas(e.target.value.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2'))} />
+          {btn('#0D63DB', enviandoAsaas ? 'Gerando...' : 'Continuar pelo Asaas →', pagarViaAsaas, enviandoAsaas,
+            enviandoAsaas ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <ArrowRight size={15} />)}
+        </div>
+      )}
+      {linkAsaasGerado && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#166534' }}>
+          Abrimos o pagamento pelo Asaas em outra aba. Assim que for confirmado, esta cobrança
+          é atualizada automaticamente — pode fechar esta tela.
+        </div>
+      )}
+
+      {!linkAsaasGerado && btn('#0D63DB',
         processando ? 'Processando...' : `Pagar ${fmtBRL(totalFinal)}`,
         pagar, processando,
         processando ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CreditCard size={16} />
