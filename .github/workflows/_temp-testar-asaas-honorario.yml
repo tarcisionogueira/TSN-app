@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Chamar api/asaas (criar_cobranca_honorario_teste)
         run: |
-          curl -sS -X POST "https://bidprobrasil.com.br/api/asaas" \
+          curl -sSL -X POST "https://bidprobrasil.com.br/api/asaas" \
             -H "Content-Type: application/json" \
             -d "{\"action\":\"criar_cobranca_honorario_teste\",\"arrematacao_id\":\"${{ inputs.arrematacao_id }}\",\"nome\":\"${{ inputs.nome }}\",\"email\":\"${{ inputs.email }}\"}" \
             | tee resposta.json
