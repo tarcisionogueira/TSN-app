@@ -374,7 +374,11 @@ export default async function handler(req, res) {
 
     if (!mpRes.ok) {
       console.error('[mp-checkout] erro MP:', data);
-      return res.status(422).json({ error: 'Pagamento recusado', codigo: data?.cause?.[0]?.code || 'unknown' });
+      // "Pagamento recusado" sozinho é beco sem saída pro cliente (achado 17/09: 3 tentativas
+      // seguidas do mesmo usuário, mesmo erro, sem indicação do que fazer). As outras respostas
+      // de pagamento recusado no app (não-aprovado, PIX indisponível) já orientam o próximo
+      // passo — esta ficava para trás.
+      return res.status(422).json({ error: 'Pagamento recusado. Verifique os dados do cartão ou tente outro cartão.', codigo: data?.cause?.[0]?.code || 'unknown' });
     }
 
     // user_id da auditoria é uuid de USUÁRIO — payerAnchor pode ser um prefixo sintético

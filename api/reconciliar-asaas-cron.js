@@ -24,6 +24,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { supabase, buscarCliente, ativarPlanoDireto, mapearPlano } from './_webhook-core.js';
+import { alertarErro } from './_error-alert.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // externalReference de compra de produto
 
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -31,9 +32,18 @@ const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
   : 'https://api.asaas.com/v3';
 const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
+// FALHA da API (auth/rede/5xx) precisa ser DISTINGUÍVEL de "sem resultados" — um `null`
+// genérico aqui, dentro do laço de paginação abaixo, vira silenciosamente "fim das páginas"
+// e a rede de segurança do Asaas passaria a reportar "ok" mesmo com a chave revogada/expirada
+// (a mesma forma nº 4 já documentada no HANDOFF: null como "acabou").
+class ErroAsaasApi extends Error {}
 async function asaasGet(path) {
   const r = await fetch(`${ASAAS_URL}${path}`, { headers: { access_token: ASAAS_KEY } });
-  return r.ok ? r.json() : null;
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '');
+    throw new ErroAsaasApi(`HTTP ${r.status} em ${path}: ${corpo.slice(0, 300)}`);
+  }
+  return r.json();
 }
 
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
