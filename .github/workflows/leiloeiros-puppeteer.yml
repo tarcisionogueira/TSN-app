@@ -17,6 +17,10 @@ on:
         description: 'LJUD: lotes/run para o backfill de foto via og:image (default 60/dia). Suba só num dispatch manual pra acelerar o backlog — NÃO mude o cron diário: a fila inteira (MEGA→WEBLEILOES) já encostou no timeout de 150min antes (09-12/08).'
         required: false
         default: ''
+      superbid_galeria:
+        description: '1 = captura a galeria completa de fotos do Superbid/SOLD/SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES (2ª passada de paginação, dobra as requisições dessas 7 fontes). Teste num dispatch manual primeiro e meça o tempo antes de considerar ligar no cron diário — mesmo motivo do ljud_foto_max.'
+        required: false
+        default: '0'
 
 jobs:
   scraper-puppeteer:
@@ -62,6 +66,7 @@ jobs:
           SCRAPER_EXCLUIR: VENDASGOV
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
           LJUD_FOTO_MAX: ${{ github.event.inputs.ljud_foto_max }}
+          SUPERBID_GALERIA: ${{ github.event.inputs.superbid_galeria || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 
       # `cancelled()` junto com `failure()`: estourar o timeout-minutes NAO e failure para o

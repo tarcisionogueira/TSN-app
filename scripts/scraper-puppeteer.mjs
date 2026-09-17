@@ -913,11 +913,24 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 
+  // GALERIA (17/09, achado do dono, recon em scripts/recon-superbid-fotos.mjs): a API tem
+  // `product.galleryJson` (array com `.link` por foto — mesma fonte do `thumbnailUrl` de
+  // hoje, só que com TODAS as fotos, não só a capa). MAS combinar `galleryJson` com o
+  // fieldList normal quebra `linkURL` (testado: 0 de 20 ofertas trouxeram linkURL com
+  // galleryJson no mesmo fieldList — a API descarta campo antigo em silêncio quando o
+  // fieldList tem esse campo nele). A única forma confirmada de ler `galleryJson` de
+  // verdade é SEM fieldList nenhum (payload cheio, como o próprio site usa). Por isso é
+  // uma SEGUNDA passada de paginação, não um campo a mais na primeira — dobra as
+  // requisições (sem custo de Bright Data, é fetch grátis dentro do navegador), então fica
+  // OPT-IN (SUPERBID_GALERIA=1) até medir o tempo real de uma rodada completa; o cron
+  // diário não liga sozinho (ver leiloeiros-puppeteer.yml).
+  const buscarGaleria = process.env.SUPERBID_GALERIA === '1';
+
   try {
     await page.goto(`${baseSite}/categorias/imoveis`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 2500));
 
-    const offers = await page.evaluate(async ([portal, lojas]) => {
+    const { offers, galeriaPorId } = await page.evaluate(async ([portal, lojas, comGaleria]) => {
       const FIELDS_BASE = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
       // Campos de DOCUMENTO (edital/matrícula/laudo). Candidatos — a API ignora os
       // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
@@ -948,10 +961,40 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
           if (arr.length < PS) break;
         }
       }
-      return all;
-    }, [portalId, stores || null]);
 
-    console.log(`    ${leiloeiro}: ${offers.length} offers abertas coletadas`);
+      // Segunda passada, SEM fieldList (payload cheio) — só assim `product.galleryJson`
+      // sobrevive. Extrai só id+link de cada foto e descarta o resto na hora, pra não
+      // segurar payload gigante em memória.
+      const galeria = {};
+      if (comGaleria) {
+        const apiUrlCheia = lojas
+          ? (n) => `https://offer-query.superbid.net/offers/?filter=stores.id:${lojas}&locale=pt_BR&orderBy=endDate:asc&pageNumber=${n}&pageSize=${PS}&portalId=[2,15]&preOrderBy=orderByFirstOpenedOffers&requestOrigin=store&searchType=opened&timeZoneId=UTC`
+          : (n) => `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=${PS}&orderBy=endDate:asc`;
+        for (let n = 1; n <= 100; n++) {
+          let arr;
+          try {
+            const r = await fetch(apiUrlCheia(n), { headers: { Accept: 'application/json' } });
+            if (!r.ok) break;
+            const d = await r.json();
+            arr = d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []);
+          } catch { break; } // padrao-ok: mesma lógica do `buscar()` logo acima nesta função — passada de GALERIA é aditiva/best-effort (SUPERBID_GALERIA opt-in); falha de rede só encerra a paginação da galeria, nunca derruba `offers` (já coletado antes) nem o scrape principal
+          if (!arr || !arr.length) break;
+          for (const of of arr) {
+            const gid = of.id || of.offerId;
+            const g = of.product?.galleryJson;
+            if (gid && Array.isArray(g) && g.length) {
+              const links = g.map(f => f?.link).filter(Boolean);
+              if (links.length) galeria[gid] = links;
+            }
+          }
+          if (arr.length < PS) break;
+        }
+      }
+
+      return { offers: all, galeriaPorId: galeria };
+    }, [portalId, stores || null, buscarGaleria]);
+
+    console.log(`    ${leiloeiro}: ${offers.length} offers abertas coletadas${buscarGaleria ? ` · galeria capturada em ${Object.keys(galeriaPorId).length} oferta(s)` : ''}`);
     const seen = new Set();
     const str = v => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
     const imoveis = offers.map(of => {
@@ -1062,7 +1105,12 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         ocupacao: ext.ocupacao || null,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
         link_edital: loteUrl,
-        link_foto: p.thumbnailUrl || null,
+        // Galeria (17/09): `galeriaPorId` só vem preenchido com SUPERBID_GALERIA=1 (ver
+        // acima) — sem isso, `fotosGaleria` fica `[]` e o comportamento é IDÊNTICO a antes
+        // (só a capa via thumbnailUrl). link_foto prefere thumbnailUrl (mesmo campo de
+        // sempre); cai pra 1ª da galeria só se a API não tiver mandado capa nenhuma.
+        link_foto: p.thumbnailUrl || (galeriaPorId[id]?.[0]) || null,
+        fotos: galeriaPorId[id]?.length ? galeriaPorId[id] : undefined,
         url_lote: loteUrl,
         ...(anexos ? { anexos } : {}),
         // Sub-portais: o leiloeiro real é a "loja" (store) de cada oferta; cai no
