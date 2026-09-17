@@ -366,8 +366,21 @@ async function editalPorVisao(url, imovelId, fim, alvo = {}) {
             + '  - Se o edital der uma data só para a praça, ponha em "inicio" e deixe "fim" vazio. NÃO deduza o encerramento.\n'
             + '  - "valor": o lance mínimo da praça. Se o edital der uma REGRA em vez de um número ("no mínimo 60% do valor da avaliação"), calcule sobre a avaliação DESTE lote.\n'
             + '  - Se houver 2ª praça, INCLUA as duas.\n'
-            + 'NÃO invente: campo que o edital não afirma vai "" (texto), 0 (número) ou [] (lista). Use ponto decimal.\n'
-            + 'Retorne SOMENTE: {"descricaoImovel":"","tipoImovel":"","areaConstruidaM2":0,"areaTerrenoM2":0,"enderecoCompleto":"","pracas":[]}' },
+            // FORMA DE PAGAMENTO NUNCA ERA PEDIDA AQUI (17/09) — o prompt só pedia descrição/
+            // área/praças, então todo edital ESCANEADO (a maioria) publicava relatório com
+            // pagamento sempre vazio, mesmo quando o documento tratava do assunto com clareza.
+            // Achado real: lote ZUK Z37342 ("é permitido o parcelamento..."), a leitura por
+            // visão confirmou identidade/praças e devolveu pagamento em branco porque NINGUÉM
+            // perguntou. Pede os mesmos sinais que a extração de TEXTO já usa (ver
+            // extrairPagamentoTexto em _doc-extracao.js), para o resto do pipeline (auditoria,
+            // autocorreção de forma_pagamento) tratar os dois caminhos do mesmo jeito.
+            + '• "condicoesPagamento": frase(s) do edital sobre forma de pagamento/parcelamento/sinal/comissão (texto corrido, até 400 caracteres, cite como o edital escreve). "" se o edital não tratar disso.\n'
+            + '• "parcelamentoPermitido": true se o edital permite parcelar o valor do arremate (mesmo sem dizer quantas vezes), false se disser explicitamente que o pagamento é só à vista, null se o edital não afirmar nada sobre isso.\n'
+            + '• "parcelas": número de parcelas, SÓ se o edital declarar um número explícito (ex.: "em até 60 parcelas" → 60). 0 se não constar.\n'
+            + '• "sinalPct": percentual de sinal/entrada exigido no ato, se declarado. 0 se não constar.\n'
+            + '• "financiavel": true se o edital permitir financiamento bancário/habitacional/FGTS, false/null caso contrário.\n'
+            + 'NÃO invente: campo que o edital não afirma vai "" (texto), 0 (número), null ou [] (lista). Use ponto decimal.\n'
+            + 'Retorne SOMENTE: {"descricaoImovel":"","tipoImovel":"","areaConstruidaM2":0,"areaTerrenoM2":0,"enderecoCompleto":"","pracas":[],"condicoesPagamento":"","parcelamentoPermitido":null,"parcelas":0,"sinalPct":0,"financiavel":null}' },
         ] }],
       }),
     }, { retries: 1, timeoutMs: Math.max(15000, Math.min(60000, fim - Date.now())), noFallback: true });
@@ -401,6 +414,11 @@ async function editalPorVisao(url, imovelId, fim, alvo = {}) {
       areaTerrenoM2: num(j.areaTerrenoM2),
       enderecoCompleto: String(j.enderecoCompleto || '').slice(0, 240) || null,
       pracas,
+      condicoesPagamento: String(j.condicoesPagamento || '').slice(0, 400) || null,
+      parcelamentoPermitido: j.parcelamentoPermitido === true ? true : (j.parcelamentoPermitido === false ? false : null),
+      parcelas: (() => { const n = Number(j.parcelas); return n >= 2 && n <= 420 ? n : null; })(),
+      sinalPct: (() => { const n = Number(j.sinalPct); return n > 0 && n <= 100 ? n : null; })(),
+      financiavel: j.financiavel === true ? true : null,
     };
     // VAZIO NÃO É LEITURA. Se nada de substantivo veio, isto é uma falha — não um edital sem
     // conteúdo. Registrar `null` aqui evita gravar um "li e não achei nada" que o chamador
@@ -507,6 +525,22 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
         // visão devolveu alguma praça com valor, ele PRECISA bater com este lote (mesma banda
         // 0,3x-3,4x do lance mínimo usada no caminho de texto) — senão a identidade/datas são
         // descartadas antes mesmo de chegar no `pertence` genérico.
+        // PAGAMENTO PELA VISÃO (17/09) — não depende da banda de valor da praça (é cláusula
+        // do edital, não dado numérico deste lote específico), então monta fora do `if
+        // visPertence` abaixo. `cond` ganha SÓ `formaPagamento` — nunca `pracas`/`avaliacao`,
+        // que continuam null de propósito na visão (ver comentário original abaixo).
+        if (vis.condicoesPagamento) cond = { formaPagamento: vis.condicoesPagamento };
+        if (vis.condicoesPagamento || vis.parcelamentoPermitido !== null || vis.parcelas || vis.sinalPct || vis.financiavel === true) {
+          pagamento = {
+            aVista: vis.parcelamentoPermitido === false ? true : null,
+            parcelas: vis.parcelas || null,
+            sinalPct: vis.sinalPct || null,
+            caucaoPct: null, comissaoPct: null, prazoDias: null,
+            financiavel: vis.financiavel === true ? true : null,
+            fgts: null,
+            parcelamentoPermitido: vis.parcelamentoPermitido === true ? true : null,
+          };
+        }
         const vminChk = Number(im.valor_minimo) || 0;
         const visPertence = !(vminChk > 0 && pracasVisao.some((p) => p.valor > 0))
           || pracasVisao.some((p) => p.valor > 0 && p.valor >= vminChk * 0.3 && p.valor <= vminChk * 3.4);
@@ -514,11 +548,14 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
           console.log('[edital-visao]', JSON.stringify({ imovel: String(imovelId), motivo: 'praca da visao fora da banda do lance minimo — descartada', vmin: vminChk, pracasVisao }));
           identidade = null; datas = null; pracasVisao = [];
         } else {
-          const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}) }, via: 'visao', confianca: 80 };
+          const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}), ...(cond?.formaPagamento ? { condicoes: cond } : {}), ...(pagamento ? { pagamento } : {}) }, via: 'visao', confianca: 80 };
           await cacheGravar(chaveUrl(url), metaVis);
         }
-        // `cond` segue null de propósito: condições de arremate NÃO foram lidas, e fabricá-las
-        // para "completar o registro" seria exatamente o defeito que este arquivo combate.
+        // `cond`/`pagamento` continuam null quando o edital não trata de forma de pagamento —
+        // fabricá-los para "completar o registro" seria exatamente o defeito que este arquivo
+        // combate. `cond.pracas`/`cond.avaliacao` seguem SEMPRE ausentes na visão: essas duas
+        // dependem da leitura de TEXTO (extrairCondicoes) para a banda de valor abaixo não
+        // confundir lote (ver comentário da rede de segurança logo acima).
       } else {
       // Isola o bloco DESTE lote quando o PDF reúne vários (ver isolarBlocoDoLote acima).
       // `null` = documento de lote único (ou nenhum bloco bateu com os valores conhecidos) —
