@@ -179,6 +179,24 @@ export function extrairPagamentoTexto(texto) {
 }
 
 /**
+ * CASCATA DE FORÇA DA CONDIÇÃO DE PAGAMENTO (17/09→18/09) — extraída de
+ * `api/gerar-analise.js` para ter UMA fonte só: o que a leitura do documento apurou >
+ * o edital > a ficha oficial da Caixa > o que o leiloeiro anunciou no título. Antes
+ * vivia duplicada (a auditoria final recalculava do zero), e a duplicação é exatamente
+ * o tipo de coisa que diverge sem ninguém notar.
+ */
+export function resolverPagamentoDoc({ docFatos, fichaCef, titulo, regrasPagamentoEdital } = {}) {
+  const fc = fichaCef || {};
+  const fcFin = String(fc.financiamento ?? '') === 'true' || fc.financiamento === true;
+  const fcFgts = String(fc.fgts ?? '') === 'true' || fc.fgts === true;
+  const pagCef = (fcFin || fcFgts) ? { financiavel: fcFin || null, fgts: fcFgts || null, origem: 'ficha_cef' } : null;
+  return docFatos
+    || regrasPagamentoEdital
+    || pagCef
+    || (titulo ? { ...(extrairPagamentoTexto(String(titulo)) || {}), origem: 'titulo' } : null);
+}
+
+/**
  * CUSTOS DECLARADOS NO DOCUMENTO (custo zero) — o que faltava para a PROJEÇÃO usar
  * número do EDITAL em vez de premissa (pedido do dono, 06/08: "caso a comissão mude,
  * caso haja taxa administrativa, caso haja informe de IPTU/condomínio, tudo isso dá

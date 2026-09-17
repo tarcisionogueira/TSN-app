@@ -18,7 +18,7 @@ import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { auditarMercadologico } from './_auditoria-relatorio.js';
-import { extrairPagamentoTexto } from './_doc-extracao.js';
+import { resolverPagamentoDoc } from './_doc-extracao.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
@@ -2411,7 +2411,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,titulo&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
@@ -3107,6 +3107,25 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // (b) RE-TENTAMOS a redação, já que a busca de mercado (a etapa CARA) já foi paga — não
     // desperdiça o custo por causa de um 429/overloaded transitório.
     const parecerDiag = { tinhaInputs: !!parecerInputs?.d, restanteInicio: Math.round(restante()), tentativas: 0 };
+    // CONTRADIÇÃO À VISTA × DOCUMENTO, CEDO (18/09) — achado investigando o lote ZUK: o
+    // `forma_pagamento='a_vista'` do acervo chega ao PARECER via `pInp.somenteAVista` (o
+    // MESMO campo que a tela usa para desabilitar o cenário financiado) e trava capital,
+    // ROI e teto de lance no cenário à vista — ANTES de este arquivo, mais abaixo, checar
+    // o documento e mostrar ao cliente a ressalva "pagamento contradiz documento". O
+    // relatório saía com a ressalva visível E os números por baixo dela ainda calculados
+    // com a premissa errada. Aqui é a MESMA cascata de força (doc > edital > ficha CEF >
+    // título), só que ANTES do parecer usar `somenteAVista` — só desarma o "à vista" (não
+    // reescreve pro cenário oposto) quando o sinal é FORTE, mesmo critério do self-heal
+    // de `forma_pagamento` logo abaixo neste arquivo.
+    const pagamentoDocCedo = resolverPagamentoDoc({
+      docFatos: imDb?.doc_fatos?.pagamento,
+      fichaCef: imDb?.ficha_cef,
+      titulo: imDb?.titulo,
+      regrasPagamentoEdital: mercado?.condicoesEdital?.regrasPagamento,
+    });
+    const pagamentoContraditorio = String(imDb?.forma_pagamento || '') === 'a_vista' && !!pagamentoDocCedo
+      && (pagamentoDocCedo.financiavel === true || Number(pagamentoDocCedo.parcelas) >= 2 || pagamentoDocCedo.fgts === true || pagamentoDocCedo.parcelamentoPermitido === true);
+    if (pagamentoContraditorio) parecerDiag.pagamentoContraditorio = true;
     // Só gera o parecer se ainda houver orçamento (a pesquisa de mercado é a etapa cara e já
     // rodou). Sem tempo, ENTREGA o relatório de mercado SEM o parecer — melhor que estourar o
     // deadline e perder TUDO. O parecer curto (regen) pode vir depois.
@@ -3167,7 +3186,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // razão; o terceiro relatório era o mensageiro, não o bug. Agora o servidor
         // recalcula com o valor que ele mesmo descobriu, usando a MESMA função pura da
         // tela, para que parecer, laudo e tela falem do mesmo imóvel.
-        const isAVistaParecer = parecerInputs.cenario === 'À Vista' || !!pInp.somenteAVista;
+        const isAVistaParecer = parecerInputs.cenario === 'À Vista' || (!!pInp.somenteAVista && !pagamentoContraditorio);
         let metricasParecer = parecerInputs.metricas || {};
         const vmCliente = Number(parecerInputs.d?.valorMercado) || 0;
         const vmServidor = Number(pInp.valorMercado) || 0;
@@ -3175,9 +3194,14 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // outro (>2% de diferença), quando o aluguel entrou só agora (yield estava 0) ou
         // quando as métricas vieram vazias/zeradas.
         const aluguelEntrouAgora = locacaoCliente <= 0 && aluguelServidor > 0;
-        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora)
+        // `pagamentoContraditorio` força o recálculo mesmo quando valor de mercado e
+        // métricas já vieram "prontos" do cliente — sem isto, o cenário à vista errado
+        // (calculado no CLIENTE, antes de existir qualquer checagem de documento) passava
+        // batido intacto pelo servidor.
+        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora || pagamentoContraditorio)
           && (vmCliente <= 0
             || aluguelEntrouAgora
+            || pagamentoContraditorio
             || (vmServidor > 0 && Math.abs(vmServidor - vmCliente) / vmServidor > 0.02)
             || !(Number(metricasParecer.capitalMobilizado) > 0));
         if (precisaRecalcular) {
@@ -3422,27 +3446,27 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         // ignorava. Medido: 8 lotes com `financiamento: true` gravados como `a_vista`
         // (erro direto) e 7.191 que aceitam FGTS tratados como pagamento à vista. Não é
         // leitura de documento nem chamada de IA: o dado está no acervo desde a captura.
-        const fc = ix?.ficha_cef || {};
-        const fcFin = String(fc.financiamento ?? '') === 'true' || fc.financiamento === true;
-        const fcFgts = String(fc.fgts ?? '') === 'true' || fc.fgts === true;
-        const pagCef = (fcFin || fcFgts) ? { financiavel: fcFin || null, fgts: fcFgts || null, origem: 'ficha_cef' } : null;
         // CONDIÇÃO DE PAGAMENTO PUBLICADA PELO LEILOEIRO NO PRÓPRIO TÍTULO. "Entrada 30% +
         // 240x" está na chamada da oferta e era simplesmente ignorado — o acervo gravava
         // `a_vista` e a tela desabilitava o cenário financiado. Ler daqui é determinístico
         // e custo zero; a leitura do edital continua sendo a fonte mais forte quando existe.
-        // Ordem de força: o que a leitura do documento apurou > o edital > a ficha oficial
-        // da Caixa > o que o leiloeiro anunciou no título.
-        pagamentoDoc = ix?.doc_fatos?.pagamento
-          // 17/09: a chave real do objeto é `regrasPagamento` (ver montagem em
-          // `condicoesEdital` logo acima) — `.pagamento` nunca existiu, e por isso este
-          // sinal (o mais forte da cadeia, a leitura do PRÓPRIO edital) nunca disparava.
-          // Achado ao investigar lote ZUK com "parcelamento" no edital gravado como
-          // `a_vista`: `regrasPagamento` já vinha `null` porque o regex de citação e o de
-          // extração estruturada (abaixo) também não reconheciam "parcelamento" — os três
-          // defeitos se somavam e o sinal nunca chegava a existir.
-          || result?.mercado?.condicoesEdital?.regrasPagamento
-          || pagCef
-          || (ix?.titulo ? { ...(extrairPagamentoTexto(String(ix.titulo)) || {}), origem: 'titulo' } : null);
+        // Ordem de força (em `resolverPagamentoDoc`, api/_doc-extracao.js — MESMA cascata
+        // usada mais acima neste arquivo antes do parecer, 18/09): o que a leitura do
+        // documento apurou > o edital > a ficha oficial da Caixa > o que o leiloeiro
+        // anunciou no título.
+        // 17/09: a chave real do objeto é `regrasPagamento` (ver montagem em
+        // `condicoesEdital` logo acima) — `.pagamento` nunca existiu, e por isso este
+        // sinal (o mais forte da cadeia, a leitura do PRÓPRIO edital) nunca disparava.
+        // Achado ao investigar lote ZUK com "parcelamento" no edital gravado como
+        // `a_vista`: `regrasPagamento` já vinha `null` porque o regex de citação e o de
+        // extração estruturada também não reconheciam "parcelamento" — os três defeitos
+        // se somavam e o sinal nunca chegava a existir.
+        pagamentoDoc = resolverPagamentoDoc({
+          docFatos: ix?.doc_fatos?.pagamento,
+          fichaCef: ix?.ficha_cef,
+          titulo: ix?.titulo,
+          regrasPagamentoEdital: result?.mercado?.condicoesEdital?.regrasPagamento,
+        });
         // Publica na ficha do imóvel para a TELA parar de travar o cenário financiado e o
         // cliente ver a condição real — foi por não estar publicada que ela se perdeu.
         if (pagamentoDoc && (Number(pagamentoDoc.parcelas) >= 2 || Number(pagamentoDoc.sinalPct) > 0 || pagamentoDoc.financiavel === true || pagamentoDoc.parcelamentoPermitido === true)) {
