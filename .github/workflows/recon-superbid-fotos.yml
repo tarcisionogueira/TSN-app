@@ -1,0 +1,36 @@
+name: Recon Superbid — campo de galeria de fotos (diagnóstico)
+
+# Descartável: descobre o nome real do campo de galeria na API offer-query.superbid.net
+# antes de mexer em scraperSuperbidNet (que hoje só pega product.thumbnailUrl — 1 foto
+# só, e serve 7 fontes: SUPERBID/SOLD/SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES).
+# Não escreve no banco — só imprime o payload da API no log.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Run recon
+        run: node scripts/recon-superbid-fotos.mjs
