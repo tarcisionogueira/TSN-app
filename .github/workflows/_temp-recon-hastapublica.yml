@@ -1,10 +1,10 @@
-name: _temp Recon Radar Gaps Puppeteer
+name: _temp Recon HastaPublica Puppeteer
 
 on:
   workflow_dispatch:
 
 jobs:
-  recon-radar-gaps-puppeteer:
+  recon-hastapublica:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,5 +23,5 @@ jobs:
             libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
             libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
-      - name: Recon radar gaps via Puppeteer
-        run: node scripts/recon-radar-gaps-puppeteer.mjs
+      - name: Recon HastaPublica via Puppeteer
+        run: node scripts/recon-hastapublica-puppeteer.mjs
