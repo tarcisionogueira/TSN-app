@@ -10,9 +10,20 @@ const BASE = 'https://www.albertomacedoleiloes.com.br';
 const LOTE_URL = process.env.LOTE_URL || `${BASE}/lote/2-lote-residencial-buri-residence`;
 
 async function buscar(url) {
-  const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+  const r = await fetch(url, {
+    headers: {
+      'User-Agent': UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'Upgrade-Insecure-Requests': '1',
+    },
+  });
   const html = await r.text();
-  return { status: r.status, html };
+  const headers = Object.fromEntries(r.headers.entries());
+  return { status: r.status, html, headers };
 }
 
 function textoDe(html) {
@@ -42,6 +53,8 @@ async function main() {
   console.log(`1) Abrindo direto a URL do lote reportada: ${LOTE_URL}`);
   const det = await buscar(LOTE_URL);
   console.log(`  status: ${det.status} · html: ${det.html.length} chars`);
+  console.log(`  headers: server=${det.headers.server || '?'} cf-ray=${det.headers['cf-ray'] || '?'} cf-mitigated=${det.headers['cf-mitigated'] || '?'}`);
+  if (det.status !== 200) console.log(`  corpo (500 chars): "${textoDe(det.html).slice(0, 500)}"`);
   if (det.status === 200) {
     const txt = textoDe(det.html);
     console.log(`  texto visível (1500 chars): "${txt.slice(0, 1500)}"`);
@@ -58,6 +71,8 @@ async function main() {
   console.log(`\n2) Abrindo a HOME (${BASE}/) — /lote/ aparece linkado direto?`);
   const home = await buscar(`${BASE}/`);
   console.log(`  status: ${home.status} · html: ${home.html.length} chars`);
+  console.log(`  headers: server=${home.headers.server || '?'} cf-ray=${home.headers['cf-ray'] || '?'}`);
+  if (home.status !== 200) console.log(`  corpo (500 chars): "${textoDe(home.html).slice(0, 500)}"`);
   const linksHome = linksInternos(home.html, BASE);
   const loteNaHome = linksHome.filter(u => /\/lote\//i.test(u));
   const leilaoNaHome = linksHome.filter(u => /\/leilao\//i.test(u));
