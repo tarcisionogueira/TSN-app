@@ -55,7 +55,44 @@ identificadas sem scraper); `cadastro_barrado` (residual, some sozinho ~20/09);
 `qa_invariantes_lenta` (painel lento, índice pendente); `fonte_cega_no_monitor` (falso-
 positivo permanente do EDITAL_DJEN no invariante SQL, documentado, não corrigido — risco alto
 pra função de ~50 checks). **RISCADA hoje**: contaminação de dados entre lotes em PDFs
-multi-lote — `publicarFatosDoPdf` corrigido, ver seção própria abaixo.
+multi-lote — `publicarFatosDoPdf` corrigido, ver seção própria abaixo. **NOVA hoje**:
+`extrairIdentidadeTexto` pega endereço do leiloeiro/cabeçalho em vez do imóvel, milhares de
+registros na base (PESTANA, HASTA, ZUK, BIASI, MEGA, FRAZAO, LJUD, CALIL, TORRES3 e outras
+menores) — só documentado, dono pediu para não corrigir agora, ver seção própria acima.
+
+---
+
+## 🔎 17/09 — ACHADO (NÃO CORRIGIDO, decisão do dono): `extrairIdentidadeTexto` pega endereço do LEILOEIRO/cabeçalho, não do imóvel
+
+Achado durante a auditoria retroativa da contaminação entre lotes (seção abaixo) — é um bug
+**diferente e maior**, não coberto pelo `isolarBlocoDoLote` que acabou de ser corrigido.
+**Instrução do dono: só documentar, não mexer agora** — fica registrado aqui como pendência de
+refator maior, mesmo padrão da lista amarela.
+
+**O mecanismo**: `extrairIdentidadeTexto()` (`api/_doc-extracao.js`) é uma extração por
+âncora — acha "condomínio/edifício/residencial/empreendimento", depois
+"rua/avenida/travessa/alameda/rodovia/estrada/praça", depois "bairro", e pega os próximos
+tokens plausíveis como nome. Em escala, ela frequentemente âncora no endereço do
+**escritório do leiloeiro** (que aparece no cabeçalho/rodapé de praticamente todo edital) ou em
+**título de seção do documento** ("DAS CONDIÇÕES DE VENDA", etc.) em vez do endereço real do
+imóvel — e isso acontece mesmo em documento de **lote único**, então `isolarBlocoDoLote` (que
+resolve vazamento ENTRE lotes de um mesmo PDF) não protege contra isto.
+
+**Escala medida** (contagem de registros com suspeita de identidade capturada errado, por
+`fonte`, piso ≥5 usado no levantamento): PESTANA 1.115 · HASTA 571 · ZUK 562 · BIASI 839
+(combinado) · MEGA 543 · FRAZAO 172 · LJUD 238 (combinado) · CALIL 169 · TORRES3 82 — e mais
+fontes abaixo do piso de 5. Isto é **na base inteira**, não um caso isolado.
+
+**Por que importa além do card de identidade**: `nomeCondominio` (produto desta mesma função)
+alimenta `api/gerar-analise.js:620` como âncora de busca de comparáveis no relatório
+mercadológico (`condAlvo`). Se a âncora for o nome/endereço do leiloeiro em vez do
+condomínio real, a busca de comparáveis pode sair pesquisando o lugar errado — impacto
+potencial na acurácia do mercadológico em escala, não confirmado caso a caso.
+
+**Não fiz**: nenhuma correção de código. Fica para sessão dedicada (refator maior, precisa de
+critério melhor que âncora-e-pega-o-próximo-token — provavelmente algo que valide o endereço
+achado contra o `bairro`/cidade conhecidos do imóvel, ou que exclua explicitamente o bloco de
+cabeçalho/rodapé do leiloeiro antes de âncorar).
 
 ---
 
