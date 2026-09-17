@@ -9,6 +9,56 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📋 FECHAMENTO DA SESSÃO 17/09 — resumo pra abrir amanhã sem reler tudo
+
+**8 itens resolvidos, 2 features novas no ar, 1 achado parcial em acompanhamento.** Nesta
+ordem: confirmei SBID21 vivo → achei e corrigi vazamento internacional (Peru+Argentina, 35
+lotes) com UF brasileira falsa → Neuma Nogueira riscada (resolveu sozinha) → Zuk veículos
+confirmado estável (4 rodadas seguidas) → limpei lote-lixo do `uf_cef_congelada` (achado
+parcial, AP segue parado — ver -6 abaixo) → corrigi `foto_repetida_como_lote` (LEFFA servindo
+a própria logo como foto, 73% do acervo) → conferi o resto do `qa_invariantes()` amarelo (1
+falso-positivo documentado, resto sem ação) → **feature nova**: filtro "Leilão negativo" +
+retenção de 15 dias em Veículos → **feature nova**: fluxo completo de proposta de compra
+direta ao leiloeiro. Todos os commits já em `main`, deploy confirmado até o penúltimo; o
+último (`53b15e7`, a proposta ao leiloeiro) ficou de confirmar — checar
+`mcp__Vercel__get_deployment` ou `list_deployments` amanhã se não tiver sido confirmado ainda
+nesta mesma conversa.
+
+**O que fica pra amanhã (nesta ordem de prioridade):**
+1. 🔴 **Franco Leilões** — dono ia rodar `scripts/_recon-francoleiloes-headless.mjs` no runner
+   residencial (WSL); ainda sem retorno. Arquivos temporários (`scripts/_recon-francoleiloes-
+   headless.mjs` + `.github/workflows/_recon-francoleiloes-headless.yml`) continuam no repo até
+   o resultado chegar — não limpar sozinho.
+2. 🟡 **`uf_cef_congelada` ainda alerta** — não é mais o lote-lixo (já limpo), é **AP** (Amapá)
+   parado há 7+ dias, 7 imóveis ativos. Provável só baixo volume (é o estado com menos imóveis
+   da Caixa do país), não bug — mas não investiguei fundo. Reconferir se persistir.
+3. 🔴 **Google Cloud "BidPro métricas diárias"** — projeto-sombra do próprio Google; só o dono
+   consegue checar quem/quando criou (Console → IAM/Faturamento).
+4. 🔴 **Instagram** — Verificação de Negócio parada no Meta Business Manager; 7 rascunhos de
+   resposta esperando em `/admin/instagram`.
+5. **Feature nova de hoje, sem validação end-to-end ainda**: o fluxo de proposta ao leiloeiro
+   (`api/propor-veiculo-leiloeiro.js`) nunca foi testado com um envio real — a maioria das
+   fontes de veículo provavelmente ainda não tem e-mail capturado em `leiloeiro_contato`
+   (a captura foi centralizada em `salvarVeiculos` hoje, mas só populará depois da PRÓXIMA
+   rodada do cron de veículos, 12h UTC). Primeira tentativa de uso real pode cair em
+   "sem_contato" — não é bug, é esperado até o cron rodar pelo menos uma vez com o código novo.
+6. **`retencaoVeiculosVencidos()` ainda não desativou nada de verdade** (0 veículos passam de
+   15 dias hoje) — primeira desativação real só daqui a alguns dias; vale conferir que rodou
+   sem erro no log do `veiculos-puppeteer.yml` quando tiver histórico suficiente.
+
+**Pendências antigas, sem mudança hoje (lista amarela, baixa prioridade)**: `data_leilao`
+ausente em CEF/FERREIRALEIL/GESTAOLEILOES/PECINI (bloqueio de IP, decisão de investimento
+pendente); PECINI no runner residencial (passa Cloudflare, página genérica); contaminação de
+dados entre lotes em PDFs multi-lote (refator maior, aguarda priorização); e-mail de resgate
+no cancelamento / corridas de e-mail duplicado (corrigidos por leitura de código, não
+validados contra caso real); cobertura de veículos baixa (7 de 62 leiloeiros, 5 fontes novas
+identificadas sem scraper); `cadastro_barrado` (residual, some sozinho ~20/09);
+`qa_invariantes_lenta` (painel lento, índice pendente); `fonte_cega_no_monitor` (falso-
+positivo permanente do EDITAL_DJEN no invariante SQL, documentado, não corrigido — risco alto
+pra função de ~50 checks).
+
+---
+
 -9. ✅ **NOVO 17/09 — Filtro "Leilão negativo" em Veículos + retenção de 15 dias + captura de
    e-mail do leiloeiro centralizada.** Pedido do dono: achar veículos com leilão sem comprador
    pra propor venda direta com o leiloeiro (pode render fruto). Três descobertas antes de
