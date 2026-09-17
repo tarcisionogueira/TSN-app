@@ -9,6 +9,13 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-4. ✅ **RESOLVIDO 17/09 — Neuma Nogueira (top2) já resolveu sozinha, riscar da lista de contato
+   pessoal.** Pendência vinha desde 10/09 ("cliente pagante que travou 14x, bug já corrigido no
+   mesmo dia, mas nunca tentou de novo — vale contato pessoal pra avisar que já funciona").
+   Conferido hoje: ela gerou **1 análise de mercado em 16/09**, sem nenhum erro novo em
+   `erros_cliente`. Voltou a usar sozinha antes de qualquer contato. Não precisa mais de
+   resgate — no máximo um follow-up de satisfação, sem urgência.
+
 -3. ✅ **RESOLVIDO 17/09 — SBID21 confirmado vivo (sub-portal 21 da rede Superbid); achado no
    caminho e corrigido: vazamento de imóvel ESTRANGEIRO com UF brasileira FALSA.** Dono pediu
    pra confirmar se SBID21 ainda existia (item vermelho do handoff anterior). Confirmado: existe,
