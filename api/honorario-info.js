@@ -44,9 +44,11 @@ export default async function handler(req) {
     // efetivamente cobra (api/mp-checkout.js lê os mesmos honorarios_recebimentos). Sem
     // isto a tela mostrava "Valor a pagar: R$ 54.835,52" com R$ 2.163,00 já recebidos e
     // o checkout, por baixo, cobrando certo R$ 52.672,52 — número visível ≠ número cobrado.
-    // metodo+valor só — NUNCA justificativa/comprovante aqui (podem citar nome/CPF de
-    // terceiro, ex. emitente de cheque repassado; esta rota é pública, sem login).
-    fetch(`${SUPABASE_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${encodeURIComponent(id)}&status=eq.confirmado&order=criado_em.asc&select=metodo,valor`, {
+    // metodo+valor+banco+numero_cheque (18/09) — banco/número identificam o INSTRUMENTO
+    // (o cheque em si), não uma pessoa, e ajudam o pagador a reconhecer a própria parte já
+    // paga. NUNCA justificativa/comprovante aqui (podem citar nome/CPF de terceiro, ex.
+    // emitente de cheque repassado; esta rota é pública, sem login).
+    fetch(`${SUPABASE_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${encodeURIComponent(id)}&status=eq.confirmado&order=criado_em.asc&select=metodo,valor,banco,numero_cheque`, {
       headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
     }),
   ]);
@@ -74,7 +76,7 @@ export default async function handler(req) {
     honorarios_recebido: recebido,
     honorarios_saldo_restante: saldoRestante,
     honorarios_status: arr.honorarios_status,
-    honorarios_partes: confirmados.map(c => ({ metodo: c.metodo, valor: c.valor })),
+    honorarios_partes: confirmados.map(c => ({ metodo: c.metodo, valor: c.valor, banco: c.banco || null, numero_cheque: c.numero_cheque || null })),
     email_sugerido: emailSugerido,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

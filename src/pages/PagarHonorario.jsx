@@ -151,9 +151,14 @@ export default function PagarHonorario() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {(arr.honorarios_partes || []).map((p, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
-                  <span>{{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}</span>
-                  <span style={{ fontWeight: 700 }}>{fmtBRL(p.valor)}</span>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, gap: 8 }}>
+                  <span>
+                    {{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}
+                    {p.metodo === 'cheque' && (p.banco || p.numero_cheque) && (
+                      <span style={{ color: '#4d7c0f', fontWeight: 400 }}> ({p.banco || '—'}{p.numero_cheque ? ` nº ${p.numero_cheque}` : ''})</span>
+                    )}
+                  </span>
+                  <span style={{ fontWeight: 700, flexShrink: 0 }}>{fmtBRL(p.valor)}</span>
                 </div>
               ))}
             </div>
