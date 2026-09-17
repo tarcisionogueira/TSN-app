@@ -9,6 +9,11 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-5. ✅ **RESOLVIDO 17/09 — Zuk veículos: fix confirmado em múltiplas rodadas do cron, não só 1x.**
+   Pendência era acompanhar mais execuções antes de dar por estável. Conferido no rastro real
+   (`veiculos_leilao`, fonte ZUK): **61 ativos**, coleta rodou e atualizou registros em 4 dias
+   seguidos (13, 14, 15 e 16/09), sem zerar nem regredir. Fix segue de pé — fechado, sem ação.
+
 -4. ✅ **RESOLVIDO 17/09 — Neuma Nogueira (top2) já resolveu sozinha, riscar da lista de contato
    pessoal.** Pendência vinha desde 10/09 ("cliente pagante que travou 14x, bug já corrigido no
    mesmo dia, mas nunca tentou de novo — vale contato pessoal pra avisar que já funciona").
