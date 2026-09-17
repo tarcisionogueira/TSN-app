@@ -50,9 +50,25 @@ export const idDaUrl = url => (String(url).match(/\/(?:leilao|lote)\/([a-z0-9-]+
 
 // Tabela de praças: pega a ÚLTIMA linha com valor em R$ na coluna final (2ª praça = mínimo
 // vigente); a 1ª linha de dados vira avaliação de reserva se não houver rótulo "Avaliação".
-function precosDaTabela(html) {
+// FALLBACK SEM <table> (17/09, achado real: /lote/<n>-<slug>, o template dos itens de pacote
+// — diferente do /leilao/<slug> single-item, que usa <table> de verdade). A mesma informação
+// ("PRAÇA ABERTURA ENCERRAMENTO INICIAL Praça única ... R$ 70.000,00") existe, só que
+// renderizada sem elemento <table> — `linhasDeTabela` (que só lê <tr>/<td>) volta vazio e o
+// lote inteiro caía em avaliação=0, descartado como se fosse pacote sem valor. Ancora no MESMO
+// cabeçalho da tabela antiga e lê os valores em R$ logo depois, na ordem em que aparecem —
+// janela curta (250 chars) de propósito: "Incremento"/"Lance atual" (R$1.000/R$0, medidos no
+// dump real) vêm bem mais adiante no texto, e um plaus()>=1000 sozinho não bastaria pra
+// descartar o incremento.
+function precosDoTextoSemTabela(txt) {
+  const m = txt.match(/PRA[ÇC]A\s+ABERTURA\s+ENCERRAMENTO\s+INICIAL([\s\S]{0,250})/i);
+  if (!m) return { primeira: 0, ultima: 0 };
+  const valores = [...m[1].matchAll(/R\$\s*([\d.]+,\d{2})/g)].map((v) => plaus(num(v[1]))).filter(Boolean);
+  if (!valores.length) return { primeira: 0, ultima: 0 };
+  return { primeira: valores[0], ultima: valores[valores.length - 1] };
+}
+function precosDaTabela(html, txt) {
   const linhas = linhasDeTabela(html).filter((cols) => cols.some((c) => /R\$/.test(c)));
-  if (!linhas.length) return { primeira: 0, ultima: 0 };
+  if (!linhas.length) return precosDoTextoSemTabela(txt);
   const valorDaLinha = (cols) => plaus(num((cols.find((c) => /R\$/.test(c)) || '').match(/R\$\s*([\d.]+,\d{2})/)?.[1] || ''));
   return { primeira: valorDaLinha(linhas[0]), ultima: valorDaLinha(linhas[linhas.length - 1]) };
 }
@@ -60,7 +76,7 @@ function precosDaTabela(html) {
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const slug = idDaUrl(url) || '';
-  const { primeira, ultima } = precosDaTabela(html);
+  const { primeira, ultima } = precosDaTabela(html, txt);
 
   const avalExplicita = plaus(num((txt.match(/Avalia[çc][ãa]o\s*(?:\([^)]*\))?\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   let avaliacao = avalExplicita || primeira;
