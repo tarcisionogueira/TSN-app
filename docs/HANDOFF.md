@@ -9,6 +9,39 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-3. ✅ **RESOLVIDO 17/09 — SBID21 confirmado vivo (sub-portal 21 da rede Superbid); achado no
+   caminho e corrigido: vazamento de imóvel ESTRANGEIRO com UF brasileira FALSA.** Dono pediu
+   pra confirmar se SBID21 ainda existia (item vermelho do handoff anterior). Confirmado: existe,
+   coletado todo dia até 16/09, 1-2 imóveis ativos há semanas — pequeno mas vivo, sem ação
+   necessária quanto a "existir".
+   **Achado no caminho:** o único imóvel ativo de SBID21 era um apartamento em Lima/Peru
+   ("San Martín De Porres"), gravado com `estado = 'PR'` como se fosse Paraná. O guard
+   `ehEstrangeiroSemUF` (que já existia desde 18/07 pra barrar estrangeiro da rede Superbid) só
+   agia quando a UF vinha VAZIA — aqui a UF não veio vazia: o regex de extração de UF
+   (`(locStr).match(/[-–]\s*([A-Z]{2})\s*$/)`, 2 letras maiúsculas no fim do texto de
+   localização) pegou um sufixo da string estrangeira que colidiu por acaso com uma UF
+   brasileira REAL, e furou o guard por não ser o caso que ele foi desenhado pra pegar.
+   **Escala real do problema:** ao medir (não só olhar o achado isolado), achei **34 lotes
+   SBID9** (mesma rede) com o MESMO padrão — todos gravados `estado='PR'`, todos cidades
+   argentinas de verdade (Adrogué, Béccar, Lanús, Mar Del Plata, Olivos, Quilmes, Rosario,
+   San Isidro, Valentín Alsina etc. — grande São Paulo... não, grande Buenos Aires). Não era
+   1 imóvel, era um vazamento sistemático represado sob "PR".
+   **Fix de raiz** (`scripts/scraper-puppeteer.mjs`): `ehEstrangeiroSemUF` virou
+   `ehEstrangeiroPelaCidade` — roda a MESMA checagem (cidade contra dataset IBGE) **mesmo com
+   UF preenchida**, não só quando vem vazia. Mesmo ajuste espelhado na varredura pós-geocode de
+   `api/monitor-fontes-cron.js` (seção D), que também só olhava UF vazia com o comentário
+   explícito "foreign com UF válida já é barrado no save" — premissa que este achado provou
+   falsa.
+   **Dado:** 35 lotes desativados (`ativo=false`, `suprimido_motivo` preenchido) — 1 de SBID21
+   (Peru) + 34 de SBID9 (Argentina). `npm run verificar:sintaxe`, `verificar:padroes` e
+   `npm run build` passaram limpos depois do fix.
+   > ⚠️ **Limitação conhecida, não resolvida agora:** a checagem por nome de cidade (normalizado,
+   > sem acento) não distingue uma cidade estrangeira que "por acaso" tem o mesmo nome de um
+   > município brasileiro (ex.: um "Rosario" argentino normaliza igual a um "Rosário"
+   > brasileiro real). Achado de hoje não caiu nesse caso (todas as 35 cidades descartadas são
+   > inequivocamente estrangeiras), mas o filtro por nome sozinho não fecha 100% — fica registrado
+   > para quem for endurecer isso depois (cruzar UF×cidade de verdade, não só cidade).
+
 -2. ✅ **RESOLVIDO 17/09 — HASTA zerada há 18+ dias: NÃO é bug, é leilão real ainda não aberto.**
    Dono rodou `node scripts/recon-hasta-zerou.mjs` do runner residencial (WSL). Veredito do
    próprio script: `detalhesOk > 0` (3/3 páginas de lote JÁ conhecidas abriram normal) e

@@ -454,12 +454,15 @@ async function handler(req) {
   }
 
   // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
-  //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
-  //    lotes internacionais (Paraguai/Argentina) que chegam com cidade VAZIA passam o
+  //    (ehEstrangeiroPelaCidade) reconhece estrangeiro pela CIDADE, mas só se ela já vier
+  //    preenchida na coleta; lotes internacionais que chegam com cidade VAZIA passam o
   //    guard e a cidade é preenchida DEPOIS (geocode) — furo confirmado em 18/07 (6 lotes
   //    do Paraguai). Aqui, com a cidade já resolvida, aplicamos a MESMA lógica e
-  //    DESATIVAMOS quem não é município BR. Só olha lotes com UF vazia (foreign com UF
-  //    válida já é barrado no save). Teto de 50 evita que um erro de dataset zere o acervo.
+  //    DESATIVAMOS quem não é município BR. Olha TODOS os lotes destas fontes, com UF vazia
+  //    OU preenchida — achado em 17/09 (SBID21 gravou Lima/Peru como se fosse do Paraná)
+  //    provou que o sufixo extraído da localização estrangeira pode coincidir com uma UF
+  //    brasileira real e furar o guard de UF no save. Teto de 50 evita que um erro de
+  //    dataset zere o acervo.
   try {
     const FONTES_INTL = ['SUPERBID', 'SBID9', 'SBID21', 'SOLD'];
     const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -469,11 +472,9 @@ async function handler(req) {
       .select('id, fonte, cidade, estado')
       .eq('ativo', true)
       .in('fonte', FONTES_INTL)
-      .or('estado.is.null,estado.eq.')       // só UF vazia (foreign com UF válida já é barrado no save)
       .not('cidade', 'is', null)
       .neq('cidade', '');
     const estrangeiros = (candidatos || []).filter(im => {
-      if (String(im.estado || '').trim() !== '') return false;   // reforço em JS
       const c = normCidadeBR(im.cidade);
       return c.length >= 3 && !CIDADES_BR.has(c);
     });

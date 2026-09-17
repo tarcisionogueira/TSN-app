@@ -88,17 +88,20 @@ const UFS_BR = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','
 // UF vazia é tolerada (lote BR sem UF extraída — backfill à parte); UF preenchida tem de
 // ser brasileira. Descarta estrangeiro (Peru/Paraguai/Argentina) e estado corrompido.
 const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); return u === '' || UFS_BR.has(u); };
-// Reforço da regra "só Brasil" para o vazamento de estrangeiros com UF VAZIA: fontes da
-// rede Superbid (SUPERBID/SBID9/SBID21/SOLD) têm inventário internacional (Paraguai/
-// Argentina) que chega sem UF e escapa da tolerância acima. Se a UF está vazia e a CIDADE
-// existe mas NÃO é município brasileiro (dataset IBGE), é estrangeiro → descarta. Mesma
-// normalização de api/_geo.js (minúsculas, sem acento) para bater com as chaves "UF|cidade".
+// Reforço da regra "só Brasil" para o vazamento de estrangeiros: fontes da rede Superbid
+// (SUPERBID/SBID9/SBID21/SOLD) têm inventário internacional (Peru/Paraguai/Argentina) cuja
+// UF não vem separada — vem embutida no fim do texto de localização (ex.: "San Martín De
+// Porres - PR"). O extrator de UF é um regex genérico (2 letras maiúsculas antes do fim da
+// string) que não sabe que a string é estrangeira, e às vezes o sufixo bate por acaso com
+// uma UF brasileira real (achado em 17/09: SBID21 gravou um imóvel de Lima/Peru como se
+// fosse do Paraná) — por isso NÃO dá pra confiar só na UF vir vazia. Se a CIDADE existe mas
+// NÃO é município brasileiro (dataset IBGE), é estrangeiro → descarta, com UF vazia OU não.
+// Mesma normalização de api/_geo.js (minúsculas, sem acento) para bater com "UF|cidade".
 const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
 const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
 const baseFonte = (f) => String(f || '').trim().toUpperCase().replace(/\s+\d.*$/, ''); // "SBID9 1-500" → "SBID9"
-const ehEstrangeiroSemUF = (fonte, uf, cidade) => {
-  if (String(uf || '').trim() !== '') return false;              // com UF: já coberto por ehBRouSemUF
+const ehEstrangeiroPelaCidade = (fonte, cidade) => {
   if (!FONTES_INTERNACIONAIS.has(baseFonte(fonte))) return false; // só as fontes com inventário internacional
   const c = normCidadeBR(cidade);
   return c.length >= 3 && !CIDADES_BR.has(c);                     // cidade preenchida e não é município BR ⇒ estrangeiro
@@ -112,9 +115,10 @@ const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
 async function salvarImoveis(imoveis, fonte) {
   if (!imoveis.length) return { salvos: 0, esperados: 0 };
   // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
-  // Inclui o caso UF-vazia + cidade estrangeira (rede Superbid) via ehEstrangeiroSemUF.
+  // Inclui cidade estrangeira da rede Superbid via ehEstrangeiroPelaCidade — roda mesmo com
+  // UF preenchida, porque o sufixo extraído pode coincidir com uma UF brasileira de verdade.
   const totalBruto = imoveis.length;
-  imoveis = imoveis.filter(im => ehBRouSemUF(im.estado) && !ehEstrangeiroSemUF(fonte, im.estado, im.cidade));
+  imoveis = imoveis.filter(im => ehBRouSemUF(im.estado) && !ehEstrangeiroPelaCidade(fonte, im.cidade));
   if (imoveis.length < totalBruto) console.log(`  [${fonte}] ${totalBruto - imoveis.length} lote(s) descartado(s) — fora do Brasil / estado inválido.`);
   if (!imoveis.length) return;
 
