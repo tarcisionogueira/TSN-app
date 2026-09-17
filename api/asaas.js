@@ -183,13 +183,18 @@ export default async function handler(req, res) {
       const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
       const saldo = Math.round((total - jaRecebido) * 100) / 100;
       if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
+      // O Asaas EXIGE cpfCnpj pra criar a cobrança (achado no 1º teste: "Erro interno no
+      // processamento" escondia "é necessário preencher o CPF ou CNPJ do cliente"). Vem do
+      // cadastro do arrematante, nunca do body — mesma fonte/decifra de cpfAutenticado.
+      const cpf = await cpfAutenticado(arr.arrematante_id, null);
+      if (!cpf) return res.status(400).json({ error: 'Não encontrei o CPF cadastrado deste cliente — necessário pro Asaas gerar a cobrança.' });
 
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
       const searchData = await searchRes.json();
       let customerId = searchData.data?.[0]?.id;
       if (!customerId) {
-        const customer = await asaasPost('/customers', { name: nome || email, email });
+        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf.replace(/\D/g, '') });
         customerId = customer.id;
       }
       const cobranca = await asaasPost('/payments', {
