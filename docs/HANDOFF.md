@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-6. ✅ **RESOLVIDO 17/09 — `uf_cef_congelada` (lista amarela): 1 lote-lixo isolado, deletado.**
+   `qa_invariantes()` acusava uma "UF da CEF congelada" — investigado: era **1 único registro**
+   (`id=79f45b8c…`, criado 24/06, sem atualização desde 16/07, `ativo=false`) onde o scraper da
+   CEF caiu numa página de challenge do hCaptcha e gravou o **JS ofuscado da própria página**
+   nos campos — `titulo` era literalmente `var _0x4e5d5c=_0x147a6e[_0x30d8da]`, `estado` era um
+   trecho de array JS com nomes de variável do hCaptcha (`HCAPTCHA`, `MOUSEUP`, `TOUCHMOVE`...).
+   Clássico "resposta de erro (challenge) gravada como conteúdo válido". Sem referência em
+   nenhuma tabela de análise/caso — deletado. **Isolado**: nenhum outro registro com o mesmo
+   padrão em 3 meses (24/06→17/09), não é recorrente, sem fix de raiz necessário no scraper.
+   > `erro_na_tela_do_cliente` (mesma leitura de `qa_invariantes()`) foi conferido junto e é
+   > **falso-alarme**: das 5 ocorrências, 4 são o próprio dono errando a senha do `/admin`
+   > ("Invalid login credentials") e 1 é a validação client-side normal ("Preencha seu nome.")
+   > num formulário de ebook — nenhuma é bug. Sem ação.
+
 -5. ✅ **RESOLVIDO 17/09 — Zuk veículos: fix confirmado em múltiplas rodadas do cron, não só 1x.**
    Pendência era acompanhar mais execuções antes de dar por estável. Conferido no rastro real
    (`veiculos_leilao`, fonte ZUK): **61 ativos**, coleta rodou e atualizou registros em 4 dias
