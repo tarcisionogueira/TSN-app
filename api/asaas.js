@@ -195,10 +195,16 @@ export default async function handler(req, res) {
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
       const searchData = await searchRes.json();
-      let customerId = searchData.data?.[0]?.id;
+      const existente = searchData.data?.[0];
+      let customerId = existente?.id;
       if (!customerId) {
-        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf.replace(/\D/g, '') });
+        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf });
         customerId = customer.id;
+      } else if (!existente.cpfCnpj) {
+        // Cliente já existia no Asaas sem CPF (ex.: criado numa tentativa anterior antes
+        // desta cobrança exigir o campo) — sem atualizar, o Asaas segue recusando a cobrança
+        // pra sempre, mesmo com o CPF certo vindo agora do formulário.
+        await asaasPut(`/customers/${customerId}`, { cpfCnpj: cpf });
       }
       const cobranca = await asaasPost('/payments', {
         customer: customerId,
