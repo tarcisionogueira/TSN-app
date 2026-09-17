@@ -563,6 +563,58 @@ export default function Caso() {
   const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1, honorario_minimo:7000 });
   const [monitorExito, setMonitorExito] = useState(null); // distribuição do êxito (só admin)
 
+  // ─── Recebimentos do honorário em partes (17/09) ──────────────────────────
+  // Pix recebido fora do sistema, cheque, saldo em cartão pelo link de sempre — cada um
+  // vira uma linha justificada em honorarios_recebimentos (api/honorario-recebimento.js).
+  const [recebimentos, setRecebimentos] = useState(null); // { total, recebido, saldo_restante, recebimentos:[...] }
+  const [carregandoReceb, setCarregandoReceb] = useState(false);
+  const [novoReceb, setNovoReceb] = useState({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '' });
+  const [registrandoReceb, setRegistrandoReceb] = useState(false);
+  const [erroReceb, setErroReceb] = useState('');
+
+  const carregarRecebimentos = useCallback(async () => {
+    if (!arrematacao?.id) return;
+    setCarregandoReceb(true);
+    try {
+      const r = await apiCall(`/api/honorario-recebimento?arrematacao_id=${arrematacao.id}`);
+      const d = await r.json().catch(() => null);
+      if (r.ok && d) setRecebimentos(d);
+    } catch { /* padrao-ok: painel de recebimentos é complementar, falha de leitura não trava a tela do caso */ }
+    setCarregandoReceb(false);
+  }, [arrematacao?.id]);
+
+  useEffect(() => {
+    if (!isStaff || !arrematacao?.id) return;
+    carregarRecebimentos();
+  }, [isStaff, arrematacao?.id, carregarRecebimentos]);
+
+  const registrarRecebimentoManual = async (e) => {
+    e.preventDefault();
+    setErroReceb('');
+    const valorNum = parseFloat(String(novoReceb.valor).replace(/\./g,'').replace(',','.')) || 0;
+    if (valorNum <= 0) { setErroReceb('Informe um valor válido.'); return; }
+    if (novoReceb.justificativa.trim().length < 5) { setErroReceb('Justifique o recebimento (mín. 5 caracteres) — ex.: "Pix recebido direto na conta pessoal em 16/09".'); return; }
+    setRegistrandoReceb(true);
+    try {
+      const r = await apiCall('/api/honorario-recebimento', {
+        method: 'POST',
+        body: JSON.stringify({
+          arrematacao_id: arrematacao.id, metodo: novoReceb.metodo, valor: valorNum,
+          justificativa: novoReceb.justificativa.trim(), comprovante_url: novoReceb.comprovante_url || null,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || 'Não foi possível registrar o recebimento.');
+      setNovoReceb({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '' });
+      await carregarRecebimentos();
+      await carregarCaso();
+    } catch (e2) {
+      setErroReceb(e2.message || 'Erro ao registrar recebimento.');
+    } finally {
+      setRegistrandoReceb(false);
+    }
+  };
+
   // ─── Procuração ──────────────────────────────────────────────────────────
   const [gerandoProc, setGerandoProc] = useState(false);
 
@@ -1818,6 +1870,63 @@ export default function Caso() {
                       <ExternalLink size={12}/> Abrir
                     </a>
                   </div>
+                </div>
+              )}
+
+              {/* Recebimentos em partes (17/09) — destrinchar o honorário quando o cliente
+                  paga por métodos diferentes (Pix recebido fora do sistema, cheque, saldo no
+                  cartão pelo link acima). Visível pra equipe do caso; só admin registra. */}
+              {isStaff && arrematacao.honorarios_status !== 'distribuido' && (
+                <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
+                  <div style={{ fontSize:12.5, fontWeight:800, color:'#111', marginBottom:8 }}>Recebimentos</div>
+                  {carregandoReceb ? (
+                    <div style={{ fontSize:12, color:'#64748b' }}><Loader2 size={12} style={{ animation:'spin 1s linear infinite', verticalAlign:'middle', marginRight:6 }}/>Carregando...</div>
+                  ) : recebimentos ? (
+                    <>
+                      <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:10, fontSize:12 }}>
+                        <div><span style={{ color:'#64748b' }}>Recebido: </span><strong style={{ color:'#059669' }}>{fmt(recebimentos.recebido)}</strong></div>
+                        <div><span style={{ color:'#64748b' }}>Saldo restante: </span><strong style={{ color: recebimentos.saldo_restante > 0 ? '#d97706' : '#059669' }}>{fmt(recebimentos.saldo_restante)}</strong></div>
+                      </div>
+                      {recebimentos.recebimentos?.length > 0 && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+                          {recebimentos.recebimentos.map(r => (
+                            <div key={r.id} style={{ fontSize:11.5, padding:'8px 10px', background:'white', border:'1px solid #e2e8f0', borderRadius:8 }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                                <span style={{ fontWeight:700, color:'#111' }}>
+                                  {{ pix_externo:'Pix (fora do sistema)', cheque:'Cheque', cartao_mp:'Cartão (link)', dinheiro:'Dinheiro', transferencia:'Transferência' }[r.metodo] || r.metodo}
+                                </span>
+                                <span style={{ fontWeight:800, color: r.status === 'estornado' ? '#dc2626' : '#059669' }}>
+                                  {fmt(r.valor)}{r.status === 'aguardando_compensacao' ? ' (aguardando)' : r.status === 'estornado' ? ' (estornado)' : ''}
+                                </span>
+                              </div>
+                              <div style={{ color:'#64748b', marginTop:3 }}>{r.justificativa}</div>
+                              <div style={{ color:'#94a3b8', marginTop:2, fontSize:10.5 }}>{fmtDate(r.criado_em)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {role === 'admin' && recebimentos.saldo_restante > 0 && (
+                        <form onSubmit={registrarRecebimentoManual} style={{ borderTop:'1px solid #e2e8f0', paddingTop:10, display:'flex', flexDirection:'column', gap:8 }}>
+                          <div style={{ fontSize:11.5, fontWeight:700, color:'#334155' }}>Registrar recebimento manual (Pix externo, cheque...)</div>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                            <select value={novoReceb.metodo} onChange={e=>setNovoReceb(p=>({...p,metodo:e.target.value}))} style={{ ...inp, fontSize:12 }}>
+                              <option value="pix_externo">Pix (recebido fora do sistema)</option>
+                              <option value="cheque">Cheque</option>
+                              <option value="dinheiro">Dinheiro</option>
+                              <option value="transferencia">Transferência</option>
+                            </select>
+                            <input value={novoReceb.valor} onChange={e=>setNovoReceb(p=>({...p,valor:maskMoedaDigitando(e.target.value)}))} style={{ ...inp, fontSize:12 }} placeholder="Valor (R$)"/>
+                          </div>
+                          <input value={novoReceb.justificativa} onChange={e=>setNovoReceb(p=>({...p,justificativa:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder='Justificativa (ex.: "Pix recebido direto na conta pessoal em 16/09")' maxLength={500}/>
+                          <input value={novoReceb.comprovante_url} onChange={e=>setNovoReceb(p=>({...p,comprovante_url:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Link do comprovante (opcional)"/>
+                          {erroReceb && <div style={{ fontSize:11.5, color:'#dc2626', fontWeight:600 }}>{erroReceb}</div>}
+                          <button type="submit" disabled={registrandoReceb} style={{ ...btn('#0D63DB'), fontSize:12, padding:'8px 16px', alignSelf:'flex-start', opacity: registrandoReceb ? 0.7 : 1 }}>
+                            {registrandoReceb ? 'Registrando...' : 'Registrar recebimento'}
+                          </button>
+                        </form>
+                      )}
+                    </>
+                  ) : null}
                 </div>
               )}
 

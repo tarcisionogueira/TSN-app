@@ -83,6 +83,7 @@ const Creditos = lazy(() => import('./pages/Creditos'));
 const Comissoes = lazy(() => import('./pages/Comissoes'));
 const Caso = lazy(() => import('./pages/Caso'));
 const PagarHonorario = lazy(() => import('./pages/PagarHonorario'));
+const CobrarAvulso = lazy(() => import('./pages/CobrarAvulso'));
 const CriarContrato = lazy(() => import('./pages/CriarContrato'));
 const ContratosTemplates = lazy(() => import('./pages/ContratosTemplates'));
 const OnrRegistro = lazy(() => import('./pages/OnrRegistro'));
@@ -378,6 +379,8 @@ function MainLayout() {
           {/* Sem PrivateRoute (18/09): o arrematante pode repassar o link a outra pessoa pagar —
               a própria página valida a cobrança via /api/honorario-info (uuid imprevisível). */}
           <Route path="/honorario/:arrematacaoId" element={<PagarHonorario />} />
+          {/* Cobrança avulsa (17/09) — mesmo raciocínio: link pode ir a quem não tem conta. */}
+          <Route path="/cobranca/:cobrancaId" element={<CobrarAvulso />} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           {/* Sem gate por papel: a capacidade de vender pode estar em qualquer papel
               (cliente pagante ou equipe). O componente autoriza por papel OU vendedor_tipo. */}

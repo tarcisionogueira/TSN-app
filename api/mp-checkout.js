@@ -73,7 +73,10 @@ export default async function handler(req, res) {
   // resto do endpoint (preço, dono da cobrança, ativação do plano) continua vindo do banco,
   // nunca do que o requisitante alega — ver o bloco HONORÁRIOS DE ÊXITO logo abaixo.
   const propositoBruto = String(req.body?.proposito || '');
-  const honorarioSemLogin = propositoBruto === 'honorario_exito';
+  // cobranca_avulsa (17/09) segue o mesmo raciocínio do honorário: o link pode ser pago
+  // por quem não tem conta no sistema (ex.: cliente de honorário de êxito quitando o saldo
+  // no cartão) — o uuid imprevisível da cobrança já é a credencial.
+  const honorarioSemLogin = propositoBruto === 'honorario_exito' || propositoBruto === 'cobranca_avulsa';
 
   const user = await getUser(req);
   if (!user && !honorarioSemLogin) return res.status(401).json({ error: 'Não autorizado' });
@@ -94,7 +97,7 @@ export default async function handler(req, res) {
   // 'produto_bonus' (12/09): ebook/curso com `requer_cartao_bonus` — cartão salvo na compra
   // pra renovar sozinho quando o bônus (concede_plano) vencer. Ver bloco abaixo e
   // api/ativar-assinatura-bonus-cron.js.
-  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria', 'produto_bonus', 'honorario_exito']);
+  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria', 'produto_bonus', 'honorario_exito', 'cobranca_avulsa']);
   const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
 
   // PRODUTO_BONUS — ebook/curso com `requer_cartao_bonus`: preço promocional + concede_plano
@@ -161,13 +164,50 @@ export default async function handler(req, res) {
       if (!arr) return res.status(404).json({ error: 'Arrematação não encontrada.' });
       if (user && arr.arrematante_id !== user.id) return res.status(403).json({ error: 'Esta cobrança não pertence a este usuário.' });
       if (['pago', 'distribuido'].includes(arr.honorarios_status)) return res.status(409).json({ error: 'Os honorários desta arrematação já foram pagos.' });
-      const v = Number(arr.honorarios_valor) || 0;
-      if (v <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
-      valor = v;
-      descricao = 'Honorários de êxito — BidPro Brasil';
+      const total = Number(arr.honorarios_valor) || 0;
+      if (total <= 0) return res.status(400).json({ error: 'Honorários ainda não calculados para esta arrematação.' });
+      // SALDO RESTANTE, não o valor cheio (17/09): o honorário pode já ter partes
+      // confirmadas por fora (Pix externo, cheque — ver api/honorario-recebimento.js).
+      // O link sempre cobra só o que falta; a soma de todas as partes é quem decide
+      // 'pago' (trigger honorarios_recebimentos_fecha_se_completo no banco).
+      const recR = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${encodeURIComponent(arrematacao_id)}&status=eq.confirmado&select=valor`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+      });
+      const confirmados = recR.ok ? await recR.json().catch(() => []) : [];
+      const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
+      const saldo = Math.round((total - jaRecebido) * 100) / 100;
+      if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
+      valor = saldo;
+      descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
       honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
+      return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
+    }
+  }
+
+  // COBRANÇA AVULSA (17/09) — link genérico pra motivo/valor fora do catálogo fixo acima.
+  // Preço e descrição SEMPRE do servidor (cobrancas_avulsas), nunca do body — mesmo cuidado
+  // de honorario_exito/produto_bonus. Criada só por admin em api/cobranca-avulsa-criar.js.
+  let cobrancaCtx = null;
+  if (proposito === 'cobranca_avulsa') {
+    const { cobranca_id } = req.body || {};
+    if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
+    const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,status`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+      });
+      const [cob] = r.ok ? await r.json().catch(() => []) : [];
+      if (!cob) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+      if (cob.status !== 'aberta') return res.status(409).json({ error: 'Esta cobrança já foi paga ou cancelada.' });
+      const v = Number(cob.valor) || 0;
+      if (v <= 0) return res.status(400).json({ error: 'Cobrança sem valor válido.' });
+      valor = v;
+      descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
+      cobrancaCtx = { cobrancaId: cob.id };
+    } catch (e) {
+      console.error('[mp-checkout] cobranca_avulsa: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
     }
   }
@@ -266,7 +306,10 @@ export default async function handler(req, res) {
           // dono da cobrança vem do banco (honorarioCtx.arrematanteId), não de `user` — pode
           // não haver sessão nenhuma neste fluxo (ver comentário acima).
           ? { user_id: honorarioCtx.arrematanteId, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: honorarioCtx.arrematanteId }
-          : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
+          : cobrancaCtx
+            // idem: quem paga pode não ter sessão (link repassado a terceiro).
+            ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId }
+            : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
       ...(produtoBonusCtx ? { external_reference: produtoBonusCtx.compraId } : {}),
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
@@ -286,7 +329,7 @@ export default async function handler(req, res) {
     //   (que pode ter expirado/sido cancelado), quebrando o fluxo do cliente. Por isso
     //   a chave leva um componente único por tentativa (idempotencyKey do front, se
     //   enviado, ou timestamp). PIX não gera cobrança automática — cada QR é pago à parte.
-    const payerAnchor = user?.id || honorarioCtx?.arrematanteId || 'anon';
+    const payerAnchor = user?.id || honorarioCtx?.arrematanteId || (cobrancaCtx ? `cobranca-${cobrancaCtx.cobrancaId}` : 'anon');
     const idemBase = `tsn-${payerAnchor}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`;
     const idemKey = payload.token
       ? idemBase
@@ -308,7 +351,16 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'Pagamento recusado', codigo: data?.cause?.[0]?.code || 'unknown' });
     }
 
-    await auditLog({ acao: 'mp_checkout_criado', user_id: payerAnchor === 'anon' ? null : payerAnchor, ip, detalhes: { payment_id: data.id, valor, metodo: metodoPagamento }, sucesso: true });
+    // user_id da auditoria é uuid de USUÁRIO — payerAnchor pode ser um prefixo sintético
+    // ('cobranca-<uuid>') pra idempotência, que não é isso; nesse caso fica null e o
+    // cobranca_id vai em `detalhes`, onde já é livre (jsonb).
+    await auditLog({
+      acao: 'mp_checkout_criado',
+      user_id: user?.id || honorarioCtx?.arrematanteId || null,
+      ip,
+      detalhes: { payment_id: data.id, valor, metodo: metodoPagamento, ...(cobrancaCtx ? { cobranca_id: cobrancaCtx.cobrancaId } : {}) },
+      sucesso: true,
+    });
 
     // Grava o cartão salvo na compra (best-effort — ver comentário no bloco que gerou
     // mpCustomerId/mpCardId acima). A confirmação da compra em si (status='ativo',

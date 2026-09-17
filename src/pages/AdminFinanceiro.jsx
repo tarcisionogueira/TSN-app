@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ExtratoUnificado from '../components/ExtratoUnificado';
 import ConciliacaoBancaria from '../components/ConciliacaoBancaria';
 import MonitorFinanceiro from '../components/MonitorFinanceiro';
+import CobrancaAvulsaAdmin from '../components/CobrancaAvulsaAdmin';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
@@ -624,7 +625,7 @@ export default function AdminFinanceiro() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
         {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
-          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas'], ['recusas', '⛔ Recusas']].map(([k, label]) => (
+          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas'], ['recusas', '⛔ Recusas'], ['cobranca_avulsa', '🧾 Cobrança avulsa']].map(([k, label]) => (
             <button key={k} onClick={() => setAba(k)}
               style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                 background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
@@ -649,6 +650,9 @@ export default function AdminFinanceiro() {
         {aba === 'monitor' && <MonitorFinanceiro />}
         {/* RECUSAS: por que uma cobrança não passou (código do MP traduzido) — base para recuperação. */}
         {aba === 'recusas' && <AbaRecusas />}
+        {/* COBRANÇA AVULSA: motivo/valor livres fora do catálogo fixo de PROPOSITOS —
+            gera link público (api/cobranca-avulsa-criar.js), preço sempre do servidor. */}
+        {aba === 'cobranca_avulsa' && <CobrancaAvulsaAdmin />}
       </div>
     </div>
   );
