@@ -118,7 +118,19 @@ async function main() {
   console.log(`${comFoto.total} ofertas · photoCount de cada:`, JSON.stringify(comFoto.contagens));
   if (comFoto.achou) {
     console.log('\nOFERTA COM FOTO — chaves de product:', Object.keys(comFoto.achou.product || {}).join(', '));
-    console.log(JSON.stringify(comFoto.achou).slice(0, 5000));
+    // TESTE 5: `galleryJson` só aparece quando photoCount>0 (achado no teste 4) — é o
+    // candidato forte. Imprime ELE direto, sem truncar por causa da descrição gigante
+    // que vinha antes no dump genérico.
+    console.log('\n=== TESTE 5: campo galleryJson por inteiro ===');
+    console.log('product.galleryJson (cru):', JSON.stringify(comFoto.achou.product?.galleryJson));
+    console.log('product.attachments (cru):', JSON.stringify(comFoto.achou.product?.attachments));
+    console.log('product.thumbnailUrl:', comFoto.achou.product?.thumbnailUrl);
+    if (comFoto.achou.product?.galleryJson) {
+      try {
+        const g = typeof comFoto.achou.product.galleryJson === 'string' ? JSON.parse(comFoto.achou.product.galleryJson) : comFoto.achou.product.galleryJson;
+        console.log('galleryJson PARSEADO:', JSON.stringify(g));
+      } catch (e) { console.log('galleryJson não é JSON parseável (já deve ser array/objeto direto — ver "cru" acima):', e.message); }
+    }
   } else {
     console.log('Nenhuma das 20 primeiras ofertas de imóvel tem photoCount>0.');
   }
