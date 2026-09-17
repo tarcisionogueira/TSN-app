@@ -9,15 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
--6. ✅ **RESOLVIDO 17/09 — `uf_cef_congelada` (lista amarela): 1 lote-lixo isolado, deletado.**
-   `qa_invariantes()` acusava uma "UF da CEF congelada" — investigado: era **1 único registro**
-   (`id=79f45b8c…`, criado 24/06, sem atualização desde 16/07, `ativo=false`) onde o scraper da
-   CEF caiu numa página de challenge do hCaptcha e gravou o **JS ofuscado da própria página**
-   nos campos — `titulo` era literalmente `var _0x4e5d5c=_0x147a6e[_0x30d8da]`, `estado` era um
-   trecho de array JS com nomes de variável do hCaptcha (`HCAPTCHA`, `MOUSEUP`, `TOUCHMOVE`...).
+-6. 🟡 **PARCIAL 17/09 — `uf_cef_congelada` (lista amarela): limpei o lote-lixo que achei, mas o
+   alerta CONTINUA — causa real é outra e menor, não código.** Ao investigar achei e limpei um
+   registro corrompido (`id=79f45b8c…`, criado 24/06, `ativo=false`): o scraper da CEF tinha
+   caído numa página de challenge do hCaptcha e gravado o **JS ofuscado da própria página** nos
+   campos — `titulo` era literalmente `var _0x4e5d5c=_0x147a6e[_0x30d8da]`, `estado` um trecho
+   de array JS com nomes de variável do hCaptcha (`HCAPTCHA`, `MOUSEUP`, `TOUCHMOVE`...).
    Clássico "resposta de erro (challenge) gravada como conteúdo válido". Sem referência em
-   nenhuma tabela de análise/caso — deletado. **Isolado**: nenhum outro registro com o mesmo
-   padrão em 3 meses (24/06→17/09), não é recorrente, sem fix de raiz necessário no scraper.
+   nenhuma tabela de análise/caso — deletado. Isolado (nenhum outro caso em 3 meses).
+   **Depois de limpar, rodei `qa_invariantes()` de novo e `uf_cef_congelada` continuou
+   `alerta`** — a UF de verdade mais parada agora é **AP (Amapá)**: 12 lotes no total (7
+   ativos), nenhum lote NOVO criado desde 27/06, última atualização 10/09 (7 dias, contra
+   diário nas outras UFs). Não parece bug — Amapá é o estado com menor volume de imóveis da
+   Caixa no país, e a leitura mais provável é "não tem lote novo pra achar", não "capturador
+   quebrou". Não investiguei mais fundo (custo x benefício baixo pra 7 imóveis) — fica
+   registrado caso o alerta persista além de mais alguns dias.
    > `erro_na_tela_do_cliente` (mesma leitura de `qa_invariantes()`) foi conferido junto e é
    > **falso-alarme**: das 5 ocorrências, 4 são o próprio dono errando a senha do `/admin`
    > ("Invalid login credentials") e 1 é a validação client-side normal ("Preencha seu nome.")
