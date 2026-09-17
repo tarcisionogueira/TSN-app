@@ -1,26 +1,44 @@
 /**
- * Parser puro — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`. ⚠️ NÃO INTEGRADO (07/09) —
- * mantido só como registro do que já foi descartado, pra não repetir a investigação.
+ * Parser puro — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`, custo Bright Data ZERO.
  *
- * Recon original (antes deste parser) viu 27 <article> com URL de lote real
- * (`/leiloes/lote-<n>-<slug>/<id>`) e um detalhe real (lote 2623, Guaratinguetá/SP —
- * "Lote 1 - SP - Guaratinguetá..." · badge "50% de desconto" = regra da 2ª praça, não evento
- * pontual · PDFs reais em CloudFront). Parser escrito em cima disso, validado localmente.
+ * ⚠️ REESCRITO 17/09 — o site migrou pra uma SPA Inertia.js (Laravel+Inertia+React) em algum
+ * momento entre 07/09 (recon original, artigo <article> na home) e agora, e AINDA ganhou
+ * Cloudflare no caminho (07/09 dizia "SEM Cloudflare"). Confirmado real (dump via IP
+ * RESIDENCIAL — Cloudflare bloqueia datacenter/Bright Data Web Unlocker nos dois, mas passa
+ * de casa, mesmo remédio de RJ/GESTAO/PECINI/HASTA):
  *
- * **Toda rodada real (3 independentes: embutida na sequência de 9 fontes, isolada via
- * dispatch, e duas rodadas de dump dedicado) deu 0 lotes — o site MUDOU DE PLATAFORMA entre
- * o recon e agora.** Dump confirmou: HTML real e completo (396KB, domínio certo pelo
- * Facebook Pixel, sem bloqueio/captcha) mas **zero** ocorrência de "/leiloes/lote-" no
- * documento inteiro; varredura de TODOS os 44 hrefs internos não achou nenhum com "lote" no
- * path — são só bundles `/build/assets/*.js` do Vite, incluindo `inertia-vendor-*.js`. **O
- * site virou uma SPA Inertia.js (Laravel+Inertia+React)**: os lotes não existem mais como
- * `<a href>` no HTML — Inertia entrega os dados como JSON embutido num `data-page="{...}"` no
- * div raiz, e o React monta os links no cliente a partir daí. Recon/parser NOVOS, mirando o
- * payload JSON (não mais regex de href), são necessários — não é ajuste de regex, é reconstruir
- * do zero. Fora do cron de produção até isso ser feito.
+ *   - URL DE LOTE não mudou: `/leiloes/lote-<n>-<slug>/<id>` — o mesmo padrão de antes,
+ *     confirmado nos 4 lotes reais vistos na página `/leiloes` (dump 17/09). O que quebrava
+ *     não era a URL, era o Cloudflare impedindo QUALQUER html de chegar.
+ *   - RÓTULOS do texto renderizado mudaram: antes "Valor de avaliação atualizado: R$ X" numa
+ *     frase só; agora vem em DUAS linhas — "VALOR DE AVALIAÇÃO\nR$ X (avaliação de MÊS/ANO)."
+ *     seguido de "Valor atualizado: R$ Y (MÊS/ANO), sujeito a nova atualização pelo índice do
+ *     TJ/SP...". É o `Y` (valor atualizado) que a regra de 2ª praça referencia ("lance igual
+ *     ou superior a 50% do valor da avaliação atualizado") — mesmo símbolo do badge "50% de
+ *     desconto" já capturado por `descPct`.
+ *   - TÍTULO/cidade/bairro/tipo/área vêm numa linha só, ANTES do texto de avaliação:
+ *     "SP - Sorocaba - Altos de Ipanema | Apartamento - 49m²".
+ *   - PDFs migraram pra CDN própria (`d1etsb4iun2r36.cloudfront.net`), nome do arquivo
+ *     classifica o tipo: `matricula-*`, `penhora-*`/`debito-*` (ônus), `avaliacao-*` (laudo) e
+ *     um sem prefixo óbvio contendo `-cond-` (= "condições", o equivalente ao edital).
+ *     `anexosDeHtml` (dom-parse-util) só reconhece a palavra "edital" no nome — o PDF de
+ *     condições daqui não bate nisso, por isso o pós-processamento abaixo promove o `-cond-`
+ *     a edital quando nenhum "edital" literal foi achado.
+ *   - Fotos: `<img>` reais em `d1etsb4iun2r36.cloudfront.net/.../images/intern_N-*.webp`;
+ *     `fotoDeHtml` (RE_IMG_DESCARTA) já filtra os dois logos do topo (`positive_logo.webp`/
+ *     `negative_logo.webp`) sem precisar de lista nova.
+ *
+ * NÃO PRECISA DE BRIGHT DATA NEM CÓDIGO NOVO NO MOTOR: o fetch já é `dom` (Puppeteer puro,
+ * scripts/lib/motor/runner.mjs → criarMotorDom) — rodando do runner RESIDENCIAL (mesmo
+ * scripts/runner-residencial.sh que já resolve RJ/GESTAO/PECINI/HASTA), o Cloudflare nem
+ * aparece. Rodar `node scripts/scraper-globo.mjs` de lá deve bastar; da CI (datacenter)
+ * continua bloqueado.
  */
-import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, textoComLinhas, montarRowDom } from './dom-parse-util.mjs';
+import { inferirTipo, proximaData, checarQualidade } from './leilaopro-parse.mjs';
+import {
+  plaus, textoDe, textoComLinhas, valorPorRotulo, cidadeUFDeSlug, cidadeUFBare,
+  montarRowDom, anexosDeHtml,
+} from './dom-parse-util.mjs';
 
 export const TENANTS = {
   globo: { fonte: 'GLOBOLEILOES', leiloeiro: 'Globo Leilões', base: 'https://globoleiloes.com.br' },
@@ -35,46 +53,51 @@ export function extrairUrlsDeLote(html, base) {
 }
 export const idDaUrl = url => (String(url).match(/\/leiloes\/lote-\d+-[a-z0-9-]+\/(\d+)/i) || [])[1] || null;
 
-function anexosGlobo(html, urlBase) {
-  const anexos = []; let link_edital = null, link_matricula = null;
-  for (const m of String(html || '').matchAll(/<a\b[^>]*href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]{0,80}?)<\/a>/gi)) {
-    let abs; try { abs = new URL(m[1], urlBase).href; } catch { continue; }
-    if (anexos.some((a) => a.url === abs)) continue;
-    const texto = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const tipo = /matr[íi]cula/i.test(texto) ? 'matricula' : /edital/i.test(texto) ? 'edital' : 'outro';
-    anexos.push({ tipo, nome: tipo === 'edital' ? 'Edital' : tipo === 'matricula' ? 'Matrícula / Laudo do bem' : 'Documento', url: abs });
-    if (tipo === 'edital' && !link_edital) link_edital = abs;
-    if (tipo === 'matricula' && !link_matricula) link_matricula = abs;
-  }
-  return { anexos, link_edital, link_matricula };
-}
-
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const linhas = textoComLinhas(html).split('\n');
 
-  const avaliacao = plaus(num((txt.match(/Valor\s+de\s+avalia[çc][ãa]o\s+atualizado\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  // "SP - Sorocaba - Altos de Ipanema | Apartamento - 49m²" — UF/cidade/bairro/tipo/área
+  // numa linha só, sempre antes do bloco de avaliação. Achado real (dump 17/09).
+  const reLinhaTitulo = /^([A-Z]{2})\s*-\s*([^-]+?)\s*-\s*([^|]+)\|\s*([^-]+?)\s*-\s*(\d+(?:[.,]\d+)?)\s*m/;
+  const linhaTitulo = linhas.find((l) => reLinhaTitulo.test(l.trim()));
+  const mTit = linhaTitulo ? linhaTitulo.trim().match(reLinhaTitulo) : null;
+
+  const slug = (String(url).match(/\/leiloes\/lote-\d+-([a-z0-9-]+)\/\d+/i) || [])[1] || '';
+  const doSlug = cidadeUFDeSlug(slug);
+  const cidade = mTit ? mTit[2].trim() : (doSlug.cidade || cidadeUFBare(txt).cidade);
+  const estado = mTit ? mTit[1] : (doSlug.estado || cidadeUFBare(txt).estado);
+  const tipo = mTit ? mTit[4].trim() : null;
+  const areaM2 = mTit ? Number(mTit[5].replace(',', '.')) : 0;
+  const titulo = linhaTitulo ? linhaTitulo.trim().slice(0, 180) : null;
+
+  // Avaliação: o VALOR ATUALIZADO é o que a regra de 2ª praça referencia ("lance >= 50% do
+  // valor da avaliação atualizado") — preferido sobre o valor original de quando foi avaliado.
+  const avalOriginal = valorPorRotulo(txt, /VALOR\s+DE\s+AVALIA[ÇC][ÃA]O/i);
+  const avalAtualizado = valorPorRotulo(txt, /Valor\s+atualizado/i);
+  const avaliacao = avalAtualizado || avalOriginal;
+
   // Desconto anunciado (badge "50% de desconto" OU a regra "X% do valor da avaliação" no
   // corpo) — regra do PRÓPRIO leiloeiro pra 2ª praça, não invenção do parser.
   const descPct = Number((txt.match(/(\d{1,3})\s*%\s*(?:de\s+desconto|do\s+valor\s+da\s+avalia)/i) || [])[1] || 0);
   const minimo = (avaliacao && descPct > 0 && descPct < 100) ? Math.round(avaliacao * (1 - descPct / 100) * 100) / 100 : avaliacao;
 
-  const linhaLote = linhas.find((l) => /^Lote\s+\d+\s*-/i.test(l)) || '';
-  const titulo = linhaLote ? linhaLote.replace(/\s*\|\s*/g, ' — ').slice(0, 180) : null;
-
-  const cUf = txt.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+){0,2})\/([A-Z]{2})\b(?=[^]{0,60}Cart[óo]rio|[^]{0,10}$)/) || txt.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+){0,2})\/([A-Z]{2})\b/);
-  const cidade = cUf ? cUf[1] : null;
-  const estado = cUf ? cUf[2] : null;
-
-  const area = extrairArea(titulo || '', txt.slice(0, 2000));
-  const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : /judicial|processo\s*n/i.test(txt) ? 'judicial' : 'judicial';
+  const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : 'judicial';
   const mat = (txt.match(/matr[íi]cula\s*:?\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;
-  const docs = anexosGlobo(html, url);
+
+  const docs = anexosDeHtml(html, url);
+  // O PDF de "condições" (equivalente ao edital) vem nomeado com "-cond-", não "edital" — o
+  // classificador genérico de anexosDeHtml não reconhece isso. Promove só quando NENHUM
+  // "edital" literal foi achado, pra não sobrescrever um caso onde o site usa o nome certo.
+  if (!docs.link_edital) {
+    const cond = docs.anexos.find((a) => /-cond-/i.test(a.url));
+    if (cond) { cond.tipo = 'edital'; cond.nome = 'Edital'; docs.link_edital = cond.url; }
+  }
 
   return {
     titulo, cidade, estado,
-    valor_avaliacao: avaliacao, valor_minimo: minimo,
-    modalidade, area_m2: area,
+    valor_avaliacao: plaus(avaliacao), valor_minimo: plaus(minimo) || plaus(avaliacao),
+    modalidade, area_m2: areaM2,
     descricao: null,
     data_leilao: proximaData(txt.slice(0, 4000)),
     numero_matricula: mat, ...docs,

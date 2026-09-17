@@ -1,14 +1,18 @@
 /**
- * FONTE (config) — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`, sem Cloudflare (recon
- * 07/09). Catálogo confirmado na HOME (27 <article> com URL de lote completa já na 1ª
- * carga) — paginação da home não confirmada ao vivo, por isso `maxPages: 1` (conservador;
- * ajustar se um dry-run mostrar mais páginas reais). Parser puro em lib/globo-parse.mjs.
+ * FONTE (config) — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`.
  *
- * `timeoutMs` alto (07/09): a 1ª rodada real estourou "Navigation timeout of 45000 ms" DUAS
- * vezes seguidas (1ª tentativa + retry) na própria home — página pesada (279KB+ de HTML só
- * no detalhe de UM lote, muito rastreador/analytics). O recon isolado tinha carregado a
- * mesma home sem problema com o MESMO teto de 45s — não é bloqueio, é tempo de carga no
- * limite; 90s dá folga sem custar nada (dom é grátis, o preço é só tempo de execução).
+ * ⚠️ 17/09 — o site ganhou Cloudflare desde o recon de 07/09 ("sem Cloudflare"), em cima da
+ * migração pra SPA Inertia.js já documentada em globo-parse.mjs. Confirmado via IP
+ * RESIDENCIAL (dump real): a home não é mais catálogo (é menu/categorias); o catálogo real
+ * é `/leiloes` — mesmo padrão de URL de lote de sempre (`/leiloes/lote-<n>-<slug>/<id>`).
+ * Bright Data Web Unlocker testado e confirmado insuficiente (desafio intacto mesmo com
+ * corpo de resposta grande) — só passa de IP residencial, mesmo remédio de RJ/GESTAO/PECINI/
+ * HASTA (`scripts/runner-residencial.sh`). Rodar `node scripts/scraper-globo.mjs` da CI
+ * continua bloqueado; do residencial deve funcionar sem mudança nenhuma no motor (`dom` já é
+ * Puppeteer puro, sem Bright Data — só a origem do IP importa aqui).
+ *
+ * `timeoutMs` alto (herdado de 07/09): página pesada, muito rastreador/analytics — 90s dá
+ * folga sem custar nada (dom é grátis, o preço é só tempo de execução).
  */
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
@@ -19,15 +23,16 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'globo',
   fetch: 'dom',
-  dom: { esperaMs: 3000, timeoutMs: 90000 },
-  catalogo: '/',
+  dom: { esperaMs: 6000, timeoutMs: 90000 },
+  catalogo: '/leiloes',
   paginaParam: 'page',
   maxPages: 1,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Própria', acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'nenhum',
-    enumeracao: '/ (home, confirmado real; paginação a confirmar)',
+    plataforma: 'Própria (Inertia.js) — atrás de Cloudflare desde ~09/09, só passa de IP residencial',
+    acesso: 'dom-puppeteer (residencial obrigatório)', custo: 'gratis', anti_bot: 'cloudflare',
+    enumeracao: '/leiloes (confirmado real via residencial, 17/09)',
     url_lote: '/leiloes/lote-<n>-<slug>/<ID>', scraper: 'scraper-globo.mjs',
   },
 };
