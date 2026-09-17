@@ -25,13 +25,16 @@ direta ao leiloeiro. Todos os commits já em `main`, deploy confirmado até o pe
 nesta mesma conversa.
 
 **O que fica pra amanhã (nesta ordem de prioridade):**
-1. 🔴 **Franco Leilões** — dono ia rodar `scripts/_recon-francoleiloes-headless.mjs` no runner
-   residencial (WSL); ainda sem retorno. Arquivos temporários (`scripts/_recon-francoleiloes-
-   headless.mjs` + `.github/workflows/_recon-francoleiloes-headless.yml`) continuam no repo até
-   o resultado chegar — não limpar sozinho.
-2. 🟡 **`uf_cef_congelada` ainda alerta** — não é mais o lote-lixo (já limpo), é **AP** (Amapá)
-   parado há 7+ dias, 7 imóveis ativos. Provável só baixo volume (é o estado com menos imóveis
-   da Caixa do país), não bug — mas não investiguei fundo. Reconferir se persistir.
+1. ✅ **Franco Leilões — RESOLVIDO (17/09, sessão seguinte)**. `isolarSessao` bastou (Cloudflare
+   é por SESSÃO, não por IP — mesmo padrão do JELEILOES), sem precisar de Scraping Browser nem
+   IP residencial. Parser novo (`scripts/lib/francoleiloes-parse.mjs`), motor+wrapper+CI
+   integrados, `npm run testar:francoleiloes` (12 asserções contra dado real). Dry-run 16/16
+   aprovado, gravar confirmado: 16 imóveis ativos, fonte=FRANCOLEILOES. Recon temporários já
+   removidos do repo.
+2. ✅ **`uf_cef_congelada`/AP — FECHADO, não é bug (17/09, sessão seguinte)**. Confirmado via log
+   do cron CEF: o CSV da Caixa para AP genuinamente vem com 0 linhas de dado dia após dia
+   (cabeçalho bem-formado, zero registros) — é o estado com menos imóveis da Caixa do país,
+   condição real da fonte externa, não defeito do scraper.
 3. 🔴 **Google Cloud "BidPro métricas diárias"** — projeto-sombra do próprio Google; só o dono
    consegue checar quem/quando criou (Console → IAM/Faturamento).
 4. 🔴 **Instagram** — Verificação de Negócio parada no Meta Business Manager; 7 rascunhos de
@@ -45,6 +48,41 @@ nesta mesma conversa.
 6. **`retencaoVeiculosVencidos()` ainda não desativou nada de verdade** (0 veículos passam de
    15 dias hoje) — primeira desativação real só daqui a alguns dias; vale conferir que rodou
    sem erro no log do `veiculos-puppeteer.yml` quando tiver histórico suficiente.
+
+### 📋 Sessão adicional 17/09 (tarde) — dono reportou "financiado" na tela do imóvel × "à vista"
+no relatório para um imóvel que ele esperava ser judicial/hipotecado
+
+**O imóvel apontado (ZUK, Rua Jorge Augusto 449, São Paulo/SP, id `b5d57dd6-...`) estava
+CORRETO nos dois lugares** — confirmado direto no banco: `modalidade='extrajudicial'`,
+`forma_pagamento='financiado'`. Bate com o próprio print do dono: badge "Extrajudicial" (não
+Judicial) e o edital é execução de dívida bancária (Banco Credibel), não venda judicial art.895
+— `hipotecado` neste sistema é reservado exatamente para o caso judicial (`src/data/pagamento.js`),
+então este imóvel nunca deveria carregar esse rótulo. Sem bug neste lote específico.
+
+**Mas a varredura pedida ("deve haver mais imóveis com o mesmo erro") achou um bug real, sistêmico,
+em outro ponto do mesmo mecanismo.** Cruzando `imoveis_leilao.forma_pagamento` (financiado/
+hipotecado, 24 ativos) com o `condicoesEdital.regrasPagamento` do relatório mercadológico mais
+recente de cada um:
+- **12 de 24 (50%)**: relatório sem `regrasPagamento` nenhum — nem o PDF do edital foi lido a
+  tempo (timeout de 3s), nem existe consenso aprendido (`leiloeiro_pagamento_prior`) pra aquele
+  leiloeiro×modalidade ainda. Esperado em fonte nova/pouco lida — não é bug, é "ainda sem dado".
+- **11 de 24 (46%)**: relatório COM `regrasPagamento`, mas com `parcelamentoPermitido: null` —
+  o leiloeiro já tinha consenso aprendido para campos numéricos (sinalPct, comissaoPct), e mesmo
+  assim o campo que trava/destrava o cenário parcelado sumia. **Causa raiz**: `pagamentoPrior()`
+  em `api/_doc-extracao.js` exigia 2 votos concordantes pra QUALQUER campo do consenso — mas
+  `parcelamentoPermitido`/`aVista`/`financiavel`/`fgts` são campos que `extrairPagamentoTexto()`
+  só marca quando o texto AFIRMA (nunca grava voto "false" — ausência vira null e é descartada
+  antes de votar), então não existe voto contrário pra diluir: 1 confirmação já é sinal real.
+  Exigir 2 pra esses 4 campos só descartava informação real à toa.
+- **1 de 24**: o próprio ZUK, regenerado hoje — único com `parcelamentoPermitido: true` (leu o
+  PDF do lote direto, não dependeu do prior aprendido).
+
+**Corrigido**: `pagamentoPrior()` agora exige só 1 voto para os 4 campos "só-confirma"
+(commit `a617122`, testes `testar:pagamento` + build OK, já em `main`). Efeito é só PRA FRENTE —
+relatórios já gerados não são reprocessados; a próxima geração de cada um desses 11 lotes deve
+vir com o cenário financiado/hipotecado usando os termos reais do leiloeiro em vez do fallback.
+Os 12 "sem dado nenhum" seguem sem solução automática — é esperar o primeiro edital daquele
+leiloeiro×modalidade ser lido (por doc ou pelo cron) pra começar a aprender.
 
 **Pendências antigas, sem mudança hoje (lista amarela, baixa prioridade)**: `data_leilao`
 ausente em CEF/FERREIRALEIL/GESTAOLEILOES/PECINI (bloqueio de IP, decisão de investimento
