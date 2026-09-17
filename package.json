@@ -63,7 +63,8 @@
     "testar:webhook-leiloeiro": "node scripts/testes/webhook-leiloeiro-aceita-foto-e-anexo.mjs",
     "testar:foto-dom": "node scripts/testes/foto-e-descricao-nao-ficam-nulas-na-familia-dom.mjs",
     "testar:foto-generica": "node scripts/testes/foto-generica-nao-pega-logo-do-site.mjs",
-    "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs"
+    "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs",
+    "testar:albertomacedo-pacote": "node scripts/testes/albertomacedo-descobre-lote-dentro-de-pacote.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

@@ -1,17 +1,22 @@
 /**
  * Parser puro — ALBERTOMACEDOLEILOES (albertomacedoleiloes.com.br). Fonte `dom`, plataforma
- * própria (recon 07/09). Sem catálogo de LOTES separado — a home lista os "leilões"
- * (`/leilao/<slug>`), e cada um pode ser um imóvel único ("terreno-de-3-hectares-em-barretos",
- * confirmado: tabela limpa de praças) OU um pacote com vários imóveis em UF diferentes
- * ("sicoob-imoveis-em-mg-e-pe", "imoveis-em-ba-mg-e-pr" — plural, várias siglas no slug).
- * NÃO dá pra distinguir os dois só pela URL — o parser tenta extrair o rótulo "Avaliação" de
- * qualquer jeito; se a página for um pacote sem um valor único, `checarQualidade` descarta
- * por `valor_avaliacao` zerado (mais seguro que inventar qual dos vários imóveis é "o" valor).
+ * própria (recon 07/09). A home lista os "leilões" (`/leilao/<slug>`), e cada um pode ser um
+ * imóvel único ("terreno-de-3-hectares-em-barretos", confirmado: tabela limpa de praças) OU um
+ * PACOTE com vários imóveis, cada um com sua PRÓPRIA página `/lote/<n>-<slug>` (achado 17/09,
+ * dono reportou lote que não aparecia no sistema: `/lote/2-lote-residencial-buri-residence`,
+ * filho de `/leilao/02-imoveis-em-burisp`). NÃO dá pra saber pela URL do `/leilao/` se é
+ * single ou pacote — resolvido com o NÍVEL 2 do motor (`extrairUrlsDeEvento`): toda URL
+ * `/leilao/<slug>` da home é tratada como "evento" e revisitada; se ela listar `/lote/`
+ * dentro, esses viram itens de verdade (extrairUrlsDeLote reconhece os dois padrões agora).
+ * Página single-item não lista `/lote/` nenhum (confirmado: recon na própria página do lote
+ * achou 0 `/lote/` internos) — o revisitar dela no nível 2 é barato e idempotente, sem
+ * duplicar item (namespace de slug de `/leilao/` e `/lote/` não colide).
  *
- * Confirmado (leilao/terreno-de-3-hectares-em-barretos): tabela PRAÇA/ABERTURA/ENCERRAMENTO
- * /INICIAL (1ª e 2ª praça) + rótulo solto "Avaliação (FEVEREIRO de 2025): R$ 1.082.794,61".
- * Sem PDF encontrado no recon (real ou apenas fora da janela capturada — a checar num
- * dry-run); fotos reais via API própria (api.albertomacedoleiloes.com.br/storage/...).
+ * Confirmado (leilao/terreno-de-3-hectares-em-barretos E lote/2-lote-residencial-buri-
+ * residence — mesmo template): tabela PRAÇA/ABERTURA/ENCERRAMENTO/INICIAL (1ª e 2ª praça) +
+ * rótulo solto "Avaliação (FEVEREIRO de 2025): R$ 1.082.794,61". Sem PDF encontrado no recon
+ * (real ou apenas fora da janela capturada — a checar num dry-run); fotos reais via API
+ * própria (api.albertomacedoleiloes.com.br/storage/...).
  */
 import { inferirTipo, cidadeUF, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, tituloDeSlug, anexosDeHtml, montarRowDom, linhasDeTabela } from './dom-parse-util.mjs';
@@ -20,15 +25,28 @@ export const TENANTS = {
   albertomacedo: { fonte: 'ALBERTOMACEDOLEILOES', leiloeiro: 'Alberto Macedo Leilões', base: 'https://albertomacedoleiloes.com.br' },
 };
 
+// Reconhece as DUAS formas de item: `/leilao/<slug>` (single, ou pacote — descartado depois
+// por falta de valor único) e `/lote/<n>-<slug>` (item de dentro de um pacote — só aparece
+// dentro da página do `/leilao/` pai, nunca na home direto, confirmado 17/09).
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["'](\/leilao\/([a-z0-9][a-z0-9-]{2,})?)\/?["']/gi)) {
-    if (!m[2]) continue;   // "/leilao/-1" e afins: sem slug de verdade, nada pra identificar
+  for (const m of String(html || '').matchAll(/href=["'](\/(?:leilao|lote)\/([a-z0-9][a-z0-9-]{2,}))\/?["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
   }
   return urls;
 }
-export const idDaUrl = url => (String(url).match(/\/leilao\/([a-z0-9-]+)/i) || [])[1] || null;
+// NÍVEL 2 do motor (runner.mjs `enumerar`): toda URL `/leilao/<slug>` da home vira "evento" —
+// cada uma é revisitada e passa de novo por `extrairUrlsDeLote`, que agora também acha
+// `/lote/` dentro dela se for um pacote. Mesmo padrão já usado por HASTA/NORDESTE.
+export function extrairUrlsDeEvento(html, base) {
+  const eventos = new Map();
+  for (const m of String(html || '').matchAll(/href=["'](\/leilao\/([a-z0-9][a-z0-9-]{2,})?)\/?["']/gi)) {
+    if (!m[2]) continue;   // "/leilao/-1" e afins: sem slug de verdade, nada pra identificar
+    try { eventos.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
+  }
+  return eventos;
+}
+export const idDaUrl = url => (String(url).match(/\/(?:leilao|lote)\/([a-z0-9-]+)/i) || [])[1] || null;
 
 // Tabela de praças: pega a ÚLTIMA linha com valor em R$ na coluna final (2ª praça = mínimo
 // vigente); a 1ª linha de dados vira avaliação de reserva se não houver rótulo "Avaliação".
