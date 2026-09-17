@@ -357,7 +357,15 @@ async function scraperCEFcsv(uf) {
       const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}21.jpg`;
       // Extrai dados do texto: CEP no endereço, matrícula e área na descrição
       const cep = extrairCEP(m.logradouro) || extrairCEP(m.descricao_csv);
-      const enderecoLimpo = toTitleCase((m.logradouro || '').replace(/\s*[-–,]?\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim());
+      // 18/09, achado investigando o invariante `pino_generico_como_rua`: o CSV da Caixa às
+      // vezes já vem com o tipo de logradouro duplicado ("Rua Rua Abrahao Barretto", "Avenida
+      // Avenida X") — não é erro nosso de concatenação (nenhum código daqui prefixa "Rua "),
+      // é a própria fonte. Mas exibir assim na ficha do imóvel parece bug do sistema pro
+      // cliente, e a duplicata também derruba o casamento de endereço entre lotes do mesmo
+      // prédio (a extração de via reconhece "rua x" ≠ "x"). Colapsa só quando o MESMO tipo se
+      // repete logo no início — nunca mexe em endereço sem duplicata.
+      const enderecoLimpo = toTitleCase((m.logradouro || '').replace(/\s*[-–,]?\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim())
+        .replace(/^(Rua|Avenida|Av\.?|Estrada|Travessa|Alameda|Rodovia|Pra[çc]a)\s+\1(?=\s|,|$)/i, '$1');
       const numeroMatricula = m.numero_matricula || extrairMatriculaTexto(m.descricao_csv);
       const areaM2 = extrairAreaM2(m.descricao_csv);
       const tipoNorm = inferirTipoCEF(m);
