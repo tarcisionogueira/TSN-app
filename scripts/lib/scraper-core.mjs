@@ -135,7 +135,13 @@ export function extrairGenerico(html, urlBase) {
   }
 
   // número da matrícula no corpo: "Matrícula nº 12.345"
-  const mat = html.match(/matr[ií]cula[^\d]{0,20}(\d[\d.\-\/]{2,})/i);
+  // DECODIFICA ANTES DE CASAR (17/09): esta linha ainda buscava em `html` cru — a mesma
+  // entidade não decodificada que já mordeu rótulo de anexo e valor de lance (comentários
+  // acima, 17/08) também escondia a matrícula: um site que escreve "Matr&iacute;cula" nunca
+  // batia com /matr[ií]cula/, e "Matrícula Imobiliária nº X" saía com numero_matricula nulo
+  // mesmo o número estando na página (achado no PECINI, lote 10645: matrícula 4.948 visível
+  // na ficha, campo gravado como null).
+  const mat = decodificarEntidades(html).match(/matr[ií]cula[^\d]{0,30}(\d[\d.\-\/]{2,})/i);
   if (mat) out.numero_matricula = mat[1];
 
   // data do leilão/praça: "leilão ... 12/07/2026" ou "1ª praça: 12/07/2026"

@@ -152,7 +152,10 @@ export function parseDetalhe(html, url) {
     cidade, estado, link_foto: base.link_foto,
     valor_avaliacao, valor_minimo, ofertas: ofUnq,
     modalidade, area_m2: area,
-    descricao: (base.descricao || '').slice(0, 500) || null,
+    // 500→2000 (17/09): mesma correção do PECINI — coluna `text` sem limite, e
+    // `extrairDescricaoDoCorpo` (agora reunindo sequência de blocos, não só o melhor) já
+    // limita a 2000; truncar em 500 aqui cortava de novo a parte mais informativa.
+    descricao: (base.descricao || '').slice(0, 2000) || null,
     data_leilao: base.data_leilao || extrairData(html),
     numero_matricula: mat,
     link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i),

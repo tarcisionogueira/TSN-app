@@ -300,7 +300,12 @@ function parseDetalhe(html, rec) {
     valor_minimo: valorMinimo,
     modalidade,
     area_m2: area,
-    descricao: (base.descricao || '').slice(0, 500) || null,
+    // 500→2000 (17/09): a coluna é `text` (sem limite no banco) e `extrairDescricaoDoCorpo`
+    // já limita a 2000 — cortar em 500 aqui de novo é a 2ª truncagem que apagava justamente a
+    // parte que o fix de "sequência de blocos" passou a trazer (medidas/confrontações vêm
+    // depois do 1º parágrafo). Achado no lote PECINI 10645 (matrícula 4.948, Santana de
+    // Parnaíba): a descrição oficial do leiloeiro passa fácil de 500 caracteres.
+    descricao: (base.descricao || '').slice(0, 2000) || null,
     data_leilao: base.data_leilao || extrairData(html),
     numero_matricula: base.numero_matricula || null,
     link_matricula: matriculaDoc,

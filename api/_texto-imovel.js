@@ -45,22 +45,46 @@ export function extrairDescricaoDoCorpo(html) {
     .map(b => decodificarEntidades(b.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim())
     .filter(b => b.length >= 60 && b.length <= 4000 && !RE_RUIDO_SITE.test(b));
 
+  // QUALIFICA cada bloco isoladamente (mesmo crivo de sempre: sinal forte + vocabulário).
+  const vocabDe = (b) => new Set((b.match(new RegExp(RE_VOCAB_IMOVEL.source, 'gi')) || []).map(t => t.toLowerCase()));
+  const qualifica = blocos.map(b => RE_SINAL_FORTE.test(b) && RE_VOCAB_IMOVEL.test(b));
+
+  // ─── PAINEL OFICIAL = SEQUÊNCIA DE BLOCOS, NÃO UM BLOCO SÓ (17/09) ───────────────────────
+  // Até aqui só o bloco de MAIOR pontuação isolada virava descrição. Achado no PECINI: o
+  // painel "Informações" que o leiloeiro publica (texto do lote → Áreas → Descrição conforme
+  // matrícula → nº da matrícula → endereço) vem em VÁRIOS <p>/<li> separados — cada um pode
+  // isoladamente ter só 1 termo de vocabulário (não bate o piso de 2), mas JUNTOS descrevem o
+  // imóvel de verdade. Ficar só com o vencedor cortava a ficha na 1ª frase e descartava
+  // exatamente a parte que vem do trabalho do leiloeiro (medidas, confrontações, matrícula) —
+  // que é a mais valiosa para quem analisa e para o diagnóstico da IA.
+  //
+  // Corrigido reunindo SEQUÊNCIAS de blocos qualificados (tolerando 1 bloco de folga no meio,
+  // pra não quebrar por causa de um <div> de UI entre dois parágrafos de conteúdo), em vez de
+  // varrer a página inteira: só blocos VIZINHOS entram juntos, então um widget de "imóveis
+  // semelhantes" longe dali no HTML não se mistura com a descrição deste lote.
+  const GAP_MAX = 1;
+  const sequencias = [];
+  let atual = null;
+  for (let i = 0; i < blocos.length; i++) {
+    if (qualifica[i]) {
+      if (atual && i - atual.fim - 1 <= GAP_MAX) { atual.fim = i; atual.idx.push(i); }
+      else { atual = { inicio: i, fim: i, idx: [i] }; sequencias.push(atual); }
+    }
+  }
+
   let melhor = null, melhorPontos = 0;
-  for (const b of blocos) {
-    // Sem sinal FORTE não há candidato — ver a nota em RE_SINAL_FORTE.
-    if (!RE_SINAL_FORTE.test(b)) continue;
-    if (!RE_VOCAB_IMOVEL.test(b)) continue;
-    // Pontuação = quantos termos DISTINTOS do vocabulário aparecem. Mede densidade de
-    // informação, não tamanho: um rodapé longo com um "m²" solto perde para uma descrição
-    // curta que traz área, dormitório e matrícula.
-    const termos = new Set((b.match(new RegExp(RE_VOCAB_IMOVEL.source, 'gi')) || []).map(t => t.toLowerCase()));
+  for (const seq of sequencias) {
+    const termos = new Set();
+    for (const i of seq.idx) for (const t of vocabDe(blocos[i])) termos.add(t);
     const pontos = termos.size;
-    if (pontos > melhorPontos || (pontos === melhorPontos && melhor && b.length > melhor.length)) {
-      melhor = b; melhorPontos = pontos;
+    if (pontos > melhorPontos) {
+      melhor = blocos.slice(seq.inicio, seq.fim + 1).join(' ');
+      melhorPontos = pontos;
     }
   }
   // Um único termo pode ser coincidência (ex.: "vaga" num menu). Exige DOIS sinais distintos
-  // para substituir a meta tag — abaixo disso, "não sei" é resposta melhor que um palpite.
+  // na sequência para substituir a meta tag — abaixo disso, "não sei" é resposta melhor que
+  // um palpite.
   return melhorPontos >= 2 ? melhor.slice(0, 2000) : null;
 }
 

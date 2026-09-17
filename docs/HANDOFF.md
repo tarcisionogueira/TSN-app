@@ -28054,3 +28054,68 @@ checkbox "Verify you are human" aparece corretamente entre o aceite de termos e 
 "Criar conta grátis". Scripts temporários de teste removidos após a confirmação.
 **Lição para qualquer script de terceiro novo**: checar o CSP de `vercel.json` faz parte do
 checklist — script de terceiro sem entrada no CSP é a mesma classe de falha do Pixel.
+
+## 17/09 — Descrição do lote muito divergente da oficial do leiloeiro (achado do dono, PECINI/RJ/SOLEON/EMILIOMATOS)
+
+**Pedido do dono**: print do lote PECINI 10645 (Santana de Parnaíba/SP, matrícula 4.948) —
+o painel "Informações" do leiloeiro (texto do lote → Áreas → Descrição conforme matrícula
+imobiliária com as confrontações → nº da matrícula → Inscrição Cadastral → Endereço) não batia
+com o que o sistema guarda. Isso importa duas vezes: para quem analisa manualmente E para o
+diagnóstico da IA, porque esse texto é o que o leiloeiro PUBLICOU/analisou a partir da
+matrícula — não é marketing, é fonte primária.
+
+**Conferido no banco**: `descricao` do lote saía **idêntica, palavra por palavra, ao 1º
+parágrafo apenas** ("Lote de terreno urbano, constituído... casa em obras.") — todo o resto
+(áreas detalhadas, a descrição com as medidas R=36,32m/confrontações, nº da matrícula,
+inscrição cadastral, endereço) não entrava. `numero_matricula` saía **null**, mesmo com
+"Matrícula Imobiliária nº 4.948" escrito claramente na página.
+
+**DUAS causas raiz, as duas em código compartilhado por PECINI, RJ (`scraper-rj.mjs`), SOLEON
+(CALIL/VEGAS/TORRES3) e EMILIOMATOS (`emiliomatos-parse.mjs`)** — todos os quatro consumidores
+de `extrairGenerico`/`extrairDescricaoDoCorpo`:
+
+1. **`extrairDescricaoDoCorpo` (`api/_texto-imovel.js`) só devolvia o BLOCO de maior
+   pontuação, nunca o painel inteiro.** O site quebra o painel oficial em vários `<p>`/`<li>`
+   separados; cada um isolado pode ter só 1 termo de vocabulário (não bate o piso de 2 que a
+   função exige), mas JUNTOS descrevem o imóvel de verdade. Corrigido reunindo **sequências**
+   de blocos qualificados (tolerando 1 bloco de folga no meio, para não quebrar por causa de
+   um `<div>` de UI entre dois parágrafos) em vez de escolher um só — e só blocos VIZINHOS
+   entram juntos, então um widget de "imóveis semelhantes" longe dali no HTML não se mistura
+   com a descrição deste lote. Testado com HTML sintético reconstruindo o painel do print: antes
+   saía só a 1ª frase (170 caracteres); depois sai o parágrafo + a área construída + a descrição
+   inteira com as confrontações (697 caracteres). Não recuperou "Matrícula Imobiliária nº
+   4.948"/Inscrição Cadastral/Endereço porque esses parágrafos vêm DEPOIS da última âncora
+   qualificada e sem outra âncora depois — comportamento intencional (evita varrer até o rodapé
+   da página); o número da matrícula é recuperado de outro jeito (item 2).
+2. **`numero_matricula` (em `extrairGenerico`, `scripts/lib/scraper-core.mjs`) ainda casava
+   contra o `html` CRU**, não decodificado — a mesma classe de bug já documentada 3x neste
+   HANDOFF (17/08: rótulo de anexo e valor de lance) mordeu este campo também: "Matr&iacute;cula"
+   nunca bate com `/matr[ií]cula/`. Corrigido decodificando antes de casar (mesmo padrão já
+   usado alhures) e alargando a janela de 20→30 caracteres ("Matrícula **Imobiliária** nº" tem
+   uma palavra a mais entre o rótulo e o número do que o "Matrícula nº" mais comum).
+3. **Achado no caminho, mesma raiz**: os 4 coletores cortavam `descricao` em `.slice(0, 500)`
+   ANTES de gravar — uma 2ª truncagem redundante em cima do limite de 2000 que a própria função
+   de extração já aplica, e que cortava de novo exatamente a parte que o fix #1 passou a trazer.
+   A coluna é `text` no Postgres (sem limite) — `api/leiloeiro-feed.js` e `leiloeiro-webhook.js`
+   já gravam até 5000 sem problema. Alinhado os 4 coletores para 2000 (mesmo teto do extrator).
+
+**Não verificado contra o HTML real** (este sandbox não alcança `pecinileiloes.com.br` —
+Cloudflare bloqueia até o proxy do ambiente; confirmado via `curl` retornando 403 no túnel).
+A reconstrução usada no teste foi feita a olho a partir do print do dono, então a estrutura
+exata (quantos `<p>` por seção, se há `<div>` entre eles) é uma aproximação, não um fato
+confirmado. **Ação pendente**: na próxima coleta real do PECINI (`PECINI_DRYRUN=0` ou o cron
+`scraper-pecini.yml`), conferir no banco se a `descricao` do lote 10645 (ou de um lote novo)
+já sai completa — se ainda faltar pedaço do painel, é sinal de que a estrutura real difere da
+reconstruída e o `GAP_MAX`/os regexes precisam de mais um ajuste, desta vez com o HTML real em
+mãos (log de erro do coletor, não suposição).
+
+**Risco assumido conscientemente**: os 3 arquivos tocados (`api/_texto-imovel.js`,
+`scripts/lib/scraper-core.mjs`, e os `slice(500→2000)`) são compartilhados por 4 coletores em
+produção. A mudança em `extrairDescricaoDoCorpo` é estritamente ADITIVA (só pode trazer mais
+texto do que antes, nunca menos — a sequência sempre inclui o antigo "melhor" bloco) e usa os
+MESMOS filtros de sempre (sinal forte + vocabulário) para decidir o que qualifica, então o
+risco de puxar bloco de outro imóvel (ex.: carrossel de "imóveis semelhantes") fica limitado a
+blocos VIZINHOS ao painel real. Ainda assim, sem HTML real de RJ/SOLEON/EMILIOMATOS para
+confirmar, vale conferir a qualidade da próxima coleta de cada um antes de considerar fechado.
+
+`npm run build` passou limpo (0 padrão perigoso novo, eslint sem erro).
