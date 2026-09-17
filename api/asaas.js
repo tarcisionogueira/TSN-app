@@ -164,7 +164,7 @@ export default async function handler(req, res) {
     // honorarios_recebimentos por este caminho — confirmar o pagamento e lançar à mão até
     // este fluxo virar definitivo (se o teste confirmar que o Asaas resolve o caso).
     if (action === 'criar_cobranca_honorario_teste') {
-      const { arrematacao_id, nome, email } = body;
+      const { arrematacao_id, nome, email, cpf: cpfBody } = body;
       if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -184,10 +184,13 @@ export default async function handler(req, res) {
       const saldo = Math.round((total - jaRecebido) * 100) / 100;
       if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
       // O Asaas EXIGE cpfCnpj pra criar a cobrança (achado no 1º teste: "Erro interno no
-      // processamento" escondia "é necessário preencher o CPF ou CNPJ do cliente"). Vem do
-      // cadastro do arrematante, nunca do body — mesma fonte/decifra de cpfAutenticado.
-      const cpf = await cpfAutenticado(arr.arrematante_id, null);
-      if (!cpf) return res.status(400).json({ error: 'Não encontrei o CPF cadastrado deste cliente — necessário pro Asaas gerar a cobrança.' });
+      // processamento" escondia "é necessário preencher o CPF ou CNPJ do cliente"). Tenta o
+      // cadastro do arrematante primeiro; a tela (sem login) também pode enviar o CPF direto
+      // — Marcos Araujo, por exemplo, nunca passou pela verificação de identidade e não tem
+      // CPF cadastrado, então SEM este fallback o link nunca conseguiria cobrar nada dele.
+      const cpfCadastro = await cpfAutenticado(arr.arrematante_id, null);
+      const cpf = cpfCadastro || String(cpfBody || '').replace(/\D/g, '');
+      if (!cpf || cpf.length !== 11) return res.status(400).json({ error: 'CPF obrigatório e inválido — necessário pro Asaas gerar a cobrança.' });
 
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
