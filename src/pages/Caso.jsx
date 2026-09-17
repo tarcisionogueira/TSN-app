@@ -583,11 +583,6 @@ export default function Caso() {
     setCarregandoReceb(false);
   }, [arrematacao?.id]);
 
-  useEffect(() => {
-    if (!isStaff || !arrematacao?.id) return;
-    carregarRecebimentos();
-  }, [isStaff, arrematacao?.id, carregarRecebimentos]);
-
   const registrarRecebimentoManual = async (e) => {
     e.preventDefault();
     setErroReceb('');
@@ -631,6 +626,11 @@ export default function Caso() {
   const isStaff    = ['analista','advogado','admin','consultor'].includes(role);
   const isCliente  = !isStaff;
   const podeSolicitarJuridico = PLANOS_JURIDICO.includes(role);
+
+  useEffect(() => {
+    if (!isStaff || !arrematacao?.id) return;
+    carregarRecebimentos();
+  }, [isStaff, arrematacao?.id, carregarRecebimentos]);
 
   // ─── Escolha do jurídico (só admin) ───────────────────────────────────────
   // 17/09, pedido do dono: hoje o advogado é sorteado entre os ativos; o admin quer
