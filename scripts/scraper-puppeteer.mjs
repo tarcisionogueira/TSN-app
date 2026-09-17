@@ -3550,11 +3550,15 @@ export async function scraperHastaPublica(browser) {
         const judicial = /\bJudicial\b/i.test(texto);
         const mComitente = texto.match(/Comitente:\s*([^\n]+)/i);
 
-        // Cidade/UF vêm da LISTAGEM (o painel não repete) — procura o card deste id pontualmente.
-        const reCidUf = new RegExp(`#${id}\\s*-[^\\n]*\\n[^\\n]+\\n\\d[ªa]\\s*Pra[çc]a\\s*\\|\\s*([^\\n/]+)/([A-Za-z]{2})`, 'i');
-        const mCidUf = listagemTexto.match(reCidUf);
-        const cidade = mCidUf ? mCidUf[1].trim() : '';
-        const uf = mCidUf ? mCidUf[2].toUpperCase() : '';
+        // Cidade/UF do LEILÃO (fallback): vem da listagem, o painel não repete — procura o
+        // card deste id pontualmente. Só serve de fallback porque um leilão pode ter lotes em
+        // CIDADES DIFERENTES (achado testando com dado real: leilão 18360 tinha lotes em Jaú,
+        // Mirassol e Iaras — usar a mesma cidade/UF pra todos os lotes gravava tudo errado, ou
+        // vazio quando o leilão nem tinha uma cidade única pra achar na listagem).
+        const reCidUfLeilao = new RegExp(`#${id}\\s*-[^\\n]*\\n[^\\n]+\\n\\d[ªa]\\s*Pra[çc]a\\s*\\|\\s*([^\\n/]+)/([A-Za-z]{2})`, 'i');
+        const mCidUfLeilao = listagemTexto.match(reCidUfLeilao);
+        const cidadeLeilao = mCidUfLeilao ? mCidUfLeilao[1].trim() : '';
+        const ufLeilao = mCidUfLeilao ? mCidUfLeilao[2].toUpperCase() : '';
 
         const m1 = texto.match(/1[ªa]\s*Praca:\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/i);
         const m2 = texto.match(/2[ªa]\s*Praca:\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/i);
@@ -3571,6 +3575,12 @@ export async function scraperHastaPublica(browser) {
           if (!RE_IMOVEL.test(alvoFiltro)) continue; // não é imóvel (veículo/equipamento etc.)
           const valor = parseBRL(valorTxt);
           if (!valor) continue;
+          // Cidade/UF: PRIMEIRO o próprio título do lote ("... - Jaú/SP" no fim), que é a
+          // fonte certa quando os lotes do leilão não são todos da mesma cidade; só cai pro
+          // dado do leilão (listagem) quando o título não termina em Cidade/UF reconhecível.
+          const mCidUfLote = tituloLote.match(/([A-Za-zÀ-ÖØ-öø-ÿ'.\s]{2,40})\/([A-Za-z]{2})\s*$/);
+          const cidade = (mCidUfLote && UF_SIGLAS.has(mCidUfLote[2].toUpperCase())) ? mCidUfLote[1].trim() : cidadeLeilao;
+          const uf = (mCidUfLote && UF_SIGLAS.has(mCidUfLote[2].toUpperCase())) ? mCidUfLote[2].toUpperCase() : ufLeilao;
           imoveis.push({
             fonte: 'HASTAPUBLICA',
             fonte_id: `hastapublica_${id}_${numLote}`,
