@@ -17,8 +17,18 @@
  */
 import { buscarViaBrightData, ErroBrightData } from '../api/_brightdata.js';
 
-const ALVOS = (process.env.RECON_DOMINIOS || 'hastapublica.com.br,joserodovalholeiloes.com.br,hdleiloes.com.br,dilsonmoreira.com.br,lucasleiloeiro.com.br')
-  .split(',').map((s) => s.trim()).filter(Boolean);
+// 2ª rodada (18/09): URLs específicas de LISTAGEM (não só a home) para os 3 domínios que a
+// 1ª rodada confirmou como HTML estático com listagem — precisamos ver a página que lista
+// TODOS os lotes de imóvel, com paginação, antes de escrever o parser de verdade.
+const ALVOS = (process.env.RECON_DOMINIOS || [
+  'hastapublica.com.br',
+  'hastapublica.com.br/busca',
+  'hastapublica.com.br/leiloes',
+  'joserodovalholeiloes.com.br/leilao/index/imoveis',
+  'hdleiloes.com.br/leilao/index/imoveis',
+  'dilsonmoreira.com.br',
+  'www.dilsonmoreira.com.br',
+].join(',')).split(',').map((s) => s.trim()).filter(Boolean);
 
 const RE_CHALLENGE = /just a moment|cf-browser-verification|checking your browser|attention required|cf-chl/i;
 const RE_LOTE = /\/(lote|imovel|leilao|imoveis)\//i;
@@ -49,10 +59,15 @@ async function reconDominio(dominio) {
   const temJson = RE_JSON_EMBUTIDO.test(html);
   console.log(`  HTTP ${status} · ${tam} bytes · challenge=${challenge} · link_lote=${temLote} · preco=${temPreco} · json_embutido=${temJson}`);
   if (status >= 200 && status < 300 && !challenge && tam > 500) {
-    const amostraLinks = [...html.matchAll(/href=["']([^"']*(?:lote|imovel|leilao)[^"']*)["']/gi)].slice(0, 5).map((m) => m[1]);
+    const amostraLinks = [...new Set([...html.matchAll(/href=["']([^"']*(?:lote|imovel|leilao)[^"']*)["']/gi)].map((m) => m[1]))].slice(0, 10);
     if (amostraLinks.length) console.log(`  amostra de links: ${JSON.stringify(amostraLinks)}`);
     const titleMatch = html.match(/<title>([^<]*)<\/title>/i);
     if (titleMatch) console.log(`  title: ${titleMatch[1].slice(0, 120)}`);
+    // Cartão de lote costuma ter cidade/UF + valor perto um do outro — pega o TRECHO ao redor
+    // do primeiro "R$" achado, pra ver a marcação real (classe CSS, estrutura) sem baixar o
+    // arquivo inteiro no log.
+    const idxPreco = html.search(RE_PRECO);
+    if (idxPreco >= 0) console.log(`  trecho ao redor do 1º R$: ${JSON.stringify(html.slice(Math.max(0, idxPreco - 300), idxPreco + 200))}`);
   }
   let veredito = 'indefinido';
   if (challenge) veredito = 'cloudflare_bloqueado';
