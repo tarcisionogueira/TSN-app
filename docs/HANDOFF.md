@@ -98,6 +98,61 @@ migração — a lógica foi validada por trigger direto no banco, não pelo flu
 outro caso) é o teste de fogo; se o webhook não gravar a parte certa, conferir
 `honorarios_recebimentos` e os logs da function antes de suspeitar de outra coisa.
 
+### 📋 Continuação 17/09 (noite) — teste real do link do Marcos achou bug, + recibo por e-mail
++ Pix/cartão combinado
+
+**Pedido "testa o pagamento real do Marcos pelo link agora"** levou a três entregas em
+sequência, cada uma validada com dado real antes de seguir para a próxima:
+
+**1) Bug achado testando o link real** (commit `f8d4bcc`): confirmei no extrato do Mercado
+Pago (`api/financeiro-extrato`, via workflow descartável) o Pix de **R$2.163,00 em 16/09**
+que o Marcos fez direto na conta — registrei como `honorarios_recebimentos` confirmado. Ao
+conferir a TELA do link, achei que `api/honorario-info.js` continuava devolvendo o valor
+CHEIO (R$54.835,52) enquanto `api/mp-checkout.js` já cobrava certo o saldo restante
+(R$52.672,52) — número exibido ≠ número cobrado. Corrigido: `honorario-info.js` agora soma os
+recebimentos confirmados e devolve `honorarios_saldo_restante`; `PagarHonorario.jsx` usa esse
+saldo tanto no valor exibido quanto no que manda pro `PagamentoServico`.
+
+**2) Cheques do Marcos registrados** (17/09 noite): o dono trouxe foto dos 3 cheques físicos
+— SICOOB nº000094 R$5.500 (pré-datado 26/12/26), SICOOB nº000093 R$5.500 (pré-datado
+26/11/26), Banco do Brasil nº850310 R$8.671,43 (19/09/26) — **emitidos por terceiros** (Pablo
+Santa Rosa da Silva e Elione Maria de Jesus, não o próprio Marcos), total R$19.671,43.
+Registrados como `confirmado` por instrução explícita do dono ("documentar isso para
+considerar os honorários pagos"), cada um com justificativa citando banco/nº/emitente/CPF/data
+— apesar de dois serem pré-datados (ainda não compensados). **Estado atual da arrematação
+`fb02770c-cfda-4f8e-a9ea-8808775bc804`**: recebido R$21.834,43 (Pix + 3 cheques), **saldo
+restante R$33.001,09** aguardando o cartão do Marcos. Se algum cheque voltar, usar
+`status='estornado'` na linha (não apagar) — a trigger reabre `pendente` sozinha se a soma
+cair abaixo do total.
+
+**3) Recibo por e-mail ao fechar** (commit `997e266`): `api/_honorario-recibo.js` — quando a
+soma bate o total (por qualquer combinação de partes), manda ao arrematante um e-mail
+discriminando cada parte (forma+valor) e o imóvel (título/endereço/valor arrematado).
+Idempotente por `arrematacoes.honorarios_recibo_enviado_em` (PATCH condicional `...IS NULL`).
+Chamado best-effort tanto do webhook do cartão quanto do registro manual.
+
+**4) Pix + Cartão combinado no mesmo link** (commit `2247460`, pedido do dono): antes só dava
+pra escolher Pix OU cartão, cada um pelo valor cheio. Agora existe uma 3ª opção "Pix +
+Cartão": quem abre o link digita quanto quer pagar de Pix AGORA (mín. R$5, sempre menor que o
+saldo), paga, e ao compensar o formulário de cartão libera pro SALDO recalculado no servidor
+(nunca no front). Vale tanto para honorário quanto para cobrança avulsa (`cobrancas_avulsas`
+ganhou `valor_pago_pix`, mais simples que o ledger do honorário porque não precisa de registro
+manual de admin). De quebra corrigiu um rótulo errado: todo pagamento vindo do link de
+honorário gravava `metodo='cartao_mp'` mesmo quando era Pix — agora distingue por
+`payment_method_id` do MP (`pix_mp` é o método novo).
+
+**Validado em produção, sem gastar de verdade**: workflow descartável testou os dois limites
+novos (`valor_pix_parcial` acima do saldo → 400 antes de chamar o MP; abaixo do piso de R$5 →
+400) — **na primeira rodada** o teste rodou contra o deploy ANTERIOR (ainda building o novo) e
+sem querer criou **2 Pix reais pendentes no Mercado Pago** (R$33.001,09 cada, payment_id
+`179533172532` e `178549667287`) — não foram pagos por ninguém, expiram sozinhos (~30min, é o
+padrão do MP para Pix não pago), nenhum dinheiro se moveu. 2ª rodada, já contra o deploy certo,
+confirmou os dois limites rejeitando ANTES de qualquer chamada ao MP.
+
+**Ainda não testado**: o fluxo Pix+Cartão de ponta a ponta com um Pix de verdade escaneado (só
+a validação de limites foi testada; a UI de 3 fases — valor→pix→cartão — não foi clicada num
+navegador real). Primeiro uso real é o teste de fogo desta parte.
+
 ### 📋 Sessão adicional 17/09 (tarde) — dono reportou "financiado" na tela do imóvel × "à vista"
 no relatório para um imóvel que ele esperava ser judicial/hipotecado
 
