@@ -386,7 +386,17 @@ export function extrairIdentidadeTexto(texto) {
 
 // ── PRIOR POR LEILOEIRO × MODALIDADE (o agente que aprende) ──────────────────
 
-/** Consenso aprendido: moda por campo, exigindo ≥2 amostras. null = sem consenso. */
+// Campos que `extrairPagamentoTexto` só marca quando o texto AFIRMA — nunca gravam
+// um voto "false" explícito (ausência vira null e é descartada antes de votar, ver
+// `pagamentoAprender`). Para estes, uma única confirmação já é sinal real: não há
+// voto contrário possível para "diluir", então exigir 2 concordâncias (como faz
+// sentido para número que varia edital a edital, ex. sinalPct) só descarta o campo
+// à toa. Achado de 17/09: 11 de 24 imóveis financiado/hipotecado tinham o prior
+// aprendido só para os campos numéricos e `parcelamentoPermitido` ausente — o mesmo
+// leiloeiro com editais lidos e o campo que decide "trava o cenário à vista" sumindo.
+const CAMPOS_SO_CONFIRMA = new Set(['aVista', 'parcelamentoPermitido', 'financiavel', 'fgts']);
+
+/** Consenso aprendido: moda por campo, exigindo ≥2 amostras (1 para campo só-confirma). null = sem consenso. */
 export async function pagamentoPrior(fonte, modalidade) {
   if (!fonte) return null;
   try {
@@ -398,7 +408,8 @@ export async function pagamentoPrior(fonte, modalidade) {
     for (const [campo, votos] of Object.entries(row.freq || {})) {
       let melhor = null, n = 0;
       for (const [valor, cont] of Object.entries(votos || {})) if (cont > n) { n = cont; melhor = valor; }
-      if (melhor === null || n < 2) continue;
+      const minimo = CAMPOS_SO_CONFIRMA.has(campo) ? 1 : 2;
+      if (melhor === null || n < minimo) continue;
       consenso[campo] = melhor === 'true' ? true : melhor === 'false' ? false : (Number.isFinite(Number(melhor)) ? Number(melhor) : melhor);
     }
     return Object.keys(consenso).length ? { ...consenso, amostras: Number(row.amostras) } : null;
