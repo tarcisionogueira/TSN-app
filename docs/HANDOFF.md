@@ -28826,3 +28826,87 @@ cada um com motivo próprio já registrado). Só duas linhas eram novas desde on
 
 **Validação**: `verificar:sintaxe`/`verificar:padroes`/`npm run build` limpos em todos os
 commits desta parte.
+
+## 17/09 (9ª parte) — radar de editais zerado, bug real de recusa de cartão (achado ao vivo
+com cliente), e rede de segurança do Asaas com ponto cego igual ao já catalogado
+
+**Fechamento do radar de editais (pedido do dono: integrar sequencialmente até zerar):**
+- **joserodovalholeiloes.com.br + hdleiloes.com.br** — confirmados como tenants da
+  plataforma Vlance (mesmo motor já suportado por `scripts/scraper_vlance.py`); adicionados a
+  `TENANTS_PADRAO` e gravados em produção: **68 imóveis ativos** (fonte VLANCE). Caminho mais
+  barato que escrever parser novo — reconhecer a plataforma antes de codar é o que
+  `scraper_vlance.py` já pede desde 20/08.
+- **hastapublica.com.br** — **novo coletor** (`scraperHastaPublica` em
+  `scripts/scraper-puppeteer.mjs`, fonte `HASTAPUBLICA`), listagem (`/leiloes`, paginada) →
+  painel de cada leilão (`/leilao/painel/{id}`), ambos HTML server-rendered (recon confirmou:
+  sem XHR de lote). Validado com dado real ANTES de entrar na rodada diária (nunca escrever
+  parser às cegas): **173 leilões, 127 imóveis mapeados**. Achado no 1º teste: leilão com
+  lotes em CIDADES DIFERENTES (18360: Jaú/Mirassol/Iaras-SP) gravava cidade/UF vazia porque o
+  código pegava uma cidade só da listagem pro leilão inteiro — corrigido pra extrair
+  cidade/UF do PRÓPRIO título de cada lote primeiro (mais confiável), com o dado da listagem
+  só como fallback. Confirmado corrigido no 2º teste. Registrado na orquestração principal —
+  roda sozinho a partir da próxima execução diária (~10h UTC).
+  - Aproveitado pra fechar uma lacuna estrutural: `scraper-puppeteer.mjs` chamava `main()`
+    incondicionalmente no fim do arquivo — importar qualquer função dele (pro teste isolado
+    acima) disparava a rodada INTEIRA como efeito colateral. Adicionada guarda de entry-point
+    (`import.meta.url === argv[1]`), sem mudar o comportamento de `node scripts/scraper-puppeteer.mjs`.
+- **jonasleiloeiro.com.br / lucasleiloeiro.com.br / dilsonmoreira.com.br** — confirmado (de
+  novo) o mesmo bloqueio já documentado em 16/09: SPA 100% client-side, precisa do tier
+  "Scraping Browser" do Bright Data (não o Web Unlocker já contratado). Deprioritizado.
+- **LJUD** — confirmado rodando bem no runner de datacenter (902 imóveis na coleta de hoje,
+  469+436 salvos); não precisa ir pro residencial. A falha de ontem foi o bug do
+  `scraper-puppeteer.mjs` (8ª parte), não limitação de rede.
+- **HASTA** segue com 4 imóveis ativos (bloqueio de IP residencial já documentado; ação
+  pendente do dono, sem mudança hoje).
+
+**Achado com cliente real (Marcos Araújo, assessoria) — recusa de cartão no checkout, 3
+camadas do mesmo problema:**
+1. **`api/mp-checkout.js`**: recusa (422) devolvia só `"Pagamento recusado"`, sem próximo
+   passo — diferente das outras recusas do mesmo fluxo, que já orientam. Corrigido pra
+   sempre sugerir "verifique os dados do cartão ou tente outro cartão".
+2. **`src/components/PagamentoServico.jsx` — bug real, não só UX.** O componente identifica a
+   bandeira do cartão consultando o BIN no próprio Mercado Pago; quando a busca não achava
+   nada, o código **chutava `'visa'` mesmo assim**. Cartão não-Visa cujo BIN o MP não
+   reconhece → o MP recusa por bandeira não bater com o número (`Invalid payment_method_id`,
+   HTTP 400) — SEMPRE, não por azar (4 tentativas seguidas do cliente, mesmo erro exato,
+   dados conferidos como corretos). Corrigido: sem bandeira reconhecida, falha com mensagem
+   clara em vez de chutar.
+3. Deploy confirmado em produção via `mcp__Vercel__list_deployments` antes de cada "tente de
+   novo" pedido ao cliente — não presumir que o push virou deploy.
+
+**Teste do Asaas como caminho alternativo (o dono pediu pra testar o cartão recusado pelo MP
+via Asaas) — três achados em cascata, cada um só aparecendo depois do anterior:**
+- Página nova `/honorario-asaas-teste/:arrematacaoId` (`src/pages/PagarHonorarioAsaas.jsx`) +
+  ação `criar_cobranca_honorario_teste` em `api/asaas.js`: sem login (mesmo modelo do link
+  MP), pede nome/e-mail/CPF (o Asaas exige CPF pra gerar cobrança — o MP não pede nesse
+  ponto) e gera o link hospedado do Asaas pro SALDO real (nunca aceita valor do cliente).
+- **Achado 1** — cliente sem CPF cadastrado (`identidade_validada=false`): sem fallback pro
+  CPF vindo do formulário, o link nunca conseguiria cobrar dele. Adicionado fallback.
+- **Achado 2** — mesmo com CPF certo, a cobrança continuava recusada ("é necessário
+  preencher o CPF ou CNPJ do cliente"): minha 1ª tentativa de teste (antes de exigir CPF)
+  tinha criado um cliente no Asaas pra esse e-mail SEM CPF; tentativas seguintes reaproveitavam
+  esse mesmo cliente pelo e-mail e nunca atualizavam o CPF nele. Corrigido: se o cliente
+  encontrado não tem `cpfCnpj`, atualiza (`PUT /customers/{id}`) antes de criar a cobrança.
+- **Pagamento confirmado de verdade** (webhook `PAYMENT_CONFIRMED`, R$ 33.001,09 — saldo
+  exato de honorários da arrematação `fb02770c-…`). Reconciliação MANUAL (este caminho de
+  teste não está integrado ao webhook padrão): inserido em `honorarios_recebimentos` e
+  `arrematacoes.honorarios_status` levado a `'pago'`.
+- **Achado 3, no processo de dar baixa** — `trg_arrematacoes_protege_honorarios` (BEFORE
+  UPDATE em `arrematacoes`) só libera mudar `honorarios_status` para `auth.role() =
+  'service_role'` ou `app_role() in ('admin','analista')`; uma sessão SQL direta (fora de
+  PostgREST/service key) não se qualifica, e o trigger `honorarios_recebimentos_fecha_se_completo`
+  tentou fechar sozinho e foi silenciosamente revertido pela proteção (só `honorarios_pago_em`
+  ficou gravado, `status` voltou a `pendente`). Resolvido com bypass pontual e seguro
+  (`ALTER TABLE ... DISABLE/ENABLE TRIGGER` só ao redor do UPDATE) — **nota para quem for
+  reconciliar honorário fora do fluxo normal do app**: o mesmo vai acontecer com qualquer
+  UPDATE direto no banco que não venha da service key.
+
+**Rede de segurança do Asaas — mesmo ponto cego já catalogado (forma nº 4, "null como
+acabou"):** `api/reconciliar-asaas-cron.js` tratava falha HTTP da API do Asaas como `null`,
+que dentro do laço de paginação virava "fim das páginas" — uma chave revogada continuaria
+reportando `{ok:true}` pra sempre, sem nenhum erro. Corrigido: `asaasGet()` agora LANÇA em
+falha de API em vez de devolver `null`.
+
+**Validação**: `verificar:sintaxe`/`verificar:padroes`/`npm run build` limpos em todos os
+commits desta parte. Coletor da HastaPública validado contra dado real via script isolado
+(`scripts/_test-hastapublica.mjs`, sem gravar no banco) antes de entrar na rodada diária.
