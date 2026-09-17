@@ -28698,3 +28698,64 @@ login ANTES do deploy (17 mais recentes inspecionadas 1 a 1) são todas `invalid
 confirmando que o padrão de falha de login é o mesmo de sempre, nada novo apareceu.
 **Ação pendente**: reconferir `eventos_atividade` (alvo=login_falha) e `last_sign_in_at`
 depois que o tráfego normal do dia passar por login de novo.
+
+## 18/09 — `relatorio_anomalias` (37 pendências): investigadas todas, uma corrigida na raiz
+
+**Pedido do dono**: "resolva todos os problemas, bugs e falhas que foram encontrados, incluindo
+os relatórios" — retomando explicitamente o que a inspeção do Cliente 360 (17/09) tinha deixado
+de fora por escopo. Todas as 37 linhas não resolvidas de `relatorio_anomalias` foram lidas,
+cruzadas com o dado real (banco + código), e cada uma recebeu um veredito.
+
+### O achado real: `pagamento_contradiz_documento` (3 casos) — CORRIGIDO NO CÓDIGO
+
+Esta é a causa-raiz do "financiado aparecendo como à vista" que o dono relatou hoje mais cedo
+(lote ZUK). O relatório já MOSTRAVA a ressalva de contradição na tela (`auditarMercadologico`
+não é falha silenciosa — `src/pages/Analise.jsx` renderiza `result.auditoria` num aviso
+visível), mas os NÚMEROS por baixo do aviso — capital necessário, ROI, teto de lance —
+continuavam calculados com a premissa à-vista errada. Causa: `isAVistaParecer`
+(`api/gerar-analise.js`, bloco do parecer) usava `pInp.somenteAVista`, herdado do
+`forma_pagamento` que o CLIENTE leu no início da sessão; a checagem que compara isso com o
+documento (edital > ficha CEF > título) só rodava DEPOIS, no bloco de auditoria final — tarde
+demais pra corrigir o cálculo que já tinha sido feito.
+
+**Corrigido** (commit `3853b64`): a mesma cascata de força foi extraída para
+`resolverPagamentoDoc()` em `api/_doc-extracao.js` (usada nos dois lugares — sem duplicar
+lógica) e agora roda ANTES do parecer, usando campos já presentes em `imDb` (sem query nova).
+Quando o sinal é FORTE, `isAVistaParecer` deixa de travar em à-vista e `precisaRecalcular`
+passa a considerar a contradição mesmo com valor de mercado e métricas já "prontos" do
+cliente. Os 3 casos reais (20f6cc89, ZUK b5d57dd6, 6dc2382e) foram corrigidos no banco
+(self-heal manual, mesma regra do código — dois já tinham se autocorrigido numa geração
+posterior) e marcados `resolvido=true`.
+
+### As demais 34: investigadas, nenhuma é bug — safety net funcionando como projetado
+
+- **`valor_praca_incoerente` (10), `mercado_area_incoerente` (4), `avaliacao_ausente` (4),
+  `avaliacao_incoerente` (2), `area_divergente` (1)** — lidos os 5 pontos de
+  `registrarAnomalia` correspondentes em `api/gerar-analise.js`: cada um é uma trava
+  determinística e bem fundamentada (ex.: `avaliacao_incoerente` descarta quando
+  avaliação > 10× o lance mínimo — quase sempre é a IA/regex lendo o total de vários lotes;
+  `mercado_area_incoerente` ancora no valor da avaliação, conservador, quando o preço/m²
+  implícito é >3× a avaliação/m²). Conferido em `mercado_area_incoerente`: os 4 imóveis têm
+  título com área plausível de unidade (não "lote"/"terreno" óbvio) e avaliação bem abaixo do
+  mercado — padrão ESPERADO em leilão judicial (é o desconto que atrai o comprador), não sinal
+  de bug de extração de área. Marcados `resolvido=true` (revisados, sem ação de código).
+- **`cnj_vazio` (5)** — conferido o número de cada processo contra o mapa de tribunal
+  (`TRIBUNAL_ESTADUAL`/`TRF_MAP`/`TRT_MAP` em `api/_cnj.js`): os 5 batem exatamente com a UF/
+  segmento de Justiça do próprio número CNJ (nenhum caiu no tribunal errado). Processos de
+  2005–2021, alguns em comarcas menores — cobertura incompleta do DataJud público é conhecida
+  e documentada no próprio código (`_cnj.js`, "não localizado ≠ inexistente" → mostra amarelo,
+  nunca verde falso). Sem indício de bug de roteamento. Marcados `resolvido=true`.
+- **`sem_parecer` (4), `sem_preco_m2` (2 de 3), `sem_valor_mercado` (1)** — todos já
+  autocorrigidos pelo cron de retentativa existente (`analises_mercado.updated_at` mais
+  recente que a anomalia, com parecer/preço/valor agora presentes). Marcados `resolvido=true`.
+- **`sem_preco_m2` — o 3º caso (c698ce4f) FICOU aberto de propósito**: ainda vazio,
+  `geminiErro: "HTTP 429 ... prepayment credits are depleted"` — é o mesmo problema já
+  sinalizado no Cliente 360 (17/09) e que o dono já sabe e decidiu adiar (fechando a
+  assessoria antes de recarregar). Não é código quebrado, é o freio de custo do Gemini
+  ativo — vai se autocorrigir sozinho assim que os créditos voltarem (mesmo cron de
+  retentativa dos outros três). Não marcado resolvido — é a única pendência real do lote.
+
+**Validação**: `npm run verificar:sintaxe` + `verificar:padroes` + `npm run build` limpos.
+Não foi possível gerar um relatório novo de ponta a ponta num browser (mesma limitação deste
+ambiente) — a mudança foi validada por leitura de código + dado real (os 3 casos reais de
+`pagamento_contradiz_documento` no banco), não por execução ao vivo.
