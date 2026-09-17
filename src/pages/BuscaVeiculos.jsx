@@ -43,9 +43,16 @@ const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande mo
 // PRAZO DO LEILÃO — mesma regra de src/pages/Busca.jsx (imóveis, pedido do dono 11/09):
 // janelas CUMULATIVAS a partir de hoje, e 'sem_data' como opção EXPLÍCITA (não omissão) —
 // leiloeiro que ainda não marcou a praça não pode sumir da lista por causa disso.
+// 'negativo' (17/09, pedido do dono): nenhuma fonte informa o RESULTADO do leilão — o único
+// sinal que temos é "a data já passou e o veículo continua voltando como ativo na coleta"
+// (ninguém tirou do ar por ter sido arrematado). A retenção do scraper mantém esses por 15
+// dias após o leilão (scripts/scraper-puppeteer.mjs, retencaoVeiculosVencidos) — depois
+// disso o veículo desativa sozinho, então este filtro nunca mostra nada mais velho que isso.
+// Útil pra achar candidato a proposta de venda direta com o leiloeiro.
 function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
+  if (opcao === 'negativo') return { tipo: 'negativo' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return null;
@@ -66,6 +73,9 @@ function fmtDataLeilao(d) {
 // Mesmo estilo de contagem regressiva de `Busca.jsx` — reescrito aqui em vez de
 // importado porque o de lá carrega premissas de modalidade de imóvel que não existem
 // em veículo (venda_direta/venda_online).
+// dias < 0 (17/09): NÃO vira null — o leilão já passou e o veículo segue ativo, sem sinal de
+// comprador (nenhuma fonte informa resultado). É o mesmo caso que o filtro "Leilão negativo"
+// busca — o card precisa mostrar isso, não escondê-lo atrás de uma data comum.
 function contagemLeilao(d) {
   if (!d) return null;
   const dt = parseDataLocal(d);
@@ -73,8 +83,8 @@ function contagemLeilao(d) {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const alvo = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   const dias = Math.round((alvo - hoje) / 86400000);
-  if (dias < 0) return null;
   const data = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  if (dias < 0) return { dias, negativo: true, texto: `Leilão negativo · ${data}`, bg: '#f3e8ff', fg: '#6d28d9' };
   const texto = dias === 0 ? `Encerra hoje · ${data}` : dias === 1 ? `Encerra amanhã · ${data}` : `Encerra em ${dias} dias · ${data}`;
   const cor = dias <= 3 ? { bg: '#fee2e2', fg: '#b91c1c' } : dias <= 10 ? { bg: '#fef3c7', fg: '#92400e' } : { bg: '#eff6ff', fg: '#084BA6' };
   return { dias, texto, ...cor };
@@ -192,6 +202,7 @@ export default function BuscaVeiculos() {
       if (f.modalidade) q = q.eq('modalidade', f.modalidade);
       const janelaPrazo = calcularJanelaPrazo(f.prazo);
       if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
+      else if (janelaPrazo?.tipo === 'negativo') q = q.lt('data_leilao', new Date().toISOString());
       else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
@@ -322,6 +333,7 @@ export default function BuscaVeiculos() {
               <option value="proximo_mes">Próximo mês</option>
               <option value="proximo_trimestre">Próximo trimestre</option>
               <option value="sem_data">Sem data definida</option>
+              <option value="negativo" title="Leilão já ocorreu e o veículo continua ativo — sem sinal de comprador. Candidato a proposta de venda direta com o leiloeiro; some sozinho 15 dias após o leilão.">Leilão negativo (já ocorreu)</option>
             </select>
           </div>
           <div>
@@ -441,7 +453,7 @@ export default function BuscaVeiculos() {
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
                     {cont
-                      ? <span title="Data do leilão" style={{ fontSize: 9, fontWeight: 800, background: cont.bg, color: cont.fg, padding: '1px 6px', borderRadius: 8 }}>🗓 {cont.texto}</span>
+                      ? <span title={cont.negativo ? 'Leilão já ocorreu sem sinal de comprador — candidato a proposta de venda direta com o leiloeiro' : 'Data do leilão'} style={{ fontSize: 9, fontWeight: 800, background: cont.bg, color: cont.fg, padding: '1px 6px', borderRadius: 8 }}>{cont.negativo ? '⚠️' : '🗓'} {cont.texto}</span>
                       : <span style={{ fontSize: 9, color: '#94a3b8' }}>🗓 {fmtDataLeilao(v.data_leilao)}</span>}
                   </div>
                 </div>

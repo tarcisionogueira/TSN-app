@@ -9,6 +9,35 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-9. ✅ **NOVO 17/09 — Filtro "Leilão negativo" em Veículos + retenção de 15 dias + captura de
+   e-mail do leiloeiro centralizada.** Pedido do dono: achar veículos com leilão sem comprador
+   pra propor venda direta com o leiloeiro (pode render fruto). Três descobertas antes de
+   codar: (a) nenhuma fonte informa o RESULTADO do leilão — decisão do dono (confirmada):
+   inferir "negativo" por DATA (leilão já passou e o veículo continua voltando ativo na
+   coleta, ninguém tirou do ar por arremate); (b) `veiculos_leilao` **não tinha NENHUMA
+   retenção** — só `upsert`, nunca `ativo=false`, então todo veículo ficaria ativo pra sempre;
+   (c) a captura automática de e-mail do leiloeiro (`_contato-leiloeiro.mjs`, 11/09) só rodava
+   pra SODRE, hardcoded dentro do próprio scraper — os outros 6 pilotos de veículo não
+   capturavam contato nenhum.
+   **Implementado:**
+   - `retencaoVeiculosVencidos()` (`scripts/scraper-puppeteer.mjs`) — desativa veículo cujo
+     `data_leilao` passou há mais de 15 dias. Roda 1x no fim do job diário de veículos
+     (`veiculos-puppeteer.yml`, 12h UTC), independe de qual fonte rodou, aditivo (nunca
+     derruba o job). Estado real hoje: **1.256 veículos ativos com leilão já passado** (nenhum
+     ainda passa de 15 dias — a janela está nova, primeira desativação real só daqui a dias).
+   - `BuscaVeiculos.jsx` — nova opção no filtro "Prazo do leilão": **"Leilão negativo (já
+     ocorreu)"**, mais um badge ⚠️ roxo no card quando o leilão já passou (era `null`/escondido
+     antes — `contagemLeilao` com `dias<0` agora retorna o estado em vez de sumir).
+   - Captura de e-mail do leiloeiro **centralizada em `salvarVeiculos`** — cobre os 7 pilotos
+     de uma vez (MEGA/SUPERBID/SODRE/ZUK/LJUD/SUPORTE/WEBLEILOES), removida a chamada
+     duplicada hardcoded que só existia dentro do `scraperSodreVeiculos`.
+   **E-mail — confirmado disponível**: Resend ativo, domínio `bidprobrasil.com.br` verificado,
+   98,7% de entrega (ver seção 1b acima). O que NÃO existe ainda é um botão/fluxo de "propor
+   compra direta" pro leiloeiro — só a captura do contato (`leiloeiro_contato`) e o envio de
+   e-mail genérico (usado hoje em "Pedir informações ao leiloeiro" da Análise documental).
+   Construir esse fluxo específico de proposta é escopo novo, não pedido ainda.
+   `verificar:sintaxe`/`padroes` e `build` passaram limpos.
+
 -8. 🟡 **CONFERIDO 17/09, sem ação — resto do `qa_invariantes()` amarelo desta rodada.**
    - `fonte_cega_no_monitor` (valor 1) = **EDITAL_DJEN, falso-positivo permanente e já
      conhecido.** Esta fonte (Radar de Editais) nunca escreve `fonte_saude` POR DESENHO —

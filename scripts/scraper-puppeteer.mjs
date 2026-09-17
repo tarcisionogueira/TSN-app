@@ -2221,8 +2221,8 @@ async function scraperSodreVeiculos(browser) {
       });
     }
     console.log(`    Sodré veículos: ${registros.length} registros mapeados (após filtro de ativos/preço)`);
-    // Não usa salvarEFinalizar (ver comentário no topo desta função) — captura o contato aqui.
-    if (registros[0]?.link_lote) await capturarContatoSeAusente(supabase, 'SODRE', registros[0].link_lote);
+    // Não usa salvarEFinalizar (ver comentário no topo desta função). Captura de e-mail do
+    // leiloeiro centralizada em `salvarVeiculos` (17/09) — deixou de ser específica daqui.
     return registros;
   } catch (err) {
     console.log(`  Erro Sodré veículos: ${err.message.slice(0, 100)}`);
@@ -2236,9 +2236,41 @@ async function scraperSodreVeiculos(browser) {
 // WebLeilões — todo log de salvamento dizia "Sodré" não importa qual fonte tivesse rodado.
 // Deriva da própria fonte do 1º registro quando não informado, então chamadas antigas sem o
 // parâmetro continuam funcionando (e corretas, já que passam a usar o `fonte` real).
+// RETENÇÃO de veículos vencidos (17/09, pedido do dono). `salvarVeiculos` só faz upsert —
+// nenhuma fonte de veículo jamais desativa um registro (diferente de `salvarEFinalizar`,
+// que tem sweep próprio para imóvel). Sem isto, todo veículo já coletado ficaria ativo PARA
+// SEMPRE. Mas apagar assim que a data do leilão passa também é errado: um "leilão negativo"
+// (sem lance/sem comprador) às vezes vira oportunidade de proposta de venda direta com o
+// leiloeiro — nenhuma fonte informa esse RESULTADO, então a única forma de reconhecer é: a
+// data já passou e o veículo CONTINUA voltando como ativo na coleta (ninguém tirou do ar por
+// ter sido arrematado). Mantém por 15 dias depois do leilão (janela para BuscaVeiculos.jsx
+// filtrar "leilão negativo"), desativa depois. Aditivo — nunca derruba o job se falhar.
+async function retencaoVeiculosVencidos() {
+  try {
+    const limite = new Date(Date.now() - 15 * 86400000).toISOString();
+    const { error, count } = await supabase
+      .from('veiculos_leilao')
+      .update({ ativo: false }, { count: 'exact' })
+      .eq('ativo', true)
+      .not('data_leilao', 'is', null)
+      .lt('data_leilao', limite);
+    if (error) { console.log(`  ⚠️ retenção de veículos vencidos falhou: ${String(error.message).slice(0, 120)}`); return; }
+    if (count) console.log(`  🗑️  ${count} veículo(s) desativado(s) — leilão há mais de 15 dias.`);
+  } catch (e) {
+    console.log(`  ⚠️ retenção de veículos vencidos falhou: ${String(e.message).slice(0, 120)}`);
+  }
+}
+
 async function salvarVeiculos(registros, rotulo) {
   const nome = rotulo || (registros[0]?.fonte ? `${registros[0].fonte} veículos` : 'veículos');
   if (!registros.length) { console.log(`    ${nome}: nada para salvar.`); return 0; }
+  // Captura automática do e-mail do leiloeiro (17/09) — mesmo mecanismo de `salvarEFinalizar`
+  // (imóvel, 11/09), centralizado aqui pra cobrir TODOS os pilotos de veículo de uma vez (só
+  // SODRE fazia isso, hardcoded dentro do próprio scraper). Alimenta `leiloeiro_contato`,
+  // usado pra propor venda direta em leilão negativo (ver retencaoVeiculosVencidos acima).
+  if (registros[0]?.fonte && registros[0]?.link_lote) {
+    await capturarContatoSeAusente(supabase, registros[0].fonte, registros[0].link_lote);
+  }
   // FILTRO CRÍTICO (13/09, pedido explícito do dono): "não tenho a intenção de mostrar
   // veículos que estão nessa situação" — bem ainda em poder do executado/devedor,
   // sujeito a busca e apreensão, não localizado (classificarPatio() já marca isso como
@@ -5204,6 +5236,10 @@ async function main() {
       const veiculosWebLeiloes = await scraperWebLeiloesVeiculos(browser);
       await salvarVeiculos(veiculosWebLeiloes);
     }
+
+    // Roda sempre no fim do job (não depende de qual fonte de veículo rodou nesta
+    // execução) — é limpeza por DATA, não por coleta. Custo desprezível (1 UPDATE).
+    await retencaoVeiculosVencidos();
 
   } finally {
     await browser.close();
