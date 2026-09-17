@@ -135,6 +135,34 @@ async function main() {
     console.log('Nenhuma das 20 primeiras ofertas de imóvel tem photoCount>0.');
   }
 
+  // TESTE 6: confirma que `product.galleryJson` sobrevive junto do fieldList REAL de
+  // produção (FIELDS_BASE, scraper-puppeteer.mjs) — não só no payload sem fieldList. O
+  // teste 1 mostrou que fieldList com campo desconhecido pode fazer a API devolver menos
+  // do que o pedido; isto aqui prova que ESTE campo específico não quebra o que já funciona.
+  console.log('\n=== TESTE 6: FIELDS_BASE de produção + product.galleryJson + product.attachments ===');
+  const FIELDS_BASE_PROD = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+  const teste6 = await page.evaluate(async (fields) => {
+    try {
+      const url = `https://offer-query.superbid.net/offers/?portalId=[2]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=20&orderBy=endDate:asc&fieldList=${fields}`;
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!r.ok) return { status: r.status };
+      const d = await r.json();
+      const offers = d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []);
+      const comLink = offers.filter(o => o.linkURL).length; // confere se o campo que JÁ funciona hoje sobreviveu
+      const achou = offers.find(o => o.product?.galleryJson);
+      return { total: offers.length, comLinkURL: comLink, primeira: offers[0] || null, achouComGaleria: achou || null };
+    } catch (e) { return { erro: String(e && e.message || e) }; }
+  }, `${FIELDS_BASE_PROD};product.galleryJson;product.attachments`);
+  console.log(`total=${teste6.total} · ofertas com linkURL preenchido=${teste6.comLinkURL} (compara com o total pra ver se o fieldList novo quebrou o campo antigo)`);
+  console.log('1ª oferta, chaves:', Object.keys(teste6.primeira || {}).join(', '));
+  console.log('1ª oferta, chaves de product:', Object.keys(teste6.primeira?.product || {}).join(', '));
+  if (teste6.achouComGaleria) {
+    console.log('\nOferta com galleryJson (via fieldList de produção) — link/foto:', JSON.stringify(teste6.achouComGaleria.product.galleryJson));
+    console.log('linkURL desta oferta:', teste6.achouComGaleria.linkURL, '| thumbnailUrl:', teste6.achouComGaleria.product.thumbnailUrl);
+  } else {
+    console.log('Nenhuma das 20 trouxe galleryJson com este fieldList — ou nenhuma tem foto, ou o campo não sobrevive junto do FIELDS_BASE.');
+  }
+
   await browser.close();
 }
 
