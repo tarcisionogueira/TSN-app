@@ -62,19 +62,24 @@ export async function enviarReciboHonorario(arrematacaoId) {
     if (!claimed.length) return { ok: false, motivo: 'corrida_perdida' };
 
     const [recebimentos, imovelR, email] = await Promise.all([
-      sb(`honorarios_recebimentos?arrematacao_id=eq.${arrematacaoId}&status=eq.confirmado&order=criado_em.asc&select=metodo,valor,criado_em`).then(r => r.ok ? r.json() : []),
+      sb(`honorarios_recebimentos?arrematacao_id=eq.${arrematacaoId}&status=eq.confirmado&order=criado_em.asc&select=metodo,valor,criado_em,banco,numero_cheque`).then(r => r.ok ? r.json() : []),
       arr.imovel_id ? sb(`imoveis_leilao?id=eq.${arr.imovel_id}&select=titulo,endereco,cidade`).then(r => r.ok ? r.json() : []) : Promise.resolve([]),
       emailDoUsuario(arr.arrematante_id),
     ]);
     if (!email) return { ok: false, motivo: 'sem_email' };
     const imovel = imovelR[0] || null;
 
-    const linhasHtml = recebimentos.map(r => `
+    const linhasHtml = recebimentos.map(r => {
+      const rotulo = METODO_LABEL[r.metodo] || r.metodo;
+      const detalheCheque = r.metodo === 'cheque' && (r.banco || r.numero_cheque)
+        ? `<br><span style="font-size:11px;color:#94a3b8">${esc(r.banco || '')}${r.numero_cheque ? ` · nº ${esc(r.numero_cheque)}` : ''}</span>` : '';
+      return `
       <tr>
-        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;color:#334155">${esc(METODO_LABEL[r.metodo] || r.metodo)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;color:#334155">${esc(rotulo)}${detalheCheque}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:12px">${fmtData(r.criado_em)}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#059669">${fmtBRL(r.valor)}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const html = `<div style="font-family:sans-serif;max-width:560px;margin:0 auto">
       <h2 style="color:#0D63DB">Recibo de pagamento — Honorários de êxito</h2>

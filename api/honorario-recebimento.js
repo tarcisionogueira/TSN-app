@@ -65,13 +65,20 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     if (role !== 'admin') return res.status(403).json({ error: 'Só admin registra recebimento manual.' });
-    const { arrematacao_id, metodo, valor, justificativa, comprovante_url, status } = req.body || {};
+    const { arrematacao_id, metodo, valor, justificativa, comprovante_url, status, banco, numero_cheque } = req.body || {};
     if (!UUID_RE.test(String(arrematacao_id || ''))) return res.status(400).json({ error: 'arrematacao_id inválido' });
     if (!METODOS.has(String(metodo))) return res.status(400).json({ error: 'método inválido' });
     if (metodo === 'cartao_mp') return res.status(400).json({ error: 'cartão via link é gravado pelo webhook, não manualmente.' });
     const v = Number(valor);
     if (!(v > 0)) return res.status(400).json({ error: 'valor deve ser maior que zero' });
     if (String(justificativa || '').trim().length < 5) return res.status(400).json({ error: 'justificativa obrigatória (mín. 5 caracteres)' });
+    // Banco + número do cheque como campos PRÓPRIOS (18/09, pedido do dono) — mais fácil de
+    // conferir/filtrar do que buscar dentro do texto da justificativa. Exigidos quando
+    // metodo='cheque' (é o ideal registrar; para os outros métodos não fazem sentido).
+    if (metodo === 'cheque') {
+      if (!String(banco || '').trim()) return res.status(400).json({ error: 'banco obrigatório para cheque' });
+      if (!String(numero_cheque || '').trim()) return res.status(400).json({ error: 'número do cheque obrigatório para cheque' });
+    }
     const statusFinal = ['confirmado', 'aguardando_compensacao'].includes(status) ? status : 'confirmado';
 
     try {
@@ -82,6 +89,8 @@ export default async function handler(req, res) {
           arrematacao_id, metodo, valor: v, status: statusFinal,
           justificativa: String(justificativa).slice(0, 500),
           comprovante_url: comprovante_url || null,
+          banco: metodo === 'cheque' ? String(banco).trim().slice(0, 120) : null,
+          numero_cheque: metodo === 'cheque' ? String(numero_cheque).trim().slice(0, 40) : null,
           registrado_por: user.id,
         }),
       });

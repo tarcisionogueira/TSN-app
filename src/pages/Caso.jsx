@@ -568,7 +568,7 @@ export default function Caso() {
   // vira uma linha justificada em honorarios_recebimentos (api/honorario-recebimento.js).
   const [recebimentos, setRecebimentos] = useState(null); // { total, recebido, saldo_restante, recebimentos:[...] }
   const [carregandoReceb, setCarregandoReceb] = useState(false);
-  const [novoReceb, setNovoReceb] = useState({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '' });
+  const [novoReceb, setNovoReceb] = useState({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '' });
   const [registrandoReceb, setRegistrandoReceb] = useState(false);
   const [erroReceb, setErroReceb] = useState('');
 
@@ -594,6 +594,8 @@ export default function Caso() {
     const valorNum = parseFloat(String(novoReceb.valor).replace(/\./g,'').replace(',','.')) || 0;
     if (valorNum <= 0) { setErroReceb('Informe um valor válido.'); return; }
     if (novoReceb.justificativa.trim().length < 5) { setErroReceb('Justifique o recebimento (mín. 5 caracteres) — ex.: "Pix recebido direto na conta pessoal em 16/09".'); return; }
+    if (novoReceb.metodo === 'cheque' && !novoReceb.banco.trim()) { setErroReceb('Informe o banco do cheque.'); return; }
+    if (novoReceb.metodo === 'cheque' && !novoReceb.numero_cheque.trim()) { setErroReceb('Informe o número do cheque.'); return; }
     setRegistrandoReceb(true);
     try {
       const r = await apiCall('/api/honorario-recebimento', {
@@ -601,11 +603,13 @@ export default function Caso() {
         body: JSON.stringify({
           arrematacao_id: arrematacao.id, metodo: novoReceb.metodo, valor: valorNum,
           justificativa: novoReceb.justificativa.trim(), comprovante_url: novoReceb.comprovante_url || null,
+          banco: novoReceb.metodo === 'cheque' ? novoReceb.banco.trim() : null,
+          numero_cheque: novoReceb.metodo === 'cheque' ? novoReceb.numero_cheque.trim() : null,
         }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.error || 'Não foi possível registrar o recebimento.');
-      setNovoReceb({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '' });
+      setNovoReceb({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '' });
       await carregarRecebimentos();
       await carregarCaso();
     } catch (e2) {
@@ -1899,6 +1903,11 @@ export default function Caso() {
                                   {fmt(r.valor)}{r.status === 'aguardando_compensacao' ? ' (aguardando)' : r.status === 'estornado' ? ' (estornado)' : ''}
                                 </span>
                               </div>
+                              {r.metodo === 'cheque' && (r.banco || r.numero_cheque) && (
+                                <div style={{ color:'#334155', marginTop:3, fontWeight:600 }}>
+                                  {r.banco || '—'}{r.numero_cheque ? ` · cheque nº ${r.numero_cheque}` : ''}
+                                </div>
+                              )}
                               <div style={{ color:'#64748b', marginTop:3 }}>{r.justificativa}</div>
                               <div style={{ color:'#94a3b8', marginTop:2, fontSize:10.5 }}>{fmtDate(r.criado_em)}</div>
                             </div>
@@ -1917,6 +1926,12 @@ export default function Caso() {
                             </select>
                             <input value={novoReceb.valor} onChange={e=>setNovoReceb(p=>({...p,valor:maskMoedaDigitando(e.target.value)}))} style={{ ...inp, fontSize:12 }} placeholder="Valor (R$)"/>
                           </div>
+                          {novoReceb.metodo === 'cheque' && (
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                              <input value={novoReceb.banco} onChange={e=>setNovoReceb(p=>({...p,banco:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Banco (ex.: SICOOB, Banco do Brasil)"/>
+                              <input value={novoReceb.numero_cheque} onChange={e=>setNovoReceb(p=>({...p,numero_cheque:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Número do cheque"/>
+                            </div>
+                          )}
                           <input value={novoReceb.justificativa} onChange={e=>setNovoReceb(p=>({...p,justificativa:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder='Justificativa (ex.: "Pix recebido direto na conta pessoal em 16/09")' maxLength={500}/>
                           <input value={novoReceb.comprovante_url} onChange={e=>setNovoReceb(p=>({...p,comprovante_url:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Link do comprovante (opcional)"/>
                           {erroReceb && <div style={{ fontSize:11.5, color:'#dc2626', fontWeight:600 }}>{erroReceb}</div>}
