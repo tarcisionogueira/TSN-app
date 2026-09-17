@@ -3484,6 +3484,122 @@ function mapLoteWebLeiloes(l) {
   };
 }
 
+// HastaPública (leiloeiros Euclides Maraschi Junior, Marcelo Valland etc., plataforma
+// HastaPública) — recon 18/09 (radar de editais): /leiloes é HTML server-rendered com os
+// cards da agenda (sem XHR de dado — confirmado via Puppeteer + interceptação de rede); cada
+// card linka pro painel do leilão (/leilao/painel/{id}), que também é server-rendered e já
+// traz os lotes ("Lotes Disponíveis") com "Lance Atual: R$ ...". A listagem tem cidade/UF
+// ("2ª Praça | Araraquara/SP") que o painel NÃO repete — por isso lê os DOIS: a listagem só
+// pra achar cidade/UF por id (regex pontual, sem tentar casar o cartão inteiro, que muda de
+// forma entre leilões) e o painel pra título, datas, modalidade e o valor de cada lote.
+export async function scraperHastaPublica(browser) {
+  console.log('  HastaPública — listagem → painel de cada leilão...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const BASE = 'https://hastapublica.com.br';
+  const leiloes = new Map(); // id -> href
+  let listagemTexto = '';
+
+  const coletarLinks = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('a[href*="/leilao/painel/"]').forEach((a) => {
+      const href = a.getAttribute('href') || '';
+      const m = href.match(/\/leilao\/painel\/(\d+)/);
+      if (m) out.push({ id: m[1], href });
+    });
+    return out;
+  });
+
+  try {
+    await page.goto(`${BASE}/leiloes`, { waitUntil: 'networkidle2', timeout: 45000 });
+    for (const l of await coletarLinks()) if (!leiloes.has(l.id)) leiloes.set(l.id, l.href);
+    listagemTexto += await page.evaluate(() => document.body.innerText).catch(() => '');
+
+    // Paginação: segue os links numerados ("1 2 3 4 Último ›") até não achar leilão novo —
+    // cap de segurança pro caso do site nunca "fechar" a lista.
+    for (let pg = 2; pg <= 40; pg++) {
+      const proximo = await page.evaluate((n) => {
+        const alvo = [...document.querySelectorAll('a')].find((a) => (a.textContent || '').trim() === String(n));
+        return alvo ? alvo.getAttribute('href') : null;
+      }, pg);
+      if (!proximo) break;
+      const antes = leiloes.size;
+      await page.goto(proximo.startsWith('http') ? proximo : `${BASE}${proximo}`, { waitUntil: 'networkidle2', timeout: 45000 });
+      for (const l of await coletarLinks()) if (!leiloes.has(l.id)) leiloes.set(l.id, l.href);
+      listagemTexto += '\n' + await page.evaluate(() => document.body.innerText).catch(() => '');
+      if (leiloes.size === antes) break; // página sem leilão novo — fim
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    console.log(`    HastaPública: ${leiloes.size} leilões na agenda`);
+
+    const RE_IMOVEL = /im[óo]vel|terreno|apartamento|\bcasa\b|s[íi]tio|ch[áa]cara|fazenda|galp[ãa]o|sala comercial|\bloja\b|[áa]rea constru|direitos?\s+d[eo]\s+im[óo]vel/i;
+    const imoveis = [];
+    let visitados = 0;
+    for (const [id, href] of leiloes) {
+      if (visitados >= 250) break; // cap de segurança
+      visitados++;
+      try {
+        const url = href.startsWith('http') ? href : `${BASE}${href}`;
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
+        if (!texto) continue;
+
+        const mTitulo = texto.match(/#\d+\s*-\s*([^\n]+)\n([^\n]+)/);
+        const varaComarca = mTitulo ? mTitulo[2].trim() : '';
+        const judicial = /\bJudicial\b/i.test(texto);
+        const mComitente = texto.match(/Comitente:\s*([^\n]+)/i);
+
+        // Cidade/UF vêm da LISTAGEM (o painel não repete) — procura o card deste id pontualmente.
+        const reCidUf = new RegExp(`#${id}\\s*-[^\\n]*\\n[^\\n]+\\n\\d[ªa]\\s*Pra[çc]a\\s*\\|\\s*([^\\n/]+)/([A-Za-z]{2})`, 'i');
+        const mCidUf = listagemTexto.match(reCidUf);
+        const cidade = mCidUf ? mCidUf[1].trim() : '';
+        const uf = mCidUf ? mCidUf[2].toUpperCase() : '';
+
+        const m1 = texto.match(/1[ªa]\s*Praca:\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/i);
+        const m2 = texto.match(/2[ªa]\s*Praca:\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/i);
+        const dtISO = (m) => m ? `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:00-03:00` : null;
+        const dt1 = dtISO(m1), dt2 = dtISO(m2);
+        const data_leilao = (dt1 && new Date(dt1).getTime() > Date.now()) ? dt1 : (dt2 || dt1);
+
+        // Lotes: "N | Título\nLance Atual: R$\n1.234,56 (A/V)" — repete por lote na página.
+        const lotesRe = /(\d+)\s*\|\s*([^\n]+)\nLance Atual:\s*R\$\s*([\d.,]+)/g;
+        for (const lm of texto.matchAll(lotesRe)) {
+          const [, numLote, tituloLoteRaw, valorTxt] = lm;
+          const tituloLote = tituloLoteRaw.trim();
+          const alvoFiltro = `${tituloLote} ${varaComarca}`;
+          if (!RE_IMOVEL.test(alvoFiltro)) continue; // não é imóvel (veículo/equipamento etc.)
+          const valor = parseBRL(valorTxt);
+          if (!valor) continue;
+          imoveis.push({
+            fonte: 'HASTAPUBLICA',
+            fonte_id: `hastapublica_${id}_${numLote}`,
+            titulo: tituloLote.slice(0, 180),
+            tipo: normalizarTipo(tituloLote),
+            modalidade: judicial ? 'judicial' : 'extrajudicial',
+            estado: uf,
+            cidade: toTitleCase(cidade),
+            bairro: '', endereco: '',
+            valor_avaliacao: 0,
+            valor_minimo: valor,
+            area_m2: 0,
+            descricao: [tituloLote, varaComarca].filter(Boolean).join(' · ').slice(0, 500),
+            link_edital: url, url_lote: url, link_foto: null,
+            leiloeiro: (mComitente ? mComitente[1].trim() : 'HastaPública').slice(0, 120),
+            data_leilao,
+            forma_pagamento: 'a_vista',
+          });
+        }
+      } catch { /* pula leilão que falhar */ }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    console.log(`    HastaPública: ${imoveis.length} imóveis mapeados (${visitados} leilões visitados)`);
+    return imoveis;
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 async function scraperWebLeiloes(browser) {
   console.log('  WebLeilões — server-rendered (imóveis + leilões)...');
   const page = await browser.newPage();
@@ -5297,6 +5413,19 @@ async function main() {
       console.log(`  ⚠️ WebLeilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
+    // 16. HastaPública (18/09, radar de editais) — server-rendered, listagem → painel de
+    // cada leilão. Blindado.
+    if (rodar('HASTAPUBLICA')) console.log('\n📋 HastaPública...');
+    if (rodar('HASTAPUBLICA')) try {
+      const imoveis = await scraperHastaPublica(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos HastaPública falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'HASTAPUBLICA');
+      await registrarSaude('HASTAPUBLICA', imoveis, 'principal', validarColeta(imoveis, 'HASTAPUBLICA'));
+    } catch (e) {
+      console.log(`  ⚠️ HastaPública falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
     // WebLeilões — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado dos
     // outros pilotos de veículo (ver .github/workflows/veiculos-puppeteer.yml).
     if (ONLY.includes('WEBLEILOES_VEICULOS')) {
@@ -5317,7 +5446,13 @@ async function main() {
   console.log(`✅ Scraper Puppeteer concluído: ${total} imóveis processados\n`);
 }
 
-main().catch(err => {
-  console.error('Erro fatal:', err);
-  process.exit(1);
-});
+// Guarda de entry-point: só roda o job inteiro quando o arquivo é executado diretamente
+// (`node scripts/scraper-puppeteer.mjs`). Sem isto, importar uma função exportada daqui
+// (ex.: pra testar um coletor novo isolado, sem gravar no banco) disparava TODOS os
+// coletores + gravação em produção como efeito colateral do import.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => {
+    console.error('Erro fatal:', err);
+    process.exit(1);
+  });
+}
