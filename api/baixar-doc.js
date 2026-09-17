@@ -12,7 +12,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
-import { hostPermitido } from './_allowed-hosts.js';
+import { hostPermitido, fetchExternoSeguro } from './_allowed-hosts.js';
 import { fetchViaBrightData } from './_brightdata.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -94,7 +94,11 @@ export default async function handler(req) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
-    let resp = await fetch(url, { signal: ctrl.signal, redirect: 'follow' }).catch(() => null);
+    // SSRF (17/09, achado de auditoria): `hostPermitido` só valida a URL inicial — um 302
+    // do próprio host permitido para 169.254.169.254/10.x/localhost passava batido com
+    // `redirect:'follow'` cru. `fetchExternoSeguro` revalida CADA hop (mesmo padrão já usado
+    // em enriquecer-lote.js/gerar-analise.js/etc.).
+    let resp = await fetchExternoSeguro(url, { signal: ctrl.signal }).catch(() => null);
     clearTimeout(timer);
 
     // Fallback: a fonte bloqueou o IP do servidor (ex.: Caixa bloqueia a Vercel).

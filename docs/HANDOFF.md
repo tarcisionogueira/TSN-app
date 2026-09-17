@@ -28119,3 +28119,70 @@ blocos VIZINHOS ao painel real. Ainda assim, sem HTML real de RJ/SOLEON/EMILIOMA
 confirmar, vale conferir a qualidade da próxima coleta de cada um antes de considerar fechado.
 
 `npm run build` passou limpo (0 padrão perigoso novo, eslint sem erro).
+
+## 17/09 (2ª parte) — 5 dos 6 achados da auditoria de segurança corrigidos; CSP fica documentado, não tocado
+
+**Pedido do dono**: corrigir os 6 achados (1 crítico/alto de auth, 1 alto de dependência, 4
+médios) da auditoria de segurança completa rodada mais cedo hoje (5 agentes em paralelo —
+RLS/SECURITY DEFINER, auth/tokens/KYC, injeção/SSRF/XSS, pagamentos/webhooks, segredos/deps).
+Nota dada: 85/100, 0 crítico.
+
+**Corrigidos, com `npm run build` limpo depois de cada um:**
+
+1. **Login sem captcha/rate-limit próprio** (`src/pages/Login.jsx`) — só o cadastro tinha
+   Turnstile; login (`signInWithPassword`) não tinha fricção nenhuma além do limite genérico
+   do GoTrue, abrindo caminho pra credential-stuffing contra conta específica. Adicionado o
+   MESMO padrão do cadastro: `TurnstileWidget` no formulário de login, `captchaToken` passado
+   em `options`, botão travado até completar o desafio (`loginBloqueado`, mesma disciplina do
+   `cadastroBloqueado` — gate e aparência do botão vêm da MESMA expressão, lição já documentada
+   neste HANDOFF em 30/08). Achado no caminho: login e cadastro passaram a COMPARTILHAR o
+   estado `captchaToken`/`turnstileTentativa` — sem resetar ao trocar de `modo`, completar o
+   desafio no cadastro e trocar pra "Entrar" deixaria o botão de login liberado com um token de
+   OUTRO fluxo, nunca verificado pra esta ação. Corrigido com um `useEffect([modo])` que zera o
+   token a cada troca de aba.
+   ⚠️ **Não testado ao vivo** (este ambiente não tem browser nem alcança o Supabase Auth real) —
+   a lógica replica exatamente o padrão do cadastro, já confirmado em produção, mas vale um
+   login de teste depois do deploy pra confirmar que o Turnstile aparece e que `signInWithPassword`
+   aceita o `captchaToken` sem reclamar (o projeto Supabase pode ter a validação de captcha
+   configurada só pra signup — se o login passar a recusar sem token válido de forma inesperada,
+   é o primeiro lugar a olhar).
+2. **`react-router-dom`/`react-router` com CVEs em produção** — `npm update` (bump de patch
+   dentro do range `^7.17.0` já declarado, sem mudar `package.json`) + `npm audit fix` limpou
+   também as 5 vulnerabilidades de build-tooling (postcss/nanoid/browserslist/
+   baseline-browser-mapping/brace-expansion). `npm audit`: **0 vulnerabilidades** (antes: 7).
+3. **SSRF residual por redirect não revalidado** — `api/baixar-doc.js`, `api/fetch-url.js`,
+   `api/verificar-doc.js` trocaram `fetch(url, {redirect:'follow'})` cru por
+   `fetchExternoSeguro()` (`api/_allowed-hosts.js`), que já existe e é usado em 7 outros
+   arquivos — só faltava replicar nestes 3. Fecha o vetor de um host da allowlist devolver 302
+   pra `169.254.169.254`/rede interna sem o servidor perceber.
+4. **`api/saque.js` sem rate-limit** — único endpoint de dinheiro sem `checkRateLimit` (os
+   outros ~50 endpoints sensíveis já usam). Adicionado por método: POST (pedir saque) 5/10min,
+   GET/PATCH (extrato, fila do admin, pagar/recusar) 60/5min — gera menos fricção pro uso normal
+   e ainda impede martelar a fila de aprovação.
+5. **`api/scraper-caixa.js` comparando `CRON_SECRET` com `!==`** (não é tempo constante) —
+   trocado por `isCronAuthorized()` (o helper que o resto do projeto usa, com
+   `timingSafeEqualStr`). Achado no caminho: este bloco inteiro é **código morto** — o handler
+   retorna 410 antes de chegar nele (endpoint desativado desde a correção do scraper CEF que
+   lia CSV por índice de coluna). Risco prático era zero, mas corrigido por higiene/consistência
+   — mesma lição do achado #1 da auditoria de pagamentos (`ativar-vendedor.js`, código morto
+   que vira armadilha se alguém reativar o endpoint sem reler o bloco).
+
+**NÃO corrigido agora, de propósito — achado #4 (CSP com `unsafe-inline`/`unsafe-eval` em
+`script-src`)**: `vercel.json` é JSON puro (sem comentário possível no arquivo), então a
+decisão fica só aqui. `unsafe-eval` provavelmente é exigido pelo Google Tag Manager (tags
+customizadas usam `eval`/`new Function` — é a orientação padrão do próprio Google pra quem não
+usa nonce estrito) e `unsafe-inline` cobre os snippets inline do GTM/Pixel/Mercado Pago no
+`index.html`. Apertar isso sem nonce/hash quebraria checkout ou analytics em produção — e este
+ambiente **não tem como testar**: sem browser, sem alcançar os domínios de terceiro (proxy
+recusa a saída), e o achado #3 da auditoria de injeção/XSS já confirmou **zero
+`dangerouslySetInnerHTML` no projeto inteiro** — ou seja, hoje não existe um vetor de XSS
+confirmado pra explorar essa brecha da CSP (o risco é teórico/defesa-em-profundidade, não uma
+vulnerabilidade ativa). Corrigir direito exige: (a) mapear cada script que hoje depende de
+inline/eval, (b) migrar pra nonce (Vercel suporta nonce por request) ou hash, (c) testar
+checkout de ponta a ponta (Mercado Pago) e os pixels de marketing antes de subir — fica como
+próximo passo dedicado, não algo pra decidir às cegas no meio de outros 5 fixes.
+
+**Higiene, fora do escopo dos 6 mas fica registrado**: os 2 achados "baixo" da auditoria de
+RLS (EXECUTE supérfluo em 11 funções de trigger; extensions `cube`/`earthdistance` em schema
+público) não foram tocados — são não-exploráveis (confirmado pelo próprio agente) e a
+migração de revogação de EXECUTE fica pra quando o dono quiser essa limpeza.

@@ -141,6 +141,11 @@ export default function Login() {
   // senha/e-mail duplicado seria recusado pelo Supabase sem nenhuma mensagem clara).
   const [captchaToken, setCaptchaToken] = useState(null);
   const [turnstileTentativa, setTurnstileTentativa] = useState(0);
+  // Login e cadastro compartilham este token (17/09, ao ligar Turnstile no login também) —
+  // sem isto, completar o desafio no cadastro e trocar para "login" deixava o botão de
+  // Entrar liberado com um token de OUTRO widget/ação, nunca verificado para o login em si.
+  // Troca de modo sempre invalida o token e força o widget (o que estiver montado) a recarregar.
+  useEffect(() => { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); }, [modo]);
   // Conta regressiva do cooldown de reenvio (1 tick/s até zerar).
   useEffect(() => {
     if (cooldownReenvio <= 0) return;
@@ -332,7 +337,14 @@ export default function Login() {
     e.preventDefault();
     setErro(''); setEmailNaoConfirmado(false); setCredencialInvalida(false); setReenviado(false); setLoading(true);
     try {
-      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({
+        email: form.email, password: form.senha,
+        // Mesmo padrão do cadastro (17/09, achado de auditoria): login era o único fluxo de
+        // auth sem NENHUMA fricção própria (nem Turnstile, nem rate-limit da aplicação) —
+        // só o limite genérico do GoTrue, pensado para abuso de infra, não para travar
+        // tentativa de senha contra uma conta específica (credential-stuffing).
+        options: { ...(turnstileConfigurado ? { captchaToken } : {}) },
+      });
       if (error) throw error;
       // Processa convite de equipe se existir
       if (signInData?.user) await processarConviteEquipe(signInData.user.id);
@@ -365,6 +377,9 @@ export default function Login() {
       if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
       if (/invalid login credentials/i.test(err.message || '')) setCredencialInvalida(true);
       setErro(traduzErroAuth(err.message));
+      // Token do Turnstile é de uso único — mesma limpeza do cadastro, senão o próximo clique
+      // reenviaria um token já consumido.
+      if (turnstileConfigurado) { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); }
     }
     setLoading(false);
   };
@@ -456,6 +471,8 @@ export default function Login() {
     || emailDuplicado || telDuplicado
     || (turnstileConfigurado && !captchaToken)
     || ((produtoParam || planoEscolhido) && cpfCheck?.temConta);
+  // Mesma disciplina do cadastro: gate e aparência do botão vêm da MESMA expressão (17/09).
+  const loginBloqueado = loading || (turnstileConfigurado && !captchaToken);
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -577,8 +594,15 @@ export default function Login() {
                   ✅ Confirmação reenviada. Verifique sua caixa de entrada e o spam.
                 </div>
               )}
-              <button type="submit" disabled={loading}
-                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+              {turnstileConfigurado && (
+                <TurnstileWidget
+                  resetKey={turnstileTentativa}
+                  onVerify={setCaptchaToken}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              )}
+              <button type="submit" disabled={loginBloqueado}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: loginBloqueado ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loginBloqueado ? 0.7 : 1 }}>
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando...</> : 'Entrar'}
               </button>
             </form>

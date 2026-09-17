@@ -22,6 +22,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -45,8 +46,12 @@ const ehArquivo = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim())
 async function testarHotlink(url) {
   let res;
   try {
-    res = await fetch(url, {
-      redirect: 'follow',
+    // SSRF (17/09, achado de auditoria): `redirect:'follow'` cru seguia um 302 sem revalidar
+    // o host final (169.254.169.254/10.x/localhost). `hotlink` é ou o template fixo da CEF
+    // (uf/num só dígitos) ou `link_matricula` já gravado no banco pelo scraper — nenhum vem
+    // direto do body da requisição, mas ainda assim vale a mesma defesa dos outros leitores
+    // de documento (`fetchExternoSeguro`, mesmo padrão de baixar-doc.js/fetch-url.js).
+    res = await fetchExternoSeguro(url, {
       signal: AbortSignal.timeout(8000),
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

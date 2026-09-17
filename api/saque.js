@@ -10,6 +10,7 @@
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { verificarSocioQSA } from './_pj-socio.js';
+import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
 export const config = { runtime: 'edge' };
 
@@ -121,6 +122,18 @@ export default async function handler(req) {
 
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
+
+  // RATE LIMIT (17/09, achado de auditoria de segurança): este endpoint mexe em saldo/saque
+  // e não passava por `_rate-limit.js` como os outros ~50 endpoints sensíveis do projeto. O
+  // ledger (`saque_avaliar`) já impede saque duplicado/indevido, mas nada travava alguém
+  // martelando POST (inflar a fila de aprovação do admin) ou GET ?ver_como=/?todos=1 (admin/
+  // analista). POST é mais restrito (pedir saque é raro); GET/PATCH ficam mais soltos (extrato
+  // é consultado com frequência normal pela tela, e o admin processa fila em lote).
+  const rlLimite = req.method === 'POST' ? 5 : 60;
+  const rlJanela = req.method === 'POST' ? 10 * 60_000 : 5 * 60_000;
+  const rl = await checkRateLimit(`saque:${req.method}:${user.id}`, rlLimite, rlJanela);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+
   const url = new URL(req.url);
   const role = await roleFor(user.id);
 

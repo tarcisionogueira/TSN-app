@@ -1,6 +1,7 @@
 export const maxDuration = 300;
 
 import { fetchViaBrightData } from './_brightdata.js';
+import { isCronAuthorized } from './_auth.js';
 
 const TODOS_ESTADOS = [
   'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
@@ -390,8 +391,12 @@ export default async function handler(req, res) {
   if (cronSecret) {
     const authHeader = req.headers['authorization'] || '';
     const bearerVal = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const sent = req.headers['x-cron-secret'] || bearerVal || '';
-    if (sent !== cronSecret) {
+    // Comparação em tempo constante via isCronAuthorized (17/09, achado de auditoria de
+    // segurança): este bloco é código morto — inalcançável desde o `return 410` acima —
+    // mas ficou com `sent !== cronSecret` (comparação direta, vazável por timing) enquanto
+    // o resto do projeto usa `timingSafeEqualStr`. Corrigido por consistência/higiene, caso
+    // este endpoint seja reativado um dia sem que alguém releia este trecho.
+    if (!isCronAuthorized(req)) {
       // Fallback: aceitar JWT de usuário admin (chamada manual pelo painel)
       const token = bearerVal;
       let isAdmin = false;

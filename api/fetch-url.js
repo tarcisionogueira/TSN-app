@@ -3,7 +3,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
-import { hostPermitido } from './_allowed-hosts.js';
+import { hostPermitido, fetchExternoSeguro } from './_allowed-hosts.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -28,9 +28,13 @@ export default async function handler(req) {
   }
 
   try {
-    const resp = await fetch(url, {
+    // SSRF (17/09, achado de auditoria): `hostPermitido` só valida a URL inicial — um 302 do
+    // próprio host permitido para 169.254.169.254/10.x/localhost passava batido com
+    // `redirect:'follow'` cru, e aqui o conteúdo baixado VOLTA pro cliente (exfiltração, não
+    // só um fetch cego). `fetchExternoSeguro` revalida CADA hop (mesmo padrão de
+    // enriquecer-lote.js/gerar-analise.js/etc.).
+    const resp = await fetchExternoSeguro(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil-Bot/1.0)' },
-      redirect: 'follow',
     });
 
     const contentType = resp.headers.get('content-type') || '';
