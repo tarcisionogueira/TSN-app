@@ -23,9 +23,19 @@ const RE_ANCORA = /\bm[²2]\b|lote\s*n?[ºo°]?\s*\d|matr[íi]cula|R\$\s?[\d.,]+
     console.log(`\n=== ${url} ===`);
     const page = await browser.newPage();
     const chamadasXhr = [];
+    const respostasApi = [];
     page.on('request', (req) => {
       const t = req.resourceType();
       if (t === 'xhr' || t === 'fetch') chamadasXhr.push(req.url());
+    });
+    page.on('response', async (res) => {
+      const u = res.url();
+      if (/\/core\/api\/get-leiloes/.test(u)) {
+        try {
+          const txt = await res.text();
+          respostasApi.push({ url: u, status: res.status(), corpo: txt.slice(0, 2500) });
+        } catch { /* padrao-ok: corpo pode já ter sido consumido/fechado pelo browser — best-effort, só recon */ }
+      }
     });
     try {
       const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -37,6 +47,7 @@ const RE_ANCORA = /\bm[²2]\b|lote\s*n?[ºo°]?\s*\d|matr[íi]cula|R\$\s?[\d.,]+
       console.log(`  HTML renderizado: ${html.length} bytes`);
       if (chamadasXhr.length) console.log(`  chamadas XHR/fetch vistas: ${JSON.stringify(chamadasXhr.slice(0, 15))}`);
       else console.log('  nenhuma chamada XHR/fetch vista — a página não busca dado nenhum por AJAX.');
+      for (const r of respostasApi) console.log(`  RESPOSTA ${r.url} (HTTP ${r.status}): ${JSON.stringify(r.corpo)}`);
       const idx = html.search(RE_ANCORA);
       if (idx >= 0) {
         console.log(`  ÂNCORA ACHADA após render! trecho: ${JSON.stringify(html.slice(Math.max(0, idx - 400), idx + 400))}`);
