@@ -86,7 +86,9 @@ const btn = (cor, texto, onClick, disabled, icon) => (
 /* ── Tela: escolha do método ── */
 // ocultarResumo: quando o chamador já mostra valor/nome do serviço em destaque logo acima
 // (ex.: PagarHonorario.jsx), repetir aqui é redundante — pula direto pras opções.
-function EscolhaMetodo({ servico, onEscolha, ocultarResumo = false }) {
+// permitirSplit (18/09): mostra a 3ª opção "Pix + Cartão" — só faz sentido em cobranças que
+// suportam saldo em partes (honorário de êxito, cobrança avulsa); assessoria/planos não.
+function EscolhaMetodo({ servico, onEscolha, ocultarResumo = false, permitirSplit = false }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {!ocultarResumo && (
@@ -134,12 +136,36 @@ function EscolhaMetodo({ servico, onEscolha, ocultarResumo = false }) {
           <ArrowRight size={16} color="#94a3b8" />
         </div>
       </button>
+
+      {permitirSplit && (
+        <button onClick={() => onEscolha('split')} style={{
+          width: '100%', padding: '18px 20px', background: 'white', border: '2px solid #e2e8f0',
+          borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, background: '#faf5ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <QrCode size={18} color="#7c3aed" style={{ marginRight: -4 }} /><CreditCard size={18} color="#7c3aed" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Pix + Cartão</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Paga parte agora no Pix, o resto no cartão</div>
+            </div>
+            <ArrowRight size={16} color="#94a3b8" />
+          </div>
+        </button>
+      )}
     </div>
   );
 }
 
 /* ── Tela: PIX ── */
-function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emailProp, ocultarResumo = false }) {
+// tituloConfirmado/subtituloConfirmado: usados no fluxo Pix+Cartão (18/09) — este Pix pode
+// ser só uma PARTE do total, então "Pagamento confirmado! Redirecionando..." (que soa como
+// "acabou tudo") fica errado; o chamador passa um texto de transição pro cartão.
+function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emailProp, ocultarResumo = false, tituloConfirmado = 'Pagamento confirmado!', subtituloConfirmado = 'Redirecionando...' }) {
   const { user } = useAuth();
   const email = emailProp || user?.email;
   const [etapa, setEtapa] = useState('gerando'); // gerando | pronto | confirmado | erro | expirado
@@ -230,8 +256,8 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emai
     return (
       <div style={{ textAlign: 'center', padding: '32px 0' }}>
         <CheckCircle2 size={56} color="#059669" style={{ margin: '0 auto 16px' }} />
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>Pagamento confirmado!</div>
-        <div style={{ fontSize: 14, color: '#64748b', marginTop: 8 }}>Redirecionando...</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{tituloConfirmado}</div>
+        <div style={{ fontSize: 14, color: '#64748b', marginTop: 8 }}>{subtituloConfirmado}</div>
       </div>
     );
   }
@@ -564,10 +590,139 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   );
 }
 
+/* ── Tela: Pix + Cartão combinado (18/09) ── */
+// Fase 1 (valor): quanto pagar de Pix agora (mín. R$5, máx. o saldo). Fase 2 (pix): gera o
+// Pix DESSE valor (parcial) e aguarda compensar — mesmo PagamentoPIX, só que com um valor
+// menor que o total. Fase 3 (cartao): ao compensar, busca o saldo ATUALIZADO no servidor
+// (recarregarSaldo — nunca calcula na mão: o servidor é quem sabe o saldo real, e evita
+// arredondamento/corrida) e mostra o cartão pra esse valor. onPago só é chamado no fim da
+// fase 3 — a fase 1/2 sozinha não fecha a cobrança.
+function PagamentoSplit({ servico, onPago, onVoltar, extra = {}, email, parcelasMax = 12, parcelasSemJuros = 3, recarregarSaldo, ocultarResumo = false }) {
+  const [fase, setFase] = useState('valor'); // valor | pix | cartao | erro_saldo
+  const [valorPix, setValorPix] = useState('');
+  const [erroValor, setErroValor] = useState('');
+  const [saldoCartao, setSaldoCartao] = useState(null);
+  const [carregandoSaldo, setCarregandoSaldo] = useState(false);
+
+  const saldoTotal = Number(servico.valor) || 0;
+  const valorPixNum = useMemo(() => parseFloat(String(valorPix).replace(/\./g, '').replace(',', '.')) || 0, [valorPix]);
+  const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 16, boxSizing: 'border-box' };
+
+  const confirmarValor = () => {
+    setErroValor('');
+    if (valorPixNum < 5) { setErroValor('Valor mínimo para o Pix: R$ 5,00.'); return; }
+    if (valorPixNum >= saldoTotal) { setErroValor(`O Pix precisa ser MENOR que o total (${fmtBRL(saldoTotal)}) — se quiser pagar tudo no Pix, use a opção "Pagar com PIX".`); return; }
+    setFase('pix');
+  };
+
+  const aoConfirmarPix = async () => {
+    setFase('cartao');
+    setCarregandoSaldo(true);
+    try {
+      const novoSaldo = await recarregarSaldo();
+      if (!(novoSaldo > 0.99)) { onPago(); return; } // saldo residual < R$1 — MP não cobra abaixo disso; considera concluído
+      setSaldoCartao(novoSaldo);
+    } catch (e) {
+      console.error('[PagamentoSplit] recarregarSaldo falhou:', e?.message || e);
+      setFase('erro_saldo');
+    } finally {
+      setCarregandoSaldo(false);
+    }
+  };
+
+  if (fase === 'valor') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <button onClick={onVoltar} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, padding: 0 }}>
+          <ChevronLeft size={16} /> Voltar
+        </button>
+        {!ocultarResumo && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(saldoTotal)}</div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>{servico.nome}</div>
+          </div>
+        )}
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Quanto você quer pagar agora via Pix?
+          </label>
+          <input style={inp} placeholder="0,00" inputMode="decimal" value={valorPix} onChange={e => setValorPix(e.target.value)} />
+          <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>
+            O restante ({valorPixNum > 0 && valorPixNum < saldoTotal ? fmtBRL(saldoTotal - valorPixNum) : fmtBRL(saldoTotal)}) fica para o cartão, liberado assim que o Pix compensar.
+          </div>
+        </div>
+        {erroValor && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10 }}>
+            <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13, color: '#dc2626' }}>{erroValor}</div>
+          </div>
+        )}
+        {btn('#7c3aed', 'Gerar Pix deste valor', confirmarValor, false, <QrCode size={16} />)}
+      </div>
+    );
+  }
+
+  if (fase === 'pix') {
+    return (
+      <PagamentoPIX
+        servico={{ ...servico, valor: valorPixNum }}
+        onConfirmado={aoConfirmarPix}
+        onVoltar={() => setFase('valor')}
+        extra={{ ...extra, valor_pix_parcial: valorPixNum }}
+        email={email}
+        ocultarResumo={ocultarResumo}
+        tituloConfirmado="Pix confirmado!"
+        subtituloConfirmado="Agora é só completar com o cartão..."
+      />
+    );
+  }
+
+  if (fase === 'erro_saldo') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'center', padding: '12px 0' }}>
+        <CheckCircle2 size={40} color="#059669" style={{ margin: '0 auto' }} />
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#059669' }}>Seu Pix foi confirmado!</div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>
+          Não conseguimos calcular o saldo do cartão automaticamente agora. Atualize a página —
+          o valor que falta já vai aparecer certo, descontado do Pix que você acabou de pagar.
+        </div>
+        {btn('#0D63DB', 'Atualizar página', () => window.location.reload(), false)}
+      </div>
+    );
+  }
+
+  // fase === 'cartao'
+  if (carregandoSaldo || saldoCartao == null) {
+    return (
+      <div style={{ textAlign: 'center', padding: '28px 0', color: '#64748b', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+        <Loader2 size={28} color="#7c3aed" style={{ animation: 'spin 1s linear infinite' }} />
+        Calculando o saldo do cartão…
+        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#166534', textAlign: 'center' }}>
+        Pix de {fmtBRL(valorPixNum)} confirmado. Complete o pagamento com o cartão:
+      </div>
+      <PagamentoCartao
+        servico={{ ...servico, valor: saldoCartao }}
+        onConfirmado={onPago}
+        onVoltar={() => setFase('valor')}
+        parcelasMax={parcelasMax}
+        parcelasSemJuros={parcelasSemJuros}
+        extra={extra}
+        email={email}
+      />
+    </div>
+  );
+}
+
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email, embutido = false }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email, embutido = false, permitirSplit = false, recarregarSaldo = null }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -592,7 +747,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
 
       {!metodo && (
         <>
-          <EscolhaMetodo servico={servico} onEscolha={setMetodo} ocultarResumo={embutido} />
+          <EscolhaMetodo servico={servico} onEscolha={setMetodo} ocultarResumo={embutido} permitirSplit={permitirSplit && !!recarregarSaldo} />
           {onCancelar && (
             <button onClick={onCancelar} style={{ width: '100%', marginTop: 12, padding: '10px', background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
               Cancelar
@@ -615,6 +770,19 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           parcelasSemJuros={parcelasSemJuros}
           extra={extra}
           email={email}
+        />
+      )}
+      {metodo === 'split' && (
+        <PagamentoSplit
+          servico={servico}
+          onPago={onPago}
+          onVoltar={() => setMetodo(null)}
+          extra={extra}
+          email={email}
+          parcelasMax={parcelasMax}
+          parcelasSemJuros={parcelasSemJuros}
+          recarregarSaldo={recarregarSaldo}
+          ocultarResumo={embutido}
         />
       )}
     </>

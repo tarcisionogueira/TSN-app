@@ -24,13 +24,20 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,status`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status`, {
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
   });
   const [cob] = r.ok ? await r.json().catch(() => []) : [];
   if (!cob) return new Response(JSON.stringify({ error: 'Cobrança não encontrada' }), { status: 404 });
 
+  // 18/09 (Pix + cartão combinado): saldo restante = valor - o que já entrou via Pix
+  // parcial (api/mp-webhook.js incrementa valor_pago_pix a cada Pix parcial confirmado).
+  const total = Number(cob.valor) || 0;
+  const pagoPix = Number(cob.valor_pago_pix) || 0;
+  const saldoRestante = Math.max(0, Math.round((total - pagoPix) * 100) / 100);
+
   return new Response(JSON.stringify({
-    id: cob.id, descricao: cob.descricao, valor: cob.valor, status: cob.status,
+    id: cob.id, descricao: cob.descricao, valor: total, status: cob.status,
+    valor_pago_pix: pagoPix, saldo_restante: saldoRestante,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

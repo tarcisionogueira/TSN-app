@@ -42,6 +42,17 @@ export default function CobrarAvulso() {
     return () => { cancel = true; };
   }, [cobrancaId]);
 
+  // Pix + Cartão combinado (18/09): depois que a parte em Pix compensa, o cartão precisa
+  // cobrar o saldo ATUALIZADO — sempre lido do servidor (nunca calculado no front, mesmo
+  // motivo do honorário de êxito em PagarHonorario.jsx).
+  const recarregarSaldo = async () => {
+    const res = await fetch(`/api/cobranca-avulsa-info?id=${encodeURIComponent(cobrancaId)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.id) throw new Error('não foi possível atualizar o saldo');
+    setCob(data);
+    return Number(data.saldo_restante) || 0;
+  };
+
   const wrap = { minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 16px' };
   const card = { background: 'white', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 460, width: '100%' };
 
@@ -100,9 +111,16 @@ export default function CobrarAvulso() {
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>BidPro Brasil</div>
         </div>
 
+        {cob.valor_pago_pix > 0 && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#166534', textAlign: 'center' }}>
+            Já recebemos <strong>{fmtBRL(cob.valor_pago_pix)}</strong> via Pix do total de {fmtBRL(cob.valor)}.
+            O valor abaixo é o <strong>saldo restante</strong>.
+          </div>
+        )}
+
         <div style={{ textAlign: 'center', padding: '4px 0' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Valor a pagar</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(cob.valor)}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(cob.saldo_restante ?? cob.valor)}</div>
         </div>
 
         <div>
@@ -121,12 +139,14 @@ export default function CobrarAvulso() {
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Como você quer pagar?</div>
             <PagamentoServico
-              servico={{ nome: cob.descricao, valor: cob.valor, proposito: 'cobranca_avulsa' }}
+              servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
               extra={{ cobranca_id: cob.id }}
               email={email}
               parcelasSemJuros={1}
               embutido
               onPago={() => setPago(true)}
+              permitirSplit
+              recarregarSaldo={recarregarSaldo}
             />
           </div>
         )}

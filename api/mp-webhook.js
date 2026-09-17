@@ -552,20 +552,27 @@ export default async function handler(req, res) {
         const total = Number(arr.honorarios_valor) || 0;
         const esperado = Math.max(0, Math.round((total - jaRecebido) * 100) / 100);
         const pago = Number(pagamento.transaction_amount) || 0;
-        // Tolerância pequena só para arredondamento — o preço nasceu no servidor
-        // (api/mp-checkout.js lê o saldo restante direto do banco, nunca do body), então um
-        // valor fora disso é sinal de algo errado, não de arredondamento.
-        if (esperado <= 0 || Math.abs(pago - esperado) > Math.max(1, esperado * 0.01)) {
+        // PIX + CARTÃO COMBINADO (17/09): o pagamento pode ser uma PARTE do saldo (Pix
+        // parcial escolhido pelo pagador em api/mp-checkout.js), não só o saldo inteiro —
+        // então não é mais "bater exato", é "não pode passar do que falta". A trava real
+        // contra passar do total é a trigger `honorarios_recebimentos_valida_teto` no
+        // banco (raise no INSERT abaixo se, por qualquer corrida, isto ainda assim
+        // ultrapassar); aqui só se rejeita o absurdo (pago ≤ 0 ou maior que o saldo atual).
+        if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {
           console.error('[mp-webhook] honorario valor incompatível', { arrId, pago, esperado, total, jaRecebido });
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
           return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
         }
+        // Método real (17/09): antes tudo que vinha do link gravava 'cartao_mp', mesmo Pix —
+        // rótulo errado desde que o Pix parcial existe. `payment_method_id` do MP diz 'pix'
+        // para Pix; qualquer outro valor aqui (visa/master/elo/...) é cartão.
+        const metodoReal = pagamento.payment_method_id === 'pix' ? 'pix_mp' : 'cartao_mp';
         const insRes = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos`, {
           method: 'POST',
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({
-            arrematacao_id: arrId, metodo: 'cartao_mp', valor: pago, status: 'confirmado',
-            justificativa: 'Pago pelo link de honorários (Mercado Pago)',
+            arrematacao_id: arrId, metodo: metodoReal, valor: pago, status: 'confirmado',
+            justificativa: metodoReal === 'pix_mp' ? 'Pago via Pix pelo link de honorários (Mercado Pago)' : 'Pago via cartão pelo link de honorários (Mercado Pago)',
             gateway_payment_id: String(pagamento.id),
           }),
         });
@@ -590,29 +597,43 @@ export default async function handler(req, res) {
       }
       if (ehCobrancaAvulsaMp) {
         const cobId = pagamento.metadata.cobranca_id;
-        const cobRes = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}&select=id,valor,status`, {
+        const cobRes = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}&select=id,valor,valor_pago_pix,status,gateway_payment_id`, {
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
         });
         const [cob] = cobRes.ok ? await cobRes.json() : [];
         if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
         if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
-        const esperado = Number(cob.valor) || 0;
+        // Dedup por payment_id: mesmo pagamento não pode incrementar valor_pago_pix 2x
+        // (reenvio do MP do MESMO evento já é barrado por eventoJaProcessado lá em cima,
+        // mas esta é a 2ª camada — o mesmo cuidado do gateway_payment_id único em
+        // honorarios_recebimentos, só que aqui é 1 linha só, não um ledger).
+        if (String(cob.gateway_payment_id || '') === String(pagamento.id)) {
+          return res.status(200).json({ ok: true, duplicado: 'cobranca_avulsa_mesmo_payment' });
+        }
+        const total = Number(cob.valor) || 0;
+        const jaPagoPix = Number(cob.valor_pago_pix) || 0;
+        const esperado = Math.max(0, Math.round((total - jaPagoPix) * 100) / 100);
         const pago = Number(pagamento.transaction_amount) || 0;
-        if (esperado <= 0 || Math.abs(pago - esperado) > Math.max(1, esperado * 0.01)) {
-          console.error('[mp-webhook] cobranca_avulsa valor incompatível', { cobId, pago, esperado });
+        // PIX + CARTÃO COMBINADO (17/09): mesmo raciocínio do honorário — o pagamento pode
+        // ser uma PARTE do saldo (Pix parcial), não precisa bater exato com o que falta.
+        if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {
+          console.error('[mp-webhook] cobranca_avulsa valor incompatível', { cobId, pago, esperado, total, jaPagoPix });
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
           return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel' });
         }
+        const completou = pago >= esperado - Math.max(1, esperado * 0.01);
         const patchRes = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}`, {
           method: 'PATCH',
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ status: 'paga', pago_em: new Date().toISOString(), gateway_payment_id: String(pagamento.id) }),
+          body: JSON.stringify(completou
+            ? { status: 'paga', pago_em: new Date().toISOString(), gateway_payment_id: String(pagamento.id), valor_pago_pix: pagamento.payment_method_id === 'pix' ? jaPagoPix + pago : jaPagoPix }
+            : { valor_pago_pix: jaPagoPix + pago, gateway_payment_id: String(pagamento.id) }),
         });
         if (!patchRes.ok) {
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
           return res.status(502).json({ error: 'cobranca_avulsa_patch_falhou' });
         }
-        return res.status(200).json({ ok: true, cobranca_avulsa: { id: cobId, pago: true } });
+        return res.status(200).json({ ok: true, cobranca_avulsa: { id: cobId, pago: completou, saldo_restante: completou ? 0 : Math.max(0, esperado - pago) } });
       }
       if (ehProdutoMp) {
         result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRefMp, p_gateway: 'mercadopago', p_gateway_payment_id: String(pagamento.id) });

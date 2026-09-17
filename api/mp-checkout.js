@@ -177,8 +177,22 @@ export default async function handler(req, res) {
       const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
       const saldo = Math.round((total - jaRecebido) * 100) / 100;
       if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
-      valor = saldo;
-      descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
+      // PIX + CARTÃO COMBINADO (17/09): quem abre o link pode escolher pagar só uma PARTE
+      // agora via Pix (`valor_pix_parcial`, só aceito com metodoPagamento='pix') — a
+      // diferença cobrada depois pelo cartão é sempre recalculada NA HORA (o card volta a
+      // pedir o saldo cheio de novo), então o valor aqui é o único ponto de confiança:
+      // limitado ao saldo devido e com piso mínimo pra não virar spam de Pix de centavos.
+      const pixParcial = metodoPagamento === 'pix' ? Number(req.body?.valor_pix_parcial) : null;
+      if (Number.isFinite(pixParcial) && pixParcial > 0) {
+        const PISO_PIX_PARCIAL = 5;
+        if (pixParcial < PISO_PIX_PARCIAL) return res.status(400).json({ error: `Valor mínimo para Pix parcial: R$ ${PISO_PIX_PARCIAL},00.` });
+        if (pixParcial > saldo + 0.01) return res.status(400).json({ error: 'O valor do Pix não pode ser maior que o saldo devido.' });
+        valor = Math.round(pixParcial * 100) / 100;
+      } else {
+        valor = saldo;
+      }
+      descricao = jaRecebido > 0 || (Number.isFinite(pixParcial) && pixParcial > 0 && pixParcial < saldo)
+        ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
       honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
@@ -195,15 +209,27 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,status`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
       if (!cob) return res.status(404).json({ error: 'Cobrança não encontrada.' });
       if (cob.status !== 'aberta') return res.status(409).json({ error: 'Esta cobrança já foi paga ou cancelada.' });
-      const v = Number(cob.valor) || 0;
-      if (v <= 0) return res.status(400).json({ error: 'Cobrança sem valor válido.' });
-      valor = v;
+      const total = Number(cob.valor) || 0;
+      if (total <= 0) return res.status(400).json({ error: 'Cobrança sem valor válido.' });
+      const jaPagoPix = Number(cob.valor_pago_pix) || 0;
+      const saldo = Math.round((total - jaPagoPix) * 100) / 100;
+      if (saldo <= 0) return res.status(409).json({ error: 'Esta cobrança já foi coberta.' });
+      // PIX + CARTÃO COMBINADO — mesmo mecanismo do honorário de êxito (ver comentário lá).
+      const pixParcial = metodoPagamento === 'pix' ? Number(req.body?.valor_pix_parcial) : null;
+      if (Number.isFinite(pixParcial) && pixParcial > 0) {
+        const PISO_PIX_PARCIAL = 5;
+        if (pixParcial < PISO_PIX_PARCIAL) return res.status(400).json({ error: `Valor mínimo para Pix parcial: R$ ${PISO_PIX_PARCIAL},00.` });
+        if (pixParcial > saldo + 0.01) return res.status(400).json({ error: 'O valor do Pix não pode ser maior que o saldo devido.' });
+        valor = Math.round(pixParcial * 100) / 100;
+      } else {
+        valor = saldo;
+      }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
       cobrancaCtx = { cobrancaId: cob.id };
     } catch (e) {

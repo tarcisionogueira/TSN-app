@@ -67,6 +67,18 @@ export default function PagarHonorario() {
     setPago(true);
   };
 
+  // Pix + Cartão combinado (18/09): depois que a PARTE em Pix compensa, o cartão precisa
+  // cobrar o saldo ATUALIZADO — nunca calculado no front (o servidor é a fonte de verdade
+  // de quanto falta, evita corrida/arredondamento). Também atualiza `arr` para a lista de
+  // partes já recebidas (a barra verde "Já recebemos...") refletir o Pix recém-pago.
+  const recarregarSaldo = async () => {
+    const res = await fetch(`/api/honorario-info?id=${encodeURIComponent(arrematacaoId)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.id) throw new Error('não foi possível atualizar o saldo');
+    setArr(data);
+    return Number(data.honorarios_saldo_restante) || 0;
+  };
+
   const wrap = { minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 16px' };
   const card = { background: 'white', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 460, width: '100%' };
 
@@ -185,6 +197,8 @@ export default function PagarHonorario() {
               parcelasSemJuros={1}
               embutido
               onPago={handlePago}
+              permitirSplit
+              recarregarSaldo={recarregarSaldo}
             />
           </div>
         )}
