@@ -5,6 +5,7 @@
 // trocando só o corpo via fetch com header X-Inertia) — antes de escrever qualquer parser
 // novo. NÃO grava nada. Roda no GitHub Actions (egress liberado).
 import puppeteer from 'puppeteer';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const BASE = 'https://globoleiloes.com.br';
 const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'];
@@ -85,5 +86,35 @@ function extrairDataPage(html) {
   }
 
   await browser.close();
+
+  // ── FASE 2 (17/09) — Cloudflare bloqueou TUDO no Puppeteer cru (403 em / e nos 3 paths).
+  // Achado NOVO: o leiloeiro_conhecimento dizia "SEM Cloudflare" em 07/09 — o site ganhou essa
+  // proteção depois disso, em cima da migração pra Inertia.js. Tenta o Bright Data Web Unlocker
+  // (mesmo produto já aprovado/usado no Pecini) — (a) HTML normal, pra achar data-page; (b) com
+  // header X-Inertia:true, que faz o Inertia responder só o JSON da página (sem HTML em volta),
+  // se o servidor aceitar a requisição vindo do Unlocker.
+  console.log('\n\n══════════════════ FASE 2 — Bright Data Web Unlocker ══════════════════');
+  for (const { rotulo, path, headers } of [
+    { rotulo: 'home (HTML normal)', path: '/', headers: {} },
+    { rotulo: 'home (X-Inertia:true)', path: '/', headers: { 'X-Inertia': 'true', Accept: 'text/html, application/xhtml+xml' } },
+    { rotulo: '/leiloes (X-Inertia:true)', path: '/leiloes', headers: { 'X-Inertia': 'true', Accept: 'text/html, application/xhtml+xml' } },
+  ]) {
+    console.log(`\n── ${rotulo} — ${BASE}${path}`);
+    try {
+      const r = await fetchUnlockerContado({
+        body: JSON.stringify({ url: BASE + path, method: 'GET', headers: { 'User-Agent': UA, ...headers } }),
+      });
+      const html = await r.text().catch(() => '');
+      console.log('  HTTP', r.status, '· len', html.length);
+      const cloudflare = /just a moment|challenge-platform|cf-chl/i.test(html);
+      if (cloudflare) { console.log('  ainda Cloudflare — desafio intacto'); continue; }
+      // Resposta X-Inertia costuma vir como JSON puro (sem HTML em volta) quando aceita.
+      try { const j = JSON.parse(html); console.log('  ⭐ JSON PURO (Inertia aceitou o header) — chaves:', Object.keys(j)); console.log('  dump(6000):', JSON.stringify(j).slice(0, 6000)); continue; } catch { /* não é JSON puro, segue pro data-page */ }
+      const dp = extrairDataPage(html);
+      if (dp) { console.log('  data-page achado — component:', dp.component, '· props chaves:', dp.props ? Object.keys(dp.props) : null); console.log('  dump(6000):', JSON.stringify(dp).slice(0, 6000)); }
+      else console.log('  sem data-page e sem JSON — raw[0..600]:', html.slice(0, 600).replace(/\s+/g, ' '));
+    } catch (e) { console.log('  ERRO:', String(e.message || e).slice(0, 200)); }
+  }
+
   console.log('\n✅ recon concluído.');
 })();

@@ -937,9 +937,31 @@ detecta "parcelamento" com guarda contra negação próxima ("não é permitido 
 achado `pagamento_contradiz_documento`). `npm run build` limpo (0 padrão novo, CSP/sintaxe
 ok). Commit em `main`, deploy confirmado.
 
-**Não verificado ainda**: se o novo relatório do lote ZUK específico sai corrigido — precisa
-gerar de novo (ou aguardar o próximo cron/pedido de cliente) e reler `condicoesEdital` depois,
-já que o relatório já existente no banco não é regerado retroativamente por este fix.
+**FECHADO (mesma sessão, ~1h depois) — validado com dado real, e havia um 4º e um 5º defeito.**
+Regenerei o relatório do ZUK pelo caminho de cron (sem cobrar cota do cliente) três vezes,
+cada uma expondo a camada seguinte:
+
+4. **Preâmbulo multi-lote**: `isolarBlocoDoLote` corta o texto a partir do "Lote N" deste
+   imóvel — mas a cláusula de pagamento é GERAL, escrita uma vez ANTES da lista de lotes, e
+   ficava de fora do bloco isolado. Corrigido somando o preâmbulo só para a extração de
+   pagamento/custos (identidade continua isolada por lote, de propósito).
+5. **O verdadeiro bloqueio deste lote**: o edital do ZUK é PDF sem camada de texto (`lerTexto`
+   falha) — a leitura cai no caminho de VISÃO (IA lendo a imagem), e esse prompt **nunca
+   perguntava sobre forma de pagamento**, só descrição/área/praças. `cond`/`pagamento` ficavam
+   `null` DE PROPÓSITO nesse caminho ("condições de arremate não foram lidas"). Os 4 fixes
+   acima são reais e valem para outras fontes, mas nenhum se aplica quando a leitura é por
+   visão — é por isso que as duas primeiras regenerações do ZUK continuaram saindo `null`.
+   Corrigido: o prompt de `editalPorVisao` agora pede `condicoesPagamento` (citação) +
+   `parcelamentoPermitido`/`parcelas`/`sinalPct`/`financiavel` (mesmo formato do caminho de
+   texto), parseados e injetados em `cond.formaPagamento`/`pagamento`.
+
+**Resultado real após o fix (3ª regeneração, 13:34 UTC)**: `condicoesEdital.formaPagamento` =
+"Comissão do leiloeiro de 5%... Parcelamento com mínimo de 25% do valor da avaliação, limitado
+a 10 parcelas, corrigidas pela tabela prática do TJSP..."; `regrasPagamento` = `{parcelas:10,
+sinalPct:25, parcelamentoPermitido:true}`; e `imoveis_leilao.forma_pagamento` mudou sozinho de
+`a_vista` para `financiado` (a autocorreção da INSPEÇÃO FINAL disparou). **5 defeitos na mesma
+cadeia, cada um mascarando o seguinte** — só apareceu inteiro porque testei contra o lote real
+do dono em vez de assumir que o 1º fix bastava.
 
 ---
 
