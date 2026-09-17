@@ -55,5 +55,23 @@ console.log('\nextrairGenerico — sem og:image, JSON-LD nem <img> aproveitável
   ok(r.link_foto === null, 'só chrome de site disponível: fica null, honesto — não é regressão nova, é o comportamento de sempre preservado');
 }
 
+console.log('\nextrairGenerico — og:image/JSON-LD que é a LOGO do site: descarta e cai no fallback de <img> (17/09, achado no LEFFA)');
+{
+  // LEFFA (LeilãoPro): lote sem foto própria tem og:image apontando pro template padrão
+  // (logo_face.png) — MESMA url em 11 de 15 lotes ativos. Sem este guard, a logo passava
+  // como se fosse a foto do imóvel (pior que não ter foto nenhuma).
+  const ogEhLogo = `<html><head><meta property="og:image" content="https://exemplo-leiloeiro.com.br/build/images/logo_face.png"></head>
+    <body><img src="/uploads/lote-456-foto1.jpg" width="900" height="700"></body></html>`;
+  const r = extrairGenerico(ogEhLogo, BASE);
+  ok(r.link_foto === 'https://exemplo-leiloeiro.com.br/uploads/lote-456-foto1.jpg',
+    'og:image é a logo do site: descarta e acha a foto real no corpo', r.link_foto);
+
+  const soLogoJsonLd = `<html><head><script type="application/ld+json">{"image":"/build/images/logo_face.png"}</script></head>
+    <body><img src="/icones/menu.svg"></body></html>`;
+  const r2 = extrairGenerico(soLogoJsonLd, BASE);
+  ok(r2.link_foto === null,
+    'JSON-LD image é a logo e não há foto real no corpo: fica null, honesto (nunca serve a logo)', r2.link_foto);
+}
+
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);

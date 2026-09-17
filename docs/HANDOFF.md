@@ -9,6 +9,43 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+-8. 🟡 **CONFERIDO 17/09, sem ação — resto do `qa_invariantes()` amarelo desta rodada.**
+   - `fonte_cega_no_monitor` (valor 1) = **EDITAL_DJEN, falso-positivo permanente e já
+     conhecido.** Esta fonte (Radar de Editais) nunca escreve `fonte_saude` POR DESENHO —
+     é monitorada por frescor-do-acervo (`FONTES_SEM_SAUDE` em `api/monitor-fontes-cron.js`,
+     comentário de 10/09 já explica). O invariante SQL (`fonte_cega_no_monitor`, limite 0) não
+     sabe dessa exceção e vai alertar PRA SEMPRE por essa fonte específica — mesmo risco de
+     "treinar o dono a ignorar" já visto com CREPALDI/SATO. **Não mexi** na função (é grande e
+     crítica, ~50 checks num `CREATE OR REPLACE` só — risco de corromper todo o painel por um
+     ajuste de uma linha não compensa); registrado aqui pra quem for tocar `qa_invariantes()`
+     de novo: falta um `and i.fonte <> 'EDITAL_DJEN'` na CTE desse invariante.
+   - `cadastro_duplicado` (valor 1) = Fabrício Rodriguez/Rodrigues, mesmo telefone, 2 cadastros
+     3 minutos depois um do outro em 30/08 — parece o dono corrigindo o próprio nome (typo no
+     sobrenome) e recadastrando. Sem sinal de bug; baixo volume, não persegui mais.
+   - `cadastro_sem_origem` (valor 3) — 3 cadastros dos últimos 7 dias sem `payload`/
+     `visita_origem`. Não investiguei a fundo (não é bug óbvio, pode ser tráfego direto/orgânico
+     legítimo); fica para quem for olhar atribuição de marketing (ritual 1c-b do topo do doc).
+   - `cadastro_barrado` (16 vs limite 7, janela 7d) — residual já conhecido, esperado sumir
+     sozinho da janela por volta de 20/09 (mesma nota de sessões anteriores).
+   - `qa_invariantes_lenta` (painel ~7,9s contra limite 5s) — confirmado ainda lento, mesma
+     causa já registrada (otimização de índice pendente), baixa prioridade, sem mudança hoje.
+
+-7. ✅ **RESOLVIDO 17/09 — `foto_repetida_como_lote`: LEFFA servia a LOGO do site como foto em
+   73% do acervo (11 de 15 lotes ativos), corrigido na raiz.** LeilãoPro (plataforma white-label
+   do LEFFA e outros): lote sem foto própria tem `og:image` apontando pro template padrão do
+   site (`.../build/images/logo_face.png`) — MESMA url nos 11 lotes. `extrairGenerico`
+   (`scripts/lib/scraper-core.mjs`) já tinha um filtro anti-logo (`RE_IMG_DESCARTA`,
+   `dom-parse-util.mjs`) mas só rodava no FALLBACK (`fotoDeHtml`) — o `og:image`/JSON-LD nunca
+   passava por ele, confiado como "sempre real". **Fix**: exportei `RE_IMG_DESCARTA` e agora ele
+   também filtra `og:image`/JSON-LD antes de aceitar — cai pro fallback de `<img>` do corpo
+   quando bate. Efeito é amplo: `extrairGenerico` é compartilhado por RJLEILOES/SOLEON/PECINI/
+   EMILIOMATOS/LEILAOPRO/SATO, não só LEFFA. Teste novo em
+   `scripts/testes/foto-generica-nao-pega-logo-do-site.mjs` (2 casos: og:image=logo com foto
+   real no corpo → usa a real; só logo, sem foto real → fica `null`, nunca serve a logo).
+   **Dado**: os 12 registros LEFFA com a logo tiveram `link_foto` zerado (`null`) — mostram
+   "sem foto" até o próximo scrape achar a real, em vez de mostrar a logo errada. `verificar:
+   sintaxe`/`padroes`, teste dedicado e `build` passaram limpos.
+
 -6. 🟡 **PARCIAL 17/09 — `uf_cef_congelada` (lista amarela): limpei o lote-lixo que achei, mas o
    alerta CONTINUA — causa real é outra e menor, não código.** Ao investigar achei e limpei um
    registro corrompido (`id=79f45b8c…`, criado 24/06, `ativo=false`): o scraper da CEF tinha

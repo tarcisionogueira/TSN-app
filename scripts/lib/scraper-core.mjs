@@ -15,7 +15,7 @@
 // sob demanda (api/) também as usa. A direção scripts → api é a convenção do repo.
 import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from '../../api/_texto-imovel.js';
 import { nomeiaUmDocumento } from '../../api/_doc-scan.js';
-import { fotoDeHtml } from './dom-parse-util.mjs';
+import { fotoDeHtml, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
 const CLAUDE_KEY       = process.env.CLAUDE_KEY || '';
@@ -102,7 +102,14 @@ export function extrairGenerico(html, urlBase) {
   // página fica sem foto mesmo tendo imagem real no HTML. `fotoDeHtml` (dom-parse-util.mjs,
   // mesmo filtro anti-chrome do fix da família `dom`) só entra quando os dois métodos
   // primários não acharam nada — nunca substitui um og:image/JSON-LD que já funcionava.
-  out.link_foto = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase) || fotoDeHtml(html, urlBase);
+  // GUARD (17/09): o og:image também pode ser a LOGO do site, não a foto do lote — achado no
+  // LEFFA (LeilãoPro), onde a página sem foto própria cai no og:image padrão do template
+  // (`.../logo_face.png`), igual pra TODO lote sem foto (11 de 15 lotes ativos com a MESMA
+  // url). Como o og:image nunca passava pelo filtro anti-chrome (só `fotoDeHtml` passava),
+  // a logo entrava disfarçada de foto real. Mesmo léxico (`RE_IMG_DESCARTA`) agora filtra
+  // o og:image/JSON-LD também, e cai pro fallback `fotoDeHtml` quando bate.
+  const fotoMeta = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase);
+  out.link_foto = (fotoMeta && !RE_IMG_DESCARTA.test(fotoMeta)) ? fotoMeta : fotoDeHtml(html, urlBase);
 
   // valores: "R$ 123.456,78"
   const valores = [...html.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => parseFloat(m[1].replace(/\./g, '').replace(',', '.')));

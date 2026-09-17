@@ -247,7 +247,7 @@ export function anexosDeHtml(html, urlBase) {
 // de novo no próximo ciclo — o log mentia sobre o que a extração realmente achou. Trazer o
 // MESMO léxico pra cá deixa o log honesto E dá a `fotoDeHtml` uma chance real de achar outra
 // imagem da galeria quando a página tem um placeholder ANTES da foto de verdade.
-const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem[-_]?imagem|sem[-_]?foto|no[-_]?image|n[ãa]o[-_]?dispon[íi]vel|indispon[íi]vel|lote[-_]?default|default[-_]?lote|img[-_]?padrao/i;
+export const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem[-_]?imagem|sem[-_]?foto|no[-_]?image|n[ãa]o[-_]?dispon[íi]vel|indispon[íi]vel|lote[-_]?default|default[-_]?lote|img[-_]?padrao/i;
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
