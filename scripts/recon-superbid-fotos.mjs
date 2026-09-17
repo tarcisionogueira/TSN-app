@@ -64,6 +64,17 @@ async function main() {
       };
       olha(out.primeira, '', 0);
       console.log('CAMPOS QUE PARECEM FOTO:\n' + (achados.join('\n') || '(nenhum achado por nome de chave)'));
+      // photoCount apareceu no dump sem fieldList — productCustomJson é STRING (json-in-json),
+      // a busca por chave acima não desce dentro de string. Decodifica na mão.
+      if (out.primeira.product?.productCustomJson) {
+        console.log('\nproduct.photoCount =', out.primeira.product.photoCount, '| product.videoUrlCount =', out.primeira.product.videoUrlCount);
+        console.log('product.productCustomJson (cru, 2000 chars):', String(out.primeira.product.productCustomJson).slice(0, 2000));
+        try {
+          const parsed = JSON.parse(out.primeira.product.productCustomJson);
+          console.log('product.productCustomJson (PARSEADO) chaves:', Object.keys(parsed).join(', '));
+          console.log(JSON.stringify(parsed).slice(0, 3000));
+        } catch (e) { console.log('productCustomJson não é JSON parseável:', e.message); }
+      }
       console.log('\nOFERTA COMPLETA (1ª, truncada 4000 chars):');
       console.log(JSON.stringify(out.primeira).slice(0, 4000));
     }
@@ -78,6 +89,16 @@ async function main() {
   await dump(
     'SUPERBID portal público, SEM fieldList (payload completo)',
     `https://offer-query.superbid.net/offers/?portalId=[2]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=1&orderBy=endDate:asc`
+  );
+
+  // TESTE 1 (fieldList expandido com candidatos chutados) voltou quase vazio — nem os campos
+  // que JÁ funcionam em produção (linkURL, thumbnailUrl) apareceram. Hipótese: a API rejeita/
+  // ignora o fieldList INTEIRO se tiver 1 campo desconhecido. Este teste 3 usa só campos
+  // CONFIRMADOS reais (do teste 2: productCustomJson, photoCount) + os que já funcionam hoje.
+  console.log('\n=== TESTE 3: fieldList SÓ com campos confirmados (produção + productCustomJson) ===');
+  await dump(
+    'SUPERBID portal público, fieldList mínimo confirmado',
+    `https://offer-query.superbid.net/offers/?portalId=[2]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=1&orderBy=endDate:asc&fieldList=id;linkURL;product.thumbnailUrl;product.photoCount;product.productCustomJson`
   );
 
   await browser.close();
