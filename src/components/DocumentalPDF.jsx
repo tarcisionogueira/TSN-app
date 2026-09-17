@@ -181,13 +181,24 @@ ${cabecalhoBidPro({
 
 <div class="av" style="border:2px solid ${R.bd};background:${R.bg};border-radius:8px;padding:12px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:15px;font-weight:900;color:${R.cor};">${R.txt}</div>
-  ${P.preliminar ? `<div style="font-size:10px;font-weight:600;color:${R.cor};opacity:0.9;margin-top:4px;">${
-    P.preliminarMotivo === 'fontes_externas'
+  ${P.preliminar ? (() => {
+    // Mesmo critério de esgotamento de src/pages/Analise.jsx (18/09) — `regenTentativas`/
+    // `startedAt` só chegam aqui quando o chamador os inclui no objeto `parecer`; ausentes,
+    // o fallback é 0/null e o texto se comporta como antes (nunca esgotado), sem regressão
+    // para quem gera o PDF sem passar por esse merge.
+    const tetoTentativas = P.preliminarMotivo === 'fontes_externas' ? 47 : 3;
+    const criadoEm = P.startedAt || 0;
+    const esgotado = (P.regenTentativas || 0) >= tetoTentativas || (criadoEm > 0 && (Date.now() - criadoEm) > 48 * 3600 * 1000);
+    const motivoTxt = P.preliminarMotivo === 'fontes_externas'
       ? 'O processo no CNJ/DataJud e/ou os andamentos no DJEN não puderam ser confirmados agora (fonte pública indisponível). Os documentos já foram lidos.'
       : P.preliminarMotivo === 'matricula_caixa'
       ? 'A matrícula da Caixa ainda está sendo capturada automaticamente.'
-      : 'Uma fonte ficou indisponível agora e não deu para concluir a leitura.'
-  } O sistema tenta de novo automaticamente (a cada hora, por até 48h) — gere o PDF novamente após a confirmação.</div>` : ''}
+      : 'Uma fonte ficou indisponível agora e não deu para concluir a leitura.';
+    const rodape = esgotado
+      ? 'Confirmado: a causa é a fonte externa, não o nosso sistema. As tentativas automáticas pararam — gere o PDF novamente após reconferir manualmente.'
+      : 'O sistema tenta de novo automaticamente (a cada hora, por até 48h) — gere o PDF novamente após a confirmação.';
+    return `<div style="font-size:10px;font-weight:600;color:${R.cor};opacity:0.9;margin-top:4px;">${motivoTxt} ${rodape}</div>`;
+  })() : ''}
 </div>
 
 ${bidscoreHtml}

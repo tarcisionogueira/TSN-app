@@ -44,6 +44,10 @@ const rowToEntry = (r) => {
     // formato. Este normalizador é compartilhado, então não há nada a fazer por tabela.
     progresso: r.progresso || null,
     dataLeilao: r.data_leilao || null, // p/ calcular a expiração do relatório na tela
+    // 18/09: quantas vezes o retry-cron já regerou este relatório — a tela usa isto pra saber
+    // se ainda vale prometer "seguimos tentando" ou se já esgotou e precisa dizer que a fonte
+    // externa é quem segue indisponível (ver documental-retry-cron.js MAX_TENT/MAX_TENT_EXTERNAS).
+    regenTentativas: r.regen_tentativas || 0,
     // Divergências que o DOCUMENTAL achou contra a matrícula (cidade/metragem). O documental
     // já gravava isto em analises_mercado.correcoes_sugeridas, mas NINGUÉM lia de volta: o
     // aviso só existia na resposta HTTP daquela geração e sumia ao recarregar (ou nunca

@@ -1470,7 +1470,11 @@ export default function Analise() {
     setPreparandoDocs(false);
     capturaPollRef.current.n = 0;
     clearTimeout(capturaPollRef.current.timer);
-    setParecerDocumental(r);
+    // `regenTentativas` vem do wrapper (docEntry), não do `result` em si — precisa ser
+    // mesclado aqui para a tela saber se ainda vale prometer nova tentativa (ver o aviso de
+    // ANÁLISE PRELIMINAR abaixo, achado do dono 18/09: "confirme que o sistema continua
+    // tentando... e sinalize que é da fonte, não do nosso sistema" quando esgotar).
+    setParecerDocumental({ ...r, regenTentativas: docEntry.regenTentativas || 0, startedAt: docEntry.startedAt || null });
     // Preenche os riscos do imóvel a partir do que a IA encontrou nos documentos.
     if (Array.isArray(r.riscos) && r.riscos.length) {
       setD(p => ({ ...p, riscos: r.riscos.map(x => ({
@@ -1700,9 +1704,30 @@ export default function Analise() {
     // edital sendo que o problema não esta nesses documentos".
     if (parecerDocumental.preliminar) {
       const motivo = parecerDocumental.preliminarMotivo;
-      if (motivo === 'fontes_externas') return { txt: 'ANÁLISE PRELIMINAR', sub: 'O processo no CNJ/DataJud e/ou os andamentos no DJEN não puderam ser confirmados agora (fonte pública indisponível). Os documentos já foram lidos — não é preciso reanexar nada. O sistema retenta sozinho de hora em hora, por até 48h.', bg: '#e0e7ff', c: '#3730a3' };
-      if (motivo === 'matricula_caixa') return { txt: 'ANÁLISE PRELIMINAR', sub: 'A matrícula da Caixa ainda está sendo capturada automaticamente. O sistema vai tentar de novo sozinho (a cada hora, por até 48h). Se preferir, anexe a matrícula em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
-      return { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+      // ESGOTADO = o retry-cron já parou de tentar (teto de tentativas batido — ver
+      // documental-retry-cron.js MAX_TENT/MAX_TENT_EXTERNAS — ou a janela de 48h desde a
+      // criação já fechou). Achado do dono (18/09): o texto abaixo prometia "por até 48h"
+      // incondicionalmente, mesmo depois de o sistema já ter desistido — uma promessa que
+      // vira falsa em silêncio. Quando esgota, a mensagem passa a CONFIRMAR que a causa é a
+      // fonte pública (não o nosso sistema) e que as tentativas automáticas pararam, em vez
+      // de continuar prometendo algo que já não está mais acontecendo.
+      const tetoTentativas = motivo === 'fontes_externas' ? 47 : 3;
+      const criadoEm = parecerDocumental.startedAt || docEntry?.startedAt || 0;
+      const esgotado = (parecerDocumental.regenTentativas || 0) >= tetoTentativas
+        || (criadoEm > 0 && (Date.now() - criadoEm) > 48 * 3600 * 1000);
+      if (motivo === 'fontes_externas') {
+        return esgotado
+          ? { txt: 'ANÁLISE PRELIMINAR', sub: 'Confirmado: o processo no CNJ/DataJud e/ou os andamentos no DJEN seguiram indisponíveis em todas as tentativas dos últimos dias — é uma limitação da fonte pública, não do nosso sistema. Os documentos já foram lidos e continuam válidos. As tentativas automáticas pararam aqui; gere novamente quando quiser reconferir (grátis) ou confirme com o analista.', bg: '#e0e7ff', c: '#3730a3' }
+          : { txt: 'ANÁLISE PRELIMINAR', sub: 'O processo no CNJ/DataJud e/ou os andamentos no DJEN não puderam ser confirmados agora (fonte pública indisponível). Os documentos já foram lidos — não é preciso reanexar nada. O sistema retenta sozinho de hora em hora, por até 48h.', bg: '#e0e7ff', c: '#3730a3' };
+      }
+      if (motivo === 'matricula_caixa') {
+        return esgotado
+          ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A captura automática da matrícula da Caixa não concluiu nas tentativas realizadas. As tentativas automáticas pararam aqui — anexe a matrícula em PDF para concluir a análise.', bg: '#e0e7ff', c: '#3730a3' }
+          : { txt: 'ANÁLISE PRELIMINAR', sub: 'A matrícula da Caixa ainda está sendo capturada automaticamente. O sistema vai tentar de novo sozinho (a cada hora, por até 48h). Se preferir, anexe a matrícula em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+      }
+      return esgotado
+        ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte seguiu indisponível nas tentativas realizadas e não deu para concluir a leitura. As tentativas automáticas pararam aqui — anexe a matrícula/edital em PDF para concluir, ou gere novamente para tentar de novo.', bg: '#e0e7ff', c: '#3730a3' }
+        : { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
     }
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
@@ -2588,11 +2613,22 @@ export default function Analise() {
                       );
                     })}
                   </div>
-                  {parecerDocumental.pendencias > 0 && (
-                    <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
-                      Algumas consultas públicas não retornaram de forma conclusiva automaticamente agora — por isso este parecer está marcado como PRELIMINAR (veja o aviso acima). Mostramos o que já temos, mas o veredito ainda não é definitivo: o sistema retenta sozinho de hora em hora (até 48h) e o analista/jurídico confirma antes do lance.
-                    </div>
-                  )}
+                  {parecerDocumental.pendencias > 0 && (() => {
+                    // Mesmo critério de esgotamento do aviso principal (vereditoDoc acima) —
+                    // duplicado aqui porque este bloco vive fora daquele useMemo. Ver o
+                    // comentário de 18/09 lá em cima para o porquê.
+                    const tetoTentativas = parecerDocumental.preliminarMotivo === 'fontes_externas' ? 47 : 3;
+                    const criadoEm = parecerDocumental.startedAt || docEntry?.startedAt || 0;
+                    const esgotadoPend = (parecerDocumental.regenTentativas || 0) >= tetoTentativas
+                      || (criadoEm > 0 && (Date.now() - criadoEm) > 48 * 3600 * 1000);
+                    return (
+                      <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
+                        {esgotadoPend
+                          ? 'Algumas consultas públicas seguiram indisponíveis em todas as tentativas realizadas — confirmado que é limitação da fonte externa, não do nosso sistema. As tentativas automáticas pararam aqui: o analista/jurídico confirma antes do lance, ou gere novamente para tentar de novo.'
+                          : 'Algumas consultas públicas não retornaram de forma conclusiva automaticamente agora — por isso este parecer está marcado como PRELIMINAR (veja o aviso acima). Mostramos o que já temos, mas o veredito ainda não é definitivo: o sistema retenta sozinho de hora em hora (até 48h) e o analista/jurídico confirma antes do lance.'}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               {parecerDocumental.raioX && (() => {
