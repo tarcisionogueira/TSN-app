@@ -47,7 +47,7 @@ const URL_LISTAGEM = 'https://hastapublica.com.br/leiloes';
       await new Promise((r) => setTimeout(r, 3000));
       const html = await page.content();
       console.log(`  HTML renderizado: ${html.length} bytes`);
-      if (chamadasXhr.length) console.log(`  chamadas XHR/fetch: ${JSON.stringify(chamadasXhr.slice(0, 20))}`);
+      if (chamadasXhr.length) console.log(`  chamadas XHR/fetch: ${JSON.stringify(chamadasXhr.filter((u) => !/google|doubleclick|jivosite|rdstation|analytics|facebook|socket\.io/i.test(u)).slice(0, 20))}`);
       else console.log('  nenhuma chamada XHR/fetch vista.');
       for (const r of respostas) console.log(`  RESPOSTA ${r.url} (HTTP ${r.status}, ${r.ct}): ${JSON.stringify(r.corpo)}`);
       // Também procura links de leilão na listagem, pra confirmar o padrão de URL.
@@ -55,6 +55,18 @@ const URL_LISTAGEM = 'https://hastapublica.com.br/leiloes';
         [...document.querySelectorAll('a[href*="/leilao/"]')].map((a) => a.getAttribute('href')).slice(0, 15)
       ).catch(() => []);
       if (links.length) console.log(`  links /leilao/ na página: ${JSON.stringify(links)}`);
+      // Texto renderizado de verdade (o que um usuário vê), em vez do HTML — mais fácil achar
+      // onde os lotes aparecem e se têm R$/m²/matrícula.
+      const texto = await page.evaluate(() => document.body.innerText).catch(() => '');
+      console.log(`  TEXTO renderizado (${texto.length} chars): ${JSON.stringify(texto.slice(0, 4000))}`);
+      // Script inline com dado embutido (padrão comum: var lotes = [...] ou JSON dentro de <script>)
+      const scripts = await page.evaluate(() =>
+        [...document.querySelectorAll('script:not([src])')]
+          .map((s) => s.textContent)
+          .filter((t) => /lote|R\$|valor|matr[íi]cula/i.test(t))
+          .slice(0, 3)
+      ).catch(() => []);
+      scripts.forEach((s, i) => console.log(`  SCRIPT INLINE #${i} (${s.length} chars): ${JSON.stringify(s.slice(0, 3000))}`));
     } catch (e) {
       console.log(`  erro: ${e.message}`);
     } finally {
