@@ -53,7 +53,8 @@ async function dumpListagem(browser, nome, url) {
       return alvo ? alvo.outerHTML.replace(/\s+/g, ' ').slice(0, 2200) : null;
     }).catch(() => null);
     if (cardHtml) console.log('▸ CARD outerHTML:', cardHtml);
-  } catch (e) { console.log('ERRO:', e.message); } finally { await page.close(); }
+    return info.links.map((h) => { try { return new URL(h, url).href; } catch { return null; } }).filter(Boolean);
+  } catch (e) { console.log('ERRO:', e.message); return []; } finally { await page.close(); }
 }
 
 async function dumpDetalhe(browser, nome, url) {
@@ -63,6 +64,14 @@ async function dumpDetalhe(browser, nome, url) {
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     console.log('HTTP', resp ? resp.status() : '?');
     await new Promise((r) => setTimeout(r, 5000));
+    // LOTE PODE TER EXPIRADO/SIDO REMOVIDO entre o momento em que o link foi achado (listagem)
+    // e agora — o site então redireciona pra home ("Redirecionando para a página inicial..."),
+    // o que destrói o contexto de execução no meio do evaluate() seguinte e mascarava a causa
+    // real atrás de "Execution context was destroyed". Checa a URL final ANTES de avaliar.
+    const urlFinal = page.url();
+    if (urlFinal !== url && !urlFinal.startsWith(url.split('?')[0])) {
+      console.log(`  ⚠️ REDIRECIONOU: ${url} → ${urlFinal} — provável lote expirado/removido; escolha outro link da listagem.`);
+    }
     const texto = await page.evaluate(() => document.body.innerText || '');
     const limpo = texto.replace(/\n{2,}/g, '\n');
     console.log(`texto renderizado (${texto.length} chars) — INÍCIO:\n${limpo.slice(0, 2500)}`);
@@ -86,17 +95,31 @@ async function dumpDetalhe(browser, nome, url) {
   } catch (e) { console.log('ERRO:', e.message); } finally { await page.close(); }
 }
 
+// Escolhe, entre os links da listagem, o melhor candidato a página de LOTE individual (não
+// categoria/evento/filtro) — prefere "/lote/" explícito; senão o 1º link que não é a própria
+// listagem. Autocura contra link expirado: sempre pega da rodada ATUAL, nunca hardcoded.
+function escolherLote(links, urlListagem) {
+  const semListagem = links.filter((l) => l !== urlListagem && !l.includes('#'));
+  return semListagem.find((l) => /\/lote[-/]/i.test(l)) || semListagem[0] || null;
+}
+
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
-    await dumpListagem(browser, 'JONASLEILOEIRO', 'https://jonasleiloeiro.com.br/');
-    await dumpDetalhe(browser, 'JONASLEILOEIRO', 'https://jonasleiloeiro.com.br/lote/comprei-belo-horizonte-mg-casa-com-area-de-101523-m/220629/');
+    const linksJonas = await dumpListagem(browser, 'JONASLEILOEIRO', 'https://jonasleiloeiro.com.br/');
+    const loteJonas = escolherLote(linksJonas, 'https://jonasleiloeiro.com.br/');
+    if (loteJonas) await dumpDetalhe(browser, 'JONASLEILOEIRO', loteJonas);
+    else console.log('\n(JONASLEILOEIRO: nenhum link de lote achado na listagem — pulei o detalhe)');
 
-    await dumpListagem(browser, 'GLOBOLEILOES', 'https://globoleiloes.com.br/leiloes');
-    await dumpDetalhe(browser, 'GLOBOLEILOES', 'https://globoleiloes.com.br/lote-1-sp-sorocaba-altos-de-ipanema-apartamento-49m2/2669');
+    const linksGlobo = await dumpListagem(browser, 'GLOBOLEILOES', 'https://globoleiloes.com.br/leiloes');
+    const loteGlobo = escolherLote(linksGlobo, 'https://globoleiloes.com.br/leiloes');
+    if (loteGlobo) await dumpDetalhe(browser, 'GLOBOLEILOES', loteGlobo);
+    else console.log('\n(GLOBOLEILOES: nenhum link de lote achado na listagem — pulei o detalhe)');
 
-    await dumpListagem(browser, 'FERNANDOLEILOEIRO', 'https://fernandoleiloeiro.com.br/');
-    await dumpListagem(browser, 'FERNANDOLEILOEIRO (busca)', 'https://fernandoleiloeiro.com.br/busca/#Engine=Start&ID_Categoria=2');
+    const linksFernando = await dumpListagem(browser, 'FERNANDOLEILOEIRO', 'https://fernandoleiloeiro.com.br/');
+    const loteFernando = escolherLote(linksFernando, 'https://fernandoleiloeiro.com.br/');
+    if (loteFernando) await dumpDetalhe(browser, 'FERNANDOLEILOEIRO', loteFernando);
+    else console.log('\n(FERNANDOLEILOEIRO: nenhum link de lote achado na listagem — pulei o detalhe)');
   } finally {
     await browser.close();
   }
