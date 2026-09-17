@@ -143,12 +143,12 @@ const ROLES_SEM_LIMITE = ['admin'];
 // Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
 const ROLES_SEM_DOCUMENTAL = ['explorador', 'consultor'];
 const ROLES_COM_CNJ   = ['top2','assessorado','clube','analista','advogado','admin'];
-// "Pedir ao leiloeiro" (12/09, pedido do dono): mais estreito que o acesso à Análise
-// Documental — só quem negocia documentação em nome do cliente (equipe) e o Assessorado
-// (acompanhamento dedicado). Investidor Pro/Leilão Club têm a Documental, mas não esta ação.
-// Espelha ROLES_PEDIDO_LEILOEIRO em api/pedir-documento-leiloeiro.js — o servidor confere de
-// novo (a tela só evita mostrar um botão que a API recusaria).
-const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte', 'assessorado', 'assessorado_anual'];
+// "Pedir ao leiloeiro" (12/09, pedido do dono; restrito à equipe em 17/09 — o cliente
+// Assessorado tinha acesso e o dono decidiu que essa comunicação com o leiloeiro deve
+// ser só da equipe interna, nunca do cliente). Espelha ROLES_PEDIDO_LEILOEIRO em
+// api/pedir-documento-leiloeiro.js — o servidor confere de novo (a tela só evita mostrar
+// um botão que a API recusaria).
+const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte'];
 
 export default function Analise() {
   const location = useLocation();
@@ -963,11 +963,11 @@ export default function Analise() {
             </div>
           )}
           <button onClick={()=>setModoManual(true)} style={{ background:'none', border:'none', color:'#9a3412', fontSize:12.5, fontWeight:700, cursor:'pointer', textDecoration:'underline', padding:0 }}>ou colar o texto do documento</button>
-          {/* Pedir ao leiloeiro (11/09; revisão em 12/09): não pede tudo de novo, só o que o
-              próprio checklist já sinalizou como faltando/em aberto. Restrito à equipe e ao
-              Assessorado (ROLES_PEDIDO_LEILOEIRO) — Investidor Pro/Leilão Club têm a Documental,
-              mas não esta ação; o servidor confere de novo, isto aqui só evita mostrar um botão
-              que a API recusaria. */}
+          {/* Pedir ao leiloeiro (11/09; revisão em 12/09; restrito só à equipe em 17/09): não
+              pede tudo de novo, só o que o próprio checklist já sinalizou como faltando/em
+              aberto. Só equipe interna (ROLES_PEDIDO_LEILOEIRO) — nem o Assessorado tem mais
+              esta ação (tinha até 17/09); o servidor confere de novo, isto aqui só evita
+              mostrar um botão que a API recusaria. */}
           {ROLES_PEDIDO_LEILOEIRO.includes(role) && (
             pedidoLeiloeiroEnviado ? (
               <div style={{ fontSize:12.5, color:'#15803d', fontWeight:700 }}>✓ Pedido enviado ao leiloeiro — a resposta cai no seu e-mail.</div>

@@ -41,9 +41,10 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
 
-// Quem pode negociar documentação com o leiloeiro EM NOME do cliente. Mais estreito que o
-// acesso à Análise Documental (que também vale para top2/clube) — decisão do dono, 12/09.
-const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte', 'assessorado', 'assessorado_anual'];
+// Quem pode negociar documentação com o leiloeiro EM NOME do cliente — só a equipe interna
+// (decisão do dono, 12/09, revista em 17/09: o Assessorado tinha acesso e foi retirado —
+// essa comunicação com o leiloeiro passa a ser exclusiva da equipe).
+const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte'];
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });

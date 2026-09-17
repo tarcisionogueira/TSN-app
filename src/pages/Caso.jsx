@@ -576,6 +576,24 @@ export default function Caso() {
   const isCliente  = !isStaff;
   const podeSolicitarJuridico = PLANOS_JURIDICO.includes(role);
 
+  // ─── Escolha do jurídico (só admin) ───────────────────────────────────────
+  // 17/09, pedido do dono: hoje o advogado é sorteado entre os ativos; o admin quer
+  // poder ESCOLHER pra qual dos jurídicos mandar (hoje são 2). Analista continua no
+  // sorteio automático — só admin ganha o seletor.
+  const [advogadosAtivos, setAdvogadosAtivos] = useState([]);
+  const [advogadoEscolhido, setAdvogadoEscolhido] = useState('');
+  useEffect(() => {
+    if (role !== 'admin') return;
+    let cancel = false;
+    supabase.from('perfis').select('id,nome').eq('role','advogado').eq('ativo', true).order('nome')
+      .then(({ data }) => { if (!cancel) setAdvogadosAtivos(data || []); });
+    return () => { cancel = true; };
+  }, [role]);
+  // Pré-seleciona o advogado já vinculado ao caso (se houver) assim que a lista carrega.
+  useEffect(() => {
+    if (role === 'admin' && caso?.advogado_id && !advogadoEscolhido) setAdvogadoEscolhido(caso.advogado_id);
+  }, [role, caso?.advogado_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Monitor do êxito (quem recebe e quanto): só admin, quando há arrematação.
   useEffect(() => {
     if (role !== 'admin' || !arrematacao?.id) { setMonitorExito(null); return; }
@@ -882,13 +900,26 @@ export default function Caso() {
         // pré-preenche o que a IA já tem nos relatórios
       });
       if (error && !error.message.includes('duplicate')) throw error;
-      // Sorteia o advogado entre os ativos (uma vez) e fixa no caso
+      // Admin escolhe pra qual dos jurídicos vai (17/09, pedido do dono — hoje são 2).
+      // Analista/demais equipe seguem no sorteio automático de sempre. Se o admin
+      // escolheu um diferente do já gravado no caso, a escolha VALE (regrava).
       let advogadoId = caso.advogado_id;
-      if (!advogadoId) {
+      if (role === 'admin' && advogadoEscolhido && advogadoEscolhido !== advogadoId) {
+        // `.select()` prova que a linha foi gravada — sem isto, um RLS/filtro que não
+        // alcance o caso devolveria error:null e a escolha do admin sumiria em silêncio
+        // (o servidor releria caso.advogado_id ANTIGO, ou sorteado, sem avisar ninguém).
+        const { data: upd, error: eUpd } = await supabase.from('casos')
+          .update({ advogado_id: advogadoEscolhido }).eq('id', caso.id).select('advogado_id');
+        if (eUpd || !upd?.length) throw new Error(eUpd?.message || 'Não foi possível gravar o jurídico escolhido no caso.');
+        advogadoId = advogadoEscolhido;
+      } else if (!advogadoId) {
         const { data: advs } = await supabase.from('perfis').select('id').eq('role','advogado').eq('ativo', true);
         if (advs?.length) {
-          advogadoId = advs[Math.floor(Math.random() * advs.length)].id;
-          await supabase.from('casos').update({ advogado_id: advogadoId }).eq('id', caso.id);
+          const sorteado = advs[Math.floor(Math.random() * advs.length)].id;
+          const { data: upd, error: eUpd } = await supabase.from('casos')
+            .update({ advogado_id: sorteado }).eq('id', caso.id).select('advogado_id');
+          if (eUpd || !upd?.length) throw new Error(eUpd?.message || 'Não foi possível gravar o jurídico sorteado no caso.');
+          advogadoId = sorteado;
         }
       }
       // Um clique: envia ao advogado por e-mail (anexos + avaliação documental),
@@ -1516,6 +1547,16 @@ export default function Caso() {
                 <div style={{ marginTop:16, padding:'14px', background:'#fefce8', borderRadius:10, border:'1px solid #fde68a' }}>
                   <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:4 }}>Encaminhar para análise jurídica</div>
                   <div style={{ fontSize:11, color:'#a16207', marginBottom:8 }}>Um clique envia ao advogado, por e-mail, todos os anexos + a avaliação documental. A devolutiva dele volta automaticamente para o Atendimento.</div>
+                  {role === 'admin' && advogadosAtivos.length > 0 && (
+                    <div style={{ marginBottom:8 }}>
+                      <label style={{ display:'block', fontSize:10.5, color:'#92400e', fontWeight:700, marginBottom:3 }}>Enviar para qual jurídico?</label>
+                      <select value={advogadoEscolhido} onChange={e => setAdvogadoEscolhido(e.target.value)}
+                        style={{ width:'100%', padding:'6px 8px', borderRadius:6, border:'1px solid #fde68a', fontSize:12, background:'white' }}>
+                        <option value="">Sortear automaticamente</option>
+                        {advogadosAtivos.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <button onClick={encaminharJuridico} disabled={!!solicitando.juridico} style={{ ...btn('#d97706'), fontSize:12, opacity: solicitando.juridico?0.6:1 }}>
                     {solicitando.juridico
                       ? <><Loader2 size={13} style={{marginRight:6,verticalAlign:'middle',animation:'spin 1s linear infinite'}}/>Enviando…</>
@@ -1544,6 +1585,16 @@ export default function Caso() {
                 <div style={{ padding:'14px', background:'#fefce8', borderRadius:10, border:'1px solid #fde68a' }}>
                   <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:4 }}>Encaminhar para análise jurídica</div>
                   <div style={{ fontSize:11, color:'#a16207', marginBottom:8 }}>Um clique envia ao advogado, por e-mail, todos os anexos + a avaliação documental. A devolutiva dele volta automaticamente para o Atendimento.</div>
+                  {role === 'admin' && advogadosAtivos.length > 0 && (
+                    <div style={{ marginBottom:8 }}>
+                      <label style={{ display:'block', fontSize:10.5, color:'#92400e', fontWeight:700, marginBottom:3 }}>Enviar para qual jurídico?</label>
+                      <select value={advogadoEscolhido} onChange={e => setAdvogadoEscolhido(e.target.value)}
+                        style={{ width:'100%', padding:'6px 8px', borderRadius:6, border:'1px solid #fde68a', fontSize:12, background:'white' }}>
+                        <option value="">Sortear automaticamente</option>
+                        {advogadosAtivos.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <button onClick={encaminharJuridico} disabled={!!solicitando.juridico} style={{ ...btn('#d97706'), fontSize:12, opacity: solicitando.juridico?0.6:1 }}>
                     {solicitando.juridico
                       ? <><Loader2 size={13} style={{marginRight:6,verticalAlign:'middle',animation:'spin 1s linear infinite'}}/>Enviando…</>
