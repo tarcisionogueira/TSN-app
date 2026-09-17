@@ -59,7 +59,13 @@ import requests
 # docs/RECON_LEILOEIROS_PLAYBOOK.md — grampo fetch/XHR). Candidatos p/ recon runtime:
 # cris, franklin, impacto, zalli, fernando, teza, ags, emiliomatos, falleiros, jonas, lucas,
 # positivo, silva. Reintegrar UM de cada vez, só depois de confirmar que traz lote > 0.
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br"]
+# 18/09 (pedido do dono, integração sequencial dos gaps do radar de editais): joserodovalho
+# e hdleiloes confirmados na plataforma Vlance por recon com Puppeteer real (não fingerprint
+# de HTML, que é o que reprovou os 13 tenants de 20/08) — `core/api/get-leiloes` respondeu
+# JSON de verdade nos dois (28 e 29 leilões ativos, formato idêntico ao já usado aqui). Ainda
+# não validados com `coletar_lotes` (o endpoint de LOTE em si) — entram como qualquer tenant
+# novo: primeiro dry-run (--dominios, sem --supabase), só grava depois de confirmar lote > 0.
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 
