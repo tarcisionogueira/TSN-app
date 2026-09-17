@@ -432,10 +432,22 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         throw new Error('Não foi possível autorizar a assinatura. Verifique os dados do cartão ou tente outro.');
       }
 
+      // A bandeira vem do lookup do próprio BIN no MP — nunca chutar. Achado 17/09: um
+      // fallback fixo em 'visa' aqui mandava o ID errado pro MP sempre que o lookup não
+      // achava a bandeira real (cartão não-Visa cujo BIN o MP não reconheceu), e o MP
+      // recusa com HTTP 400 "Invalid payment_method_id" — indistinguível, pro cliente, de
+      // "seu cartão foi recusado", mas o problema era nosso chute, não o cartão dele
+      // (4 tentativas seguidas, mesmo erro exato, dados conferidos como corretos).
       const bin = form.numero.replace(/\s/g, '').slice(0, 6);
-      const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
-      const pmData = await pmRes.json();
-      const metodoPagamentoId = pmData.results?.[0]?.id || 'visa';
+      let metodoPagamentoId;
+      try {
+        const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
+        const pmData = await pmRes.json();
+        metodoPagamentoId = pmData.results?.[0]?.id;
+      } catch { /* padrao-ok: segue para o erro explícito abaixo — nunca chuta bandeira */ }
+      if (!metodoPagamentoId) {
+        throw new Error('Não conseguimos reconhecer a bandeira deste cartão. Confira o número digitado ou tente outro cartão.');
+      }
 
       // apiCall devolve o Response CRU: checar res.ok e ler o JSON. Antes o código lia
       // Response.status (o código HTTP) como se fosse o status do pagamento → nunca batia
