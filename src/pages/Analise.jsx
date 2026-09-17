@@ -1287,8 +1287,9 @@ export default function Analise() {
     // de cláusula do edital, então ele é mostrado para o cliente confirmar.
     const ce = r.mercado?.condicoesEdital;
     const cst = ce?.custos || null;
-    const comissaoEd = ce?.regrasOrigem === 'padrao_leiloeiro' ? 0 : Number(ce?.regrasPagamento?.comissaoPct) || 0;
-    if (cst || comissaoEd > 0) {
+    const rp = ce?.regrasPagamento || null;
+    const comissaoEd = ce?.regrasOrigem === 'padrao_leiloeiro' ? 0 : Number(rp?.comissaoPct) || 0;
+    if (cst || comissaoEd > 0 || rp) {
       const patch = {}, aplicados = [];
       if (comissaoEd > 0 && Number(d.taxaLeiloeiroPercentual) !== comissaoEd) {
         patch.taxaLeiloeiroPercentual = comissaoEd; aplicados.push(`comissão do leiloeiro ${String(comissaoEd).replace('.', ',')}%`);
@@ -1304,6 +1305,29 @@ export default function Analise() {
       if (iptuMes > 0 && !(Number(d.iptuMensal) > 0)) { patch.iptuMensal = iptuMes; aplicados.push(`IPTU R$ ${fmt(iptuMes)}/mês`); }
       if (Number(cst?.condominioMensal) > 0 && !(Number(d.condominioMensal) > 0)) {
         patch.condominioMensal = Number(cst.condominioMensal); aplicados.push(`condomínio R$ ${fmt(cst.condominioMensal)}/mês`);
+      }
+      // ── AS CONDIÇÕES DE PARCELAMENTO DO EDITAL TAMBÉM PRECISAM CHEGAR AQUI (17/09) ──────
+      // `aplicarExtracao` (extração manual por URL/PDF/texto) já aplicava `regrasPagamento`
+      // à projeção há semanas — mas o carregamento AUTOMÁTICO do relatório recém-gerado
+      // (este efeito) só puxava `custos`/`comissaoPct`, nunca `parcelas`/`sinalPct`/
+      // `parcelamentoPermitido`. Resultado medido: relatório do ZUK (10 parcelas, 25% de
+      // sinal, conforme o próprio edital) abria a projeção com os DEFAULTS de financiamento
+      // bancário (5% de entrada, 360 meses) — Fluxo de Caixa e capital necessário calculados
+      // sobre um produto que o leilão nem oferece. Mesma hierarquia já usada em
+      // `aplicarExtracao`: edital manda, inclusive para destravar/trancar o parcelado;
+      // campo que o usuário já ajustou (não está mais no valor de VAZIO) é respeitado.
+      if (rp?.parcelamentoPermitido === false && !d.somenteAVista) {
+        patch.somenteAVista = true; patch.origemCondicoesPagamento = 'edital_veda';
+        aplicados.push('parcelamento vedado pelo edital');
+      } else if (rp?.parcelamentoPermitido === true && d.somenteAVista) {
+        patch.somenteAVista = false; patch.origemCondicoesPagamento = 'edital';
+        aplicados.push('parcelamento permitido pelo edital');
+      }
+      if (Number(rp?.sinalPct) > 0 && !(Number(d.sinalPercentual) > 0 && d.sinalPercentual !== VAZIO.sinalPercentual)) {
+        patch.sinalPercentual = Number(rp.sinalPct); aplicados.push(`sinal ${String(rp.sinalPct).replace('.', ',')}%`);
+      }
+      if (Number(rp?.parcelas) > 0 && Number(d.prazoMeses) === VAZIO.prazoMeses) {
+        patch.prazoMeses = Number(rp.parcelas); aplicados.push(`${rp.parcelas} parcelas`);
       }
       if (aplicados.length) { setD(p => ({ ...p, ...patch })); setCustosEdital({ aplicados, custos: cst }); }
     }
