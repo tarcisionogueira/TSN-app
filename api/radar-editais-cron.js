@@ -90,7 +90,15 @@ export const ufDoTribunal = (sigla) => ufValida(String(sigla || '').replace(/^TJ
 // Palavras que NUNCA aparecem num nome próprio de leiloeiro, mas aparecem quando a regex/IA
 // pega um FRAGMENTO de frase do edital ("para os encargos de avaliação e leilão", "a
 // publicação do edital na forma do art", "inviável", "credenciado"…). Guard forte.
-const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b)/i;
+// AMPLIADO 17/09 (medido contra os 77 nomes distintos hoje em `imoveis_leilao.leiloeiro`
+// de fonte EDITAL_DJEN, pedido do dono para validar a construção do scraper): achou "Não
+// Será" (2x — auxiliar+verbo, não nome), "Outros Documentos" (1x), "O Leiloeiro" (1x — a
+// própria palavra reaparecendo como se fosse nome, sinal de preâmbulo mal consumido) e
+// "José Roberto Neves Amorim Noticiou" (1x — "Noticiou" é o VERBO da frase seguinte, a
+// janela de 80 chars não tinha delimitador antes dele). `leiloeir` bloqueia sem risco: a
+// palavra nunca aparece DENTRO de um nome válido (o preâmbulo já a consome antes da
+// janela), e não colide com "leilões"/"leilão" (raiz diferente: leiloeir-o vs leil-ão).
+const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|leiloeir|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b|document|\bn[ãa]o\b|\bser[áa]\b|notici|\bdeclarou\b|\bdeterminou\b|\binformou\b|\bdecidiu\b|\bconcluiu\b|\bexpediu\b)/i;
 // ⚠️ AMPLIADO (03/09), depois de medir as "cidades" dos 87 editais elegíveis para virar lote:
 // "Detran", "IBAPE", "OAB", "INTIME", "TRATANDO", "Justiça do Estado de São Paulo TJ",
 // "Portal de Auxiliares da Justiça do TJ", "Tabela Prática do TJ", "Vistos. CADASTRE",
@@ -118,6 +126,13 @@ function nomeLeiloeiroValido(s) {
   const palavras = nome.split(' ').filter(Boolean);
   if (palavras.length < 2 || palavras.length > 6) return null; // nome próprio: 2–6 palavras
   if (/\d/.test(nome)) return null;                            // nomes não têm números
+  // CARACTERE FORA DO ALFABETO PORTUGUÊS = MOJIBAKE, NÃO NOME (17/09). Achado real:
+  // "Isaias Rosa Ramos Junior ¿ Jucemg" — um separador (provável travessão) decodificado
+  // errado virou "¿" e sobreviveu ao corte porque RE_CORTE não cobre esse símbolo. Em vez
+  // de ensinar RE_CORTE a reconhecer TODO encoding quebrado possível, valida o nome pelo
+  // que ele DEVE ser: letras (com acento), espaço, apóstrofo, ponto (inicial abreviada) e
+  // hífen (nome composto) — qualquer outro símbolo denuncia lixo de parsing.
+  if (/[^A-Za-zÀ-ÿ' .\-]/.test(nome)) return null;
   if (NOME_BLOQ.test(nome)) return null;                       // é fragmento de frase, não nome
   return tituloNome(nome).slice(0, 120);
 }
@@ -174,7 +189,18 @@ export function extrairLeiloeiro(texto) {
     const pre = resto.match(RE_PREAMBULO);
     if (!pre || pre.index !== 0) continue;
     const janela = resto.slice(pre[0].length, pre[0].length + 80).replace(/\s+/g, ' ');
-    const corte = janela.search(RE_CORTE);
+    let corte = janela.search(RE_CORTE);
+    // INICIAL ABREVIADA NÃO É FIM DE NOME (17/09). RE_CORTE trata "." como delimitador
+    // forte — correto para "Fulano, Endereço..." mas errado para "Jorge V. Espolador":
+    // o ponto ali fecha uma inicial do meio, não a frase. Achado real: "Jorge Vitório
+    // Espolador" (14 lotes sob o nome certo) e "Jorge V" (9 lotes — a MESMA pessoa,
+    // truncada no "V."). Sem isto o corte para no primeiro "X." e o resto do nome vira
+    // outra "pessoa" na contagem. Pula o ponto quando o que vem antes dele, na janela, é
+    // uma letra maiúscula isolada, e procura o PRÓXIMO delimitador de verdade.
+    while (corte > 0 && janela[corte] === '.' && /\s[A-ZÀ-Ý]$/.test(janela.slice(0, corte))) {
+      const prox = janela.slice(corte + 1).search(RE_CORTE);
+      corte = prox >= 0 ? corte + 1 + prox : -1;
+    }
     const cand = (corte >= 0 ? janela.slice(0, corte) : janela).trim();
     // ⚠️ A INICIAL MAIÚSCULA É CHECADA AQUI, e a primeira versão desta função esqueceu.
     // O comentário acima já dizia que ela é o guard — mas `nomeLeiloeiroValido` NUNCA exigiu
