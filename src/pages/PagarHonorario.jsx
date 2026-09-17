@@ -124,9 +124,20 @@ export default function PagarHonorario() {
           <strong>{fmtBRL(arr.valor_arrematado)}</strong>.
         </div>
 
+        {/* Honorário em partes (17/09): quando já há recebimento confirmado por fora (Pix
+            direto, cheque), o valor a pagar aqui é o SALDO, não o total — mesmo número que
+            api/mp-checkout.js efetivamente cobra. Mostrar o total sem o abatimento faria a
+            pessoa ver um valor e o cartão cobrar outro, menor. */}
+        {arr.honorarios_recebido > 0 && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#166534' }}>
+            Já recebemos <strong>{fmtBRL(arr.honorarios_recebido)}</strong> do total de {fmtBRL(arr.honorarios_valor)}.
+            O valor abaixo é o <strong>saldo restante</strong>.
+          </div>
+        )}
+
         <div style={{ textAlign: 'center', padding: '4px 0' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Valor a pagar</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(arr.honorarios_valor)}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(arr.honorarios_saldo_restante ?? arr.honorarios_valor)}</div>
         </div>
 
         <div>
@@ -158,7 +169,7 @@ export default function PagarHonorario() {
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Como você quer pagar?</div>
             <PagamentoServico
-              servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_valor, proposito: 'honorario_exito' }}
+              servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_saldo_restante ?? arr.honorarios_valor, proposito: 'honorario_exito' }}
               extra={{ arrematacao_id: arr.id }}
               email={email}
               parcelasSemJuros={1}
