@@ -101,6 +101,28 @@ async function main() {
     `https://offer-query.superbid.net/offers/?portalId=[2]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=1&orderBy=endDate:asc&fieldList=id;linkURL;product.thumbnailUrl;product.photoCount;product.productCustomJson`
   );
 
+  // TESTE 3 pegou uma oferta com photoCount=0 (por acaso) e productCustomJson só com campos
+  // de VEÍCULO vazios — não prova nada sobre onde mora a galeria de quem TEM foto. Busca
+  // várias ofertas SEM fieldList e dumpa a PRIMEIRA com photoCount>0 por inteiro.
+  console.log('\n=== TESTE 4: acha uma oferta com photoCount>0 e dumpa ela inteira ===');
+  const comFoto = await page.evaluate(async () => {
+    try {
+      const r = await fetch(`https://offer-query.superbid.net/offers/?portalId=[2]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=20&orderBy=endDate:asc`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) return { status: r.status };
+      const d = await r.json();
+      const offers = d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []);
+      const achou = offers.find(o => Number(o.product?.photoCount) > 0);
+      return { total: offers.length, contagens: offers.map(o => o.product?.photoCount), achou: achou || null };
+    } catch (e) { return { erro: String(e && e.message || e) }; }
+  });
+  console.log(`${comFoto.total} ofertas · photoCount de cada:`, JSON.stringify(comFoto.contagens));
+  if (comFoto.achou) {
+    console.log('\nOFERTA COM FOTO — chaves de product:', Object.keys(comFoto.achou.product || {}).join(', '));
+    console.log(JSON.stringify(comFoto.achou).slice(0, 5000));
+  } else {
+    console.log('Nenhuma das 20 primeiras ofertas de imóvel tem photoCount>0.');
+  }
+
   await browser.close();
 }
 
