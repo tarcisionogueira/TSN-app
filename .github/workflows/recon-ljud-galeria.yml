@@ -1,4 +1,4 @@
-name: _temp Recon LJUD Galeria
+name: Recon LJUD Galeria (a API tem mais de uma foto por lote?)
 
 on:
   workflow_dispatch:

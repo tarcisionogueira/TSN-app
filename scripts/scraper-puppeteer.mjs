@@ -120,7 +120,14 @@ async function salvarImoveis(imoveis, fonte) {
   const totalBruto = imoveis.length;
   imoveis = imoveis.filter(im => ehBRouSemUF(im.estado) && !ehEstrangeiroPelaCidade(fonte, im.cidade));
   if (imoveis.length < totalBruto) console.log(`  [${fonte}] ${totalBruto - imoveis.length} lote(s) descartado(s) — fora do Brasil / estado inválido.`);
-  if (!imoveis.length) return;
+  // 17/09 (achado ao investigar o crash de hoje): este `return` era um `return;` sem valor —
+  // diferente dos outros dois early-return desta função (linha 116 e a de baixo), que devolvem
+  // `{ salvos, esperados }`. Quando TODOS os lotes de um bloco de 500 são estrangeiros/UF
+  // inválida (aconteceu de verdade com SBID21: 6 de 6 descartados), `salvarEFinalizar` recebia
+  // `undefined` em vez do objeto e quebrava em `r.salvos` — Erro fatal, processo encerrado, e
+  // TUDO que vem depois na fila (LJUD, BIASI, GRUPOLANCE, ZUK, PESTANA) nunca rodava naquele
+  // dia. `imoveis.length` aqui já reflete o filtro, então 0/0 é o valor correto.
+  if (!imoveis.length) return { salvos: 0, esperados: 0 };
 
   // MESCLAGEM de documentos (fix de raiz): o upsert por fonte_id sobrescreve a linha
   // inteira, então o scrape diário APAGAVA os anexos/matrícula capturados fora dele
