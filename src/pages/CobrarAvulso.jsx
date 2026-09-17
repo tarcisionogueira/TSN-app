@@ -33,6 +33,9 @@ export default function CobrarAvulso() {
         if (cancel) return;
         if (!res.ok || !data?.id) { setErro('Esta cobrança não foi encontrada.'); setCarregando(false); return; }
         setCob(data);
+        // Pré-preenche com o e-mail do destinatário informado pelo admin ao criar a
+        // cobrança, se houver — continua editável (repasse a outra pessoa pagar).
+        if (data.email_sugerido) setEmail(e => e || data.email_sugerido);
         setCarregando(false);
       } catch (e) {
         console.error('[CobrarAvulso] carregar cobrança falhou:', e?.message || e);

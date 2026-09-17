@@ -5,10 +5,16 @@
  * SEM exigir login (18/09, pedido do dono: o arrematante pode repassar o link a outra pessoa
  * pagar — raro, mas acontece). Antes a página lia `arrematacoes` direto via supabase-js, o
  * que dependia de sessão pra passar pela RLS; agora é este endpoint, com service key, que
- * devolve só os 3 campos que a tela realmente precisa — nunca CPF/telefone/nome completo do
+ * devolve só os campos que a tela realmente precisa — nunca CPF/telefone/nome completo do
  * arrematante nem dados de outra cobrança. O `id` é um uuid imprevisível (conhecido só por
  * quem recebeu o link) — é ele que faz o papel de credencial neste fluxo, mesmo modelo do
  * antigo link hospedado do Mercado Pago.
+ *
+ * `email_sugerido` (18/09, pedido do dono): pré-preenche o campo "e-mail de quem está
+ * pagando" com o e-mail do PRÓPRIO arrematante — cobre o caso comum (é ele mesmo quem abre o
+ * link) sem obrigar a redigitar um e-mail que o sistema já tem. Continua editável na tela: o
+ * caso raro de repasse a terceiro (a razão de esta rota não exigir login) não fica bloqueado,
+ * só deixa de vir pré-preenchido com o e-mail errado.
  */
 export const config = { runtime: 'edge' };
 
@@ -30,7 +36,7 @@ export default async function handler(req) {
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
   const [arrR, recR] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(id)}&select=id,valor_arrematado,honorarios_valor,honorarios_status`, {
+    fetch(`${SUPABASE_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(id)}&select=id,valor_arrematado,honorarios_valor,honorarios_status,arrematante_id`, {
       headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
     }),
     // 17/09 (honorário em partes): a tela precisa saber o SALDO RESTANTE, não só o valor
@@ -51,6 +57,16 @@ export default async function handler(req) {
   const total = Number(arr.honorarios_valor) || 0;
   const saldoRestante = Math.max(0, Math.round((total - recebido) * 100) / 100);
 
+  let emailSugerido = null;
+  if (arr.arrematante_id) {
+    try {
+      const ur = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${arr.arrematante_id}`, {
+        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(8000),
+      });
+      if (ur.ok) { const u = await ur.json(); emailSugerido = u?.email || null; }
+    } catch { /* padrao-ok: e-mail sugerido é só conveniência de UX — sem ele o campo fica vazio e editável, não trava o pagamento */ }
+  }
+
   return new Response(JSON.stringify({
     id: arr.id,
     valor_arrematado: arr.valor_arrematado,
@@ -59,5 +75,6 @@ export default async function handler(req) {
     honorarios_saldo_restante: saldoRestante,
     honorarios_status: arr.honorarios_status,
     honorarios_partes: confirmados.map(c => ({ metodo: c.metodo, valor: c.valor })),
+    email_sugerido: emailSugerido,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

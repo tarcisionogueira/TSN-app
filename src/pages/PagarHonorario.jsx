@@ -41,6 +41,10 @@ export default function PagarHonorario() {
         if (cancel) return;
         if (!res.ok || !data?.id) { setErro('Esta cobrança não foi encontrada.'); setCarregando(false); return; }
         setArr(data);
+        // Pré-preenche com o e-mail do próprio arrematante quando a sessão logada não já
+        // preencheu (ex.: link aberto sem login, que é o caso comum). Continua editável —
+        // quem repassou o link a outra pessoa pagar troca por outro e-mail na hora.
+        if (data.email_sugerido) setEmail(e => e || data.email_sugerido);
         setCarregando(false);
       } catch (e) {
         console.error('[PagarHonorario] carregar cobrança falhou:', e?.message || e);

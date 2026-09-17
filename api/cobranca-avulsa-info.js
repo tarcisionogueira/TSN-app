@@ -24,7 +24,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status,destinatario_email`, {
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
   });
   const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -39,5 +39,8 @@ export default async function handler(req) {
   return new Response(JSON.stringify({
     id: cob.id, descricao: cob.descricao, valor: total, status: cob.status,
     valor_pago_pix: pagoPix, saldo_restante: saldoRestante,
+    // pré-preenche o campo de e-mail na tela quando o admin já informou o destinatário ao
+    // criar a cobrança (mesma ideia do email_sugerido em honorario-info.js) — continua editável.
+    email_sugerido: cob.destinatario_email || null,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
