@@ -38,6 +38,34 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    Construir esse fluxo específico de proposta é escopo novo, não pedido ainda.
    `verificar:sintaxe`/`padroes` e `build` passaram limpos.
 
+-10. ✅ **NOVO 17/09 — Fluxo de "Propor compra direta" ao leiloeiro, pra veículo com leilão
+   negativo.** Continuação do item acima, mesma sessão: o dono pediu o fluxo de verdade (não
+   só o filtro). Mesmo padrão em DOIS PASSOS de "Pedir ao leiloeiro" (Análise documental,
+   11-12/09) — `api/propor-veiculo-leiloeiro.js`, novo:
+   - `action='preview'` monta um rascunho (dados do veículo + leilão encerrado) e devolve pra
+     revisão, sem mandar nada nem gastar rate limit; `action='enviar'` manda o texto que a
+     pessoa efetivamente confirmou (editado ou não) — servidor só garante o cabeçalho.
+   - **Trava de negócio**: só aceita veículo com `data_leilao` NO PASSADO — propor compra de
+     algo ainda em pregão seria mensagem sem fundamento pro leiloeiro.
+   - **Acesso restrito à equipe** (`admin`/`analista`/`suporte`) — decisão de implementação
+     (não pedido explícito), porque é negociação de aquisição em nome da empresa, diferente do
+     pedido de documento (que também libera Assessorado, agindo em nome do CLIENTE). Fácil de
+     ampliar se o dono quiser outro escopo de acesso.
+   - Reaproveita `leiloeiro_contato` (mesmo cadastro da Análise documental) — se a fonte não
+     tem e-mail capturado ainda, devolve o texto pra copiar manualmente em vez de fingir envio.
+   - Rate limit: 10 propostas/dia por usuário, 1 proposta por veículo a cada 7 dias (mais
+     largo que o de documento — aqui não tem sentido reenviar toda hora).
+   - Nova tabela `veiculo_propostas_leiloeiro` (migração `proposta_veiculo_leiloeiro.sql`,
+     aplicada) — auditoria de toda tentativa, inclusive `sem_contato`, mesmo padrão de
+     `documental_pedidos_leiloeiro`.
+   - `BuscaVeiculos.jsx` — botão roxo "Propor" no card, só visível quando `podePropor` (role
+     da equipe) **e** o leilão já é negativo (mesmo `cont.negativo` do item anterior); abre um
+     modal com o rascunho editável, mesma UX de revisão-antes-de-enviar.
+   **Achado no caminho, corrigido**: o checker `flex-2col-sem-minwidth0` pegou o cabeçalho do
+   modal (título + botão fechar) sem `minWidth:0` no filho — corrigido antes de commitar
+   (mesma família de bug de 13/08 que a trava existe pra prevenir).
+   `verificar:sintaxe`/`padroes` e `build` passaram limpos.
+
 -8. 🟡 **CONFERIDO 17/09, sem ação — resto do `qa_invariantes()` amarelo desta rodada.**
    - `fonte_cega_no_monitor` (valor 1) = **EDITAL_DJEN, falso-positivo permanente e já
      conhecido.** Esta fonte (Radar de Editais) nunca escreve `fonte_saude` POR DESENHO —
