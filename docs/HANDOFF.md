@@ -880,6 +880,49 @@ pra função de ~50 checks).
 
 ---
 
+## 🏛️ 17/09 — LEILOEIROS DO PRINT (EDITAL_DJEN): VALIDAÇÃO DO SCRAPER + RUÍDO NO PARSER + GLOBOLEILOES BLOQUEADO
+
+Pedido do dono, a partir de um print de lote judicial (advogado no lugar de leiloeiro,
+"Cumprimento de sentença", financeiro 40/100, sem laudo) — validar quantos leiloeiros nessa
+situação a automação já capta e o que falta integrar.
+
+**Achado**: é a fonte `EDITAL_DJEN` (lê direto a publicação judicial do DJEN, sem passar por
+plataforma comercial) — 370 imóveis ativos, 77 nomes distintos de leiloeiro/advogado.
+
+**Ruído no parser** (medido contra os 77 nomes reais): "Não Será"/"O Leiloeiro"/"Outros
+Documentos" (fragmento de frase capturado como nome), "José Roberto Neves Amorim Noticiou"
+(verbo da frase seguinte grudado no nome), "Jorge V" (nome truncado no ponto de uma inicial
+abreviada — a pessoa certa, "Jorge Vitório Espolador", já estava certa 14x), "Isaias Rosa Ramos
+Junior ¿ Jucemg" (separador mal decodificado). Corrigido em `api/radar-editais-cron.js`:
+`NOME_BLOQ` ganhou os termos; `nomeLeiloeiroValido` passou a exigir alfabeto português puro
+(rejeita mojibake); `extrairLeiloeiro` não corta mais no ponto de uma inicial abreviada. Só
+vale pra próxima captura — os 77 registros já gravados não são corrigidos retroativamente.
+
+**Cruzamento com `leiloeiro_conhecimento`** (13 dos 15 nomes flagrados no print já rodam:
+Kron/Alberto Macedo/Giordano/Jorge Vitório Espolador (JELEILOES)/Denys Pyerre de Oliveira
+(LEJE, o do print original)/Rigolon/Rocha/Simon/Thaís Teixeira/VM Leilões/Felipe Frazão/Gl
+Leilões=Grupolance): confirmado por leitura de dado já existente, sem nenhuma integração nova
+necessária.
+
+**GLOBOLEILOES (Cassia Negrete Nunes Balbino) — achado novo, não resolvido.** O
+`leiloeiro_conhecimento` dizia "SEM Cloudflare" em 07/09; hoje o site devolve **403 em TODOS os
+caminhos**, inclusive via Puppeteer real esperando 8s de hidratação (0 link de lote, sem
+`data-page`). Testado também o Bright Data Web Unlocker (mesmo produto do Pecini, com e sem
+header `X-Inertia:true`): HTTP 200 com corpo grande (637KB/428KB) mas **desafio Cloudflare
+intacto** nas 3 tentativas — mesma assinatura de FERNANDOLEILOEIRO/JONASLEILOEIRO, confirmado
+com chamada real (não é falta de crédito/config). Não escrevi parser nenhum: sem ver a
+estrutura real do Inertia.js, seria adivinhar às cegas. `leiloeiro_conhecimento` atualizado com
+o achado; `GLOBOLEILOES` somado a `scripts/_teste-residencial-cloudflare-bloqueados.mjs`
+(renomeado de `_teste-residencial-fernando-jonas.mjs`) — próximo passo é o dono rodar esse
+teste no runner residencial (`git pull && node
+scripts/_teste-residencial-cloudflare-bloqueados.mjs`) pra ver se IP de casa + navegador real
+(nunca tentados juntos nos três) resolve.
+
+**FERNANDOLEILOEIRO/JONASLEILOEIRO**: sem mudança — Bright Data já confirmado insuficiente em
+sessão anterior (07/09, 16/09), mesmo teste residencial acima cobre os dois.
+
+---
+
 ## 🖼️ 17/09 — SUPERBID (7 fontes): GALERIA COMPLETA DE FOTOS EM PRODUÇÃO
 
 Continuação do LJUD (parte anterior): Superbid/SOLD/SBID9/SBID21/TOTALLEILOES/CREPALDI/
