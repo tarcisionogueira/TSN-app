@@ -32,6 +32,7 @@ on:
       - 'scripts/lib/leilaoindex-parse.mjs'
       - 'scripts/lib/rocha-parse.mjs'
       - 'scripts/lib/albertomacedo-parse.mjs'
+      - 'scripts/lib/francoleiloes-parse.mjs'
       - 'scripts/lib/simon-parse.mjs'
       - 'scripts/lib/globo-parse.mjs'
       - 'scripts/lib/leje-parse.mjs'
@@ -43,6 +44,7 @@ on:
       - 'scripts/scraper-leilaoindex.mjs'
       - 'scripts/scraper-rocha.mjs'
       - 'scripts/scraper-albertomacedo.mjs'
+      - 'scripts/scraper-francoleiloes.mjs'
       - 'scripts/scraper-simon.mjs'
       - 'scripts/scraper-globo.mjs'
       - 'scripts/scraper-leje.mjs'
@@ -50,7 +52,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,simon,globo,leje (hasta so funciona de IP residencial — de datacenter falha sempre)'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje (hasta so funciona de IP residencial — de datacenter falha sempre)'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -140,6 +142,14 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ALBERTOMACEDO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-albertomacedo.mjs
+
+      - name: Francoleiloes
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'francoleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FRANCOLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-francoleiloes.mjs
 
       - name: Simon
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'simon')) }}
