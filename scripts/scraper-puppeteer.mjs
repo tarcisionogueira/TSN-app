@@ -134,7 +134,7 @@ async function salvarImoveis(imoveis, fonte) {
     try {
       const { data } = await supabase
         .from('imoveis_leilao')
-        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao, fotos')
         .in('fonte_id', fonteIds.slice(i, i + 150));
       for (const r of data || []) existentes.set(r.fonte_id, r);
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
@@ -217,6 +217,10 @@ async function salvarImoveis(imoveis, fonte) {
       // Sem preservar, o scrape diário zerava o edital capturado → o nº de docs "flutuava" entre
       // rodadas e re-baixava à toa. Agora só sobrescreve quando o dia traz um edital novo.
       if (prev.link_edital && !im.link_edital) row.link_edital = prev.link_edital;
+      // GALERIA (17/09): a API nem sempre traz `fotos` (mesmo ~38% de vazio documentado no
+      // backfill de capa abaixo) — sem preservar, o upsert diário apagaria a galeria já
+      // capturada num dia anterior sempre que o scrape do dia vier sem `fotos`.
+      if ((!Array.isArray(row.fotos) || !row.fotos.length) && Array.isArray(prev.fotos) && prev.fotos.length) row.fotos = prev.fotos;
       // AVALIAÇÃO recuperada FORA do scrape (garantirValores/on-demand leram o edital e
       // corrigiram o banco) não pode ser ZERADA pelo upsert diário: o card da listagem de
       // GL/LJUD/SODRE não traz avaliação (vem 0) e a linha inteira é sobrescrita. Preserva
@@ -2622,7 +2626,15 @@ function mapLoteLJUD_pp(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || '').trim();
   const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
-  const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
+  // GALERIA COMPLETA (17/09, achado do dono: "ainda há lotes sem fotos, precisamos de todas
+  // as fotos fornecidas pelo leiloeiro"). `it.fotos` já vem como ARRAY da API — até hoje só
+  // `fotos[0]` era usado (a capa). Captura todas, na mesma resolução 640x480 já aplicada à
+  // capa; `link_foto` continua sendo a capa (thumbnail em listagem), `fotos` é a galeria que
+  // a ficha do imóvel pode exibir.
+  const fotosArr = (Array.isArray(it.fotos) ? it.fotos : [])
+    .map(f => f?.nm_path_completo ? String(f.nm_path_completo).replace('/196x146/', '/640x480/') : null)
+    .filter(Boolean);
+  const foto = fotosArr[0] || null;
   const loteId = it.lote_id || it.id;
   // O portal é AGREGADOR: cada lote vem de um leiloeiro oficial (nm_url_leiloeiro), e a página
   // /lote/{id} do agregador responde "Leilão não encontrado" para muitos lotes. Por isso o
@@ -2679,7 +2691,8 @@ function mapLoteLJUD_pp(it) {
     link_matricula: matricula,
     url_lote: loteUrl,
     anexos: anexosArr.length ? anexosArr : null,
-    link_foto: foto, leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
+    link_foto: foto, fotos: fotosArr.length ? fotosArr : null,
+    leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
     data_leilao: parseDataLJUD(it.dt_fechamento), forma_pagamento: 'a_vista',
   };
 }

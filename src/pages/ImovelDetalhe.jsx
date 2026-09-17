@@ -778,6 +778,7 @@ export default function ImovelDetalhe() {
   const [enviandoMatricula, setEnviandoMatricula] = useState(false);
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
+  const [fotoAtivaIdx, setFotoAtivaIdx] = useState(0); // qual foto da GALERIA está selecionada (só relevante com imovel.fotos.length > 1)
   const [compartilhado, setCompartilhado] = useState(false); // feedback "link copiado"
   const [proxStatus, setProxStatus] = useState('idle'); // idle|loading|ok|empty|error — pontos próximos
   const [proxTry, setProxTry] = useState(0); // incrementa p/ "tentar novamente"
@@ -852,7 +853,7 @@ export default function ImovelDetalhe() {
     if (jaCarregado) return;
     if (!id) { nav('/buscar'); return; }
     // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.
-    if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setAnexosDocs([]); setMatAviso(false); setMatModal(null); }
+    if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setFotoAtivaIdx(0); setAnexosDocs([]); setMatAviso(false); setMatModal(null); }
     // O IMÓVEL ANTERIOR NÃO PODE FICAR NA TELA DO IMÓVEL NOVO (31/08). Dois furos aqui:
     //
     // (a) `{ data }` sem `error` — forma #2 do CLAUDE.md. O postgrest-js NÃO lança em não-2xx,
@@ -884,7 +885,11 @@ export default function ImovelDetalhe() {
           valorAvaliacao: data.valor_avaliacao, valorMinimo: data.valor_minimo,
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
           urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
-          foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
+          foto: data.link_foto,
+          // Galeria (17/09): hoje só LJUD popula isto (fotos além da capa) — quando a fonte
+          // não tiver `fotos`, a ficha se comporta exatamente como antes (1 foto só).
+          fotos: Array.isArray(data.fotos) && data.fotos.length ? data.fotos : null,
+          leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           valorMinimo2: data.valor_minimo_2 ?? null, dataLeilao2: data.data_leilao_2 ?? null,
           // O `select('*')` sempre trouxe estas colunas; faltava MAPEAR. Sem elas o
           // `leilaoEncerrado` da tela decidia pelo início da 2ª praça e dava por encerrado
@@ -1067,8 +1072,13 @@ export default function ImovelDetalhe() {
   // no onError, avança para o próximo (imgIdx). A LISTA de similares carrega a
   // foto por hotlink DIRETO e funciona — então no detalhe priorizamos o mesmo
   // hotlink direto e só caímos no proxy/padrão-Caixa se ele falhar.
+  // Galeria: quando a fonte trouxe mais de 1 foto, a miniatura selecionada vira a foto
+  // "principal" da vez — mas passa pela MESMA cascata de fallback (hotlink → proxy →
+  // padrão Caixa) que já protegia a foto única, então uma miniatura quebrada não é
+  // diferente de uma foto única quebrada.
+  const galeria = Array.isArray(imovel.fotos) && imovel.fotos.length > 1 ? imovel.fotos : null;
   const getImgCandidates = () => {
-    const foto = imovel.foto;
+    const foto = galeria ? (galeria[fotoAtivaIdx] || galeria[0]) : imovel.foto;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
     // Já hospedado por nós (supabase) ou caminho local: usa direto.
     if (foto && (foto.includes('supabase.co') || foto.startsWith('/'))) return [foto];
@@ -1349,7 +1359,33 @@ export default function ImovelDetalhe() {
                   -{descLabel}%
                 </div>
               )}
+              {galeria && (
+                <div style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(17,17,17,0.75)', color: 'white', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                  {fotoAtivaIdx + 1} / {galeria.length}
+                </div>
+              )}
             </div>
+
+            {/* Galeria: miniaturas — só aparece quando a fonte trouxe mais de 1 foto (17/09,
+                pedido do dono: "precisamos de todas as fotos fornecidas pelo leiloeiro").
+                Hoje só o LJUD popula `imovel.fotos`; nas demais fontes este bloco não renderiza
+                nada e a ficha fica idêntica a antes. */}
+            {galeria && (
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                {galeria.map((url, i) => (
+                  <button key={url + i} type="button" onClick={() => { setFotoAtivaIdx(i); setImgIdx(0); }}
+                    style={{
+                      flexShrink: 0, width: 72, height: 56, borderRadius: 8, overflow: 'hidden', padding: 0, cursor: 'pointer',
+                      border: i === fotoAtivaIdx ? '2px solid #0D63DB' : '2px solid transparent',
+                      opacity: i === fotoAtivaIdx ? 1 : 0.7, background: '#f1f5f9',
+                    }}>
+                    <img src={url} alt={`Foto ${i + 1}`} loading="lazy"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      onError={e => { e.currentTarget.style.visibility = 'hidden'; }} />
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Título e localização */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>

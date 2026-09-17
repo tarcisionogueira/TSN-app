@@ -13,6 +13,10 @@ on:
         description: '1 = dumpa a estrutura do bem LJUD (recon da URL do lote)'
         required: false
         default: '0'
+      ljud_foto_max:
+        description: 'LJUD: lotes/run para o backfill de foto via og:image (default 60/dia). Suba só num dispatch manual pra acelerar o backlog — NÃO mude o cron diário: a fila inteira (MEGA→WEBLEILOES) já encostou no timeout de 150min antes (09-12/08).'
+        required: false
+        default: ''
 
 jobs:
   scraper-puppeteer:
@@ -57,6 +61,7 @@ jobs:
           # HASTA/RJ/PECINI. Rodar so ela na mao continua possivel: SCRAPER_FONTES=VENDASGOV.
           SCRAPER_EXCLUIR: VENDASGOV
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
+          LJUD_FOTO_MAX: ${{ github.event.inputs.ljud_foto_max }}
         run: node scripts/scraper-puppeteer.mjs
 
       # `cancelled()` junto com `failure()`: estourar o timeout-minutes NAO e failure para o

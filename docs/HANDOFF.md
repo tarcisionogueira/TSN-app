@@ -28221,3 +28221,90 @@ imóveis ativos a usam, e a tela do cliente nem lê esse campo. Quantificando o 
 ZERO foto (distinto de "só 1 em vez de galeria"): **LJUD (954 ativos) tem 216 sem foto
 nenhuma (22,6%)**, GIORDANOLEILOES 31,4%, THAISTEIXEIRA 41,2%, LEFFA/PURCENA 70%+. Fica como
 pendência priorizada por volume — LJUD é o maior estoque afetado.
+
+## 17/09 (5ª parte) — LJUD: galeria completa de fotos (prioridade por volume, pedido do dono)
+
+**Pedido do dono**: "precisamos de todas as fotos fornecidas pelo leiloeiro" — priorizado por
+volume, começando pelo LJUD (maior estoque afetado: 216 de 954 ativos sem NENHUMA foto).
+
+**Achado ao investigar**: a API do LJUD (`get-lotes`/`get-bens-por-estados`) já devolve um
+ARRAY `it.fotos[]` por lote — e `mapLoteLJUD_pp` sempre usou só `fotos[0]` (a capa),
+descartando o resto. Não era falta de dado da fonte, era descarte no mapeamento.
+
+**Corrigido** (`scripts/scraper-puppeteer.mjs`): `mapLoteLJUD_pp` agora captura o array
+inteiro (mesma resolução 640x480 já aplicada à capa) e grava em `fotos` (jsonb, coluna que já
+existia mas ficava órfã — só 26 de 26.228 imóveis ativos a usavam antes disso). `link_foto`
+continua sendo a capa. `salvarImoveis` ganhou a MESMA lógica de preservação que já protege
+anexos/matrícula/edital: se o scrape do dia vier com `fotos` vazio (a API não traz galeria
+pra ~38% dos lotes, aprendizado de 18/07 já documentado no código), a galeria capturada num
+dia anterior NÃO é apagada.
+
+**Backlog dos 216 sem foto nenhuma**: esses são os mesmos ~38% sem `fotos[]` na API — dependem
+do backfill via `og:image` já existente (visita a página do lote, best-effort), capado em
+`LJUD_FOTO_MAX=60`/rodada (o cron roda 1x/dia, `leiloeiros-puppeteer.yml`). Não subi o default
+(o job já encostou no timeout de 150min antes, 09-12/08, cortando fontes que rodam DEPOIS do
+LJUD na lista) — em vez disso, `LJUD_FOTO_MAX` virou input do `workflow_dispatch`, pra rodar
+um catch-up manual mais agressivo sem arriscar o cron diário.
+
+**Frente visível — `src/pages/ImovelDetalhe.jsx`**: sem UI nenhuma pra galeria, capturar mais
+fotos não mudava nada pro cliente. Adicionada tira de miniaturas (só aparece quando
+`imovel.fotos.length > 1` — nas outras ~20 fontes sem galeria, a ficha fica IDÊNTICA a antes)
++ contador "N/total" no canto da foto principal. A foto selecionada passa pela MESMA cascata
+de fallback (hotlink → proxy → padrão Caixa) que já protegia a foto única.
+
+`npm run build` limpo. Não testado num browser real (mesma limitação de sempre deste
+ambiente) — a lógica é aditiva e cai pro comportamento de hoje quando `fotos` está vazio/null,
+que é o caso de toda fonte que não seja LJUD.
+
+## 17/09 (6ª parte) — CSP: unsafe-inline/unsafe-eval removidos (achado médio da auditoria)
+
+**Pedido do dono**: "resolva com o máximo de eficiência e segurança para nosso fluxo."
+
+**Investigação (evidência, não suposição) antes de mexer**:
+- `index.html` (fonte E `dist/` pós-build, idênticos) tem exatamente **3 `<script>` inline**:
+  o redirect de `/r/`, o JSON-LD de SEO, e o loader do `gtag.js`. Nada mais no projeto inteiro
+  gera `<script>` com conteúdo inline em runtime — os 4 lugares que fazem
+  `document.createElement('script')` (Mercado Pago SDK ×3, Turnstile, Facebook Pixel dentro de
+  `marketing.js`) todos setam `.src` pra um domínio EXTERNO já liberado na CSP — `unsafe-inline`
+  nunca protegia esses, só os 3 blocos estáticos.
+- **`unsafe-eval`**: `grep` em TODO o `dist/assets/*.js` (React, Supabase, Leaflet, PDF.js,
+  bundle inteiro) não achou `eval(`/`new Function(` em lugar nenhum do NOSSO código. Único hit
+  real: o worker do PDF.js (`pdf.worker.min.mjs`), que já tem `isEvalSupported()` — feature
+  detection PRÓPRIA do PDF.js pra rodar sem `eval` (cai num interpretador mais lento só pra
+  funções PostScript de espaço de cor, que a maioria dos PDFs não usa). O projeto só carrega
+  `gtag.js` (GA4 Global Site Tag), NÃO o Tag Manager completo (`gtm.js` — não tem nenhum
+  `GTM-XXXX` no repo) — é o `gtag.js` que a documentação do Google não lista como dependente de
+  `unsafe-eval` (isso é só do GTM com tags de HTML/JS customizado).
+
+**Corrigido**: `vercel.json` trocou `'unsafe-inline' 'unsafe-eval'` pelos 3 hashes SHA-256 dos
+scripts inline (`'sha256-...'` ×3) — removidos os dois. **Trava nova**
+(`scripts/verificar-csp-hashes.mjs`, no `prebuild`, `npm run verificar:csp`): recalcula os
+hashes do `index.html` atual e falha o build se algum não bater com o `script-src` do
+`vercel.json` — sem isto, editar QUALQUER um dos 3 scripts inline (ex.: trocar o ID do GA)
+bloquearia o script em produção **em silêncio total** (mesma classe de falha documentada várias
+vezes neste HANDOFF: CSP bloqueando script novo sem erro visível — foi assim que o Turnstile já
+quebrou uma vez, 16/09). Testado de propósito: editei um script inline, a trava pegou e
+apontou o hash certo; revertido depois. `node scripts/verificar-csp-hashes.mjs --print`
+recalcula quando alguém editar os 3 scripts de verdade.
+
+**Risco residual, não zero**: o comportamento INTERNO do `gtag.js`/`fbevents.js` (arquivos do
+Google/Meta, não nosso código) não dá pra confirmar 100% sem um browser real — a análise é por
+evidência forte (documentação pública + zero uso no nosso bundle), não teste ao vivo. Vale
+conferir `marketing_metricas_dia`/`visita_origem` num dia após o deploy pra confirmar que o
+tráfego de Ads/Pixel continua chegando — anotado como acompanhamento, não bloqueio.
+
+## 17/09 (7ª parte) — login com Turnstile: monitorado, sem incidente (ainda sem dado suficiente)
+
+**Pedido do dono**: monitorar todos os usuários pelo Cliente 360, inspecionar 1 a 1 se houve
+alguma ocorrência desde o deploy do Turnstile no login (17/09, commit `807d30e`).
+
+**Verificado via banco** (não dá pra testar login num browser deste ambiente): zero linha em
+`eventos_atividade` com `alvo='login_falha'` desde o deploy — mas também **zero login bem
+sucedido** no mesmo período (`auth.users.last_sign_in_at` — ninguém tentou entrar ainda; o
+último login real foi 16/09 17:22, antes do deploy). Não é sinal positivo nem negativo, é
+ausência de dado: não dá pra confirmar que funciona nem descartar que quebrou. As falhas de
+login ANTES do deploy (17 mais recentes inspecionadas 1 a 1) são todas `invalid_credentials`
+(senha errada) e `email_not_confirmed` (e-mail não confirmado) — nenhuma menciona captcha,
+confirmando que o padrão de falha de login é o mesmo de sempre, nada novo apareceu.
+**Ação pendente**: reconferir `eventos_atividade` (alvo=login_falha) e `last_sign_in_at`
+depois que o tráfego normal do dia passar por login de novo.
