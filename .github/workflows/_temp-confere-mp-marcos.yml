@@ -1,0 +1,30 @@
+name: _temp confere MP Marcos (descartável)
+on:
+  workflow_dispatch:
+
+jobs:
+  confere:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar extrato financeiro real (Mercado Pago)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -o resposta.json
+          echo "--- status HTTP ---"
+          curl -sS -o /dev/null -w "%{http_code}\n" "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" -H "x-cron-secret: $CRON_SECRET"
+          echo "--- avisos ---"
+          node -e "const d=require('./resposta.json'); console.log(JSON.stringify(d.avisos||[], null, 2));"
+          echo "--- lançamentos MP de ENTRADA entre R\$1500 e R\$2500 nos últimos 5 dias ---"
+          node -e "
+            const d = require('./resposta.json');
+            const itens = (d.lancamentos || []).filter(x => x.banco === 'Mercado Pago' && x.direcao === 'entrada');
+            const alvo = itens.filter(x => {
+              const v = Number(x.liquido ?? x.bruto ?? 0);
+              return v >= 1500 && v <= 2500;
+            });
+            console.log('total entradas MP no período:', itens.length);
+            console.log(JSON.stringify(alvo, null, 2));
+          "
