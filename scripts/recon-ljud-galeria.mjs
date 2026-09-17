@@ -80,7 +80,23 @@ async function paginaApi(page, pg) {
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
   const page = await browser.newPage();
   await page.setUserAgent(UA);
-  await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  // DIAGNÓSTICO (18/09, o recon original recon-ljud-foto.mjs falhou HOJE com o mesmo erro —
+  // "Failed to fetch" pode ser o fetch em si OU a página nunca ter carregado de verdade
+  // (bloqueio/Cloudflare/timeout) e o fetch rodar sobre about:blank. Sem isto os dois motivos
+  // parecem idênticos no log.
+  try {
+    const resp = await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    console.log(`  goto: status=${resp?.status() ?? '(sem response)'} url_final=${page.url()}`);
+  } catch (e) {
+    console.log(`  goto FALHOU: ${e.message}`);
+  }
+  console.log(`  title da página carregada: "${await page.title().catch(() => '(erro)')}"`);
+  console.log(`  navigator.onLine no contexto da página: ${await page.evaluate(() => navigator.onLine).catch((e) => `erro: ${e.message}`)}`);
+  const testeFetch = await page.evaluate(async () => {
+    try { const r = await fetch('https://www.leiloesjudiciais.com.br/', { method: 'HEAD' }); return `HEAD na home: status ${r.status}`; }
+    catch (e) { return `HEAD na home FALHOU: ${e.name} — ${e.message}`; }
+  }).catch((e) => `evaluate falhou: ${e.message}`);
+  console.log(`  ${testeFetch}`);
   await new Promise((r) => setTimeout(r, 2000));
 
   const vistos = new Map();
