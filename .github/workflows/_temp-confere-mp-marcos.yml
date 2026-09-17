@@ -10,11 +10,13 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" \
+          curl -sS -L "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" \
             -H "x-cron-secret: $CRON_SECRET" \
             -o resposta.json
           echo "--- status HTTP ---"
-          curl -sS -o /dev/null -w "%{http_code}\n" "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" -H "x-cron-secret: $CRON_SECRET"
+          curl -sS -L -o /dev/null -w "%{http_code}\n" "https://bidprobrasil.com.br/api/financeiro-extrato?dias=5&lista=completa" -H "x-cron-secret: $CRON_SECRET"
+          echo "--- primeiros 200 caracteres da resposta (diagnóstico) ---"
+          head -c 200 resposta.json; echo
           echo "--- avisos ---"
           node -e "const d=require('./resposta.json'); console.log(JSON.stringify(d.avisos||[], null, 2));"
           echo "--- lançamentos MP de ENTRADA entre R\$1500 e R\$2500 nos últimos 5 dias ---"
