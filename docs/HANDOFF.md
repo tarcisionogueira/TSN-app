@@ -9,6 +9,54 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔴🔴 AÇÃO URGENTE DO DONO (18/09) — créditos do Gemini esgotados
+
+**Não é bug de código, é conta a recarregar.** Achado inspecionando Cliente 360: a busca
+"mercado ao vivo" (Gemini + grounding) está devolvendo `HTTP 429: Your prepayment credits are
+depleted` desde 16/09 22:16 — confirmado em 6 tentativas seguidas no mesmo imóvel (galpão de
+Guaçuí/ES) até 17/09 18:03, todas vazias. **Recarregar o saldo em https://aistudio.google.com/**
+— até lá, todo relatório mercadológico "ao vivo" cai vazio ou no fallback (Índice BidPro), sem
+comparáveis reais de web. `api/diagnostico-gemini.js` (admin) confirma em 1 chamada se voltou.
+
+O painel Cliente 360 estava ESCONDENDO este motivo atrás de "sem comparáveis" — corrigido
+(`admin_360_falha_recente_mostra_erro_gemini.sql`, ver seção de sessão abaixo); agora a linha em
+`falhas_recentes` mostra o HTTP 429 de verdade. Isso não resolve o problema, só faz ele aparecer.
+
+### 📋 Sessão 18/09 — inspeção do Cliente 360 (pedido do dono) + correções
+
+`admin_360_estatisticas()` apontou `clientes_com_erro: 2`. Investigado item a item:
+
+1. **`Cannot access 'Bt' before initialization` em `/caso/:id` (19:37:57, MEU bug de hoje)** —
+   o `useEffect` do painel "Recebimentos" (ver honorário em partes, seção anterior) referenciava
+   `isStaff` no array de dependências ~60 linhas ANTES da declaração — TDZ real (não falha de
+   bundle), quebrava a tela do caso inteira. Corrigido (movido pra depois de `isStaff`). É quase
+   certamente a causa do "Não conseguimos terminar de carregar a página" que o dono viu ao
+   navegar Admin → Equipe → Casos.
+2. **Gemini com créditos esgotados** — ver seção urgente acima. Corrigido o QUE o painel mostra
+   (motivo real em vez de "sem comparáveis"); o problema em SI (créditos) só o dono resolve.
+3. **`_leaflet_pos` em `/planos`** (2 ocorrências, ago-set, conta "Testando Teste" — teste
+   interno, não cliente real) — já é a 3ª família deste bug (11/08, 28/08, e este); as duas
+   anteriores JÁ foram corrigidas com `map.stop()` antes de `.remove()` em `MapaImoveis.jsx`,
+   `Busca.jsx` e `ImovelDetalhe.jsx` (`zoomAnimation:false` + reset de `_animatingZoom` neste
+   último). Não investiguei mais fundo — baixíssimo volume, conta de teste, 3 rodadas de fix já
+   aplicadas com retorno decrescente.
+4. **`minhas_analises_lista: JWT expired`** (10/09, ocorrência única) — JÁ é o gatilho que levou
+   `lerComRenovacao` a ser adotado nesta RPC (comentário no próprio código confirma); zero
+   ocorrências depois. Não é bug ativo.
+5. **`vite:preloadError PRESO`** (31/08 e 02/09) — comportamento INTENCIONAL: é o anti-loop
+   avisando a pessoa (`mostrarAvisoPreso`) quando um reload automático já tentou e o chunk
+   continua quebrado — a alternativa seria ficar preso num spinner sem explicação. Não é bug.
+6. **`erros_invisiveis_recentes` (`gerar-analise`/`gerar-documental`, tipo `geracao_recuperada`)**
+   — NOME enganoso, mas o conteúdo é bom sinal: é o self-heal detectando "a conexão do cliente
+   caiu, o servidor terminou sozinho" e reconciliando depois — funcionando como desenhado, não
+   uma falha.
+
+**Não investigado** (fora do escopo desta inspeção, é outra tabela — `relatorio_anomalias`, não
+`erros_cliente`): 37 anomalias abertas (`relatorio_incoerente` 11, `valor_praca_incoerente` 10,
+`cnj_vazio` 5, `mercado_area_incoerente` 4, `avaliacao_ausente` 4, `area_divergente` 1,
+`avaliacao_incoerente` 2) — é auditoria de qualidade de conteúdo gerado por IA, não erro de
+sistema; cada tipo merece investigação própria, não cabe num "resolver rápido".
+
 ### 📋 FECHAMENTO DA SESSÃO 17/09 — resumo pra abrir amanhã sem reler tudo
 
 **8 itens resolvidos, 2 features novas no ar, 1 achado parcial em acompanhamento.** Nesta
