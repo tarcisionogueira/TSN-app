@@ -1,8 +1,29 @@
-export const config = { runtime: 'edge' };
+// Node (não Edge): precisa de `dns.lookup` pra fechar o SSRF por DNS-rebinding (achado da
+// auditoria de 18/09) — o Edge Runtime não expõe resolver. `export const GET` (não
+// `export default`): no runtime Node da Vercel, `export default` é tratado como assinatura
+// Express (req,res) e o `Response` retornado seria ignorado → 504 (mesmo cuidado de
+// anunciar-produto.js/convidar-live.js).
+export const config = { runtime: 'nodejs' };
 
-import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
+import dns from 'node:dns/promises';
+import { hostExternoSeguro, fetchExternoSeguro, ipLiteralEhInterna } from './_allowed-hosts.js';
 
-export default async function handler(req) {
+// Resolve o hostname e reprova se QUALQUER endereço resolvido (IPv4 ou IPv6) for
+// interno/reservado. `hostExternoSeguro` já bloqueou o caso óbvio (IP literal na URL);
+// isto fecha o caso de um domínio público cujo DNS aponta pra 169.254.169.254/10.x/127.0.0.1
+// — o gap que a auditoria achou (a checagem antiga só olhava o TEXTO do hostname). Falha
+// FECHADA: erro de resolução também bloqueia, nunca deixa passar por não saber checar.
+async function hostnameResolveParaSeguro(hostname) {
+  try {
+    const enderecos = await dns.lookup(hostname, { all: true, verbatim: true });
+    return enderecos.length > 0 && enderecos.every((e) => !ipLiteralEhInterna(e.address));
+  } catch {
+    return false; // padrao-ok: fail-closed deliberado — DNS não resolveu, não confia no host
+  }
+}
+
+export const GET = handler;
+async function handler(req) {
   const { searchParams } = new URL(req.url);
   const url = searchParams.get('url');
 
@@ -34,6 +55,9 @@ export default async function handler(req) {
     // fetchExternoSeguro revalida CADA hop: o guard acima só via a 1ª URL, e o fetch seguia
     // redirect por padrão — um host liberado podia devolver 302 para 169.254.169.254/10.x e o
     // proxy buscava a rede interna. Lança 'ssrf_bloqueado' (cai no catch → 502).
+    // `hostnameResolveParaSeguro` roda em CADA hop também — sem ele, um hostname que passa no
+    // texto mas resolve pra rede interna só era pego se aparecesse DEPOIS de um redirect
+    // (aqui é pego já no primeiro hop, que é o hostname original de `url`).
     const res = await fetchExternoSeguro(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -41,7 +65,7 @@ export default async function handler(req) {
         'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
       },
       signal: AbortSignal.timeout(8000),
-    });
+    }, 4, hostnameResolveParaSeguro);
 
     if (!res.ok) return new Response('Image not found', { status: 404 });
 

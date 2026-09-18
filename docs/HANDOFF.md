@@ -29318,21 +29318,32 @@ financeiras foram lidas linha a linha direto do `pg_proc`, não só por grep).
    explorável (não são SECURITY DEFINER e todo acesso já é `public.tabela` qualificado),
    mas é o hardening padrão do Postgres; migração aplicada.
 
-**Achado NÃO corrigido nesta sessão — decisão consciente, fica pra próxima com dono no
-computador**: `api/img-proxy.js` (SSRF, severidade média). É **sem autenticação** e usa
+**Achado do img-proxy.js — corrigido em 18/09, sessão seguinte, a pedido do dono.**
+`api/img-proxy.js` (SSRF, severidade média) era **sem autenticação** e usava
 `hostExternoSeguro()` (aceita qualquer host HTTPS que não PAREÇA IP interno no texto do
 hostname) em vez do allowlist exato que `fetch-url.js`/`baixar-doc.js` usam — de propósito,
 porque cada leiloeiro usa um CDN de domínio diferente e o allowlist exato escondia quase
-todas as fotos. O buraco: a checagem é só sobre o TEXTO do hostname, nunca sobre o IP
-resolvido (`_allowed-hosts.js` documenta isso: "Não resolve DNS"). Um domínio com DNS
-apontando pra `169.254.169.254`/`10.x` passa pela checagem porque o nome não parece IP.
-**Por que não mexi agora**: o fix real (resolver DNS e validar o IP antes de conectar)
-precisa do módulo `dns`, que **não existe no Edge Runtime** — a correção certa é migrar
-este endpoint de `runtime: 'edge'` pra `nodejs` e revalidar IP resolvido a cada hop, e eu
-não tenho como testar um deploy real daqui. Trocar o runtime às cegas arrisca quebrar a
-foto de todo imóvel do site pra fechar um buraco cujo impacto real em sandbox de Edge
-(sem rede interna tradicional tipo EC2) já é estreito. Fica registrado como o item
-acionável nº 1 da próxima sessão de segurança.
+todas as fotos. O buraco: a checagem era só sobre o TEXTO do hostname, nunca sobre o IP
+resolvido. Um domínio com DNS apontando pra `169.254.169.254`/`10.x` passava porque o nome
+não parece IP.
+
+**Fix aplicado**: migrado de `runtime: 'edge'` pra `nodejs` (mesmo padrão de
+`anunciar-produto.js`/`convidar-live.js`: `export const GET = handler`, `export default`
+seria tratado como Express e o `Response` ignorado → 504). Adicionado `dns.lookup(hostname,
+{all:true})` + validação de CADA endereço resolvido (IPv4 e IPv6) contra a mesma faixa
+interna já usada pro literal — a parte pura dessa checagem foi extraída de `ehHostInterno`
+pra `ipLiteralEhInterna()` em `_allowed-hosts.js` (só regex, sem I/O, seguro de importar em
+Edge também). `fetchExternoSeguro()` ganhou um 4º parâmetro opcional `validarHost` (Node-only,
+os outros 14 chamadores continuam passando só 2 args, comportamento inalterado) que roda a
+resolução de DNS em CADA hop de redirect, não só na URL inicial. Falha SEMPRE fechada: erro
+de resolução de DNS bloqueia, nunca deixa passar por não saber checar.
+
+Risco residual, documentado e aceito: a janela entre o `dns.lookup` e o `fetch()` de fato
+(DNS-rebinding em tempo real, TTL baixíssimo) não é fechada por pinning de conexão — exigiria
+um `Agent`/`dispatcher` customizado do Node, engenharia desproporcional ao risco real (o
+"internal network" de uma função serverless da Vercel não é uma rede tradicional tipo EC2
+com painéis internos). Isso é o padrão de mitigação de SSRF usado pela maioria dos proxies
+em produção; fechar 100% exigiria mudança de infraestrutura, não deste endpoint.
 
 **Confirmado limpo** (leitura completa, não só grep): autenticidade dos 2 webhooks de
 pagamento (HMAC + refetch por ID nos dois, fail-closed sem secret), preço sempre calculado
