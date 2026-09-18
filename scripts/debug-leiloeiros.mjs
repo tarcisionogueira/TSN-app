@@ -358,6 +358,38 @@ async function sondaSbid21(browser) {
   await page.close();
 }
 
+// Sonda SAULOJULIOLEILOEIRO (18/09) — recon de 18/09 achou API própria (app/lotes,
+// app/destakes) devolvendo lote misto (imóvel + veículo + maquinário) sem campo de
+// categoria óbvio nos campos já vistos. Antes de escrever o parser: existe filtro de
+// categoria (?categoria=imoveis) ou um campo (tipo/categoria/produto) no objeto do lote
+// que separe imóvel do resto? Fetch direto (sem Cloudflare — recon anterior já confirmou
+// 200 puro), plain fetch é suficiente.
+async function sondaSaulojulio() {
+  const base = 'https://saulojulioleiloeiro.com.br';
+  const tentativas = [
+    `${base}/app/lotes`,
+    `${base}/app/lotes?categoria=imoveis`,
+    `${base}/app/lotes?tipo=imoveis`,
+    `${base}/app/lotes?categoria=imovel`,
+  ];
+  const res = {};
+  for (const url of tentativas) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
+      const d = await r.json().catch(() => null);
+      const lotes = d?.lotes || [];
+      res[url] = {
+        http: r.status, total: lotes.length,
+        camposDoPrimeiro: lotes[0] ? Object.keys(lotes[0]) : [],
+        amostraCategorias: [...new Set(lotes.map(l => l.categoria || l.tipo || l.produto || null))].slice(0, 15),
+        amostraNomes: lotes.slice(0, 5).map(l => l.nome),
+      };
+    } catch (e) { res[url] = { erro: String(e?.message || e) }; }
+  }
+  await gravarDebug('sonda-saulojulio', 'app/lotes com variações de filtro', 200, 'application/json', JSON.stringify(res, null, 2));
+  console.log('sonda-saulojulio:', JSON.stringify(res, null, 2).slice(0, 3000));
+}
+
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
   const txt = String(conteudo || '').slice(0, 400000);
   const { error } = await supabase.from('debug_fetch').insert({
@@ -478,7 +510,7 @@ async function main() {
   try {
     // Round 36 (01/08): SÓ a sonda do SBID21 (0 em 2 runs; SBID9 ok). O loop do
     // Round 35 (ALVOS TRT-15, concluído em 30/07) fica desligado p/ o run ser rápido.
-    await sondaSbid21(browser);
+    await sondaSaulojulio();
     // for (const alvo of ALVOS) {
     //   try { await capturar(browser, alvo); }
     //   catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
