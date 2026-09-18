@@ -50,21 +50,15 @@ const FAIXAS_IP_INTERNAS = [
   /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,   // CGNAT 100.64.0.0/10
 ];
 
-// Anti-SSRF para os fetchers de ENRIQUECIMENTO (enriquecer-lote, geocodificar,
-// gerar-documental): eles precisam alcançar QUALQUER leiloeiro/CDN público — uma
-// allowlist exata quebraria a cobertura — mas jamais a rede interna ou o endpoint
-// de metadados da nuvem. Bloqueia literais de IP privado/loopback/link-local e
-// hostnames internos. Não resolve DNS (o runtime serverless não expõe resolver);
-// cobre o vetor concreto: uma URL de documento no banco apontando p/ 169.254.169.254,
-// localhost, 10.x, etc. Trata URL ilegível/protocolo não-http como interno (fail-closed).
-export function ehHostInterno(rawUrl) {
-  let u;
-  try { u = new URL(rawUrl); } catch { return true; }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return true;
-  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, ''); // remove colchetes de IPv6
+// Núcleo puro (só regex, sem I/O) do que conta como IP interno/reservado — extraído de
+// `ehHostInterno` para ser reaproveitado tanto sobre um literal dentro do hostname quanto
+// sobre um IP já RESOLVIDO por DNS (é o que `img-proxy.js` usa depois do `dns.lookup`,
+// porque checar só o texto do hostname deixa passar um domínio cujo DNS aponta pra
+// 169.254.169.254/10.x — achado da auditoria de 18/09). Não faz I/O: seguro de importar
+// em qualquer runtime, inclusive Edge.
+export function ipLiteralEhInterna(rawIp) {
+  const host = String(rawIp || '').toLowerCase().replace(/^\[|\]$/g, '');
   if (!host) return true;
-  if (host === 'localhost' || host.endsWith('.localhost')) return true;
-  if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.lan')) return true;
   // IPv6 loopback / não-especificado / link-local (fe80::) / unique-local (fc00::/7)
   if (host === '::1' || host === '::') return true;
   if (/^fe80:/i.test(host) || /^f[cd][0-9a-f]*:/i.test(host)) return true;
@@ -79,6 +73,26 @@ export function ehHostInterno(rawUrl) {
   return false;
 }
 
+// Anti-SSRF para os fetchers de ENRIQUECIMENTO (enriquecer-lote, geocodificar,
+// gerar-documental): eles precisam alcançar QUALQUER leiloeiro/CDN público — uma
+// allowlist exata quebraria a cobertura — mas jamais a rede interna ou o endpoint
+// de metadados da nuvem. Bloqueia literais de IP privado/loopback/link-local e
+// hostnames internos. Não resolve DNS (funções Edge não expõem resolver — quem roda em
+// Node e precisa fechar esse vetor usa `ipLiteralEhInterna` sobre o IP já resolvido, ver
+// acima); cobre o vetor concreto: uma URL de documento no banco apontando p/
+// 169.254.169.254, localhost, 10.x, etc. Trata URL ilegível/protocolo não-http como
+// interno (fail-closed).
+export function ehHostInterno(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return true; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return true;
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, ''); // remove colchetes de IPv6
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.lan')) return true;
+  return ipLiteralEhInterna(host);
+}
+
 /** Destino externo seguro: http(s) público e que NÃO aponta p/ rede interna/metadados. */
 export function hostExternoSeguro(rawUrl) {
   return !!rawUrl && /^https?:\/\//i.test(rawUrl) && !ehHostInterno(rawUrl);
@@ -89,11 +103,18 @@ export function hostExternoSeguro(rawUrl) {
  * Fecha o SSRF residual do redirect:'follow', que seguia um 302 externo → 169.254.169.254
  * (metadados de nuvem) / 10.x / localhost sem revalidar. Uso: leitores de documento
  * (edital/matrícula) cuja URL vem do banco. Lança 'ssrf_bloqueado' se um hop for interno.
+ *
+ * `validarHost(hostname)` é opcional e Node-only (quem chama de Edge nunca passa):
+ * roda ANTES de cada hop, além de `hostExternoSeguro`. Existe pra quem resolve DNS antes
+ * de conectar (img-proxy.js, achado da auditoria de 18/09: `hostExternoSeguro` só olha o
+ * TEXTO do hostname — um domínio com DNS apontando pra 169.254.169.254 passava). Deve
+ * devolver `false` para bloquear o hop.
  */
-export async function fetchExternoSeguro(url, opts = {}, maxHops = 4) {
+export async function fetchExternoSeguro(url, opts = {}, maxHops = 4, validarHost = null) {
   let atual = url;
   for (let i = 0; i <= maxHops; i++) {
     if (!hostExternoSeguro(atual)) throw new Error('ssrf_bloqueado');
+    if (validarHost && !(await validarHost(new URL(atual).hostname))) throw new Error('ssrf_bloqueado_dns');
     const r = await fetch(atual, { ...opts, redirect: 'manual' });
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get('location');

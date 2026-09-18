@@ -4,7 +4,7 @@
 // app lê o resultado do banco. Espelha os prompts de src/utils/claude.js.
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
-import { getUser } from './_auth.js';
+import { getUser, isCronAuthorized } from './_auth.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
@@ -1702,7 +1702,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   // REGERAÇÃO AUTOMÁTICA (regenerar-relatorios-cron): reprocessa relatório com vício,
   // com orçamento fresco. Autentica pelo CRON_SECRET (não passa por getUser nem cota).
-  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+  const isCron = isCronAuthorized(req);
   let user;
   if (isCron) {
     if (!req.body?.paraUserId) { res.status(400).json({ error: 'paraUserId obrigatório no cron' }); return; }

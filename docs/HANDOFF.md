@@ -29316,3 +29316,73 @@ o cliente recebe produto+bônus normalmente, só assina na mão depois.
 
 **Validação**: `npm run build` limpo em todos os commits; migrações aplicadas via MCP com
 `auditoria_seguranca()=0/0` depois de cada uma.
+
+## 18/09 — Auditoria de segurança completa (código + banco) — nota final: 90/100
+
+Pedido do dono: "verificação de segurança completa em todo o código, nota de 0 a 100".
+Cobertura: 4 agentes paralelos em worktree isolado (auth/authz+IDOR, pagamento/webhook,
+XSS/SSRF/secrets/upload, injeção+cron), `auditoria_seguranca()` (0 crítico/0 atenção),
+`mcp__Supabase__get_advisors(security)` completo (5 categorias, todas as `authenticated_*`
+e `anon_security_definer_*` — 133 funções — foram listadas; as 19 `admin_*` e as
+financeiras foram lidas linha a linha direto do `pg_proc`, não só por grep).
+
+**Achados corrigidos nesta sessão** (código + migração, todos com `npm run build` limpo):
+1. **CRON_SECRET com comparação não-constante em 3 rotas caras** (`gerar-analise.js`,
+   `gerar-documental.js`, `gerar-laudo-viabilidade.js`) — usavam `===` direto em vez do
+   `isCronAuthorized()` (timing-safe) que todo o resto do `api/*cron*` já usa. Um vazamento
+   do secret (não só por timing attack) bypassava plano/cota nessas 3 rotas de IA. Trocado
+   pelo helper padrão nos 3 arquivos.
+2. **`resend-webhook.js` comparava o secret com `!==`** (não constant-time) — baixo impacto
+   (só toca metadado de e-mail), mas quebrava o padrão que todo outro webhook segue. Trocado
+   por `timingSafeEqualStr` (exportado de `_auth.js`, reaproveitado em vez de duplicado).
+3. **`mp-checkout.js` (assessoria): piso/teto de preço pulava por completo se
+   `planos_config` voltasse vazio** (`if (vigentes.length)`) — não é atacável por request,
+   mas reabria `valor` vindo do cliente sem checagem se a linha de config sumir/for
+   renomeada. Agora falha fechado (503), mesma lógica do catch ao lado.
+4. **2 funções de trigger sem `search_path` fixo** (`honorarios_recebimentos_valida_teto`,
+   `honorarios_recebimentos_fecha_se_completo`) — achado do linter do Supabase. Não é
+   explorável (não são SECURITY DEFINER e todo acesso já é `public.tabela` qualificado),
+   mas é o hardening padrão do Postgres; migração aplicada.
+
+**Achado do img-proxy.js — corrigido em 18/09, sessão seguinte, a pedido do dono.**
+`api/img-proxy.js` (SSRF, severidade média) era **sem autenticação** e usava
+`hostExternoSeguro()` (aceita qualquer host HTTPS que não PAREÇA IP interno no texto do
+hostname) em vez do allowlist exato que `fetch-url.js`/`baixar-doc.js` usam — de propósito,
+porque cada leiloeiro usa um CDN de domínio diferente e o allowlist exato escondia quase
+todas as fotos. O buraco: a checagem era só sobre o TEXTO do hostname, nunca sobre o IP
+resolvido. Um domínio com DNS apontando pra `169.254.169.254`/`10.x` passava porque o nome
+não parece IP.
+
+**Fix aplicado**: migrado de `runtime: 'edge'` pra `nodejs` (mesmo padrão de
+`anunciar-produto.js`/`convidar-live.js`: `export const GET = handler`, `export default`
+seria tratado como Express e o `Response` ignorado → 504). Adicionado `dns.lookup(hostname,
+{all:true})` + validação de CADA endereço resolvido (IPv4 e IPv6) contra a mesma faixa
+interna já usada pro literal — a parte pura dessa checagem foi extraída de `ehHostInterno`
+pra `ipLiteralEhInterna()` em `_allowed-hosts.js` (só regex, sem I/O, seguro de importar em
+Edge também). `fetchExternoSeguro()` ganhou um 4º parâmetro opcional `validarHost` (Node-only,
+os outros 14 chamadores continuam passando só 2 args, comportamento inalterado) que roda a
+resolução de DNS em CADA hop de redirect, não só na URL inicial. Falha SEMPRE fechada: erro
+de resolução de DNS bloqueia, nunca deixa passar por não saber checar.
+
+Risco residual, documentado e aceito: a janela entre o `dns.lookup` e o `fetch()` de fato
+(DNS-rebinding em tempo real, TTL baixíssimo) não é fechada por pinning de conexão — exigiria
+um `Agent`/`dispatcher` customizado do Node, engenharia desproporcional ao risco real (o
+"internal network" de uma função serverless da Vercel não é uma rede tradicional tipo EC2
+com painéis internos). Isso é o padrão de mitigação de SSRF usado pela maioria dos proxies
+em produção; fechar 100% exigiria mudança de infraestrutura, não deste endpoint.
+
+**Confirmado limpo** (leitura completa, não só grep): autenticidade dos 2 webhooks de
+pagamento (HMAC + refetch por ID nos dois, fail-closed sem secret), preço sempre calculado
+no servidor em todo fluxo de cobrança, idempotência com dedup atômico + rollback em falha,
+IDOR (toda rota re-deriva o dono do banco, nunca confia em id do body), XSS (zero
+`dangerouslySetInnerHTML` com conteúdo externo), SQLi (zero SQL dinâmico com parâmetro de
+RPC exposto a anon/authenticated), mass assignment (trigger `proteger_campos_sensiveis_perfil`
+reverte campo sensível mesmo se o update tentar), e as 19 funções `admin_*` de maior risco —
+todas checam `role = 'admin'`/`'analista'` via `auth.uid()` dentro do próprio corpo antes de
+tocar dado, então o `GRANT EXECUTE TO authenticated` (que o advisor lista pra 104 funções) é
+o padrão esperado do Supabase, não uma falha — a autorização real está dentro da função.
+
+**Por que 90 e não 100**: 1 achado médio real e não-atacável-por-request-comum mas concreto
+(img-proxy SSRF) deixado pendente por prudência de deploy, mais o padrão geral de qualidade
+muito acima da média (comentários no próprio código documentando incidentes anteriores e
+seus fixes, dois auditores próprios rodando em CI). Nenhum achado ALTO em nenhuma categoria.

@@ -165,7 +165,7 @@ export function isCronAuthorized(req) {
 // Comparação de strings resistente a timing attack (sem depender de Buffer/crypto
 // do Node — funciona no Edge). Comprimentos diferentes retornam false cedo, mas o
 // laço roda sobre o segredo esperado para não vazar tamanho por tempo.
-function timingSafeEqualStr(a, b) {
+export function timingSafeEqualStr(a, b) {
   const bb = String(b || '');
   const aa = String(a || '');
   let diff = aa.length ^ bb.length;

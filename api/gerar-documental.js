@@ -9,7 +9,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { createHash } from 'node:crypto';
-import { getUser } from './_auth.js';
+import { getUser, isCronAuthorized } from './_auth.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
@@ -646,7 +646,7 @@ export default async function handler(req, res) {
   // RETENTATIVA AUTOMÁTICA (documental-retry-cron): reprocessa laudos que saíram
   // PRELIMINARES, de hora em hora até 48h, dando ao Claude um novo ciclo com
   // orçamento fresco. Autentica pelo CRON_SECRET (não passa por getUser nem cota).
-  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+  const isCron = isCronAuthorized(req);
 
   let user;
   if (isCron) {
