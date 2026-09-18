@@ -28910,3 +28910,118 @@ falha de API em vez de devolver `null`.
 **Validação**: `verificar:sintaxe`/`verificar:padroes`/`npm run build` limpos em todos os
 commits desta parte. Coletor da HastaPública validado contra dado real via script isolado
 (`scripts/_test-hastapublica.mjs`, sem gravar no banco) antes de entrar na rodada diária.
+
+## 18/09 — fallback Asaas confirmado em produção, bug de inadimplência indevida em recorrência
+(achado com cliente real), antecipação de recebível, "A receber" zerado (investigação aberta) e
+campo de documentos pessoais
+
+**1. Fallback transparente MP→Asaas (trabalho iniciado antes da compactação desta sessão) —
+confirmado READY em produção** (commit `f9972fb`, alias `bidprobrasil.com.br`). Sem mudança de
+código hoje, só a confirmação que faltava.
+
+**2. Recon dos domínios pequenos do radar de editais (pedido do dono: "segue pelos domínios
+pequenos").** 17 candidatos levantados de `editais_leilao` (`leiloeiro_integrado=false`,
+filtrando portais de tribunal que não são leiloeiro de verdade e domínios já resolvidos em
+sessões anteriores) adicionados a `scripts/recon-novos-leiloeiros.mjs` (`SITES`), nenhum já
+conhecido em `leiloeiro_conhecimento`. **Timeout do workflow precisou de dois ajustes**: o piso
+original (15min, pensado para 1-2 sites) não bastava para 17 — subiu para 40min e ainda assim
+cancelou de novo no limite. Corrigido dividindo em 2 lotes paralelos (8+9 sites) — mais rápido em
+relógio de parede do que insistir num timeout único maior. **Resultado ainda não classificado
+nesta entrada** — ver pendências abaixo.
+
+**3. Caso Valbeni (Investidor Pro rebaixado a Explorador, 06/09) — bug real de regra de negócio,
+achado investigando a pedido do dono.** A cobrança recorrente do MP falhou
+(`cc_rejected_bad_filled_card_number`, `op_type: recurring_payment` — o MP tentando cobrar o
+cartão salvo SOZINHO, sem o cliente na tela; mandato seguia `authorized`, próxima tentativa
+agendada para 06/10) e o cliente foi marcado `inadimplente_desde` mesmo sendo Investidor Pro
+(sem fidelidade). A regra do dono (17/08) já estava implementada em `suspenderPlanoDireto`: só
+Clube (contrato de 12 meses) vira inadimplente de verdade; Pro/Assessorado em recorrência só são
+rebaixados a Explorador, porque podem voltar sozinhos na próxima cobrança. **`processarRecusado`
+e `processarVencido` (caminho do webhook de pagamento avulso, `_webhook-core.js`) não tinham essa
+mesma régua** — marcavam inadimplência para qualquer plano pago, sem checar fidelidade.
+Consequência real (não só cosmética): com `inadimplente_desde` setado, o guard
+`!perfil.inadimplente_desde` do `reconciliar-assinaturas-cron` para de reconsiderar o cliente
+para reativação automática mesmo com mandato ainda ativo, e o prazo de expurgo LGPD de
+documentos (90 dias) era iniciado para quem nem cancelou de verdade — `usuario_docs.expira_em`
+do Valbeni já estava setado para 05/12 por causa disso. Corrigido (commit `d6e9f08`):
+`ROLES_COM_FIDELIDADE` extraída para o topo do arquivo, mesmo gate aplicado a `inadimplente_desde`
+e a `setExpiracaoDocumentos` nos dois caminhos. Corrigido manualmente no banco o registro do
+Valbeni (`inadimplente_desde` e `expira_em` do documento, ambos indevidos). Enviado e-mail de
+reativação com oportunidades de Brasília/DF batendo no perfil dele (revenda, até R$150k).
+
+**4. Antecipação de recebível — pergunta do dono sobre fluxo de caixa (concentrar valor em
+conta, saber se precisa antecipar para liberar).** Prazo padrão já estava registrado em
+`config_financeira`: MP D+30, Asaas D+32 (cartão; Pix é D+0/D+1). MP não tem API pública de
+autoatendimento para antecipação em conta comum — é negociado direto com o Mercado Pago, fora do
+nosso sistema. Asaas tem: confirmado AO VIVO (via GitHub Actions, já que este ambiente não
+alcança `docs.asaas.com` nem tem a chave de produção) que `POST /v3/anticipations` e
+`GET /v3/anticipations/simulate` respondem 401 sem credencial — ou seja, a rota EXISTE de
+verdade (não é 404) — mas não deu pra confirmar o formato exato da resposta (doc é SPA
+renderizada em JS). Implementado (commit `7a29bb1`) em duas etapas justamente por isso: card
+"Antecipar recebível" no Admin Financeiro → Asaas, botão **Simular** primeiro (mostra a resposta
+crua na tela) e só depois **Confirmar** (mexe em dinheiro de verdade, cobra taxa). **Pendente**:
+dono ainda não rodou a simulação real para eu confirmar os nomes dos campos.
+
+**5. "A receber" zerado na aba Asaas do Admin Financeiro — investigação aberta, sem causa
+confirmada ainda.** Dono reportou os 4 cards (saldo/a receber/recebido/taxas) e o extrato
+zerados, mesmo com um pagamento real de R$ 33.001,09 recebido via Asaas nesta mesma sessão
+(item 9ª parte, 17/09). Runtime logs confirmam as chamadas a `/api/asaas` voltando 200 — não é
+falha de rede/auth silenciosa (a forma nº 1 do topo deste documento), o corpo em si está vindo
+assim ou os campos lidos (`balance.balance`, `balance.totalReceivable`, `statsMes.revenue`,
+filtro `status=RECEIVED` do extrato) não batem com o que a API do Asaas realmente devolve.
+**Hipótese mais provável, ainda não confirmada**: pagamento de CARTÃO no Asaas fica em status
+`CONFIRMED` até liberar (D+32), não `RECEIVED` (que é o status de PIX/boleto já compensados) —
+e pode não ter `paymentDate` preenchido ainda, o que excluiria o registro dos dois filtros do
+extrato ao mesmo tempo. Log temporário adicionado em `api/asaas.js` (`financas`/`extrato`)
+imprimindo a resposta crua de `/finance/balance`, `/finance/statistics` e uma chamada extra sem
+filtro de status. **Pendente**: dono precisa recarregar a aba Asaas uma vez para eu ler o log e
+confirmar — os logs de diagnóstico devem ser REMOVIDOS depois de confirmado (não são para
+ficar em produção).
+
+**6. Campo de documentos pessoais em Meus Arrematados (pedido do dono).** Diferente dos
+documentos do IMÓVEL que já existiam ali (auto/carta de arrematação, escritura, matrícula —
+tabela `imovel_anexos`, por `imovel_id`), o dono queria um lugar para a equipe (ou ele) anexar
+os documentos PESSOAIS do arrematante (RG, CPF, comprovante de residência, certidão, procuração)
+— que pertencem à PESSOA, não ao imóvel. Já existia uma tabela certa para isso
+(`usuario_docs`, por `user_id`, já usada no KYC de saque), mas os dois caminhos de upload que já
+gravavam nela não serviam: `api/arrematacoes.js` exige um `arrematacao_id` real (a tabela
+`arrematacoes`, o caso jurídico formal) que não existe para todo item de `arrematados` (o
+portfólio que o PRÓPRIO cliente registra em Meus Arrematados — são tabelas diferentes, apesar do
+nome parecido); e o upload client-side já usado em Perfil.jsx/ImovelDetalhe.jsx só funciona
+quando quem sobe o arquivo é o DONO do documento (RLS exige `user_id = auth.uid()`) —
+`ImovelDetalhe.jsx` já bloqueia esse caminho em modo suporte justamente porque a equipe subindo
+um documento gravaria em nome dela mesma, não do cliente. Novo endpoint server-side
+`api/doc-pessoal.js` (staff-only: admin/consultor/analista/advogado, service key) resolve os
+dois problemas — grava por `user_id`, sem depender de `arrematacao_id`. Nova aba "Doc.
+pessoais" em Arrematados.jsx (visível só para a equipe). Migração `usuario_docs_descricao.sql`
+adiciona campo de descrição (mesma razão de `imovel_anexos.descricao`, 16/09: rastreabilidade
+quando há mais de um documento do mesmo tipo).
+
+**7. Botão "Encaminhar ao Jurídico" não localizado pelo dono — esclarecido, não é bug.** Fica na
+página do Caso (`/caso/:id`, seção Jurídico), não em Meus Arrematados. Só aparece depois que uma
+reunião foi marcada "Aprovada para arrematação" pelo analista (exceto em caso atribuído
+diretamente pela equipe, que pula a reunião). Nenhuma mudança de código — dono orientado sobre
+onde fica e a condição que precisa estar satisfeita.
+
+**Pendências abertas ao final desta sessão (carregando de sessões anteriores + as de hoje):**
+- **Recon dos 17 domínios pequenos do radar de editais** — rodando em 2 lotes; falta ler o
+  resultado e classificar cada domínio (Vlance-tenant / HTML simples / SPA-bloqueado /
+  Cloudflare / vazio) antes de decidir quais merecem scraper.
+- **"A receber" zerado no Asaas** (item 5 acima) — aguardando o dono recarregar a tela para eu
+  confirmar a causa pelo log; remover os logs de diagnóstico depois.
+- **Antecipação de recebível Asaas** (item 4 acima) — aguardando o dono rodar "Simular" uma vez
+  para eu validar o formato da resposta antes de confiar no botão "Confirmar".
+- **HASTA zerada (4 imóveis ativos)** — bloqueio de IP residencial já documentado (16-17/09);
+  ação pendente é o DONO rodar `scripts/recon-hasta-zerou.mjs` de casa. Sem mudança.
+- **Galeria de fotos do LJUD** — sem veredito desde 17/09 (8ª parte); API pública bloqueia o IP
+  do GitHub Actions (mesma classe do bloqueio já documentado para CEF via curl direto). Scripts
+  prontos (`recon-ljud-galeria.mjs`), só falta rede que não bloqueie.
+- **`pino_generico_como_rua`**: 26 ainda acima do limite de 25 (17/09, 8ª parte) — resto são
+  casos de abreviação ("Mal." × "Marechal"), não cobertos pelo fix pontual já aplicado.
+- **"Leilão ao vivo" redirecionando** (screenshot reportado antes da 9ª parte de 17/09) — nunca
+  confirmado; pedido o imóvel/link específico ao dono e a conversa seguiu para outros assuntos
+  antes da resposta. Lead mais provável: redirect apex→www da Vercel sem `-L`/follow, visto em
+  outro contexto nesta sessão — não confirmado contra o caso relatado.
+
+**Validação**: `npm run build` (que roda `verificar:padroes`/`verificar:sintaxe`/`verificar:csp`)
+limpo em todos os commits desta parte.
