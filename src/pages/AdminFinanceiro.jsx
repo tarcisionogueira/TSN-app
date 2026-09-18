@@ -176,7 +176,13 @@ export function FinanceiroCaixa() {
       });
       const data = await res.json();
       if (res.ok) setAntecipSim(data);
-      else setAntecipResult({ ok: false, msg: data.error || 'Erro ao simular' });
+      // "Já foi antecipada" não é uma FALHA — é o Asaas confirmando que o dinheiro já saiu
+      // (achado de 18/09: o admin testou, a antecipação real aconteceu, e toda simulação
+      // seguinte esbarra nisso). Mostrar em vermelho como as falhas de verdade confundia:
+      // parecia que algo tinha quebrado quando na verdade não havia mais o que fazer ali.
+      else if (/j[áa]\s+foi\s+antecipad/i.test(data.error || '')) {
+        setAntecipResult({ ok: true, info: true, msg: 'Este valor já foi antecipado anteriormente — nada a fazer aqui. Escolha outro item da lista, se precisar.' });
+      } else setAntecipResult({ ok: false, msg: data.error || 'Erro ao simular' });
     } catch (e) { // padrao-ok: motivo já vai pra tela (setAntecipResult) — console só pra depuração
       console.error('[antecipacao] simular:', e?.message || e);
       setAntecipResult({ ok: false, msg: 'Falha de conexão' });
@@ -440,8 +446,9 @@ export function FinanceiroCaixa() {
 
           {antecipResult && (
             <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-              background: antecipResult.ok ? '#f0fdf4' : '#fef2f2', color: antecipResult.ok ? '#15803d' : '#dc2626' }}>
-              {antecipResult.ok ? '✅' : '❌'} {antecipResult.msg}
+              background: antecipResult.info ? '#eff6ff' : antecipResult.ok ? '#f0fdf4' : '#fef2f2',
+              color: antecipResult.info ? '#1d4ed8' : antecipResult.ok ? '#15803d' : '#dc2626' }}>
+              {antecipResult.info ? 'ℹ️' : antecipResult.ok ? '✅' : '❌'} {antecipResult.msg}
             </div>
           )}
 

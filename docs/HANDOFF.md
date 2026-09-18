@@ -29534,3 +29534,15 @@ antecipação FUTURA de um honorário criado pelo fluxo normal do app; não reso
 feito por fora.
 
 **Validação**: `npm run build` limpo.
+
+**Atualização, mesmo dia**: peguei o log real da função no Vercel (`mcp__Vercel__get_runtime_logs`)
+pra confirmar de vez — a mensagem que o Asaas devolve é `"Esta cobrança já foi antecipada."`.
+Ou seja: não tem mais achado nenhum aqui, é o Asaas corretamente recusando simular de novo uma
+cobrança que já foi antecipada de verdade (confirma o ~R$900 do achado acima). O "Erro interno"
+que ainda apareceu num teste foi só timing — o admin testou a poucos segundos do deploy do fix
+terminar de propagar.
+
+**Ajuste de UX** (pedido do dono: "não ficar aparecendo erro interno"): a tela de Antecipar
+Recebível agora detecta esse texto específico e mostra em AZUL/informativo ("Este valor já foi
+antecipado anteriormente — nada a fazer aqui"), não em vermelho como as falhas de verdade —
+antes qualquer `!res.ok` virava vermelho igual, então um estado de negócio normal parecia pane.
