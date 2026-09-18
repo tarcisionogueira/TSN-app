@@ -29386,3 +29386,42 @@ o padrão esperado do Supabase, não uma falha — a autorização real está de
 (img-proxy SSRF) deixado pendente por prudência de deploy, mais o padrão geral de qualidade
 muito acima da média (comentários no próprio código documentando incidentes anteriores e
 seus fixes, dois auditores próprios rodando em CI). Nenhum achado ALTO em nenhuma categoria.
+
+**PR #344 mergeado em 18/09** (comparação constant-time + fail-closed na assessoria +
+search_path + fix do SSRF do img-proxy). Todos os itens acima já estão em produção.
+
+## 18/09 — MFA (2FA/TOTP) para contas staff, achado da própria auditoria
+
+Checagem pós-auditoria (a pedido do dono): `auth.mfa_factors` estava **zero** no projeto
+inteiro — a única conta `admin` existente não tinha 2FA, e as funções `admin_*` (cota,
+métricas financeiras, dado de cliente) autorizam só por `role='admin'`, sem checar nível de
+verificação (`aal`). Senha vazada = acesso total, sem segunda barreira.
+
+**Implementado**: fluxo completo de TOTP via `supabase.auth.mfa` (já vem no `@supabase/
+supabase-js` 2.108.2, sem dependência nova):
+- `src/pages/Perfil.jsx`: seção "Autenticação de dois fatores" — só aparece pra
+  `ROLES_STAFF = ['admin','analista','advogado','consultor']` (as contas que acessam
+  `admin_*`), some inteira em modo suporte (as mutações usam a sessão do ADMIN, não da conta
+  impersonada — mesma disciplina do resto do arquivo). QR code + secret manual + confirmação
+  por código; desativar exige confirmação.
+- `src/pages/Login.jsx`: **sem isto, o "Ativar 2FA" seria só decoração** — `signInWithPassword`
+  sozinho já devolve um JWT válido em `aal1`; o login precisa checar
+  `getAuthenticatorAssuranceLevel()` e, se a conta tiver fator TOTP verificado (`nextLevel ===
+  'aal2'`), pedir o código antes de completar o login. Implementado com fail-closed nos dois
+  `error` que o `verificar:padroes` pegou de cara (`getAuthenticatorAssuranceLevel`/
+  `listFactors` sem checar `error` cairia direto pro login sem pedir o código, exatamente a
+  forma nº 1/nº 2 da lista lá em cima — corrigido antes do commit, não depois).
+
+**O que isto NÃO fecha sozinho — decisão deliberada, fica pro próximo passo**: as RPCs
+`admin_*` continuam autorizando só por `role`, sem exigir `aal2`. Ou seja, hoje o 2FA protege
+o LOGIN pela UI (o que já cobre o grosso do risco: senha vazada não basta mais pra entrar no
+app), mas uma chamada direta à API com um JWT válido em `aal1` (ex.: token roubado depois de
+um login já feito) ainda passa pelas funções `admin_*` sem pedir o segundo fator. Fechar isso
+exige adicionar `if (auth.jwt()->>'aal') is distinct from 'aal2' then raise exception` nas
+funções `admin_*` mais sensíveis — combinado com exigir MFA obrigatório (não opcional) pra
+`role='admin'`. Não fiz agora porque é standalone (não depende deste PR) e o dono pediu
+"ativa o MFA primeiro" — fica registrado como o próximo passo natural.
+
+**Validação**: `npm run build` limpo (o linter `verificar:padroes` pegou o fail-open real no
+primeiro try e foi corrigido antes do commit — ver acima). Não dá pra testar o fluxo completo
+(scan de QR real) neste ambiente; a conta admin precisa validar na prática assim que subir.
