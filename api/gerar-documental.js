@@ -1871,7 +1871,10 @@ export default async function handler(req, res) {
       preliminar,
       preliminarMotivo,
       parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,
-      cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
+      // `erros` (18/09): motivo REAL por tribunal quando parecer.motivo === 'consulta_falhou'
+      // (timeout/HTTP/rede) — só para diagnóstico interno, não é lido pela tela (Analise.jsx
+      // e NotaMetodologica.jsx destroem só total/parecer/processos/tribunais).
+      cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados, erros: cnj.erros } : null,
       fontesExternas,
       documentosLidos: lidos,
       checklist,
