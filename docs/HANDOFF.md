@@ -29425,3 +29425,33 @@ funções `admin_*` mais sensíveis — combinado com exigir MFA obrigatório (n
 **Validação**: `npm run build` limpo (o linter `verificar:padroes` pegou o fail-open real no
 primeiro try e foi corrigido antes do commit — ver acima). Não dá pra testar o fluxo completo
 (scan de QR real) neste ambiente; a conta admin precisa validar na prática assim que subir.
+
+## 18/09 — Custo real de ANTECIPAÇÃO de recebível no Asaas: ~2,7% (dado real, não estimativa)
+
+Pedido do dono: documentar. O pagamento do Marcos (R$ 33.001,09, cartão, `CONFIRMED` — o
+mesmo caso real usado pra validar o fix de `financas`/`extrato` mais acima nesta sessão)
+veio de um link Asaas gerado manualmente numa sessão anterior porque o Mercado Pago estava
+recusando. Ficou `CONFIRMED` (D+32) até o dono pedir antecipação pela tela; o desconto foi
+**~R$ 900** — **≈2,7% do valor bruto**, saindo do bolso pra liberar o dinheiro antes do prazo.
+
+**Isso NÃO tem registro em nenhuma tabela nossa** — `cobrancas_avulsas` está **zerada desde
+sempre** (0 linhas). O link foi gerado direto na API do Asaas (fora do fluxo
+`criar_cobranca_avulsa`/`cobranca-avulsa-criar.js`), então não existe vínculo local entre
+esse pagamento, o Marcos, e o motivo do recebimento — só existe do lado do Asaas. A tela
+Financeiro → Asaas (extrato) mostra porque lê AO VIVO da API do Asaas, não da nossa tabela;
+se dependesse do nosso banco, este pagamento seria invisível também ali.
+
+**O que isso implica pra leitura de "recebido"**: `statsMes.fees` em `api/asaas.js:570`
+(`sum(value) - sum(netValue)`) já embute qualquer desconto que o Asaas aplicar ao
+`netValue` do pagamento — e, por construção da API do Asaas, o custo de antecipação reduz o
+`netValue` do próprio pagamento antecipado. **Não confirmado ao vivo** (este ambiente não
+alcança a API do Asaas) **se isso já aparece corretamente somado em `fees`/se `totalReceivable`
+(pendentes `CONFIRMED`) some da lista assim que antecipado** — só o extrato (que lê o objeto
+cru) foi confirmado pelo dono. Próxima sessão: conferir os três números (`recebido`, `taxas`,
+`a receber`) no Financeiro logo depois de uma antecipação, com o pagamento do Marcos como
+caso real já conhecido.
+
+**Regra prática pra decidir quando vale antecipar** (~2,7% é o único dado-ponto que temos
+até agora, não é média — vale mais uma vez confirmado): compare contra o custo de esperar
+D+32 — se o caixa aguenta esperar, não antecipa; ~2,7% num valor grande (este caso: quase
+R$ 900) é um desconto real, não trivial.
