@@ -546,19 +546,35 @@ export default async function handler(req, res) {
       const hoje = new Date();
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
-      const [balance, statsMes] = await Promise.allSettled([
+      // 90 dias cobre folgado o D+32 do cartão sem a janela crescer sem limite — "a receber"
+      // é o que ainda NÃO virou saldo, não um recorte do mês corrente.
+      const inicioJanela90 = new Date(hoje.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // 18/09, achado com dado real (pagamento do Marcos, R$33.001,09, cartão, CONFIRMED):
+      // `/finance/balance` só devolve `{balance}` — NÃO existe `totalReceivable` na resposta
+      // real do Asaas (log de diagnóstico confirmou o objeto cru). E `/finance/statistics`
+      // devolve 404 (endpoint indisponível nesta conta) — as duas causas do "zerado" que a
+      // seção anterior deste HANDOFF só suspeitava. Trocado por cálculo sobre `/payments`, que
+      // já prova funcionar (200, dado real): "a receber" = soma de CONFIRMED ainda não
+      // liberado; "recebido no mês"/"taxas" = soma de RECEIVED+CONFIRMED do mês (value/netValue).
+      // Limite de paginação (100) é honesto pro volume atual; se crescer, precisa paginar.
+      const [balance, doMes, pendentes] = await Promise.allSettled([
         asaasGet('/finance/balance'),
-        asaasGet(`/finance/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
+        asaasGet(`/payments?dateCreated[ge]=${inicioMes}&dateCreated[le]=${fimMes}&limit=100`),
+        asaasGet(`/payments?status=CONFIRMED&dateCreated[ge]=${inicioJanela90}&limit=100`),
       ]);
       if (balance.status === 'rejected') throw new Error(balance.reason?.message || 'Erro ao buscar saldo');
-      // 18/09: diagnóstico temporário — dono reportou "A receber" zerado mesmo com pagamento
-      // real recebido via Asaas nesta sessão. As chamadas voltam 200 (confirmado nos logs),
-      // então o problema é OU dado real zerado OU nome de campo errado — log da resposta crua
-      // decide qual. Remover depois de confirmado (ver HANDOFF).
-      console.log('[asaas financas] balance:', JSON.stringify(balance.value), 'statsMes:', JSON.stringify(statsMes.status === 'fulfilled' ? statsMes.value : statsMes.reason?.message));
+
+      const listaMes = doMes.status === 'fulfilled' ? (doMes.value?.data || []) : [];
+      const recebidosMes = listaMes.filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED');
+      const revenue = recebidosMes.reduce((s, p) => s + (Number(p.value) || 0), 0);
+      const fees = recebidosMes.reduce((s, p) => s + (p.netValue != null ? (Number(p.value) || 0) - Number(p.netValue) : 0), 0);
+
+      const listaPendente = pendentes.status === 'fulfilled' ? (pendentes.value?.data || []) : [];
+      const totalReceivable = listaPendente.reduce((s, p) => s + (Number(p.value) || 0), 0);
+
       return res.status(200).json({
-        balance: balance.value,
-        statsMes: statsMes.status === 'fulfilled' ? statsMes.value : null,
+        balance: { ...balance.value, totalReceivable },
+        statsMes: { revenue, fees },
       });
     }
 
@@ -566,18 +582,14 @@ export default async function handler(req, res) {
       const hoje = new Date();
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
-      const data = await asaasGet(`/payments?status=RECEIVED&paymentDate[ge]=${inicioMes}&paymentDate[le]=${fimMes}&limit=50`);
-      // 18/09: diagnóstico temporário — "A receber"/extrato vindo zerado mesmo com pagamento
-      // real via Asaas nesta sessão. Filtra por `paymentDate` (data de LIQUIDAÇÃO) + status
-      // RECEIVED — pagamento de CARTÃO fica em CONFIRMED até liberar (D+32) e pode não ter
-      // paymentDate preenchido ainda, o que o excluiria dos dois filtros ao mesmo tempo.
-      // Log sem filtro de status pra ver o estado real. Remover depois de confirmado.
-      try {
-        const semFiltro = await asaasGet(`/payments?dateCreated[ge]=${inicioMes}&dateCreated[le]=${fimMes}&limit=50`);
-        console.log('[asaas extrato] com filtro RECEIVED:', data?.totalCount, '| sem filtro (por dateCreated):', semFiltro?.totalCount,
-          'status encontrados:', JSON.stringify((semFiltro?.data || []).map(p => ({ id: p.id, status: p.status, value: p.value, paymentDate: p.paymentDate, dateCreated: p.dateCreated, billingType: p.billingType }))));
-      } catch (e) { console.log('[asaas extrato] diagnóstico sem filtro falhou:', e?.message); }
-      return res.status(200).json(data);
+      // 18/09, achado com dado real: pagamento de CARTÃO fica `CONFIRMED` até liberar (D+32) e
+      // `paymentDate` vem null até lá — filtrar só RECEIVED + paymentDate escondia qualquer
+      // cobrança de cartão ainda não liquidada (foi exatamente o caso do Marcos: 0 resultados
+      // com o filtro antigo, 1 com CONFIRMED via dateCreated). Filtra por `dateCreated` (quando
+      // a cobrança nasceu) e inclui os dois status que representam dinheiro cobrado de verdade.
+      const bruto = await asaasGet(`/payments?dateCreated[ge]=${inicioMes}&dateCreated[le]=${fimMes}&limit=100`);
+      const filtrada = (bruto?.data || []).filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED');
+      return res.status(200).json({ ...bruto, data: filtrada, totalCount: filtrada.length });
     }
 
     if (action === 'transferir_pix') {

@@ -295,11 +295,15 @@ export function FinanceiroCaixa() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{p.description || p.customer?.name || '—'}</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('pt-BR') : ''}
+                      {/* 18/09: cartão fica CONFIRMED até liberar (D+32) e paymentDate vem null
+                          até lá — cai pra dateCreated (quando a cobrança nasceu) pra não mostrar
+                          data em branco num pagamento que já foi cobrado, só não liquidado. */}
+                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('pt-BR') : p.dateCreated ? new Date(p.dateCreated).toLocaleDateString('pt-BR') : ''}
                       {p.billingType ? ` · ${p.billingType}` : ''}
+                      {p.status === 'CONFIRMED' && ' · aguardando liberação'}
                     </div>
                   </div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#10b981' }}>R$ {fmt(p.value)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: p.status === 'CONFIRMED' ? '#0D63DB' : '#10b981' }}>R$ {fmt(p.value)}</div>
                 </div>
               ))}
               {totalPag > 1 && (
