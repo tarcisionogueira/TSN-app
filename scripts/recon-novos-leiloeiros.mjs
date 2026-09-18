@@ -62,6 +62,9 @@ const SITES = {
   LEILAOBRASIL: { base: 'https://leilaobrasil.com.br', paths: PATHS_PADRAO },
   GALERIAPEREIRA: { base: 'https://galeriapereira.com.br', paths: PATHS_PADRAO },
   GESTORNACIONAL: { base: 'https://www.gestornacional.com.br', paths: PATHS_PADRAO },
+  // Pendência de 18/09: `www.gestornacional.com.br` deu ERR_NAME_NOT_RESOLVED em todos os
+  // paths — testar sem o "www." antes de descartar o domínio como candidato.
+  GESTORNACIONAL_SEMWWW: { base: 'https://gestornacional.com.br', paths: PATHS_PADRAO },
   SAULOJULIOLEILOEIRO: { base: 'https://saulojulioleiloeiro.com.br', paths: PATHS_PADRAO },
   KRONBERGLEILOES: { base: 'https://kronbergleiloes.com.br', paths: PATHS_PADRAO },
   NAKAKOGUELEILOES: { base: 'https://www.nakakogueleiloes.com.br', paths: PATHS_PADRAO },
