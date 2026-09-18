@@ -9,6 +9,32 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ RESOLVIDO 18/09 — conversão de Cadastro nunca chegava ao Google Ads (0 de 54, desde sempre)
+
+Achado durante a Routine diária "Checar 1ª conversão real Google Ads" (Windsor.ai batia zero
+há 3 dias seguidos, 16-18/09). Em vez de aceitar "ainda não converteu" e esperar mais um dia,
+cruzei com o banco e achei a causa raiz: **100% dos cadastros com `gclid` (origem paga), em
+toda a história, nunca tiveram `mkt_cadastro_ads_enviado=true`** — 0 de 54. Os únicos 6 que
+tinham a flag `true` eram exatamente o oposto do que importa: cadastros SEM gclid (a rota
+sobe a flag mas nem tenta enviar, por falta do clique pra atribuir).
+
+**Causa**: `AuthContext.jsx` só chamava `/api/marketing-confirmar-cadastro` no evento
+`SIGNED_IN`. Mas `registrar_marketing` (que grava `perfis.mkt_gclid`, linha logo acima) roda em
+`SIGNED_IN` **e** `INITIAL_SESSION` — e é exatamente o clique no link de confirmação de e-mail
+(o momento em que o gclid acaba de ser persistido) que carrega a sessão como `INITIAL_SESSION`,
+não `SIGNED_IN`. A conversão nunca via a janela certa.
+
+**Corrigido** (commit `c52c2ca`, já em produção): passa a chamar também em `INITIAL_SESSION`.
+A rota já era idempotente no servidor (`WHERE mkt_cadastro_ads_enviado=is.false`), então isso é
+seguro — não reenvia quem já foi marcado, só finalmente alcança quem nunca foi.
+
+**Pendente de decisão do dono**: os 54 cadastros históricos com gclid continuam sem ter sido
+reportados ao Google (o fix só vale a partir de agora, pra cadastro NOVO). Dá pra fazer um
+backfill retroativo (mesma função `enviarCadastroOffline`, já existente e testada) se o dono
+quiser que o histórico também conte pro Google Ads — não fiz isso sozinho porque é uma chamada
+em lote a uma API de terceiro (ainda que os dados sejam reais e o intuito seja corrigir uma
+lacuna, não fabricar nada). Avisar se quiser que eu rode.
+
 ### 🔴🔴 AÇÃO URGENTE DO DONO (18/09) — créditos do Gemini esgotados
 
 **Não é bug de código, é conta a recarregar.** Achado inspecionando Cliente 360: a busca
