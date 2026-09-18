@@ -379,25 +379,57 @@ export function FinanceiroCaixa() {
           </button>
         </div>
 
-        {/* Antecipar recebível (18/09) — ver comentário no state acima: rota real, resposta
-            não validada. Fluxo em duas etapas pra primeira chamada real ser conferida antes
-            de confirmar qualquer coisa que mexa em dinheiro de verdade. */}
+        {/* Antecipar recebível (18/09, ajustado 18/09 — pedido do dono: "não seria simular com
+            base nos valores disponíveis?"). Rota real, resposta não validada. Fluxo em duas
+            etapas pra primeira chamada real ser conferida antes de confirmar dinheiro de
+            verdade. O Asaas simula/antecipa um PAGAMENTO específico (não um valor agregado —
+            é assim que a API real funciona), mas isso não precisa virar trabalho manual: os
+            candidatos são exatamente os `CONFIRMED` do extrato (cobrado, aguardando D+32) —
+            o select já mostra valor+cliente+data em vez de pedir o ID de cabeça. */}
         <div style={{ background: '#ffffff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', padding: '24px', gridColumn: '1 / -1' }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: '#111111', marginBottom: 6 }}>Antecipar recebível</div>
           <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16, lineHeight: 1.5 }}>
-            Libera o valor de um pagamento antes do prazo padrão (D+32 no Asaas), mediante taxa. Cole o ID do pagamento
-            (visível no extrato ou no painel do Asaas) e simule antes de confirmar.
+            Libera o valor de um pagamento antes do prazo padrão (D+32 no Asaas), mediante taxa. Escolha um dos valores
+            aguardando liberação e simule antes de confirmar.
           </p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            <input value={antecipId} onChange={e => { setAntecipId(e.target.value); setAntecipSim(null); setAntecipResult(null); }}
-              placeholder="ID do pagamento (ex: pay_xxxxxxxx)"
-              style={{ flex: '1 1 260px', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, color: '#111111' }} />
-            <button onClick={simularAntecipacao} disabled={!antecipId.trim() || antecipLoading}
-              style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #0D63DB', background: '#fff', color: '#0D63DB',
-                cursor: !antecipId.trim() ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
-              {antecipLoading && !antecipSim ? 'Simulando…' : 'Simular'}
-            </button>
-          </div>
+          {(() => {
+            const pendentes = extrato.filter(p => p.status === 'CONFIRMED');
+            const modoManual = antecipId === '__manual__';
+            return (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                {!modoManual ? (
+                  <select value={antecipId} onChange={e => { setAntecipId(e.target.value); setAntecipSim(null); setAntecipResult(null); }}
+                    style={{ flex: '1 1 320px', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, color: '#111111' }}>
+                    <option value="">
+                      {pendentes.length ? 'Selecione um valor aguardando liberação…' : loadingExt ? 'Carregando…' : 'Nenhum valor aguardando liberação este mês'}
+                    </option>
+                    {pendentes.map(p => (
+                      <option key={p.id} value={p.id}>
+                        R$ {fmt(p.value)} — {p.description || p.customer?.name || p.id} · {p.dateCreated ? new Date(p.dateCreated).toLocaleDateString('pt-BR') : ''}
+                      </option>
+                    ))}
+                    <option value="__manual__">Outro — digitar o ID manualmente…</option>
+                  </select>
+                ) : (
+                  <input value={antecipId === '__manual__' ? '' : antecipId}
+                    onChange={e => { setAntecipId(e.target.value); setAntecipSim(null); setAntecipResult(null); }}
+                    placeholder="ID do pagamento (ex: pay_xxxxxxxx)" autoFocus
+                    style={{ flex: '1 1 260px', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, color: '#111111' }} />
+                )}
+                {modoManual && (
+                  <button onClick={() => { setAntecipId(''); setAntecipSim(null); setAntecipResult(null); }}
+                    style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: 13 }}>
+                    ← Voltar à lista
+                  </button>
+                )}
+                <button onClick={simularAntecipacao} disabled={!antecipId.trim() || antecipId === '__manual__' || antecipLoading}
+                  style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #0D63DB', background: '#fff', color: '#0D63DB',
+                    cursor: (!antecipId.trim() || antecipId === '__manual__') ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  {antecipLoading && !antecipSim ? 'Simulando…' : 'Simular'}
+                </button>
+              </div>
+            );
+          })()}
 
           {antecipSim && (
             <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 8, background: '#f8fafc', fontSize: 12.5, color: '#334155' }}>

@@ -22,6 +22,7 @@
       "mcp__github__get_job_logs",
       "mcp__github__actions_get",
       "mcp__Supabase__list_projects",
+      "mcp__Supabase__execute_sql",
       "Bash(npm run verificar:padroes*)",
       "Bash(npm run verificar:sintaxe*)",
       "Bash(npm run build*)",
