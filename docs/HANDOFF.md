@@ -29025,3 +29025,114 @@ onde fica e a condição que precisa estar satisfeita.
 
 **Validação**: `npm run build` (que roda `verificar:padroes`/`verificar:sintaxe`/`verificar:csp`)
 limpo em todos os commits desta parte.
+
+## 18/09 (2ª parte) — fechamento do recon dos 17 domínios, auditoria do fallback MP→Asaas em
+TODOS os fluxos de pagamento, e endereço completo virou exigência (dados de NF)
+
+**1. Recon dos 17 domínios pequenos — concluído com 13 classificados, 4 sem dado (bug do
+script) e 1 site que trava a fila.** O `scripts/recon-novos-leiloeiros.mjs` **não tem timeout
+por request** — descoberto ao vivo: o lote com `SAULOJULIOLEILOEIRO` travou a fila inteira (nada
+sai no log por 38min até o timeout do job cancelar) logo depois de `GESTORNACIONAL` (que falha
+rápido, DNS nem resolve). Um segundo lote isolado (`KRONBERGLEILOES,NAKAKOGUELEILOES,
+NETEDITAIS,MONZONLEILOES`) travou de novo do mesmo jeito — um desses 4 também trava, não
+identificado qual. **Ação pendente**: adicionar timeout por fetch/página no script antes de
+tentar de novo (sem isso, qualquer site lento/protegido pode travar a fila toda).
+
+Classificação dos 13 confirmados:
+- **Bloqueados por Cloudflare (403 "Just a moment...", sem alternativa)**: LEGISLEILOES,
+  VIVALEILOES, AGSLEILOES.
+- **Tenants confirmados da plataforma Superbid** (mesmo padrão de LJUD/SUPERBID, com API JSON
+  própria — `event-query.superbid.net`/`offer-query.superbid.net`, melhor caminho é a API, não
+  HTML): **SUPERBIDJUDICIAL** ("Canal Judicial", 29.190 eventos no submarketplace Judicial) e
+  **JMFLEILOES** (`hostName: "JMF Leilões"`, `portal_id=2`, `store_id=16060`).
+  - Já existe scraper genérico pra plataforma Superbid no código (o mesmo que atende MEGA,
+    SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI, PESTANA — achado na 8ª parte de 17/09); integrar
+    estes dois é registrar a fonte, não escrever parser novo.
+- **HTML viável (conteúdo real, sem API dedicada)**: LEILAOBRASIL (`/`), GALERIAPEREIRA
+  (`/lotes/imoveis`), RAFAELLEILOEIRO (`/` e `/busca?categoria=imoveis`, alguns lotes
+  redirecionam pro portal federal `comprei.pgfn.gov.br`), **ELEILOEIRO** (⚠️ domínio testado
+  redireciona — o real é `www.e-leiloes.com.br`, path `/leilao/imoveis`).
+- **SPA com API JSON própria (melhor que parsear HTML)**: **LEILOESJUDICIAISMG** — Nuxt, mas
+  `api.leiloesjudiciais.com.br/core/api/*` devolve contagens/filtros reais.
+- **CMS white-label com API própria**: **ACTLEILOES** — roda em "Sua Plataforma de Leilão"
+  (SaaS de terceiro pra leiloeiro), API `/ApiEngine/GetLotesSuperDestaque` etc. com dados reais
+  de lote (endereço, avaliação).
+- **Domínio não resolve**: GESTORNACIONAL (`www.gestornacional.com.br` — `ERR_NAME_NOT_RESOLVED`
+  em todos os paths; testar sem o `www.` antes de descartar).
+- **Sem dado (script travou antes de chegar)**: KRONBERGLEILOES, NAKAKOGUELEILOES, NETEDITAIS,
+  MONZONLEILOES, SAULOJULIOLEILOEIRO.
+
+**2. Auditoria completa do fallback MP→Asaas em TODOS os fluxos de pagamento (pedido do dono:
+"confirme que para qualquer pagamento... tenta MP primeiro e em erro tenta Asaas, como foi o
+caso do Marcos").** Resposta honesta, por fluxo (levantamento linha a linha, não estimativa):
+
+| Fluxo | Tenta MP primeiro | Cai pro Asaas numa recusa REAL |
+|---|---|---|
+| Checkout.jsx — top2 anual / clube / troca de plano (link hospedado MP) | Sim | **Sim, automático** |
+| Checkout.jsx — top2 mensal / assessorado (cartão embutido) | Sim | **NÃO** — só cobre SDK bloqueado/erro de rede, não recusa de cartão de verdade |
+| Checkout.jsx — cadastro+pagamento na hora (visitante) | Sim | Só SDK bloqueado, não recusa real |
+| PagamentoServico.jsx (honorário de êxito / cobrança avulsa) — **é o caso do Marcos** | Sim | **Sim, confirmado funcionando** (é o que foi corrigido nesta sessão) |
+| ProdutoPublico.jsx — compra avulsa (link hospedado) | Sim | **Sim, automático** |
+| ProdutoPublico.jsx — cartão embutido (bônus) | Sim | **NÃO** |
+| Festa.jsx (evento à parte, Padaria Mascote) | Sim (único gateway) | Não existe — nunca teve Asaas |
+
+**Causa raiz dos dois "NÃO" em Checkout.jsx/ProdutoPublico.jsx**: o componente
+`PagamentoServico.jsx` já sabe fazer o fallback (é o mesmo mecanismo do Marcos), mas só liga
+quando quem o chama passa `extra.arrematacao_id` ou `extra.cobranca_id` — e nem Checkout.jsx
+nem o cartão de bônus do ProdutoPublico.jsx passam isso. **Não mexido hoje**: o mecanismo de
+fallback do Marcos foi desenhado pra cobrança AVULSA (calcula saldo de uma `arrematacao`/
+`cobranca_avulsa` específica); assinatura RECORRENTE (mensalidade) não tem esse conceito de
+saldo — precisaria de uma ação nova no Asaas (`criar_assinatura` via fallback, não
+`criar_cobranca_fallback`) e testar contra cobrança de verdade. Mexer em checkout de assinatura
+recorrente ao vivo no fim de uma sessão longa é risco que não vale a pressa — fica documentado
+como a pendência #1 da próxima sessão.
+
+**3. Pagamento agora exige endereço completo + atualiza o cadastro (pedido do dono: dados
+completos pra emissão de NF, guardados pra não redigitar em cobrança futura).** Aplicado no
+fallback Asaas (o único ponto que fazia sentido mexer com segurança hoje — é código desta
+própria sessão, já validado com o pagamento real do Marcos):
+- `api/asaas.js` (`criar_cobranca_fallback`) agora **exige** CEP/logradouro/número/bairro/
+  cidade/UF além do CPF (mesma checagem `enderecoOk` que `Checkout.jsx` já usa) — sem isso,
+  devolve 400 `endereco_necessario` antes de gerar a cobrança.
+- Depois de gerar a cobrança, **atualiza `perfis`** com o endereço e o CPF (cifrado/hash, nunca
+  texto claro — mesmo padrão de `/api/cpf-set`, a chave só existe no backend): usa
+  `arrematante_id` já conhecido no fluxo de honorário; cobrança avulsa não tem esse vínculo na
+  tabela (é só e-mail), então busca a conta pelo e-mail via admin API do GoTrue, best-effort —
+  se não achar conta, a cobrança segue normal e só não há cadastro pra atualizar.
+- CPF agora também passa por `validarCPF` (dígito verificador), não só comprimento.
+- `src/components/PagamentoServico.jsx`: formulário do fallback ganhou os campos de endereço
+  completo com autopreenchimento por CEP (ViaCEP, mesmo padrão do Checkout.jsx), exigidos antes
+  de liberar o botão "Continuar pelo Asaas".
+- **Não coberto ainda**: Checkout.jsx (assinatura) e ProdutoPublico.jsx já fazem isso desde
+  antes (`salvarDadosFaturamento`/campos próprios) — não precisavam de mudança. Quem SEGUE sem
+  qualquer coleta de endereço/CPF: honorário/cobrança avulsa quando pagos direto pelo MP (só
+  ganham o formulário completo quando CAI no fallback Asaas) e toda a compra de produto
+  avulso. Se algum dia a NFS-e for ligada pra esses fluxos (hoje é um gancho desativado, só
+  dispara pra assinatura de plano — `api/_webhook-core.js:605`), vai faltar dado.
+
+**4. "A receber" zerado no Asaas — segue sem confirmação.** Log de diagnóstico deployado, mas
+o dono ainda não recarregou a aba até o fechamento desta sessão (`/api/asaas` sem nenhuma
+chamada nos últimos 40min de runtime logs). Log fica no ar pra próxima sessão — remover depois
+de ler.
+
+**Pendências para a próxima sessão (substituindo a lista da 1ª parte de hoje, já revisada):**
+1. **Fallback Asaas em assinatura recorrente** (Checkout.jsx cartão embutido, ProdutoPublico.jsx
+   bônus) — recusa REAL de cartão ainda é beco sem saída nesses dois. Precisa de uma ação nova
+   no Asaas pra assinatura (não é `criar_cobranca_fallback`, que é pra cobrança avulsa).
+2. **"A receber" zerado no Asaas** — aguardando o dono recarregar a aba pra eu ler o log
+   (hipótese já registrada: pagamento de cartão fica `CONFIRMED`, não `RECEIVED`, até liberar).
+3. **Antecipação de recebível Asaas** — aguardando o dono rodar "Simular" uma vez pra validar o
+   formato da resposta.
+4. **Script de recon sem timeout por request** — trava a fila inteira quando um site é lento/
+   protegido (achado hoje, 2 lotes travados). Adicionar timeout antes do próximo recon.
+5. **4 domínios do radar de editais sem dado** (KRONBERGLEILOES, NAKAKOGUELEILOES, NETEDITAIS,
+   MONZONLEILOES) + **SAULOJULIOLEILOEIRO** (trava o script) — re-rodar depois do item 4.
+6. **GESTORNACIONAL** — testar sem o `www.` antes de descartar (DNS não resolveu com `www.`).
+7. Itens já pendentes de sessões anteriores, sem mudança: **HASTA zerada** (ação do dono, rodar
+   `recon-hasta-zerou.mjs` de casa), **galeria de fotos do LJUD** (API bloqueia IP do GitHub
+   Actions), **`pino_generico_como_rua`** (26, ainda 1 acima do limite — casos de abreviação),
+   **"leilão ao vivo" redirecionando** (nunca confirmado, falta o link do dono).
+
+**Validação**: `npm run build` limpo em todos os commits. Fallback Asaas com endereço não foi
+testado contra um pagamento real ainda (só o build/lint) — primeira cobrança real depois deste
+deploy vale conferir.
