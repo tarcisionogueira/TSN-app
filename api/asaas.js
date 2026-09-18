@@ -637,6 +637,25 @@ export default async function handler(req, res) {
       const { paymentId } = body;
       if (!paymentId) return res.status(400).json({ error: 'paymentId obrigatório (id do pagamento/recebível no Asaas)' });
       const data = await asaasPost('/anticipations', { payment: paymentId });
+      // LOG DE ATIVIDADE (Cliente 360) — best-effort. Só alguns pagamentos têm vínculo local
+      // com um usuário (honorário de êxito, via arrematacoes.arrematante_id); um link gerado
+      // manualmente fora do fluxo do app (ver HANDOFF, achado do pagamento do Marcos) não tem
+      // esse vínculo e o log simplesmente não acontece — silencioso, não é um erro.
+      try {
+        const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const KEY = process.env.SUPABASE_SERVICE_KEY;
+        const r = await fetch(`${SB}/rest/v1/honorarios_recebimentos?gateway_payment_id=eq.${encodeURIComponent(paymentId)}&select=arrematacao_id&limit=1`, {
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+        });
+        const [rec] = r.ok ? await r.json() : [];
+        if (rec?.arrematacao_id) {
+          const r2 = await fetch(`${SB}/rest/v1/arrematacoes?id=eq.${rec.arrematacao_id}&select=arrematante_id`, {
+            headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+          });
+          const [arr] = r2.ok ? await r2.json() : [];
+          if (arr?.arrematante_id) await logAtividade(arr.arrematante_id, 'antecipacao_solicitada', `R$ ${data?.netValue ?? ''} líquido`, { paymentId, bruto: data?.value, taxa: data?.fee });
+        }
+      } catch { /* log é best-effort */ }
       return res.status(200).json(data);
     }
 
@@ -644,6 +663,13 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Asaas error:', err.message);
     alertarErro({ rota: '/api/asaas', erro: err.message, extra: { action } });
-    return res.status(500).json({ error: 'Erro interno no processamento' });
+    // O motivo real (ex.: `errors[].description` do Asaas, já extraído por asaasGet/asaasPost)
+    // ia só pro Sentry — que está DORMENTE até SENTRY_DSN existir (docs/ENVS_VERCEL.md, ainda
+    // pendente) — e pro e-mail de alerta. O admin ficava só com "Erro interno no processamento",
+    // sem NENHUMA pista, justamente nas ações (simular/solicitar antecipação) que o próprio
+    // comentário pediu pra "conferir a resposta manualmente" antes de confiar. Toda ação aqui já
+    // passou pelo gate de admin/dono-do-recurso lá em cima — o texto vem do Asaas, não é stack
+    // trace nem segredo interno, então é seguro devolver pro admin.
+    return res.status(500).json({ error: err.message || 'Erro interno no processamento' });
   }
 }
