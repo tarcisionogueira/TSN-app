@@ -33,7 +33,7 @@ async function curlCru(url) {
   const { username, password } = proxyIspCredenciais();
   try {
     const { stdout } = await execFileP('curl', [
-      '-sS', '-m', '25', '--proxy', proxyIspServidor(), '--proxy-user', `${username}:${password}`,
+      '-sS', '-L', '-m', '25', '--proxy', proxyIspServidor(), '--proxy-user', `${username}:${password}`,
       '-A', UA, '-o', '-', '-w', '\n__STATUS__%{http_code}', url,
     ]);
     const idx = stdout.lastIndexOf('__STATUS__');
@@ -57,42 +57,56 @@ const browser = await puppeteer.launch({
   headless: true,
   args: ['--no-sandbox', '--disable-setuid-sandbox', `--proxy-server=${proxyIspServidor()}`],
 });
-const page = await browser.newPage();
-await page.authenticate(proxyIspCredenciais());
-await page.setUserAgent(UA);
 
 const jsonVistos = [];
-page.on('response', async (res) => {
-  try {
-    const ct = res.headers()['content-type'] || '';
-    if (!/json/i.test(ct)) return;
-    const url = res.url();
-    const txt = await res.text().catch(() => '');
-    jsonVistos.push({ url, tamanho: txt.length, amostra: txt.slice(0, 300) });
-    console.log(`  [API] ${url.slice(0, 140)} (${txt.length}b)`);
-  } catch { /* espião nunca derruba a navegação */ }
-});
 
-async function ir(url, esperaMs = 3500) {
-  console.log(`\n→ navegando ${url}`);
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }).catch(e => console.log(`   falha: ${e.message.slice(0, 120)}`));
+/**
+ * Cada leilão em um BrowserContext (incógnito) NOVO — mesmo remédio do `isolarSessao` em
+ * fetch-dom.mjs (JELEILOES, 07/09): descarta a hipótese de a 1ª navegação "gastar" a sessão e
+ * a 2ª+ vir vazia/bloqueada por fingerprint, não por o leilão realmente estar sem lotes.
+ */
+async function irIsolado(url, esperaMs = 3500) {
+  const contexto = await browser.createBrowserContext();
+  const page = await contexto.newPage();
+  await page.authenticate(proxyIspCredenciais());
+  await page.setUserAgent(UA);
+  page.on('response', async (res) => {
+    try {
+      const ct = res.headers()['content-type'] || '';
+      if (!/json/i.test(ct)) return;
+      const u = res.url();
+      const txt = await res.text().catch(() => '');
+      jsonVistos.push({ url: u, tamanho: txt.length });
+      console.log(`    [API] ${u.slice(0, 140)} (${txt.length}b)`);
+    } catch { /* espião nunca derruba a navegação */ }
+  });
+  console.log(`  → navegando (sessão nova) ${url}`);
+  let falhou = null;
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }).catch(e => { falhou = e.message.slice(0, 120); });
+  if (falhou) console.log(`    falha: ${falhou}`);
   await new Promise(r => setTimeout(r, esperaMs));
-  return page.content();
+  const html = await page.content();
+  await contexto.close();
+  return html;
 }
 
-const homeHtml = await ir(BASE + '/leiloes');
+const homeHtml = await irIsolado(BASE + '/leiloes');
 const leilaoIds = [...new Set([...homeHtml.matchAll(/\/leilao\/(\d+)\/lotes/gi)].map(m => m[1]))];
-console.log(`\nleilões achados no /leiloes renderizado: ${leilaoIds.length} — amostra: ${JSON.stringify(leilaoIds.slice(0, 5))}`);
+console.log(`\nleilões achados no /leiloes renderizado: ${leilaoIds.length} — amostra: ${JSON.stringify(leilaoIds.slice(0, 9))}`);
 
-if (leilaoIds[0]) {
-  const lotesHtml = await ir(`${BASE}/leilao/${leilaoIds[0]}/lotes`);
+const AMOSTRA = leilaoIds.slice(0, 3);
+console.log(`\nTestando ${AMOSTRA.length} leilão(ões) em sessões ISOLADAS: ${JSON.stringify(AMOSTRA)}`);
+
+for (const id of AMOSTRA) {
+  console.log(`\n════ leilão ${id} ════`);
+  const lotesHtml = await irIsolado(`${BASE}/leilao/${id}/lotes`);
   const itemIds = [...new Set([...lotesHtml.matchAll(/\/item\/(\d+)\/detalhes/gi)].map(m => m[1]))];
-  console.log(`itens achados em /leilao/${leilaoIds[0]}/lotes: ${itemIds.length} — amostra: ${JSON.stringify(itemIds.slice(0, 5))}`);
+  console.log(`  itens em /leilao/${id}/lotes: ${itemIds.length} (HTML ${lotesHtml.length} bytes) — amostra: ${JSON.stringify(itemIds.slice(0, 5))}`);
 
   if (itemIds[0]) {
-    const detalheHtml = await ir(`${BASE}/item/${itemIds[0]}/detalhes`);
+    const detalheHtml = await irIsolado(`${BASE}/item/${itemIds[0]}/detalhes`);
     const temRS = (detalheHtml.match(/R\$\s?[\d.]+,\d{2}/g) || []).slice(0, 6);
-    console.log(`detalhe /item/${itemIds[0]}/detalhes: ${detalheHtml.length} bytes, R$ encontrados: ${JSON.stringify(temRS)}`);
+    console.log(`  detalhe /item/${itemIds[0]}/detalhes: ${detalheHtml.length} bytes, R$ encontrados: ${JSON.stringify(temRS)}`);
   }
 }
 
