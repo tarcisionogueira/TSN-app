@@ -1,7 +1,7 @@
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
-import { cpfDoRegistro } from './_cpf.js';
+import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF } from './_cpf.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
@@ -165,8 +165,13 @@ export default async function handler(req, res) {
     // honorarios_recebimentos/cobrancas_avulsas automaticamente (mesma lógica de
     // api/mp-webhook.js), sem depender de alguém dar baixa manual.
     if (action === 'criar_cobranca_fallback') {
-      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody } = body;
+      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody, endereco } = body;
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
+      // 18/09, pedido do dono: pagamento exige endereço completo (dados pra emissão de NF),
+      // não só CPF. Mesma checagem de completude do Checkout.jsx (enderecoOk).
+      const end = endereco || {};
+      const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
+      if (!enderecoOk) return res.status(400).json({ error: 'endereco_necessario', mensagem: 'Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) para gerar a cobrança.' });
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
       let saldo, descricao, externalReference, arrematanteId = null;
 
@@ -215,7 +220,46 @@ export default async function handler(req, res) {
       // conseguiria cobrar dele (achado real, 17/09).
       const cpfCadastro = arrematanteId ? await cpfAutenticado(arrematanteId, null) : null;
       const cpf = cpfCadastro || String(cpfBody || '').replace(/\D/g, '');
-      if (!cpf || cpf.length !== 11) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF válido — o Asaas exige pra gerar a cobrança.' });
+      if (!cpf || !validarCPF(cpf)) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF válido — o Asaas exige pra gerar a cobrança.' });
+
+      // 18/09, pedido do dono: quem paga tem o cadastro atualizado com o que digitou aqui,
+      // pra não precisar redigitar em cobranças futuras. `honorario_exito` já sabe o
+      // arrematante_id; `cobranca_avulsa` não tem esse vínculo na tabela (é uma cobrança
+      // por e-mail, pode nem ter conta) — tenta achar a conta pelo e-mail, best-effort.
+      let perfilAlvoId = arrematanteId;
+      if (!perfilAlvoId) {
+        try {
+          const adminRes = await fetch(`${SB}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
+            headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(8000),
+          });
+          if (adminRes.ok) {
+            const adminData = await adminRes.json().catch(() => null);
+            perfilAlvoId = adminData?.users?.[0]?.id || null;
+          }
+        } catch { /* padrao-ok: best-effort — sem conta encontrada, só não atualiza cadastro; a cobrança segue */ }
+      }
+      if (perfilAlvoId) {
+        try {
+          const enderecoFmt = [
+            [end.logradouro, end.numero].filter(Boolean).join(', '),
+            end.complemento, end.bairro,
+            [end.cidade, end.uf].filter(Boolean).join(' - '),
+            end.cep ? `CEP ${end.cep}` : '',
+          ].filter(Boolean).join(' · ');
+          const [cpf_hash, cpf_enc] = cpfCriptoAtivo() ? await Promise.all([hashCpf(cpf), encryptCpf(cpf)]) : [null, null];
+          const patchRes = await fetch(`${SB}/rest/v1/perfis?id=eq.${encodeURIComponent(perfilAlvoId)}`, {
+            method: 'PATCH',
+            headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              endereco: enderecoFmt || null, endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
+              endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
+              endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
+              ...(cpfCadastro ? {} : { cpf: null, cpf_hash, cpf_enc }), // não sobrescreve CPF já cadastrado antes (cpfCadastro veio de lá)
+            }),
+          });
+          if (!patchRes.ok) console.error('[asaas fallback] atualizar cadastro falhou:', patchRes.status, await patchRes.text().catch(() => ''));
+        } catch (e) { console.error('[asaas fallback] atualizar cadastro:', e?.message || e); } // padrao-ok: best-effort — não pode travar a cobrança por falha de atualização de cadastro
+      }
 
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);

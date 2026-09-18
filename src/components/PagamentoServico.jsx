@@ -369,12 +369,31 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const propositoFallback = extra.arrematacao_id ? 'honorario_exito' : extra.cobranca_id ? 'cobranca_avulsa' : null;
   const [mostrarAsaas, setMostrarAsaas] = useState(false);
   const [cpfAsaas, setCpfAsaas] = useState('');
+  // Endereço completo — exigido pelo Asaas pra emissão de NF (18/09, pedido do dono). Mesmos
+  // campos/formato de src/pages/Checkout.jsx (salvarDadosFaturamento), pra cair no mesmo
+  // padrão de perfis.endereco_* quando o backend atualiza o cadastro.
+  const [endAsaas, setEndAsaas] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
+  const [cepLoadingAsaas, setCepLoadingAsaas] = useState(false);
   const [enviandoAsaas, setEnviandoAsaas] = useState(false);
   const [linkAsaasGerado, setLinkAsaasGerado] = useState(false);
+
+  const buscarCepAsaas = async (cepRaw) => {
+    const cep = (cepRaw || '').replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setCepLoadingAsaas(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json(); // padrao-ok: ViaCEP sempre responde 200 (mesmo p/ CEP inexistente, com {erro:true}) — só preenchimento automático, campos seguem editáveis manualmente
+      if (!j.erro) setEndAsaas(p => ({ ...p, cep, logradouro: j.logradouro || p.logradouro, bairro: j.bairro || p.bairro, cidade: j.localidade || p.cidade, uf: j.uf || p.uf }));
+    } catch (e) { console.error('[PagamentoServico] busca CEP:', e?.message || e); } // padrao-ok: CEP offline, cliente preenche manualmente — não bloqueia o fluxo
+    setCepLoadingAsaas(false);
+  };
+  const enderecoAsaasOk = !!(endAsaas.cep && endAsaas.logradouro && endAsaas.numero && endAsaas.bairro && endAsaas.cidade && endAsaas.uf);
 
   const pagarViaAsaas = async () => {
     const cpfLimpo = cpfAsaas.replace(/\D/g, '');
     if (cpfLimpo.length !== 11) { setErro('Informe um CPF válido para continuar pelo Asaas.'); return; }
+    if (!enderecoAsaasOk) { setErro('Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) — necessário para emissão de nota fiscal.'); return; }
     setEnviandoAsaas(true);
     setErro('');
     try {
@@ -388,6 +407,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           nome: form.nome || email,
           email,
           cpf: cpfLimpo,
+          endereco: endAsaas,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -638,10 +658,31 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       {mostrarAsaas && !linkAsaasGerado && (
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 12.5, color: '#1e40af' }}>
-            O Mercado Pago não aprovou. Você pode tentar pelo <strong>Asaas</strong> (backup seguro) — só precisamos do seu CPF.
+            O Mercado Pago não aprovou. Você pode tentar pelo <strong>Asaas</strong> (backup seguro) — precisamos do CPF e do endereço completo (exigidos para gerar a cobrança e a nota fiscal). Fica salvo no seu cadastro, não precisa preencher de novo da próxima vez.
           </div>
           <input style={inp} placeholder="CPF (000.000.000-00)" value={cpfAsaas}
             onChange={e => setCpfAsaas(e.target.value.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2'))} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...inp, flex: 1 }} placeholder="CEP" value={endAsaas.cep}
+              onChange={e => { const cep = e.target.value.replace(/\D/g, '').slice(0, 8); setEndAsaas(p => ({ ...p, cep })); if (cep.length === 8) buscarCepAsaas(cep); }} />
+            {cepLoadingAsaas && <Loader2 size={15} style={{ animation: 'spin 1s linear infinite', alignSelf: 'center' }} />}
+          </div>
+          <input style={inp} placeholder="Logradouro (rua/av.)" value={endAsaas.logradouro}
+            onChange={e => setEndAsaas(p => ({ ...p, logradouro: e.target.value }))} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...inp, flex: 1 }} placeholder="Número" value={endAsaas.numero}
+              onChange={e => setEndAsaas(p => ({ ...p, numero: e.target.value }))} />
+            <input style={{ ...inp, flex: 2 }} placeholder="Complemento (opcional)" value={endAsaas.complemento}
+              onChange={e => setEndAsaas(p => ({ ...p, complemento: e.target.value }))} />
+          </div>
+          <input style={inp} placeholder="Bairro" value={endAsaas.bairro}
+            onChange={e => setEndAsaas(p => ({ ...p, bairro: e.target.value }))} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...inp, flex: 2 }} placeholder="Cidade" value={endAsaas.cidade}
+              onChange={e => setEndAsaas(p => ({ ...p, cidade: e.target.value }))} />
+            <input style={{ ...inp, flex: 1 }} placeholder="UF" maxLength={2} value={endAsaas.uf}
+              onChange={e => setEndAsaas(p => ({ ...p, uf: e.target.value.toUpperCase() }))} />
+          </div>
           {btn('#0D63DB', enviandoAsaas ? 'Gerando...' : 'Continuar pelo Asaas →', pagarViaAsaas, enviandoAsaas,
             enviandoAsaas ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <ArrowRight size={15} />)}
         </div>
