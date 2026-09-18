@@ -313,9 +313,18 @@ export function AuthProvider({ children }) {
           } catch (e) { console.warn('[atribuicao] excecao:', e?.message || e); }
           // Conversão OFFLINE de Cadastro ao Google Ads — complementa o gtag do navegador
           // (trackCadastro), mesmo princípio do CAPI pro Meta. Idempotente no servidor
-          // (api/marketing-confirmar-cadastro.js); só no SIGNED_IN (login novo), mesmo gate
-          // do boas-vindas acima — não em toda reabertura (INITIAL_SESSION).
-          if (event === 'SIGNED_IN') {
+          // (api/marketing-confirmar-cadastro.js).
+          // 18/09: rodava só no SIGNED_IN — mas `registrar_marketing` (acima) roda em
+          // SIGNED_IN **e** INITIAL_SESSION, e é no clique do link de confirmação de e-mail
+          // (que carrega a sessão como INITIAL_SESSION, não SIGNED_IN) que o gclid acaba de
+          // ser persistido. Resultado real, banco em 18/09: **0 de 54 cadastros com gclid
+          // desde sempre** tinham `mkt_cadastro_ads_enviado=true` — a rota nunca disparava
+          // para quem tinha origem paga pra reportar, só para quem não tinha (e aí ela
+          // mesma pula o envio por falta de gclid). Zero conversão de Cadastro chegou ao
+          // Google Ads por este caminho, em nenhuma data. Rota já é idempotente no servidor
+          // (`mkt_cadastro_ads_enviado=is.false` no WHERE), então chamar também no
+          // INITIAL_SESSION é seguro — só reenviaria à toa quem já foi marcado.
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
             fetch('/api/marketing-confirmar-cadastro', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
           }
           // INDICAÇÃO DE CLIENTE — o mesmo tratamento que o convite de EQUIPE ganhou em 05/08
