@@ -29136,3 +29136,93 @@ de ler.
 **Validação**: `npm run build` limpo em todos os commits. Fallback Asaas com endereço não foi
 testado contra um pagamento real ainda (só o build/lint) — primeira cobrança real depois deste
 deploy vale conferir.
+
+## 18/09 (sessão seguinte) — ritual de abertura + fallback Asaas em assinatura/assessoria +
+"A receber"/antecipação corrigidos + fontes de acesso complexo saem do stale-purge + recon
+concluído (13/17 domínios classificados)
+
+Branch `claude/handoff-bidpro-brasil-inicial-xwdxxe` (ainda não mergeada em `main` — pedir
+revisão/merge antes de considerar isto em produção).
+
+**1. Ritual de abertura**: heartbeat registrado, 0 crítico em segurança/regras de negócio.
+JOAOEMILIO e SBID21 (fonte_regressao_suspeita) confirmados SADIOS de novo, ao vivo — mesmo
+veredito de 16/09 (leiloeiro pequeno com inventário genuinamente baixo no momento, não bug).
+`cadastro_barrado` (16/7d) eram os "{}" sem diagnóstico já corrigidos em 14/09, só ainda dentro
+da janela de 7 dias — sem ação.
+
+**2. Fallback Asaas — pendência #1 do HANDOFF, fechada em 2 dos 3 fluxos.** Recusa REAL de
+cartão (não só SDK bloqueado) em **Investidor Pro mensal** (preapproval transparente) e em
+**assessoria** (à vista/parcelado, cartão embutido) agora caem pro Asaas automaticamente —
+reusam `pagarAsaas`/`criar_assinatura`, já provados no caminho de SDK bloqueado. Seguro: o MP só
+tem mandato de verdade com `status=authorized`; nesse caso o fallback nunca dispara. **Não
+feito**: ProdutoPublico.jsx (bônus, cartão embutido) — exigiria ação nova no Asaas (compra
+avulsa de produto), sem como validar contra decline real nesta sessão.
+
+**3. "A receber"/"Recebido no mês" zerados — causa raiz confirmada com dado real** (dono
+recarregou a aba, log de diagnóstico da sessão anterior capturou: pagamento do Marcos, R$
+33.001,09, cartão, `CONFIRMED`). `/finance/balance` só devolve `{balance}` — **não existe**
+`totalReceivable` na resposta real do Asaas; `/finance/statistics` dá 404 (endpoint
+indisponível nesta conta). As três métricas agora vêm de `/payments` (já provado funcionando):
+"a receber" soma `CONFIRMED` numa janela de 90 dias, "recebido no mês"/"taxas" somam
+RECEIVED+CONFIRMED do mês corrente. Logs de diagnóstico removidos.
+
+**4. Antecipar recebível — UX corrigida.** Pedido do dono: "não seria simular com base nos
+valores disponíveis?" Trocado o campo de ID livre por um select com os `CONFIRMED` do extrato
+(valor+cliente+data), com opção de ID manual pra fora da lista.
+
+**5. Fontes de acesso complexo saem da varredura diária de staleness (pedido do dono).**
+ZUK/GRUPOLANCE/SBID9/VENDASGOV/SOLD (login-gated), TORRES3 (Cloudflare pago) e HASTA (só
+residencial) entram na mesma exceção que CEF/SUPORTE/atribuido_manual já tinham em
+`desativar_imoveis_leiloeiro_stale` (migração `stale_exclui_fontes_acesso_complexo.sql`,
+aplicada em produção). O gap real: a função usa margem FIXA de 36h pra decidir "sumiu do site",
+o que pressupõe recoleta ~diária — se a cadência dessas fontes for espaçada (proposta abaixo),
+a mesma função que devia proteger o acervo passaria a apagar lote ainda disponível. Ciclo de
+vida delas passa a depender só de `desativar_leiloes_encerrados()` (data_leilao vencida, roda de
+hora em hora, independe de recoleta).
+
+**Proposta de espaçamento (desenhada, NÃO implementada ainda — pendente confirmação do dono
+sobre os números antes de mexer em cron/workflow, é tradeoff de negócio: menos lotes novos por
+dia × menos exposição de login/custo):**
+- **Login-gated (ZUK/GRUPOLANCE/SBID9/VENDASGOV/SOLD)**: hoje rodam DIÁRIO (10h UTC,
+  `leiloeiros-puppeteer.yml`, junto com fontes simples no mesmo job). Proposta: separar essas 5
+  pra um job próprio a cada 3 dias (reduz ~65% a exposição de login), mantendo
+  `workflow_dispatch` manual disponível como hoje. Matrícula sob demanda (ZUK 4x/dia,
+  GRUPOLANCE 4x/dia) NÃO muda — já é sob demanda por lote, não por acervo.
+- **TORRES3**: hoje sem schedule fixo, só dispatch oportunista (~20h) com freio de frescor
+  COMPARTILHADO com CALIL/VEGAS (grátis) — `coleta-recente.mjs SOLEON 7`. Proposta: dar a
+  TORRES3 um freio PRÓPRIO de 14 dias (desacoplado dos tenants grátis), já que é o único do
+  cluster que paga Bright Data por tentativa.
+- **HASTA**: nada a mudar no schedule — já é 100% manual/residencial (excluída do cron de
+  datacenter desde 21/08, só roda quando o dono roda `runner-residencial.sh` de casa). O que
+  muda é só a exclusão do stale-purge (item 5 acima), que sem isso apagaria o acervo 36h depois
+  de CADA rodada residencial, não importa o quanto o dono espace.
+
+**6. Recon dos 17 domínios pequenos — concluído (13/17 classificados, 4 domínios mortos).**
+Achado real no meio do caminho: o watchdog de timeout do commit anterior não bastou — rodei de
+verdade e achei uma 2ª trava de 38min, em `page.close()` sem timeout nenhum (corrigido com
+envelope de 4min/site + timeout de 15s no close). Classificação final:
+- **SAULOJULIOLEILOEIRO**: SPA com API própria (`app/lotes`, `app/destakes`) — e é
+  MULTI-TENANT: o mesmo backend atende pelo menos damianileiloes/fbleiloes/mazzollileiloes/
+  dbsleiloes (achado em `assets/ga/data.json`), candidatos novos pro radar.
+- **KRONBERGLEILOES**: confirmado = KRONLEILOES (iframe da home aponta direto pra lá), já
+  conhecido como white-label Superbid (`stores.id:16180`) — não precisa de parser novo.
+- **NAKAKOGUELEILOES**: HTML viável, cards reais (38 no seletor `[class*="lote"]`), links de
+  lote (`/lotes/137562/`, paginação `/lotes/consulta/N`) e uma API de filtro por cidade/UF
+  (`cidades.php?ajax=true`). Candidato real a scraper.
+- **NETEDITAIS, MONZONLEILOES**: `ERR_NAME_NOT_RESOLVED` em todos os paths — domínio não
+  existe/não resolve. Descartar.
+- **GESTORNACIONAL**: testado também SEM `www.` (pendência de 18/09) — `ERR_NAME_NOT_RESOLVED`
+  nos dois casos. Confirmado morto, descartar.
+
+**Pendências para a próxima sessão:**
+1. Confirmar os números da proposta de espaçamento (item 5) antes de mexer em cron/workflow.
+2. ProdutoPublico.jsx (bônus) sem fallback Asaas — precisa de ação nova (compra avulsa).
+3. Integrar SAULOJULIOLEILOEIRO (+ os outros tenants do mesmo backend) e NAKAKOGUELEILOES —
+   escrever parser/registrar fonte.
+4. Fallback Asaas em assinatura recorrente segue não testado contra um decline REAL em
+   produção (só validado por leitura de código + build).
+5. Sem mudança: HASTA zerada (ação do dono), galeria de fotos LJUD, `pino_generico_como_rua`
+   (26), "leilão ao vivo" redirecionando (falta o link do dono).
+
+**Validação**: `npm run build` limpo em todos os commits desta sessão; migração aplicada em
+produção via MCP com `auditoria_seguranca()=0/0` depois.
