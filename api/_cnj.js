@@ -275,6 +275,12 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
     if (r._erro) erros.push(`${r._tribunal}: ${r._erro}`);
     for (const hit of (r.hits?.hits || [])) processos.push(formatarProcesso(hit, r._tribunal));
   }
+  // 18/09 — antes o motivo real (timeout? HTTP 5xx? rate limit?) morria aqui: `erros` virava
+  // `parecer.motivo='consulta_falhou'` no relatório, mas o TEXTO do erro nunca aparecia em
+  // lugar nenhum (nem log, nem banco) — impossível diferenciar DataJud fora do ar de bug
+  // nosso na próxima ocorrência. Log simples resolve pro Vercel; `erros` no retorno já viaja
+  // pro chamador persistir se quiser (gerar-documental.js agora grava em result.cnj.erros).
+  if (erros.length) console.error(`[cnj] falha em ${erros.length}/${tribunais.length} tribunal(is):`, erros.join(' | '));
   const unique = processos.filter((p, i, arr) => arr.findIndex(x => x.numero === p.numero) === i);
   unique.sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? b.score_risco - a.score_risco : a.tem_bloqueante ? -1 : 1));
   return { processos: unique, total: unique.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined, parecer: gerarParecerRisco(unique, { erros, tribunais, numeroProcesso: numero_processo, modalidade }) };
