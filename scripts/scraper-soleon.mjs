@@ -97,6 +97,14 @@ const TENANTS = filtro.length ? POOL.filter(t => filtro.includes(t.fonte)) : POO
 
 const MAX_LOTES = Number(process.env.SOLEON_MAX_LOTES || 40);
 const MAX_PAGES = Number(process.env.SOLEON_MAX_PAGES || 6);
+// FREIO PRÓPRIO PRA TORRES3 (18/09, pedido do dono): é o único tenant deste cluster atrás de
+// Cloudflare — toda enumeração e todo detalhe dele caem no Bright Data pago (CALIL/VEGAS são
+// grátis). O freio de GRUPO do workflow (coleta-recente.mjs SOLEON 7, `scraper-soleon.yml`)
+// só olha se o cluster inteiro está "velho" — TORRES3 acaba pagando na mesma cadência que
+// CALIL/VEGAS pedem por serem grátis, sem necessidade nenhuma (achado 18/09, revisando a
+// proposta de espaçamento: só TORRES3 é `custo=misto` em leiloeiro_conhecimento; os outros
+// dois são gratis+sem anti-bot). Piso PRÓPRIO, mais largo — desacoplado do freio do grupo.
+const TORRES3_FRESCOR_DIAS = Number(process.env.SOLEON_TORRES3_FRESCOR_DIAS || 14);
 const DRYRUN = process.env.SOLEON_DRYRUN !== '0';
 const DEBUG = process.env.SOLEON_DEBUG === '1';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -432,6 +440,24 @@ async function debugRecon() {
 // sempre vem primeiro (nunca perde captação por causa de releitura), e a folga do teto que
 // sobrar vai para o lote conhecido mais antigo (fila por `atualizado_em`), não é jogada fora.
 async function coletarTenant(tenant) {
+  if (tenant.fonte === 'TORRES3') {
+    const { data: recentes } = await supabase.from('imoveis_leilao') // padrao-ok: falha de leitura vira idadeDias=Infinity abaixo, que é MAIOR que qualquer piso — fail-open pro caminho de sempre coletar, nunca pro caminho de pular por engano
+      .select('atualizado_em').eq('fonte', 'TORRES3').eq('ativo', true)
+      .order('atualizado_em', { ascending: false }).limit(1);
+    const ultima = recentes?.[0]?.atualizado_em ? Date.parse(recentes[0].atualizado_em) : 0;
+    const idadeDias = ultima ? (Date.now() - ultima) / 86400000 : Infinity;
+    if (idadeDias < TORRES3_FRESCOR_DIAS) {
+      console.log(`  [TORRES3] acervo com ${idadeDias.toFixed(1)}d — abaixo do piso de ${TORRES3_FRESCOR_DIAS}d (freio próprio, é o único tenant pago do cluster). Pulando.`);
+      // Marca como SEM_COTA (mesmo Set que o freio de orçamento real usa) — não é o teto
+      // semanal do Bright Data negando, mas é a MESMA classe de decisão ("não gastei de
+      // propósito, não é a fonte que quebrou"): registrarSaude() já sabe não acusar
+      // regressão quando semCota=true. Sem isto, o skip virava "tenant sem lote nesta
+      // execução" em fonte_saude — exatamente a forma nº 5 do CLAUDE.md que este próprio
+      // arquivo já corrigiu uma vez para o teto de verdade.
+      SEM_COTA.add('TORRES3');
+      return [];
+    }
+  }
   const { urls, via } = await enumerarLotes(tenant);
   VIA_TENANT.set(tenant.fonte, via);
   if (!urls.length) { console.log(`  [${tenant.fonte}] 0 lotes enumerados (via ${via}). Pulando.`); return []; }
