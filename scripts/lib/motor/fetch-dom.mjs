@@ -12,16 +12,32 @@
  * {html: null} e o runner trata como "sem detalhe"/fetch falho — jamais como fonte vazia.
  */
 import puppeteer from 'puppeteer';
+import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './proxy-isp.mjs';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false } = {}) {
+// `usarProxyIsp` (18/09): OPT-IN — sai pelo proxy ISP do Bright Data (ver proxy-isp.mjs) em vez
+// do IP da máquina. Serve para testar/rodar fontes bloqueadas por reputação de IP de datacenter
+// (HASTA e companhia) SEM depender do runner residencial. Se `usarProxyIsp` for true mas as env
+// vars não estiverem configuradas, cai em silêncio para o comportamento sem proxy (mesma regra
+// de `brightDataDisponivel()` em `_brightdata.js`).
+export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false } = {}) {
   const estado = { semCota: false };   // dom não usa Bright Data; campo existe pelo contrato
+  const comProxy = usarProxyIsp && proxyIspDisponivel();
   let browser = null;
 
   async function garantir() {
-    if (!browser) browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    if (!browser) {
+      const args = ['--no-sandbox', '--disable-setuid-sandbox'];
+      if (comProxy) args.push(`--proxy-server=${proxyIspServidor()}`);
+      browser = await puppeteer.launch({ headless: true, args });
+    }
     return browser;
+  }
+
+  /** Chromium não aceita user:pass no --proxy-server; a autenticação é por página. */
+  async function autenticarSeProxy(page) {
+    if (comProxy) await page.authenticate(proxyIspCredenciais());
   }
 
   // ISOLAMENTO DE SESSÃO (07/09, JELEILOES): default false — nenhum comportamento muda pra
@@ -33,9 +49,15 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs
   // cada requisição volta a parecer "a primeira" da sessão, e o contexto é fechado no fim.
   async function novaPagina() {
     const b = await garantir();
-    if (!isolarSessao) return { page: await b.newPage(), contexto: null };
+    if (!isolarSessao) {
+      const page = await b.newPage();
+      await autenticarSeProxy(page);
+      return { page, contexto: null };
+    }
     const contexto = await b.createBrowserContext();
-    return { page: await contexto.newPage(), contexto };
+    const page = await contexto.newPage();
+    await autenticarSeProxy(page);
+    return { page, contexto };
   }
 
   // ESPAÇAMENTO ANTES de cada navegação (default 0 — nenhum comportamento muda pra

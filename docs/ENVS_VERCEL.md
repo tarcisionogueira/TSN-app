@@ -48,6 +48,11 @@ chegam, crons rodam, cobrança processa). Tratar como configuradas:
 - **Comunicação:** `RESEND_API_KEY`, `APP_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`
 - **IA:** `CLAUDE_KEY`, `GEMINI_API_KEY`
 - **Operação:** `BRIGHTDATA_API_TOKEN`, `BRIGHTDATA_ZONE`, `BRIGHTDATA_MAX_REQ_SEMANA`, `DAILY_API_KEY`
+- **Proxy ISP (18/09):** `BRIGHTDATA_ISP_HOST`, `BRIGHTDATA_ISP_USER`, `BRIGHTDATA_ISP_PASS` —
+  produto SEPARADO do Web Unlocker acima (`scripts/lib/motor/proxy-isp.mjs`), custo fixo por IP
+  + tráfego (não por requisição), para fontes que bloqueiam por reputação de IP de datacenter
+  (HASTA e companhia). Configuradas na Vercel (Production/Preview/Development) **e** como
+  secrets do GitHub Actions (workflows que usam `usarProxyIsp` leem de lá, não da Vercel).
 
 ## ✅ `LOCATIONIQ_USD_POR_1000` — resolvido, e NÃO precisa existir
 

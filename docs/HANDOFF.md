@@ -29546,3 +29546,44 @@ terminar de propagar.
 Recebível agora detecta esse texto específico e mostra em AZUL/informativo ("Este valor já foi
 antecipado anteriormente — nada a fazer aqui"), não em vermelho como as falhas de verdade —
 antes qualquer `!res.ok` virava vermelho igual, então um estado de negócio normal parecia pane.
+
+## 18/09 — Proxy ISP do Bright Data (produto novo, separado do Web Unlocker) — teste contra o HASTA
+
+Dono criou um proxy ISP na Bright Data (`isp_scraping_geral`, Shared unlimited $2/IP/mês,
+geolocalização Brasil) via KYB simplificado (sem verificação Residential completa — ficou
+pendente por exigir LinkedIn, que o dono não tem; retomar depois se quiser o produto
+Residential "completo"). Credenciais cadastradas na Vercel (Production+Preview+Development)
+como `BRIGHTDATA_ISP_HOST`/`BRIGHTDATA_ISP_USER`/`BRIGHTDATA_ISP_PASS` — **nomes diferentes**
+de `BRIGHTDATA_API_TOKEN`/`BRIGHTDATA_ZONE` (que são do Web Unlocker) de propósito: são
+produtos e modelos de cobrança diferentes (fixo por IP+tráfego vs. por requisição), não
+compartilham o freio de cota de `api/_brightdata.js`.
+
+Também criada `tarcisio@bidprobrasil.com.br` como Inbox do Resend (domínio já verificado,
+recebimento habilitado) — usada como Business Email no formulário da Bright Data.
+
+**Por que este proxy, e por que HASTA**: HASTA (e RJ/PECINI/GESTAO/GLOBOLEILOES) bloqueiam por
+REPUTAÇÃO DE IP de datacenter — não por paywall JS (isso o Web Unlocker já resolve). Hoje essas
+fontes só coletam pelo runner RESIDENCIAL (`runner-residencial.sh`, IP de casa do dono,
+`~/.bidpro-runner.env`, cron local) — funciona e é grátis, mas depende da máquina do dono estar
+ligada. A ideia do proxy ISP é uma alternativa que roda em qualquer lugar (Vercel/GitHub
+Actions), sem depender de máquina física — **pedido do dono: a função deve servir o sistema em
+geral, não só o HASTA**.
+
+**Implementado** (`scripts/lib/motor/proxy-isp.mjs` + `usarProxyIsp` em `criarMotorDom`,
+`scripts/lib/motor/fetch-dom.mjs`): OPT-IN por chamador — sem a flag, nada muda para quem já
+roda pelo runner residencial. Quando ligado, o Chromium sobe com `--proxy-server` e cada página
+nova chama `page.authenticate(...)` (o Chromium não aceita user:pass embutido no argumento).
+Serve qualquer fonte do motor `dom` (HASTA, RJ, PECINI, GESTAO, GLOBOLEILOES, ALFA, NORDESTE),
+não só HASTA.
+
+**Teste**: `scripts/_teste-proxy-isp-hasta.mjs` (descartável, mesmo padrão de
+`_teste-residencial-cloudflare-bloqueados.mjs`) + workflow `_temp-teste-proxy-isp-hasta.yml`
+(`workflow_dispatch`, roda em `ubuntu-latest` — datacenter, o mesmo ambiente que hoje bloqueia
+HASTA). **Pendente**: cadastrar as mesmas 3 credenciais como secrets do GitHub Actions
+(Settings → Secrets and variables → Actions — Vercel e GitHub Actions são cofres separados) e
+disparar a workflow para confirmar, ao vivo, se o proxy resolve o bloqueio. Se resolver, decidir
+com o dono se vale migrar HASTA (e as outras 4 fontes do mesmo motivo) do runner residencial
+para Vercel/GitHub Actions + proxy — troca dependência de máquina física por ~$2-10/mês.
+
+**Validação**: `npm run verificar:sintaxe`, `npm run verificar:padroes` e `npm run build`
+limpos.
