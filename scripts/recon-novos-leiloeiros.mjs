@@ -189,7 +189,9 @@ async function reconSite(browser, nome, cfg) {
     console.log(`   • [${d.status}] ${url}`);
     if (d.sample) console.log(`       corpo: ${d.sample}`);
   }
-  await page.close();
+  // 18/09 (2ª volta): o watchdog por path não bastou — um run travou 38min DEPOIS do último
+  // path, exatamente aqui (page.close() sem timeout nenhum). Mesmo remédio.
+  try { await comTimeout(page.close(), 15000, `${nome} — fechar página`); } catch { /* segue, o processo termina de qualquer jeito */ }
 }
 
 // Recon via Bright Data Web Unlocker — para sites atrás de Cloudflare (Pecini), que
@@ -405,7 +407,11 @@ const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim(
     for (const nome of alvo) {
       const cfg = SITES[nome];
       if (!cfg) { console.log(`Site desconhecido: ${nome}`); continue; }
-      try { await reconSite(browser, nome, cfg); }
+      // Envelope externo (18/09, 2ª volta): mesmo com o watchdog interno por path, um run
+      // travou 38min inteiros DEPOIS do último path — dentro de reconSite, não no loop de
+      // paths. Este limite mais largo (4min/site) é a rede de segurança final: ele SEMPRE
+      // libera o próximo site, não importa onde o travamento aconteça lá dentro.
+      try { await comTimeout(reconSite(browser, nome, cfg), 240000, `reconSite ${nome}`); }
       catch (e) { console.log(`Recon ${nome} (puppeteer) falhou: ${e.message}`); }
       // Pecini responde 403 (Cloudflare) ao Puppeteer → tenta pelo Bright Data unlocker.
       if (nome === 'PECINI') {
