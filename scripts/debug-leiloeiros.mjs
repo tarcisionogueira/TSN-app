@@ -364,30 +364,40 @@ async function sondaSbid21(browser) {
 // categoria (?categoria=imoveis) ou um campo (tipo/categoria/produto) no objeto do lote
 // que separe imóvel do resto? Fetch direto (sem Cloudflare — recon anterior já confirmou
 // 200 puro), plain fetch é suficiente.
-async function sondaSaulojulio() {
-  const base = 'https://saulojulioleiloeiro.com.br';
-  const tentativas = [
-    `${base}/app/lotes`,
-    `${base}/app/lotes?categoria=imoveis`,
-    `${base}/app/lotes?tipo=imoveis`,
-    `${base}/app/lotes?categoria=imovel`,
-  ];
-  const res = {};
-  for (const url of tentativas) {
-    try {
-      const r = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
-      const d = await r.json().catch(() => null);
-      const lotes = d?.lotes || [];
-      res[url] = {
-        http: r.status, total: lotes.length,
-        camposDoPrimeiro: lotes[0] ? Object.keys(lotes[0]) : [],
-        amostraCategorias: [...new Set(lotes.map(l => l.categoria || l.tipo || l.produto || null))].slice(0, 15),
-        amostraNomes: lotes.slice(0, 5).map(l => l.nome),
-      };
-    } catch (e) { res[url] = { erro: String(e?.message || e) }; }
-  }
-  await gravarDebug('sonda-saulojulio', 'app/lotes com variações de filtro', 200, 'application/json', JSON.stringify(res, null, 2));
+async function sondaSaulojulio(browser) {
+  // 1ª tentativa (fetch cru, sem navegador) deu 403/404 — a API exige o contexto da própria
+  // página (cookie/referer da SPA). Repete de DENTRO do navegador, mesmo padrão de sondaSbid21.
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  try { await page.goto('https://saulojulioleiloeiro.com.br/imoveis', { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch {}
+  await new Promise(r => setTimeout(r, 2000));
+  const res = await page.evaluate(async () => {
+    const tentativas = [
+      '/app/lotes',
+      '/app/lotes?categoria=imoveis',
+      '/app/lotes?tipo=imoveis',
+      '/app/lotes?categoria=imovel',
+      '/app/lotes?dom=saulo&categoria=imoveis',
+    ];
+    const out = {};
+    for (const url of tentativas) {
+      try {
+        const r = await fetch(url, { headers: { Accept: 'application/json' } });
+        const d = await r.json().catch(() => null);
+        const lotes = d?.lotes || [];
+        out[url] = {
+          http: r.status, total: lotes.length,
+          camposDoPrimeiro: lotes[0] ? Object.keys(lotes[0]) : [],
+          amostraCategorias: [...new Set(lotes.map(l => l.categoria || l.tipo || l.produto || l.segmento || null))].slice(0, 15),
+          amostraNomes: lotes.slice(0, 6).map(l => l.nome),
+        };
+      } catch (e) { out[url] = { erro: String(e && e.message || e) }; }
+    }
+    return out;
+  }).catch((e) => ({ erro: String(e && e.message || e) }));
+  await gravarDebug('sonda-saulojulio', 'app/lotes com variações de filtro (via browser)', 200, 'application/json', JSON.stringify(res, null, 2));
   console.log('sonda-saulojulio:', JSON.stringify(res, null, 2).slice(0, 3000));
+  await page.close();
 }
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
@@ -510,7 +520,7 @@ async function main() {
   try {
     // Round 36 (01/08): SÓ a sonda do SBID21 (0 em 2 runs; SBID9 ok). O loop do
     // Round 35 (ALVOS TRT-15, concluído em 30/07) fica desligado p/ o run ser rápido.
-    await sondaSaulojulio();
+    await sondaSaulojulio(browser);
     // for (const alvo of ALVOS) {
     //   try { await capturar(browser, alvo); }
     //   catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
