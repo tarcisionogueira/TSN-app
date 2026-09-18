@@ -29429,3 +29429,54 @@ caso real já conhecido.
 até agora, não é média — vale mais uma vez confirmado): compare contra o custo de esperar
 D+32 — se o caixa aguenta esperar, não antecipa; ~2,7% num valor grande (este caso: quase
 R$ 900) é um desconto real, não trivial.
+
+## 18/09 — Minha Rede (PII de indicados) revisado, e Cliente 360 ganha "movimentação de negócio"
+
+**Minha Rede**: levantei quem vê telefone/e-mail de indicado hoje (RLS `perfis` +
+`minha_rede()`) e o dono confirmou o desenho atual: **equipe (`is_equipe()`) e o indicador
+DIRETO (nível 1, nunca a rede inteira) — sem mudança de código**. Verificado que não há
+brecha de escalonamento: `minha_rede(p_root)` ignora `p_root` de quem não é equipe
+(`v_root := v_uid` sempre), então um indicador comum não consegue ver a rede de outra
+pessoa passando o parâmetro. Fica registrado que essa é uma decisão deliberada, não um
+"ainda não mexi nisso".
+
+**Cliente 360 — "todos os acessos, cliques, movimentação"**: auditoria encontrou DUAS
+trilhas já existentes e bem separadas — `eventos_atividade` (clickstream de UI: pageview,
+clique, submit, change, erro — via `tracker.js`/`api/track.js`, **confirmado ao vivo: 151
+cliques + 78 pageviews nas últimas 24h**) estava ótima; `atividade_log` (movimentação de
+NEGÓCIO — pagamento, saque, contrato, KYC) estava **fraca**: só geração de relatório +
+clique de e-mail nos últimos 30 dias, nada de pagamento/saque/plano/contrato, mesmo esses
+tendo acontecido no mês. Causa: `logAtividade()` existia **triplicada** (copy-paste em
+`gerar-analise.js`/`gerar-documental.js`/`gerar-laudo-viabilidade.js`) e mais nenhum dos
+~300 arquivos de `api/` a chamava — cada endpoint que quisesse registrar algo teria que
+descobrir esse padrão sozinho.
+
+**Feito**: extraído para `api/_atividade.js` (`logAtividade(userId, evento, detalhe, meta,
+atorId)`, best-effort, chama a RPC `registrar_atividade` já existente — testada ao vivo,
+linha de teste removida depois). Os 3 arquivos que duplicavam a função agora importam dali
+(zero mudança de comportamento). Instrumentado nos pontos de maior valor:
+- `pagamento_aprovado` + `plano_alterado` em `_webhook-core.js:processarConfirmado` — cobre
+  MP e Asaas NUM PONTO SÓ, porque os dois gateways confirmam por ali.
+- `saque_pj_aprovado`/`saque_pj_reprovado`/`saque_pago`/`saque_recusado` em `saque.js` (as
+  solicitações já eram logadas via `logSaque`, que já existia e usa a MESMA rpc — só os
+  desfechos de admin/analista estavam faltando).
+- `contrato_assinado` em `assinar-contrato.js` — resolve o signatário do mesmo jeito que o
+  bloco de promoção de role já fazia (via `contratos_pendentes.user_id` ou e-mail), mas
+  INDEPENDENTE dele, pra cobrir também contrato sem tier de plano.
+- `assinatura_cancelada` em `mp.js` (`cancelarAssinatura`) e `asaas.js`
+  (`action=cancelar_assinatura`).
+
+**Não instrumentado, deliberadamente**: KYC de assinatura de contrato
+(`verificar-identidade-kyc.js`) — é uma verificação de ROSTO pra assinatura pública, muitas
+vezes SEM `perfis.id` estável (testemunha sem conta, ou signatário ainda não resolvido no
+momento da chamada); forçar um `userId` ali seria arriscar logar no lugar errado ou nunca
+logar. O "KYC" que de fato tem um usuário estável por trás é a validação de PJ pro saque
+(`aprovar_saque_pj`/`reprovar_saque_pj`), que já ficou coberta acima.
+
+**Pendência natural pra próxima sessão**: mais pontos de negócio ficaram de fora por
+escopo (ex.: admin promovendo role manualmente fora de pagamento/contrato, edição de
+imóvel/lote pela equipe) — instrumentar sob demanda, não em bloco, seguindo o mesmo
+`logAtividade()`.
+
+**Validação**: `npm run build` limpo; RPC testada ao vivo com um evento
+`teste_instrumentacao_360` (removido logo em seguida).

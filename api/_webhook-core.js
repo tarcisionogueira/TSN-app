@@ -24,6 +24,7 @@ import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
 import { enviarConversaoOffline, googleAdsAtivo } from './_google-ads.js';
 import { enviarEmail } from './_email.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
+import { logAtividade } from './_atividade.js';
 
 // Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
@@ -579,6 +580,19 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   if (Object.keys(update).length > 0) {
     const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
     if (error) throw new Error(error.message);
+  }
+
+  // LOG DE ATIVIDADE (Cliente 360) — cobre os dois gateways (MP e Asaas) num ponto só, já
+  // que os dois confirmam por aqui. `plano_alterado` só quando o pagamento de fato mudou o
+  // role (pagamento de serviço avulso não mapeia plano, ver `mapeado` acima). `await`ado
+  // (não fire-and-forget solto): em runtime serverless o container pode congelar assim que
+  // a resposta é enviada, derrubando um fetch ainda em voo — mesmo padrão que o resto do
+  // arquivo já segue pra NFS-e/comissão abaixo.
+  await logAtividade(cliente.id, 'pagamento_aprovado', descricao || null,
+    { gateway, valor, valorLiquido, servico: !!servico, gatewayPaymentId });
+  if (mapeado && update.role) {
+    await logAtividade(cliente.id, 'plano_alterado', `${cliente.role} → ${update.role}`,
+      { de: cliente.role, para: update.role, ciclo: mapeado.ciclo || null, gateway });
   }
 
   // Grava preço contratado (trava de 12 meses para recorrência)
