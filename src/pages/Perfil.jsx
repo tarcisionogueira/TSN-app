@@ -31,6 +31,10 @@ const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado', 'explo
 // Clientes PAGANTES também recebem comissão (Programa de Parceiros — rede multinível) e
 // precisam ver saldo/saque + o relatório da rede.
 const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+// Contas OPERACIONAIS — as que acessam as RPCs admin_* (cota, métricas financeiras, dado de
+// cliente). Auditoria de segurança de 18/09: MFA estava zerado em auth.mfa_factors pro projeto
+// inteiro, e essas são as contas que mais perdem com uma senha vazada. 2FA aparece só pra elas.
+const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 
 const ROLE_LABELS = {
   admin: 'Administrador',
@@ -365,6 +369,96 @@ export default function Perfil() {
       setPushMensagem({ tipo: 'erro', texto: e.message });
     }
     setPushLoading(false);
+  };
+
+  // 2FA (TOTP) — só pra contas STAFF (admin/analista/advogado/consultor). Ver ROLES_STAFF.
+  const [mfaFactors, setMfaFactors] = useState([]);
+  const [mfaCarregando, setMfaCarregando] = useState(false);
+  const [mfaInscrevendo, setMfaInscrevendo] = useState(false);
+  const [mfaQr, setMfaQr] = useState('');
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaCodigo, setMfaCodigo] = useState('');
+  const [mfaVerificando, setMfaVerificando] = useState(false);
+  const [mfaDesativando, setMfaDesativando] = useState(false);
+  const [mfaMsg, setMfaMsg] = useState(null);
+  const mfaVerificado = mfaFactors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+
+  const carregarMfaFactors = async () => {
+    // `data.all` traz verificados E não-verificados (`data.totp` só traz verificados — perderia
+    // o fator "pendente" que `iniciarMfa` precisa achar para poder limpar e recomeçar).
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (!error) setMfaFactors(data?.all || []);
+  };
+
+  useEffect(() => {
+    if (!ROLES_STAFF.includes(role) || emSuporte) return;
+    setMfaCarregando(true);
+    carregarMfaFactors().finally(() => setMfaCarregando(false));
+  }, [role, emSuporte]); // eslint-disable-line
+
+  // Inicia o enrollment: gera o QR code. Se já existe um fator TOTP NÃO verificado de uma
+  // tentativa anterior (abandonada no meio), o enroll novo falha com "already exists" — remove
+  // o velho primeiro e tenta de novo, senão a pessoa fica travada sem conseguir recomeçar.
+  const iniciarMfa = async () => {
+    if (guardaSuporte(setMfaMsg)) return;
+    setMfaMsg(null);
+    setMfaInscrevendo(true);
+    try {
+      let { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: `totp-${Date.now()}` });
+      if (error) {
+        const pendente = mfaFactors.find(f => f.factor_type === 'totp' && f.status === 'unverified');
+        if (pendente) {
+          await supabase.auth.mfa.unenroll({ factorId: pendente.id });
+          ({ data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: `totp-${Date.now()}` }));
+        }
+        if (error) throw error;
+      }
+      setMfaFactorId(data.id);
+      setMfaQr(data.totp.qr_code);
+      setMfaSecret(data.totp.secret);
+    } catch (e) {
+      setMfaMsg({ tipo: 'erro', texto: e.message || 'Não consegui iniciar o 2FA. Tente de novo.' });
+      setMfaInscrevendo(false);
+    }
+  };
+
+  const confirmarMfa = async (e) => {
+    e?.preventDefault();
+    if (guardaSuporte(setMfaMsg)) return;
+    setMfaVerificando(true);
+    setMfaMsg(null);
+    try {
+      const { data: chal, error: eChal } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+      if (eChal) throw eChal;
+      const { error: eVer } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: chal.id, code: mfaCodigo.trim() });
+      if (eVer) throw eVer;
+      setMfaMsg({ tipo: 'sucesso', texto: '2FA ativado! Da próxima vez que entrar, vamos pedir o código do seu app autenticador.' });
+      setMfaInscrevendo(false);
+      setMfaQr(''); setMfaSecret(''); setMfaCodigo('');
+      await carregarMfaFactors();
+    } catch (e) {
+      setMfaMsg({ tipo: 'erro', texto: e.message || 'Código inválido. Confira o app e tente de novo.' });
+    } finally {
+      setMfaVerificando(false);
+    }
+  };
+
+  const desativarMfa = async () => {
+    if (guardaSuporte(setMfaMsg)) return;
+    if (!window.confirm('Desativar a autenticação de dois fatores desta conta?')) return;
+    setMfaDesativando(true);
+    setMfaMsg(null);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaVerificado.id });
+      if (error) throw error;
+      setMfaMsg({ tipo: 'sucesso', texto: '2FA desativado.' });
+      await carregarMfaFactors();
+    } catch (e) {
+      setMfaMsg({ tipo: 'erro', texto: e.message || 'Não consegui desativar agora.' });
+    } finally {
+      setMfaDesativando(false);
+    }
   };
 
   // LGPD states
@@ -1526,6 +1620,80 @@ export default function Perfil() {
                   placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" style={inputStyle} />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Usada para transferência de comissões e saques</div>
               </div>
+            )}
+
+            {/* 2FA — só pra conta STAFF (admin/analista/advogado/consultor). Achado da auditoria
+                de 18/09: MFA zerado no projeto inteiro, e são essas contas que acessam as RPCs
+                admin_* (cota, métricas financeiras, dado de cliente) só com senha. */}
+            {ROLES_STAFF.includes(role) && !emSuporte && (
+              <>
+                <div style={{ height: 1, background: '#f1f5f9', margin: '8px 0 20px' }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 4 }}>Autenticação de dois fatores (2FA)</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+                  Sua conta tem acesso a dado financeiro e de cliente. 2FA exige um código do seu
+                  celular além da senha pra entrar — protege mesmo se a senha vazar.
+                </div>
+
+                {mfaMsg && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 600,
+                    background: mfaMsg.tipo === 'sucesso' ? '#f0fdf4' : '#fef2f2',
+                    color: mfaMsg.tipo === 'sucesso' ? '#16a34a' : '#dc2626',
+                    border: `1px solid ${mfaMsg.tipo === 'sucesso' ? '#bbf7d0' : '#fecaca'}`,
+                  }}>
+                    {mfaMsg.tipo === 'sucesso' ? '✓ ' : '✕ '}{mfaMsg.texto}
+                  </div>
+                )}
+
+                {mfaCarregando ? (
+                  <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 20 }}>Carregando…</div>
+                ) : mfaInscrevendo ? (
+                  <div style={{ marginBottom: 20, padding: 16, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 13, color: '#334155', marginBottom: 12 }}>
+                      1. Escaneie o QR code com seu app autenticador (Google Authenticator, Authy, etc.)
+                    </div>
+                    {mfaQr && (
+                      <img src={mfaQr} alt="QR code do 2FA" width={180} height={180} style={{ display: 'block', margin: '0 auto 12px', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    )}
+                    {mfaSecret && (
+                      <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginBottom: 16, wordBreak: 'break-all' }}>
+                        Não consegue escanear? Digite o código manualmente: <code style={{ fontWeight: 700, color: '#334155' }}>{mfaSecret}</code>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 13, color: '#334155', marginBottom: 8 }}>2. Digite o código de 6 dígitos gerado no app</div>
+                    <form onSubmit={confirmarMfa} style={{ display: 'flex', gap: 8 }}>
+                      <input type="text" inputMode="numeric" maxLength={6} value={mfaCodigo}
+                        onChange={e => setMfaCodigo(e.target.value.replace(/\D/g, ''))}
+                        placeholder="000000" style={{ ...inputStyle, flex: 1, textAlign: 'center', letterSpacing: 4, fontSize: 18 }} />
+                      <button type="submit" disabled={mfaVerificando || mfaCodigo.length !== 6}
+                        style={{
+                          padding: '0 20px', background: (mfaVerificando || mfaCodigo.length !== 6) ? '#94a3b8' : '#111111',
+                          color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                          cursor: (mfaVerificando || mfaCodigo.length !== 6) ? 'not-allowed' : 'pointer',
+                        }}>
+                        {mfaVerificando ? 'Confirmando…' : 'Confirmar'}
+                      </button>
+                    </form>
+                    <button type="button" onClick={() => { setMfaInscrevendo(false); setMfaQr(''); setMfaSecret(''); setMfaCodigo(''); setMfaMsg(null); }}
+                      style={{ marginTop: 10, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                ) : mfaVerificado ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, padding: '12px 16px', background: '#f0fdf4', borderRadius: 10, border: '1px solid #bbf7d0' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>✓ 2FA ativo nesta conta</span>
+                    <button type="button" onClick={desativarMfa} disabled={mfaDesativando}
+                      style={{ background: 'none', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: mfaDesativando ? 'not-allowed' : 'pointer' }}>
+                      {mfaDesativando ? 'Desativando…' : 'Desativar'}
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={iniciarMfa} disabled={mfaInscrevendo}
+                    style={{ marginBottom: 20, padding: '10px 18px', background: 'white', color: '#111111', border: '1px solid #111111', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Ativar autenticação de dois fatores
+                  </button>
+                )}
+              </>
             )}
 
             {/* Separador senha */}

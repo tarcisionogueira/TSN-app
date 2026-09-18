@@ -130,6 +130,12 @@ export default function Login() {
   // crua virava beco. Um contador desativa o botão e mostra QUANDO poderá reenviar.
   const [cooldownReenvio, setCooldownReenvio] = useState(0);
   const [showSenha, setShowSenha] = useState(false);
+  // 2FA no login (18/09): conta com fator TOTP verificado exige o código aqui, senão o "Ativar
+  // 2FA" do Perfil só pediria o QR code uma vez e nunca mais — cosmético, não proteção real.
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaCodigoLogin, setMfaCodigoLogin] = useState('');
+  const [mfaVerificandoLogin, setMfaVerificandoLogin] = useState(false);
+  const [posLoginPendente, setPosLoginPendente] = useState(null); // guarda o redirect até o código confirmar
   const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
   const [cpfChecking, setCpfChecking] = useState(false);
   const [emailDuplicado, setEmailDuplicado] = useState(false);
@@ -333,6 +339,36 @@ export default function Login() {
     setReenviando(false);
   };
 
+  // Extraído de handleLogin (18/09) pra poder rodar tanto direto (sem 2FA) quanto depois do
+  // código confirmado (com 2FA) — as DUAS entradas têm que acabar no mesmo lugar.
+  const concluirLoginPosAuth = async (signInData) => {
+    // Processa convite de equipe se existir
+    if (signInData?.user) await processarConviteEquipe(signInData.user.id);
+    // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
+    const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
+    sessionStorage.removeItem('tsn_redirect_produto');
+    const planoPendente = planoEscolhido || lerConvite(CHAVE_PLANO);
+    limparConvite(CHAVE_PLANO);
+    const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
+    sessionStorage.removeItem('tsn_promo_pendente');
+    // Funil de produto pago: quem veio de /p/ebook|curso/:id ("Já tenho conta, Entrar" ou
+    // "Comprar agora") chega com ?produto=tipo:id. Antes esse param era ignorado no redirect
+    // e o visitante caía na Home, perdendo a intenção de compra. Volta para a página do produto.
+    const destProduto = destinoProduto(produtoParam);
+    if (produtoRedirect) {
+      nav(produtoRedirect);
+    } else if (destProduto) {
+      nav(destProduto);
+    } else if (planoPendente) {
+      nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
+    } else if (nextParam) {
+      // nextParam já vem decodificado de URLSearchParams — não decodificar de novo
+      nav(nextParam);
+    } else {
+      nav('/');
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErro(''); setEmailNaoConfirmado(false); setCredencialInvalida(false); setReenviado(false); setLoading(true);
@@ -346,31 +382,28 @@ export default function Login() {
         options: { ...(turnstileConfigurado ? { captchaToken } : {}) },
       });
       if (error) throw error;
-      // Processa convite de equipe se existir
-      if (signInData?.user) await processarConviteEquipe(signInData.user.id);
-      // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
-      const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
-      sessionStorage.removeItem('tsn_redirect_produto');
-      const planoPendente = planoEscolhido || lerConvite(CHAVE_PLANO);
-      limparConvite(CHAVE_PLANO);
-      const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
-      sessionStorage.removeItem('tsn_promo_pendente');
-      // Funil de produto pago: quem veio de /p/ebook|curso/:id ("Já tenho conta, Entrar" ou
-      // "Comprar agora") chega com ?produto=tipo:id. Antes esse param era ignorado no redirect
-      // e o visitante caía na Home, perdendo a intenção de compra. Volta para a página do produto.
-      const destProduto = destinoProduto(produtoParam);
-      if (produtoRedirect) {
-        nav(produtoRedirect);
-      } else if (destProduto) {
-        nav(destProduto);
-      } else if (planoPendente) {
-        nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
-      } else if (nextParam) {
-        // nextParam já vem decodificado de URLSearchParams — não decodificar de novo
-        nav(nextParam);
-      } else {
-        nav('/');
+      // 2FA (18/09): senha certa não é suficiente pra quem tem fator TOTP verificado — o
+      // signIn já devolve um JWT válido em aal1, então SEM este passo o código nunca seria
+      // pedido de fato (a tela seguinte seria só decoração). `nextLevel` vem 'aal2' quando
+      // existe fator verificado; só então buscamos o factorId e trocamos pra tela de código.
+      // FAIL-CLOSED nos dois `error`: se não dá pra saber o nível de verificação, ou pra achar
+      // o fator, não completa o login sozinho — cai no catch abaixo e pede pra tentar de novo,
+      // em vez de destravar a conta por não ter conseguido checar (a mesma forma de bug que
+      // .ok/.error mede lá em cima, agora no fluxo de 2FA).
+      const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalError) throw aalError;
+      if (aalData?.nextLevel === 'aal2' && aalData?.currentLevel !== 'aal2') {
+        const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+        if (factorsError) throw factorsError;
+        const fator = factorsData?.totp?.[0];
+        if (!fator) throw new Error('Sua conta exige verificação em duas etapas, mas não encontrei um fator ativo. Contate o suporte.');
+        setMfaFactorId(fator.id);
+        setPosLoginPendente(signInData);
+        setModo('mfa');
+        setLoading(false);
+        return;
       }
+      await concluirLoginPosAuth(signInData);
     } catch (err) {
       // Falha de LOGIN agora deixa rastro (antes: zero registro — gap da auditoria E1.6).
       registrarEvento('api_erro', { alvo: 'login_falha', detalhe: motivoErroAuth(err) });
@@ -382,6 +415,20 @@ export default function Login() {
       if (turnstileConfigurado) { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); }
     }
     setLoading(false);
+  };
+
+  const handleMfaLogin = async (e) => {
+    e.preventDefault();
+    setErro(''); setMfaVerificandoLogin(true);
+    try {
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code: mfaCodigoLogin.trim() });
+      if (error) throw error;
+      await concluirLoginPosAuth(posLoginPendente);
+    } catch (err) {
+      registrarEvento('api_erro', { alvo: 'login_mfa_falha', detalhe: motivoErroAuth(err) });
+      setErro('Código inválido ou expirado. Confira o app autenticador e tente de novo.');
+    }
+    setMfaVerificandoLogin(false);
   };
 
   const handleCadastro = async (e) => {
@@ -516,6 +563,36 @@ export default function Login() {
             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 4 }}>Leilão &amp; Investimentos</div>
           </div>
         </button>
+
+        {/* 2FA — senha certa, mas a conta tem TOTP verificado (18/09) */}
+        {modo === 'mfa' && (
+          <>
+            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Código de verificação</h2>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
+              Digite o código de 6 dígitos do seu app autenticador.
+            </p>
+            <form onSubmit={handleMfaLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={lbl}>Código</label>
+                <input type="text" inputMode="numeric" maxLength={6} value={mfaCodigoLogin}
+                  onChange={e => setMfaCodigoLogin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000" required autoFocus
+                  style={{ ...inp, textAlign: 'center', letterSpacing: 6, fontSize: 20 }} />
+              </div>
+              {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
+              <button type="submit" disabled={mfaVerificandoLogin || mfaCodigoLogin.length !== 6}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (mfaVerificandoLogin || mfaCodigoLogin.length !== 6) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (mfaVerificandoLogin || mfaCodigoLogin.length !== 6) ? 0.7 : 1 }}>
+                {mfaVerificandoLogin ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando...</> : 'Confirmar'}
+              </button>
+            </form>
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <button onClick={async () => { await supabase.auth.signOut(); setModo('login'); setErro(''); setMfaCodigoLogin(''); setPosLoginPendente(null); }}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>
+                ← Voltar para o login
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Sucesso cadastro */}
         {modo === 'sucesso' && (
