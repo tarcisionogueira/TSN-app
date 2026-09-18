@@ -8,6 +8,8 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 10 };
 
+import { timingSafeEqualStr } from './_auth.js';
+
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const SECRET = process.env.RESEND_WEBHOOK_SECRET;
@@ -21,7 +23,7 @@ export default async function handler(req, res) {
   if (SECRET) {
     let k = null;
     try { k = new URL(req.url, 'http://x').searchParams.get('k'); } catch { /* url malformada */ }
-    if (k !== SECRET) { res.status(401).end(); return; }
+    if (!timingSafeEqualStr(k, SECRET)) { res.status(401).end(); return; }
   }
 
   try {

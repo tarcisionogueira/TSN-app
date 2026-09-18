@@ -29290,3 +29290,62 @@ o cliente recebe produto+bônus normalmente, só assina na mão depois.
 
 **Validação**: `npm run build` limpo em todos os commits; migrações aplicadas via MCP com
 `auditoria_seguranca()=0/0` depois de cada uma.
+
+## 18/09 — Auditoria de segurança completa (código + banco) — nota final: 90/100
+
+Pedido do dono: "verificação de segurança completa em todo o código, nota de 0 a 100".
+Cobertura: 4 agentes paralelos em worktree isolado (auth/authz+IDOR, pagamento/webhook,
+XSS/SSRF/secrets/upload, injeção+cron), `auditoria_seguranca()` (0 crítico/0 atenção),
+`mcp__Supabase__get_advisors(security)` completo (5 categorias, todas as `authenticated_*`
+e `anon_security_definer_*` — 133 funções — foram listadas; as 19 `admin_*` e as
+financeiras foram lidas linha a linha direto do `pg_proc`, não só por grep).
+
+**Achados corrigidos nesta sessão** (código + migração, todos com `npm run build` limpo):
+1. **CRON_SECRET com comparação não-constante em 3 rotas caras** (`gerar-analise.js`,
+   `gerar-documental.js`, `gerar-laudo-viabilidade.js`) — usavam `===` direto em vez do
+   `isCronAuthorized()` (timing-safe) que todo o resto do `api/*cron*` já usa. Um vazamento
+   do secret (não só por timing attack) bypassava plano/cota nessas 3 rotas de IA. Trocado
+   pelo helper padrão nos 3 arquivos.
+2. **`resend-webhook.js` comparava o secret com `!==`** (não constant-time) — baixo impacto
+   (só toca metadado de e-mail), mas quebrava o padrão que todo outro webhook segue. Trocado
+   por `timingSafeEqualStr` (exportado de `_auth.js`, reaproveitado em vez de duplicado).
+3. **`mp-checkout.js` (assessoria): piso/teto de preço pulava por completo se
+   `planos_config` voltasse vazio** (`if (vigentes.length)`) — não é atacável por request,
+   mas reabria `valor` vindo do cliente sem checagem se a linha de config sumir/for
+   renomeada. Agora falha fechado (503), mesma lógica do catch ao lado.
+4. **2 funções de trigger sem `search_path` fixo** (`honorarios_recebimentos_valida_teto`,
+   `honorarios_recebimentos_fecha_se_completo`) — achado do linter do Supabase. Não é
+   explorável (não são SECURITY DEFINER e todo acesso já é `public.tabela` qualificado),
+   mas é o hardening padrão do Postgres; migração aplicada.
+
+**Achado NÃO corrigido nesta sessão — decisão consciente, fica pra próxima com dono no
+computador**: `api/img-proxy.js` (SSRF, severidade média). É **sem autenticação** e usa
+`hostExternoSeguro()` (aceita qualquer host HTTPS que não PAREÇA IP interno no texto do
+hostname) em vez do allowlist exato que `fetch-url.js`/`baixar-doc.js` usam — de propósito,
+porque cada leiloeiro usa um CDN de domínio diferente e o allowlist exato escondia quase
+todas as fotos. O buraco: a checagem é só sobre o TEXTO do hostname, nunca sobre o IP
+resolvido (`_allowed-hosts.js` documenta isso: "Não resolve DNS"). Um domínio com DNS
+apontando pra `169.254.169.254`/`10.x` passa pela checagem porque o nome não parece IP.
+**Por que não mexi agora**: o fix real (resolver DNS e validar o IP antes de conectar)
+precisa do módulo `dns`, que **não existe no Edge Runtime** — a correção certa é migrar
+este endpoint de `runtime: 'edge'` pra `nodejs` e revalidar IP resolvido a cada hop, e eu
+não tenho como testar um deploy real daqui. Trocar o runtime às cegas arrisca quebrar a
+foto de todo imóvel do site pra fechar um buraco cujo impacto real em sandbox de Edge
+(sem rede interna tradicional tipo EC2) já é estreito. Fica registrado como o item
+acionável nº 1 da próxima sessão de segurança.
+
+**Confirmado limpo** (leitura completa, não só grep): autenticidade dos 2 webhooks de
+pagamento (HMAC + refetch por ID nos dois, fail-closed sem secret), preço sempre calculado
+no servidor em todo fluxo de cobrança, idempotência com dedup atômico + rollback em falha,
+IDOR (toda rota re-deriva o dono do banco, nunca confia em id do body), XSS (zero
+`dangerouslySetInnerHTML` com conteúdo externo), SQLi (zero SQL dinâmico com parâmetro de
+RPC exposto a anon/authenticated), mass assignment (trigger `proteger_campos_sensiveis_perfil`
+reverte campo sensível mesmo se o update tentar), e as 19 funções `admin_*` de maior risco —
+todas checam `role = 'admin'`/`'analista'` via `auth.uid()` dentro do próprio corpo antes de
+tocar dado, então o `GRANT EXECUTE TO authenticated` (que o advisor lista pra 104 funções) é
+o padrão esperado do Supabase, não uma falha — a autorização real está dentro da função.
+
+**Por que 90 e não 100**: 1 achado médio real e não-atacável-por-request-comum mas concreto
+(img-proxy SSRF) deixado pendente por prudência de deploy, mais o padrão geral de qualidade
+muito acima da média (comentários no próprio código documentando incidentes anteriores e
+seus fixes, dois auditores próprios rodando em CI). Nenhum achado ALTO em nenhuma categoria.

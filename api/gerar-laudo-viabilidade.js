@@ -10,7 +10,7 @@
 // cota de scraping/pesquisa. Espelha a mecânica de gerar-analise/gerar-documental.
 export const config = { runtime: 'nodejs', maxDuration: 180 };
 
-import { getUser } from './_auth.js';
+import { getUser, isCronAuthorized } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
@@ -211,7 +211,7 @@ export default async function handler(req, res) {
   // REGERAÇÃO AUTOMÁTICA (regenerar-relatorios-cron): reprocessa com orçamento fresco.
   // Autentica pelo CRON_SECRET (não passa por getUser nem pelo gate de plano — o laudo
   // regenerado já pertence a um usuário que teve acesso).
-  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+  const isCron = isCronAuthorized(req);
   let user;
   if (isCron) {
     if (!req.body?.paraUserId) { res.status(400).json({ error: 'paraUserId obrigatório no cron' }); return; }

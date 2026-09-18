@@ -269,12 +269,17 @@ export default async function handler(req, res) {
       // maior taxa é 3,49% a.a. em 12x, muito abaixo disso.
       const [cfg] = await (await sbGet(`planos_config?plano_key=eq.assessorado&select=preco,preco_vista&limit=1`)).json();
       const vigentes = [cfg?.preco, cfg?.preco_vista].map(Number).filter((n) => n > 0);
-      if (vigentes.length) {
-        const piso = Math.min(...vigentes), teto = Math.max(...vigentes) * 2;
-        const v = Number(valor);
-        if (v < piso - 0.01 || v > teto) {
-          return res.status(400).json({ error: 'Valor da assessoria não confere com o preço vigente.' });
-        }
+      // FAIL-CLOSED: se o preço vigente não veio (linha ausente/renomeada em planos_config),
+      // não dá para provar que `valor` bate com o preço de tabela — mesma lógica do catch
+      // abaixo, sem preço para conferir contra não é "sem risco", é "não sei".
+      if (!vigentes.length) {
+        console.error('[mp-checkout] planos_config sem preço vigente para assessorado');
+        return res.status(503).json({ error: 'Não consegui validar o preço agora. Tente em instantes.' });
+      }
+      const piso = Math.min(...vigentes), teto = Math.max(...vigentes) * 2;
+      const v = Number(valor);
+      if (v < piso - 0.01 || v > teto) {
+        return res.status(400).json({ error: 'Valor da assessoria não confere com o preço vigente.' });
       }
     } catch (e) {
       // FAIL-CLOSED: sem conseguir conferir o gate ou o preço, NÃO cobra. Um erro de leitura
