@@ -29506,3 +29506,31 @@ imóvel/lote pela equipe) — instrumentar sob demanda, não em bloco, seguindo 
 
 **Validação**: `npm run build` limpo; RPC testada ao vivo com um evento
 `teste_instrumentacao_360` (removido logo em seguida).
+
+## 18/09 — Antecipação Asaas: "Erro interno no processamento" mascarava o motivo real
+
+Dono rodou `simular_antecipacao` pela primeira vez (exatamente o que o comentário do
+código pedia: "ANTES de usar pra valer, confira a resposta manualmente") e bateu num
+genérico "Erro interno no processamento" — zero pista do motivo.
+
+**Causa**: `asaasGet`/`asaasPost` já extraem o erro REAL do Asaas
+(`errors[].description`) e lançam com ele — mas o `catch` de topo de `api/asaas.js`
+descartava `err.message` e devolvia sempre o mesmo texto genérico. O motivo real só ia pro
+Sentry (**dormente — `SENTRY_DSN` ainda PENDENTE em `docs/ENVS_VERCEL.md`, zero eventos
+confirmados na organização**) e pro e-mail de alerta (não verificado). **Corrigido**: o
+catch agora devolve `err.message` — toda ação deste arquivo já passa por gate de
+admin/dono-do-recurso antes de chegar aqui, e o texto vem do Asaas, não é stack trace nem
+segredo. Rode `simular_antecipacao` de novo — agora o motivo real aparece na tela.
+
+**Achado à parte, ao investigar**: o pagamento testado (R$ 33.001,09, "Honorários de êxito
+(saldo restante) — BidPro Brasil [TESTE Asaas]") **não tem vínculo local com nenhum
+usuário** — não bate com nenhuma `arrematacoes.honorarios_valor`, e é o mesmo caso já
+registrado acima (`cobrancas_avulsas` zerada, link gerado direto na API do Asaas). Por
+isso ele **não pode aparecer no Cliente 360 do Marcos, de nenhum jeito** — não é bug desta
+sessão, é a ausência de vínculo local que já vínhamos documentando. Aproveitei e adicionei
+log de `antecipacao_solicitada` em `solicitar_antecipacao` (resolve o usuário via
+`honorarios_recebimentos.gateway_payment_id` → `arrematacoes.arrematante_id`) — vale para
+antecipação FUTURA de um honorário criado pelo fluxo normal do app; não resolve o caso já
+feito por fora.
+
+**Validação**: `npm run build` limpo.
