@@ -184,6 +184,40 @@ export default function ProdutoPublico({ tipo }) {
     } finally { setComprando(false); }
   }
 
+  // Fallback Asaas pro bônus (18/09, pedido do dono): recusa REAL de cartão no cartão
+  // embutido do bônus (requer_cartao_bonus) não tinha plano B — era o único fluxo de
+  // pagamento ainda sem fallback (ver HANDOFF, pendência #1). Reusa criar_cobranca_avulsa,
+  // a MESMA ação que a compra avulsa comum já usa logo acima (preço/elegibilidade sempre do
+  // servidor via comprar_produto_iniciar — nunca do valor promocional que a tela mostra).
+  // Fora do escopo: o "cartão salvo pra renovar sozinho" é recurso específico do fluxo MP
+  // com cartão embutido — pelo Asaas o cliente recebe o produto + bônus normalmente, só não
+  // ganha a renovação automática; pode assinar na mão quando o bônus vencer, como qualquer
+  // outro cliente que comprou avulso.
+  async function pagarBonusAsaas() {
+    if (!user?.email) return;
+    setErroCompra('');
+    try {
+      const refCod = ref || lerRef();
+      const nome = nomePerfil || user?.user_metadata?.nome || user?.user_metadata?.full_name || '';
+      const r = await apiCall('/api/asaas', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'criar_cobranca_avulsa', produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível gerar o pagamento pelo Asaas.');
+      if (j.ja_tem) { setComprouAvulso(true); setMostrarPagamentoBonus(false); return; }
+      if (j.linkPagamento) {
+        window.open(j.linkPagamento, '_blank', 'noopener');
+        setMostrarPagamentoBonus(false);
+        setAguardando(true);
+      } else {
+        throw new Error('Não foi possível gerar o pagamento.');
+      }
+    } catch (e) {
+      setErroCompra(e?.message || 'Erro ao gerar cobrança pelo Asaas.');
+    }
+  }
+
   // Cadastro inline (11/09): cria a conta JÁ CONFIRMADA (mesmo endpoint do checkout de plano
   // grátis), loga e segue direto para `comprar()` — sem a volta ao /login que existia antes.
   async function criarContaEComprar() {
@@ -864,10 +898,10 @@ export default function ProdutoPublico({ tipo }) {
                     )}
                     {produto?.requer_cartao_bonus ? (
                       !mostrarPagamentoBonus ? (
-                        <button className="bp-btn-hover" onClick={() => { trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase); setMostrarPagamentoBonus(true); }} disabled={!aceitouTermo}
+                        <button className="bp-btn-hover" onClick={() => { trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase); setMostrarPagamentoBonus(true); }} disabled={!aceitouTermo || aguardando}
                           title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
-                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: aceitouTermo ? 'pointer' : 'default', marginBottom: 10, opacity: aceitouTermo ? 1 : 0.7, boxShadow: aceitouTermo ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
-                          {`Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
+                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (aceitouTermo && !aguardando) ? 'pointer' : 'default', marginBottom: 10, opacity: (aceitouTermo && !aguardando) ? 1 : 0.7, boxShadow: (aceitouTermo && !aguardando) ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
+                          {aguardando ? 'Aguardando pagamento…' : `Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
                         </button>
                       ) : (
                         <div style={{ marginBottom: 10 }}>
@@ -875,6 +909,7 @@ export default function ProdutoPublico({ tipo }) {
                             servico={{ produto_tipo: tipo, produto_id: id, ref: ref || lerRef(), nome: produto?.titulo, valor: precoBase, descricao: produto?.titulo, proposito: 'produto_bonus', manterAssinatura: cienteRenovacao }}
                             soCartao
                             parcelasMax={1}
+                            onGatewayBloqueado={pagarBonusAsaas}
                             onPago={() => {
                               // Mesmo formato de event_id do polling acima (dedup com o CAPI do servidor).
                               const uidCompra = effectiveUserId || user?.id;
