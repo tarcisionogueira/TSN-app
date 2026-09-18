@@ -29,6 +29,14 @@ import { deveAncorarGarantia } from './_ancora-cdc.js';
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
 const planoBase = (p) => String(p || '').replace(/_(anual|vista|mensal)$/i, '');
 
+// ─── RECORRÊNCIA NÃO TEM INADIMPLÊNCIA (regra do dono, 17/08) ──────────────────────────
+// "Não há inadimplência em recorrência do Investidor Pro — ele é reduzido a explorador.
+//  Leilão Clube tem contrato de 12 meses, por isso há inadimplência." Compartilhado entre
+// suspenderPlanoDireto e processarRecusado — os dois caminhos que podem rebaixar por falha
+// de cobrança precisam da MESMA régua, senão o mesmo cliente pode virar "inadimplente" por
+// um caminho e não pelo outro dependendo de qual webhook chegou primeiro (18/09).
+const ROLES_COM_FIDELIDADE = ['clube', 'clube_anual'];
+
 // ── Escada de planos do CLIENTE (regra do dono, 30/07): um pagamento NUNCA rebaixa ──
 // o role. A mensalidade do Investidor Pro CONTINUA sendo cobrada enquanto o cliente é
 // assessorado (a assessoria é por arrematação, em cima do Pro) — sem esta guarda, a
@@ -379,7 +387,6 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
   // Efeito colateral bem-vindo: quem NUNCA pagou é `explorador`, que não está em nenhuma das
   // duas listas — então não é rebaixado (já está na base) nem marcado. Era o caso do cliente
   // de 16/08, cuja primeira cobrança foi recusada e que mesmo assim virou "devedor".
-  const ROLES_COM_FIDELIDADE = ['clube', 'clube_anual'];
   const temFidelidade = ROLES_COM_FIDELIDADE.includes(cliente.role);
 
   const update = {};
@@ -665,7 +672,10 @@ export async function processarVencido({ gatewayCustomerId, email, gateway, serv
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente && !cliente.inadimplente_desde) {
     const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-    const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
+    // 18/09: mesma régua de fidelidade de processarRecusado/suspenderPlanoDireto —
+    // só Clube marca inadimplência de verdade.
+    const update = {};
+    if (ROLES_COM_FIDELIDADE.includes(cliente.role)) update.inadimplente_desde = new Date().toISOString().slice(0, 10);
     if (ROLES_PAGANTES.includes(cliente.role)) {
       update.role_anterior = cliente.role;
       update.role = 'explorador';
@@ -681,8 +691,9 @@ export async function processarVencido({ gatewayCustomerId, email, gateway, serv
     // sempre, e a reentrega é descartada como `duplicado`.
     const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
     if (error) throw new Error(error.message);
-    // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
-    await setExpiracaoDocumentos(cliente.id);
+    // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento. Só para
+    // quem tem fidelidade (mesmo critério de processarRecusado, 18/09).
+    if (ROLES_COM_FIDELIDADE.includes(cliente.role)) await setExpiracaoDocumentos(cliente.id);
   }
   return { ok: true };
 }
@@ -832,14 +843,22 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
     }
     // Só suspende se ainda não está inadimplente (evita sobrescrever role_anterior já salvo).
     // 19/08: os três updates abaixo descartavam o erro — ver o comentário em processarVencido.
+    // 18/09: `inadimplente_desde` só entra para quem tem FIDELIDADE (Clube) — mesma régua de
+    // suspenderPlanoDireto. Antes, esta função marcava inadimplência para QUALQUER plano pago
+    // (inclusive Investidor Pro sem fidelidade), o que travava a reativação automática do
+    // reconciliar-assinaturas-cron (guarda `!perfil.inadimplente_desde`) mesmo quando o mandato
+    // MP seguia autorizado e a cobrança seguinte podia passar sozinha.
     if (ROLES_PAGANTES.includes(cliente.role) && !cliente.inadimplente_desde) {
-      update.inadimplente_desde = new Date().toISOString().slice(0, 10);
+      const temFidelidade = ROLES_COM_FIDELIDADE.includes(cliente.role);
+      if (temFidelidade) update.inadimplente_desde = new Date().toISOString().slice(0, 10);
       update.role_anterior = cliente.role;
       update.role = 'explorador';
       const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
       if (error) throw new Error(error.message);
-      // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
-      await setExpiracaoDocumentos(cliente.id);
+      // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento. Só para
+      // quem tem fidelidade: recorrência sem fidelidade pode voltar sozinha na próxima
+      // tentativa do gateway (suspenderPlanoDireto, caminho correto, nunca inicia este prazo).
+      if (temFidelidade) await setExpiracaoDocumentos(cliente.id);
     } else {
       const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
       if (error) throw new Error(error.message);
