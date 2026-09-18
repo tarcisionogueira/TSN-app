@@ -29226,3 +29226,67 @@ envelope de 4min/site + timeout de 15s no close). Classificação final:
 
 **Validação**: `npm run build` limpo em todos os commits desta sessão; migração aplicada em
 produção via MCP com `auditoria_seguranca()=0/0` depois.
+
+## 18/09 (2ª parte, mesma sessão) — produção liberada, autocorreção do espaçamento, TORRES3
+com freio próprio, fallback Asaas fecha 100% (bônus incluso), recon de novas fontes
+
+**Pedido do dono**: colocar tudo em produção, resolver as pendências que dependem de mim, e
+testar só a HASTA (não o cluster Cloudflare inteiro) antes de comprometer mais Bright Data.
+
+**1. Deploy em produção.** Branch mergeado em `main` (push direto, sem PR — fluxo padrão do
+projeto), Vercel READY em todos os commits desta parte.
+
+**2. ⚠️ AUTOCORREÇÃO — a exclusão de ZUK/GRUPOLANCE/SBID9/SOLD do stale-purge estava ERRADA.**
+Antes de implementar o espaçamento pedido, fui checar `leiloeiro_conhecimento.acesso` das 5
+fontes chamadas de "login-gated" na conversa — e nenhuma das 4 acima é login-gated pro
+CATÁLOGO (só a MATRÍCULA é, e já roda à parte, 4x/dia, sem depender do catálogo). As 4 rodam
+puppeteer/api_json GRÁTIS, sem anti-bot, no job diário — a mesma cadência que a margem de 36h
+do stale-purge já pressupõe. Excluí-las (migração da 1ª parte desta sessão) não resolvia nada e
+criava um risco novo: lote removido de verdade deixaria de ser detectado até a data do leilão
+vencer sozinha. Revertido (`stale_corrige_exclusao_login_gated.sql`) — só VENDASGOV, TORRES3 e
+HASTA continuam excluídas (essas sim têm acesso que não bate com "recoleta diária"). Registro
+isto explicitamente porque é exatamente a pergunta que o CLAUDE.md pede ("este número mede o
+que o nome diz?") — só fiz tarde demais, depois de já ter aplicado, não antes.
+
+**3. TORRES3 — freio próprio de 14 dias, desacoplado do grátis.** Único tenant do cluster
+SOLEON atrás de Cloudflare (toda enumeração e detalhe caem no Bright Data pago); hoje herdava
+o mesmo freio de 7 dias do GRUPO inteiro (`coleta-recente.mjs SOLEON 7`), pagando na cadência
+que CALIL/VEGAS (grátis) pedem, sem necessidade. Freio agora vive DENTRO do coletor
+(`scraper-soleon.mjs`), só pra TORRES3 — CALIL/VEGAS seguem no ritmo normal. Skip marca
+`SEM_COTA` (mesmo mecanismo do freio de orçamento real) pra `registrarSaude()` não confundir
+"decidi não gastar" com "a fonte quebrou".
+
+**4. Fallback Asaas — FECHADO nos 3 fluxos (pendência #1 do HANDOFF, 100% agora).** Faltava só
+o bônus (ProdutoPublico.jsx, cartão embutido, `requer_cartao_bonus`). Resolvido reusando
+`criar_cobranca_avulsa` — a MESMA ação que a compra avulsa comum já usa (preço/elegibilidade
+sempre do servidor via `comprar_produto_iniciar`), sem precisar de ação nova no Asaas nem
+coletar CPF/endereço de novo (o fluxo já exige login). Fora do escopo, deliberadamente: o
+"cartão salvo pra renovar sozinho quando o bônus vence" é recurso específico do MP; pelo Asaas
+o cliente recebe produto+bônus normalmente, só assina na mão depois.
+
+**5. Recon de fontes novas — 2 achados, 1 integração adiada com motivo.**
+- **SAULOJULIOLEILOEIRO**: a API (`app/lotes`) só responde 200 quando é a PRÓPRIA SPA que
+  chama (capturado passivamente por interceptação, recon de mais cedo); um `fetch` direto
+  pra MESMA URL — de fora OU de dentro do contexto do navegador — devolve 404/403 em toda
+  variação de filtro testada (`?categoria=imoveis`, `?tipo=imoveis`, etc.). Precisa de recon
+  mais fundo (provavelmente um token/header que o framework client-side injeta sozinho, ou a
+  chamada precisa vir depois de outro endpoint estabelecer sessão) — não escrevo parser sem
+  entender isso primeiro (arriscaria adivinhar filtro de categoria errado e misturar
+  imóvel com veículo/maquinário, que é o que o payload sem filtro já mostrou vir junto).
+  **Adiado pra sessão com recon dedicado.**
+- **NAKAKOGUELEILOES**: recon confirmou site real (cards, links de lote, API de filtro por
+  cidade/UF) — achado NO MEIO do dump de detalhe: `dumpDetalhe()` tinha o MESMO bug de
+  `page.close()` sem timeout já corrigido em `reconSite()` mais cedo nesta sessão (achado
+  de novo, ao vivo: o job travou de novo, cancelado manualmente, `page.close()` do
+  `dumpDetalhe` corrigido com o mesmo envelope). Dump do lote de detalhe redisparado.
+
+**Pendências para a próxima sessão:**
+1. SAULOJULIOLEILOEIRO — recon mais fundo da API (`app/lotes`) antes de integrar.
+2. NAKAKOGUELEILOES — conferir resultado do dump de detalhe redisparado e escrever o parser.
+3. `pino_generico_como_rua` (26, 1 acima do limite) — casos de abreviação, não investigado
+   nesta sessão (deprioritizado frente aos itens de pagamento/captura).
+4. Fallback Asaas nos 3 fluxos segue sem teste contra um decline REAL em produção — só
+   validado por leitura de código + build.
+
+**Validação**: `npm run build` limpo em todos os commits; migrações aplicadas via MCP com
+`auditoria_seguranca()=0/0` depois de cada uma.
