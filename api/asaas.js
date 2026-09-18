@@ -507,6 +507,11 @@ export default async function handler(req, res) {
         asaasGet(`/finance/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
       ]);
       if (balance.status === 'rejected') throw new Error(balance.reason?.message || 'Erro ao buscar saldo');
+      // 18/09: diagnóstico temporário — dono reportou "A receber" zerado mesmo com pagamento
+      // real recebido via Asaas nesta sessão. As chamadas voltam 200 (confirmado nos logs),
+      // então o problema é OU dado real zerado OU nome de campo errado — log da resposta crua
+      // decide qual. Remover depois de confirmado (ver HANDOFF).
+      console.log('[asaas financas] balance:', JSON.stringify(balance.value), 'statsMes:', JSON.stringify(statsMes.status === 'fulfilled' ? statsMes.value : statsMes.reason?.message));
       return res.status(200).json({
         balance: balance.value,
         statsMes: statsMes.status === 'fulfilled' ? statsMes.value : null,
@@ -518,6 +523,16 @@ export default async function handler(req, res) {
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
       const data = await asaasGet(`/payments?status=RECEIVED&paymentDate[ge]=${inicioMes}&paymentDate[le]=${fimMes}&limit=50`);
+      // 18/09: diagnóstico temporário — "A receber"/extrato vindo zerado mesmo com pagamento
+      // real via Asaas nesta sessão. Filtra por `paymentDate` (data de LIQUIDAÇÃO) + status
+      // RECEIVED — pagamento de CARTÃO fica em CONFIRMED até liberar (D+32) e pode não ter
+      // paymentDate preenchido ainda, o que o excluiria dos dois filtros ao mesmo tempo.
+      // Log sem filtro de status pra ver o estado real. Remover depois de confirmado.
+      try {
+        const semFiltro = await asaasGet(`/payments?dateCreated[ge]=${inicioMes}&dateCreated[le]=${fimMes}&limit=50`);
+        console.log('[asaas extrato] com filtro RECEIVED:', data?.totalCount, '| sem filtro (por dateCreated):', semFiltro?.totalCount,
+          'status encontrados:', JSON.stringify((semFiltro?.data || []).map(p => ({ id: p.id, status: p.status, value: p.value, paymentDate: p.paymentDate, dateCreated: p.dateCreated, billingType: p.billingType }))));
+      } catch (e) { console.log('[asaas extrato] diagnóstico sem filtro falhou:', e?.message); }
       return res.status(200).json(data);
     }
 
