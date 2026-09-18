@@ -1688,6 +1688,12 @@ export default function Checkout() {
               assinatura={false}
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
+              // 18/09 (HANDOFF pendência #1): recusa real do MP aqui não caía pro Asaas —
+              // só o mandato de assinatura (top2 mensal, abaixo) tinha isso. `planoApiKey`
+              // já resolve pra 'assessorado' ou 'assessorado_vista' conforme a modalidade
+              // (linha ~294), a MESMA chave que api/asaas.js (criar_assinatura → PLANOS)
+              // já reconhece — reusa o mesmo caminho, sem pedir CPF/endereço de novo.
+              onGatewayBloqueado={pagarAsaas}
             />
           ) : showPagamento && planoKey === 'top2' && modalidade !== 'anual' ? (
             /* ── Investidor Pro mensal: assinatura transparente inline (cartão no BidPro) ── */

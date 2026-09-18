@@ -477,7 +477,13 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao criar a assinatura.');
+        // `assinaturaRecusada` (18/09): recusa REAL do mandato (não criou/não autorizou) —
+        // diferente de `sdkBloqueado` (SDK/fetch barrado por extensão), mas mesmo destino:
+        // nenhum mandato ficou ativo no MP (só `authorized` é mandato de verdade, tratado
+        // abaixo), então trocar de gateway aqui é SEGURO, sem risco de duplo-mandato. Sem
+        // esta marca, `assinatura recorrente com cartão embutido` (top2 mensal) era o único
+        // caminho de assinatura sem plano B numa recusa real (HANDOFF 18/09, pendência #1).
+        if (!res.ok) throw Object.assign(new Error(data.error || 'Falha ao criar a assinatura.'), { assinaturaRecusada: true });
         // `authorized` É MANDATO, NÃO PAGAMENTO (16/08). O MP valida o cartão com uma
         // transação de R$ 0,00 e devolve `authorized` na hora; a primeira cobrança é
         // assíncrona e pode ser recusada minutos depois — no 1º assinante Pro veio 22
@@ -490,7 +496,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           setErro('Assinatura em processamento. Assim que o pagamento for confirmado, seu plano é liberado automaticamente — você recebe um e-mail no mesmo instante.');
           return;
         }
-        throw new Error('Não foi possível autorizar a assinatura. Verifique os dados do cartão ou tente outro.');
+        throw Object.assign(new Error('Não foi possível autorizar a assinatura. Verifique os dados do cartão ou tente outro.'), { assinaturaRecusada: true });
       }
 
       // A bandeira vem do lookup do próprio BIN no MP — nunca chutar. Achado 17/09: um
@@ -559,7 +565,15 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         return;
       }
       setErro('Pagamento não aprovado. Verifique os dados ou tente outro cartão.');
+      // 18/09 (HANDOFF pendência #1): recusa real no pagamento AVULSO com cartão embutido
+      // (ex.: assessoria à vista/parcelado — `assinatura=false`) tinha o mesmo beco sem saída
+      // do preapproval: sem `arrematacao_id`/`cobranca_id` (que só honorário/cobrança avulsa
+      // têm), `propositoFallback` nunca fica truthy e `mostrarAsaas` nunca aparece. Quando o
+      // chamador passa `onGatewayBloqueado` (Checkout.jsx faz isso pra assessoria, mesma
+      // função `pagarAsaas` já usada pra assinatura), usa o MESMO caminho — troca de gateway
+      // com os dados que o Checkout já tem, sem pedir CPF/endereço de novo aqui.
       if (propositoFallback) setMostrarAsaas(true);
+      else if (onGatewayBloqueado) onGatewayBloqueado();
     } catch (e) {
       // Achado 04/09: mesma classe de falha do assinarComCadastro (Checkout.jsx) - SDK barrado
       // ou createCardToken bloqueado (adblock/privacidade) -, so que aqui a assinatura nao tem
@@ -570,7 +584,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       // cobrado ainda neste ponto (sem risco de duplo-mandato).
       const m = String(e?.message || '');
       const bloqueado = e?.sdkBloqueado || /failed to fetch|load failed|networkerror|net::err|fetch/i.test(m);
-      if (bloqueado && assinatura && onGatewayBloqueado) { onGatewayBloqueado(); return; }
+      // 18/09 (HANDOFF pendência #1): recusa REAL do mandato (`assinaturaRecusada`, marcada
+      // acima) tem o MESMO destino do SDK bloqueado — nenhum mandato ficou ativo no MP, então
+      // cair pro Asaas aqui é seguro. Antes só `bloqueado` disparava isto; uma recusa de
+      // verdade (cartão sem saldo/limite, antifraude) virava beco sem saída no cartão
+      // embutido de assinatura (Investidor Pro mensal) — o único caminho sem plano B.
+      if ((bloqueado || e?.assinaturaRecusada) && assinatura && onGatewayBloqueado) { onGatewayBloqueado(); return; }
       setErro(bloqueado
         ? 'Não conseguimos processar o cartão (ele costuma ser barrado por bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo.'
         : (m || 'Erro ao processar pagamento.'));

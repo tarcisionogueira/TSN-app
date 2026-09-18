@@ -80,6 +80,19 @@ const SITES = {
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
 
+// Watchdog GENÉRICO (18/09) — `page.goto` já tem timeout (45s), mas `page.evaluate()` e o
+// handler de `page.on('response')` NÃO têm: se travarem (site lento/protegido), a `await`
+// correspondente nunca resolve e a FILA INTEIRA para até o timeout do WORKFLOW (achado real:
+// SAULOJULIOLEILOEIRO travou 38min sozinho, e um 2º lote travou de novo do mesmo jeito).
+// Corre a unidade de trabalho (por path) contra um limite que SEMPRE resolve — não cancela o
+// trabalho travado (Puppeteer não garante isso), só destrava a fila pro próximo site/path.
+function comTimeout(promise, ms, rotulo) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout de ${ms}ms — ${rotulo}`)), ms)),
+  ]);
+}
+
 function ehJsonInteressante(url, ct) {
   if (/\.(png|jpe?g|gif|svg|webp|woff2?|ttf|css|js)(\?|$)/i.test(url)) return false;
   if (/json/i.test(ct || '')) return true;
@@ -88,67 +101,83 @@ function ehJsonInteressante(url, ct) {
 
 async function reconSite(browser, nome, cfg) {
   console.log(`\n\n══════════════════ RECON ${nome} (${cfg.base}) ══════════════════`);
-  const page = await browser.newPage();
-  await page.setUserAgent(UA);
-  await page.setViewport({ width: 1280, height: 900 });
+  const apis = new Map(); // url -> {status, ct, sample} — compartilhado entre páginas (ver abrirPagina)
 
-  const apis = new Map(); // url -> {status, ct, sample}
-  page.on('response', async (resp) => {
-    try {
-      const url = resp.url(); const ct = resp.headers()['content-type'] || '';
-      if (!ehJsonInteressante(url, ct)) return;
-      if (apis.has(url)) return;
-      let sample = '';
-      try { sample = (await resp.text()).slice(0, 500).replace(/\s+/g, ' '); } catch { /* corpo consumido */ }
-      apis.set(url, { status: resp.status(), ct, sample });
-    } catch { /* ignora */ }
-  });
+  // Extraído (18/09) porque o watchdog de timeout pode precisar TROCAR de página no meio dos
+  // paths de um mesmo site (ver comTimeout mais abaixo) — sem isto, a 2ª página nasceria sem
+  // o listener de resposta e pararia de capturar APIs pro resto do site.
+  const abrirPagina = async () => {
+    const p = await browser.newPage();
+    await p.setUserAgent(UA);
+    await p.setViewport({ width: 1280, height: 900 });
+    p.on('response', async (resp) => {
+      try {
+        const url = resp.url(); const ct = resp.headers()['content-type'] || '';
+        if (!ehJsonInteressante(url, ct)) return;
+        if (apis.has(url)) return;
+        let sample = '';
+        try { sample = (await resp.text()).slice(0, 500).replace(/\s+/g, ' '); } catch { /* corpo consumido */ }
+        apis.set(url, { status: resp.status(), ct, sample });
+      } catch { /* ignora */ }
+    });
+    return p;
+  };
+  let page = await abrirPagina();
 
   for (const path of cfg.paths) {
     const url = cfg.base + path;
     try {
-      const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-      const status = resp ? resp.status() : '?';
-      // dá tempo de disparar XHRs de listagem
-      await new Promise(r => setTimeout(r, 3500));
-      // tenta rolar para carregar lazy/paginação infinita
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-      await new Promise(r => setTimeout(r, 2000));
+      await comTimeout((async () => {
+        const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        const status = resp ? resp.status() : '?';
+        // dá tempo de disparar XHRs de listagem
+        await new Promise(r => setTimeout(r, 3500));
+        // tenta rolar para carregar lazy/paginação infinita
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+        await new Promise(r => setTimeout(r, 2000));
 
-      const info = await page.evaluate(() => {
-        const pick = (sel) => Array.from(document.querySelectorAll(sel)).slice(0, 3).map(e => (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
-        // heurística de cards de lote
-        const cardSels = ['.card', '.lote', '.item-lote', '[class*="lote"]', '[class*="card"]', 'article', '.product', '[class*="imovel"]'];
-        const cards = {};
-        for (const s of cardSels) { const n = document.querySelectorAll(s).length; if (n) cards[s] = n; }
-        // links que parecem de lote/imóvel
-        const links = Array.from(document.querySelectorAll('a[href]'))
-          .map(a => a.getAttribute('href'))
-          .filter(h => h && /lote|imove|leilao|bem|detalhe|sale/i.test(h))
-          .slice(0, 12);
-        // paginação
-        const pag = Array.from(document.querySelectorAll('[class*="pag"], .pagination, nav a')).slice(0, 6).map(e => (e.textContent || '').trim().slice(0, 20)).filter(Boolean);
-        return { titulo: document.title, cardCounts: cards, sampleCards: pick('[class*="lote"], .card, article'), loteLinks: [...new Set(links)], paginacao: pag };
-      });
+        const info = await page.evaluate(() => {
+          const pick = (sel) => Array.from(document.querySelectorAll(sel)).slice(0, 3).map(e => (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+          // heurística de cards de lote
+          const cardSels = ['.card', '.lote', '.item-lote', '[class*="lote"]', '[class*="card"]', 'article', '.product', '[class*="imovel"]'];
+          const cards = {};
+          for (const s of cardSels) { const n = document.querySelectorAll(s).length; if (n) cards[s] = n; }
+          // links que parecem de lote/imóvel
+          const links = Array.from(document.querySelectorAll('a[href]'))
+            .map(a => a.getAttribute('href'))
+            .filter(h => h && /lote|imove|leilao|bem|detalhe|sale/i.test(h))
+            .slice(0, 12);
+          // paginação
+          const pag = Array.from(document.querySelectorAll('[class*="pag"], .pagination, nav a')).slice(0, 6).map(e => (e.textContent || '').trim().slice(0, 20)).filter(Boolean);
+          return { titulo: document.title, cardCounts: cards, sampleCards: pick('[class*="lote"], .card, article'), loteLinks: [...new Set(links)], paginacao: pag };
+        });
 
-      console.log(`\n── ${url}  → HTTP ${status}`);
-      console.log(`   título: ${info.titulo}`);
-      console.log(`   contagem de cards por seletor: ${JSON.stringify(info.cardCounts)}`);
-      if (info.sampleCards?.length) console.log(`   amostra de cards: ${JSON.stringify(info.sampleCards)}`);
-      if (info.loteLinks?.length) console.log(`   links de lote/imóvel: ${JSON.stringify(info.loteLinks)}`);
-      if (info.paginacao?.length) console.log(`   paginação: ${JSON.stringify(info.paginacao)}`);
+        console.log(`\n── ${url}  → HTTP ${status}`);
+        console.log(`   título: ${info.titulo}`);
+        console.log(`   contagem de cards por seletor: ${JSON.stringify(info.cardCounts)}`);
+        if (info.sampleCards?.length) console.log(`   amostra de cards: ${JSON.stringify(info.sampleCards)}`);
+        if (info.loteLinks?.length) console.log(`   links de lote/imóvel: ${JSON.stringify(info.loteLinks)}`);
+        if (info.paginacao?.length) console.log(`   paginação: ${JSON.stringify(info.paginacao)}`);
 
-      // Dump do 1º card (article) que tem link de /oferta/ — estrutura exata p/ o scraper.
-      if (status === 200 && /imoveis|leiloes|busca/.test(path)) {
-        const cardHtml = await page.evaluate(() => {
-          const arts = Array.from(document.querySelectorAll('article, [class*="card"], li'));
-          const alvo = arts.find(a => a.querySelector('a[href*="/oferta/"]'));
-          return alvo ? alvo.outerHTML.replace(/\s+/g, ' ').slice(0, 2200) : null;
-        }).catch(() => null);
-        if (cardHtml) console.log(`   ▸ CARD outerHTML: ${cardHtml}`);
-      }
+        // Dump do 1º card (article) que tem link de /oferta/ — estrutura exata p/ o scraper.
+        if (status === 200 && /imoveis|leiloes|busca/.test(path)) {
+          const cardHtml = await page.evaluate(() => {
+            const arts = Array.from(document.querySelectorAll('article, [class*="card"], li'));
+            const alvo = arts.find(a => a.querySelector('a[href*="/oferta/"]'));
+            return alvo ? alvo.outerHTML.replace(/\s+/g, ' ').slice(0, 2200) : null;
+          }).catch(() => null);
+          if (cardHtml) console.log(`   ▸ CARD outerHTML: ${cardHtml}`);
+        }
+      })(), 60000, `${nome} ${path}`);
     } catch (e) {
       console.log(`\n── ${url}  → ERRO: ${String(e.message).slice(0, 120)}`);
+      // Watchdog disparou (ou goto/evaluate falharam de outro jeito): a página pode ter
+      // trabalho pendurado (evaluate travado não é cancelável) — fecha e abre uma nova pro
+      // resto dos paths deste site, pra não arrastar o travamento adiante.
+      if (/timeout de \d+ms/.test(e.message)) {
+        try { await page.close(); } catch { /* já pode ter fechado sozinha */ }
+        page = await abrirPagina();
+      }
     }
   }
 
@@ -368,7 +397,7 @@ const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim(
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
     for (const url of dumpUrls) {
-      try { await dumpDetalhe(browser, url); } catch (e) { console.log(`Dump ${url} falhou: ${e.message}`); }
+      try { await comTimeout(dumpDetalhe(browser, url), 60000, `dump ${url}`); } catch (e) { console.log(`Dump ${url} falhou: ${e.message}`); }
     }
     for (const nome of alvo) {
       const cfg = SITES[nome];
