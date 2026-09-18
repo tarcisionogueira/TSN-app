@@ -16,6 +16,7 @@ import { getAuthUser } from './_auth.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
+import { logAtividade } from './_atividade.js';
 
 const MP_URL    = 'https://api.mercadopago.com';
 const TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
@@ -449,6 +450,7 @@ async function cancelarAssinatura({ assinaturaId, email, userId }) {
   for (const id of ids) {
     try { await mpPut(`/preapproval/${id}`, { status: 'cancelled' }); cancelados++; } catch (_) {}
   }
+  if (cancelados > 0 && userId) await logAtividade(userId, 'assinatura_cancelada', `${cancelados} assinatura(s) MP`, { gateway: 'mercadopago', assinaturaId: assinaturaId || null, cancelados });
   return { ok: true, cancelados };
 }
 

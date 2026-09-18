@@ -10,6 +10,7 @@ import { escapeHtml } from './_sanitize.js';
 // dropdown por papel do cliente, e este arquivo promovia o role e liberava o acesso direto de
 // explorador→assessorado, pulando o Pro — a regra "absoluta" do dono só existia no autoatendimento).
 import { acessoAssessoria } from '../src/lib/assessoria-acesso.js';
+import { logAtividade } from './_atividade.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -208,6 +209,22 @@ export default async function handler(req) {
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ acao: 'contrato_assinado', ip, sucesso: true, detalhes: { contrato_id: contrato.id, token, hash, ...(kycMatch ? { kyc_match: { modo: kycModo, mesma_pessoa: kycMatch.mesma_pessoa, confianca: kycMatch.confianca, documento_ok: kycMatch.documento_ok } } : {}) } }),
   }).catch(() => {});
+
+  // LOG DE ATIVIDADE (Cliente 360) — `audit_logs` acima é trilha jurídica (IP/hash/prova),
+  // mas não aparece no Cliente 360 (que lê `atividade_log`). Resolve o signatário do mesmo
+  // jeito que o bloco de promoção de role abaixo (contratos_pendentes.user_id, ou e-mail) —
+  // best-effort e independente dele, então um contrato SEM tier de plano (não entra no
+  // RANK_TIER do bloco de promoção) ainda aparece na linha do tempo do cliente.
+  try {
+    let userIdLog = null;
+    const pendLog = await sb(`contratos_pendentes?contrato_link_id=eq.${contrato.id}&select=user_id&limit=1`).then(x => x.json()).catch(() => []);
+    userIdLog = pendLog?.[0]?.user_id || null;
+    if (!userIdLog && contrato.assinante_email) {
+      const ridLog = await sb('rpc/get_user_id_by_email', { method: 'POST', body: JSON.stringify({ p_email: contrato.assinante_email }) });
+      if (ridLog.ok) userIdLog = await ridLog.json().catch(() => null);
+    }
+    if (userIdLog) await logAtividade(userIdLog, 'contrato_assinado', contrato.plano_key || null, { contrato_id: contrato.id, ip });
+  } catch { /* log é reforço; a assinatura já está válida */ }
 
   // PROMOÇÃO DE ROLE POR CONTRATO (achado 05/08: o Rafael assinou o Contrato de
   // Assessoria e continuou 'explorador' — o painel identificava o cliente errado).

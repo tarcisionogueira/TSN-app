@@ -3,6 +3,7 @@ import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
 import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF } from './_cpf.js';
 import { podeContratarAssessoria } from './_assessoria.js';
+import { logAtividade } from './_atividade.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
 // no CPF que veio do body). Fallback ao body só durante a transição da cifra.
@@ -488,6 +489,8 @@ export default async function handler(req, res) {
         const t = await delRes.text();
         throw new Error(`Erro ao cancelar: ${t}`);
       }
+
+      if (authUser?.id) await logAtividade(authUser.id, 'assinatura_cancelada', 'assinatura Asaas', { gateway: 'asaas', subscriptionId: sub.id });
 
       return res.status(200).json({
         cancelado: true,

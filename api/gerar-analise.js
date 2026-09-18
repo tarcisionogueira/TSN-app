@@ -5,6 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser, isCronAuthorized } from './_auth.js';
+import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
@@ -158,16 +159,6 @@ async function marcarProgresso(imovelId, ownerId, etapas) {
     });
   } catch { /* progresso é best-effort */ }
 }
-// LOG DE ATIVIDADE (Cliente 360) — best-effort, nunca bloqueia o relatório. Registra o
-// movimento (relatório ok/erro) com o MOTIVO, para diagnóstico (ex.: "sem créditos").
-async function logAtividade(userId, evento, detalhe, meta) {
-  try {
-    if (!userId) return;
-    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
-      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
-  } catch { /* log é best-effort */ }
-}
-
 export function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');

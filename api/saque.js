@@ -318,10 +318,12 @@ export default async function handler(req) {
       if (acao === 'aprovar_pj') {
         const r = await rpc('aprovar_saque_pj', { p_lanc_id: Number(idv), p_validador: user.id, p_via: 'manual' });
         if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Erro ao aprovar' }, 400);
+        await logSaque(r.data.user_id, 'saque_pj_aprovado', 'PJ validada, saque liberado para pagamento', { validador: user.id });
         return json({ ok: true });
       }
       const r = await rpc('reprovar_saque_pj', { p_lanc_id: Number(idv), p_motivo: String(body.motivo || '') });
       if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Erro ao reprovar' }, 400);
+      await logSaque(r.data.user_id, 'saque_pj_reprovado', String(body.motivo || ''), { validador: user.id });
       return json({ ok: true });
     }
 
@@ -338,8 +340,9 @@ export default async function handler(req) {
         method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=representation' },
       });
       if (!r.ok) return json({ error: 'Erro ao liberar pagamentos', detail: r.data }, 500);
-      const pagos = Array.isArray(r.data) ? r.data.length : 0;
-      return json({ ok: true, pagos });
+      const linhas = Array.isArray(r.data) ? r.data : [];
+      await Promise.all(linhas.map((l) => logSaque(l.user_id, 'saque_pago', `R$ ${Number(l.valor).toFixed(2)} (lote de sexta)`, { valor: l.valor, pago_por: user.id, lanc_id: l.id })));
+      return json({ ok: true, pagos: linhas.length });
     }
 
     // Ações individuais precisam do id do lançamento (bigint).
@@ -375,6 +378,7 @@ export default async function handler(req) {
       });
       if (!r.ok) return json({ error: 'Erro ao marcar pago' }, 500);
       if (!Array.isArray(r.data) || r.data.length !== 1) return json(await conflitoSaque(id, 'pagar'), 409);
+      await logSaque(r.data[0].user_id, 'saque_pago', `R$ ${Number(r.data[0].valor).toFixed(2)}`, { valor: r.data[0].valor, pago_por: user.id, lanc_id: r.data[0].id });
       return json({ ok: true });
     }
     if (acao === 'recusar') {
@@ -383,6 +387,7 @@ export default async function handler(req) {
       });
       if (!r.ok) return json({ error: 'Erro ao recusar' }, 500);
       if (!Array.isArray(r.data) || r.data.length !== 1) return json(await conflitoSaque(id, 'recusar'), 409);
+      await logSaque(r.data[0].user_id, 'saque_recusado', `R$ ${Number(r.data[0].valor).toFixed(2)}`, { valor: r.data[0].valor, recusado_por: user.id, lanc_id: r.data[0].id });
       return json({ ok: true });
     }
     return json({ error: 'acao inválida' }, 400);

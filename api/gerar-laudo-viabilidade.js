@@ -11,6 +11,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 180 };
 
 import { getUser, isCronAuthorized } from './_auth.js';
+import { logAtividade } from './_atividade.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
@@ -29,14 +30,6 @@ function sb(path, opts = {}) {
     ...opts,
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
-}
-// LOG DE ATIVIDADE (Cliente 360) — best-effort. Dá visibilidade a falhas do LAUDO.
-async function logAtividade(userId, evento, detalhe, meta) {
-  try {
-    if (!userId) return;
-    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
-      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
-  } catch { /* best-effort */ }
 }
 async function upsertLaudo(row) {
   await sb('analises_laudo?on_conflict=user_id,imovel_id', {

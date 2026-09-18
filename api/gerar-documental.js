@@ -10,6 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { createHash } from 'node:crypto';
 import { getUser, isCronAuthorized } from './_auth.js';
+import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
@@ -41,15 +42,6 @@ function sb(path, opts = {}) {
     ...opts,
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
-}
-// LOG DE ATIVIDADE (Cliente 360) — best-effort, nunca bloqueia. Antes só o mercado
-// registrava; sem isto, falhas do DOCUMENTAL ficavam invisíveis no Cliente 360.
-async function logAtividade(userId, evento, detalhe, meta) {
-  try {
-    if (!userId) return;
-    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
-      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
-  } catch { /* log é best-effort */ }
 }
 // O agente que aprende com os relatórios SINALIZA anomalias (ex.: CNJ sem retorno) para a
 // verificação de saúde — sem custo, sem gerar relatório. Idempotente por (tipo, imóvel).
