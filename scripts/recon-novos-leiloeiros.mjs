@@ -390,7 +390,11 @@ async function dumpDetalhe(browser, url, esperaMs = 4000) {
   } catch (e) {
     console.log(`   ERRO: ${String(e.message).slice(0, 150)}`);
   } finally {
-    await page.close();
+    // Mesma classe de trava já achada em reconSite (page.close() sem timeout, 38min parado)
+    // — achado de novo aqui (18/09, 2ª rodada: dump da NAKAKOGUELEILOES travou o job inteiro
+    // apesar do envelope de 60s em volta da CHAMADA de dumpDetalhe, porque o travamento era
+    // NO PRÓPRIO finally, depois do envelope já ter "vencido" a corrida). Mesmo remédio.
+    try { await comTimeout(page.close(), 15000, `dump ${url} — fechar página`); } catch { /* segue */ }
   }
 }
 
