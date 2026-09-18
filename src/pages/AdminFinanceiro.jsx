@@ -91,6 +91,14 @@ export function FinanceiroCaixa() {
   const [pixModal, setPixModal] = useState(false);
   const [pixResult, setPixResult] = useState(null);
   const [pagina, setPagina] = useState(0);
+  // Antecipação de recebível (18/09) — rota confirmada real no Asaas (POST/GET em
+  // /v3/anticipations respondem 401 sem credencial, não 404), mas o formato exato da
+  // resposta NÃO foi validado contra produção ainda. Por isso o fluxo é em duas etapas
+  // (simular → confirmar) mesmo sendo admin: a primeira chamada real é a validação.
+  const [antecipId, setAntecipId] = useState('');
+  const [antecipSim, setAntecipSim] = useState(null);
+  const [antecipLoading, setAntecipLoading] = useState(false);
+  const [antecipResult, setAntecipResult] = useState(null);
 
   useEffect(() => {
     loadFinancas();
@@ -154,6 +162,50 @@ export function FinanceiroCaixa() {
     }
     setPixLoading(false);
     setPixModal(false);
+  }
+
+  async function simularAntecipacao() {
+    setAntecipLoading(true);
+    setAntecipResult(null);
+    setAntecipSim(null);
+    try {
+      const res = await apiCall('/api/asaas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'simular_antecipacao', paymentId: antecipId.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) setAntecipSim(data);
+      else setAntecipResult({ ok: false, msg: data.error || 'Erro ao simular' });
+    } catch (e) { // padrao-ok: motivo já vai pra tela (setAntecipResult) — console só pra depuração
+      console.error('[antecipacao] simular:', e?.message || e);
+      setAntecipResult({ ok: false, msg: 'Falha de conexão' });
+    }
+    setAntecipLoading(false);
+  }
+
+  async function confirmarAntecipacao() {
+    setAntecipLoading(true);
+    setAntecipResult(null);
+    try {
+      const res = await apiCall('/api/asaas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'solicitar_antecipacao', paymentId: antecipId.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAntecipResult({ ok: true, msg: 'Antecipação solicitada com sucesso!' });
+        setAntecipSim(null);
+        setAntecipId('');
+      } else {
+        setAntecipResult({ ok: false, msg: data.error || 'Erro ao solicitar antecipação' });
+      }
+    } catch (e) { // padrao-ok: motivo já vai pra tela (setAntecipResult) — console só pra depuração
+      console.error('[antecipacao] confirmar:', e?.message || e);
+      setAntecipResult({ ok: false, msg: 'Falha de conexão' });
+    }
+    setAntecipLoading(false);
   }
 
   const POR_PAGINA = 10;
@@ -321,6 +373,49 @@ export function FinanceiroCaixa() {
             }}>
             Transferir via PIX →
           </button>
+        </div>
+
+        {/* Antecipar recebível (18/09) — ver comentário no state acima: rota real, resposta
+            não validada. Fluxo em duas etapas pra primeira chamada real ser conferida antes
+            de confirmar qualquer coisa que mexa em dinheiro de verdade. */}
+        <div style={{ background: '#ffffff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', padding: '24px', gridColumn: '1 / -1' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#111111', marginBottom: 6 }}>Antecipar recebível</div>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16, lineHeight: 1.5 }}>
+            Libera o valor de um pagamento antes do prazo padrão (D+32 no Asaas), mediante taxa. Cole o ID do pagamento
+            (visível no extrato ou no painel do Asaas) e simule antes de confirmar.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+            <input value={antecipId} onChange={e => { setAntecipId(e.target.value); setAntecipSim(null); setAntecipResult(null); }}
+              placeholder="ID do pagamento (ex: pay_xxxxxxxx)"
+              style={{ flex: '1 1 260px', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, color: '#111111' }} />
+            <button onClick={simularAntecipacao} disabled={!antecipId.trim() || antecipLoading}
+              style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #0D63DB', background: '#fff', color: '#0D63DB',
+                cursor: !antecipId.trim() ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+              {antecipLoading && !antecipSim ? 'Simulando…' : 'Simular'}
+            </button>
+          </div>
+
+          {antecipSim && (
+            <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 8, background: '#f8fafc', fontSize: 12.5, color: '#334155' }}>
+              <div style={{ fontWeight: 700, marginBottom: 6, color: '#111' }}>Resposta da simulação (bruta — confira antes de confirmar):</div>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, fontFamily: 'monospace', fontSize: 11.5 }}>{JSON.stringify(antecipSim, null, 2)}</pre>
+            </div>
+          )}
+
+          {antecipResult && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              background: antecipResult.ok ? '#f0fdf4' : '#fef2f2', color: antecipResult.ok ? '#15803d' : '#dc2626' }}>
+              {antecipResult.ok ? '✅' : '❌'} {antecipResult.msg}
+            </div>
+          )}
+
+          {antecipSim && (
+            <button onClick={confirmarAntecipacao} disabled={antecipLoading}
+              style={{ padding: '12px 18px', borderRadius: 10, border: 'none', background: '#d97706', color: '#fff',
+                cursor: antecipLoading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14 }}>
+              {antecipLoading ? 'Processando…' : 'Confirmar antecipação (cobra taxa) →'}
+            </button>
+          )}
         </div>
       </div>
 

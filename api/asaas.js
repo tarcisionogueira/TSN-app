@@ -486,7 +486,7 @@ export default async function handler(req, res) {
     }
 
     // Ações financeiras exigem role admin
-    if (['financas', 'extrato', 'transferir_pix'].includes(action)) {
+    if (['financas', 'extrato', 'transferir_pix', 'simular_antecipacao', 'solicitar_antecipacao'].includes(action)) {
       const adminUser = await getAuthUserNode(req);
       if (!adminUser?.id) return res.status(401).json({ error: 'Não autorizado' });
       const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -536,6 +536,33 @@ export default async function handler(req, res) {
         pixAddressKeyType: tipoChave || 'CPF',
         description: descricao || 'Transferência BidPro Brasil',
       });
+      return res.status(200).json(data);
+    }
+
+    // ── ANTECIPAÇÃO DE RECEBÍVEL (18/09) ────────────────────────────────────────
+    // Pedido do dono: verificar se dá pra liberar o valor de um recebível antes do
+    // prazo padrão (D+32 no Asaas) e deixar essa opção disponível no sistema.
+    // ⚠️ NÃO TESTADO CONTRA PRODUÇÃO — confirmei que a rota EXISTE de verdade
+    // (POST/GET em /v3/anticipations[/simulate] respondem 401, não 404, sem
+    // credencial — checado ao vivo via GitHub Actions, já que este ambiente não
+    // alcança docs.asaas.com nem tem a chave de produção), mas não consegui abrir
+    // a documentação (SPA renderizada em JS) pra confirmar o nome exato dos campos.
+    // O nome usado abaixo (`payment`) segue a convenção do restante da API Asaas
+    // (camelCase, singular). Qualquer campo errado volta como `errors[].description`
+    // — ERRO ALTO E CLARO pro admin, nunca silencioso — mas ANTES de usar pra
+    // valer, rode `simular_antecipacao` uma vez com um pagamento real e confira a
+    // resposta manualmente.
+    if (action === 'simular_antecipacao') {
+      const { paymentId } = body;
+      if (!paymentId) return res.status(400).json({ error: 'paymentId obrigatório (id do pagamento/recebível no Asaas)' });
+      const data = await asaasGet(`/anticipations/simulate?payment=${encodeURIComponent(paymentId)}`);
+      return res.status(200).json(data);
+    }
+
+    if (action === 'solicitar_antecipacao') {
+      const { paymentId } = body;
+      if (!paymentId) return res.status(400).json({ error: 'paymentId obrigatório (id do pagamento/recebível no Asaas)' });
+      const data = await asaasPost('/anticipations', { payment: paymentId });
       return res.status(200).json(data);
     }
 
