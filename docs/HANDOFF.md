@@ -29949,6 +29949,27 @@ anteriores: stealth sem proxy tinha o navegador certo mas o IP errado (datacente
 tinha o IP/desafio resolvido mas sem navegador. Teste: `scripts/_teste-proxy-isp-leiloar.mjs` +
 `_temp-teste-proxy-isp-leiloar.yml`, mesmo padrão do teste do HASTA (18/09).
 
+**Resultado (19/09) — meio caminho andado, não resolve sozinho ainda.** O proxy ISP passou
+pelo Cloudflare nos 3 (nenhum voltou com "Just a moment...", confirmado) — isso É a mesma
+vitória do HASTA. Mas a listagem COMPLETA ainda não veio numa visita simples de página:
+- **crleiloes.com.br**: página cresceu de 236KB (fetch estático) pra 365KB (JS rodou de
+  verdade), mas ainda só os 19 lotes "destaque" — a busca paginada real (endpoint
+  `bens/listarCaracteristicasCategoria` e afins, achado em recon anterior) só carrega
+  depois de uma AÇÃO do usuário (filtro/busca), que uma visita de página sozinha não dispara.
+- **leiloesuberlandia.com.br**: usei a home (não `/leiloes`, que dá 404 nesse tenant) — achou
+  **13 links `/leilao/N` distintos** (melhora real!), mas 0 `/lote/N` — precisa entrar em CADA
+  leilão pra pegar os lotes, não testado ainda.
+- **lucasleiloeiro.com.br**: página grande (570KB) mas 0 links reconhecíveis — a SPA por hash
+  não renderiza resultado só com `page.goto`, precisa de scroll/clique simulado.
+
+**Conclusão**: Cloudflare deixou de ser o obstáculo (proxy ISP resolve); o que falta agora é
+ENGENHARIA DE SCRAPER específica por site (simular a busca no crleiloes, navegar
+leilão-por-leilão no leiloesuberlandia, simular interação na SPA do lucasleiloeiro) — trabalho
+de construção, não mais um teste de acesso. **AÇÃO PENDENTE — fica registrado pro dono decidir
+quando estiver no computador**: vale investir esse esforço de scraper dedicado por site agora,
+ou aguardar? (crleiloes tem volume real — 321 imóveis + 149 veículos — os outros dois ainda sem
+volume confirmado). Descartáveis do teste removidos após extrair o achado.
+
 **Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
 integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
 Leilotech), 1 domínio morto (neteditais), 2 confirmados sem solução viável hoje (leilaobrasil,
