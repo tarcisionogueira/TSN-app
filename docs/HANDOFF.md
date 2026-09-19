@@ -29909,6 +29909,20 @@ tinha os comentários explicando a remoção de 31/08) e aqui.
 **Descartáveis removidos** (`_teste-leiloar-rede.mjs`, `_teste-tenants-suporte-superbid.mjs` e
 os 2 workflows `_temp-*`) depois de cumprirem o papel — mesmo padrão do resto da sessão.
 
+**Stealth grátis testado e REJEITADO (19/09, decisão do dono: "tenta a B primeiro, se não rolar
+usa Bright Data").** `puppeteer-extra` + `puppeteer-extra-plugin-stealth` (sem proxy) travou nos
+3 domínios (crleiloes, leiloesuberlandia, lucasleiloeiro) na tela `Just a moment...` do
+Cloudflare — corpo de ~5KB, 0 respostas de dado real. Achado que MUDA a estratégia: o fetch
+ESTÁTICO via `pg_net` (sem JS) já passava pelo Cloudflare nesses domínios sem custo algum — ou
+seja, o bloqueio é no FINGERPRINT do navegador automatizado (CDP/Puppeteer), não no IP. Só que a
+listagem completa de lotes não é server-rendered (toda rota testada — `/bens`, `/bens/index/...`,
+`/leiloes?pagina=1` — devolve o MESMO shell de ~19 destaques, byte a byte idêntico à home); o
+catálogo real carrega via AJAX depois do JS rodar. Bright Data Web Unlocker resolve os dois
+problemas ao mesmo tempo (passa o desafio E renderiza o JS) — próximo passo: 1 chamada de teste
+por domínio via `buscarViaBrightData` (`api/_brightdata.js`, `proposito: 'teste-leiloar'`,
+ledger oficial) pra confirmar que a listagem real vem no HTML antes de construir o scraper de
+produção.
+
 **Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
 integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
 Leilotech), 1 domínio morto (neteditais), 2 confirmados sem solução viável hoje (leilaobrasil,
