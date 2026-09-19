@@ -1589,6 +1589,15 @@ export default async function handler(req, res) {
       if (fonte.instavel) return { label, status: 'pendente', detalhe: 'Fonte pública indisponível no momento — o sistema reprocessa automaticamente e o jurídico valida antes do lance.' };
       return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.` };
     };
+    // 19/09 — "0 processos encontrados" e "não consegui consultar" são coisas DIFERENTES,
+    // e até aqui caíam no MESMO status ('pendente' → "indisponível agora" na tela). Achado
+    // do dono ao vivo, na 1ª regeração depois do fix da query `nested` (PR #356): CNJ mostrou
+    // "indisponível agora / Aguardando o DataJud" mesmo com a consulta tendo RODADO e voltado
+    // limpa — zero processos é o resultado ESPERADO pra maioria dos imóveis, não uma falha.
+    // Agora que `buscarProcessosCNJ` expõe `erros` por tribunal (fix de 18-19/09), dá pra
+    // distinguir: `cnj` não-nulo e sem `erros` = consulta concluiu de verdade, zero é resposta.
+    const cnjFalhou = !!(cnj && Array.isArray(cnj.erros) && cnj.erros.length > 0);
+    const cnjConcluiuSemAchar = !!(cnj && !cnj.total && !cnjFalhou);
     const checklist = [
       { label: 'Procedência do lote (leiloeiro/fonte)',
         status: antifraude.fonteReconhecida ? 'feito' : (row?.fonte ? 'diligencia' : 'na'),
@@ -1601,11 +1610,13 @@ export default async function handler(req, res) {
           ? `${lidos.length} documento(s) lido(s): ${lidos.map(l => l.rotulo).join(', ')}`
           : (urls.length ? 'Documentos localizados, mas a fonte não liberou a leitura agora — nova tentativa em breve.' : 'Nenhum documento vinculado ao lote.') },
       { label: 'Processo judicial (CNJ/DataJud)',
-        status: (cnj && cnj.total) ? 'feito' : (procFontes ? 'pendente' : 'na'),
+        status: (cnj && cnj.total) ? 'feito' : cnjConcluiuSemAchar ? 'feito' : (procFontes ? 'pendente' : 'na'),
         detalhe: (cnj && cnj.total)
           ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}`
-          : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
-            : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
+          : cnjConcluiuSemAchar
+            ? `Nenhum processo localizado no CNJ${cnjViaNome ? ` para "${execNome}"` : ''} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.`
+            : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
+              : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
       // CNDT / CNIB / CENPROT removidos do checklist automático (portal pago + captcha, não saem
       // sozinhos) — não faz sentido mostrar como consulta do sistema. Ficam a cargo do jurídico.
