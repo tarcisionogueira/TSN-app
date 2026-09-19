@@ -1,12 +1,12 @@
-name: _temp Teste HASTA via proxy ISP (diagnóstico do zero de 5 dias)
+name: _temp Recon HASTA (3ª mudança de estrutura — dump bruto)
 
 on:
   workflow_dispatch:
 
 jobs:
-  teste:
+  recon:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,10 +23,9 @@ jobs:
             libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
             libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
-      - name: Teste
+      - name: Recon
         env:
           BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
           BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
           BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
-          HASTA_LOTE_TESTE: '10739'
-        run: node scripts/_teste-hasta-via-proxy.mjs
+        run: node scripts/_recon-hasta-estrutura-nova.mjs
