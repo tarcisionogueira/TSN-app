@@ -30221,3 +30221,43 @@ Bright Data testados e nenhum resolve), lucasleiloeiro.com.br/kronbergleiloes.co
 
 Descartáveis do recon (`_recon-leiloeiros-radar-pendentes.mjs` + workflow `_temp`) removidos
 após extrair o achado.
+
+## 19/09 (pedido do dono: "Integre esses leiloeiros") — LEILAOBRASIL + LUTHERO integrados
+
+**3ª investigação deste site, e as 2 anteriores mediram a coisa errada (forma nº10 do
+CLAUDE.md) — nenhuma das duas vezes o leilaobrasil.com.br esteve de fato bloqueado:**
+- **20/08**: chamado de "Cloudflare" — hipótese nunca testada de verdade, só suposição.
+- **19/09, mais cedo hoje**: testado contra `/buscador?categoria=2` (a rota do template
+  ERRADO — SUEDPETER/LIDER), devolveu 0 `article.lote-main`, registrado como "DESCARTADO,
+  confirmado de novo". **A rota estava errada, não o site.**
+
+**O que o recon de hoje (5 rodadas, fetch DIRETO — sem proxy, sem Bright Data) achou:**
+1. **Nenhuma rota adivinhada de catálogo existe** (sitemap.xml, /eventos, /leiloes, /imoveis,
+   /busca — todas 404). **A HOME É o catálogo**: lista ~230 links únicos
+   `/eventos/leilao/<id-evento>/<slug>/lote` num fetch só, sem paginação.
+2. Cada link de listagem **REDIRECIONA** (fetch com `redirect:'follow'` resolve sozinho) pro
+   lote de detalhe real: `/eventos/leilao/<slug>/lote/<id-lote>/<slug>`.
+3. **Achado que torna o parser robusto**: a página do lote tem `<script>var lote = {...};
+   </script>` — um objeto JSON COMPLETO (json_encode cru do backend), não escapado como
+   string. Isolando o `<script>` que contém `"valorAvaliacao"` e fazendo `JSON.parse`, o
+   parser lê direto: `lote.bem.{cidade,uf,endereco,tipo,comitente,image,arquivos}` e
+   `lote.leilao.{judicial(bool),documentos,leiloeiro,dataProximoLeilao,_urls.edital}`. Muito
+   mais confiável que regex sobre texto solto — sem __NEXT_DATA__/ld+json, só esse `var lote`.
+4. Meta tag `author="SOLEON..."` **NÃO existe aqui** (isso é do HASTA) — este é confirmado
+   por `static.suporteleiloes.com.br` no CDN de fotos/PDF e `arrematante.<dominio>/#/cadastro`
+   idêntico nos dois tenants: infra **Suporte Leilões**, mas um **3º template**, diferente do
+   `/imoveis?page=N` do JELEILOES/KLEILOES e do `/buscador?categoria=2` do SUEDPETER/LIDER.
+
+**Implementado**: `scripts/lib/leilaobrasil-parse.mjs` (TENANTS leilaobrasil+luthero,
+`extrairJsonLote` isola e faz `JSON.parse` do `var lote`, `parseDetalhe` lê os campos reais —
+matrícula ainda vem só embutida em `siteDescricao`, extraída por regex "Matrícula nº X" como
+fallback dentro do próprio parser JSON; se `var lote` sumir um dia, cai pro fallback de regex
+sobre HTML cru dos rótulos `<strong>Cidade - UF</strong>...<span>Endereço</span>` já
+confirmados). `scripts/lib/motor/fontes/leilaobrasil.mjs` usa fetch **simples** (`criarMotorFetch`,
+não Puppeteer/dom) — o site é 100% server-rendered sem bloqueio, custo zero de fato.
+`scripts/scraper-leilaobrasil.mjs` + `.github/workflows/scraper-leilaobrasil.yml` (dedicado,
+sem instalar Chromium). **Validado offline** contra os dados reais capturados no recon (mock
+fiel ao JSON do lote 24171) antes de gastar qualquer coleta real — todos os campos conferiram.
+
+Descartáveis das 5 rodadas de recon (`_recon-suporteleiloes-template3.mjs` + workflow `_temp`)
+removidos após extrair o achado.
