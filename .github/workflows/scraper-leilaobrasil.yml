@@ -1,0 +1,42 @@
+name: Scraper Leilão Brasil / Luthero (Suporte Leilões, 3º template)
+
+# leilaobrasil.com.br + lutheroleiloes.com.br — fetch direto, sem Cloudflare, sem Puppeteer,
+# custo Bright Data zero (confirmado 19/09). dryrun default '0' no cron (GRAVA); dispatch
+# manual sem input também grava por default — mesma lição do RJLEILOES (11/08): default
+# dry-run por engano gastou cota 8× sem gravar nada.
+on:
+  schedule:
+    - cron: '30 8 * * *'  # diário, 8h30 UTC (perto do scraper-dom.yml, sem disputar runner)
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_lotes:
+        description: 'Máx. de lotes por execução'
+        required: false
+        default: '250'
+
+jobs:
+  scraper-leilaobrasil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper LEILAOBRASIL/LUTHERO
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          LEILAOBRASIL_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          LEILAOBRASIL_MAX_LOTES: ${{ github.event.inputs.max_lotes || '250' }}
+        run: node scripts/scraper-leilaobrasil.mjs
