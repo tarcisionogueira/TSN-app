@@ -29923,6 +29923,29 @@ por domínio via `buscarViaBrightData` (`api/_brightdata.js`, `proposito: 'teste
 ledger oficial) pra confirmar que a listagem real vem no HTML antes de construir o scraper de
 produção.
 
+**Resultado do teste Bright Data (19/09) — HIPÓTESE ERRADA, registrando pra não repetir.** O
+Web Unlocker (`format: 'raw'`) PASSA o desafio Cloudflare nos 3 domínios (confirmado: nenhum
+veio com "Just a moment..."), mas **não executa o JS/AJAX da SPA** — só devolve o HTML que o
+servidor de origem manda, igual ao fetch estático grátis:
+- **crleiloes.com.br**: 236.928 bytes, só os 19 lotes "destaque" do shell — MESMO resultado do
+  `pg_net` grátis. Pagar Bright Data aqui não trouxe NADA a mais; a listagem completa
+  (321 imóveis + 149 veículos) só existe depois do AJAX rodar num navegador de verdade.
+- **leiloesuberlandia.com.br**: **404 puro** em `/leiloes` — a URL estava errada pra ESTE
+  tenant especificamente (cada site da Plataforma Leiloar pode ter rota própria); não é
+  bloqueio de nenhum tipo, é erro de adivinhação da rota.
+- **lucasleiloeiro.com.br**: 208.019 bytes, mas 0 links reconhecíveis — mesma causa do
+  crleiloes (SPA por hash, precisa de JS).
+
+**Conclusão prática: "Bright Data resolve" era a hipótese errada para ESTES 3 sites.** O
+produto contratado (Web Unlocker, fetch cru) resolve bloqueio de IP/Cloudflare mas NÃO substitui
+um navegador executando JS. Pra destravar de verdade, as opções reais são: (a) contratar/ativar
+o produto "Scraping Browser" da Bright Data (sessão remota tipo Puppeteer via WebSocket — é
+OUTRO produto, não o Web Unlocker já configurado), ou (b) engenharia reversa pra achar o
+endpoint AJAX real de cada site (como foi feito pro LEILOTECH com `/go/graphql`) — sem garantia
+de sucesso, e são plataformas independentes (cada uma pode ter uma API própria). **Nenhuma
+opção é imediata; fica registrado como decisão em aberto do dono**, não uma tarefa pronta pra
+seguir sozinha. Descartáveis do teste removidos após extrair o achado.
+
 **Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
 integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
 Leilotech), 1 domínio morto (neteditais), 2 confirmados sem solução viável hoje (leilaobrasil,
