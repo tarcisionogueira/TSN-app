@@ -17,7 +17,8 @@ import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.
 import { anthropicFetch } from './_claude.js';
 import { classificarDocumento } from './_doc-leitura.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
-import { buscarProcessosCNJ } from './_cnj.js';
+import { buscarProcessosCNJ, gerarParecerRisco } from './_cnj.js';
+import { buscarQSA } from './_pj-socio.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN } from './_laudo-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
@@ -1426,6 +1427,52 @@ export default async function handler(req, res) {
         if (!execNome && passivo.nome) { execNome = passivo.nome; ex.executadoNome = passivo.nome; }
       }
     }
+
+    // FALLBACK 4 (dono, 19/09) — quando o executado é CNPJ, a matrícula/edital dizem quem é
+    // a EMPRESA, mas o risco de execução/fraude à execução pode recair sobre a PESSOA do
+    // sócio (responsabilidade pessoal, desconsideração da personalidade jurídica) — e isso
+    // NUNCA aparece buscando só a razão social. Documento anexado pode estar desatualizado
+    // (sócio que saiu, processo aberto depois da matrícula) — por isso busca o quadro
+    // societário (QSA, dado aberto da Receita) e roda o CNJ por NOME de cada sócio,
+    // mesclando os processos achados aos da empresa. Best-effort: nunca bloqueia o laudo.
+    // Teto de 5 sócios — protege o tempo de geração em CNPJ com quadro grande.
+    let cnjSocios = null;
+    if (docOk && execDoc.length === 14 && im.estado && Date.now() < hardDeadline) {
+      try {
+        const qsa = await buscarQSA(execDoc);
+        const nomesSocios = (qsa?.socios || [])
+          .map(s => String(s?.nome || '').trim())
+          .filter(n => n.length >= 6)
+          .slice(0, 5);
+        const achadosPorSocio = [];
+        for (const nomeSocio of nomesSocios) {
+          if (Date.now() >= hardDeadline) break;
+          try {
+            const porSocio = await buscarProcessosCNJ({ nome_parte: nomeSocio, uf: im.estado, modalidade: im.modalidade });
+            if (porSocio?.processos?.length) achadosPorSocio.push({ socio: nomeSocio, processos: porSocio.processos, tribunais: porSocio.tribunais_consultados });
+          } catch { /* CNJ por sócio é best-effort */ }
+        }
+        if (nomesSocios.length) {
+          cnjSocios = { verificados: nomesSocios, comProcesso: achadosPorSocio.map(a => a.socio) };
+        }
+        if (achadosPorSocio.length) {
+          const base = cnj || { processos: [], total: 0, tribunais_consultados: [] };
+          const processos = [...(base.processos || [])];
+          for (const a of achadosPorSocio) {
+            for (const p of a.processos) {
+              if (!processos.some(x => x.numero === p.numero)) processos.push({ ...p, viaSocio: a.socio });
+            }
+          }
+          const tribunaisMesclados = [...new Set([...(base.tribunais_consultados || []), ...achadosPorSocio.flatMap(a => a.tribunais || [])])];
+          cnj = {
+            ...base, processos, total: processos.length, tribunais_consultados: tribunaisMesclados,
+            // recalcula o parecer (nível/texto) com os processos MESCLADOS — sem isto, o texto
+            // continuaria dizendo "nenhum processo" mesmo com processo de sócio encontrado.
+            parecer: gerarParecerRisco(processos, { tribunais: tribunaisMesclados, modalidade: im.modalidade }),
+          };
+        }
+      } catch { /* QSA indisponível é best-effort — nunca bloqueia o laudo */ }
+    }
     // Anomalia (aprendizado) — INTEGRAÇÃO do CNJ: só sinaliza quando tínhamos um nº de
     // processo CONCRETO (do lote ou extraído dos docs) e mesmo assim a consulta voltou
     // VAZIA — aí sim é suspeito (nº malformado, token/fonte do CNJ fora do ar). Sem nº
@@ -1612,9 +1659,9 @@ export default async function handler(req, res) {
       { label: 'Processo judicial (CNJ/DataJud)',
         status: (cnj && cnj.total) ? 'feito' : cnjConcluiuSemAchar ? 'feito' : (procFontes ? 'pendente' : 'na'),
         detalhe: (cnj && cnj.total)
-          ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}`
+          ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}${cnjSocios ? ` · executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s)${cnjSocios.comProcesso.length ? `, com processo: ${cnjSocios.comProcesso.join(', ')}` : ''}` : ''}`
           : cnjConcluiuSemAchar
-            ? `Nenhum processo localizado no CNJ${cnjViaNome ? ` para "${execNome}"` : ''} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.`
+            ? `Nenhum processo localizado no CNJ${cnjViaNome ? ` para "${execNome}"` : ''} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.${cnjSocios ? ` Executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s), sem processo.` : ''}`
             : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
               : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
@@ -1903,7 +1950,7 @@ export default async function handler(req, res) {
         documentos: (lidos || []).map(l => ({ tipo: l.tipo || null, rotulo: l.rotulo || null, formato: l.kind || null, doCache: !!l.cache })),
         textoColado: !!(body?.textoEdital || body?.textoMatricula),
         consultas: {
-          cnj: cnj ? { total: cnj.total || 0, tribunais: cnj.tribunais_consultados || [], porNome: !!cnjViaNome } : null,
+          cnj: cnj ? { total: cnj.total || 0, tribunais: cnj.tribunais_consultados || [], porNome: !!cnjViaNome, socios: cnjSocios || null } : null,
           djen: !!fx.djen,
           certidoesFiscais: fx.certidoes?.resumo || null,
         },
