@@ -29874,11 +29874,46 @@ tinha os comentários explicando a remoção de 31/08) e aqui.
   (não dá pra adivinhar por leitura do JS minificado; sem `sitemap.xml` disponível, 404 nos
   dois domínios).
 
-**Teste de rede pendente (PR #361, aguardando "pode mergear" — 3º commit desta PR):**
-`scripts/_teste-leiloar-rede.mjs` + workflow `_temp-teste-leiloar-rede.yml` — Puppeteer com
-interceptação de rede (captura toda resposta XHR/fetch) em: crleiloes `/leiloes`,
-leiloesuberlandia `/leiloes` (mesma rede Leiloar — um scraper pode cobrir os dois de uma vez),
-lucasleiloeiro (rota SPA), sfleiloes (achar o endpoint Laravel) e vipleiloes.com.br (checar se
-os lotes do Kronberg aparecem lá). **Só roda depois do merge** (workflow_dispatch exige o
-arquivo no `main`). Próximo passo: mergear #361 → dispatch do teste → usar os endpoints reais
-achados pra escrever o(s) scraper(s) definitivo(s).
+**Resultado dos testes de rede (rodaram após o merge do #361) — 5 achados, 1 já integrado:**
+
+- **leilaobrasil.com.br — DESCARTADO, confirmado de novo.** `/buscador?categoria=2` (endpoint
+  SUPORTE) devolve **0 `article.lote-main`** — mesmo resultado do teste de 20/08. Não é mudança
+  de estrutura recuperável; não entra em `SUPORTE_TENANTS`.
+- **dilsonmoreira.com.br — inconclusivo, não perseguido.** A API pública do Superbid
+  (`offer-query.superbid.net`, `portalId=[2]`) devolveu **HTTP 403** pra um GET direto (sem os
+  headers/contexto que a SPA em produção manda). Não vale investir mais tempo nisso agora
+  (economia máxima) — se o dono quiser confirmar via a rede Superbid de verdade, precisa
+  descobrir o `portalId` certo do Dilson Moreira primeiro.
+- **crleiloes.com.br e leiloesuberlandia.com.br (Plataforma Leiloar) — BLOQUEADO por
+  Cloudflare.** Os dois dispararam o desafio `cdn-cgi/challenge-platform` pro Puppeteer sem
+  disfarce (headless comum) — nenhuma chamada de dado real passou, só o desafio JS. **Não dá
+  pra raspar de graça.** Pra destravar precisaria ou (a) Bright Data Web Unlocker (pago, já
+  contratado) só nesses dois domínios, ou (b) `puppeteer-extra` + plugin stealth (grátis, menos
+  confiável contra Cloudflare atualizado). Fica registrado como PENDENTE DE DECISÃO — 321
+  imóveis + 149 veículos no crleiloes justificam o investimento, mas isso é gasto recorrente de
+  Bright Data por execução, então fica pro dono decidir antes de eu construir o scraper.
+- **lucasleiloeiro.com.br — mesmo bloqueio Cloudflare** que o Leiloar. Mesma decisão pendente.
+- **sfleiloes.com.br — RESOLVIDO E JÁ INTEGRADO (commit deste PR).** Confirmado como tenant da
+  rede **Leilotech** (`{dominio}/go/graphql`, mesmo endpoint que já raspamos pra outros 19
+  leiloeiros) — `appName: "SF Leilões"` bateu certinho, e a home tem slugs reais de `/leilao/`
+  e `/lote/`. Adicionado a `LEILOTECH_TENANTS` em `scripts/scraper-puppeteer.mjs` — entra
+  automaticamente no próximo `leiloeiros-puppeteer.yml` (diário), sem custo extra (é grátis,
+  como os outros tenants Leilotech).
+- **kronbergleiloes.com.br — achado novo, ainda não resolvido.** O Kronberg não tem catálogo
+  próprio (só WordPress institucional), mas a home linka pra **`vipleiloes.com.br`** — domínio
+  DIFERENTE do `leilaovip.com.br` que já é a fonte `VIP` integrada (1095 imóveis!). O teste
+  confirmou "kronberg" no corpo renderizado de `vipleiloes.com.br`. **`vipleiloes.com.br` é uma
+  plataforma nova, não investigada** — pode ser uma rede white-label própria ou outro agregador;
+  precisa de recon de estrutura antes de decidir se vale scraper dedicado.
+
+**Descartáveis removidos** (`_teste-leiloar-rede.mjs`, `_teste-tenants-suporte-superbid.mjs` e
+os 2 workflows `_temp-*`) depois de cumprirem o papel — mesmo padrão do resto da sessão.
+
+**Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
+integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
+Leilotech), 1 domínio morto (neteditais), 2 confirmados sem solução viável hoje (leilaobrasil,
+dilsonmoreira), 2 bloqueados por Cloudflare aguardando decisão de investir Bright Data
+(crleiloes + leiloesuberlandia = mesma rede Leiloar, lucasleiloeiro), 1 com pista nova pra
+investigar (kronberg → vipleiloes.com.br), 2 saulojulioleiloeiro (API `/app/lotes` responde 403
+pra chamada sem sessão — precisa engenharia reversa de cookie/referer) e o próprio crleiloes já
+contado acima.
