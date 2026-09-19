@@ -29936,15 +29936,18 @@ servidor de origem manda, igual ao fetch estático grátis:
 - **lucasleiloeiro.com.br**: 208.019 bytes, mas 0 links reconhecíveis — mesma causa do
   crleiloes (SPA por hash, precisa de JS).
 
-**Conclusão prática: "Bright Data resolve" era a hipótese errada para ESTES 3 sites.** O
-produto contratado (Web Unlocker, fetch cru) resolve bloqueio de IP/Cloudflare mas NÃO substitui
-um navegador executando JS. Pra destravar de verdade, as opções reais são: (a) contratar/ativar
-o produto "Scraping Browser" da Bright Data (sessão remota tipo Puppeteer via WebSocket — é
-OUTRO produto, não o Web Unlocker já configurado), ou (b) engenharia reversa pra achar o
-endpoint AJAX real de cada site (como foi feito pro LEILOTECH com `/go/graphql`) — sem garantia
-de sucesso, e são plataformas independentes (cada uma pode ter uma API própria). **Nenhuma
-opção é imediata; fica registrado como decisão em aberto do dono**, não uma tarefa pronta pra
-seguir sozinha. Descartáveis do teste removidos após extrair o achado.
+**Conclusão prática: "Bright Data Web Unlocker resolve" era a hipótese errada para ESTES 3
+sites.** Fetch cru resolve bloqueio de IP/Cloudflare mas NÃO substitui um navegador executando
+JS. Descartáveis do teste removidos após extrair o achado.
+
+**CORREÇÃO (mesmo dia): o dono já tinha o produto certo — o PROXY ISP (`isp_scraping_geral`,
+$2/IP/mês, criado em 18/09, documentado acima), não o "Scraping Browser".** Esse proxy já foi
+CONFIRMADO resolvendo o mesmo tipo de bloqueio (reputação de IP de datacenter) no HASTA em
+18/09 — e combinado com o Chromium REAL do motor `dom` (`criarMotorDom({ usarProxyIsp: true })`,
+`scripts/lib/motor/fetch-dom.mjs`), executa JS de verdade. É a peça que faltava nos dois testes
+anteriores: stealth sem proxy tinha o navegador certo mas o IP errado (datacenter); Web Unlocker
+tinha o IP/desafio resolvido mas sem navegador. Teste: `scripts/_teste-proxy-isp-leiloar.mjs` +
+`_temp-teste-proxy-isp-leiloar.yml`, mesmo padrão do teste do HASTA (18/09).
 
 **Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
 integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
