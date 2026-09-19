@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { Loader2, Target, X, ChevronLeft } from 'lucide-react';
+import { useVezDoModal } from '../utils/filaModais';
 
 // Triagem do investidor — modal ONE-TIME no 1º acesso do cliente. Define o perfil-base
 // que direciona os agentes e prioriza o enriquecimento pelas cidades de interesse.
@@ -77,7 +78,11 @@ export default function TriagemPerfil({ userId }) {
     return () => { vivo = false; };
   }, [userId]);
 
-  if (!mostrar) return null;
+  // 19/09 — entra na fila de modais (era o único a furar: z-index fixo, cobria o vídeo de
+  // boas-vindas em conta nova). Continua decidindo SOZINHO se quer aparecer; só a EXIBIÇÃO
+  // agora espera a vez.
+  const podeMostrar = useVezDoModal('triagem', mostrar);
+  if (!podeMostrar) return null;
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const podeSalvar = f.perfil_investidor && f.faixa_capital && f.forma_pagamento && f.consorcio_interesse && f.experiencia_leilao;
