@@ -1,9 +1,13 @@
-// RECON DESCARTÁVEL (19/09) — 3ª mudança de estrutura do HASTA, RODADA 2. A rodada 1 já
-// provou que a listagem /leilao/<id>/lotes (18KB) NÃO tem nenhum href com dígito que pareça
-// lote — zero candidatos. O detalhe (/item/<id>/detalhes) tem sidebar "LOTE 001...014" em
-// TEXTO VISÍVEL, mas sem href correspondente na varredura anterior — precisa ver o HTML CRU
-// ao redor pra saber se é onclick/data-attr/JS. Esta rodada dumpa o HTML INTEIRO da listagem
-// (cabe em 18KB) e o trecho cru ao redor do menu de lotes no detalhe.
+// RECON DESCARTÁVEL (19/09) — RODADA 3. Achado da rodada 2: o evento 569 testado está
+// "Em Breve" (label no HTML) e a listagem mostra "NENHUM LOTE ENCONTRADO NO MOMENTO" — texto
+// HONESTO do próprio site, não bug de parser. O detalhe do lote conhecido 10739 tem um
+// <select id="sel-lotes"><option value="ID">LOTE NNN</option>...</select> que navega via JS
+// para `/lote/<id>/show?page=1` (achado no <script> da listagem: sel-lotes on('change')).
+// Meta tag confirma: author="SOLEON Soluções para Leilões Online" — MESMA plataforma dos
+// tenants de scraper-soleon.mjs, cujo extrairUrlsDeLote JÁ tem fallback pra /lote/(\d+)/.
+// Esta rodada varre TODOS os 9 eventos: qual está "Em Breve"/vazio de verdade vs qual tem
+// lotes de fato (via contagem de <option value="N"> dentro de sel-lotes ou <div class="lote
+// ...">), e dumpa a `lista-lotes` de um evento COM lote pra ver o card real.
 import { criarMotorDom } from './lib/motor/fetch-dom.mjs';
 import { proxyIspDisponivel } from './lib/motor/proxy-isp.mjs';
 import { extrairUrlsDeEvento, TENANTS } from './lib/hasta-parse.mjs';
@@ -11,46 +15,35 @@ import { extrairUrlsDeEvento, TENANTS } from './lib/hasta-parse.mjs';
 if (!proxyIspDisponivel()) { console.error('BRIGHTDATA_ISP_HOST/USER/PASS ausentes.'); process.exit(1); }
 
 const BASE = TENANTS.hasta.base;
-const motor = criarMotorDom({ esperaMs: 6000, timeoutMs: 45000, usarProxyIsp: true });
+const motor = criarMotorDom({ esperaMs: 5000, timeoutMs: 45000, usarProxyIsp: true });
 
 console.log(`\n=== ${BASE}/leiloes ===`);
 const { html: htmlLista } = await motor.fetchFonte(`${BASE}/leiloes`);
 if (!htmlLista) { console.log('❌ listagem de eventos não abriu.'); await motor.fechar(); process.exit(0); }
 const eventos = extrairUrlsDeEvento(htmlLista, BASE);
-const [id1, url1] = [...eventos.entries()][0];
+console.log(`Eventos: ${eventos.size}`);
 
-console.log(`\n=== leilão ${id1}: ${url1} (espera 6s) ===`);
-const { html: htmlEv } = await motor.fetchFonte(url1);
-if (!htmlEv) { console.log('❌ evento não abriu.'); await motor.fechar(); process.exit(0); }
-console.log(`bytes: ${htmlEv.length}`);
-console.log('\n----- HTML CRU COMPLETO DA LISTAGEM -----');
-console.log(htmlEv);
-console.log('----- FIM HTML CRU DA LISTAGEM -----\n');
-
-const LOTE = process.env.HASTA_LOTE_TESTE || '10739';
-const urlLote = `${BASE}/item/${LOTE}/detalhes`;
-console.log(`\n=== lote conhecido ${LOTE}: ${urlLote} ===`);
-const { html: htmlDet } = await motor.fetchFonte(urlLote);
-if (!htmlDet) { console.log('❌ detalhe não abriu.'); await motor.fechar(); process.exit(0); }
-console.log(`bytes: ${htmlDet.length}`);
-
-// Trecho cru ao redor do menu "LOTE 0xx" (visível no texto, sem href correspondente).
-const idxLote = htmlDet.search(/LOTE\s*001/i);
-if (idxLote >= 0) {
-  console.log('\n----- HTML CRU ao redor de "LOTE 001" (2000 chars antes/depois) -----');
-  console.log(htmlDet.slice(Math.max(0, idxLote - 2000), idxLote + 2000));
-  console.log('----- FIM -----\n');
-} else {
-  console.log('\n"LOTE 001" não encontrado no HTML cru (só no texto renderizado?).');
+let achouComLote = false;
+for (const [id, url] of eventos) {
+  const { html } = await motor.fetchFonte(url);
+  if (!html) { console.log(`  leilão ${id}: ❌ não abriu`); continue; }
+  const emBreve = /em[_\s]?breve/i.test(html.slice(html.indexOf('header-leilao'), html.indexOf('header-leilao') + 3000));
+  const vazio = /NENHUM\s+LOTE\s+ENCONTRADO/i.test(html);
+  const nOptions = [...html.matchAll(/<option\s+value=["'](\d+)["'][^>]*>\s*LOTE/gi)].length;
+  const nDivLote = [...html.matchAll(/class=["'][^"']*\blote-card\b[^"']*["']/gi)].length;
+  console.log(`  leilão ${id}: bytes=${html.length} emBreve=${emBreve} vazio=${vazio} options(LOTE)=${nOptions} div.lote-card=${nDivLote}`);
+  if (!vazio && nOptions > 0 && !achouComLote) {
+    achouComLote = true;
+    console.log(`\n  >>> leilão ${id} TEM lote — dumpando div "lista-lotes" bruta <<<`);
+    const iStart = html.indexOf('lista-lotes');
+    if (iStart >= 0) {
+      console.log(html.slice(Math.max(0, iStart - 200), iStart + 4000));
+    }
+  }
+  await new Promise(r => setTimeout(r, 300));
 }
 
-// Onde estão os rótulos Cidade/Endereço/Matrícula de VERDADE? Varre o HTML cru inteiro por
-// essas palavras (podem estar em outra aba/seção que só carrega sob demanda).
-for (const rotulo of ['idade', 'ndere', 'atr[íi]cula', 'CEP', 'UF\\b']) {
-  const re = new RegExp(rotulo, 'gi');
-  const n = (htmlDet.match(re) || []).length;
-  console.log(`Ocorrências brutas de /${rotulo}/i no HTML do detalhe: ${n}`);
-}
+if (!achouComLote) console.log('\n⚠️ NENHUM dos 9 eventos tem opção de lote — todos vazios/em breve de verdade.');
 
 await motor.fechar();
-console.log('\n✅ recon rodada 2 concluído.');
+console.log('\n✅ recon rodada 3 concluído.');
