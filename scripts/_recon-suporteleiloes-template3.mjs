@@ -1,49 +1,49 @@
-// RECON DESCARTÁVEL (19/09) — RODADA 4. Rodada 3 achou um objeto JSON embutido em algum
-// <script> da página com valorAvaliacao/valorInicial/documentos[]/leiloeiro{} — muito mais
-// robusto que regex sobre texto. Esta rodada isola o <script> inteiro, tenta JSON.parse e
-// imprime a estrutura completa (chaves de topo + campos de interesse).
+// RECON DESCARTÁVEL (19/09) — RODADA 5 (final). Achado: `var lote = {...}` no script #4 é
+// um JSON válido com id/descricao/valores no topo, e objetos aninhados `bem` e `leilao`
+// (que devem ter cidade/uf/endereco/matricula/comitente/leiloeiro/documentos/fotos). Esta
+// rodada dumpa `lote.bem` e `lote.leilao` por completo.
 const BASE = 'https://www.leilaobrasil.com.br';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-const c = new AbortController();
-const t = setTimeout(() => c.abort(), 20000);
-const r = await fetch(`${BASE}/eventos/leilao/apartamento-no-butanta/lote/24171/apartamento-no-butanta`,
-  { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow' });
-clearTimeout(t);
-const html = await r.text();
-console.log(`bytes=${html.length}`);
-
-// Acha TODOS os <script> e testa cada um por "valorAvaliacao".
-const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
-console.log(`total de <script> tags: ${scripts.length}`);
-let achou = false;
-for (let i = 0; i < scripts.length; i++) {
-  const corpo = scripts[i][1];
-  if (!corpo.includes('valorAvaliacao')) continue;
-  achou = true;
-  console.log(`\n=== script #${i} contém valorAvaliacao (${corpo.length} chars) ===`);
-  console.log('--- primeiros 300 chars (achar o padrão de atribuição) ---');
-  console.log(corpo.slice(0, 300));
-  // Tenta achar um objeto JSON válido dentro do corpo: procura "= {" ou ": {" e tenta
-  // parsear a partir dali até o fim, cortando ; ou </script> se precisar.
-  const mAtrib = corpo.match(/=\s*(\{[\s\S]*\})\s*;?\s*$/) || corpo.match(/(\{[\s\S]*\})/);
-  if (mAtrib) {
-    try {
-      const obj = JSON.parse(mAtrib[1]);
-      console.log('\n--- JSON.parse OK. Chaves de topo: ---');
-      console.log(Object.keys(obj).join(', '));
-      for (const campo of ['titulo', 'descricao', 'cidade', 'uf', 'endereco', 'localizacaoLatitude', 'localizacaoLongitude', 'matricula', 'numeroMatricula', 'comitente', 'leiloeiro', 'documentos', 'fotos', 'imagens', 'valorAvaliacao', 'valorInicial', 'valorInicial2', 'valorMinimo', 'dataAbertura1', 'dataFechamento1', 'dataAbertura2', 'dataFechamento2', 'tipo', 'modalidade', 'areaM2', 'area']) {
-        if (campo in obj) console.log(`  ${campo}: ${JSON.stringify(obj[campo]).slice(0, 300)}`);
-      }
-    } catch (e) {
-      console.log(`\nJSON.parse FALHOU: ${String(e.message).slice(0, 200)}`);
-      console.log('--- últimos 300 chars do corpo (achar onde corta) ---');
-      console.log(corpo.slice(-300));
-    }
-  } else {
-    console.log('Não achei um padrão de objeto JSON reconhecível neste script.');
+async function pegarLote(url) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 20000);
+  const r = await fetch(url, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow' });
+  clearTimeout(t);
+  const html = await r.text();
+  const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const s of scripts) {
+    if (!s[1].includes('valorAvaliacao')) continue;
+    const m = s[1].match(/var\s+lote\s*=\s*(\{[\s\S]*\});/);
+    if (!m) continue;
+    try { return { lote: JSON.parse(m[1]), url: r.url }; } catch (e) { return { erro: String(e.message).slice(0, 200), url: r.url }; }
   }
+  return { erro: 'script com var lote não achado', url: r.url };
 }
-if (!achou) console.log('NENHUM <script> continha "valorAvaliacao" — o achado da rodada 3 deve estar noutro lugar (atributo data-*?).');
 
-console.log('\n✅ recon rodada 4 concluído.');
+const { lote, erro, url } = await pegarLote(`${BASE}/eventos/leilao/apartamento-no-butanta/lote/24171/apartamento-no-butanta`);
+console.log(`url=${url}`);
+if (erro) { console.log(`ERRO: ${erro}`); process.exit(0); }
+
+console.log('\n=== lote.bem (chaves + valores, truncado) ===');
+if (lote.bem && typeof lote.bem === 'object') {
+  for (const [k, v] of Object.entries(lote.bem)) {
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    console.log(`  ${k}: ${s.slice(0, 250)}`);
+  }
+} else console.log(`lote.bem = ${JSON.stringify(lote.bem)}`);
+
+console.log('\n=== lote.leilao (chaves + valores, truncado) ===');
+if (lote.leilao && typeof lote.leilao === 'object') {
+  for (const [k, v] of Object.entries(lote.leilao)) {
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    console.log(`  ${k}: ${s.slice(0, 250)}`);
+  }
+} else console.log(`lote.leilao = ${JSON.stringify(lote.leilao)}`);
+
+console.log('\n=== outros campos de topo úteis ===');
+for (const k of ['dataFechamento', 'dataLimiteLances', 'dataFechado', 'leiloes', 'numero', 'numeroString', 'status']) {
+  console.log(`  ${k}: ${JSON.stringify(lote[k]).slice(0, 200)}`);
+}
+
+console.log('\n✅ recon rodada 5 concluído.');
