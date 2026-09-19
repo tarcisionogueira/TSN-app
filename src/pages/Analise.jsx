@@ -3091,6 +3091,9 @@ export default function Analise() {
                         <Scale size={13} color={proc.tem_bloqueante ? '#dc2626' : '#64748b'} />
                         <span style={{ fontWeight: 800, fontSize: 13, color: '#111111' }}>{proc.numero}</span>
                         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#e2e8f0', color: '#475569' }}>{proc.tribunal}</span>
+                        {proc.viaSocio && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#dbeafe', color: '#1e40af' }} title="O imóvel está em nome de uma empresa (CNPJ); este processo é do sócio, não da empresa.">👤 sócio: {proc.viaSocio}</span>
+                        )}
                         {proc.riscos?.filter(r => r.severidade === 'bloqueante').map(r => (
                           <span key={r.categoria} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⛔ {r.categoria}</span>
                         ))}

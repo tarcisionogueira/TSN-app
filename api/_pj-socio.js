@@ -44,7 +44,9 @@ async function fetchJson(url, ms = 12000) {
 }
 
 // Busca o QSA do CNPJ em fontes abertas gratuitas. Normaliza para [{nome, cpf_masc}].
-async function buscarQSA(cnpj14) {
+// Exportada (19/09) para reuso em api/gerar-documental.js — cruzamento CNJ por sócio,
+// não só verificação de parceiro (o uso original desta função).
+export async function buscarQSA(cnpj14) {
   // 1) BrasilAPI
   let d = await fetchJson(`https://brasilapi.com.br/api/cnpj/v1/${cnpj14}`);
   if (d && Array.isArray(d.qsa)) {
