@@ -29579,11 +29579,71 @@ não só HASTA.
 **Teste**: `scripts/_teste-proxy-isp-hasta.mjs` (descartável, mesmo padrão de
 `_teste-residencial-cloudflare-bloqueados.mjs`) + workflow `_temp-teste-proxy-isp-hasta.yml`
 (`workflow_dispatch`, roda em `ubuntu-latest` — datacenter, o mesmo ambiente que hoje bloqueia
-HASTA). **Pendente**: cadastrar as mesmas 3 credenciais como secrets do GitHub Actions
-(Settings → Secrets and variables → Actions — Vercel e GitHub Actions são cofres separados) e
-disparar a workflow para confirmar, ao vivo, se o proxy resolve o bloqueio. Se resolver, decidir
-com o dono se vale migrar HASTA (e as outras 4 fontes do mesmo motivo) do runner residencial
-para Vercel/GitHub Actions + proxy — troca dependência de máquina física por ~$2-10/mês.
+HASTA).
+
+**Validação**: `npm run verificar:sintaxe`, `npm run verificar:padroes` e `npm run build`
+limpos.
+
+**✅ CONFIRMADO AO VIVO, mesmo dia** — secrets cadastradas em GitHub Actions (Settings → Secrets
+and variables → Actions — cofre separado da Vercel) e workflow disparada de `ubuntu-latest`
+(datacenter puro, sem VPN nem IP de casa): HASTA respondeu com HTML real (31KB, 10 links de
+leilão reais — `/leilao/569/lotes` etc.), sem tela de bloqueio. **O proxy ISP resolve o
+bloqueio de datacenter no HASTA.** Decisão de migrar as 5 fontes do runner residencial para
+Vercel/GitHub Actions + proxy segue em aberto — pedido do dono para decidir depois, sem pressa
+(o runner residencial continua funcionando de graça enquanto isso).
+
+## 18/09 — Recon do HASTA via proxy ISP: mapa da estrutura, sem precisar de Chromium sempre
+
+Pedido do dono: "veja se, através desta nova porta de acesso, conseguimos mapear melhor o site
+para não precisar ficar utilizando o tempo todo" — mesmo raciocínio de usar o caminho leve
+quando dá, reservando o pesado (Chromium) só quando precisa.
+
+`scripts/recon-hasta-via-proxy.mjs` (descartável) + `_temp-recon-hasta-via-proxy.yml`, duas
+fases: (1) `curl --proxy` cru, sem navegador; (2) Chromium com o proxy, escutando toda resposta
+`content-type: json` via CDP.
+
+**Achados:**
+- **A lista de leilões ativos (`/`, `/leiloes`) já vem pronta no HTML CRU, sem JS nenhum** —
+  dá pra checar "tem leilão novo?" com um `curl` barato, sem abrir Chromium. Simplificação real
+  e imediata.
+- **Nenhum endpoint JSON encontrado** em nenhuma das duas rodadas — a SPA não busca os lotes
+  numa API separada (SSR/hidratação direta), então o nível de detalhe (lote/item) continua
+  exigindo Chromium. Não tem atalho aqui.
+- **1ª rodada**: `/leilao/569/lotes` voltou 0 itens — hipótese inicial era bloqueio de sessão
+  (mesmo padrão que já mordeu o JELEILOES: 2ª+ navegação na mesma sessão vem vazia). **2ª
+  rodada, sessões ISOLADAS** (BrowserContext incógnito por leilão, mesmo remédio de
+  `isolarSessao`): testados 569, 570 e 3 — **os três vieram com 0 itens mesmo isolados**.
+  Hipótese de bloqueio de sessão DESCARTADA; explicação mais provável é que esses 3 leilões
+  específicos (os 3 primeiros da lista de 9) estão sem lotes ativos agora (encerrados ou
+  aguardando publicação) — não confirmado, ficaram `11, 9, 10, 14, 15, 1` sem testar.
+
+**Validação**: `npm run verificar:sintaxe`, `npm run verificar:padroes` e `npm run build`
+limpos.
+
+## 18/09 — CNJ/DataJud: erro de consulta processual não deixava rastro em lugar nenhum
+
+Dono sinalizou (sessão anterior) que um relatório documental de apartamento mostrou erro na
+consulta do CNJ. Achado ao investigar (relatório de 17/09, apto Rua Jorge Augusto/SP): a
+consulta ao CNJ/DataJud falhou de verdade (`parecer.motivo: "consulta_falhou"`, não
+"não localizado") — mas **o motivo REAL do erro (timeout? HTTP 5xx? rate limit?) nunca chegava
+a lugar nenhum**. `buscarProcessosCNJ` (`api/_cnj.js`) captura `_erro: err.message` por
+tribunal, mas nunca logava; `gerar-documental.js` descartava o campo `erros` antes de
+persistir o relatório (só `total/parecer/processos/tribunais` iam pro banco). Conferi no
+Vercel (`get_runtime_logs`) o minuto exato da geração: zero rastro.
+
+**Diagnóstico possível com o que existia**: chave `CNJ_DATAJUD_KEY` configurada (6 tribunais
+foram de fato consultados — se a chave estivesse ausente, a lista viria vazia); DJEN funcionou
+normal no MESMO relatório (não é queda geral de fontes externas); e o padrão é INTERMITENTE —
+só 2 ocorrências em 30 dias (29/08 e 17/09) entre ~10 relatórios que consultaram o CNJ, todos
+os outros passaram normal. Mais consistente com instabilidade pontual do próprio DataJud do
+que com bug persistente nosso — mas isso é inferência por frequência, não prova direta, porque
+o texto do erro nunca existiu registrado.
+
+**Corrigido** (`api/_cnj.js` + `api/gerar-documental.js`): `console.error` com os erros por
+tribunal quando houver falha (aparece no runtime log da Vercel), e `cnj.erros` agora é
+persistido em `result.cnj` — só uso interno (banco), `Analise.jsx`/`NotaMetodologica.jsx`
+destroem apenas as chaves que já liam, então não muda nada na tela do cliente. Próxima
+ocorrência já vem com o motivo exato, em vez de exigir arqueologia de log.
 
 **Validação**: `npm run verificar:sintaxe`, `npm run verificar:padroes` e `npm run build`
 limpos.
