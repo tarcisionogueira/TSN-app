@@ -8,7 +8,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
-import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
+import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
 import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -4822,9 +4822,20 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         if (!im) continue;
         if (!(Number(im.area_m2) > 0) && Number(db.area_m2) > 0) im.area_m2 = Number(db.area_m2);
         if (!(Number(im.valor_avaliacao) > 0) && Number(db.valor_avaliacao) > 0) im.valor_avaliacao = Number(db.valor_avaliacao);
-        if (!im.link_matricula && db.link_matricula) im.link_matricula = db.link_matricula;
-        if (!im.link_regras_venda && db.link_regras_venda) im.link_regras_venda = db.link_regras_venda;
-        if (!(Array.isArray(im.anexos) && im.anexos.length) && Array.isArray(db.anexos) && db.anexos.length) im.anexos = db.anexos;
+        // REEXAMINA o que já estava gravado antes de carregar pra frente (achado 19/09, chácara
+        // SUPERBID: 3 de 5 anexos eram texto de compartilhamento, gravados ANTES do reforço em
+        // _doc-scan.js). Sem isto, lixo que um dia passou pelo filtro furado ficava imune para
+        // sempre — o mesmo `atuais.filter(ehDocumento)` que `api/enriquecer-lote.js` já faz no
+        // caminho sob-demanda, replicado aqui porque este merge (coleta periódica) é um segundo
+        // ponto de entrada que nunca tinha o mesmo portão. link_matricula/link_regras_venda
+        // também passam pelo portão — um .pdf de verdade sempre passa (RE_DOC_EXT), então isto
+        // só derruba o que já era lixo.
+        const base = im.url_lote || im.link_edital || '';
+        if (!im.link_matricula && db.link_matricula && ehDocumento(db.link_matricula, 'Matrícula', base)) im.link_matricula = db.link_matricula;
+        if (!im.link_regras_venda && db.link_regras_venda && ehDocumento(db.link_regras_venda, 'Regras', base)) im.link_regras_venda = db.link_regras_venda;
+        if (!(Array.isArray(im.anexos) && im.anexos.length) && Array.isArray(db.anexos) && db.anexos.length) {
+          im.anexos = db.anexos.filter(a => ehDocumento(a?.url, a?.nome || '', base));
+        }
       }
     }
   } catch { /* merge é otimização — nunca derruba o enriquecimento */ }

@@ -23,6 +23,14 @@
  * `?text=` carrega a descrição) e em 2 da SUPERBID ("Confira a oferta: …").
  *
  * A metade de baixo do teste é a que importa mais: nenhum documento de verdade pode cair junto.
+ *
+ * 19/09 — REFORÇO: chácara de Santana de Parnaíba/SP (SUPERBID), achado do dono no Cliente
+ * 360. O mesmo padrão "texto de compartilhamento" — mas o "%" cru de "43%" (nunca escapado
+ * para "%25" por quem gerou o link da SUPERBID) quebrava `decodeURIComponent`, e o fallback
+ * devolvia a URL crua (com "%20" como TEXTO, não espaço) — a contagem de espaços dava ZERO no
+ * que era, decodificado direito, o texto mais espaçado dos três. Duas variantes mais curtas
+ * (119 e 149 caracteres decodificados) também escapavam do limiar antigo de 150 caracteres,
+ * calibrado só para o caso de 1.728 caracteres da LJUD.
  */
 import { ehDocumento, ehDocInstitucional } from '../../api/_doc-scan.js';
 import { readFileSync } from 'node:fs';
@@ -46,6 +54,16 @@ recusa('botão de compartilhar no Twitter (SUPORTE, 3 lotes)',
   'https://twitter.com/intent/tweet?text=Natureza:%20Urbano%20/%20Tipo%20de%20im%C3%B3vel:%20Casa%20/%20Matr%C3%ADcula:%206');
 recusa('texto de compartilhamento da SUPERBID (2 lotes)',
   'https://www.superbid.net/oferta/Confira%20a%20oferta:%20Ch%C3%A1cara%20de%20alto%20padr%C3%A3o%20com%205%20su%C3%ADtes%20e%20matr%C3%ADcula%2012345%20no%20munic%C3%ADpio%20de%20Atibaia%20SP%20por%20apenas%20hoje');
+
+console.log('\nA CHÁCARA DE SANTANA DE PARNAÍBA (19/09) — "%" cru quebrava o decode');
+recusa('"%" cru de "43%" (não escapado) quebra decodeURIComponent — motivo original',
+  'https://www.superbid.net/oferta/Confira%20a%20oferta:%20Ch%C3%A1cara%20de%20alto%20padr%C3%A3o%20com%205%20su%C3%ADtes%20e%20%C3%81rea%20total%20de%205.381%20m%C2%B2%20|%2043%%20abaixo%20da%20avalia%C3%A7%C3%A3o%20|%20Santana%20de%20Parna%C3%ADba/SP%20encontre%20as%20melhores%20oportunidades%20de%20neg%C3%B3cios%20para%20voc%C3%AA!');
+recusa('variante curta (149 chars decodificados) — abaixo do limiar antigo de 150',
+  'https://www.superbid.net/oferta/Leil%C3%A3o%20de%20Ch%C3%A1cara%20de%20alto%20padr%C3%A3o%20com%205%20su%C3%ADtes%20e%20%C3%81rea%20total%20de%205.381%20m%C2%B2%20|%2043%%20abaixo%20da%20avalia%C3%A7%C3%A3o%20|%20Santana%20de%20Parna%C3%ADba/SP%20|%20Superbid%20Exchange');
+recusa('variante mais curta ainda (119 chars decodificados)',
+  'https://www.superbid.net/oferta/Ch%C3%A1cara%20de%20alto%20padr%C3%A3o%20com%205%20su%C3%ADtes%20e%20%C3%81rea%20total%20de%205.381%20m%C2%B2%20|%2043%%20abaixo%20da%20avalia%C3%A7%C3%A3o%20|%20Santana%20de%20Parna%C3%ADba/SP');
+aceita('a matrícula REAL do mesmo lote continua aceita (.pdf, sem prosa)',
+  'https://s.superbid.net/attachment/14/34/1434ce13-0b38-4405-a568-433f637dbbd3.pdf', 'Matricula-no-192-22.12.2025');
 
 console.log('\nAS VARIAÇÕES DO MESMO DOCUMENTO INSTITUCIONAL');
 for (const t of [
@@ -81,6 +99,15 @@ console.log('\nO CONSERTO PRECISA ALCANÇAR O PASSADO');
   checa('enriquecer-lote importa o portão', /ehDocumento[^;]*from '\.\/_doc-scan\.js'/.test(src));
   checa('e reexamina o que JÁ estava gravado antes de preservar',
     /for \(const a of atuais\)[\s\S]{0,320}?ehDocumento\(a\?\.url/.test(src));
+}
+{
+  // 19/09 — MESMO ponto cego, SEGUNDA porta: scraper-puppeteer.mjs (coleta PERIÓDICA, a que
+  // roda todo dia p/ SUPERBID/MEGA/GL/…) tinha seu PRÓPRIO merge de `db.anexos` pro lote
+  // fresco, sem reexaminar — o portão de enriquecer-lote.js (acima) não cobre esta porta.
+  const src = readFileSync(new URL('../../scripts/scraper-puppeteer.mjs', import.meta.url), 'utf8');
+  checa('scraper-puppeteer importa o portão', /ehDocumento[^;]*from ['"]\.\.\/api\/_doc-scan\.js['"]/.test(src));
+  checa('e o merge de db.anexos reexamina antes de carregar pra frente',
+    /db\.anexos\.filter\(a => ehDocumento\(a\?\.url/.test(src));
 }
 
 console.log(`\n${falhas ? '✗' : '✓'} ${ok} passaram, ${falhas} falharam\n`);

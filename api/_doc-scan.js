@@ -34,18 +34,38 @@ const RE_PARAM_MKT = /[?&](utm_[a-z]+|gclid|fbclid|msclkid|mc_eid)=/i;
 // URL com PREÇO no caminho é rótulo de anúncio virado link, não arquivo
 // (ex.: /item/7588/Chácara…%20-%20Lance%20Inicial:%20R$2.266.000,00).
 const RE_URL_ANUNCIO = /R\$|lance\s*inicial/i;
-// ── A DESCRIÇÃO DO LOTE VIRADA EM LINK (achado do dono, 10/09) ────────────────────────
+// ── A DESCRIÇÃO DO LOTE VIRADA EM LINK (achado do dono, 10/09; reforçado 19/09) ───────
 // Lote 97989/210252 da LJUD: um "anexo" cuja URL tem 1.728 caracteres e é a descrição
 // INTEIRA do imóvel colada como caminho (".../lote/97989/Terreno c/ 6.335,59m² - Galpão em
 // ruína -Feira de Santana/BA - Um galpão industrial…"). O `RE_URL_ANUNCIO` não pegou porque
 // aquele texto não cita preço, e o portão final aceitou por PALAVRA-CHAVE: a descrição diz
 // "matrícula nº 18.486", então `RE_MATRICULA` casou e o lixo entrou como se fosse a matrícula.
 // A defesa aqui não depende de qual palavra o texto contém: nome de ARQUIVO não é PROSA.
-// Caminho decodificado longo e cheio de espaços é frase, não arquivo. Limiar folgado
-// (150 caracteres E 8 espaços) para não pegar "Edital 2ª praça - Comarca de X.pdf".
+//
+// 19/09 — REFORÇADO. Chácara de Santana de Parnaíba/SP (SUPERBID): 3 dos 5 "anexos" eram o
+// texto de compartilhamento da oferta (".../oferta/Confira a oferta: Chácara de alto padrão
+// com 5 suítes… 43% abaixo da avaliação…") — o MESMO padrão que este filtro já existia para
+// pegar (há teste para ele, `testar:anexo-lixo`). Dois problemas, um consertado por cada
+// mudança abaixo:
+//  (a) o "%" de "43%" no texto original NUNCA foi escapado para "%25" por quem gerou o link —
+//      a URL carrega um "%" solto seguido de "%20" (vira "...43%%20abaixo..."). Isso quebra
+//      `decodeURIComponent`, que joga URIError; o catch de `decodificar()` devolve a string
+//      CRUA (ainda com "%20" como texto, não espaço) — e a contagem de espaços deste filtro
+//      dava ZERO no que é, na verdade, o texto mais espaçado de todos. `decodificar()` agora
+//      escapa "%" solto (não seguido de 2 hex) ANTES de decodificar, então nunca mais lança.
+//  (b) mesmo decodificado direito, 2 das 3 URLs tinham 119–149 caracteres — abaixo do limiar
+//      de 150 usado até aqui, calibrado para o caso de 1.728 caracteres da LJUD e nunca
+//      testado contra prosa mais curta. Limiar agora tem duas pernas: caminho SEM extensão de
+//      arquivo E com muitos espaços é prosa (URL de doc de verdade sempre termina em extensão
+//      OU é um endpoint opaco sem espaço nenhum — nenhum caso do teste `testar:anexo-lixo`
+//      tem as duas coisas juntas); OU o limiar antigo (150 chars + 8 espaços), para prosa
+//      longa que por acaso termine parecendo uma extensão.
 const RE_URL_PROSA = (u) => {
   const caminho = decodificar(String(u || '')).split(/[?#]/)[0].replace(/^https?:\/\/[^/]+/i, '');
-  return caminho.length > 150 && (caminho.match(/ /g) || []).length >= 8;
+  const espacos = (caminho.match(/ /g) || []).length;
+  const semExtensao = !/\.[a-z0-9]{2,5}$/i.test(caminho);
+  if (semExtensao && espacos >= 8) return true;
+  return caminho.length > 150 && espacos >= 8;
 };
 // Extensões de documento que nos interessam.
 const RE_DOC_EXT = /\.(pdf|docx?|xlsx?|odt|rtf)(?:[?#]|$)/i;
@@ -169,8 +189,18 @@ function rotuloDoBloco(html, href, janela = 3000) {
 
 // decodeURIComponent explode com '%' solto (comum em URL de anúncio); aqui o pior caso
 // é comparar a URL crua, nunca derrubar a varredura.
+//
+// 19/09 — o "pior caso" não era só cosmético: a URL de compartilhamento da SUPERBID carrega
+// um "%" cru de "43%" (nunca escapado para "%25" por quem gerou o link) colado num "%20" —
+// vira "...43%%20abaixo...". `decodeURIComponent` lança URIError nisso, o catch devolvia a
+// string CRUA (com "%20" como TEXTO, não espaço), e RE_URL_PROSA (abaixo) contava zero
+// espaço no que era, decodificado direito, o texto mais espaçado dos três anexos-lixo — o
+// filtro deixava passar exatamente o que existe para pegar. Escapar "%" solto ANTES de
+// decodificar faz o decode ter sucesso (em vez de cair pro fallback cru) sem mudar o
+// resultado de nenhuma URL que já decodificava bem.
 function decodificar(u) {
-  try { return decodeURIComponent(String(u)).replace(/\+/g, ' '); } catch { return String(u); }
+  const saneado = String(u).replace(/%(?![0-9A-Fa-f]{2})/g, '%25');
+  try { return decodeURIComponent(saneado).replace(/\+/g, ' '); } catch { return String(u); }
 }
 
 // A própria página do lote (âncora "#tab-parcelamento") ou a HOME do leiloeiro — nunca
