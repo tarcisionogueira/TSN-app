@@ -870,6 +870,46 @@ async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
   return { vistos: (data || []).length, corrigidos, falhas_gravacao: falhasGravacao || undefined };
 }
 
+/**
+ * RE-AVALIA `leiloeiro_integrado=false` de editais ANTIGOS (19/09, achado do dono).
+ *
+ * `reparsarLeiloeirosPendentes` (acima) só revisita edital SEM nome extraído — mas o problema
+ * aqui é outro: Giordano Leilões e José Antônio Rodovalho Júnior JÁ TÊM nome extraído E já
+ * estão integrados (GIORDANOLEILOES e LJUD/VLANCE respectivamente — confirmado via
+ * `leiloeiro_dominios_do_acervo()`), e mesmo assim seus editais seguiam marcados
+ * `leiloeiro_integrado=false`. Causa: o campo é gravado UMA VEZ, no processamento inicial do
+ * edital — se a integração aconteceu DEPOIS (comum: o radar é justamente o que revela o
+ * leiloeiro que ainda não raspamos, e aí ele é integrado), o flag nunca é recalculado, e o
+ * backlog de aquisição mente pra sempre sobre quem já está coberto — gastando esforço (e Bright
+ * Data) tentando integrar de novo quem já está.
+ *
+ * Roda SEMPRE, de graça (só relê o que já tem nome+domínio e testa contra a lista fresca de
+ * `ehIntegrado` desta rodada — zero rede, zero IA) e se esgota sozinho como o re-parse acima:
+ * quando não sobrar `false` que agora resolve `true`, o UPDATE afeta zero linhas.
+ */
+async function reavaliarIntegracaoDesatualizada(supabase, ehIntegrado, teto = 500) {
+  const { data, error } = await supabase.from('editais_leilao')
+    .select('id, leiloeiro_nome, leilao_plataforma_url')
+    .eq('leiloeiro_integrado', false)
+    .not('leiloeiro_nome', 'is', null)
+    .order('atualizado_em', { ascending: true })   // os mais velhos primeiro — cicla o backlog inteiro ao longo de vários runs
+    .limit(teto);
+  if (error) return { erro: error.message.slice(0, 120), vistos: 0, corrigidos: 0 };
+
+  let corrigidos = 0, falhasGravacao = 0;
+  for (const e of data || []) {
+    // Só sobe false→true. Nunca desce: um `true` já gravado é o sinal mais forte que existe
+    // (o mesmo princípio do reparse acima, "não regredir sinal forte por um mais fraco").
+    if (ehIntegrado(e.leiloeiro_nome, dominioDe(e.leilao_plataforma_url)) !== true) continue;
+    const { error: eUpd } = await supabase.from('editais_leilao')
+      .update({ leiloeiro_integrado: true, atualizado_em: new Date().toISOString() })
+      .eq('id', e.id);
+    if (eUpd) { falhasGravacao++; console.error('[radar-editais] reavaliação não gravou', e.id, eUpd.message); continue; }
+    corrigidos++;
+  }
+  return { vistos: (data || []).length, corrigidos, falhas_gravacao: falhasGravacao || undefined };
+}
+
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
@@ -1008,6 +1048,12 @@ async function handler(req) {
   try { reparse = await reparsarLeiloeirosPendentes(supabase, ehIntegrado); }
   catch (e) { reparse = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] re-parse falhou', reparse.erro); }
 
+  // Idem, para editais cujo NOME já foi extraído mas o flag `leiloeiro_integrado` ficou
+  // desatualizado (ver comentário da função) — leiloeiro integrado DEPOIS do processamento.
+  let reavaliacao = null;
+  try { reavaliacao = await reavaliarIntegracaoDesatualizada(supabase, ehIntegrado); }
+  catch (e) { reavaliacao = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] reavaliação falhou', reavaliacao.erro); }
+
   // ENRIQUECIMENTO POR IA — roda SEMPRE (mesmo com o pull pulado), best-effort, capado e
   // time-boxed: drena a fila de editais reais ainda não extraídos, a cada 4h, barato.
   let iaExtraidos = 0;
@@ -1041,7 +1087,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, promocao, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

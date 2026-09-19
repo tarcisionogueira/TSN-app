@@ -101,7 +101,16 @@ async function buscarTribunal(tribunal, query) {
       body: JSON.stringify({ size: 10, query }),
       signal: AbortSignal.timeout(12000),
     });
-    if (!res.ok) return { hits: { hits: [], total: { value: 0 } }, _tribunal: tribunal, _erro: `HTTP ${res.status}` };
+    // 19/09 — HTTP 400 sozinho não diz NADA (query malformada? campo inexistente? sintaxe
+    // Elasticsearch errada?). Achado ao vivo: 6/6 tribunais devolvendo 400 ao mesmo tempo pra
+    // uma busca por NOME DA PARTE (query `nested`) — enquanto a busca por NÚMERO (query
+    // `bool/match` simples) passava 5/6 na mesma rodada. O corpo do erro do Elasticsearch diz
+    // exatamente qual campo/sintaxe ele rejeitou; sem capturar isso, cada 400 novo exige
+    // arqueologia de log igual a esta. Trunca pra não inchar o log com o erro inteiro.
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => '');
+      return { hits: { hits: [], total: { value: 0 } }, _tribunal: tribunal, _erro: `HTTP ${res.status}${corpo ? ` — ${corpo.slice(0, 300)}` : ''}` };
+    }
     const data = await res.json();
     return { ...data, _tribunal: tribunal };
   } catch (err) {
