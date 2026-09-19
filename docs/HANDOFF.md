@@ -29788,5 +29788,41 @@ produziria exatamente esse resultado.
 estoura é em `endpoint` (não em `user_id`, que é a que o `on_conflict` do upsert cobre). O
 comentário do código já previa esse caso ("mesmo aparelho, outra conta... segue tratado
 abaixo") mas o tratamento nunca foi implementado — cai no mesmo 502 genérico. Não bloqueia nada
-crítico (só a reinscrição de push nesse aparelho), mas é bug real, não falha de rede. Ainda não
-corrigido — fica para quando push notifications voltar à pauta.
+crítico (só a reinscrição de push nesse aparelho), mas é bug real, não falha de rede.
+
+**Corrigido** (mesmo dia, PR #358): ao detectar o 409 na constraint
+`push_subscriptions_endpoint_key`, apaga a inscrição da conta antiga com aquele `endpoint` e
+refaz o upsert pra conta atual — a inscrição de push deve seguir quem está logado no aparelho
+agora, não quem inscreveu primeiro.
+
+## 19/09 (fechamento) — dois achados a mais na varredura, os dois corrigidos no mesmo PR #358
+
+**Popup de onboarding duplicado** (print do dono): `TriagemPerfil` ("Vamos personalizar suas
+análises") cobria o vídeo de Boas-vindas em conta nova. Causa: `TriagemPerfil` era o único
+popup que NÃO participava da fila de modais (`src/utils/filaModais.js`, nascida em 15/08
+exatamente pra isso) — renderizava com `z-index` fixo (3000) por cima de tudo, sem esperar a
+vez. Registrado na fila logo depois de `'boas-vindas'` (mesmo motivo do `'tour'`: perguntar por
+cima de vídeo não personaliza nada, só atrapalha os dois).
+
+**Gemini `HTTP 429 "prepayment credits depleted"`** — mesmo achado já documentado em 16/09
+(seção "AÇÃO URGENTE DO DONO" no topo deste arquivo), reconfirmado ativo hoje na minha própria
+chamada de teste (02:31 UTC). Não é bug de código — é crédito a recarregar em
+aistudio.google.com. Nenhuma ação de código possível; já está sinalizado corretamente no
+Cliente 360 desde a sessão de 18/09.
+
+### Estado no fechamento — tudo em produção
+
+| PR | O quê | Status |
+|---|---|---|
+| #355 | anexos-lixo SUPERBID/SOLD · log de erro CNJ · recon Fernando/Jonas · reavaliação `leiloeiro_integrado` | mergeado, confirmado (José Rodovalho virou `true` no cron das 04h) |
+| #356 | causa raiz do CNJ — query `nested` indevida em `partes` | mergeado, confirmado ao vivo |
+| #357 | "0 processos no CNJ" não é mais "indisponível agora" | mergeado, confirmado ao vivo (regeração completa via conta QA) |
+| #358 | push-subscribe 502 · popup duplicado · HANDOFF do dia | mergeado |
+
+Relatório real do dono (Rua Jorge Augusto, 449/SP) corrigido e validado. Recon Fernando/Jonas:
+proxy ISP não resolve (523 consistente) — sem integração viável hoje, registrado acima. Infra
+de teste (conta QA `dev@bidpro.com.br` + `pg_net` no Supabase) fica pronta pra próxima sessão.
+
+**Sem pendência aberta desta rodada** além do saldo do Gemini (ação do dono, fora do código) e
+dos leiloeiros ainda não integrados (leilaobrasil, lucasleiloeiro, kronbergleiloes, crleiloes,
+alessandroteixeiraleiloes — nenhum investigado ainda, ficam pra próxima sessão).
