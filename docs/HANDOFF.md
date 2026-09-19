@@ -29647,3 +29647,77 @@ ocorrência já vem com o motivo exato, em vez de exigir arqueologia de log.
 
 **Validação**: `npm run verificar:sintaxe`, `npm run verificar:padroes` e `npm run build`
 limpos.
+
+## 19/09 — CNJ: causa raiz encontrada e corrigida (a consulta por nome de parte nunca funcionou)
+
+Continuação direta do achado de 18/09 acima: com o log do corpo do erro em produção (PR #355),
+a PRIMEIRA regeração real do dono já capturou o motivo exato — HTTP 400 em **6/6 tribunais
+simultaneamente** (tjsp, trf3, trt2, trt15, tst, stj), todos com o mesmo `query_shard_exception`
+do Elasticsearch: `"failed to create query: [nested] failed to find nested object under path
+[partes]"`. A consulta por NÚMERO de processo (query mais simples, sem `nested`) funcionava
+normal na mesma rodada — só a busca por NOME DA PARTE estava quebrada, em qualquer tribunal.
+
+**Causa**: `buscarProcessosCNJ` (`api/_cnj.js`) envolvia a busca por nome em
+`nested: { path: 'partes', query: { match: {...} } } }`. No mapping público do índice do
+DataJud, `partes` não é do tipo `nested` — é objeto/array comum. O wrapper `nested` é rejeitado
+pelo Elasticsearch em TODO tribunal, sempre — não era o DataJud fora do ar, nem gap de
+cobertura de tribunal (TJ/STJ já eram consultados normalmente, ao contrário do que se suspeitava
+inicialmente).
+
+**Corrigido** (PR #356): troca para `match` direto em `partes.nome`, sem o wrapper `nested`.
+
+**Validação**: `node --check`, eslint, `verificar:sintaxe`, `verificar:padroes` e `build`,
+todos ok.
+
+## 19/09 — Anexos-lixo no SUPERBID/SOLD: "%" cru quebrava o decode, limiar de prosa curto demais
+
+Achado do dono no Cliente 360: chácara de Santana de Parnaíba/SP (SUPERBID) com quase todos os
+anexos inválidos, incluindo a "matrícula" (na real, um link do WhatsApp mal rotulado). Causa:
+o filtro `RE_URL_PROSA` (`api/_doc-scan.js`, nascido em 10/09 para a LJUD) detecta "texto de
+compartilhamento colado como se fosse arquivo" contando espaços no caminho DECODIFICADO — mas
+o texto da SUPERBID tinha um `%` cru (de "43%", nunca escapado para "%25") que quebrava
+`decodeURIComponent`; o `catch` devolvia a URL crua, com `%20` como TEXTO em vez de espaço, e a
+contagem de espaços dava zero no que era, decodificado direito, o mais espaçado dos três casos.
+Duas variantes mais curtas (119 e 149 caracteres decodificados) também escapavam do limiar
+antigo de 150 caracteres, calibrado só para o caso de 1.728 caracteres da LJUD.
+
+**Corrigido** (`api/_doc-scan.js`): `decodificar()` agora saneia `%` solto (`%(?![0-9A-Fa-f]{2})`
+→ `%25`) antes de decodificar, com fallback só se ainda assim falhar; `RE_URL_PROSA` ganhou um
+ramo para caminho SEM extensão de arquivo com 8+ espaços, mesmo abaixo de 150 caracteres.
+Segundo bug relacionado: `scraper-puppeteer.mjs` (coleta periódica) tinha seu próprio merge de
+`db.anexos` do lote anterior sem reexaminar pelo portão — lixo que entrava uma vez ficava imune
+a qualquer conserto posterior do filtro. Corrigido para reexaminar via `ehDocumento()` antes de
+carregar adiante, espelhando o padrão já usado em `api/enriquecer-lote.js` desde 10/09.
+
+3 lotes afetados (2 SUPERBID + 1 SOLD, mesma rede/plataforma) limpos direto no banco.
+`npm run testar:anexo-lixo`: 25/25 (6 casos novos).
+
+## 19/09 — Radar de editais: `leiloeiro_integrado` nunca era reavaliado depois de integrar
+
+A flag era calculada uma vez no processamento inicial do edital e nunca revisitada — leiloeiro
+que passava a ser integrado DEPOIS (Giordano Leilões via GIORDANOLEILOES/LJUD, José A.
+Rodovalho Jr via LJUD/VLANCE, ambos já presentes em `leiloeiro_dominios_do_acervo()`) ficava
+marcado "não integrado" no radar para sempre, inflando o backlog com trabalho já feito.
+`reparsarLeiloeirosPendentes()` só cobre o caso de `leiloeiro_nome` nulo, não o de nome já
+preenchido com flag desatualizada.
+
+**Corrigido** (`api/radar-editais-cron.js`): nova `reavaliarIntegracaoDesatualizada()` revisita
+editais com `leiloeiro_integrado=false` e nome preenchido (teto 500, mais antigos primeiro) e
+promove false→true quando a checagem atual confirma — nunca rebaixa. Resultado exposto em
+`reavaliacao` na resposta do endpoint, para observar sem precisar de query manual.
+
+## 19/09 — Proxy ISP NÃO resolve o bloqueio do FERNANDOLEILOEIRO/JONASLEILOEIRO (Cloudflare)
+
+Testado (leiloeiros com mais editais no radar ainda não integrados: 19 e 3 editais em 45 dias).
+Já confirmado sem sucesso via IP residencial + Web Unlocker (achado anterior). Com o proxy ISP
+(que resolveu o bloqueio de reputação de IP do HASTA, 18/09), o resultado é DIFERENTE mas
+igualmente bloqueado: não vem o desafio "just a moment" da Cloudflare, vem **HTTP 523** ("origem
+inalcançável") nos 3 alvos testados — **repetido de forma idêntica em duas rodadas separadas**
+(não é instabilidade pontual do site deles). Cloudflare provavelmente descarta a conexão antes
+de chegar à origem para esse IP/ASN de datacenter/ISP, com um código diferente do WAF residencial.
+Conclusão: nenhum dos dois métodos de proxy do Bright Data testados até agora (residencial,
+Web Unlocker, ISP) resolve estes dois leiloeiros — próxima tentativa exigiria um produto
+diferente (ex.: Residential com rotação mais agressiva, ou aceitar CAPTCHA solver) ou desistir
+da integração automatizada e considerar cadastro manual pontual. Scripts descartáveis
+(`scripts/recon-fernando-jonas-via-proxy.mjs`, `.github/workflows/_temp-recon-fernando-jonas.yml`)
+removidos após o teste.
