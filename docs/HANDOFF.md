@@ -29826,3 +29826,59 @@ de teste (conta QA `dev@bidpro.com.br` + `pg_net` no Supabase) fica pronta pra p
 **Sem pendência aberta desta rodada** além do saldo do Gemini (ação do dono, fora do código) e
 dos leiloeiros ainda não integrados (leilaobrasil, lucasleiloeiro, kronbergleiloes, crleiloes,
 alessandroteixeiraleiloes — nenhum investigado ainda, ficam pra próxima sessão).
+
+## 19/09 (continuação) — CNJ também busca pelos sócios do CNPJ + recon da rodada de leiloeiros
+(pedido do dono: "resolva todos os leiloeiros para pegar todos os imóveis e veículos")
+
+**CNJ × sócios (PR #361):** quando o executado é CNPJ, `api/gerar-documental.js` agora também
+consulta o QSA (via `buscarQSA`, `api/_pj-socio.js`, já existia mas era só interno) e busca
+processos no CNJ pelo NOME de cada sócio, além do nome da empresa — mitiga divergência entre a
+matrícula/documentos anexados (podem estar desatualizados) e quem de fato responde pela
+execução hoje. UI mostra chip "via sócio" no card do processo (`src/pages/Analise.jsx`).
+
+**Certidões (CNDT/CNIB/CENPROT/PGFN/Receita/FGTS) — pergunta do dono sobre o Bright Data pago:**
+resposta é NÃO, o Bright Data pago não resolve. Web Unlocker (o produto contratado) é
+anti-bot/IP-reputation + renderização JS — **não é resolução de CAPTCHA**, que é um produto
+separado. CNIB/CENPROT exigem CAPTCHA que nenhuma automação daqui resolve; PGFN exige login
+pessoal gov.br (não automatizável por procuração de sistema); a API grátis da Receita não aceita
+busca por CPF. Nenhuma mudança de código — decisão registrada em `api/_laudo-fontes.js` (já
+tinha os comentários explicando a remoção de 31/08) e aqui.
+
+**Recon dos leiloeiros pendentes do radar (fetch via `pg_net`/Supabase, sem gastar Bright Data):**
+- **kronbergleiloes.com.br** — é WordPress puro; `/wp-json/wp/v2/types` só lista tipos padrão
+  (post/page/mídia), **sem WPCasa nem custom post type de imóvel** — não tem API estruturada
+  pra raspar. A home só tem páginas institucionais + link pra
+  `https://kronbergleiloes.rds.land/kron-cadastros-2024` (captura de lead) e pra
+  **`vipleiloes.com.br`** — hipótese: os lotes reais do Kronberg podem estar hospedados lá, não
+  no próprio domínio. Fica pro teste de rede abaixo confirmar.
+- **neteditais.com.br** — **domínio não resolve DNS** (não é "página vazia" como o recon
+  anterior sugeria). Histórico no banco: só 2 editais NUNCA (`Confiança Leilões`, jul/set),
+  domínio morto. Descartado — não vale reinvestir (regra "economia máxima").
+- **lucasleiloeiro.com.br, leiloesuberlandia.com.br, sfleiloes.com.br** — os 3 que davam
+  timeout no recon anterior responderam normal no reteste (era instabilidade de rede, não
+  bloqueio). Achados por site:
+  - `lucasleiloeiro.com.br`: SPA com rota por hash (`/busca/#Engine=Start&Pagina=1&...&ID_Categoria=N`)
+    — HTML estático vem com o template não-compilado (`${row.URLLote}` literal na página), ou
+    seja, os lotes só existem depois do JS rodar. Precisa navegador.
+  - `leiloesuberlandia.com.br`: footer aponta pra **`plataformaleiloar.com.br`**.
+  - `sfleiloes.com.br`: tem URLs reais de `/leilao/{id}/{slug}` e `/lote/{id}/{slug}` já na
+    home (server-rendered), mas a pasta `/build` sugere Laravel+SPA por trás — precisa achar o
+    endpoint de listagem paginada (a home só mostra alguns destaques).
+- **crleiloes.com.br** (Cláudio Reis Leiloeiro Oficial, 321 imóveis + 149 veículos por conta do
+  dono) — **roda na mesma `plataformaleiloar.com.br`** que o `leiloesuberlandia.com.br`
+  (confirmado por `assets.mercadoleiloar.com.br` no footer dos dois) — é uma REDE white-label
+  nova, ainda não mapeada no código (diferente da SUPORTE/SUPERBID já integradas). Achado bônus:
+  o back-end é CakePHP (`data[Categoria][id][]`, `bens/listarCaracteristicasCategoria`), URLs
+  reais de lote (`/lote/{id}/{slug}`) e leilão (`/leilao/{id}`) aparecem na home, mas a
+  listagem completa (`/leiloes`) carrega via AJAX — precisa capturar a chamada de rede real
+  (não dá pra adivinhar por leitura do JS minificado; sem `sitemap.xml` disponível, 404 nos
+  dois domínios).
+
+**Teste de rede pendente (PR #361, aguardando "pode mergear" — 3º commit desta PR):**
+`scripts/_teste-leiloar-rede.mjs` + workflow `_temp-teste-leiloar-rede.yml` — Puppeteer com
+interceptação de rede (captura toda resposta XHR/fetch) em: crleiloes `/leiloes`,
+leiloesuberlandia `/leiloes` (mesma rede Leiloar — um scraper pode cobrir os dois de uma vez),
+lucasleiloeiro (rota SPA), sfleiloes (achar o endpoint Laravel) e vipleiloes.com.br (checar se
+os lotes do Kronberg aparecem lá). **Só roda depois do merge** (workflow_dispatch exige o
+arquivo no `main`). Próximo passo: mergear #361 → dispatch do teste → usar os endpoints reais
+achados pra escrever o(s) scraper(s) definitivo(s).
