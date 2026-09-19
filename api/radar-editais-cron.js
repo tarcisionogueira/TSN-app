@@ -883,6 +883,17 @@ async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
  * backlog de aquisição mente pra sempre sobre quem já está coberto — gastando esforço (e Bright
  * Data) tentando integrar de novo quem já está.
  *
+ * ⚠️ O `.not('leiloeiro_nome', 'is', null)` original DEIXAVA DE FORA exatamente o caso mais
+ * comum: edital cujo `leiloeiro_nome` nunca foi extraído (texto sem nome de pessoa física
+ * claro), mas cujo `leilao_plataforma_url` aponta pro domínio de um leiloeiro que JÁ
+ * integramos DEPOIS. `ehIntegrado(nome, dominio)` já resolve por DOMÍNIO primeiro, sem
+ * precisar de nome (ver `construirEhIntegrado`) — mas a query nunca trazia essas linhas pra
+ * função testar. Achado 19/09 (2ª rodada, pedido do dono "confirme"): GIORDANOLEILOES (66
+ * imóveis ativos) e CRLEILOES (15, recém-integrado) tinham `leiloeiro_nome=null` e ficavam
+ * "não integrado" pra sempre — o mesmo defeito documentado acima, só que na outra metade dos
+ * editais. Agora a query também traz linha com nome nulo DESDE QUE tenha `leilao_plataforma_url`
+ * — `ehIntegrado` recebe `nome=null` sem problema (o branch de domínio roda primeiro).
+ *
  * Roda SEMPRE, de graça (só relê o que já tem nome+domínio e testa contra a lista fresca de
  * `ehIntegrado` desta rodada — zero rede, zero IA) e se esgota sozinho como o re-parse acima:
  * quando não sobrar `false` que agora resolve `true`, o UPDATE afeta zero linhas.
@@ -891,7 +902,7 @@ async function reavaliarIntegracaoDesatualizada(supabase, ehIntegrado, teto = 50
   const { data, error } = await supabase.from('editais_leilao')
     .select('id, leiloeiro_nome, leilao_plataforma_url')
     .eq('leiloeiro_integrado', false)
-    .not('leiloeiro_nome', 'is', null)
+    .or('leiloeiro_nome.not.is.null,leilao_plataforma_url.not.is.null')
     .order('atualizado_em', { ascending: true })   // os mais velhos primeiro — cicla o backlog inteiro ao longo de vários runs
     .limit(teto);
   if (error) return { erro: error.message.slice(0, 120), vistos: 0, corrigidos: 0 };
