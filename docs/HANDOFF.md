@@ -29923,6 +29923,32 @@ por domínio via `buscarViaBrightData` (`api/_brightdata.js`, `proposito: 'teste
 ledger oficial) pra confirmar que a listagem real vem no HTML antes de construir o scraper de
 produção.
 
+**Resultado do teste Bright Data (19/09) — HIPÓTESE ERRADA, registrando pra não repetir.** O
+Web Unlocker (`format: 'raw'`) PASSA o desafio Cloudflare nos 3 domínios (confirmado: nenhum
+veio com "Just a moment..."), mas **não executa o JS/AJAX da SPA** — só devolve o HTML que o
+servidor de origem manda, igual ao fetch estático grátis:
+- **crleiloes.com.br**: 236.928 bytes, só os 19 lotes "destaque" do shell — MESMO resultado do
+  `pg_net` grátis. Pagar Bright Data aqui não trouxe NADA a mais; a listagem completa
+  (321 imóveis + 149 veículos) só existe depois do AJAX rodar num navegador de verdade.
+- **leiloesuberlandia.com.br**: **404 puro** em `/leiloes` — a URL estava errada pra ESTE
+  tenant especificamente (cada site da Plataforma Leiloar pode ter rota própria); não é
+  bloqueio de nenhum tipo, é erro de adivinhação da rota.
+- **lucasleiloeiro.com.br**: 208.019 bytes, mas 0 links reconhecíveis — mesma causa do
+  crleiloes (SPA por hash, precisa de JS).
+
+**Conclusão prática: "Bright Data Web Unlocker resolve" era a hipótese errada para ESTES 3
+sites.** Fetch cru resolve bloqueio de IP/Cloudflare mas NÃO substitui um navegador executando
+JS. Descartáveis do teste removidos após extrair o achado.
+
+**CORREÇÃO (mesmo dia): o dono já tinha o produto certo — o PROXY ISP (`isp_scraping_geral`,
+$2/IP/mês, criado em 18/09, documentado acima), não o "Scraping Browser".** Esse proxy já foi
+CONFIRMADO resolvendo o mesmo tipo de bloqueio (reputação de IP de datacenter) no HASTA em
+18/09 — e combinado com o Chromium REAL do motor `dom` (`criarMotorDom({ usarProxyIsp: true })`,
+`scripts/lib/motor/fetch-dom.mjs`), executa JS de verdade. É a peça que faltava nos dois testes
+anteriores: stealth sem proxy tinha o navegador certo mas o IP errado (datacenter); Web Unlocker
+tinha o IP/desafio resolvido mas sem navegador. Teste: `scripts/_teste-proxy-isp-leiloar.mjs` +
+`_temp-teste-proxy-isp-leiloar.yml`, mesmo padrão do teste do HASTA (18/09).
+
 **Resumo da rodada "resolva todos os leiloeiros" (10 pendentes do radar):** 1 já estava
 integrado (alessandroteixeiraleiloes, flag desatualizada), 1 resolvido agora (sfleiloes via
 Leilotech), 1 domínio morto (neteditais), 2 confirmados sem solução viável hoje (leilaobrasil,
@@ -29931,3 +29957,48 @@ dilsonmoreira), 2 bloqueados por Cloudflare aguardando decisão de investir Brig
 investigar (kronberg → vipleiloes.com.br), 2 saulojulioleiloeiro (API `/app/lotes` responde 403
 pra chamada sem sessão — precisa engenharia reversa de cookie/referer) e o próprio crleiloes já
 contado acima.
+
+## 19/09 (bug real do dono, print) — PortalZuk: descrição truncada + CSS vazando na descrição
+
+**Achado do dono**: imóvel em Santana de Parnaíba/SP (Alameda dos Lírios, 196) mostrava a
+descrição " em leilão - Alameda dos Lírios, 196 - Santana de Parnaíba/SP - Banco Bradesco S/A |
+Z37427" — sem dizer que tipo de imóvel é, e sem matrícula.
+
+**Causa raiz nº 1 (título truncado, `scraperPortalZuk`):** o atributo `title` do card do site
+(`portalzuk.com.br`) às vezes vem SEM a palavra do tipo — confirmado ao vivo: **61 de 73**
+imóveis capturados hoje (83%!) vieram assim, todos do mesmo lote consignado "Z37427" do Banco
+Bradesco (o card desse lote usa um template diferente no site, sem o prefixo). O scraper
+confiava cegamente no texto pronto do site em vez de usar o campo `tipo`, que vem de um
+SELETOR SEPARADO (`.card-property-price-lote`) e continua correto mesmo quando o `title` falha
+— confirmado comparando com a página de detalhe (`<h1>Casa à venda em leilão</h1>`, `<title>
+Leilão de Casa...`). **Corrigido**: agora completa o título com o `tipo` já extraído quando o
+texto do site não começa com ele.
+
+**Causa raiz nº 2 (CSS vazando na descrição, achado ao investigar o mesmo scraper — pior no
+`scraperPortalZukVeiculos`, 100% dos registros):** `.card-property-news` embute um ícone SVG
+com `<style>` inline, e `.textContent` lê o CSS junto — **64 de 64 veículos ZUK** (100%) tinham
+literalmente `.st0{fill:none;stroke:#023B26;stroke-width:2;...}` dentro da descrição do
+cliente. Os imóveis não tinham esse leak (0/73 hoje), mas o RISCO era o mesmo em qualquer
+`.card-property-*` do site — corrigido nos DOIS scrapers (imóveis e veículos): clona o nó e
+remove `<style>`/`<script>` ANTES de ler o texto, em vez de confiar que `.textContent` só traz
+texto visível.
+
+**Matrícula — não é bug, é fila.** `link_matricula` fica `null` até o cron separado
+`matricula-zuk.yml` (4×/dia, 60 lotes por rodada, login-gated) alcançar o lote — ordena por
+`data_leilao` mais próxima primeiro. O lote do dono (praça 29/09) tem fila de **50 pendentes**
+à frente hoje; cron rodando normal (última rodada 20:41 UTC, sucesso). Deve resolver em 1-2
+rodadas (6-12h), sem ação manual.
+
+**Por que autocura sem backfill**: `salvarEFinalizar` faz `upsert(..., onConflict:'fonte_id')`
+— o cron diário (`leiloeiros-puppeteer.yml`, 10h UTC) **sobrescreve** título/descrição a cada
+rodada pra quem ainda está ativo no site. Os 61+64 registros já afetados se autocorrigem na
+próxima rodada (amanhã 10h UTC), sem precisar de UPDATE manual no banco.
+
+**Outros leiloeiros com a mesma metodologia (pedido do dono)**: `scraperPortalZuk` e
+`scraperPortalZukVeiculos` são as DUAS únicas fontes que usam esse padrão de card
+(`.card-property`) — é específico do site `portalzuk.com.br`, não compartilhado com outro
+leiloeiro. Os outros 2 usos de `a.getAttribute('title')` no arquivo (Frazão Leilões, Grupo
+Lance) são sites DIFERENTES, com estrutura de card própria — revisados, não apresentam o mesmo
+padrão de card `.card-property-*` nem o SVG/`<style>` embutido; sem evidência de bug igual.
+
+**Validação**: `node --check`, eslint (sintaxe+padrões) — ok.
