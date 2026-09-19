@@ -19,8 +19,20 @@
  *   • Menu lateral lista TODOS os lotes ("LOTE 001…NNN") — sem R$, não contamina o parse.
  *   • Comitente CAIXA: possível SOBREPOSIÇÃO com a fonte CEF (o "Número do Bem" é o id
  *     do imóvel no portal da Caixa) — vigiar duplicidade no acervo.
- *   • O site NÃO responde a datacenter (render vazio no runner do GitHub) — coleta é pelo
- *     runner RESIDENCIAL (motor dom), gate coleta_cliente.
+ *   • O site NÃO respondia a datacenter (render vazio) — resolvido 19/09 com o proxy ISP do
+ *     Bright Data (`usarProxyIsp: true` em lib/motor/fontes/hasta.mjs); segue também
+ *     disponível pelo runner RESIDENCIAL (motor dom), gate coleta_cliente.
+ *
+ * ⚠️ FALSO ALARME DE "4ª MUDANÇA DE ESTRUTURA" (19/09) — NÃO REPETIR ESTE ERRO. O zero de
+ * 15-19/09 foi investigado 2x: a PR #370 concluiu (errado) que era uma 3ª mudança estrutural,
+ * baseada em abrir o lote CONHECIDO 10739 (via /item/.../detalhes) e ver campos vazios no
+ * parser. Recon mais fundo (3 rodadas, mesmo dia) provou o contrário: os 9 eventos LISTADOS
+ * hoje mostram, no próprio HTML, "NENHUM LOTE ENCONTRADO NO MOMENTO" — texto do site, não
+ * ausência de padrão. O lote 10739 pertence ao leilão 561 (JÁ ENCERRADO, fora da vitrine
+ * atual) — abrir um lote antigo por URL direta NUNCA prova que o catálogo tem conteúdo.
+ * Confirmação independente: o runner RESIDENCIAL (produção real, historicamente confiável)
+ * registrou o MESMO "vazio" todo dia desde 13/09. Lição: pra provar "não é vazio real", cheque
+ * um evento da LISTAGEM ATUAL (/leiloes), nunca um lote antigo já fora dela.
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, titleCase, textoDe, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';

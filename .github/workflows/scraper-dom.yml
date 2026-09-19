@@ -1,11 +1,12 @@
 name: Scraper DOM (Passo 2) — alfa/hasta/nordeste + candidatos DJEN
 
-# Fontes `dom` do motor fetch × parse (Puppeteer no runner, 0 Bright Data). O push na
-# branch de trabalho roda TODAS as fontes (exceto HASTA) em DRY-RUN (validação — não
-# grava). HASTA NÃO roda no push nem no agendamento: o site bloqueia IP de datacenter,
-# então daqui ele SEMPRE falha — e gravar fonte_saude 'falhou/0' é ruído que engana o
-# monitor de baseline (aconteceu em 21/08 19:27 UTC, no meio da 1ª carga residencial de
-# verdade). HASTA é do runner RESIDENCIAL; segue disponível só no dispatch manual.
+# Fontes `dom` do motor fetch × parse (Puppeteer no runner, 0 Bright Data — exceto HASTA,
+# que usa o proxy ISP do Bright Data, custo fixo). O push na branch de trabalho roda TODAS
+# as fontes (exceto HASTA) em DRY-RUN (validação — não grava). HASTA agora entra no
+# RODA_TUDO (agendado/push) como as demais (19/09): até aqui ficava de fora porque o site
+# bloqueava IP de datacenter e SEMPRE falhava daqui — `dom.usarProxyIsp` em
+# lib/motor/fontes/hasta.mjs resolve isso (validado em 3 rodadas de recon, 19/09). Segue
+# disponível também no dispatch manual, sem precisar estar na lista de `fontes`.
 #
 # PRODUÇÃO (07/09): `schedule` abaixo GRAVA de verdade, sozinho, todo dia — sem isto,
 # nenhuma destas fontes escrevia no banco a não ser por dispatch manual (alguém lembrar
@@ -52,7 +53,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje (hasta so funciona de IP residencial — de datacenter falha sempre)'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -96,11 +97,14 @@ jobs:
         run: node scripts/scraper-alfa.mjs
 
       - name: Hasta
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && contains(github.event.inputs.fontes, 'hasta') }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'hasta')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          HASTA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
+          BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
+          BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
+          HASTA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-hasta.mjs
 
       - name: Nordeste
