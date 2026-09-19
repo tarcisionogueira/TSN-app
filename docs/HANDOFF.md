@@ -29957,3 +29957,48 @@ dilsonmoreira), 2 bloqueados por Cloudflare aguardando decisão de investir Brig
 investigar (kronberg → vipleiloes.com.br), 2 saulojulioleiloeiro (API `/app/lotes` responde 403
 pra chamada sem sessão — precisa engenharia reversa de cookie/referer) e o próprio crleiloes já
 contado acima.
+
+## 19/09 (bug real do dono, print) — PortalZuk: descrição truncada + CSS vazando na descrição
+
+**Achado do dono**: imóvel em Santana de Parnaíba/SP (Alameda dos Lírios, 196) mostrava a
+descrição " em leilão - Alameda dos Lírios, 196 - Santana de Parnaíba/SP - Banco Bradesco S/A |
+Z37427" — sem dizer que tipo de imóvel é, e sem matrícula.
+
+**Causa raiz nº 1 (título truncado, `scraperPortalZuk`):** o atributo `title` do card do site
+(`portalzuk.com.br`) às vezes vem SEM a palavra do tipo — confirmado ao vivo: **61 de 73**
+imóveis capturados hoje (83%!) vieram assim, todos do mesmo lote consignado "Z37427" do Banco
+Bradesco (o card desse lote usa um template diferente no site, sem o prefixo). O scraper
+confiava cegamente no texto pronto do site em vez de usar o campo `tipo`, que vem de um
+SELETOR SEPARADO (`.card-property-price-lote`) e continua correto mesmo quando o `title` falha
+— confirmado comparando com a página de detalhe (`<h1>Casa à venda em leilão</h1>`, `<title>
+Leilão de Casa...`). **Corrigido**: agora completa o título com o `tipo` já extraído quando o
+texto do site não começa com ele.
+
+**Causa raiz nº 2 (CSS vazando na descrição, achado ao investigar o mesmo scraper — pior no
+`scraperPortalZukVeiculos`, 100% dos registros):** `.card-property-news` embute um ícone SVG
+com `<style>` inline, e `.textContent` lê o CSS junto — **64 de 64 veículos ZUK** (100%) tinham
+literalmente `.st0{fill:none;stroke:#023B26;stroke-width:2;...}` dentro da descrição do
+cliente. Os imóveis não tinham esse leak (0/73 hoje), mas o RISCO era o mesmo em qualquer
+`.card-property-*` do site — corrigido nos DOIS scrapers (imóveis e veículos): clona o nó e
+remove `<style>`/`<script>` ANTES de ler o texto, em vez de confiar que `.textContent` só traz
+texto visível.
+
+**Matrícula — não é bug, é fila.** `link_matricula` fica `null` até o cron separado
+`matricula-zuk.yml` (4×/dia, 60 lotes por rodada, login-gated) alcançar o lote — ordena por
+`data_leilao` mais próxima primeiro. O lote do dono (praça 29/09) tem fila de **50 pendentes**
+à frente hoje; cron rodando normal (última rodada 20:41 UTC, sucesso). Deve resolver em 1-2
+rodadas (6-12h), sem ação manual.
+
+**Por que autocura sem backfill**: `salvarEFinalizar` faz `upsert(..., onConflict:'fonte_id')`
+— o cron diário (`leiloeiros-puppeteer.yml`, 10h UTC) **sobrescreve** título/descrição a cada
+rodada pra quem ainda está ativo no site. Os 61+64 registros já afetados se autocorrigem na
+próxima rodada (amanhã 10h UTC), sem precisar de UPDATE manual no banco.
+
+**Outros leiloeiros com a mesma metodologia (pedido do dono)**: `scraperPortalZuk` e
+`scraperPortalZukVeiculos` são as DUAS únicas fontes que usam esse padrão de card
+(`.card-property`) — é específico do site `portalzuk.com.br`, não compartilhado com outro
+leiloeiro. Os outros 2 usos de `a.getAttribute('title')` no arquivo (Frazão Leilões, Grupo
+Lance) são sites DIFERENTES, com estrutura de card própria — revisados, não apresentam o mesmo
+padrão de card `.card-property-*` nem o SVG/`<style>` embutido; sem evidência de bug igual.
+
+**Validação**: `node --check`, eslint (sintaxe+padrões) — ok.

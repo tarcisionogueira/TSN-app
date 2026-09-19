@@ -1533,15 +1533,25 @@ async function scraperPortalZuk(browser) {
 
     const cards = await page.evaluate(() => {
       const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+      // Achado 19/09 (veículos ZUK, 64/64 registros): `.card-property-news` às vezes
+      // embute um ícone SVG com <style> inline — `.textContent` lê o CSS junto ("Carro,
+      // Ford/Focus... .st0{fill:none;stroke:#023B26;...}" foi parar na descrição do
+      // cliente). Clona o nó e remove <style>/<script> ANTES de ler o texto.
+      const textoLimpo = (el) => {
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('style,script').forEach((n) => n.remove());
+        return norm(clone.textContent);
+      };
       const out = [];
       document.querySelectorAll('.card-property').forEach(card => {
         const a = card.querySelector('a[href*="/imovel/"]');
         const href = (a?.href || '').split('?')[0];
         if (!href) return;
         const title = a?.getAttribute('title') || '';
-        const tipo = norm(card.querySelector('.card-property-price-lote')?.textContent);
-        const addr = norm(card.querySelector('.card-property-address')?.textContent);
-        const ocup = norm(card.querySelector('.card-property-news')?.textContent);
+        const tipo = textoLimpo(card.querySelector('.card-property-price-lote'));
+        const addr = textoLimpo(card.querySelector('.card-property-address'));
+        const ocup = textoLimpo(card.querySelector('.card-property-news'));
         const img = card.querySelector('img')?.getAttribute('src') || null;
         const valores = (card.textContent.match(/R\$\s*[\d.]+,\d{2}/g) || []);
         out.push({ href, title, tipo, addr, ocup, img, valores });
@@ -1564,11 +1574,22 @@ async function scraperPortalZuk(browser) {
       const uf = (pm?.[1] || '').toUpperCase();
       const cidade = pm?.[2] ? toTitleCase(pm[2].replace(/-/g, ' ')) : '';
       const tipoRaw = c.tipo || c.title;
+      // O atributo `title` do card às vezes vem SEM a palavra do tipo (achado 19/09: 61 de
+      // 73 imóveis do dia, todos do lote consignado "Z37427" do Banco Bradesco — o card
+      // dessa leva usa um template diferente no site, sem o prefixo) — descrição saía
+      // truncada tipo " em leilão - Rua X - Cidade/UF" sem dizer que é casa/apartamento/etc.
+      // `c.tipo` vem de um seletor SEPARADO (.card-property-price-lote) e continua correto
+      // mesmo quando o `title` falha — usa ele pra completar em vez de confiar cego no site.
+      const tipoLabel = c.tipo ? toTitleCase(c.tipo) : '';
+      const tituloBruto = (c.title || '').trim();
+      const tituloCompleto = tipoLabel && !new RegExp(`^${tipoLabel}\\b`, 'i').test(tituloBruto)
+        ? `${tipoLabel} ${tituloBruto}`.trim()
+        : tituloBruto;
       const modalidade = (/judicial/i.test(c.title) && !/extra/i.test(c.title || '')) ? 'judicial' : 'extrajudicial';
       return {
         fonte: 'ZUK',
         fonte_id: `zuk_${id}`,
-        titulo: (c.title || `Imóvel PortalZuk ${uf}`).slice(0, 180),
+        titulo: (tituloCompleto || `Imóvel PortalZuk ${uf}`).slice(0, 180),
         tipo: normalizarTipo(tipoRaw),
         modalidade,
         estado: uf,
@@ -1579,7 +1600,7 @@ async function scraperPortalZuk(browser) {
         valor_minimo: valMin,
         area_m2: 0,
         ocupacao: extrairDaDescricao(`${c.title} ${c.ocup}`).ocupacao || null,
-        descricao: [c.title, c.ocup].filter(Boolean).join(' · ').slice(0, 500),
+        descricao: [tituloCompleto, c.ocup].filter(Boolean).join(' · ').slice(0, 500),
         link_edital: c.href,
         link_foto: c.img,
         leiloeiro: 'Zukerman (PortalZuk)',
@@ -1644,17 +1665,27 @@ async function scraperPortalZukVeiculos(browser) {
 
     const cards = await page.evaluate(() => {
       const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+      // Mesmo achado do scraperPortalZuk (imóveis, 19/09): ícones SVG dentro do card
+      // embutem <style> inline, e `.textContent` lê o CSS junto — clona e remove
+      // <style>/<script> antes de ler o texto (aqui vale pro card inteiro também, já que
+      // `textoCard`/`textoCompleto` alimentam a classificação de pátio/marca/ano).
+      const textoLimpo = (el) => {
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('style,script').forEach((n) => n.remove());
+        return norm(clone.textContent);
+      };
       const out = [];
       document.querySelectorAll('.card-property').forEach(card => {
         const a = card.querySelector('a[href]');
         const href = (a?.href || '').split('?')[0];
         if (!href) return;
-        const title = a?.getAttribute('title') || norm(card.querySelector('[class*="title"]')?.textContent) || '';
-        const addr = norm(card.querySelector('.card-property-address')?.textContent);
-        const news = norm(card.querySelector('.card-property-news')?.textContent);
+        const title = a?.getAttribute('title') || textoLimpo(card.querySelector('[class*="title"]')) || '';
+        const addr = textoLimpo(card.querySelector('.card-property-address'));
+        const news = textoLimpo(card.querySelector('.card-property-news'));
         const img = card.querySelector('img')?.getAttribute('src') || null;
         const valores = (card.textContent.match(/R\$\s*[\d.]+,\d{2}/g) || []);
-        const textoCard = norm(card.textContent).slice(0, 500);
+        const textoCard = textoLimpo(card).slice(0, 500);
         out.push({ href, title, addr, news, img, valores, textoCard });
       });
       return out;
