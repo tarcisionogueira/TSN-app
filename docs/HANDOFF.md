@@ -30179,3 +30179,45 @@ pega sozinha, todo dia, sem esperar o dono rodar manualmente.
 
 Descartáveis do recon (`_recon-hasta-estrutura-nova.mjs` + workflow `_temp`, 3 rodadas)
 removidos após extrair o achado.
+
+## 19/09 (pedido do dono: "radar aponta leiloeiro sem imóvel, não faz sentido, confirme") — bug real achado e corrigido + triagem de 6 leiloeiros novos
+
+**Confirmado: era bug, não dado real.** `reavaliarIntegracaoDesatualizada()` (a correção de
+algumas horas atrás, ver entrada acima "leiloeiro_integrado nunca era reavaliado") só
+revisitava edital com `leiloeiro_nome` preenchido — mas `ehIntegrado(nome, dominio)` já resolve
+por **domínio**, sem precisar de nome. Edital cujo nome nunca foi extraído (comum: texto sem
+nome de pessoa física claro) mas cujo `leilao_plataforma_url` bate com domínio já integrado
+ficava "não integrado" pra sempre. **GIORDANOLEILOES (66 imóveis ativos) e CRLEILOES (15,
+integrado hoje mesmo)** apareciam no radar como pendentes — confirmado com query direta no
+banco antes de mexer no código. 5 domínios/9 editais afetados no total (também
+joserodovalholeiloes.com.br, hdleiloes.com.br, hastapublica.com.br). **Corrigido** (PR #372):
+troca o filtro `.not('leiloeiro_nome','is',null)` por
+`.or('leiloeiro_nome.not.is.null,leilao_plataforma_url.not.is.null')` — nunca rebaixa `true`→
+`false`, só sobe o que a checagem atual confirma. Roda no próximo cron agendado, sem ação manual.
+
+**Triagem grátis (fetch direto, sem Bright Data) dos 6 leiloeiros mais recentes do radar ainda
+sem investigação:**
+
+| Domínio | Resultado |
+|---|---|
+| **leilaobrasil.com.br** | 200, 1,7MB, listagem real (`/eventos/leilao/<slug>/lote/<id>/<slug>`). Assets em `static.suporteleiloes.com.br` — mesma infra do JELEILOES/KLEILOES, mas **3º template** (nem `/buscador` do SUEDPETER/LIDER, nem `/imoveis?page=N` do JELEILOES). Candidato real. |
+| **lutheroleiloes.com.br** | 200, 586KB, **MESMO padrão de URL** que leilaobrasil (`/eventos/leilao/.../lote/<id>/...`, subdomínio `arrematante.<dominio>/#/cadastro` idêntico) — mesmo template, 2º tenant confirmado. |
+| **lut.com.br** | Redireciona pra `www.portalzuk.com.br` — **já integrado via ZUK**. Sem ação. |
+| **gpleiloes.com.br** | 200 mas só 2.105 bytes — página quase vazia (placeholder/em construção). Baixa prioridade. |
+| **dilsonmoreira.com.br** | `fetch failed` mesmo do GitHub Actions (DNS/conexão) — domínio parece fora do ar. |
+| **neteditais.com.br** | `fetch failed` — mesma situação. Nome sugere hospedagem de editais, não site de leiloeiro; provável ruído da extração de nome pelo DJEN. |
+
+**Candidato prioritário**: leilaobrasil.com.br + lutheroleiloes.com.br — mesmo template novo,
+2 leiloeiros de uma vez, responde a fetch DIRETO (sem Cloudflare, sem custo de Bright Data/proxy)
+e a listagem já mostra URLs de lote reais no HTML. Precisa de parser PRÓPRIO (URL/estrutura
+diferente do `jeleiloes-parse.mjs` existente) — trabalho real de integração (não é 1 linha),
+mas barato: fetch grátis, 2 leiloeiros de uma vez. **Fica para decisão do dono** se vale
+investir agora.
+
+**Confirmados sem novidade (não re-testados — já esgotados em investigação anterior)**:
+fernandoleiloeiro.com.br/jonasleiloeiro.com.br (Cloudflare HTTP 523, os 3 métodos de proxy do
+Bright Data testados e nenhum resolve), lucasleiloeiro.com.br/kronbergleiloes.com.br
+(bloqueados), leiloesuberlandia.com.br/vivaleiloes.com.br (baixa prioridade, poucos editais).
+
+Descartáveis do recon (`_recon-leiloeiros-radar-pendentes.mjs` + workflow `_temp`) removidos
+após extrair o achado.
