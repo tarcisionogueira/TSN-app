@@ -79,7 +79,35 @@ export default async function handler(req) {
     }),
   });
   if (!ins.ok) {
-    console.error('[push-subscribe] upsert falhou', ins.status, (await ins.text().catch(() => '')).slice(0, 200));
+    const corpo = await ins.text().catch(() => '');
+    // 19/09 — achado ao vivo (console do dono): 409/23505 na constraint `endpoint`, não
+    // `user_id` — MESMO aparelho, cadastro que já tinha uma inscrição de OUTRA conta (comum
+    // em quem testa com mais de um login no mesmo navegador). O comentário acima já previa
+    // esse caso como "legítimo... tratado abaixo", mas nunca foi implementado: caía no mesmo
+    // 502 genérico do erro de verdade. Correto aqui é TRANSFERIR a inscrição pro usuário atual
+    // (o push deve seguir quem está logado no aparelho agora, não quem inscreveu primeiro).
+    if (ins.status === 409 && /push_subscriptions_endpoint_key/.test(corpo)) {
+      const del = await sb(`push_subscriptions?endpoint=eq.${encodeURIComponent(subscription.endpoint)}`, { method: 'DELETE' });
+      if (del.ok) {
+        const retry = await sb('push_subscriptions?on_conflict=user_id', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({
+            user_id: user.id,
+            endpoint: subscription.endpoint,
+            p256dh: subscription.keys?.p256dh || null,
+            auth: subscription.keys?.auth || null,
+            user_agent: req.headers.get('user-agent')?.slice(0, 200) || null,
+          }),
+        });
+        if (retry.ok) return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+        console.error('[push-subscribe] retry após transferir endpoint falhou', retry.status, (await retry.text().catch(() => '')).slice(0, 200));
+      } else {
+        console.error('[push-subscribe] delete do endpoint de outra conta falhou', del.status);
+      }
+    } else {
+      console.error('[push-subscribe] upsert falhou', ins.status, corpo.slice(0, 200));
+    }
     return new Response(JSON.stringify({ error: 'Não foi possível ativar as notificações agora.' }), { status: 502, headers });
   }
 

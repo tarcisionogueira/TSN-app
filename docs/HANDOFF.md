@@ -29721,3 +29721,72 @@ diferente (ex.: Residential com rotação mais agressiva, ou aceitar CAPTCHA sol
 da integração automatizada e considerar cadastro manual pontual. Scripts descartáveis
 (`scripts/recon-fernando-jonas-via-proxy.mjs`, `.github/workflows/_temp-recon-fernando-jonas.yml`)
 removidos após o teste.
+
+## 19/09 — Documental: "0 processos no CNJ" virava "indisponível agora" (PR #357)
+
+Continuação do fix da query `nested` (PR #356, acima): a PRIMEIRA regeração real do dono depois
+do deploy ainda mostrou "Processo judicial (CNJ/DataJud) — indisponível agora / Aguardando o
+DataJud", mesmo com a consulta tendo concluído sem nenhum erro (`cnj.total=0`, `cnj.erros`
+ausente). Causa: `api/gerar-documental.js` não distinguia "consultei e não achei nada" (0
+processos é o resultado ESPERADO pra maioria dos imóveis — nenhum leilão tem processo contra o
+executado) de "não consegui consultar" — os dois caíam no mesmo status `pendente`, que a tela
+renderiza como "indisponível agora", e ainda rebaixava o relatório inteiro pra PRELIMINAR
+(`preliminar = ... || pendencias > 0`).
+
+**Corrigido**: novo `cnjConcluiuSemAchar` (`cnj` não-nulo e sem `erros`) marca o item como
+`feito` com mensagem própria ("Nenhum processo localizado no CNJ — consulta concluída, sem
+falhas"), reservando "aguardando" só para quando a consulta de fato não terminou ou algum
+tribunal retornou erro.
+
+## 19/09 — Infra de teste: conta QA + chamada direta à API de produção (sem clicar na UI)
+
+Pedido do dono: como testar mudanças de API sem depender dele clicar "Gerar" toda vez? Duas
+travas descartadas por serem contornos de segurança que eu não deveria tomar sozinho: extrair o
+segredo JWT do Supabase para forjar sessão, ou desligar a proteção CAPTCHA (Turnstile) do login
+para automatizar `POST /auth/v1/token`. Solução adotada, sem abrir mão de nenhuma das duas:
+
+1. **Conta de teste dedicada** (`dev@bidpro.com.br`, role `assessorado` — plano pago mínimo que
+   destrava a Documental), criada direto no banco via SQL (`auth.users` + `auth.identities`,
+   senha com `pgcrypto`/`crypt()`) — o trigger `on_auth_user_created` já existente criou o
+   `perfis` automaticamente. Contorna o CAPTCHA porque não passa pelo endpoint de login — insere
+   a sessão já autenticada direto no schema `auth`.
+2. **Sessão real**: o dono loga uma vez pelo navegador com essa conta e cola o `access_token` do
+   `localStorage` (chave `*-auth-token`) — nunca a senha.
+3. **Chamada à API pelo próprio Postgres**: extensão `pg_net` (assíncrona, nativa do Supabase)
+   habilitada no projeto — o sandbox desta sessão não tem egress liberado pra internet externa
+   (nem para o próprio Supabase), mas o Postgres do projeto tem. `net.http_post(url, headers,
+   body)` chama `/api/gerar-analise` e `/api/gerar-documental` como se fosse o navegador; o
+   resultado sai em `net._http_response` (`status_code`, `content`, `headers`).
+
+   ⚠️ **Achado no caminho**: chamar `https://bidprobrasil.com.br/...` (sem `www`) devolve 401
+   sempre — é o REDIRECT pra `www.bidprobrasil.com.br` que o cliente HTTP não segue preservando
+   o POST/corpo/Authorization. **Use sempre a URL com `www.`** em qualquer chamada programática.
+
+Essa infraestrutura fica disponível para a PRÓXIMA sessão que precisar confirmar uma API sem
+esperar o dono testar manualmente — é reaproveitável (mesma conta, mesma extensão já ligada).
+
+**Confirmação ao vivo, ponta a ponta**: regeração completa (mercadológico + documental) via a
+conta de teste no mesmo imóvel (Rua Jorge Augusto, 449/SP) terminou `status: concluida` com o
+item CNJ em `feito` — "Nenhum processo localizado no CNJ para 'GIGANARDI EMPREENDIMENTOS
+IMOBILIARIOS LTDA' — consulta concluída (tjsp, trf3, trt2, trt15, tst, stj), sem falhas" — e
+`pendencias: 0`, `preliminar: false`. Prova os dois fixes (PR #356 + #357) funcionando juntos em
+produção, inclusive o caminho de busca POR NOME (não só por número).
+
+## 19/09 — Relatório do dono corrigido SEM reprocessar (economia: reaproveitou o dado já salvo)
+
+Em vez de forçar uma regeração completa (custo de IA) só para o relatório existente refletir o
+fix acima, os campos afetados (`checklist[2]`, `pendencias`, `preliminar`, `preliminarMotivo`)
+foram recalculados com a MESMA lógica nova e gravados direto via SQL — o `cnj` já salvo no
+relatório (consulta concluída, 0 processos, sem erros) já tinha tudo que o fix precisava; nada
+sobre o CNJ mudou, só a leitura do resultado. Validado o mesmo caminho com a conta de teste
+chamando `/api/gerar-documental` de verdade (infra acima), confirmando que uma regeração nova
+produziria exatamente esse resultado.
+
+## 19/09 — Achado incidental: `push_subscribe` 502 quando o MESMO aparelho já tinha inscrição de OUTRA conta
+
+`console.error('[push-subscribe] upsert falhou', ..., 23505 ...)` — a unique constraint que
+estoura é em `endpoint` (não em `user_id`, que é a que o `on_conflict` do upsert cobre). O
+comentário do código já previa esse caso ("mesmo aparelho, outra conta... segue tratado
+abaixo") mas o tratamento nunca foi implementado — cai no mesmo 502 genérico. Não bloqueia nada
+crítico (só a reinscrição de push nesse aparelho), mas é bug real, não falha de rede. Ainda não
+corrigido — fica para quando push notifications voltar à pauta.

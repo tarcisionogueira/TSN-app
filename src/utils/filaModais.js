@@ -31,7 +31,11 @@ import { useEffect, useState } from 'react';
 // aleatória de quem acessou pela inscrição na aula), não uma sugestão, mas menos urgente que
 // contrato/cadastro incompleto (que podem travar a conta de verdade). Fica ANTES de
 // 'boas-vindas' de propósito: o texto do popup já anuncia "o vídeo vai aparecer a seguir".
-const PRIORIDADE = ['contrato', 'cadastro', 'senha-pendente', 'bonus', 'boas-vindas', 'tour', 'sugestao'];
+// 'triagem' (19/09, achado do dono): entra depois de 'boas-vindas' pelo MESMO motivo do
+// 'tour' — perguntar por cima de um vídeo não personaliza nada, só atrapalha os dois. Antes
+// a Triagem não participava da fila (z-index próprio, fixo em 3000) e cobria o vídeo de
+// boas-vindas em conta nova, quando os dois disparam juntos.
+const PRIORIDADE = ['contrato', 'cadastro', 'senha-pendente', 'bonus', 'boas-vindas', 'triagem', 'tour', 'sugestao'];
 
 const querem = new Set();
 const ouvintes = new Set();
