@@ -1,0 +1,45 @@
+name: Scraper Cláudio Reis Leiloeiro (Bright Data)
+
+# crleiloes.com.br é 100% Cloudflare por reputação de IP de datacenter (confirmado
+# 19/09: fetch cru do GitHub Actions deu 403 em todas as páginas; o mesmo fetch do IP
+# do Supabase passou). O Web Unlocker resolve. Acervo pequeno (~15-20 lotes ativos,
+# mistura imóvel/veículo/máquina) — custo de cota é baixo por rodada.
+#
+# dryrun default '0' (GRAVA) no cron; dispatch manual sem input também grava por
+# default — quem quiser só inspecionar passa dryrun=1 explicitamente. Mesma lição do
+# RJLEILOES (11/08): default dry-run por engano gastou cota 8× sem gravar nada.
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_lotes:
+        description: 'Máx. de lotes de detalhe por execução'
+        required: false
+        default: '30'
+
+jobs:
+  scraper-crleiloes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper CRLEILOES
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          CRLEILOES_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          CRLEILOES_MAX_LOTES: ${{ github.event.inputs.max_lotes || '30' }}
+        run: node scripts/scraper-crleiloes.mjs

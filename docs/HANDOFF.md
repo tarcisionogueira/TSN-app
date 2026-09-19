@@ -30023,3 +30023,49 @@ Lance) são sites DIFERENTES, com estrutura de card própria — revisados, não
 padrão de card `.card-property-*` nem o SVG/`<style>` embutido; sem evidência de bug igual.
 
 **Validação**: `node --check`, eslint (sintaxe+padrões) — ok.
+
+## 19/09 (fechamento) — crleiloes.com.br INTEGRADO: `scripts/scraper-crleiloes.mjs`
+
+Pedido do dono, após o teste de proxy+Chromium confirmar que o Cloudflare (não a SPA) era o
+obstáculo: "veja o que precisa e traga os lotes de imóveis e veículos em pátio".
+
+**Achado que simplificou tudo**: confirmei via fetch cru do GitHub Actions (`_teste-crleiloes-
+fetch.mjs`, descartável, já removido) que o crleiloes bloqueia por REPUTAÇÃO DE IP DE
+DATACENTER — HTTP 403 "Just a moment..." em `/bens/pesquisaAvancada` a partir do runner do
+Actions, enquanto o MESMO fetch do IP do Supabase (pg_net) passa liso. Não é fingerprint (por
+isso o stealth não resolveu) nem falta de JS (por isso o proxy+Chromium via `/leiloes` também
+não bastava, e aquele endpoint só mostra os ~19 destaques mesmo com JS rodando). A rota real —
+achada nesta sessão — é `/bens/pesquisaAvancada/page:N`: **form de busca do CakePHP 2.x,
+server-rendered, paginação clássica por PATH (não query string — `?page=2` não muda nada,
+`/page:2` muda)**. `page:N` além do fim REDIRECIONA pra página 1 (mesmo conjunto de ids) — é o
+sinal de fim, sem precisar de contagem total.
+
+**O acervo é pequeno** (medido, não estimado): ~12 lotes/página, 3 páginas reais — bem abaixo
+dos "321 imóveis + 149 veículos" citados num recon anterior (aquele número vinha de uma
+heurística mais grosseira). E é MISTO: imóveis, veículos E máquinas/equipamentos agrícolas
+(trator, grade aradora, roçadeira, motoniveladora, compressor) — estes últimos não têm tabela
+no banco e são ignorados de propósito (regex `RE_MAQUINA`, testada antes de imóvel/veículo pra
+"carretão DE TRATOR" não cair em veículo pela palavra solta).
+
+**Solução final: Bright Data Web Unlocker (já contratado, cota de `api/_brightdata.js`) na rota
+`/bens/pesquisaAvancada/page:N`.** Mais simples e mais barato que o proxy ISP + Chromium
+testado antes — essa rota é server-rendered, não precisa de navegador nenhum, só de um IP que o
+Cloudflare aceite (que é exatamente o que o Web Unlocker resolve). Segue o mesmo arcabouço do
+`scraper-rj.mjs` (11/08): `FalhaDeAcesso` tipada (nunca confunde "sem cota" com "fonte vazia"),
+dry-run default seguro, `registrarSaude` em todo caminho (inclusive erro), `checarQualidade`
+compartilhada (`scripts/lib/scraper-core.mjs`) pros imóveis. Veículos usam um parser mais
+simples (marca/ano/placa por regex no texto do detalhe) já que a tabela é mais enxuta.
+
+**Parser de listagem validado OFFLINE antes de gastar Bright Data**: usei o HTML já capturado
+via `pg_net` (grátis) pra testar `extrairCards`/`classificar` localmente contra dado real —
+achei e corrigi um bug ali mesmo (regex de cidade/UF não pulava o ícone `<i class="fa
+fa-map-marker"></i>` entre o botão e o texto, então cidade/estado saíam `null` em 100% dos
+cards) antes de rodar contra a fonte paga. **12/12 cards da página 1 parsearam certo** depois
+do conserto (título, avaliação, lance, cidade, estado, status, modalidade).
+
+**Workflow**: `.github/workflows/scraper-crleiloes.yml`, `workflow_dispatch` com
+`dryrun`/`max_lotes`, mesma env de secrets que os outros coletores Bright Data. Sem `schedule:`
+ainda — fica pro dono decidir a cadência depois de ver o resultado do primeiro dry-run/gravação.
+
+**Validação**: `node --check`, eslint (sintaxe+padrões) e `npm run build` — ok. `verificar:schema`
+não roda localmente (sem credencial no sandbox) — vai rodar no CI.
