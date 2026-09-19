@@ -30069,3 +30069,48 @@ ainda — fica pro dono decidir a cadência depois de ver o resultado do primeir
 
 **Validação**: `node --check`, eslint (sintaxe+padrões) e `npm run build` — ok. `verificar:schema`
 não roda localmente (sem credencial no sandbox) — vai rodar no CI.
+
+## 19/09 (pedido do dono: caçar regressão nos leiloeiros já integrados) — HASTA MUDOU DE
+## ESTRUTURA DE NOVO (3ª vez), não é bloqueio nem esvaziamento
+
+`fonte_regressao_suspeita()` mostrou HASTA zerada em TODAS as ~20 execuções desde 15/09
+("respondeu 200 e enumerou 0 lote(s)"), crescendo de 8 para 9 eventos no catálogo mas sempre 0
+lotes — piso aprendido 290, mediana 579. Diagnóstico via proxy ISP (já resolve o Cloudflare,
+confirmado 18/09) + **o parser de produção** (`lib/hasta-parse.mjs`, não uma cópia):
+
+- **Os 9 `/leilao/<id>/lotes` abrem normal** (18-18,5KB cada, texto real: "ID 569 - LEILÃO DE
+  IMÓVEIS CAIXA ECONÔMICA FEDERAL - LICITAÇÃO ABERTA - Lista de Lotes"). Não é desafio
+  Cloudflare, não é erro, não é bloqueio de acesso — a página carrega.
+- **`extrairUrlsDeLote` (parser de produção) acha ZERO em todos os 9** — o padrão de href que
+  ele procura (`/item/<id>/detalhes`) não existe mais nessas páginas.
+- **O lote CONHECIDO 10739 (já no acervo) também abre** (28KB, real), mas `parseDetalhe` (parser
+  de produção) devolve **quase tudo `null`**: título, cidade, estado, endereço, descrição,
+  matrícula, foto — só `valor_avaliacao`/`valor_minimo` (R$1.800, valor suspeito pra imóvel) e
+  `link_edital` (um PDF real do Cloudfront) vieram preenchidos.
+
+**Veredito, sem ambiguidade: NÃO é "leilão sem lote agora" (um lote CONHECIDO existe e abre, só
+não parseia) e NÃO é bloqueio de acesso (tudo responde 200 com conteúdo real). É a 3ª mudança
+de estrutura do site desde que a fonte foi integrada** (a 1ª foi o domínio errado —
+singular/plural —, achada em 21/08; a 2ª foi o catálogo virar por-evento em 29/08, documentada
+no cabeçalho de `hasta-parse.mjs`; esta é a 3ª: o site trocou os seletores/rótulos de novo, tanto
+na listagem de lotes quanto no detalhe).
+
+**Não tentei reescrever o parser às cegas** — os 300 caracteres de amostra e o `parseDetalhe`
+nulo não bastam pra saber a estrutura NOVA (só provam que a antiga não bate mais). Precisa de
+um recon novo dedicado (dump da listagem `/leilao/<id>/lotes` e do detalhe `/item/<id>/detalhes`
+inteiros, mesmo método que já resolveu as 2 mudanças anteriores) antes de tocar em
+`hasta-parse.mjs` — é trabalho de reconstrução, não um ajuste pequeno. **Fica registrado como
+decisão pendente do dono**: autorizar esse recon+reescrita agora (mais uma rodada de Bright
+Data/proxy) ou deixar pra depois — o acervo HASTA (piso 290-579 lotes) fica represado
+entretanto, mas nenhum dado errado está sendo gravado (o gate de qualidade do
+`hasta-parse.mjs`/`checarQualidade` já reprova o lote com título/cidade/matrícula nulos, então
+zero é o resultado seguro, não silencioso).
+
+**JOAOEMILIO (mesma varredura)**: recon de listagem (Bright Data) mostrou a página carregando
+normal (28KB) mas **zero hrefs `/item/N/detalhes` no HTML inteiro** — mesma assinatura de "sem
+lote genuíno" que outros leiloeiros pequenos já mostraram entre praças (não achei sinal de
+challenge/erro/estrutura diferente). Tratado como esvaziamento legítimo por ora, não regressão —
+mas sem o mesmo grau de certeza que o veredito acima do HASTA (não testei um lote conhecido
+dele). Fica monitorado.
+
+Descartáveis do teste (`_teste-hasta-via-proxy.mjs` + workflow) removidos após extrair o achado.
