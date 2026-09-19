@@ -1,8 +1,10 @@
 /**
  * Scraper HASTA — hastaleiloes.com.br, o site REAL (plural; ver a história do domínio
- * errado em lib/hasta-parse.mjs). Fonte `dom`: bloqueia datacenter, roda no runner
- * RESIDENCIAL — custo Bright Data ZERO. Wrapper fino do motor; fonte em
- * lib/motor/fontes/hasta.mjs; parser puro em lib/hasta-parse.mjs.
+ * errado em lib/hasta-parse.mjs). Fonte `dom` via proxy ISP (19/09) — antes dependia do
+ * runner RESIDENCIAL (bloqueio de reputação de IP de datacenter); o proxy ISP do Bright
+ * Data resolve isso, e agora roda de qualquer runner GitHub Actions. Custo fixo do proxy
+ * (não por requisição) — Web Unlocker (por cota) não é usado aqui. Wrapper fino do motor;
+ * fonte em lib/motor/fontes/hasta.mjs; parser puro em lib/hasta-parse.mjs.
  *
  * Acervo real (CSV do dono, 21/08): 579 lotes em ~20 páginas de 30 — por isso o default
  * de HASTA_MAX_PAGES é 20 (o motor para sozinho quando uma página não traz nada novo).

@@ -1,8 +1,14 @@
 /**
  * FONTE (config) — HASTA (hastaleiloes.com.br, o site REAL — plural; ver a história do
- * domínio errado no cabeçalho de lib/hasta-parse.mjs). Fonte `dom` do Passo 2: o site não
- * responde a datacenter (render vazio no runner do GitHub), então a coleta roda pelo
- * runner RESIDENCIAL (linha HASTA no runner-residencial.sh, gate coleta_cliente).
+ * domínio errado no cabeçalho de lib/hasta-parse.mjs). Fonte `dom` do Passo 2, plataforma
+ * SOLEON (mesma base white-label de scraper-soleon.mjs — confirmado 19/09 pela meta tag
+ * `author="SOLEON Soluções para Leilões Online"`).
+ *
+ * `usarProxyIsp: true` (19/09) — até aqui o site só respondia a IP RESIDENCIAL (bloqueio de
+ * reputação de IP de datacenter), e a coleta dependia inteiramente da máquina do dono
+ * (runner-residencial.sh). Confirmado em 3 rodadas de recon do dia (proxy ISP do Bright
+ * Data, já validado 18/09 contra este mesmo site): o proxy passa igual ao IP residencial —
+ * então a fonte roda de qualquer runner GitHub Actions agora, sem depender de máquina única.
  * Estrutura mapeada pelo DONO via console do navegador (21/08): listagem /lotes/imovel
  * (30/pág) → lote /item/<ID>/detalhes. Comitente observado: CAIXA (vigiar duplicidade
  * com a fonte CEF). Parser puro em lib/hasta-parse.mjs.
@@ -16,7 +22,7 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'hasta',
   fetch: 'dom',
-  dom: { esperaMs: 3500 },
+  dom: { esperaMs: 3500, usarProxyIsp: true },
   // 29/08 — O CATÁLOGO PASSOU A SER POR LEILÃO, e `/lotes/imovel` virou vitrine vazia.
   // `/leiloes` lista os EVENTOS; o nível 2 do motor entra em cada `/leilao/<id>/lotes`. O
   // porquê (com as medições do recon) está no cabeçalho de `extrairUrlsDeEvento`.
@@ -33,8 +39,8 @@ export default {
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Hasta Leilões (SPA própria; render exige IP residencial)', acesso: 'dom-puppeteer-residencial',
-    custo: 'gratis', anti_bot: 'bloqueio a datacenter', enumeracao: '/leiloes -> /leilao/<id>/lotes (nivel 2, renderizado)',
-    url_lote: '/item/<ID>/detalhes', scraper: 'scraper-hasta.mjs (runner residencial)',
+    plataforma: 'Hasta Leilões (SOLEON; render exige Chromium — proxy ISP resolve bloqueio de IP de datacenter)', acesso: 'dom-puppeteer-proxy-isp',
+    custo: 'fixo (proxy ISP, nao por requisicao)', anti_bot: 'bloqueio de reputacao de IP (resolvido via proxy ISP)', enumeracao: '/leiloes -> /leilao/<id>/lotes (nivel 2, renderizado)',
+    url_lote: '/item/<ID>/detalhes', scraper: 'scraper-hasta.mjs (runner GitHub Actions ou residencial)',
   },
 };

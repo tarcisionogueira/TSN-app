@@ -30114,3 +30114,68 @@ mas sem o mesmo grau de certeza que o veredito acima do HASTA (não testei um lo
 dele). Fica monitorado.
 
 Descartáveis do teste (`_teste-hasta-via-proxy.mjs` + workflow) removidos após extrair o achado.
+
+## 19/09 (correção do achado acima) — HASTA: era vazio REAL, a "3ª mudança de estrutura" era diagnóstico errado
+
+**O veredito de algumas horas atrás estava errado.** Autorizado pelo dono a investir no
+recon+reescrita ("Resolva primeiro o leiloeiro e ao concluir, coloque em produção"), rodei 3
+rodadas de recon dedicado (dump de HTML CRU, não só o parser de produção) e o resultado inverteu
+a conclusão anterior.
+
+**O erro do diagnóstico original**: usei o lote CONHECIDO 10739 (`/item/10739/detalhes`) como
+prova de que "o catálogo tem conteúdo, só o parser não acha mais". Mas o título desse lote é
+`"ID 561 - LEILÃO PARTICULAR DE BENS MÓVEIS - CLINICA DE EMAGRECIMENTO"` — **leilão 561, que não
+está entre os 9 eventos listados hoje em `/leiloes`** (já encerrado). Abrir um lote antigo por
+URL direta prova que o servidor ainda serve páginas history, nunca que o catálogo ATUAL tem
+lote. Foi a mesma armadilha, ao contrário: em vez de "vazio lido como bug", foi "página antiga
+lida como catálogo vivo".
+
+**O que o recon 2 e 3 mostraram, com o HTML cru na mão**:
+- Rodada 2 (dump completo da listagem do evento 569): o próprio HTML contém, verbatim,
+  `<h3>NENHUM LOTE ENCONTRADO NO MOMENTO</h3>` dentro de `<div class="lista-lotes">` — **texto do
+  site**, a mesma UI que um visitante humano veria. O evento tem badge `"Em Breve"`.
+- O menu de navegação entre lotes do lote 10739 (antes lido como "sidebar sem link, `parseDetalhe`
+  quebrado") é na verdade um `<select id="sel-lotes"><option value="10730">LOTE 001</option>...`
+  que navega via JS (`window.location = '/lote/'+loteId+'/show?page=1'`) — confirma que o site
+  trocou `<a href>` por `<select>` em alguns lugares, mas isso não é o que zera o catálogo.
+- A meta tag `author="SOLEON Soluções para Leilões Online"` confirma que o HASTA roda a MESMA
+  plataforma white-label de `scraper-soleon.mjs` (CALIL/VEGAS/JOAOEMILIO/etc.) — só que atrás de
+  bloqueio de IP, por isso tem parser e scraper próprios.
+- **Rodada 3 (varredura dos 9 eventos)**: todos os 9 devolvem `vazio=true` — `"NENHUM LOTE
+  ENCONTRADO NO MOMENTO"` em TODOS, sem exceção. Zero eventos com `<option>` de lote.
+
+**Confirmação independente, fora do meu próprio recon**: `fonte_saude` mostra o runner
+RESIDENCIAL (produção real, rodando sozinho todo dia, sem eu ter tocado nele) registrando
+`"respondeu 200 e enumerou 0 lote(s)"` **todo santo dia desde 13/09** — o mesmo veredito que o
+recon de hoje, de um IP completamente diferente (proxy Bright Data vs. a casa do dono). Duas
+fontes independentes, o mesmo resultado: **é vazio real do leiloeiro, não falha de acesso nem de
+parser.** `imoveis_leilao` também bate: só 4 lotes `ativo=true` restam do HASTA, o mais recente
+atualizado em 30/08 — o grande leilão CAIXA de 579 lotes (leilão 557, citado no cabeçalho do
+parser) já se esgotou, e os 9 eventos atuais são leilões NOVOS ainda "Em Breve", sem lote
+publicado.
+
+**`fonte_regressao_suspeita()` continua certa em acusar `"zerou"`** — o monitor está fazendo o
+trabalho dele (mediana 579 → 0 é real e vale a pena aparecer), o que estava errado era a MINHA
+leitura de causa, não o alarme.
+
+**Não toquei em `hasta-parse.mjs` além de anotar o achado** — não havia bug de padrão de href
+nem de rótulo pra corrigir; reescrever o parser às cegas, sem um lote real pra validar contra,
+seria inventar uma correção pra um problema que não existe (a mesma forma nº10 do CLAUDE.md, na
+direção oposta: o instrumento estava certo, quem media errado era eu). Fica pendente uma
+validação futura: quando o HASTA publicar lote de novo, conferir se `parseDetalhe` ainda lê
+Cidade/Endereço/Matrícula de imóvel (só testamos um bem MÓVEL — eletrodoméstico — que não tem
+esses campos por natureza, não por quebra).
+
+**O que MUDOU de verdade, e foi pra produção**: `lib/motor/fontes/hasta.mjs` ganhou
+`dom: { usarProxyIsp: true }` — até aqui o HASTA só respondia a IP residencial (bloqueio de
+reputação de datacenter) e dependia 100% da máquina do dono (`runner-residencial.sh`). O proxy
+ISP do Bright Data (mesmo produto validado 18/09, custo FIXO por IP/mês, não por requisição) já
+provou nas 3 rodadas de recon de hoje que atravessa o mesmo bloqueio — então a fonte roda agora
+de qualquer runner GitHub Actions, sem depender de uma máquina única. `scraper-dom.yml` moveu o
+step "Hasta" para o grupo `RODA_TUDO` (agendado/push, como as outras fontes `dom`), com os 3
+secrets do proxy ISP adicionados ao step. Isso não resolve o "vazio" (que é real), mas tira a
+dependência de infra externa e garante que a próxima vez que o HASTA publicar lote, a coleta
+pega sozinha, todo dia, sem esperar o dono rodar manualmente.
+
+Descartáveis do recon (`_recon-hasta-estrutura-nova.mjs` + workflow `_temp`, 3 rodadas)
+removidos após extrair o achado.
