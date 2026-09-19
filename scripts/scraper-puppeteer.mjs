@@ -3940,6 +3940,10 @@ const LEILOTECH_TENANTS = [
   { domain: 'andredepaulaleiloes.com.br',leiloeiro: 'André de Paula Leilões' },
   { domain: 'ferleiloes.com.br',         leiloeiro: 'Fer Leilões' },
   { domain: 'alleiloes.com.br',          leiloeiro: 'AL Leilões' },
+  // Backlog radar (recon 19/09, GRÁTIS via pg_net + Puppeteer): sfleiloes.com.br "SF Leilões"
+  // é tenant Leilotech confirmado — GET direto no /go/graphql (query de branding, appName
+  // "SF Leilões") e /lote//leilao/ com slugs reais já visíveis na home server-rendered.
+  { domain: 'sfleiloes.com.br',          leiloeiro: 'SF Leilões' },
 ];
 
 // Extrai um número de campos que podem vir número OU string BR OU objeto de valores.
