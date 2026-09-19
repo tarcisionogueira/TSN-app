@@ -247,7 +247,12 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
     const numLimpo = String(numero_processo).replace(/\D/g, '');
     query = { bool: { should: [{ match: { numeroProcesso: numero_processo } }, { match: { numeroProcesso: numLimpo } }], minimum_should_match: 1 } };
   } else if (nome_parte) {
-    query = { nested: { path: 'partes', query: { match: { 'partes.nome': { query: nome_parte, fuzziness: 'AUTO' } } } } };
+    // 19/09 — NÃO envolver em `nested`: o log de erro (capturado ao vivo após o fix do corpo
+    // de resposta) mostrou HTTP 400 em 6/6 tribunais com o motivo exato do Elasticsearch:
+    // "failed to create query: [nested] failed to find nested object under path [partes]" —
+    // no mapping público do DataJud, `partes` NÃO é do tipo `nested`, é objeto/array comum.
+    // `match` direto em `partes.nome` é a forma correta (mesma que a API pública documenta).
+    query = { match: { 'partes.nome': { query: nome_parte, fuzziness: 'AUTO' } } };
   } else {
     return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([], { erros: ['sem critério de busca'], modalidade }) };
   }
