@@ -30511,3 +30511,72 @@ de já ter decidido revisitar) virou função compartilhada e entrou também no 
 preenchido. Efeito colateral esperado e desejado: isso vale pra TODAS as fontes que passam por
 esta função, não só ZUK — exatamente o "e quaisquer outros que ainda estejam na mesma
 situação" que o dono pediu.
+
+**Validado em produção, com prova (não só "rodou sem erro"):** disparo real do
+`leiloeiros-puppeteer.yml` (`fontes=ZUK`) depois do merge do PR #379 — log confirma
+`📄 Documentos: 120/120 lotes enriquecidos` (o teto inteiro usado, sinal de que a fila cresceu
+como esperado). Conferido no banco: vários lotes ZUK atualizados nos últimos 20 min já têm
+descrição REAL, incluindo número de matrícula em texto livre —
+ex. `zuk_37097-231513`: "...Matriculado no Cartório do 1º Serviço Registral de Imóveis de
+Uberlândia sob o nº 255.660..."; `zuk_37355-233611`: "...Matr. 22.958 do 1º CRI de Várzea
+Grande/MT."; `zuk_37308-233677`: "...matrícula nº 114.807 do 1º Oficial de Registro de
+Imóveis de Campinas/SP." Prova concreta de que o fix funciona, não suposição.
+
+**Nota honesta para a próxima sessão**: o lote EXATO do print (`zuk_37518-234619`) não estava
+entre os 120 desta rodada — com ~450 ativos no ZUK e provavelmente boa parte com o mesmo
+padrão de eco, um teto de 120/dia leva vários dias pra cobrir o catálogo inteiro. E
+`alvos.slice(0, cap)` não tem rotação por dia (diferente de `visitarTextoDetalhe`, que usa
+`janelaRotativaPorDia`) — a ordem vem do `document.querySelectorAll('.card-property')` do
+site, então se essa ordem for estável entre execuções, os MESMOS ~120 primeiros lotes seriam
+enriquecidos todo dia e a cauda do catálogo nunca seria alcançada. Não investigado/corrigido
+hoje — a sessão foi encerrada pelo dono antes disso. Vale conferir em alguns dias se o lote do
+print já foi corrigido (cron diário, 1x/dia); se não, é sinal de que a falta de rotação é
+real e merece o mesmo tratamento que `janelaRotativaPorDia` já dá a outras fontes.
+
+## Fechamento da sessão de 19-20/09 — resumo dos tópicos principais
+
+Sessão longa, encadeada a partir de "Integre esses leiloeiros" (LEILAOBRASIL/LUTHERO) até o
+pedido de encerramento do dono. Registro consolidado pra quem retomar:
+
+1. **LEILAOBRASIL + LUTHERO integrados** (PR #375) — 3º template da infra Suporte Leilões,
+   fetch direto sem custo, JSON embutido no HTML do lote. 229 + 50 imóveis em produção.
+
+2. **Auditoria documental geral** (pedido do dono: matrícula/edital/foto/regras de venda em
+   todos os ~58 leiloeiros + regra de pátio de veículos) — 7 agentes em paralelo
+   investigaram, achados corrigidos em `fonte_cobertura()` (SQL, reconhecer `.docx`/`.doc`),
+   HASTAPUBLICA (bug de foto descartada), KRONLEILOES/TOTALLEILOES/CREPALDI (faltava
+   `enrich:true`), LEILOFY (reforço do extrator genérico), LJUD (nunca tinha
+   enriquecimento, escopo seguro), família leilao/index (bug de prioridade de atributo de
+   imagem lazy-load + regex de matrícula), pátio de veículos (cap dobrado). Confirmado como
+   NÃO-bug: matrícula baixa da SUPERBID (característica real da rede). Tudo em produção (PR
+   #376).
+
+3. **Truncamento de descrição removido** (pedido do dono: "trazer completo, como está
+   descrito no próprio leiloeiro") — ~16 arquivos, teto de 500/2000→8000 caracteres, incluindo
+   a raiz comum `_texto-imovel.js` que tinha seu próprio teto interno escondido atrás do teto
+   externo já corrigido uma vez antes (17/09). Em produção (PR #376).
+
+4. **VLANCE corrigido com payload real** — foto (`fotos[].nm_path_completo`, chave errada
+   chutada antes), descrição (era cópia do título; campo certo é `nm_descricao`) e matrícula
+   (nunca lia o campo `anexos`, que existe na API). Validado contra JSON real capturado em
+   produção, não mock. Em produção (PR #376).
+
+5. **Verificação pontual do dono num print real do ZUK** — dois bugs confirmados (descrição
+   sintética nunca lia o texto real do portal; anexo-lixo de página de categoria/listagem
+   entrando como documento do lote) e um não-bug confirmado (matrícula em fila normal, cron
+   de 60/rodada 4x/dia funcionando). Corrigidos + testados (PR #377).
+
+6. **Bug estrutural descoberto ao validar o fix acima ao vivo**: `jaTemDocs` travava a
+   revisita de qualquer lote que já tivesse área+avaliação+documento (mesmo lixo) —
+   PERMANENTEMENTE, mesmo com a descrição ainda sendo eco do título. Corrigido na raiz,
+   vale pra todas as fontes que passam por `enriquecerDocumentosLote()`, não só ZUK.
+   Validado com prova real (descrições jurídicas completas, com matrícula, apareceram em
+   produção depois do fix) (PR #379).
+
+7. **Mapa da escala de coleta grátis×paga** — desde 15/09 o modelo real é "residencial
+   primeiro, pago só como rede de segurança via login do staff" pra RJ/GESTAO/SOLEON/PECINI.
+   Achado: **VLANCE era a única das 5 fontes fora do gatilho automático** — corrigido com uma
+   linha, sem migração (o gate já existia no banco) (PR #378).
+
+**Tudo confirmado em produção** (branch `main`, commits `f1a0cb5`→`5d8e364`, PRs #375-#379
+mergeados em sequência, nenhum pendente).
