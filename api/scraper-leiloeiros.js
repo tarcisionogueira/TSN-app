@@ -130,7 +130,8 @@ async function coletarSold(paginas, deadline) {
         valor_avaliacao: parseNum(lot.appraisal_value || lot.evaluation),
         valor_minimo: vmin,
         area_m2: parseNum(lot.area || lot.useful_area),
-        descricao: (lot.description || '').replace(/<[^>]+>/g, '').slice(0, 500) || null,
+        // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
+        descricao: (lot.description || '').replace(/<[^>]+>/g, '').slice(0, 8000) || null,
         link_edital: lot.url || `https://www.sold.com.br/lote/${lot.id}`,
         link_foto: lot.image || lot.thumbnail || lot.photo || null,
         leiloeiro: lot.auctioneer?.name || lot.company || 'Sold Leilões',
@@ -181,7 +182,8 @@ async function coletarSuperbid(paginas, deadline) {
         valor_avaliacao: sanitizarAval(parseNum(det.referenceValue || det.directSaleValue || of.referenceValue), vmin),
         valor_minimo: vmin,
         area_m2: parseNum(((of.offerDescription || '').match(/(\d+[.,]?\d*)\s*m2/i) || [])[1]),
-        descricao: decodificarEntidades((of.offerDescription || '').replace(/<[^>]+>/g, '')).slice(0, 500) || null,
+        // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
+        descricao: decodificarEntidades((of.offerDescription || '').replace(/<[^>]+>/g, '')).slice(0, 8000) || null,
         link_edital: `https://www.superbid.net/lote/${id}`,
         link_foto: pr.thumbnailUrl || null,
         url_lote: `https://www.superbid.net/lote/${id}`,

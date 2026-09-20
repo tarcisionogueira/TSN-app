@@ -109,8 +109,10 @@ export function parseDetalhe(html, url) {
   const mat = (txt.match(/Matr[íi]cula:\s*(?:Matr[íi]cula:\s*)?([\d.]{4,})/i) || [])[1] || null;
 
   // Descrição estruturada: "… - IMOVEL <num> - TIPO APARTAMENTO - AREA 57,67 M2 - …".
-  const mDesc = txt.match(/Descri[çc][ãa]o:\s*([^]{10,500}?)(?=\s+(?:Observa[çc][õo]es|Localiza[çc][ãa]o|CONTATOS)|$)/i);
-  const descricao = mDesc ? mDesc[1].trim().slice(0, 500) : null;
+  // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): o `{10,500}` do
+  // regex já cortava a CAPTURA antes mesmo do .slice() — subir só o slice não bastava.
+  const mDesc = txt.match(/Descri[çc][ãa]o:\s*([^]{10,8000}?)(?=\s+(?:Observa[çc][õo]es|Localiza[çc][ãa]o|CONTATOS)|$)/i);
+  const descricao = mDesc ? mDesc[1].trim().slice(0, 8000) : null;
   const tipoDesc = (txt.match(/TIPO\s+([A-ZÀ-Ú]+)/) || [])[1] || '';
   const titulo = (() => {
     const cond = (descricao || '').match(/^([A-ZÀ-Ú0-9][^-]{4,70}?)\s*-\s*IMOVEL/);

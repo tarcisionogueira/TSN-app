@@ -131,7 +131,8 @@ export default async function handler(req, res) {
         if (!(Number(im.area_m2) > 0)) {
           const corpo = extrairDescricaoDoCorpo(html);
           const ecoDoTitulo = !im.descricao || im.descricao.trim() === String(im.titulo || '').trim();
-          if (corpo && ecoDoTitulo) { patch.descricao = corpo.slice(0, 2000); comTexto++; }
+          // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
+          if (corpo && ecoDoTitulo) { patch.descricao = corpo.slice(0, 8000); comTexto++; }
           const area = extrairAreaM2(corpo || '') || extrairAreaM2(html);
           if (area > 0) { patch.area_m2 = area; comArea++; }
         }

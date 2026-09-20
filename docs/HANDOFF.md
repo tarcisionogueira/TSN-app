@@ -30261,3 +30261,144 @@ fiel ao JSON do lote 24171) antes de gastar qualquer coleta real — todos os ca
 
 Descartáveis das 5 rodadas de recon (`_recon-suporteleiloes-template3.mjs` + workflow `_temp`)
 removidos após extrair o achado.
+
+## 20/09 (pedido do dono: "verificação geral... matrícula, edital, regras de venda online,
+## fotos, veículos só em pátio" → "Resolva tudo... independente do formato")
+
+**Auditoria** em todos os ~58 leiloeiros ativos via `fonte_cobertura()`/`matricula_cobertura()`
+achou gaps concretos de matrícula/foto/edital em 8 grupos de fontes. Em vez de corrigir às
+cegas, **7 agentes em paralelo investigaram cada gap por leitura de código** (sem rede, sem
+gravar) antes de qualquer edição — achando causa raiz confirmada, não suposição:
+
+- **`fonte_cobertura()` media só `.pdf`** — LEILAOBRASIL/LUTHERO (integrados ontem) publicam
+  edital em `.doc`/`.docx` e apareciam com 3% quando o real é ~98%: o instrumento media "é
+  PDF?" e reportava com o nome de "tem o documento?" (forma nº 10). Corrigido (migração
+  `fonte_cobertura_qualquer_formato.sql`, mesmo conjunto de extensões de `RE_DOC_EXT`).
+  Verificado ao vivo: LEILAOBRASIL 3%→98%, LUTHERO ?→96%.
+- **HASTAPUBLICA 0% foto**: `enriquecerDocumentosLote()` já CALCULAVA `docs.foto`
+  (`vasculharDocumentos` varre `<img>` da página) e **descartava** — nunca atribuía a
+  `im.link_foto`. `api/enriquecer-lote.js` e `scraper-bayit.mjs`, que chamam o mesmo
+  `vasculharDocumentos`, já consumiam certo; só este caller (usado por HASTAPUBLICA e
+  WEBLEILOES) tinha o buraco. Corrigido com 1 linha. HASTAPUBLICA matrícula segue em aberto —
+  o próprio recon do site (`recon-hastapublica-puppeteer.mjs`) já sinalizava um modal AJAX por
+  lote que nada no pipeline clica; precisa de recon dedicado antes de mexer.
+- **KRONLEILOES/TOTALLEILOES/CREPALDI 0-5% matrícula**: nunca passavam `{ enrich: true }` pro
+  `coletarFonte` — **o MESMO bug já corrigido uma vez em SBID9/SBID21 (09/09)**, reintroduzido
+  nas 3 fontes seguintes que nasceram depois. Mesmo template de oferta que dá 74%/100% em
+  SUPERBID/SOLD com o enrich ligado. Corrigido (mesma flag `{ enrich: true, enrichCap: 120 }`).
+- **LEILOFY 9% matrícula**: parser próprio classifica documento só pelo texto DENTRO da âncora
+  `<a>` — mesma classe de bug já achada e corrigida no Bayit (09/09, rótulo no elemento-pai,
+  não na âncora), nunca portada pra cá. Ligado `enriquecerDocumentosLote` como reforço
+  ADITIVO (só preenche o que o parser próprio deixou vazio).
+- **LJUD 42% matrícula (baseline de 18/07 era 93%)**: é a ÚNICA fonte rica em documento sem
+  `enriquecerDocumentosLote`. Adicionado, mas com escopo RESTRITO à URL agregador de 2
+  segmentos (`/lote/{leilao_id}/{lote_id}`) — o fallback pra home do leiloeiro (quando falta
+  `leilao_id`) NUNCA pode ser visitado: foi o bug de 28/08 que pendurou os documentos de um
+  leilão inteiro em cada lote (25 anexos, matrícula de imóvel de outra cidade).
+- **Família leilao/index (GIORDANO 73%/RIGOLON 47%/THAISTEIXEIRA 50% foto; 6-7% matrícula)**:
+  `fotoDeHtml` lia o atributo de imagem por UMA alternação só — regex casa na posição mais à
+  esquerda da TAG, não na ordem de prioridade, então `src` (placeholder de lazy-load) vencia
+  `data-src` (foto real) quando vinha antes na marcação (padrão-padrão de jQuery
+  Lazy/lazysizes/lozad). Corrigido com tentativas em ordem explícita. `numero_matricula`
+  exigia só espaço entre rótulo e número — "Matrícula: 123" (dois-pontos) já falhava; regra
+  afrouxada (mesmo espírito de `valorPorRotulo`, já usado no mesmo arquivo). `anexosDeHtml`
+  só reconhecia `.pdf` — ampliado pro mesmo conjunto de `RE_DOC_EXT`. O link_matricula por URL
+  segue estruturalmente frágil (depende do nome do arquivo do vendor S3) — não mexido sem
+  HTML real pra confirmar.
+- **SUPERBID 30% matrícula**: **NÃO é bug** — confirmado em 3 fontes independentes
+  (`leiloeiro_conhecimento.sql`, `BASELINE_CAPTURA_LEILOEIROS.md`,
+  `docs_status='esperado'` no banco, que já poupa a fonte de captura ativa). É característica
+  genuína da rede — matrícula raramente pública no lote. Nenhuma ação.
+- **Pátio de veículos** (SUPERBID 3%/LJUD 4%/ZUK/WEBLEILOES/CRLEILOES 0% vs SODRE 95%):
+  `classificarPatio()` é UMA função conservadora por desenho, compartilhada — a diferença vem
+  de QUANTO TEXTO cada fonte entrega a ela, não da lógica. SUPERBID/LJUD visitam só 60
+  detalhes/rodada num catálogo de milhares (~1-5% de cobertura por dia); cap dobrado pra 120
+  (mais cobertura nunca cria falso "confirmado" — só aumenta o que é legitimamente exibido).
+  CRLEILOES nunca chama a função (decisão deliberada de 19/09, aguardando confirmar
+  vocabulário do site antes de ligar). ZUK teve fix em 13/09 "ainda não validado ao vivo" — seguia
+  0% uma semana depois; precisa checar `status_patio_motivo`/logs antes de mexer no regex.
+  WEBLEILOES já tem cobertura completa (catálogo pequeno) e ainda 0% — mais provável limitação
+  genuína do site (vocabulário diferente) que bug de cobertura.
+- **VLANCE (0% foto, 0% matrícula)**: `foto_url()` já sabe ler `fotos` (string ou lista de
+  dict com 5 chaves candidatas) mas **nunca foi validado contra payload real** — o próprio
+  autor documentou isso em comentário (10/09) sem nunca ter voltado a checar. Matrícula/doc
+  **nunca foi implementado** (zero campo relacionado no código, `link_edital` é URL fixa
+  genérica de categoria, não documento do lote). Em vez de adivinhar o nome do campo, o
+  diagnóstico existente (chaves do 1º lote) ganhou dump do JSON completo, gated por
+  `VLANCE_DEBUG_PAYLOAD=1` (novo input do workflow) — corrigir `foto_url()` às cegas arrisca
+  medir uma coisa e reportar com o nome de outra (forma nº 10), a mesma lição que já mordeu
+  esta base 4 vezes. PR #376.
+
+**VLANCE — atualização (20/09, mesmo dia): causa raiz confirmada contra payload REAL.**
+Dispatch de diagnóstico (`VLANCE_DEBUG_PAYLOAD=1`, dry-run) capturou o JSON completo do 1º
+lote de 3 domínios — resolveu de vez a incerteza que o comentário de 10/09 tinha deixado em
+aberto:
+- **Foto**: nenhuma das 5 chaves que `foto_url()` chutava (`url`/`nm_foto`/`nm_arquivo`/
+  `src`/`link`) existe no payload real. O campo certo é `fotos[].nm_path_completo` (URL S3
+  completa, já em `/196x146/`) — mesma convenção de nomes (`nm_*`) e mesmo endpoint
+  (`core/api/get-lotes`) já usados por LJUD, o que sugere a MESMA família de backend/vendor.
+  Corrigido, com upgrade de resolução pra `/640x480/` (mesma tática já validada em LJUD).
+- **Descrição**: `descricao` gravada era uma CÓPIA DO TÍTULO — o campo real com o texto do
+  leiloeiro é `nm_descricao` (HTML rich-text, ex.: "Casa, lote 02, quadra 09... Obs²: O imóvel
+  não possui matrícula imobiliária..."). Nunca tinha sido lido. Corrigido.
+- **Matrícula/documentos**: `anexos` é campo REAL do payload (`"anexos": []` presente e vazio
+  nas 3 amostras — a API suporta, só nunca foi tentado ler). Adicionada extração no mesmo
+  formato de LJUD (`nm`/`nm_path_completo`), aditiva — pior caso é continuar vazio, igual a
+  antes. Também adicionado regex de `numero_matricula` sobre o texto da descrição real (que
+  às vezes cita o número em texto livre).
+- Todas as correções validadas rodando `montar_row()` contra o JSON REAL capturado no log
+  (não um mock) antes de commitar — inclusive um caso onde o imóvel genuinamente NÃO tem
+  matrícula ("não possui matrícula imobiliária"), confirmando que o regex não inventa número
+  onde não há.
+- **Achado colateral, sem ação**: `capitalvalorleiloes.com.br` (3º domínio testado) bateu o
+  teto semanal do Bright Data (`subcota`) no meio da coleta — o freio de orçamento funcionou
+  como desenhado (recusa fechada, não finge sucesso), só não deu pra confirmar o payload
+  desse domínio especificamente nesta rodada.
+
+Todas as correções de código são **aditivas** (`if (!im.campo) im.campo = achado`) — nunca
+sobrescrevem dado já gravado, só preenchem o que faltava.
+
+### Descrição TRUNCADA em ~15 arquivos (pedido do dono, mesma rodada: "trazer completo, como
+### está descrito no próprio leiloeiro")
+
+`imoveis_leilao.descricao` é `text` no banco — **sem limite nenhum**. Mesmo assim, quase todo
+scraper cortava a descrição real do leiloeiro em `.slice(0, 500)` (às vezes 300). Já tinha
+havido uma rodada de correção em 17/09 (PECINI/RJ/SOLEON/EMILIOMATOS/CRLEILOES, 500→2000), mas
+o `.slice(0, 500)` estava presente em pelo menos 10 OUTROS arquivos que a rodada de 17/09 não
+tocou — e **mesmo o teto de 2000 ainda truncava** em produção (confirmado por query: contagem
+de `length(descricao) = 2000` > 0 em CALIL/APICE/TMLEILOES/CRLEILOES/LANCEJA/VEGAS).
+
+**Medição em produção que provou o tamanho real do problema** (`length(descricao) = teto` é a
+assinatura de corte — a descrição bateu exatamente no limite):
+LEILAOBRASIL 191/229 · FERREIRALEIL 97/179 · DANIELGARCIA 45/95 · LUTHERO 39/50 ·
+GESTAOLEILOES 23/153 · **SODRE 16/16 (100%)** · CERULI 8/45 · CALIL 8/44 · LEILOFY 6/22 ·
+APICE 8/35 · TMLEILOES 4/6 · ISAIAS 4/44 · CRLEILOES 2/8 · LANCEJA 1/3 · VEGAS 1/18.
+
+**Corrigido em todos os pontos onde a `descricao` é o TEXTO REAL do lote** (não confundir com
+os MUITOS lugares onde `descricao` é sintética — `[titulo, endereco].join(...)`, já curta por
+natureza, deixados como estavam): `scripts/scraper-puppeteer.mjs` (6 pontos: SOLD, SUPERBID,
+SUPERBID veículos, SODRE imóveis+veículos, LEILOFY), `scripts/scraper.js` (SUPERBID/SOLD via
+CEF+outros, cron diário), `api/scraper-leiloeiros.js` (mesma coisa, caminho Bright Data de
+backup), `api/enriquecer-lote.js` + `api/enriquecer-backfill-cron.js` (enriquecimento
+pós-scrape, senão re-truncava o que a correção acima soltou), `scripts/lib/hasta-parse.mjs`
+(o REGEX também limitava a captura em `{10,500}` — subir só o `.slice()` não bastaria),
+`scripts/lib/leilaopro-parse.mjs` (parser compartilhado por vários tenants JELEILOES/KLEILOES),
+`scripts/lib/leilaobrasil-parse.mjs`, `scripts/scraper-gestao.mjs`, e **a raiz comum**
+`api/_texto-imovel.js::extrairDescricaoDoCorpo()` (usada por PECINI/RJ/SOLEON/EMILIOMATOS —
+tinha seu PRÓPRIO teto interno de 2000, upstream dos tetos externos que a rodada de 17/09
+subiu; sem corrigir aqui também, os externos nunca teriam efeito).
+
+Teto novo: **8000 caracteres** em todos os pontos (mesmo padrão já usado em
+`api/leiloeiro-webhook.js`/`api/leiloeiro-feed.js`, com folga extra sobre os 2000 que ainda
+truncavam). Não removido o teto por completo — é rede de segurança defensiva contra uma
+extração que por algum motivo capture a página inteira, não uma expectativa real de que uma
+descrição de leilão chegue perto disso.
+
+**Fora do escopo, verificado e OK**: `api/scraper-caixa.js` (CEF, maior fonte do acervo) já
+grava `descricao.trim() || null` **sem nenhum corte** — não precisava de fix. O display do
+cliente logado (`src/pages/ImovelDetalhe.jsx` → `formatarDescricaoImovel`) também não corta —
+mostra a `descricao` inteira como veio do banco. `api/publico.js` (página SEO pública,
+`/leilao/:id`, não-logada) corta a exibição em 1200 — **deixado como está**: é a página-teaser
+do funil de cadastro (documentado no cabeçalho do arquivo: "decidido para não dar de graça o
+que é o produto"), uma decisão de produto deliberada, não um bug de captura — o cliente
+CADASTRADO já vê a descrição completa.

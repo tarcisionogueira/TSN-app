@@ -85,7 +85,11 @@ export function extrairDescricaoDoCorpo(html) {
   // Um único termo pode ser coincidência (ex.: "vaga" num menu). Exige DOIS sinais distintos
   // na sequência para substituir a meta tag — abaixo disso, "não sei" é resposta melhor que
   // um palpite.
-  return melhorPontos >= 2 ? melhor.slice(0, 2000) : null;
+  // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): 2000 ainda truncava
+  // — CALIL/APICE/TMLEILOES/CRLEILOES/LANCEJA/VEGAS batiam exatamente nesse teto em produção.
+  // Coluna `descricao` é `text` no banco, sem limite; os caller sites (scraper-pecini.mjs etc.)
+  // também precisam do mesmo teto, senão re-truncam o que este função devolve mais longo agora.
+  return melhorPontos >= 2 ? melhor.slice(0, 8000) : null;
 }
 
 /**

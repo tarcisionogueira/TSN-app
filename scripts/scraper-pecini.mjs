@@ -300,12 +300,11 @@ function parseDetalhe(html, rec) {
     valor_minimo: valorMinimo,
     modalidade,
     area_m2: area,
-    // 500→2000 (17/09): a coluna é `text` (sem limite no banco) e `extrairDescricaoDoCorpo`
-    // já limita a 2000 — cortar em 500 aqui de novo é a 2ª truncagem que apagava justamente a
-    // parte que o fix de "sequência de blocos" passou a trazer (medidas/confrontações vêm
-    // depois do 1º parágrafo). Achado no lote PECINI 10645 (matrícula 4.948, Santana de
-    // Parnaíba): a descrição oficial do leiloeiro passa fácil de 500 caracteres.
-    descricao: (base.descricao || '').slice(0, 2000) || null,
+    // 500→2000 (17/09) →8000 (20/09, pedido do dono: descrição completa, como o leiloeiro
+    // publica): 2000 ainda truncava (medido no acervo: lotes batendo exatamente no teto).
+    // `extrairDescricaoDoCorpo` (api/_texto-imovel.js) já foi ao mesmo teto — sem repetir aqui
+    // o corte voltaria a acontecer, só que num ponto diferente.
+    descricao: (base.descricao || '').slice(0, 8000) || null,
     data_leilao: base.data_leilao || extrairData(html),
     numero_matricula: base.numero_matricula || null,
     link_matricula: matriculaDoc,
