@@ -1032,28 +1032,33 @@ async function extrairValoresPdf(base64, deadline) {
 // os anexos podem informar dívida a assumir, responsabilidades, forma de pagamento ou
 // descritivo do imóvel". Best-effort: nunca bloqueia o relatório.
 async function lerLaudoAvaliacao(imovelId, deadline) {
-  if (Date.now() > deadline - 12000) return null;
+  // Log INCONDICIONAL a cada saída (mesmo princípio de [endereco-busca]/[metragem-doc]):
+  // sem isto, "não tinha laudo", "leitura falhou" e "laudo sem nada a acrescentar" são
+  // indistinguíveis de fora — e essa distinção é o que valida se a função funciona de verdade.
+  const sai = (motivo, extra) => { console.log('[laudo-avaliacao]', JSON.stringify({ imovel: String(imovelId), motivo, ...extra })); return null; };
+  if (Date.now() > deadline - 12000) return sai('sem_orcamento');
   let im = null;
   try {
     const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo&limit=1`)).json();
     im = Array.isArray(rows) ? rows[0] : null;
-  } catch { return null; } // padrao-ok: leitura best-effort — imóvel some, laudo não é lido, relatório segue sem ele
-  if (!im || !Array.isArray(im.anexos)) return null;
+  } catch { return sai('erro_leitura_imovel'); } // padrao-ok: `sai()` já registra o motivo via console.log — ver comentário da função
+  if (!im || !Array.isArray(im.anexos)) return sai('sem_anexos');
   const laudo = im.anexos.find(a => a?.tipo === 'laudo' || /laudo/i.test(String(a?.nome || '')));
-  if (!laudo?.url) return null;
+  if (!laudo?.url) return sai('sem_anexo_laudo', { totalAnexos: im.anexos.length });
 
   let base64 = null;
   try {
     const r = await fetch(laudo.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(12000) });
-    if (!r.ok) return null;
+    if (!r.ok) return sai('http_nao_ok', { status: r.status, url: laudo.url });
     const buf = Buffer.from(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));
     if (buf.length && buf.slice(0, 5).toString('latin1') === '%PDF-' && buf.length <= 6_500_000) base64 = buf.toString('base64');
-  } catch { return null; } // padrao-ok: site do leiloeiro inacessível/timeout — best-effort, não bloqueia o relatório
-  if (!base64) return null;
+    else return sai('nao_e_pdf_valido', { bytes: buf.length, url: laudo.url });
+  } catch (e) { return sai('erro_fetch', { erro: String(e?.message || e).slice(0, 160), url: laudo.url }); }
+  if (!base64) return sai('sem_base64');
 
   let ext = null;
-  try { ext = await extrairValoresPdf(base64, deadline); } catch { return null; } // padrao-ok: IA falhou nesta leitura — best-effort, não bloqueia o relatório
-  if (!ext) return null;
+  try { ext = await extrairValoresPdf(base64, deadline); } catch (e) { return sai('erro_ia', { erro: String(e?.message || e).slice(0, 160) }); }
+  if (!ext) return sai('ia_sem_resposta');
 
   const avalLaudo = Number(ext.avaliacao) || 0;
   const avalCard = Number(im.valor_avaliacao) || 0;
@@ -1078,6 +1083,14 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
         : `Card mostrava R$${Math.round(avalCard)}; o laudo de avaliação anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para o valor do laudo — é a fonte mais autoritativa para este campo.`);
     } catch { /* best-effort */ }
   }
+
+  // Log INCONDICIONAL (mesmo princípio de [endereco-busca]/[metragem-doc] acima): sem isto,
+  // "o laudo não tinha nada a acrescentar" e "a leitura falhou antes de chegar aqui" são
+  // indistinguíveis de fora — e essa distinção é exatamente o que valida se a função funciona.
+  console.log('[laudo-avaliacao]', JSON.stringify({
+    imovel: String(imovelId), url: laudo.url, avalCard: avalCard || null, avalLaudo: avalLaudo || null,
+    faltava, divergiu, debitos: !!ext.debitos, condicaoImovel: !!ext.condicaoImovel, formaPagamento: !!ext.formaPagamento,
+  }));
 
   return {
     avaliacaoLaudo: avalLaudo || null,
