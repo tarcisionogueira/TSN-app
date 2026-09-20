@@ -129,3 +129,33 @@
 3. **Data do leilão** em GRUPOLANCE, WEBLEILOES, VIP, BIASI (0–1%).
 4. **Matrícula** onde é pública mas não capturada: ZUK (31% → subir).
 5. **BIASI** confirmar acervo real (~173 vs meta ~370) após a correção de paginação.
+
+## 6. Auditoria de completude ampla (20/09) — três gaps estruturais, mesma causa-raiz
+
+Revisão pedida pelo dono (fotos/edital/regras/matrícula/descrição/geolocalização/forma de
+pagamento em TODAS as ~56 fontes ativas). Achado central: **os três piores números não são
+bugs isolados por fonte — são o MESMO padrão** ("scraper lê só o card da listagem, nunca visita
+a página de detalhe do lote") repetido em dezenas de scrapers de `scripts/scraper-puppeteer.mjs`.
+Detalhe completo, com evidência SQL e leitura de código, em `docs/HANDOFF.md` (sessão 20/09).
+
+- **`endereco`**: vazio (`''` hardcoded) ou quase vazio em PESTANA (0/1007), LEILAOBRASIL
+  (0/209), FERREIRALEIL (0/179), HASTAPUBLICA (0/130), LJUD (14/979), BIASI (17/441),
+  GRUPOLANCE (2/361) — confirmado no CÓDIGO, não é ausência no site em todos os casos.
+  **Consequência direta: `geo_bom_pct` baixo é efeito, não causa** — o geocodificador
+  (`api/_geo.js`, cascata Nominatim → viaCEP → BrasilAPI) já é sofisticado; sem `endereco`/`cep`
+  de entrada ele não tem o que geocodificar além do nível cidade. **Não mexer no geocodificador
+  antes de resolver a captura de endereço na origem.**
+- **`link_regras_venda`**: 0% em ~50 das 56 fontes (só CEF 79%, SODRE 81%, WEBLEILOES 50% têm
+  cobertura real). Não wired em `scripts/lib/scraper-core.mjs` (extrairGenerico, usado por
+  SOLEON/RJ — 12+ tenants) nem na maioria dos parsers dedicados.
+- **`numero_matricula`**: 0% em fontes SUPERBID.net (SUPERBID, TOTALLEILOES, KRONLEILOES)
+  **apesar de `anexos` ter documento em 76-96%** — o PDF chega, ninguém lê o número de dentro
+  dele. Não é ausência no site; é falta de extração de texto do PDF (mesma classe de trabalho
+  já feita para CEF em `scripts/captura-matricula-cef.mjs`).
+- **`forma_pagamento`**: **não é boilerplate fake** como a hipótese inicial suspeitava — existe
+  um trigger real (`default_forma_pagamento_judicial()`, `trg_default_forma_pagamento_judicial`)
+  que reclassifica `judicial` + `a_vista` para `hipotecado` (regra de negócio: hipoteca judicial
+  quase sempre é parcelável, art. 895 CPC — ver `scripts/testes/hipotecado-e-parcelavel-nao-a-vista.mjs`).
+  A variação real que falta é dentro do universo "extrajudicial": só CEF (`formaPagamentoCEF`) e
+  BB (`normalizarPagamento`) fazem detecção por-lote de financiamento/parcelamento a partir do
+  texto do site; as outras ~50 fontes gravam sempre `'a_vista'` sem checar o site.

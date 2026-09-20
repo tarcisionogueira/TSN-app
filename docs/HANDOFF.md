@@ -278,6 +278,176 @@ menores) — só documentado, dono pediu para não corrigir agora, ver seção p
 
 ---
 
+## 🗺️ SESSÃO 26 (20/09) — AUDITORIA DE COMPLETUDE DAS ~56 FONTES + RECON DEDICADO DE `data_leilao` (GESTAOLEILOES corrigido; PECINI/FERREIRALEIL documentados, não corrigidos às cegas)
+
+Pedido do dono: revisar o mapeamento de captura de TODAS as fontes ativas (foto, edital, regras
+de venda, matrícula, descrição, geolocalização, forma de pagamento) e destravar o recon dedicado
+de `data_leilao` que estava represado esperando autorização. Sessão só de leitura de código +
+SQL real + recon via GitHub Actions — nada foi "consertado às cegas": cada achado abaixo tem
+evidência (número do banco, trecho de código ou log de recon real).
+
+### 1. `data_leilao` — GESTAOLEILOES corrigido, causa raiz era outra do que se pensava
+
+O diagnóstico de 13/09 (`diagnostico-datas-fontes.yml`) tinha medido a página ERRADA para o
+GESTAOLEILOES: fez fetch DIRETO de `lote.php?idLote=` (9/9 → HTTP 403, bloqueio de IP de
+datacenter). Mas a produção (`scraper-gestao.mjs → coletarEvento()`) tira a data de
+`leilao.php?idLeilao=` **via Bright Data**, não fetch direto — e a cota do Bright Data pro
+propósito `gestao` tinha folga na semana (14/150 usados). Ou seja: o 403 medido era real, mas
+não era o que travava a produção.
+
+Recon dedicado (`scripts/recon-datas-gestao-pecini-ferreiraleil.mjs` +
+`.github/workflows/_temp-recon-datas-gestao-pecini-ferreiraleil.yml`, 3 rodadas via
+`workflow_dispatch`, nada gravado no banco — arquivos apagados ao final) reproduziu o caminho
+REAL: buscou `leilao.php?idLeilao=` com fetch direto (confirmou 403) e depois via Bright Data
+(sucesso, página completa) para 4 eventos ativos sem `data_leilao`. Resultado: em 2 dos 4, o
+Bright Data trouxe a página inteira com o texto **"Data: Abertura 24/Ago/2026, 10h00
+Encerramento 29/Set/2026"** claramente presente — mas `dataEvento(cabecalho)` devolvia `null`
+mesmo assim.
+
+**Causa raiz real**: `cabecalho = html.slice(0, 6000)` — em página de evento grande (90-190 kB,
+o bloco de lotes vem ANTES do bloco de data no HTML do GESTAO), o texto da data fica bem além
+dos primeiros 6000 bytes. `dataEvento()` nunca via o texto que precisava ver — não é ausência
+no site, é o extrator olhando o pedaço errado da página.
+
+**Primeira tentativa de fix (commit `f95209b`) estava ERRADA e o recon pegou**: busquei o
+ancorador `Data:\s*Abertura` no **HTML cru** (`html.search(...)`), mas no markup real
+"Data:" e "Abertura" ficam separados por tag/entidade — o regex nunca casa ali, só depois de
+decodificar entidades e tirar tag (exatamente o que o helper de comparação do recon já fazia).
+Rodei o recon de novo sobre a MESMA página real e vi `idxData=-1` nos 4 casos — a v1 não
+funcionava, apesar de parecer corrigida no code review. **v2 (commit `65ac92d`, validada)**:
+decodifica/tira tag do documento INTEIRO primeiro, só então procura o ancorador. Revalidado
+sobre as MESMAS páginas reais: idLeilao=1044 → `2026-08-24` ✅, idLeilao=1051 → `2026-09-11` ✅
+(antes: `null` nos dois). Os outros 2 eventos amostrados (idLeilao=1045, um stub de 1,4 kB —
+página bloqueada de verdade; idLeilao=1011, 90 kB sem nenhuma data no texto) continuam sem data
+— e devem continuar, porque genuinamente não têm o texto.
+
+Fix em produção: `scripts/scraper-gestao.mjs` (`coletarEvento`), commits `f95209b` + `65ac92d`
+(a segunda corrige a primeira). Efeito esperado no próximo `scraper-gestao` real: parte dos 153
+ativos hoje em 0% de `data_leilao` passa a vir preenchida — cobertura exata só no próximo run.
+
+### 2. `data_leilao` — PECINI e FERREIRALEIL: recon feito, SEM fix (documentado, não é chute)
+
+**PECINI** (29 ativos, 0% data): mesmo recon confirmou 403 direto + Bright Data trazendo a
+página COMPLETA (196-212 kB) para 5 lotes reais. Mas a varredura bruta de datas no texto só
+achou **"Consolidação da Propriedade em DD/MM/AAAA"** (evento jurídico PASSADO, não a praça) e
+"Laudo de Avaliação, datado de" — nenhuma âncora "leilão/praça/encerr" bateu. A data real da
+praça pode estar numa parte da página que a amostra de 6-10 primeiras datas não capturou, ou em
+formato diferente. **Não implementei parser novo às cegas** — próxima sessão: recon com mais
+contexto por match + anchor específico do layout PECINI antes de mexer em código de produção.
+
+**FERREIRALEIL** (179 ativos, 2% data — **3/179, não 58%**): a linha de base antiga do
+`leiloeiro_conhecimento` registrava 58% (110 ativos, medição de setembro, "site varia o que
+publica lote a lote — nenhuma ação"). **Isso mudou**: série diária dos últimos 20 dias mostra
+0-2 de ~32 ativos com data TODO dia desde 01/09 — uma regressão real, não ruído de amostra
+pequena. Recon (5 amostras de `item/N/detalhes` reais, ativos, sem data) confirmou 403 direto +
+Bright Data trazendo a página COMPLETA (35-36 kB) — e **zero** ocorrência de qualquer data em
+formato `dd/mm/aaaa` ou `dd/Mon/aaaa` no texto inteiro, nem pelo extrator nem por regex bruta.
+Não é bloqueio (a página vem via BD igual às outras que funcionaram). Duas hipóteses não
+descartadas: (a) o site parou de publicar a data nestes itens específicos (mudança estrutural);
+(b) a data está num componente carregado via JS que o Web Unlocker (sem execução de JS) não
+populou — só um fetch por Chromium real de IP residencial (`fetch-residencial.mjs`, rodado de
+casa) descarta isso. **Pendência registrada em `leiloeiro_conhecimento.observacao`** — não
+decidi sozinho porque exige nova rodada de recon, não é um conserto de uma linha.
+
+### 3. Auditoria de completude (foto/edital/regras/matrícula/descrição/geo/pagamento) — o que era hipótese virou fato, com uma correção importante
+
+Todas as hipóteses do pedido original foram checadas com SQL real e leitura de código ANTES de
+qualquer conclusão (regra da forma nº10 do CLAUDE.md: nunca reportar número sem confirmar o que
+ele mede de verdade).
+
+**Confirmado como bug real de captura** (não limite do site):
+- **`endereco`** vazio/quase vazio em PESTANA (0/1007), LEILAOBRASIL (0/209), FERREIRALEIL
+  (0/179), HASTAPUBLICA (0/130), LJUD (14/979), BIASI (17/441), GRUPOLANCE (2/361) — confirmado
+  no CÓDIGO: `endereco: ''` está **hardcoded** em `mapLotePestana`, `mapLoteBiasi`,
+  `mapLoteGrupoLance` (`scripts/scraper-puppeteer.mjs`) e no parser genérico
+  `scripts/lib/dom-parse-util.mjs`. Estes scrapers leem só o CARD da listagem (título, preço,
+  foto, cidade/UF) e **nunca visitam a página de detalhe do lote** — não é que o site não
+  publique endereço, é que o scraper nunca chega a olhar onde ele estaria.
+  > ⚠️ **Isto é um achado DIFERENTE do "17/09 — `extrairIdentidadeTexto` pega endereço do
+  > leiloeiro"** documentado acima (mesmo conjunto de fontes, coincidência real, não erro de
+  > nomenclatura): aquele é sobre a extração de identidade a partir do PDF do edital, no momento
+  > do RELATÓRIO — o dono já decidiu não mexer nele agora. Este aqui é sobre o campo bruto
+  > `imoveis_leilao.endereco` nunca ser preenchido no momento da COLETA, uma etapa antes e
+  > totalmente independente.
+- **CONSEQUÊNCIA DIRETA — `geo_bom_pct` baixo (a hipótese original do dono sobre "localização
+  batendo com o endereço no Google") é EFEITO, não causa.** Lido `api/_geo.js`: a cascata de
+  geocodificação (Google pago opcional → Nominatim estruturado → CEP via viaCEP/BrasilAPI →
+  Nominatim por CEP → bairro → centroide da cidade) já é sofisticada e já tenta CEP como
+  fallback quando falta endereço estruturado. **Não há bug no geocodificador** — sem
+  `endereco`/`cep` de entrada, não existe fallback que resolva além do nível cidade/bairro. Não
+  mexi no geocodificador; a correção certa é capturar endereço na origem (item acima).
+- **`link_regras_venda`**: confirmado 0% em ~50 das 56 fontes ativas (só CEF 79%, SODRE 81%,
+  WEBLEILOES 50% têm cobertura real). Lido `scripts/lib/scraper-core.mjs` (`extrairGenerico`,
+  usado por SOLEON — CALIL/VEGAS/TORRES3/FERREIRALEIL/JOAOEMILIO/DANIELGARCIA/ISAIAS/APICE/
+  CERULI/TMLEILOES/PURCENA/AGOSTINHO — e por RJLEILOES): o campo nunca é escrito, só é CHECADO
+  em `checarQualidade` para decidir se falta edital. Gap estrutural real, não ausência no site
+  (confirmação página-a-página de cada plataforma fica para próxima sessão — são famílias de
+  scraper diferentes, não um fix único).
+- **`numero_matricula`** 0% em SUPERBID/TOTALLEILOES/KRONLEILOES **apesar de `anexos` ter
+  documento em 76-96% dos ativos** (1.084/1.416 no SUPERBID) — o PDF chega e fica salvo, ninguém
+  lê o número de matrícula de dentro dele. Mesma classe de trabalho já feita para CEF
+  (`scripts/captura-matricula-cef.mjs`), só que nunca replicada pra família SUPERBID.net.
+- **GESTAOLEILOES descrição fraca (27%, apesar de foto 90%/matrícula 92%)**: confirmado — o
+  regex `DESCRIÇÃO:\s*(.+?)...` só acha texto quando o card TEM esse rótulo, e ele só aparece
+  quando o lote vem com o bloco "IMÓVEL DE MATRÍCULA N DO CARTÓRIO..." (texto jurídico longo).
+  Cards sem esse bloco saem com `descricao: null` e só o título genérico "IMÓVEL - Cidade - UF".
+  Não é regex quebrado — é o SITE variando o que publica por card (mesmo padrão já documentado
+  pro FERREIRALEIL em sessão anterior). Não mexido.
+
+**Hipótese CORRIGIDA depois de investigar** (o dono suspeitava "boilerplate fake", e não é bem
+isso):
+- **`forma_pagamento` 100% preenchido em TODAS as 56 fontes NÃO é boilerplate cego.** Achado um
+  trigger de banco real, `default_forma_pagamento_judicial()` (`trg_default_forma_pagamento_judicial`,
+  BEFORE INSERT/UPDATE em `imoveis_leilao`): quando `modalidade='judicial'` e o scraper gravou
+  `null`/`'a_vista'`, o trigger reclassifica pra `'hipotecado'` — regra de negócio real (hipoteca
+  judicial costuma ser parcelável, art. 895 CPC; ver `scripts/testes/hipotecado-e-parcelavel-nao-a-vista.mjs`).
+  É por isso que MEGA tem 516 a_vista + 108 hipotecado, TORRES3 tem os três valores, etc. — a
+  variação existe, só não é visível olhando o código do scraper sozinho.
+  **O que REALMENTE falta**: dentro do universo "extrajudicial" (a maioria dos lotes fora da
+  CEF), só CEF (`formaPagamentoCEF`, lê "hipotec/financ/fgts/parcelament" do texto real da
+  página) e Banco do Brasil (`normalizarPagamento`) fazem detecção por-lote de
+  financiamento/parcelamento a partir do que o site publica. As outras ~50 fontes gravam
+  `'a_vista'` sempre, sem checar se o leiloeiro oferece parcelamento — um gap real, mas bem mais
+  estreito do que "o campo inteiro é fake".
+- **EDITAL_DJEN confirmado como estrutural e correto em 0%** (foto/edital) — é feed de
+  publicação judicial do DJEN, não site de leiloeiro; 424 ativos, 0 foto, ~0 edital, como
+  esperado. Não é tarefa de conserto.
+
+### 4. O que foi corrigido nesta sessão vs. o que ficou documentado como pendência
+
+| Fonte/campo | Achado | Ação |
+|---|---|---|
+| GESTAOLEILOES `data_leilao` | Extrator olhava só os 1os 6000 bytes da página | **Corrigido e validado** (`scripts/scraper-gestao.mjs`) |
+| PECINI `data_leilao` | Página completa via BD, mas sem âncora que bata com a praça real | Documentado em `leiloeiro_conhecimento`; recon maior fica pendente |
+| FERREIRALEIL `data_leilao` | Regressão de ~58%→2% desde 01/09; página completa, zero data no texto | Documentado; precisa teste com Chromium residencial pra descartar JS |
+| `endereco` (PESTANA/LEILAOBRASIL/FERREIRALEIL/HASTAPUBLICA/LJUD/BIASI/GRUPOLANCE) | `''` hardcoded, scraper nunca visita detalhe | Documentado; fix requer visita a detalhe por fonte (não feito às cegas) |
+| `geo_bom_pct` baixo | Efeito do endereço vazio, geocodificador OK | Documentado; **não mexer no geocodificador** |
+| `link_regras_venda` 0% (~50 fontes) | Nunca wired em `extrairGenerico`/parsers dedicados | Documentado; prioridade por volume fica pra próxima sessão |
+| `numero_matricula` 0% (SUPERBID/TOTAL/KRON) | PDF existe (anexos 76-96%), número nunca extraído do PDF | Documentado; mesma classe de trabalho do `captura-matricula-cef.mjs` |
+| `forma_pagamento` "100%" | Tem trigger de negócio real (judicial→hipotecado); gap real é só financ./parcel. fora de CEF/BB | Hipótese corrigida; nenhum código mudado (não era o bug suposto) |
+| GESTAOLEILOES `descricao` fraca | Site varia o que publica por card, regex correto | Confirmado como limite do site; nenhuma ação |
+| EDITAL_DJEN foto/edital 0% | Fonte é feed judicial, não site de leiloeiro | Confirmado estrutural; nenhuma ação |
+
+`leiloeiro_conhecimento.observacao` atualizado para GESTAOLEILOES, PECINI, FERREIRALEIL, PESTANA,
+BIASI, GRUPOLANCE, LJUD. `docs/BASELINE_CAPTURA_LEILOEIROS.md` ganhou a seção 6 com o resumo
+sistêmico. Build (`npm run build`), `verificar:padroes` e `verificar:sintaxe` passaram limpos.
+Recon descartável (`scripts/recon-datas-gestao-pecini-ferreiraleil.mjs` +
+`.github/workflows/_temp-recon-datas-gestao-pecini-ferreiraleil.yml`) apagado após validar o fix
+— não sobrou lixo no repo.
+
+**Pendente de decisão/trabalho futuro (não decidi sozinho, ficou documentado)**:
+1. PECINI/FERREIRALEIL `data_leilao` — precisam de mais uma rodada de recon dedicado antes de
+   qualquer parser novo (ver item 2 acima).
+2. `endereco` vazio em 7 fontes — decisão de priorização (qual fonte primeiro) e confirmação
+   página-a-página de que o dado existe no detalhe antes de implementar visita.
+3. `link_regras_venda` 0% em ~50 fontes — mesma coisa, por família de plataforma.
+4. `numero_matricula` faltando em SUPERBID.net — requer pipeline de leitura de PDF (custo de
+   processamento a avaliar, mesmo padrão do CEF).
+5. Nenhum destes itens envolve gasto extra de Bright Data acima do teto normal nem mudança de
+   UX visível pro cliente — por isso não bloqueiam em "decisão do dono", só em tempo de sessão.
+
+---
+
 ## 🔎 17/09 — ACHADO (NÃO CORRIGIDO, decisão do dono): `extrairIdentidadeTexto` pega endereço do LEILOEIRO/cabeçalho, não do imóvel
 
 Achado durante a auditoria retroativa da contaminação entre lotes (seção abaixo) — é um bug
@@ -677,17 +847,24 @@ corrige sozinho, mas não há re-processamento retroativo automático dos já pu
    `0 * * * *` também dispara só ~5-6x/dia na prática, não 24x — GitHub atrasa/derruba cron exato
    de hora popular sob carga). FERREIRALEIL/GESTAOLEILOES/PECINI via novo workflow
    `diagnostico-datas-fontes.yml` (fetch direto, 3 lotes por fonte, sem gravar nada): **9 de 9
-   amostras deram HTTP 403** direto na página do lote. Código de extração de data de cada uma
-   (`extrairDatasLeilao`, `scraper-gestao.mjs`, `scraper-pecini.mjs`, `scraper-soleon.mjs`) foi
-   lido e é legítimo — não é `null` hardcoded. **Fix recomendado**: rotear a busca de data por
-   `scripts/lib/fetch-residencial.mjs` (IP residencial) ou Bright Data, já validado em produção
-   para cobertura de documentos de GESTAOLEILOES/RJLEILOES — não precisa de parser novo.
-   **Ainda não testados individualmente** (lista original): LEJE, ALBERTOMACEDOLEILOES,
-   GIORDANOLEILOES, GRUPOLANCE, BIASI, WEBLEILOES (91-100% sem data cada) — HASTA já é
-   conhecida como IP-bloqueada por investigação anterior. GRUPOLANCE/BIASI/WEBLEILOES tiveram
-   recon em 29/08 (`recon-datas-fontes.mjs`) com achado DIFERENTE na época (mapeador escrevendo
-   `data_leilao: null` literal, não bloqueio) — precisa reconfirmar se ainda procede no código
-   atual antes de assumir que é o mesmo bloqueio de IP.
+   amostras deram HTTP 403** direto na página do lote.
+   > ✅ **GESTAOLEILOES — CAUSA RAIZ REVISTA E CORRIGIDA (20/09).** O 403 medido em 13/09 era real
+   > mas IRRELEVANTE: a produção já busca `leilao.php?idLeilao=` via Bright Data (não fetch
+   > direto), com cota sobrando. O bug de verdade — achado com recon real sobre página ao vivo —
+   > era `dataEvento(cabecalho)` só olhar os primeiros 6000 bytes do HTML; em evento grande
+   > (90-190 kB) o texto "Data: Abertura DD/Mon/AAAA" cai bem depois disso. Corrigido em
+   > `scripts/scraper-gestao.mjs` (busca o ancorador no documento INTEIRO, já decodificado/sem
+   > tag). Validado 2/4 em amostra real (idLeilao 1044→2026-08-24, 1051→2026-09-11; os outros 2
+   > genuinamente não têm data no HTML). Detalhe completo na sessão 20/09 abaixo.
+   > 🟡 **PECINI/FERREIRALEIL — recon real feito, SEM fix (não dá pra corrigir às cegas).** Ambos
+   > confirmam 403 direto + Bright Data trazendo a página COMPLETA, mas sem achar a data da praça
+   > no texto (PECINI só tem datas de eventos jurídicos passados; FERREIRALEIL não tem nenhuma
+   > data em 5/5 amostras, uma REGRESSÃO de ~58% pra 2% desde 01/09 — ver sessão 20/09).
+   **Ainda não testados individualmente**: LEJE, ALBERTOMACEDOLEILOES, GIORDANOLEILOES,
+   GRUPOLANCE, BIASI, WEBLEILOES (91-100% sem data cada) — HASTA já é conhecida como
+   IP-bloqueada. GRUPOLANCE/BIASI confirmados em 20/09 como `data_leilao: null` **literal**
+   no código (`scripts/scraper-puppeteer.mjs`, `mapLoteBiasi`/`mapLoteGrupoLance`) — scraper
+   NUNCA visita a página de detalhe do lote, então não é bloqueio de IP nestes dois.
 7. **Instagram — liberar a automação de resposta (100% burocracia da Meta, zero código)**
    (reaberta 11/09; era a pendência #9 antiga, sumiu da lista numa compactação e voltou porque
    segue real). Hoje o sistema só ESCUTA (webhook capturando comentários reais desde 08/09,
