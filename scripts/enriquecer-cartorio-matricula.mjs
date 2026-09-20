@@ -32,7 +32,7 @@ async function buscarCandidatos() {
   const out = [];
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, fonte, estado, link_matricula, ficha_cef, endereco, bairro')
+      .select('id, fonte, estado, link_matricula, ficha_cef, endereco, bairro, numero_matricula')
       .eq('ativo', true).neq('fonte', 'CEF')
       .is('matricula_scan_em', null)
       .ilike('link_matricula', '%.pdf%')
@@ -94,6 +94,11 @@ async function main() {
       const reg = texto ? extrairRegistroMatricula(texto) : null;
       if (reg) {
         patch.ficha_cef = { ...(im.ficha_cef && typeof im.ficha_cef === 'object' ? im.ficha_cef : {}), ...reg };
+        // NÚMERO da matrícula: `reg.matricula` já vinha extraído e só ia pro JSON `ficha_cef`
+        // (achado 20/09) — a coluna `numero_matricula`, que É a que aparece pro cliente em
+        // ImovelDetalhe.jsx/Busca.jsx, ficava vazia mesmo com o número em mãos. Só preenche
+        // quando ainda não tem (nunca sobrescreve um valor que o scraper já capturou).
+        if (reg.matricula && !im.numero_matricula) patch.numero_matricula = reg.matricula;
         ok++;
         if (logs < 5) { logs++; console.log(`  [reg ${logs}] ${im.fonte} ${im.estado} → ${JSON.stringify(reg)}`); }
       } else {
