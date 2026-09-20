@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: Chama o endpoint de diagnóstico SODRE
         run: |
-          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-sodre?url=https%3A%2F%2Fleilao.sodresantoro.com.br%2Fleilao%2F29005%2Flotes-encerrados%2F2804970" \
+          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-sodre" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -H "content-type: application/json" | tee /tmp/out.json
           echo "---"

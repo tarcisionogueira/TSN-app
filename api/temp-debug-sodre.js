@@ -31,6 +31,11 @@ export default async function handler(req, res) {
     const i = html.indexOf(kw);
     if (i >= 0) marcadores[kw] = html.slice(Math.max(0, i - 60), i + 200);
   }
+  // apiURL completo + o bloco __NUXT_DATA__ inteiro (pode ter o preço/status codificado ali).
+  const idxApi = html.indexOf('apiURL');
+  if (idxApi >= 0) marcadores.apiURL_completo = html.slice(idxApi, idxApi + 400);
+  const idxNuxtData = html.indexOf('id="__NUXT_DATA__"');
+  const nuxtDataBloco = idxNuxtData >= 0 ? html.slice(idxNuxtData, idxNuxtData + 12000) : null;
 
-  res.status(200).json({ ok: true, url, html_len: html.length, achado, trechos, trechoCru, marcadores, primeiros2000: txt.slice(0, 2000) });
+  res.status(200).json({ ok: true, url, html_len: html.length, achado, trechos, trechoCru, marcadores, nuxtDataBloco, primeiros2000: txt.slice(0, 2000) });
 }
