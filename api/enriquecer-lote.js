@@ -506,7 +506,8 @@ export default async function handler(req, res) {
   // critério e gravar por outro.
   if (descEcoDoTitulo) {
     const descPag = extrairDescricaoDoCorpo(html);
-    if (descPag) patch.descricao = descPag.slice(0, 500);
+    // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
+    if (descPag) patch.descricao = descPag.slice(0, 8000);
   }
 
   // ⚠️ `valor_avaliacao`/`valor_minimo` NÃO vinham no `select` (corrigido em 17/08, junto com

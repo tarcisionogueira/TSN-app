@@ -183,7 +183,8 @@ function montarVeiculo(c, base, textoDetalhe) {
     fonte: 'CRLEILOES',
     fonte_id: `crl_${c.id}`,
     titulo: (c.titulo || `Veículo CRLEILOES ${c.id}`).slice(0, 180),
-    descricao: (base.descricao || c.titulo || '').slice(0, 2000),
+    // 20/09 (mesmo motivo do PECINI): 2000 ainda truncava — CRLEILOES batia no teto.
+    descricao: (base.descricao || c.titulo || '').slice(0, 8000),
     marca: marcaM ? marcaM[1].toUpperCase() : null,
     modelo: null,
     ano_fabricacao: anoM ? Number(anoM[1] || anoM[3]) : null,

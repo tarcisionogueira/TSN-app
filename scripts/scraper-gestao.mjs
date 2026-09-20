@@ -293,7 +293,9 @@ function parseCard(card, ctx) {
   const foto = (String(ctx.htmlEvento || html).match(reFotoLote) || [])[1] || null;
   const fotoAbs = foto ? (foto.startsWith('http') ? foto : `https://${ctx.dominio}/${foto.replace(/^\//, '')}`) : null;
 
-  const descricao = (txt.match(/DESCRI[ÇC][ÃA]O:\s*(.+?)(?:\s*-\s*VALOR DE AVALIA|\s*IPTU:|$)/i) || [])[1]?.trim()?.slice(0, 500) || null;
+  // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica) — GESTAOLEILOES
+  // batia no teto de 500 em produção (23/153 lotes truncados exatamente nesse tamanho).
+  const descricao = (txt.match(/DESCRI[ÇC][ÃA]O:\s*(.+?)(?:\s*-\s*VALOR DE AVALIA|\s*IPTU:|$)/i) || [])[1]?.trim()?.slice(0, 8000) || null;
   const tituloBase = [inferirRotulo(txt), cidade, estado].filter(Boolean).join(' - ');
   const temDesconto = valorAval > 0 && valorMinimo > 0 && valorMinimo <= valorAval;
 

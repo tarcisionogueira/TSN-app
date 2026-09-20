@@ -886,7 +886,11 @@ async function scraperSold(browser, pageNum = 1) {
         valor_avaliacao: valAval,
         valor_minimo: valMin,
         area_m2: parseFloat(lot.area || lot.useful_area || 0),
-        descricao: (lot.description || titulo).replace(/<[^>]+>/g, '').slice(0, 500),
+        // 20/09 (pedido do dono: "devemos trazê-lo completo, assim como está descrito no
+        // próprio leiloeiro"): coluna `descricao` é `text` no banco (sem limite) — cortar em
+        // 500 truncava o texto real do leiloeiro no meio da frase. Mesmo teto generoso já
+        // usado em leiloeiro-webhook.js/leiloeiro-feed.js, com folga extra.
+        descricao: (lot.description || titulo).replace(/<[^>]+>/g, '').slice(0, 8000),
         link_edital: lot.url || lot.link || `https://www.sold.com.br/lote/${id}`,
         link_foto: lot.image || lot.thumbnail || lot.photo || null,
         leiloeiro: lot.auctioneer?.name || lot.company || 'Sold Leilões',
@@ -1110,7 +1114,8 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         // o que o extrator específico já achou.
         area_m2: ext.area_m2 || extrairAreaM2(desc) || 0,
         ocupacao: ext.ocupacao || null,
-        descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
+        // 20/09: descrição real do leiloeiro (Superbid) — mesmo motivo do fix acima (SOLD).
+        descricao: desc.replace(/<[^>]+>/g, '').slice(0, 8000),
         link_edital: loteUrl,
         // Galeria (17/09): `galeriaPorId` só vem preenchido com SUPERBID_GALERIA=1 (ver
         // acima) — sem isso, `fotosGaleria` fica `[]` e o comportamento é IDÊNTICO a antes
@@ -1203,7 +1208,8 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const titulo = (str(p.shortDesc) || str(of.title) || `Veículo ${leiloeiro}`).slice(0, 180);
       const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
         .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
-      const descricao = (partesDesc.join(' — ') || titulo).slice(0, 500);
+      // 20/09: mesmo fix — texto real do leiloeiro (offerDescription/offerDetail), não título.
+      const descricao = (partesDesc.join(' — ') || titulo).slice(0, 8000);
       const textoCompleto = `${titulo} ${descricao}`;
       const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
       const linkURL = str(of.linkURL);
@@ -2049,7 +2055,8 @@ async function scraperSodre(browser) {
         valor_minimo: valMin,
         area_m2: area || extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).area_m2 || 0,
         ocupacao: extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).ocupacao || null,
-        descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
+        // 20/09: lot_description é o texto real do leiloeiro (SODRE) — mesmo fix.
+        descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 8000),
         // Rota REAL do lote (recon 30/07): www.../imoveis/lote/{id} devolve 404 (Nuxt)
         // MESMO em lote ativo — a página viva é a do subdomínio de leilão (o padrão que o
         // captura-docs-sodre já usa). Sem isto, link_edital/url_lote nasciam mortos e a
@@ -2246,7 +2253,8 @@ async function scraperSodreVeiculos(browser) {
       const valMin = Number(r.bid_initial) || Number(r.bid_actual) || 0;
       if (!valMin) continue;
       const titulo = String(r.lot_title || r.lot_description?.slice(0, 180) || 'Veículo Sodré').slice(0, 180);
-      const descricao = String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500);
+      // 20/09: mesmo fix (SODRE veículos) — lot_description é o texto real do leiloeiro.
+      const descricao = String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 8000);
       const textoCompleto = `${titulo} ${descricao} ${r.lot_location || ''}`;
       // Sem campo de UF confirmado: lot_location costuma trazer "Cidade - UF" (mesmo formato
       // do título de imóveis) — tenta ali primeiro, cai para o título se não achar.
@@ -5091,7 +5099,8 @@ function mapLoteLeilofy(raw, id) {
     valor_avaliacao: avaliacao || 0,
     valor_minimo: lance || 0,
     area_m2: Number(String(areaCon).replace(/\./g, '').replace(',', '.')) || 0,
-    descricao: String(raw?.descricao || titulo || '').slice(0, 500),
+    // 20/09: raw?.descricao é o texto real publicado pelo leiloeiro (LEILOFY) — mesmo fix.
+    descricao: String(raw?.descricao || titulo || '').slice(0, 8000),
     link_edital: findDoc(/edital/i),
     link_matricula: findDoc(/matr[íi]cula/i),
     url_lote: `https://leiloariasmart.com.br/imovel/${id}`,

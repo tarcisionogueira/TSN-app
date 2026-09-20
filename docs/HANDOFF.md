@@ -30331,3 +30331,48 @@ gravar) antes de qualquer edição — achando causa raiz confirmada, não supos
 
 Todas as correções de código são **aditivas** (`if (!im.campo) im.campo = achado`) — nunca
 sobrescrevem dado já gravado, só preenchem o que faltava.
+
+### Descrição TRUNCADA em ~15 arquivos (pedido do dono, mesma rodada: "trazer completo, como
+### está descrito no próprio leiloeiro")
+
+`imoveis_leilao.descricao` é `text` no banco — **sem limite nenhum**. Mesmo assim, quase todo
+scraper cortava a descrição real do leiloeiro em `.slice(0, 500)` (às vezes 300). Já tinha
+havido uma rodada de correção em 17/09 (PECINI/RJ/SOLEON/EMILIOMATOS/CRLEILOES, 500→2000), mas
+o `.slice(0, 500)` estava presente em pelo menos 10 OUTROS arquivos que a rodada de 17/09 não
+tocou — e **mesmo o teto de 2000 ainda truncava** em produção (confirmado por query: contagem
+de `length(descricao) = 2000` > 0 em CALIL/APICE/TMLEILOES/CRLEILOES/LANCEJA/VEGAS).
+
+**Medição em produção que provou o tamanho real do problema** (`length(descricao) = teto` é a
+assinatura de corte — a descrição bateu exatamente no limite):
+LEILAOBRASIL 191/229 · FERREIRALEIL 97/179 · DANIELGARCIA 45/95 · LUTHERO 39/50 ·
+GESTAOLEILOES 23/153 · **SODRE 16/16 (100%)** · CERULI 8/45 · CALIL 8/44 · LEILOFY 6/22 ·
+APICE 8/35 · TMLEILOES 4/6 · ISAIAS 4/44 · CRLEILOES 2/8 · LANCEJA 1/3 · VEGAS 1/18.
+
+**Corrigido em todos os pontos onde a `descricao` é o TEXTO REAL do lote** (não confundir com
+os MUITOS lugares onde `descricao` é sintética — `[titulo, endereco].join(...)`, já curta por
+natureza, deixados como estavam): `scripts/scraper-puppeteer.mjs` (6 pontos: SOLD, SUPERBID,
+SUPERBID veículos, SODRE imóveis+veículos, LEILOFY), `scripts/scraper.js` (SUPERBID/SOLD via
+CEF+outros, cron diário), `api/scraper-leiloeiros.js` (mesma coisa, caminho Bright Data de
+backup), `api/enriquecer-lote.js` + `api/enriquecer-backfill-cron.js` (enriquecimento
+pós-scrape, senão re-truncava o que a correção acima soltou), `scripts/lib/hasta-parse.mjs`
+(o REGEX também limitava a captura em `{10,500}` — subir só o `.slice()` não bastaria),
+`scripts/lib/leilaopro-parse.mjs` (parser compartilhado por vários tenants JELEILOES/KLEILOES),
+`scripts/lib/leilaobrasil-parse.mjs`, `scripts/scraper-gestao.mjs`, e **a raiz comum**
+`api/_texto-imovel.js::extrairDescricaoDoCorpo()` (usada por PECINI/RJ/SOLEON/EMILIOMATOS —
+tinha seu PRÓPRIO teto interno de 2000, upstream dos tetos externos que a rodada de 17/09
+subiu; sem corrigir aqui também, os externos nunca teriam efeito).
+
+Teto novo: **8000 caracteres** em todos os pontos (mesmo padrão já usado em
+`api/leiloeiro-webhook.js`/`api/leiloeiro-feed.js`, com folga extra sobre os 2000 que ainda
+truncavam). Não removido o teto por completo — é rede de segurança defensiva contra uma
+extração que por algum motivo capture a página inteira, não uma expectativa real de que uma
+descrição de leilão chegue perto disso.
+
+**Fora do escopo, verificado e OK**: `api/scraper-caixa.js` (CEF, maior fonte do acervo) já
+grava `descricao.trim() || null` **sem nenhum corte** — não precisava de fix. O display do
+cliente logado (`src/pages/ImovelDetalhe.jsx` → `formatarDescricaoImovel`) também não corta —
+mostra a `descricao` inteira como veio do banco. `api/publico.js` (página SEO pública,
+`/leilao/:id`, não-logada) corta a exibição em 1200 — **deixado como está**: é a página-teaser
+do funil de cadastro (documentado no cabeçalho do arquivo: "decidido para não dar de graça o
+que é o produto"), uma decisão de produto deliberada, não um bug de captura — o cliente
+CADASTRADO já vê a descrição completa.

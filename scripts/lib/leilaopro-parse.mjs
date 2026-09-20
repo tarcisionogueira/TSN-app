@@ -192,7 +192,9 @@ export function parseDetalhe(html, url) {
     cidade, estado, link_foto: base.link_foto || null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
-    descricao: (descricao || '').slice(0, 500) || null,
+    // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): parser
+    // compartilhado por vários tenants (JELEILOES/KLEILOES etc.) — 500 truncava no meio.
+    descricao: (descricao || '').slice(0, 8000) || null,
     data_leilao: proximaData(txt),
     numero_matricula: mat,
     link_edital, link_matricula, anexos,

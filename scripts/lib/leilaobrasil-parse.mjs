@@ -115,7 +115,8 @@ function parseDetalheFallback(html, url) {
     titulo, cidade, estado, endereco,
     valor_avaliacao: avaliacao, valor_minimo: avaliacao,
     area_m2: extrairArea(txt) || 0,
-    descricao: txt.slice(0, 500) || null,
+    // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
+    descricao: txt.slice(0, 8000) || null,
     numero_matricula: matricula,
     link_edital: mEdital ? mEdital[1] : null,
     link_foto: null,
@@ -150,7 +151,9 @@ export function parseDetalhe(html, url) {
     titulo, cidade: bem.cidade || null, estado: bem.uf || null, endereco,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     area_m2: num(bem.areaEdificada) || num(bem.areaTerreno) || extrairArea(descTexto) || 0,
-    descricao: descTexto.slice(0, 500) || null,
+    // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica) — descTexto é o
+    // texto real de bem.siteDescricao, sem limite útil de trazer inteiro (coluna `text`).
+    descricao: descTexto.slice(0, 8000) || null,
     numero_matricula: matricula,
     link_edital: linkEdital, link_foto: linkFoto,
     data_leilao: dataLeilao,

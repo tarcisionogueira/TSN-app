@@ -541,7 +541,9 @@ async function scraperSuperbid(pageNumber = 1) {
         valor_avaliacao: sanitizarAval(parseFloat(det.referenceValue || det.directSaleValue || 0), parseFloat(det.initialBidValue || det.currentMinBid || 0)),
         valor_minimo: parseFloat(det.initialBidValue || det.currentMinBid || 0),
         area_m2: area,
-        descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500),
+        // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): coluna
+        // `descricao` é `text` no banco, sem limite — 500 truncava no meio da frase.
+        descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 8000),
         link_edital: `https://www.superbid.net/lote/${of.id}`,
         link_foto: p.thumbnailUrl || null,
         leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
@@ -1053,7 +1055,8 @@ async function scraperSold(page = 1) {
         valor_avaliacao: parseFloat(lot.appraisal_value || lot.evaluation || 0),
         valor_minimo: parseFloat(lot.minimum_bid || lot.initial_bid || lot.price || 0),
         area_m2: parseFloat(lot.area || lot.useful_area || 0),
-        descricao: (lot.description || '').replace(/<[^>]+>/g,'').slice(0, 500),
+        // 20/09: mesmo fix (SOLD) — descrição real do leiloeiro, não truncar.
+        descricao: (lot.description || '').replace(/<[^>]+>/g,'').slice(0, 8000),
         link_edital: lot.url || `https://www.sold.com.br/lote/${lot.id}`,
         link_foto: lot.image || lot.thumbnail || lot.photo || null,
         leiloeiro: lot.auctioneer?.name || lot.company || 'Sold Leilões',

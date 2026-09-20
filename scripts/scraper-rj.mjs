@@ -279,10 +279,8 @@ function parseDetalhe(html, url) {
     valor_minimo: valorMinimo,
     modalidade,
     area_m2: area,
-    // 500→2000 (17/09): mesma correção do PECINI — coluna `text` sem limite, e
-    // `extrairDescricaoDoCorpo` (agora reunindo sequência de blocos, não só o melhor) já
-    // limita a 2000; truncar em 500 aqui cortava de novo a parte mais informativa.
-    descricao: (base.descricao || '').slice(0, 2000) || null,
+    // 500→2000 (17/09) →8000 (20/09, mesmo motivo do PECINI): 2000 ainda truncava em produção.
+    descricao: (base.descricao || '').slice(0, 8000) || null,
     data_leilao: dataLeilaoDetectada,
     numero_matricula: mat,
     link_edital: findDoc(/edital/i) || doTipo('edital'),

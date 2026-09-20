@@ -295,10 +295,9 @@ function parseDetalhe(html, url) {
     link_foto: base.link_foto,
     valor_avaliacao: avaliacao, valor_minimo: valorMinimo,
     modalidade, area_m2: area,
-    // 500→2000 (17/09): mesma correção do PECINI — coluna `text` sem limite, e
-    // `extrairDescricaoDoCorpo` (agora reunindo sequência de blocos, não só o melhor) já
-    // limita a 2000; truncar em 500 aqui cortava de novo a parte mais informativa.
-    descricao: (base.descricao || '').slice(0, 2000) || null,
+    // 500→2000 (17/09) →8000 (20/09, mesmo motivo do PECINI): 2000 ainda truncava em produção
+    // (CALIL/VEGAS bateram exatamente no teto).
+    descricao: (base.descricao || '').slice(0, 8000) || null,
     // 16/09 (achado no painel de invariantes — venda_direta_com_praca): o override de
     // `modalidadeDeJanela` (15/09, âncora no preço) pode classificar venda_direta MESMO com
     // `dataLeilaoDetectada` preenchida (é feito de propósito, pro sinal forte não ficar refém
