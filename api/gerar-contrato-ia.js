@@ -152,17 +152,17 @@ Gere o contrato completo e pronto para uso.`;
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        // 8000: com anexo, o contrato novo TRANSCREVE a qualificação completa das partes em
-        // vez de deixar colchetes, então a saída é bem maior que a de um contrato genérico.
-        // Em 4000 uma renovação de contrato longo terminava cortada no meio de uma cláusula.
-        max_tokens: 8000,
+        // 24000 (21/09, subiu de 8000 — pedido do dono: "cobrir contratos complexos", ~100 mil
+        // caracteres de saída). Teto real do maxDuration (300s, ver config no topo do arquivo —
+        // NENHUMA rota deste projeto passa disso, é o teto do plano Vercel) limita até onde dá
+        // pra subir com segurança: `retries: 0` (não repete — um retry depois de já gastar boa
+        // parte do orçamento em 24k tokens só trocaria "truncado" por "estourou o teto e nem
+        // respondeu") e timeoutMs deixando margem pro resto do handler responder.
+        max_tokens: 24000,
         system: SYSTEM_PROMPT + aprendizado,
         messages: [{ role: 'user', content: userMessage }],
       }),
-      // Limitado de propósito: com o padrão (3 retries × 120s) o pior caso passa de 6 min e
-      // estoura o maxDuration de 300s — a Vercel mataria a função e o dono veria DE NOVO a
-      // página de texto em vez do JSON de erro. Aqui o pior caso fica ~3,5 min, dentro do teto.
-    }, { retries: 1, timeoutMs: 100000 });
+    }, { retries: 0, timeoutMs: 270000 });
 
     // Erro do Claude vem em JSON, mas um 5xx de borda/proxy pode vir em HTML/texto: ler direto
     // com .json() esconderia a causa atrás de um SyntaxError. Lê o corpo UMA vez e decide.
