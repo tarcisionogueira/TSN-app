@@ -317,6 +317,48 @@ export function ehFracaoIdeal(imovel) {
   return !clausulaDescritiva;
 }
 
+// ACERVO É SÓ IMÓVEL E VEÍCULO (20/09, achado real: "Fresas topo OSG 4c 18mm" — uma fresa de
+// usinagem — gravada como `tipo:'terreno'`, fonte LEILAOBRASIL). Leiloeiro judicial multi-bem
+// vende o imóvel da empresa falida JUNTO com maquinário, ferramentas, gado, eletrônicos, cotas
+// sociais — tudo na mesma vitrine — e um parser sem filtro grava tudo, porque o classificador
+// de TIPO sempre devolve alguma coisa (nunca "recusa"). LISTA PERMITIDA, não proibida — mesma
+// lição já aprendida em nordeste-parse.mjs (`ehImovel`): "uma lista de palavras PROIBIDAS vira
+// caça ao gambá, sempre falta a próxima categoria" (2x seguidas naquele parser). A categoria
+// seguinte seria "cadeira odontológica" hoje e "título da dívida agrária" amanhã — impossível
+// enumerar tudo que NÃO é. Só passa quem tem sinal de imóvel OU veículo de verdade no texto.
+// SEM `\b` de fechamento nos radicais (achado testando contra dado real, ANTES de aplicar no
+// banco): "apartament" com `\b` nas duas pontas não bate "Apartamento" nem "Apartamentos" — o
+// 'o'/'os' final é caractere de palavra, então não há fronteira ali, e o filtro reprovaria
+// exatamente os apartamentos que deveria manter. `\b` só na ABERTURA (ancora o início da
+// palavra) deixa o final livre pra singular/plural/variação, sem abrir mão de não casar no
+// meio de outra palavra.
+// "lote" DE PROPÓSITO fora da lista: em leilão multi-bem toda descrição começa com "Lote N)
+// <o que quer que seja>" — é numeração de item de leilão, não terreno. Incluir "lote" batia
+// em "Lote 2) 280 Fresas topo OSG 4c 18mm" (achado testando contra dado real, ANTES de aplicar
+// no banco) e deixava passar exatamente o item que o filtro existe pra barrar. "terreno" e
+// "loteamento" já cobrem o sinal real de lote-de-terreno sem essa ambiguidade.
+// "apto"/"aptos" TAMBÉM de propósito fora: LEILAOBRASIL carrega lixo de CSS colado do Word em
+// `descricao` ("font-family:\"Aptos\"", a fonte padrão do Office desde 2023) — casava em TODA
+// linha da fonte, item de imóvel ou não. "apartament\w*" já cobre apartamento/apartamentos sem
+// essa colisão.
+// `galp[õo][ãe]s?` (1ª versão) NUNCA batia "Galpão" singular — achado testando contra BIASI/
+// ZUK/WEBLEILOES (galpões reais derrubados, ANTES de ampliar o escopo pra outras fontes): a
+// vogal do singular ("galpÃo") e do plural ("galpÕes") trocam de posição, não é só acento —
+// character class não cobre isso, precisa de ramo próprio pra cada forma.
+// `\bm[²2]\b` (1ª versão) nunca batia "1.575,00M²" colado sem espaço, mesmo depois de tirar a
+// fronteira de ABERTURA (achado seguinte, mesmo caso): a fronteira de FECHAMENTO também falhava
+// — '²' não é caractere de palavra pro motor de regex, então não há transição palavra↔não-
+// palavra entre '²' e o que vem depois (vírgula, traço, fim da string). "m²" não precisa de
+// fronteira nenhuma (símbolo já é específico o bastante); só o fallback ASCII "m2" mantém a de
+// fechamento, pra não casar dentro de um código tipo "m2050".
+const RE_SINAL_IMOVEL = /\b(im[óo]ve(l|is)|casas?|sobrados?|apartament\w*|flats?|kitnets?|studios?|coberturas?|terrenos?|loteament\w*|glebas?|ch[áa]caras?|s[íi]tios?|fazendas?|[áa]rea\s+(rural|de\s+terra)|galp(?:[ãa]o|[õo]es)s?|pr[ée]dios?|edif[íi]cios?|sala\s+comercial|lojas?|com[eé]rcial|industrial|condom[íi]nios?|matr[íi]culas?|escrit[óo]rios?|box\s+de\s+garagem|vaga\s+de\s+garagem|metros?\s+quadrados)|m²|m2\b/i;
+const RE_SINAL_VEICULO = /\b(ve[íi]culos?|autom[óo]ve(l|is)|caminh[õo]es|caminh[ãa]o|caminhonetes?|carretas?|reboques?|semirreboques?|[ôo]nibus|motocicletas?|motonetas?|tratores?|trator|colheitadeiras?|retroescavadeiras?|empilhadeiras?|chassi|chevrolet|volkswagen|\bvw\b|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citro[ëe]n|scania|iveco|volvo|mercedes|kia|mitsubishi|suzuki|yamaha|kawasaki|jeep)\b|\b(19|20)\d{2}\/(19|20)\d{2}\b/i;
+
+export function ehForaDoAcervo(imovel) {
+  const txt = `${imovel?.titulo || ''} ${imovel?.descricao || ''}`;
+  return !RE_SINAL_IMOVEL.test(txt) && !RE_SINAL_VEICULO.test(txt);
+}
+
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
   // Antes de qualquer checagem de completude: isto sequer deve virar lote. Um registro
@@ -324,6 +366,9 @@ export function checarQualidade(imovel, { estrito = true } = {}) {
   // resto — a qualidade dos campos nada diz sobre o bem ser vendável.
   if (ehFracaoIdeal(imovel)) {
     return { ok: false, faltando: ['fracao_ideal'], descartar: true, motivo: 'parte/fração ideal — fora do acervo por decisão de negócio' };
+  }
+  if (ehForaDoAcervo(imovel)) {
+    return { ok: false, faltando: ['fora_do_acervo'], descartar: true, motivo: 'nem imóvel nem veículo — acervo é só dessas duas categorias' };
   }
   const exigeData = modalidadeExigeData(imovel?.modalidade);
   const semData = exigeData && !imovel?.data_leilao;
