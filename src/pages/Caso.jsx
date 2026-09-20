@@ -17,6 +17,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
+import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -520,47 +521,6 @@ export default function Caso() {
   const toggleSec = (k) => setSecOpen(p => ({ ...p, [k]:!p[k] }));
 
   const [solicitando, setSolicitando] = useState({});
-
-  // ─── Enviar e-mail do caso (jurídico ou leiloeiro) ────────────────────────
-  // Pedido do dono (20/09): "num click incluir todos os anexos do lote, e caso seja um
-  // assessorado também incluir os documentos pessoais... permitir escolher entre enviar ao
-  // jurídico ou ao leiloeiro deste lote". Contato AD-HOC — diferente de "Encaminhar ao
-  // Jurídico" acima (que é o fluxo formal, muda o status do caso).
-  const [emailPreview, setEmailPreview] = useState(null); // { destino, texto, destinatarioEmail, ... }
-  const [enviandoEmailCaso, setEnviandoEmailCaso] = useState(false);
-  const [carregandoPreviewEmail, setCarregandoPreviewEmail] = useState(null); // 'juridico'|'leiloeiro'|null
-
-  const abrirPreviewEmail = async (destino) => {
-    setCarregandoPreviewEmail(destino);
-    setMsg('');
-    try {
-      const r = await apiCall('/api/enviar-email-caso', { method:'POST', body: JSON.stringify({ caso_id: caso.id, destino, action:'preview' }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao montar o e-mail');
-      setEmailPreview({ destino, ...d });
-    } catch (e) {
-      setMsg(`Erro: ${e.message}`);
-    } finally {
-      setCarregandoPreviewEmail(null);
-    }
-  };
-  const enviarEmailCaso = async () => {
-    if (!emailPreview) return;
-    setEnviandoEmailCaso(true);
-    setMsg('');
-    try {
-      const r = await apiCall('/api/enviar-email-caso', { method:'POST', body: JSON.stringify({ caso_id: caso.id, destino: emailPreview.destino, action:'enviar', texto: emailPreview.texto }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
-      if (d.semContato) { setMsg('Não há e-mail de contato cadastrado para este destino ainda.'); return; }
-      setMsg(`📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).`);
-      setEmailPreview(null);
-    } catch (e) {
-      setMsg(`Erro: ${e.message}`);
-    } finally {
-      setEnviandoEmailCaso(false);
-    }
-  };
 
   // ─── Chat ────────────────────────────────────────────────────────────────
   const [msgs, setMsgs] = useState([]);
@@ -1452,50 +1412,9 @@ export default function Caso() {
 
       {/* Enviar e-mail do caso — ad-hoc, com todos os anexos do lote (+ docs pessoais se
           assessorado). Diferente de "Encaminhar ao Jurídico" abaixo: não muda o status do caso,
-          só manda o que já temos pra quem escolher (jurídico ou o leiloeiro deste lote). */}
-      {isStaff && (
-        <div style={{ ...card, marginBottom:20 }}>
-          <div style={{ fontSize:15, fontWeight:900, color:'#111', marginBottom:4 }}>📧 Enviar e-mail</div>
-          <div style={{ fontSize:12, color:'#64748b', marginBottom:12 }}>
-            Um clique inclui todos os documentos do lote (e os documentos pessoais do cliente, se ele for assessorado). Escolha o destino:
-          </div>
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            <button onClick={() => abrirPreviewEmail('juridico')} disabled={carregandoPreviewEmail === 'juridico'} style={{ ...btn('#0D63DB'), fontSize:12, opacity: carregandoPreviewEmail==='juridico'?0.6:1 }}>
-              {carregandoPreviewEmail === 'juridico' ? 'Preparando…' : 'Enviar ao Jurídico'}
-            </button>
-            <button onClick={() => abrirPreviewEmail('leiloeiro')} disabled={carregandoPreviewEmail === 'leiloeiro'} style={{ ...btn('#475569'), fontSize:12, opacity: carregandoPreviewEmail==='leiloeiro'?0.6:1 }}>
-              {carregandoPreviewEmail === 'leiloeiro' ? 'Preparando…' : 'Enviar ao Leiloeiro deste lote'}
-            </button>
-          </div>
-
-          {emailPreview && (
-            <div style={{ marginTop:14, padding:'14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'#111', marginBottom:6 }}>
-                Prévia — {emailPreview.destino === 'juridico' ? 'Jurídico' : 'Leiloeiro deste lote'}
-              </div>
-              {!emailPreview.contatoDisponivel && (
-                <div style={{ fontSize:12, color:'#b91c1c', marginBottom:8 }}>⚠️ Nenhum e-mail de contato cadastrado para este destino ainda — o envio vai falhar.</div>
-              )}
-              <textarea value={emailPreview.texto} onChange={e => setEmailPreview(p => ({ ...p, texto: e.target.value }))}
-                rows={7} style={{ width:'100%', padding:10, borderRadius:8, border:'1px solid #e2e8f0', fontSize:13, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }} />
-              <div style={{ fontSize:11, color:'#64748b', marginTop:8 }}>
-                Anexos do lote ({emailPreview.anexosLote?.length || 0}): {emailPreview.anexosLote?.length ? emailPreview.anexosLote.join(', ') : '— nenhum documento do lote ainda —'}
-              </div>
-              {emailPreview.ehAssessorado && (
-                <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>
-                  Documentos pessoais do cliente ({emailPreview.anexosPessoais?.length || 0}): {emailPreview.anexosPessoais?.length ? emailPreview.anexosPessoais.join(', ') : '— nenhum documento pessoal cadastrado ainda —'}
-                </div>
-              )}
-              <div style={{ display:'flex', gap:8, marginTop:12 }}>
-                <button onClick={enviarEmailCaso} disabled={enviandoEmailCaso || !emailPreview.contatoDisponivel} style={{ ...btn('#059669'), fontSize:12, opacity:(enviandoEmailCaso||!emailPreview.contatoDisponivel)?0.6:1 }}>
-                  {enviandoEmailCaso ? 'Enviando…' : 'Confirmar envio'}
-                </button>
-                <button onClick={() => setEmailPreview(null)} disabled={enviandoEmailCaso} style={{ ...btn('#94a3b8'), fontSize:12 }}>Cancelar</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+          só manda o que já temos pra quem escolher (jurídico ou o leiloeiro deste lote).
+          Componente compartilhado com ImovelDetalhe.jsx — ver EnviarEmailCasoLote.jsx. */}
+      {isStaff && <EnviarEmailCasoLote casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
 
       {/* Certidões e diligências (checklist interativo do raio-X jurídico) */}
       {certidoes.length > 0 && (

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
+import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
@@ -2099,6 +2100,14 @@ export default function ImovelDetalhe() {
                 </div>
               </div>
             </div>
+
+            {/* Enviar e-mail — só equipe (jurídico ou o leiloeiro deste lote), pedido do dono
+                21/09: "deve aparecer na tela de análise do lote". Sem cliente/caso nesta tela
+                (o mesmo lote pode ter vários casos, de clientes diferentes) — só os anexos
+                do lote, sem documentos pessoais. Mesmo componente de Caso.jsx. */}
+            {['admin', 'analista', 'advogado', 'consultor'].includes(role) && (
+              <EnviarEmailCasoLote imovelId={imovel.id} cardStyle={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px' }} />
+            )}
 
             {/* Info rápida */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px' }}>
