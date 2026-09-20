@@ -1,0 +1,18 @@
+name: _temp-recon-fetch-url
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL a buscar via fetchLote
+        required: true
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Busca URL via fetchLote (recon genérico)
+        run: |
+          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-cef-brightdata?url=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${{ github.event.inputs.url }}")" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "content-type: application/json" | tee /tmp/out.json
+          echo "---"
+          python3 -m json.tool /tmp/out.json || cat /tmp/out.json
