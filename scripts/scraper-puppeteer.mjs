@@ -4913,6 +4913,22 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         if (!(Array.isArray(im.anexos) && im.anexos.length) && Array.isArray(db.anexos) && db.anexos.length) {
           im.anexos = db.anexos.filter(a => ehDocumento(a?.url, a?.nome || '', base));
         }
+        // DESALINHAMENTO anexos×link_* (20/09, achado real: 735 lotes ativos com doc tipo
+        // 'matricula'/'regras' dentro de `anexos`, mas `link_matricula`/`link_regras_venda`
+        // nulos — SUPERBID/KRON/MEGA/GRUPOLANCE/BIASI/TOTAL/SOLD/LEILOTECH/FRAZAO). A causa:
+        // `jaTemDocs` abaixo trata "tem anexos" como "já processado" e nunca revisita pra
+        // completar o link individual quando ele ficou pra trás (ex.: `anexos` veio de uma
+        // versão anterior deste código, sem a atribuição de `link_matricula`). Deriva os dois
+        // AQUI, do que já está em `anexos`, então o gate abaixo nunca mais vê essa lacuna —
+        // sem precisar revisitar a página pra um dado que já temos.
+        if (!im.link_matricula && Array.isArray(im.anexos)) {
+          const m = im.anexos.find(a => a?.tipo === 'matricula');
+          if (m?.url) im.link_matricula = m.url;
+        }
+        if (!im.link_regras_venda && Array.isArray(im.anexos)) {
+          const r = im.anexos.find(a => a?.tipo === 'regras');
+          if (r?.url) im.link_regras_venda = r.url;
+        }
       }
     }
   } catch { /* merge é otimização — nunca derruba o enriquecimento */ }
