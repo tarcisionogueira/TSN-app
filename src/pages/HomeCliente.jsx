@@ -39,6 +39,15 @@ const STATUS_CASO = {
   procuracao_assinada: 'Procuração assinada', concluido: 'Concluído',
 };
 
+// Cache em MÓDULO, não em state (20/09 — achado do dono: o card "Rever vídeo de boas-vindas"
+// sempre atrasa em relação aos demais). Causa: HomeCliente REMONTA a cada clique em "Início"
+// (state não sobrevive à navegação — mesma característica já documentada pro esqueleto da
+// cota, ver abaixo), então o fetch de `cursos_admin` roda de novo TODA VEZ, enquanto os outros
+// cards da grade não dependem de rede e já nascem prontos. O curso de onboarding é config
+// global do admin — não muda por navegação nem por usuário — então cachear fora do state faz
+// o card nascer instantâneo a partir da 2ª visita da sessão (só a 1ª ainda mostra o esqueleto).
+let cacheCursoBoasVindas; // undefined = ainda não buscado nesta sessão de página
+
 export default function HomeCliente() {
   const nav = useNavigate();
   const { user, effectiveRole, effectiveUserId, impersonate, roleSimulado, nome: nomePerfil } = useAuth();
@@ -83,10 +92,15 @@ export default function HomeCliente() {
   // no próximo acesso" e o "concluiu, some para sempre" continuam intactos).
   useEffect(() => {
     if (!effectiveUserId) { setCursoBoasVindas(null); return; }
+    if (cacheCursoBoasVindas !== undefined) { setCursoBoasVindas(cacheCursoBoasVindas); return; }
     let vivo = true;
     supabase.from('cursos_admin').select('id, titulo')
       .eq('onboarding', true).eq('ativo', true).order('ordem').limit(1).maybeSingle()
-      .then(({ data }) => { if (vivo) setCursoBoasVindas(data || null); });
+      .then(({ data }) => {
+        const v = data || null;
+        cacheCursoBoasVindas = v;
+        if (vivo) setCursoBoasVindas(v);
+      });
     return () => { vivo = false; };
   }, [effectiveUserId]);
 
