@@ -23,6 +23,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install dependencies
+        run: npm ci
       - name: Enriquecer FIPE
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
