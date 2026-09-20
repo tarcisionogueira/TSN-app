@@ -30,6 +30,7 @@ REDE (residencial primeiro, Bright Data só como fallback — economia):
 
 import argparse
 import csv
+import html
 import json
 import os
 import re
@@ -334,6 +335,22 @@ def data_leilao(lote, pai):
     return None
 
 
+def strip_html(txt):
+    """Remove tags e decodifica entidades — nm_descricao vem em HTML (Draft.js/rich-text)."""
+    if not txt:
+        return ""
+    s = re.sub(r"<[^>]+>", " ", str(txt))
+    s = html.unescape(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+# 20/09: CONFIRMADO contra payload REAL (dump `VLANCE_DEBUG_PAYLOAD=1`, 3 domínios, 3 lotes) —
+# nenhuma das 5 chaves candidatas que este código chutava (url/nm_foto/nm_arquivo/src/link)
+# bate com o campo real. `fotos` é lista de dict com `nm_path_completo` (URL S3 completa, já
+# na resolução `thumb_pequena`/196x146) — mesmo padrão de `it.fotos[].nm_path_completo` já
+# usado pra LJUD (mesma convenção de nomes `nm_*`, api "core/api/get-lotes" idêntica — é a
+# MESMA família de backend). Upgrada pra `thumb_grande`/640x480 quando o path bate (mesma
+# tática já validada em LJUD: substring replace na URL, sem requisição extra).
 def foto_url(lote):
     fotos = lote.get("fotos")
     if isinstance(fotos, list) and fotos:
@@ -341,10 +358,38 @@ def foto_url(lote):
         if isinstance(f, str):
             return f
         if isinstance(f, dict):
+            caminho = f.get("nm_path_completo")
+            if caminho:
+                return str(caminho).replace("/196x146/", "/640x480/")
             for k in ("url", "nm_foto", "nm_arquivo", "src", "link"):
                 if f.get(k):
                     return str(f[k])
     return None
+
+
+# 20/09: `anexos` é campo REAL do payload (confirmado no dump, `"anexos": []` presente e
+# vazio nas 3 amostras — mas a CHAVE existe, então a API suporta documentos por lote; só
+# nunca foi tentado ler). Mesma forma de item que LJUD (`nm`/`nm_path` = rótulo,
+# `nm_path_completo` = URL S3 direta) — mesma convenção `nm_*`/mesma API "core/api/get-lotes".
+# Sem uma amostra REAL não-vazia pra confirmar 100%, mas é a hipótese fundamentada, não um
+# palpite às cegas — e é aditiva: se a forma real divergir, o pior caso é `anexos`/matrícula
+# continuarem vazios (mesmo estado de antes), nunca pior.
+def anexos_url(lote):
+    anexos = lote.get("anexos")
+    if not isinstance(anexos, list):
+        return []
+    out = []
+    for a in anexos:
+        if not isinstance(a, dict):
+            continue
+        url = a.get("nm_path_completo")
+        if not url:
+            continue
+        nome = str(a.get("nm") or a.get("nm_path") or "Documento")[:120]
+        tipo = "matricula" if re.search(r"matr[ií]cula|laudo", nome, re.I) \
+            else "edital" if re.search(r"edital", nome, re.I) else "outro"
+        out.append({"tipo": tipo, "nome": nome, "url": str(url)})
+    return out
 
 
 def montar_row(lote, pai, base, dom):
@@ -356,6 +401,16 @@ def montar_row(lote, pai, base, dom):
     desconto = round((1 - vm / va) * 100) if va > 0 and vm > 0 else None
     judicial = norm(pai.get("leilao_judicial")) or norm(lote.get("tp_judicial_extrajudicial"))
     modalidade = "judicial" if "jud" in judicial and "extra" not in judicial else "extrajudicial"
+    # 20/09 (pedido do dono: descrição completa + documentos, independente do formato):
+    # `nm_descricao` é o texto REAL do leiloeiro (confirmado no payload — HTML rich-text, às
+    # vezes contém até o número da matrícula em texto livre); antes a `descricao` gravada era
+    # só uma cópia do TÍTULO, nunca o texto de verdade.
+    descricao_real = strip_html(lote.get("nm_descricao")) or (lote.get("nm_titulo_lote") or "")
+    anexos = anexos_url(lote)
+    matricula_doc = next((a["url"] for a in anexos if a["tipo"] == "matricula"), None)
+    edital_doc = next((a["url"] for a in anexos if a["tipo"] == "edital"), None)
+    m_matricula = re.search(r"matr[ií]cula[^\d]{0,20}([\d.\-]{3,})", descricao_real, re.I)
+    numero_matricula = m_matricula.group(1) if m_matricula else None
     return {
         "fonte": "VLANCE",
         "fonte_id": f"vlance_{slug(dom)}_{lote.get('lote_id')}",
@@ -366,8 +421,11 @@ def montar_row(lote, pai, base, dom):
         "estado": (lote.get("nm_estado") or "")[:2].upper() or None,
         "valor_avaliacao": va,
         "valor_minimo": vm,
-        "descricao": (lote.get("nm_titulo_lote") or "")[:500],
-        "link_edital": urljoin(base, f"/leilao/index/imoveis"),
+        "descricao": descricao_real[:8000],
+        "numero_matricula": numero_matricula,
+        "link_matricula": matricula_doc,
+        "link_edital": edital_doc or urljoin(base, "/leilao/index/imoveis"),
+        "anexos": anexos or None,
         "url_lote": base,
         "link_foto": foto_url(lote),
         "leiloeiro": lote.get("nm_leiloeiro") or pai.get("leilao_leiloeiro") or f"{slug(dom).capitalize()} Leilões",

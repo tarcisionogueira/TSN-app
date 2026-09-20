@@ -30329,6 +30329,32 @@ gravar) antes de qualquer edição — achando causa raiz confirmada, não supos
   medir uma coisa e reportar com o nome de outra (forma nº 10), a mesma lição que já mordeu
   esta base 4 vezes. PR #376.
 
+**VLANCE — atualização (20/09, mesmo dia): causa raiz confirmada contra payload REAL.**
+Dispatch de diagnóstico (`VLANCE_DEBUG_PAYLOAD=1`, dry-run) capturou o JSON completo do 1º
+lote de 3 domínios — resolveu de vez a incerteza que o comentário de 10/09 tinha deixado em
+aberto:
+- **Foto**: nenhuma das 5 chaves que `foto_url()` chutava (`url`/`nm_foto`/`nm_arquivo`/
+  `src`/`link`) existe no payload real. O campo certo é `fotos[].nm_path_completo` (URL S3
+  completa, já em `/196x146/`) — mesma convenção de nomes (`nm_*`) e mesmo endpoint
+  (`core/api/get-lotes`) já usados por LJUD, o que sugere a MESMA família de backend/vendor.
+  Corrigido, com upgrade de resolução pra `/640x480/` (mesma tática já validada em LJUD).
+- **Descrição**: `descricao` gravada era uma CÓPIA DO TÍTULO — o campo real com o texto do
+  leiloeiro é `nm_descricao` (HTML rich-text, ex.: "Casa, lote 02, quadra 09... Obs²: O imóvel
+  não possui matrícula imobiliária..."). Nunca tinha sido lido. Corrigido.
+- **Matrícula/documentos**: `anexos` é campo REAL do payload (`"anexos": []` presente e vazio
+  nas 3 amostras — a API suporta, só nunca foi tentado ler). Adicionada extração no mesmo
+  formato de LJUD (`nm`/`nm_path_completo`), aditiva — pior caso é continuar vazio, igual a
+  antes. Também adicionado regex de `numero_matricula` sobre o texto da descrição real (que
+  às vezes cita o número em texto livre).
+- Todas as correções validadas rodando `montar_row()` contra o JSON REAL capturado no log
+  (não um mock) antes de commitar — inclusive um caso onde o imóvel genuinamente NÃO tem
+  matrícula ("não possui matrícula imobiliária"), confirmando que o regex não inventa número
+  onde não há.
+- **Achado colateral, sem ação**: `capitalvalorleiloes.com.br` (3º domínio testado) bateu o
+  teto semanal do Bright Data (`subcota`) no meio da coleta — o freio de orçamento funcionou
+  como desenhado (recusa fechada, não finge sucesso), só não deu pra confirmar o payload
+  desse domínio especificamente nesta rodada.
+
 Todas as correções de código são **aditivas** (`if (!im.campo) im.campo = achado`) — nunca
 sobrescrevem dado já gravado, só preenchem o que faltava.
 
