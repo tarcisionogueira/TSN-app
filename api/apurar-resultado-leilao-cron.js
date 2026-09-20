@@ -64,7 +64,22 @@ const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || '')
 //     lance" real: ficaria pra sempre empurrando ruído pro filtro "Sem lance" (que agora
 //     também mostra indeterminado — pedido do dono, mesma sessão). Fica de fora até termos
 //     como ler a página renderizada (ex.: reaproveitar Puppeteer do scraper principal).
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE']);
+//   • CEF/Caixa (21/09): confirmado ao vivo (fetchLote direto no lote real) que o fetch direto
+//     falha — IP do servidor bloqueado, mesma causa já documentada em enriquecer-lote.js — e o
+//     fallback Bright Data também falha, por cota semanal esgotada (`via:"sem_cota"`,
+//     `html_len:0`). Diferente de PESTANA/EDITAL_DJEN, a URL do lote é 1:1 (não é o problema),
+//     mas insistir aqui é gasto puro: nunca traz conteúdo pra apurar.
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
+
+// Mesma lista acima, mas pronta pro operador `not.in` do PostgREST — aplicada DENTRO da
+// consulta SQL (não só depois em JS). Achado 21/09: aplicar só em JS deixava o `LIMIT 250`
+// ser consumido pelas 587 linhas candidatas de PESTANA + 587 de CEF ANTES do filtro rodar,
+// varrendo o lote inteiro e sobrando zero vaga pro dia inteiro para fontes menores (SATO,
+// CALIL, KRONLEILOES, LEILOTECH, FRAZAO, TORRES3, VIP, SUPERBID, APICE, GRUPOLANCE,
+// HASTAPUBLICA, LANCEJA, LEFFA, AGOSTINHO, CERULI, RIGOLONLEILOES, ROCHALEILOES,
+// SIMONLEILOES, FRANCOLEILOES — todas com 100% "não apurado", zero tentativas). Excluir na
+// própria query devolve essas vagas pra quem tem URL de lote real e pode ser lido.
+const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL].join(',')})`;
 
 // Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
 // tentativas já feitas) contra a MESMA tabela de origem. `T0`/`orcamentoRestante` são
@@ -115,7 +130,7 @@ export default async function handler(req, res) {
   const T0 = Date.now();
 
   // ── Imóveis (data_fim é `date`) ──────────────────────────────────────────────────────────
-  const rIm = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
+  const rIm = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -123,14 +138,14 @@ export default async function handler(req, res) {
     return;
   }
   const candidatosImoveis = (await rIm.json().catch(() => []))
-    .filter(im => !ehVendaDireta(im.modalidade) && !FONTES_APURACAO_NAO_CONFIAVEL.has(im.fonte))
+    .filter(im => !ehVendaDireta(im.modalidade))
     .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas }));
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
   const desdeISO = new Date(Date.now() - 3 * 86400000).toISOString();
   const agoraISO = new Date().toISOString();
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
@@ -138,7 +153,6 @@ export default async function handler(req, res) {
     resumoVeiculos.erro = `HTTP ${rVe.status}`;
   } else {
     const candidatosVeiculos = (await rVe.json().catch(() => []))
-      .filter(v => !FONTES_APURACAO_NAO_CONFIAVEL.has(v.fonte))
       .map(v => ({ id: v.id, alvo: v.link_lote, resultado_apuracao_tentativas: v.resultado_apuracao_tentativas }));
     resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS)), erro: null };
   }

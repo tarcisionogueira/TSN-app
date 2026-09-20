@@ -31,7 +31,8 @@ const COOLDOWN_MS = 6 * 3600000; // não refaz o fetch se a última tentativa fo
 // isto o cron nunca tentaria essas fontes de novo, mas esta rota on-demand ainda tentaria toda
 // vez que um cliente abrisse o lote. SODRE em especial: confirmado ao vivo que o resultado só
 // existe depois de hidratação JS — sem headless browser aqui, gastar Bright Data não resolve.
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE']);
+// CEF (21/09): fetch direto bloqueado por IP + Bright Data sem cota — confirmado ao vivo.
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
