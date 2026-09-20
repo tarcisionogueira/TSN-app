@@ -89,11 +89,20 @@ async function checarUrl(label, url, { proposito, charset = 'utf-8', usarDataEve
   if (!html) { console.log(`  [${label}] ${url} → SEM HTML (${via})`); return; }
   const cabecalho = decodificarEntidades(html.slice(0, 8000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const viaExtrairData = extrairData(html);
-  const viaEventoGestao = usarDataEventoGestao ? dataEventoGestao(cabecalho) : null;
+  // Repete EXATAMENTE a janela ancorada do fix aplicado em scraper-gestao.mjs (20/09), pra
+  // validar sobre a MESMA página real antes de considerar o conserto confirmado.
+  let viaEventoGestao = null;
+  if (usarDataEventoGestao) {
+    const idxData = html.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
+    const janela = idxData >= 0 ? html.slice(Math.max(0, idxData - 200), idxData + 400) : cabecalho;
+    const txtJanela = idxData >= 0 ? decodificarEntidades(janela.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ') : cabecalho;
+    viaEventoGestao = dataEventoGestao(txtJanela);
+    console.log(`     idxData=${idxData} janela="${txtJanela.slice(0, 150)}"`);
+  }
   console.log(`  [${label}] ${url}`);
   console.log(`     via=${via} bytes=${html.length}`);
-  console.log(`     extrairData()=${viaExtrairData || '-'}${usarDataEventoGestao ? ` dataEvento()=${viaEventoGestao || '-'}` : ''}`);
-  console.log(`     datas cruas: ${achadosCrus(html).join(' | ') || '(NENHUMA no HTML — JS ou sem data publicada)'}`);
+  console.log(`     extrairData()=${viaExtrairData || '-'}${usarDataEventoGestao ? ` dataEvento()COM_FIX=${viaEventoGestao || '-'}` : ''}`);
+  console.log(`     datas cruas: ${achadosCrus(html, 10).join(' | ') || '(NENHUMA no HTML — JS ou sem data publicada)'}`);
 }
 
 async function main() {

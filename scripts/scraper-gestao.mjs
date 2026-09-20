@@ -441,10 +441,19 @@ async function coletarEvento(dominio, idLeilao) {
   const html = await bd(url, { valido: paginaOk });
   if (!paginaOk(html)) return { rows: [], bloqueado: true };
   const cabecalho = decodificarEntidades(html.slice(0, 6000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+  // JANELA DE DATA ANCORADA (20/09): recon real (Bright Data, idLeilao 1044/1051, páginas de
+  // 90-190 kB) mostrou "Data: Abertura 24/Ago/2026..." existindo no HTML mas FORA do
+  // slice(0,6000) — em página de evento grande, o bloco de lotes empurra o texto de data pra
+  // além do cabeçalho, e `dataEvento(cabecalho)` "achava" ausência que não existia (153 ativos
+  // do GESTAOLEILOES em 0% de data_leilao apesar de o Bright Data trazer a página completa).
+  // Busca o ancorador no HTML INTEIRO em vez de confiar que ele mora nos primeiros 6000 chars.
+  const idxData = html.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
+  const janelaData = idxData >= 0 ? html.slice(Math.max(0, idxData - 200), idxData + 400) : cabecalho;
+  const textoData = idxData >= 0 ? decodificarEntidades(janelaData.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ') : cabecalho;
   const ctx = {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),
-    data_leilao: dataEvento(cabecalho),
+    data_leilao: dataEvento(textoData),
     htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)
   };
   const cards = fatiarCards(html);
