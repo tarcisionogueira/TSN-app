@@ -1,0 +1,99 @@
+/**
+ * /api/apurar-resultado-leilao-cron — uma vez por dia, ao final do dia (18h Brasília), apura o
+ * RESULTADO REAL de cada leilão que encerrou hoje: teve lance (vendido, com valor quando a
+ * página publica) ou não (sem lance/deserto). Pedido do dono (20/09): aprender quais praças são
+ * mais disputadas e, sobretudo, identificar os lotes SEM lance para propor compra direta ao
+ * leiloeiro — "no próprio site do leiloeiro que já faz a busca ele consta os lances... ao final
+ * do dia ele acessar e puxar o lance dado e se consta o status de vendido ou sem licitantes".
+ *
+ * Diferente da coleta em massa (que só lê a LISTAGEM), este cron revisita a PÁGINA DE CADA LOTE
+ * individualmente — mesma infraestrutura de fetch+Bright Data de `enriquecer-lote.js` — porque
+ * o resultado do leilão só aparece ali, não na busca geral.
+ *
+ * JANELA: `data_fim` dos ÚLTIMOS 3 DIAS (não só hoje) — cobre o lote de hoje E dá 2 dias de
+ * reforço para quem falhou (fonte fora do ar, sem cota do Bright Data naquele dia). Teto de
+ * tentativas evita martelar para sempre uma página que nunca resolve.
+ *
+ * NUNCA INFERE: só grava `resultado_leilao` quando a própria página afirma (ver
+ * `_resultado-leilao.js`). Sem sinal confiável, grava `indeterminado` — distinto de NULL (ainda
+ * não apurado) e distinto de `sem_lance` (a página disse que não teve lance).
+ */
+export const config = { runtime: 'nodejs', maxDuration: 280 };
+
+import { isCronAuthorized } from './_auth.js';
+import { fetchLote } from './enriquecer-lote.js';
+import { apurarResultadoDoTexto } from './_resultado-leilao.js';
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+const MAX_TENTATIVAS = 3;
+const LOTE_TAMANHO = 250;
+const ORCAMENTO_MS = 250000; // corta antes do maxDuration de 280s, sobra pra responder
+
+function sb(path, opts = {}) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...opts,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+}
+
+const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || ''));
+
+export default async function handler(req, res) {
+  if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
+  if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
+
+  const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const desde = new Date(Date.now() - 3 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+  const r = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
+  if (!r.ok) {
+    const detalhe = await r.text().catch(() => '');
+    console.error('[apurar-resultado-leilao]', r.status, detalhe.slice(0, 300));
+    res.status(500).json({ error: 'Falha ao selecionar lotes', detalhe: detalhe.slice(0, 300) });
+    return;
+  }
+  const candidatos = (await r.json().catch(() => [])).filter(im => !ehVendaDireta(im.modalidade));
+
+  const T0 = Date.now();
+  let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, cortado = false;
+  for (const im of candidatos) {
+    if (Date.now() - T0 > ORCAMENTO_MS) { cortado = true; break; }
+    const alvo = im.url_lote || im.link_edital;
+    const tentativas = (Number(im.resultado_apuracao_tentativas) || 0) + 1;
+    if (!alvo || !/^https?:\/\//.test(alvo)) {
+      semUrl++;
+      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(im.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ resultado_leilao: 'indeterminado', resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas }) }).catch(() => {});
+      continue;
+    }
+    let html = '';
+    // fetchLote() já resolve/loga suas próprias falhas (direto→BrightData→'fail'); este catch só
+    // protege contra um throw inesperado fora desse contrato — html='' cai no ramo de "sem
+    // conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
+    try { ({ html } = await fetchLote(alvo, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
+    if (!html) {
+      // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa —
+      // a janela de 3 dias já cobre o reforço, e martelar sem ter respondido nada não ensina.
+      semConteudo++;
+      continue;
+    }
+    const achado = apurarResultadoDoTexto(html);
+    const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas };
+    if (achado) {
+      patch.resultado_leilao = achado.resultado;
+      if (achado.valor) patch.valor_lance_vencedor = achado.valor;
+      if (achado.resultado === 'vendido') vendidos++; else semLance++;
+    } else {
+      patch.resultado_leilao = 'indeterminado';
+      indeterminados++;
+    }
+    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(im.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
+  }
+
+  // Log incondicional (mesmo princípio já usado em outras rotinas desta base): sem isto, "não
+  // havia candidato hoje" e "a rotina parou de rodar" são indistinguíveis de fora.
+  const resumo = { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
+  console.log('[apurar-resultado-leilao]', JSON.stringify(resumo));
+  res.status(200).json({ ok: true, ...resumo });
+}

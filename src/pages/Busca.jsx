@@ -105,6 +105,18 @@ const PRAZO_OPTS = [
   ['proximo_trimestre', 'Próximo trimestre', 'Leilões com praça marcada nos próximos 3 meses.'],
   ['sem_data', 'Sem data definida', 'O leiloeiro ainda não divulgou a data da praça — não some da lista por isso.'],
 ];
+// RESULTADO DO LEILÃO — pedido do dono (20/09): aprender quais praças são mais disputadas e,
+// sobretudo, achar os lotes SEM lance para propor compra direta ao leiloeiro. Apurado uma vez
+// por dia (ver api/apurar-resultado-leilao-cron.js), lendo a página de CADA lote que encerrou —
+// nenhuma fonte publica isso na listagem em massa, então a maioria do acervo fica em "ainda não
+// apurado" até o leilão realmente encerrar E o cron do fim do dia revisitar a página.
+// 'nao_apurado' agrupa NULL (nunca tentado) e 'indeterminado' (tentou, a página não deu sinal
+// confiável) — a distinção técnica entre os dois mora no banco, não precisa aparecer aqui.
+const RESULTADO_OPTS = [
+  ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance — oportunidade de propor compra direta ao leiloeiro.'],
+  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou mas o resultado ainda não foi conferido no site do leiloeiro.'],
+];
 function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
@@ -181,6 +193,7 @@ const COLUNAS_BUSCA = [
   // Quem sabe se existe ARQUIVO — no link, nos anexos ou no nosso Storage — é o banco.
   'tem_edital_doc','tem_matricula_doc',
   'data_leilao','data_fim','forma_pagamento','viavel','score_viabilidade','fracionado',
+  'resultado_leilao','valor_lance_vencedor',
   'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
   'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
 ].join(',');
@@ -277,6 +290,10 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   const janelaPrazo = calcularJanelaPrazo(f.prazo);
   if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
   else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
+  // Resultado do leilão (apurado pelo cron do fim do dia) — 'nao_apurado' cobre tanto NULL
+  // (nunca apurado) quanto 'indeterminado' (apurado, sem sinal confiável na página).
+  if (f.resultadoLeilao === 'nao_apurado') q = q.or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado');
+  else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
   else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL).gte('desconto_percentual', LOCACAO_DESCONTO_MIN);
@@ -709,7 +726,7 @@ export default function Busca() {
   const analisesRestantes = mostraSelo ? Math.max(0, limiteAnalises - Number(cotaMercado.usado || 0)) : null;
   const janelaSelo = janelaLabel(cotaMercado);
 
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'' };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'', resultadoLeilao:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
@@ -1615,6 +1632,20 @@ export default function Busca() {
                     const ativo = filtros.prazo === val;
                     return (
                       <button key={val} title={desc} onClick={() => up('prazo', ativo ? '' : val)}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Resultado do leilão</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {RESULTADO_OPTS.map(([val, label, desc]) => {
+                    const ativo = filtros.resultadoLeilao === val;
+                    return (
+                      <button key={val} title={desc} onClick={() => up('resultadoLeilao', ativo ? '' : val)}
                         style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
                         {label}
                       </button>

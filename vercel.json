@@ -207,6 +207,10 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/apurar-resultado-leilao-cron",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/espelhar-docs-cron",
       "schedule": "40 */4 * * *"
     },
