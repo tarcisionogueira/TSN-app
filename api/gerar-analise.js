@@ -1008,7 +1008,7 @@ async function extrairValoresPdf(base64, deadline) {
   const budget = deadline - Date.now();
   if (budget < 12000) return null; // sem tempo suficiente p/ a IA ler o PDF
   const data = await anthropic({
-    model: MODEL, max_tokens: 400,
+    model: MODEL, max_tokens: 500,
     system: 'Você lê documentos de leilão de imóvel. Responda SOMENTE JSON válido, sem markdown.',
     messages: [{ role: 'user', content: [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'documento do lote' },
@@ -1017,7 +1017,7 @@ async function extrairValoresPdf(base64, deadline) {
       // ganha 3 campos extras SEM custo de chamada nova (é o mesmo documento, a mesma IA já
       // com ele na tela). Cada campo é uma frase, não estrutura — o texto entra no parecer
       // como CITAÇÃO do documento, não como número calculado.
-      { type: 'text', text: 'Extraia do documento (edital/matrícula/laudo de avaliação): {"avaliacao": number, "lanceMinimo": number, "debitos": string, "condicaoImovel": string, "formaPagamento": string}. avaliacao = valor de AVALIAÇÃO do imóvel (auto/laudo de avaliação) em reais; lanceMinimo = menor lance admitido (1º leilão/praça) em reais — SÓ números (sem "R$", sem pontos de milhar), 0 se não constar. debitos = resumo em UMA frase de dívidas/ônus/encargos que o arrematante assume conforme o documento (IPTU atrasado, condomínio em aberto, hipoteca, penhora etc.) — "" se não mencionar. condicaoImovel = resumo em UMA frase do estado físico/ocupação do imóvel conforme o documento (ex.: "em ruínas", "ocupado", "desocupado", "reformado", "pronto para morar") — "" se não constar. formaPagamento = resumo em UMA frase das formas de pagamento aceitas (à vista, financiado, parcelado, sinal + saldo) — "" se não constar. NUNCA invente nenhum campo.' },
+      { type: 'text', text: 'Extraia do documento (edital/matrícula/laudo de avaliação): {"avaliacao": number, "lanceMinimo": number, "debitos": string, "condicaoImovel": string, "formaPagamento": string, "enderecoImovel": string, "municipioImovel": string}. avaliacao = valor de AVALIAÇÃO do imóvel (auto/laudo de avaliação) em reais; lanceMinimo = menor lance admitido (1º leilão/praça) em reais — SÓ números (sem "R$", sem pontos de milhar), 0 se não constar. debitos = resumo em UMA frase de dívidas/ônus/encargos que o arrematante assume conforme o documento (IPTU atrasado, condomínio em aberto, hipoteca, penhora etc.) — "" se não mencionar. condicaoImovel = resumo em UMA frase do estado físico/ocupação do imóvel conforme o documento (ex.: "em ruínas", "ocupado", "desocupado", "reformado", "pronto para morar") — "" se não constar. formaPagamento = resumo em UMA frase das formas de pagamento aceitas (à vista, financiado, parcelado, sinal + saldo) — "" se não constar. enderecoImovel = o ENDEREÇO/DESCRIÇÃO DA LOCALIZAÇÃO do IMÓVEL em si (rua, número, bairro, loteamento/condomínio), exatamente como o documento descreve ONDE o imóvel está — NUNCA o endereço de uma das partes, do perito, do procurador ou do cartório — "" se não constar. municipioImovel = o MUNICÍPIO/cidade onde o IMÓVEL está localizado conforme o documento (não a comarca do processo, se forem diferentes) — "" se não constar. NUNCA invente nenhum campo.' },
     ] }],
   }, false, { retries: 0, timeoutMs: Math.min(30000, budget - 3000), noFallback: true });
   return parseJSON(extractText(data));
@@ -1105,6 +1105,7 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
   console.log('[laudo-avaliacao]', JSON.stringify({
     imovel: String(imovelId), url: laudo.url, ehLaudo, nomeDoc, avalCard: avalCard || null, avalLaudo: avalLaudo || null,
     faltava, divergiu, debitos: !!ext.debitos, condicaoImovel: !!ext.condicaoImovel, formaPagamento: !!ext.formaPagamento,
+    enderecoLaudo: !!ext.enderecoImovel, municipioLaudo: ext.municipioImovel || null,
   }));
 
   return {
@@ -1113,6 +1114,13 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
     debitos: String(ext.debitos || '').trim() || null,
     condicaoImovel: String(ext.condicaoImovel || '').trim() || null,
     formaPagamento: String(ext.formaPagamento || '').trim() || null,
+    // ENDEREÇO/MUNICÍPIO conforme o documento (20/09, pedido do dono — caso do Marcos: o
+    // laudo do perito pode descrever um imóvel numa localidade DIFERENTE da matrícula/card,
+    // por erro de averbação ou erro do próprio perito. Mesma leitura de PDF já feita acima,
+    // sem chamada extra. Quem decide o que fazer com a divergência é o bloco "ENDEREÇO RICO
+    // PARA A BUSCA" mais abaixo, que também tem a leitura da matrícula para comparar.
+    enderecoLaudo: String(ext.enderecoImovel || '').trim() || null,
+    municipioLaudo: String(ext.municipioImovel || '').trim() || null,
     nomeDoc,
     url: laudo.url,
   };
@@ -1739,6 +1747,12 @@ ${inp._laudo.condicaoImovel ? `- Condição/ocupação do imóvel conforme o doc
 ${inp._laudo.debitos ? `- Débitos/ônus mencionados no documento: ${inp._laudo.debitos} — trate como CUSTO/RISCO da operação na seção de débitos e na defesa.` : ''}
 ${inp._laudo.formaPagamento ? `- Forma de pagamento mencionada no documento: ${inp._laudo.formaPagamento}` : ''}
 ` : ''}
+${inp._divergencia ? `
+⚠️ DIVERGÊNCIA DE LOCALIZAÇÃO ENTRE DOCUMENTOS DO LOTE (leitura automática — cite ao cliente com transparência, é informação relevante para a decisão, não a esconda):
+${inp._divergencia.resolvida
+  ? `- ${inp._divergencia.perdedor.fonte} indicava "${inp._divergencia.perdedor.municipio}"; ${inp._divergencia.vencedor.fonte} indica "${inp._divergencia.vencedor.municipio}". Usamos "${inp._divergencia.vencedor.municipio}" (geocodificação mais precisa), mas isso pode ser erro de averbação na matrícula ou erro do perito — recomende ao cliente confirmar em campo antes de decidir o lance.`
+  : `- ${inp._divergencia.candidatoA.fonte} indica "${inp._divergencia.candidatoA.municipio}" e ${inp._divergencia.candidatoB.fonte} indica "${inp._divergencia.candidatoB.municipio}" — os documentos do lote DIVERGEM sobre onde o imóvel está e não foi possível confirmar qual está correto. Informe as DUAS localidades ao cliente como pendência de verificação ANTES do lance — não escolha uma sem dizer que há divergência.`}
+` : ''}
 
 MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
 ${mercado?.fonteEstimativa === 'base_propria' ? '\n- ORIGEM DOS COMPARÁVEIS: base própria BidPro. São anúncios REAIS do mesmo tipo já capturados nesta praça, cada um com fonte e mês de referência, e não uma pesquisa feita agora. Diga isso ao cliente com naturalidade e transparência (a base é recente e do mesmo recorte), e trate as datas dos comparáveis como o que são: o retrato do período, não do minuto.' : ''}
@@ -1947,6 +1961,14 @@ export default async function handler(req, res) {
   // (rua válida + bairro do título + cidade/UF) + nome do condomínio, para o Nível 1/2 da busca não
   // ficar genérico ("cidade"). Best-effort; nunca bloqueia.
   let enderecoGenerico = false; // sem rua E sem bairro conhecidos → o edital pode completar
+  // DIVERGÊNCIA DE LOCALIZAÇÃO ENTRE DOCUMENTOS (20/09, pedido do dono — caso real do Marcos:
+  // matrícula/card apontavam um endereço; o laudo do perito, no mesmo lote, descrevia um
+  // imóvel em OUTRA localidade — erro de averbação ou erro do próprio perito, não erro de
+  // captura). A matrícula NÃO é automaticamente a fonte certa nesses casos; por isso o
+  // desempate abaixo usa a PRECISÃO da geocodificação (grátis) como critério objetivo, e
+  // quando não dá pra desempatar com segurança, os DOIS candidatos ficam registrados em vez
+  // de escolher às cegas — exposta ao parecer via `pInp._divergencia` mais abaixo.
+  let divergenciaLocalizacao = null;
   try {
     const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte&limit=1`)).json();
     if (imA && mercadoInputs) {
@@ -1991,6 +2013,57 @@ export default async function handler(req, res) {
       if (doDescricao?.loteamento && !imA.nomecondominio) {
         imA.nomecondominio = doDescricao.loteamento; // usado logo abaixo, e evita reprocessar a mesma extração
         try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nomecondominio: doDescricao.loteamento }) }); } catch { /* best-effort */ }
+      } else if (doDescricao?.loteamento && imA.nomecondominio && _norm(doDescricao.loteamento) !== _norm(imA.nomecondominio)) {
+        // Achado do dono: "informar um endereço e na documentação informar um condomínio que
+        // não corresponde ao endereço" já aconteceu de verdade. Pode ser o MESMO empreendimento
+        // com grafia diferente — por isso NÃO sobrescreve às cegas; só sinaliza para revisão
+        // humana, mesmo princípio de "informar a divergência" do bloco de localização abaixo.
+        console.log('[condominio-diverge-matricula]', JSON.stringify({ imovel: String(imovelId), card: imA.nomecondominio, matricula: doDescricao.loteamento }));
+        try {
+          await registrarAnomalia('condominio_diverge_matricula', imA.fonte || null, String(imovelId), 'nomecondominio',
+            `Card mostrava condomínio "${imA.nomecondominio}"; a matrícula (já no acervo) diz "${doDescricao.loteamento}" — pode ser grafia diferente do MESMO empreendimento, ou o condomínio informado não corresponder ao endereço do lote. Conferir manualmente.`);
+        } catch { /* best-effort */ }
+      }
+      // LAUDO × MATRÍCULA/CARD — divergência ENTRE DOCUMENTOS sobre a localização, não só
+      // vs. o card (caso real do Marcos: o laudo do perito, dentro do mesmo lote, descrevia um
+      // imóvel em OUTRA localidade — erro de averbação da matrícula ou erro do próprio perito).
+      // A matrícula não é automaticamente a fonte certa aqui, então o desempate usa a
+      // PRECISÃO da geocodificação (grátis, sem Google — mesmo motor do `ancorarImovel` acima)
+      // como critério objetivo: geocodifica os dois candidatos e só troca quando um sai
+      // CLARAMENTE mais preciso (diferença de 2+ níveis, ex. endereço × cidade). Sem essa
+      // folga, não escolhe — registra os DOIS candidatos para revisão humana, em vez de
+      // fabricar certeza que não existe. Também blinda contra municípios vizinhos que se
+      // confundem (ex. Barueri/Santana de Parnaíba): o mecanismo pega QUALQUER divergência
+      // entre documentos, não uma lista fixa de cidades parecidas.
+      const munLaudo = String(laudoInfo?.municipioLaudo || '').trim();
+      const endLaudo = String(laudoInfo?.enderecoLaudo || '').trim();
+      if (munLaudo && _norm(munLaudo) !== _norm(cidFinal)) {
+        const deadlineGeo = Date.now() + Math.min(15000, Math.max(0, restante() - 212000));
+        let gAtual = null, gLaudo = null;
+        try { gAtual = await geocodificarCascata({ endereco: rua, bairro, cidade: cidFinal, estado: est }, { sleepMs: 0, permitirPago: false, deadline: deadlineGeo }); } catch { /* geocode best-effort */ }
+        try { gLaudo = await geocodificarCascata({ endereco: endLaudo, cidade: munLaudo, estado: est }, { sleepMs: 0, permitirPago: false, deadline: deadlineGeo }); } catch { /* geocode best-effort */ }
+        const rAtual = gAtual ? rankNivel(gAtual.nivel) : -1;
+        const rLaudo = gLaudo ? rankNivel(gLaudo.nivel) : -1;
+        const candidatoAtual = { fonte: 'matrícula/card', municipio: cidFinal, endereco: rua || bairro || '', nivelGeo: gAtual?.nivel || 'falhou' };
+        const candidatoLaudo = { fonte: laudoInfo?.nomeDoc || 'laudo', municipio: munLaudo, endereco: endLaudo, nivelGeo: gLaudo?.nivel || 'falhou' };
+        const laudoVenceu = rLaudo >= rAtual + 2;
+        const atualVenceu = rAtual >= rLaudo + 2;
+        if (laudoVenceu) { cidFinal = munLaudo; if (endLaudo) rua = endLaudo; }
+        divergenciaLocalizacao = laudoVenceu
+          ? { resolvida: true, vencedor: candidatoLaudo, perdedor: candidatoAtual, motivo: `geocode ${candidatoLaudo.nivelGeo} × ${candidatoAtual.nivelGeo}` }
+          : atualVenceu
+            ? { resolvida: true, vencedor: candidatoAtual, perdedor: candidatoLaudo, motivo: `geocode ${candidatoAtual.nivelGeo} × ${candidatoLaudo.nivelGeo}` }
+            : { resolvida: false, candidatoA: candidatoAtual, candidatoB: candidatoLaudo };
+        console.log('[localizacao-diverge-documentos]', JSON.stringify({ imovel: String(imovelId), ...divergenciaLocalizacao }));
+        try {
+          await registrarAnomalia('localizacao_diverge_entre_documentos', imA.fonte || null, String(imovelId), 'cidade',
+            divergenciaLocalizacao.resolvida
+              ? `Documentos divergem sobre a localização: ${candidatoAtual.fonte} diz "${candidatoAtual.municipio}" (${candidatoAtual.endereco || 's/ rua'}); ${candidatoLaudo.fonte} diz "${candidatoLaudo.municipio}" (${candidatoLaudo.endereco || 's/ rua'}). Desempatado por precisão de geocodificação (${divergenciaLocalizacao.motivo}) a favor de "${divergenciaLocalizacao.vencedor.municipio}". Pode ser erro de averbação na matrícula ou erro do perito — considerar correção formal se confirmado em campo.`
+              : `Documentos divergem sobre a localização e a geocodificação NÃO desempatou com segurança: ${candidatoAtual.fonte} diz "${candidatoAtual.municipio}" (${candidatoAtual.endereco || 's/ rua'}, geocode "${candidatoAtual.nivelGeo}"); ${candidatoLaudo.fonte} diz "${candidatoLaudo.municipio}" (${candidatoLaudo.endereco || 's/ rua'}, geocode "${candidatoLaudo.nivelGeo}"). Revisão humana necessária.`);
+        } catch { /* best-effort */ }
+        if (laudoVenceu) {
+          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ cidade: cidFinal }) }); } catch { /* best-effort */ }
+        }
       }
       // `mercadoInputs.cidade` também precisa da cidade CORRIGIDA — senão a busca de
       // comparáveis usa o endereço certo mas o contexto demográfico/FipeZAP/socio continua
@@ -3326,6 +3399,10 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           // Débitos/condição/forma de pagamento LIDOS do laudo (não digitados pelo cliente) —
           // `promptParecer` cita como informação do PRÓPRIO documento, nunca como premissa.
           _laudo: laudoInfo,
+          // Divergência de localização ENTRE DOCUMENTOS (matrícula × laudo), quando houve —
+          // ver bloco "ENDEREÇO RICO PARA A BUSCA" acima. `promptParecer` expõe ao cliente em
+          // vez de esconder a incerteza atrás de um endereço só.
+          _divergencia: divergenciaLocalizacao,
         };
         if (usarPraca) {
           parecerDiag.lanceTrocadoPelaPraca = { cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual, data: pracaRef.data };
