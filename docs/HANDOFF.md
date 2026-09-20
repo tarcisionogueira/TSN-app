@@ -30261,3 +30261,73 @@ fiel ao JSON do lote 24171) antes de gastar qualquer coleta real — todos os ca
 
 Descartáveis das 5 rodadas de recon (`_recon-suporteleiloes-template3.mjs` + workflow `_temp`)
 removidos após extrair o achado.
+
+## 20/09 (pedido do dono: "verificação geral... matrícula, edital, regras de venda online,
+## fotos, veículos só em pátio" → "Resolva tudo... independente do formato")
+
+**Auditoria** em todos os ~58 leiloeiros ativos via `fonte_cobertura()`/`matricula_cobertura()`
+achou gaps concretos de matrícula/foto/edital em 8 grupos de fontes. Em vez de corrigir às
+cegas, **7 agentes em paralelo investigaram cada gap por leitura de código** (sem rede, sem
+gravar) antes de qualquer edição — achando causa raiz confirmada, não suposição:
+
+- **`fonte_cobertura()` media só `.pdf`** — LEILAOBRASIL/LUTHERO (integrados ontem) publicam
+  edital em `.doc`/`.docx` e apareciam com 3% quando o real é ~98%: o instrumento media "é
+  PDF?" e reportava com o nome de "tem o documento?" (forma nº 10). Corrigido (migração
+  `fonte_cobertura_qualquer_formato.sql`, mesmo conjunto de extensões de `RE_DOC_EXT`).
+  Verificado ao vivo: LEILAOBRASIL 3%→98%, LUTHERO ?→96%.
+- **HASTAPUBLICA 0% foto**: `enriquecerDocumentosLote()` já CALCULAVA `docs.foto`
+  (`vasculharDocumentos` varre `<img>` da página) e **descartava** — nunca atribuía a
+  `im.link_foto`. `api/enriquecer-lote.js` e `scraper-bayit.mjs`, que chamam o mesmo
+  `vasculharDocumentos`, já consumiam certo; só este caller (usado por HASTAPUBLICA e
+  WEBLEILOES) tinha o buraco. Corrigido com 1 linha. HASTAPUBLICA matrícula segue em aberto —
+  o próprio recon do site (`recon-hastapublica-puppeteer.mjs`) já sinalizava um modal AJAX por
+  lote que nada no pipeline clica; precisa de recon dedicado antes de mexer.
+- **KRONLEILOES/TOTALLEILOES/CREPALDI 0-5% matrícula**: nunca passavam `{ enrich: true }` pro
+  `coletarFonte` — **o MESMO bug já corrigido uma vez em SBID9/SBID21 (09/09)**, reintroduzido
+  nas 3 fontes seguintes que nasceram depois. Mesmo template de oferta que dá 74%/100% em
+  SUPERBID/SOLD com o enrich ligado. Corrigido (mesma flag `{ enrich: true, enrichCap: 120 }`).
+- **LEILOFY 9% matrícula**: parser próprio classifica documento só pelo texto DENTRO da âncora
+  `<a>` — mesma classe de bug já achada e corrigida no Bayit (09/09, rótulo no elemento-pai,
+  não na âncora), nunca portada pra cá. Ligado `enriquecerDocumentosLote` como reforço
+  ADITIVO (só preenche o que o parser próprio deixou vazio).
+- **LJUD 42% matrícula (baseline de 18/07 era 93%)**: é a ÚNICA fonte rica em documento sem
+  `enriquecerDocumentosLote`. Adicionado, mas com escopo RESTRITO à URL agregador de 2
+  segmentos (`/lote/{leilao_id}/{lote_id}`) — o fallback pra home do leiloeiro (quando falta
+  `leilao_id`) NUNCA pode ser visitado: foi o bug de 28/08 que pendurou os documentos de um
+  leilão inteiro em cada lote (25 anexos, matrícula de imóvel de outra cidade).
+- **Família leilao/index (GIORDANO 73%/RIGOLON 47%/THAISTEIXEIRA 50% foto; 6-7% matrícula)**:
+  `fotoDeHtml` lia o atributo de imagem por UMA alternação só — regex casa na posição mais à
+  esquerda da TAG, não na ordem de prioridade, então `src` (placeholder de lazy-load) vencia
+  `data-src` (foto real) quando vinha antes na marcação (padrão-padrão de jQuery
+  Lazy/lazysizes/lozad). Corrigido com tentativas em ordem explícita. `numero_matricula`
+  exigia só espaço entre rótulo e número — "Matrícula: 123" (dois-pontos) já falhava; regra
+  afrouxada (mesmo espírito de `valorPorRotulo`, já usado no mesmo arquivo). `anexosDeHtml`
+  só reconhecia `.pdf` — ampliado pro mesmo conjunto de `RE_DOC_EXT`. O link_matricula por URL
+  segue estruturalmente frágil (depende do nome do arquivo do vendor S3) — não mexido sem
+  HTML real pra confirmar.
+- **SUPERBID 30% matrícula**: **NÃO é bug** — confirmado em 3 fontes independentes
+  (`leiloeiro_conhecimento.sql`, `BASELINE_CAPTURA_LEILOEIROS.md`,
+  `docs_status='esperado'` no banco, que já poupa a fonte de captura ativa). É característica
+  genuína da rede — matrícula raramente pública no lote. Nenhuma ação.
+- **Pátio de veículos** (SUPERBID 3%/LJUD 4%/ZUK/WEBLEILOES/CRLEILOES 0% vs SODRE 95%):
+  `classificarPatio()` é UMA função conservadora por desenho, compartilhada — a diferença vem
+  de QUANTO TEXTO cada fonte entrega a ela, não da lógica. SUPERBID/LJUD visitam só 60
+  detalhes/rodada num catálogo de milhares (~1-5% de cobertura por dia); cap dobrado pra 120
+  (mais cobertura nunca cria falso "confirmado" — só aumenta o que é legitimamente exibido).
+  CRLEILOES nunca chama a função (decisão deliberada de 19/09, aguardando confirmar
+  vocabulário do site antes de ligar). ZUK teve fix em 13/09 "ainda não validado ao vivo" — seguia
+  0% uma semana depois; precisa checar `status_patio_motivo`/logs antes de mexer no regex.
+  WEBLEILOES já tem cobertura completa (catálogo pequeno) e ainda 0% — mais provável limitação
+  genuína do site (vocabulário diferente) que bug de cobertura.
+- **VLANCE (0% foto, 0% matrícula)**: `foto_url()` já sabe ler `fotos` (string ou lista de
+  dict com 5 chaves candidatas) mas **nunca foi validado contra payload real** — o próprio
+  autor documentou isso em comentário (10/09) sem nunca ter voltado a checar. Matrícula/doc
+  **nunca foi implementado** (zero campo relacionado no código, `link_edital` é URL fixa
+  genérica de categoria, não documento do lote). Em vez de adivinhar o nome do campo, o
+  diagnóstico existente (chaves do 1º lote) ganhou dump do JSON completo, gated por
+  `VLANCE_DEBUG_PAYLOAD=1` (novo input do workflow) — corrigir `foto_url()` às cegas arrisca
+  medir uma coisa e reportar com o nome de outra (forma nº 10), a mesma lição que já mordeu
+  esta base 4 vezes. PR #376.
+
+Todas as correções de código são **aditivas** (`if (!im.campo) im.campo = achado`) — nunca
+sobrescrevem dado já gravado, só preenchem o que faltava.
