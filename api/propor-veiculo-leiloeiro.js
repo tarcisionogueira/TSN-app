@@ -16,8 +16,11 @@
  * de documento em nome de um cliente pagante (diferente de ROLES_PEDIDO_LEILOEIRO, que também
  * libera Assessorado). Fácil de ampliar depois se o dono quiser.
  *
- * SÓ para veículo com leilão negativo (`data_leilao` no passado) — propor compra de algo
- * ainda em pregão não faz sentido de negócio e seria uma mensagem estranha pro leiloeiro.
+ * SÓ para veículo com `resultado_leilao='sem_lance'` — apurado de VERDADE, revisitando a
+ * página do lote após o leilão encerrar (api/apurar-resultado-leilao-cron.js). Até 21/09 este
+ * gate era só inferência por data (`data_leilao` no passado) — "nenhuma fonte informa o
+ * resultado", dizia o comentário antigo; agora informa, e propor compra num lote que na
+ * verdade VENDEU seria uma mensagem sem fundamento (e constrangedora) pro leiloeiro.
  *
  * Reply-to = o PRÓPRIO e-mail de quem está enviando: o leiloeiro responde direto, sem exigir
  * infraestrutura de ingestão de resposta.
@@ -90,14 +93,13 @@ export default async function handler(req) {
     }
   }
 
-  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao`)).json();
+  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao`)).json();
   if (!veiculo) return json({ error: 'Veículo não encontrado' }, 404);
 
-  // SÓ leilão negativo: propor compra de algo ainda em pregão não faz sentido — e como
-  // "negativo" aqui é inferido só pela data (nenhuma fonte informa o resultado), aceitar
-  // qualquer data futura seria uma mensagem sem fundamento pro leiloeiro.
-  if (!veiculo.data_leilao || new Date(veiculo.data_leilao) >= new Date()) {
-    return json({ error: 'Este veículo ainda não teve o leilão encerrado — proposta de compra direta só faz sentido para leilão negativo (já ocorrido, sem comprador).' }, 400);
+  // SÓ resultado REAL "sem lance" — não mais inferência por data (21/09). Um leilão que ainda
+  // não foi apurado (NULL/'indeterminado') ou que na verdade vendeu não passa aqui.
+  if (veiculo.resultado_leilao !== 'sem_lance') {
+    return json({ error: 'Proposta de compra direta só é oferecida quando o leilão deste veículo foi conferido e confirmado SEM LANCE — ainda não é o caso deste lote.' }, 400);
   }
 
   const veiculoLabel = [veiculo.marca, veiculo.modelo, veiculo.ano_fabricacao].filter(Boolean).join(' ') || veiculo.titulo || `Veículo ${veiculoId}`;

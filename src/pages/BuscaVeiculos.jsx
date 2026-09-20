@@ -7,9 +7,11 @@ import { useIsMobile } from '../utils/useIsMobile';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 
-// Proposta de compra direta ao leiloeiro (17/09, pedido do dono) — só para leilão NEGATIVO
-// (já ocorreu, sem comprador). Restrito à equipe: espelha ROLES_PROPOSTA_VEICULO em
-// api/propor-veiculo-leiloeiro.js — a tela só evita mostrar um botão que a API recusaria.
+// Proposta de compra direta ao leiloeiro (17/09, pedido do dono) — só para lote com resultado
+// REAL apurado "sem lance" (21/09; antes era inferência por data — ver api/apurar-resultado-
+// leilao-cron.js e o comentário de RESULTADO_BADGE acima). Restrito à equipe: espelha
+// ROLES_PROPOSTA_VEICULO em api/propor-veiculo-leiloeiro.js — a tela só evita mostrar um botão
+// que a API recusaria.
 const ROLES_PROPOSTA_VEICULO = ['admin', 'analista', 'suporte'];
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
@@ -28,7 +30,19 @@ const COLUNAS = [
   // Só mostra quando fipe_status é 'ok'/'aproximado' (ver renderização do card); 'sem_match'/'erro'
   // não tem valor_fipe preenchido mesmo, então já ficam de fora sem precisar checar aqui.
   'valor_fipe', 'fipe_status',
+  // Resultado REAL do leilão (21/09) — apurado por api/apurar-resultado-leilao-cron.js
+  // revisitando a página de cada lote. Substitui a antiga inferência por data ("negativo").
+  'resultado_leilao', 'valor_lance_vencedor',
 ].join(',');
+
+// RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
+// (api/apurar-resultado-leilao-cron.js processa os dois acervos no mesmo run). 'nao_apurado'
+// agrupa NULL (nunca tentado) e 'indeterminado' (tentou, sem sinal confiável na página).
+const RESULTADO_OPTS = [
+  ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance — oportunidade de propor compra direta ao leiloeiro.'],
+  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou mas o resultado ainda não foi conferido no site do leiloeiro.'],
+];
 
 // "Tipo de veículo" (13/09, pedido do dono) — NÃO é o mesmo campo que `tipoMonta`
 // (severidade de dano/sucata, coluna `sinistro`) nem `modalidade` (judicial/extrajudicial).
@@ -54,16 +68,13 @@ const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande mo
 // PRAZO DO LEILÃO — mesma regra de src/pages/Busca.jsx (imóveis, pedido do dono 11/09):
 // janelas CUMULATIVAS a partir de hoje, e 'sem_data' como opção EXPLÍCITA (não omissão) —
 // leiloeiro que ainda não marcou a praça não pode sumir da lista por causa disso.
-// 'negativo' (17/09, pedido do dono): nenhuma fonte informa o RESULTADO do leilão — o único
-// sinal que temos é "a data já passou e o veículo continua voltando como ativo na coleta"
-// (ninguém tirou do ar por ter sido arrematado). A retenção do scraper mantém esses por 15
-// dias após o leilão (scripts/scraper-puppeteer.mjs, retencaoVeiculosVencidos) — depois
-// disso o veículo desativa sozinho, então este filtro nunca mostra nada mais velho que isso.
-// Útil pra achar candidato a proposta de venda direta com o leiloeiro.
+// 'negativo' (17/09) SAIU DAQUI em 21/09: era só INFERÊNCIA por data ("a data já passou e o
+// veículo continua ativo" — nenhuma fonte informava o resultado de verdade). Virou o filtro
+// "Resultado do leilão" abaixo, com apuração REAL (api/apurar-resultado-leilao-cron.js
+// revisita a página de cada lote) — mesmo padrão de Busca.jsx (imóveis).
 function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
-  if (opcao === 'negativo') return { tipo: 'negativo' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return null;
@@ -84,9 +95,9 @@ function fmtDataLeilao(d) {
 // Mesmo estilo de contagem regressiva de `Busca.jsx` — reescrito aqui em vez de
 // importado porque o de lá carrega premissas de modalidade de imóvel que não existem
 // em veículo (venda_direta/venda_online).
-// dias < 0 (17/09): NÃO vira null — o leilão já passou e o veículo segue ativo, sem sinal de
-// comprador (nenhuma fonte informa resultado). É o mesmo caso que o filtro "Leilão negativo"
-// busca — o card precisa mostrar isso, não escondê-lo atrás de uma data comum.
+// dias < 0 (17/09, copy corrigida 21/09): NÃO vira null — o leilão já passou, ponto; deixou de
+// AFIRMAR "sem comprador" aqui porque agora existe sinal REAL pra isso (`v.resultado_leilao`,
+// renderizado à parte no card) — esta função só descreve DATA, nunca resultado.
 function contagemLeilao(d) {
   if (!d) return null;
   const dt = parseDataLocal(d);
@@ -95,11 +106,18 @@ function contagemLeilao(d) {
   const alvo = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   const dias = Math.round((alvo - hoje) / 86400000);
   const data = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
-  if (dias < 0) return { dias, negativo: true, texto: `Leilão negativo · ${data}`, bg: '#f3e8ff', fg: '#6d28d9' };
+  if (dias < 0) return { dias, encerrado: true, texto: `Leilão encerrado · ${data}`, bg: '#f1f5f9', fg: '#475569' };
   const texto = dias === 0 ? `Encerra hoje · ${data}` : dias === 1 ? `Encerra amanhã · ${data}` : `Encerra em ${dias} dias · ${data}`;
   const cor = dias <= 3 ? { bg: '#fee2e2', fg: '#b91c1c' } : dias <= 10 ? { bg: '#fef3c7', fg: '#92400e' } : { bg: '#eff6ff', fg: '#084BA6' };
   return { dias, texto, ...cor };
 }
+
+// Badge de RESULTADO REAL (21/09) — distinto da contagem de data acima. Só aparece quando a
+// apuração já rodou; ausente = "ainda não apurado" (nada exibido, não é "sem resultado").
+const RESULTADO_BADGE = {
+  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
+};
 
 // Desconto = quanto o lance mínimo está abaixo da avaliação do PRÓPRIO leiloeiro. Sem
 // avaliação (comum quando a API não a traz), não há desconto para mostrar — melhor
@@ -172,7 +190,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', prazo: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -256,8 +274,11 @@ export default function BuscaVeiculos() {
       if (f.modalidade) q = q.eq('modalidade', f.modalidade);
       const janelaPrazo = calcularJanelaPrazo(f.prazo);
       if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
-      else if (janelaPrazo?.tipo === 'negativo') q = q.lt('data_leilao', new Date().toISOString());
       else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
+      // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'nao_apurado' agrupa
+      // NULL (nunca tentado) e 'indeterminado' (tentou, sem sinal confiável).
+      if (f.resultadoLeilao === 'nao_apurado') q = q.or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado');
+      else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
@@ -387,7 +408,13 @@ export default function BuscaVeiculos() {
               <option value="proximo_mes">Próximo mês</option>
               <option value="proximo_trimestre">Próximo trimestre</option>
               <option value="sem_data">Sem data definida</option>
-              <option value="negativo" title="Leilão já ocorreu e o veículo continua ativo — sem sinal de comprador. Candidato a proposta de venda direta com o leiloeiro; some sozinho 15 dias após o leilão.">Leilão negativo (já ocorreu)</option>
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Resultado do leilão</label>
+            <select style={inp} value={filtros.resultadoLeilao} onChange={e => setFiltros(f => ({ ...f, resultadoLeilao: e.target.value }))}>
+              <option value="">Qualquer</option>
+              {RESULTADO_OPTS.map(([val, label, desc]) => <option key={val} value={val} title={desc}>{label}</option>)}
             </select>
           </div>
           <div>
@@ -511,8 +538,13 @@ export default function BuscaVeiculos() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
+                    {/* Resultado REAL (21/09) — quando já apurado, é o sinal que importa;
+                        a contagem de data abaixo é só complemento, nunca contradiz este. */}
+                    {v.resultado_leilao && RESULTADO_BADGE[v.resultado_leilao] && (() => { const rb = RESULTADO_BADGE[v.resultado_leilao]; return (
+                      <span title={v.resultado_leilao === 'sem_lance' ? 'Apurado na página do leiloeiro — encerrou sem lance, candidato a proposta de venda direta' : 'Apurado na página do leiloeiro — o lote foi arrematado'} style={{ fontSize: 9, fontWeight: 800, background: rb.bg, color: rb.fg, padding: '1px 6px', borderRadius: 8 }}>{rb.texto}</span>
+                    ); })()}
                     {cont
-                      ? <span title={cont.negativo ? 'Leilão já ocorreu sem sinal de comprador — candidato a proposta de venda direta com o leiloeiro' : 'Data do leilão'} style={{ fontSize: 9, fontWeight: 800, background: cont.bg, color: cont.fg, padding: '1px 6px', borderRadius: 8 }}>{cont.negativo ? '⚠️' : '🗓'} {cont.texto}</span>
+                      ? <span title="Data do leilão" style={{ fontSize: 9, fontWeight: 800, background: cont.bg, color: cont.fg, padding: '1px 6px', borderRadius: 8 }}>🗓 {cont.texto}</span>
                       : <span style={{ fontSize: 9, color: '#94a3b8' }}>🗓 {fmtDataLeilao(v.data_leilao)}</span>}
                   </div>
                 </div>
@@ -521,7 +553,9 @@ export default function BuscaVeiculos() {
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: v.link_lote ? 'pointer' : 'default' }}>
                     Ver no leiloeiro <ExternalLink size={12} />
                   </button>
-                  {podePropor && cont?.negativo && (
+                  {/* Gate de "Propor" trocado de inferência por data para resultado REAL
+                      apurado (21/09) — evita propor compra num lote que na verdade vendeu. */}
+                  {podePropor && v.resultado_leilao === 'sem_lance' && (
                     <button onClick={e => { e.stopPropagation(); abrirProposta(v); }} title="Propor compra direta ao leiloeiro — leilão já ocorreu sem comprador"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 10px', background: '#6d28d9', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       <Mail size={12} /> Propor

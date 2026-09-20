@@ -10,13 +10,20 @@
  * individualmente — mesma infraestrutura de fetch+Bright Data de `enriquecer-lote.js` — porque
  * o resultado do leilão só aparece ali, não na busca geral.
  *
- * JANELA: `data_fim` dos ÚLTIMOS 3 DIAS (não só hoje) — cobre o lote de hoje E dá 2 dias de
- * reforço para quem falhou (fonte fora do ar, sem cota do Bright Data naquele dia). Teto de
- * tentativas evita martelar para sempre uma página que nunca resolve.
+ * JANELA: dos ÚLTIMOS 3 DIAS (não só hoje) — cobre o lote de hoje E dá 2 dias de reforço para
+ * quem falhou (fonte fora do ar, sem cota do Bright Data naquele dia). Teto de tentativas evita
+ * martelar para sempre uma página que nunca resolve.
  *
  * NUNCA INFERE: só grava `resultado_leilao` quando a própria página afirma (ver
  * `_resultado-leilao.js`). Sem sinal confiável, grava `indeterminado` — distinto de NULL (ainda
  * não apurado) e distinto de `sem_lance` (a página disse que não teve lance).
+ *
+ * IMÓVEIS + VEÍCULOS no MESMO run (21/09, pedido do dono: "tanto para veículos como para
+ * imóveis"): o filtro de veículo era só INFERÊNCIA por data ("leilão negativo" em
+ * BuscaVeiculos.jsx e o gate de api/propor-veiculo-leiloeiro.js) — mesma limitação que os
+ * imóveis tinham antes de 20/09. `apurarResultadoDoTexto`/`fetchLote` são genéricos (texto e
+ * URL, sem nada imóvel-específico), então uma segunda passada aqui — orçamento de tempo
+ * COMPARTILHADO, sem cron novo — cobre os dois acervos com o mesmo código de apuração.
  */
 export const config = { runtime: 'nodejs', maxDuration: 280 };
 
@@ -39,31 +46,17 @@ function sb(path, opts = {}) {
 
 const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || ''));
 
-export default async function handler(req, res) {
-  if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
-  if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
-
-  const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const desde = new Date(Date.now() - 3 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
-  const r = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
-  if (!r.ok) {
-    const detalhe = await r.text().catch(() => '');
-    console.error('[apurar-resultado-leilao]', r.status, detalhe.slice(0, 300));
-    res.status(500).json({ error: 'Falha ao selecionar lotes', detalhe: detalhe.slice(0, 300) });
-    return;
-  }
-  const candidatos = (await r.json().catch(() => [])).filter(im => !ehVendaDireta(im.modalidade));
-
-  const T0 = Date.now();
+// Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
+// tentativas já feitas) contra a MESMA tabela de origem. `T0`/`orcamentoRestante` são
+// compartilhados entre as duas passadas (imóveis primeiro, veículos com o que sobrar).
+async function apurarLote(tabela, candidatos, T0, orcamentoRestante) {
   let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, cortado = false;
-  for (const im of candidatos) {
-    if (Date.now() - T0 > ORCAMENTO_MS) { cortado = true; break; }
-    const alvo = im.url_lote || im.link_edital;
-    const tentativas = (Number(im.resultado_apuracao_tentativas) || 0) + 1;
-    if (!alvo || !/^https?:\/\//.test(alvo)) {
+  for (const c of candidatos) {
+    if (Date.now() - T0 > orcamentoRestante) { cortado = true; break; }
+    const tentativas = (Number(c.resultado_apuracao_tentativas) || 0) + 1;
+    if (!c.alvo || !/^https?:\/\//.test(c.alvo)) {
       semUrl++;
-      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(im.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ resultado_leilao: 'indeterminado', resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas }) }).catch(() => {});
       continue;
     }
@@ -71,7 +64,7 @@ export default async function handler(req, res) {
     // fetchLote() já resolve/loga suas próprias falhas (direto→BrightData→'fail'); este catch só
     // protege contra um throw inesperado fora desse contrato — html='' cai no ramo de "sem
     // conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
-    try { ({ html } = await fetchLote(alvo, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
+    try { ({ html } = await fetchLote(c.alvo, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
     if (!html) {
       // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa —
       // a janela de 3 dias já cobre o reforço, e martelar sem ter respondido nada não ensina.
@@ -88,12 +81,50 @@ export default async function handler(req, res) {
       patch.resultado_leilao = 'indeterminado';
       indeterminados++;
     }
-    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(im.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
+    await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
+  }
+  return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
+}
+
+export default async function handler(req, res) {
+  if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
+  if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
+
+  const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const desde = new Date(Date.now() - 3 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const T0 = Date.now();
+
+  // ── Imóveis (data_fim é `date`) ──────────────────────────────────────────────────────────
+  const rIm = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
+  if (!rIm.ok) {
+    const detalhe = await rIm.text().catch(() => '');
+    console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
+    res.status(500).json({ error: 'Falha ao selecionar imóveis', detalhe: detalhe.slice(0, 300) });
+    return;
+  }
+  const candidatosImoveis = (await rIm.json().catch(() => []))
+    .filter(im => !ehVendaDireta(im.modalidade))
+    .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas }));
+  const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
+
+  // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
+  const desdeISO = new Date(Date.now() - 3 * 86400000).toISOString();
+  const agoraISO = new Date().toISOString();
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
+  let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
+  if (!rVe.ok) {
+    const detalhe = await rVe.text().catch(() => '');
+    console.error('[apurar-resultado-leilao] veiculos', rVe.status, detalhe.slice(0, 300));
+    resumoVeiculos.erro = `HTTP ${rVe.status}`;
+  } else {
+    const candidatosVeiculos = (await rVe.json().catch(() => []))
+      .map(v => ({ id: v.id, alvo: v.link_lote, resultado_apuracao_tentativas: v.resultado_apuracao_tentativas }));
+    resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS)), erro: null };
   }
 
   // Log incondicional (mesmo princípio já usado em outras rotinas desta base): sem isto, "não
   // havia candidato hoje" e "a rotina parou de rodar" são indistinguíveis de fora.
-  const resumo = { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
+  const resumo = { imoveis: resumoImoveis, veiculos: resumoVeiculos };
   console.log('[apurar-resultado-leilao]', JSON.stringify(resumo));
   res.status(200).json({ ok: true, ...resumo });
 }
