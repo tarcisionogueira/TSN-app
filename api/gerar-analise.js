@@ -1007,14 +1007,86 @@ async function extrairValoresPdf(base64, deadline) {
   const budget = deadline - Date.now();
   if (budget < 12000) return null; // sem tempo suficiente p/ a IA ler o PDF
   const data = await anthropic({
-    model: MODEL, max_tokens: 300,
+    model: MODEL, max_tokens: 400,
     system: 'Você lê documentos de leilão de imóvel. Responda SOMENTE JSON válido, sem markdown.',
     messages: [{ role: 'user', content: [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'documento do lote' },
-      { type: 'text', text: 'Extraia do edital/matrícula: {"avaliacao": number, "lanceMinimo": number}. avaliacao = valor de AVALIAÇÃO do imóvel (auto/laudo de avaliação) em reais; lanceMinimo = menor lance admitido (1º leilão/praça) em reais. SÓ números (sem "R$", sem pontos de milhar). Se não constar no documento, use 0. NUNCA invente.' },
+      // 20/09, pedido do dono: "todos os anexos podem informar dívida a assumir, forma de
+      // pagamento, descritivo do imóvel" — mesma leitura de PDF já feita para avaliação/lance
+      // ganha 3 campos extras SEM custo de chamada nova (é o mesmo documento, a mesma IA já
+      // com ele na tela). Cada campo é uma frase, não estrutura — o texto entra no parecer
+      // como CITAÇÃO do documento, não como número calculado.
+      { type: 'text', text: 'Extraia do documento (edital/matrícula/laudo de avaliação): {"avaliacao": number, "lanceMinimo": number, "debitos": string, "condicaoImovel": string, "formaPagamento": string}. avaliacao = valor de AVALIAÇÃO do imóvel (auto/laudo de avaliação) em reais; lanceMinimo = menor lance admitido (1º leilão/praça) em reais — SÓ números (sem "R$", sem pontos de milhar), 0 se não constar. debitos = resumo em UMA frase de dívidas/ônus/encargos que o arrematante assume conforme o documento (IPTU atrasado, condomínio em aberto, hipoteca, penhora etc.) — "" se não mencionar. condicaoImovel = resumo em UMA frase do estado físico/ocupação do imóvel conforme o documento (ex.: "em ruínas", "ocupado", "desocupado", "reformado", "pronto para morar") — "" se não constar. formaPagamento = resumo em UMA frase das formas de pagamento aceitas (à vista, financiado, parcelado, sinal + saldo) — "" se não constar. NUNCA invente nenhum campo.' },
     ] }],
   }, false, { retries: 0, timeoutMs: Math.min(30000, budget - 3000), noFallback: true });
   return parseJSON(extractText(data));
+}
+
+// LAUDO DE AVALIAÇÃO — LEITURA SEMPRE, NÃO SÓ QUANDO FALTA VALOR (20/09, achado do dono com
+// caso real: Vila Mariana/SP, card com R$ 680.000 de avaliação, nunca conferido contra o
+// laudo anexado ao lote). `garantirValores` acima só abre documento quando o CARD não tem
+// avaliação/lance — nunca CONFRONTA um valor já presente com o que o laudo, a fonte mais
+// autoritativa para esse campo específico, realmente diz. Esta função roda SEMPRE que existe
+// um anexo tipo "laudo" (independente do card já ter valor), e também aproveita a MESMA
+// leitura para trazer débitos/condição/forma de pagamento — pedido explícito do dono: "todos
+// os anexos podem informar dívida a assumir, responsabilidades, forma de pagamento ou
+// descritivo do imóvel". Best-effort: nunca bloqueia o relatório.
+async function lerLaudoAvaliacao(imovelId, deadline) {
+  if (Date.now() > deadline - 12000) return null;
+  let im = null;
+  try {
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo&limit=1`)).json();
+    im = Array.isArray(rows) ? rows[0] : null;
+  } catch { return null; } // padrao-ok: leitura best-effort — imóvel some, laudo não é lido, relatório segue sem ele
+  if (!im || !Array.isArray(im.anexos)) return null;
+  const laudo = im.anexos.find(a => a?.tipo === 'laudo' || /laudo/i.test(String(a?.nome || '')));
+  if (!laudo?.url) return null;
+
+  let base64 = null;
+  try {
+    const r = await fetch(laudo.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(12000) });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    if (buf.length && buf.slice(0, 5).toString('latin1') === '%PDF-' && buf.length <= 6_500_000) base64 = buf.toString('base64');
+  } catch { return null; } // padrao-ok: site do leiloeiro inacessível/timeout — best-effort, não bloqueia o relatório
+  if (!base64) return null;
+
+  let ext = null;
+  try { ext = await extrairValoresPdf(base64, deadline); } catch { return null; } // padrao-ok: IA falhou nesta leitura — best-effort, não bloqueia o relatório
+  if (!ext) return null;
+
+  const avalLaudo = Number(ext.avaliacao) || 0;
+  const avalCard = Number(im.valor_avaliacao) || 0;
+  const vmin = Number(im.valor_minimo) || 0;
+  // Só corrige o card quando o laudo tem número plausível E (o card não tinha nenhum, ou
+  // diverge de verdade — >15%). Abaixo desse teto é a MESMA leitura vista de fontes
+  // diferentes (arredondamento), não uma correção — mesmo critério de tolerância que o resto
+  // desta base usa antes de sobrescrever um valor (ver `avaliacao_incoerente` acima).
+  const faltava = avalLaudo >= 1000 && avalCard <= 0;
+  const divergiu = avalLaudo >= 1000 && avalCard > 0 && Math.abs(avalLaudo - avalCard) / avalCard > 0.15;
+  if (faltava || divergiu) {
+    const patch = { valor_avaliacao: avalLaudo };
+    if (vmin > 0 && avalLaudo >= vmin) {
+      patch.desconto_percentual = Math.round((1 - vmin / avalLaudo) * 100);
+      patch.viavel = (1 - vmin / avalLaudo) >= 0.3;
+      patch.score_viabilidade = Math.min(100, Math.round((1 - vmin / avalLaudo) * 150));
+    }
+    try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }); } catch { /* best-effort */ }
+    try {
+      await registrarAnomalia('avaliacao_diverge_laudo', im.fonte, imovelId, 'valor_avaliacao', faltava
+        ? `Card sem avaliação; o laudo de avaliação anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}. Preenchido a partir do laudo.`
+        : `Card mostrava R$${Math.round(avalCard)}; o laudo de avaliação anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para o valor do laudo — é a fonte mais autoritativa para este campo.`);
+    } catch { /* best-effort */ }
+  }
+
+  return {
+    avaliacaoLaudo: avalLaudo || null,
+    avaliacaoUsada: (faltava || divergiu) ? avalLaudo : (avalCard || avalLaudo || null),
+    debitos: String(ext.debitos || '').trim() || null,
+    condicaoImovel: String(ext.condicaoImovel || '').trim() || null,
+    formaPagamento: String(ext.formaPagamento || '').trim() || null,
+    url: laudo.url,
+  };
 }
 
 // Confirmação SOB DEMANDA de VALORES consultando o EDITAL (só quando um relatório é pedido —
@@ -1632,6 +1704,12 @@ pois são CUSTO da operação e impactam a viabilidade — apenas no aspecto fin
 IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/${inp.estado || ''}
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
+${inp._laudo && (inp._laudo.debitos || inp._laudo.condicaoImovel || inp._laudo.formaPagamento) ? `
+LAUDO DE AVALIAÇÃO ANEXADO AO LOTE (documento oficial, leitura automática — cite como informação do PRÓPRIO documento, nunca como premissa sua):
+${inp._laudo.condicaoImovel ? `- Condição/ocupação do imóvel conforme o laudo: ${inp._laudo.condicaoImovel}` : ''}
+${inp._laudo.debitos ? `- Débitos/ônus mencionados no laudo: ${inp._laudo.debitos} — trate como CUSTO/RISCO da operação na seção de débitos e na defesa.` : ''}
+${inp._laudo.formaPagamento ? `- Forma de pagamento mencionada no laudo: ${inp._laudo.formaPagamento}` : ''}
+` : ''}
 
 MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
 ${mercado?.fonteEstimativa === 'base_propria' ? '\n- ORIGEM DOS COMPARÁVEIS: base própria BidPro. São anúncios REAIS do mesmo tipo já capturados nesta praça, cada um com fonte e mês de referência, e não uma pesquisa feita agora. Diga isso ao cliente com naturalidade e transparência (a base é recente e do mesmo recorte), e trate as datas dos comparáveis como o que são: o retrato do período, não do minuto.' : ''}
@@ -1680,7 +1758,7 @@ Escreva em português formal, texto simples (sem markdown/asteriscos e SEM trave
 § SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real frente ao mercado)
 ${mercado?.classificacaoIntencao?.algum ? '§ SEÇÃO: ADEQUAÇÃO POR OBJETIVO (diga para QUAIS objetivos o imóvel é bom, entre Revenda, Locação e Temporada, podendo ser mais de um, com o porquê de cada; sendo cidade turística, DEFENDA a temporada como diferencial de renda)' : ''}
 § SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde dá para subir o lance mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
-§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)${debitos ? '\n§ SEÇÃO: DÉBITOS E ENCARGOS ASSUMIDOS (liste os débitos informados que entram como custo; diga se constam na documentação do lote; para os que não constarem, aponte as referências de onde obter/confirmar)' : ''}
+§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)${(debitos || inp._laudo?.debitos) ? '\n§ SEÇÃO: DÉBITOS E ENCARGOS ASSUMIDOS (liste os débitos informados que entram como custo; diga se constam na documentação do lote; para os que não constarem, aponte as referências de onde obter/confirmar; inclua o que o laudo de avaliação mencionar, se houver)' : ''}
 § SEÇÃO: DEFESA DA OPERAÇÃO (argumentos objetivos de por que ${usoProprio ? 'a compra para uso compensa' : 'o investimento compensa'})
 § SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO
 
@@ -1806,6 +1884,12 @@ export default async function handler(req, res) {
   // ANEXOS (não só a página do lote) — corrige avaliação zerada e valor sentinela; o que não
   // confirmar vira anomalia. Limitada a uma fração do orçamento p/ não roubar tempo do mercado.
   try { await garantirValores(String(imovelId), Date.now() + Math.min(30000, Math.max(0, restante() - 235000))); } catch { /* nunca bloqueia o relatório */ }
+
+  // LAUDO DE AVALIAÇÃO — confronta o card com o documento, mesmo quando o card já tem valor
+  // (ver comentário da função). Roda logo em seguida, mesmo orçamento restante — é 1 fetch +
+  // 1 leitura de PDF, best-effort.
+  let laudoInfo = null;
+  try { laudoInfo = await lerLaudoAvaliacao(String(imovelId), Date.now() + Math.min(20000, Math.max(0, restante() - 215000))); } catch { /* nunca bloqueia o relatório */ }
 
   // EXTRATO DO EDITAL (determinístico, SEM await): praças com valores/datas, forma de
   // pagamento e avaliação lidas do DOCUMENTO do lote (pdf-parse + regex, sem IA). Roda
@@ -3166,10 +3250,18 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           ...parecerInputs.d,
           endereco: String(parecerInputs.d?.endereco || '').trim() || mercadoInputs?.endereco || '',
           nomeCondominio: parecerInputs.d?.nomeCondominio || mercadoInputs?.nomeCondominio || '',
+          // Mesma lógica do endereço: `parecerInputs.d.valorAvaliacao` é o que o CLIENTE mandou
+          // (snapshot da tela); se o laudo divergiu/preencheu, o parecer tem que citar o valor
+          // JÁ CORRIGIDO, não o número antigo do card.
+          ...(laudoInfo?.avaliacaoUsada && Math.abs(laudoInfo.avaliacaoUsada - (Number(parecerInputs.d?.valorAvaliacao) || 0)) > 0.01
+            ? { valorAvaliacao: laudoInfo.avaliacaoUsada } : {}),
           ...(usarPraca ? { valorArrematacao: pracaRef.valor } : {}),
           valorMercado: valorMercado || parecerInputs.d.valorMercado,
           valorLocacao: locacaoCliente > 0 ? locacaoCliente : aluguelServidor,
           _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor,
+          // Débitos/condição/forma de pagamento LIDOS do laudo (não digitados pelo cliente) —
+          // `promptParecer` cita como informação do PRÓPRIO documento, nunca como premissa.
+          _laudo: laudoInfo,
         };
         if (usarPraca) {
           parecerDiag.lanceTrocadoPelaPraca = { cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual, data: pracaRef.data };
