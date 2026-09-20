@@ -36,6 +36,11 @@ function lerFbp() {
  *
  * A confirmação acontece NESTA tela (não redireciona): é ali que entra o grupo de
  * WhatsApp, que é onde o lançamento realmente acontece.
+ *
+ * /admin/live-preview/:slug (20/09) — MESMO componente, prop `adminPreview`: troca a RPC
+ * para `live_proxima_preview` (ignora `ativo`, exige role admin no banco) e liga uma faixa
+ * de aviso no topo. Existe pra revisar um rascunho de lançamento sem publicá-lo — a rota
+ * pública só enxerga evento com `ativo=true`.
  */
 
 function useContagem(alvo) {
@@ -66,7 +71,7 @@ function useContagem(alvo) {
 
 
 
-export default function LiveInscricao() {
+export default function LiveInscricao({ adminPreview = false }) {
   const { slug } = useParams();
   const [evento, setEvento] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -113,7 +118,9 @@ export default function LiveInscricao() {
       // `live_proxima` em vez da tabela: ela resolve a recorrência e devolve a data da
       // PRÓXIMA aula. Assim o link da campanha (bio, anúncio, ManyChat) nunca precisa mudar
       // — e link que muda é link que uma hora aponta para página morta com anúncio pago rodando.
-      const { data, error } = await supabase.rpc('live_proxima', { p_slug: slug });
+      // Prévia admin chama a função IRMÃ (ignora `ativo`, exige role admin no banco) — a
+      // pública nunca vê rascunho, e o dono não depende de publicar pra revisar o texto.
+      const { data, error } = await supabase.rpc(adminPreview ? 'live_proxima_preview' : 'live_proxima', { p_slug: slug });
       if (cancelado) return;
       if (error) setErroCarga(true);
       setEvento(data || null);
@@ -128,7 +135,7 @@ export default function LiveInscricao() {
       }
     })();
     return () => { cancelado = true; };
-  }, [slug]);
+  }, [slug, adminPreview]);
 
   const contagem = useContagem(evento?.data_hora);
 
@@ -242,12 +249,14 @@ export default function LiveInscricao() {
         <div style={{ textAlign: 'center', maxWidth: 420 }}>
           <div style={{ fontSize: 42, marginBottom: 14 }}>{erroCarga ? '⚠️' : '📅'}</div>
           <h1 style={{ fontSize: 22, margin: '0 0 10px' }}>
-            {erroCarga ? 'Não conseguimos carregar esta página' : 'Esta aula não está com inscrições abertas'}
+            {erroCarga ? 'Não conseguimos carregar esta página' : adminPreview ? 'Rascunho não encontrado' : 'Esta aula não está com inscrições abertas'}
           </h1>
           <p style={{ fontSize: 14.5, color: '#94a3b8', lineHeight: 1.6, margin: '0 0 20px' }}>
             {erroCarga
               ? 'Foi uma falha momentânea de conexão nossa — a aula continua de pé.'
-              : 'Acompanhe o Instagram da BidPro Brasil para saber da próxima.'}
+              : adminPreview
+                ? 'Confira o slug na URL, e se está logado como admin — só admin enxerga rascunho.'
+                : 'Acompanhe o Instagram da BidPro Brasil para saber da próxima.'}
           </p>
           {erroCarga && (
             <button onClick={() => window.location.reload()}
@@ -295,29 +304,36 @@ export default function LiveInscricao() {
 
   // Passos do que vai acontecer na aula. Numerados porque é SEQUÊNCIA de verdade — uma
   // coisa depende da anterior —, não decoração.
+  // Reescrito em 20/09 para o lançamento de 15/11 (parceria Érico Rocha): a Roma é "comprar
+  // imóvel de leilão por até metade do preço" — os 4 passos constroem ATÉ ela, e o último
+  // abre um laço (o passo a passo completo vem na aula) em vez de fechar tudo aqui.
   const PASSOS = [
-    { t: 'Judicial x extrajudicial', d: 'As duas modalidades, o que muda no risco e qual serve para quem está começando.' },
-    { t: 'Busca ao vivo', d: 'Abro a plataforma e procuro na sua frente, com os filtros que eu uso de verdade.' },
-    { t: 'Laudo gerado na hora', d: 'Escolhemos um imóvel e a IA monta o relatório de viabilidade ali, do zero.' },
-    { t: 'O lance máximo', d: 'Como calcular o teto que preserva a sua margem — e por que quase todo mundo erra aqui.' },
+    { t: 'O que separa metade do preço de prejuízo', d: 'A lógica por trás do desconto real — como ler um edital e saber, em minutos, se vale a pena.' },
+    { t: 'Busca ao vivo, na sua cidade', d: 'Abro a plataforma e procuro oportunidade real na sua frente, com os filtros que eu uso de verdade.' },
+    { t: 'Da avaliação ao lance máximo', d: 'Calculamos juntos, num imóvel real, o teto que preserva a sua margem.' },
+    { t: 'O caminho depois da aula', d: 'O passo a passo completo para transformar isso em rotina — reservado para quem estiver ao vivo.' },
   ];
 
-  // ── QUALIFICAÇÃO (05/09) ──────────────────────────────────────────────
+  // ── QUALIFICAÇÃO (05/09, reescrita 20/09) ───────────────────────────────
   // Adicionado depois de comparar com a LP de um concorrente: ele filtra por capital mínimo
   // (R$85 mil) antes de deixar entrar — decisão do dono foi NÃO copiar isso (encolheria o
   // topo de funil, já que a BidPro atende faixa mais ampla que a mentoria de ticket alto
   // dele). Fica só a qualificação por INTENÇÃO/dor, sem gate de dinheiro nenhum.
+  // Reescrita em 20/09: o lançador apontou que a versão anterior CONSTRUÍA objeção dentro da
+  // própria abordagem (ex.: "sem saber se tinha risco jurídico" planta o medo antes de vender
+  // o benefício). Os três itens agora são três AVATARES — pontos de entrada diferentes que
+  // convergem na mesma Roma — liderados pelo desejo, não pelo receio.
   const QUALIFICA = [
-    'Você quer começar a investir em leilão de imóveis, mas não sabe por onde procurar oportunidade real.',
-    'Você já perdeu tempo olhando edital sem saber se o imóvel tinha risco jurídico ou estava ocupado.',
-    'Você quer usar tecnologia para encontrar e avaliar imóveis, em vez de garimpar site por site.',
+    'Você sonha em ter o seu primeiro imóvel — ou o próximo — e quer pagar bem menos do que ele vale.',
+    'Você já olhou edital de leilão sozinho e quer aprender a enxergar, em minutos, qual vale a pena arrematar.',
+    'Você quer transformar leilão em rotina de investimento, com processo e tecnologia — não em garimpo de sorte.',
   ];
   // O último item é ressalva, não frase de efeito: dizer que leilão "não é isento de risco"
   // é coerente com o resto do produto (é a mesma honestidade do ScoreRisco e da documental) —
   // prometer lucro garantido é o tipo de promessa que esta base inteira evita fazer.
   const NAO_VAI_VER = [
-    'Um curso teórico de leilão, sem aplicação prática.',
-    'Você virando especialista em edital e matrícula da noite para o dia.',
+    'Teoria solta, sem aplicação — vamos abrir a ferramenta e mexer num imóvel real.',
+    'Promessa de que todo imóvel compensa — mostro também quando o número manda NÃO arrematar.',
     'Promessa de lucro garantido — leilão é oportunidade real, não é isento de risco.',
   ];
 
@@ -328,6 +344,16 @@ export default function LiveInscricao() {
     <div style={{ minHeight: '100vh', background: NAVY, color: '#EAF0F8', fontFamily: FONTE,
       paddingBottom: (!pronto && !formVisivel) ? 92 : 0 }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');`}</style>
+
+      {/* ── FAIXA DE PRÉVIA (20/09) ──────────────────────────────────────────
+          Só existe em /admin/live-preview/:slug. Lembra que ninguém de fora vê isto — o
+          evento pode estar `ativo=false` (é exatamente o caso do rascunho de 15/11) — e que
+          qualquer inscrição feita aqui é REAL (mesmo endpoint, mesmo banco, mesmo WhatsApp). */}
+      {adminPreview && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 1100, background: '#7c2d12', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '8px 14px' }}>
+          PRÉVIA ADMIN — {evento.ativo ? 'este evento já está ATIVO' : 'rascunho, fora do ar para o público'} · inscrição aqui é real
+        </div>
+      )}
 
       {/* ── HERO, centralizado ────────────────────────────────────────────────
           Centralizado de propósito: numa página de campanha o olho entra pelo meio,
@@ -747,7 +773,9 @@ export default function LiveInscricao() {
             Garantir minha vaga
           </button>
           <div style={{ fontSize: 13, color: '#8FA4BF', marginTop: 14 }}>
-            {evento.recorrencia === 'semanal' ? 'Toda quarta, às 19h.' : 'Vaga gratuita.'}
+            {/* 20/09: evento único (ex.: o lançamento de 15/11) mostra a DATA, não um genérico
+                "vaga gratuita" — "Toda quarta" só faz sentido pra recorrência semanal mesmo. */}
+            {evento.recorrencia === 'semanal' ? 'Toda quarta, às 19h.' : `${quando} · vaga gratuita.`}
           </div>
         </div>
       )}

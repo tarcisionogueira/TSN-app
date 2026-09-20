@@ -408,6 +408,10 @@ function MainLayout() {
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           {/* Landing da aula ao vivo: pública, sem login, é a porta de entrada da campanha */}
           <Route path="/live/:slug" element={<LiveInscricao />} />
+          {/* Prévia ADMIN (20/09): mesma tela, mas lê `live_proxima_preview` (ignora `ativo`,
+              exige role admin no próprio banco) — é assim que o dono revisa um rascunho de
+              lançamento sem publicá-lo: a rota pública continua só enxergando evento `ativo`. */}
+          <Route path="/admin/live-preview/:slug" element={<PrivateRoute roles={['admin']}><LiveInscricao adminPreview /></PrivateRoute>} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           {/* Vitrine PÚBLICA de eBooks/cursos (12/09) — mesmo espírito do Acervo Aberto de
               imóveis, sem exigir login. A compra em si continua em /p/:tipo/:id. */}
