@@ -5024,6 +5024,34 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           const descPag = extrairDescricaoDoCorpo(html);
           if (descPag) im.descricao = descPag;
         }
+        // ENDEREÇO (20/09): a maioria destes scrapers só lê o CARD da listagem (nunca visita
+        // este detalhe) e grava `endereco: ''` fixo — achado real, SQL confirmou 0% em
+        // PESTANA/BIASI/GRUPOLANCE/HASTAPUBLICA/LEILAOBRASIL. Este ponto JÁ visita o detalhe
+        // (pra docs/avaliação/área), custo marginal zero pra também tentar o endereço.
+        // 1) BIASI tem um marcador fixo de template ("Fotos Mapa Street View" logo depois do
+        //    endereço do imóvel) — validado com recon real (3 amostras corretas + 1 caso que
+        //    SEM o marcador pegava o endereço do ESCRITÓRIO do leiloeiro, que aparece solto no
+        //    HTML antes do bloco do imóvel). Usa o ÚLTIMO "/UF " antes do marcador — é onde o
+        //    endereço do lote começa (depois do "Cidade/UF" do título, que sempre precede).
+        if (!im.endereco && im.fonte === 'BIASI') {
+          const txtPlano = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+          const idxMarcador = txtPlano.indexOf('Fotos Mapa Street View');
+          if (idxMarcador > 0) {
+            const antes = txtPlano.slice(Math.max(0, idxMarcador - 200), idxMarcador);
+            const mEnd = antes.match(/\/[A-Z]{2}\s+(.{5,150})$/);
+            if (mEnd) im.endereco = mEnd[1].trim().slice(0, 200);
+          }
+        }
+        // 2) Genérico (qualquer fonte deste enriquecimento): heurística situacional já validada
+        //    em texto de matrícula ("situado na/no/à <logradouro>"), aplicada só ao texto da
+        //    DESCRIÇÃO do lote — nunca à página inteira — pra nunca capturar o endereço do
+        //    escritório do leiloeiro (que não é `descricao`, é rodapé/chrome da página).
+        if (!im.endereco) {
+          const baseTxt = im.descricao || '';
+          const end = baseTxt ? extrairEnderecoMatricula(baseTxt) : null;
+          if (end?.logradouro) im.endereco = end.logradouro;
+          if (end?.bairro && !im.bairro) im.bairro = end.bairro;
+        }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         // 20/09: docs.foto era CALCULADO aqui (vasculharDocumentos já varre <img> da página)
         // e descartado — nunca atribuído a im.link_foto. api/enriquecer-lote.js e
