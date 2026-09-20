@@ -3154,8 +3154,18 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         const pracasDoLote = [Number(imDb?.valor_minimo) || 0, Number(imDb?.valor_minimo_2) || 0].filter(v => v > 0);
         const veioSemeado = pracasDoLote.some(v => Math.abs(v - vArrCliente) < 0.01);
         const usarPraca = pracaRef.valor > 0 && (vArrCliente <= 0 || (veioSemeado && pracaRef.valor < vArrCliente));
+        // ENDEREÇO/CONDOMÍNIO do PARECER (20/09, achado do dono: "não informa qual o
+        // endereço do imóvel mesmo consultando a documentação e matrícula"). `parecerInputs.d`
+        // vem do CLIENTE (Analise.jsx) e nunca recebe o enriquecimento feito acima em
+        // `mercadoInputs` (rua/condomínio lidos do edital/matrícula via `garantirEnderecoDoc`/
+        // `editalPre.identidade`) — os dois pipelines corriam em paralelo e só o da BUSCA de
+        // comparáveis era corrigido; o texto do parecer citava sempre o endereço cru do cliente
+        // (muitas vezes vazio). `pInp.endereco`/`nomeCondominio` agora herdam o valor já
+        // enriquecido quando o do cliente vier vazio ou só com o bairro.
         const pInp = {
           ...parecerInputs.d,
+          endereco: String(parecerInputs.d?.endereco || '').trim() || mercadoInputs?.endereco || '',
+          nomeCondominio: parecerInputs.d?.nomeCondominio || mercadoInputs?.nomeCondominio || '',
           ...(usarPraca ? { valorArrematacao: pracaRef.valor } : {}),
           valorMercado: valorMercado || parecerInputs.d.valorMercado,
           valorLocacao: locacaoCliente > 0 ? locacaoCliente : aluguelServidor,

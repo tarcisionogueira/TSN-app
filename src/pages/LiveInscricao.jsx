@@ -314,6 +314,19 @@ export default function LiveInscricao({ adminPreview = false }) {
     { t: 'O caminho depois da aula', d: 'O passo a passo completo para transformar isso em rotina — reservado para quem estiver ao vivo.' },
   ];
 
+  // ── COMO VOCÊ PAGA (20/09) ────────────────────────────────────────────
+  // Pedido do dono: trazer as formas de pagamento como FATO positivo, não como resposta a uma
+  // objeção que a própria página levanta antes — nenhum card começa admitindo um medo ("você
+  // deve estar pensando que precisa de todo o dinheiro..."), cada um só afirma o que é possível.
+  // "Quando o leilão permite"/"em muitos extrajudiciais" em vez de "sempre": nem toda praça
+  // oferece as três modalidades, e prometer isso de forma universal seria a mesma promessa
+  // vazia que o resto da página evita (ScoreRisco, "não é isento de risco").
+  const FORMAS_PAGAMENTO = [
+    { t: 'Sinal + saldo financiado', d: 'Você entra com o sinal e financia o restante, como um financiamento comum — sem precisar do valor cheio na hora do lance.' },
+    { t: 'Sinal parcelado, sem juros', d: 'Em muitos extrajudiciais, o próprio sinal pode ser parcelado direto com o leiloeiro — sem juros, sem comprovar renda ou saldo em conta.' },
+    { t: 'À vista, com o desconto máximo', d: 'Quem paga à vista puxa o maior desconto do lote — é a modalidade de maior margem.' },
+  ];
+
   // ── QUALIFICAÇÃO (05/09, reescrita 20/09) ───────────────────────────────
   // Adicionado depois de comparar com a LP de um concorrente: ele filtra por capital mínimo
   // (R$85 mil) antes de deixar entrar — decisão do dono foi NÃO copiar isso (encolheria o
@@ -566,6 +579,28 @@ export default function LiveInscricao({ adminPreview = false }) {
               </div>
               <div style={{ fontSize: 16.5, fontWeight: 700, color: '#fff', marginBottom: 7, lineHeight: 1.3 }}>{p.t}</div>
               <div style={{ fontSize: 14, color: '#A7B9CE', lineHeight: 1.6 }}>{p.d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── COMO VOCÊ PAGA (20/09) ────────────────────────────────────────────
+          Cartões de FATO, não de rebate: nenhum abre admitindo um medo do leitor. Fica logo
+          depois de "como vai funcionar" (a pessoa já entendeu a mecânica do desconto) e ANTES
+          da qualificação — é o segundo motivo pra continuar lendo, não só "vale menos", mas
+          também "cabe no meu bolso hoje". */}
+      <div style={{ maxWidth: 900, margin: '58px auto 0', padding: '0 22px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 10 }}>Como você paga</div>
+          <h2 style={{ fontSize: 'clamp(23px,3.4vw,31px)', fontWeight: 800, margin: 0, color: '#fff', letterSpacing: '-0.02em' }}>
+            Depende do leilão — no dia eu mostro qual encaixa
+          </h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 18 }}>
+          {FORMAS_PAGAMENTO.map((f) => (
+            <div key={f.t} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '22px 20px' }}>
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: '#fff', marginBottom: 7, lineHeight: 1.3 }}>{f.t}</div>
+              <div style={{ fontSize: 14, color: '#A7B9CE', lineHeight: 1.6 }}>{f.d}</div>
             </div>
           ))}
         </div>
