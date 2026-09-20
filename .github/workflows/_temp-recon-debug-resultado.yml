@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: Chama o endpoint de diagnóstico
         run: |
-          curl -sS -X POST "https://bidprobrasil.com.br/api/temp-debug-resultado" \
+          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-resultado" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -H "content-type: application/json" | tee /tmp/out.json
           echo "---"
