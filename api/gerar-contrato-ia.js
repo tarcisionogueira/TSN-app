@@ -112,10 +112,13 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: 'Descreva o contrato com pelo menos 20 caracteres' }), { status: 400 });
   }
 
-  // 24.000 caracteres (~6k tokens) para os anexos: 6.000 cortava um contrato inteiro no meio,
-  // e o caso REAL desta rota é "gere de novo o contrato do ano passado com a data nova" — o
-  // modelo precisa do documento inteiro, não do primeiro terço.
-  const DOCS_MAX = 24000;
+  // 60.000 caracteres (~15k tokens) para os anexos (21/09, subiu de 24.000 — pedido do dono:
+  // "poder incluir mais arquivos para usar de base", teto de anexo subiu de 5 para 10 no
+  // front). 6.000 cortava um contrato inteiro no meio, e o caso REAL desta rota é "gere de
+  // novo o contrato do ano passado com a data nova" — o modelo precisa do documento inteiro,
+  // não do primeiro terço; com vários anexos como base, 24.000 cortava o de trás sem avisar
+  // (a mesma forma nº 10 do CLAUDE.md — número plausível, mas cortando calado).
+  const DOCS_MAX = 60000;
   const docsTexto = documentos ? String(documentos).slice(0, DOCS_MAX) : '';
 
   const userMessage = `Gere um contrato de ${tipoFinal || 'prestação de serviços'} com base na seguinte descrição em texto livre:
@@ -172,10 +175,14 @@ Gere o contrato completo e pronto para uso.`;
     // TRUNCAMENTO É DITO, não escondido: em `max_tokens` o contrato termina no meio de uma
     // cláusula e, na tela, parece completo — o operador mandaria assinar um documento cortado.
     const truncado = data.stop_reason === 'max_tokens';
+    // Mesmo princípio do lado de ENTRADA (21/09): com vários anexos como base, o texto
+    // combinado pode passar de DOCS_MAX — o corte é silencioso pro modelo (`docsTexto` já
+    // vem cortado) e ficaria silencioso pro operador também sem este aviso.
+    const documentosTruncados = !!documentos && String(documentos).length > DOCS_MAX;
 
-    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, truncado }, sucesso: true });
+    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, truncado, documentosTruncados }, sucesso: true });
 
-    return new Response(JSON.stringify({ ok: true, contrato, truncado }), {
+    return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

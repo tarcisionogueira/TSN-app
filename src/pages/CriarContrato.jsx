@@ -161,15 +161,17 @@ export default function CriarContrato() {
   };
 
   // ── Upload arquivos referência ──
-  // Teto de 5 era aplicado em silêncio (`.slice(0,5)` descartava o excedente sem avisar) —
-  // quem selecionasse mais via achava que "não consegue anexar", sem saber que o 6º arquivo
-  // em diante nunca entrou na lista. Agora avisa quantos ficaram de fora.
+  // Teto (21/09, pedido do dono: "poder incluir mais arquivos para usar de base" — subiu de
+  // 5 para 10). Era aplicado em silêncio (`.slice()` descartava o excedente sem avisar) —
+  // quem selecionasse mais via achava que "não consegue anexar", sem saber que o excedente
+  // nunca entrou na lista. Agora avisa quantos ficaram de fora.
+  const MAX_ARQUIVOS_REF = 10;
   const handleArquivosRef = (e) => {
     const files = Array.from(e.target.files || []);
     setArquivosRef(prev => {
       const combinado = [...prev, ...files];
-      if (combinado.length > 5) setErro(`Máximo de 5 arquivos de referência — ${combinado.length - 5} não foi(ram) incluído(s).`);
-      return combinado.slice(0, 5);
+      if (combinado.length > MAX_ARQUIVOS_REF) setErro(`Máximo de ${MAX_ARQUIVOS_REF} arquivos de referência — ${combinado.length - MAX_ARQUIVOS_REF} não foi(ram) incluído(s).`);
+      return combinado.slice(0, MAX_ARQUIVOS_REF);
     });
   };
 
@@ -229,6 +231,9 @@ export default function CriarContrato() {
       // o operador manda assinar um documento que termina no meio de uma cláusula.
       if (data.truncado) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}O texto atingiu o tamanho máximo e pode ter ficado incompleto no fim — role até o final e confira antes de enviar.`);
+      }
+      if (data.documentosTruncados) {
+        setAvisoDocs(av => `${av ? av + ' ' : ''}Os documentos anexados juntos passaram do tamanho que a IA consegue ler de uma vez — o(s) último(s) anexo(s) pode(m) não ter sido totalmente considerado(s).`);
       }
       const textoGerado = data.contrato || data.conteudo || '';
       setContratoGerado(textoGerado);
@@ -475,7 +480,7 @@ export default function CriarContrato() {
             <p style={S.secTitle}>Documentos de referência adicionais (opcional)</p>
             <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px', lineHeight: 1.5 }}>
               {modo === 'gerar' ? 'Anexe propostas, e-mails ou documentos de suporte para a IA.' : 'Documentos que o signatário pode consultar ao ler e assinar.'}
-              {' '}Até 5 arquivos, 5 MB cada.
+              {' '}Até {MAX_ARQUIVOS_REF} arquivos.
             </p>
             <input ref={fileRefRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleArquivosRef} />
             <button onClick={() => fileRefRef.current?.click()}
