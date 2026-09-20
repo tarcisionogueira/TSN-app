@@ -12003,17 +12003,28 @@ function LiveTab() {
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px,1fr))', gap:14, marginBottom:18 }}>
         <div>
-          <label style={S.label}>Sala do Google Meet</label>
-          <input style={S.input} value={ev.link_sala || ''} placeholder="Gere automaticamente ou cole aqui"
+          <label style={S.label}>Link da transmissão</label>
+          <input style={S.input} value={ev.link_sala || ''} placeholder={ev.recorrencia === 'semanal' ? 'Gere automaticamente ou cole aqui' : 'Cole aqui o link da live (ex.: YouTube)'}
             onChange={e => setEv({ ...ev, link_sala: e.target.value })} onBlur={() => salvar({ link_sala: ev.link_sala || null })} />
-          <button onClick={gerarSala} disabled={criandoSala}
-            style={{ marginTop:8, padding:'9px 15px', background: criandoSala ? '#94a3b8' : '#0D63DB', color:'#fff', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor: criandoSala ? 'default' : 'pointer' }}>
-            {criandoSala ? 'Criando…' : '🎦 Gerar sala automaticamente'}
-          </button>
-          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
-            Cria o evento na sua agenda com sala do Meet.
-            {ev.recorrencia === 'semanal' ? ' Sendo semanal, o mesmo link vale para todas as edições.' : ' Evento único — a sala vale para esta data.'}
-          </div>
+          {/* O botão gera sala do GOOGLE MEET (via /api/live-criar-sala) — só faz sentido pra
+              aula recorrente. O lançamento de 15/11 (dono, 20/09) não é mais Meet, é live no
+              YouTube: o link entra colado à mão no campo acima, sem gerador. */}
+          {ev.recorrencia === 'semanal' ? (
+            <>
+              <button onClick={gerarSala} disabled={criandoSala}
+                style={{ marginTop:8, padding:'9px 15px', background: criandoSala ? '#94a3b8' : '#0D63DB', color:'#fff', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor: criandoSala ? 'default' : 'pointer' }}>
+                {criandoSala ? 'Criando…' : '🎦 Gerar sala do Meet automaticamente'}
+              </button>
+              <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+                Cria o evento na sua agenda com sala do Meet. Sendo semanal, o mesmo link vale para todas as edições.
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+              Aparece no lembrete por e-mail (véspera e no dia) e no convite de agenda. Cole aqui
+              o link da live do YouTube assim que criar a transmissão.
+            </div>
+          )}
         </div>
         <div>
           <label style={S.label}>Grupo de WhatsApp</label>
