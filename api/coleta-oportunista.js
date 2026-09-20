@@ -42,7 +42,13 @@ const ESPACAMENTO  = process.env.COLETA_OPORTUNISTA_ESPACAMENTO || '20 hours';
 // se a casa perder um ciclo inteiro, o pago acorda no 4º dia, não no 7º.
 const DIAS_FRESCO  = Number(process.env.COLETA_OPORTUNISTA_DIAS_FRESCO || 4);
 // Fonte → workflow (só as PAGAS por Bright Data).
-const FONTES = { SOLEON: 'scraper-soleon.yml', GESTAO: 'scraper-gestao.yml', RJ: 'scraper-rj.yml', PECINI: 'scraper-pecini.yml' };
+// 20/09: VLANCE tinha o MESMO tratamento das outras 4 (schedule desligado em 15/09, mesmo
+// comentário "coleta-oportunista.js continua disparando via workflow_dispatch no login do
+// staff" no cabeçalho de scraper-vlance.yml) — mas nunca entrou neste mapa. Resultado: desde
+// 15/09 o VLANCE não tinha NENHUM gatilho automático na nuvem, só o runner residencial do
+// dono ou disparo manual. `coleta_cliente` já tinha a linha (`fontes_acervo: ['VLANCE']`,
+// `intervalo_horas: 72`) pronta — faltava só esta entrada.
+const FONTES = { SOLEON: 'scraper-soleon.yml', GESTAO: 'scraper-gestao.yml', RJ: 'scraper-rj.yml', PECINI: 'scraper-pecini.yml', VLANCE: 'scraper-vlance.yml' };
 const H = { apikey: SVC, Authorization: `Bearer ${SVC}`, Accept: 'application/json' };
 
 /**
