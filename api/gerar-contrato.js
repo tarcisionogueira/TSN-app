@@ -105,11 +105,16 @@ export default async function handler(req, res) {
 
   // Normaliza a lista de signatários: um LINK POR ASSINANTE (cada um assina o seu).
   // Aceita o formato novo (signatarios: [{nome,email}]) e o antigo (emailAssinante).
+  // E-MAIL NÃO É MAIS OBRIGATÓRIO (21/09, pedido do dono: "poder copiar o link e enviar
+  // para que as partes assinem na tela do celular" — sem depender de e-mail chegar). O que
+  // identifica um assinante agora é NOME (ou e-mail válido, se o nome faltar) — precisa de
+  // pelo menos um dos dois pra a linha fazer sentido na tela de "enviado"/no link copiável.
   const listaSign = (Array.isArray(signatarios) && signatarios.length
     ? signatarios
     : (emailAssinante ? [{ email: emailAssinante }] : []))
     .map(s => ({ nome: sanitizeText(s?.nome || '', 120) || null, email: sanitizeText(s?.email || '', 200) }))
-    .filter(s => /\S+@\S+\.\S+/.test(s.email))
+    .map(s => ({ nome: s.nome, email: /\S+@\S+\.\S+/.test(s.email) ? s.email : null }))
+    .filter(s => s.nome || s.email)
     .slice(0, 10);
 
   // Fluxo direto: conteúdo já pronto (assinar documento existente ou contrato gerado pela IA no frontend)
@@ -159,23 +164,28 @@ export default async function handler(req, res) {
       };
 
       // Uma linha (token/link) por signatário. testemunha_token vem do DEFAULT do banco.
-      const rows = listaSign.map(s => ({ ...base, assinante_email: s.email }));
-      const { data, error } = await supabase.from('contratos_link').insert(rows).select('token, assinante_email, testemunha_token');
+      // assinante_nome vai na PRÓPRIA linha (21/09) — antes só existia em memória e era
+      // casado de volta por e-mail; com e-mail opcional, várias linhas teriam
+      // assinante_email=null e esse casamento devolveria sempre o primeiro signatário
+      // sem e-mail pra todo mundo (identidade trocada no link/e-mail de outra pessoa).
+      const rows = listaSign.map(s => ({ ...base, assinante_email: s.email, assinante_nome: s.nome }));
+      const { data, error } = await supabase.from('contratos_link').insert(rows).select('token, assinante_email, assinante_nome, testemunha_token');
       if (error || !data?.length) return res.status(500).json({ error: 'Erro ao salvar contrato' });
 
-      // Casa cada token com o nome/email e envia o link por e-mail a cada parte. Quando o contrato
-      // EXIGE testemunha, cada parte recebe também o LINK DA SUA TESTEMUNHA para encaminhar (a
-      // testemunha preenche nome/CPF e assina remotamente — não precisa estar junto da parte).
-      const links = data.map(row => {
-        const nome = listaSign.find(s => s.email === row.assinante_email)?.nome || null;
-        return {
-          // Link SEM hash (/c/…): o rewrite serve o preview rico "Assinatura de documento"
-          // no WhatsApp e redireciona a pessoa para a rota do app (/#/c/…). Idem testemunha.
-          nome, email: row.assinante_email, token: row.token, url: `${origin}/c/${row.token}`,
-          testemunhaUrl: (requerTestemunha && row.testemunha_token) ? `${origin}/t/${row.testemunha_token}` : null,
-        };
-      });
-      await Promise.all(links.map(l =>
+      // Quando o contrato EXIGE testemunha, cada parte recebe também o LINK DA SUA TESTEMUNHA
+      // para encaminhar (a testemunha preenche nome/CPF e assina remotamente — não precisa
+      // estar junto da parte).
+      const links = data.map(row => ({
+        // Link SEM hash (/c/…): o rewrite serve o preview rico "Assinatura de documento"
+        // no WhatsApp e redireciona a pessoa para a rota do app (/#/c/…). Idem testemunha.
+        nome: row.assinante_nome, email: row.assinante_email, token: row.token, url: `${origin}/c/${row.token}`,
+        testemunhaUrl: (requerTestemunha && row.testemunha_token) ? `${origin}/t/${row.testemunha_token}` : null,
+      }));
+      // Só tenta e-mail pra quem TEM e-mail — sem isso `enviarEmail({to:null,...})` era
+      // chamado pra todo assinante sem e-mail (o `.catch(()=>{})` escondia a falha, mas
+      // continuava gastando cota do Resend e poluindo emails_log à toa). Quem não recebe
+      // e-mail depende só do link copiável mostrado na tela de "enviado" — funciona igual.
+      await Promise.all(links.filter(l => l.email).map(l =>
         enviarEmail({
           to: l.email,
           subject: `Contrato para assinatura: ${tituloFinal}`,

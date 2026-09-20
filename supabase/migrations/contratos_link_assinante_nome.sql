@@ -1,0 +1,11 @@
+-- Pedido do dono (21/09): "o e-mail não ser item obrigatório e eu poder copiar o link e
+-- enviar para que as partes assinem na tela do celular" — hoje o e-mail é a ÚNICA forma de
+-- identificar um assinante (api/gerar-contrato.js filtra `signatarios` por e-mail válido antes
+-- de criar a linha em contratos_link), então sem e-mail não existe nem token nem link — mesmo
+-- a tela de "enviado" já sabendo mostrar link copiável por assinante.
+--
+-- Falta uma coluna pra guardar o NOME do assinante na própria linha: hoje o nome só existe em
+-- memória no servidor (`listaSign`) e é casado de volta por e-mail (`s.email === row.assinante_email`)
+-- — com e-mail agora opcional, várias linhas teriam `assinante_email = null` e esse casamento
+-- devolveria sempre o PRIMEIRO signatário sem e-mail pra todo mundo (bug de identidade trocada).
+alter table public.contratos_link add column if not exists assinante_nome text;

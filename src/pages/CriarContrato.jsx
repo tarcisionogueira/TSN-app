@@ -161,9 +161,16 @@ export default function CriarContrato() {
   };
 
   // ── Upload arquivos referência ──
+  // Teto de 5 era aplicado em silêncio (`.slice(0,5)` descartava o excedente sem avisar) —
+  // quem selecionasse mais via achava que "não consegue anexar", sem saber que o 6º arquivo
+  // em diante nunca entrou na lista. Agora avisa quantos ficaram de fora.
   const handleArquivosRef = (e) => {
     const files = Array.from(e.target.files || []);
-    setArquivosRef(prev => [...prev, ...files].slice(0, 5));
+    setArquivosRef(prev => {
+      const combinado = [...prev, ...files];
+      if (combinado.length > 5) setErro(`Máximo de 5 arquivos de referência — ${combinado.length - 5} não foi(ram) incluído(s).`);
+      return combinado.slice(0, 5);
+    });
   };
 
   const toggleDocExtra = (id) => {
@@ -242,8 +249,11 @@ export default function CriarContrato() {
   const enviarContrato = async () => {
     setErro('');
     if (!titulo.trim()) { setErro('Informe o título do contrato.'); return; }
-    const signValidos = signatarios.filter(s => /\S+@\S+\.\S+/.test(s.email.trim()));
-    if (!signValidos.length) { setErro('Informe ao menos um assinante com e-mail válido.'); return; }
+    // E-mail é opcional (21/09, pedido do dono) — o que identifica o assinante é NOME (ou
+    // e-mail, se o nome faltar); sem nenhum dos dois não dá pra rotular o link na tela de
+    // "enviado" nem no possível e-mail. Mesma régua usada no servidor (api/gerar-contrato.js).
+    const signValidos = signatarios.filter(s => s.nome.trim() || /\S+@\S+\.\S+/.test(s.email.trim()));
+    if (!signValidos.length) { setErro('Informe ao menos um assinante (nome ou e-mail).'); return; }
     if (modo === 'assinar' && !arquivoUrl) { setErro('Aguarde o upload do arquivo ou selecione um arquivo.'); return; }
     if (modo === 'gerar' && !contratoGerado) { setErro('Gere o contrato antes de enviar.'); return; }
 
@@ -380,12 +390,12 @@ export default function CriarContrato() {
 
             <div style={{ marginBottom: 16 }}>
               <label style={S.label}>Assinantes (partes) *</label>
-              <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 8px' }}>Cada assinante recebe o contrato por e-mail com o seu próprio link para assinar (e pode compartilhá-lo).</p>
+              <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 8px' }}>Cada assinante ganha seu próprio link. Informe o e-mail se quiser que a plataforma envie automaticamente — sem e-mail, você copia o link na tela seguinte e manda por WhatsApp ou onde preferir.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {signatarios.map((s, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input style={{ ...S.input, flex: 1 }} value={s.nome} onChange={e => setSign(i, 'nome', e.target.value)} placeholder="Nome (opcional)" />
-                    <input style={{ ...S.input, flex: 1.4 }} type="email" value={s.email} onChange={e => setSign(i, 'email', e.target.value)} placeholder="email@exemplo.com" />
+                    <input style={{ ...S.input, flex: 1 }} value={s.nome} onChange={e => setSign(i, 'nome', e.target.value)} placeholder="Nome" />
+                    <input style={{ ...S.input, flex: 1.4 }} type="email" value={s.email} onChange={e => setSign(i, 'email', e.target.value)} placeholder="email@exemplo.com (opcional)" />
                     {signatarios.length > 1 && <button onClick={() => rmSignatario(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}><X size={16} /></button>}
                   </div>
                 ))}
@@ -492,7 +502,7 @@ export default function CriarContrato() {
             <button onClick={() => {
               setErro('');
               if (!titulo.trim()) { setErro('Informe o título.'); return; }
-              if (!signatarios.some(s => /\S+@\S+\.\S+/.test(s.email.trim()))) { setErro('Informe ao menos um assinante com e-mail válido.'); return; }
+              if (!signatarios.some(s => s.nome.trim() || /\S+@\S+\.\S+/.test(s.email.trim()))) { setErro('Informe ao menos um assinante (nome ou e-mail).'); return; }
               if (modo === 'assinar' && !arquivoDoc) { setErro('Selecione o arquivo do documento.'); return; }
               if (modo === 'assinar' && !arquivoUrl && !arquivoUploading) { setErro('Aguarde o upload concluir.'); return; }
               setPasso('identidade');
@@ -592,7 +602,7 @@ export default function CriarContrato() {
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
               <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#eff6ff', color: '#0D63DB', borderRadius: 20 }}>{tipoContrato}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f0fdf4', color: '#059669', borderRadius: 20 }}>{signatarios.filter(s => s.email.trim()).length} assinante(s)</span>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f0fdf4', color: '#059669', borderRadius: 20 }}>{signatarios.filter(s => s.nome.trim() || s.email.trim()).length} assinante(s)</span>
               {requerTestemunha && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#eff6ff', color: '#0D63DB', borderRadius: 20 }}>Com testemunha</span>}
               {produtoSel && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f3e8ff', color: '#6d28d9', borderRadius: 20 }}>Vinculado a produto</span>}
               <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#fef3c7', color: '#92400e', borderRadius: 20 }}>{VERIFICACOES.find(v => v.id === verificacao)?.label}</span>
@@ -648,7 +658,7 @@ export default function CriarContrato() {
           <CheckCircle2 size={52} color="#059669" style={{ margin: '0 auto 16px' }} />
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 8px' }}>Contrato enviado!</h2>
           <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 14, lineHeight: 1.6 }}>
-            Cada assinante recebeu o contrato por e-mail com o seu link. Você também pode copiar e compartilhar os links abaixo.
+            Quem tem e-mail cadastrado já recebeu o contrato por e-mail. Para os demais (ou pra mandar por WhatsApp), copie o link de cada um abaixo.
           </p>
           {linksGerados.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 520, margin: '0 auto 24px', textAlign: 'left' }}>
