@@ -441,15 +441,17 @@ async function coletarEvento(dominio, idLeilao) {
   const html = await bd(url, { valido: paginaOk });
   if (!paginaOk(html)) return { rows: [], bloqueado: true };
   const cabecalho = decodificarEntidades(html.slice(0, 6000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
-  // JANELA DE DATA ANCORADA (20/09): recon real (Bright Data, idLeilao 1044/1051, páginas de
-  // 90-190 kB) mostrou "Data: Abertura 24/Ago/2026..." existindo no HTML mas FORA do
-  // slice(0,6000) — em página de evento grande, o bloco de lotes empurra o texto de data pra
-  // além do cabeçalho, e `dataEvento(cabecalho)` "achava" ausência que não existia (153 ativos
-  // do GESTAOLEILOES em 0% de data_leilao apesar de o Bright Data trazer a página completa).
-  // Busca o ancorador no HTML INTEIRO em vez de confiar que ele mora nos primeiros 6000 chars.
-  const idxData = html.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
-  const janelaData = idxData >= 0 ? html.slice(Math.max(0, idxData - 200), idxData + 400) : cabecalho;
-  const textoData = idxData >= 0 ? decodificarEntidades(janelaData.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ') : cabecalho;
+  // JANELA DE DATA ANCORADA (20/09, v2 — a v1 buscava o ancorador no HTML CRU e nunca achava:
+  // "Data:" e "Abertura" vêm separados por tags/entidades no markup real, então só casam depois
+  // de decodificar entidades e tirar as tags — exatamente o que `achadosCrus()` do recon fazia e
+  // o `html.search()` direto no cru não fazia. Corrigido decodificando/tirando tag do documento
+  // INTEIRO primeiro, e só então procurando o ancorador). Recon real (Bright Data, idLeilao
+  // 1044/1051, páginas de 90-190 kB) mostrou "Data: Abertura 24/Ago/2026..." existindo no texto
+  // mas fora do slice(0,6000) que dataEvento() lia — 153 ativos do GESTAOLEILOES em 0% de
+  // data_leilao apesar de a página vir completa.
+  const textoCompleto = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+  const idxData = textoCompleto.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
+  const textoData = idxData >= 0 ? textoCompleto.slice(Math.max(0, idxData - 100), idxData + 200) : cabecalho;
   const ctx = {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),

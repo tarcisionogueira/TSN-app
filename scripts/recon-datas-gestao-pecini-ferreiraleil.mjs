@@ -93,9 +93,12 @@ async function checarUrl(label, url, { proposito, charset = 'utf-8', usarDataEve
   // validar sobre a MESMA página real antes de considerar o conserto confirmado.
   let viaEventoGestao = null;
   if (usarDataEventoGestao) {
-    const idxData = html.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
-    const janela = idxData >= 0 ? html.slice(Math.max(0, idxData - 200), idxData + 400) : cabecalho;
-    const txtJanela = idxData >= 0 ? decodificarEntidades(janela.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ') : cabecalho;
+    // v2: procura o ancorador no texto JÁ decodificado/sem tag (a v1 buscava no HTML cru e
+    // "Data:"/"Abertura" nunca casavam ali — só depois de tirar tag/entidade, como achadosCrus()
+    // já fazia).
+    const textoCompleto = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+    const idxData = textoCompleto.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
+    const txtJanela = idxData >= 0 ? textoCompleto.slice(Math.max(0, idxData - 100), idxData + 200) : cabecalho;
     viaEventoGestao = dataEventoGestao(txtJanela);
     console.log(`     idxData=${idxData} janela="${txtJanela.slice(0, 150)}"`);
   }
@@ -113,6 +116,10 @@ async function main() {
     await checarUrl('GESTAOLEILOES evento', url, { proposito: 'gestao', charset: 'windows-1252', usarDataEventoGestao: true });
     await sleep(500);
   }
+  // PECINI/FERREIRALEIL já confirmados em 2 rodadas anteriores (403 direto, BD ok, mas SEM
+  // nenhuma data no HTML) — pula por padrão pra não gastar cota Bright Data à toa. Setar
+  // SKIP_PECINI_FERREIRA=0 pra reincluir se precisar reconfirmar.
+  if (process.env.SKIP_PECINI_FERREIRA === '0') {
 
   console.log('\n===== PECINI — url_lote =====');
   const pecini = await sbGet(`imoveis_leilao?select=url_lote&ativo=eq.true&fonte=eq.PECINI&data_leilao=is.null&limit=5`);
@@ -127,6 +134,7 @@ async function main() {
     await checarUrl('FERREIRALEIL', l.url_lote, { proposito: 'soleon' });
     await sleep(500);
   }
+  } // fim SKIP_PECINI_FERREIRA
 }
 
 main().catch(e => { console.error('[recon-datas-gestao-pecini-ferreiraleil] FALHOU:', e?.message || e); process.exit(1); });
