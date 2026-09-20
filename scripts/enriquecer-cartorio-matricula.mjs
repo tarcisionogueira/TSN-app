@@ -53,7 +53,13 @@ async function baixarPDF(url) {
   const t = setTimeout(() => ctrl.abort(), 25000);
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' } });
-    if (!r.ok) return { erro: `http_${r.status}`, morto: r.status === 404 || r.status === 410 };
+    // 403 NÃO é "o arquivo não existe" — é bloqueio de acesso (medido 20/09: 574 de 580
+    // candidatos desta rodada deram 403, o mesmo padrão de IP-de-datacenter-bloqueado já visto
+    // em GESTAO/PECINI/FERREIRALEIL nesta sessão, e que o próprio comentário do topo do arquivo
+    // já sabia existir "ex.: Superbid" — só o CÓDIGO não distinguia. Só 404/410 confirmam
+    // ausência de verdade (link morto, arquivo removido); 403 fica FORA de `morto` pra nunca
+    // marcar matricula_scan_em como se tivéssemos provado que não existe.
+    if (!r.ok) return { erro: `http_${r.status}`, morto: r.status === 404 || r.status === 410, bloqueado: r.status === 403 };
     const ab = await r.arrayBuffer();
     const buf = Buffer.from(ab);
     if (buf.length > 12_000_000) return { erro: 'grande', morto: true };
@@ -69,7 +75,7 @@ async function main() {
   if (!cands?.length) { console.log('Matrícula: sem candidatos (PDF de texto, não-CEF, sem cartório).'); return; }
   console.log(`Candidatos: ${cands.length} · conc ${CONC} · limite ${LIMITE}`);
 
-  let idx = 0, ok = 0, semTexto = 0, mortos = 0, transientes = 0, feitos = 0, logs = 0, endOk = 0, logsEnd = 0;
+  let idx = 0, ok = 0, semTexto = 0, mortos = 0, transientes = 0, bloqueados = 0, feitos = 0, logs = 0, endOk = 0, logsEnd = 0;
   const marcar = (id, patch) => supabase.from('imoveis_leilao').update(patch).eq('id', id).then(() => {}, () => {});
 
   async function worker() {
@@ -77,9 +83,12 @@ async function main() {
       const im = cands[idx++];
       const dl = await baixarPDF(im.link_matricula);
       if (dl.erro) {
-        // Transitório (rede/timeout): deixa p/ a próxima execução (não marca).
-        // Morto (404/HTML/gigante): marca para não reprocessar sempre.
-        if (dl.transiente) { transientes++; }
+        // Transitório (rede/timeout) OU bloqueado (403 — IP de datacenter, não "não existe":
+        // achado real 20/09, 574/580 candidatos desta fonte deram 403 e o código de ANTES
+        // marcava matricula_scan_em como se fosse ausência confirmada, excluindo pra sempre um
+        // link que é real e funciona por outra via — mesma forma nº5 do CLAUDE.md, agora
+        // encontrada aqui). Só 404/410/HTML/gigante (`morto`) marcam scan_em de verdade.
+        if (dl.transiente || dl.bloqueado) { if (dl.bloqueado) bloqueados++; else transientes++; }
         else { mortos++; await marcar(im.id, { matricula_scan_em: new Date().toISOString() }); }
         feitos++; continue;
       }
@@ -127,7 +136,7 @@ async function main() {
   }
 
   await Promise.all(Array.from({ length: CONC }, () => worker()));
-  console.log(`FIM: registro preenchido ${ok} · endereço preenchido ${endOk} · sem-texto/escaneado ${semTexto} · links mortos ${mortos} · transientes(retry) ${transientes} · processados ${feitos}`);
+  console.log(`FIM: registro preenchido ${ok} · endereço preenchido ${endOk} · sem-texto/escaneado ${semTexto} · links mortos ${mortos} · bloqueados(403,retry) ${bloqueados} · transientes(retry) ${transientes} · processados ${feitos}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
