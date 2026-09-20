@@ -50,5 +50,22 @@ export default async function handler(req, res) {
     respostaFlat = { status: r.status, corpo: txt.slice(0, 2000) };
   } catch (e) { erroFlat = String(e?.message || e).slice(0, 200); }
 
-  res.status(200).json({ ok: true, tribunal, respostaNested, erroNested, respostaFlat, erroFlat });
+  // Terceira tentativa: sem `.keyword` — talvez o campo já seja keyword puro (sem sub-field).
+  const bodySemKeyword = { size: 0, query, aggs: { credores: { terms: { field: 'partes.nome', size: 20 } } } };
+  let respostaSemKeyword = null, erroSemKeyword = null;
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { Authorization: `APIKey ${CNJ_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(bodySemKeyword), signal: AbortSignal.timeout(15000) });
+    const txt = await r.text();
+    respostaSemKeyword = { status: r.status, corpo: txt.slice(0, 2000) };
+  } catch (e) { erroSemKeyword = String(e?.message || e).slice(0, 200); }
+
+  // Quarta: introspecção do mapping real (se a API pública expuser).
+  let mapping = null, erroMapping = null;
+  try {
+    const r = await fetch(`${BASE_URL}/api_publica_${tribunal}/_mapping`, { headers: { Authorization: `APIKey ${CNJ_KEY}` }, signal: AbortSignal.timeout(15000) });
+    const txt = await r.text();
+    mapping = { status: r.status, corpo: txt.slice(0, 3000) };
+  } catch (e) { erroMapping = String(e?.message || e).slice(0, 200); }
+
+  res.status(200).json({ ok: true, tribunal, respostaNested, erroNested, respostaFlat, erroFlat, respostaSemKeyword, erroSemKeyword, mapping, erroMapping });
 }
