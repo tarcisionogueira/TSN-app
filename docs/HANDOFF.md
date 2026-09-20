@@ -278,6 +278,162 @@ menores) — só documentado, dono pediu para não corrigir agora, ver seção p
 
 ---
 
+## 🛠️ SESSÃO 26 · PARTE 2 (20/09, tarde) — DONO AUTORIZOU "RESOLVA": BACKLOG INTEIRO DA PARTE 1 FECHADO
+
+Continuação direta da sessão anterior (ver Parte 1 logo abaixo). O dono leu o relatório e
+respondeu: **"Quanto aos demais problemas que você identificou, resolva."** — autorização
+explícita pro backlog inteiro listado como "pendente de trabalho futuro", que não envolvia
+decisão do dono nem gasto extra de Bright Data. Ordem seguida: endereço vazio → matrícula →
+FERREIRALEIL → PECINI, com recon real (GitHub Actions, Puppeteer/Bright Data) validando CADA
+achado antes de escrever qualquer linha de conserto — a mesma disciplina da Parte 1.
+
+⚠️ **Achado operacional, registrado pra próxima sessão não estranhar**: durante este bloco,
+outra sessão (o dono, provavelmente) editou o MESMO checkout em paralelo — um `git fetch`+algo
+no meio do trabalho descartou edições minhas ainda não commitadas em `scripts/scraper-
+puppeteer.mjs` e `scripts/lib/leilaobrasil-parse.mjs` (sem aviso, só percebido porque o Edit
+seguinte reportou "arquivo mudou em disco"). Refeitas e commitadas imediatamente após cada
+edição (não em lote) para não perder de novo. Se uma sessão futura notar o mesmo, commitar
+com mais frequência é a defesa.
+
+### 1. Endereço vazio — corrigido em 4 fontes, investigado e documentado em mais 2
+
+- **LEILAOBRASIL/LUTHERO — causa raiz era um bug de "calcula e descarta"**: `parseDetalhe()`
+  (`scripts/lib/leilaobrasil-parse.mjs`) já extraía `endereco` do JSON embutido (`bem.endereco`/
+  `bem.numero`) quando presente — mas `montarRow()` nunca copiava esse campo pro registro
+  salvo. 0/209 ativos com endereço até hoje, por um `endereco` que existia em memória e nunca
+  chegava ao banco. Corrigido (agora `endereco`/`bairro` vão pro row). Ganhou também um
+  fallback: quando `bem.endereco`/`numero` vêm vazios (medido: maioria real dos casos — o
+  backend do site não preenche pra boa parte dos judiciais), extrai do TEXTO da descrição do
+  BEM com `extrairEnderecoMatricula()` (heurística "situado na/no/à", já validada em texto de
+  matrícula PDF — nunca captura endereço de rodapé porque só olha o texto do `bem`, não a
+  página inteira).
+- **PESTANA (maior volume, 1.007 ativos)**: `bem.endereco`/`cidade.name`/`estado.name` vêm
+  VAZIOS no payload real da API (confirmado por recon: até em imóvel urbano). Mas
+  `bem.observacao` + `caracteristicas[].valor` trazem o texto jurídico completo, que às vezes
+  tem "situado na Rua X, nº Y". Mesmo `extrairEnderecoMatricula()` aplicado aí, best-effort —
+  fica vazio em lote rural/loteamento sem logradouro urbano (não é bug, é limite real do dado).
+- **BIASI (441 ativos)**: tem um marcador FIXO de template — "Fotos Mapa Street View" aparece
+  logo depois do endereço do imóvel em toda página de detalhe. Validado com recon real: 3
+  amostras corretas + 1 caso onde uma extração ingênua (1º logradouro da página inteira)
+  pegava **o endereço do ESCRITÓRIO do leiloeiro** ("Av. Fagundes Filho, 145..."), não do lote
+  — a mesma armadilha do achado de 17/09 (`extrairIdentidadeTexto`). Corrigido usando o ÚLTIMO
+  "/UF " antes do marcador, que isola só o bloco do imóvel. Implementado dentro de
+  `enriquecerDocumentosLote()` (já visita o detalhe pra docs/avaliação/área — custo marginal
+  zero).
+- **GRUPOLANCE (361 ativos)**: o 403 medido no primeiro recon (fetch cru) NÃO reflete a
+  produção — recon com Puppeteer real confirmou que a página de detalhe abre normal e tem
+  endereço limpo ("Alameda Grajaú", "Rua GB-48 esquina com Av. Goiânia"). Sem um marcador fixo
+  tipo o do BIASI, não arrisquei extração ingênua (mesmo risco de pegar o escritório) — ganhou
+  só o fallback genérico (abaixo). Cobertura menor que o ideal; falta achar um marcador
+  confiável numa sessão futura.
+- **Fallback GENÉRICO, para TODA fonte que passa por `enriquecerDocumentosLote()`** (GRUPOLANCE/
+  VIP/LEILOTECH/SUPORTE/WEBLEILOES/HASTAPUBLICA/SUPERBID e demais): `extrairEnderecoMatricula()`
+  sobre `im.descricao` (nunca a página inteira) — só dispara quando a descrição usa a locução
+  "situado na/no/à", então tem cobertura parcial mas risco zero de contaminação cruzada.
+- **HASTAPUBLICA**: investigado, sem fix. A URL de "detalhe" é na verdade a página do EVENTO
+  (`/leilao/painel/{id}`, compartilhada por vários lotes) — não achei estrutura HTML por-lote
+  com endereço. Precisaria de abordagem via PDF (edital/documentos), não tentada.
+
+### 2. `link_matricula`/`link_regras_venda` — bug real achado e corrigido, 735 lotes recuperados
+
+Achado ao investigar a família SUPERBID pro item de matrícula: **735 lotes ativos** (SUPERBID
+492 · KRONLEILOES 69 · MEGA 68 · GRUPOLANCE 55 · BIASI 37 · TOTALLEILOES 6 · SOLD 5 ·
+LEILOTECH 3) tinham um documento tipo `matricula` **já sentado dentro de `anexos[]`**, mas
+`link_matricula` continuava `null`. Mais 76 lotes (FRAZAO 72 · MEGA 4) no mesmo estado pra
+`link_regras_venda`. Causa: o gate `jaTemDocs` de `enriquecerDocumentosLote()`
+(`scripts/scraper-puppeteer.mjs`) trata "já tem `anexos`" como "já processado" e nunca revisita
+pra alinhar o link individual — `anexos` tinha vindo de uma versão anterior do código, sem essa
+atribuição. **Corrigido na origem** (deriva `link_matricula`/`link_regras_venda` direto de
+`anexos` sempre que estiverem vazios, sem precisar revisitar a página) e **backfill imediato via
+SQL** dos 735+76 já represados:
+
+| Fonte | `link_matricula` antes → depois | `link_regras_venda` antes → depois |
+|---|---|---|
+| SUPERBID | 30/1.416 (2%) → 522/1.416 (37%) | 0 → 0 (site não publica — ver abaixo) |
+| MEGA | 550/624 (88%) → 618/624 (99%) | 13/624 → 17/624 |
+| GRUPOLANCE | 228/361 (63%) → 283/361 (78%) | 0 → 0 |
+| BIASI | 161/441 (37%) → 198/441 (45%) | 0 → 0 |
+| KRONLEILOES | 0/126 (0%) → 69/126 (55%) | 0 → 0 |
+| LEILOTECH | 48/70 (69%) → 51/70 (73%) | 0/70 → 1/70 |
+| TOTALLEILOES | 0/10 (0%) → 6/10 (60%) | 0 → 0 |
+| SOLD | 1/93 (1%) → 6/93 (6%) | 0 → 0 |
+| FRAZAO | 126/126 (já 100%) | 0/126 (0%) → 72/126 (57%) |
+
+`numero_matricula` (a coluna exibida ao cliente em `ImovelDetalhe.jsx`/`Busca.jsx`, diferente de
+`link_matricula`) continua dependendo do cron semanal `enriquecer-cartorio-matricula.mjs`, que
+lê o TEXTO do PDF — agora também escreve `numero_matricula` (achado: só gravava em
+`ficha_cef.matricula`, um JSON interno que o cliente não vê — mesmo padrão "calcula e
+descarta" do bug do LEILAOBRASIL acima). Disparado manualmente pra não esperar domingo.
+
+**2b. Achado DURANTE esse disparo manual — um segundo bug real, também corrigido.** Rodando o
+cron com os 735 candidatos novos: **574 de 580 deram HTTP 403** ao baixar o PDF (IP de
+datacenter do GitHub Actions — mesmo padrão de GESTAO/PECINI/FERREIRALEIL desta sessão e da
+anterior). O código tratava QUALQUER erro não-transiente (incluindo 403) como "morto",
+gravando `matricula_scan_em` como se tivéssemos PROVADO que o arquivo não existe — um campo
+`dl.morto` já existia na função de download mas **nunca era lido pelo chamador**, então um 403
+(bloqueio, link real) virava indistinguível de um 404 (arquivo removido de verdade). Essa
+rodada sozinha teria marcado 574 lotes como "escaneados sem sucesso" PRA SEMPRE. Corrigido
+(403 vira categoria própria, não marca `scan_em`, reprocessa na próxima rodada) e **desfeito o
+dano desta mesma rodada** (`matricula_scan_em` resetado pra `null` nos 578 registros marcados
+entre 14:06:00-14:07:00 UTC de hoje, via SQL direto, escopado pelo timestamp exato da rodada).
+Extração de verdade pro SUPERBID via este cron continua bloqueada por IP de datacenter —
+mesma limitação de infraestrutura já documentada pra GESTAO/PECINI/FERREIRALEIL; não é gasto
+extra de Bright Data pra decidir, é rota de acesso, então fica registrado, não resolvido.
+
+**`link_regras_venda` 0% pra SUPERBID/GRUPOLANCE/BIASI/KRON/TOTAL/SOLD — investigado e
+CONFIRMADO como limite real do site, não bug.** Amostra real de 40 documentos do CALIL (tenant
+saudável da plataforma SOLEON, que também estava nesta lista antes da Parte 1): Termo de
+Penhora, Auto de Avaliação, Planilha de Débito, Matrícula, Edital, Despacho de Venda,
+Certidão, Laudo, Ata de Audiência — **zero** documento do tipo "regras/condições de venda".
+Leilão judicial privado no Brasil, no geral, não tem esse documento separado (diferente de
+CEF/SODRE/WEBLEILOES, que têm um artefato institucional próprio). Nenhuma extração nova
+implementada pra essas fontes — não existe o que extrair.
+
+### 3. FERREIRALEIL — regressão de data CONCLUSIVAMENTE explicada (sem fix possível em CI)
+
+A Parte 1 tinha deixado como hipótese aberta. Testei agora com **Chromium real** (não só
+Bright Data) em 3 páginas de lote ativas: as 3 bateram em **"desafio Cloudflare não
+resolveu"**. O site aparentemente ligou/reforçou proteção Cloudflare — provável causa raiz da
+queda de ~58% pra 2% de cobertura de data desde 01/09 (mudança do lado do site, não bug
+nosso). Bright Data Web Unlocker PASSA do Cloudflare (200, página completa 35-36kB) mas essa
+página também não tem NENHUMA data em texto — sugere que o Unlocker serve algo sem o widget de
+data que um browser completo carregaria via JS, ou que o site parou de publicar a data nestes
+itens. **As duas rotas disponíveis em CI (fetch direto, Bright Data) estão esgotadas.** Só um
+teste de IP residencial de verdade (rodado de casa) resolveria a dúvida — registrado como
+pendência que só o dono pode rodar, não decidida sozinha.
+
+### 4. PECINI — data também esgotada nas rotas grátis (HTML e PDF)
+
+Testei o PDF do edital (`link_edital`, sempre `.pdf`) via Bright Data: **2 de 3 amostras são
+PDF ESCANEADO** (imagem — `pdf-parse` extrai só 16 caracteres de um arquivo de 130-150kB,
+mesma categoria que `enriquecer-cartorio-matricula.mjs` já trata como "sem-texto/escaneado" e
+delega pro laudo documental via IA, que tem custo por lote). O 3º PDF tem texto real (14.562
+caracteres) mas só contém "Laudo de Avaliação, datado de" — data administrativa, não a da
+praça. **Conclusão: a data do PECINI não está acessível via extração de texto grátis (nem
+HTML, nem PDF)** — só via OCR/IA sob demanda (decisão de custo do dono) ou uma fonte ainda não
+encontrada. Não implementei OCR/IA sozinho — é gasto variável por lote, mesma categoria de
+decisão que o dono pediu pra não tomar sozinha.
+
+### Checklist final desta parte
+`leiloeiro_conhecimento` atualizado (PESTANA/BIASI/GRUPOLANCE/LEILAOBRASIL/LUTHERO/
+HASTAPUBLICA/SUPERBID/KRONLEILOES/TOTALLEILOES/MEGA/SOLD/LEILOTECH/FRAZAO/CALIL/VEGAS/TORRES3/
+FERREIRALEIL/PECINI). `npm run build` + `verificar:padroes` + `verificar:sintaxe` passaram
+limpos ao final. Recons descartáveis (fase 2, fase 3, PDF do PECINI) apagados depois de
+validados. Push feito em `main` e `claude/epic-keller-t8mpce`, commit a commit (não em lote,
+pelo achado operacional do topo desta seção).
+
+**Pendente de decisão do dono (nenhum item aqui foi decidido sozinho)**:
+1. FERREIRALEIL/PECINI `data_leilao` — só resolvível com teste de IP residencial (FERREIRALEIL)
+   ou OCR/IA paga por lote (PECINI). Nenhum dos dois é "gasto normal de Bright Data", por isso
+   ficaram como pendência em vez de decisão unilateral.
+2. GRUPOLANCE endereço — cobertura parcial; falta achar um marcador de template confiável
+   (como o "Fotos Mapa Street View" do BIASI) pra elevar a cobertura sem risco de contaminação.
+3. HASTAPUBLICA endereço — precisaria de abordagem via PDF, não tentada nesta sessão.
+4. `numero_matricula` real (não só `link_matricula`) pra SUPERBID/KRON/TOTAL — depende do cron
+   semanal conseguir baixar o PDF de fora do datacenter (mesma limitação de IP já conhecida).
+
+---
+
 ## 🗺️ SESSÃO 26 (20/09) — AUDITORIA DE COMPLETUDE DAS ~56 FONTES + RECON DEDICADO DE `data_leilao` (GESTAOLEILOES corrigido; PECINI/FERREIRALEIL documentados, não corrigidos às cegas)
 
 Pedido do dono: revisar o mapeamento de captura de TODAS as fontes ativas (foto, edital, regras
