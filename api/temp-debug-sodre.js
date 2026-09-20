@@ -22,5 +22,15 @@ export default async function handler(req, res) {
   // atributo/JSON (ex.: data-status="vendido"), o texto limpo pode ter perdido a palavra.
   const idxCru = html.toLowerCase().indexOf('vendido');
   const trechoCru = idxCru >= 0 ? html.slice(Math.max(0, idxCru - 150), idxCru + 200) : null;
-  res.status(200).json({ ok: true, url, html_len: html.length, achado, trechos, trechoCru, primeiros2000: txt.slice(0, 2000) });
+
+  // Procura dado ESTRUTURADO (Next.js __NEXT_DATA__, GraphQL embutido, etc.) — se o valor/
+  // status do lote existir em JSON com outra codificação (status code, enum em inglês), o
+  // texto "vendido" pode nunca aparecer mas o PREÇO/ID do lote sim.
+  const marcadores = {};
+  for (const kw of ['__NEXT_DATA__', '__NUXT__', '2804970', '9000', '9.000', 'winningBid', 'currentBid', '"status"', '"sold"', 'apolloState', 'application/json']) {
+    const i = html.indexOf(kw);
+    if (i >= 0) marcadores[kw] = html.slice(Math.max(0, i - 60), i + 200);
+  }
+
+  res.status(200).json({ ok: true, url, html_len: html.length, achado, trechos, trechoCru, marcadores, primeiros2000: txt.slice(0, 2000) });
 }
