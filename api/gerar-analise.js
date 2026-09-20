@@ -1031,20 +1031,34 @@ async function extrairValoresPdf(base64, deadline) {
 // leitura para trazer débitos/condição/forma de pagamento — pedido explícito do dono: "todos
 // os anexos podem informar dívida a assumir, responsabilidades, forma de pagamento ou
 // descritivo do imóvel". Best-effort: nunca bloqueia o relatório.
+//
+// FALLBACK PRO ANEXO QUE SOBROU (20/09, mesma sessão): quando o lote NÃO tem matrícula nem
+// edital (as duas fontes mais completas), qualquer outro documento anexado é o que resta — e
+// o dono foi explícito: "a não leitura de documentação pode gerar impactos". Sem matrícula/
+// edital, lê o primeiro anexo de qualquer tipo (proposta, "outro", etc.), não só "laudo" — é
+// a mesma leitura, só sem exigir que o rótulo bata com /laudo/i.
 async function lerLaudoAvaliacao(imovelId, deadline) {
   // Log INCONDICIONAL a cada saída (mesmo princípio de [endereco-busca]/[metragem-doc]):
-  // sem isto, "não tinha laudo", "leitura falhou" e "laudo sem nada a acrescentar" são
+  // sem isto, "não tinha documento", "leitura falhou" e "documento sem nada a acrescentar" são
   // indistinguíveis de fora — e essa distinção é o que valida se a função funciona de verdade.
   const sai = (motivo, extra) => { console.log('[laudo-avaliacao]', JSON.stringify({ imovel: String(imovelId), motivo, ...extra })); return null; };
   if (Date.now() > deadline - 12000) return sai('sem_orcamento');
   let im = null;
   try {
-    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo&limit=1`)).json();
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo,numero_matricula,link_matricula,link_edital&limit=1`)).json();
     im = Array.isArray(rows) ? rows[0] : null;
   } catch { return sai('erro_leitura_imovel'); } // padrao-ok: `sai()` já registra o motivo via console.log — ver comentário da função
   if (!im || !Array.isArray(im.anexos)) return sai('sem_anexos');
-  const laudo = im.anexos.find(a => a?.tipo === 'laudo' || /laudo/i.test(String(a?.nome || '')));
-  if (!laudo?.url) return sai('sem_anexo_laudo', { totalAnexos: im.anexos.length });
+  const semMatriculaNemEdital = !im.numero_matricula && !im.link_matricula && !im.link_edital;
+  const laudo = im.anexos.find(a => a?.tipo === 'laudo' || /laudo/i.test(String(a?.nome || '')))
+    || (semMatriculaNemEdital ? im.anexos.find(a => a?.tipo !== 'matricula' && a?.tipo !== 'edital' && a?.url) : null);
+  if (!laudo?.url) return sai('sem_anexo_util', { totalAnexos: im.anexos.length, semMatriculaNemEdital });
+  // Rótulo HONESTO pro texto do parecer/anomalia: só chama de "laudo de avaliação" quando for
+  // mesmo um (tipo/nome batem) — o fallback pode ser "proposta"/"outro"/anexo sem tipo, e
+  // chamar isso de laudo seria a MESMA forma nº10 que este código existe pra evitar em outros
+  // campos (medir uma coisa, reportar com o nome de outra).
+  const ehLaudo = laudo?.tipo === 'laudo' || /laudo/i.test(String(laudo?.nome || ''));
+  const nomeDoc = ehLaudo ? 'laudo de avaliação' : `documento anexado ao lote${laudo?.nome ? ` ("${laudo.nome}")` : ''}`;
 
   let base64 = null;
   try {
@@ -1079,8 +1093,8 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
     try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }); } catch { /* best-effort */ }
     try {
       await registrarAnomalia('avaliacao_diverge_laudo', im.fonte, imovelId, 'valor_avaliacao', faltava
-        ? `Card sem avaliação; o laudo de avaliação anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}. Preenchido a partir do laudo.`
-        : `Card mostrava R$${Math.round(avalCard)}; o laudo de avaliação anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para o valor do laudo — é a fonte mais autoritativa para este campo.`);
+        ? `Card sem avaliação; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}. Preenchido a partir dele.`
+        : `Card mostrava R$${Math.round(avalCard)}; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para esse valor — é a fonte mais autoritativa disponível para este campo.`);
     } catch { /* best-effort */ }
   }
 
@@ -1088,7 +1102,7 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
   // "o laudo não tinha nada a acrescentar" e "a leitura falhou antes de chegar aqui" são
   // indistinguíveis de fora — e essa distinção é exatamente o que valida se a função funciona.
   console.log('[laudo-avaliacao]', JSON.stringify({
-    imovel: String(imovelId), url: laudo.url, avalCard: avalCard || null, avalLaudo: avalLaudo || null,
+    imovel: String(imovelId), url: laudo.url, ehLaudo, nomeDoc, avalCard: avalCard || null, avalLaudo: avalLaudo || null,
     faltava, divergiu, debitos: !!ext.debitos, condicaoImovel: !!ext.condicaoImovel, formaPagamento: !!ext.formaPagamento,
   }));
 
@@ -1098,6 +1112,7 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
     debitos: String(ext.debitos || '').trim() || null,
     condicaoImovel: String(ext.condicaoImovel || '').trim() || null,
     formaPagamento: String(ext.formaPagamento || '').trim() || null,
+    nomeDoc,
     url: laudo.url,
   };
 }
@@ -1718,10 +1733,10 @@ IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
 ${inp._laudo && (inp._laudo.debitos || inp._laudo.condicaoImovel || inp._laudo.formaPagamento) ? `
-LAUDO DE AVALIAÇÃO ANEXADO AO LOTE (documento oficial, leitura automática — cite como informação do PRÓPRIO documento, nunca como premissa sua):
-${inp._laudo.condicaoImovel ? `- Condição/ocupação do imóvel conforme o laudo: ${inp._laudo.condicaoImovel}` : ''}
-${inp._laudo.debitos ? `- Débitos/ônus mencionados no laudo: ${inp._laudo.debitos} — trate como CUSTO/RISCO da operação na seção de débitos e na defesa.` : ''}
-${inp._laudo.formaPagamento ? `- Forma de pagamento mencionada no laudo: ${inp._laudo.formaPagamento}` : ''}
+${(inp._laudo.nomeDoc || 'laudo de avaliação').toUpperCase()} ANEXADO AO LOTE (leitura automática — cite como informação do PRÓPRIO documento, nunca como premissa sua; use o nome exato "${inp._laudo.nomeDoc || 'laudo de avaliação'}" ao citar, não invente outro tipo de documento):
+${inp._laudo.condicaoImovel ? `- Condição/ocupação do imóvel conforme o documento: ${inp._laudo.condicaoImovel}` : ''}
+${inp._laudo.debitos ? `- Débitos/ônus mencionados no documento: ${inp._laudo.debitos} — trate como CUSTO/RISCO da operação na seção de débitos e na defesa.` : ''}
+${inp._laudo.formaPagamento ? `- Forma de pagamento mencionada no documento: ${inp._laudo.formaPagamento}` : ''}
 ` : ''}
 
 MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
