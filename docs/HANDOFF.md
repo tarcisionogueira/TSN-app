@@ -30480,3 +30480,34 @@ Validado com um dispatch manual do `matricula-zuk.yml` e do `leiloeiros-puppetee
 (`fontes=ZUK`, escopado pra não rodar as ~30 fontes do cron completo) durante a mesma sessão,
 a pedido do dono, pra confirmar ao vivo que a correção do PR #377 (descrição real + anexo-lixo
 do ZUK) refletia no lote do print original.
+
+### O fix do PR #377 estava MORTO na prática — `jaTemDocs` travava a revisita pra sempre (20/09)
+
+A validação ao vivo acima (rodar o scraper de verdade e reconferir o banco) provou que o fix
+da descrição do PR #377 **nunca teria efeito no lote do print, nem em boa parte do catálogo
+antigo**. Achado seguindo exatamente o método que o CLAUDE.md pede — rodar em seco sobre dado
+real antes de aceitar como resolvido —, não por suposição.
+
+`enriquecerDocumentosLote()` só revisita um lote (`alvos`) quando `!jaTemDocs || faltaAval ||
+faltaArea || reconferirPreco`. `jaTemDocs` é `link_matricula || anexos.length>0` — e o lote do
+print já tinha os três preenchidos: área 421,91 m² (de um enriquecimento antigo), avaliação
+R$1,5mi, e (depois do dispatch de matrícula desta mesma sessão) `link_matricula`. Resultado:
+`jaTemDocs=true`, `faltaAval=false`, `faltaArea=false` → o lote **nunca entra em `alvos`**,
+nunca é revisitado, e o código de descrição do PR #377 — que só roda DENTRO do loop de
+`alvos`, depois de baixar o HTML — nunca executa pra ele. Confirmado rodando o scraper de
+verdade (dispatch `fontes=ZUK`) e conferindo que `atualizado_em`/`descricao`/`anexos` do lote
+não mudaram uma vírgula, apesar do job ter terminado com sucesso.
+
+Isso não é bug isolado do lote do print — é estrutural: **qualquer lote de QUALQUER fonte que
+passa por `enriquecerDocumentosLote()`** (HASTAPUBLICA, WEBLEILOES, ZUK, SUPERBID, SOLD,
+SBID9/21, TOTALLEILOES/CREPALDI/KRONLEILOES, LEILOFY, FRAZAO, VENDASGOV) e já tenha
+área+avaliação+algum documento (mesmo lixo) fica **permanentemente imune** a qualquer conserto
+que dependa de revisitar a página — o mesmo "eco do título" continuaria pra sempre em todo
+lote antigo o suficiente para já ter sido enriquecido uma vez.
+
+**Corrigido na raiz**: a heurística `descricaoEhEcoDoTitulo()` (antes inline, só usada depois
+de já ter decidido revisitar) virou função compartilhada e entrou também no filtro de
+`alvos` — um lote com descrição-eco agora é candidato a revisita mesmo com todo o resto
+preenchido. Efeito colateral esperado e desejado: isso vale pra TODAS as fontes que passam por
+esta função, não só ZUK — exatamente o "e quaisquer outros que ainda estejam na mesma
+situação" que o dono pediu.
