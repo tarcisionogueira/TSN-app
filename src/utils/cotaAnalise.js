@@ -64,6 +64,12 @@ export async function lerCotaMercado(supabase, userId) {
   return c?.mercado ? { ...c.mercado, credito_saldo: Number(c.credito_saldo || 0), restantes: restantesDe(c.mercado) } : null;
 }
 
+/** Mesmo atalho, para o relatório de VEÍCULO (21/09) — balde próprio, ver `minhas_cotas`. */
+export async function lerCotaVeiculo(supabase, userId) {
+  const c = await lerCotas(supabase, userId);
+  return c?.veiculo ? { ...c.veiculo, credito_saldo: Number(c.credito_saldo || 0), restantes: restantesDe(c.veiculo) } : null;
+}
+
 /**
  * A tela pode BARRAR a geração? (10/08)
  *

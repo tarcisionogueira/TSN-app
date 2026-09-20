@@ -1,6 +1,6 @@
 /**
  * POST /api/enviar-email-caso   (equipe: admin/analista/advogado/consultor)
- * Body: { caso_id? | imovel_id?, destino: 'juridico'|'leiloeiro', action?: 'preview'|'enviar', texto?, emailManual? }
+ * Body: { caso_id? | imovel_id? | veiculo_id?, destino: 'juridico'|'leiloeiro', action?: 'preview'|'enviar', texto?, emailManual? }
  *
  * Pedido do dono (20/09): "num click incluir todos os anexos do lote, e caso seja um
  * assessorado também incluir os documentos pessoais... me permitir escolher entre enviar ao
@@ -16,11 +16,17 @@
  * anexo por URL (Resend busca via `path`, o servidor nunca baixa/base64-codifica o PDF — ver
  * `enviar-juridico-email.js:96-98,156`, mais barato e sem limite de payload do nosso lado).
  *
- * DOIS PONTOS DE ENTRADA (21/09, pedido do dono — "deve aparecer na tela de análise do lote"):
+ * TRÊS PONTOS DE ENTRADA (21/09, pedido do dono — "deve aparecer na tela de análise do lote";
+ * ampliado no mesmo dia para veículos — "permitir [...] assim como os imóveis [...] o de
+ * enviar o e-mail"):
  *  - `caso_id`: usado em src/pages/Caso.jsx — tem cliente, então também confere assessorado/
  *    documentos pessoais.
  *  - `imovel_id`: usado em src/pages/ImovelDetalhe.jsx (a tela do LOTE não é 1:1 com cliente —
  *    vários casos podem existir pro mesmo imóvel) — só os anexos do lote, sem docs pessoais.
+ *  - `veiculo_id`: usado em src/pages/VeiculoDetalhe.jsx — mesmo caso de imovel_id (lote sem
+ *    cliente único), lendo de `veiculos_leilao` em vez de `imoveis_leilao`. Não existe
+ *    `casos.veiculo_id` (o conceito de "caso" ainda é só de imóvel) — por isso este caminho
+ *    nunca resolve `caso`, só o lote em si.
  *
  * SEM CONTATO CADASTRADO (21/09, achado real: só 7 de 57 fontes ativas têm e-mail hoje): o
  * preview devolve `contatoDisponivel:false` e o chamador pode digitar um e-mail (`emailManual`)
@@ -104,11 +110,12 @@ export default async function handler(req) {
   let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
   const casoId = String(body?.caso_id || '').trim() || null;
   const imovelIdDireto = String(body?.imovel_id || '').trim() || null;
+  const veiculoIdDireto = String(body?.veiculo_id || '').trim() || null;
   const destino = String(body?.destino || '') === 'leiloeiro' ? 'leiloeiro' : String(body?.destino || '') === 'juridico' ? 'juridico' : '';
-  if (!casoId && !imovelIdDireto) return json({ error: 'caso_id ou imovel_id obrigatório' }, 400);
+  if (!casoId && !imovelIdDireto && !veiculoIdDireto) return json({ error: 'caso_id, imovel_id ou veiculo_id obrigatório' }, 400);
   if (!destino) return json({ error: "destino obrigatório: 'juridico' ou 'leiloeiro'" }, 400);
   const acao = String(body?.action || 'preview') === 'enviar' ? 'enviar' : 'preview';
-  const chaveRate = casoId || imovelIdDireto;
+  const chaveRate = casoId || imovelIdDireto || veiculoIdDireto;
 
   const rPerfil = await sb(`perfis?id=eq.${user.id}&select=role,nome`);
   if (!rPerfil.ok) return json({ error: 'Não foi possível verificar seu acesso agora. Tente novamente.' }, 500);
@@ -141,7 +148,16 @@ export default async function handler(req) {
     const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,anexos&limit=1`);
     if (rImovel.ok) [imovel] = await rImovel.json();
   }
-  const anexosLote = (Array.isArray(imovel?.anexos) ? imovel.anexos : []).filter(a => a?.url);
+  let veiculo = null;
+  if (!imovelId && veiculoIdDireto) {
+    const rVeiculo = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoIdDireto)}&select=id,fonte,titulo,marca,modelo,anexos&limit=1`);
+    if (rVeiculo.ok) [veiculo] = await rVeiculo.json();
+  }
+  // Unifica lote (imóvel OU veículo — nunca os dois) para o resto da função não precisar
+  // ramificar de novo em cada leitura: fonte (contato do leiloeiro), anexos e um rótulo.
+  const lote = imovel || veiculo;
+  const loteFonte = lote?.fonte || null;
+  const anexosLote = (Array.isArray(lote?.anexos) ? lote.anexos : []).filter(a => a?.url);
 
   // ASSESSORADO (e variante anual) → também os documentos PESSOAIS do CLIENTE dono do caso
   // (não do usuário logado — a equipe pode estar enviando em nome de outro cliente). Mesmo
@@ -159,14 +175,16 @@ export default async function handler(req) {
     if (!Array.isArray(docsPessoais)) docsPessoais = [];
   }
 
-  const labelImovel = caso?.imovel_endereco || imovel?.titulo || `Lote ${String(imovelId || '').slice(0, 8)}`;
+  const labelLote = caso?.imovel_endereco || imovel?.titulo
+    || (veiculo ? ([veiculo.marca, veiculo.modelo].filter(Boolean).join(' ') || veiculo.titulo) : null)
+    || `Lote ${String(imovelId || veiculoIdDireto || '').slice(0, 8)}`;
   const nomeRemetente = perfilRemetente.nome || 'Equipe BidPro Brasil';
 
   // ── Resolve destinatário ────────────────────────────────────────────────────────────────
   let destinatarioEmail = null;
   let ccList = [];
   if (destino === 'leiloeiro') {
-    const rContato = await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(imovel?.fonte || '')}&select=email`);
+    const rContato = await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(loteFonte || '')}&select=email`);
     const [contato] = rContato.ok ? await rContato.json() : [null];
     destinatarioEmail = contato?.email || null;
   } else {
@@ -185,9 +203,10 @@ export default async function handler(req) {
     ccList = ccList.filter(e => e && e !== destinatarioEmail);
   }
 
+  const rotuloTipo = veiculo ? 'Veículo' : 'Imóvel';
   const corpoTextoPuro = destino === 'leiloeiro'
-    ? `Prezados,\n\nEstamos em acompanhamento do lote abaixo e gostaríamos de mais informações / esclarecimentos:\n\nImóvel: ${labelImovel}\n\nSeguem em anexo os documentos do lote que já temos em mãos.\n\nAgradecemos desde já a atenção.\n\n${nomeRemetente}`
-    : `Prezados,\n\nSolicitamos análise/apoio jurídico referente ao caso abaixo:\n\nImóvel: ${labelImovel}\n\nSeguem em anexo os documentos do lote${ehAssessorado ? ' e os documentos pessoais do cliente' : ''}.\n\n${nomeRemetente}`;
+    ? `Prezados,\n\nEstamos em acompanhamento do lote abaixo e gostaríamos de mais informações / esclarecimentos:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote que já temos em mãos.\n\nAgradecemos desde já a atenção.\n\n${nomeRemetente}`
+    : `Prezados,\n\nSolicitamos análise/apoio jurídico referente ao caso abaixo:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote${ehAssessorado ? ' e os documentos pessoais do cliente' : ''}.\n\n${nomeRemetente}`;
 
   // PASSO 1 — PREVIEW: mostra o rascunho e QUANTOS anexos sairiam, sem enviar nada. Sem
   // contato cadastrado, o chamador oferece um campo pra digitar (ver `emailManual` no envio).
@@ -212,7 +231,7 @@ export default async function handler(req) {
   }
 
   if (!destinatarioEmail) {
-    await auditar({ caso_id: casoId, imovel_id: imovelId, destino, destinatario_email: null, enviado_por: user.id,
+    await auditar({ caso_id: casoId, imovel_id: imovelId, veiculo_id: veiculoIdDireto, destino, destinatario_email: null, enviado_por: user.id,
       anexos_lote: anexosLote.length, anexos_pessoais: docsPessoais.length, texto_enviado: null, status: 'sem_contato' });
     return json({ ok: false, semContato: true, texto: textoFinal });
   }
@@ -237,7 +256,7 @@ export default async function handler(req) {
     to: destinatarioEmail,
     cc: ccList,
     replyTo: user.email,
-    subject: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelImovel}`,
+    subject: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`,
     html,
     text: textoFinal,
     attachments,
@@ -245,7 +264,7 @@ export default async function handler(req) {
   });
 
   await auditar({
-    caso_id: casoId, imovel_id: imovelId, destino, destinatario_email: destinatarioEmail, enviado_por: user.id,
+    caso_id: casoId, imovel_id: imovelId, veiculo_id: veiculoIdDireto, destino, destinatario_email: destinatarioEmail, enviado_por: user.id,
     anexos_lote: anexosLote.length, anexos_pessoais: docsPessoais.length, texto_enviado: textoFinal,
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
   });
@@ -253,7 +272,7 @@ export default async function handler(req) {
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
   // errado (que o Resend recusou) não pode virar cadastro permanente.
   if (r.ok && usouEmailManual) {
-    await salvarContato(destino, destinatarioEmail, { fonte: imovel?.fonte, advogadoId: caso?.advogado_id, nomeRemetente });
+    await salvarContato(destino, destinatarioEmail, { fonte: loteFonte, advogadoId: caso?.advogado_id, nomeRemetente });
   }
 
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);

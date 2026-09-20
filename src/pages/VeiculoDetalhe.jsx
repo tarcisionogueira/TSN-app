@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2 } from 'lucide-react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
 import { apiCall } from '../utils/apiCall';
+import { useAuth } from '../contexts/AuthContext';
+import { lerCotaVeiculo } from '../utils/cotaAnalise';
+import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+
+// Mesma lista de imóvel (ImovelDetalhe.jsx) — explorador/consultor têm amostra grátis,
+// pagantes e equipe têm cota mensal; o bloqueio por cota é decidido no servidor.
+const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual', 'top2', 'top2_anual', 'explorador', 'consultor'];
+const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
 const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };
@@ -45,14 +53,21 @@ const FIPE_EXPLICACAO = {
 
 export default function VeiculoDetalhe() {
   const nav = useNavigate();
+  const loc = useLocation();
   const { id } = useParams();
   const isMobile = useIsMobile();
+  const { user, role, isLoggedIn, effectiveUserId } = useAuth();
   const [v, setV] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [fotoAtiva, setFotoAtiva] = useState(0);
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
+  const [cota, setCota] = useState(null);
+  // Mesmo princípio de BuscaVeiculos.jsx: a rota de entrada decide o "voltar" — painel
+  // interno (`/admin/...`) volta pro painel, cliente (`/veiculo/:id`) volta pro painel dele.
+  const isAdminPath = loc.pathname.startsWith('/admin');
+  const voltarPath = isAdminPath ? '/admin/veiculos-leilao' : '/veiculos';
 
   useEffect(() => {
     let cancelado = false;
@@ -92,6 +107,16 @@ export default function VeiculoDetalhe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v?.id]);
 
+  // Cota de análise de veículo, mesmo padrão de ImovelDetalhe.jsx (lerCotaMercado): nunca
+  // lança — falha de rede não pode virar "você não tem análise".
+  useEffect(() => {
+    const uid = effectiveUserId || user?.id;
+    if (!uid) { setCota(null); return; }
+    let vivo = true;
+    lerCotaVeiculo(supabase, uid).then((c) => { if (vivo) setCota(c); });
+    return () => { vivo = false; };
+  }, [user, effectiveUserId]);
+
   if (carregando) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#64748b' }}><Loader2 className="animate-spin" size={22} /></div>;
   }
@@ -99,7 +124,7 @@ export default function VeiculoDetalhe() {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
         <p>{erro || 'Veículo não encontrado.'}</p>
-        <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        <button onClick={() => nav(voltarPath)} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
   }
@@ -107,10 +132,20 @@ export default function VeiculoDetalhe() {
   const fotos = fotosArray(v);
   const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
   const mostrarFipe = v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado');
+  const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
+  const podeFazerAnalise = PLANOS_ANALISE.includes(role);
+  const rotuloAnalise = (() => {
+    if (!cota || cota.ilimitado) return 'Solicitar Análise';
+    if (cota.restantes <= 0) return cota.amostra ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
+    return cota.amostra ? 'Analisar grátis' : 'Analisar veículo';
+  })();
+  const saldoAnalise = (!cota || cota.ilimitado || cota.restantes <= 0)
+    ? null
+    : `${cota.restantes} de ${cota.limite} ${cota.restantes === 1 ? 'relatório disponível' : 'relatórios disponíveis'}${cota.amostra ? ' (amostra grátis)' : ' este mês'}`;
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={() => nav('/admin/veiculos-leilao')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={() => nav(voltarPath)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar à busca
       </button>
 
@@ -207,8 +242,45 @@ export default function VeiculoDetalhe() {
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 16px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', pointerEvents: v.link_lote ? 'auto' : 'none' }}>
             Ver no leiloeiro <ExternalLink size={14} />
           </a>
+
+          {/* Solicitar análise (21/09, pedido do dono: "assim como os imóveis") — condição do
+              veículo + FIPE + veredito, num relatório só (ver api/gerar-analise-veiculo.js). */}
+          {isLoggedIn ? (
+            leilaoEncerrado ? (
+              <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
+                <strong>Leilão encerrado.</strong> Como não é mais possível dar lance, o relatório não é gerado para este veículo.
+              </div>
+            ) : podeFazerAnalise ? (
+              <>
+                <button onClick={() => nav(`/analise-veiculo?veiculo=${encodeURIComponent(v.id)}`, { state: { veiculo: v } })}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  <BarChart2 size={15} /> {rotuloAnalise}
+                </button>
+                {saldoAnalise && (
+                  <div style={{ marginTop: 7, textAlign: 'center', fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>{saldoAnalise}</div>
+                )}
+              </>
+            ) : (
+              <button onClick={() => nav('/planos')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                <BarChart2 size={15} /> Fazer upgrade para analisar
+              </button>
+            )
+          ) : (
+            <button onClick={() => nav('/login')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              <BarChart2 size={15} /> Entrar para analisar
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Enviar e-mail — só equipe (jurídico ou o leiloeiro deste lote), mesmo componente de
+          ImovelDetalhe.jsx/Caso.jsx. Sem cliente/caso nesta tela (mesmo lote pode interessar a
+          vários clientes) — só os anexos do lote. */}
+      {ROLES_STAFF.includes(role) && (
+        <EnviarEmailCasoLote veiculoId={v.id} cardStyle={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16 }} />
+      )}
 
       {v.descricao && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>

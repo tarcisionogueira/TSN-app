@@ -4,10 +4,11 @@ import { apiCall } from '../utils/apiCall';
 /**
  * "Enviar e-mail" — jurídico ou leiloeiro do lote, com um clique incluindo todos os
  * documentos (e os pessoais, se o cliente do caso for assessorado). Pedido do dono (20/09,
- * ampliado 21/09): usado tanto em `Caso.jsx` (casoId — tem cliente, então confere
- * assessorado) quanto em `ImovelDetalhe.jsx` (imovelId — a tela do lote não é 1:1 com
- * cliente, só os anexos do lote). Mesmo componente, dois pontos de entrada — evita duas
- * cópias da mesma lógica de preview/envio divergindo com o tempo.
+ * ampliado 21/09): usado em `Caso.jsx` (casoId — tem cliente, então confere assessorado),
+ * `ImovelDetalhe.jsx` (imovelId — a tela do lote não é 1:1 com cliente, só os anexos do
+ * lote) e `VeiculoDetalhe.jsx` (veiculoId — mesmo caso de imovelId, sem cliente único).
+ * Mesmo componente, três pontos de entrada — evita cópias da mesma lógica de preview/envio
+ * divergindo com o tempo.
  *
  * SEM CONTATO CADASTRADO: a maioria das fontes ainda não tem e-mail salvo (7 de 57 fontes
  * ativas, medido em 21/09) — o campo de e-mail aparece pra digitar na hora, e se o envio der
@@ -20,14 +21,14 @@ import { apiCall } from '../utils/apiCall';
 const btnLocal = (color = '#0D63DB') => ({ padding: '10px 20px', background: color, color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' });
 const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-export default function EnviarEmailCasoLote({ casoId, imovelId, cardStyle }) {
+export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardStyle }) {
   const [emailPreview, setEmailPreview] = useState(null); // { destino, texto, destinatarioEmail, contatoDisponivel, ... }
   const [enviando, setEnviando] = useState(false);
   const [carregando, setCarregando] = useState(null); // 'juridico'|'leiloeiro'|null
   const [emailManual, setEmailManual] = useState('');
   const [msg, setMsg] = useState('');
 
-  const corpoAlvo = () => (casoId ? { caso_id: casoId } : { imovel_id: imovelId });
+  const corpoAlvo = () => (casoId ? { caso_id: casoId } : veiculoId ? { veiculo_id: veiculoId } : { imovel_id: imovelId });
 
   const abrirPreview = async (destino) => {
     setCarregando(destino);
