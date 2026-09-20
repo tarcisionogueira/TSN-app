@@ -9,13 +9,14 @@
  * corpo de resposta grande) — só passa de IP residencial, mesmo remédio de RJ/GESTAO/PECINI/
  * HASTA (`scripts/runner-residencial.sh`).
  *
- * `usarProxyIsp: true` (20/09, EM TESTE) — Web Unlocker (acima) é produto DIFERENTE do proxy
- * ISP: aquele tenta resolver o challenge via fingerprint/JS de um datacenter; este troca o IP
- * de saída do Puppeteer por um de reputação residencial — o mesmo bloqueio de Cloudflare por
- * IP de datacenter que o proxy ISP já resolveu pra HASTA (19/09, `hasta.mjs`). Ainda não
- * validado contra ESTE site especificamente — se o dry-run via CI continuar em 0 lotes mesmo
- * com o proxy, o Cloudflare daqui está reagindo a outra coisa (fingerprint de browser, não só
- * IP) e a produção real segue sendo `scripts/runner-residencial.sh`.
+ * ❌ TESTADO 20/09 — proxy ISP do Bright Data NÃO resolve este bloqueio. Web Unlocker (acima) e
+ * proxy ISP são produtos diferentes (aquele tenta resolver o challenge via fingerprint/JS de
+ * datacenter; este só troca o IP de saída do Puppeteer por reputação residencial — o mesmo
+ * remédio que resolveu HASTA em 19/09), mas dry-run via CI com `usarProxyIsp:true` enumerou
+ * 0 lotes igual, mesma assinatura de antes ("respondeu 200 e enumerou 0 lote(s)"). Conclusão:
+ * o Cloudflare deste site reage a algo além de reputação de IP (fingerprint de browser/TLS
+ * completo) — só passa mesmo de IP residencial de verdade. NÃO tentar de novo sem mudar essa
+ * premissa. Produção real continua sendo `scripts/runner-residencial.sh`.
  *
  * `timeoutMs` alto (herdado de 07/09): página pesada, muito rastreador/analytics — 90s dá
  * folga sem custar nada (dom é grátis, o preço é só tempo de execução).
@@ -29,7 +30,7 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'globo',
   fetch: 'dom',
-  dom: { esperaMs: 6000, timeoutMs: 90000, usarProxyIsp: true },
+  dom: { esperaMs: 6000, timeoutMs: 90000 },
   catalogo: '/leiloes',
   paginaParam: 'page',
   maxPages: 1,

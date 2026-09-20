@@ -164,19 +164,15 @@ jobs:
         run: node scripts/scraper-simon.mjs
 
       - name: Globo
-        # NÃO entra em env.RODA_TUDO ainda (20/09): `usarProxyIsp:true` em globo.mjs está EM
-        # TESTE (mesmo remédio que já resolveu HASTA, 19/09) — precisa de dry-run confirmando
-        # lotes>0 antes de entrar na rotação automática. Se o proxy ISP não bastar aqui (o
-        # Cloudflare deste site pode reagir a mais que IP), a produção de verdade continua
-        # sendo scripts/runner-residencial.sh (IP residencial, mesmo remédio de RJ/GESTAO/
-        # PECINI). Continua rodando no PUSH como sinalizador.
+        # NÃO entra em env.RODA_TUDO (17/09, retestado 20/09 com proxy ISP — não resolveu,
+        # ver globo.mjs): site atrás de Cloudflare que reage a mais que reputação de IP. A
+        # produção de verdade é scripts/runner-residencial.sh (IP residencial, mesmo remédio
+        # de RJ/GESTAO/PECINI). Continua rodando no PUSH como sinalizador — se o Cloudflare
+        # cair um dia, o push mostra lotes de novo e vale reconsiderar entrar no RODA_TUDO.
         if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'globo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
-          BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
-          BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
           GLOBO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-globo.mjs
 
