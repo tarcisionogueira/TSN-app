@@ -30447,3 +30447,36 @@ qualquer correção:
    grava nele) — sucesso frequente é exatamente por que ele fica velho. Confirmado ao vivo no
    log do run, não por suposição. Deve resolver sozinho nas próximas rodadas (capacidade
    4×60=240/dia, folga grande sobre o volume de lotes novos).
+
+### Mapa da escala de coleta (grátis × paga) + achado: VLANCE sem gatilho automático (20/09)
+
+Pedido do dono: mapear com que frequência cada rotina de coleta roda (grátis vs. paga/Bright
+Data) — auditoria completa de `.github/workflows/*.yml`, cuidando para não contar cron
+COMENTADO como ativo (achado no meio da auditoria: `scraper-vlance.yml`/`scraper-pecini.yml`/
+`scraper-gestao.yml`/`scraper-rj.yml`/`scraper-soleon.yml` têm o bloco `schedule:` inteiro
+comentado desde 15/09 — um grep ingênuo por `cron:` os contaria como ativos).
+
+**O modelo real, desde 15/09**: RJ/GESTAO(CALIL·VEGAS·TORRES3)/SOLEON/PECINI/VLANCE tiveram o
+cron semanal PAGO desligado porque passaram a ser cobertas de graça pelo runner residencial do
+dono (`scripts/runner-residencial.sh`, gate de 72h por fonte = ~2x/semana) — o pago só entra
+como rede de segurança via `api/coleta-oportunista.js`, disparado quando um membro do STAFF
+loga no app (máx. 1x/20h) e **só se o acervo já estiver com 4+ dias sem atualizar**
+(`acervoFresco()`, medido — não estimado — em 29/08).
+
+**Achado**: o mapa `FONTES` de `coleta-oportunista.js` só tinha `SOLEON/GESTAO/RJ/PECINI` — o
+**VLANCE nunca entrou**, apesar do comentário no cabeçalho de `scraper-vlance.yml` dizer
+explicitamente "`coleta-oportunista.js` continua disparando via `workflow_dispatch` no login
+do staff" (comentário copiado dos outros 4, nunca verificado contra o código). Resultado: desde
+15/09 o VLANCE ficou **sem gatilho automático nenhum na nuvem** — só atualizava via runner
+residencial do dono ou disparo manual. Confirmado como o ÚNICO caso: das 5 fontes com o mesmo
+tratamento "DESLIGADO 15/09", as outras 4 estão corretamente no mapa.
+
+**Corrigido**: `VLANCE: 'scraper-vlance.yml'` adicionado ao `FONTES`. Não precisou de migração —
+`coleta_cliente` já tinha a linha pronta (`fontes_acervo: ['VLANCE']`, `intervalo_horas: 72`,
+criada junto com o gate residencial). Mesmo padrão, mesmo risco (zero) dos outros 4: só dispara
+Bright Data se o acervo estiver genuinamente velho.
+
+Validado com um dispatch manual do `matricula-zuk.yml` e do `leiloeiros-puppeteer.yml`
+(`fontes=ZUK`, escopado pra não rodar as ~30 fontes do cron completo) durante a mesma sessão,
+a pedido do dono, pra confirmar ao vivo que a correção do PR #377 (descrição real + anexo-lixo
+do ZUK) refletia no lote do print original.
