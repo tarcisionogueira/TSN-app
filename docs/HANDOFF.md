@@ -35,7 +35,7 @@ quiser que o histórico também conte pro Google Ads — não fiz isso sozinho p
 em lote a uma API de terceiro (ainda que os dados sejam reais e o intuito seja corrigir uma
 lacuna, não fabricar nada). Avisar se quiser que eu rode.
 
-### 🔴🔴 AÇÃO URGENTE DO DONO (18/09) — créditos do Gemini esgotados
+### 🔴🔴 AÇÃO URGENTE DO DONO (18/09, AINDA ABERTO em 20/09) — créditos do Gemini esgotados
 
 **Não é bug de código, é conta a recarregar.** Achado inspecionando Cliente 360: a busca
 "mercado ao vivo" (Gemini + grounding) está devolvendo `HTTP 429: Your prepayment credits are
@@ -47,6 +47,31 @@ comparáveis reais de web. `api/diagnostico-gemini.js` (admin) confirma em 1 cha
 O painel Cliente 360 estava ESCONDENDO este motivo atrás de "sem comparáveis" — corrigido
 (`admin_360_falha_recente_mostra_erro_gemini.sql`, ver seção de sessão abaixo); agora a linha em
 `falhas_recentes` mostra o HTTP 429 de verdade. Isso não resolve o problema, só faz ele aparecer.
+
+**Reconfirmado em 20/09, ainda ativo — o dono disse ter colocado R$200 de crédito no Gemini
+nesta mesma sessão, e o erro persiste do mesmo jeito.** Log de produção (Vercel) mostra
+`[gemini-grounding-falhou]` com o mesmo `HTTP 402: Your prepayment credits are depleted` em
+**100% dos relatórios gerados entre 13h09 e 15h01** (7 de 7 chamadas a `/api/gerar-analise`),
+sem exceção — não é intermitente. Hipótese mais provável: o crédito foi colocado num projeto/
+conta do Google AI Studio DIFERENTE do que gerou a `GEMINI_API_KEY` hoje configurada na Vercel
+— o app continua batendo numa chave sem saldo mesmo com a outra conta paga. **Passo a passo pra
+amanhã**: 1) chamar `GET /api/diagnostico-gemini` logado como admin — ele diz se a chave
+respondeu e mostra os ÚLTIMOS 4 CARACTERES da chave configurada (nunca o valor inteiro), o
+suficiente pra conferir se é a chave da conta que recebeu o crédito; 2) se os 4 caracteres não
+baterem com a chave da conta paga, gerar uma chave NOVA nessa conta e atualizar
+`GEMINI_API_KEY` no painel da Vercel (Settings → Environment Variables); 3) rodar o diagnóstico
+de novo pra confirmar `ok:true` antes de considerar resolvido.
+
+**O que NÃO é bug, pra não gastar tempo revendo à toa**: o cascateamento pro Claude (Haiku) já
+funciona — confirmado no mesmo log, mesmo lote, mesma janela: quando o Gemini falha, o motor
+cai pro Claude web_search (`modeloBusca: claude-haiku-4-5`), faz as buscas de verdade (6-9 por
+relatório) e termina limpo (`stop: end_turn`). Um relatório (terreno de 490m² em Barueri/SP,
+20/09 15h01) saiu "mercado não estimado" mesmo com o fallback funcionando — não foi o
+cascateamento que falhou, foi a própria busca (via Claude) só achar páginas de LISTAGEM
+agregada dos portais (541+ lotes, sem preço/m²/data individual por anúncio) pra esse endereço
+específico; o sistema recusou certo em inventar comparável a partir disso, e vai tentar de novo
+sozinho por até 48h. Enquanto o Gemini estiver fora, é esperado que MAIS relatórios saiam assim
+— o fallback funciona, só busca com um motor a menos.
 
 ### 📋 Sessão 18/09 — inspeção do Cliente 360 (pedido do dono) + correções
 
