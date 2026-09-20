@@ -8,9 +8,10 @@ import { fetchExternoSeguro } from './_allowed-hosts.js';
 
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
-  const url = 'https://leilao.sodresantoro.com.br/leilao/29005/lote/2804970/';
+  const url = String(req.query?.url || 'https://leilao.sodresantoro.com.br/leilao/29005/lote/2804970/');
   let html = '';
-  try { ({ html } = await fetchLote(url, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: diagnóstico best-effort
+  let via = null;
+  try { ({ html, via } = await fetchLote(url, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: diagnóstico best-effort
 
   // Isola o conteúdo do script __NUXT_DATA__ inteiro (do id até o </script> de fechamento).
   const ini = html.indexOf('id="__NUXT_DATA__"');
@@ -51,5 +52,5 @@ export default async function handler(req, res) {
     }
   }
 
-  res.status(200).json({ ok: true, html_len: html.length, nuxtLen, achadosNoBloco, apiTentativas });
+  res.status(200).json({ ok: true, url, via, html_len: html.length, nuxtLen, achadosNoBloco, apiTentativas: url.includes('sodresantoro') ? apiTentativas : [] });
 }

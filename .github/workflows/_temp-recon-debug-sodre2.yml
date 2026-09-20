@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: Investiga NUXT_DATA completo + API direta SODRE
         run: |
-          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-sodre2" \
+          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/temp-debug-sodre2?url=https%3A%2F%2Fvenda-imoveis.caixa.gov.br%2Fsistema%2Fdetalhe-imovel.asp%3Fhdnimovel%3D10003047" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -H "content-type: application/json" | tee /tmp/out.json
           echo "---"
