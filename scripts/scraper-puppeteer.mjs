@@ -3236,6 +3236,14 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
   const primeiroDoc = (tipo, lista) => (lista.find(d => d.tipo === tipo) || {}).url || null;
   const editalUrl = primeiroDoc('edital', anexos);
   const agenda = `${PESTANA_BASE}/agenda-de-leiloes/${leilao.id}`;
+  // ENDEREÇO (20/09): `bem.endereco`/`cidade.name`/`estado.name` vêm VAZIOS no payload real da
+  // API (confirmado por recon: `"cidade":{"name":""},"estado":{"name":""}` mesmo em imóvel
+  // urbano) — `endereco:''` era o comportamento honesto do dado bruto. Mas `bem.observacao` e
+  // `bem.caracteristicas[].valor` trazem o texto jurídico completo do bem, que ÀS VEZES contém
+  // "situado na Rua X, nº Y" (heurística já validada em texto de matrícula). Best-effort: null
+  // quando não casar — não força endereço num lote rural/loteamento sem logradouro urbano.
+  const textoBem = [bem.observacao, ...(bem.caracteristicas || []).map(c => c?.valor)].filter(Boolean).join(' ');
+  const enderecoPestana = textoBem ? extrairEnderecoMatricula(textoBem) : null;
   return {
     fonte: 'PESTANA',
     fonte_id: `pestana_${lote.id}`,
@@ -3244,8 +3252,8 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
     modalidade,
     estado: uf,
     cidade: cidade ? toTitleCase(cidade) : '',
-    bairro: '',
-    endereco: '',
+    bairro: enderecoPestana?.bairro || '',
+    endereco: enderecoPestana?.logradouro || '',
     valor_avaliacao: 0,
     valor_minimo: valor,
     area_m2: area,
