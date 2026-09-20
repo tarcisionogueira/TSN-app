@@ -179,13 +179,14 @@ function montarRow(l) {
   const { cidade, estado } = cidadeUF(l.descricao, l.titulo);
   const { valor_minimo, valor_avaliacao } = valores(l);
   const comitente = l.comitente?.nome_fantasia || null;
-  // ⛔ CONFIRMADO 404 (02/08, reconfirmado 10/09) — NÃO é mais "TODO validar", é "sabidamente
-  // quebrado". `/leilao/{id}` foi só o palpite mais comum nessa plataforma; 12/12 lotes
-  // sondados pelo captura-documentos voltaram "Not Found" duas vezes, em datas diferentes.
-  // O cron deste scraper está SUSPENSO em scraper-sato.yml por causa disto — não religar sem
-  // antes corrigir esta linha com o padrão real (recon ao vivo; testar /lote/{id}, /leiloes/{id}
-  // e QUALQUER OUTRO candidato, e atualizar aqui + leiloeiro_conhecimento.docs_status).
-  const url = l.externo === '1' && l.link_parceiro ? l.link_parceiro : `${BASE}/leilao/${l.id}`;
+  // ✅ CORRIGIDO 20/09 (recon ao vivo, scripts/recon-sato-url-lote.mjs contra 3 leilões nativos
+  // reais): a rota certa é `/leiloes/{id}` (PLURAL) — HTTP 200 com 80-120KB de conteúdo real nos
+  // 3 testados. `/leilao/{id}` (singular, o palpite antigo) devolveu 404 nos mesmos 3 IDs — não
+  // era bloqueio de IP nem challenge, era erro de singular/plural. 12 outros candidatos testados
+  // (/lote, /imovel, /evento, /detalhe...) também 404. Histórico: confirmado quebrado em 02/08 e
+  // 10/09 (12/12 lotes sondados voltaram "Not Found"), cron suspenso em scraper-sato.yml desde
+  // então — religar o `schedule:` faz parte deste mesmo commit.
+  const url = l.externo === '1' && l.link_parceiro ? l.link_parceiro : `${BASE}/leiloes/${l.id}`;
   const va = valor_avaliacao, vm = valor_minimo;
   return {
     fonte: FONTE,
