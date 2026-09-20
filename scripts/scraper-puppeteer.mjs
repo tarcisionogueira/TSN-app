@@ -4926,8 +4926,14 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // qualquer outro lote no mesmo estado (provavelmente boa parte do catálogo já antigo).
     const descEco = descricaoEhEcoDoTitulo(im);
     return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco;
-  }).slice(0, cap);
-  if (!alvos.length) return 0;
+  });
+  // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
+  // `cap` alvos da lista, na mesma ordem que `imoveis` chega a cada rodada — se `alvos.length`
+  // > cap (catálogo grande com muita cauda pendente), a cauda NUNCA é alcançada, dia após dia.
+  // Mesma classe de bug que `visitarTextoDetalhe` já resolve com `janelaRotativaPorDia`
+  // (desloca o início da fatia pelo dia do ano): reaproveitado aqui pelo mesmo motivo.
+  const alvosNoDia = janelaRotativaPorDia(alvos, cap).slice(0, cap);
+  if (!alvosNoDia.length) return 0;
 
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
@@ -4935,7 +4941,7 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
   const fim = Date.now() + deadlineMs;
   let enr = 0;
   try {
-    for (const im of alvos) {
+    for (const im of alvosNoDia) {
       if (Date.now() > fim) { console.log('    Documentos: deadline atingido — resto fica p/ a próxima execução'); break; }
       const url = im.url_lote || im.link_edital;
       try {
@@ -4997,7 +5003,7 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
       } catch { /* lote a lote; nunca derruba o scrape */ }
     }
   } finally { await page.close().catch(() => {}); }
-  console.log(`    📄 Documentos: ${enr}/${alvos.length} lotes enriquecidos (edital/matrícula/laudo/proposta).`);
+  console.log(`    📄 Documentos: ${enr}/${alvosNoDia.length} lotes enriquecidos (edital/matrícula/laudo/proposta).`);
   return enr;
 }
 
