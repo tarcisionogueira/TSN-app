@@ -45,7 +45,7 @@ function fmtDataLeilao(d) {
 }
 
 const COLUNAS = [
-  'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
+  'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'chassi', 'renavam', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'cidade', 'estado',
   'link_lote', 'fotos', 'data_leilao', 'leiloeiro', 'sinistro', 'is_sucata', 'financiavel',
   'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao', 'tipo_veiculo',
@@ -199,6 +199,8 @@ export default function VeiculoDetalhe() {
             {anoLabel && <span>{anoLabel}</span>}
             {v.km != null && <span>· {Number(v.km).toLocaleString('pt-BR')} km</span>}
             {v.placa && <span>· Placa {v.placa}</span>}
+            {v.chassi && <span>· Chassi {v.chassi}</span>}
+            {v.renavam && <span>· RENAVAM {v.renavam}</span>}
           </div>
           <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
             <MapPin size={13} />{[v.cidade, v.estado].filter(Boolean).join(', ') || '—'}

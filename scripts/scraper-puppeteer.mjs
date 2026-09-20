@@ -2136,7 +2136,42 @@ async function scraperSodre(browser) {
 const REGEX_PLACA = /\b([A-Z]{3}-?\d[A-Z0-9]\d{2}|[A-Z]{3}-?\d{4})\b/;
 const REGEX_ANO = /\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/;
 const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
-const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
+// 'mmc' (21/09, achado real — lote SUPORTE "CAMINHONE MMC/L200 TRITON..."): sigla oficial de
+// Mitsubishi Motors Corporation, usada pelo próprio DETRAN/CRLV em vez do nome por extenso —
+// não é gíria nem abreviação nossa, é o que consta no documento do veículo. Sem ela, todo
+// Mitsubishi cadastrado como "MMC/<modelo>" saía com marca null.
+const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|mmc|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
+
+// MODELO via convenção DETRAN/CRLV "MARCA/MODELO" (ex.: "MMC/L200 TRITON", "VW/GOL") — o
+// mesmo formato que já aparece cru no título de vários leiloeiros. Só age quando a marca
+// reconhecida (MARCAS_VEICULO) é IMEDIATAMENTE seguida de "/" — não tenta adivinhar modelo
+// de texto solto sem essa âncora, mesmo cuidado de sempre não inventar campo que a fonte não
+// afirma claramente.
+function extrairModeloPorBarra(texto) {
+  const m = String(texto || '').match(/\b(?:vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes(?:-benz)?|mitsubishi|mmc|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\s*\/\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 .-]{1,40}?)(?=\s*[,|]|\s{2}|$)/i);
+  return m ? m[1].trim().toUpperCase() : null;
+}
+
+// CHASSI/RENAVAM/PLACA/COR a partir do bloco "Descrição" da página de DETALHE (21/09, achado
+// real do lote SUPORTE/Rodrigo Collyer: "...Descrição CAMINHONE MMC/L200 TRITON 3.2 D, placa
+// HKP6077, chassi 93XJRKB8T9C808991, RENAVAM 00121309878, ano fabricação/modelo 2008/2009,
+// cor preta..."). ESCOPO DELIBERADAMENTE ESTREITO: só olha os ~400 caracteres logo após o
+// rótulo "Descrição" — nunca a página inteira (que tem menu/rodapé, mesmo risco já documentado
+// pra marca/ano/placa em mapLoteSuporteVeiculo). Sem o rótulo "Descrição", devolve tudo null —
+// não adivinha por texto solto.
+function extrairCamposDescricao(textoDetalhe) {
+  const vazio = { chassi: null, renavam: null, placa: null, cor: null };
+  if (!textoDetalhe) return vazio;
+  const idx = textoDetalhe.search(/\bDescri[çc][aã]o\b/i);
+  if (idx < 0) return vazio;
+  const bloco = textoDetalhe.slice(idx, idx + 400);
+  return {
+    chassi: bloco.match(/\bchassi[:\s]+([A-HJ-NPR-Z0-9]{11,17})\b/i)?.[1]?.toUpperCase() ?? null,
+    renavam: bloco.match(/\bRENAVAM[:\s]+(\d{9,11})\b/i)?.[1] ?? null,
+    placa: bloco.match(/\bplaca[:\s]+([A-Z]{3}-?\d[A-Z0-9]\d{2}|[A-Z]{3}-?\d{4})\b/i)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    cor: bloco.match(/\bcor[:\s]+([A-Za-zÀ-ÿ]+)\b/i)?.[1]?.toLowerCase() ?? null,
+  };
+}
 // ── CATEGORIA DO VEÍCULO (carro/moto/caminhão/...) — 13/09, pedido do dono: "inclua um
 // filtro para selecionar por tipo de veículo (moto, carro, caminhão, etc)". Nenhuma fonte
 // grava isso hoje (nem coluna existia — ver migração veiculos_leilao_tipo_veiculo.sql). Sem
@@ -4462,6 +4497,11 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
   // algum tenant use o outro formato) e só cai no espaço se não achou — mantém REGEX_ANO
   // (compartilhado com a Sodré) intocado, escopo só neste mapper.
   const anoMatch = textoCompleto.match(REGEX_ANO) || textoCompleto.match(/\b(19[5-9]\d|20[0-4]\d)\s+(19[5-9]\d|20[0-4]\d)\b/);
+  // chassi/RENAVAM/placa/cor: só do bloco "Descrição" da página de detalhe (ver
+  // extrairCamposDescricao) — nunca da página inteira. `placa` daqui é preferida à antiga
+  // (que buscava REGEX_PLACA solto em textoCompleto, sem âncora — já documentado como fonte
+  // de falso positivo, ex. "AUT 2014"); só cai pro método antigo se o detalhe não tiver o rótulo.
+  const camposDescricao = extrairCamposDescricao(textoDetalhe);
   return {
     fonte: 'SUPORTE',
     fonte_id: `slv_${tenantKey}_${l.id}`,
@@ -4470,10 +4510,13 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
     descricao: titulo.slice(0, 500),
     marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
     tipo_veiculo: classificarTipoVeiculo(textoCompleto),
-    modelo: null,
+    modelo: extrairModeloPorBarra(textoCompleto),
+    chassi: camposDescricao.chassi,
+    renavam: camposDescricao.renavam,
+    cor: camposDescricao.cor,
     ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
     ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
-    placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    placa: camposDescricao.placa ?? (textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null),
     km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
     valor_minimo: valorMin,
     valor_avaliacao: null,

@@ -65,10 +65,18 @@ const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || '')
 //     também mostra indeterminado — pedido do dono, mesma sessão). Fica de fora até termos
 //     como ler a página renderizada (ex.: reaproveitar Puppeteer do scraper principal).
 //   • CEF/Caixa (21/09): confirmado ao vivo (fetchLote direto no lote real) que o fetch direto
-//     falha — IP do servidor bloqueado, mesma causa já documentada em enriquecer-lote.js — e o
-//     fallback Bright Data também falha, por cota semanal esgotada (`via:"sem_cota"`,
-//     `html_len:0`). Diferente de PESTANA/EDITAL_DJEN, a URL do lote é 1:1 (não é o problema),
-//     mas insistir aqui é gasto puro: nunca traz conteúdo pra apurar.
+//     falha — IP do servidor bloqueado, mesma causa já documentada em enriquecer-lote.js.
+//     PRIMEIRA hipótese (mesmo dia): seria só orçamento — sub-cota `geral` do Bright Data
+//     estava travada em 40/semana desde 03/09 (quando só tinha 2 consumidores) e este cron
+//     virou o 3º sem rebalancear; subida pra 150/semana (dentro dos 210 créditos já pagos e
+//     ociosos do teto global de 720). TESTADO DE NOVO com a cota disponível: `via:"fail"`,
+//     `html_len:0` — o Bright Data CHEGOU à Caixa e voltou vazio mesmo assim. Não é mais
+//     orçamento: `venda-imoveis.caixa.gov.br` é um site ASP clássico, provavelmente dependente
+//     de sessão (cookie de navegação prévia pela busca) — abrir o link do lote direto, mesmo
+//     via proxy residencial, não basta. Diferente de PESTANA/EDITAL_DJEN, a URL do lote é 1:1
+//     (não é o problema); o bloqueio é de acesso mesmo. Sub-cota `geral` maior continua valendo
+//     — beneficia os outros 2 consumidores que a compartilham (enriquecer-datas-cron.js,
+//     enriquecer-backfill-cron.js), só não resolveu CEF.
 const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
 
 // Mesma lista acima, mas pronta pro operador `not.in` do PostgREST — aplicada DENTRO da
