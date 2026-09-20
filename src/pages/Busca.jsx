@@ -110,12 +110,16 @@ const PRAZO_OPTS = [
 // por dia (ver api/apurar-resultado-leilao-cron.js), lendo a página de CADA lote que encerrou —
 // nenhuma fonte publica isso na listagem em massa, então a maioria do acervo fica em "ainda não
 // apurado" até o leilão realmente encerrar E o cron do fim do dia revisitar a página.
-// 'nao_apurado' agrupa NULL (nunca tentado) e 'indeterminado' (tentou, a página não deu sinal
-// confiável) — a distinção técnica entre os dois mora no banco, não precisa aparecer aqui.
+// 'sem_lance' agrupa 'sem_lance' E 'indeterminado' (pedido do dono, 21/09: "coloque para
+// parecer junto com sem lance") — a página não deu sinal de VENDA em nenhum dos dois casos, e
+// é exatamente isso que interessa para achar candidato a proposta direta; a distinção fica só
+// no CARD/tela do lote, que mostra "Indeterminado" honestamente até uma reapuração resolver
+// (ver ImovelDetalhe.jsx — reabre e tenta de novo contra o leiloeiro ao abrir a tela). Já
+// 'nao_apurado' aqui é só NULL — nunca tentado (leilão nem encerrou, ou o cron ainda não chegou).
 const RESULTADO_OPTS = [
   ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance — oportunidade de propor compra direta ao leiloeiro.'],
-  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou mas o resultado ainda não foi conferido no site do leiloeiro.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem sinal de venda — inclui os já confirmados "sem lance" e os "indeterminados" (tentamos, mas a página do leiloeiro não deu uma resposta clara). Oportunidade de propor compra direta.'],
+  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
@@ -290,9 +294,10 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   const janelaPrazo = calcularJanelaPrazo(f.prazo);
   if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
   else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
-  // Resultado do leilão (apurado pelo cron do fim do dia) — 'nao_apurado' cobre tanto NULL
-  // (nunca apurado) quanto 'indeterminado' (apurado, sem sinal confiável na página).
-  if (f.resultadoLeilao === 'nao_apurado') q = q.or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado');
+  // Resultado do leilão (apurado pelo cron do fim do dia) — 'sem_lance' agrupa 'sem_lance' E
+  // 'indeterminado' (21/09: nenhum dos dois tem sinal de venda); 'nao_apurado' é só NULL.
+  if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,resultado_leilao.eq.indeterminado');
+  else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);

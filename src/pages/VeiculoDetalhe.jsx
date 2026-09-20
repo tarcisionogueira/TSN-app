@@ -15,6 +15,15 @@ import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 // chega aqui já passou pelo gate da rota.
 const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 
+// Resultado real do leilão (21/09) — mesmo mapa de BuscaVeiculos.jsx (RESULTADO_BADGE) e de
+// ImovelDetalhe.jsx. 'indeterminado' com nome honesto: a busca já o trata junto de "sem
+// lance", mas aqui, no lote específico, nunca finge uma confirmação que ainda não existe.
+const RESULTADO_LEILAO_BADGE = {
+  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
+  indeterminado: { texto: 'Resultado indeterminado', bg: '#f1f5f9', fg: '#64748b' },
+};
+
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
 const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };
 const SINISTRO_COR = {
@@ -103,6 +112,23 @@ export default function VeiculoDetalhe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v?.id]);
 
+  // On-demand: RESULTADO DO LEILÃO indeterminado → reconfere contra a página do leiloeiro ao
+  // abrir a tela (pedido do dono, 21/09: "rode novamente para o leiloeiro e atualize o status
+  // caso esteja divergente"). Mesmo endpoint/gate de ImovelDetalhe.jsx (cooldown/teto de
+  // tentativas no servidor); só dispara quando já está 'indeterminado' e o leilão já encerrou.
+  useEffect(() => {
+    if (!v?.id || v.resultado_leilao !== 'indeterminado') return;
+    if (!v.data_leilao || new Date(v.data_leilao).getTime() >= Date.now()) return;
+    let cancelado = false;
+    apiCall('/api/reapurar-resultado-leilao', { method: 'POST', body: JSON.stringify({ veiculoId: v.id }) })
+      .then(r => r.json()).then(d => {
+        if (cancelado || !d?.atualizado) return;
+        setV(prev => prev && ({ ...prev, resultado_leilao: d.resultado_leilao, valor_lance_vencedor: d.valor_lance_vencedor }));
+      }).catch(() => {}); // padrao-ok: reconferência best-effort — falha não pode travar a tela do veículo
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v?.id, v?.resultado_leilao]);
+
   // Cota de análise de veículo, mesmo padrão de ImovelDetalhe.jsx (lerCotaMercado): nunca
   // lança — falha de rede não pode virar "você não tem análise".
   useEffect(() => {
@@ -178,6 +204,17 @@ export default function VeiculoDetalhe() {
             <MapPin size={13} />{[v.cidade, v.estado].filter(Boolean).join(', ') || '—'}
             {v.leiloeiro && <span> · Leiloeiro: {v.leiloeiro}</span>}
           </div>
+
+          {/* Resultado real do leilão (21/09) — só depois de encerrado e já apurado; ausência
+              aqui é "ainda não sei", nunca "não vendeu". */}
+          {v.resultado_leilao && leilaoEncerrado && RESULTADO_LEILAO_BADGE[v.resultado_leilao] && (() => {
+            const rb = RESULTADO_LEILAO_BADGE[v.resultado_leilao];
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: rb.bg, color: rb.fg, padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700 }}>
+                {rb.texto}{v.valor_lance_vencedor > 0 ? ` — ${fmtBRL(v.valor_lance_vencedor)}` : ''}
+              </div>
+            );
+          })()}
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {v.modalidade && v.modalidade !== 'nao_identificado' && (

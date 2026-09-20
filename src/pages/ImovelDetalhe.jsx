@@ -25,6 +25,16 @@ import { TIPOS_LIQUIDOS } from '../lib/intencao';
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 
+// Resultado real do leilão (21/09) — apurado revisitando a página do lote (ver
+// api/apurar-resultado-leilao-cron.js e api/reapurar-resultado-leilao.js). 'indeterminado'
+// aparece com o nome honesto: o filtro de busca já o trata como candidato a "sem lance", mas
+// o rótulo individual nunca finge uma confirmação que ainda não existe.
+const RESULTADO_LEILAO_BADGE = {
+  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
+  indeterminado: { texto: 'Resultado indeterminado', bg: '#f1f5f9', fg: '#64748b' },
+};
+
 const TIPO_ANEXO_LABEL = {
   edital: 'Edital', auto_arrematacao: 'Auto de Arrematação', carta_arrematacao: 'Carta de Arrematação',
   matricula: 'Matrícula', contrato: 'Contrato', procuracao: 'Procuração', outro: 'Outro',
@@ -913,6 +923,7 @@ export default function ImovelDetalhe() {
           // arrematação, área da matrícula) — publicados por quem leu o documento.
           nomeCondominio: data.nomecondominio || null,
           docFatos: data.doc_fatos || null, docFatosEm: data.doc_fatos_em || null,
+          resultadoLeilao: data.resultado_leilao || null, valorLanceVencedor: data.valor_lance_vencedor ?? null,
         });
       })
       .finally(() => { if (vigente) setLoading(false); });
@@ -933,6 +944,24 @@ export default function ImovelDetalhe() {
     }).catch(() => {});
     return () => { cancel = true; };
   }, [imovel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On-demand: RESULTADO DO LEILÃO indeterminado → reconfere contra a página do leiloeiro ao
+  // abrir a tela (pedido do dono, 21/09: "rode novamente para o leiloeiro e atualize o status
+  // caso esteja divergente"). Só dispara quando já está 'indeterminado' (a apuração diária —
+  // api/apurar-resultado-leilao-cron.js — cuida do resto); o servidor tem cooldown e teto de
+  // tentativas próprios, então repetir a visita não gasta Bright Data à toa. Continua exibindo
+  // "Indeterminado" até o servidor confirmar uma resposta — nunca troca sozinho no cliente.
+  useEffect(() => {
+    if (!imovel?.id || imovel.resultadoLeilao !== 'indeterminado') return;
+    if (!leilaoEncerrado(imovel).encerrado) return;
+    let cancel = false;
+    apiCall('/api/reapurar-resultado-leilao', { method: 'POST', body: JSON.stringify({ imovelId: imovel.id }) })
+      .then(r => r.json()).then(d => {
+        if (cancel || !d?.atualizado) return;
+        setImovel(prev => prev ? { ...prev, resultadoLeilao: d.resultado_leilao, valorLanceVencedor: d.valor_lance_vencedor } : prev);
+      }).catch(() => {}); // padrao-ok: reconferência best-effort — falha aqui não pode travar a tela do lote
+    return () => { cancel = true; };
+  }, [imovel?.id, imovel?.resultadoLeilao]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On-demand: ao abrir um imóvel de LEILOEIRO (não-CEF) ainda não vasculhado,
   // varre a página do lote atrás de matrícula/edital/regras/anexos/foto e traz
@@ -2043,6 +2072,18 @@ export default function ImovelDetalhe() {
                         <div style={{ marginTop: 6, color: '#94a3b8' }}>É um indicador de <strong>triagem</strong>, não substitui a análise completa nem o parecer do analista.</div>
                       </div>
                     </details>
+                  </div>
+                );
+              })()}
+
+              {/* Resultado real do leilão (21/09) — só depois de encerrado, e só quando já
+                  apurado; enquanto está em pregão ou nunca foi tentado, não mostra nada
+                  (ausência aqui é "ainda não sei", nunca "não vendeu"). */}
+              {imovel.resultadoLeilao && encerrado.encerrado && RESULTADO_LEILAO_BADGE[imovel.resultadoLeilao] && (() => {
+                const rb = RESULTADO_LEILAO_BADGE[imovel.resultadoLeilao];
+                return (
+                  <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, background: rb.bg, color: rb.fg, padding: '10px 14px', borderRadius: 10, fontSize: 12.5, fontWeight: 700 }}>
+                    {rb.texto}{imovel.valorLanceVencedor > 0 ? ` — ${fmtBRL(imovel.valorLanceVencedor)}` : ''}
                   </div>
                 );
               })()}

@@ -36,12 +36,15 @@ const COLUNAS = [
 ].join(',');
 
 // RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
-// (api/apurar-resultado-leilao-cron.js processa os dois acervos no mesmo run). 'nao_apurado'
-// agrupa NULL (nunca tentado) e 'indeterminado' (tentou, sem sinal confiável na página).
+// (api/apurar-resultado-leilao-cron.js processa os dois acervos no mesmo run). 'sem_lance'
+// agrupa 'sem_lance' E 'indeterminado' (pedido do dono, 21/09: "coloque para parecer junto
+// com sem lance") — nenhum dos dois tem sinal de venda; a distinção honesta fica só na tela do
+// veículo, que reapura contra o leiloeiro ao abrir e resolve o indeterminado quando dá. Já
+// 'nao_apurado' aqui é só NULL (nunca tentado).
 const RESULTADO_OPTS = [
   ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance — oportunidade de propor compra direta ao leiloeiro.'],
-  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou mas o resultado ainda não foi conferido no site do leiloeiro.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem sinal de venda — inclui os já confirmados "sem lance" e os "indeterminados" (tentamos, mas a página do leiloeiro não deu resposta clara). Oportunidade de propor compra direta.'],
+  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 
 // "Tipo de veículo" (13/09, pedido do dono) — NÃO é o mesmo campo que `tipoMonta`
@@ -114,9 +117,12 @@ function contagemLeilao(d) {
 
 // Badge de RESULTADO REAL (21/09) — distinto da contagem de data acima. Só aparece quando a
 // apuração já rodou; ausente = "ainda não apurado" (nada exibido, não é "sem resultado").
+// 'indeterminado' aparece no CARD com o nome honesto — o filtro "Sem lance" já o inclui junto
+// (pedido do dono, 21/09), mas o rótulo individual não pode fingir confirmação que não existe.
 const RESULTADO_BADGE = {
   vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
+  indeterminado: { texto: 'Indeterminado', bg: '#f1f5f9', fg: '#64748b' },
 };
 
 // Desconto = quanto o lance mínimo está abaixo da avaliação do PRÓPRIO leiloeiro. Sem
@@ -275,9 +281,10 @@ export default function BuscaVeiculos() {
       const janelaPrazo = calcularJanelaPrazo(f.prazo);
       if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
       else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
-      // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'nao_apurado' agrupa
-      // NULL (nunca tentado) e 'indeterminado' (tentou, sem sinal confiável).
-      if (f.resultadoLeilao === 'nao_apurado') q = q.or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado');
+      // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'sem_lance' agrupa
+      // 'sem_lance' E 'indeterminado' (nenhum tem sinal de venda); 'nao_apurado' é só NULL.
+      if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,resultado_leilao.eq.indeterminado');
+      else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
       else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
