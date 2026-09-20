@@ -7,9 +7,15 @@
  * é `/leiloes` — mesmo padrão de URL de lote de sempre (`/leiloes/lote-<n>-<slug>/<id>`).
  * Bright Data Web Unlocker testado e confirmado insuficiente (desafio intacto mesmo com
  * corpo de resposta grande) — só passa de IP residencial, mesmo remédio de RJ/GESTAO/PECINI/
- * HASTA (`scripts/runner-residencial.sh`). Rodar `node scripts/scraper-globo.mjs` da CI
- * continua bloqueado; do residencial deve funcionar sem mudança nenhuma no motor (`dom` já é
- * Puppeteer puro, sem Bright Data — só a origem do IP importa aqui).
+ * HASTA (`scripts/runner-residencial.sh`).
+ *
+ * `usarProxyIsp: true` (20/09, EM TESTE) — Web Unlocker (acima) é produto DIFERENTE do proxy
+ * ISP: aquele tenta resolver o challenge via fingerprint/JS de um datacenter; este troca o IP
+ * de saída do Puppeteer por um de reputação residencial — o mesmo bloqueio de Cloudflare por
+ * IP de datacenter que o proxy ISP já resolveu pra HASTA (19/09, `hasta.mjs`). Ainda não
+ * validado contra ESTE site especificamente — se o dry-run via CI continuar em 0 lotes mesmo
+ * com o proxy, o Cloudflare daqui está reagindo a outra coisa (fingerprint de browser, não só
+ * IP) e a produção real segue sendo `scripts/runner-residencial.sh`.
  *
  * `timeoutMs` alto (herdado de 07/09): página pesada, muito rastreador/analytics — 90s dá
  * folga sem custar nada (dom é grátis, o preço é só tempo de execução).
@@ -23,7 +29,7 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'globo',
   fetch: 'dom',
-  dom: { esperaMs: 6000, timeoutMs: 90000 },
+  dom: { esperaMs: 6000, timeoutMs: 90000, usarProxyIsp: true },
   catalogo: '/leiloes',
   paginaParam: 'page',
   maxPages: 1,
