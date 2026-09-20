@@ -541,6 +541,11 @@ def main():
         # certo for identificado e `foto_url`/`montar_row` forem ajustados.
         if lotes:
             print(f"    (campos do 1º lote bruto: {sorted(lotes[0].keys())})")
+            # 20/09: extensão pontual do diagnóstico acima — dump do JSON completo do 1º lote
+            # (não só as chaves) pra confirmar o NOME real do campo de foto/documento antes de
+            # ajustar foto_url()/montar_row() às cegas. Gated por env pra não poluir todo run.
+            if os.environ.get("VLANCE_DEBUG_PAYLOAD") == "1":
+                print(f"    (1º lote, JSON completo: {json.dumps(lotes[0], ensure_ascii=False, default=str)[:4000]})")
         if not args.todas:
             alvo = norm(args.categoria)
             lotes = [l for l in lotes if norm(l.get("nm_categoria")) == alvo]

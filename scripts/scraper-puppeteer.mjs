@@ -1248,8 +1248,11 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     // API não expõe (ex.: seção "Documentação"/condição do bem). Bounded: com 3.200+ ofertas
     // num catálogo só, visitar todas seria caro — 60 por rodada já é ganho sobre 0, e o
     // upsert diário vai cobrindo mais lotes ao longo do tempo.
+    // 20/09: cap dobrado (60→120) — com 4.300+ ofertas, 60/rodada dava só ~1,4% de cobertura
+    // por dia (3-4% acumulado); classificarPatio() é conservador por desenho (nunca cria falso
+    // "confirmado"), então mais cobertura só aumenta veículos legitimamente exibidos, nunca risco.
     const detalhePorId = await visitarTextoDetalhe(browser, pendentes, {
-      getUrl: (x) => x.link_lote, getId: (x) => x.id, max: 60, label: `${leiloeiro} veículos`,
+      getUrl: (x) => x.link_lote, getId: (x) => x.id, max: 120, label: `${leiloeiro} veículos`,
     });
     const registros = pendentes.map((x) => {
       const detalhe = detalhePorId.get(x.id);
@@ -1858,8 +1861,10 @@ async function scraperLJUDVeiculos(browser) {
     // `visitarTextoDetalhe` já rotaciona a fatia visitada pelo dia do ano quando o acervo
     // é maior que `max` (ver `janelaRotativaPorDia`) — sem isso, com >1.000 lotes e `cards`
     // reconstruído do zero a cada rodada, os mesmos ~60 primeiros seriam visitados todo dia.
+    // 20/09: cap dobrado (60→120), mesmo motivo do SUPERBID veículos — classificarPatio() é
+    // conservador por desenho, então mais cobertura só aumenta veículos exibidos, nunca risco.
     const detalhePorId = await visitarTextoDetalhe(browser, cards, {
-      getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 60, label: 'LJUD veículos',
+      getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 120, label: 'LJUD veículos',
     });
     const seen = new Set();
     const veiculos = cards.map((c) => {
@@ -4939,6 +4944,13 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           if (a2 > 0) im.area_m2 = a2;
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
+        // 20/09: docs.foto era CALCULADO aqui (vasculharDocumentos já varre <img> da página)
+        // e descartado — nunca atribuído a im.link_foto. api/enriquecer-lote.js e
+        // scraper-bayit.mjs, que chamam o mesmo vasculharDocumentos, já consomem docs.foto
+        // corretamente; só este caller (usado por HASTAPUBLICA e WEBLEILOES) tinha o buraco.
+        // Causa raiz confirmada do 0% de foto em HASTAPUBLICA, que não extrai foto no parser
+        // dedicado e depende 100% deste enriquecimento genérico.
+        if (docs.foto && !im.link_foto) im.link_foto = docs.foto;
         const achouAlgo = docs.matricula || docs.laudo || (Array.isArray(docs.anexos) && docs.anexos.length);
         if (achouAlgo) {
           if (!im.url_lote) im.url_lote = url;          // preserva a página do lote
@@ -5251,8 +5263,10 @@ async function main() {
 
     // 3c. White-labels da rede por LOJA (Round 35 do backlog TRT-15): mesma offer-query,
     // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
-    if (rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(browser, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }));
-    if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }));
+    // 20/09: assim como SBID9/SBID21 (09/09), estas duas saíam sem { enrich: true } — mesmo
+    // portal/template de oferta que SUPERBID/SOLD (74%/100% de matrícula com enrich ligado).
+    if (rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(browser, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }), { enrich: true, enrichCap: 120 });
+    if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120 });
     // KRONLEILOES (16/09): candidato do EDITAL_DJEN, site próprio (kronleiloes.com.br)
     // bloqueia Cloudflare direto (403 em fetch puro) — parecia exigir Bright Data pago. Recon
     // com Chromium real (recon-crepaldi.mjs, que passa o Cloudflare) mostrou que o site é só
@@ -5260,11 +5274,15 @@ async function main() {
     // offer-query.superbid.net com stores.id:16180 (444 ofertas na loja, confirmado por
     // teste direto na API pública). Zero Cloudflare, zero Bright Data — mesma API grátis que
     // TOTALLEILOES/CREPALDI já usam.
-    if (rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(browser, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }));
+    if (rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(browser, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }), { enrich: true, enrichCap: 120 });
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
+    // 20/09: o parser próprio classifica matrícula só pelo texto DENTRO da âncora <a> (frágil —
+    // mesma classe de bug já achada no Bayit 09/09, rótulo no elemento-pai). ADITIVO ligar
+    // enriquecerDocumentosLote/vasculharDocumentos (mais robusto, com fallback de rótulo do
+    // bloco-pai): só preenche o que o parser próprio deixou vazio, nunca substitui.
     if (rodar('LEILOFY')) console.log('\n📋 Leiloaria Smart (Leilofy)...');
-    if (rodar('LEILOFY')) await coletarFonte('LEILOFY', () => scraperLeilofy(browser));
+    if (rodar('LEILOFY')) await coletarFonte('LEILOFY', () => scraperLeilofy(browser), { enrich: true, enrichCap: 120 });
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos.
     // A página de detalhe do lote (link_edital) é server-rendered → enrich vasculha
@@ -5331,6 +5349,16 @@ async function main() {
         { nome: 'navegador-getlotes', fn: () => scraperLJUD_navegador(browser, 'get-lotes') },
         { nome: 'navegador-getbens',  fn: () => scraperLJUD_navegador(browser, 'get-bens-por-estados') },
       ]);
+      // 20/09: LJUD é a única fonte rica em documento sem enriquecerDocumentosLote — matrícula
+      // caiu de 93% (baseline 18/07) para 42%. Escopo RESTRITO à URL agregador de 2 segmentos
+      // (/lote/{leilao_id}/{lote_id}): é a única forma que garante 1 lote = 1 página real.
+      // NUNCA visitar o fallback (home do leiloeiro/domínio agregador) — foi o bug de 28/08 que
+      // pendurou os documentos de um leilão inteiro em cada lote (25 anexos, matrícula de imóvel
+      // de outra cidade); paginaLoteEhRaiz existe justamente para barrar isso no lado da fila.
+      try {
+        const comUrlPropria = imoveis.filter(im => /^https:\/\/www\.leiloesjudiciais\.com\.br\/lote\/\d+\/\d+$/.test(im.url_lote || ''));
+        if (comUrlPropria.length) await enriquecerDocumentosLote(browser, comUrlPropria, { cap: 120 });
+      } catch (e) { console.log(`  ⚠️ Enriquecimento de documentos LJUD falhou (segue sem): ${e.message.slice(0, 80)}`); }
       total += await salvarEFinalizar(imoveis, 'LJUD');
       await registrarSaude('LJUD', imoveis, estrategia, validacao);
     }

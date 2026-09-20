@@ -69,7 +69,10 @@ export function parseDetalhe(html, url) {
   const estado = info?.estado || bare.estado;
   const area = extrairArea(info?.descCurta || '', txt.slice(0, 500));
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : /judicial/i.test(txt) ? 'judicial' : 'extrajudicial';
-  const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;
+  // 20/09: exigia só espaço/"nº" entre o rótulo e o número — "Matrícula: 45.678" ou
+  // "Matrícula - 45.678" (dois-pontos/hífen) já falhavam. Mesmo espírito de `valorPorRotulo`
+  // (que já tolera até 40 caracteres quaisquer entre rótulo e valor neste mesmo arquivo).
+  const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.]{3,})/i) || [])[1] || null;
   const docs = anexosDeHtml(html, url);
 
   return {

@@ -196,7 +196,11 @@ export function linhasDeTabela(html) {
 export function anexosDeHtml(html, urlBase) {
   const anexos = [];
   let link_edital = null, link_matricula = null;
-  for (const m of String(html || '').matchAll(/href=["']([^"']+\.pdf[^"']*)["']/gi)) {
+  // 20/09 (pedido do dono: "os documentos que precisamos, independente do formato"): era só
+  // `.pdf` — LEILAOBRASIL/LUTHERO (mesma infra Suporte Leilões) publicam edital em `.doc`/
+  // `.docx`, e ficavam invisíveis aqui. Mesmo conjunto de extensões de RE_DOC_EXT (api/_doc-
+  // scan.js), o extrator genérico que já reconhece qualquer formato de documento real.
+  for (const m of String(html || '').matchAll(/href=["']([^"']+\.(?:pdf|docx?|xlsx?|odt|rtf)[^"']*)["']/gi)) {
     let abs; try { abs = new URL(m[1], urlBase).href; } catch { continue; }
     const low = abs.toLowerCase();
     const tipo = /edital/.test(low) ? 'edital' : /matr[íi]cula|laudo/.test(low) ? 'matricula' : 'outro';
@@ -251,7 +255,17 @@ export const RE_IMG_DESCARTA = /logo|favicon|sprite|avatar|placeholder|spinner|l
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
-    let src = (tag.match(/\b(?:data-src|data-lazy-src|data-original|src)=["']([^"']+)["']/i) || [])[1];
+    // 20/09: era UMA alternação só (`(?:data-src|...|src)`), e regex casa na posição MAIS À
+    // ESQUERDA da tag, não na ordem da alternação — se `src` (placeholder) vier ANTES de
+    // `data-src` (foto real) na marcação, o que é o padrão-padrão de toda lib de lazy-load
+    // (jQuery Lazy/lazysizes/lozad), o placeholder vencia e a foto real nunca era vista (o
+    // `continue` de `data:`/extensão abaixo descarta a tag INTEIRA, sem olhar `data-src`).
+    // Tentativas em ORDEM DE PRIORIDADE explícita corrige: o atributo de lazy-load sempre
+    // vence quando presente, não importa a posição no HTML.
+    let src = (tag.match(/\bdata-src=["']([^"']+)["']/i) || [])[1]
+      || (tag.match(/\bdata-lazy-src=["']([^"']+)["']/i) || [])[1]
+      || (tag.match(/\bdata-original=["']([^"']+)["']/i) || [])[1]
+      || (tag.match(/\bsrc=["']([^"']+)["']/i) || [])[1];
     // srcset="url1 1x, url2 2x…" — 1º candidato antes da vírgula/descritor de densidade.
     // Medido 10/09: NORDESTE (Next.js/next-image) e SIMONLEILOES ficaram em 0% foto mesmo
     // com o fix acima — plataformas que usam `srcset` sem `src` puro (lazy-load responsivo)
