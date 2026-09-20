@@ -30580,3 +30580,45 @@ pedido de encerramento do dono. Registro consolidado pra quem retomar:
 
 **Tudo confirmado em produção** (branch `main`, commits `f1a0cb5`→`5d8e364`, PRs #375-#379
 mergeados em sequência, nenhum pendente).
+
+## Retomada em 20/09 — o lote do print virou caso encerrado, e a rotação foi corrigida
+
+Pedido do dono ao retomar: "Confere se aquele lote já foi corrigido em alguns dias". A
+resposta virou dois achados, um sem ação (caso fechado) e um com ação (bug real, corrigido).
+
+**O lote `zuk_37518-234619` não foi corrigido — mas não é mais um bug a perseguir.** Conferido
+no banco: descrição, anexo-lixo ("Imóveis Recebendo Proposta") e ausência de matrícula
+seguem idênticos ao print original, `atualizado_em` continua travado em `19/09 14:24:33`. A
+causa: o leilão saiu do ar (**`ativo: false`**) antes de qualquer rodada pós-fix alcançá-lo.
+Confirmado lendo o código (`coletarFonte`, `scraper-puppeteer.mjs`): `enriquecerDocumentosLote`
+só recebe os imóveis que `scraperPortalZuk()` capturou AO VIVO na página do leiloeiro naquela
+rodada — não uma lista vinda do banco. Uma vez que o lote sai do site (vendido/expirado), ele
+some da captura, é marcado inativo, e **nunca mais entra em `imoveis`** — logo nunca mais passa
+pelo filtro `alvos`, e fica congelado com os dados antigos para sempre. Não é uma falha do
+conserto: é um lote que deixou de existir para o cliente antes do conserto ter a chance de
+alcançá-lo. Sem ação necessária — não afeta ninguém, é lixo histórico inofensivo num registro
+inativo.
+
+**A nota honesta deixada na entrada anterior ERA um bug real, e foi corrigida agora.**
+`alvos.slice(0, cap)` sempre pegava os mesmos primeiros `cap` itens da lista, na ordem em que
+`imoveis` chega a cada rodada (a ordem do `document.querySelectorAll('.card-property')` do
+site) — sem rotação. Com `alvos.length > cap` (catálogo grande com muita cauda pendente de
+revisita), a cauda nunca seria alcançada, dia após dia — diferente de `visitarTextoDetalhe`,
+que já resolve exatamente isso com `janelaRotativaPorDia` (desloca o início da fatia pelo dia
+do ano, cobrindo o catálogo inteiro em `ceil(total/max)` dias). `enriquecerDocumentosLote()`
+nunca tinha esse mecanismo.
+
+**Corrigido**: `janelaRotativaPorDia` (já existente, já usada e testada em produção por
+`visitarTextoDetalhe`) agora também envolve a seleção de `alvos` em `enriquecerDocumentosLote()`
+antes do corte pelo `cap` (`scripts/scraper-puppeteer.mjs`, dentro da função, variável renomeada
+para `alvosNoDia`). Efeito: vale para TODAS as fontes que passam por esta função (HASTAPUBLICA,
+WEBLEILOES, ZUK, SUPERBID, SOLD, SBID9/21, TOTALLEILOES/CREPALDI/KRONLEILOES, LEILOFY, FRAZAO,
+VENDASGOV), não só ZUK — qualquer catálogo grande o bastante para ter fila pendente maior que o
+`cap` diário agora rotaciona e cobre a cauda ao longo dos dias, em vez de revisitar os mesmos
+primeiros itens para sempre. `npm run build`, `npm run verificar:padroes` e
+`npm run testar:anexo-lixo` (27/27) passaram antes do push. Sem migração de banco — mudança
+pura de código, sem novo objeto de schema.
+
+**Sessão encerrada.** Nada pendente conhecido além do que já está registrado como sugestão
+aberta (EMILIOMATOS/SATO — decisão de consertar ou aposentar formalmente os crons suspensos,
+nunca pedida explicitamente pelo dono).
