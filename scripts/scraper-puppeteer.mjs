@@ -9,7 +9,15 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
-import { extrairDescricaoDoCorpo } from '../api/_texto-imovel.js';
+import { extrairDescricaoDoCorpo, decodificarEntidades } from '../api/_texto-imovel.js';
+// Mesma heurística já validada em texto de matrícula PDF (api/_registro-matricula.js, usada
+// por scripts/enriquecer-cartorio-matricula.mjs): "situado(a) na/no/à <logradouro>". Reaproveitada
+// aqui (20/09) pra preencher `endereco` a partir do TEXTO DA DESCRIÇÃO do lote (nunca da página
+// inteira) nas fontes que hoje gravam endereco vazio — BIASI/GRUPOLANCE/VIP/LEILOTECH/SUPORTE/
+// WEBLEILOES/HASTAPUBLICA/SUPERBID e as demais que passam por enriquecerDocumentosLote(). Por
+// exigir a locução situacional ("situado na"/"localizado no"/"à Rua X"), não captura texto solto
+// de rodapé/institucional — é a mesma defesa que já livra o extrator de matrícula do mesmo risco.
+import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
