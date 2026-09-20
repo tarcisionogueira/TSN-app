@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
 import { extrairDescricaoDoCorpo } from '../api/_texto-imovel.js';
-import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
+import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -101,6 +101,8 @@ const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); r
 const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
 const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
+// Só estas 2 fontes têm o classificador ehForaDoAcervo() validado (ver salvarImoveis abaixo).
+const FONTES_FORA_DO_ACERVO_VALIDADAS = new Set(['SUPERBID', 'LJUD']);
 const baseFonte = (f) => String(f || '').trim().toUpperCase().replace(/\s+\d.*$/, ''); // "SBID9 1-500" → "SBID9"
 const ehEstrangeiroPelaCidade = (fonte, cidade) => {
   if (!FONTES_INTERNACIONAIS.has(baseFonte(fonte))) return false; // só as fontes com inventário internacional
@@ -253,9 +255,23 @@ async function salvarImoveis(imoveis, fonte) {
   // O mesmo `ehFracaoIdeal` do portão compartilhado, para a regra ter UMA definição só: dois
   // regexes equivalentes em arquivos diferentes divergem no primeiro ajuste, e aí a fonte que
   // ficou para trás volta a admitir o que a outra barra.
-  const limpos = rows.filter(r => !ehFracaoIdeal(r));
-  const barrados = rows.length - limpos.length;
+  const semFracao = rows.filter(r => !ehFracaoIdeal(r));
+  const barrados = rows.length - semFracao.length;
   if (barrados) console.log(`  ⛔ ${fonte}: ${barrados} lote(s) de parte/fração ideal barrados (fora do acervo por decisão de negócio)`);
+
+  // ACERVO SÓ IMÓVEL/VEÍCULO (20/09) — mesma régua de scraper-core.mjs/fora_do_acervo_imovel_
+  // veiculo() no banco (achado real: fresa de usinagem publicada como terreno via LEILAOBRASIL).
+  // Aplicada aqui NA CAPTURA pela 1ª vez, não só via limpeza retroativa + qa_invariantes(). Escopo
+  // LIMITADO a SUPERBID/LJUD — as únicas 2 fontes deste coletor genérico já validadas contra o
+  // classificador (diff completo JS×SQL sobre o acervo ativo inteiro, 0 divergências, 20/09). As
+  // outras ~15 fontes que passam por aqui (MEGA/GRUPOLANCE/ZUK/BIASI/PESTANA/SOLD/SODRE/FRAZAO/
+  // VENDASGOV/VIP/LEILOTECH/SUPORTE/SBID9/SBID21/WEBLEILOES) NUNCA foram validadas — um teste
+  // rápido achou 365 candidatos concentrados nelas, quase todos falso-positivo de título mais
+  // terso. Ampliar pra elas sem validar repetiria o erro que este mesmo filtro já evitou uma vez.
+  const limpos = semFracao.filter(r => !FONTES_FORA_DO_ACERVO_VALIDADAS.has(r.fonte) || !ehForaDoAcervo(r));
+  const foraDoAcervo = semFracao.length - limpos.length;
+  if (foraDoAcervo) console.log(`  ⛔ ${fonte}: ${foraDoAcervo} lote(s) fora do acervo (nem imóvel nem veículo) barrados`);
+
   if (!limpos.length) { console.log(`  ${fonte}: nada a salvar após o filtro.`); return { salvos: 0, esperados: 0 }; }
 
   const { error } = await supabase
