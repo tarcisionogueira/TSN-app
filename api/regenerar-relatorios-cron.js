@@ -217,6 +217,21 @@ export default async function handler(req, res) {
               method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ cota_estornada: true }) });
           } catch { /* estorno best-effort */ }
         }
+        // SEM parecerInputs.d: nenhuma tentativa consegue gerar o parecer (é o dado de negócio
+        // do cliente — valorArrematacao/objetivo/etc —, não algo que o servidor recalcule). Achado
+        // 20/09: a linha ficava 4 ciclos de 6h (24h) sendo re-selecionada e falhando sempre do
+        // mesmo jeito ('sem_parecerInputs'), ocupando o Cliente 360 com alarme que nenhum retry
+        // resolveria. Sobe direto para o teto em vez de gastar os 4 ciclos — mesmo princípio do
+        // teto de tentativas: não regerar infinito um vício permanente.
+        if (!r?.inputs?.parecerInputs?.d) {
+          try {
+            await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+              method: 'PATCH', headers: { Prefer: 'return=minimal' },
+              body: JSON.stringify({ regen_tentativas: MAX_PARECER, regen_em: new Date().toISOString() }),
+            });
+          } catch { /* segue mesmo assim */ }
+          return;
+        }
         try {
           await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
             method: 'PATCH', headers: { Prefer: 'return=minimal' },
