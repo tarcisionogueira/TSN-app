@@ -5092,10 +5092,11 @@ function ScrapersMonitor() {
 // nos filtros públicos de busca). Lê `veiculos_leilao` (tabela separada de imoveis_leilao —
 // ver supabase/migrations/veiculos_leilao_piloto.sql). Só Sodré Santoro por ora. `indefinido`
 // some da lista por padrão — não exibir sem sinal claro de pátio é o pedido do dono ("não
-// tenho interesse em tomar veículos de executado"). Vive dentro de ScrapersTab (aba "fontes")
-// — é a TELA OPERACIONAL de verdade (Operacional → 📡 Operação de Coleta), não o Dashboard/
-// Início: colocar aqui de propósito, com botão de disparo, pra não repetir o achado de 11/09
-// ("não localizei o botão").
+// tenho interesse em tomar veículos de executado"). Vive na aba Veículos (Operacional →
+// 🚗 Veículos, 20/09 — antes ficava dentro de ScrapersTab/"fontes"; o dono pediu pra juntar
+// tudo de veículo num menu só, junto da retomada via CNJ) — mantida como tela OPERACIONAL,
+// não Dashboard/Início: colocar aqui de propósito, com botão de disparo, pra não repetir o
+// achado de 11/09 ("não localizei o botão").
 function VeiculosPilotoMonitor() {
   const navVeic = useNavigate();
   const [linhas, setLinhas] = useState([]);
@@ -5189,6 +5190,33 @@ function VeiculosPilotoMonitor() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Aba "Veículos" (20/09, pedido do dono: "deixar os veículos tudo junto" — antes o piloto de
+// pátio vivia solto dentro de Scrapers/"fontes" e a retomada via CNJ não tinha menu nenhum,
+// só a URL direta). Um menu só reúne as duas frentes de veículo: o que já está em pátio
+// (VeiculosPilotoMonitor, seguro/perda total — nunca em posse do executado) e a busca de
+// processos de retomada por financiamento (CNJ DataJud, /admin/retomada-veiculos).
+function VeiculosTab() {
+  const nav = useNavigate();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <VeiculosPilotoMonitor />
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>⚖️ Retomada de veículos (CNJ)</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+              Processos de busca e apreensão/alienação fiduciária por banco — dado público do CNJ, uso interno
+            </div>
+          </div>
+          <button onClick={() => nav('/admin/retomada-veiculos')} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            🔍 Buscar processos
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -8237,8 +8265,6 @@ function ScrapersTab() {
             </div>
           )}
 
-          {/* Leilão de veículos — piloto (11/09) */}
-          <VeiculosPilotoMonitor />
           <LeiloeiroContatoManager />
         </div>
       )}
@@ -12223,13 +12249,14 @@ const GRUPOS_ADMIN = [
   { nome: 'Administrativo',icone: '🏢', desc: 'Pessoas, contratos e ajustes',  tabs: ['Usuários', 'Convites', 'Equipe', 'Contratos', 'Configurações'] },
   { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Marketing', 'Promoções', 'Aula ao vivo', 'Cursos', 'eBooks'] },
   { nome: 'Financeiro',    icone: '💰', desc: 'Fluxo de caixa e conciliação',  tabs: ['Financeiro'] },
-  { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
+  { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Veiculos', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
 
 // Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
 // só o texto do botão. "Scrapers" vira "Operação de Coleta" (reposicionamento pedido).
 const ROTULO_TAB = {
   Scrapers: '📡 Operação de Coleta',
+  Veiculos: '🚗 Veículos',
   CNJ: '⚖️ CNJ',
   Registros: '🗂️ Registros',
   Editais: '📜 Radar de Editais',
@@ -13141,6 +13168,7 @@ export default function Admin() {
         {tab === 'Comercial'      && <ComercialTab />}
         {tab === 'Equipe'         && <EquipeHub />}
         {tab === 'Scrapers'       && <ScrapersTab />}
+        {tab === 'Veiculos'       && <VeiculosTab />}
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Editais'        && <RadarEditaisTab />}

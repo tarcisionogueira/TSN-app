@@ -548,8 +548,8 @@ export default function BuscaVeiculos() {
         </div>
       )}
 
-      <button onClick={() => nav('/admin?aba=Scrapers')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
-        ← Voltar para o Operacional
+      <button onClick={() => nav('/admin?aba=Veiculos')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+        ← Voltar para Veículos
       </button>
 
       {propondoVeiculo && (

@@ -39,8 +39,8 @@ export default function RetomadaVeiculos() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={() => nav('/admin')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
-        <ArrowLeft size={16} /> Voltar ao Admin
+      <button onClick={() => nav('/admin?aba=Veiculos')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+        <ArrowLeft size={16} /> Voltar a Veículos
       </button>
 
       <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111111', margin: 0 }}>Retomada de veículos — CNJ DataJud</h1>

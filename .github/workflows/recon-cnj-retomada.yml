@@ -1,4 +1,4 @@
-name: _temp Recon CNJ retomada veículos
+name: Recon CNJ retomada veículos
 
 on:
   workflow_dispatch:
