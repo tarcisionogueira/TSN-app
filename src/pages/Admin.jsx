@@ -11713,7 +11713,11 @@ function LiveTab() {
   // toast de "relatório pronto" custou hoje de manhã.
   const [grupo, setGrupo] = useState(null);   // { porInscricao: Map, motivo } — null = ainda carregando
   const [chamando, setChamando] = useState('');
-  const SLUG = 'leilao-ao-vivo';
+  // 20/09: a aula semanal ("toda quarta") foi retirada do ar (dono decidiu não continuar) e a
+  // tela passou a gerenciar o evento do LANÇAMENTO de 15/11 (parceria Érico Rocha) — mesmo
+  // editor, outro slug. O rascunho antigo (`leilao-ao-vivo`) continua no banco com `ativo=false`,
+  // só não é mais editável por aqui.
+  const SLUG = 'lucre-antes-de-arrematar';
 
   const carregar = useCallback(async () => {
     const { data, error } = await supabase.from('eventos_live').select('*').eq('slug', SLUG).maybeSingle();
@@ -12007,7 +12011,8 @@ function LiveTab() {
             {criandoSala ? 'Criando…' : '🎦 Gerar sala automaticamente'}
           </button>
           <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
-            Cria o evento na sua agenda com sala do Meet. Sendo semanal, o mesmo link vale para todas as quartas.
+            Cria o evento na sua agenda com sala do Meet.
+            {ev.recorrencia === 'semanal' ? ' Sendo semanal, o mesmo link vale para todas as edições.' : ' Evento único — a sala vale para esta data.'}
           </div>
         </div>
         <div>
@@ -12091,6 +12096,34 @@ function LiveTab() {
           </div>
         </div>
       </div>
+
+      {/* DATA/HORA — só aparece em evento ÚNICO (sem recorrência semanal). Num evento recorrente
+          a data vem de `recorrencia_dia`/`recorrencia_hora` (não editável por aqui, nunca foi
+          preciso até hoje); num lançamento como o de 15/11, `data_hora` é a ÚNICA fonte, e até
+          20/09 esta tela não tinha onde editá-la — só dava pra mudar via SQL direto. */}
+      {!ev.recorrencia && (
+        <div style={{ marginBottom:18 }}>
+          <label style={S.label}>Data e hora da aula (horário de Brasília)</label>
+          <input type="datetime-local" style={S.input}
+            value={ev._data_hora_campo ?? (ev.data_hora ? (() => {
+              const d = new Date(new Date(ev.data_hora).toLocaleString('en-US', { timeZone: 'America/Bahia' }));
+              const p2 = n => String(n).padStart(2, '0');
+              return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+            })() : '')}
+            onChange={e => setEv({ ...ev, _data_hora_campo: e.target.value })}
+            onBlur={() => {
+              if (!ev._data_hora_campo) return;
+              // O <input> não sabe fuso — o valor digitado É horário de Brasília (America/Bahia,
+              // UTC-3 o ano inteiro, sem horário de verão). Monta o ISO com o offset explícito
+              // em vez de deixar o navegador interpretar como fuso local dele.
+              salvar({ data_hora: `${ev._data_hora_campo}:00-03:00` });
+            }} />
+          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+            Evento único (sem recorrência semanal) — esta é a única fonte da data exibida na
+            página pública e usada nos lembretes.
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom:18 }}>
         <label style={S.label}>Título</label>
