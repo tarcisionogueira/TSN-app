@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
+import { extrairDescricaoDoCorpo } from '../api/_texto-imovel.js';
 import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -4950,6 +4951,21 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           // rodapé/outro lote e o trigger de preservação a tornava permanente (caso BIASI).
           const a2 = extrairAreaM2(texto, { permitirSolta: false });
           if (a2 > 0) im.area_m2 = a2;
+        }
+        // DESCRIÇÃO REAL, não eco do título (20/09, achado do dono numa ficha ZUK: a
+        // "Descrição" mostrada ao cliente era idêntica ao título, diferente do texto real do
+        // portal do leiloeiro). Mesma regra de `api/enriquecer-lote.js` (`descEcoDoTitulo`):
+        // só troca quando o que sobra depois de tirar o título é pouco (< 40 chars — cobre o
+        // padrão ZUK `[tituloCompleto, ocupação].join(' · ')`, que é o MESMO defeito medido em
+        // 17/08 pra SUPERBID/PESTANA/LJUD/BIASI. Custo zero: já é o HTML que baixamos pra docs.
+        const descEcoDoTitulo = (() => {
+          const d = String(im.descricao || '').trim();
+          const t = String(im.titulo || '').trim();
+          return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+        })();
+        if (descEcoDoTitulo) {
+          const descPag = extrairDescricaoDoCorpo(html);
+          if (descPag) im.descricao = descPag;
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         // 20/09: docs.foto era CALCULADO aqui (vasculharDocumentos já varre <img> da página)

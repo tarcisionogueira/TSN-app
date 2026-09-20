@@ -31,6 +31,14 @@ const RE_ASSET_MIN  = /\.min\.[a-z0-9]{2,5}(?:[?#]|$)/i;              // storage
 const RE_PAGINA_CONTA = /\/(login|signin|sign-in|entrar|logout|sair|cadastr\w*|registrar|licitante|habilita\w*|authorization|authorize|oauth|minha-conta|meus-dados|carrinho|checkout|gloss[áa]rio|glossario|faq|contato|fale-conosco|quem-somos)(?:[/?#]|$)/i;
 // Link de MARKETING (campanha/rastreio) — documento nenhum carrega utm_source/gclid.
 const RE_PARAM_MKT = /[?&](utm_[a-z]+|gclid|fbclid|msclkid|mc_eid)=/i;
+// PÁGINA DE LISTAGEM/CATEGORIA (20/09, achado do dono numa ficha ZUK): "Imóveis Recebendo
+// Proposta" entrou como anexo — o href era a página de CATEGORIA do site
+// (.../todos-imoveis/recebendo-proposta?order=lancamento), não um documento do lote. A
+// palavra-chave "proposta" (KW.proposta, pensada pro "Modelo de Proposta" de compra
+// parcelada) bateu no slug da categoria, e `ehPaginaDoSite` só reconhece a home ou a MESMA
+// página do lote — não outras páginas do site. Nenhum documento de verdade carrega parâmetro
+// de ordenação/paginação: sinal genérico, não específico do ZUK.
+const RE_PARAM_LISTAGEM = /[?&](order(?:by)?|sort|page|pagina)=/i;
 // URL com PREÇO no caminho é rótulo de anúncio virado link, não arquivo
 // (ex.: /item/7588/Chácara…%20-%20Lance%20Inicial:%20R$2.266.000,00).
 const RE_URL_ANUNCIO = /R\$|lance\s*inicial/i;
@@ -271,7 +279,7 @@ export function ehDocumento(url, label, baseUrl) {
   // é exatamente aí que o tema do site (js/css), o pixel de rastreio, a página de login e
   // a âncora da própria página se disfarçavam de anexo e abriam CÓDIGO para o cliente.
   if (RE_ASSET_EXT.test(url) || RE_ASSET_PATH.test(url) || RE_ASSET_MIN.test(url)) return false;
-  if (RE_PAGINA_CONTA.test(url) || RE_PARAM_MKT.test(url)) return false;
+  if (RE_PAGINA_CONTA.test(url) || RE_PARAM_MKT.test(url) || RE_PARAM_LISTAGEM.test(url)) return false;
   if (RE_URL_ANUNCIO.test(decodificar(url))) return false;
   if (ehPaginaDoSite(url, baseUrl)) return false;
   const alvo = `${url} ${label || ''}`;
