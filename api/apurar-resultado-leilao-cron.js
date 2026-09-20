@@ -46,16 +46,25 @@ function sb(path, opts = {}) {
 
 const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || ''));
 
-// FONTES CUJO url_lote NÃO É A PÁGINA DO LOTE (achado ao vivo, 21/09, pedido do dono "verifique
-// por que esse filtro não está trazendo nada"): PESTANA guarda em `url_lote`/`link_edital` a
-// AGENDA do leilão inteiro — até 1.070 lotes compartilhando a mesma URL — e EDITAL_DJEN guarda a
-// HOMEPAGE do leiloeiro. Apurar essas fontes nunca dá o resultado do lote certo (a apuração lê a
-// página errada, sempre a mesma para dezenas de lotes) e piora: a cláusula padrão de "condições
-// de venda"/"despesas do arrematante" que existe em QUALQUER edital, vendido ou não, casava com
-// o sinal de venda e marcava 'vendido' falso (confirmado: 10 lotes PESTANA no primeiro dia — ver
-// reset em supabase/migrations/reset_resultado_leilao_falso_positivo.sql). Fica de fora até a
-// fonte capturar uma URL por lote de verdade — não é um problema de regex, é de DADO.
-const FONTES_SEM_URL_POR_LOTE = new Set(['PESTANA', 'EDITAL_DJEN']);
+// FONTES QUE ESTE MÉTODO (fetch de texto + regex) NUNCA VAI CONSEGUIR APURAR — duas causas
+// raiz diferentes, achadas ao vivo, mas o mesmo efeito: melhor NÃO tentar do que gerar ruído.
+//   • PESTANA / EDITAL_DJEN (21/09): `url_lote`/`link_edital` NÃO é a página do lote — é a
+//     AGENDA do leilão inteiro (PESTANA: até 1.070 lotes compartilhando a mesma URL) ou a
+//     HOMEPAGE do leiloeiro (EDITAL_DJEN). A cláusula padrão de "condições de venda"/"despesas
+//     do arrematante", presente em QUALQUER edital, casava com o sinal de venda e marcava
+//     'vendido' falso (10 lotes PESTANA no primeiro dia — reset em
+//     supabase/migrations/reset_resultado_leilao_falso_positivo.sql).
+//   • SODRE (21/09, achado do dono com print — "HONDA CG 160 CARGO" mostrando VENDIDO/R$9.000
+//     na página, apurado como indeterminado por nós): confirmado ao vivo que a página é um
+//     Nuxt SSR cujo HTML estático não contém a palavra "vendido" em lugar NENHUM — nem no texto
+//     visível nem em atributo/JSON de topo. O resultado do lote só existe depois de hidratação
+//     JS (ou numa chamada de API separada que só o navegador faz) — sem headless browser aqui,
+//     não tem como ler. Todas as 44 tentativas SODRE (1 imóvel + 43 veículos) deram
+//     'indeterminado', nunca um falso 'vendido' — mas por isso mesmo SODRE nunca teria "sem
+//     lance" real: ficaria pra sempre empurrando ruído pro filtro "Sem lance" (que agora
+//     também mostra indeterminado — pedido do dono, mesma sessão). Fica de fora até termos
+//     como ler a página renderizada (ex.: reaproveitar Puppeteer do scraper principal).
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE']);
 
 // Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
 // tentativas já feitas) contra a MESMA tabela de origem. `T0`/`orcamentoRestante` são
@@ -114,14 +123,14 @@ export default async function handler(req, res) {
     return;
   }
   const candidatosImoveis = (await rIm.json().catch(() => []))
-    .filter(im => !ehVendaDireta(im.modalidade) && !FONTES_SEM_URL_POR_LOTE.has(im.fonte))
+    .filter(im => !ehVendaDireta(im.modalidade) && !FONTES_APURACAO_NAO_CONFIAVEL.has(im.fonte))
     .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas }));
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
   const desdeISO = new Date(Date.now() - 3 * 86400000).toISOString();
   const agoraISO = new Date().toISOString();
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
@@ -129,6 +138,7 @@ export default async function handler(req, res) {
     resumoVeiculos.erro = `HTTP ${rVe.status}`;
   } else {
     const candidatosVeiculos = (await rVe.json().catch(() => []))
+      .filter(v => !FONTES_APURACAO_NAO_CONFIAVEL.has(v.fonte))
       .map(v => ({ id: v.id, alvo: v.link_lote, resultado_apuracao_tentativas: v.resultado_apuracao_tentativas }));
     resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS)), erro: null };
   }
