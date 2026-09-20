@@ -14,7 +14,10 @@ function sb(path) {
 
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
-  const r = await sb(`imoveis_leilao?resultado_leilao=eq.indeterminado&select=id,fonte,url_lote,link_edital&order=resultado_apurado_em.desc&limit=6`);
+  const ids = String(req.query?.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  const r = ids.length
+    ? await sb(`imoveis_leilao?id=in.(${ids.join(',')})&select=id,fonte,url_lote,link_edital`)
+    : await sb(`imoveis_leilao?resultado_leilao=eq.indeterminado&select=id,fonte,url_lote,link_edital&order=resultado_apurado_em.desc&limit=6`);
   const rows = await r.json(); // padrao-ok: script descartável de diagnóstico, sem checagem — se r falhar, rows vem vazio e o loop abaixo não roda
   const out = [];
   for (const im of rows) {
