@@ -23,9 +23,9 @@ async function fetchDireto(url) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 15000);
   try {
-    const r = await fetch(url, { signal: c.signal, redirect: 'manual', headers: { 'User-Agent': UA, Accept: 'text/html,application/json' } });
+    const r = await fetch(url, { signal: c.signal, redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'text/html,application/json' } });
     const ct = r.headers.get('content-type') || '';
-    const loc = r.headers.get('location') || '';
+    const loc = r.redirected ? r.url : '';
     let body = '';
     try { body = await r.text(); } catch { /* sem corpo legível */ }
     return { status: r.status, ct, loc, len: body.length, corpo: body };
