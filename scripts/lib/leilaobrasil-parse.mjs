@@ -43,6 +43,14 @@
  *     "Tipo" + `<p>Judicial</p>`, EDITAL como PDF/DOCX em `static.suporteleiloes.com.br`.
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
+// Reaproveita o extrator de endereço já validado sobre texto de matrícula (api/_registro-
+// matricula.js, usado por scripts/enriquecer-cartorio-matricula.mjs): mesma heurística
+// "situado(a) na/no/à <logradouro>", testada contra dado real. Reuso é mais seguro que
+// escrever um regex novo — e aplicado só sobre `descTexto` (bem.siteDescricao/descricao, o
+// texto DO IMÓVEL), nunca sobre a página inteira: por construção não pode capturar o
+// endereço do ESCRITÓRIO do leiloeiro (que vive no rodapé/chrome da página, fora do `bem`) —
+// exatamente a armadilha documentada em 17/09 (extrairIdentidadeTexto).
+import { extrairEnderecoMatricula } from '../../api/_registro-matricula.js';
 
 export const TENANTS = {
   leilaobrasil: { fonte: 'LEILAOBRASIL', leiloeiro: 'Leilão Brasil', base: 'https://www.leilaobrasil.com.br' },
@@ -136,7 +144,15 @@ export function parseDetalhe(html, url) {
   const descTexto = stripHtml(bem.siteDescricao || bem.descricao || '');
   const matricula = (descTexto.match(/Matr[íi]cula\s*n[ºo°]?\s*([\d.\-]+)/i) || [])[1] || null;
   const titulo = bem.siteTitulo || bem.descricao || leilao.titulo || null;
-  const endereco = [bem.endereco, bem.numero].filter(Boolean).join(', ') || null;
+  // `bem.endereco`/`bem.numero` existem no schema mas vêm VAZIOS na maioria dos lotes reais
+  // (medido 20/09: 0/209 ativos com endereço, apesar do campo existir na estrutura do JSON —
+  // o backend do site simplesmente não preenche pra boa parte dos anúncios judiciais).
+  // Fallback: extrai do TEXTO da descrição (`descTexto`, escopo do `bem` — nunca a página
+  // inteira) com a mesma heurística já usada pra matrícula em PDF. Best-effort: null quando
+  // não casar, sem inventar.
+  const enderecoTxt = (!bem.endereco && !bem.numero) ? extrairEnderecoMatricula(descTexto) : null;
+  const endereco = [bem.endereco, bem.numero].filter(Boolean).join(', ') || enderecoTxt?.logradouro || null;
+  const bairro = bem.bairro || enderecoTxt?.bairro || null;
   const avaliacao = plaus(num(lote.valorAvaliacao ?? bem.valorAvaliacao));
   const minimo = plaus(num(lote.valorMinimo ?? bem.valorMinimo)) || avaliacao;
   const linkEdital = leilao?._urls?.edital
@@ -148,7 +164,7 @@ export function parseDetalhe(html, url) {
   const modalidade = leilao.judicial === true ? 'judicial' : (leilao.judicial === false ? 'extrajudicial' : 'judicial');
 
   return {
-    titulo, cidade: bem.cidade || null, estado: bem.uf || null, endereco,
+    titulo, cidade: bem.cidade || null, estado: bem.uf || null, endereco, bairro,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     area_m2: num(bem.areaEdificada) || num(bem.areaTerreno) || extrairArea(descTexto) || 0,
     // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica) — descTexto é o
@@ -173,6 +189,11 @@ export function montarRow(url, det, tenant) {
     titulo: det.titulo || `Imóvel ${tenant.leiloeiro} ${id}`,
     tipo, modalidade: det.modalidade,
     cidade: det.cidade || null, estado: det.estado || null,
+    // CAUSA RAIZ do endereço vazio (20/09): `parseDetalhe()` já CALCULA `det.endereco`/
+    // `det.bairro` (do JSON estruturado ou, quando vazio, do texto da descrição — ver
+    // extrairEnderecoMatricula acima), mas esta função nunca os copiava pro row salvo —
+    // o dado existia em memória e era descartado aqui. 0/209 ativos com endereço até 20/09.
+    endereco: det.endereco || null, bairro: det.bairro || null,
     valor_avaliacao: va, valor_minimo: vm, area_m2: det.area_m2 || 0,
     descricao: det.descricao || null,
     link_edital: det.link_edital || url, url_lote: url, link_foto: det.link_foto || null,
