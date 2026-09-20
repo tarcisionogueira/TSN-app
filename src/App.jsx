@@ -30,6 +30,7 @@ const Privacidade = lazy(() => import('./pages/Privacidade'));
 const Busca = lazy(() => import('./pages/Busca'));
 const BuscaVeiculos = lazy(() => import('./pages/BuscaVeiculos'));
 const VeiculoDetalhe = lazy(() => import('./pages/VeiculoDetalhe'));
+const RetomadaVeiculos = lazy(() => import('./pages/RetomadaVeiculos'));
 const ImovelDetalhe = lazy(() => import('./pages/ImovelDetalhe'));
 const ImovelGate = lazy(() => import('./pages/ImovelGate'));
 const Analise = lazy(() => import('./pages/Analise'));
@@ -370,6 +371,7 @@ function MainLayout() {
               ainda não é para o cliente ver. */}
           <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista']}><VeiculoDetalhe /></PrivateRoute>} />
+          <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />

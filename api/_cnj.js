@@ -230,6 +230,34 @@ export function gerarParecerRisco(processos, ctx = {}) {
   return { nivel: 'verde', texto: `Consulta em ${processos.length} processo(s) sem riscos bloqueantes.`, recomendacao: 'Prossiga com a due diligence documental.' };
 }
 
+// Roda a query em cada tribunal (em lotes, ~36 tribunais no modo nacional não podem estourar
+// conexões de uma vez), formata os hits e deduplica por número de processo. Extraído em 20/09
+// pra ser reusado por buscarRetomadaVeiculos() sem duplicar esta parte (a batelada/dedupe/sort
+// já levou vários fixes ao vivo — duas cópias divergiriam no primeiro ajuste).
+async function executarBuscaCNJ(tribunais, query) {
+  const resultados = [];
+  const LOTE = 8;
+  for (let i = 0; i < tribunais.length; i += LOTE) {
+    const parte = tribunais.slice(i, i + LOTE);
+    resultados.push(...await Promise.all(parte.map(t => buscarTribunal(t, query))));
+  }
+  const processos = [];
+  const erros = [];
+  for (const r of resultados) {
+    if (r._erro) erros.push(`${r._tribunal}: ${r._erro}`);
+    for (const hit of (r.hits?.hits || [])) processos.push(formatarProcesso(hit, r._tribunal));
+  }
+  // 18/09 — antes o motivo real (timeout? HTTP 5xx? rate limit?) morria aqui: `erros` virava
+  // `parecer.motivo='consulta_falhou'` no relatório, mas o TEXTO do erro nunca aparecia em
+  // lugar nenhum (nem log, nem banco) — impossível diferenciar DataJud fora do ar de bug
+  // nosso na próxima ocorrência. Log simples resolve pro Vercel; `erros` no retorno já viaja
+  // pro chamador persistir se quiser (gerar-documental.js agora grava em result.cnj.erros).
+  if (erros.length) console.error(`[cnj] falha em ${erros.length}/${tribunais.length} tribunal(is):`, erros.join(' | '));
+  const unique = processos.filter((p, i, arr) => arr.findIndex(x => x.numero === p.numero) === i);
+  unique.sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? b.score_risco - a.score_risco : a.tem_bloqueante ? -1 : 1));
+  return { processos: unique, erros };
+}
+
 /**
  * Consulta o CNJ DataJud por número de processo OU por nome da parte, na UF dada.
  * Retorna { processos, total, tribunais_consultados, erros, parecer }.
@@ -276,26 +304,61 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
       if (!tribunais.includes('tst')) tribunais.push('tst');
     }
   }
-  // Em modo nacional são ~36 tribunais — roda em lotes para não estourar conexões.
-  const resultados = [];
-  const LOTE = 8;
-  for (let i = 0; i < tribunais.length; i += LOTE) {
-    const parte = tribunais.slice(i, i + LOTE);
-    resultados.push(...await Promise.all(parte.map(t => buscarTribunal(t, query))));
-  }
-  const processos = [];
-  const erros = [];
-  for (const r of resultados) {
-    if (r._erro) erros.push(`${r._tribunal}: ${r._erro}`);
-    for (const hit of (r.hits?.hits || [])) processos.push(formatarProcesso(hit, r._tribunal));
-  }
-  // 18/09 — antes o motivo real (timeout? HTTP 5xx? rate limit?) morria aqui: `erros` virava
-  // `parecer.motivo='consulta_falhou'` no relatório, mas o TEXTO do erro nunca aparecia em
-  // lugar nenhum (nem log, nem banco) — impossível diferenciar DataJud fora do ar de bug
-  // nosso na próxima ocorrência. Log simples resolve pro Vercel; `erros` no retorno já viaja
-  // pro chamador persistir se quiser (gerar-documental.js agora grava em result.cnj.erros).
-  if (erros.length) console.error(`[cnj] falha em ${erros.length}/${tribunais.length} tribunal(is):`, erros.join(' | '));
-  const unique = processos.filter((p, i, arr) => arr.findIndex(x => x.numero === p.numero) === i);
-  unique.sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? b.score_risco - a.score_risco : a.tem_bloqueante ? -1 : 1));
+  const { processos: unique, erros } = await executarBuscaCNJ(tribunais, query);
   return { processos: unique, total: unique.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined, parecer: gerarParecerRisco(unique, { erros, tribunais, numeroProcesso: numero_processo, modalidade }) };
+}
+
+/**
+ * Processos de BUSCA E APREENSÃO / ALIENAÇÃO FIDUCIÁRIA de veículo, filtrados pelo nome do
+ * credor (banco/financeira). Pedido do dono (20/09) — uso interno (admin/analista), só lista
+ * pra revisão; não envia nada a ninguém.
+ *
+ * LIMITAÇÃO REAL do DataJud, documentada pra não vender o que a API não entrega: ele expõe
+ * só METADADO do processo (partes, classe, assuntos, movimentos) — NUNCA o conteúdo da
+ * petição. Placa, marca, modelo e ano do veículo NÃO existem em nenhum campo estruturado
+ * aqui; só apareceriam dentro do PDF da petição inicial de cada processo, que este código não
+ * lê (ler documento por tribunal é outro projeto — dezenas de sistemas diferentes, do
+ * tamanho da frota de scrapers de leiloeiro que este repo já tem, e vários exigem
+ * credencial de parte/OAB pra abrir o PDF mesmo sendo processo público). `valor_causa` é o
+ * proxy mais próximo de "valor da dívida" que a API pública realmente entrega — normalmente
+ * é o valor cobrado na ação, não necessariamente o saldo devedor atualizado.
+ */
+export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
+  if (!CNJ_KEY) return { processos: [], total: 0, erros: ['CNJ_DATAJUD_KEY ausente'] };
+  const bancoLimpo = String(banco || '').trim();
+  if (!bancoLimpo) return { processos: [], total: 0, erros: ['informe o nome do banco/credor'] };
+  const ufUp = String(uf || '').toUpperCase();
+  const estadual = TRIBUNAL_ESTADUAL[ufUp];
+  if (!nacional && !estadual) return { processos: [], total: 0, erros: [`UF inválida: ${uf}`] };
+  const trf = TRF_MAP[ufUp];
+  const trfLegado = ufUp === 'MG' ? 'trf1' : null;
+  const trtsUf = TRT_MAP[ufUp] || [];
+  const tribunais = nacional ? [...TODOS_TRIBUNAIS]
+    : [estadual, trf, trfLegado, ...trtsUf, trtsUf.length ? 'tst' : null, 'stj'].filter(Boolean);
+
+  // Mesma lição de nome_parte acima: `match` direto em `partes.nome`, nunca `nested` (o
+  // mapping público não marca `partes` como nested). Filtro de assunto/classe em `should`
+  // (qualquer um dos dois serve — tribunais diferentes classificam de formas diferentes).
+  const query = {
+    bool: {
+      must: [
+        { match: { 'partes.nome': { query: bancoLimpo, fuzziness: 'AUTO' } } },
+        { bool: { should: [
+          { match: { 'assuntos.nome': 'Alienação Fiduciária' } },
+          { match: { 'classe.nome': 'Busca e Apreensão' } },
+        ], minimum_should_match: 1 } },
+      ],
+    },
+  };
+
+  const { processos, erros } = await executarBuscaCNJ(tribunais, query);
+  const resultado = processos.map(p => ({
+    numero: p.numero, tribunal: p.tribunal, classe: p.classe, assuntos: p.assuntos,
+    orgao: p.orgao, fase: p.fase, data_ajuizamento: p.data_ajuizamento,
+    ultima_atualizacao: p.ultima_atualizacao, valor_causa: p.valor_causa,
+    banco: p.partes.find(pp => /ativo/i.test(pp.tipo))?.nome || bancoLimpo,
+    executado: p.partes.filter(pp => /passivo/i.test(pp.tipo)).map(pp => ({ nome: pp.nome, documento: pp.documento })),
+    movimentos: p.movimentos.slice(0, 5),
+  }));
+  return { processos: resultado, total: resultado.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined };
 }
