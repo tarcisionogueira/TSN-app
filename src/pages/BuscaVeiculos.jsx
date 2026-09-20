@@ -24,6 +24,10 @@ const COLUNAS = [
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
   // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
   'tipo_veiculo',
+  // Valor FIPE de referência (20/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_fipe.sql.
+  // Só mostra quando fipe_status é 'ok'/'aproximado' (ver renderização do card); 'sem_match'/'erro'
+  // não tem valor_fipe preenchido mesmo, então já ficam de fora sem precisar checar aqui.
+  'valor_fipe', 'fipe_status',
 ].join(',');
 
 // "Tipo de veículo" (13/09, pedido do dono) — NÃO é o mesmo campo que `tipoMonta`
@@ -500,6 +504,11 @@ export default function BuscaVeiculos() {
                     <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mín.</div>
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
+                    {v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado') && (
+                      <div style={{ fontSize: 10, color: '#0369a1' }} title={v.fipe_status === 'aproximado' ? 'Valor aproximado — mais de uma versão do modelo bateu com o ano informado' : 'Valor de referência da tabela FIPE'}>
+                        FIPE {v.fipe_status === 'aproximado' ? '≈ ' : ''}{fmtBRL(v.valor_fipe)}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
                     {cont

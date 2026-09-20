@@ -1,0 +1,31 @@
+name: Enriquecer FIPE (veículos)
+
+# Valor FIPE de referência por veículo, via API pública gratuita (500 req/dia sem token).
+# Lote pequeno por execução para caber com folga na cota — ver scripts/enriquecer-fipe.mjs.
+on:
+  schedule:
+    - cron: '0 8 * * *'   # 5h BRT
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máx. de veículos por execução'
+        required: false
+        default: '60'
+
+jobs:
+  enriquecer-fipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enriquecer FIPE
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FIPE_LIMITE: ${{ github.event.inputs.limite || '60' }}
+        run: node scripts/enriquecer-fipe.mjs
