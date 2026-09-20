@@ -436,8 +436,8 @@ export default function BuscaVeiculos() {
             const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
             return (
               <div key={v.id}
-                style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', cursor: v.link_lote ? 'pointer' : 'default', transition: 'box-shadow 0.15s' }}
-                onClick={e => { if (e.target.closest('a,button')) return; if (v.link_lote) window.open(v.link_lote, '_blank', 'noopener'); }}
+                style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
+                onClick={e => { if (e.target.closest('a,button')) return; nav(`/admin/veiculos-leilao/${v.id}`); }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ width: '100%', height: isMobile ? 180 : 150, position: 'relative' }}>
