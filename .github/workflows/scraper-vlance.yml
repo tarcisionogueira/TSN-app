@@ -24,6 +24,10 @@ on:
         description: '1 = não grava (só lista); 0 = grava'
         required: false
         default: '0'
+      debug_payload:
+        description: '1 = imprime no log o JSON completo do 1º lote de cada domínio (diagnóstico)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-vlance:
@@ -46,6 +50,7 @@ jobs:
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           # CI = datacenter → o direto sempre dá 403; força Bright Data e não desperdiça tentativa.
           VLANCE_FORCE_BD: '1'
+          VLANCE_DEBUG_PAYLOAD: ${{ github.event.inputs.debug_payload || '0' }}
         run: |
           # FALLBACK: se o runner RESIDENCIAL do dono já atualizou o VLANCE nos últimos 7 dias
           # (168h — mesmo critério das outras 4 fontes pagas, 15/09), pula e não gasta Bright
