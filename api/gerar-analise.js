@@ -1051,8 +1051,19 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
   } catch { return sai('erro_leitura_imovel'); } // padrao-ok: `sai()` já registra o motivo via console.log — ver comentário da função
   if (!im || !Array.isArray(im.anexos)) return sai('sem_anexos');
   const semMatriculaNemEdital = !im.numero_matricula && !im.link_matricula && !im.link_edital;
+  // A SOBRA SEM RÓTULO (20/09, achado real: lote do Marcos — TEM matrícula e edital, os dois
+  // ligados a 2 dos 3 anexos, mas todos os 3 vêm do scraper com `tipo: 'anexo'` genérico. O
+  // terceiro (nem matrícula nem edital pelo link) nunca era aberto por ninguém — e é
+  // frequentemente o laudo do perito. Diferente do fallback de cima (sem matrícula/edital
+  // NENHUM), aqui os dois JÁ EXISTEM; só falta abrir o que sobrou. Só entra quando sobra
+  // EXATAMENTE UM candidato — com 2+ sobras a escolha seria arbitrária (qual delas é o laudo?)
+  // e abrir o documento errado custa uma leitura de IA à toa.
+  const sobra = () => {
+    const s = im.anexos.filter(a => a?.url && a.url !== im.link_matricula && a.url !== im.link_edital && a?.tipo !== 'matricula' && a?.tipo !== 'edital');
+    return s.length === 1 ? s[0] : null;
+  };
   const laudo = im.anexos.find(a => a?.tipo === 'laudo' || /laudo/i.test(String(a?.nome || '')))
-    || (semMatriculaNemEdital ? im.anexos.find(a => a?.tipo !== 'matricula' && a?.tipo !== 'edital' && a?.url) : null);
+    || (semMatriculaNemEdital ? im.anexos.find(a => a?.tipo !== 'matricula' && a?.tipo !== 'edital' && a?.url) : sobra());
   if (!laudo?.url) return sai('sem_anexo_util', { totalAnexos: im.anexos.length, semMatriculaNemEdital });
   // Rótulo HONESTO pro texto do parecer/anomalia: só chama de "laudo de avaliação" quando for
   // mesmo um (tipo/nome batem) — o fallback pode ser "proposta"/"outro"/anexo sem tipo, e
