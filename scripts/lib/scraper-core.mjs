@@ -337,10 +337,14 @@ export function ehFracaoIdeal(imovel) {
 // em "Lote 2) 280 Fresas topo OSG 4c 18mm" (achado testando contra dado real, ANTES de aplicar
 // no banco) e deixava passar exatamente o item que o filtro existe pra barrar. "terreno" e
 // "loteamento" já cobrem o sinal real de lote-de-terreno sem essa ambiguidade.
-// "apto"/"aptos" TAMBÉM de propósito fora: LEILAOBRASIL carrega lixo de CSS colado do Word em
-// `descricao` ("font-family:\"Aptos\"", a fonte padrão do Office desde 2023) — casava em TODA
-// linha da fonte, item de imóvel ou não. "apartament\w*" já cobre apartamento/apartamentos sem
-// essa colisão.
+// "apto"/"aptos" ficou fora numa 1ª rodada por causa do lixo de CSS colado do Word que o
+// LEILAOBRASIL carrega em `descricao` ("font-family:\"Aptos\"", a fonte padrão do Office desde
+// 2023) — casava em TODA linha da fonte, item de imóvel ou não. Mas validando contra SUPERBID
+// (achado real: "APTO 1603, DO BLOCO 02...", "APTO Nº 604...") a abreviação é de uso corrente
+// e comum demais pra deixar fora — a colisão é bem mais estreita do que a palavra inteira: só
+// acontece quando "Aptos" vem colado a uma aspa (é sempre `"Aptos"` dentro do CSS, nunca solto
+// no texto). Negative lookahead resolve sem reabrir a colisão: barra só "apto(s)" seguido de
+// aspa, deixa passar todo o resto (incluindo o "apartament\w*" que já cobria a forma completa).
 // `galp[õo][ãe]s?` (1ª versão) NUNCA batia "Galpão" singular — achado testando contra BIASI/
 // ZUK/WEBLEILOES (galpões reais derrubados, ANTES de ampliar o escopo pra outras fontes): a
 // vogal do singular ("galpÃo") e do plural ("galpÕes") trocam de posição, não é só acento —
@@ -351,7 +355,44 @@ export function ehFracaoIdeal(imovel) {
 // palavra entre '²' e o que vem depois (vírgula, traço, fim da string). "m²" não precisa de
 // fronteira nenhuma (símbolo já é específico o bastante); só o fallback ASCII "m2" mantém a de
 // fechamento, pra não casar dentro de um código tipo "m2050".
-const RE_SINAL_IMOVEL = /\b(im[óo]ve(l|is)|casas?|sobrados?|apartament\w*|flats?|kitnets?|studios?|coberturas?|terrenos?|loteament\w*|glebas?|ch[áa]caras?|s[íi]tios?|fazendas?|[áa]rea\s+(rural|de\s+terra)|galp(?:[ãa]o|[õo]es)s?|pr[ée]dios?|edif[íi]cios?|sala\s+comercial|lojas?|com[eé]rcial|industrial|condom[íi]nios?|matr[íi]culas?|escrit[óo]rios?|box\s+de\s+garagem|vaga\s+de\s+garagem|metros?\s+quadrados)|m²|m2\b/i;
+//
+// 20/09 (2ª rodada, validando contra SUPERBID/LJUD ANTES de ampliar o escopo do invariante):
+// mesmos 207 "positivos" nessas 2 fontes, quase todos falso-positivo de estilo de título mais
+// terso, não contaminação — 33 sobraram depois dos fixes de galpão/m² acima, revisados um a um:
+//   - "lote" (excluído de propósito por causa de "Lote N)" no LEILAOBRASIL) tem uso DIFERENTE
+//     aqui: "Lote - Vale dos Cristais", "Lote nº 06 - 450m²" — é terreno de verdade. MAS
+//     reintroduzir "lote" solto quebrou "lote de gado" (achado no MESMO teste, antes de
+//     aplicar) — "lote de <coisa>" é o uso genérico "partida/porção de X", não terreno,
+//     mesma ambiguidade de sempre. Dupla negativa: barra "lote N)" (numeração de item) E
+//     "lote de <palavra>" QUANDO a palavra não é terra/terreno — deixa passar "lote de
+//     terreno"/"lote de terra" (uso real) sem reabrir a porta pro genérico.
+//   - "box" (Box 1611, Box nº 13) é vaga/depósito real nestas fontes — adicionado com contexto
+//     (número ou "de garagem") pra não virar sinal solto demais.
+//   - "sala" sozinha ("Sala 225", "Sala nº 404") — adicionado com contexto (número/"comercial")
+//     pelo mesmo motivo; "salas comerciais" (plural) não batia no "sala comercial" singular.
+//   - termos que simplesmente faltavam por não terem aparecido nas 4 fontes já cobertas:
+//     "edificação" (stem diferente de "edifício"), "hotel", "barracão", "propriedade rural",
+//     "multipropriedade", "imobiliário", "posto de combustível/gasolina", "hectares"/"ha".
+// Casos vistos e DEIXADOS de fora de propósito (achado real, não adicionados por serem
+// ambíguos, não por esquecimento): "Jazigo" (túmulo — é imóvel juridicamente, mas não serve ao
+// propósito de investimento da plataforma) e "Outros - <endereço>" (sem nenhum sinal de tipo,
+// só endereço — pode ser imóvel real com categoria não informada pela fonte, mas também pode
+// não ser; sem dado suficiente pra decidir automaticamente).
+//
+// 20/09 (3ª rodada, achado comparando o resultado deste regex contra o espelho SQL rodado sobre
+// TODO o acervo ativo de SUPERBID/LJUD, não só os 33 já revisados — 4 divergências, todas
+// SUPERBID): "Área Rural - Colonia Murici SJP", "Área de terra Próximo aos Lençóis
+// Maranhenses" etc. davam falso positivo (fora_do_acervo=true) quando "Área rural"/"Área de
+// terra" era o ÚNICO sinal do título, sem nenhuma outra palavra da lista antes. Causa: `\b` do
+// JS considera `\w` só ASCII (`[A-Za-z0-9_]`) — SEMPRE, com ou sem a flag `/u` (não é bug de
+// unicode, testado isoladamente) — então a fronteira de ABERTURA do grupo grande nunca bate
+// quando o trecho casado começaria bem em cima do "Á" acentuado (início de string/depois de
+// espaço): "Á" não é "\w", e o que vem antes (início ou espaço) também não é — sem transição,
+// sem fronteira. Mesma classe de bug já visto (fronteira que finge existir e não existe), desta
+// vez na abertura em vez do fechamento. Corrigido puxando esta alternativa pra FORA do grupo
+// com `\b` compartilhado (mesmo padrão já usado pra m²/ha), com fronteira própria só no
+// fechamento — lá "rural"/"terra" terminam em letra ASCII, então funciona.
+const RE_SINAL_IMOVEL = /\b(im[óo]ve(l|is)|imobili[áa]ri[ao]s?|casas?|sobrados?|apartament\w*|apto(?:s(?!["']))?(?![a-z])|flats?|kitnets?|studios?|coberturas?|terrenos?|lotes?(?!\s*\d+\)|\s+de\s+(?!terrenos?\b|terras?\b))|loteament\w*|glebas?|ch[áa]caras?|s[íi]tios?|fazendas?|propriedade\s+rural|multipropriedade|galp(?:[ãa]o|[õo]es)s?|barrac(?:[ãa]o|[õo]es)s?|pr[ée]dios?|edif[íi]cios?|edifica[çc](?:[ãa]o|[õo]es)s?|hot(?:el|[ée]is)|posto\s+de\s+(combust[íi]vel|gasolina)|salas?\s*(?:comerciai?s?|n[ºo°.]|\d)|lojas?|com[eé]rcial|industrial|condom[íi]nios?|matr[íi]culas?|escrit[óo]rios?|boxe?s?\s*(?:de\s+garagem|n[ºo°.]?\s*\d|\d)|vaga\s+de\s+garagem|metros?\s+quadrados|hectares?)|m²|m2\b|\d\s*ha\b|[áa]rea\s+(rural|de\s+terra)\b/i;
 const RE_SINAL_VEICULO = /\b(ve[íi]culos?|autom[óo]ve(l|is)|caminh[õo]es|caminh[ãa]o|caminhonetes?|carretas?|reboques?|semirreboques?|[ôo]nibus|motocicletas?|motonetas?|tratores?|trator|colheitadeiras?|retroescavadeiras?|empilhadeiras?|chassi|chevrolet|volkswagen|\bvw\b|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citro[ëe]n|scania|iveco|volvo|mercedes|kia|mitsubishi|suzuki|yamaha|kawasaki|jeep)\b|\b(19|20)\d{2}\/(19|20)\d{2}\b/i;
 
 export function ehForaDoAcervo(imovel) {
