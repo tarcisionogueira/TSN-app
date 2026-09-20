@@ -118,7 +118,7 @@ export default function AnaliseVeiculo() {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
         <p>Veículo não encontrado.</p>
-        <button onClick={() => nav('/veiculos')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
   }
@@ -130,7 +130,7 @@ export default function AnaliseVeiculo() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={() => nav(`/veiculo/${v.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={() => nav(`/admin/veiculos-leilao/${v.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar ao veículo
       </button>
 

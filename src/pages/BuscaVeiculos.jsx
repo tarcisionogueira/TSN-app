@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Car, Filter, Loader2, MapPin, ExternalLink, X, Mail, Send } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { parseDataLocal } from '../utils/format';
@@ -178,16 +178,9 @@ function filtrosVazios() {
 
 export default function BuscaVeiculos() {
   const nav = useNavigate();
-  const loc = useLocation();
   const isMobile = useIsMobile();
   const { role } = useAuth();
   const podePropor = ROLES_PROPOSTA_VEICULO.includes(role);
-  // Rota de origem decide pra onde abrir o detalhe (21/09, pedido do dono: abrir a tela do
-  // veículo em vez do leiloeiro direto, agora também pro cliente). `/admin/veiculos-leilao`
-  // (painel interno) continua indo pro detalhe interno; `/veiculos` (cliente) vai pro
-  // detalhe cliente. Mesma tela (VeiculoDetalhe), só a rota de entrada/volta muda.
-  const isAdminPath = loc.pathname.startsWith('/admin');
-  const detalhePath = (id) => isAdminPath ? `/admin/veiculos-leilao/${id}` : `/veiculo/${id}`;
   const [filtros, setFiltros] = useState(filtrosVazios);
   const [mostrarFiltros, setMostrarFiltros] = useState(!isMobile);
   const [resultados, setResultados] = useState([]);
@@ -444,7 +437,7 @@ export default function BuscaVeiculos() {
             return (
               <div key={v.id}
                 style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-                onClick={e => { if (e.target.closest('a,button')) return; nav(detalhePath(v.id)); }}
+                onClick={e => { if (e.target.closest('a,button')) return; nav(`/admin/veiculos-leilao/${v.id}`); }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ width: '100%', height: isMobile ? 180 : 150, position: 'relative' }}>
@@ -555,8 +548,8 @@ export default function BuscaVeiculos() {
         </div>
       )}
 
-      <button onClick={() => nav(isAdminPath ? '/admin?aba=Veiculos' : '/painel')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
-        ← Voltar {isAdminPath ? 'para Veículos' : 'ao painel'}
+      <button onClick={() => nav('/admin?aba=Veiculos')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+        ← Voltar para Veículos
       </button>
 
       {propondoVeiculo && (

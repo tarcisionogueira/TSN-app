@@ -368,16 +368,12 @@ function MainLayout() {
           <Route path="/alavancagem" element={<Alavancagem />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
-          {/* Piloto (11/09): fica dentro do admin (Operacional) até o dono validar o acervo —
-              ainda não é para o cliente ver. */}
+          {/* Piloto (11/09, reafirmado 21/09): fica dentro do admin (Operacional) — é EXCLUSIVO
+              do dono/equipe, nunca do cliente. A análise/e-mail do lote (21/09) seguem a mesma
+              regra: ferramenta interna, não faz sentido ganhar rota pública. */}
           <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista']}><VeiculoDetalhe /></PrivateRoute>} />
-          {/* Client-facing (21/09, pedido do dono): mesmas telas, mesmo padrão de acesso de
-              /buscar (qualquer papel logado) — o gate real de quem pode GERAR análise é a
-              cota no servidor, não a rota. */}
-          <Route path="/veiculos" element={<PrivateRoute><BuscaVeiculos /></PrivateRoute>} />
-          <Route path="/veiculo/:id" element={<PrivateRoute><VeiculoDetalhe /></PrivateRoute>} />
-          <Route path="/analise-veiculo" element={<PrivateRoute><AnaliseVeiculo /></PrivateRoute>} />
+          <Route path="/analise-veiculo" element={<PrivateRoute roles={['admin','analista']}><AnaliseVeiculo /></PrivateRoute>} />
           <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />

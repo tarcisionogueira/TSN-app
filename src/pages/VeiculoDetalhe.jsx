@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
@@ -9,9 +9,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { lerCotaVeiculo } from '../utils/cotaAnalise';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 
-// Mesma lista de imóvel (ImovelDetalhe.jsx) — explorador/consultor têm amostra grátis,
-// pagantes e equipe têm cota mensal; o bloqueio por cota é decidido no servidor.
-const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual', 'top2', 'top2_anual', 'explorador', 'consultor'];
+// Tela EXCLUSIVA do operacional (dono/equipe) — nunca do cliente (reafirmado 21/09; a rota
+// em App.jsx já só existe sob /admin/veiculos-leilao*, roles=['admin','analista']). Por isso
+// "Solicitar análise" e "Enviar e-mail" abaixo não precisam tratar cliente/visitante: quem
+// chega aqui já passou pelo gate da rota.
 const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
@@ -53,10 +54,9 @@ const FIPE_EXPLICACAO = {
 
 export default function VeiculoDetalhe() {
   const nav = useNavigate();
-  const loc = useLocation();
   const { id } = useParams();
   const isMobile = useIsMobile();
-  const { user, role, isLoggedIn, effectiveUserId } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   const [v, setV] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
@@ -64,10 +64,6 @@ export default function VeiculoDetalhe() {
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
   const [cota, setCota] = useState(null);
-  // Mesmo princípio de BuscaVeiculos.jsx: a rota de entrada decide o "voltar" — painel
-  // interno (`/admin/...`) volta pro painel, cliente (`/veiculo/:id`) volta pro painel dele.
-  const isAdminPath = loc.pathname.startsWith('/admin');
-  const voltarPath = isAdminPath ? '/admin/veiculos-leilao' : '/veiculos';
 
   useEffect(() => {
     let cancelado = false;
@@ -124,7 +120,7 @@ export default function VeiculoDetalhe() {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
         <p>{erro || 'Veículo não encontrado.'}</p>
-        <button onClick={() => nav(voltarPath)} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
   }
@@ -133,7 +129,6 @@ export default function VeiculoDetalhe() {
   const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
   const mostrarFipe = v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado');
   const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
-  const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) return cota.amostra ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
@@ -145,7 +140,7 @@ export default function VeiculoDetalhe() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={() => nav(voltarPath)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={() => nav('/admin/veiculos-leilao')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar à busca
       </button>
 
@@ -244,33 +239,23 @@ export default function VeiculoDetalhe() {
           </a>
 
           {/* Solicitar análise (21/09, pedido do dono: "assim como os imóveis") — condição do
-              veículo + FIPE + veredito, num relatório só (ver api/gerar-analise-veiculo.js). */}
-          {isLoggedIn ? (
-            leilaoEncerrado ? (
-              <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
-                <strong>Leilão encerrado.</strong> Como não é mais possível dar lance, o relatório não é gerado para este veículo.
-              </div>
-            ) : podeFazerAnalise ? (
-              <>
-                <button onClick={() => nav(`/analise-veiculo?veiculo=${encodeURIComponent(v.id)}`, { state: { veiculo: v } })}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  <BarChart2 size={15} /> {rotuloAnalise}
-                </button>
-                {saldoAnalise && (
-                  <div style={{ marginTop: 7, textAlign: 'center', fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>{saldoAnalise}</div>
-                )}
-              </>
-            ) : (
-              <button onClick={() => nav('/planos')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                <BarChart2 size={15} /> Fazer upgrade para analisar
-              </button>
-            )
+              veículo + FIPE + veredito, num relatório só (ver api/gerar-analise-veiculo.js).
+              Sem ramo de cliente/visitante aqui: a rota (App.jsx) já é exclusiva
+              admin/analista — quem chegou nesta tela sempre pode gerar. */}
+          {leilaoEncerrado ? (
+            <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
+              <strong>Leilão encerrado.</strong> Como não é mais possível dar lance, o relatório não é gerado para este veículo.
+            </div>
           ) : (
-            <button onClick={() => nav('/login')}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              <BarChart2 size={15} /> Entrar para analisar
-            </button>
+            <>
+              <button onClick={() => nav(`/analise-veiculo?veiculo=${encodeURIComponent(v.id)}`, { state: { veiculo: v } })}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                <BarChart2 size={15} /> {rotuloAnalise}
+              </button>
+              {saldoAnalise && (
+                <div style={{ marginTop: 7, textAlign: 'center', fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>{saldoAnalise}</div>
+              )}
+            </>
           )}
         </div>
       </div>
