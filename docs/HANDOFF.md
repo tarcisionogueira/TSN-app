@@ -30402,3 +30402,48 @@ mostra a `descricao` inteira como veio do banco. `api/publico.js` (página SEO p
 do funil de cadastro (documentado no cabeçalho do arquivo: "decidido para não dar de graça o
 que é o produto"), uma decisão de produto deliberada, não um bug de captura — o cliente
 CADASTRADO já vê a descrição completa.
+
+### Verificação pontual do dono na ficha ZUK — 2 bugs reais achados, 1 não-bug confirmado
+
+Print do dono (lote `zuk_37518-234619`, "Alameda dos Lírios, 196 - Santana de Parnaíba/SP"):
+descrição idêntica ao título (e diferente do portal), sem matrícula, e um anexo rotulado
+"Imóveis Recebendo Propost..." — pediu para CONFIRMAR se o que essa mesma sessão tinha acabado
+de dar como resolvido estava de fato resolvido. Não estava — a rodada anterior tinha corrigido
+o TETO de truncamento, mas não tinha olhado a CONSTRUÇÃO da descrição do ZUK, que é um caso
+diferente. Investigado com a fonte real (`imoveis_leilao`, fonte_id exato do print) antes de
+qualquer correção:
+
+1. **Descrição = eco sintético do título, não o texto do portal (bug real, corrigido).**
+   `scraperPortalZuk` nunca leu a descrição REAL da página do lote — monta
+   `[tituloCompleto, c.ocup].join(' · ')` a partir só dos CARDS da listagem. Mesmo defeito já
+   medido e documentado em 17/08 para SUPERBID (1.492/1.494)/PESTANA (1.029/1.029)/LJUD
+   (981/981)/BIASI (472/472), e já corrigido para essas fontes no enriquecimento sob-demanda
+   (`api/enriquecer-lote.js`) — mas nunca portado pro enriquecimento PERIÓDICO
+   (`enriquecerDocumentosLote`, `scripts/scraper-puppeteer.mjs`), que é o único caminho do ZUK
+   (chamado com `{enrich:true}`). Corrigido: mesma regra `descEcoDoTitulo` (heurística idêntica
+   à de `enriquecer-lote.js` — troca só quando sobra menos de 40 caracteres depois de tirar o
+   título), usando `extrairDescricaoDoCorpo()` no MESMO HTML que a função já baixa pra
+   matrícula/edital — custo zero de requisição extra.
+2. **Anexo-lixo: página de CATEGORIA entrando como documento do lote (bug real, corrigido).**
+   O "anexo" era `.../todos-imoveis/recebendo-proposta?order=lancamento` — a página de listagem
+   "Imóveis Recebendo Proposta" do site, não um documento do lote. A palavra-chave `proposta`
+   (pensada pro "Modelo de Proposta" de venda parcelada) bateu no slug da categoria, e
+   `ehPaginaDoSite()` só reconhece a home ou a página do PRÓPRIO lote — não outras páginas do
+   site. Corrigido com um filtro genérico (não específico do ZUK): nenhum documento real carrega
+   parâmetro de ordenação/paginação (`?order=`/`?sort=`/`?page=`/`?pagina=`) — mesmo padrão de
+   `RE_PARAM_MKT` (que já filtra utm/gclid). `npm run testar:anexo-lixo` ganhou 2 casos novos
+   (o exato do print + uma variante genérica `?page=`); os 27 casos (25 antigos + 2 novos)
+   passam. O teste já provou que o mecanismo de reexame (`enriquecer-lote.js` e
+   `scraper-puppeteer.mjs` re-checam TODO anexo já gravado antes de preservar) alcança o
+   passado — o "Imóveis Recebendo Proposta" será removido sozinho no próximo enriquecimento,
+   sem precisar de um UPDATE manual.
+3. **Matrícula ausente: NÃO é bug — fila em processamento normal, confirmado no log.**
+   `matricula-zuk.yml` (login-gated, 4x/dia, cap 60/rodada) é quem preenche `link_matricula` do
+   ZUK — 91% dos 570 ativos já têm (520/570). O lote do print faz parte de um lote CONSIGNADO
+   novo (~30-40 imóveis, criado 19/09 14:24, mesma leva "Z37427"/Banco Bradesco) — a rodada mais
+   recente (19/09 20:44) salvou **60 matrículas, 0 falhas, 0 erros**, mas ainda não chegou nesse
+   lote específico dentro da leva. `matricula_checada_em` "parado" em 12/09 no agregado engana:
+   o campo só é escrito no caminho de FALHA (`salvarMatricula()`, o caminho de sucesso, nunca
+   grava nele) — sucesso frequente é exatamente por que ele fica velho. Confirmado ao vivo no
+   log do run, não por suposição. Deve resolver sozinho nas próximas rodadas (capacidade
+   4×60=240/dia, folga grande sobre o volume de lotes novos).

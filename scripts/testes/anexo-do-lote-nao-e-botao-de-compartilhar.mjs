@@ -65,6 +65,12 @@ recusa('variante mais curta ainda (119 chars decodificados)',
 aceita('a matrícula REAL do mesmo lote continua aceita (.pdf, sem prosa)',
   'https://s.superbid.net/attachment/14/34/1434ce13-0b38-4405-a568-433f637dbbd3.pdf', 'Matricula-no-192-22.12.2025');
 
+console.log('\nA PÁGINA DE CATEGORIA/LISTAGEM (20/09, achado do dono numa ficha ZUK)');
+recusa('"Imóveis Recebendo Proposta" — página de categoria com ?order=, não documento do lote',
+  'https://www.portalzuk.com.br/leilao-de-imoveis/tl/todos-imoveis/recebendo-proposta?order=lancamento',
+  'Imóveis Recebendo Proposta Imóveis disponíveis para envio de proposta');
+recusa('mesma classe: página paginada de listagem', 'https://www.exemplo.com.br/imoveis?page=2', 'Ver mais imóveis');
+
 console.log('\nAS VARIAÇÕES DO MESMO DOCUMENTO INSTITUCIONAL');
 for (const t of [
   'relatorio-diferencial-salarial/Relatorio de Igualdade 2026.pdf',
