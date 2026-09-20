@@ -1,0 +1,14 @@
+name: _temp-recon-rodar-apuracao
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispara a apuração de resultado do leilão agora
+        run: |
+          curl -sS -L -X POST "https://www.bidprobrasil.com.br/api/apurar-resultado-leilao-cron" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "content-type: application/json" \
+            --max-time 290 | tee /tmp/out.json
+          echo "---"
+          python3 -m json.tool /tmp/out.json || cat /tmp/out.json
