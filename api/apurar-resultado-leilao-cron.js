@@ -46,6 +46,17 @@ function sb(path, opts = {}) {
 
 const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || ''));
 
+// FONTES CUJO url_lote NÃO É A PÁGINA DO LOTE (achado ao vivo, 21/09, pedido do dono "verifique
+// por que esse filtro não está trazendo nada"): PESTANA guarda em `url_lote`/`link_edital` a
+// AGENDA do leilão inteiro — até 1.070 lotes compartilhando a mesma URL — e EDITAL_DJEN guarda a
+// HOMEPAGE do leiloeiro. Apurar essas fontes nunca dá o resultado do lote certo (a apuração lê a
+// página errada, sempre a mesma para dezenas de lotes) e piora: a cláusula padrão de "condições
+// de venda"/"despesas do arrematante" que existe em QUALQUER edital, vendido ou não, casava com
+// o sinal de venda e marcava 'vendido' falso (confirmado: 10 lotes PESTANA no primeiro dia — ver
+// reset em supabase/migrations/reset_resultado_leilao_falso_positivo.sql). Fica de fora até a
+// fonte capturar uma URL por lote de verdade — não é um problema de regex, é de DADO.
+const FONTES_SEM_URL_POR_LOTE = new Set(['PESTANA', 'EDITAL_DJEN']);
+
 // Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
 // tentativas já feitas) contra a MESMA tabela de origem. `T0`/`orcamentoRestante` são
 // compartilhados entre as duas passadas (imóveis primeiro, veículos com o que sobrar).
@@ -103,7 +114,7 @@ export default async function handler(req, res) {
     return;
   }
   const candidatosImoveis = (await rIm.json().catch(() => []))
-    .filter(im => !ehVendaDireta(im.modalidade))
+    .filter(im => !ehVendaDireta(im.modalidade) && !FONTES_SEM_URL_POR_LOTE.has(im.fonte))
     .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas }));
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 

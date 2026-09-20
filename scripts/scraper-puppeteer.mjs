@@ -2364,15 +2364,19 @@ async function scraperSodreVeiculos(browser) {
 // WebLeilões — todo log de salvamento dizia "Sodré" não importa qual fonte tivesse rodado.
 // Deriva da própria fonte do 1º registro quando não informado, então chamadas antigas sem o
 // parâmetro continuam funcionando (e corretas, já que passam a usar o `fonte` real).
-// RETENÇÃO de veículos vencidos (17/09, pedido do dono). `salvarVeiculos` só faz upsert —
+// RETENÇÃO de veículos vencidos (17/09, pedido do dono; confirmada 21/09 — "esses leilões
+// negativos devem manter por pelo menos 15 dias [...] pode ser necessário fazer alguma
+// proposta e precisamos ter acesso à documentação"). `salvarVeiculos` só faz upsert —
 // nenhuma fonte de veículo jamais desativa um registro (diferente de `salvarEFinalizar`,
 // que tem sweep próprio para imóvel). Sem isto, todo veículo já coletado ficaria ativo PARA
-// SEMPRE. Mas apagar assim que a data do leilão passa também é errado: um "leilão negativo"
-// (sem lance/sem comprador) às vezes vira oportunidade de proposta de venda direta com o
-// leiloeiro — nenhuma fonte informa esse RESULTADO, então a única forma de reconhecer é: a
-// data já passou e o veículo CONTINUA voltando como ativo na coleta (ninguém tirou do ar por
-// ter sido arrematado). Mantém por 15 dias depois do leilão (janela para BuscaVeiculos.jsx
-// filtrar "leilão negativo"), desativa depois. Aditivo — nunca derruba o job se falhar.
+// SEMPRE. Mas apagar assim que a data do leilão passa também é errado: um lote sem lance às
+// vezes vira oportunidade de proposta de compra direta com o leiloeiro, e a equipe precisa de
+// tempo com o lote ainda visível (e a documentação ainda acessível — `VeiculoDetalhe.jsx` não
+// filtra por `ativo`, só some da LISTA) pra decidir e agir. Mantém por 15 dias depois do
+// leilão (janela para a equipe usar o filtro "Resultado do leilão" em BuscaVeiculos.jsx —
+// apurado de verdade desde 21/09, ver api/apurar-resultado-leilao-cron.js), desativa depois.
+// `ativo=false` só tira da LISTA — a linha e os documentos continuam no banco. Aditivo — nunca
+// derruba o job se falhar.
 async function retencaoVeiculosVencidos() {
   try {
     const limite = new Date(Date.now() - 15 * 86400000).toISOString();
