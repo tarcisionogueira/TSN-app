@@ -4852,6 +4852,18 @@ function extrairValorAtualWebLeiloesHtml(html) {
 // Bounded por cap + deadline: preenche progressivamente entre as execuções diárias
 // (mesmo ritmo do CEF). NUNCA lança — enriquece em memória; se um lote falhar, ele
 // segue com o que já tinha e o scrape/salvamento continua normalmente.
+// 20/09: extraída do meio de enriquecerDocumentosLote() — precisa ser chamada em DOIS
+// lugares (o filtro de `alvos`, ANTES de decidir quem revisitar, e o patch de descrição
+// depois de baixar o HTML). Mesma regra de `api/enriquecer-lote.js` (`descEcoDoTitulo`): só
+// considera eco quando o que sobra depois de tirar o título é pouco (< 40 chars — cobre o
+// padrão ZUK `[tituloCompleto, ocupação].join(' · ')`, mesmo defeito medido em 17/08 pra
+// SUPERBID/PESTANA/LJUD/BIASI).
+function descricaoEhEcoDoTitulo(im) {
+  const d = String(im.descricao || '').trim();
+  const t = String(im.titulo || '').trim();
+  return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+}
+
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   // MERGE do que o BANCO já tem ANTES de decidir quem visitar (P3 de 21/08). Sem isto,
   // dois defeitos da mesma classe da regressão de datas da CEF: (a) o upsert diário do
@@ -4906,7 +4918,14 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // preço na fonte — ver extrairValorAtualWebLeiloesHtml. Só 10 lotes ativos hoje; folga
     // grande dentro do cap.
     const reconferirPreco = im.fonte === 'WEBLEILOES' && im.modalidade === 'venda_direta';
-    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco;
+    // 20/09 (achado do dono numa ficha ZUK): `jaTemDocs` sozinho travava a revisita PARA
+    // SEMPRE em lotes que já tinham área/avaliação/matrícula — mesmo com a descrição ainda
+    // sendo eco do título. O lote do print (zuk_37518-234619) já tinha os três preenchidos
+    // (área 421,91 · avaliação R$1,5mi · matrícula capturada nesta mesma sessão) e por isso
+    // NUNCA seria revisitado — o fix de descrição do PR #377 ficaria morto pra ele e pra
+    // qualquer outro lote no mesmo estado (provavelmente boa parte do catálogo já antigo).
+    const descEco = descricaoEhEcoDoTitulo(im);
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco;
   }).slice(0, cap);
   if (!alvos.length) return 0;
 
@@ -4954,16 +4973,8 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         }
         // DESCRIÇÃO REAL, não eco do título (20/09, achado do dono numa ficha ZUK: a
         // "Descrição" mostrada ao cliente era idêntica ao título, diferente do texto real do
-        // portal do leiloeiro). Mesma regra de `api/enriquecer-lote.js` (`descEcoDoTitulo`):
-        // só troca quando o que sobra depois de tirar o título é pouco (< 40 chars — cobre o
-        // padrão ZUK `[tituloCompleto, ocupação].join(' · ')`, que é o MESMO defeito medido em
-        // 17/08 pra SUPERBID/PESTANA/LJUD/BIASI. Custo zero: já é o HTML que baixamos pra docs.
-        const descEcoDoTitulo = (() => {
-          const d = String(im.descricao || '').trim();
-          const t = String(im.titulo || '').trim();
-          return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
-        })();
-        if (descEcoDoTitulo) {
+        // portal do leiloeiro). Custo zero: já é o HTML que baixamos pra docs.
+        if (descricaoEhEcoDoTitulo(im)) {
           const descPag = extrairDescricaoDoCorpo(html);
           if (descPag) im.descricao = descPag;
         }
