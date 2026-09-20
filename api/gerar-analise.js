@@ -28,6 +28,7 @@ import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculo
 import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 import { comCascataBusca } from './_busca-modelo.js';
+import { extrairEnderecoMatricula } from './_registro-matricula.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1947,7 +1948,7 @@ export default async function handler(req, res) {
   // ficar genérico ("cidade"). Best-effort; nunca bloqueia.
   let enderecoGenerico = false; // sem rua E sem bairro conhecidos → o edital pode completar
   try {
-    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio&limit=1`)).json();
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte&limit=1`)).json();
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
       const ruaOk = (e) => { const s = String(e || '').trim(); return s.length >= 6 && /[a-zà-ú]{3}/i.test(s) && !lixo.test(s); };
@@ -1960,12 +1961,47 @@ export default async function handler(req, res) {
         const cand = segs.find(s => s && !ehTipoArea(s) && _norm(s) !== _norm(cid) && !/^[a-z]{2}$/i.test(s));
         if (cand) bairro = cand;
       }
-      const rua = ruaOk(imA.endereco) ? String(imA.endereco).trim() : '';
-      const partes = [rua, bairro, cid].filter(Boolean);
+      let rua = ruaOk(imA.endereco) ? String(imA.endereco).trim() : '';
+      let cidFinal = cid;
+      // MATRÍCULA JÁ NO BANCO, LIDA AGORA, DE GRAÇA (20/09, achado real: terreno "Gênesis II"
+      // em Barueri/SP). `imA.descricao` às vezes JÁ TEM o texto completo da matrícula (o
+      // scraper colou) — sem precisar buscar PDF nenhum. Esse texto dizia "situado na Alameda
+      // das Guaraunas... loteamento denominado RESIDENCIAL E COMERCIAL GÊNESIS II... Município
+      // de Santana de Parnaíba", e NADA disso era lido: `endereco` no card era "Alameda lberica"
+      // (rua ERRADA, mas passava no `ruaOk` por ter cara de rua válida — o teste é de FORMATO,
+      // não de correção), `cidade` era "São Paulo" (nunca conferida contra o documento) e
+      // `nomecondominio` ficava vazio. A busca de comparáveis procurava em "São Paulo" por uma
+      // rua que não existe lá — zero chance de achar os 3 anúncios reais que o dono achou no
+      // Google em segundos, todos publicados sob "Gênesis II".
+      // A matrícula é a fonte MAIS autoritativa para estes 3 campos — quando ela contradiz o
+      // card, ela vence, e a divergência de cidade vira anomalia (mesmo padrão de
+      // `avaliacao_diverge_laudo`) + correção no acervo, porque cidade errada atrapalha todo
+      // relatório futuro deste lote, não só este.
+      const doDescricao = extrairEnderecoMatricula(imA.descricao);
+      if (doDescricao?.municipio && _norm(doDescricao.municipio) !== _norm(cid)) {
+        cidFinal = doDescricao.municipio;
+        console.log('[cidade-diverge-matricula]', JSON.stringify({ imovel: String(imovelId), card: cid, matricula: doDescricao.municipio }));
+        try {
+          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ cidade: doDescricao.municipio }) });
+          await registrarAnomalia('cidade_diverge_matricula', imA.fonte || null, String(imovelId), 'cidade',
+            `Card mostrava "${cid}"; a própria matrícula (já no acervo) diz "Município de ${doDescricao.municipio}". Corrigido no acervo.`);
+        } catch { /* best-effort — a busca abaixo já usa cidFinal mesmo se o PATCH falhar */ }
+      }
+      if (doDescricao?.logradouro && _norm(doDescricao.logradouro) !== _norm(rua)) rua = doDescricao.logradouro;
+      if (doDescricao?.loteamento && !imA.nomecondominio) {
+        imA.nomecondominio = doDescricao.loteamento; // usado logo abaixo, e evita reprocessar a mesma extração
+        try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nomecondominio: doDescricao.loteamento }) }); } catch { /* best-effort */ }
+      }
+      // `mercadoInputs.cidade` também precisa da cidade CORRIGIDA — senão a busca de
+      // comparáveis usa o endereço certo mas o contexto demográfico/FipeZAP/socio continua
+      // pedindo dado da cidade ERRADA, os dois desalinhados no mesmo relatório.
+      if (cidFinal !== cid) mercadoInputs.cidade = cidFinal;
+      const partes = [rua, bairro, cidFinal].filter(Boolean);
       if (rua || bairro) mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
       if (!mercadoInputs.nomeCondominio && imA.nomecondominio) mercadoInputs.nomeCondominio = imA.nomecondominio;
-      // Ainda genérico (sem rua E sem bairro no card/título)? LÊ o edital/matrícula para achar o
-      // endereço completo — o erro de não puxar o endereço estando no documento não pode repetir.
+      // Ainda genérico (sem rua E sem bairro no card/título/matrícula)? LÊ o edital/matrícula
+      // (via PDF) para achar o endereço completo — o erro de não puxar o endereço estando no
+      // documento não pode repetir.
       if (!rua && !bairro) {
         enderecoGenerico = true;
         try {
@@ -1978,7 +2014,7 @@ export default async function handler(req, res) {
           }
         } catch { /* leitura de documento é best-effort */ }
       }
-      console.log('[endereco-busca]', JSON.stringify({ imovel: String(imovelId), rua: !!rua, bairro: bairro || null, usado: mercadoInputs.endereco }));
+      console.log('[endereco-busca]', JSON.stringify({ imovel: String(imovelId), rua: !!rua, bairro: bairro || null, cidadeCorrigida: cidFinal !== cid ? cidFinal : null, usado: mercadoInputs.endereco }));
     }
   } catch { /* enriquecimento é best-effort */ }
 
