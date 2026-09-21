@@ -22,6 +22,7 @@ import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { anthropicFetch } from './_claude.js';
+import { sanitizeText } from './_sanitize.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -103,6 +104,7 @@ async function handler(req) {
     partesAdicionais, partes,
     foro,
     documentos,
+    imagens,
   } = body;
   const tipoFinal = tipoContrato || tipo;
   const partesFinal = partesAdicionais || partes;
@@ -121,14 +123,27 @@ async function handler(req) {
   const DOCS_MAX = 60000;
   const docsTexto = documentos ? String(documentos).slice(0, DOCS_MAX) : '';
 
+  // IMAGENS (21/09, pedido do dono: "implemente a leitura de imagem via IA" — CNH, foto de
+  // WhatsApp etc. que antes só davam "não consegui ler"). O CLIENTE já redimensiona pra
+  // 1568px/JPEG antes de mandar (recomendação da própria Anthropic — acima disso ela
+  // redimensiona do lado dela mesmo); aqui é só um teto de SEGURANÇA contra um payload fora
+  // do padrão (nunca confiar só na validação do outro lado) — 8M caracteres base64 ≈ 6 MB
+  // crus, bem acima do que uma imagem redimensionada deveria pesar. Corpo da função Vercel
+  // tem teto de 4,5 MB (plataforma, não configurável); 10 imagens nesse teto individual
+  // ficam dentro da margem com folga pro resto do payload (texto/descrição).
+  const MEDIA_TYPES_IMAGEM = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+  const imagensValidas = (Array.isArray(imagens) ? imagens : [])
+    .filter(i => i && typeof i.base64 === 'string' && i.base64.length > 0 && i.base64.length < 8_000_000 && MEDIA_TYPES_IMAGEM.has(i.mediaType))
+    .slice(0, 10);
+
   const userMessage = `Gere um contrato de ${tipoFinal || 'prestação de serviços'} com base na seguinte descrição em texto livre:
 
 ${descricao.slice(0, 4000)}
 
-${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
+${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${(docsTexto || imagensValidas.length) ? `${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
 ${docsTexto}
-
-COMO USAR OS ANEXOS — regra que vale mais que o hábito de deixar campo em branco:
+` : ''}${imagensValidas.length ? `\nO OPERADOR TAMBÉM ANEXOU ${imagensValidas.length} IMAGEM(NS) (fotos, ex.: CNH, comprovante) — cada uma aparece logo ANTES desta mensagem, identificada pelo nome do arquivo. Leia o conteúdo de cada imagem como faria com um documento.\n` : ''}
+COMO USAR OS ANEXOS (documentos E imagens) — regra que vale mais que o hábito de deixar campo em branco:
 - Todo dado que estiver nos anexos deve ser TRANSCRITO no contrato novo: nomes completos,
   CPF/CNPJ, endereços, estado civil, profissão, valores, prazos, objeto. NÃO deixe
   [NOME COMPLETO], [CPF], [ENDEREÇO] em nada que o anexo já informe — o operador anexou o
@@ -143,8 +158,21 @@ FORO OBRIGATÓRIO deste contrato: ${foroFinal} (eleja este foro com renúncia a 
 
 Gere o contrato completo e pronto para uso.`;
 
+  // Bloco de conteúdo da mensagem: imagem ANTES do texto que a referencia (ordem que a
+  // própria Claude recomenda pra correlacionar imagem com instrução), rotulada pelo nome do
+  // arquivo — sem o rótulo, o modelo vê a foto mas não sabe qual anexo original ela era.
+  const content = imagensValidas.length
+    ? [
+        ...imagensValidas.flatMap(img => [
+          { type: 'text', text: `Imagem anexada: ${sanitizeText(img.nome, 150) || 'arquivo'}` },
+          { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } },
+        ]),
+        { type: 'text', text: userMessage },
+      ]
+    : userMessage;
+
   const aprendizado = await resumoAprendizadoContrato(tipoFinal);
-  console.log('[gerar-contrato-ia] aprendizado injetado:', aprendizado ? `${aprendizado.length} chars` : '(nenhum)');
+  console.log('[gerar-contrato-ia] aprendizado injetado:', aprendizado ? `${aprendizado.length} chars` : '(nenhum)', imagensValidas.length ? `· ${imagensValidas.length} imagem(ns)` : '');
 
   try {
     const r = await anthropicFetch({
@@ -162,7 +190,7 @@ Gere o contrato completo e pronto para uso.`;
         // respondeu") e timeoutMs deixando margem pro resto do handler responder.
         max_tokens: 32000,
         system: SYSTEM_PROMPT + aprendizado,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{ role: 'user', content }],
       }),
     }, { retries: 0, timeoutMs: 270000 });
 
@@ -182,7 +210,7 @@ Gere o contrato completo e pronto para uso.`;
     // vem cortado) e ficaria silencioso pro operador também sem este aviso.
     const documentosTruncados = !!documentos && String(documentos).length > DOCS_MAX;
 
-    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, truncado, documentosTruncados }, sucesso: true });
+    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, comImagens: imagensValidas.length, truncado, documentosTruncados }, sucesso: true });
 
     return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados }), {
       status: 200,

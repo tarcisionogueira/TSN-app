@@ -191,11 +191,16 @@ export default function CriarContrato() {
       // contratante e contratado" e recebeu [NOME COMPLETO] / [CPF: XXX.XXX.XXX-XX]: o
       // modelo nunca viu o documento. A rota já aceitava `documentos`; faltava preencher.
       let documentos = '';
+      let imagens = [];
       if (arquivosRef.length) {
         setLendoDocs(true);
         const r0 = await extrairTextoDeVarios(arquivosRef);
         setLendoDocs(false);
         documentos = r0.documentos;
+        // Imagem (JPG/PNG/WebP) vai como base64 pro bloco de visão da Claude (21/09, pedido
+        // do dono: "implemente a leitura de imagem via IA" — antes era sempre "ignorado",
+        // agora só CNH/foto que o navegador não decodifica cai nesse caso).
+        imagens = r0.imagens.map(i => ({ nome: i.nome, base64: i.base64, mediaType: i.mediaType }));
         // Arquivo que não deu para ler é DITO, nunca descartado em silêncio — silêncio aqui
         // é exatamente o que fez o dono achar que o anexo tinha sido usado.
         if (r0.ignorados.length) setAvisoDocs(`Não consegui ler: ${r0.ignorados.join(' · ')}. O contrato foi gerado SEM o conteúdo desse(s) arquivo(s).`);
@@ -213,7 +218,7 @@ export default function CriarContrato() {
       // até o maxDuration. A geração real leva ~30-60s, então 3 min é folgado sem ser eterno.
       const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
-        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos }),
+        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos, imagens }),
         signal: AbortSignal.timeout(180000),
       });
       // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
@@ -479,10 +484,10 @@ export default function CriarContrato() {
           <div style={S.card}>
             <p style={S.secTitle}>Documentos de referência adicionais (opcional)</p>
             <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px', lineHeight: 1.5 }}>
-              {modo === 'gerar' ? 'Anexe propostas, e-mails ou documentos de suporte para a IA.' : 'Documentos que o signatário pode consultar ao ler e assinar.'}
+              {modo === 'gerar' ? 'Anexe propostas, e-mails, documentos ou fotos (CNH, comprovantes) — a IA lê PDF e também enxerga imagem direto.' : 'Documentos que o signatário pode consultar ao ler e assinar.'}
               {' '}Até {MAX_ARQUIVOS_REF} arquivos.
             </p>
-            <input ref={fileRefRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleArquivosRef} />
+            <input ref={fileRefRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }} onChange={handleArquivosRef} />
             <button onClick={() => fileRefRef.current?.click()}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 9, fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
               <Upload size={14} /> Adicionar arquivos de referência
