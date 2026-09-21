@@ -31453,3 +31453,27 @@ aplicada, smoke test de insert/select/delete feito direto no banco antes do comm
 > estar disparando — conferir se `/api/processar-fila-webhook-mp-cron` está registrado nos
 > Cron Jobs do projeto na Vercel). Zero linhas na tabela é normal se não houve pagamento MP
 > real desde o deploy — não é falha, só ausência de tráfego pra testar.
+
+### Fotos CEF ausentes — achado ao vivo do dono, confirma bloqueio de IP de datacenter (mesma classe do HASTA)
+
+Dono reportou imóvel CEF (São Gonçalo dos Campos/BA) "com foto" aparecendo sem foto no site.
+Investigado: `link_foto` (capa, vem da coluna 11 do CSV oficial da Caixa) é null pra ~600 dos
+18.795 imóveis CEF ativos (3,2%) — o feed deles mesmo não traz foto pra esses casos, não é
+bug nosso. A segunda camada que existe EXATAMENTE pra cobrir esse gap
+(`scripts/foto-cef.mjs`, reescrito 18/09 pra virar galeria — visita a página individual do
+imóvel na Caixa e captura as fotos de lá) **nunca tinha rodado nem uma vez em produção**:
+0 de 18.795 imóveis CEF ativos tinham `fotos` preenchido. O único run recente do workflow
+(`fotos-cef.yml`, manual) foi 17/09, um dia ANTES da reescrita — rodou a versão antiga.
+
+**Disparado manualmente pra testar** (`workflow_dispatch`, run #17, 21/09 17:54 UTC) — achado
+confirmado: `⚠️ 5 bloqueios seguidos — CEF pode estar bloqueando o IP. Encerrando. ✅
+Concluído: 0/120 galerias salvas`. Mesmo bloqueio de IP de datacenter do GitHub Actions que
+já resolvemos pro HASTA via proxy ISP do Bright Data (18/09).
+
+**Decisão do dono (21/09): NÃO aplicar proxy pago agora** (evita gasto recorrente de cota
+Bright Data pra uma lacuna cosmética de 3,2% do acervo) — **rodar `node scripts/foto-cef.mjs`
+manualmente de casa/rede residencial**, com `VITE_SUPABASE_URL`/`SUPABASE_SERVICE_KEY` no
+ambiente. Pega até 120 imóveis sem galeria por execução (`fotos is null`), incremental, nunca
+reprocessa quem já tem. ~157 execuções pra cobrir o acervo inteiro — sem pressa, dono decide
+o ritmo. Se no futuro quiser automatizar de vez, a opção documentada é o mesmo proxy ISP já
+provado no HASTA (`dom: { usarProxyIsp: true }`), mas isso NÃO foi aplicado agora.
