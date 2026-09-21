@@ -31385,3 +31385,54 @@ tem proteção natural: token de uso único). `npm run build` limpo, em produç�
 **Depende do dono**: os dois Pix de R$33.001,09 do Marcos expiraram — não dá para reviver
 um Pix vencido. Se a venda ainda estiver de pé, é preciso gerar uma cobrança NOVA para ele
 (a trava nova já impede o problema de se repetir nesta segunda tentativa).
+
+### Antecipação de cartão negada — causa raiz não é ramo de atuação, são 2 bugs nossos
+
+Continuação da investigação da venda do Marcos. O dono trouxe as telas do Asaas (documentos
+aprovados, cadastro aprovado, "Antecipação de cartão de crédito desativada") e dois artigos
+oficiais da central de ajuda deles (salvos e lidos por completo). **Achado principal: o ramo
+de atuação NÃO é motivo de exclusão** — a lista oficial de exclusão é só 5 casos (doações/
+sorteios/rifas, CNPJ inapto/baixado, cobrança de dívidas, empréstimos/consórcios, cripto/day
+trade), nenhum aplicável à assessoria de leilão. A causa real, batendo com os critérios
+oficiais ("vencimento ≥8 dias úteis" + "dados do pagador completos"), eram **2 bugs no nosso
+código**, os dois em `api/asaas.js`:
+
+1. Toda cobrança avulsa criada por este arquivo (fallback honorário/cobrança avulsa, plano à
+   vista, produto, diferença de upgrade) nascia com `dueDate` = HOJE — reprovava o critério
+   de vencimento SEMPRE, pra qualquer cobrança. Corrigido: `vencimentoAntecipavel()` (hoje+12
+   dias corridos, cobre 8 dias úteis mesmo com 2 fins de semana no meio). Não muda quando o
+   cliente paga (`billingType: 'UNDEFINED'` já paga na hora, em qualquer data).
+2. O endereço do pagador (já exigido pelo formulário desde 18/09, "dados pra emissão de NF")
+   nunca ia pro `customer` do Asaas — só pro nosso `perfis`. Corrigido: agora envia junto na
+   criação/atualização do customer.
+
+Nenhum dos dois corrige a cobrança do Marcos (já criada, vencimento não muda depois) — valem
+só pra cobranças novas. Escalado ao suporte do Asaas com essa base ("não me enquadro em
+nenhuma exclusão oficial, corrigi o cadastro") — time de antecipação vai retornar.
+
+### mp-webhook.js — fila durável + cron, resolvido ANTES de crescer o volume (pedido do dono)
+
+Último item da auditoria de qualidade MP (o que eu tinha deixado pra depois): responder ao
+webhook mais rápido. Descartei `waitUntil()` da Vercel — a doc deles mesma diz que é
+best-effort, sem retry, sem durabilidade, desaconselhado pra lógica de negócio crítica
+(ativar plano, creditar comissão). Implementado com fila durável, mesmo padrão de
+`emails_fila`/`drenar-fila-emails-cron.js`:
+
+- `api/mp-webhook.js` virou um handler FINO: verifica assinatura, enfileira em
+  `mp_webhook_fila`, responde 200 na hora. Enfileiramento falhou → cai no caminho de sempre
+  (processa síncrono, deixa o MP reentregar em erro).
+- A lógica de negócio original (~550 linhas) foi só RENOMEADA pra `processarEventoMp` e
+  exportada — nenhuma linha mudou.
+- Novo cron `api/processar-fila-webhook-mp-cron.js` (a cada 1 min, mais frequente que
+  qualquer outro cron do projeto — dinheiro merece) drena a fila chamando essa mesma função
+  com um `res` fake que captura o resultado. Teto de 5 tentativas antes de marcar 'falhou' e
+  alertar por e-mail (mesmo padrão do `regenerar-relatorios-cron`).
+
+**Quase virou bug, pego antes de ir pro ar**: a 1ª versão da migração tinha
+`unique(mp_topic, mp_data_id)`. O MP entrega o MESMO par (tipo, data.id) mais de uma vez
+conforme o pagamento MUDA de estado de verdade (criado → aprovado) — a unique rejeitaria a
+2ª entrega (a que importa) como duplicata, e a aprovação nunca seria processada. Removida.
+`processarEventoMp` já é seguro pra rodar mais de uma vez pro mesmo pagamento (sempre confere
+o estado ATUAL via API do MP, tem idempotência própria via `webhook_eventos_processados`) —
+é ali que mora a proteção, não numa constraint na fila. `npm run build` limpo, migração
+aplicada, smoke test de insert/select/delete feito direto no banco antes do commit.
