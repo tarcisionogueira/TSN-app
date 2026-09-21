@@ -103,11 +103,26 @@ export default async function handler(req) {
   let b; try { b = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
   const imovelId = String(b?.imovel_id || '');
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(imovelId)) return json({ error: 'imovel_id inválido' }, 400);
+  // 'regras': achado do QA de 21/09 — o botão "Regras de venda online" (venda direta CEF)
+  // também abre um hotlink MONTADO (caixaRegrasVendaUrl, mesma classe de guess que a
+  // matrícula), sem a mesma verificação servidor-side que a matrícula já ganhou em 21/08.
+  const tipoDoc = b?.tipo === 'regras' ? 'regras' : 'matricula';
 
   const imovelRes = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,estado,fonte_id,link_matricula`);
   if (!imovelRes.ok) return json({ error: 'Erro ao consultar o imóvel' }, 502);
   const [imovel] = await imovelRes.json().catch(() => []);
   if (!imovel) return json({ error: 'Imóvel não encontrado' }, 404);
+
+  if (tipoDoc === 'regras') {
+    // Documento FIXO da Caixa (mesmo PDF pra todo imóvel de venda direta) — não há fila de
+    // captura nem anexo por imóvel: ou o link padrão está no ar, ou não está.
+    if (!ehCef(imovel.fonte)) return json({ disponivel: false, motivo: 'sem_link', busca: null });
+    const hotlinkRegras = 'https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf';
+    const testeRegras = await testarHotlink(hotlinkRegras);
+    if (testeRegras === 'disponivel') return json({ disponivel: true, origem: 'hotlink', url: hotlinkRegras });
+    if (testeRegras === 'nao_publicada') return json({ disponivel: false, motivo: 'nao_publicada', busca: null });
+    return json({ disponivel: null, url: hotlinkRegras, busca: null });
+  }
 
   // 1) Já temos o documento no nosso Storage (capturado ou anexado)? Melhor resposta possível.
   const anexoRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&tipo=eq.matricula&storage_path=not.is.null&select=id,storage_path&limit=1`);

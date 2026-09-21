@@ -787,6 +787,11 @@ export default function ImovelDetalhe() {
   const [matModal, setMatModal] = useState(null);   // {verificado, busca, anexada?, erro?}
   const [matAviso, setMatAviso] = useState(false);  // hotlink aberto SEM conferência — saída de socorro
   const [enviandoMatricula, setEnviandoMatricula] = useState(false);
+  // Achado do QA de 21/09: "Regras de venda online" (CEF) também é um hotlink MONTADO
+  // (caixaRegrasVendaUrl), mesma classe de risco que a matrícula já tratou em 21/08 — só que
+  // é um documento FIXO (mesmo PDF pra todo imóvel), sem fila/anexo por imóvel.
+  const [verifRegras, setVerifRegras] = useState(false);
+  const [regrasIndisponivel, setRegrasIndisponivel] = useState(false);
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
   const [fotoAtivaIdx, setFotoAtivaIdx] = useState(0); // qual foto da GALERIA está selecionada (só relevante com imovel.fotos.length > 1)
@@ -1213,6 +1218,30 @@ export default function ImovelDetalhe() {
       if (w) { try { w.location = matriculaUrl; } catch { /* ignora */ } }
       setMatAviso(true);
     } finally { setVerifMatricula(false); }
+  };
+
+  // Mesmo princípio de verificarMatricula, pro hotlink MONTADO de "Regras de venda online"
+  // (achado do QA de 21/09) — só intercepta quando o link é de fato o PDF fixo da Caixa
+  // (`caixaRegras`); qualquer outro caso (anexo já capturado, página do leiloeiro) segue
+  // sendo um link normal, sem round-trip.
+  const verificarRegras = async (e) => {
+    if (!caixaRegras || regrasEditalUrl !== caixaRegras || !user || !imovel?.id) return;
+    e.preventDefault();
+    const w = window.open('', '_blank');
+    setVerifRegras(true);
+    try {
+      const res = await apiCall('/api/verificar-doc', { method: 'POST', body: JSON.stringify({ imovel_id: imovel.id, tipo: 'regras' }) });
+      const d = res.ok ? await res.json().catch(() => null) : null;
+      if (d && d.disponivel === false) {
+        try { w?.close(); } catch { /* ignora */ }
+        setRegrasIndisponivel(true);
+        return;
+      }
+      const destino = (d && d.url) ? d.url : caixaRegras;
+      if (w) w.location = destino; else window.open(destino, '_blank', 'noopener');
+    } catch {
+      if (w) { try { w.location = caixaRegras; } catch { /* ignora */ } }
+    } finally { setVerifRegras(false); }
   };
 
   // Anexo manual da matrícula (último caso): mesmo /api/upload-anexo da tela de análise —
@@ -1792,10 +1821,26 @@ export default function ImovelDetalhe() {
                       </a>
                     )}
                     {regrasEditalUrl && (
-                      <a href={regrasEditalUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {regrasEditalLabel}
+                      <a href={regrasEditalUrl} target="_blank" rel="noopener noreferrer" onClick={verificarRegras}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none', opacity: verifRegras ? 0.7 : 1 }}>
+                        {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {verifRegras ? 'Verificando…' : regrasEditalLabel}
                       </a>
+                    )}
+                    {regrasIndisponivel && (
+                      <div onClick={() => setRegrasIndisponivel(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                        <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, maxWidth: 420, width: '100%', padding: '22px 22px 18px', boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                            <ScrollText size={20} color="#c2410c" />
+                            <div style={{ fontWeight: 800, fontSize: 16.5, color: '#1e293b' }}>Regras de venda indisponíveis</div>
+                          </div>
+                          <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, margin: '0 0 16px' }}>
+                            Verificamos agora e o documento padrão "Como comprar" da Caixa não está publicado no
+                            endereço de sempre — <b>não é um problema do seu acesso</b>. Costuma voltar sozinho;
+                            tente novamente em alguns minutos, ou consulte as regras diretamente no edital do imóvel.
+                          </p>
+                          <button onClick={() => setRegrasIndisponivel(false)} style={{ width: '100%', padding: '11px 0', background: '#c2410c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Entendi</button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

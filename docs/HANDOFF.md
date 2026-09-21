@@ -31184,6 +31184,42 @@ maior superfície de mudança que não cabia no mesmo lote):
 - Campo CPF do cadastro descartado silenciosamente (médio — só re-pergunta no checkout).
 - `regen_motivo:null` pode desligar o self-heal documental permanentemente (suspeita).
 
+## 21/09 (3ª parte) — "Edital/Regras sem verificação servidor-side" + achado ao vivo do dono
+
+### Edital/Regras: fechado o mesmo gap que a Matrícula já tinha corrigido em 21/08
+
+`regrasEditalUrl` prioriza `caixaRegras` (venda direta CEF) — um hotlink MONTADO por
+`caixaRegrasVendaUrl()` (`https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf`,
+mesmo PDF pra todo imóvel de venda direta), exatamente a mesma classe de risco que a matrícula
+tinha antes de 21/08: link "adivinhado", clicado sem checar antes se está no ar. Diferente da
+matrícula, é um documento FIXO (não por imóvel) — sem fila de captura nem anexo específico.
+
+`api/verificar-doc.js` ganhou `tipo: 'regras'` (só ativa quando a fonte é CEF): testa o hotlink
+fixo com o mesmo `testarHotlink()` já usado pela matrícula, sem fila/anexo (não fazem sentido
+pra um doc único). `ImovelDetalhe.jsx` intercepta o clique SÓ quando `regrasEditalUrl ===
+caixaRegras` (o caso do hotlink adivinhado) — anexo já capturado ou página do leiloeiro
+continuam como link normal, sem round-trip. Indisponível → modal simples avisando que não é
+problema do acesso do cliente (documento único, sem opção de anexar). `npm run build` limpo.
+
+### Achado ao vivo do dono: link de assinatura de contrato preso em "Redirecionando… continuar"
+
+Mesmo defeito já visto antes no link de live/aula, agora no link de assinatura de contrato
+recém-gerado: a CSP global (`vercel.json`) só libera `<script>` INLINE cujo hash bata com um
+dos 3 fixos do `index.html`. O redirecionamento de `api/og-share.js` era inline com conteúdo
+que muda por request (token/slug diferente) — nunca bate hash, o navegador bloqueia a execução
+em SILÊNCIO (sem erro visível), e a pessoa fica presa na página, só o link manual "continuar"
+funcionando. Afeta TODO link compartilhado: contrato, testemunha, imóvel, curso/ebook, aula ao
+vivo, indicação — não só a live que o dono notou primeiro.
+
+Corrigido movendo o script pra arquivo externo (`api/og-redirect.js`, parâmetros via query
+string) — `script-src 'self'` já cobre arquivo do mesmo domínio, sem precisar de hash.
+Comportamento idêntico ao anterior, testado o round-trip de encode/decode da query string
+(inclusive com `&`/`"` de UTM dentro do destino) e o handler isoladamente antes do build.
+
+Também a pedido do dono: o bloco de TEXTO puro do contrato (`ContratoLink.jsx`, quando não há
+arquivo anexado) passa a ter fundo BRANCO, como uma folha — o resto da tela segue no tema
+escuro da marca. Aplicado nas duas telas (assinatura e leitura pós-assinatura).
+
 **Pendências que continuam só do DONO** (nenhuma mexida nesta sessão — são decisão/painel):
 nomear um analista (`role='analista'` segue 0 ativos); escopo mínimo nas chaves Asaas/Mercado
 Pago; Google G2RS/WebISS; decidir o teto da PECINI vs. secret da frota; decidir
