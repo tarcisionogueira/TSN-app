@@ -31080,3 +31080,54 @@ pura de código, sem novo objeto de schema.
 **Sessão encerrada.** Nada pendente conhecido além do que já está registrado como sugestão
 aberta (EMILIOMATOS/SATO — decisão de consertar ou aposentar formalmente os crons suspensos,
 nunca pedida explicitamente pelo dono).
+
+## 21/09 — Ritual de abertura + investigação das 3 fontes "zeraram" do alerta de e-mail
+
+Pedido do dono: rodar as verificações iniciais e investigar as fontes zeradas apontadas por
+`fonte_regressao_suspeita()` e pelo e-mail de alerta (43 fontes com problema). As 3 com
+`motivo='zerou'` tiveram desfechos BEM diferentes — misturar os três no mesmo balaio teria
+sido o erro:
+
+1. **HASTA — NÃO é achado novo.** Segue "vazio" (200 OK, 0 lotes em 8-9 eventos do catálogo)
+   desde antes de 12/09, mas isso já foi investigado e fechado DUAS VEZES no HANDOFF (16/09 e
+   17/09, com `recon-hasta-zerou.mjs` rodado pelo dono do runner residencial e confirmação ao
+   vivo abrindo o site): não é rota quebrada, é leilão real sem lote publicado no momento.
+   Sem ação — só continua aparecendo no alerta porque o alerta não tem memória de "já
+   confirmado não-bug".
+2. **JOAOEMILIO — também já investigado e fechado (18-19/09).** Tenant do SOLEON; caiu de
+   179→23→0 ao longo de 2 semanas enquanto os tenants-irmãos do MESMO scraper (CALIL, VEGAS,
+   GESTAOLEILOES) seguiam saudáveis — código não está quebrado, é o catálogo do leiloeiro
+   esvaziando sem reposição. Sem ação.
+3. **SOLD — achado NOVO, real, sem investigação anterior.** Caiu de 96→0 num único run
+   (20/09 14:17 UTC) — e na MESMA janela de 5 minutos desse mesmo run, SUPERBID caiu
+   1452→200, KRONLEILOES 134→28 e TOTALLEILOES 9→1. As 4 fontes chamam a MESMA API
+   (`offer-query.superbid.net`, via `scraperSuperbidNet` em `scripts/scraper-puppeteer.mjs`)
+   — coincidência forte demais pra ser 4 bugs de parser independentes; o padrão aponta pra um
+   blip do lado do vendor (rate limit/instabilidade) na API, não pro nosso código.
+   **Mas o log de produção não provava isso** — só dizia "0 offers abertas coletadas", sem
+   HTTP status nem motivo, porque `buscar()` (dentro de `page.evaluate`, contexto do
+   browser) tratava HTTP não-2xx e falha de rede/parse como o MESMO `null` que "página sem
+   oferta", e mesmo um `console.log` ali dentro não apareceria no log do Actions (sem
+   `page.on('console')` no arquivo). Mesma classe de "erro tratado como resposta vazia" que o
+   CLAUDE.md já cataloga (item 4).
+   **Corrigido (só diagnóstico, zero mudança de comportamento de coleta):** `buscar()` agora
+   devolve o motivo da falha (`HTTP {status}` ou a mensagem do erro); as até 3 tentativas da
+   1ª página acumulam esse motivo, e um novo log avisa quando "0 offers" é FALHA da API, com
+   o motivo, em vez de catálogo genuinamente vazio. O freio que já existia (`SOLD gravou 0
+   (≤50) — pulando desativação por segurança`) funcionou como desenhado e não apagou os 93
+   imóveis que já estavam ativos — nenhum dado foi perdido nesta regressão.
+   `npm run build` (padrões+sintaxe+CSP) passou limpo.
+
+**Não resolvido ainda, porque depende do próximo run real:** o cron `leiloeiros-puppeteer.yml`
+roda 1x/dia (~14h UTC) e ainda não rodou hoje. Só na próxima execução o novo log vai dizer se
+o 0 de ontem era um blip pontual (SOLD volta a ~90-100 sozinho, log sem motivo) ou se a API
+está mesmo instável (log mostra HTTP 429/500/timeout). **Vale conferir `fonte_saude` e o log
+do run de hoje depois das 14h UTC antes de investigar mais fundo.**
+
+Também aplicado nesta sessão (achados do QA de funcionalidades semanal, e-mail de 21/09):
+`upsertAnalise`/`upsertDoc` (`api/gerar-analise.js`, `api/gerar-documental.js`) não conferiam
+`.ok` da resposta do PostgREST no upsert final do relatório — um 400/409/500 seguia como
+sucesso (crédito debitado, cliente recebe 200, relatório pode não ter sido salvo). Corrigido
+com checagem de `.ok` + throw, e os caminhos de recuperação (dentro dos `catch` principais, que
+também chamam essas funções pra registrar o erro) ganharam try/catch próprio pra não deixar a
+resposta ao cliente sem retorno numa segunda falha. Build validado antes do push.
