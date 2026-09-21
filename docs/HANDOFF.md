@@ -31360,3 +31360,28 @@ continua com erro do lado deles — o dono não conseguiu revisar/restringir o e
 chaves de produção (o mesmo trabalho que já foi feito no Asaas: validação de saque via
 Webhook habilitada, sem IP allowlist porque este projeto Vercel Pro não tem IP de saída
 fixo). Retomar quando a página do MP voltar a carregar.
+
+### Achado ao investigar "por que a venda do Marcos não fechou" (21/09): Pix duplicado
+
+Dono perguntou se o achado de qualidade de integração acima explicava uma venda que não
+fechou (Marcos Araujo, `assessorado`, tentativa de 17/09). Não é o mesmo bug — mas a
+investigação achou o real: `audit_logs` mostra DOIS `mp_checkout_criado` bem-sucedidos,
+mesmo usuário, mesmo valor (R$33.001,09), método Pix, com **1,6 segundo** de diferença —
+dois `payment_id` do MP diferentes. `mp_pagamentos` confirma: os dois ficaram `cancelled/
+expired` — NINGUÉM pagou nenhum dos dois (o Pix do MP expira em ~30min; o backfill/
+reconciliação só bateu 3 dias depois, em 20/09).
+
+**Causa**: `criouRef` em `PagamentoServico.jsx::PagamentoPIX` só impede um segundo disparo
+DENTRO do mesmo mount do componente — um duplo-clique que remonta a tela (ou qualquer
+remount) zera a ref e gera um Pix REAL novo, sem avisar que já existe um pendente. Cliente
+via dois QR codes diferentes pro mesmo valor, provavelmente pagou o errado ou nenhum, e a
+venda nunca fechou.
+
+**Corrigido** em `api/mp-checkout.js`: trava server-side (fonte de verdade, mesmo princípio
+de preço/gate deste arquivo) — Pix pro MESMO usuário+valor dentro de 8s é recusado com
+mensagem clara em vez de gerar um segundo QR. Só afeta `metodoPagamento==='pix'` (cartão já
+tem proteção natural: token de uso único). `npm run build` limpo, em produção.
+
+**Depende do dono**: os dois Pix de R$33.001,09 do Marcos expiraram — não dá para reviver
+um Pix vencido. Se a venda ainda estiver de pé, é preciso gerar uma cobrança NOVA para ele
+(a trava nova já impede o problema de se repetir nesta segunda tentativa).
