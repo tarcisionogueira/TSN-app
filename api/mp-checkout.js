@@ -241,6 +241,19 @@ export default async function handler(req, res) {
   const valorCentavos = Math.round(Number(valor) * 100);
   if (valorCentavos < 100) return res.status(400).json({ error: 'Valor mínimo R$ 1,00' });
 
+  // Trava contra PIX duplicado (21/09) — achada investigando por que uma venda não fechou:
+  // duas cobranças PIX reais (payment_id diferentes) do MESMO valor saíram com 1,6s de
+  // diferença (duplo clique ou remount da tela de Pix — `criouRef` em PagamentoServico.jsx
+  // só protege re-disparo DENTRO do mesmo mount) e as duas expiraram sem ninguém pagar.
+  // Só trava PIX: cartão já tem proteção natural (token de uso único).
+  if (metodoPagamento === 'pix') {
+    const anchorDup = user?.id || honorarioCtx?.arrematanteId || (cobrancaCtx ? `cobranca-${cobrancaCtx.cobrancaId}` : ip);
+    const rlDup = await checkRateLimit(`mp-pix-dup:${anchorDup}:${valorCentavos}`, 1, 8000);
+    if (!rlDup.ok) {
+      return res.status(429).json({ error: 'Já geramos um Pix para este valor há poucos segundos. Aguarde a tela carregar antes de gerar outro.' });
+    }
+  }
+
   // ASSESSORIA — o gate "1 assessoria por contrato" e o PREÇO precisam valer AQUI (10/08).
   // Este endpoint é o que efetivamente COBRA a assessoria (Checkout.jsx → PagamentoServico →
   // /api/mp-checkout), e era o único caminho de assessoria sem gate: ele existia em /api/mp,
