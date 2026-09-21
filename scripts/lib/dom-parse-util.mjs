@@ -42,7 +42,15 @@ export function valorPorRotulo(txt, rotuloRe) {
 
 // Título legível a partir do slug: "leilao-de-fazenda-em-manhumirim-mg" →
 // "Leilão de Fazenda em Manhumirim/MG" (melhor que shell sem og).
+// 21/09 (achado ao vivo do dono): ALBERTOMACEDOLEILOES tem pelo menos 1 lote cujo "slug" da
+// URL é o UUID cru do lote (ex.: "df8b5dbe-9ba7-4572-9393-687f783292e0"), não um slug
+// descritivo. Sem essa guarda, o resto da função trata o UUID como texto normal e produz
+// "Df8b5dbe 9ba7 4572 9393 687f783292e0" como título — plausível o bastante pra passar
+// despercebido, mas não descreve o imóvel. Retorna null (mesmo contrato de "não consegui",
+// já tratado pelos chamadores) em vez de inventar um título a partir de um identificador.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function tituloDeSlug(slug) {
+  if (UUID_RE.test(String(slug || '').trim())) return null;
   const limpo = String(slug || '').replace(/^[\d-]+/, '').replace(/[-_]+/g, ' ').trim();
   if (!limpo) return null;
   let t = titleCase(limpo).replace(/\bLeilao\b/gi, 'Leilão').replace(/\bImovel\b/gi, 'Imóvel');
