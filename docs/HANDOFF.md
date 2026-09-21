@@ -31313,3 +31313,50 @@ corte silencioso — não mexido.
 `npm run build` limpo em todos. Migração de `login_tentativas` aplicada antes do commit.
 Com isto, os 15 achados do QA de funcionalidades de 21/09 estão todos fechados ou
 documentados como não-bug — nenhum item de código restante da lista original.
+
+### Mercado Pago — "Qualidade da integração" (21/09): 2 dos 4 achados eram reais, 2 não se aplicam
+
+Auditoria pedida pelo dono ao ver o painel MP com 0/100 (a página "Credenciais de produção"
+estava com erro NO LADO DO MP, código `DXT20-TXHQOBS3LNIJ` — sem relação com o nosso código;
+o dono pivotou pra este item enquanto isso). Achados confirmados por leitura de código, 2
+corrigidos e 2 descartados após checar a doc real do endpoint (WebSearch — `WebFetch` direto
+pra `mercadopago.com.br` está bloqueado no egress deste ambiente):
+
+1. **`X-Idempotency-Key` sempre novo, `crypto.randomUUID()` a cada chamada** em
+   `api/mp.js::mpPost()` — usado pelas 4 funções que criam recurso no MP (2 preferências
+   Checkout Pro, 2 preapprovals de assinatura). Uma chave sempre nova ANULA a própria
+   idempotência: um retry de rede ou duplo clique do cliente cria um SEGUNDO recurso no MP
+   em vez de reaproveitar o primeiro. `api/mp-checkout.js` (pagamento Transparente) já fazia
+   certo (`idemBase` derivado do pagador+valor). Corrigido: `mpPost` agora recebe a chave
+   como parâmetro, derivada por chamada — `tsn-pref-<external_reference>` pras preferências,
+   `tsn-assinatura-<userId>-<planoKey>` pra assinatura normal, e
+   `tsn-assinatura-tr-<userId>-<planoKey>-<cardTokenId>` pra transparente (o `cardTokenId` é
+   de uso único, então entra na chave — um retry com o MESMO token reaproveita o preapproval
+   já criado, sem colidir com uma tentativa seguinte que usa outro token).
+2. **`external_reference` ausente em 3 dos 4 tipos de cobrança do Transparente**
+   (`api/mp-checkout.js`) — só `produtoBonusCtx` levava; honorário de êxito, cobrança avulsa
+   e serviço avulso iam sem nenhuma. Verificado em `mp-webhook.js` que nenhum desses 3
+   discrimina por `external_reference` (é `metadata.tipo` quem decide — `ehHonorarioMp`,
+   `ehCobrancaAvulsaMp`), só o produto usa (`ehProdutoMp = UUID_RE.test(extRefMp)`, uuid
+   puro). Corrigido com prefixo (`honorario:<id>`, `cobranca:<id>`, `servico:<user>:<prop>`)
+   que o próprio `UUID_RE` (ancorado, `^...$`) rejeita — zero risco de um pagamento de
+   honorário ser lido como produto avulso.
+3. **`payer.identification`/CPF "ausente" no Preapproval** (`criarAssinatura`/
+   `criarAssinaturaTransparente`) — **NÃO é bug**: a API de Preapproval do MP não documenta
+   um campo `payer.identification` (só `payer_email`, string); esse campo só existe nos
+   endpoints de Preferência/Payments, que já mandam certo. Adicionar um campo que a API não
+   lê não muda a pontuação e arrisca nada de graça — não mexido.
+4. **`statement_descriptor` "ausente" no Preapproval** — mesmo motivo do item 3, mesma
+   fonte (busca na doc oficial): não é um campo do endpoint de assinaturas. Não mexido.
+
+Deixados de propósito FORA desta rodada (pedem mais cuidado, não são "bug confirmado de
+baixo risco" como os 2 acima): fingerprint de device/sessão no checkout (não dá pra
+confirmar o nome exato do campo sem acesso à doc viva) e fazer `mp-webhook.js` responder
+2xx ANTES do processamento síncrono (mexe na ordem de um fluxo financeiro crítico — pede
+mais desenho antes de tocar). `npm run build` limpo antes do push.
+
+**Ainda pendente, não depende de nós**: a página "Credenciais de produção" do painel MP
+continua com erro do lado deles — o dono não conseguiu revisar/restringir o escopo das
+chaves de produção (o mesmo trabalho que já foi feito no Asaas: validação de saque via
+Webhook habilitada, sem IP allowlist porque este projeto Vercel Pro não tem IP de saída
+fixo). Retomar quando a página do MP voltar a carregar.
