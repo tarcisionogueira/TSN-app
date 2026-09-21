@@ -31565,3 +31565,33 @@ linhas — foi exatamente isso que aconteceu na 1ª tentativa desta migração, 
 `REINDEX INDEX idx_imoveis_bem_movel_barrado;` ser adicionado). **Nota para o futuro: sempre
 que alterar o CORPO de uma função usada em índice parcial/funcional, `REINDEX` explícito faz
 parte da mudança — `CREATE OR REPLACE` sozinho não avisa que ficou desatualizado.**
+
+### Pedido de seguimento: "tem mais algum tipo de bem misturado no acervo?" — sim, móveis e marcas
+
+Rodei `fora_do_acervo_imovel_veiculo()` (já existia, mas `qa_invariantes()` só a aplicava a 6
+fontes) contra o acervo INTEIRO, sem esse recorte. Apareceram 28 lotes ativos em mais 8 fontes
+nunca cobertas. Conferido um a um, não em lote:
+
+- **24 eram bem errado de verdade**: móveis de escritório e eletrodomésticos (Ar-condicionado,
+  Sofá, Poltrona, Televisor, Escrivaninha, Arquivo de aço) em VIP (11) e BAYIT (8), mesa/
+  cadeiras em LEILOTECH (3), e um lote "Bens móveis em geral: betoneira, gerador, portas,
+  cadeiras — Massa Falida" em KRONLEILOES (1). Achado extra dentro do achado: 2 dos itens VIP
+  eram MARCAS/trademarks ("A Marca Henrifarma", "A Marca Hydrocolor Plus") — nem bem móvel
+  tangível, ativo intangível mesmo — confirma que o problema não é só "veículo", é "qualquer
+  bem que não seja imóvel nem veículo" indo parar no acervo. Desativados 23 (excluída "Varzea
+  do Tanque" da BAYIT, sem descrição pra confirmar).
+- **4 eram FALSO POSITIVO do detector**, imóvel de verdade descrito de um jeito que o regex
+  não reconhecia: "28,00 alquires" (GRUPOLANCE, unidade de área rural), "vagaS de garagem"
+  no plural (FRAZAO, regex só tinha singular), "EX SUCURSAL BANCARIA" (SBID9, prédio de
+  agência bancária). Regex corrigido pros 3 padrões — nenhum desses 3 foi tocado, seguem
+  ativos, são imóvel real.
+- **1 é outro tipo de bug, não resolvido aqui**: ALBERTOMACEDOLEILOES, título literalmente
+  um UUID ("Df8b5dbe-9ba7-4572-9393-687f783292e0"), descrição só "Sete Lagoas/MG · avaliação
+  R$ 170.100,00" — sem texto nenhum pra saber se é imóvel mal descrito ou outra coisa. Fica
+  como achado separado pro dono decidir.
+
+Escopo do invariante `acervo_fora_de_escopo` ampliado das 6 fontes originais pras 8 novas —
+não fica invisível de novo. `npm run build` limpo. As duas correções de regex foram aplicadas
+via replace no texto que o próprio Postgres já tinha da função (mesma técnica da migração do
+webhook MP) — testadas lado a lado (função nova vs antiga, no acervo inteiro) antes de valer
+pra confirmar que só os 3 casos-alvo mudavam de resultado, nada mais.
