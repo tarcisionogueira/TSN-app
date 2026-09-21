@@ -784,11 +784,16 @@ export default async function handler(req, res) {
   const tinhaRelatorioBom = !!(resultadoAnterior && typeof resultadoAnterior === 'object'
     && !resultadoAnterior.precisaDocumentos && typeof resultadoAnterior.parecer === 'string'
     && resultadoAnterior.parecer.trim().length > 200);
-  // Se já havia um relatório BOM, uma regeração que leu 0 docs preserva o parecer,
-  // para o loop (regen_motivo=null) e loga a anomalia. Retorna o result preservado.
+  // Se já havia um relatório BOM, uma regeração que leu 0 docs preserva o parecer e loga a
+  // anomalia. Achado do QA de 21/09: `regen_motivo: null` aqui desligava o self-heal
+  // PERMANENTEMENTE — `regenerar-relatorios-cron` só revisita linhas com `regen_motivo not
+  // null` (api/regenerar-relatorios-cron.js:69), então uma leitura de 0 docs TRANSITÓRIA
+  // (teto Bright Data, URL assinada expirada, 403 momentâneo) nunca seria re-tentada mesmo
+  // que o documento fosse capturado dias depois. Usa um motivo próprio para o cron continuar
+  // tentando (até o teto de `regen_tentativas` já existente, MAX_TENT=3 — sem risco de loop).
   const preservarSeBom = async (faltandoAgora) => {
     if (!tinhaRelatorioBom) return null;
-    await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: null });
+    await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: 'leitura_zero_transitoria' });
     registrarAnomalia('documental_regen_leitura_zero', row?.fonte, imovelId, 'documentos',
       `Regeração leu 0 documentos (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
     // ESTORNO AQUI DENTRO, não nos chamadores (10/08). Os dois pontos que chamam

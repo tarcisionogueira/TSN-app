@@ -1061,13 +1061,20 @@ export default function Busca() {
     setRaioAtivoBusca(false);
   };
 
+  // Achado do QA de 21/09: sem guarda de corrida, uma troca RÁPIDA de cidade podia deixar a
+  // resolução mais LENTA (fallback Nominatim, passo 3) sobrescrever `centroRaio` por cima de
+  // uma resolução mais recente e mais rápida (passo 1) — raio centralizava silenciosamente na
+  // cidade ERRADA. Mesmo padrão de `buscaSeqRef` já usado em `buscarPagina` neste arquivo.
+  const geoSeqRef = React.useRef(0);
   // Centro da cidade para raio/auto-zoom. PRIMÁRIO: centroide das coordenadas dos
   // próprios imóveis no banco (instantâneo, sem dependência externa, e é onde os
   // imóveis realmente estão). FALLBACK: Nominatim com timeout (cidades sem imóveis
   // geocodificados). Antes dependia só do Nominatim no navegador, que bloqueia/
   // pendura chamadas web — travava a busca por raio e o auto-zoom.
   const geocodificarCidade = async (cidade, estado) => {
-    if (!cidade) { setCentroRaio(null); return null; }
+    const seq = ++geoSeqRef.current;
+    const atual = () => seq === geoSeqRef.current;
+    if (!cidade) { if (atual()) setCentroRaio(null); return null; }
     // 1) Centroide dos imóveis da cidade (fonte da verdade)
     try {
       let q = supabase.from('imoveis_leilao')
@@ -1082,7 +1089,7 @@ export default function Busca() {
         const lng = pts.reduce((s, p) => s + Number(p.longitude), 0) / pts.length;
         if (isFinite(lat) && isFinite(lng)) {
           const centro = { lat, lng, label: cidade };
-          setCentroRaio(centro);
+          if (atual()) setCentroRaio(centro);
           return centro;
         }
       }
@@ -1096,7 +1103,7 @@ export default function Busca() {
         const d = await res.json();
         if (d && d.ok && isFinite(d.lat) && isFinite(d.lng)) {
           const centro = { lat: Number(d.lat), lng: Number(d.lng), label: cidade };
-          setCentroRaio(centro);
+          if (atual()) setCentroRaio(centro);
           return centro;
         }
       } catch {}
@@ -1112,11 +1119,11 @@ export default function Busca() {
       const data = await res.json();
       if (data && data.length > 0) {
         const centro = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: cidade };
-        setCentroRaio(centro);
+        if (atual()) setCentroRaio(centro);
         return centro;
       }
     } catch {}
-    setCentroRaio(null);
+    if (atual()) setCentroRaio(null);
     return null;
   };
 

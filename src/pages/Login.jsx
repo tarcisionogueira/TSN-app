@@ -373,12 +373,24 @@ export default function Login() {
     e.preventDefault();
     setErro(''); setEmailNaoConfirmado(false); setCredencialInvalida(false); setReenviado(false); setLoading(true);
     try {
+      // Achado do QA de 21/09 (fechado): login era o único fluxo de auth sem NENHUMA
+      // fricção própria — só o limite genérico do GoTrue, pensado para abuso de infra, não
+      // para travar tentativa de senha contra UMA conta específica (credential-stuffing,
+      // possivelmente rotacionando IP). `api/login-rate.js` conta falhas recentes POR
+      // CONTA (login certo nunca penaliza ninguém); fail-open se a checagem falhar — nunca
+      // trava um login legítimo por causa da própria infra do limite.
+      try {
+        const rl = await apiCall('/api/login-rate', { method: 'POST', body: JSON.stringify({ action: 'check', email: form.email }) });
+        const rlData = rl.ok ? await rl.json().catch(() => null) : null;
+        if (rlData?.bloqueado) {
+          setErro(`Muitas tentativas para este e-mail. Aguarde ${rlData.minutos || 15} minutos e tente novamente.`);
+          setLoading(false);
+          return;
+        }
+      } catch { /* checagem best-effort — nunca bloqueia o login por falha nossa */ }
+
       const { data: signInData, error } = await supabase.auth.signInWithPassword({
         email: form.email, password: form.senha,
-        // Mesmo padrão do cadastro (17/09, achado de auditoria): login era o único fluxo de
-        // auth sem NENHUMA fricção própria (nem Turnstile, nem rate-limit da aplicação) —
-        // só o limite genérico do GoTrue, pensado para abuso de infra, não para travar
-        // tentativa de senha contra uma conta específica (credential-stuffing).
         options: { ...(turnstileConfigurado ? { captchaToken } : {}) },
       });
       if (error) throw error;
@@ -407,8 +419,12 @@ export default function Login() {
     } catch (err) {
       // Falha de LOGIN agora deixa rastro (antes: zero registro — gap da auditoria E1.6).
       registrarEvento('api_erro', { alvo: 'login_falha', detalhe: motivoErroAuth(err) });
+      const credErrada = /invalid login credentials/i.test(err.message || '');
       if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
-      if (/invalid login credentials/i.test(err.message || '')) setCredencialInvalida(true);
+      if (credErrada) setCredencialInvalida(true);
+      // Só SENHA ERRADA conta pro rate-limit — e-mail não confirmado, MFA etc. não são
+      // tentativa de adivinhar senha. Best-effort: nunca atrasa nem quebra o retorno de erro.
+      if (credErrada) apiCall('/api/login-rate', { method: 'POST', body: JSON.stringify({ action: 'registrar_falha', email: form.email }) }).catch(() => {});
       setErro(traduzErroAuth(err.message));
       // Token do Turnstile é de uso único — mesma limpeza do cadastro, senão o próximo clique
       // reenviaria um token já consumido.

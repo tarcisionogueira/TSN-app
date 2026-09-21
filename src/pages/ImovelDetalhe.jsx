@@ -1330,9 +1330,12 @@ export default function ImovelDetalhe() {
     .filter(a => a && a.url && !urlsOficiais.has(a.url)));
   const chavesCap = new Set(anexosCapturados.flatMap(a => [chaveNome(a), a.url]).filter(Boolean));
   // Anexos vasculhados na página do leiloeiro: só o que NÃO é oficial e NÃO repete um documento
-  // já capturado (por nome ou url) — assim cada anexo aparece 1× só.
+  // já capturado (por nome ou url) — assim cada anexo aparece 1× só. Achado do QA de 21/09:
+  // faltava `ehDocArquivo()` aqui — a mesma checagem central que já distingue arquivo real de
+  // página de listagem em todo o resto do arquivo. Sem ela, um scraper mais antigo podia
+  // renderizar uma página do site do leiloeiro (não um documento) como se fosse anexo clicável.
   const anexosLeiloeiro = dedupDocs((Array.isArray(imovel.anexos) ? imovel.anexos : [])
-    .filter(a => a && a.url && !urlsOficiais.has(a.url)
+    .filter(a => a && a.url && ehDocArquivo(a.url) && !urlsOficiais.has(a.url)
       && !(chaveNome(a) && chavesCap.has(chaveNome(a))) && !chavesCap.has(a.url)));
   const temCardDocumentos = !!matriculaHref || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0 || anexosCapturados.length > 0;
   const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', regras_venda: 'Regras de venda', laudo: 'Laudo de avaliação', outro: 'Documento', anexo: 'Anexo' };
