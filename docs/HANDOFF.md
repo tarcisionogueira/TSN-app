@@ -31276,3 +31276,11 @@ necessário; nenhuma das 3 partes tinha assinado ainda no momento da correção.
 - Google G2RS/WebISS.
 - Decidir o teto da PECINI vs. secret da frota.
 - Decidir terminar/remover CREPALDI.
+
+### Mais um item do QA fechado: paginação da Busca sem tie-breaker estável
+
+`Busca.jsx` (modo normal, `.order(coluna,...)`) e a RPC `buscar_por_raio_v2` (modo raio)
+ordenavam só por desconto/valor/data/distância — nenhuma é coluna única, e com o scraper
+inserindo/atualizando o catálogo o tempo todo, dois imóveis podiam empatar e a ORDEM entre
+páginas mudar (lote duplicado ou pulado). Os dois ganharam `id` como desempate final (não
+afeta a ordenação que o cliente escolheu). `npm run build` limpo antes do push.
