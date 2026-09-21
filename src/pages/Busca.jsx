@@ -865,6 +865,9 @@ export default function Busca() {
   })());
   useEffect(() => { try { sessionStorage.setItem('busca_pagina', String(pagina)); } catch {} }, [pagina]);
   const [totalResultados, setTotalResultados] = useState(0);
+  // 21/09: quantos imóveis batem nos MESMOS filtros do raio mas ainda não têm coordenada
+  // (a RPC de raio exige lat/lng, então eles somem da lista sem aviso — ver api/busca-raio.js).
+  const [semGeocodeRaio, setSemGeocodeRaio] = useState(0);
   const POR_PAGINA = 20;
 
   // Radius search state
@@ -1218,7 +1221,7 @@ export default function Busca() {
   const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo, cidadesRaio = null) => {
     const seq = ++buscaSeqRef.current;
     const atual = () => seq === buscaSeqRef.current;
-    setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
+    setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]); setSemGeocodeRaio(0);
 
     const buildQuery = (base) => {
       // Fonte única de filtros (mesma do mapa). No modo raio, cidadesRaio é o conjunto
@@ -1271,6 +1274,9 @@ export default function Busca() {
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
             descontoMin: ajInt.descontoMin,
             prazo: filtrosAtivos.prazo || '',
+            // Habilita o aviso de "imóveis sem geocode" no back — sem isso não dá pra saber
+            // se um imóvel sem coordenada seria desta busca (ver comentário em busca-raio.js).
+            cidadeNormCentro: normCidade(filtrosAtivos.cidades?.[0] || ''),
           },
         };
         const resp = await fetch('/api/busca-raio', {
@@ -1296,6 +1302,7 @@ export default function Busca() {
         const totalEst = apiData.total ?? (offset + dados.length + (dados.length === POR_PAGINA ? 1 : 0));
         if (!atual()) return;   // busca antiga: não publica contagem por cima da atual
         setTotalResultados(totalEst);
+        setSemGeocodeRaio(Number(apiData.semGeocode) || 0);
 
         const novasDistancias = {};
         const mapeados = dados.map(im => {
@@ -2133,6 +2140,14 @@ export default function Busca() {
                   : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
                   : 'Configure os filtros e clique em Buscar Leilões'}
               </p>
+              {/* 21/09: no modo raio, imóvel sem coordenada não entra no cálculo de distância
+                  e sumia da lista sem nenhum aviso (só o mapa avisava). Mesmo espírito do
+                  aviso do mapa (`semCoordenadas`), aplicado à lista. */}
+              {!loading && raioAtivoBusca && semGeocodeRaio > 0 && (
+                <p style={{ margin:'4px 0 0', fontSize:11.5, color:'#b45309', fontWeight:600 }}>
+                  📍 +{semGeocodeRaio} imóvel(is) em {filtrosBusca?.cidades?.[0] || 'a cidade central'} correspondem aos filtros mas ainda não têm coordenada — não entram nesta lista por raio.
+                </p>
+              )}
             </div>
             {/* Alternador Lista / Mapa */}
             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:10, padding:3, gap:2 }}>

@@ -71,29 +71,49 @@ export default async function handler(req) {
   // Filtros atuais: tipos, estado, modalidades, pagamento, valor_min/max, desconto_min.
   // Ao adicionar um filtro novo, inclua-o aqui, na RPC buscar_por_raio_v2 (SQL) e no
   // helper aplicarFiltrosImoveis do front — os três caminhos precisam ficar em sincronia.
-  const rpcRes = await sb('rpc/buscar_por_raio_v2', {
-    method: 'POST',
-    body: JSON.stringify({
-      lat, lng,
-      raio_metros: raioMetros,
-      lim: porPagina,
-      off: offset,
-      tipos_filtro: tipos,
-      // RAIO CRUZA ESTADO (14/09, pedido do dono): este endpoint é usado só pelo modo raio —
-      // travar por UF escondia imóvel do lado da divisa, dentro do raio pedido, só por estar
-      // na UF vizinha da cidade-centro. '' aqui é "sem filtro de UF" pro RPC (buscar_por_raio_v2).
-      estado_filtro: '',
-      modalidades_filtro: modalidades,
-      pagamentos_filtro: pagamentos,
-      valor_min: filtros.valorMin || 0,
-      valor_max: filtros.valorMax || 9999999999,
-      desconto_min: filtros.descontoMin || 0,
-      data_de: dataDe, data_ate: dataAte, sem_data: semData,
-      // 17/09 (achado do dono): faltava — a RPC sempre ordenava por distância e o dropdown
-      // "Menor valor primeiro"/desconto/data não tinha efeito nenhum no modo raio.
-      ordenacao: sortAtivo || 'distancia',
+  const filtrosComuns = {
+    tipos_filtro: tipos,
+    // RAIO CRUZA ESTADO (14/09, pedido do dono): este endpoint é usado só pelo modo raio —
+    // travar por UF escondia imóvel do lado da divisa, dentro do raio pedido, só por estar
+    // na UF vizinha da cidade-centro. '' aqui é "sem filtro de UF" pro RPC (buscar_por_raio_v2).
+    estado_filtro: '',
+    modalidades_filtro: modalidades,
+    pagamentos_filtro: pagamentos,
+    valor_min: filtros.valorMin || 0,
+    valor_max: filtros.valorMax || 9999999999,
+    desconto_min: filtros.descontoMin || 0,
+    data_de: dataDe, data_ate: dataAte, sem_data: semData,
+  };
+
+  // 21/09 (pedido do dono, "busca por raio, qual melhor forma de resolver [o gap de
+  // imóvel sem geocode sumindo sem aviso]"): junto da RPC de resultados, uma 2ª chamada
+  // — só CONTAGEM, sem trazer linha — de quantos imóveis batem nos MESMOS filtros mas
+  // não têm coordenada, restrita à cidade escolhida como centro (`cidadeNormCentro`; sem
+  // ela não dá pra saber se um imóvel sem geocode "seria" desta busca). Em paralelo com a
+  // RPC principal — não atrasa a resposta normal, e se falhar não derruba a busca (só não
+  // mostra o aviso).
+  const cidadeNormCentro = String(filtros.cidadeNormCentro || '').trim();
+  const [rpcRes, semGeocodeRes] = await Promise.all([
+    sb('rpc/buscar_por_raio_v2', {
+      method: 'POST',
+      body: JSON.stringify({
+        lat, lng,
+        raio_metros: raioMetros,
+        lim: porPagina,
+        off: offset,
+        ...filtrosComuns,
+        // 17/09 (achado do dono): faltava — a RPC sempre ordenava por distância e o dropdown
+        // "Menor valor primeiro"/desconto/data não tinha efeito nenhum no modo raio.
+        ordenacao: sortAtivo || 'distancia',
+      }),
     }),
-  });
+    cidadeNormCentro
+      ? sb('rpc/buscar_por_raio_v2_sem_geocode_count', {
+          method: 'POST',
+          body: JSON.stringify({ cidade_norm_filtro: cidadeNormCentro, ...filtrosComuns }),
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
   if (!rpcRes.ok) {
     const err = await rpcRes.text().catch(() => '');
@@ -110,10 +130,18 @@ export default async function handler(req) {
   // total vem repetido em cada linha (window-less count via subselect); 0 linhas → 0
   const total = (dados && dados.length > 0 && dados[0].total != null) ? Number(dados[0].total) : 0;
 
+  // Falha nesta 2ª chamada não é erro da busca — só fica sem o aviso (0).
+  let semGeocode = 0;
+  if (semGeocodeRes && semGeocodeRes.ok) {
+    const val = await semGeocodeRes.json().catch(() => null);
+    semGeocode = typeof val === 'number' ? val : Number(val ?? 0) || 0;
+  }
+
   return new Response(JSON.stringify({
     resultados: dados || [],
     pagina,
     porPagina,
     total,
+    semGeocode,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
