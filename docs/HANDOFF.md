@@ -31653,3 +31653,60 @@ antecipação foi negada). **Não tenho credencial/API do Asaas neste sandbox pr
 o saldo "a receber" ao vivo** — o dono confirma isso direto no painel Asaas
 (Extrato → A receber), que é onde esse valor aparece pendente até a data de liquidação da
 própria cobrança.
+
+### PENDÊNCIA PRA AMANHÃ: MP — página "Credenciais de produção" (dono resolve)
+
+A página "Credenciais de produção" do painel do Mercado Pago segue com erro do lado deles
+(código `DXT20-TXHQOBS3LNIJ`, achado em 21/09) — não é algo do nosso código. **Ação do dono
+amanhã**: abrir de novo em `Suas integrações` → a aplicação de produção → **Credenciais de
+produção**; se tiver carregado, ver o que a página realmente mostra (ver a ressalva abaixo
+antes de assumir que existe "restringir escopo" pra fazer) e me avisar o que apareceu — eu
+sigo os passos daí.
+
+⚠️ **Ressalva importante, achada ao pesquisar hoje (21/09) — pode fechar o item sem ação**:
+a doc oficial do MP (OAuth) mostra que o campo `scope` só existe no fluxo OAuth de
+aplicações MARKETPLACE (quando um vendedor autoriza um app de TERCEIRO, tipo "conceder
+permissão a"). Nossa integração é DIRETA — usamos o Access Token de produção da própria
+conta (`MP_ACCESS_TOKEN`), não um app OAuth de terceiro — e pelo que a documentação mostra,
+esse tipo de credencial não tem um "escopo" restringível via painel ou API (ela já É a conta,
+com tudo que a conta pode fazer). Ou seja: é bem possível que a página, quando carregar,
+mostre só Public Key + Access Token (visualizar/regenerar) e talvez segredo de webhook — sem
+nenhum seletor de permissão pra restringir, porque essa opção não existe pra este tipo de
+integração. **Se for isso que aparecer, o item deve ser fechado como "não aplicável a
+integração direta"** em vez de ficar como pendência aberta pra sempre — não fica bloqueado
+esperando um recurso que o MP não oferece pra este tipo de credencial. Só decido isso com o
+dono olhando a tela de verdade (não consigo abrir `mercadopago.com.br` daqui — bloqueio de
+rede do sandbox, mesmo padrão dos outros sites externos).
+
+### Pedido do dono: dá pra conectar Asaas/MP automaticamente pra essas informações? — pesquisado, plano pra amanhã
+
+**Resposta curta: parcialmente já dá, e o resto é possível construir — mas nenhum dos dois eu
+implementei hoje, porque faltava confirmar detalhe antes de escrever código com nome de campo
+"chutado" (a forma nº 10 do topo deste HANDOFF: número plausível medindo a coisa errada).**
+
+**O que já está conectado, hoje**: as duas chaves (`ASAAS_API_KEY`, `MP_ACCESS_TOKEN`) já
+vivem na Vercel e já são usadas por `api/asaas.js`, `api/mp.js`, `api/reconciliar-asaas-cron.js`
+e outros — ou seja, o SERVIDOR já fala com as duas APIs o tempo todo. Não tenho essas chaves
+neste sandbox de desenvolvimento (correto, por segurança — só a Vercel em produção tem), então
+não dá pra eu consultar ao vivo DAQUI, mas o CÓDIGO em produção pode.
+
+**O que falta, pra cada uma:**
+- **Asaas — status "a receber" por cobrança**: a API do Asaas devolve (confirmado pela doc
+  oficial, `docs.asaas.com`) os campos `creditDate` e `estimatedCreditDate` no objeto de
+  cobrança — exatamente o tipo de dado que resolveria "confirma se está a receber e quando
+  libera" sem abrir o painel. **Não escrevi código pra isso ainda** porque não consegui abrir
+  a doc completa daqui (`docs.asaas.com` bloqueado neste sandbox, mesmo padrão dos outros
+  sites externos) pra confirmar o significado exato de cada campo antes de interpretar —
+  prefiro ler a resposta REAL de `GET /v3/payments/{id}` uma vez (script simples, roda com a
+  chave que já existe na Vercel) e só then decidir o que cada campo quer dizer, em vez de
+  supor. **Proposta pra amanhã**: criar um endpoint admin (`api/asaas-consultar-cobranca.js`,
+  protegido por auth de admin) que faz esse GET e devolve o JSON cru pra eu ler uma vez —
+  depois vira painel permanente se fizer sentido.
+- **MP — escopo/segurança da credencial**: ver a ressalva acima — pode ser que não exista
+  "escopo" pra consultar via API neste tipo de integração (só existe pra OAuth de terceiro).
+  Se for esse o caso, não tem o que "conectar automaticamente" aqui — o item se resolve
+  sozinho ao confirmar que a pergunta não se aplica.
+
+**Combinado pra amanhã**: dono confirma o que a tela do MP mostra (ou eu confirmo, se a rede
+tiver melhorado); eu confirmo os campos reais do Asaas com uma chamada de teste; daí sim decido
+se vale um painel automático ou se a resposta de hoje já fecha as duas pendências.
