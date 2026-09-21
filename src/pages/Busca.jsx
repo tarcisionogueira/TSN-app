@@ -1338,6 +1338,34 @@ export default function Busca() {
         setDistancias(novasDistancias);
         setResultados(mapeados);
         setLoading(false);
+
+        // Achado do QA de 21/09: este `return` saía ANTES do histórico/alerta de e-mail
+        // abaixo (só rodavam no modo normal) — quem só busca por raio nunca entrava em
+        // `busca_historico` (invisível em telemetria) e nunca tinha `alertas_email`
+        // atualizado com o recorte geográfico que de fato usou.
+        if (!soLeitura) try {
+          const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
+          supabase.from('busca_historico').insert({
+            user_id: user?.id || null, session_id: sid, filtros: { ...filtrosAtivos, raioKm: raioKmBusca, raioLat: centro?.lat, raioLng: centro?.lng }, // padrao-ok: telemetria de QUEM navega, e o bloco já é pulado sob suporte (!soLeitura)
+            resultados_count: totalEst, cidade: filtrosAtivos.cidades?.join(', ') || null,
+            estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
+            valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
+            valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
+            desconto_min: filtrosAtivos.descontoMin ? Number(filtrosAtivos.descontoMin) : null,
+            pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
+            sort_usado: sortAtivo,
+          }).then(() => {}).catch(() => {});
+        } catch (_) {}
+
+        if (!soLeitura && user?.id && centro) {
+          try {
+            supabase.from('alertas_email').upsert({
+              user_id: user.id, filtros: { ...filtrosAtivos, raioKm: raioKmBusca, raioLat: centro.lat, raioLng: centro.lng }, // padrao-ok: bloco pulado sob suporte (!soLeitura); alerta é de quem navega
+              descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipos?.join(', ')].filter(Boolean).join(' · ') || `Raio de ${raioKmBusca}km`,
+              ativo: true,
+            }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
+          } catch (_) {}
+        }
         return;
       }
 
@@ -1345,7 +1373,7 @@ export default function Busca() {
       let dbData, dbError, totalBusca = 0;
       {
         const offset = (paginaAlvo - 1) * POR_PAGINA;
-        const [{ count }, { data, error }] = await Promise.all([
+        const [{ count, error: countError }, { data, error }] = await Promise.all([
           // count 'estimated' (planner): exato p/ conjuntos pequenos, estimativa barata p/
           // grandes — evita um COUNT(*) cheio do catálogo a cada busca (escala com 10k users).
           buildQuery(supabase.from('imoveis_leilao').select('id', { count: 'estimated', head: true })),
@@ -1355,7 +1383,18 @@ export default function Busca() {
         ]);
         dbData = data;
         dbError = error;
-        totalBusca = count || 0; // valor REAL desta busca (o estado totalResultados é assíncrono → stale no log)
+        // Achado do QA de 21/09: só o erro da consulta de DADOS era checado — se só a de
+        // CONTAGEM falhasse (RLS, timeout no head:true), `count` saía null/undefined e
+        // `totalBusca` virava 0 mesmo com `dbData` cheio de resultados reais. O empty-state
+        // ("Nenhum resultado", gated por totalResultados===0) e a grade de cards (gated por
+        // resultadosFiltrados.length>0) usam sinais DIFERENTES — sem este fallback eles podiam
+        // discordar e mostrar os dois ao mesmo tempo pro cliente.
+        if (countError) {
+          registrarEvento('api_erro', { alvo: 'busca_contagem', detalhe: String(countError.message || countError.code || 'erro').slice(0, 120) });
+          totalBusca = data ? (offset + data.length + (data.length === POR_PAGINA ? 1 : 0)) : 0;
+        } else {
+          totalBusca = count || 0; // valor REAL desta busca (o estado totalResultados é assíncrono → stale no log)
+        }
         if (!atual()) return;   // busca antiga: não publica contagem por cima da atual
         setTotalResultados(totalBusca);
       }

@@ -1108,12 +1108,23 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
       patch.viavel = (1 - vmin / avalLaudo) >= 0.3;
       patch.score_viabilidade = Math.min(100, Math.round((1 - vmin / avalLaudo) * 150));
     }
-    try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }); } catch { /* best-effort */ }
+    // Achado do QA de 21/09: o PATCH não conferia `.ok` — um 400/409/500 (ex.: coluna
+    // renomeada) seguia SEM erro visível e a anomalia era gravada dizendo "corrigido para esse
+    // valor" mesmo que o catálogo não tivesse mudado. Todo relatório futuro deste imóvel
+    // herdaria o valor errado, com o log dizendo que já estava certo.
+    let patchOk = false;
     try {
-      await registrarAnomalia('avaliacao_diverge_laudo', im.fonte, imovelId, 'valor_avaliacao', faltava
-        ? `Card sem avaliação; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}. Preenchido a partir dele.`
-        : `Card mostrava R$${Math.round(avalCard)}; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para esse valor — é a fonte mais autoritativa disponível para este campo.`);
-    } catch { /* best-effort */ }
+      const rPatch = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+      patchOk = rPatch.ok;
+      if (!rPatch.ok) console.error(`[laudo-avaliacao] PATCH do catálogo falhou (imóvel ${imovelId}): HTTP ${rPatch.status}`);
+    } catch (e) { console.error(`[laudo-avaliacao] PATCH do catálogo lançou (imóvel ${imovelId}):`, e?.message || e); }
+    if (patchOk) {
+      try {
+        await registrarAnomalia('avaliacao_diverge_laudo', im.fonte, imovelId, 'valor_avaliacao', faltava
+          ? `Card sem avaliação; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}. Preenchido a partir dele.`
+          : `Card mostrava R$${Math.round(avalCard)}; o ${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)} (${Math.round((avalLaudo - avalCard) / avalCard * 100)}%). Corrigido para esse valor — é a fonte mais autoritativa disponível para este campo.`);
+      } catch { /* best-effort */ }
+    }
   }
 
   // Log INCONDICIONAL (mesmo princípio de [endereco-busca]/[metragem-doc] acima): sem isto,
@@ -1227,7 +1238,13 @@ async function garantirValores(imovelId, deadline) {
     patch.score_viabilidade = Math.min(100, Math.round((1 - vmin / aval) * 150));
   }
   if (Object.keys(patch).length) {
-    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+    // Achado do QA de 21/09: mesmo bug do PATCH de lerLaudoAvaliacao — sem checar `.ok`, uma
+    // falha de escrita fica invisível e o catálogo (fonte de verdade pra TODO relatório futuro
+    // deste imóvel) não recebe o valor confirmado no edital/matrícula.
+    try {
+      const rPatch = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+      if (!rPatch.ok) console.error(`[garantirValores] PATCH do catálogo falhou (imóvel ${imovelId}): HTTP ${rPatch.status}`);
+    } catch (e) { console.error(`[garantirValores] PATCH do catálogo lançou (imóvel ${imovelId}):`, e?.message || e); }
   }
   if (aval <= 0) await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não confirmada no edital/matrícula/anexos (${usei || 'sem url'}).`);
   if (vmin <= 0) await registrarAnomalia('valor_minimo_ausente', im.fonte, imovelId, 'valor_minimo', `Lance mínimo não confirmado no edital/matrícula/anexos (${usei || 'sem url'}).`);

@@ -1845,9 +1845,14 @@ export default function ImovelDetalhe() {
                               : <>Quando o leiloeiro ainda não publicou o arquivo no endereço padrão, o link abre uma página de erro — <b>não é um problema do seu acesso</b>. Você pode obter a matrícula direto na página do imóvel e anexá-la aqui.</>}
                           </p>
                           <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '9px 12px' }}>
+                            {/* Achado do QA de 21/09: a fila de 30min (`enfileirar`, verificar-doc.js) só existe
+                                pra CEF — pra ~30 leiloeiros não-CEF `busca` vem null e esta mensagem prometia uma
+                                busca que nunca foi acionada. Diferencia pelo mesmo `isCef` já usado no resto do arquivo. */}
                             {matModal.busca === 'esgotada'
                               ? <>Nossa busca automática já vasculhou a página do imóvel no site do leiloeiro e não localizou o arquivo — neste caso, só o próprio leiloeiro pode fornecê-lo.</>
-                              : <><b>O que já estamos fazendo:</b> acionamos a busca automática, que procura a matrícula dentro da própria página do imóvel. Se ela for localizada, o documento aparece nesta ficha em “Documentos do lote” (em geral, em até 30 minutos).</>}
+                              : (imovel?.fonte === 'CEF' || imovel?.fonte === 'caixa')
+                                ? <><b>O que já estamos fazendo:</b> acionamos a busca automática, que procura a matrícula dentro da própria página do imóvel. Se ela for localizada, o documento aparece nesta ficha em “Documentos do lote” (em geral, em até 30 minutos).</>
+                                : <><b>O que já estamos fazendo:</b> este leiloeiro não tem busca automática de 30 minutos — nosso enriquecimento periódico revisita a página do lote e atualiza os documentos quando encontra algo novo, o que pode levar mais tempo. Enquanto isso, você pode anexar a matrícula manualmente abaixo.</>}
                           </p>
                           <div style={{ fontWeight: 800, fontSize: 13.5, color: '#1e293b', marginBottom: 8 }}>Como obter agora (leva ~2 minutos):</div>
                           <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 13, color: '#334155', lineHeight: 1.7 }}>
