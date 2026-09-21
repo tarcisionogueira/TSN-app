@@ -495,7 +495,8 @@ export default function ContratoLink() {
               if (ehPdfTxt) return <><iframe src={contrato.arquivo_url} title="Documento" style={{ width:'100%', height:'72vh', border:'1px solid #1e293b', borderRadius:10, background:'#fff' }} />{link}</>;
               return <div>{link}</div>;
             })() : (
-              <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1', background:'#0f172a', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
+              // Mesmo pedido do dono (21/09) da tela de assinatura: texto em fundo branco.
+              <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#1e293b', background:'#ffffff', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
                 {contrato.conteudo}
               </div>
             )}
@@ -652,9 +653,12 @@ export default function ContratoLink() {
               </p>
             </div>
           ) : (
+            // Pedido do dono (21/09): o TEXTO do contrato fica com fundo branco, como uma
+            // folha — o resto da tela segue no tema escuro da marca. Antes usava o mesmo
+            // fundo escuro do resto da página, difícil de ler como se fosse um documento.
             <div style={{
-              whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1',
-              background:'#111827', borderRadius:12, padding:'20px 22px',
+              whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#1e293b',
+              background:'#ffffff', borderRadius:12, padding:'20px 22px',
               border:'1px solid #111111', minHeight:200,
             }}>
               {contrato.conteudo}

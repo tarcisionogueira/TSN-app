@@ -14,6 +14,15 @@
  * Medido em 28/08: a página servia o cartão certo (conferido no ar) e o WhatsApp mostrava o
  * genérico. Robô não executa JavaScript, então o `location.replace` abaixo leva a PESSOA e
  * deixa o robô com as tags. Sem JS (raro), o link "continuar" no corpo resolve.
+ *
+ * ⚠️ 21/09 — O REDIRECIONAMENTO FICOU MUDO PARA HUMANOS TAMBÉM, e por um motivo diferente do
+ * de cima: o script vivia INLINE, e a CSP global (vercel.json) só libera inline com hash
+ * exato — os 3 hashes fixos são do index.html; o conteúdo daqui muda a cada request (token
+ * diferente), nunca bate hash nenhum, e o navegador bloqueia a execução em silêncio. O visitante
+ * ficava preso em "Redirecionando…", só o link manual "continuar" funcionando — em qualquer link
+ * compartilhado (contrato, testemunha, imóvel, curso/ebook, aula, indicação), achado ao vivo no
+ * link de assinatura de contrato recém-gerado. Movido para `api/og-redirect.js`, servido como
+ * ARQUIVO (`script-src 'self'` já cobre, sem precisar de hash).
  *   /c/<token>    → "Assinatura de documento" + título do contrato (destino /#/c/<token>)
  *   /t/<token>    → assinatura da TESTEMUNHA                        (destino /#/t/<token>)
  *   /i/<id>       → imóvel: título, cidade/UF, lance e FOTO         (destino /#/imovel/<id>)
@@ -203,23 +212,13 @@ export default async function handler(req, res) {
 <meta name="twitter:description" content="${esc(desc)}"/>
 <meta name="twitter:image" content="${esc(img)}"/>
 <meta name="robots" content="noindex"/>
-<script>${tipo === 'imovel' && idOk ? `
-// Quem tem sessão válida do Supabase (chave sb-<ref>-auth-token no localStorage) vai para a
-// tela COMPLETA do app; os demais para a página pública do lote. Sessão EXPIRADA conta como
-// visitante — mandar para o app só para cair no teaser é um passo a mais sem nada em troca.
-(function () {
-  var app = ${JSON.stringify(`/#/imovel/${id}`)}, publico = ${JSON.stringify(destino)}, logado = false;
-  try {
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (!k || !/^sb-.+-auth-token$/.test(k)) continue;
-      var s = JSON.parse(localStorage.getItem(k) || 'null');
-      var exp = s && (s.expires_at || (s.currentSession && s.currentSession.expires_at));
-      if (s && (!exp || Number(exp) * 1000 > Date.now())) { logado = true; break; }
-    }
-  } catch (e) { /* storage bloqueado (aba privada): trata como visitante */ }
-  location.replace(logado ? app : publico);
-})();` : `location.replace(${JSON.stringify(destino)});`}</script>
+<script src="/api/og-redirect.js?${
+  // Quem tem sessão válida do Supabase (chave sb-<ref>-auth-token no localStorage) vai para a
+  // tela COMPLETA do app; os demais para a página pública do lote. Sessão EXPIRADA conta como
+  // visitante — mandar para o app só para cair no teaser é um passo a mais sem nada em troca.
+  // Script EXTERNO de propósito (21/09) — ver comentário no topo do arquivo.
+  new URLSearchParams({ publico: destino, ...(tipo === 'imovel' && idOk ? { app: `/#/imovel/${id}` } : {}) }).toString()
+}"></script>
 </head><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155">
 Redirecionando… <a href="${esc(destino)}" style="color:#0D63DB;font-weight:700">continuar</a>
 </body></html>`;
