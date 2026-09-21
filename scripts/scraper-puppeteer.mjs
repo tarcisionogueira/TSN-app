@@ -999,6 +999,17 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       let r1 = await buscar(1, FIELDS_DOCS);
       if (!r1.arr || !r1.arr.length) { if (r1.motivo) motivosPag1.push(`fieldList completo: ${r1.motivo}`); fields = FIELDS_BASE; r1 = await buscar(1, FIELDS_BASE); } // fallback seguro
       if ((!r1.arr || !r1.arr.length) && lojas) { if (r1.motivo) motivosPag1.push(`fieldList base: ${r1.motivo}`); fields = ''; r1 = await buscar(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
+      // 21/09 (achado do dono rodando de novo em produção): o "Failed to fetch" do SOLD/SBID9/
+      // CREPALDI em 20-21/09 é erro de REDE (não HTTP), e as 3 tentativas acima acontecem em
+      // sequência imediata — não dão tempo de um blip transitório de rede passar. Uma última
+      // tentativa depois de uma pausa curta é a diferença entre zerar o dia inteiro (o cron só
+      // roda 1x/dia) e um blip de segundos que se resolveria sozinho.
+      if ((!r1.arr || !r1.arr.length) && /^erro:/.test(r1.motivo || '')) {
+        await new Promise(res => setTimeout(res, 4000));
+        const rRetry = await buscar(1, fields);
+        if (rRetry.arr && rRetry.arr.length) { r1 = rRetry; motivosPag1.push('recuperado após pausa de 4s'); }
+        else if (rRetry.motivo) motivosPag1.push(`após pausa de 4s: ${rRetry.motivo}`);
+      }
       if ((!r1.arr || !r1.arr.length) && r1.motivo) motivosPag1.push(`última tentativa: ${r1.motivo}`);
       const first = r1.arr;
       const all = [...(first || [])];
