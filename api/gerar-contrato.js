@@ -141,7 +141,15 @@ export default async function handler(req, res) {
 
       const base = {
         titulo: tituloFinal,
-        conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 20000) : null,
+        // Achado ao vivo do dono (21/09): contrato de locação comercial cortado no MEIO de uma
+        // cláusula ("...ocultação de patrimônio ilícito; (" — sem o item (vi) e tudo depois).
+        // `sanitizeText` existe para limitar TEXTO LIVRE curto indo pra prompt de IA (padrão
+        // 5000); aqui limitava o CONTRATO INTEIRO a 20000 — baixo demais pra um documento
+        // jurídico completo, e o corte é SILENCIOSO: o cliente assina um contrato incompleto
+        // sem saber. Mesma classe de bug já corrigida nas descrições de leilão (teto baixo
+        // demais tratado como se fosse a expectativa real, não rede de segurança). `conteudo`
+        // é `text` no banco, sem limite — o teto novo é só defesa contra um paste patológico.
+        conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 500000) : null,
         arquivo_url: urlArquivoSegura,
         arquivo_nome: arquivoNome ? sanitizeText(arquivoNome, 200) : null,
         tipo_contrato: tipo || 'servico',

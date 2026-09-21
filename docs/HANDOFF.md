@@ -31220,6 +31220,30 @@ Também a pedido do dono: o bloco de TEXTO puro do contrato (`ContratoLink.jsx`,
 arquivo anexado) passa a ter fundo BRANCO, como uma folha — o resto da tela segue no tema
 escuro da marca. Aplicado nas duas telas (assinatura e leitura pós-assinatura).
 
+### Achado ao vivo do dono (2º do dia): contrato cortado no MEIO de uma cláusula
+
+Só depois do fundo branco (acima) o corte ficou visível de verdade — texto terminando em
+"...ocultação de patrimônio ilícito; (" no meio do item (v), sem o (vi) nem nada depois.
+Medido no banco: `length(conteudo) = 20000` EXATO nos contratos recentes (e num de 04/08
+também) — assinatura inequívoca de corte por `.slice()`, não falha de geração da IA.
+
+**Causa raiz**: `api/gerar-contrato.js:144` — `sanitizeText(conteudoDireto, 20000)`.
+`sanitizeText` existe pra limitar texto CURTO indo pra prompt de IA (padrão 5000); aqui
+limitava o CONTRATO INTEIRO, e o corte é SILENCIOSO — nem erro, nem aviso, o cliente recebe
+o link e assina um documento juridicamente incompleto sem saber. Mesma classe de bug já
+corrigida nas descrições de leilão (17-20/09): teto baixo demais tratado como expectativa
+real em vez de rede de segurança. `contratos_link.conteudo` é `text` no banco, sem limite.
+
+**Corrigido**: teto subido para 500000 (o texto de sanitização — controles ASCII, marcadores
+de prompt-injection — continua rodando; só o `.slice()` deixou de ser o gargalo real).
+`npm run build` limpo.
+
+**Não recuperável**: os contratos JÁ criados com texto cortado (inclusive o que o dono estava
+testando ao vivo, `503b82b90d6c75...` e as 2 outras linhas — 1 por signatário — da mesma
+geração) perderam o texto depois do corte NO SERVIDOR, antes de gravar; o texto completo não
+sobrevive em lugar nenhum do banco. Precisam ser gerados de novo (o fix já vale pro próximo
+"Gerar contrato" — não precisa de mais nenhuma ação de código).
+
 **Pendências que continuam só do DONO** (nenhuma mexida nesta sessão — são decisão/painel):
 nomear um analista (`role='analista'` segue 0 ativos); escopo mínimo nas chaves Asaas/Mercado
 Pago; Google G2RS/WebISS; decidir o teto da PECINI vs. secret da frota; decidir
