@@ -303,6 +303,106 @@ menores) — só documentado, dono pediu para não corrigir agora, ver seção p
 
 ---
 
+## 🛠️ SESSÃO 26 · PARTE 3 (20/09, noite) — APURAÇÃO DE LEILÃO (CEF/Bright Data + filtro na SQL), CAMPOS DO VEÍCULO SUPORTE, RANKING CNJ INVESTIGADO (não implementado) E CRIAR CONTRATO (e-mail opcional, mais anexos, contrato maior, IA lê imagem)
+
+Sessão de pedidos pontuais do dono, cada um investigado/testado ao vivo antes de mexer — sem
+supor nada. Cinco frentes, nenhuma dependendo da outra.
+
+### 1. Apuração de resultado do leilão — fontes menores paravam de ser tentadas + CEF reconfirmado bloqueado
+
+Pedido: "organize para que todos os leiloeiros se apliquem essa identificação dos lotes que não
+tiveram lance". Achado: `FONTES_APURACAO_NAO_CONFIAVEL` (PESTANA/EDITAL_DJEN/SODRE) era
+filtrada só em JS, **depois** do `LIMIT 250` da consulta SQL já ter sido consumido — PESTANA
+(587 candidatos) e CEF (587 candidatos, achado nesta sessão) enchiam o lote diário sozinhos,
+sobrando zero vaga pra SATO/CALIL/KRONLEILOES/LEILOTECH/FRAZAO/TORRES3/VIP/SUPERBID/APICE/
+GRUPOLANCE/HASTAPUBLICA/LANCEJA/LEFFA/AGOSTINHO/CERULI/RIGOLONLEILOES/ROCHALEILOES/
+SIMONLEILOES/FRANCOLEILOES — todas 100% "não apurado", zero tentativas. Corrigido: exclusão
+movida pra DENTRO da query (`fonte=not.in.(...)`, PostgREST) em `api/apurar-resultado-leilao-
+cron.js`, liberando o `LIMIT` pra quem pode ser lido de verdade.
+
+**CEF/Caixa — testado 2x, conclusão mudou entre as duas.** 1ª hipótese: seria só orçamento — a
+sub-cota `geral` do Bright Data estava travada em 40/semana desde 03/09 (quando só tinha 2
+consumidores; este cron virou o 3º sem rebalancear), enquanto o teto GLOBAL (720/semana) tinha
+210 créditos já pagos e ociosos. Subida pra 150/semana (`brightdata_sobe_teto_geral_
+apuracao.sql`). Testado de novo com a cota disponível: `via:"fail"`, `html_len:0` — o Bright
+Data CHEGOU à Caixa e voltou vazio mesmo assim. **Não é mais orçamento**: `venda-imoveis.caixa.
+gov.br` é ASP clássico, provável dependência de sessão (cookie de navegação prévia pela busca)
+que nem proxy residencial contorna. CEF continua em `FONTES_APURACAO_NAO_CONFIAVEL` — motivo
+documentado no código. A sub-cota maior continua valendo pros outros 2 consumidores
+(`enriquecer-datas-cron.js`, `enriquecer-backfill-cron.js`), que ganharam orçamento de verdade.
+
+### 2. Campos do veículo SUPORTE — marca "MMC" não reconhecida, modelo nunca extraído, chassi/RENAVAM/placa/cor jogados fora
+
+Achado real, com print do dono: lote "CAMINHONE MMC/L200 TRITON 3.2 D" (Rodrigo Collyer
+Leilões) mostrava chassi/RENAVAM/placa na página do leiloeiro e nada capturado por nós.
+Investigado ao vivo (fetch real da página de detalhe): o bloco "Descrição" da página traz tudo
+estruturado — `"...placa HKP6077, chassi 93XJRKB8T9C808991, RENAVAM 00121309878, cor
+preta..."`. Corrigido em `scripts/scraper-puppeteer.mjs`:
+- `'mmc'` adicionado a `MARCAS_VEICULO` (sigla oficial DETRAN/CRLV de Mitsubishi — sem ela todo
+  Mitsubishi cadastrado como "MMC/&lt;modelo&gt;" saía com marca `null`).
+- `modelo` agora extraído pela convenção DETRAN "MARCA/MODELO" (`extrairModeloPorBarra`) — antes
+  era sempre `null`, hardcoded.
+- chassi/RENAVAM/placa/cor extraídos SÓ do bloco "Descrição" da página de detalhe
+  (`extrairCamposDescricao`, ~400 chars após o rótulo) — escopo deliberadamente estreito, nunca
+  a página inteira (mesmo cuidado já documentado contra menu/rodapé pra marca/ano/placa).
+- Migration `veiculos_leilao_chassi_renavam.sql` (colunas novas; placa/cor já existiam).
+- `VeiculoDetalhe.jsx` já sabia mostrar marca/modelo/placa condicionalmente (por isso o lote do
+  print aparecia só com o título cru — os dados nunca tinham sido capturados); ganhou também
+  chassi/RENAVAM.
+- **Só vale pra lotes capturados na PRÓXIMA rodada do scraper** — não fiz recaptura retroativa
+  do lote específico do print.
+
+### 3. Ranking CNJ sem nome de banco — investigado, NÃO implementado (decisão do dono: manter como está)
+
+Pedido: descobrir automaticamente quais financeiras têm mais processos de busca e apreensão de
+veículo, sem digitar o nome do banco. Decisão do dono nas perguntas de escopo: descoberta
+automática (sem lista fixa) + execução interativa (não virar job em segundo plano). Testado ao
+vivo se a API pública do DataJud aceita agregação (`terms` em `partes.nome`, três variantes:
+nested+keyword, flat+keyword, flat sem keyword) — **as três voltam `buckets: []` sem erro**, e a
+introspecção do mapping real (`_mapping`) é bloqueada por permissão da própria chave pública
+(`security_exception`). Sem agregação, um ranking confiável exigiria paginar TODOS os processos
+(só o TJSP tem 10.000+ batendo no filtro) — inviável de forma interativa e pouco confiável por
+amostragem pequena. **Reportado ao dono, que decidiu manter a busca por banco nomeado como já
+existia** (`api/cnj-retomada-veiculos.js`/`src/pages/RetomadaVeiculos.jsx`, sem mudança).
+
+### 4. Criar Contrato — quatro pedidos na mesma tela, todos em produção
+
+- **E-mail deixou de ser obrigatório.** O dono reportou "não consigo anexar arquivos" — causa
+  real era outra: a mesma tela exige e-mail válido de um assinante pra liberar "Próximo", bem
+  embaixo da seção de anexos; o bloqueio foi confundido com falha no anexo. Pedido explícito:
+  "o e-mail não ser item obrigatório e eu poder copiar o link e enviar para que as partes
+  assinem na tela do celular". `signatarios` agora aceita NOME ou e-mail (antes exigia e-mail),
+  em `src/pages/CriarContrato.jsx` e `api/gerar-contrato.js`. O backend já gerava link/token por
+  assinante e a tela final já sabia mostrar "Copiar link" — só faltava não exigir e-mail pra
+  chegar lá. Migration `contratos_link_assinante_nome.sql`: sem ela, vários assinantes sem
+  e-mail teriam `assinante_email=null` e o casamento nome↔linha (antes feito por e-mail) sempre
+  devolveria o PRIMEIRO sem e-mail pra todo mundo — identidade trocada no link. `enviarEmail`
+  só é chamado pra quem tem e-mail (antes chamaria com `to:null` pra todo mundo sem e-mail).
+- **Teto de anexos de referência: 5 → 10 arquivos**, mais o que chega à IA: `DOCS_MAX`
+  (`api/gerar-contrato-ia.js`) 24.000 → 60.000 caracteres — 24k já cortava o conteúdo combinado
+  de vários anexos antes do teto de arquivos entrar em jogo. Corte agora é DITO
+  (`documentosTruncados` na resposta, avisado na tela) — antes era silencioso. Legenda "5 MB
+  cada" removida (nunca foi de fato checada no código — não criei checagem nova que pudesse
+  rejeitar arquivo que sempre funcionou).
+- **Contrato gerado maior: max_tokens 8.000 → 32.000** (pedido: "cobrir contratos complexos",
+  ~100 mil caracteres). MEDIDO ao vivo, não estimado, em duas rodadas: 24.000 tokens → 75.467
+  caracteres em 173s; 32.000 tokens → **98.428 caracteres em 236s** — folga real de 64s até o
+  maxDuration de 300s (teto de PLATAFORMA da Vercel; nenhuma rota deste projeto passa disso).
+  `retries` 1→0 (um retry depois de gastar a maior parte do orçamento em 32k tokens só trocaria
+  "truncado" por "estourou o teto e nem respondeu").
+- **IA lê imagem anexada (CNH, comprovante, captura de tela) sem OCR.** O dono viu "não
+  consegui ler: Screenshot_1.png ... é imagem" ao anexar 7 fotos (2 capturas + 5 do WhatsApp,
+  incluindo CNH) e pediu a leitura via IA. A própria Claude enxerga imagem nativamente — sem
+  biblioteca de OCR. `src/utils/extrairTextoDoc.js`: JPG/PNG/WebP viram base64
+  (`extrairImagemBase64`), redimensionados pra 1568px de lado maior antes de codificar (própria
+  recomendação da Anthropic pra entendimento de imagem — evita também estourar o teto de corpo
+  de função da Vercel, 4,5 MB, não configurável). `api/gerar-contrato-ia.js` monta o `content`
+  da mensagem com cada imagem rotulada pelo nome do arquivo, ANTES do texto que a referencia.
+  HEIC continua sem suporte (decodificação inconsistente entre navegadores) — motivo dito, nunca
+  silêncio.
+
+---
+
 ## 🛠️ SESSÃO 26 · PARTE 2 (20/09, tarde) — DONO AUTORIZOU "RESOLVA": BACKLOG INTEIRO DA PARTE 1 FECHADO
 
 Continuação direta da sessão anterior (ver Parte 1 logo abaixo). O dono leu o relatório e
