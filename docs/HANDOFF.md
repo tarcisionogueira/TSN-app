@@ -31436,3 +31436,20 @@ conforme o pagamento MUDA de estado de verdade (criado → aprovado) — a uniqu
 o estado ATUAL via API do MP, tem idempotência própria via `webhook_eventos_processados`) —
 é ali que mora a proteção, não numa constraint na fila. `npm run build` limpo, migração
 aplicada, smoke test de insert/select/delete feito direto no banco antes do commit.
+
+> ⚠️ **PENDENTE — verificar na próxima sessão (agendei um lembrete de sessão pra 22/09 08h07,
+> mas ele morre se esta sessão cair antes de disparar; se não vier nada, é ISSO que
+> aconteceu — confira aqui manualmente)**: esta é a PRIMEIRA execução real do
+> `processar-fila-webhook-mp-cron` em produção, nunca testado contra tráfego real do MP.
+> Rodar:
+> ```sql
+> select count(*), status from mp_webhook_fila group by status;
+> select id, mp_topic, mp_data_id, status, tentativas, ultimo_erro, criado_em, processado_em
+>   from mp_webhook_fila order by criado_em desc limit 20;
+> ```
+> Verde = linhas chegando e virando `processado` minutos depois de `criado_em` (prova que o
+> cron de fato roda a cada minuto e drena). Sinal de alerta = qualquer linha `falhou` (ler o
+> `ultimo_erro`) ou linhas `pendente` acumulando sem `processado_em` avançar (cron pode não
+> estar disparando — conferir se `/api/processar-fila-webhook-mp-cron` está registrado nos
+> Cron Jobs do projeto na Vercel). Zero linhas na tabela é normal se não houve pagamento MP
+> real desde o deploy — não é falha, só ausência de tráfego pra testar.
