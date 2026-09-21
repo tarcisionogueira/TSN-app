@@ -31536,3 +31536,32 @@ public.mp_prazo_liberacao_diagnostico();` (reconfere os últimos 90 dias sempre 
 nova entrada `mp_liberacao_atrasada` em `qa_invariantes()` (alerta se o MP algum dia passar a
 segurar > 1 dia — mudança de política de risco pra esta conta seria a explicação mais
 provável, e agora tem alarme em vez de precisar notar sozinho).
+
+### Fotos CEF — confirmado: o fix do parâmetro (`hdnimovel`) funcionou
+
+Dono rodou de novo de casa depois do fix: **67/120 galerias salvas** (contra 0/120 antes).
+Alguns imóveis continuam saindo "sem foto" mesmo com o parâmetro certo — plausível agora
+(diferente de antes): pode ser imóvel que a Caixa mesmo não fotografou. Sem mais ação
+pendente aqui — o mecanismo está funcionando, resta só continuar rodando aos poucos (ver
+seção anterior) até cobrir o acervo.
+
+### Veículo misturado no acervo de imóveis — bem_movel_barrado só olhava o título
+
+Achado ao vivo do dono: "Fiat Fiorino 2008" (IRANI FLORES/LEILAOBRASIL) aparecendo na Busca
+de imóveis. A trava que existe pra isso (`bem_movel_barrado`, citada em `qa_invariantes()` e
+`auditoria_regras_negocio()`) só checava o TÍTULO pros padrões de veículo — a descrição
+("Veículo da marca Fiat... chassi... RENAVAM...") nunca era lida. Corrigido: agora também
+checa `título+descrição` por "veiculo" (em qualquer posição) e "chassi"/"renavam"
+(identificadores exclusivos de veículo). Medido antes de aplicar: 15 imóveis ativos afetados,
+todos confirmados veículo de verdade (carros/motos/caminhão via LEILAOBRASIL, + 1 caso via
+EDITAL_DJEN onde o "título" virou o endereço de uma moto apreendida). Todos desativados.
+
+**Achado no caminho, quase mascarou o próprio fix**: existe `idx_imoveis_bem_movel_barrado`,
+um índice PARCIAL sobre o resultado desta função. `CREATE OR REPLACE FUNCTION` numa função
+`IMMUTABLE` não recalcula índices que dependem dela sozinho — sem `REINDEX` explícito, o
+UPDATE de remediação teria afetado 0 linhas em SILÊNCIO (a função corrigida dizia `true`
+chamada direto numa linha, mas a busca via índice continuava dizendo `false` pras MESMAS
+linhas — foi exatamente isso que aconteceu na 1ª tentativa desta migração, antes do
+`REINDEX INDEX idx_imoveis_bem_movel_barrado;` ser adicionado). **Nota para o futuro: sempre
+que alterar o CORPO de uma função usada em índice parcial/funcional, `REINDEX` explícito faz
+parte da mudança — `CREATE OR REPLACE` sozinho não avisa que ficou desatualizado.**
