@@ -532,9 +532,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ customerId });
     }
 
-    // Ações financeiras exigem role admin
+    // Ações financeiras exigem role admin. `adminUser` é declarado FORA do bloco (não
+    // `const` dentro do `if`) porque `transferir_pix`, mais abaixo, também precisa dele
+    // pra registrar quem pediu a transferência — escopo de bloco derrubaria isso em
+    // ReferenceError em runtime (só apareceria no primeiro saque de verdade).
+    let adminUser = null;
     if (['financas', 'extrato', 'transferir_pix', 'simular_antecipacao', 'solicitar_antecipacao'].includes(action)) {
-      const adminUser = await getAuthUserNode(req);
+      adminUser = await getAuthUserNode(req);
       if (!adminUser?.id) return res.status(401).json({ error: 'Não autorizado' });
       const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
       const SVC_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -610,6 +614,23 @@ export default async function handler(req, res) {
         pixAddressKeyType: tipoChave || 'CPF',
         description: descricao || 'Transferência BidPro Brasil',
       });
+      // Registra ANTES da validação por Webhook chegar (~5s depois, do lado do Asaas) —
+      // é contra ESTE registro que api/asaas-validar-saque.js compara o payload recebido.
+      // Sem isso, "validar" seria só responder aprovado pra qualquer coisa que chegasse.
+      // Best-effort: se a gravação falhar, a validação por webhook vai recusar por não
+      // achar o registro (fail-closed) — nunca aprova sem ter o que comparar.
+      if (data?.id) {
+        try {
+          await fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/asaas_transferencias_pendentes`, {
+            method: 'POST',
+            headers: {
+              apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+              'Content-Type': 'application/json', Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({ asaas_transfer_id: data.id, valor: valorNum, chave_pix: chavePix, criado_por: adminUser.id }),
+          });
+        } catch { /* best-effort — fail-closed no validador cobre a ausência */ }
+      }
       return res.status(200).json(data);
     }
 
