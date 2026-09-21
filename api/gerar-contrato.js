@@ -6,6 +6,7 @@ import { anthropicFetch } from './_claude.js';
 import { sanitizeText, sanitizeName } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
 import { enviarEmail } from './_email.js';
+import { cabecalhoEmailHTML } from './_email-header.js';
 import { randomUUID } from 'node:crypto';
 
 // Dados fixos da empresa contratante
@@ -193,15 +194,42 @@ export default async function handler(req, res) {
       // chamado pra todo assinante sem e-mail (o `.catch(()=>{})` escondia a falha, mas
       // continuava gastando cota do Resend e poluindo emails_log à toa). Quem não recebe
       // e-mail depende só do link copiável mostrado na tela de "enviado" — funciona igual.
+      // Pedido do dono (21/09): o e-mail ainda era o texto plano genérico, sem a marca —
+      // mesmo achado já corrigido em 13/09 para 6 outros e-mails (`_email-header.js`), só
+      // que este nasceu depois e ficou de fora da consolidação. Mesmo padrão de layout dos
+      // demais e-mails transacionais (notificar-reuniao.js): cabeçalho com logo sobre fundo
+      // escuro da marca, corpo em card branco, botão na cor azul da marca (#0D63DB).
       await Promise.all(links.filter(l => l.email).map(l =>
         enviarEmail({
           to: l.email,
           subject: `Contrato para assinatura: ${tituloFinal}`,
-          html: `<p>Olá${l.nome ? ' ' + l.nome : ''}!</p><p>Você tem um contrato para revisar e assinar: <strong>${tituloFinal}</strong>.</p>
-                 <p><a href="${l.url}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Abrir e assinar</a></p>
-                 <p>Ou copie o link: ${l.url}</p>
-                 ${l.testemunhaUrl ? `<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0"/><p><strong>Este contrato exige uma testemunha.</strong> Após assinar, encaminhe o link abaixo à SUA testemunha (ela preenche nome, CPF e assina):</p><p>${l.testemunhaUrl}</p>` : ''}
-                 <p>BidPro Brasil</p>`,
+          html: `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:580px;margin:0 auto;padding:24px 16px;">
+    ${cabecalhoEmailHTML({ subtitulo: 'Assinatura Eletrônica de Documento' })}
+    <div style="background:#fff;padding:32px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <h2 style="margin:0 0 6px;font-size:20px;color:#0f172a;">Olá${l.nome ? ', ' + l.nome : ''}!</h2>
+      <p style="margin:0 0 22px;color:#475569;font-size:15px;line-height:1.6;">
+        Você tem um contrato para revisar e assinar: <strong style="color:#0f172a;">${tituloFinal}</strong>.
+      </p>
+      <div style="text-align:center;margin-bottom:20px;">
+        <a href="${l.url}" style="display:inline-block;background:#0D63DB;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:16px;">Abrir e assinar</a>
+      </div>
+      <p style="margin:0 0 4px;font-size:12.5px;color:#94a3b8;">Ou copie o link:</p>
+      <p style="margin:0 0 22px;font-size:12.5px;word-break:break-all;"><a href="${l.url}" style="color:#0D63DB;">${l.url}</a></p>
+      ${l.testemunhaUrl ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:16px 18px;margin-bottom:8px;">
+        <p style="margin:0 0 8px;font-size:13.5px;color:#1e3a8a;"><strong>Este contrato exige uma testemunha.</strong> Após assinar, encaminhe o link abaixo à SUA testemunha (ela preenche nome, CPF e assina):</p>
+        <p style="margin:0;font-size:12.5px;word-break:break-all;"><a href="${l.testemunhaUrl}" style="color:#0D63DB;">${l.testemunhaUrl}</a></p>
+      </div>` : ''}
+      <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;text-align:center;">
+        BidPro Brasil · Assinatura Eletrônica de Documento · Brasil
+      </p>
+    </div>
+  </div>
+</body>
+</html>`,
           meta: { tipo: 'contrato' },
         }).catch(() => {})
       ));
