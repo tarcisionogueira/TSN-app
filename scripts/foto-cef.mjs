@@ -32,6 +32,11 @@ async function extrairFotosUrls(page, numero) {
   try {
     const url = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numero}`;
     resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
+    // 21/09 (achado ao vivo, rodando de casa): "0 imgs" vinha com HTTP 200 e título certo,
+    // sem redirect nenhum — não é bloqueio, a página carrega normal. A galeria da Caixa
+    // provavelmente é preenchida por JS depois do DOMContentLoaded; `domcontentloaded` não
+    // espera isso. Dá uma folga curta antes de ler o DOM.
+    await new Promise(r => setTimeout(r, 2500));
   } catch (e) {
     return { srcs: [], motivo: `erro: ${e?.message || e}` };
   }
