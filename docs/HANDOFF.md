@@ -31595,3 +31595,61 @@ não fica invisível de novo. `npm run build` limpo. As duas correções de rege
 via replace no texto que o próprio Postgres já tinha da função (mesma técnica da migração do
 webhook MP) — testadas lado a lado (função nova vs antiga, no acervo inteiro) antes de valer
 pra confirmar que só os 3 casos-alvo mudavam de resultado, nada mais.
+
+### ALBERTOMACEDOLEILOES (UUID no título) — resolvido: imóvel real, confirmado direto na fonte
+
+O achado acima ficou em aberto porque o site está bloqueado pra mim (`EGRESS_BLOCKED`). O
+dono abriu o link direto e mandou 2 prints: é uma casa de verdade em Sete Lagoas/MG (Condomínio
+Residencial Madrid, Unidade 3, Rua Madri 38-B, Jardim Europa, CEP 35701-265, Matrícula 55491,
+2º Cartório de Registro de Imóveis de Sete Lagoas, leilão extrajudicial CNP Seguradora, lote
+0001, avaliação R$ 170.100,00). Banco corrigido com os dados reais (título, descrição, tipo,
+bairro, endereço, CEP).
+
+**Causa raiz corrigida no código, não só o dado**: `tituloDeSlug()` (em
+`scripts/lib/dom-parse-util.mjs`) não tinha guarda contra o slug da URL ser o UUID cru do lote
+— produzia "Df8b5dbe 9ba7 4572 9393 687f783292e0" como título, plausível o bastante pra passar
+despercebido. Agora detecta UUID e retorna `null` (mesmo contrato de "não consegui" que os
+chamadores já tratam, caindo no fallback `Imóvel {leiloeiro} {id}` em vez de inventar um
+título a partir de um identificador). Commit `d657b90`, build limpo, em produção.
+
+### SUPERBID — regressão de volume (200 vs baseline 719–1438): confirmada real, causa ainda aberta
+
+Pedido do dono: confirmar direto na fonte se a queda de volume do SUPERBID é bug nosso ou
+real. `www.superbid.net` e `offer-query.superbid.net` estão bloqueados pra mim
+(`EGRESS_BLOCKED`), e a run mais recente do `leiloeiros-puppeteer.yml` no GitHub Actions
+(#202, `35624938402`) é a MESMA já analisada antes — sem coleta nova desde então pra
+reconferir. O que já se sabe, medido: o scraper rodou sem NENHUM erro técnico (sem timeout,
+sem bloqueio, sem exceção) e coletou 200 ofertas contra um baseline aprendido de 719–1438 —
+ou seja, não é o padrão de "freio de custo/rede disfarçado de vazio" (forma #5 do HANDOFF):
+a coleta funcionou, só trouxe menos. Pode ser (a) o SUPERBID reduziu o catálogo de imóveis
+publicados de verdade nesse momento, ou (b) mudança estrutural no site que o scraper não
+percebeu (ex.: paginação silenciosamente cortada). **Fica pendente**: rodar a ofensiva de
+captura (recon da estrutura viva do SUPERBID) na próxima execução do cron, ou o dono
+conferir manualmente quantos lotes de imóvel aparecem hoje no site — o próximo run do cron
+(diário) vai indicar se o número se recupera sozinho (sustentando a hipótese "catálogo caiu
+de verdade") ou se persiste travado em ~200 (sustentando "scraper parou de ver parte do
+site").
+
+### Fila de webhook MP (`mp_webhook_fila`) — ainda sem nenhuma execução registrada
+
+Checado a pedido do dono: `select status, count(*) from mp_webhook_fila group by status;`
+retornou **vazio** — zero linhas na tabela desde que a fila/cron foram implantados. Não é
+erro: significa apenas que nenhum webhook do MP chegou ainda (nenhum pagamento novo processado
+por esse caminho desde o deploy). O cron (`processar-fila-webhook-mp-cron`, 1×/min) está
+ativo e vai processar assim que a primeira linha entrar. Sem ação pendente — só falta um
+pagamento real acontecer pra validar o caminho ponta a ponta.
+
+### Marcos — pagamento confirmado como CARTÃO DE CRÉDITO (não PIX) — registro corrigido
+
+Dono esclareceu: o pagamento de Marcos (R$ 33.001,09, `pay_ikl88bja7s0afipw`) foi via
+**cartão de crédito** no link de cobrança Asaas gerado, não PIX. O registro em
+`honorarios_recebimentos` (id `d7253645-daf5-44a5-aa8d-39e31ee47fac`) tinha `metodo =
+'transferencia'` e uma nota dizendo "instrumento exato não confirmado" — desatualizado.
+Corrigido: `metodo = 'cartao_asaas'` (valor válido do `CHECK` da coluna — `transferencia`
+nunca foi o instrumento certo, era só o rótulo genérico usado enquanto não se sabia qual
+era), `justificativa` atualizada registrando cartão de crédito + a negativa de antecipação
+do Asaas + que o valor segue como "a receber" até liquidação normal (~D+32, já que
+antecipação foi negada). **Não tenho credencial/API do Asaas neste sandbox pra confirmar
+o saldo "a receber" ao vivo** — o dono confirma isso direto no painel Asaas
+(Extrato → A receber), que é onde esse valor aparece pendente até a data de liquidação da
+própria cobrança.
