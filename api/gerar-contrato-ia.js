@@ -152,13 +152,15 @@ Gere o contrato completo e pronto para uso.`;
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        // 24000 (21/09, subiu de 8000 — pedido do dono: "cobrir contratos complexos", ~100 mil
-        // caracteres de saída). Teto real do maxDuration (300s, ver config no topo do arquivo —
-        // NENHUMA rota deste projeto passa disso, é o teto do plano Vercel) limita até onde dá
-        // pra subir com segurança: `retries: 0` (não repete — um retry depois de já gastar boa
-        // parte do orçamento em 24k tokens só trocaria "truncado" por "estourou o teto e nem
+        // 32000 (21/09, subiu de 8000 → 24000 → 32000 — pedido do dono: "cobrir contratos
+        // complexos", ~100 mil caracteres de saída). MEDIDO ao vivo, não estimado: um contrato
+        // sintético deliberadamente complexo gerou 24.000 tokens (75.467 caracteres, cortado no
+        // teto) em 173s — 139 tokens/s. Nessa taxa, 32.000 tokens ficam em ~230s, com folga
+        // segura dentro do maxDuration de 300s (ver topo do arquivo — NENHUMA rota deste projeto
+        // passa de 300s, é o teto real do plano Vercel). `retries: 0` (um retry depois de já
+        // gastar boa parte do orçamento só trocaria "truncado" por "estourou o teto e nem
         // respondeu") e timeoutMs deixando margem pro resto do handler responder.
-        max_tokens: 24000,
+        max_tokens: 32000,
         system: SYSTEM_PROMPT + aprendizado,
         messages: [{ role: 'user', content: userMessage }],
       }),

@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 24000,
+        max_tokens: 32000,
         system: 'Você é um advogado especialista em contratos empresariais brasileiros. Gere contratos completos, formais e juridicamente sólidos, com base legal citada.',
         messages: [{ role: 'user', content: PROMPT_COMPLEXO }],
       }),
