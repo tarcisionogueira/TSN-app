@@ -20,6 +20,22 @@ async function cpfAutenticado(userId, cpfBody) {
     return (await cpfDoRegistro(row)) || fb;
   } catch { return fb; }
 }
+// Vencimento das cobranças avulsas/pagamento único (21/09, achado investigando por que a
+// antecipação do Marcos foi negada): o requisito nº5 do Asaas pra liberar antecipação de
+// cartão é "vencimento respeita o prazo mínimo de 8 dias úteis" — e toda cobrança daqui
+// nascia com `dueDate` = HOJE (linha original: `new Date().toISOString().split('T')[0]`),
+// então NENHUMA cobrança criada por este arquivo jamais poderia ser antecipada, tivesse o
+// ramo/KYC certo ou não. Isso não atrasa o cliente: `billingType: 'UNDEFINED'` deixa pagar
+// por cartão/Pix/boleto na hora, em qualquer data — `dueDate` aqui é só o prazo formal da
+// fatura, não uma trava de quando o cliente PODE pagar (ele paga imediato no link/checkout
+// hospedado, como sempre). +12 dias corridos cobre 8 dias úteis mesmo com 2 fins de semana
+// no meio, sem precisar de calendário de feriados pra uma folga de segurança.
+function vencimentoAntecipavel() {
+  const d = new Date();
+  d.setDate(d.getDate() + 12);
+  return d.toISOString().split('T')[0];
+}
+
 // Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
 // Em produção (default) usa a URL real do Asaas.
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -280,7 +296,7 @@ export default async function handler(req, res) {
         customer: customerId,
         billingType: 'UNDEFINED',
         value: saldo,
-        dueDate: new Date().toISOString().split('T')[0],
+        dueDate: vencimentoAntecipavel(),
         description: descricao,
         externalReference,
       });
@@ -336,7 +352,7 @@ export default async function handler(req, res) {
           customer: customerId,
           billingType: 'UNDEFINED',
           value: info.valor,
-          dueDate: new Date().toISOString().split('T')[0],
+          dueDate: vencimentoAntecipavel(),
           description: info.nome,
         });
         linkPagamento = cobranca.invoiceUrl || cobranca.bankSlipUrl;
@@ -406,7 +422,7 @@ export default async function handler(req, res) {
         customer: customerId,
         billingType: 'UNDEFINED',
         value: Number(ini.valor),
-        dueDate: new Date().toISOString().split('T')[0],
+        dueDate: vencimentoAntecipavel(),
         description: String(ini.titulo || 'Produto BidPro').slice(0, 120),
         externalReference: ini.compra_id,
       });
@@ -450,7 +466,7 @@ export default async function handler(req, res) {
           customer: customer.id,
           billingType: 'UNDEFINED',
           value: cobrancaDiferenca,
-          dueDate: new Date().toISOString().split('T')[0],
+          dueDate: vencimentoAntecipavel(),
           description: `Upgrade para ${info.nome} — diferença proporcional`,
         });
         linkPagamento = cobranca.invoiceUrl || cobranca.bankSlipUrl;
