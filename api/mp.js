@@ -25,10 +25,13 @@ const WEBHOOK   = `${BASE_URL}/api/mp-webhook`;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function mpPost(path, body) {
+// idemKey determinística (mesmo padrão de api/mp-checkout.js): um retry do MESMO pedido
+// (timeout de rede, duplo clique) reaproveita o recurso já criado no MP em vez de gerar
+// um segundo — crypto.randomUUID() a cada chamada derrotava a própria idempotência.
+async function mpPost(path, body, idemKey) {
   const res = await fetch(`${MP_URL}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': crypto.randomUUID() },
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idemKey || crypto.randomUUID() },
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -260,7 +263,7 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
     metadata: { userId, planoKey, splitIndex, splitTotal },
   };
 
-  const pref = await mpPost('/checkout/preferences', body);
+  const pref = await mpPost('/checkout/preferences', body, `tsn-pref-${body.external_reference}`.slice(0, 64));
   return {
     preferenceId: pref.id,
     initPoint:    pref.init_point,        // produção
@@ -307,7 +310,7 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
     external_reference: ini.compra_id,               // uuid → webhook trata como PRODUTO
     expires: false,
     metadata: { tipo: 'produto', compra_id: ini.compra_id, user_id: userId },
-  });
+  }, `tsn-prod-${ini.compra_id}`);
   return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, compra_id: ini.compra_id, valor: ini.valor };
 }
 
@@ -339,7 +342,7 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
     ],
   };
 
-  const sub = await mpPost('/preapproval', body);
+  const sub = await mpPost('/preapproval', body, `tsn-assinatura-${userId}-${planoKey}`);
   return {
     assinaturaId: sub.id,
     initPoint:    sub.init_point,
@@ -386,7 +389,10 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
   // servidor; o cliente recebe uma frase que diz o que fazer.
   let sub;
   try {
-    sub = await mpPost('/preapproval', body);
+    // cardTokenId é de uso único (SDK do MP) — incluí-lo na chave garante que um retry com
+    // o MESMO token reaproveita o preapproval já criado, sem colidir com uma tentativa
+    // seguinte (novo token) do mesmo usuário/plano.
+    sub = await mpPost('/preapproval', body, `tsn-assinatura-tr-${userId}-${planoKey}-${String(cardTokenId).slice(0, 24)}`);
   } catch (e) {
     console.error('[mp] preapproval recusado:', e.message);
     throw new Error('Não foi possível autorizar o cartão. Verifique os dados ou tente outro cartão.', { cause: e });

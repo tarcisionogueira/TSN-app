@@ -341,7 +341,18 @@ export default async function handler(req, res) {
             // idem: quem paga pode não ter sessão (link repassado a terceiro).
             ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId }
             : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
-      ...(produtoBonusCtx ? { external_reference: produtoBonusCtx.compraId } : {}),
+      // external_reference sempre presente (score de qualidade da integração MP pede
+      // referência externa em toda cobrança). Só o formato do produto (uuid puro) é lido
+      // de volta pelo webhook (ehProdutoMp/UUID_RE); os demais levam prefixo — que o
+      // próprio UUID_RE rejeita por ser ancorado — porque esses fluxos já discriminam por
+      // metadata.tipo, não por external_reference (ver comentário em mp-webhook.js).
+      external_reference: produtoBonusCtx
+        ? produtoBonusCtx.compraId
+        : honorarioCtx
+          ? `honorario:${honorarioCtx.arrematacaoId}`
+          : cobrancaCtx
+            ? `cobranca:${cobrancaCtx.cobrancaId}`
+            : `servico:${user.id}:${proposito}`,
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
     };
