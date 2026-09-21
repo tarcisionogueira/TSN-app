@@ -31754,3 +31754,39 @@ específico que viu aparecer errado**, dá pra investigar esse caso exato em vez
 — pode ser um problema diferente (ex.: um lote relistado pro leiloeiro com data nova, que
 por enquanto não achei nenhum exemplo real no banco) que só aparece com um caso concreto na
 mão.
+
+**PENDENTE PRA PRÓXIMA SESSÃO**: dono pediu pra conferir o invariante `resultado_leilao_atrasado`
+depois do próximo run do cron corrigido (18h BRT / 21h UTC de 22/09). Consulta:
+`select * from public.qa_invariantes() where chave='resultado_leilao_atrasado';` — hoje
+(21/09, antes da correção rodar de novo) estava em 1.441 de atraso; deve cair bastante. Ao
+abrir a próxima sessão, rodar isso e reportar.
+
+### Retenção de anexos: 15 dias extra para "sem lance", padrão para "vendido"
+
+Pedido do dono (21/09, mesma conversa): "esses imóveis sem lance o sistema deve armazenar
+as informações e anexos dele por mais 15 dias para dar tempo de fazer uma proposta. os que
+foram arrematados pode seguir a cronologia de retirar do sistema de forma padrão já
+configurada."
+
+`anexos_expirados()` (usada por `limpar-documentos-cron.js` pra decidir o que apagar do
+bucket `documentos`) tinha regra única pra leilão com praça: apaga 1 dia após `data_leilao`
+OU assim que o imóvel sai do acervo (`ativo=false`, o que vier primeiro) — e como o
+leiloeiro tira o lote do ar quase no mesmo dia (achado de hoje, na correção do cron de
+apuração), na prática os documentos sumiam ANTES de alguém ter tempo de propor compra.
+
+**Corrigido**: novo ramo pra `resultado_leilao='sem_lance'` — ignora o gatilho de
+`ativo=false` (dispara rápido demais) e usa só a data, com **15 dias** em vez de 1.
+`resultado_leilao='vendido'` (arrematado) **não muda** — segue exatamente a mesma
+cronologia padrão de sempre, como pedido. Testado antes de aplicar: dos 13 imóveis já
+`sem_lance` hoje, 0 anexos deles aparecem na lista de expurgo depois da correção (contra a
+lista de antes, que não segmentava por resultado).
+
+**Decisão que tomei e não foi pedida explicitamente — sinalizando pro dono confirmar**: só
+apliquei os 15 dias extras para `resultado_leilao='sem_lance'` (confirmado). Deixei
+`indeterminado` (tentamos apurar, a página não deu resposta clara) na regra PADRÃO (1 dia/
+ativo=false) — mesmo esses aparecerem juntos no filtro "Sem lance" da tela pro cliente. Risco:
+um lote `indeterminado` que since resolvido pra `sem_lance` só depois (quando alguém abre a
+tela do imóvel e a reapuração on-demand roda) pode já ter perdido os documentos antes disso
+acontecer, se ninguém abrir a tela dentro de 1 dia. Se o dono quiser os 15 dias valendo pra
+`indeterminado` também (mesmo critério do filtro do cliente), é uma troca de 1 linha — só não
+apliquei sozinho porque a instrução dizia literalmente "sem lance".
