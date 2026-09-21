@@ -69,6 +69,7 @@ export default async function handler(req, res) {
   const senha = String(b.senha || '');
   const cpf   = String(b.cpf || '').replace(/\D/g, '');
   const cardTokenId = String(b.cardTokenId || '');
+  const deviceId = b.deviceId ? String(b.deviceId).slice(0, 200) : null;
   const plano = String(b.plano || '');
   const end   = (b.endereco && typeof b.endereco === 'object') ? b.endereco : {};
 
@@ -118,7 +119,11 @@ export default async function handler(req, res) {
   let desfechoDesconhecido = false;
   const criarPreapproval = () => fetch(`${MP_URL}/preapproval`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `${userId}-${plano}` },
+    headers: {
+      Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json',
+      'X-Idempotency-Key': `${userId}-${plano}`,
+      ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
+    },
     body: JSON.stringify({
       reason: cfg.nome,
       external_reference: `${userId}|${plano}`,

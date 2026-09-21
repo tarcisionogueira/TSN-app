@@ -28,10 +28,17 @@ const WEBHOOK   = `${BASE_URL}/api/mp-webhook`;
 // idemKey determinística (mesmo padrão de api/mp-checkout.js): um retry do MESMO pedido
 // (timeout de rede, duplo clique) reaproveita o recurso já criado no MP em vez de gerar
 // um segundo — crypto.randomUUID() a cada chamada derrotava a própria idempotência.
-async function mpPost(path, body, idemKey) {
+// deviceId (21/09): fingerprint do dispositivo pro motor antifraude do MP — só se aplica
+// ao Checkout Transparente (cobramos direto, sem o cliente passar pela página do MP); nos
+// fluxos hospedados (Checkout Pro) é a própria página deles que já coleta isso.
+async function mpPost(path, body, idemKey, deviceId) {
   const res = await fetch(`${MP_URL}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idemKey || crypto.randomUUID() },
+    headers: {
+      Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json',
+      'X-Idempotency-Key': idemKey || crypto.randomUUID(),
+      ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -355,7 +362,7 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
  * tokenizado no browser (SDK do MP) e cria o preapproval já autorizado. O cliente
  * nunca sai do BidPro. Preço SEMPRE do servidor (PLANOS_CONFIG), nunca do cliente.
  */
-async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId }) {
+async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId, deviceId }) {
   const cfg = (await carregarPrecos())[planoKey];
   if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
   if (!cardTokenId) throw new Error('Token do cartão ausente');
@@ -392,7 +399,7 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
     // cardTokenId é de uso único (SDK do MP) — incluí-lo na chave garante que um retry com
     // o MESMO token reaproveita o preapproval já criado, sem colidir com uma tentativa
     // seguinte (novo token) do mesmo usuário/plano.
-    sub = await mpPost('/preapproval', body, `tsn-assinatura-tr-${userId}-${planoKey}-${String(cardTokenId).slice(0, 24)}`);
+    sub = await mpPost('/preapproval', body, `tsn-assinatura-tr-${userId}-${planoKey}-${String(cardTokenId).slice(0, 24)}`, deviceId);
   } catch (e) {
     console.error('[mp] preapproval recusado:', e.message);
     throw new Error('Não foi possível autorizar o cartão. Verifique os dados ou tente outro cartão.', { cause: e });

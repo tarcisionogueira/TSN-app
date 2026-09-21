@@ -18,7 +18,7 @@ import { motivoErroAuth } from '../lib/erroAuth.js';
 import { salvarRef } from '../utils/ref';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
-import PagamentoServico from '../components/PagamentoServico';
+import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
 import { ESTADOS_UF } from '../data/cidades';
 
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
@@ -747,12 +747,13 @@ export default function Checkout() {
         });
       }
       const mp = new window.MercadoPago(MP_PUBLIC_KEY);
+      const deviceId = await obterDeviceId();
       const [mes, ano] = card.validade.split('/');
       const token = await mp.createCardToken({ cardNumber: card.numero.replace(/\s/g, ''), cardholderName: card.nome, cardExpirationMonth: mes, cardExpirationYear: `20${ano}`, securityCode: card.cvv });
       if (!token?.id) throw new Error('Não foi possível validar o cartão. Confira os dados.');
       const res = await apiCall('/api/assinar-com-cadastro', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2' }),
+        body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2', deviceId }),
       });
       const data = await res.json();
       if (!res.ok) {

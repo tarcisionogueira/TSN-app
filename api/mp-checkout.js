@@ -389,12 +389,19 @@ export default async function handler(req, res) {
     const idemKey = payload.token
       ? idemBase
       : `${idemBase}-${String(req.body?.idempotencyKey || Date.now()).slice(0, 40)}`;
+    // deviceId (21/09): fingerprint gerado pelo SDK do MP no navegador (window.MP_DEVICE_
+    // SESSION_ID, já carregado nesta tela pra tokenizar o cartão) — repassado no header que
+    // o motor antifraude do MP espera. Opcional: se o front não mandar (SDK bloqueado por
+    // adblock, por ex.), a cobrança segue sem o fingerprint, só com aprovação potencialmente
+    // mais conservadora — nunca bloqueia o pagamento por isso.
+    const deviceId = req.body?.deviceId ? String(req.body.deviceId).slice(0, 200) : null;
     const mpRes = await fetch(`${MP_BASE}/v1/payments`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
         'X-Idempotency-Key': idemKey,
+        ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
       },
       body: JSON.stringify(payload),
     });

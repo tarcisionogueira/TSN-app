@@ -20,6 +20,23 @@ const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || '';
 
 const fmtBRL = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Fingerprint do dispositivo pro motor antifraude do MP (21/09, achado na auditoria de
+// qualidade de integração): o próprio SDK (já carregado aqui pra tokenizar cartão) publica
+// o valor em window.MP_DEVICE_SESSION_ID, mas o preenchimento não é síncrono — sonda por
+// até 1,5s antes de desistir. Ausência não bloqueia o pagamento, só aprova sem o dado extra.
+export function obterDeviceId() {
+  return new Promise(resolve => {
+    const tentativas = 15;
+    let i = 0;
+    const check = () => {
+      if (window.MP_DEVICE_SESSION_ID) return resolve(window.MP_DEVICE_SESSION_ID);
+      if (++i >= tentativas) return resolve(null);
+      setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
 // `semJurosAte` é 3 por padrão (assessoria, Leilão Club, etc. — decisão do dono de 16/09);
 // os honorários de êxito passam 1 (18/09): só PIX ou 1x sem juros, 2x em diante já assume.
 const calcParcelaMaisJuros = (valor, n, semJurosAte = 3) => {
@@ -454,6 +471,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         });
       }
       const mp = new window.MercadoPago(MP_PUBLIC_KEY);
+      const deviceId = await obterDeviceId();
       const [mes, ano] = form.validade.split('/');
       const token = await mp.createCardToken({
         cardNumber: form.numero.replace(/\s/g, ''),
@@ -474,6 +492,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
             plano: planoKey,
             email,
             cardTokenId: token.id,
+            deviceId,
           }),
         });
         const data = await res.json();
@@ -527,6 +546,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           email,
           metodoPagamento: 'credit_card',
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
+          deviceId,
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
           proposito: servico.proposito || 'servico',
           // produto_bonus (12/09): identifica QUAL produto — /api/mp-checkout usa isso pra
