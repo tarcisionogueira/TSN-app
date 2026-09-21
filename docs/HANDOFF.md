@@ -31710,3 +31710,47 @@ não dá pra eu consultar ao vivo DAQUI, mas o CÓDIGO em produção pode.
 **Combinado pra amanhã**: dono confirma o que a tela do MP mostra (ou eu confirmo, se a rede
 tiver melhorado); eu confirmo os campos reais do Asaas com uma chamada de teste; daí sim decido
 se vale um painel automático ou se a resposta de hoje já fecha as duas pendências.
+
+### Filtro "Sem lance" não puxava NADA de imóvel — cron nunca alcançava os ativos
+
+Achado ao vivo do dono: "o filtro de leilões sem lance... não está puxando imóveis sem
+lance." Confirmado no banco, e pior do que parecia pela pergunta: **ZERO** dos 25.723
+imóveis ativos tinham `resultado_leilao` preenchido — não é "puxando pouco", é "nunca
+funcionou desde que o recurso existe" (lançado hoje mesmo, 21/09, mais cedo nesta sessão).
+
+**Causa raiz**: a consulta de candidatos de `api/apurar-resultado-leilao-cron.js`, pro
+acervo de IMÓVEIS, não filtrava `ativo` (diferente da de VEÍCULOS, que sempre filtrou) e
+ordenava por `data_fim ASC` (mais antigo primeiro) dentro da janela de 3 dias de reforço. O
+site do leiloeiro tira o lote do ar quase assim que o leilão encerra — então, medido: na
+janela de 3 dias havia 1.454 candidatos já `ativo=false` (o leiloeiro já tirou do ar) contra
+apenas 229 ainda `ativo=true` (os que de fato importam pro filtro "Sem lance", que só
+mostra `ativo=true`). Como o orçamento de tempo por rodada é limitado (Bright Data é lento),
+das 250 vagas processadas por execução, **144 foram gastas em lotes já inativos e ZERO nos
+229 que realmente importavam** — o cron rodava todo dia, gastava o orçamento inteiro, e
+nunca sobrava tempo pra chegar no que o filtro do cliente de fato usa.
+
+**Corrigido** (imóveis e veículos, mesmo arquivo): adiciona `ativo=eq.true` na consulta de
+imóveis (só processa o que o cliente pode ver — sem isso, apurar um lote já invisível não
+ajuda ninguém) e troca a ordenação pra `DESC` nos dois acervos — processa primeiro o que
+venceu HOJE (o pedido literal do dono: "puxar os leilões que venceram no dia"), com os 2
+dias de reforço vindo depois se sobrar orçamento. `npm run build`, `verificar:padroes` e
+`verificar:sintaxe` limpos.
+
+**Monitoramento novo** (mesmo princípio da `mp_liberacao_atrasada` de hoje — não é só
+responder a pergunta, é não deixar o mesmo silêncio voltar sem ninguém notar): invariante
+`resultado_leilao_atrasado` em `qa_invariantes()` — conta imóvel/veículo ativo com leilão
+encerrado há mais de 2 dias e `resultado_leilao` ainda nulo. Medido HOJE (antes do próximo
+run corrigido, às 18h BRT de amanhã): **1.441 em atraso** (o backlog real represado pelo
+bug) — número que deve cair pra perto de zero conforme os próximos runs corrigidos
+processarem. Se voltar a crescer no futuro, é o mesmo sintoma se repetindo.
+
+**Não reproduzi a segunda parte do relato** ("aparecendo imóveis com leilão futuro"): com
+ZERO imóvel ativo tendo `resultado_leilao` preenchido (confirmado antes da correção), o
+filtro "Sem lance" só podia estar retornando vazio pra imóvel — não tinha como mostrar
+NENHUM resultado, futuro ou não. Conferi também veículos (só 2 registros com `sem_lance`
+até então, ambos com data já passada) e não achei nenhum caso, atual, de `resultado_leilao`
+preenchido com data futura. **Se o dono conseguir me passar o link ou `fonte_id` de um caso
+específico que viu aparecer errado**, dá pra investigar esse caso exato em vez de generalizar
+— pode ser um problema diferente (ex.: um lote relistado pro leiloeiro com data nova, que
+por enquanto não achei nenhum exemplo real no banco) que só aparece com um caso concreto na
+mão.
