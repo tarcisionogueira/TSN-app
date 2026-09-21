@@ -91,6 +91,17 @@ function verificarAssinatura(req) {
   } catch { return 'invalida'; }
 }
 
+// Handler FINO (21/09) — verifica a assinatura, ENFILEIRA e responde na hora. A lógica de
+// negócio de verdade (processarEventoMp, abaixo, ORIGINALMENTE era todo o corpo deste handler
+// — nenhuma linha da lógica mudou) roda depois, drenada pelo cron
+// `processar-fila-webhook-mp-cron.js`. Por quê: `waitUntil()` da Vercel (a forma "óbvia" de
+// "responde rápido, processa depois") é best-effort — sem retry, sem durabilidade, e a própria
+// Vercel desaconselha pra lógica de negócio crítica. Fila em tabela + cron é o que garante que
+// nenhum evento se perde mesmo se o processamento demorar ou falhar na primeira tentativa.
+//
+// Se o ENFILEIRAMENTO falhar (Supabase fora do ar, ex.), cai pro caminho de SEMPRE: processa
+// síncrono agora mesmo e deixa o MP reentregar se der erro — nunca troca "seguro e lento" por
+// "rápido e arriscado" quando o rápido não está disponível.
 export default async function handler(req, res) {
   // Health-check: abrir a URL no navegador (GET) confirma que a função está viva
   // e acessível pelo domínio. Se aqui responde 200 JSON, o webhook existe e o
@@ -117,6 +128,30 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Não autorizado' });
   }
 
+  const tipoFila = req.body?.type || req.body?.action || '';
+  const dataIdFila = req.body?.data?.id;
+  if (!tipoFila) return res.status(200).json({ ok: true, ignored: 'sem tipo' });
+
+  try {
+    // SEM dedup na gravação (de propósito — ver comentário na migração mp_webhook_fila.sql):
+    // o MESMO (tipo, data.id) chega mais de uma vez conforme o pagamento muda de estado de
+    // verdade, e uma trava aqui rejeitaria a entrega que importa. processarEventoMp já é
+    // seguro pra rodar de novo pro mesmo pagamento — a idempotência mora lá, não na fila.
+    const r = await fetch(`${_SB_URL}/rest/v1/mp_webhook_fila`, {
+      method: 'POST',
+      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ mp_topic: tipoFila, mp_data_id: String(dataIdFila || ''), payload: req.body }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error(`enfileirar_${r.status}`);
+    return res.status(200).json({ ok: true, enfileirado: true });
+  } catch (e) {
+    console.error('[mp-webhook] falha ao enfileirar, processando síncrono (fallback):', e?.message || e);
+    return processarEventoMp(req, res);
+  }
+}
+
+export async function processarEventoMp(req, res) {
   const tipo = req.body?.type || req.body?.action || '';
   const dataId = req.body?.data?.id;
   const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
