@@ -31284,3 +31284,32 @@ ordenavam só por desconto/valor/data/distância — nenhuma é coluna única, e
 inserindo/atualizando o catálogo o tempo todo, dois imóveis podiam empatar e a ORDEM entre
 páginas mudar (lote duplicado ou pulado). Os dois ganharam `id` como desempate final (não
 afeta a ordenação que o cliente escolheu). `npm run build` limpo antes do push.
+
+### Os 4 achados restantes do QA de 21/09 — todos fechados, dono pediu "siga com todos"
+
+1. **Anexos do leiloeiro sem validar se são arquivo** (`ImovelDetalhe.jsx`) — `anexosLeiloeiro`
+   não chamava `ehDocArquivo()`, a mesma checagem central que já protege o resto do arquivo.
+   Corrigido.
+2. **`geocodificarCidade` sem guarda de corrida** (`Busca.jsx`) — troca rápida de cidade podia
+   deixar uma resolução LENTA (Nominatim) sobrescrever o centro por cima de uma mais recente.
+   `geoSeqRef`, mesmo padrão de `buscaSeqRef` já usado no arquivo.
+3. **`regen_motivo: null` desligava o self-heal documental PERMANENTEMENTE**
+   (`gerar-documental.js::preservarSeBom`) — confirmada a suspeita do QA: uma leitura de 0
+   documentos TRANSITÓRIA (teto Bright Data, URL expirada, 403 momentâneo) marcava
+   `regen_motivo: null`, e `regenerar-relatorios-cron` só revisita `regen_motivo not null`.
+   Trocado para `'leitura_zero_transitoria'` — reaproveita o teto de tentativas já existente
+   (MAX_TENT=3), sem risco de loop.
+4. **Login sem rate-limit por conta** — novo `api/login-rate.js` + tabela `login_tentativas`
+   (mesmo padrão de `verificar_cpf_rate`: RLS ligado sem política, só o endpoint com
+   SERVICE_KEY acessa, fail-open se a infra do limite falhar). 8 falhas de SENHA em 15min
+   bloqueiam a próxima tentativa PARA AQUELE E-MAIL; login certo, e-mail não confirmado e
+   MFA não contam.
+
+**Confirmado como NÃO-bug, deixado como está**: campo CPF do cadastro não vai pro
+`signUp` de propósito — o próprio código já dizia "CPF NÃO é exigido aqui, só na hora de
+pagar"; existe só pra checagem de conta duplicada. Decisão de produto deliberada, não
+corte silencioso — não mexido.
+
+`npm run build` limpo em todos. Migração de `login_tentativas` aplicada antes do commit.
+Com isto, os 15 achados do QA de funcionalidades de 21/09 estão todos fechados ou
+documentados como não-bug — nenhum item de código restante da lista original.
