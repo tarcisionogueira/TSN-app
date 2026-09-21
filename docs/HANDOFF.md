@@ -31131,3 +31131,60 @@ sucesso (crédito debitado, cliente recebe 200, relatório pode não ter sido sa
 com checagem de `.ok` + throw, e os caminhos de recuperação (dentro dos `catch` principais, que
 também chamam essas funções pra registrar o erro) ganharam try/catch próprio pra não deixar a
 resposta ao cliente sem retorno numa segunda falha. Build validado antes do push.
+
+## 21/09 (2ª parte) — pedido do dono: priorizar por impacto e resolver tudo que não depende dele
+
+Dos 15 achados do QA de funcionalidades semanal, mais 6 foram fechados e postos em produção
+(`main`, sem PR — fast-forward, seguindo o fluxo do CLAUDE.md), por ordem de impacto:
+
+1. **PATCH de avaliação/desconto não conferia `.ok`** (`gerar-analise.js:1105,1224`) — o gêmeo
+   crítico do upsert já corrigido, mas este corrompe `imoveis_leilao` (catálogo, fonte de
+   verdade pra TODO relatório futuro do imóvel), não só 1 relatório. Corrigido: só grava a
+   anomalia "corrigido para esse valor" quando o PATCH realmente teve `.ok`; a 2ª chamada
+   (`garantirValores`) ganhou log de erro em vez de falhar em silêncio.
+2. **Indicação circular em CADEIA** (SQL, migração `qa_21_09_indicacao_ciclica_e_saque_pj_teto.sql`)
+   — `vincular_upline`/`usar_convite` só bloqueavam autoindicação DIRETA; um ciclo indireto já
+   travou o navegador em produção (09/09, Tarcisio/Joao Paulo). Nova
+   `formaria_ciclo_indicacao()` sobe a cadeia de `indicado_por` antes de gravar; aplicada nos
+   dois pontos de escrita.
+3. **Saque PJ-pendente ignorava teto mensal/NF** (mesma migração) — `solicitar_saque_pj_pendente`
+   reimplementava as checagens de cadastro do zero mas nunca reavaliava o teto de R$2.500 nem a
+   NF acima dele (diferente de `solicitar_saque_ledger`, que rechama `saque_avaliar` inteiro).
+   Agora reavalia sob o mesmo advisory lock. `auditoria_regras_negocio()` ganhou uma checagem
+   dedicada pra este ramo (antes só cobria `solicitar_saque_ledger`) — regressão futura aqui
+   volta a acender o alarme.
+4. **Botão "Matrícula" prometia busca automática em 30min** pra ~30 leiloeiros não-CEF sem essa
+   fila (`ImovelDetalhe.jsx`) — mensagem agora diferencia CEF (tem fila real) de não-CEF
+   (aponta pro enriquecimento periódico + upload manual).
+5. **Busca: "Nenhum resultado" podia aparecer com cards reais** — só o erro da consulta de
+   DADOS era checado; se só a de CONTAGEM falhasse, `total` virava 0 com resultados reais na
+   tela. Agora cai numa estimativa a partir do que veio (mesmo princípio que o modo raio já
+   usava).
+6. **Busca por raio invisível em telemetria/alertas** — o `return` do modo raio saía antes dos
+   blocos de `busca_historico`/`alertas_email`, que só existiam no modo normal. Replicados pro
+   raio (com `raioKm`/`raioLat`/`raioLng` no filtro salvo).
+
+**Segurança, achado colateral do próprio `auditoria_seguranca()`:** `live_proxima_preview`
+(SECURITY DEFINER) tinha EXECUTE de anon sem necessidade — só é chamada por
+`/admin/live-preview`, já atrás de `role=admin` no front E no banco. Revogado de anon/public.
+
+`npm run build` (padrões+sintaxe+CSP+vite) limpo antes do push.
+`auditoria_regras_negocio()`/`auditoria_seguranca()` confirmam 0 crítico/0 atenção depois da
+migração. `qa_invariante_indicacao_ciclica()` confirma 0 ciclo existente no dado atual.
+
+**Deixado de propósito para depois** (achados reais, mas exigem mais decisão de produto ou
+maior superfície de mudança que não cabia no mesmo lote):
+- Modo raio esconde imóveis sem geocode da LISTA sem aviso — o banner do MAPA já existe, mas
+  "quantos faltam geocode PERTO deste ponto" não tem definição óbvia sem uma 2ª consulta
+  (a RPC de raio nem enxerga quem não tem lat/lng).
+- Botão Edital/Regras sem a mesma verificação servidor-side que a Matrícula já tem.
+- Anexos do leiloeiro renderizados sem `ehDocArquivo()` (suspeita, não confirmada por fonte).
+- Paginação da Busca sem tie-breaker estável; `geocodificarCidade` sem guarda de corrida.
+- Login sem rate-limit por conta (Turnstile + limite genérico do GoTrue cobrem parte).
+- Campo CPF do cadastro descartado silenciosamente (médio — só re-pergunta no checkout).
+- `regen_motivo:null` pode desligar o self-heal documental permanentemente (suspeita).
+
+**Pendências que continuam só do DONO** (nenhuma mexida nesta sessão — são decisão/painel):
+nomear um analista (`role='analista'` segue 0 ativos); escopo mínimo nas chaves Asaas/Mercado
+Pago; Google G2RS/WebISS; decidir o teto da PECINI vs. secret da frota; decidir
+terminar/remover CREPALDI.
