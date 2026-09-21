@@ -966,7 +966,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
     await page.goto(`${baseSite}/categorias/imoveis`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 2500));
 
-    const { offers, galeriaPorId } = await page.evaluate(async ([portal, lojas, comGaleria]) => {
+    const { offers, galeriaPorId, diagVazio } = await page.evaluate(async ([portal, lojas, comGaleria]) => {
       const FIELDS_BASE = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
       // Campos de DOCUMENTO (edital/matrícula/laudo). Candidatos — a API ignora os
       // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
@@ -980,23 +980,37 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         // (a loja lista o catálogo inteiro) — imóveis são filtrados no mapeamento abaixo.
         ? `https://offer-query.superbid.net/offers/?filter=stores.id:${lojas}&locale=pt_BR&orderBy=endDate:asc&pageNumber=${n}&pageSize=${PS}&portalId=[2,15]&preOrderBy=orderByFirstOpenedOffers&requestOrigin=store&searchType=opened&timeZoneId=UTC${fields ? `&fieldList=${fields}` : ''}`
         : `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=${PS}&orderBy=endDate:asc&fieldList=${fields}`;
+      // Achado do QA/regressão de 20-21/09 (SOLD zerou de 96→0 num run só): antes, HTTP não-2xx
+      // e falha de rede/parse viravam `null` do mesmo jeito que "página sem oferta" — a página 1
+      // falhando é indistinguível de "leiloeiro genuinamente sem lote hoje" no log. Agora
+      // `buscar` devolve o MOTIVO da falha, e as 3 tentativas da 1ª página (fieldList
+      // completo/base/vazio) acumulam esse motivo — só quando SOBRA algum é que sabemos que o
+      // 0 é falha da API, não catálogo vazio de verdade.
       const buscar = async (n, fields) => {
-        try { const r = await fetch(apiUrl(n, fields), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
-        catch { return null; }
+        try {
+          const r = await fetch(apiUrl(n, fields), { headers: { Accept: 'application/json' } });
+          if (!r.ok) return { arr: null, motivo: `HTTP ${r.status}` };
+          const d = await r.json();
+          return { arr: d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []), motivo: null };
+        } catch (e) { return { arr: null, motivo: `erro: ${String(e?.message || e).slice(0, 100)}` }; }
       };
+      const motivosPag1 = [];
       let fields = FIELDS_DOCS;
-      let first = await buscar(1, FIELDS_DOCS);
-      if (!first || !first.length) { fields = FIELDS_BASE; first = await buscar(1, FIELDS_BASE); } // fallback seguro
-      if ((!first || !first.length) && lojas) { fields = ''; first = await buscar(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
+      let r1 = await buscar(1, FIELDS_DOCS);
+      if (!r1.arr || !r1.arr.length) { if (r1.motivo) motivosPag1.push(`fieldList completo: ${r1.motivo}`); fields = FIELDS_BASE; r1 = await buscar(1, FIELDS_BASE); } // fallback seguro
+      if ((!r1.arr || !r1.arr.length) && lojas) { if (r1.motivo) motivosPag1.push(`fieldList base: ${r1.motivo}`); fields = ''; r1 = await buscar(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
+      if ((!r1.arr || !r1.arr.length) && r1.motivo) motivosPag1.push(`última tentativa: ${r1.motivo}`);
+      const first = r1.arr;
       const all = [...(first || [])];
       if (first && first.length >= PS) {
         for (let n = 2; n <= 100; n++) {
-          const arr = await buscar(n, fields);
+          const { arr } = await buscar(n, fields);
           if (!arr || !arr.length) break;
           all.push(...arr);
           if (arr.length < PS) break;
         }
       }
+      const diagVazio = all.length === 0 && motivosPag1.length ? motivosPag1.join(' · ') : null;
 
       // Segunda passada, SEM fieldList (payload cheio) — só assim `product.galleryJson`
       // sobrevive. Extrai só id+link de cada foto e descarta o resto na hora, pra não
@@ -1027,10 +1041,11 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         }
       }
 
-      return { offers: all, galeriaPorId: galeria };
+      return { offers: all, galeriaPorId: galeria, diagVazio };
     }, [portalId, stores || null, buscarGaleria]);
 
     console.log(`    ${leiloeiro}: ${offers.length} offers abertas coletadas${buscarGaleria ? ` · galeria capturada em ${Object.keys(galeriaPorId).length} oferta(s)` : ''}`);
+    if (!offers.length && diagVazio) console.log(`    ⚠️ ${leiloeiro}: 0 offers pode ser FALHA da API, não catálogo vazio — ${diagVazio}`);
     const seen = new Set();
     const str = v => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
     const imoveis = offers.map(of => {
