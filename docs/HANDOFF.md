@@ -31244,7 +31244,35 @@ geração) perderam o texto depois do corte NO SERVIDOR, antes de gravar; o text
 sobrevive em lugar nenhum do banco. Precisam ser gerados de novo (o fix já vale pro próximo
 "Gerar contrato" — não precisa de mais nenhuma ação de código).
 
+### Rede de segurança contra regressão + achado colateral grave (contratos JÁ ASSINADOS)
+
+Pedido do dono: "garanta que contratos futuros não tenhamos o mesmo problema". Além do fix do
+teto (já registrado acima), `qa_invariantes()` ganhou o invariante `contrato_texto_truncado`
+(categoria Documentos, gravidade **crítico**): conta `contratos_link` com `length(conteudo)`
+batendo EXATO em 20000 (teto antigo) ou 500000 (teto novo) — mesmo princípio de
+`length(descricao) = teto` já usado nas descrições de leilão. Se o corte voltar (regressão de
+código, ou um contrato genuinamente gigante no futuro), este invariante acende sozinho.
+
+**Rodando agora, achado real: 2 contratos JÁ ASSINADOS por clientes reais em 04-05/08/2026**
+("Contrato de Assessoria em Leilão de Imóveis") também estão cortados em exatamente 20000
+caracteres — o mesmo defeito, só que sem ninguém ter pedido para eu ler o texto completo
+depois de assinado. **Não toquei no conteúdo desses dois** — diferente do contrato de hoje
+(ainda `aguardando_assinatura`, onde corrigir era só preencher o que faltava), sobrescrever o
+texto de um documento JÁ ASSINADO seria alterar retroativamente um registro jurídico, o que
+exige decisão do dono (aditivo, contato com o cliente, parecer jurídico) — não é ação de
+código. **Isto entra como pendência NOVA e prioritária na lista abaixo.**
+
+O contrato de hoje (locação comercial, Tiago/Ilza/Rafael) foi corrigido diretamente no banco
+com o texto que o dono forneceu — os 3 links já enviados continuam válidos, nenhum reenvio
+necessário; nenhuma das 3 partes tinha assinado ainda no momento da correção.
+
 **Pendências que continuam só do DONO** (nenhuma mexida nesta sessão — são decisão/painel):
-nomear um analista (`role='analista'` segue 0 ativos); escopo mínimo nas chaves Asaas/Mercado
-Pago; Google G2RS/WebISS; decidir o teto da PECINI vs. secret da frota; decidir
-terminar/remover CREPALDI.
+- **NOVO, prioridade alta**: 2 contratos de "Assessoria em Leilão de Imóveis" (04-05/08) foram
+  **assinados** com texto cortado em 20000 caracteres — decidir como tratar (aditivo contratual,
+  recontato com o cliente, ou parecer jurídico antes de qualquer ação). Achados via
+  `select * from public.qa_invariantes() where chave='contrato_texto_truncado';`.
+- Nomear um analista (`role='analista'` segue 0 ativos).
+- Escopo mínimo nas chaves Asaas/Mercado Pago.
+- Google G2RS/WebISS.
+- Decidir o teto da PECINI vs. secret da frota.
+- Decidir terminar/remover CREPALDI.
