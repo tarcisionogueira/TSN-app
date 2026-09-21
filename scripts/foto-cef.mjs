@@ -21,11 +21,25 @@ const DELAY_MS = 600;
 // Antes retornava a PRIMEIRA <img> que batesse no padrão — agora retorna TODAS (dedup por
 // src), pra virar galeria. Mesmo critério de sempre: CEF usa src com "foto"/"Foto"/"imovel",
 // e o fallback (tamanho>100, sem logo/ícone/banner) cobre o resto.
+// 21/09: devolve o MOTIVO junto (mesmo princípio já aplicado no diagnóstico do SOLD) — um
+// `catch { return [] }` cego não deixa distinguir "página bloqueou/redirecionou" de "imóvel
+// realmente sem foto na Caixa", e foi exatamente essa falta de motivo que impediu confirmar
+// se o "5 bloqueios seguidos" (achado 21/09, rodando de casa) é bloqueio de verdade ou outra
+// coisa (captcha, redirect, detecção de headless) — de datacenter E de IP residencial deu o
+// mesmo resultado, contrariando a suposição inicial de bloqueio por reputação de IP.
 async function extrairFotosUrls(page, numero) {
+  let resp;
   try {
     const url = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numero}`;
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
+    resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
+  } catch (e) {
+    return { srcs: [], motivo: `erro: ${e?.message || e}` };
+  }
 
+  const status = resp?.status();
+  const urlFinal = resp?.url();
+  let titulo = '';
+  try {
     const srcs = await page.evaluate(() => {
       const imgs = Array.from(document.querySelectorAll('img'));
       const vistos = new Set();
@@ -50,10 +64,12 @@ async function extrairFotosUrls(page, numero) {
       });
       return candidates.map(c => c.src);
     });
-
-    return Array.isArray(srcs) ? srcs.slice(0, MAX_FOTOS_POR_IMOVEL) : [];
-  } catch {
-    return [];
+    titulo = await page.title().catch(() => '');
+    const lista = Array.isArray(srcs) ? srcs.slice(0, MAX_FOTOS_POR_IMOVEL) : [];
+    if (lista.length) return { srcs: lista, motivo: null };
+    return { srcs: [], motivo: `0 imgs (HTTP ${status ?? '?'}, título "${titulo}", url final ${urlFinal})` };
+  } catch (e) {
+    return { srcs: [], motivo: `erro no evaluate (HTTP ${status ?? '?'}): ${e?.message || e}` };
   }
 }
 
@@ -158,13 +174,14 @@ async function main() {
 
   for (const im of imoveis) {
     const numero = im.fonte_id.replace('cef_', '');
-    const urlsGaleria = await extrairFotosUrls(page, numero);
+    const { srcs: urlsGaleria, motivo } = await extrairFotosUrls(page, numero);
 
     if (!urlsGaleria.length) {
       bloqueados++;
+      console.log(`  ⚠️  ${im.fonte_id}: sem foto — ${motivo}`);
       // Se bloqueou 5 seguidos provavelmente IP bloqueado — para
       if (bloqueados >= 5) {
-        console.log('⚠️  5 bloqueios seguidos — CEF pode estar bloqueando o IP. Encerrando.');
+        console.log('⚠️  5 falhas seguidas — encerrando (ver motivos acima).');
         break;
       }
       continue;
