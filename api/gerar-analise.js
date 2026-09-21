@@ -133,11 +133,17 @@ function sbRpc(fn, body) {
 }
 async function upsertAnalise(row) {
   // upsert por (user_id, imovel_id)
-  await sb('analises_mercado?on_conflict=user_id,imovel_id', {
+  const r = await sb('analises_mercado?on_conflict=user_id,imovel_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
+  // Achado do QA de 21/09: um 400/409/500 do PostgREST (constraint, coluna renomeada) seguia
+  // como sucesso — crédito debitado, cliente recebe 200, relatório pode não ter sido salvo.
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '');
+    throw new Error(`upsertAnalise: HTTP ${r.status} — ${corpo.slice(0, 300)}`);
+  }
 }
 // BARRA DE EVOLUÇÃO (pedido do dono: "coloque uma barra de evolução que a cada resposta vai
 // preenchendo ou sinalizando que foi concluída"). Grava o progresso das ETAPAS da geração na
@@ -3910,11 +3916,15 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // REGERAÇÃO QUE FALHOU: devolve o relatório anterior em vez de deixar o cliente sem nada.
     // Volta como 'concluida' (é um relatório íntegro, o de antes) com o motivo da falha em
     // `erro`, para a tela poder avisar "não deu para atualizar, este é o anterior".
-    if (resultAnterior) {
-      await upsertAnalise({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultAnterior });
-    } else {
-      await upsertAnalise({ ...base, status: 'erro', erro: msg });
-    }
+    // upsertAnalise agora lança em falha de escrita — protegido aqui para não deixar a
+    // resposta ao cliente sem retorno se o PRÓPRIO registro do erro também falhar.
+    try {
+      if (resultAnterior) {
+        await upsertAnalise({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultAnterior });
+      } else {
+        await upsertAnalise({ ...base, status: 'erro', erro: msg });
+      }
+    } catch (e2) { console.error('upsertAnalise (registro do erro) falhou:', e2?.message || e2); }
     try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, semIndice: e?.semIndice ?? null, segmento: e?.segmento || null, diagBusca: e?.diagBusca || null, restaurouAnterior: !!resultAnterior, ator: user.id }); } catch { /* log best-effort */ }
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).

@@ -55,11 +55,17 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
   } catch { /* nunca bloqueia o relatório */ }
 }
 async function upsertDoc(row) {
-  await sb('analises_documental?on_conflict=user_id,imovel_id', {
+  const r = await sb('analises_documental?on_conflict=user_id,imovel_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
+  // Achado do QA de 21/09: um 400/409/500 do PostgREST (constraint, coluna renomeada) seguia
+  // como sucesso — crédito debitado, cliente recebe 200, relatório pode não ter sido salvo.
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '');
+    throw new Error(`upsertDoc: HTTP ${r.status} — ${corpo.slice(0, 300)}`);
+  }
 }
 
 // ── BARRA DE EVOLUÇÃO (13/08) ───────────────────────────────────────────────
@@ -2279,16 +2285,21 @@ export default async function handler(req, res) {
     // com uma falha que não houve do lado dele — e devolvia 500/504 sobre um laudo que já
     // existe (a tela só descobriria a verdade recarregando). É o oposto do "vazio entregue como
     // resposta" do CLAUDE.md: aqui é ERRO entregue sobre um SUCESSO. Sai cedo, como sucesso.
+    // upsertDoc agora lança em falha de escrita — protegido aqui para não deixar a resposta
+    // ao cliente sem retorno se o PRÓPRIO registro do erro/estado também falhar.
     if (persistidoNestaRodada) {
-      await upsertDoc({ ...base, status: 'concluida', erro: `pos_salvamento_falhou: ${String(msg).slice(0, 160)}`, result: persistidoNestaRodada });
+      try { await upsertDoc({ ...base, status: 'concluida', erro: `pos_salvamento_falhou: ${String(msg).slice(0, 160)}`, result: persistidoNestaRodada }); }
+      catch (e2) { console.error('upsertDoc (pos_salvamento_falhou) falhou:', e2?.message || e2); }
       await logAtividade(ownerId, 'relatorio_documental_pos_salvamento_falhou', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
       return res.status(200).json({ ok: true, result: persistidoNestaRodada });
     }
-    if (tinhaRelatorioBom) {
-      await upsertDoc({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultadoAnterior });
-    } else {
-      await upsertDoc({ ...base, status: 'erro', erro: msg });
-    }
+    try {
+      if (tinhaRelatorioBom) {
+        await upsertDoc({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultadoAnterior });
+      } else {
+        await upsertDoc({ ...base, status: 'erro', erro: msg });
+      }
+    } catch (e2) { console.error('upsertDoc (registro do erro) falhou:', e2?.message || e2); }
     await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom });
     // Estorna a cota consumida (não cobra por análise que falhou de verdade — o caso "entregue,
     // só o pós-salvamento falhou" já retornou acima e nunca chega aqui).
