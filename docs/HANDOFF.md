@@ -31503,3 +31503,36 @@ já funciona quase sempre).
 de rede — rodou sem nenhuma falha nos logs, só trouxe menos ofertas mesmo. Pode ser queda
 real do catálogo deles ou paginação truncando mais cedo por outro motivo — **investigação
 separada, ainda em aberto**, não resolvida por este fix.
+
+### Fotos CEF — a causa real era outra coisa: parâmetro de URL errado (não bloqueio, não timing)
+
+Continuação do achado das fotos CEF ausentes (mesmo dia). Rodando de casa com o diagnóstico
+melhorado, o dono trouxe o log: `HTTP 200, título "Caixa - Imóveis à venda", url final igual
+à pedida` — ou seja, a página carrega normal, não é bloqueio nenhum (contraria a suspeita
+inicial de reputação de IP). Testei uma folga de 2,5s pra JS carregar a galeria (hipótese de
+timing) — não resolveu, mesmo resultado nos 5 mesmos imóveis. A causa real, achada comparando
+com `imoveis_leilao.url_lote` (que já é o link que FUNCIONA, usado pelo scraper principal):
+**o parâmetro da URL estava errado** — `foto-cef.mjs` usava `hdniip`, que a Caixa não
+reconhece; o certo é `hdnimovel`. Com o parâmetro errado, a página carregava um estado
+genérico (título padrão, HTTP 200) sem NENHUM dado do imóvel específico — daí zero fotos
+sempre, em qualquer IP, com ou sem espera. Corrigido. Duas hipóteses erradas descartadas por
+teste real antes de achar a certa — registrado porque as duas "pareciam" plausíveis olhando
+só o sintoma (mesma lição de sempre: medir, não supor).
+
+### MP — prazo de liberação do dinheiro: medido, não suposto (pedido do dono)
+
+Dono pediu confirmação de que o MP libera as mensalidades quase imediato (motivação: 30 dias
+parado sem render CDI é prejuízo, e o Asaas acabou de fechar a porta da antecipação). Medido
+direto do campo que o próprio MP manda em cada pagamento (`money_release_date`, já vinha
+sendo gravado dentro de `dados_mp` sem nunca ter sido lido) contra `date_approved`: **0 horas
+de diferença em 74 de 74 pagamentos aprovados dos últimos 90 dias, avulso e recorrente, sem
+UMA exceção**. `config_financeira.prazo_recebimento_dias` pro MP estava em 30 — um valor
+genérico nunca medido contra o comportamento real desta conta — corrigido pra 0. Isso alimenta
+a tela Comissões (`src/pages/Comissoes.jsx`), que calculava disponibilidade de comissão com
+prazo pessimista de propósito.
+
+Virou monitoramento permanente, não só a resposta de hoje: `select * from
+public.mp_prazo_liberacao_diagnostico();` (reconfere os últimos 90 dias sempre que rodar) +
+nova entrada `mp_liberacao_atrasada` em `qa_invariantes()` (alerta se o MP algum dia passar a
+segurar > 1 dia — mudança de política de risco pra esta conta seria a explicação mais
+provável, e agora tem alarme em vez de precisar notar sozinho).
