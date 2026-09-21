@@ -31477,3 +31477,29 @@ ambiente. Pega até 120 imóveis sem galeria por execução (`fotos is null`), i
 reprocessa quem já tem. ~157 execuções pra cobrir o acervo inteiro — sem pressa, dono decide
 o ritmo. Se no futuro quiser automatizar de vez, a opção documentada é o mesmo proxy ISP já
 provado no HASTA (`dom: { usarProxyIsp: true }`), mas isso NÃO foi aplicado agora.
+
+### SOLD/SBID9/CREPALDI zerados — confirmado: blip de rede transitório de ~2 minutos, corrigido
+
+O diagnóstico plantado em 20/09 (achado, não mudança de comportamento) provou o valor dele
+no primeiro run real. Log do dia 21/09 (run `leiloeiros-puppeteer.yml` #202):
+
+```
+Sold Leilões: 0 offers pode ser FALHA da API, não catálogo vazio — fieldList completo: erro:
+Failed to fetch · última tentativa: erro: Failed to fetch
+```
+
+**Confirmado por correlação**: SOLD, SBID9 e CREPALDI falharam com o MESMO erro
+("Failed to fetch" — falha de REDE, não HTTP) na mesma janela de ~2 minutos (16:36-16:38
+UTC); SUPERBID, SBID21, TOTALLEILOES e KRONLEILOES rodaram sem nenhum erro no MESMO run.
+Blip transitório de rede/vendor, não bug de parser nosso — mas como o cron roda só 1x/dia,
+esse blip de 2 minutos zerava a fonte inteira pro DIA TODO.
+
+**Corrigido**: `scripts/scraper-puppeteer.mjs::scraperSuperbidNet` ganhou 1 tentativa extra
+após pausa de 4s, só quando o motivo é de rede (`erro:`, nunca pra `HTTP xxx` — esse é
+resposta real do servidor, repetir não muda nada). Não afeta o caminho normal (1ª tentativa
+já funciona quase sempre).
+
+**SUPERBID em si**: a regressão de total (200 vs piso 719-1438, 2 dias seguidos) NÃO é erro
+de rede — rodou sem nenhuma falha nos logs, só trouxe menos ofertas mesmo. Pode ser queda
+real do catálogo deles ou paginação truncando mais cedo por outro motivo — **investigação
+separada, ainda em aberto**, não resolvida por este fix.
