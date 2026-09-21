@@ -1379,6 +1379,12 @@ export default function Busca() {
           buildQuery(supabase.from('imoveis_leilao').select('id', { count: 'estimated', head: true })),
           buildQuery(supabase.from('imoveis_leilao').select(COLUNAS_BUSCA))
             .order(coluna, { ascending: dir, nullsFirst: false })
+            // Achado do QA de 21/09: `coluna` (desconto/valor/data) não é única — com o
+            // scraper inserindo/atualizando o catálogo o tempo todo, dois imóveis podem
+            // empatar nela, e sem desempate a ORDEM entre eles pode mudar de uma página pra
+            // outra (o mesmo lote reaparece, ou um lote nunca aparece). `id` é estável e
+            // nunca muda — desempata sem afetar a ordenação que o cliente escolheu.
+            .order('id', { ascending: true })
             .range(offset, offset + POR_PAGINA - 1),
         ]);
         dbData = data;
