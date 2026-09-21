@@ -278,19 +278,32 @@ export default async function handler(req, res) {
         } catch (e) { console.error('[asaas fallback] atualizar cadastro:', e?.message || e); } // padrao-ok: best-effort — não pode travar a cobrança por falha de atualização de cadastro
       }
 
+      // Endereço no CUSTOMER do Asaas, não só no nosso `perfis` (achado 21/09, mesma
+      // investigação da antecipação negada do Marcos): o form logo acima EXIGE endereço
+      // completo ("dados pra emissão de NF" — comentário de 18/09) e ele era salvo só no
+      // nosso banco — nunca ia pro Asaas. Item da checklist deles pra liberar antecipação,
+      // "dados do pagador completos", cobra isso do CUSTOMER de lá, não do nosso cadastro.
+      const enderecoAsaas = {
+        postalCode: end.cep || undefined,
+        address: end.logradouro || undefined,
+        addressNumber: end.numero || undefined,
+        complement: end.complemento || undefined,
+        province: end.bairro || undefined,
+      };
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
       const searchData = await searchRes.json();
       const existente = searchData.data?.[0];
       let customerId = existente?.id;
       if (!customerId) {
-        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf });
+        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf, ...enderecoAsaas });
         customerId = customer.id;
-      } else if (!existente.cpfCnpj) {
-        // Cliente já existia no Asaas sem CPF (ex.: cadastro antigo, ou o customer criado
-        // numa tentativa anterior a esta cobrança exigir o campo) — sem atualizar, o Asaas
-        // segue recusando a cobrança pra sempre, mesmo com o CPF certo vindo agora.
-        await asaasPut(`/customers/${customerId}`, { cpfCnpj: cpf });
+      } else if (!existente.cpfCnpj || !existente.postalCode) {
+        // Cliente já existia no Asaas sem CPF e/ou sem endereço (ex.: cadastro antigo, ou o
+        // customer criado numa tentativa anterior a esta cobrança exigir os campos) — sem
+        // atualizar, o Asaas segue recusando/desqualificando a cobrança pra sempre, mesmo
+        // com os dados certos vindo agora.
+        await asaasPut(`/customers/${customerId}`, { cpfCnpj: cpf, ...enderecoAsaas });
       }
       const cobranca = await asaasPost('/payments', {
         customer: customerId,
