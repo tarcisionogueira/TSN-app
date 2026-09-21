@@ -138,7 +138,19 @@ export default async function handler(req, res) {
   const T0 = Date.now();
 
   // ── Imóveis (data_fim é `date`) ──────────────────────────────────────────────────────────
-  const rIm = await sb(`imoveis_leilao?data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.asc&limit=${LOTE_TAMANHO}`);
+  // Achado ao vivo do dono (21/09): "não está puxando imóveis sem lance" — confirmado, ZERO
+  // imóvel ativo tinha `resultado_leilao` preenchido, apesar do cron rodar todo dia. Causa:
+  // esta query não filtrava `ativo` (diferente da de veículos, logo abaixo, que sempre filtrou)
+  // e ordenava por `data_fim ASC` (mais antigo primeiro) dentro da janela de 3 dias — o site do
+  // leiloeiro tira o lote do ar quase assim que o leilão encerra, então os mais ANTIGOS da
+  // janela já estão `ativo=false` bem antes dos de HOJE. Resultado medido: dos 250 processados
+  // por rodada, 144 eram inativos (0 relevância pro filtro "Sem lance", que só mostra `ativo`)
+  // e ZERO eram os 229 ativos-e-vencidos que existiam na mesma janela — o orçamento de tempo
+  // (Bright Data é lento) sempre se esgotava no lixo antigo antes de chegar no que importa.
+  // Corrigido: filtra `ativo=true` (só o que o cliente pode ver, igual veículos) e ordena
+  // DESC (o que venceu HOJE primeiro — é literalmente o pedido: "puxar os leilões que
+  // venceram no dia"), com os 2 dias de reforço vindo depois se sobrar orçamento.
+  const rIm = await sb(`imoveis_leilao?ativo=eq.true&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -153,7 +165,10 @@ export default async function handler(req, res) {
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
   const desdeISO = new Date(Date.now() - 3 * 86400000).toISOString();
   const agoraISO = new Date().toISOString();
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.asc&limit=${LOTE_TAMANHO}`);
+  // Mesma correção de ordem do bloco de imóveis acima: DESC prioriza o que venceu HOJE
+  // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
+  // esgote o orçamento antes de chegar no lote de hoje.
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.desc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
