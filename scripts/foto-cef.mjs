@@ -30,7 +30,13 @@ const DELAY_MS = 600;
 async function extrairFotosUrls(page, numero) {
   let resp;
   try {
-    const url = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numero}`;
+    // 21/09: era `hdniip` — parâmetro que a Caixa não reconhece (o real é `hdnimovel`,
+    // confirmado em `imoveis_leilao.url_lote`, já usado pelo scraper principal). Com o
+    // parâmetro errado a página carregava um estado genérico — HTTP 200, título normal,
+    // mas sem NENHUM dado do imóvel específico. Era a causa real do "0 imgs" (não bloqueio,
+    // não timing — a folga de 2,5s abaixo não mudava nada porque a página nunca tinha o
+    // imóvel certo pra carregar).
+    const url = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${numero}`;
     resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT });
     // 21/09 (achado ao vivo, rodando de casa): "0 imgs" vinha com HTTP 200 e título certo,
     // sem redirect nenhum — não é bloqueio, a página carrega normal. A galeria da Caixa
