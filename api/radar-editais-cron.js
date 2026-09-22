@@ -1083,6 +1083,18 @@ async function handler(req) {
     promocao = data;
   } catch (e) { promocao = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] promoção não rodou', promocao.erro); }
 
+  // LINK DO LOTE REAL quando o mesmo PROCESSO já foi capturado por outra fonte nossa (22/09,
+  // pedido do dono: "se conseguimos extrair a informação, não faz sentido direcionar a uma
+  // pagina generica"). Só troca link genérico/vazio por um ESPECÍFICO, e só quando o processo
+  // casa com exatamente 1 lote da outra fonte (processo com 2+ lotes fica como está — ver
+  // comentário da função no banco). Puro DB, custo zero, roda sempre.
+  let linkLote = null;
+  try {
+    const { data, error } = await supabase.rpc('editais_djen_backfill_url_lote');
+    if (error) throw new Error(error.message);
+    linkLote = { atualizados: Array.isArray(data) ? data.length : 0 };
+  } catch (e) { linkLote = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] link do lote real não rodou', linkLote.erro); }
+
   // BUSCA DE DOCUMENTO NO SITE DO LEILOEIRO (item 4 do pedido). Melhor esforço genérico —
   // ver o comentário de `descobrirDocumentosNoSite`. Roda por último e com teto pequeno: é
   // rede de verdade (fetch no site de terceiro), então o custo por rodada fica baixo mesmo
@@ -1098,7 +1110,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, link_lote: linkLote, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
