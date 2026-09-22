@@ -55,6 +55,15 @@ export const ADMIN_CHAT_TOOLS = [
     },
   },
   {
+    name: 'buscar_arremates_cliente',
+    description: 'Busca as arrematações (compras confirmadas) de um cliente PELO NOME — use sempre que o admin mencionar um cliente/assessorado pelo nome sem informar o número do processo (ex.: "o Marcos arrematou, verifica o processo dele"). Devolve os lotes arrematados e o número de processo de cada um, que você pode então usar em buscar_djen para checar se o auto foi expedido.',
+    input_schema: {
+      type: 'object',
+      properties: { nome: { type: 'string', description: 'Nome (completo ou parcial) do cliente' } },
+      required: ['nome'],
+    },
+  },
+  {
     name: 'checar_mensalidades_atrasadas',
     description: 'Lista assinaturas (mensalidades) com renovação ativa cuja data de cobrança já passou sem um pagamento aprovado correspondente — sinal de falha de cobrança recorrente no Mercado Pago.',
     input_schema: { type: 'object', properties: {} },
@@ -126,24 +135,71 @@ async function verificarArremateProcesso({ numero_processo }) {
 
   const resultados = [];
   for (const lote of lotes) {
-    const [mercado, documental, laudo] = await Promise.all([
+    // `casos` é a fonte de verdade de arremate (status_etapa/arrematado_em) — achado ao testar
+    // com dado real (22/09): analises_mercado/documental/laudo.arrematado fica FALSE mesmo em
+    // cliente com arremate formal e caso aberto (ex.: Marcos Araujo, caso d86f357b, imóvel de
+    // Feira de Santana/BA), então usar só esse campo perde o cliente. analises_* ainda entra
+    // como sinal secundário (cliente que está analisando/em andamento, sem caso formal ainda).
+    const [casos, mercado, documental, laudo] = await Promise.all([
+      sbJson(`casos?imovel_id=eq.${lote.id}&select=id,cliente_id,status_etapa,arrematado_em`),
       sbJson(`analises_mercado?imovel_id=eq.${lote.id}&select=user_id,status,arrematado&limit=10`),
       sbJson(`analises_documental?imovel_id=eq.${lote.id}&select=user_id,status,arrematado&limit=10`),
       sbJson(`analises_laudo?imovel_id=eq.${lote.id}&select=user_id,status,arrematado&limit=10`),
     ]);
+    const analises = [...(mercado || []), ...(documental || []), ...(laudo || [])];
     const userIds = new Set();
-    for (const a of [...(mercado || []), ...(documental || []), ...(laudo || [])]) if (a?.user_id) userIds.add(a.user_id);
+    for (const c of Array.isArray(casos) ? casos : []) if (c?.cliente_id) userIds.add(c.cliente_id);
+    for (const a of analises) if (a?.user_id) userIds.add(a.user_id);
     let clientes = [];
     if (userIds.size) {
       const perfis = await sbJson(`perfis?id=in.(${[...userIds].join(',')})&select=id,nome,role`);
-      clientes = (Array.isArray(perfis) ? perfis : []).map((p) => ({
-        nome: p.nome, role: p.role,
-        arrematado: [...(mercado || []), ...(documental || []), ...(laudo || [])].some((a) => a.user_id === p.id && a.arrematado),
-      }));
+      clientes = (Array.isArray(perfis) ? perfis : []).map((p) => {
+        const caso = (Array.isArray(casos) ? casos : []).find((c) => c.cliente_id === p.id);
+        return {
+          nome: p.nome, role: p.role,
+          arrematado: !!caso?.arrematado_em || analises.some((a) => a.user_id === p.id && a.arrematado),
+          caso_id: caso?.id || null,
+          status_etapa: caso?.status_etapa || null,
+          arrematado_em: caso?.arrematado_em || null,
+        };
+      });
     }
     resultados.push({ imovel_id: lote.id, titulo: lote.titulo, cidade: lote.cidade, estado: lote.estado, ativo: lote.ativo, clientes });
   }
   return { encontrado: true, lotes: resultados };
+}
+
+async function buscarArrematesCliente({ nome }) {
+  const termo = String(nome || '').trim();
+  if (!termo) return { erro: 'nome obrigatório' };
+  const perfis = await sbJson(`perfis?nome=ilike.*${encodeURIComponent(termo)}*&select=id,nome,role&limit=5`);
+  if (perfis?.erro) return perfis;
+  if (!perfis.length) return { encontrado: false, observacao: `Nenhum cliente encontrado com o nome "${termo}".` };
+
+  const clientes = [];
+  for (const p of perfis) {
+    // `casos` é a fonte de verdade de arremate — ver o comentário em verificarArremateProcesso
+    // (achado 22/09: analises_*.arrematado fica FALSE mesmo com caso formal arrematado).
+    // analises_*.arrematado=true entra como sinal secundário (raro, mas cobre o caso de um
+    // fluxo antigo que marcava só lá).
+    const [casos, mercado, documental, laudo] = await Promise.all([
+      sbJson(`casos?cliente_id=eq.${p.id}&status_etapa=eq.arrematado&select=id,imovel_id,status_etapa,arrematado_em&order=arrematado_em.desc&limit=10`),
+      sbJson(`analises_mercado?user_id=eq.${p.id}&arrematado=eq.true&select=imovel_id,status,updated_at&order=updated_at.desc&limit=10`),
+      sbJson(`analises_documental?user_id=eq.${p.id}&arrematado=eq.true&select=imovel_id,status,updated_at&order=updated_at.desc&limit=10`),
+      sbJson(`analises_laudo?user_id=eq.${p.id}&arrematado=eq.true&select=imovel_id,status,updated_at&order=updated_at.desc&limit=10`),
+    ]);
+    const casoPorImovel = Object.fromEntries((Array.isArray(casos) ? casos : []).map((c) => [c.imovel_id, c]));
+    const imovelIds = new Set(Object.keys(casoPorImovel));
+    for (const a of [...(mercado || []), ...(documental || []), ...(laudo || [])]) if (a?.imovel_id) imovelIds.add(a.imovel_id);
+    let lotes = [];
+    if (imovelIds.size) {
+      const ls = await sbJson(`imoveis_leilao?id=in.(${[...imovelIds].join(',')})&select=id,titulo,cidade,estado,numero_processo,data_leilao,ativo`);
+      lotes = (Array.isArray(ls) ? ls : []).map((l) => ({ ...l, caso_id: casoPorImovel[l.id]?.id || null, arrematado_em: casoPorImovel[l.id]?.arrematado_em || null }));
+    }
+    clientes.push({ id: p.id, nome: p.nome, role: p.role, arrematacoes: lotes });
+  }
+  const semArremate = clientes.every((c) => !c.arrematacoes.length);
+  return { encontrado: true, clientes, observacao: semArremate ? 'Cliente(s) encontrado(s), mas sem arrematação (caso com status_etapa=arrematado) registrada no sistema.' : undefined };
 }
 
 async function checarMensalidadesAtrasadas() {
@@ -269,6 +325,7 @@ export async function executarFerramentaAdmin(nome, input, ctx) {
     switch (nome) {
       case 'buscar_djen': return await buscarDjen(input);
       case 'verificar_arremate_processo': return await verificarArremateProcesso(input);
+      case 'buscar_arremates_cliente': return await buscarArrematesCliente(input);
       case 'checar_mensalidades_atrasadas': return await checarMensalidadesAtrasadas();
       case 'checar_movimentacao_processos_assessorados': return await checarMovimentacaoProcessosAssessorados();
       case 'emitir_alerta': return await emitirAlerta(input, ctx);
