@@ -31904,3 +31904,36 @@ Asaas (`creditDate`)~~ **fechada** — confirmado com chamada real, ver seção 
 (regressão de volume 200 vs 719-1438) — causa provável corrigida (paginação silenciosa em
 `scraperSuperbidNet`, commit `cb3e5a7`), mas **não confirmada ao vivo** ainda — aguardando o
 próximo run do cron pra ver se o volume volta ao normal.
+
+### 22/09 (madrugada) — "faz outras verificações do handoff enquanto isso": mais 3 achados fechados
+
+Rodada de `qa_invariantes()` + `auditoria_seguranca()` + `auditoria_regras_negocio()` enquanto
+aguardava a checagem das 21h UTC. Três achados reais, corrigidos:
+
+1. **Segurança — função nova do dia sem grant restrito**: `editais_djen_backfill_url_lote()`
+   (criada nesta mesma sessão, `SECURITY DEFINER`, faz UPDATE em `imoveis_leilao`) tinha
+   EXECUTE liberado pra PUBLIC/anon/authenticated — qualquer anônimo podia forçar UPDATE em
+   massa contornando RLS. Corrigido: revoke + grant só pra `service_role` (migração
+   `editais_djen_backfill_url_lote_revoga_grants.sql`, commit `23eaf6f`).
+2. **Auditoria de regras — falso órfão**: `bem_movel_barrado()` aparecia como não aplicando a
+   regra `acervo.bem_movel` mesmo com `regra_negocio.aplicada_por` correto, porque o auditor
+   confere se a CHAVE aparece no CÓDIGO da função, não só no metadado. Fix: comentário
+   referenciando a chave dentro do corpo da função — zero mudança de comportamento (migração
+   `bem_movel_barrado_referencia_regra_negocio.sql`, commit `23eaf6f`).
+3. **HASTAPUBLICA — foto de Open Graph do site gravada como foto do lote**: `foto_repetida_como_lote`
+   acusou 100% dos 117 lotes ativos com a MESMA foto. Causa: `vasculharDocumentos()` casa
+   `content=` de QUALQUER atributo (pra pegar imagem embutida em JSON), incluindo o `content`
+   da meta `og:image` do `<head>` — "og.jpg" não batia na lista de ruído
+   (sprite/logo/icon/avatar/placeholder/banner), e por ser a 1ª imagem do HTML, travava ali.
+   Corrigido: lista de ruído ganhou padrões de OG/compartilhamento social (`api/_doc-scan.js`);
+   gatilho de revisita estreito adicionado (os 117 já tinham anexos, nunca seriam revisitados
+   de outra forma) em `enriquecerDocumentosLote()`; `link_foto` das 117 linhas zerado no banco
+   até a próxima coleta trazer a foto real. Commit `ef3d551`.
+
+Itens menores de `qa_invariantes()` olhados e considerados ruído normal (não bugs de código):
+`cadastro_duplicado=1` (2 cadastros do mesmo telefone em 3 minutos — sinal esperado de 1º
+cadastro não concluído, não erro), `cadastro_sem_origem=1` em 7 dias (trickle orgânico normal,
+sem UTM porque não veio de anúncio). `contrato_texto_truncado=2` segue **aberto**: são 2
+contratos JÁ ASSINADOS (04/08, antes do fix de 21/09), criados pelo próprio dono no mesmo
+instante — parecem teste interno, mas alterar `conteudo` de documento assinado é decisão do
+dono, não técnica; aguardando confirmação pra apagar as 2 linhas (não fazer sem confirmar).
