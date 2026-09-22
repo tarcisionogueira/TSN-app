@@ -18,7 +18,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from './_brightdata.js';
-import { iaGeminiPrimary } from './_claude.js';
+import { iaGeminiPrimary, anthropicFetch } from './_claude.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
@@ -401,6 +401,137 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
     } catch { /* segue */ }
   }
   return feitos;
+}
+
+// Palavras curtas demais para provar identidade sozinhas (sobrenomes comuns, partículas) —
+// exigir uma delas batendo no texto da página daria falso-positivo fácil. A validação usa
+// só as palavras "fortes" do nome (>=4 letras, fora esta lista).
+const PALAVRA_FRACA_LEILOEIRO = new Set(['dos', 'das', 'de', 'da', 'do', 'e', 'leilões', 'leiloes', 'leiloeiro', 'leiloeira']);
+
+/**
+ * Descobre o SITE do leiloeiro por NOME (+ registro JUCESP quando houver), via Claude
+ * web_search — pedido do dono (22/09): "com o nome do leiloeiro e talvez cnpj conseguimos
+ * buscar os sites". O DJEN não publica CNPJ, mas às vezes publica o registro na junta
+ * comercial (`leiloeiro_jucesp`, já extraído por regex).
+ *
+ * VALIDA antes de aceitar (nunca confia no resultado cru da busca): busca a própria página
+ * (fetchExternoSeguro — mesma trava anti-SSRF já usada pros documentos do leiloeiro) e só
+ * aceita se o CONTEÚDO da página confirmar o nome (2+ palavras fortes do nome aparecem no
+ * texto) ou o registro JUCESP. Sem essa checagem eu trocaria "link genérico honesto" por
+ * "link específico e possivelmente ERRADO" (nome comum, homônimo, diretório de terceiros) —
+ * pior que o estado de hoje. Devolve `{ url, motivo }` (url null = não achou/não validou).
+ */
+async function descobrirSiteLeiloeiro(nome, { jucesp, cidade, uf } = {}) {
+  if (!process.env.CLAUDE_KEY) return { url: null, motivo: 'sem CLAUDE_KEY' };
+  const contexto = [cidade, uf].filter(Boolean).join('/');
+  const prompt = `Encontre o SITE OFICIAL (domínio de leilões online) do leiloeiro judicial brasileiro "${nome}"${jucesp ? `, registro de leiloeiro nº ${jucesp}` : ''}${contexto ? `, que atua em ${contexto}` : ''}. É uma pessoa física ou empresa que realiza leilões judiciais/extrajudiciais eletrônicos no Brasil. Responda APENAS um JSON válido, sem markdown: {"url": "https://dominio.com.br" ou null, "confianca": "alta"|"media"|"baixa"}. Use null se não encontrar, se o nome for comum demais pra ter certeza, ou se achar só perfil de rede social/diretório (não o site próprio).`;
+  let res;
+  try {
+    res = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': process.env.CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-beta': 'web-search-2025-03-05' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 400,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    }, { retries: 0, timeoutMs: 45000, noFallback: true });
+  } catch (e) { return { url: null, motivo: `busca falhou: ${String(e?.message || e).slice(0, 100)}` }; }
+  if (!res || !res.ok) return { url: null, motivo: `busca HTTP ${res?.status || 'rede'}` };
+  const data = await res.json().catch(() => null);
+  // web_search intercala blocos de busca com o texto final — o JSON está no ÚLTIMO bloco de
+  // texto (mesmo padrão de extractText em gerar-analise.js: pega o texto, não o 1º bloco).
+  const blocos = Array.isArray(data?.content) ? data.content.filter((b) => b?.type === 'text') : [];
+  const txt = blocos.length ? String(blocos[blocos.length - 1]?.text || '') : '';
+  const m = txt.match(/\{[\s\S]*\}/);
+  let achado;
+  try { achado = m ? JSON.parse(m[0]) : null; } catch { achado = null; }
+  if (!achado || !achado.url || achado.confianca === 'baixa' || !/^https?:\/\//i.test(achado.url)) {
+    return { url: null, motivo: 'busca não encontrou com confiança suficiente' };
+  }
+  // VALIDAÇÃO: a página tem que confirmar o nome/registro no próprio conteúdo.
+  let corpo;
+  try {
+    const r = await fetchExternoSeguro(achado.url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 4);
+    if (!r.ok) return { url: null, motivo: `página do leiloeiro respondeu HTTP ${r.status} — não validado` };
+    corpo = (await r.text()).slice(0, 200000);
+  } catch (e) { return { url: null, motivo: `não consegui abrir a página pra validar: ${String(e?.message || e).slice(0, 80)}` }; }
+  const corpoNorm = norm(corpo.replace(/<[^>]+>/g, ' '));
+  const bateJucesp = jucesp && corpoNorm.includes(norm(jucesp));
+  const palavrasFortes = norm(nome).split(' ').filter((w) => w.length >= 4 && !PALAVRA_FRACA_LEILOEIRO.has(w));
+  const palavrasQueBatem = palavrasFortes.filter((w) => corpoNorm.includes(w));
+  const bateNome = palavrasFortes.length >= 2 ? palavrasQueBatem.length >= 2 : palavrasQueBatem.length >= 1;
+  if (!bateJucesp && !bateNome) {
+    return { url: null, motivo: `página não confirma o leiloeiro no conteúdo (achou "${achado.url}", ${palavrasQueBatem.length}/${palavrasFortes.length} palavras do nome batem)` };
+  }
+  return { url: achado.url, motivo: bateJucesp ? 'confirmado por JUCESP na página' : `confirmado por nome na página (${palavrasQueBatem.join(', ')})` };
+}
+
+const DESCOBERTA_LOTE = 5; // teto de buscas novas por run (economia + tempo de execução)
+
+/**
+ * Roda a descoberta pros leiloeiros do DJEN ainda sem site conhecido (nem
+ * `leilao_plataforma_url` no edital, nem já tentado antes — `leiloeiro_site_descoberto` é o
+ * cache, nunca busca o mesmo duas vezes, mesmo quando não achou nada). Quando valida, já
+ * atualiza `url_lote` nos lotes ativos daquele leiloeiro que hoje estão sem link real
+ * (nunca sobrescreve um link já específico).
+ */
+async function descobrirSitesLeiloeiros(supabase) {
+  const { data: pendentes, error } = await supabase
+    .from('editais_leilao')
+    .select('leiloeiro_nome, leiloeiro_nome_norm, leiloeiro_jucesp, imovel_cidade, imovel_uf')
+    .not('leiloeiro_nome_norm', 'is', null)
+    .is('leilao_plataforma_url', null)
+    .order('criado_em', { ascending: false })
+    .limit(400); // amostra recente; dedup por norm abaixo, cap real é DESCOBERTA_LOTE buscas
+  if (error) throw new Error(error.message);
+  // Falha AQUI não pode virar "cache vazio, ninguém tentou ainda" — re-buscaria leiloeiro já
+  // tentado (custo de web_search dobrado à toa). Aborta o passo inteiro em vez de arriscar.
+  const { data: jaTentados, error: eCache } = await supabase.from('leiloeiro_site_descoberto').select('leiloeiro_nome_norm');
+  if (eCache) throw new Error(`leitura do cache falhou: ${eCache.message}`);
+  const jaTentadosSet = new Set((jaTentados || []).map((r) => r.leiloeiro_nome_norm));
+  const vistos = new Set();
+  const candidatos = [];
+  for (const e of pendentes || []) {
+    if (jaTentadosSet.has(e.leiloeiro_nome_norm) || vistos.has(e.leiloeiro_nome_norm)) continue;
+    vistos.add(e.leiloeiro_nome_norm);
+    candidatos.push(e);
+    if (candidatos.length >= DESCOBERTA_LOTE) break;
+  }
+  let encontrados = 0, lotesAtualizados = 0;
+  for (const c of candidatos) {
+    const { url, motivo } = await descobrirSiteLeiloeiro(c.leiloeiro_nome, {
+      jucesp: c.leiloeiro_jucesp, cidade: c.imovel_cidade, uf: c.imovel_uf,
+    });
+    // Grava o cache ANTES de olhar o resultado adiante — mesmo "não achou" tem que ficar
+    // registrado, senão o próximo run buscaria de novo. Loga se a gravação falhar (não
+    // impede o backfill abaixo quando `url` veio, mas o cache fica sem a entrada — o custo
+    // já foi gasto e o próximo run pode repetir; melhor visível no log que silencioso).
+    const { error: eCacheW } = await supabase.from('leiloeiro_site_descoberto').upsert({
+      leiloeiro_nome_norm: c.leiloeiro_nome_norm, leiloeiro_nome: c.leiloeiro_nome,
+      jucesp: c.leiloeiro_jucesp, url, validado: !!url, motivo, tentado_em: new Date().toISOString(),
+    });
+    if (eCacheW) console.error(`[radar-editais] gravar cache de "${c.leiloeiro_nome}" falhou:`, eCacheW.message);
+    if (url) {
+      encontrados++;
+      // Só troca link genérico/vazio — nunca sobrescreve um url_lote já específico (ex.: um
+      // lote deste mesmo leiloeiro que o cruzamento por processo já tenha resolvido antes).
+      // Filtro em JS (não no `.or()` do PostgREST): `ilike` não expressa "sem path depois do
+      // domínio" com segurança — um LIKE largo demais aqui sobrescreveria link específico.
+      const { data: candidatosUpd, error: eSel } = await supabase
+        .from('imoveis_leilao').select('id, url_lote')
+        .eq('fonte', 'EDITAL_DJEN').eq('ativo', true).eq('leiloeiro', c.leiloeiro_nome);
+      if (eSel) console.error(`[radar-editais] listar lotes de "${c.leiloeiro_nome}" pra backfill falhou:`, eSel.message);
+      const ehGenericoOuVazio = (v) => !v || /^https?:\/\/[^/]+\/?(\?.*)?$/i.test(String(v).trim());
+      const idsParaAtualizar = (candidatosUpd || []).filter((r) => ehGenericoOuVazio(r.url_lote)).map((r) => r.id);
+      if (idsParaAtualizar.length) {
+        const { data: upd, error: eUpd } = await supabase
+          .from('imoveis_leilao').update({ url_lote: url }).in('id', idsParaAtualizar).select('id');
+        if (!eUpd && Array.isArray(upd)) lotesAtualizados += upd.length;
+      }
+    }
+  }
+  return { buscados: candidatos.length, encontrados, lotesAtualizados };
 }
 
 // Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
@@ -1095,6 +1226,17 @@ async function handler(req) {
     linkLote = { atualizados: Array.isArray(data) ? data.length : 0 };
   } catch (e) { linkLote = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] link do lote real não rodou', linkLote.erro); }
 
+  // DESCOBRIR SITE DO LEILOEIRO POR NOME quando o próprio edital não trouxe nenhum (22/09,
+  // pedido do dono: "com o nome do leiloeiro e talvez cnpj conseguimos buscar os sites").
+  // web_search de verdade (custo real, ~US$0,01/busca) — por isso capado a DESCOBERTA_LOTE
+  // por run e com cache (`leiloeiro_site_descoberto`) pra nunca buscar o mesmo duas vezes.
+  // Time-boxed como o resto do run: pula se já estourou o orçamento da função serverless.
+  let descoberta = null;
+  if (Date.now() - t0 < 250000) {
+    try { descoberta = await descobrirSitesLeiloeiros(supabase); }
+    catch (e) { descoberta = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] descoberta de site não rodou', descoberta.erro); }
+  } else { descoberta = { pulado: 'orçamento de tempo do run já esgotado' }; }
+
   // BUSCA DE DOCUMENTO NO SITE DO LEILOEIRO (item 4 do pedido). Melhor esforço genérico —
   // ver o comentário de `descobrirDocumentosNoSite`. Roda por último e com teto pequeno: é
   // rede de verdade (fetch no site de terceiro), então o custo por rodada fica baixo mesmo
@@ -1110,7 +1252,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, link_lote: linkLote, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, link_lote: linkLote, descoberta_site: descoberta, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
