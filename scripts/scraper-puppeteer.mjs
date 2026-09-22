@@ -109,8 +109,18 @@ const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); r
 const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
 const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
-// Só estas 2 fontes têm o classificador ehForaDoAcervo() validado (ver salvarImoveis abaixo).
-const FONTES_FORA_DO_ACERVO_VALIDADAS = new Set(['SUPERBID', 'LJUD']);
+// Fontes com o classificador ehForaDoAcervo() validado (ver salvarImoveis abaixo). VIP/
+// LEILAOBRASIL/LEILOTECH/ROCHALEILOES entraram em 22/09 (achado real: "236 Cadeiras, Tipo
+// Universitárias" da VIP aparecendo na Busca como imóvel) — mesma metodologia do 20/09: diff
+// completo do classificador contra TODO o acervo ativo das 4 fontes (335 lotes) antes de ligar,
+// não só nos suspeitos óbvios. 20 candidatos a "fora do acervo"; 16 confirmados (móveis/
+// hardware/eletrônicos/marca — cadeiras, sofás, armários, escrivaninhas, calçado, caixa de som,
+// nome de marca sem produto) e 4 falso-candidato (não descartam de verdade: "Usina Solar..." e
+// 2 lotes agrícolas da LEILAOBRASIL batem em "Fazenda <nome do lugar>" no endereço — falso
+// negativo pré-existente, mesmo risco que SUPERBID/LJUD já assumem; "Pousada com 1.570 m²..."
+// bate no "m²" — falso alarme da minha 1ª tentativa de validação em SQL, não do classificador
+// real). Zero falso-positivo (nenhum imóvel de verdade seria descartado) — só então ligado.
+const FONTES_FORA_DO_ACERVO_VALIDADAS = new Set(['SUPERBID', 'LJUD', 'VIP', 'LEILAOBRASIL', 'LEILOTECH', 'ROCHALEILOES']);
 const baseFonte = (f) => String(f || '').trim().toUpperCase().replace(/\s+\d.*$/, ''); // "SBID9 1-500" → "SBID9"
 const ehEstrangeiroPelaCidade = (fonte, cidade) => {
   if (!FONTES_INTERNACIONAIS.has(baseFonte(fonte))) return false; // só as fontes com inventário internacional
@@ -267,15 +277,16 @@ async function salvarImoveis(imoveis, fonte) {
   const barrados = rows.length - semFracao.length;
   if (barrados) console.log(`  ⛔ ${fonte}: ${barrados} lote(s) de parte/fração ideal barrados (fora do acervo por decisão de negócio)`);
 
-  // ACERVO SÓ IMÓVEL/VEÍCULO (20/09) — mesma régua de scraper-core.mjs/fora_do_acervo_imovel_
-  // veiculo() no banco (achado real: fresa de usinagem publicada como terreno via LEILAOBRASIL).
-  // Aplicada aqui NA CAPTURA pela 1ª vez, não só via limpeza retroativa + qa_invariantes(). Escopo
-  // LIMITADO a SUPERBID/LJUD — as únicas 2 fontes deste coletor genérico já validadas contra o
-  // classificador (diff completo JS×SQL sobre o acervo ativo inteiro, 0 divergências, 20/09). As
-  // outras ~15 fontes que passam por aqui (MEGA/GRUPOLANCE/ZUK/BIASI/PESTANA/SOLD/SODRE/FRAZAO/
-  // VENDASGOV/VIP/LEILOTECH/SUPORTE/SBID9/SBID21/WEBLEILOES) NUNCA foram validadas — um teste
-  // rápido achou 365 candidatos concentrados nelas, quase todos falso-positivo de título mais
-  // terso. Ampliar pra elas sem validar repetiria o erro que este mesmo filtro já evitou uma vez.
+  // ACERVO SÓ IMÓVEL/VEÍCULO (20/09, ampliado 22/09) — mesma régua de scraper-core.mjs/
+  // fora_do_acervo_imovel_veiculo() no banco (achado real: fresa de usinagem publicada como
+  // terreno via LEILAOBRASIL; depois "236 Cadeiras, Tipo Universitárias" da VIP na Busca).
+  // Aplicada aqui NA CAPTURA, não só via limpeza retroativa + qa_invariantes(). Escopo LIMITADO
+  // às fontes de FONTES_FORA_DO_ACERVO_VALIDADAS — só entram depois de um diff completo contra
+  // TODO o acervo ativo da fonte (0 falso-positivo real). As ~11 fontes que ainda passam por
+  // aqui sem validar (MEGA/GRUPOLANCE/ZUK/BIASI/PESTANA/SOLD/SODRE/FRAZAO/VENDASGOV/SUPORTE/
+  // SBID9/SBID21/WEBLEILOES) tiveram, num teste rápido de 20/09, ~365 candidatos concentrados
+  // nelas, quase todos falso-positivo de título mais terso. Ampliar pra elas sem validar
+  // repetiria o erro que este mesmo filtro já evitou uma vez.
   const limpos = semFracao.filter(r => !FONTES_FORA_DO_ACERVO_VALIDADAS.has(r.fonte) || !ehForaDoAcervo(r));
   const foraDoAcervo = semFracao.length - limpos.length;
   if (foraDoAcervo) console.log(`  ⛔ ${fonte}: ${foraDoAcervo} lote(s) fora do acervo (nem imóvel nem veículo) barrados`);
