@@ -16,6 +16,10 @@ const STATUS = {
   concluido:  { l: 'Concluído',  c: '#15803d', bg: '#dcfce7' },
 };
 const CATEGORIAS = ['Arrematação', 'Honorários advocatícios', 'Taxa do leiloeiro', 'ITBI / Registro', 'Reforma', 'IPTU', 'Condomínio', 'Débitos assumidos', 'Venda', 'Aluguel recebido', 'Outro'];
+// Tipo de leilão (22/09, pedido do dono): judicial/extrajudicial/venda direta na lista, e o
+// número do processo quando judicial — só faz sentido lá (execução fiscal/civil tem processo;
+// venda direta/leilão extrajudicial de banco não tem).
+const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', venda_direta: 'Venda direta', venda_online: 'Venda online', licitacao_aberta: 'Licitação aberta' };
 // Documentos do ciclo do arremate — ficam permanentes (nunca apagados) e alimentam
 // a IA. Judicial: auto/carta. Extrajudicial: boleto sinal/aquisição, contrato do
 // banco (financiado), escritura (lavratura) e matrícula registrada.
@@ -710,6 +714,7 @@ export default function Arrematados() {
   const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
   const [mercado, setMercado] = React.useState({}); // imovel_id → valorMercado
   const [avals, setAvals] = React.useState({});     // imovel_id → valor_avaliacao
+  const [processos, setProcessos] = React.useState({}); // imovel_id → {modalidade, numero_processo}
   const [loading, setLoading] = React.useState(true);
   const [sel, setSel] = React.useState(null);
   const [novo, setNovo] = React.useState(false);
@@ -742,11 +747,13 @@ export default function Arrematados() {
           const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = Number(x.result?.valorMercado) > 0 ? Number(x.result.valorMercado) : null; }); setMercado(mm);
         } catch { setMercado({}); }
         try {
-          const { data: iv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao').in('id', imovelIds);
-          const av = {}; (iv || []).forEach(x => { av[x.id] = x.valor_avaliacao ?? null; }); setAvals(av);
-        } catch { setAvals({}); }
-      } else { setNDocs({}); setMercado({}); setAvals({}); }
-    } else { setSaldos({}); setNDocs({}); setMercado({}); setAvals({}); }
+          const { data: iv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao,modalidade,numero_processo').in('id', imovelIds);
+          const av = {}; const proc = {};
+          (iv || []).forEach(x => { av[x.id] = x.valor_avaliacao ?? null; proc[x.id] = { modalidade: x.modalidade, numero_processo: x.numero_processo }; });
+          setAvals(av); setProcessos(proc);
+        } catch { setAvals({}); setProcessos({}); }
+      } else { setNDocs({}); setMercado({}); setAvals({}); setProcessos({}); }
+    } else { setSaldos({}); setNDocs({}); setMercado({}); setAvals({}); setProcessos({}); }
     setLoading(false);
   }, [uid]);
   React.useEffect(() => { carregar(); }, [carregar]);
@@ -854,6 +861,11 @@ export default function Arrematados() {
             const aval = a.imovel_id ? (avals[a.imovel_id] ?? null) : null;
             const roe = (vMerc != null && arrematacao != null) ? (vMerc - arrematacao) : null;
             const roePct = (roe != null && arrematacao > 0) ? (roe / arrematacao) * 100 : null;
+            // Modalidade/processo: vem de imoveis_leilao (operação atribuída pela equipe, via
+            // imovel_id) OU do jsonb `imovel` (cliente registrou manualmente em "Já arrematei").
+            const procInfo = a.imovel_id ? processos[a.imovel_id] : null;
+            const modalidade = procInfo?.modalidade || a.imovel?.modalidade || null;
+            const numeroProcesso = procInfo?.numero_processo || a.imovel?.numero_processo || null;
             return (
               <div key={a.id} onClick={() => setSel(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer' }}
@@ -867,6 +879,14 @@ export default function Arrematados() {
                   <div style={{ fontSize: 12.5, color: '#64748b' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.c }}>{st.l}</span>
+                    {modalidade && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#f1f5f9', color: '#475569' }}>
+                        {MODALIDADE_LABEL[modalidade] || modalidade}
+                      </span>
+                    )}
+                    {modalidade === 'judicial' && numeroProcesso && (
+                      <span style={{ color: '#64748b' }}>Proc. {numeroProcesso}</span>
+                    )}
                     <span style={{ color: '#94a3b8' }}><FileText size={11} style={{ verticalAlign: -1 }} /> {docsCount} doc{docsCount !== 1 ? 's' : ''}</span>
                     {aval != null && <span style={{ color: '#64748b', fontWeight: 700 }}>Aval. {brl(aval)}</span>}
                     {vMerc != null && <span style={{ color: '#0d9488', fontWeight: 700 }}>Mercado {brl(vMerc)}</span>}
