@@ -41,3 +41,13 @@ export const ehMatriculaValida = (v) => ehDocArquivo(v) && !/matricula\.asp/i.te
  */
 export const ehRegrasDoc = (v, urlLote) => ehUrl(v)
   && !/detalhe-imovel\.asp/i.test(v) && v.trim() !== (urlLote || '').trim();
+
+/**
+ * Link "genérico" = só o domínio do leiloeiro, sem caminho até o lote (achado 22/09,
+ * pedido do dono: clicou em "Acessar leiloeiro" e caiu no catálogo inteiro do site, não
+ * no lote — chegou a ver item de outro tipo, achando que estava no nosso sistema).
+ * Comum em fontes cujo DADO DE ORIGEM não cita o lote: EDITAL_DJEN (o DJEN só publica o
+ * nome/site do leiloeiro, nunca o link do lote) e VLANCE (tenant multi-leiloeiro — 100%
+ * dos ativos medidos em 22/09 caem aqui). Não é bug de parser: é o que a fonte tem.
+ */
+export const ehUrlGenerica = (v) => ehUrl(v) && /^https?:\/\/[^/]+\/?(\?.*)?$/i.test(v.trim());

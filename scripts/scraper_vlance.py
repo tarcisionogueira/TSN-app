@@ -426,7 +426,17 @@ def montar_row(lote, pai, base, dom):
         "link_matricula": matricula_doc,
         "link_edital": edital_doc or urljoin(base, "/leilao/index/imoveis"),
         "anexos": anexos or None,
-        "url_lote": base,
+        # 22/09 (achado do dono: clicou em "Acessar leiloeiro" e caiu no catálogo inteiro do
+        # site, não no lote — chegou a ver item de outro tipo lá, achando que era do nosso
+        # sistema). `url_lote` gravava só `base` (o domínio) mesmo a API já trazendo
+        # `lote_id`+`leilao_id` — os MESMOS dois campos do padrão de URL que o próprio site
+        # usa (confirmado pela URL que o dono navegou manualmente: .../leilao/index/
+        # leilao_id/<id>/lote/<id>). Aditivo: só monta o link específico quando os dois IDs
+        # vêm preenchidos; sem eles, cai no mesmo `base` de sempre — nunca pior que hoje.
+        "url_lote": (
+            urljoin(base, f"/leilao/index/leilao_id/{lote.get('leilao_id')}/lote/{lote.get('lote_id')}")
+            if lote.get("leilao_id") and lote.get("lote_id") else base
+        ),
         "link_foto": foto_url(lote),
         "leiloeiro": lote.get("nm_leiloeiro") or pai.get("leilao_leiloeiro") or f"{slug(dom).capitalize()} Leilões",
         "data_leilao": data_leilao(lote, pai),

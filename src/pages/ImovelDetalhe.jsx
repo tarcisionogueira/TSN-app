@@ -11,7 +11,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
-import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc } from '../utils/documento';
+import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
@@ -1314,9 +1314,13 @@ export default function ImovelDetalhe() {
   const regrasEditalUrl = docOficial
     || ((ehUrl(docRegras) && !ehMesmaMatricula(docRegras)) ? docRegras
         : (ehUrl(imovel.urlLote) && imovel.urlLote !== matriculaUrl ? imovel.urlLote : null));
+  // Link genérico (achado 22/09): o botão levava ao CATÁLOGO do leiloeiro, não ao lote —
+  // rótulo tem que dizer isso, senão o cliente lê "Acessar leiloeiro" como se fosse a
+  // página deste imóvel específico.
+  const linkLeiloeiroGenerico = !regrasEhDocReal && ehUrlGenerica(regrasEditalUrl);
   const regrasEditalLabel = regrasEhDocReal
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
-    : 'Acessar leiloeiro';
+    : (linkLeiloeiroGenerico ? 'Ver site do leiloeiro' : 'Acessar leiloeiro');
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
   // SEM REPETIÇÃO (pedido do dono: "todos os anexos que o leiloeiro disponibiliza devem constar,
   // mas apenas 1x"). Mantém TODOS os anexos (inclusive proposta/parcelamento etc.), mas: (1) dedup
@@ -1829,6 +1833,12 @@ export default function ImovelDetalhe() {
                         {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {verifRegras ? 'Verificando…' : regrasEditalLabel}
                       </a>
                     )}
+                    {linkLeiloeiroGenerico && (
+                      <div style={{ flexBasis: '100%', fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5 }}>
+                        Este leiloeiro não publica um link direto para o lote — o botão abre o
+                        catálogo geral do site, não a página específica deste imóvel.
+                      </div>
+                    )}
                     {regrasIndisponivel && (
                       <div onClick={() => setRegrasIndisponivel(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
                         <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, maxWidth: 420, width: '100%', padding: '22px 22px 18px', boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
@@ -1905,8 +1915,9 @@ export default function ImovelDetalhe() {
                           <div style={{ fontWeight: 800, fontSize: 13.5, color: '#1e293b', marginBottom: 8 }}>Como obter agora (leva ~2 minutos):</div>
                           <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 13, color: '#334155', lineHeight: 1.7 }}>
                             <li>
-                              Abra a página do imóvel no site do leiloeiro
-                              {paginaLeiloeiroUrl && <> — <a href={paginaLeiloeiroUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>abrir página do imóvel</a></>}.
+                              {ehUrlGenerica(paginaLeiloeiroUrl)
+                                ? <>Abra o site do leiloeiro e procure este lote pelo número do processo/edital{paginaLeiloeiroUrl && <> — <a href={paginaLeiloeiroUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>abrir site do leiloeiro</a></>} (este leiloeiro não publica link direto por lote).</>
+                                : <>Abra a página do imóvel no site do leiloeiro{paginaLeiloeiroUrl && <> — <a href={paginaLeiloeiroUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>abrir página do imóvel</a></>}.</>}
                             </li>
                             <li>Procure a seção de documentos do lote — na Caixa, os links ficam próximos de “Baixar edital e anexos”.</li>
                             <li>Baixe o PDF da matrícula no seu computador ou celular.</li>
@@ -2146,8 +2157,13 @@ export default function ImovelDetalhe() {
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
-                    <ExternalLink size={15} /> Acessar leiloeiro
+                    <ExternalLink size={15} /> {ehUrlGenerica(imovel.urlLote) ? 'Ver site do leiloeiro' : 'Acessar leiloeiro'}
                   </a>
+                  {ehUrlGenerica(imovel.urlLote) && (
+                    <div style={{ marginTop: 6, fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5, textAlign: 'center' }}>
+                      Leva ao catálogo geral do leiloeiro — este leiloeiro não publica link direto por lote.
+                    </div>
+                  )}
                 </div>
               )}
 
