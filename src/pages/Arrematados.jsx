@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip, User } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -708,17 +708,28 @@ function NovoArrematado({ onClose, onCriar, sugestoes, inicial }) {
 export default function Arrematados() {
   const nav = useNavigate();
   const loc = useLocation();
+  const [params] = useSearchParams();
   const isMobile = useIsMobile();
   const [prefill, setPrefill] = React.useState(null);
   const { user, effectiveUserId, impersonate, role } = useAuth();
-  const soLeitura = !!impersonate; // modo suporte: só visualiza, não altera pelo cliente
   const STAFF_ROLES = ['admin', 'consultor', 'analista', 'advogado'];
   const ehStaff = STAFF_ROLES.includes(role);
+  // Visão direta da equipe (22/09, pedido do dono, vindo do menu Assessorados): "ir
+  // diretamente aos imoveis arrematados... mas sem ser pelo modo suporte" — modo suporte
+  // (iniciarSuporte/impersonate) troca o `effectiveRole` inteiro e com ele a navegação/menu
+  // do app pro do CLIENTE, o que redirecionava a equipe pra Home em vez de ficar em
+  // /arrematados. Este caminho NÃO impersona: só troca QUAL user_id é consultado, mantendo
+  // a equipe com seu próprio papel/menu. RLS já autoriza (o comentário de iniciarSuporte em
+  // AuthContext confirma: "os dados continuam protegidos por RLS", a sessão real nunca muda).
+  const clienteIdParam = params.get('cliente_id');
+  const nomeClienteParam = params.get('nome');
+  const visaoEquipeDireta = ehStaff && /^[0-9a-f-]{36}$/i.test(clienteIdParam || '');
+  const soLeitura = !!impersonate || visaoEquipeDireta; // só visualiza/anexa; não lança financeiro em nome do cliente sem impersonar de verdade
   // ANEXAR docs complementares: o dono (fora do modo suporte) OU quem está no suporte (staff).
   // O upload-anexo já autoriza staff no servidor; aqui liberamos a UI no modo suporte.
-  const permitirAnexo = !impersonate || ehStaff;
+  const permitirAnexo = !soLeitura || ehStaff;
   const { analises, documentais } = useAnalises();
-  const uid = effectiveUserId || user?.id || null;
+  const uid = visaoEquipeDireta ? clienteIdParam : (effectiveUserId || user?.id || null);
   const [arrematados, setArrematados] = React.useState([]);
   const [saldos, setSaldos] = React.useState({}); // arrematado_id → saldo
   const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
@@ -823,15 +834,25 @@ export default function Arrematados() {
       ) : (
       <>
       <div>
+        {visaoEquipeDireta && (
+          <button onClick={() => nav('/assessorados')} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 0, fontSize: 12.5, fontWeight: 700, color: '#0D63DB', cursor: 'pointer', marginBottom: 6 }}>
+            <ChevronLeft size={14} /> Assessorados
+          </button>
+        )}
         <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>BidPro Brasil</div>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Home size={22} color="#059669" /> Meus Arrematados
+          <Home size={22} color="#059669" /> {visaoEquipeDireta ? `Arrematados de ${nomeClienteParam || 'cliente'}` : 'Meus Arrematados'}
         </h1>
       </div>
 
-      {soLeitura && (
+      {impersonate && (
         <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: '#9a3412', fontWeight: 600 }}>
           👁 Modo suporte — somente visualização. Você acompanha as telas do assinante para orientá-lo; alterações são feitas por ele.
+        </div>
+      )}
+      {visaoEquipeDireta && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: '#1e40af', fontWeight: 600 }}>
+          👥 Visualizando como equipe — sem entrar em modo suporte. Você pode anexar documentos (do arremate e pessoais), mas lançamentos financeiros e novos registros continuam sendo do próprio cliente.
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

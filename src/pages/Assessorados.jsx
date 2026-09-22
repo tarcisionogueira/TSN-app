@@ -4,13 +4,22 @@ import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, ChevronRight, Settings } from 'lucide-react';
 
-// Menu "Assessorados" (22/09, pedido do dono). Duas versões:
+// Menu "Assessorados" (22/09, pedido do dono). Três versões:
 // v1: lista com nome + telefone + casos expandidos inline.
-// v2 (pedido do dono, mesma sessão, ao ver a v1 no ar): "deve aparecer somente o nome deles em
-// lista. ao clicar no assessorado, ir para a tela de meus arrematados e permitir visualizar os
-// relatorios que eles geraram." — lista simples; o clique entra em MODO SUPORTE
-// (iniciarSuporte, mesmo mecanismo que Central da Equipe/Cliente 360 já usam pra abrir a tela
-// de um cliente como staff) e manda pra /arrematados, a tela REAL do cliente — que já tem um
+// v2: "deve aparecer somente o nome... ao clicar, ir para meus arrematados e ver relatórios"
+//     — lista simples, clique entrava em MODO SUPORTE (iniciarSuporte) e navegava pra
+//     /arrematados.
+// v3 (pedido do dono, ainda na mesma sessão, ao testar a v2 ao vivo): "indo pelo botão
+//     assessorados não deve entrar em modo suporte mas sim ir diretamente aos imoveis
+//     arrematados... sem ser pelo modo suporte pois ha funções como incluir os documentos
+//     pessoais que so um admin ou equipe conseguem anexar." Modo suporte troca o
+//     `effectiveRole` inteiro pro do CLIENTE — e com ele o menu/navegação do app viravam os
+//     do assessorado, o que na prática levava a equipe pra Home em vez de ficar em
+//     /arrematados (e por trocar de "identidade", ficava incoerente com anexar documento
+//     como equipe). Agora navega com `?cliente_id=&nome=` — Arrematados.jsx lê os dois e
+//     troca só QUAL user_id é consultado, mantendo a equipe com seu próprio papel/menu (RLS
+//     já autoriza; nunca foi o impersonate que dava a permissão de leitura, ver o comentário
+//     de iniciarSuporte em AuthContext). Reaproveita a tela REAL do cliente — que já tem um
 // botão "Minhas análises" pros relatórios. Reaproveitada, não duplicada.
 // Visível só pra admin (vê todos) e equipe (analista/advogado/consultor — só quem foi
 // DESIGNADO a acompanhar); a designação em si fica atrás do ⚙, pra não poluir a lista.
@@ -50,7 +59,7 @@ function DesignarEquipe({ cliente, equipe, onDesignar, onRemover, onFechar }) {
 
 export default function Assessorados() {
   const nav = useNavigate();
-  const { role, iniciarSuporte } = useAuth();
+  const { role } = useAuth();
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
@@ -79,8 +88,7 @@ export default function Assessorados() {
   }
 
   function abrirArrematados(c) {
-    iniciarSuporte({ id: c.id, nome: c.nome, role: 'assessorado' });
-    nav('/arrematados');
+    nav(`/arrematados?cliente_id=${c.id}&nome=${encodeURIComponent(c.nome || '')}`);
   }
 
   if (erro) return <div style={{ maxWidth: 700, margin: '40px auto', padding: 20 }}>
