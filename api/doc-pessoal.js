@@ -120,8 +120,14 @@ export default async function handler(req) {
     const up = await storage(`object/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': contentType, 'x-upsert': 'true' }, body: buffer });
     if (!up.ok) { console.error('doc-pessoal storage erro:', await up.text()); return json({ error: 'Erro ao salvar no storage' }, 500); }
 
+    // Achado ao vivo (22/09, upload real pro Marcos): sem `Prefer: return=representation` o
+    // PostgREST devolve 201 com corpo VAZIO por padrão — `ins.json()` estourava
+    // "Unexpected end of JSON input" sem cair no `!ins.ok` (o insert tinha ido bem), e a
+    // exceção não capturada derrubava o handler com 500 sem corpo JSON. O cliente via
+    // "Falha no envio" (fallback genérico) porque não tinha `error` nenhum pra ler.
     const ins = await sb('usuario_docs', {
       method: 'POST',
+      headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ user_id: targetUserId, tipo, nome: baseNome, url: storagePath, tamanho_kb: Math.round(buffer.byteLength / 1024), descricao }),
     });
     if (!ins.ok) {
