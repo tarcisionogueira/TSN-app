@@ -259,7 +259,18 @@ function parseEdital(texto) {
   const leiloeiro = extrairLeiloeiro(t);
   const jucesp = pega(/JUCESP[^\dA-Za-z]{0,6}(?:n[ºo.]?\s*)?([\d./-]{2,12})/i);
   const av = pega(/avalia[çc][ãa]o[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
-  const lance = pega(/(?:lance|valor)\s+m[íi]nimo[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
+  // 22/09 (achado do dono: card mostrando "Lance mín. R$ 500,00" pra terreno de R$3,4mi).
+  // Causa: o texto padrão do CPC art.895 (parcelamento) tem DOIS trechos com "mínimo": o
+  // valor de VERDADE ("LANCE MÍNIMO 2º LEILÃO: R$ 1.700.000,00") e a cláusula de
+  // parcelamento ("no valor mínimo de R$ 500,00 CADA" parcela). O gap `[^\dR]{0,25}` não
+  // deixava passar dígito nenhum — e "2º"/"1º" TÊM dígito — então o valor de verdade nunca
+  // batia, e o regex caía direto no valor da PARCELA (sempre pequeno, sempre redondo:
+  // 500/1.000/1.500…), bem mais adiante no texto. Medido no acervo ativo: 21 lotes exibindo
+  // esse valor de parcela como se fosse o lance mínimo do imóvel inteiro.
+  // Corrigido: (a) o gap agora atravessa "2º LEILÃO"/"1º PRAÇA" etc. sem quebrar por causa do
+  // dígito do ordinal; (b) `(?!\s*cada)` nunca aceita a cláusula de parcelamento, mesmo se ela
+  // vier ANTES do valor de verdade nalgum edital com ordem diferente.
+  const lance = pega(/(?:lance|valor)\s+m[íi]nimo(?:\s+(?:d[eo]\s+)?\d[ºªo°]\s*(?:leil[ãa]o|pra[çc]a))?[^\dR]{0,25}R\$\s*([\d.]+,\d{2})(?!\s*cada)/i);
   const praca1 = pega(/(?:1[ªa]?|primeir[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const praca2 = pega(/(?:2[ªa]?|segund[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const matricula = pega(/matr[íi]cula\s*(?:n[ºo.]?\s*)?([\d.\-]{3,15})/i);
