@@ -31755,11 +31755,13 @@ específico que viu aparecer errado**, dá pra investigar esse caso exato em vez
 por enquanto não achei nenhum exemplo real no banco) que só aparece com um caso concreto na
 mão.
 
-**PENDENTE PRA PRÓXIMA SESSÃO**: dono pediu pra conferir o invariante `resultado_leilao_atrasado`
-depois do próximo run do cron corrigido (18h BRT / 21h UTC de 22/09). Consulta:
-`select * from public.qa_invariantes() where chave='resultado_leilao_atrasado';` — hoje
-(21/09, antes da correção rodar de novo) estava em 1.441 de atraso; deve cair bastante. Ao
-abrir a próxima sessão, rodar isso e reportar.
+**Conferido em 22/09** (pedido do dono do dia anterior): `max(resultado_apurado_em)` no banco
+ainda é `2026-09-21 21:03` — o run das 21h UTC de 21/09 foi o ÚLTIMO antes da correção ser
+publicada (mesmo timestamp de antes), e o run de HOJE (21h UTC de 22/09 / 18h BRT) ainda não
+aconteceu no momento desta checagem. Invariante `resultado_leilao_atrasado` segue em 1.441 —
+esperado, ainda não é regressão. **PENDENTE**: reconferir depois das 21h UTC de 22/09 —
+`select * from public.qa_invariantes() where chave='resultado_leilao_atrasado';` — aí sim o
+número deve começar a cair.
 
 ### Retenção de anexos: 15 dias extra para "sem lance", padrão para "vendido"
 
@@ -31790,3 +31792,29 @@ tela do imóvel e a reapuração on-demand roda) pode já ter perdido os documen
 acontecer, se ninguém abrir a tela dentro de 1 dia. Se o dono quiser os 15 dias valendo pra
 `indeterminado` também (mesmo critério do filtro do cliente), é uma troca de 1 linha — só não
 apliquei sozinho porque a instrução dizia literalmente "sem lance".
+
+### 22/09 — confirmado: 15 dias também para "indeterminado", e a busca diária passa a tentar resolver a dúvida sozinha
+
+Dono respondeu: **"Sim! Mas ao buscar vai tirar essa dúvida de indeterminado ou sem lance"**
+— confirma estender os 15 dias, e pede que a apuração DIÁRIA já tente resolver a ambiguidade
+(não só quando um cliente abre a tela do imóvel).
+
+**Achado ao investigar o pedido**: até aqui, a query de candidatos do cron só pegava
+`resultado_leilao is null` — uma vez marcado `'indeterminado'` (a página não deu resposta
+clara na 1ª tentativa), o cron diário NUNCA MAIS tentava de novo. A única chance de resolver
+era um cliente abrir a tela específica daquele imóvel (`ImovelDetalhe.jsx` reapura on-demand
+quando `resultadoLeilao==='indeterminado'`) — ou seja, lote sem visita nenhuma ficava
+`indeterminado` pra sempre, mesmo a página do leiloeiro tendo publicado o resultado depois.
+
+**Corrigido em `api/apurar-resultado-leilao-cron.js`** (imóveis e veículos): a consulta de
+candidatos agora inclui `resultado_leilao is null OR resultado_leilao = 'indeterminado'`
+(dentro do mesmo teto de `resultado_apuracao_tentativas` já existente — não vira retentativa
+infinita nas fontes que nunca respondem, essas já ficam de fora via
+`FONTES_APURACAO_NAO_CONFIAVEL`). Ou seja: a busca diária agora tenta de novo, até o teto de
+tentativas, os lotes que ficaram sem resposta clara — igual pedido.
+
+**`anexos_expirados()` ampliada** (mesma migração de ontem, agora cobrindo os dois): o ramo
+de 15 dias passa a valer pra `resultado_leilao in ('sem_lance','indeterminado')` — os dois
+representam a mesma dúvida pro cliente (já aparecem juntos no filtro "Sem lance" da busca).
+Testado antes de aplicar: 0 anexos de `sem_lance`/`indeterminado` aparecem no expurgo depois
+da correção (eram 54 `indeterminado` + 13 `sem_lance` sujeitos à regra antiga).

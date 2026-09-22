@@ -150,7 +150,14 @@ export default async function handler(req, res) {
   // Corrigido: filtra `ativo=true` (só o que o cliente pode ver, igual veículos) e ordena
   // DESC (o que venceu HOJE primeiro — é literalmente o pedido: "puxar os leilões que
   // venceram no dia"), com os 2 dias de reforço vindo depois se sobrar orçamento.
-  const rIm = await sb(`imoveis_leilao?ativo=eq.true&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
+  //
+  // 22/09 (pedido do dono: "ao buscar vai tirar essa dúvida de indeterminado ou sem lance"):
+  // até aqui só reprocessava `resultado_leilao is null` — uma vez marcado 'indeterminado', o
+  // cron diário NUNCA mais tentava de novo; só resolvia se um CLIENTE abrisse a tela do imóvel
+  // (reapuração on-demand em ImovelDetalhe.jsx). Agora a busca diária também tenta de novo os
+  // 'indeterminado' (dentro do mesmo teto de `resultado_apuracao_tentativas` — não vira loop
+  // infinito nas fontes que nunca respondem, ex. SODRE, já filtradas à parte).
+  const rIm = await sb(`imoveis_leilao?ativo=eq.true&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -167,8 +174,9 @@ export default async function handler(req, res) {
   const agoraISO = new Date().toISOString();
   // Mesma correção de ordem do bloco de imóveis acima: DESC prioriza o que venceu HOJE
   // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
-  // esgote o orçamento antes de chegar no lote de hoje.
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&resultado_leilao=is.null&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.desc&limit=${LOTE_TAMANHO}`);
+  // esgote o orçamento antes de chegar no lote de hoje. Mesma reabertura de 'indeterminado'
+  // do bloco de imóveis acima (22/09).
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.desc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
