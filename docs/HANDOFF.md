@@ -31818,3 +31818,49 @@ de 15 dias passa a valer pra `resultado_leilao in ('sem_lance','indeterminado')`
 representam a mesma dúvida pro cliente (já aparecem juntos no filtro "Sem lance" da busca).
 Testado antes de aplicar: 0 anexos de `sem_lance`/`indeterminado` aparecem no expurgo depois
 da correção (eram 54 `indeterminado` + 13 `sem_lance` sujeitos à regra antiga).
+
+---
+
+## 📌 FECHAMENTO DA SESSÃO — 21–22/09/2026
+
+Tudo abaixo já está commitado e em produção (`main` + branch da sessão). Nada fica só na
+memória desta conversa — é só reler esta seção pra retomar sem perguntar de novo.
+
+**O que foi corrigido (por ordem):**
+1. **ALBERTOMACEDOLEILOES** — lote com título = UUID cru virou registro real (casa em Sete
+   Lagoas/MG, confirmado pelo dono direto na fonte); `tituloDeSlug()` ganhou guarda contra
+   slug-UUID (`d657b90`).
+2. **Busca por raio** — imóvel sem geocode sumia da lista sem aviso; nova RPC
+   `buscar_por_raio_v2_sem_geocode_count()` + banner "+N imóveis... sem coordenada" na lista
+   (`777de98`).
+3. **MP — pendência do dono**: página "Credenciais de produção" quebrada do lado do MP;
+   registrada como pendência, com ressalva de que "escopo" pode não se aplicar a credencial
+   de integração direta (só existe em OAuth de terceiro) — pode fechar sem ação.
+4. **Asaas/MP — conexão automática**: pesquisado; chaves já conectadas em produção (Vercel);
+   plano concreto documentado (endpoint de diagnóstico Asaas pra ler `creditDate`/
+   `estimatedCreditDate` reais antes de interpretar) — não implementado ainda, fica pra
+   quando o dono quiser avançar.
+5. **BUG GRANDE — filtro "Sem lance" nunca funcionou pra imóvel** (`4ce0553`): ZERO dos
+   25.723 imóveis ativos tinham `resultado_leilao` apurado, desde que o recurso existe. Causa:
+   consulta do cron não filtrava `ativo` e processava backlog já invisível antes do que
+   importava. Corrigido: filtra `ativo=true`, ordena por data mais recente primeiro.
+   Monitoramento novo: invariante `resultado_leilao_atrasado` em `qa_invariantes()`.
+6. **Retenção de 15 dias pra "sem lance"/"indeterminado"** (`ca00b66`, `24bf6a0`): documentos
+   desses imóveis não são mais apagados no dia seguinte ao leilão — ficam 15 dias, tempo de
+   montar proposta de compra direta ao leiloeiro. Arrematado (`vendido`) não muda.
+7. **Busca diária volta a tentar "indeterminado"** (`24bf6a0`): antes, uma vez indeterminado,
+   só resolvia se um cliente abrisse a tela daquele imóvel. Agora o cron reprocessa também,
+   dentro do teto de tentativas já existente.
+
+**PENDENTE — checar depois de 21h UTC / 18h BRT de 22/09** (não antes: o cron ainda não
+rodou com a correção aplicada):
+```sql
+select * from public.qa_invariantes() where chave='resultado_leilao_atrasado';
+```
+Medido pela última vez (22/09, 00h13 UTC): `valor=1441`, ainda o número de ANTES da correção
+(o run de 21/09 21h foi anterior à correção subir; o de 22/09 21h ainda não aconteceu). Se
+depois desse horário o número não tiver caído bastante, é regressão nova — investigar de
+novo em vez de assumir que "já devia ter funcionado".
+
+**Também pendente, sem prazo**: MP (página de credenciais), diagnóstico Asaas (`creditDate`),
+SUPERBID (regressão de volume 200 vs 719-1438, causa ainda aberta).
