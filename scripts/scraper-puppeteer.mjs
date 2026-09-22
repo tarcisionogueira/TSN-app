@@ -5063,7 +5063,15 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // NUNCA seria revisitado — o fix de descrição do PR #377 ficaria morto pra ele e pra
     // qualquer outro lote no mesmo estado (provavelmente boa parte do catálogo já antigo).
     const descEco = descricaoEhEcoDoTitulo(im);
-    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco;
+    // HASTAPUBLICA (22/09, achado de qa_invariantes: foto_repetida_como_lote — 117/117 lotes
+    // ativos com a MESMA foto). vasculharDocumentos pegava o og:image do <head> — imagem de
+    // compartilhamento social do site inteiro, não do lote — como se fosse a foto (corrigido
+    // em api/_doc-scan.js). `jaTemDocs` já era true pros 117 (todos tinham anexos), então sem
+    // este gatilho eles nunca seriam revisitados. Escopo estreito de propósito — só o padrão
+    // específico já confirmado, não vira "falta foto" geral (CEF/EDITAL_DJEN/LJUD, que também
+    // ficam sem foto, não passam por este enriquecimento de qualquer forma — outra causa).
+    const fotoOgGenerica = /\/(og|opengraph|og-image)\.(jpe?g|png|webp)(?:[?#]|$)/i.test(im.link_foto || '');
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica;
   });
   // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
   // `cap` alvos da lista, na mesma ordem que `imoveis` chega a cada rodada — se `alvos.length`

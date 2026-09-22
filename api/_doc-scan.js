@@ -336,7 +336,15 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
     if (!abs) continue;
     const label = ancoraTexto.get(raw) || '';
     // Foto: guarda a primeira imagem "de verdade" se ainda não temos foto.
-    if (!out.foto && RE_IMG_EXT.test(abs) && !HOST_RUIDO.test(abs) && !/sprite|logo|icon|avatar|placeholder|banner/i.test(abs.split('/').pop() || '')) {
+    // Achado 22/09 (qa_invariantes: foto_repetida_como_lote): 100% dos 117 lotes ativos da
+    // HASTAPUBLICA gravavam a MESMA foto — o regex de atributos (linha ~325) casa `content=`
+    // pra pegar imagem embutida em JSON, mas isso também casa o `content` da tag
+    // `<meta property="og:image">` do <head> (imagem de compartilhamento social, uma só pra
+    // o site inteiro), e "og.jpg" não batia em nenhuma palavra do filtro de ruído — a
+    // primeira ocorrência (a do <head>, sempre antes do HTML do lote) vencia e o `!out.foto`
+    // travava nela pro resto da página.
+    if (!out.foto && RE_IMG_EXT.test(abs) && !HOST_RUIDO.test(abs)
+        && !/sprite|logo|icon|avatar|placeholder|banner|^og[-_]?(image)?\.|opengraph|social[-_]?(share|image)|share[-_]?image|default[-_]?(image|thumb)/i.test(abs.split('/').pop() || '')) {
       // evita capturar ícones pequenos do tema; aceita só jpg/png/webp comuns
       if (/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(abs)) out.foto = abs;
     }
