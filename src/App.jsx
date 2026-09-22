@@ -49,6 +49,7 @@ const Calculadora = lazy(() => import('./pages/Calculadora'));
 const IndiceConsulta = lazy(() => import('./pages/IndiceConsulta'));
 const Membros = lazy(() => import('./pages/Membros'));
 const Cliente360 = lazy(() => import('./pages/Cliente360'));
+const Assessorados = lazy(() => import('./pages/Assessorados'));
 const Curso = lazy(() => import('./pages/Curso'));
 const Planos = lazy(() => import('./pages/Planos'));
 const Alavancagem = lazy(() => import('./pages/Alavancagem'));
@@ -421,6 +422,7 @@ function MainLayout() {
           <Route path="/educacao" element={<EducacaoPublico />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/cliente-360" element={<PrivateRoute roles={['admin','analista']}><Cliente360 /></PrivateRoute>} />
+          <Route path="/assessorados" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><Assessorados /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
