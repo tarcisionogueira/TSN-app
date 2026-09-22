@@ -966,7 +966,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
     await page.goto(`${baseSite}/categorias/imoveis`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 2500));
 
-    const { offers, galeriaPorId, diagVazio } = await page.evaluate(async ([portal, lojas, comGaleria]) => {
+    const { offers, galeriaPorId, diagVazio, diagParcial } = await page.evaluate(async ([portal, lojas, comGaleria]) => {
       const FIELDS_BASE = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
       // Campos de DOCUMENTO (edital/matrícula/laudo). Candidatos — a API ignora os
       // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
@@ -1013,15 +1013,31 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       if ((!r1.arr || !r1.arr.length) && r1.motivo) motivosPag1.push(`última tentativa: ${r1.motivo}`);
       const first = r1.arr;
       const all = [...(first || [])];
+      // 22/09 (achado revisando o SUPERBID: 1452→200 em 2 rodadas seguidas, sempre exatos
+      // 2×pageSize): igual à página 1 antes do fix de 21/09, este loop lia só `arr` de
+      // `buscar()` e descartava `motivo` — erro de rede/HTTP/rate-limit na página 2+ virava
+      // "acabou o catálogo" sem deixar rastro (a mesma forma nº 4 do CLAUDE.md, agora dentro
+      // da paginação). `paginaFalhou` grava ONDE e POR QUÊ parou quando não foi fim real do
+      // catálogo (fim real = motivo null); a pausa de 4s é o mesmo tratamento de blip de rede
+      // que a página 1 já tinha desde 21/09.
+      let paginaFalhou = null;
       if (first && first.length >= PS) {
         for (let n = 2; n <= 100; n++) {
-          const { arr } = await buscar(n, fields);
-          if (!arr || !arr.length) break;
+          let { arr, motivo } = await buscar(n, fields);
+          if ((!arr || !arr.length) && /^erro:/.test(motivo || '')) {
+            await new Promise(res => setTimeout(res, 4000));
+            const retry = await buscar(n, fields);
+            if (retry.arr && retry.arr.length) { arr = retry.arr; motivo = null; }
+            else if (retry.motivo) motivo = `após pausa de 4s: ${retry.motivo}`;
+          }
+          if (!arr || !arr.length) { if (motivo) paginaFalhou = { pagina: n, motivo }; break; }
           all.push(...arr);
           if (arr.length < PS) break;
         }
       }
       const diagVazio = all.length === 0 && motivosPag1.length ? motivosPag1.join(' · ') : null;
+      const diagParcial = all.length > 0 && paginaFalhou
+        ? `parou na página ${paginaFalhou.pagina} (${all.length} coletadas até ali): ${paginaFalhou.motivo}` : null;
 
       // Segunda passada, SEM fieldList (payload cheio) — só assim `product.galleryJson`
       // sobrevive. Extrai só id+link de cada foto e descarta o resto na hora, pra não
@@ -1052,11 +1068,12 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         }
       }
 
-      return { offers: all, galeriaPorId: galeria, diagVazio };
+      return { offers: all, galeriaPorId: galeria, diagVazio, diagParcial };
     }, [portalId, stores || null, buscarGaleria]);
 
     console.log(`    ${leiloeiro}: ${offers.length} offers abertas coletadas${buscarGaleria ? ` · galeria capturada em ${Object.keys(galeriaPorId).length} oferta(s)` : ''}`);
     if (!offers.length && diagVazio) console.log(`    ⚠️ ${leiloeiro}: 0 offers pode ser FALHA da API, não catálogo vazio — ${diagVazio}`);
+    if (offers.length && diagParcial) console.log(`    ⚠️ ${leiloeiro}: paginação pode ter parado por FALHA da API, não fim do catálogo — ${diagParcial}`);
     const seen = new Set();
     const str = v => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
     const imoveis = offers.map(of => {
