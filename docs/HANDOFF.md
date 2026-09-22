@@ -31711,6 +31711,34 @@ não dá pra eu consultar ao vivo DAQUI, mas o CÓDIGO em produção pode.
 tiver melhorado); eu confirmo os campos reais do Asaas com uma chamada de teste; daí sim decido
 se vale um painel automático ou se a resposta de hoje já fecha as duas pendências.
 
+### 22/09 — Asaas: campos confirmados com chamada real, fecha a pendência de significado
+
+Implementado `GET /api/asaas-consultar-cobranca?id=pay_XXX` (admin), conforme o plano acima.
+Testado ao vivo pelo dono contra a cobrança real do Marcos (`pay_ikl88bja7s0afipw`,
+R$ 33.001,09) e o significado dos campos está **confirmado, não mais suposto**:
+
+- `status`: `PENDING` → `CONFIRMED` (cartão aprovado, dinheiro AINDA não no saldo Asaas) →
+  `RECEIVED` (dinheiro já creditado). Esta cobrança está em `CONFIRMED`.
+- `creditDate`: data DEFINITIVA de quando o dinheiro entra no saldo Asaas (uma vez que o
+  Asaas já decidiu — não é chute).
+- `estimatedCreditDate`: estimativa; pode divergir de `creditDate` enquanto incerta — aqui
+  bateu exatamente igual.
+- `clientPaymentDate`/`dueDate`: quando o cliente pagou (17/09).
+- `anticipated`/`anticipable`: confirma se a cobrança foi/pode ser antecipada — os dois
+  `false` aqui, batendo com o achado de 21/09 (antecipação negada pelo Asaas).
+
+Medido: `clientPaymentDate` 17/09 → `creditDate` 19/10 = **32 dias**, exatamente o D+32
+(liquidação padrão de cartão sem antecipação) já deduzido em 21/09 — agora confirmado com
+dado real em vez de suposição.
+
+**Decisão**: a pendência de "confirma se está a receber e quando libera" está fechada —
+o endpoint já responde isso sob demanda para qualquer `pay_id`. Não construí monitoramento
+AUTOMÁTICO (tipo `mp_liberacao_atrasada`) porque, diferente do MP, o Asaas não tem uma
+tabela local com o histórico de pagamentos (`mp_pagamentos` existe, equivalente do Asaas
+não) — um invariante automático exigiria antes um cron de sincronização (fora do escopo
+deste pedido, que era só confirmar os campos). Fica como próximo passo SE o dono quiser
+virar painel/alerta permanente.
+
 ### Filtro "Sem lance" não puxava NADA de imóvel — cron nunca alcançava os ativos
 
 Achado ao vivo do dono: "o filtro de leilões sem lance... não está puxando imóveis sem
