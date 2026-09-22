@@ -12,7 +12,8 @@
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
-import { buscarViaBrightData, buscarViaProxyIsp } from './_brightdata.js';
+import { buscarViaBrightData } from './_brightdata.js';
+import { buscarViaProxyIsp } from './_brightdata-isp-node.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica , ehDocumento } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
