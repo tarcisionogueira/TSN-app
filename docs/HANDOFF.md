@@ -31654,7 +31654,7 @@ o saldo "a receber" ao vivo** — o dono confirma isso direto no painel Asaas
 (Extrato → A receber), que é onde esse valor aparece pendente até a data de liquidação da
 própria cobrança.
 
-### PENDÊNCIA PRA AMANHÃ: MP — página "Credenciais de produção" (dono resolve)
+### ✅ FECHADA (22/09) — MP: "Credenciais de produção" não tem escopo porque não é OAuth de terceiro
 
 A página "Credenciais de produção" do painel do Mercado Pago segue com erro do lado deles
 (código `DXT20-TXHQOBS3LNIJ`, achado em 21/09) — não é algo do nosso código. **Ação do dono
@@ -31662,6 +31662,14 @@ amanhã**: abrir de novo em `Suas integrações` → a aplicação de produção
 produção**; se tiver carregado, ver o que a página realmente mostra (ver a ressalva abaixo
 antes de assumir que existe "restringir escopo" pra fazer) e me avisar o que apareceu — eu
 sigo os passos daí.
+
+**Reaberto e confirmado pelo dono em 22/09** (sem o erro de 21/09 — instabilidade
+temporária do lado do MP): a tela mostra exatamente o previsto na ressalva abaixo — Public
+Key, Access Token, Client ID, Client Secret e "compartilhe as credenciais com um
+desenvolvedor". **Nenhum seletor de escopo/permissão.** Confirma a ressalva: este tipo de
+credencial (integração DIRETA, não OAuth de aplicação terceira) não tem — e não pode ter —
+uma opção de restringir permissões, porque a credencial já É a conta inteira. **Item fechado
+como "não aplicável a integração direta"**, não é lacuna de configuração nossa nem do dono.
 
 ⚠️ **Ressalva importante, achada ao pesquisar hoje (21/09) — pode fechar o item sem ação**:
 a doc oficial do MP (OAuth) mostra que o campo `scope` só existe no fluxo OAuth de
@@ -31890,5 +31898,9 @@ Medido pela última vez (22/09, 00h13 UTC): `valor=1441`, ainda o número de ANT
 depois desse horário o número não tiver caído bastante, é regressão nova — investigar de
 novo em vez de assumir que "já devia ter funcionado".
 
-**Também pendente, sem prazo**: MP (página de credenciais), diagnóstico Asaas (`creditDate`),
-SUPERBID (regressão de volume 200 vs 719-1438, causa ainda aberta).
+**Também pendente, sem prazo** (estado em 22/09): ~~MP (página de credenciais)~~ **fechada**
+— reaberta e confirmada "não aplicável a integração direta", ver seção acima; ~~diagnóstico
+Asaas (`creditDate`)~~ **fechada** — confirmado com chamada real, ver seção acima; SUPERBID
+(regressão de volume 200 vs 719-1438) — causa provável corrigida (paginação silenciosa em
+`scraperSuperbidNet`, commit `cb3e5a7`), mas **não confirmada ao vivo** ainda — aguardando o
+próximo run do cron pra ver se o volume volta ao normal.
