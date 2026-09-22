@@ -13003,10 +13003,14 @@ function CnjTab() {
               <div style={{ maxWidth: 480, margin: '0 auto', fontSize: 13 }}>
                 Pergunte sobre processos judiciais, usuários da plataforma, análises gerenciais ou qualquer dado do sistema.<br/><br/>
                 <strong>Exemplos:</strong><br/>
-                "Qual a situação do processo 1234567-89.2023.8.05.0001?"<br/>
+                "Qual a situação do processo 1234567-89.2023.8.05.0001? Tem publicação recente no DJEN?"<br/>
+                "Esse processo tem algum cliente com arrematação em andamento?"<br/>
                 "Nome da parte: Maria Santos, BA — há penhora?"<br/>
+                "Quais mensalidades estão com cobrança atrasada?"<br/>
+                "Algum processo de assessorado teve movimentação essa semana?"<br/>
                 "Quais os últimos 10 atendimentos de suporte?"<br/>
-                "Gere um relatório dos usuários inadimplentes"
+                "Gere um relatório dos usuários inadimplentes"<br/>
+                "Avisa o cliente [nome] sobre a movimentação" <span style={{ color: '#cbd5e1' }}>(pede confirmação antes de enviar)</span>
               </div>
             </div>
           )}

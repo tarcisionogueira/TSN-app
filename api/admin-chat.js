@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { ADMIN_CHAT_TOOLS, executarFerramentaAdmin } from './_admin-chat-tools.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -81,15 +82,27 @@ export default async function handler(req) {
   const system = `Você é o assistente de inteligência administrativa da BidPro Brasil, plataforma de análise de imóveis em leilão.
 
 Você tem acesso privilegiado a:
-- Processos judiciais consultados no CNJ DataJud
+- Processos judiciais consultados no CNJ DataJud (contexto injetado quando houver busca ativa)
+- Ferramentas para consultar o DJEN direto por processo, identificar clientes com arrematação/análise
+  em andamento naquele processo, mensalidades com cobrança em atraso e movimentação recente de
+  processos de clientes do plano assessorado — use-as proativamente sempre que a pergunta do admin
+  se beneficiar, sem precisar que ele peça a consulta por extenso.
 - Histórico de atendimentos e conversas de todos os usuários da plataforma
 - Dados das integrações (PGFN, Receita Federal, etc.) quando disponíveis
 
 Seu papel é responder perguntas do administrador sobre:
-- Situação jurídica de processos e partes
+- Situação jurídica de processos e partes (CNJ DataJud e DJEN)
+- Quais clientes têm arrematação/análise em andamento ligada a um processo (facilita contato direto)
+- Mensalidades não cobradas e movimentação de processos de assessorados
 - Padrões nas conversas de suporte (problemas recorrentes, dúvidas frequentes)
 - Insights sobre usuários específicos
 - Geração de relatórios gerenciais
+
+ALERTA/NOTIFICAÇÃO (ferramenta emitir_alerta): só chame com confirmar:true depois que o admin
+pedir EXPLICITAMENTE o envio numa mensagem (ex.: "manda", "avisa o cliente", "confirma o envio").
+Na primeira menção ao alerta, chame SEMPRE com confirmar:false — isso só mostra uma prévia, não
+envia nada — e pergunte ao admin se pode confirmar. Nunca envie alerta sem esse passo de confirmação
+explícita numa mensagem anterior do admin.
 
 ${gerar_relatorio ? 'O administrador solicitou um RELATÓRIO FORMAL. Estruture a resposta com: título, data, sumário executivo, dados detalhados, conclusões e recomendações.' : ''}
 
@@ -103,15 +116,33 @@ Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não e
     { role: 'user', content: contextoStr ? `${contextoStr}\n\n---\nPergunta: ${mensagem}` : mensagem },
   ];
 
-  const r = await anthropicFetch({
-    method: 'POST',
-    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, system, messages }),
-  });
-  const data = await r.json();
-  if (!r.ok) return new Response(JSON.stringify({ error: data.error?.message || 'Erro' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  // Loop de tool use: a IA pode encadear várias ferramentas (ex.: achar o processo no DJEN e
+  // já verificar se tem cliente com arremate) antes da resposta final em texto. Teto de 6
+  // rodadas — suficiente para qualquer combinação das ferramentas atuais, evita loop sem fim
+  // se o modelo insistir em chamar ferramenta depois de já ter o que precisa.
+  for (let rodada = 0; rodada < 6; rodada++) {
+    const r = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, system, messages, tools: ADMIN_CHAT_TOOLS }),
+    });
+    const data = await r.json();
+    if (!r.ok) return new Response(JSON.stringify({ error: data.error?.message || 'Erro' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 
-  return new Response(JSON.stringify({ resposta: data.content[0].text }), {
-    status: 200, headers: { 'Content-Type': 'application/json' },
-  });
+    if (data.stop_reason !== 'tool_use') {
+      const texto = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+      return new Response(JSON.stringify({ resposta: texto }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    messages.push({ role: 'assistant', content: data.content });
+    const usos = data.content.filter(b => b.type === 'tool_use');
+    const resultados = await Promise.all(usos.map(async (uso) => ({
+      type: 'tool_result',
+      tool_use_id: uso.id,
+      content: JSON.stringify(await executarFerramentaAdmin(uso.name, uso.input, { adminUser: user })),
+    })));
+    messages.push({ role: 'user', content: resultados });
+  }
+
+  return new Response(JSON.stringify({ error: 'Muitas chamadas de ferramenta em sequência — reformule a pergunta.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 }
