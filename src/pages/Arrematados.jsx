@@ -77,7 +77,7 @@ const ehUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 
 // `podeRemover` espelha a policy `imovel_anexos_delete` (admin/analista). Não é cosmético:
 // mostrar lixeira para quem o banco não autoriza produz a mentira do "removido" que volta.
-function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permitirAnexo = !soLeitura, ehStaff = false }) {
+function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permitirAnexo = !soLeitura }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos, mesmo assinados).
   const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
@@ -88,15 +88,9 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [docsLoading, setDocsLoading] = React.useState(true);
   const [enviando, setEnviando] = React.useState(false);
   const [docTipo, setDocTipo] = React.useState('auto_arrematacao');
-  // Documentos pessoais do arrematante (RG, CPF, comprovante…) — equipe/dono anexam em
-  // nome do cliente (18/09, pedido do dono). Fonte é `usuario_docs` por user_id, via
-  // /api/doc-pessoal (server-side: upload em nome de outra pessoa não passa por RLS
-  // client-side, ver comentário no topo do endpoint).
-  const [docsPessoais, setDocsPessoais] = React.useState([]);
-  const [docsPessoaisLoading, setDocsPessoaisLoading] = React.useState(true);
-  const [pessoalTipo, setPessoalTipo] = React.useState('pessoal_rg_cnh');
-  const [pessoalDescricao, setPessoalDescricao] = React.useState('');
-  const [enviandoPessoal, setEnviandoPessoal] = React.useState(false);
+  // Documentos PESSOAIS do arrematante (RG/CPF/comprovante) saíram daqui (22/09, pedido do
+  // dono: "eles servem para qualquer arrematação e não somente a que esta em andamento") —
+  // viraram o painel DocsPessoaisPainel, aberto por user_id na tela-lista, não por arremate.
   // Descrição opcional do anexo (16/09, pedido do dono: comprovante de pagamento do
   // leiloeiro varia de propósito — sinal, saldo, taxa — e sem descrição a lista de
   // documentos perde a rastreabilidade de qual é qual).
@@ -160,61 +154,6 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     } catch { /* validação é best-effort */ }
   };
   React.useEffect(() => { carregarDocs(); }, [carregarDocs]);
-
-  // Documentos pessoais (staff-only) — carrega só quando há acesso, e só se soubermos
-  // de quem é o arremate (arr.user_id).
-  const carregarDocsPessoais = React.useCallback(async () => {
-    if (!ehStaff || !arr.user_id) { setDocsPessoais([]); setDocsPessoaisLoading(false); return; }
-    setDocsPessoaisLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/doc-pessoal?user_id=${arr.user_id}`, {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-      });
-      const d = await res.json().catch(() => ({}));
-      setDocsPessoais(res.ok && Array.isArray(d.docs) ? d.docs : []);
-    } catch (e) { console.error('[Arrematados] carregar docs pessoais:', e?.message || e); setDocsPessoais([]); }
-    setDocsPessoaisLoading(false);
-  }, [ehStaff, arr.user_id]);
-  React.useEffect(() => { carregarDocsPessoais(); }, [carregarDocsPessoais]);
-
-  const uploadDocPessoal = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) { alert('Arquivo acima de 20 MB.'); return; }
-    setEnviandoPessoal(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file); fd.append('user_id', arr.user_id); fd.append('tipo', pessoalTipo);
-      if (pessoalDescricao.trim()) fd.append('descricao', pessoalDescricao.trim());
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/doc-pessoal', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Falha no envio');
-      setPessoalDescricao('');
-      await carregarDocsPessoais();
-    } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
-    finally { setEnviandoPessoal(false); }
-  };
-  const abrirDocPessoal = async (d) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/doc-pessoal?action=abrir', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ doc_id: d.id }) });
-      const j = await res.json().catch(() => ({}));
-      if (j.url) window.open(j.url, '_blank', 'noopener'); else alert(j.error || 'Não foi possível abrir o documento.');
-    } catch (e) { console.error('[Arrematados] abrir doc pessoal:', e?.message || e); alert('Não foi possível abrir o documento.'); }
-  };
-  const delDocPessoal = async (d) => {
-    if (!confirm(`Remover "${d.nome}"?`)) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/doc-pessoal?doc_id=${d.id}`, { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) { alert(j.error || 'Não foi possível remover o documento.'); return; }
-      setDocsPessoais(prev => prev.filter(x => x.id !== d.id));
-    } catch (e) { console.error('[Arrematados] remover doc pessoal:', e?.message || e); alert('Não foi possível remover o documento.'); }
-  };
 
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos — mesmo já assinados).
   const carregarContratos = React.useCallback(async () => {
@@ -422,11 +361,6 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
         <div style={{ display: 'flex', gap: 8, padding: '14px 20px 0' }}>
           {tab('lancamentos', 'Lançamentos', DollarSign)}
           {tab('documentos', 'Documentos', FileText)}
-          {ehStaff && (
-            <button onClick={() => setAba('pessoais')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 10, background: aba === 'pessoais' ? '#0D63DB' : '#f1f5f9', color: aba === 'pessoais' ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              <User size={15} /> Doc. pessoais{docsPessoais.length ? ` (${docsPessoais.length})` : ''}
-            </button>
-          )}
         </div>
 
         <div style={{ padding: 20 }}>
@@ -577,45 +511,121 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
             </>
           )}
 
-          {aba === 'pessoais' && ehStaff && (
-            <>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
-                Documentos pessoais do arrematante (RG, CPF, comprovante de residência, certidão…) — usados na análise jurídica e no registro do imóvel. Visível só para a equipe.
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                <select value={pessoalTipo} onChange={e => setPessoalTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
-                  {DOC_PESSOAL_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviandoPessoal ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
-                  {enviandoPessoal ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF/foto</>}
-                  <input type="file" accept="application/pdf,.pdf,image/png,image/jpeg" onChange={uploadDocPessoal} disabled={enviandoPessoal} style={{ display: 'none' }} />
-                </label>
-              </div>
-              <input placeholder="Descrição (opcional)" value={pessoalDescricao} onChange={e => setPessoalDescricao(e.target.value)} maxLength={300} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 14 }} />
-
-              {docsPessoaisLoading ? (
-                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Carregando…</div>
-              ) : docsPessoais.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum documento pessoal anexado ainda.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {docsPessoais.map(d => (
-                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #f1f5f9', borderRadius: 10 }}>
-                      <User size={17} color="#7c3aed" />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <button onClick={() => abrirDocPessoal(d)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1e3a8a', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>{d.nome}</button>
-                        {d.descricao && <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.descricao}</div>}
-                        {d.tipo && <span style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_PESSOAL_LABEL[d.tipo] || d.tipo}</span>}
-                      </div>
-                      <button onClick={() => abrirDocPessoal(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
-                      <button onClick={() => delDocPessoal(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Documentos pessoais do cliente (RG/CPF/comprovante/certidão) — 22/09, movido pra fora do
+// Detalhe de um arremate específico: "eles servem para qualquer arrematação e não somente a
+// que esta em andamento" (pedido do dono). Abre por `uid` (o cliente sendo visto na lista),
+// não por `arr.user_id` de um arremate — mesma fonte (usuario_docs via /api/doc-pessoal),
+// só que agora é UM painel só, independente de qual arremate está selecionado.
+// ─────────────────────────────────────────────────────────────────────────────
+function DocsPessoaisPainel({ uid, onClose }) {
+  const [docsPessoais, setDocsPessoais] = React.useState([]);
+  const [docsPessoaisLoading, setDocsPessoaisLoading] = React.useState(true);
+  const [pessoalTipo, setPessoalTipo] = React.useState('pessoal_rg_cnh');
+  const [pessoalDescricao, setPessoalDescricao] = React.useState('');
+  const [enviandoPessoal, setEnviandoPessoal] = React.useState(false);
+  const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 9, fontSize: 13, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
+
+  const carregarDocsPessoais = React.useCallback(async () => {
+    if (!uid) { setDocsPessoais([]); setDocsPessoaisLoading(false); return; }
+    setDocsPessoaisLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/doc-pessoal?user_id=${uid}`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+      const d = await res.json().catch(() => ({}));
+      setDocsPessoais(res.ok && Array.isArray(d.docs) ? d.docs : []);
+    } catch (e) { console.error('[Arrematados] carregar docs pessoais:', e?.message || e); setDocsPessoais([]); }
+    setDocsPessoaisLoading(false);
+  }, [uid]);
+  React.useEffect(() => { carregarDocsPessoais(); }, [carregarDocsPessoais]);
+
+  const uploadDocPessoal = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { alert('Arquivo acima de 20 MB.'); return; }
+    setEnviandoPessoal(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file); fd.append('user_id', uid); fd.append('tipo', pessoalTipo);
+      if (pessoalDescricao.trim()) fd.append('descricao', pessoalDescricao.trim());
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/doc-pessoal', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Falha no envio');
+      setPessoalDescricao('');
+      await carregarDocsPessoais();
+    } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
+    finally { setEnviandoPessoal(false); }
+  };
+  const abrirDocPessoal = async (d) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/doc-pessoal?action=abrir', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ doc_id: d.id }) });
+      const j = await res.json().catch(() => ({}));
+      if (j.url) window.open(j.url, '_blank', 'noopener'); else alert(j.error || 'Não foi possível abrir o documento.');
+    } catch (e) { console.error('[Arrematados] abrir doc pessoal:', e?.message || e); alert('Não foi possível abrir o documento.'); }
+  };
+  const delDocPessoal = async (d) => {
+    if (!confirm(`Remover "${d.nome}"?`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/doc-pessoal?doc_id=${d.id}`, { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(j.error || 'Não foi possível remover o documento.'); return; }
+      setDocsPessoais(prev => prev.filter(x => x.id !== d.id));
+    } catch (e) { console.error('[Arrematados] remover doc pessoal:', e?.message || e); alert('Não foi possível remover o documento.'); }
+  };
+
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 520, padding: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontWeight: 900, fontSize: 18, color: '#111', display: 'flex', alignItems: 'center', gap: 8 }}><User size={18} color="#7c3aed" /> Documentos pessoais</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
+          RG, CPF, comprovante de residência, certidão… valem para QUALQUER arrematação deste cliente, não só a que estiver em andamento. Usados na análise jurídica e no registro do imóvel. Visível só para a equipe.
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <select value={pessoalTipo} onChange={e => setPessoalTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
+            {DOC_PESSOAL_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviandoPessoal ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+            {enviandoPessoal ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF/foto</>}
+            <input type="file" accept="application/pdf,.pdf,image/png,image/jpeg" onChange={uploadDocPessoal} disabled={enviandoPessoal} style={{ display: 'none' }} />
+          </label>
+        </div>
+        <input placeholder="Descrição (opcional)" value={pessoalDescricao} onChange={e => setPessoalDescricao(e.target.value)} maxLength={300} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 14 }} />
+
+        {docsPessoaisLoading ? (
+          <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Carregando…</div>
+        ) : docsPessoais.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum documento pessoal anexado ainda.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {docsPessoais.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                <User size={17} color="#7c3aed" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <button onClick={() => abrirDocPessoal(d)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1e3a8a', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>{d.nome}</button>
+                  {d.descricao && <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.descricao}</div>}
+                  {d.tipo && <span style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_PESSOAL_LABEL[d.tipo] || d.tipo}</span>}
+                </div>
+                <button onClick={() => abrirDocPessoal(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
+                <button onClick={() => delDocPessoal(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -718,6 +728,7 @@ export default function Arrematados() {
   const [loading, setLoading] = React.useState(true);
   const [sel, setSel] = React.useState(null);
   const [novo, setNovo] = React.useState(false);
+  const [verDocsPessoais, setVerDocsPessoais] = React.useState(false);
 
   const carregar = React.useCallback(async () => {
     if (!uid) return;
@@ -808,7 +819,7 @@ export default function Arrematados() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sel ? (
-        <Detalhe arr={sel} soLeitura={soLeitura} podeRemover={['admin', 'analista'].includes(role)} permitirAnexo={permitirAnexo} ehStaff={ehStaff} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+        <Detalhe arr={sel} soLeitura={soLeitura} podeRemover={['admin', 'analista'].includes(role)} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
       ) : (
       <>
       <div>
@@ -826,6 +837,7 @@ export default function Arrematados() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {!soLeitura && acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
         {acaoBtn('Minhas análises', Search, '#0D63DB', () => nav('/analises'))}
+        {ehStaff && uid && acaoBtn('Doc. pessoais', User, '#7c3aed', () => setVerDocsPessoais(true))}
       </div>
 
       {loading ? (
@@ -905,6 +917,7 @@ export default function Arrematados() {
       )}
 
       {novo && <NovoArrematado onClose={() => { setNovo(false); setPrefill(null); }} onCriar={criar} sugestoes={sugestoes} inicial={prefill} />}
+      {verDocsPessoais && <DocsPessoaisPainel uid={uid} onClose={() => setVerDocsPessoais(false)} />}
     </div>
   );
 }
