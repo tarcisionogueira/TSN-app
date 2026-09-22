@@ -92,7 +92,11 @@ const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL]
 // Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
 // tentativas já feitas) contra a MESMA tabela de origem. `T0`/`orcamentoRestante` são
 // compartilhados entre as duas passadas (imóveis primeiro, veículos com o que sobrar).
-async function apurarLote(tabela, candidatos, T0, orcamentoRestante) {
+// `tentarProxyIsp` (22/09, pedido do dono): só os VEÍCULOS passam true — 831 candidatos
+// SUPERBID no backlog, a sub-cota diária do Web Unlocker (25/dia, compartilhada com outros 2
+// crons) nunca daria conta. Imóveis já ficaram saudáveis com o fix de ordenação/filtro de
+// ativo (21/09) e continuam só nas cotas normais — sem motivo pra gastar o proxy ISP ali.
+async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxyIsp = false) {
   let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, cortado = false;
   for (const c of candidatos) {
     if (Date.now() - T0 > orcamentoRestante) { cortado = true; break; }
@@ -104,10 +108,10 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante) {
       continue;
     }
     let html = '';
-    // fetchLote() já resolve/loga suas próprias falhas (direto→BrightData→'fail'); este catch só
-    // protege contra um throw inesperado fora desse contrato — html='' cai no ramo de "sem
-    // conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
-    try { ({ html } = await fetchLote(c.alvo, { proposito: 'geral' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
+    // fetchLote() já resolve/loga suas próprias falhas (direto→BrightData→proxy ISP→'fail');
+    // este catch só protege contra um throw inesperado fora desse contrato — html='' cai no
+    // ramo de "sem conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
+    try { ({ html } = await fetchLote(c.alvo, { proposito: 'geral', tentarProxyIsp })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
     if (!html) {
       // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa —
       // a janela de 3 dias já cobre o reforço, e martelar sem ter respondido nada não ensina.
@@ -185,7 +189,7 @@ export default async function handler(req, res) {
   } else {
     const candidatosVeiculos = (await rVe.json().catch(() => []))
       .map(v => ({ id: v.id, alvo: v.link_lote, resultado_apuracao_tentativas: v.resultado_apuracao_tentativas }));
-    resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS)), erro: null };
+    resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS, true)), erro: null };
   }
 
   // Log incondicional (mesmo princípio já usado em outras rotinas desta base): sem isto, "não

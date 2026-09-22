@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
-import { buscarViaBrightData } from './_brightdata.js';
+import { buscarViaBrightData, buscarViaProxyIsp } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica , ehDocumento } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
@@ -43,7 +43,14 @@ function sb(path, opts = {}) {
 // arquivo (quando o cliente abre a tela do imóvel) passa 'geral_cliente' explicitamente —
 // subcota irmã, separada em 03/09 para o cliente nunca ficar sem enriquecimento por causa
 // do backlog dos crons de fundo (ver brightdata_separa_geral_cliente_do_geral_cron.sql).
-export async function fetchLote(url, { semBrightData = false, proposito = 'geral' } = {}) {
+// `tentarProxyIsp` (22/09, pedido do dono): quando a sub-cota do Web Unlocker recusar
+// (semCota), tenta o proxy ISP (custo fixo por IP+tráfego, fora desse freio — ver
+// _brightdata.js) ANTES de desistir. OPT-IN por chamador: por padrão nada muda (o freio de
+// cota continua sendo a única defesa), só liga explicitamente onde o custo fixo compensa —
+// hoje só apurar-resultado-leilao-cron.js pros veículos (831 SUPERBID no backlog, 25/dia de
+// sub-cota nunca dariam conta). "Caso não funcione, usa as cotas": o proxy nunca lança —
+// falha de qualquer natureza (não configurado, rede, timeout) cai pro `sem_cota` de sempre.
+export async function fetchLote(url, { semBrightData = false, proposito = 'geral', tentarProxyIsp = false } = {}) {
   // Anti-SSRF: URL vinda do banco (url_lote/link_edital) — nunca alcança rede interna/metadados.
   if (!hostExternoSeguro(url)) return { html: '', finalUrl: url, via: 'bloqueado' };
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
@@ -63,7 +70,16 @@ export async function fetchLote(url, { semBrightData = false, proposito = 'geral
     const text = await bd.text().catch(() => '');
     if (text) return { html: text, finalUrl: url, via: 'brightdata' };
   } catch (e) {
-    if (e?.semCota) return { html: '', finalUrl: url, via: 'sem_cota', semCota: true };
+    if (e?.semCota) {
+      if (tentarProxyIsp) {
+        const respIsp = await buscarViaProxyIsp(url, { headers: h, timeoutMs: 20000 });
+        if (respIsp && respIsp.ok) {
+          const textIsp = await respIsp.text().catch(() => '');
+          if (textIsp && textIsp.length > 500) return { html: textIsp, finalUrl: respIsp.url || url, via: 'proxy_isp' };
+        }
+      }
+      return { html: '', finalUrl: url, via: 'sem_cota', semCota: true };
+    }
   }
   return { html: '', finalUrl: url, via: 'fail' };
 }
