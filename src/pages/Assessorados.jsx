@@ -2,47 +2,26 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, ArrowRight, Phone } from 'lucide-react';
+import { Users, ChevronRight, Settings } from 'lucide-react';
 
-// Menu "Assessorados" (22/09, pedido do dono): lista os clientes do plano assessorado e liga
-// direto pros arremates/casos deles (cada caso abre /caso/:id, que já tem upload de anexo e
-// monitoramento). Visível só pra admin (vê todos) e equipe (analista/advogado/consultor —
-// só quem foi DESIGNADO a acompanhar, gerido aqui mesmo pelo admin).
+// Menu "Assessorados" (22/09, pedido do dono). Duas versões:
+// v1: lista com nome + telefone + casos expandidos inline.
+// v2 (pedido do dono, mesma sessão, ao ver a v1 no ar): "deve aparecer somente o nome deles em
+// lista. ao clicar no assessorado, ir para a tela de meus arrematados e permitir visualizar os
+// relatorios que eles geraram." — lista simples; o clique entra em MODO SUPORTE
+// (iniciarSuporte, mesmo mecanismo que Central da Equipe/Cliente 360 já usam pra abrir a tela
+// de um cliente como staff) e manda pra /arrematados, a tela REAL do cliente — que já tem um
+// botão "Minhas análises" pros relatórios. Reaproveitada, não duplicada.
+// Visível só pra admin (vê todos) e equipe (analista/advogado/consultor — só quem foi
+// DESIGNADO a acompanhar); a designação em si fica atrás do ⚙, pra não poluir a lista.
 
-const STATUS_LABEL = {
-  arrematado: { txt: 'Arrematado', bg: '#dcfce7', fg: '#15803d' },
-  em_andamento: { txt: 'Em andamento', bg: '#e0e7ff', fg: '#3730a3' },
-  concluido: { txt: 'Concluído', bg: '#dcfce7', fg: '#15803d' },
-  cancelado: { txt: 'Cancelado', bg: '#fee2e2', fg: '#b91c1c' },
-};
-const dataBR = (s) => { try { return new Date(s).toLocaleDateString('pt-BR'); } catch { return '—'; } };
-
-function CasoChip({ caso, onClick }) {
-  const st = STATUS_LABEL[caso.status_etapa] || { txt: caso.status_etapa || '—', bg: '#f1f5f9', fg: '#475569' };
-  return (
-    <button onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-      padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', marginTop: 6,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {caso.imovel_endereco || 'Sem endereço registrado'}
-        </div>
-        {caso.arrematado_em && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Arrematado em {dataBR(caso.arrematado_em)}</div>}
-      </div>
-      <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: st.bg, color: st.fg, whiteSpace: 'nowrap' }}>{st.txt}</span>
-      <ArrowRight size={14} color="#94a3b8" />
-    </button>
-  );
-}
-
-function DesignarEquipe({ cliente, equipe, onDesignar, onRemover }) {
+function DesignarEquipe({ cliente, equipe, onDesignar, onRemover, onFechar }) {
   const [sel, setSel] = useState('');
   const jaIds = new Set((cliente.equipe_designada || []).map((e) => e.membro_id));
   const disponiveis = (equipe || []).filter((m) => !jaIds.has(m.id));
   return (
-    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Equipe designada</div>
+    <div onClick={(e) => e.stopPropagation()} style={{ padding: '12px 16px 16px', borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Equipe designada a {cliente.nome}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
         {(cliente.equipe_designada || []).length === 0 && <span style={{ fontSize: 12, color: '#cbd5e1' }}>Ninguém designado ainda.</span>}
         {(cliente.equipe_designada || []).map((m) => (
@@ -64,16 +43,18 @@ function DesignarEquipe({ cliente, equipe, onDesignar, onRemover }) {
           </button>
         </div>
       )}
+      <button onClick={onFechar} style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Fechar</button>
     </div>
   );
 }
 
 export default function Assessorados() {
   const nav = useNavigate();
-  const { role } = useAuth();
+  const { role, iniciarSuporte } = useAuth();
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
+  const [designarAberto, setDesignarAberto] = useState(null);
 
   async function carregar() {
     setErro(null);
@@ -97,21 +78,26 @@ export default function Assessorados() {
     if (r.ok) carregar();
   }
 
-  if (erro) return <div style={{ maxWidth: 900, margin: '40px auto', padding: 20 }}>
+  function abrirArrematados(c) {
+    iniciarSuporte({ id: c.id, nome: c.nome, role: 'assessorado' });
+    nav('/arrematados');
+  }
+
+  if (erro) return <div style={{ maxWidth: 700, margin: '40px auto', padding: 20 }}>
     <div style={{ background: '#fee2e2', color: '#b91c1c', padding: 16, borderRadius: 10, fontSize: 14 }}>Erro: {erro}</div>
   </div>;
-  if (!dados) return <div style={{ maxWidth: 900, margin: '60px auto', textAlign: 'center', color: '#94a3b8' }}>Carregando...</div>;
+  if (!dados) return <div style={{ maxWidth: 700, margin: '60px auto', textAlign: 'center', color: '#94a3b8' }}>Carregando...</div>;
 
   const clientes = dados.clientes.filter((c) => !busca.trim() || (c.nome || '').toLowerCase().includes(busca.trim().toLowerCase()));
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px 60px' }}>
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px 60px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
         <Users size={22} color="#0D63DB" />
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#111', margin: 0 }}>Assessorados</h1>
       </div>
       <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
-        {role === 'admin' ? 'Todos os clientes do plano Assessoria.' : 'Clientes designados a você.'}
+        {role === 'admin' ? 'Todos os clientes do plano Assessoria. Clique num nome para ver os arrematados e relatórios dele.' : 'Clientes designados a você.'}
       </div>
 
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..."
@@ -125,22 +111,27 @@ export default function Assessorados() {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {clientes.map((c) => (
-          <div key={c.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</div>
-                {c.telefone && <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}><Phone size={11} /> {c.telefone}</div>}
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
+        {clientes.map((c, i) => (
+          <div key={c.id}>
+            <div onClick={() => abrirArrematados(c)} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer',
+              borderTop: i ? '1px solid #f1f5f9' : 'none',
+            }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.nome}
               </div>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{c.casos.length} caso{c.casos.length !== 1 ? 's' : ''}</span>
+              {dados.pode_designar && (
+                <button onClick={(e) => { e.stopPropagation(); setDesignarAberto(designarAberto === c.id ? null : c.id); }}
+                  title="Designar equipe" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', display: 'flex' }}>
+                  <Settings size={15} />
+                </button>
+              )}
+              <ChevronRight size={16} color="#cbd5e1" />
             </div>
-
-            {c.casos.length === 0
-              ? <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 10 }}>Nenhum caso/arremate ainda.</div>
-              : c.casos.map((caso) => <CasoChip key={caso.id} caso={caso} onClick={() => nav(`/caso/${caso.id}`)} />)}
-
-            {dados.pode_designar && <DesignarEquipe cliente={c} equipe={dados.equipe} onDesignar={designar} onRemover={remover} />}
+            {designarAberto === c.id && (
+              <DesignarEquipe cliente={c} equipe={dados.equipe} onDesignar={designar} onRemover={remover} onFechar={() => setDesignarAberto(null)} />
+            )}
           </div>
         ))}
       </div>
