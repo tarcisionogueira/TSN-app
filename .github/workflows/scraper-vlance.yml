@@ -28,6 +28,10 @@ on:
         description: '1 = imprime no log o JSON completo do 1º lote de cada domínio (diagnóstico)'
         required: false
         default: '0'
+      forcar:
+        description: '1 = ignora o freio de 168h e coleta mesmo com acervo "fresco" (ex.: logo após um fix de código que precisa recoletar já). Tem custo Bright Data — usar com intenção, não por padrão.'
+        required: false
+        default: '0'
 
 jobs:
   scraper-vlance:
@@ -57,6 +61,8 @@ jobs:
           # Data. Só coleta quando o residencial não rodou (rede de segurança).
           if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then
             python3 scripts/scraper_vlance.py --ignorar-robots
+          elif [ "${{ github.event.inputs.forcar }}" = "1" ]; then
+            python3 scripts/scraper_vlance.py --supabase --ignorar-robots
           else
             python3 scripts/scraper_vlance.py --supabase --ignorar-robots --pular-se-fresco 168
           fi
