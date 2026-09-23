@@ -22,24 +22,27 @@ console.log('URL:', reqInfo.url);
 console.log('BODY:', reqInfo.body.slice(0, 1500));
 const hdrs = { ...reqInfo.headers }; ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
 const base = JSON.parse(reqInfo.body);
-const troca = (obj, de, para) => JSON.parse(JSON.stringify(obj).split(`"${de}"`).join(`"${para}"`));
-const variantes = [['original', base]];
-for (const st of ['encerrado', 'finalizado', 'fechado', 'vendido', 'arrematado', 'sem_lance', 'condicional']) variantes.push([`aberto→${st}`, troca(base, 'aberto', st)]);
-for (const st of ['andamento']) for (const novo of ['encerrado', 'vendido', 'finalizado', 'arrematado']) variantes.push([`andamento→${novo}`, troca(base, st, novo)]);
-if (LOTES.length) variantes.push(['busca lot_id', { ...base, search: LOTES[0], q: LOTES[0], text: LOTES[0] }]);
-if (LEILAO) variantes.push(['auction_id', { ...base, auction_id: [LEILAO], auctionId: LEILAO, auctions: [LEILAO] }]);
-for (const [nome, body] of variantes) {
+// 23/09 (2ª rodada): a API é um Elasticsearch repassado — o corpo capturado tinha size:0 (só
+// agregações), por isso as variantes vieram vazias. Aqui vão consultas ES próprias.
+const idx = base.indices || ['veiculos', 'judiciais-veiculos'];
+const consultas = [
+  ['por lot_id (os 399)', { indices: idx, query: { terms: { lot_id: LOTES.map(Number) } }, size: 20 }],
+  ['leilão inteiro', { indices: idx, query: { term: { auction_id: Number(LEILAO) } }, size: 5 }],
+  ['vocabulário dos encerrados', { indices: idx, query: { term: { auction_status: 'encerrado' } }, size: 3,
+    aggs: { ls: { terms: { field: 'lot_status', size: 30 } }, lsid: { terms: { field: 'lot_status_id', size: 30 } }, hb: { terms: { field: 'bid_has_bid', size: 5 } } } }],
+];
+for (const [nome, body] of consultas) {
   const r = await page.evaluate(async (url, headers, b) => {
     try {
-      const x = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ ...b, page: 1, perPage: 50 }), credentials: 'include' });
-      const t = await x.text(); let j = null; try { j = JSON.parse(t); } catch { return { http: x.status, naoJson: t.slice(0, 120) }; }
-      const arr = j.results || [];
-      const dist = {};
-      for (const l of arr) { const k = `${l.lot_status}|${l.lot_status_id}|${l.auction_status}|lance=${l.bid_has_bid}`; dist[k] = (dist[k] || 0) + 1; }
-      return { http: x.status, total: j.total, n: arr.length, dist, ids: arr.slice(0, 3).map(l => l.lot_id) };
+      const x = await fetch(url, { method: 'POST', headers, body: JSON.stringify(b), credentials: 'include' });
+      const t = await x.text(); let j = null; try { j = JSON.parse(t); } catch { return { http: x.status, naoJson: t.slice(0, 200) }; }
+      const arr = j.results || j.hits?.hits?.map(h => h._source) || [];
+      return { http: x.status, chaves: Object.keys(j), total: j.total ?? j.hits?.total, n: arr.length,
+        lotes: arr.slice(0, 20).map(l => ({ id: l.lot_id, ls: l.lot_status, lsid: l.lot_status_id, as: l.auction_status, lance: l.bid_has_bid, atual: l.bid_actual, ini: l.bid_initial, fim: l.lot_date_end })),
+        aggs: j.aggregations || j.aggs || null };
     } catch (e) { return { erro: e.message }; }
   }, reqInfo.url, hdrs, body);
-  console.log(`[${nome}]`, JSON.stringify(r));
+  console.log(`\n[${nome}]`, JSON.stringify(r).slice(0, 4000));
 }
 if (LOTES.length) console.log('procurados:', LOTES.join(','));
 await browser.close();
