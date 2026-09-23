@@ -1,0 +1,30 @@
+name: Recon — resultado de leilão (SUPERBID + CEF)
+
+# Só leitura. Descobre de onde tirar vendido/sem lance da SUPERBID (API offer-query) e da CEF
+# (página de detalhe com node:https × fetch). Ver scripts/recon-resultado-sbid-cef.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      sbid_ids:
+        description: 'IDs de oferta SUPERBID (vírgula)'
+        required: false
+        default: '4977069,4991486,4970636,5009404'
+      cef_nums:
+        description: 'Números de imóvel CEF (vírgula)'
+        required: false
+        default: '8555528395605,1444403960129,8555518426524,10286392'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon
+        env:
+          SBID_IDS: ${{ inputs.sbid_ids }}
+          CEF_NUMS: ${{ inputs.cef_nums }}
+        run: node scripts/recon-resultado-sbid-cef.mjs
