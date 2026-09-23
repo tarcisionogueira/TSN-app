@@ -2169,6 +2169,7 @@ async function scraperSodre(browser) {
         if (total && lotesMap.size >= total) break;
         await new Promise(r => setTimeout(r, 350));
       }
+      await apurarEncerradosSodre(page, reqInfo.url, hdrs, baseBody.indices || ['imoveis', 'judiciais-imoveis'], 'imoveis_leilao', 'sodre_');
     }
 
     // Aprofunda POR LEILÃO: o view global mostra ~25, mas cada leilão tem seus
@@ -2400,6 +2401,46 @@ function descontoPercentualVeiculo(valorMinimo, valorAvaliacao) {
   return (pct > 0 && pct <= 95) ? pct : null;
 }
 
+// ── RESULTADO DA SODRÉ LIDO NA PRÓPRIA API, ENQUANTO O LOTE AINDA ESTÁ LÁ (23/09) ─────────────
+// A página da Sodré (Nuxt SSR) não diz "vendido" em lugar nenhum — por isso a fonte está fora do
+// cron de apuração e 399 veículos ficaram sem resultado. Mas a search-lots (Elasticsearch
+// repassado, recon-sodre-encerrados.yml) mantém o lote ENCERRADO por pouco tempo com o desfecho
+// explícito: `lot_status = "não vendido"` (lot_status_id 6), último lance e lance inicial.
+// Depois o lote SOME do índice (os 399 já não voltam por lot_id) — então o resultado só pode ser
+// lido na janela, e a coleta diária é quem passa por ela. Só grava rótulo EXPLÍCITO: "não
+// vendido" → sem_lance; "vendido"/"arrematado" → vendido com o lance; qualquer outro rótulo é
+// só contado no log (vocabulário novo aparece ali antes de virar regra). Sumir do índice NÃO é
+// tratado como venda — seria inferência.
+async function apurarEncerradosSodre(page, url, hdrs, indices, tabela, prefixo) {
+  const res = await page.evaluate(async (u, h, b) => {
+    try {
+      const r = await fetch(u, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
+      if (!r.ok) return { erro: `HTTP ${r.status}` };
+      const j = await r.json();
+      return { lotes: (j.results || []).map(l => ({ id: l.lot_id, ls: l.lot_status, lsid: l.lot_status_id, atual: l.bid_actual })) };
+    } catch (e) { return { erro: String(e.message || e) }; }
+  }, url, hdrs, { indices, query: { term: { auction_status: 'encerrado' } }, size: 1000 });
+  if (res.erro) { console.log(`    Sodré ${tabela}: não li os encerrados (${res.erro}) — resultado fica para a próxima rodada`); return; }
+  const rotulos = {};
+  let gravados = 0;
+  const agora = new Date().toISOString();
+  for (const l of res.lotes || []) {
+    const ls = String(l.ls || '').toLowerCase();
+    rotulos[`${ls}|${l.lsid}`] = (rotulos[`${ls}|${l.lsid}`] || 0) + 1;
+    const resultado = /^n[ãa]o\s+vendid/.test(ls) ? 'sem_lance' : /^(vendid|arrematad)/.test(ls) ? 'vendido' : null;
+    if (!resultado || !l.id) continue;
+    const patch = { resultado_leilao: resultado, resultado_apurado_em: agora };
+    if (resultado === 'vendido' && Number(l.atual) > 0) patch.valor_lance_vencedor = Number(l.atual);
+    if (tabela === 'imoveis_leilao') patch.resultado_origem = 'api_sodre';
+    const { data, error } = await supabase.from(tabela).update(patch)
+      .eq('fonte', 'SODRE').eq('fonte_id', `${prefixo}${l.id}`)
+      .or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado').select('id');
+    if (error) { console.log(`    Sodré ${tabela}: falha ao gravar resultado de ${l.id}: ${String(error.message).slice(0, 80)}`); continue; }
+    gravados += (data || []).length;
+  }
+  console.log(`    Sodré ${tabela}: ${res.lotes?.length || 0} encerrado(s) no índice · rótulos ${JSON.stringify(rotulos)} · ${gravados} resultado(s) gravado(s)`);
+}
+
 async function scraperSodreVeiculos(browser) {
   console.log('  Sodré Santoro (veículos) — interceptando /api/search-lots...');
   const page = await browser.newPage();
@@ -2453,6 +2494,7 @@ async function scraperSodreVeiculos(browser) {
         if (total && lotesMap.size >= total) break;
         await new Promise(r => setTimeout(r, 350));
       }
+      await apurarEncerradosSodre(page, reqInfo.url, hdrs, baseBody.indices || ['veiculos', 'judiciais-veiculos'], 'veiculos_leilao', 'sodre_veic_');
     }
     const parseData = (s) => {
       const m = (s || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
