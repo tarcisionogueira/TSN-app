@@ -24,6 +24,22 @@ import { Users, ChevronRight, Settings } from 'lucide-react';
 // Visível só pra admin (vê todos) e equipe (analista/advogado/consultor — só quem foi
 // DESIGNADO a acompanhar); a designação em si fica atrás do ⚙, pra não poluir a lista.
 
+// Pedido do dono (22/09): sinalizar na lista se o cliente já tem arremate em andamento
+// (arrematou mas ainda não deu posse — mesma régua de _assessoria.js) e destacar quando
+// houver MAIS DE UM ao mesmo tempo, que pede atenção redobrada.
+function BadgeAndamento({ n }) {
+  if (!n) return <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Sem arremate em andamento</span>;
+  const multiplo = n > 1;
+  return (
+    <span style={{
+      fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4,
+      background: multiplo ? '#fff7ed' : '#eff6ff', color: multiplo ? '#c2410c' : '#0D63DB',
+    }}>
+      {multiplo && '⚠ '}{n} arremate{n > 1 ? 's' : ''} em andamento
+    </span>
+  );
+}
+
 function DesignarEquipe({ cliente, equipe, onDesignar, onRemover, onFechar }) {
   const [sel, setSel] = useState('');
   const jaIds = new Set((cliente.equipe_designada || []).map((e) => e.membro_id));
@@ -126,8 +142,11 @@ export default function Assessorados() {
               display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer',
               borderTop: i ? '1px solid #f1f5f9' : 'none',
             }}>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {c.nome}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {c.nome}
+                </div>
+                <div style={{ marginTop: 2 }}><BadgeAndamento n={c.em_andamento || 0} /></div>
               </div>
               {dados.pode_designar && (
                 <button onClick={(e) => { e.stopPropagation(); setDesignarAberto(designarAberto === c.id ? null : c.id); }}

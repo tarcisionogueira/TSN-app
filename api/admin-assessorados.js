@@ -51,7 +51,7 @@ export default async function handler(req) {
 
     const [perfis, casos, designacoes] = await Promise.all([
       sbJson(`perfis?id=in.(${clienteIds.join(',')})&select=id,nome,telefone,role&order=nome.asc`),
-      sbJson(`casos?cliente_id=in.(${clienteIds.join(',')})&select=id,cliente_id,imovel_id,imovel_endereco,status_etapa,arrematado_em,juridico_status,created_at&order=created_at.desc`),
+      sbJson(`casos?cliente_id=in.(${clienteIds.join(',')})&select=id,cliente_id,imovel_id,imovel_endereco,status_etapa,arrematado_em,posse_em,juridico_status,created_at&order=created_at.desc`),
       role === 'admin' ? sbJson(`assessorado_designacao?cliente_id=in.(${clienteIds.join(',')})&select=cliente_id,membro_id`) : Promise.resolve([]),
     ]);
 
@@ -62,16 +62,25 @@ export default async function handler(req) {
       nomeMembro = Object.fromEntries(membros.map((m) => [m.id, m.nome]));
     }
 
-    const clientes = perfis.map((p) => ({
-      id: p.id, nome: p.nome, telefone: p.telefone,
-      casos: casos.filter((c) => c.cliente_id === p.id).map((c) => ({
-        id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
-        arrematado_em: c.arrematado_em, juridico_status: c.juridico_status,
-      })),
-      equipe_designada: role === 'admin'
-        ? designacoes.filter((d) => d.cliente_id === p.id).map((d) => ({ membro_id: d.membro_id, nome: nomeMembro[d.membro_id] || d.membro_id }))
-        : undefined,
-    }));
+    const clientes = perfis.map((p) => {
+      const casosCliente = casos.filter((c) => c.cliente_id === p.id);
+      // "Em andamento" = MESMA régua de podeContratarAssessoria (_assessoria.js): arrematou mas
+      // ainda não deu posse — é o intervalo em que o cliente está de fato sendo assessorado
+      // neste imóvel. Pedido do dono (22/09): sinalizar na lista, e destacar quando houver MAIS
+      // DE UMA (mais de um imóvel assessorado ao mesmo tempo pede atenção redobrada da equipe).
+      const emAndamento = casosCliente.filter((c) => c.arrematado_em && !c.posse_em).length;
+      return {
+        id: p.id, nome: p.nome, telefone: p.telefone,
+        em_andamento: emAndamento,
+        casos: casosCliente.map((c) => ({
+          id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
+          arrematado_em: c.arrematado_em, posse_em: c.posse_em, juridico_status: c.juridico_status,
+        })),
+        equipe_designada: role === 'admin'
+          ? designacoes.filter((d) => d.cliente_id === p.id).map((d) => ({ membro_id: d.membro_id, nome: nomeMembro[d.membro_id] || d.membro_id }))
+          : undefined,
+      };
+    });
 
     return json({ pode_designar: role === 'admin', clientes, equipe });
   }
