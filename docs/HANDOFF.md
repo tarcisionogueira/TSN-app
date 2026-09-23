@@ -32576,3 +32576,15 @@ Run 35889208096: LJUD visíveis 87 → **566** (114 por texto + 452 herdados; Fr
 Catanduva 98983, Cacoal…). Regra segurou onde devia: Araras (4 confirmados + 1 lido sem sinal)
 e Catanduva 98984 / Campo Grande (lote lido sem sinal) NÃO herdaram — 682 seguem ocultos até
 a leitura confirmar. Herança com só 1 lote lido existe (18 lotes) — evidência mais fraca; vigiar.
+
+**25. ✅ Leilões negativos sumiam da vitrine (imóveis e veículos).** A regra de negócio (sem lance /
+indeterminado fica ATIVO 15 dias após a apuração, para proposta de compra) existia só em
+`desativar_leiloes_encerrados`. Três caminhos a furavam: (a) o sweep `sumiu_da_fonte` do
+coletor — a fonte tira o lote encerrado da vitrine (SUPERBID só lista oferta aberta), então todo
+negativo era desligado na coleta seguinte (186/186 SUPERBID invisíveis); (b) a retenção de
+veículos (15 dias após o LEILÃO, não após a apuração — backlog apurado nascia vencido); (c) a
+apuração residencial não religava (o cron da Vercel religava). Os três respeitam a janela agora;
+245 imóveis religados (`leilao_negativo_religa_janela_15_dias.sql`): SUPERBID 188, ZUK 31, SOLD 13…
+
+**26. ✅ Caixa de e-mail ilegível no celular.** Lista (340px) + leitor lado a lado empurravam a
+mensagem para fora da tela. Abaixo de 900px: OU lista, OU mensagem com "Voltar à lista".

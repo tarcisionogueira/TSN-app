@@ -380,12 +380,18 @@ async function salvarEFinalizar(imoveis, fonte) {
     // vendido antes da praça, etc.). Sem isto o banco não distinguia "a fonte tirou do ar" de
     // "nós falhamos em coletar" para NENHUM lote destas fontes (0 de 2892 preenchidos no ZUK,
     // medido em 03/09). Nunca atinge CEF/HASTA (fora deste coletor — ver reconciliar_gemeos_hasta_cef).
+    // LEILÃO NEGATIVO FICA 15 DIAS (23/09). Lote encerrado sai da vitrine da fonte (a SUPERBID só
+    // lista oferta ABERTA) — então todo "sem lance" apurado era desligado aqui na coleta
+    // seguinte (186 de 186 SUPERBID invisíveis). Mesma janela de desativar_leiloes_encerrados():
+    // sem_lance/indeterminado apurado há < 15 dias continua ativo, para a proposta de compra.
+    const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
     const { error, count } = await supabase
       .from('imoveis_leilao')
       .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
       .eq('fonte', fonte)
       .eq('ativo', true)
-      .lt('atualizado_em', runStart);
+      .lt('atualizado_em', runStart)
+      .or(`resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${janelaNegativo}`);
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
     else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
   } else if (gravouTudo && salvos <= 50) {
@@ -2563,12 +2569,16 @@ async function scraperSodreVeiculos(browser) {
 async function retencaoVeiculosVencidos() {
   try {
     const limite = new Date(Date.now() - 15 * 86400000).toISOString();
+    // Leilão negativo (sem_lance/indeterminado) conta os 15 dias a partir da APURAÇÃO, não do
+    // leilão (23/09) — mesma janela dos imóveis. Apuração tardia (backlog da SUPERBID) não
+    // pode nascer já vencida.
     const { error, count } = await supabase
       .from('veiculos_leilao')
       .update({ ativo: false }, { count: 'exact' })
       .eq('ativo', true)
       .not('data_leilao', 'is', null)
-      .lt('data_leilao', limite);
+      .lt('data_leilao', limite)
+      .or(`resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${limite}`);
     if (error) { console.log(`  ⚠️ retenção de veículos vencidos falhou: ${String(error.message).slice(0, 120)}`); return; }
     if (count) console.log(`  🗑️  ${count} veículo(s) desativado(s) — leilão há mais de 15 dias.`);
   } catch (e) {

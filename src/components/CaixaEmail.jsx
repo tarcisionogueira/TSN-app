@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle } from 'lucide-react';
+import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -64,6 +65,9 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [ativa, setAtiva] = useState(null);      // mensagem aberta (linha completa)
+  // Celular (23/09): lista e leitor lado a lado (340px + 1fr) empurravam a mensagem para fora da
+  // tela. Abaixo de 900px vira app de e-mail: OU a lista, OU a mensagem aberta com "Voltar".
+  const estreito = useIsMobile(900);
   const [busca, setBusca] = useState('');
   const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a }
   const [enviando, setEnviando] = useState(false);
@@ -106,6 +110,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     const { data, error } = await supabase.from('email_caixa').select('*').eq('id', m.id).maybeSingle();
     if (error || !data) { setErro(error ? `Não consegui abrir a mensagem: ${error.message}` : 'Mensagem não encontrada.'); return; }
     setAtiva(data);
+    if (estreito) window.scrollTo({ top: 0, behavior: 'smooth' }); // a mensagem ocupa o lugar da lista
     if (!data.lido) {
       const { data: up, error: eUp } = await supabase.from('email_caixa').update({ lido: true }).eq('id', m.id).select('id');
       if (!eUp && up?.length) {
@@ -195,7 +200,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   const visiveis = b ? porOrigem.filter(m => [m.de_email, m.de_nome, m.assunto, (m.para || []).join(' ')].some(v => String(v || '').toLowerCase().includes(b))) : porOrigem;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '340px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
       {/* Barra de pastas + ações */}
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {PASTAS.map(({ k, label, Icon }) => (
@@ -210,7 +215,7 @@ export default function CaixaEmail({ soPessoal = false }) {
         ))}
         <div style={{ flex: 1 }} />
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
-          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, minWidth: 220 }} />
+          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, minWidth: estreito ? 0 : 220, flex: estreito ? '1 1 100%' : undefined }} />
         <button onClick={carregar} style={btn(false)} title="Atualizar"><RefreshCw size={14} /></button>
         <button onClick={() => setCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
           <PenSquare size={14} /> Escrever
@@ -226,7 +231,7 @@ export default function CaixaEmail({ soPessoal = false }) {
       )}
 
       {/* LISTA */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: estreito && ativa ? 'none' : undefined }}>
         {pasta === 'spam' && (
           <div style={{ padding: '10px 14px', background: '#fff7ed', borderBottom: '1px solid #fed7aa', fontSize: 11.5, color: '#9a3412' }}>
             Aqui cai o que veio de remetente <b>bloqueado</b> ou que <b>falhou na autenticação</b> (SPF/DKIM/DMARC — remetente possivelmente forjado). Nada daqui abre chamado. Não clique em links de mensagens suspeitas.
@@ -269,15 +274,18 @@ export default function CaixaEmail({ soPessoal = false }) {
       </div>
 
       {/* LEITOR */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', minHeight: 420 }}>
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', minHeight: estreito ? 0 : 420, minWidth: 0, display: estreito && !ativa ? 'none' : undefined }}>
+        {estreito && ativa && (
+          <button onClick={() => setAtiva(null)} style={{ ...btn(false), margin: '12px 12px 0' }}><ArrowLeft size={14} /> Voltar à lista</button>
+        )}
         {!ativa ? (
           <div style={{ padding: 60, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
             <Inbox size={28} style={{ marginBottom: 8 }} /><br />Selecione uma mensagem.
           </div>
         ) : (
-          <div style={{ padding: 18 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 6 }}>{ativa.assunto || '(sem assunto)'}</div>
-            <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.7 }}>
+          <div style={{ padding: estreito ? 14 : 18 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 6, overflowWrap: 'anywhere' }}>{ativa.assunto || '(sem assunto)'}</div>
+            <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.7, overflowWrap: 'anywhere' }}>
               <div><b>De:</b> {ativa.de_nome ? `${ativa.de_nome} <${ativa.de_email}>` : ativa.de_email}</div>
               <div><b>Para:</b> {(ativa.para || []).join(', ') || ativa.caixa}</div>
               {(ativa.cc || []).length > 0 && <div><b>Cc:</b> {ativa.cc.join(', ')}</div>}
@@ -335,7 +343,7 @@ export default function CaixaEmail({ soPessoal = false }) {
               ['Cc', <input key="cc" value={compor.cc} onChange={e => setCompor({ ...compor, cc: e.target.value })} placeholder="opcional" style={campo} />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],
             ].map(([rot, el]) => (
-              <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px 1fr', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
+              <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
             <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={12}
               placeholder="Escreva sua mensagem… (sua assinatura e o e-mail original, numa resposta, entram automaticamente)"

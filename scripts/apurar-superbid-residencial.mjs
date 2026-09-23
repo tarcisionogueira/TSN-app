@@ -127,6 +127,15 @@ for (const a of alvos) {
     } else {
       patch.resultado_leilao = 'indeterminado';
     }
+    // Leilão negativo volta para a vitrine (23/09) — mesmo `religarSeNaoVendido` do cron da
+    // Vercel: o lote foi desligado por praça vencida ou por sair da vitrine da SUPERBID, e é
+    // justamente o que o cliente procura para propor compra. Fica 15 dias
+    // (desativar_leiloes_encerrados / sweep / retenção de veículos respeitam a mesma janela).
+    const religavel = a.tabela !== 'imoveis_leilao' || !a.suprimido_motivo || ['praca_vencida', 'sumiu_da_fonte'].includes(a.suprimido_motivo);
+    if (religavel && res !== 'vendido' && res !== 'em_andamento' && res !== 'retirado') {
+      patch.ativo = true;
+      if (a.tabela === 'imoveis_leilao') patch.suprimido_motivo = null;
+    }
     try {
       const rp = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
       if (Array.isArray(rp) && rp.length) gravados++; else { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
