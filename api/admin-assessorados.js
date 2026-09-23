@@ -69,9 +69,17 @@ export default async function handler(req) {
       // neste imóvel. Pedido do dono (22/09): sinalizar na lista, e destacar quando houver MAIS
       // DE UMA (mais de um imóvel assessorado ao mesmo tempo pede atenção redobrada da equipe).
       const emAndamento = casosCliente.filter((c) => c.arrematado_em && !c.posse_em).length;
+      // 23/09 (dono): separar as TRÊS fases da arrematação assessorada. Não há tabela que ligue
+      // contrato/honorário a um imóvel (os 4 assessorados de hoje nem têm contratos_link — o
+      // contrato foi por fora), então a fase sai do próprio CASO, que é o registro por imóvel:
+      //   contratada   = caso aberto ainda sem arremate (análise solicitada/pronta)
+      //   em_andamento = arrematou, imissão de posse ainda não feita
+      //   concluida    = posse registrada
+      const contratadas = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em).length;
+      const concluidas = casosCliente.filter((c) => c.posse_em).length;
       return {
         id: p.id, nome: p.nome, telefone: p.telefone,
-        em_andamento: emAndamento,
+        em_andamento: emAndamento, contratadas, concluidas,
         casos: casosCliente.map((c) => ({
           id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
           arrematado_em: c.arrematado_em, posse_em: c.posse_em, juridico_status: c.juridico_status,

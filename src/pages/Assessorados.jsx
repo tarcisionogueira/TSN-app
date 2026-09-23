@@ -24,19 +24,47 @@ import { Users, ChevronRight, Settings } from 'lucide-react';
 // Visível só pra admin (vê todos) e equipe (analista/advogado/consultor — só quem foi
 // DESIGNADO a acompanhar); a designação em si fica atrás do ⚙, pra não poluir a lista.
 
-// Pedido do dono (22/09): sinalizar na lista se o cliente já tem arremate em andamento
-// (arrematou mas ainda não deu posse — mesma régua de _assessoria.js) e destacar quando
-// houver MAIS DE UM ao mesmo tempo, que pede atenção redobrada.
-function BadgeAndamento({ n }) {
-  if (!n) return <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Sem arremate em andamento</span>;
-  const multiplo = n > 1;
+// Fases da arrematação assessorada (22/09 → 23/09, pedido do dono): CONTRATADA (caso aberto,
+// ainda sem arremate) · EM ANDAMENTO (arrematou, sem imissão de posse — mesma régua de
+// _assessoria.js) · CONCLUÍDA (posse registrada). Mais de uma EM ANDAMENTO ao mesmo tempo
+// ganha destaque laranja: pede atenção redobrada da equipe.
+const FASES = [
+  { k: 'contratadas', um: 'contratada', varios: 'contratadas', titulo: 'Contratadas', sub: 'aguardando arremate', cor: '#7c3aed', bg: '#f3e8ff' },
+  { k: 'em_andamento', um: 'em andamento', varios: 'em andamento', titulo: 'Em andamento', sub: 'arrematado, sem imissão de posse', cor: '#0D63DB', bg: '#eff6ff' },
+  { k: 'concluidas', um: 'concluída', varios: 'concluídas', titulo: 'Concluídas', sub: 'imissão de posse feita', cor: '#15803d', bg: '#f0fdf4' },
+];
+function BadgesFases({ c }) {
+  const presentes = FASES.filter((f) => (c[f.k] || 0) > 0);
+  if (!presentes.length) return <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhuma arrematação registrada</span>;
   return (
-    <span style={{
-      fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4,
-      background: multiplo ? '#fff7ed' : '#eff6ff', color: multiplo ? '#c2410c' : '#0D63DB',
-    }}>
-      {multiplo && '⚠ '}{n} arremate{n > 1 ? 's' : ''} em andamento
+    <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+      {presentes.map((f) => {
+        const n = c[f.k];
+        const alerta = f.k === 'em_andamento' && n > 1;
+        return (
+          <span key={f.k} style={{
+            fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+            background: alerta ? '#fff7ed' : f.bg, color: alerta ? '#c2410c' : f.cor,
+          }}>
+            {alerta && '⚠ '}{n} {n > 1 ? f.varios : f.um}
+          </span>
+        );
+      })}
     </span>
+  );
+}
+function ResumoFases({ clientes }) {
+  const tot = (k) => clientes.reduce((a, c) => a + (c[k] || 0), 0);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+      {FASES.map((f) => (
+        <div key={f.k} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: f.cor }}>{tot(f.k)}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{f.titulo}</div>
+          <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{f.sub}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -124,6 +152,8 @@ export default function Assessorados() {
         {role === 'admin' ? 'Todos os clientes do plano Assessoria. Clique num nome para ver os arrematados e relatórios dele.' : 'Clientes designados a você.'}
       </div>
 
+      {dados.clientes.length > 0 && <ResumoFases clientes={dados.clientes} />}
+
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..."
         style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, marginBottom: 18, boxSizing: 'border-box' }} />
 
@@ -146,7 +176,7 @@ export default function Assessorados() {
                 <div style={{ fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.nome}
                 </div>
-                <div style={{ marginTop: 2 }}><BadgeAndamento n={c.em_andamento || 0} /></div>
+                <div style={{ marginTop: 2 }}><BadgesFases c={c} /></div>
               </div>
               {dados.pode_designar && (
                 <button onClick={(e) => { e.stopPropagation(); setDesignarAberto(designarAberto === c.id ? null : c.id); }}

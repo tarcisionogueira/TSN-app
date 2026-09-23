@@ -32383,3 +32383,18 @@ responder, encaminhar, escrever novo (de suporte@/contato@/privacidade@), baixar
   do primeiro e-mail real: tudo `null` = o Resend não repassa e o spam fica só no bloqueio manual.
 - ⚠️ Visto de passagem, NÃO corrigido: `api/notificar-cliente.js` faz `fetch` no Resend sem
   checar `.ok` (forma #1) e confere equipe só por `role` (ignora `funcao_equipe`).
+
+**10. Teste real da caixa (23/09 14:48) achou defeito ANTIGO: e-mail de remetente interno
+nunca entrava.** `inbound-juridico.js` grava remetente interno (dono, no-reply@,
+notifications@) como `autor_tipo='sistema'` — a CHECK de `chamados_mensagens` só aceitava
+cliente/atendente/ia → 23514, chamado nascia VAZIO e o webhook devolvia 500 (Resend
+reentregando). Corrigido (`chamados_mensagens_aceita_autor_sistema.sql`); evento reenviado
+pelo Resend (replay). Caixa: e-mail chegou com `autenticacao = {spf: none, dkim: pass,
+dmarc: none}` — **cabeçalhos da API confirmados em produção**. Obs.: `reimob.com.br` (domínio
+do dono) está sem SPF/DMARC publicados — e-mail dele tem mais chance de cair em spam alheio.
+
+**11. Assessorados — três fases por cliente + totais no topo** (pedido do dono): Contratada
+(caso aberto sem arremate) · Em andamento (arrematado sem imissão de posse; ⚠ se >1) ·
+Concluída (posse registrada). A fase sai do CASO: não há tabela que ligue contrato/honorário a
+imóvel, e os 4 assessorados de hoje nem têm `contratos_link` (contrato por fora). Hoje:
+contratadas 3 (Rafael), em andamento 3, concluídas 0.
