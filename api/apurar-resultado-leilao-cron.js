@@ -141,6 +141,22 @@ export default async function handler(req, res) {
   const desde = new Date(Date.now() - 3 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const T0 = Date.now();
 
+  // Interruptor no banco (`app_config.brightdata_isp_proxy_ativo`), sem redeploy — pedido do
+  // dono (22/09) depois do incidente de build causado pelo `undici` do proxy ISP: se ele der
+  // problema em produção (custo, timeout, comportamento inesperado), desligar vira um UPDATE
+  // de uma linha, não um commit+deploy. Diferente do padrão de `ativacao-nudge-cron.js` (que
+  // é DESLIGADO por padrão e falha fechado), aqui o proxy ISP já está em produção desde 22/09
+  // — falha de leitura ou chave ausente mantém o comportamento ATUAL (ligado), pra este
+  // interruptor não desligar sozinho uma coisa que já funciona só porque o app_config
+  // momentaneamente não respondeu.
+  let proxyIspLigado = true;
+  try {
+    const rFlag = await sb('app_config?key=eq.brightdata_isp_proxy_ativo&select=value');
+    const linhas = await rFlag.json().catch(() => []); // padrao-ok: leitura best-effort dentro de try/catch — `proxyIspLigado` já começa com o valor seguro (ligado, comportamento atual) e só muda se a leitura vier completa
+    const v = linhas?.[0]?.value;
+    if (v !== undefined) proxyIspLigado = String(v).toLowerCase() !== 'false';
+  } catch { /* mantém ligado — ver comentário acima */ }
+
   // ── Imóveis (data_fim é `date`) ──────────────────────────────────────────────────────────
   // Achado ao vivo do dono (21/09): "não está puxando imóveis sem lance" — confirmado, ZERO
   // imóvel ativo tinha `resultado_leilao` preenchido, apesar do cron rodar todo dia. Causa:
@@ -189,12 +205,12 @@ export default async function handler(req, res) {
   } else {
     const candidatosVeiculos = (await rVe.json().catch(() => []))
       .map(v => ({ id: v.id, alvo: v.link_lote, resultado_apuracao_tentativas: v.resultado_apuracao_tentativas }));
-    resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS, true)), erro: null };
+    resumoVeiculos = { ...(await apurarLote('veiculos_leilao', candidatosVeiculos, T0, ORCAMENTO_MS, proxyIspLigado)), erro: null };
   }
 
   // Log incondicional (mesmo princípio já usado em outras rotinas desta base): sem isto, "não
   // havia candidato hoje" e "a rotina parou de rodar" são indistinguíveis de fora.
-  const resumo = { imoveis: resumoImoveis, veiculos: resumoVeiculos };
+  const resumo = { imoveis: resumoImoveis, veiculos: resumoVeiculos, proxyIspLigado };
   console.log('[apurar-resultado-leilao]', JSON.stringify(resumo));
   res.status(200).json({ ok: true, ...resumo });
 }
