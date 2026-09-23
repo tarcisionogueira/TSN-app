@@ -94,7 +94,7 @@ const homeHtml = await irIsolado(BASE + '/leiloes');
 const leilaoIds = [...new Set([...homeHtml.matchAll(/\/leilao\/(\d+)\/lotes/gi)].map(m => m[1]))];
 console.log(`\nleilões achados no /leiloes renderizado: ${leilaoIds.length} — amostra: ${JSON.stringify(leilaoIds.slice(0, 9))}`);
 
-const AMOSTRA = leilaoIds.slice(0, 3);
+const AMOSTRA = leilaoIds.slice(0, 4);
 console.log(`\nTestando ${AMOSTRA.length} leilão(ões) em sessões ISOLADAS: ${JSON.stringify(AMOSTRA)}`);
 
 for (const id of AMOSTRA) {
@@ -102,6 +102,18 @@ for (const id of AMOSTRA) {
   const lotesHtml = await irIsolado(`${BASE}/leilao/${id}/lotes`);
   const itemIds = [...new Set([...lotesHtml.matchAll(/\/item\/(\d+)\/detalhes/gi)].map(m => m[1]))];
   console.log(`  itens em /leilao/${id}/lotes: ${itemIds.length} (HTML ${lotesHtml.length} bytes) — amostra: ${JSON.stringify(itemIds.slice(0, 5))}`);
+  // 23/09: o motor enumera 9 eventos e 0 lote desde 30/08 — que formato de link o lote tem AGORA?
+  const padroes = new Map();
+  for (const m of lotesHtml.matchAll(/href=["']([^"'#]+)["']/gi)) {
+    let caminho; try { caminho = new URL(m[1], BASE).pathname; } catch { continue; } // href inválido: não é padrão
+    const chave = caminho.replace(/\d+/g, 'N');
+    if (!padroes.has(chave)) padroes.set(chave, { n: 0, ex: caminho });
+    padroes.get(chave).n++;
+  }
+  console.log('  padrões de href (N=número):');
+  for (const [k, v] of [...padroes].sort((a, b) => b[1].n - a[1].n).slice(0, 25)) console.log(`    ${String(v.n).padStart(3)}× ${k}   ex: ${v.ex}`);
+  const txt = lotesHtml.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  console.log(`  R$ no texto: ${(txt.match(/R\$\s?[\d.]+,\d{2}/g) || []).length} · trecho: ${txt.slice(0, 400)}`);
 
   if (itemIds[0]) {
     const detalheHtml = await irIsolado(`${BASE}/item/${itemIds[0]}/detalhes`);
