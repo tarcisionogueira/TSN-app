@@ -31937,3 +31937,143 @@ sem UTM porque não veio de anúncio). `contrato_texto_truncado=2` segue **abert
 contratos JÁ ASSINADOS (04/08, antes do fix de 21/09), criados pelo próprio dono no mesmo
 instante — parecem teste interno, mas alterar `conteudo` de documento assinado é decisão do
 dono, não técnica; aguardando confirmação pra apagar as 2 linhas (não fazer sem confirmar).
+
+## 📌 FECHAMENTO DA SESSÃO — 22–23/09/2026
+
+Continuação da sessão anterior (mesma branch `claude/cool-goodall-fq90dr`). Tudo abaixo já
+commitado e em `main`, deploy confirmado `READY` a cada passo.
+
+**O que foi corrigido (por ordem):**
+
+1. **INCIDENTE — deploy de produção inteiro quebrado** (`bfaafc0`): o commit anterior (proxy
+   ISP do Bright Data) adicionou `undici`, e `api/baixar-doc.js` (Edge Function) importa
+   `_brightdata.js` — o `import('undici')` dinâmico do proxy ISP, mesmo nunca chamado em Edge,
+   era detectado ESTATICAMENTE pelo bundler da Vercel e quebrava o build inteiro
+   (`NOW_SANDBOX_WORKER_EDGE_FUNCTION_UNSUPPORTED_MODULES`). Produção ficou presa no build
+   anterior (`5647065`) até corrigir. Fix: `buscarViaProxyIsp`/`agenteProxyIsp` extraídos pra
+   módulo NOVO, exclusivamente Node.js (`api/_brightdata-isp-node.js`), importado só pelos
+   chamadores Node (`enriquecer-lote.js`) — `_brightdata.js` (e qualquer Edge Function que o
+   importe) ficou livre de `undici`.
+2. **Lotes que não são imóvel nem veículo aparecendo na Busca** (`e980c2b`) — achado real do
+   dono: "236 Cadeiras, Tipo Universitárias" (fonte VIP) com cara de imóvel. Causa: o evento do
+   leiloeiro é categorizado "Imóveis", mas mistura lotes de bens móveis (massa falida); o
+   coletor pegava todo lote do evento sem olhar a categoria do lote em si. O classificador
+   `ehForaDoAcervo()` (scraper-core.mjs, 20/09) já existia mas ficava restrito a SUPERBID/LJUD
+   até validar por fonte. Validado contra os 335 lotes ativos de VIP/LEILAOBRASIL/LEILOTECH/
+   ROCHALEILOES (mesma metodologia do 20/09: diff completo, não só os suspeitos óbvios) — 16
+   confirmados (móveis/hardware/eletrônicos/calçado/marca), 0 falso-positivo — ligado pras 4
+   fontes + limpeza retroativa dos 16 lotes.
+3. **Gap de regex "vagas de garagem" (plural)** (`2fea252`) — achado validando a ampliação
+   acima: `RE_SINAL_IMOVEL` só reconhecia o singular; um lote real da FRAZAO ("Unidade... com
+   04 vagas de garagem") daria falso-positivo de fora_do_acervo por causa só disso quando essa
+   fonte for validada. Corrigido.
+4. **Título ZUK quebrado em 20 lotes ativos** (`2fea252`) — raspados entre 14/09 e 18/09, ANTES
+   do fix de 19/09 que prefixa o tipo no título quando o card do site vem sem ele; nunca foram
+   re-raspados pra herdar o conserto. Backfill usando a coluna `tipo` (já correta) como fonte
+   do rótulo que faltava no título (`" em leilão - ..."` → `"Casa em leilão - ..."` etc).
+5. **Feature: kill-switch no banco pro proxy ISP** (`ba3ca84`) — Feature Flags nativo da Vercel
+   (Flags Explorer) testado e **não está disponível** pra esta conta/projeto (API devolve
+   403/404 mesmo com permissão de admin — provavelmente não habilitado no plano). Em vez
+   disso, mesmo padrão que a base já usa (`app_config`, igual `gateway_ativo`/
+   `ativacao_nudge_ativo`): nova chave `app_config.brightdata_isp_proxy_ativo` (`'true'`, não
+   muda comportamento atual), lida a cada execução de `apurar-resultado-leilao-cron.js`. Pra
+   desligar o proxy ISP sem deploy: `update app_config set value='false' where
+   key='brightdata_isp_proxy_ativo'`.
+6. **Feature: badge de arremate em andamento em Assessorados** (`73f92f3`) — pedido do dono:
+   sinalizar na lista se o cliente já tem arremate em andamento (mesma régua de
+   `podeContratarAssessoria`: arrematou e ainda não deu posse), e destacar quando houver MAIS
+   DE UM ao mesmo tempo. `api/admin-assessorados.js` devolve `em_andamento` (contagem) por
+   cliente; `Assessorados.jsx` mostra badge cinza (0), azul (1) ou laranja com ⚠ (>1) sob o
+   nome. Hoje ninguém tem mais de 1 simultâneo — testado contra dado real (Marcos/Matheus/
+   Rafael com 1 cada, Fred com 0) —, mas o badge já está pronto pra quando acontecer.
+
+**PENDENTE — checar depois de ~22h UTC de 23/09** (não antes — ver por quê): o cron de
+`apurar-resultado-leilao-cron` roda 1x/dia às 21h UTC; o run de 22/09 21h **rodou no build
+ANTIGO** (`5647065`, anterior ao proxy ISP existir sequer no código) porque o deploy do fix
+(`e980c2b`, item 1 acima) só ficou pronto ~21h26 UTC — 26 min DEPOIS do cron já ter disparado.
+Confirmado no log: `veiculos: 250 candidatos, 250 sem conteúdo` (nenhum ISP, nenhum resultado)
+e `select * from qa_invariantes() where chave='resultado_leilao_atrasado'` continuava em
+`1441`, idêntico a antes — **não é regressão, é o fix ainda não ter tido chance de rodar**.
+Agendei um check-in automático pra ~22h10 UTC de 23/09 (depois do PRÓXIMO disparo real, já com
+o kill-switch e o proxy ISP no ar) — essa é a primeira medição que vale alguma coisa. Se depois
+dela `semConteudo` não cair e `resultado_leilao_atrasado` continuar em 1441, aí sim é para
+investigar de novo (não assumir que "ainda não deu tempo" pela segunda vez).
+
+### Achados sem ação necessária (investigados, não são bugs)
+
+- **SBID9 — imóvel estrangeiro (Rosario/Argentina)** que apareceu numa varredura mais ampla:
+  ao reconferir, o registro **não está mais ativo** (o próprio guard de estrangeiro do
+  scraper, ou uma coleta seguinte, já resolveu). Nenhuma ação necessária.
+- **BAYIT — "Varzea do Tanque"** (Cunha/SP, valor preenchido): é um imóvel rural de verdade
+  (Várzea do Tanque é localidade real em Cunha/SP), só com título terso demais pra
+  `normalizarTipo()` reconhecer uma tipologia específica — cai no balde genérico "Imóvel"
+  (aparece na Busca, só não no filtro por tipo). Não é o bug de "bem móvel", é tipologia
+  atípica de imóvel real — comportamento aceito por desenho (ver comentário de `RE_SINAL_
+  IMOVEL`/`normalizarTipo` sobre o balde genérico ser a rede de segurança).
+
+### Achado, NÃO resolvido — precisa de decisão do dono antes de mexer
+
+**EDITAL_DJEN mostrando lotes muito incompletos na Busca pública.** Ao investigar os "lotes
+fora do acervo" de forma ampla, achei 94 candidatos nesta fonte — mas ela é estruturalmente
+diferente de um scraper de leiloeiro: alimenta o Radar de Editais (`api/radar-editais-cron.js`)
+a partir do DJEN (Diário de Justiça Eletrônico Nacional), o título é só o ENDEREÇO do processo
+("Rua X — Cidade/UF"), não uma descrição de lote. Não é o bug de "bem móvel" (na maioria dos
+casos são imóveis de verdade, só descritos de outro jeito) — é outra coisa: dos 437 lotes
+ativos desta fonte, só **113 (26%) têm valor mínimo preenchido e 6 (1,4%) têm foto**. Como
+`Busca.jsx` não tem nenhuma exclusão pra `EDITAL_DJEN`, esses registros aparecem na busca
+pública normal do jeito que estão — muito incompletos, pra um card que promete "preço, foto,
+localização". **Isto é decisão de produto, não bug técnico**: (a) deixar como está (o Radar
+serve pra alimentar um pipeline que depois enriquece via `editaisDjenBackfillUrlLote`/
+`enriquecerDocumentosLote`, e o card incompleto é só um estágio transitório); (b) esconder
+`EDITAL_DJEN` da Busca pública até ter foto+valor (ex.: um filtro `fonte<>'EDITAL_DJEN'` OU
+`valor_minimo>0` na query — mudaria contagem de resultados); (c) alguma UI diferenciada pra
+"lead de edital, ainda sem detalhe completo". Não mudei nada sem essa decisão.
+
+### Novo pedido do dono (23/09) — qualidade da integração do Mercado Pago
+
+Print mostrando **47 de 100** pontos ("qualidade da integração" do MP, mínimo 73 pra aprovar),
+medido em 22/09 13:59 (Payment ID produtivo 178549667287). Pesquisei o checklist oficial do MP
+(developers.mercadopago.com.br) e conferi contra o código:
+
+**Já implementado** (achado ao ler `api/mp.js`/`api/mp-checkout.js` — trabalho de uma sessão
+anterior, 21/09, comentários no próprio código confirmam): `notification_url` (webhook) em
+TODOS os pagamentos/preferências; `external_reference` sempre presente (o comentário em
+`mp-checkout.js` já diz "score de qualidade da integração MP pede"); `X-Idempotency-Key` em
+toda chamada; `deviceId`/`X-meli-session-id` (fingerprint anti-fraude do SDK MP, 21/09);
+`statement_descriptor`; `payer.identification` (CPF) na preferência do Checkout Pro
+(`api/mp.js`, assinatura).
+
+**Gap concreto encontrado**: o pagamento DIRETO via Checkout API (`api/mp-checkout.js`,
+`POST /v1/payments` — cartão avulso/PIX de serviço/produto/honorário/cobrança) manda um
+`payer` MÍNIMO (`{ type:'customer', id, email }` ou só `{ email }`), sem `identification`
+(CPF) nem nome — exatamente a "ação recomendada" que o MP cita publicamente ("enviar todas as
+informações do comprador para reforçar a prevenção a fraude"). Provável causa de parte da
+pontuação faltante (não dá pra confirmar sem o detalhamento por aspecto, que só aparece
+logado como admin no painel do MP — não investiguei mais fundo por não ter esse acesso nesta
+sessão).
+
+**Proposta concreta pra próxima sessão** (não implementada ainda — é código que cobra de
+verdade, quis validar contra sandbox antes de subir, não rodar às pressas no meio de outras
+6 tarefas da mesma sessão): em `criarPagamento` (`api/mp-checkout.js`), buscar `nome, cpf` de
+`perfis` por `user.id` (mesmo padrão `sbGet` já usado no gate de assessoria, linhas 265-270) e
+enriquecer `payer` com `identification: {type:'CPF', number: cpfDigits}` +
+`first_name`/`last_name` (separar de `nome`) quando disponíveis. Aditivo, não muda nenhum
+fluxo existente — só valida contra um pagamento de teste (sandbox ou valor mínimo real) antes
+de considerar fechado, e depois reabrir `Medir novamente` no painel do MP pra confirmar que o
+score subiu.
+
+### Pendências de sessões anteriores que CONTINUAM em aberto (só o dono resolve)
+
+Reafirmando pra não se perder — nenhuma delas é técnica:
+- **Google Cloud "BidPro métricas diárias"** — projeto-sombra do próprio Google; só o dono
+  consegue checar quem/quando criou (Console → IAM/Faturamento).
+- **Instagram (Meta)** — Verificação de Negócio parada no Meta Business Manager; 7 rascunhos
+  de resposta esperando em `/admin/instagram`.
+- **Gemini (Google AI Studio) — créditos esgotados desde 16/09**, reconfirmado ainda quebrado
+  em 20/09 mesmo após recarga (suspeita: crédito foi pra conta/projeto diferente da chave
+  configurada na Vercel). **Não consegui reconfirmar o status atual nesta sessão** — o
+  endpoint de diagnóstico (`/api/diagnostico-gemini`) exige login admin (não tenho token), e a
+  busca nos logs de runtime da Vercel deu inconclusiva (timeout numa janela, zero resultado
+  noutra — mais provável ausência de tentativas recentes do que confirmação de conserto). Não
+  estou marcando como resolvido sem prova — reconferir com `/api/diagnostico-gemini` logado
+  como admin antes de qualquer outra coisa.
