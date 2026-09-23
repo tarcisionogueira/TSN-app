@@ -32077,3 +32077,120 @@ Reafirmando pra não se perder — nenhuma delas é técnica:
   noutra — mais provável ausência de tentativas recentes do que confirmação de conserto). Não
   estou marcando como resolvido sem prova — reconferir com `/api/diagnostico-gemini` logado
   como admin antes de qualquer outra coisa.
+
+## 📌 FECHAMENTO DA SESSÃO — 23/09/2026 (revisão de segurança/performance + conectores)
+
+Continuação da mesma sessão, pedido do dono: "há alguma revisão que melhoraria eficiência,
+segurança dos dados, agilidade do sistema?" — rodei os auditores do Supabase de verdade (não é
+opinião) e corrigi o que era seguro corrigir sem supervisão.
+
+### Segurança — corrigido
+
+**🔴 `fipe_uso` sem RLS (nível ERROR do Supabase Advisor).** Tabela criada em 20/09 (trava de
+custo da API da FIPE) ficou sem RLS, diferente da irmã `brightdata_uso`. Com os grants padrão
+de `anon`/`authenticated` do schema `public`, **qualquer visitante anônimo conseguia ler ou
+adulterar o contador de cota** via PostgREST (`/rest/v1/fipe_uso`) — inclusive TRUNCATE, que
+RLS sozinha não barra (é operação de tabela, não de linha). Corrigido: RLS ligada, zero
+policies (fail-closed, mesmo padrão de `brightdata_uso`) — migração
+`fipe_uso_habilita_rls.sql`. Só `registrar_uso_fipe()` (SECURITY DEFINER) e `service_role`
+continuam tocando na tabela; testado.
+
+### Performance — corrigido (com um erro no meio do caminho, corrigido no mesmo dia)
+
+1. **11 policies de RLS** (`honorarios_recebimentos`, `cobrancas_avulsas`, `analises_veiculo`,
+   `leiloeiro_site_descoberto`) chamavam `auth.uid()`/`auth.role()` cru — reavaliado LINHA A
+   LINHA pelo Postgres. Reescrito com `(select auth.uid())` — InitPlan, avaliado 1x por
+   consulta. Mesma lógica, sem mudança de comportamento (`rls_auth_initplan_otimizacao.sql`).
+2. **27 foreign keys sem índice de cobertura** — todas em tabelas de log/financeiro/designação,
+   baixo tráfego mas JOIN/DELETE em cascata nelas varria a tabela inteira sem índice. Aditivo,
+   zero risco (`indices_fk_sem_cobertura.sql`).
+3. **53 índices com 0 scans em 4 meses de tráfego real** (stats resetadas em 22/05, janela
+   representativa) — removidos por serem só custo (espaço + trabalho extra em todo INSERT/
+   UPDATE/DELETE) sem nunca acelerar leitura (`remove_indices_nunca_usados.sql`).
+   ⚠️ **Autocorreção no mesmo dia**: rodando o Advisor de novo LOGO DEPOIS pra conferir,
+   descobri que **14 desses 53** eram, na verdade, a ÚNICA cobertura de uma foreign key — o
+   nome do índice não seguia a convenção `idx_<tabela>_<coluna>` (ex.: `lancamentos_imovel_id_idx`,
+   `idx_fk_progresso_licao_id`), então o cruzamento contra a lista de FKs sem índice (item 2,
+   rodada ANTERIOR à limpeza) não os reconheceu como cobertura de FK. `idx_scan=0` nesses casos
+   só significava que nenhum UPDATE/DELETE em cascata ou JOIN por aquela FK tinha rodado nos
+   últimos 4 meses — não que a cobertura fosse dispensável. Recriados na mesma sessão
+   (`restaura_indices_fk_removidos_por_engano.sql`) assim que o Advisor voltou a acusar
+   `unindexed_foreign_keys` nessas 14. **Lição pra próxima limpeza de índice "não usado":
+   sempre rodar o Advisor de novo IMEDIATAMENTE depois de remover, antes de considerar
+   fechado** — é exatamente o tipo de erro que só aparece medindo, não lendo.
+
+`qa_invariantes()` e `auditoria_seguranca()` seguem 0 crítico/0 atenção depois de tudo isso.
+
+### Achado via Sentry (conector JÁ instalado e JÁ instrumentado no código — ninguém tinha
+olhado os issues ainda)
+
+O dono perguntou sobre Sentry achando que precisava configurar do zero — na verdade **já está
+tudo pronto desde 15/09** (`@sentry/node`+`@sentry/react`, `src/utils/sentry.js` no front,
+`api/_sentry.js` no back, projeto `tsn-app` na org `bidpro-brasil`). O lado BACKEND
+(`SENTRY_DSN`) está ativo e capturando de verdade — achei **2 issues reais, nunca vistos**:
+
+1. **[TSN-APP-2](https://bidpro-brasil.sentry.io/issues/TSN-APP-2)** — `/api/asaas.js`, ação
+   `simular_antecipacao`/`solicitar_antecipacao`: **"Antecipação de cartão de crédito
+   desativada"**, 7 ocorrências desde 17/09, a mais recente em 21/09. Confirmado no código: a
+   mensagem vem DIRETO da resposta de erro do Asaas (`errors[].description`), não é bug do
+   app — é uma função que precisa ser HABILITADA no painel da conta Asaas. Como o Asaas é
+   gateway BACKUP (MP é o principal), prioridade baixa, mas alguém está tentando usar e
+   tomando erro — **decisão do dono**: habilitar no Asaas, ou aceitar que fica indisponível
+   enquanto for backup.
+2. **[TSN-APP-3](https://bidpro-brasil.sentry.io/issues/TSN-APP-3)** — `monitor-dados-cron.js`:
+   "Possível regressão de dados no acervo: área faltando em 61% do lote recente". Investigado:
+   **não é regressão de scraper** — é o mesmo achado já registrado acima sobre `EDITAL_DJEN`
+   (71% sem área nesse lote, o maior contribuinte) mais `LJUD` num patamar elevado (35%, vale
+   um olhar futuro mas não é o vilão principal). Mesma causa raiz já documentada: fonte
+   estruturalmente incompleta, não scraper quebrado.
+
+**O lado FRONTEND (`VITE_SENTRY_DSN`) parece continuar dormente** — os 2 issues encontrados
+têm `Culprit: capturarErroServidor` (backend) em 100% dos casos, nenhum com o culprit do lado
+cliente (`capturarNoSentry`). Não confirmei 100% (não vi a lista de env vars da Vercel — API
+recusou permissão, mesmo 403 de antes), mas é o sinal mais forte disponível. Se quiser
+capturar erro de CLIENTE (JS quebrando no navegador do usuário) também, falta confirmar/setar
+`VITE_SENTRY_DSN` na Vercel (ver `docs/ENVS_VERCEL.md`, pendência desde 15/09).
+
+### Navegabilidade / tamanho de bundle — investigado, NÃO mexido (motivo abaixo)
+
+3 chunks passam de 500kB no build: `Admin.jsx` (505kB), `lib.js` (499kB, vendor sem nome
+específico), `index.js` (433kB, entrada principal). Investigado antes de tocar:
+
+- **`Admin.jsx` é um arquivo de 13.231 linhas** — já é lazy-loaded por rota (68 `lazy()` em
+  `App.jsx`), então seu peso NUNCA chega no cliente/visitante comum, só quando um membro da
+  equipe abre `/admin`. Reduzir esse chunk exigiria quebrar o arquivo em sub-seções lazy
+  DENTRO da própria página — reffactor real, em arquivo enorme e crítico para a operação
+  diária da equipe, alto risco de regressão sem um jeito de testar visualmente aqui. Não fiz
+  às pressas.
+- `supabase-*.js` (204kB), `leaflet-src-*.js` (148kB) e `pdf-*.js` (330kB) **já saem em chunks
+  próprios** — o Vite/Rollup já os separa sozinho; não há ganho fácil aí.
+- `lib.js`/`index.js` são o que realmente carrega para TODO visitante (inclusive anônimo) —
+  mexer em `manualChunks` do `vite.config.js` para separar melhor essas duas é a ação de
+  maior retorno real para agilidade do cliente comum, mas é mudança de estratégia de bundling
+  que só valida rodando o app de verdade num navegador (risco de tela branca se a ordem de
+  carregamento dos chunks quebrar) — não tenho como testar isso visualmente nesta sessão.
+  **Proposta concreta pra quando puder testar ao vivo**: configurar `build.rollupOptions.
+  output.manualChunks` separando React/React-DOM/React-Router num chunk `vendor-react`
+  (muda raríssimo, cacheia bem entre deploys) e medir o antes/depois com `npm run build`.
+
+### Conectores — inventário (pedido do dono: registrar pra não ter redundância nem
+sub-utilização por falta de saber que existe)
+
+| Conector | Usado por este projeto? | Para quê |
+|---|---|---|
+| **Supabase** | ✅ Sim, o tempo todo | Banco de dados, RLS, migrações, RPCs — a espinha dorsal do TSN-app |
+| **Vercel** | ✅ Sim, o tempo todo | Deploy, env vars, cron jobs, logs de runtime/erro, feature flags (testado hoje — indisponível no plano) |
+| **GitHub** (Integração com o GitHub) | ✅ Sim, o tempo todo | Repositório `tarcisionogueira/TSN-app`, commits, push, Actions |
+| **Sentry** | ✅ Sim, **mas subutilizado até hoje** — backend ativo desde 15/09 com 2 issues reais nunca vistos (achado nesta sessão); frontend (`VITE_SENTRY_DSN`) parece dormente ainda | Rastreio de erro estruturado — ver seção acima |
+| **Windsor.ai** | ✅ Sim | Métricas de Google Ads/Meta Ads (rotinas de marketing, `marketing_metricas_dia`) |
+| **Resend** | ✅ Sim (via API key no backend, não via este conector diretamente) | E-mail transacional do app (verificação, avisos, contratos) — o conector aqui é a MESMA conta, dá pra usar pra gerenciar/depurar sem sair do chat |
+| **Google Drive** | ⚠️ Não identificado uso neste projeto | Disponível pra guardar/ler arquivo se algum fluxo precisar (hoje o TSN-app usa Supabase Storage, não Drive) |
+| **Gmail** | ⚠️ Não identificado uso neste projeto | É a SUA conta pessoal, não a conta transacional do app (essa é via Resend) — serve pra eu mandar e-mail EM SEU NOME quando pedir, não para o app enviar e-mail a clientes |
+| **Google Calendar** | ⚠️ Não identificado uso neste projeto | Poderia agendar reunião/lembrete fora do fluxo do Daily.co já usado pelo app |
+| **Claude Docs** | ⚠️ Não usado neste projeto ainda | Documento colaborativo — alternativa a colar relatório grande no chat |
+| **Canva** | 🔴 **Precisa reconectar** (status "Reconectar" na tela de conectores, sessão expirada) | Não identificado uso neste projeto |
+
+**Nenhuma redundância encontrada** entre os 11 — cada um cobre uma função distinta. Os 4
+marcados ⚠️ não são "instalado à toa": são de uso GERAL da sua conta (não amarrados a um
+projeto), então ficam ociosos até você pedir algo que precise deles — não é desperdício, é
+capacidade disponível. O único item realmente acionável é o Canva, que está desconectado.
