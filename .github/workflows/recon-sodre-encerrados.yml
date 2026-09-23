@@ -1,0 +1,33 @@
+name: Recon — SODRÉ lotes encerrados (não grava)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lotes:
+        description: 'lot_id SODRE (vírgula)'
+        required: false
+        default: '2805637,2805641,2805630'
+      leilao:
+        description: 'auction_id SODRE'
+        required: false
+        default: '29006'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Chromium deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        env:
+          SODRE_LOTES: ${{ inputs.lotes }}
+          SODRE_LEILAO: ${{ inputs.leilao }}
+        run: node scripts/recon-sodre-encerrados.mjs
