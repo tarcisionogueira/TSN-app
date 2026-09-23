@@ -73,6 +73,9 @@ async function irIsolado(url, esperaMs = 3500) {
   page.on('response', async (res) => {
     try {
       const ct = res.headers()['content-type'] || '';
+      const tipoReq = res.request().resourceType();
+      // 23/09: loga TAMBÉM xhr/fetch que devolvem HTML — a lista de lotes da SOLEON pode vir assim.
+      if (['xhr', 'fetch'].includes(tipoReq) && !/json/i.test(ct)) { console.log(`    [XHR-${ct.split(';')[0] || '?'}] ${res.url().slice(0, 140)} status=${res.status()}`); return; }
       if (!/json/i.test(ct)) return;
       const u = res.url();
       const txt = await res.text().catch(() => '');
@@ -94,7 +97,7 @@ const homeHtml = await irIsolado(BASE + '/leiloes');
 const leilaoIds = [...new Set([...homeHtml.matchAll(/\/leilao\/(\d+)\/lotes/gi)].map(m => m[1]))];
 console.log(`\nleilões achados no /leiloes renderizado: ${leilaoIds.length} — amostra: ${JSON.stringify(leilaoIds.slice(0, 9))}`);
 
-const AMOSTRA = leilaoIds.slice(0, 4);
+const AMOSTRA = leilaoIds.slice(0, 2);
 console.log(`\nTestando ${AMOSTRA.length} leilão(ões) em sessões ISOLADAS: ${JSON.stringify(AMOSTRA)}`);
 
 for (const id of AMOSTRA) {
@@ -113,13 +116,23 @@ for (const id of AMOSTRA) {
   console.log('  padrões de href (N=número):');
   for (const [k, v] of [...padroes].sort((a, b) => b[1].n - a[1].n).slice(0, 25)) console.log(`    ${String(v.n).padStart(3)}× ${k}   ex: ${v.ex}`);
   const txt = lotesHtml.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-  console.log(`  R$ no texto: ${(txt.match(/R\$\s?[\d.]+,\d{2}/g) || []).length} · trecho: ${txt.slice(0, 400)}`);
+  console.log(`  R$ no texto: ${(txt.match(/R\$\s?[\d.]+,\d{2}/g) || []).length}`);
+  const corpo = txt.replace(/span\.im-caret[\s\S]*?\}\s*\}/g, ' ');
+  for (const m of corpo.matchAll(/.{0,120}(lote|nenhum|encerrad|dispon)/gi)) { console.log(`    texto: …${m[0].trim().slice(-160)}`); }
 
   if (itemIds[0]) {
     const detalheHtml = await irIsolado(`${BASE}/item/${itemIds[0]}/detalhes`);
     const temRS = (detalheHtml.match(/R\$\s?[\d.]+,\d{2}/g) || []).slice(0, 6);
     console.log(`  detalhe /item/${itemIds[0]}/detalhes: ${detalheHtml.length} bytes, R$ encontrados: ${JSON.stringify(temRS)}`);
   }
+}
+
+// 23/09: outras portas do catálogo — a vitrine por categoria voltou? a página do evento sem /lotes?
+for (const caminho of ['/lotes/imovel', '/lotes/imovel?tipo=imovel&page=1', `/leilao/${AMOSTRA[0]}`, '/lotes/diversos']) {
+  const h = await irIsolado(BASE + caminho);
+  const itens = [...new Set([...h.matchAll(/\/item\/(\d+)\/detalhes/gi)].map(m => m[1]))];
+  const outros = [...new Set([...h.matchAll(/href=["']([^"']*(?:lote|item)[^"']*)["']/gi)].map(m => m[1]))].slice(0, 8);
+  console.log(`\n[porta] ${caminho} → ${h.length} bytes · /item/N/detalhes=${itens.length} · outros links com lote/item: ${JSON.stringify(outros)}`);
 }
 
 await browser.close();
