@@ -32628,3 +32628,15 @@ em diante e a revisita corrige o que for relido.
   exigiria IP residencial e ~22 mil arquivos — decisão de custo do dono.
 - Não mexido: `pino_generico_como_rua` 81, `lote_sem_area_nem_matricula` 704 (lacuna de dado),
   `geocode_sem_preco` (precisa da env `LOCATIONIQ_USD_POR_1000` na Vercel), bundle (teste visual).
+
+**29. ✅ Alberto Macedo: cidade do lote (dono, 23/09).** 13 lotes ativos sem cidade E 13 gravados
+como cidade **"Ssp"** ("SSP/SP", órgão expedidor de RG no texto da matrícula). O parser lia só o
+título-de-slug e os 1.500 primeiros caracteres (menu lateral) e aceitava qualquer "Palavra/UF". Recon
+(Chromium; o site dá 403 a fetch simples) mostrou a cidade repetida no lote — "localizada em Onda
+Verde – SP", "Município de Onda Verde - SP", endereço "…, Onda Verde - SP, Brasil" — e o rodapé com o
+escritório do leiloeiro (São Paulo). `cidadeDoLote()`: vota entre todas as ocorrências "Cidade - UF"/
+"Cidade/UF" (traço, travessão ou barra) validadas no IBGE + a cidade do slug (`cidadeDoSlug`, inclusive
+colada: "sete-lagoasmg"); vence a mais citada. Teste: `npm run testar:albertomacedo-cidade`. Backfill
+dos 12 "Ssp" pelo slug. Restam ~12 cujo slug não tem cidade — a próxima coleta lê a página.
+Achado lateral: a página chama a API do próprio site (`api.albertomacedoleiloes.com.br/rest/v1/
+public_lots`, PostgREST) com `address` estruturado — caminho mais barato que Chromium, se um dia valer.

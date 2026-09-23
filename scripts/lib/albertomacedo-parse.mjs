@@ -18,8 +18,9 @@
  * (real ou apenas fora da janela capturada — a checar num dry-run); fotos reais via API
  * própria (api.albertomacedoleiloes.com.br/storage/...).
  */
-import { inferirTipo, cidadeUF, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
+import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, tituloDeSlug, anexosDeHtml, montarRowDom, linhasDeTabela } from './dom-parse-util.mjs';
+import MUNICIPIOS from '../../api/_municipios.js';
 
 export const TENANTS = {
   albertomacedo: { fonte: 'ALBERTOMACEDOLEILOES', leiloeiro: 'Alberto Macedo Leilões', base: 'https://albertomacedoleiloes.com.br' },
@@ -73,6 +74,69 @@ function precosDaTabela(html, txt) {
   return { primeira: valorDaLinha(linhas[0]), ultima: valorDaLinha(linhas[linhas.length - 1]) };
 }
 
+
+// ── CIDADE DO LOTE (23/09) ──────────────────────────────────────────────────────────────────────
+// Antes: `cidadeUF` sobre o título-de-slug e os 1.500 primeiros caracteres (menu lateral com a
+// lista de estados) — 13 lotes ativos sem cidade, e outro gravado como "Ssp" (era "SSP/SP", órgão
+// expedidor de RG no texto da matrícula). Recon de 23/09 (Chromium, página real): a cidade aparece
+// várias vezes NO LOTE — título "localizada em Onda Verde – SP" (travessão), descrição "Município
+// de Onda Verde - SP", endereço "…, Onda Verde - SP, Brasil" — e o rodapé traz o endereço do
+// ESCRITÓRIO do leiloeiro (São Paulo). Regra: toda ocorrência "Cidade - UF" / "Cidade/UF" da
+// página, validada no IBGE (mata "Ssp"), mais a cidade que o slug carrega ("…-onda-verde-sp-…",
+// "…sete-lagoasmg"); vence a mais citada — o rodapé aparece uma vez.
+const UFS = new Set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' '));
+const semAcento = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const titulo1 = (x) => x.toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\s(De|Do|Da|Dos|Das|E)\s/g, (m) => m.toLowerCase());
+
+export function cidadeDoSlug(slug) {
+  const t = String(slug || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let achado = null;
+  for (let i = 0; i < t.length; i++) {
+    const uf = t[i].toUpperCase();
+    if (t[i].length === 2 && UFS.has(uf)) {
+      for (let n = 5; n >= 1; n--) {
+        if (i - n < 0) continue;
+        const nome = t.slice(i - n, i).join(' ');
+        if (MUNICIPIOS[`${uf}|${nome}`]) { achado = { nome, uf }; break; }
+      }
+    }
+    if (t[i].length > 3 && UFS.has(t[i].slice(-2).toUpperCase())) {   // colado: "lagoasmg"
+      const uf2 = t[i].slice(-2).toUpperCase(), resto = t[i].slice(0, -2);
+      for (let n = 4; n >= 0; n--) {
+        if (i - n < 0) continue;
+        const nome = [...t.slice(i - n, i), resto].join(' ');
+        if (MUNICIPIOS[`${uf2}|${nome}`]) { achado = { nome, uf: uf2 }; break; }
+      }
+    }
+  }
+  return achado ? { cidade: titulo1(achado.nome), estado: achado.uf } : null;
+}
+
+export function cidadeDoLote(txt, slug) {
+  const votos = new Map();   // "UF|nome" → { n, exibe }
+  const votar = (nomeCru, uf, peso = 1) => {
+    const palavras = String(nomeCru).trim().split(/\s+/);
+    // o texto antes da cidade pode trazer lixo ("localizada em Onda Verde"): tenta do nome mais
+    // longo ao mais curto, pelo FIM, e fica com o 1º que existe no IBGE.
+    for (let k = Math.min(5, palavras.length); k >= 1; k--) {
+      const exibe = palavras.slice(-k).join(' ');
+      const chave = `${uf}|${semAcento(exibe)}`;
+      if (MUNICIPIOS[chave]) {
+        const v = votos.get(chave) || { n: 0, exibe: titulo1(exibe) };
+        v.n += peso; votos.set(chave, v); return;
+      }
+    }
+  };
+  for (const m of String(txt || '').matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{1,60}?)\s*(?:[-–—]|\/)\s*([A-Z]{2})\b/g)) {
+    if (UFS.has(m[2])) votar(m[1], m[2]);
+  }
+  const doSlug = cidadeDoSlug(slug);
+  if (doSlug) votar(doSlug.cidade, doSlug.estado, 2);
+  let melhor = null;
+  for (const [chave, v] of votos) if (!melhor || v.n > melhor.n) melhor = { ...v, uf: chave.split('|')[0] };
+  return melhor ? { cidade: melhor.exibe, estado: melhor.uf } : { cidade: null, estado: null };
+}
+
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const slug = idDaUrl(url) || '';
@@ -97,7 +161,7 @@ export function parseDetalhe(html, url) {
   }
 
   const titulo = tituloDeSlug(slug);
-  const { cidade, estado } = cidadeUF(titulo || '', txt.slice(0, 1500));
+  const { cidade, estado } = cidadeDoLote(txt, slug);
   const area = extrairArea(titulo || '', txt.slice(0, 1500));
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : /judicial|processo\s*n/i.test(txt) ? 'judicial' : 'extrajudicial';
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;
