@@ -69,12 +69,41 @@ export default async function handler(req) {
   if (body?.acao === 'anexo') {
     const id = String(body?.id || ''), anexoId = String(body?.anexo_id || '');
     let msg;
-    try { msg = await ler1(`email_caixa?id=eq.${encodeURIComponent(id)}&select=resend_email_id,anexos`); }
+    try { msg = await ler1(`email_caixa?id=eq.${encodeURIComponent(id)}&select=direcao,resend_email_id,anexos`); }
     catch (e) { console.error('[email-caixa] anexo:', e.message); return json({ error: 'Não foi possível ler a mensagem.' }, 500); }
-    // Só anexo que É desta mensagem — o id vem do cliente e não pode virar proxy do Resend.
-    if (!msg?.resend_email_id || !(msg.anexos || []).some(a => a?.id && a.id === anexoId)) return json({ error: 'Anexo não encontrado' }, 404);
     const key = process.env.RESEND_API_KEY;
     if (!key) return json({ error: 'Envio de e-mail não configurado' }, 503);
+
+    // ENVIADO (23/09): o arquivo é o que o Resend de fato ANEXOU no envio — GET
+    // /emails/{id}/attachments. Mostra exatamente o que o destinatário recebeu, não uma
+    // releitura da origem (que pode ter mudado, ou exigir login — caso da matrícula LEILOFY).
+    if (msg?.direcao === 'saida') {
+      const idx = Number(body?.anexo_idx);
+      const esperado = (msg.anexos || [])[idx];
+      if (!msg.resend_email_id || !esperado) return json({ error: 'Anexo não encontrado' }, 404);
+      const rl = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments`,
+        { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+      const jl = rl.ok ? await rl.json().catch(() => null) : null;
+      const itens = Array.isArray(jl?.data) ? jl.data : (Array.isArray(jl) ? jl : null);
+      if (!itens) {
+        console.error('[email-caixa] anexos enviados: Resend', rl.status, jl ? Object.keys(jl).join(',') : '(sem corpo)');
+        return json({ error: `O provedor não listou os anexos deste envio (HTTP ${rl.status}).` }, 502);
+      }
+      const alvo = itens.find(a => a?.filename === esperado.nome) || itens[idx];
+      let url = alvo?.download_url || null;
+      if (!url && alvo?.id) {
+        const ra = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(alvo.id)}`,
+          { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+        const ja = ra.ok ? await ra.json().catch(() => null) : null;
+        url = ja?.download_url || null;
+        if (!url) console.error('[email-caixa] anexo enviado: Resend', ra.status, ja ? Object.keys(ja).join(',') : '(sem corpo)');
+      }
+      if (!url) return json({ error: 'O provedor não entregou o anexo agora. Tente de novo em instantes.' }, 502);
+      return json({ ok: true, url });
+    }
+
+    // Só anexo que É desta mensagem — o id vem do cliente e não pode virar proxy do Resend.
+    if (!msg?.resend_email_id || !(msg.anexos || []).some(a => a?.id && a.id === anexoId)) return json({ error: 'Anexo não encontrado' }, 404);
     const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(anexoId)}`,
       { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
     const j = r.ok ? await r.json().catch(() => null) : null;
@@ -109,7 +138,10 @@ export default async function handler(req) {
     if (!original) return json({ error: 'Mensagem original não encontrada' }, 404);
   }
 
-  let replyTo = `${de}@${DOMINIO}`;
+  // Fora de chamado, a resposta volta para a CAIXA encadeada a este envio (resposta+<token>@,
+  // reconhecido no inbound) — nunca para o e-mail pessoal de quem enviou, nem abre chamado.
+  const respostaToken = chamado ? null : crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+  let replyTo = chamado ? `${de}@${DOMINIO}` : `resposta+${respostaToken}@${DOMINIO}`;
   if (chamado) {
     let token = chamado.email_token;
     if (!token) {
@@ -155,7 +187,7 @@ export default async function handler(req) {
     direcao: 'saida', pasta: 'enviados', caixa: `${de}@${DOMINIO}`, de_email: `${de}@${DOMINIO}`, de_nome: nomeRemetente,
     para, cc, assunto, texto: textoFinal, html, in_reply_to: original?.message_id || null,
     referencias: headers['References'] || null, resend_email_id: r.id || null, lido: true,
-    chamado_id: chamado?.id || null, enviado_por: user.id,
+    chamado_id: chamado?.id || null, enviado_por: user.id, resposta_token: respostaToken,
   } });
   if (!ins.ok) { console.error('[email-caixa] registrar enviado HTTP', ins.status); avisos.push('enviado, mas não ficou registrado em Enviados'); }
 

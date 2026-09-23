@@ -120,9 +120,9 @@ export default function CaixaEmail() {
     setAviso(`${b.padrao} desbloqueado. Mensagens já em Spam continuam lá — use “Não é spam” para trazer de volta.`);
   }
 
-  async function baixarAnexo(m, a) {
+  async function baixarAnexo(m, a, idx) {
     try {
-      const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'anexo', id: m.id, anexo_id: a.id }) });
+      const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'anexo', id: m.id, anexo_id: a.id || undefined, anexo_idx: idx }) });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.url) { setErro(j.error || `Não consegui baixar o anexo (HTTP ${res.status}).`); return; }
       window.open(j.url, '_blank', 'noopener,noreferrer');
@@ -248,6 +248,7 @@ export default function CaixaEmail() {
               <div><b>Para:</b> {(ativa.para || []).join(', ') || ativa.caixa}</div>
               {(ativa.cc || []).length > 0 && <div><b>Cc:</b> {ativa.cc.join(', ')}</div>}
               <div><b>Data:</b> {new Date(ativa.criado_em).toLocaleString('pt-BR')}</div>
+              {ativa.resposta_de && <div style={{ color: '#7c3aed', fontWeight: 700 }}><Reply size={12} /> Resposta a um e-mail enviado pela equipe (veja em Enviados).</div>}
               {ativa.chamado_id && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta mensagem está num chamado da fila — responder daqui também registra no chamado.</div>}
               {ativa.spam_motivo && <div style={{ color: '#dc2626', fontWeight: 700 }}><ShieldAlert size={12} /> Spam: {ativa.spam_motivo}</div>}
             </div>
@@ -266,8 +267,8 @@ export default function CaixaEmail() {
 
             {(ativa.anexos || []).length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                {ativa.anexos.map((a, i) => a.id
-                  ? <button key={i} onClick={() => baixarAnexo(ativa, a)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
+                {ativa.anexos.map((a, i) => (a.id || (ativa.direcao === 'saida' && ativa.resend_email_id))
+                  ? <button key={i} onClick={() => baixarAnexo(ativa, a, i)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
                   : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome}{ativa.direcao === 'saida' ? '' : ' (indisponível)'}</span>)}
               </div>
             )}

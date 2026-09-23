@@ -333,7 +333,7 @@ async function motivoDeSpam(endereco, headers, aut) {
   return null;
 }
 
-async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', spamMotivo = null, aut = null } = {}) {
+async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', spamMotivo = null, aut = null, respostaDe = null } = {}) {
   try {
     if (messageId) {
       const rd = await sb(`email_caixa?direcao=eq.entrada&message_id=eq.${encodeURIComponent(messageId)}&select=id&limit=1`);
@@ -353,6 +353,7 @@ async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', s
       html: String(data?.html || '').slice(0, 300000) || null,
       message_id: messageId, in_reply_to: headers['in-reply-to'] || null, referencias: headers['references'] || null,
       resend_email_id: data?.email_id || null, anexos, autenticacao: aut, spam_motivo: spamMotivo,
+      resposta_de: respostaDe,
     } });
     if (!r.ok) { console.error('[caixa] registrar HTTP', r.status, (await r.text().catch(() => '')).slice(0, 200)); return null; }
     const [linha] = await r.json();
@@ -553,6 +554,24 @@ export default async function handler(req) {
   // "é só responder este e-mail" que nós mesmos mandamos, e pedido de titular de
   // dados endereçado ao privacidade@, que a LGPD obriga a atender.
   const aut = autenticacaoDe(headers);
+  // RESPOSTA A UM E-MAIL NOSSO (23/09): `resposta+<token>@` só existe no reply-to de um envio
+  // da equipe (botão "Enviar e-mail" do caso/lote). Casa o token → grava na caixa ligada ao
+  // envio original e para aqui: resposta de leiloeiro/jurídico a um contato nosso não é
+  // atendimento de cliente, não abre chamado. Token desconhecido segue o fluxo normal.
+  if (!caso) {
+    const tokResp = destinatarios(data, headers).map(d => String(d).match(/resposta\+([a-z0-9]+)@/i)?.[1]).find(Boolean);
+    if (tokResp) {
+      const ro = await sb(`email_caixa?resposta_token=eq.${encodeURIComponent(tokResp)}&select=id&limit=1`);
+      const [orig] = ro.ok ? await ro.json().catch(() => []) : [];
+      if (!ro.ok) console.error('[caixa] busca do envio original HTTP', ro.status);
+      if (orig) {
+        const caixaId = await registrarNaCaixa(data, headers, messageId, { aut, respostaDe: orig.id });
+        if (!caixaId) return json({ error: 'nao_foi_possivel_registrar_resposta' }, 500); // Resend reentrega
+        return json({ ok: true, resposta_de: orig.id, caixa_id: caixaId });
+      }
+      console.warn('[caixa] token de resposta desconhecido — segue como atendimento:', tokResp);
+    }
+  }
   if (!caso) {
     // Spam só se decide no ramo de ATENDIMENTO: o do jurídico já foi casado por token secreto
     // (juridico+<token>@) ou pelo Message-ID que nós mesmos enviamos — isso é prova mais forte

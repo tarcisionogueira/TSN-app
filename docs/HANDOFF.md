@@ -32398,3 +32398,16 @@ do dono) está sem SPF/DMARC publicados — e-mail dele tem mais chance de cair 
 Concluída (posse registrada). A fase sai do CASO: não há tabela que ligue contrato/honorário a
 imóvel, e os 4 assessorados de hoje nem têm `contratos_link` (contrato por fora). Hoje:
 contratadas 3 (Rafael), em andamento 3, concluídas 0.
+
+**12. Caixa: anexos de e-mail ENVIADO + respostas voltam para o sistema (pedido do dono).**
+- Anexo de enviado aparecia "indisponível": o registro não guarda id de anexo. Agora
+  `/api/email-caixa` (acao `anexo`, `anexo_idx`) busca no Resend o anexo **como foi enviado**
+  (`GET /emails/{id}/attachments` → `download_url`). O envio de 14:28 à LEILOFY entrou por
+  backfill — lembrando que ali a "MATRÍCULA" era a página de login do leiloeiro (item 8).
+- Reply-to deixa de ser o e-mail pessoal (Gmail da Reimob). Botão "Enviar e-mail" do
+  caso/lote e mensagens novas da caixa saem com `resposta+<token>@bidprobrasil.com.br`
+  (`email_caixa.resposta_token`); o inbound casa o token, grava a resposta na Entrada com
+  `resposta_de` = envio original e **não abre chamado**. Remetente do botão virou
+  `contato@` (era `noreply@`). Resposta a CHAMADO continua com `suporte+<token do chamado>@`.
+- ⚠️ O e-mail de 14:28 já saiu com reply-to da Reimob — a resposta DESSE leiloeiro vai
+  chegar no Gmail. Só os envios a partir do deploy de hoje voltam para a caixa.

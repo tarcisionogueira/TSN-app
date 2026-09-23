@@ -281,11 +281,16 @@ export default async function handler(req) {
     <p style="color:#94a3b8;font-size:11px;margin-top:24px;white-space:normal">Enviado via BidPro Brasil.</p>
   </div>`;
 
+  // RESPOSTA VOLTA PARA A CAIXA (23/09, pedido do dono): o reply-to era o e-mail PESSOAL de
+  // quem enviou (o Gmail da Reimob) — a resposta do leiloeiro saía do sistema. Agora é
+  // `resposta+<token>@`: o inbound casa o token, grava na caixa ligada a ESTE envio e não abre
+  // chamado. Remetente deixa de ser `noreply@` — "não responda" contradiz pedir resposta.
+  const respostaToken = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
   const r = await enviarEmail({
-    from: `${nomeRemetente} (BidPro Brasil) <noreply@bidprobrasil.com.br>`,
+    from: `${nomeRemetente} (BidPro Brasil) <contato@bidprobrasil.com.br>`,
     to: destinatarioEmail,
     cc: ccList,
-    replyTo: user.email,
+    replyTo: `resposta+${respostaToken}@bidprobrasil.com.br`,
     subject: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`,
     html,
     text: textoFinal,
@@ -305,8 +310,8 @@ export default async function handler(req) {
   if (r.ok) {
     try {
       const rc = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
-        direcao: 'saida', pasta: 'enviados', caixa: 'noreply@bidprobrasil.com.br',
-        de_email: 'noreply@bidprobrasil.com.br', de_nome: nomeRemetente,
+        direcao: 'saida', pasta: 'enviados', caixa: 'contato@bidprobrasil.com.br',
+        de_email: 'contato@bidprobrasil.com.br', de_nome: nomeRemetente, resposta_token: respostaToken,
         para: [destinatarioEmail], cc: ccList,
         assunto: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`.slice(0, 500),
         texto: textoFinal, html, resend_email_id: r.id || null, lido: true, enviado_por: user.id,
