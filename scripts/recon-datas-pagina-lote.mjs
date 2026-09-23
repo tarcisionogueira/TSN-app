@@ -27,6 +27,16 @@ for (const url of URLS) {
     const t = m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     if (t) console.log(`  [título ${Math.round(100 * m.index / html.length)}%] ${t.slice(0, 90)}`);
   }
+  // 23/09: também LOCALIZAÇÃO (Alberto Macedo gravava lote sem cidade) — rótulos de endereço e
+  // padrões "Cidade/UF" ou "Cidade - UF", com posição, para achar de onde ler.
+  for (const m of txt.matchAll(/(Localiza[çc][ãa]o|Endere[çc]o|Cidade|Munic[íi]pio|Comarca|Situado|Localizado)[^.]{0,140}/gi)) {
+    console.log(`  [local ${String(Math.round(100 * m.index / txt.length)).padStart(3)}%] ${m[0].slice(0, 160)}`);
+  }
+  for (const m of txt.matchAll(/[A-ZÀ-Ú][A-Za-zÀ-ú' .-]{2,40}\s*[\/-]\s*(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/g)) {
+    console.log(`  [cid/uf ${String(Math.round(100 * m.index / txt.length)).padStart(3)}%] ${m[0]}`);
+  }
+  const nd = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/) || html.match(/window\.__NUXT__\s*=\s*([\s\S]{0,200})/);
+  console.log(`  estado embutido: ${nd ? nd[0].slice(0, 120) : 'nenhum (__NEXT_DATA__/__NUXT__)'}`);
   for (const m of txt.matchAll(RE)) {
     console.log(`  [data ${String(Math.round(100 * m.index / txt.length)).padStart(3)}%] ${m[0]}  ← …${txt.slice(Math.max(0, m.index - 110), m.index).trim()}`);
   }
