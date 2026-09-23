@@ -32548,3 +32548,21 @@ Correções: `urlDiretaDoDocumento` (api/_anexo-nome.js) desembrulha para `/_adm
 (mesmo host, só extensão de documento) no scraper e no envio; o envio agora **lê o começo de
 cada anexo e descarta HTML**; 23 lotes corrigidos no banco
 (`leilofy_desembrulha_link_de_login.sql`). O e-mail já enviado não muda — reenviar a matrícula.
+
+**22. ✅ HASTA "não conclui desde 30/08" = o SITE está vazio, não é parser.** Recon via proxy ISP
+(run 35888508737): os 9 leilões de `/leiloes` abrem e exibem "Lista de Lotes desse Leilão
+NENHUM LOTE" (569 CAIXA licitação aberta, 570 TRT-5 com data 06/04/2027, prefeituras…);
+`/lotes/imovel` e `/lotes/diversos` também sem lote. O gate não carimba porque não há o que
+gravar — comportamento certo. Os 4 ativos órfãos (sem data, vistos pela última vez 30/08)
+foram desligados (`sumiu_da_fonte`). Nada a corrigir até o site voltar a publicar; o
+`fonte_saude` já registra `vazio` com o motivo por extenso.
+
+**23. ✅ Veículos: "sem lance" não aparecia na busca = filtro de pátio.** 94% dos veículos
+SUPERBID (4.103/4.344) estavam `status_patio='indefinido'` e a busca só mostra `confirmado`.
+Decisão do dono: exibir todo veículo em pátio — corporativo, prefeitura, troca de frota,
+extrajudicial; judicial só com sinal de apreendido/pátio. `classificarPatioSuperbid()`:
+extrajudicial (API: `modalityId≠4`, sem `judicialPraca`/`product.judicial`) sem sinal de
+executado → confirmado; `SINAL_PATIO` ganhou "apreendido"/"recolhido ao depósito".
+Backfill (`veiculos_superbid_patio_extrajudicial.sql`): 3.998 liberados. Busca: 835 → 4.833
+visíveis, 189 "sem lance" (inclui indeterminado/condicional, agrupamento de 21/09) e 11 vendidos.
+Pendente: LJUD tem 1.161 `indefinido` (majoritariamente judicial) — mesma análise se o dono quiser.
