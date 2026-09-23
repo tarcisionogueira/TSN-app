@@ -21,7 +21,7 @@ import puppeteer from 'puppeteer';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 
 const execFileP = promisify(execFile);
-const BASE = 'https://hastaleiloes.com.br';
+const BASE = process.env.RECON_BASE || 'https://hastaleiloes.com.br'; // 23/09: reusado p/ outros tenants SOLEON (JOAOEMILIO)
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
 if (!proxyIspDisponivel()) {

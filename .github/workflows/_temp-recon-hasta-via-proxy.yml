@@ -2,6 +2,11 @@ name: _temp Recon HASTA via Proxy ISP
 
 on:
   workflow_dispatch:
+    inputs:
+      base:
+        description: 'Site SOLEON (padrão HASTA)'
+        required: false
+        default: 'https://hastaleiloes.com.br'
 
 jobs:
   recon-hasta-via-proxy:
@@ -28,4 +33,5 @@ jobs:
           BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
           BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
           BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
+          RECON_BASE: ${{ inputs.base }}
         run: node scripts/recon-hasta-via-proxy.mjs
