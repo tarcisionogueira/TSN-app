@@ -32566,3 +32566,13 @@ executado → confirmado; `SINAL_PATIO` ganhou "apreendido"/"recolhido ao depós
 Backfill (`veiculos_superbid_patio_extrajudicial.sql`): 3.998 liberados. Busca: 835 → 4.833
 visíveis, 189 "sem lance" (inclui indeterminado/condicional, agrupamento de 21/09) e 11 vendidos.
 Pendente: LJUD tem 1.161 `indefinido` (majoritariamente judicial) — mesma análise se o dono quiser.
+
+**24. ✅ Veículos LJUD: pátio acumula + herança por leilão (decisão do dono).** Defeito geral
+corrigido: `salvarVeiculos` regravava `status_patio` do dia por cima — lote confirmado e não
+relido (rodízio de ~120/dia) voltava a `indefinido`. Agora `indefinido` não rebaixa
+`confirmado`. LJUD: 1 lote de cada leilão lido antes do rodízio; leilão com lotes lidos todos
+em pátio (nenhum contra) passa `confirmado` aos não lidos (motivo "leilão de pátio: N lote(s)…").
+Run 35889208096: LJUD visíveis 87 → **566** (114 por texto + 452 herdados; Franca, Palestina,
+Catanduva 98983, Cacoal…). Regra segurou onde devia: Araras (4 confirmados + 1 lido sem sinal)
+e Catanduva 98984 / Campo Grande (lote lido sem sinal) NÃO herdaram — 682 seguem ocultos até
+a leitura confirmar. Herança com só 1 lote lido existe (18 lotes) — evidência mais fraca; vigiar.
