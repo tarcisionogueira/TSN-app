@@ -56,8 +56,8 @@ if (process.env.SBID_IDS) {
   const filtroRes = `or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}`;
   const meio = Math.ceil(LIMITE / 2);
   const [imo, vei] = await Promise.all([
-    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo&order=data_fim.desc&limit=${meio}`),
-    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&select=id,link_lote,resultado_apuracao_tentativas&order=data_leilao.desc&limit=${LIMITE - meio}`),
+    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=data_fim.desc&limit=${meio}`),
+    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=data_leilao.desc&limit=${LIMITE - meio}`),
   ]);
   for (const r of imo) { const o = idDaUrl(r.url_lote); if (o) alvos.push({ tabela: 'imoveis_leilao', ...r, ofertaId: o }); }
   for (const r of vei) { const o = idDaUrl(r.link_lote); if (o) alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); }
@@ -131,7 +131,11 @@ for (const a of alvos) {
     // Vercel: o lote foi desligado por praça vencida ou por sair da vitrine da SUPERBID, e é
     // justamente o que o cliente procura para propor compra. Fica 15 dias
     // (desativar_leiloes_encerrados / sweep / retenção de veículos respeitam a mesma janela).
-    const religavel = a.tabela !== 'imoveis_leilao' || !a.suprimido_motivo || ['praca_vencida', 'sumiu_da_fonte'].includes(a.suprimido_motivo);
+    // Só religa leilão RECENTE (≤ 30 dias): o backlog tem lote de meses atrás, que pode já ter
+    // saído em venda direta — voltar com ele à vitrine como "oportunidade" seria vender passado.
+    const fimLeilao = Date.parse(a.data_fim || a.data_leilao || '');
+    const recente = Number.isFinite(fimLeilao) && Date.now() - fimLeilao < 30 * 864e5;
+    const religavel = recente && (a.tabela !== 'imoveis_leilao' || !a.suprimido_motivo || ['praca_vencida', 'sumiu_da_fonte'].includes(a.suprimido_motivo));
     if (religavel && res !== 'vendido' && res !== 'em_andamento' && res !== 'retirado') {
       patch.ativo = true;
       if (a.tabela === 'imoveis_leilao') patch.suprimido_motivo = null;
