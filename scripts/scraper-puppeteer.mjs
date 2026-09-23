@@ -330,6 +330,11 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (urlAmostra) await capturarContatoSeAusente(supabase, fonte, urlAmostra);
 
   const runStart = new Date().toISOString();
+  // Tamanho do acervo ATIVO antes da rodada — base da trava de proporção do sweep (abaixo).
+  const { count: ativosAntes, error: eAtivos } = await supabase
+    .from('imoveis_leilao').select('id', { count: 'exact', head: true })
+    .eq('fonte', fonte).eq('ativo', true);
+  if (eAtivos) console.error(`  ${fonte}: não consegui contar o acervo ativo (${eAtivos.message}) — sweep será pulado.`);
   let salvos = 0, esperados = 0;
   for (let i = 0; i < imoveis.length; i += 500) {
     const r = await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
@@ -347,7 +352,22 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (!gravouTudo) {
     console.error(`  🛑 ${fonte}: sweep PULADO — gravou ${salvos} de ${esperados}. Desativar aqui aposentaria lote por falha nossa.`);
   }
-  if (salvos > 50 && gravouTudo) {
+  // COLETA PARCIAL NÃO APOSENTA NINGUÉM (23/09). Em 20/09 a API da Superbid cortou a
+  // paginação na página 3 ("Failed to fetch" — provável rate limit mascarado pelo CORS do
+  // fetch no navegador): 200 de 1.452 coletados, acima do piso de 50, e o sweep desativou
+  // 1.219 lotes — 1.153 com leilão AINDA POR VIR. O piso absoluto não enxerga isso; duas
+  // travas agora: (a) o coletor avisou que parou por falha (`coletaParcial`); (b) a rodada
+  // gravou menos da METADE do que estava ativo. Queda grande legítima só atrasa a saída:
+  // a limpeza por data do leilão continua aposentando o que venceu.
+  const metadeDoAcervo = Number.isFinite(ativosAntes) && ativosAntes > 0 && salvos < ativosAntes * 0.5;
+  const sweepBloqueado = imoveis.coletaParcial || eAtivos || metadeDoAcervo;
+  if (sweepBloqueado && gravouTudo && salvos > 50) {
+    const pq = imoveis.coletaParcial ? `coleta parcial (${imoveis.coletaParcial})`
+      : eAtivos ? 'acervo ativo não pôde ser contado'
+      : `gravou ${salvos} de ${ativosAntes} ativos (< 50%)`;
+    console.error(`  🛑 ${fonte}: sweep PULADO — ${pq}. Desativar aqui aposentaria lote que a fonte ainda tem.`);
+  }
+  if (salvos > 50 && gravouTudo && !sweepBloqueado) {
     // suprimido_motivo: registra POR QUE saiu de circulação — sumiu desta coleta (delisted,
     // vendido antes da praça, etc.). Sem isto o banco não distinguia "a fonte tirou do ar" de
     // "nós falhamos em coletar" para NENHUM lote destas fontes (0 de 2892 preenchidos no ZUK,
@@ -360,7 +380,7 @@ async function salvarEFinalizar(imoveis, fonte) {
       .lt('atualizado_em', runStart);
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
     else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
-  } else if (gravouTudo) {
+  } else if (gravouTudo && salvos <= 50) {
     console.log(`  ⚠️ ${fonte} gravou ${salvos} (≤50) — pulando desativação por segurança`);
   }
   return imoveis.length;
@@ -1227,6 +1247,9 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
     }).filter(Boolean);
 
     console.log(`    ${leiloeiro}: ${imoveis.length} imóveis mapeados`);
+    // 23/09: a paginação que parou por FALHA (não por fim do catálogo) viaja até o sweep de
+    // salvarEFinalizar — antes o aviso morria no log e o sweep aposentava o resto do acervo.
+    if (diagParcial) imoveis.coletaParcial = diagParcial;
     return imoveis;
   } catch (err) {
     console.log(`  Erro ${leiloeiro}: ${err.message.slice(0, 100)}`);

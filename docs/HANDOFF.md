@@ -32317,3 +32317,40 @@ cidade corrompida "Capri Imbui Salvadorba" — parser grudando bairro+cidade+UF)
 SUPORTE (2), WEBLEILOES (1). Cada fonte é um parser a olhar — pauta futura.
 (Build: `node_modules` ausente no container; mudanças só em `scripts/`, validadas com
 `node --check` + `verificar:padroes` + teste.)
+
+**6. 🔴 SUPERBID "zerou" — o estrago real foi 3 dias ANTES, e foi nosso.** Log do run
+35740930517 (22/09): portal 2 levou `Failed to fetch` nas 3 tentativas da página 1; SOLD, na
+mesma API, 1 s depois, coletou 98. TOTALLEILOES e KRON tiveram a paginação cortada pelo mesmo
+erro. Em 20 e 21/09 a SUPERBID coletou **exatos 200** (paginação cortada na pág. 3) — acima
+do piso de 50 do sweep, que então **desativou 1.219 lotes, 1.153 com leilão ainda por vir**
+(`suprimido_motivo='sumiu_da_fonte'`). Hipótese mais provável: rate-limit da API mascarado pelo
+CORS — o fetch roda DENTRO do navegador (page.evaluate), e 429/403 sem
+`Access-Control-Allow-Origin` aparece como "Failed to fetch", sem status (forma #1).
+**Corrigido**: (a) `scraperSuperbidNet` marca `imoveis.coletaParcial` quando a paginação para
+por falha; (b) `salvarEFinalizar` pula o sweep se a coleta foi parcial OU se gravou < 50% do
+acervo ativo (trava genérica para MEGA/LJUD/ZUK/BIASI/… — queda legítima só atrasa a saída,
+a limpeza por data continua). **Reativados 1.151** (SUPERBID, vistos em 19/09, praça futura)
++ UF recuperada em 46 deles → SUPERBID 170 → **1.321 ativos**. Reversível:
+`fonte='SUPERBID' and atualizado_em::date='2026-09-19'`.
+**Pendente**: mover o fetch da offer-query para o Node (fora do navegador) para ENXERGAR o
+status real e fazer backoff em 429 — sem isso a coleta segue parcial em dia ruim (agora sem
+aposentar ninguém).
+
+**7. Documentos e fotos dos lotes já captados — o que está guardado de verdade.**
+- Documentos: espelhados em `documento_espelho` → Supabase Storage (58.409 copiados; 571 nas
+  últimas 24h). **26.039 pendentes, quase todos `HTTP 403`** (CEF 22.372, BAYIT 678, HASTA 579,
+  ALFA 531, SUPERBID 411, PECINI 281) — o site bloqueia o IP do servidor; esses documentos
+  existem SÓ no site do leiloeiro enquanto ele mantiver no ar.
+- **Fotos: NÃO são guardadas.** 6.839 capas ativas (fora CEF) apontam para o CDN do leiloeiro
+  (sbwebservices 1.531, pestana 979, suporte 756, S3 747, zuk 523, mega 520); 5 são nossas.
+  Se o leiloeiro tirar o lote do ar, a foto quebra. **Decisão do dono** (custo): espelhar só a
+  capa dos ativos ≈ 6,8 mil × ~150 KB ≈ 1 GB no Storage + egress.
+
+**8. E-mail ao leiloeiro (LEILOFY, 23/09 14:28)** — `canaldireto@leiloariasmart.com.br`
+já registrado em `leiloeiro_contato` (origem `manual`, pelo próprio botão). Resend:
+**delivered**, reply-to para o dono. **Mas o anexo "MATRÍCULA" era a página de LOGIN do site**
+(`/login?redirect=…pdf`, 16 KB de HTML — o documento exige conta) e os dois anexos saíram
+sem extensão (`octet-stream`). O espelho já tinha recusado essa URL ("resposta HTML, não é
+documento"); o envio não consultava. Corrigido em `api/enviar-email-caso.js`: descarta link de
+login e o que o espelho marcou `ignorado`; nome ganha extensão (`MATRÍCULA.pdf`). 21 anexos da
+LEILOFY estão nessa situação.
