@@ -32445,3 +32445,20 @@ domínio chega ao webhook; a diferença é o roteamento:
 - Advogado: vê só a própria caixa pessoal e envia só por ela (tela + API + RLS); a ação de
   anexo e o "responder" da API (chave de serviço) aplicam a mesma cerca da RLS.
 - E-mail de 14:28 à LEILOFY: **entregue 14:28:14, ainda não aberto** (checado 23/09).
+
+**15. "Sem lance" vazio na BA (dono, 23/09) — o filtro está certo; falta apuração.** BA tinha
+**0 imóveis com resultado apurado** (país: 18 sem_lance, 97 vendidos, 76 indeterminados em
+~76 mil). BA, últimos 30 dias: 518 leilões realizados → 209 CEF (fonte excluída — site da Caixa
+volta vazio até pelo Bright Data, ver 20/09), 201 "sumiu_da_fonte", só 50 ativos (42 de fonte
+excluída). Duas causas corrigidas:
+1. **Vazão**: o cron apurava 50–90/dia (20/09: 51 · 21/09: 92 · 22/09: 48) contra ~350/dia
+   entrando na janela de 3 dias (945 candidatos ativos agora). Agendamento `0 21 * * *` →
+   **`0 */3 * * *`** (~8× a vazão). Custo: leitura direta na maioria; fallback Bright Data
+   segue preso à sub-cota diária `geral` (25).
+2. **Corrida**: `desativar_leiloes_encerrados()` (horária) desliga o lote na hora em que a
+   praça vence; o cron só olhava `ativo=true`. Agora entram também os desligados por
+   `praca_vencida` (não os `sumiu_da_fonte`), e o NÃO vendido é religado → cai na retenção de
+   15 dias. Simulado: +111 candidatos no país.
+**Limite que não some**: CEF (a maior parte da BA) continua sem apuração até resolver o acesso
+à Caixa. Conferir amanhã: `select resultado_apurado_em::date, count(*) … group by 1` deve
+passar de ~70 para centenas/dia.

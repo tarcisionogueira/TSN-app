@@ -1,5 +1,6 @@
 /**
- * /api/apurar-resultado-leilao-cron — uma vez por dia, ao final do dia (18h Brasília), apura o
+ * /api/apurar-resultado-leilao-cron — a cada 3 horas (era 1x/dia às 18h Brasília até 23/09: apurava
+ *   50–90 lotes/dia contra ~350/dia entrando na janela de 3 dias — a maioria vencia sem ser olhada), apura o
  * RESULTADO REAL de cada leilão que encerrou hoje: teve lance (vendido, com valor quando a
  * página publica) ou não (sem lance/deserto). Pedido do dono (20/09): aprender quais praças são
  * mais disputadas e, sobretudo, identificar os lotes SEM lance para propor compra direta ao
@@ -128,6 +129,10 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
       patch.resultado_leilao = 'indeterminado';
       indeterminados++;
     }
+    // Lote que a limpeza HORÁRIA já desligou por praça vencida, antes de este cron diário
+    // chegar nele (23/09 — ver a consulta de candidatos): se não vendeu, volta ao ar e entra
+    // na retenção de 15 dias de `desativar_leiloes_encerrados()`. Vendido continua desligado.
+    if (c.religarSeNaoVendido && patch.resultado_leilao !== 'vendido') { patch.ativo = true; patch.suprimido_motivo = null; }
     await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
   }
   return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
@@ -177,7 +182,14 @@ export default async function handler(req, res) {
   // (reapuração on-demand em ImovelDetalhe.jsx). Agora a busca diária também tenta de novo os
   // 'indeterminado' (dentro do mesmo teto de `resultado_apuracao_tentativas` — não vira loop
   // infinito nas fontes que nunca respondem, ex. SODRE, já filtradas à parte).
-  const rIm = await sb(`imoveis_leilao?ativo=eq.true&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
+  // 23/09 (dono: "Sem lance" na BA vazio). CORRIDA ENTRE DOIS ROBÔS: `desativar_leiloes_
+  // encerrados()` roda de HORA em hora e desliga o lote assim que a praça vence; este cron roda
+  // 1x/dia (21h UTC) e só olhava `ativo=true`. Leilão que acabou de manhã já estava desligado à
+  // noite — nunca era apurado, nunca virava "sem lance". Medido na BA, 30 dias: 518 leilões
+  // realizados, 50 ativos, 0 apurados. A retenção de 15 dias de 22/09 protegia só o que JÁ
+  // tinha sido apurado. Agora entram também os desligados POR PRAÇA VENCIDA (não os
+  // "sumiu_da_fonte": esses a fonte tirou do ar) — e o não-vendido é religado (apurarLote).
+  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -186,7 +198,7 @@ export default async function handler(req, res) {
   }
   const candidatosImoveis = (await rIm.json().catch(() => []))
     .filter(im => !ehVendaDireta(im.modalidade))
-    .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas }));
+    .map(im => ({ id: im.id, alvo: im.url_lote || im.link_edital, resultado_apuracao_tentativas: im.resultado_apuracao_tentativas, religarSeNaoVendido: im.ativo === false }));
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
