@@ -86,7 +86,10 @@ export default async function handler(req) {
       //   em_andamento = arrematou, imissão de posse ainda não feita
       //   concluida    = posse registrada
       //   (fora das três) caso sem arremate cujo imóvel foi vendido a terceiro — não conta.
-      const perdida = (c) => !c.arrematado_em && !c.posse_em && vendidos.has(String(c.imovel_id));
+      //   (fora das três) caso sem arremate ENCERRADO pela equipe ("✓ Concluir caso" no Pipeline
+      //   = status 'concluido'): o cliente não arrematou, ex. Rafael/ZUK de 31/08 (dono, 23/09).
+      const perdida = (c) => !c.arrematado_em && !c.posse_em
+        && (vendidos.has(String(c.imovel_id)) || c.status_etapa === 'concluido');
       const contratadas = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em && !perdida(c)).length;
       const concluidas = casosCliente.filter((c) => c.posse_em).length;
       return {
@@ -95,7 +98,7 @@ export default async function handler(req) {
         casos: casosCliente.map((c) => ({
           id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
           arrematado_em: c.arrematado_em, posse_em: c.posse_em, juridico_status: c.juridico_status,
-          vendido_a_terceiro: perdida(c),
+          nao_arrematado: perdida(c),
         })),
         equipe_designada: role === 'admin'
           ? designacoes.filter((d) => d.cliente_id === p.id).map((d) => ({ membro_id: d.membro_id, nome: nomeMembro[d.membro_id] || d.membro_id }))
