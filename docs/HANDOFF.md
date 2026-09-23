@@ -32462,3 +32462,22 @@ excluída). Duas causas corrigidas:
 **Limite que não some**: CEF (a maior parte da BA) continua sem apuração até resolver o acesso
 à Caixa. Conferir amanhã: `select resultado_apurado_em::date, count(*) … group by 1` deve
 passar de ~70 para centenas/dia.
+
+**16. ✅ CEF APURADA SEM ACESSAR A CAIXA + o NULL que desligou a limpeza de vencidos.**
+(`cef_sem_lance_por_relistagem_e_null_da_retencao.sql`, rodada em seco antes.)
+- Leilão/licitação da Caixa sem lance VOLTA ao CSV como venda online/direta com o MESMO
+  `cef_<n>`; vendido some. Gatilho `trg_cef_sem_lance_por_relistagem` marca `sem_lance` na
+  gravação do CSV (custo zero, sem Bright Data, sem a página de detalhe). Retroativo: 1.909 CEF
+  em venda online com data de leilão PASSADA → `sem_lance` (a data só pode ser do leilão:
+  o CSV não traz data para venda online, `trg_preservar_data_leilao` mantém a antiga, e o
+  enriquecimento só lê data FUTURA de leilão/licitação). **BA: 0 → 90 "sem lance"; país ~18 → 1.920.**
+- `leilao_ja_encerrado` passa a isentar venda ONLINE (já isentava direta): a data ali é resto
+  do leilão; o imóvel segue à venda e sai só quando some do CSV.
+- 🔴 **Defeito de 22/09 corrigido**: a retenção de 15 dias era
+  `not (resultado_leilao in (...) and resultado_apurado_em > ...)` — com resultado NULL vira NULL
+  e o WHERE EXCLUI a linha. Desde 22/09 22h a limpeza horária e o gatilho de gravação não
+  desligavam NENHUM vencido; o vigia `leilao_vencido_ativo` tinha o mesmo NULL e dizia 0.
+  Rodada agora: **2.651 vencidos desligados** (1.919 CEF licitação + 732 leiloeiros); vigia
+  mede de verdade (0 depois); `resultado_leilao_atrasado` 3.716 → 1.785. Lição: `not (a and b)`
+  com coluna anulável SEMPRE com `coalesce(..., false)`.
+- Não coberto: "vendido" da CEF (sumir do CSV ≈ vendido OU retirado — não dá para afirmar).

@@ -78,6 +78,9 @@ const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || '')
 //     (não é o problema); o bloqueio é de acesso mesmo. Sub-cota `geral` maior continua valendo
 //     — beneficia os outros 2 consumidores que a compartilham (enriquecer-datas-cron.js,
 //     enriquecer-backfill-cron.js), só não resolveu CEF.
+//   · CEF É APURADA EM OUTRO LUGAR desde 23/09 — sem acessar a Caixa: o gatilho
+//     `trg_cef_sem_lance_por_relistagem` lê o CSV diário (leilão/licitação que volta como venda
+//     online/direta = SEM LANCE). Continua fora daqui porque a página de detalhe segue fechada.
 const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
 
 // Mesma lista acima, mas pronta pro operador `not.in` do PostgREST — aplicada DENTRO da
