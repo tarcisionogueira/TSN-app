@@ -34,6 +34,15 @@ export default async function handler(req, res) {
   }
   const desativados = await r.json().catch(() => 0);
 
+  // 1b) CEF VENDIDO inferido (23/09): imóvel de leilão/licitação que SAIU da lista da Caixa a
+  // partir da véspera do leilão = vendido (resultado_origem='inferido_lista_caixa'). Roda logo
+  // após o sweep acima — mesmo relógio do CSV. Best-effort: falha aqui não derruba a limpeza.
+  let vendidosCef = null;
+  try {
+    const rv = await rpc('apurar_vendidos_cef', {});
+    vendidosCef = rv.ok ? await rv.json().catch(() => null) : { erro: (await rv.text().catch(() => '')).slice(0, 200) };
+  } catch (e) { vendidosCef = { erro: String(e?.message || e).slice(0, 200) }; }
+
   // 2) LEILOEIROS (novo): desativa o que saiu do site (não veio no último scrape da fonte). Guarda
   // anti-regressão embutida na RPC (pula fonte com remoção > 40% = scrape degradado). Best-effort:
   // uma falha aqui não derruba o resultado do CEF.
@@ -78,5 +87,5 @@ export default async function handler(req, res) {
   }
 
   console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos }));
-  return res.status(200).json({ ok: true, desativados, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
+  return res.status(200).json({ ok: true, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
 }

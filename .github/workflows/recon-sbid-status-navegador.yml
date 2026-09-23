@@ -1,0 +1,34 @@
+name: Recon — resultado SUPERBID pelo navegador
+
+# Só leitura. A API/página da SUPERBID dá 403 (Cloudflare) para fetch de servidor; o coletor
+# funciona chamando a API de dentro do navegador. Ver scripts/recon-sbid-status-navegador.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      sbid_ids:
+        description: 'IDs de oferta SUPERBID (vírgula) — encerradas, veículos e imóveis'
+        required: false
+        default: '4977069,4991486,5006234,4970636,5008418,5009404'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        env:
+          SBID_IDS: ${{ inputs.sbid_ids }}
+        run: node scripts/recon-sbid-status-navegador.mjs

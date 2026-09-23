@@ -32481,3 +32481,17 @@ passar de ~70 para centenas/dia.
   mede de verdade (0 depois); `resultado_leilao_atrasado` 3.716 → 1.785. Lição: `not (a and b)`
   com coluna anulável SEMPRE com `coalesce(..., false)`.
 - Não coberto: "vendido" da CEF (sumir do CSV ≈ vendido OU retirado — não dá para afirmar).
+
+**17. CEF VENDIDO (inferido) + recon SUPERBID/CEF.**
+- Recon 35880941738 (GitHub): SUPERBID API e página → **403 Cloudflare** para fetch de servidor
+  (só navegador passa — é assim que o coletor funciona). CEF detalhe → **Radware CAPTCHA** para
+  node:https E fetch, também do GitHub (a hipótese "cliente TLS" do recon de 03/08 não vale mais).
+- CEF vendido pela SAÍDA da lista: medido nos leilões de 60 dias — 5.641 saíram, 4.844 até 7d
+  depois do leilão, 255 antes; só 3 reapareceram no mesmo endereço com outro número (não
+  vendido volta com o MESMO número → sem lance). `apurar_vendidos_cef()`
+  (`cef_vendido_inferido_pela_lista.sql`), chamada pelo `limpar-imoveis-stale-cron` (05h):
+  saiu a partir da véspera do leilão = `vendido` com `resultado_origem='inferido_lista_caixa'`.
+  Saiu antes = retirada, fica sem resultado. Aplicado: **7.131 vendidos (BA 303)**; os 1.909
+  sem lance ganharam `resultado_origem='relistagem_caixa'`.
+- Veículos (2.168 SUPERBID vencidos, 0 apurados): próximo passo = apurar dentro do navegador
+  do coletor. Recon pelo navegador: `recon-sbid-status-navegador.yml`.
