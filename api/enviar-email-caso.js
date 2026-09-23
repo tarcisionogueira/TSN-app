@@ -281,16 +281,23 @@ export default async function handler(req) {
     <p style="color:#94a3b8;font-size:11px;margin-top:24px;white-space:normal">Enviado via BidPro Brasil.</p>
   </div>`;
 
-  // RESPOSTA VOLTA PARA A CAIXA (23/09, pedido do dono): o reply-to era o e-mail PESSOAL de
-  // quem enviou (o Gmail da Reimob) — a resposta do leiloeiro saía do sistema. Agora é
-  // `resposta+<token>@`: o inbound casa o token, grava na caixa ligada a ESTE envio e não abre
-  // chamado. Remetente deixa de ser `noreply@` — "não responda" contradiz pedir resposta.
-  const respostaToken = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+  // DE QUEM SAI E PARA ONDE VOLTA (23/09, decisão do dono). Antes: `De: noreply@` e reply-to
+  // no e-mail PESSOAL de quem enviou (o Gmail da Reimob) — a resposta do leiloeiro saía do
+  // sistema. Agora: quem tem endereço da equipe (`equipe_email`, ex.: tarcisio@) envia como
+  // ele mesmo, com reply-to `tarcisio+<token>@` — a resposta volta à caixa DELE, encadeada a
+  // este envio. Sem endereço pessoal, sai por contato@ e a resposta cai na fila de atendimento.
+  let pessoal = null;
+  const rPes = await sb(`equipe_email?user_id=eq.${user.id}&select=endereco&limit=1`);
+  if (rPes.ok) [pessoal] = await rPes.json().catch(() => []);
+  else console.error('[enviar-email-caso] equipe_email HTTP', rPes.status, '— envia por contato@');
+  const enderecoDe = pessoal?.endereco || 'contato@bidprobrasil.com.br';
+  const respostaToken = pessoal ? crypto.randomUUID().replace(/-/g, '').slice(0, 24) : null;
+  const replyTo = pessoal ? enderecoDe.replace('@', `+${respostaToken}@`) : enderecoDe;
   const r = await enviarEmail({
-    from: `${nomeRemetente} (BidPro Brasil) <contato@bidprobrasil.com.br>`,
+    from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: destinatarioEmail,
     cc: ccList,
-    replyTo: `resposta+${respostaToken}@bidprobrasil.com.br`,
+    replyTo,
     subject: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`,
     html,
     text: textoFinal,
@@ -310,8 +317,8 @@ export default async function handler(req) {
   if (r.ok) {
     try {
       const rc = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
-        direcao: 'saida', pasta: 'enviados', caixa: 'contato@bidprobrasil.com.br',
-        de_email: 'contato@bidprobrasil.com.br', de_nome: nomeRemetente, resposta_token: respostaToken,
+        direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, dono: pessoal ? user.id : null,
+        de_email: enderecoDe, de_nome: nomeRemetente, resposta_token: respostaToken,
         para: [destinatarioEmail], cc: ccList,
         assunto: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`.slice(0, 500),
         texto: textoFinal, html, resend_email_id: r.id || null, lido: true, enviado_por: user.id,

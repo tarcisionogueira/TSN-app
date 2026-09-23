@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import EmailHtml from './EmailHtml';
 
@@ -21,7 +22,10 @@ const PASTAS = [
   { k: 'lixeira', label: 'Lixeira', Icon: Trash2 },
 ];
 const CAIXAS = ['suporte', 'contato', 'privacidade'];
-const COLS_LISTA = 'id,direcao,pasta,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,spam_motivo,anexos';
+const COLS_LISTA = 'id,direcao,pasta,caixa,dono,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,spam_motivo,anexos,resposta_de';
+// Filtro de origem (23/09): caixa PESSOAL (endereço da própria pessoa, privada) × COMUNICAÇÃO
+// (contato@/suporte@/privacidade@ — da equipe toda).
+const ORIGENS = [['todas', 'Todas'], ['minha', 'Minha caixa'], ['comunicacao', 'Comunicação']];
 
 const fmtData = (iso) => {
   const d = new Date(iso);
@@ -51,6 +55,17 @@ export default function CaixaEmail() {
   const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a }
   const [enviando, setEnviando] = useState(false);
   const [bloqueados, setBloqueados] = useState([]);
+  const [origem, setOrigem] = useState('todas');
+  const [meuEndereco, setMeuEndereco] = useState(null); // tarcisio@… (equipe_email) ou null
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user?.id) return;
+    let vivo = true;
+    supabase.from('equipe_email').select('endereco').eq('user_id', user.id).maybeSingle() // padrao-ok: caixa pessoal é do ATENDENTE logado (id real), nunca do cliente personificado no modo suporte
+      .then(({ data, error }) => { if (vivo) { if (error) setErro(`Não consegui ler seu endereço da equipe: ${error.message}`); setMeuEndereco(data?.endereco || null); } });
+    return () => { vivo = false; };
+  }, [user?.id]);
+  const dePadrao = meuEndereco ? 'pessoal' : 'suporte';
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro('');
@@ -132,7 +147,8 @@ export default function CaixaEmail() {
   function responder(m) {
     const caixaNossa = String(m.caixa || '').split('@')[0];
     setCompor({
-      de: CAIXAS.includes(caixaNossa) ? caixaNossa : 'suporte',
+      // Veio pra minha caixa pessoal → respondo como eu; veio pra comunicação → pelo mesmo endereço.
+      de: (m.dono && meuEndereco) ? 'pessoal' : (CAIXAS.includes(caixaNossa) ? caixaNossa : dePadrao),
       para: m.de_email || '', cc: '',
       assunto: /^re:/i.test(m.assunto || '') ? m.assunto : `Re: ${m.assunto || ''}`,
       texto: '', responder_a: m.id, chamado_id: m.chamado_id,
@@ -140,7 +156,7 @@ export default function CaixaEmail() {
   }
   function encaminhar(m) {
     const corpo = `\n\n---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${m.texto || ''}`;
-    setCompor({ de: 'suporte', para: '', cc: '', assunto: `Fwd: ${m.assunto || ''}`, texto: corpo.slice(0, 18000), responder_a: null });
+    setCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${m.assunto || ''}`, texto: corpo.slice(0, 18000), responder_a: null });
   }
 
   async function enviar() {
@@ -162,7 +178,8 @@ export default function CaixaEmail() {
   }
 
   const b = busca.trim().toLowerCase();
-  const visiveis = b ? lista.filter(m => [m.de_email, m.de_nome, m.assunto, (m.para || []).join(' ')].some(v => String(v || '').toLowerCase().includes(b))) : lista;
+  const porOrigem = origem === 'todas' ? lista : lista.filter(m => (origem === 'minha' ? !!m.dono : !m.dono));
+  const visiveis = b ? porOrigem.filter(m => [m.de_email, m.de_nome, m.assunto, (m.para || []).join(' ')].some(v => String(v || '').toLowerCase().includes(b))) : porOrigem;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
@@ -174,11 +191,15 @@ export default function CaixaEmail() {
             {naoLidos[k] > 0 && <span style={{ background: k === 'spam' ? '#dc2626' : '#0D63DB', color: 'white', borderRadius: 10, padding: '0 7px', fontSize: 10 }}>{naoLidos[k]}</span>}
           </button>
         ))}
+        <span style={{ width: 1, height: 22, background: '#e2e8f0', margin: '0 4px' }} />
+        {ORIGENS.map(([k, l]) => (
+          <button key={k} onClick={() => setOrigem(k)} style={{ ...btn(origem === k), background: origem === k ? '#334155' : 'white' }}>{l}</button>
+        ))}
         <div style={{ flex: 1 }} />
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, minWidth: 220 }} />
         <button onClick={carregar} style={btn(false)} title="Atualizar"><RefreshCw size={14} /></button>
-        <button onClick={() => setCompor({ de: 'suporte', para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
+        <button onClick={() => setCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
           <PenSquare size={14} /> Escrever
         </button>
       </div>
@@ -292,7 +313,10 @@ export default function CaixaEmail() {
             </div>
             {compor.chamado_id && <div style={{ fontSize: 12, color: '#0D63DB', marginBottom: 8 }}>Esta resposta também entra no histórico do chamado.</div>}
             {[
-              ['De', <select key="de" value={compor.de} onChange={e => setCompor({ ...compor, de: e.target.value })} style={campo}>{CAIXAS.map(c => <option key={c} value={c}>{c}@bidprobrasil.com.br</option>)}</select>],
+              ['De', <select key="de" value={compor.de} onChange={e => setCompor({ ...compor, de: e.target.value })} style={campo}>
+                {meuEndereco && <option value="pessoal">{meuEndereco} (você — respostas voltam para a sua caixa)</option>}
+                {CAIXAS.map(c => <option key={c} value={c}>{c}@bidprobrasil.com.br (comunicação — respostas vão para a fila de atendimento)</option>)}
+              </select>],
               ['Para', <input key="para" value={compor.para} onChange={e => setCompor({ ...compor, para: e.target.value })} placeholder="email@exemplo.com (vários: separe por vírgula)" style={campo} />],
               ['Cc', <input key="cc" value={compor.cc} onChange={e => setCompor({ ...compor, cc: e.target.value })} placeholder="opcional" style={campo} />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],

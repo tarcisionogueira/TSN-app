@@ -32411,3 +32411,19 @@ contratadas 3 (Rafael), em andamento 3, concluídas 0.
   `contato@` (era `noreply@`). Resposta a CHAMADO continua com `suporte+<token do chamado>@`.
 - ⚠️ O e-mail de 14:28 já saiu com reply-to da Reimob — a resposta DESSE leiloeiro vai
   chegar no Gmail. Só os envios a partir do deploy de hoje voltam para a caixa.
+
+**13. Endereço PESSOAL × COMUNICAÇÃO (decisão do dono, substitui o `resposta+` do item 12).**
+O e-mail de 14:28 ao leiloeiro NÃO saiu de tarcisio@: saiu `De: noreply@` com reply-to no
+Gmail da Reimob. MX de bidprobrasil.com.br → inbound do Resend (SES): todo endereço do
+domínio chega ao webhook; a diferença é o roteamento:
+- **Pessoal** (`equipe_email`, escrita só admin — em `perfis` um cliente poderia se declarar
+  dono de contato@): envio sai `De: Nome <tarcisio@>`, reply-to `tarcisio+<token>@`; a
+  resposta cai na caixa **privada** do dono (`email_caixa.dono`, RLS), encadeada ao envio, sem
+  chamado. Hoje: `tarcisio@bidprobrasil.com.br` → admin.
+- **Comunicação** (suporte@, contato@, privacidade@, responda@…): resposta → **chamado na fila
+  do Atendimento** + caixa da equipe. Mensagem para pessoal E comunicação juntos → atendimento
+  (cliente que copiou alguém da equipe não perde o chamado).
+- Tela: "De" oferece o endereço pessoal (padrão) e os de comunicação, cada um dizendo para onde
+  a resposta volta; filtro Todas / Minha caixa / Comunicação.
+- Novo membro da equipe ganha endereço: `insert into equipe_email (endereco, user_id) …`
+  (admin). Endereços de comunicação são recusados pela CHECK da tabela.

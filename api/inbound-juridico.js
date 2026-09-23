@@ -333,7 +333,27 @@ async function motivoDeSpam(endereco, headers, aut) {
   return null;
 }
 
-async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', spamMotivo = null, aut = null, respostaDe = null } = {}) {
+// Endereço PESSOAL da equipe entre os destinatários (tabela `equipe_email`, só o admin edita).
+// Devolve { endereco, user_id, token } — `token` é o +sufixo que casa a resposta com o envio.
+// null também quando a mensagem foi para algum endereço de COMUNICAÇÃO nosso (contato@,
+// suporte@…): aí prevalece o atendimento — cliente que copiou alguém da equipe não pode perder
+// o chamado.
+async function enderecoPessoal(dests) {
+  const nossos = dests.map(d => String(d).toLowerCase().trim().replace(/^.*<([^>]+)>.*$/, '$1'))
+    .map(d => d.match(/^([a-z0-9._-]+)(?:\+([a-z0-9]+))?@bidprobrasil\.com\.br$/)).filter(Boolean)
+    .map(m => ({ base: `${m[1]}@bidprobrasil.com.br`, token: m[2] || null }));
+  if (!nossos.length) return null;
+  const r = await sb(`equipe_email?endereco=in.(${[...new Set(nossos.map(n => `"${n.base}"`))].join(',')})&select=endereco,user_id`);
+  if (!r.ok) { console.error('[caixa] equipe_email HTTP', r.status, '— segue como atendimento'); return null; }
+  const pessoais = await r.json().catch(() => []);
+  if (!pessoais.length) return null;
+  if (nossos.some(n => !pessoais.find(p => p.endereco === n.base))) return null; // também foi p/ comunicação
+  const n = nossos.find(x => x.token) || nossos[0];
+  const p = pessoais.find(x => x.endereco === n.base) || pessoais[0];
+  return { endereco: p.endereco, user_id: p.user_id, token: n.token };
+}
+
+async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', spamMotivo = null, aut = null, respostaDe = null, dono = null, caixa = null } = {}) {
   try {
     if (messageId) {
       const rd = await sb(`email_caixa?direcao=eq.entrada&message_id=eq.${encodeURIComponent(messageId)}&select=id&limit=1`);
@@ -345,7 +365,7 @@ async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', s
     const anexos = (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || [])).slice(0, 20)
       .map(a => ({ id: a?.id || null, nome: String(a?.filename || 'anexo').slice(0, 160), content_type: a?.content_type || null, tamanho: a?.size ?? null }));
     const r = await sb('email_caixa', { method: 'POST', prefer: 'return=representation', body: {
-      direcao: 'entrada', pasta, caixa: nossos[0]?.replace(/\+[^@]*@/, '@') || null,
+      direcao: 'entrada', pasta, caixa: caixa || nossos[0]?.replace(/\+[^@]*@/, '@') || null, dono,
       de_email: endereco || null, de_nome: nome || null,
       para: lista(data?.to), cc: lista(data?.cc),
       assunto: String(data?.subject || '').slice(0, 500) || null,
@@ -554,22 +574,23 @@ export default async function handler(req) {
   // "é só responder este e-mail" que nós mesmos mandamos, e pedido de titular de
   // dados endereçado ao privacidade@, que a LGPD obriga a atender.
   const aut = autenticacaoDe(headers);
-  // RESPOSTA A UM E-MAIL NOSSO (23/09): `resposta+<token>@` só existe no reply-to de um envio
-  // da equipe (botão "Enviar e-mail" do caso/lote). Casa o token → grava na caixa ligada ao
-  // envio original e para aqui: resposta de leiloeiro/jurídico a um contato nosso não é
-  // atendimento de cliente, não abre chamado. Token desconhecido segue o fluxo normal.
+  // ENDEREÇO PESSOAL DA EQUIPE (23/09, decisão do dono): tarcisio@ e afins são caixa de uma
+  // PESSOA — vão para a caixa dela (privada), encadeados ao envio original quando vêm no
+  // `+token` do reply-to, e não abrem chamado. Comunicação (contato@/suporte@…) segue abaixo.
   if (!caso) {
-    const tokResp = destinatarios(data, headers).map(d => String(d).match(/resposta\+([a-z0-9]+)@/i)?.[1]).find(Boolean);
-    if (tokResp) {
-      const ro = await sb(`email_caixa?resposta_token=eq.${encodeURIComponent(tokResp)}&select=id&limit=1`);
-      const [orig] = ro.ok ? await ro.json().catch(() => []) : [];
-      if (!ro.ok) console.error('[caixa] busca do envio original HTTP', ro.status);
-      if (orig) {
-        const caixaId = await registrarNaCaixa(data, headers, messageId, { aut, respostaDe: orig.id });
-        if (!caixaId) return json({ error: 'nao_foi_possivel_registrar_resposta' }, 500); // Resend reentrega
-        return json({ ok: true, resposta_de: orig.id, caixa_id: caixaId });
+    const pessoal = await enderecoPessoal(destinatarios(data, headers));
+    if (pessoal) {
+      let respostaDe = null;
+      if (pessoal.token) {
+        const ro = await sb(`email_caixa?resposta_token=eq.${encodeURIComponent(pessoal.token)}&dono=eq.${pessoal.user_id}&select=id&limit=1`);
+        if (ro.ok) respostaDe = ((await ro.json().catch(() => []))[0] || {}).id || null;
+        else console.error('[caixa] busca do envio original HTTP', ro.status);
       }
-      console.warn('[caixa] token de resposta desconhecido — segue como atendimento:', tokResp);
+      const spamMotivo = pessoal.token && respostaDe ? null : await motivoDeSpam(remetente(data).endereco, headers, aut);
+      const caixaId = await registrarNaCaixa(data, headers, messageId,
+        { aut, respostaDe, dono: pessoal.user_id, caixa: pessoal.endereco, pasta: spamMotivo ? 'spam' : 'entrada', spamMotivo });
+      if (!caixaId) return json({ error: 'nao_foi_possivel_registrar' }, 500); // Resend reentrega
+      return json({ ok: true, pessoal: true, resposta_de: respostaDe, caixa_id: caixaId });
     }
   }
   if (!caso) {

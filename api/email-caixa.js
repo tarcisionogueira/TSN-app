@@ -119,7 +119,15 @@ export default async function handler(req) {
   const rl = await checkRateLimit(`email-caixa:user:${user.id}`, 80, 86_400_000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
-  const de = CAIXAS_ENVIO.includes(body?.de) ? body.de : 'suporte';
+  // 'pessoal' = o endereço da própria pessoa (equipe_email). Os demais são de COMUNICAÇÃO.
+  let pessoal = null;
+  if (body?.de === 'pessoal') {
+    try { pessoal = await ler1(`equipe_email?user_id=eq.${user.id}&select=endereco`); }
+    catch (e) { console.error('[email-caixa] equipe_email:', e.message); return json({ error: 'Não foi possível ler seu endereço da equipe.' }, 500); }
+    if (!pessoal) return json({ error: 'Você ainda não tem endereço pessoal @bidprobrasil.com.br — peça ao admin.' }, 400);
+  }
+  const de = pessoal ? null : (CAIXAS_ENVIO.includes(body?.de) ? body.de : 'suporte');
+  const enderecoDe = pessoal ? pessoal.endereco : `${de}@${DOMINIO}`;
   const para = listaEmails(body?.para);
   const cc = listaEmails(body?.cc).filter(e => !para.includes(e));
   const assunto = String(body?.assunto || '').trim().slice(0, 300);
@@ -138,10 +146,12 @@ export default async function handler(req) {
     if (!original) return json({ error: 'Mensagem original não encontrada' }, 404);
   }
 
-  // Fora de chamado, a resposta volta para a CAIXA encadeada a este envio (resposta+<token>@,
-  // reconhecido no inbound) — nunca para o e-mail pessoal de quem enviou, nem abre chamado.
-  const respostaToken = chamado ? null : crypto.randomUUID().replace(/-/g, '').slice(0, 24);
-  let replyTo = chamado ? `${de}@${DOMINIO}` : `resposta+${respostaToken}@${DOMINIO}`;
+  // Para onde volta a resposta (23/09, decisão do dono):
+  //   · chamado        → suporte+<token do chamado>@ (volta ao MESMO chamado)
+  //   · endereço pessoal → pessoa+<token do envio>@ (volta à caixa dela, encadeada)
+  //   · comunicação    → o próprio endereço (contato@/suporte@…) → cai na fila de atendimento
+  const respostaToken = (!chamado && pessoal) ? crypto.randomUUID().replace(/-/g, '').slice(0, 24) : null;
+  let replyTo = respostaToken ? enderecoDe.replace('@', `+${respostaToken}@`) : enderecoDe;
   if (chamado) {
     let token = chamado.email_token;
     if (!token) {
@@ -168,7 +178,7 @@ export default async function handler(req) {
     + (citacao ? `<blockquote style="border-left:3px solid #cbd5e1;margin:16px 0 0;padding:4px 12px;color:#64748b;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:13px">${esc(citacao.trim())}</blockquote>` : '');
 
   const r = await enviarEmail({
-    from: `${nomeRemetente} (BidPro Brasil) <${de}@${DOMINIO}>`,
+    from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
     headers: Object.keys(headers).length ? headers : undefined,
     meta: { tipo: 'caixa_equipe', userId: user.id },
@@ -184,7 +194,7 @@ export default async function handler(req) {
   // Registro na caixa (Enviados). O e-mail JÁ SAIU — falha aqui é só histórico: avisa, não esconde.
   const avisos = [];
   const ins = await sb('email_caixa', { method: 'POST', prefer: 'return=minimal', body: {
-    direcao: 'saida', pasta: 'enviados', caixa: `${de}@${DOMINIO}`, de_email: `${de}@${DOMINIO}`, de_nome: nomeRemetente,
+    direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, de_email: enderecoDe, de_nome: nomeRemetente, dono: pessoal ? user.id : null,
     para, cc, assunto, texto: textoFinal, html, in_reply_to: original?.message_id || null,
     referencias: headers['References'] || null, resend_email_id: r.id || null, lido: true,
     chamado_id: chamado?.id || null, enviado_por: user.id, resposta_token: respostaToken,
