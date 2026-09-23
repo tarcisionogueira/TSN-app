@@ -32495,3 +32495,16 @@ passar de ~70 para centenas/dia.
   sem lance ganharam `resultado_origem='relistagem_caixa'`.
 - Veículos (2.168 SUPERBID vencidos, 0 apurados): próximo passo = apurar dentro do navegador
   do coletor. Recon pelo navegador: `recon-sbid-status-navegador.yml`.
+
+**18. 🔴 SUPERBID bloqueando o GitHub (Cloudflare) — coleta E apuração (veículos 0 apurados).**
+Recon pelo NAVEGADOR (run 35881622230): mesmo de dentro do Chromium, todas as chamadas à
+offer-query dão `Failed to fetch` (403 do Cloudflare sem CORS → o navegador esconde o status).
+É a causa do "zerou" de 22/09 e das coletas parciais: 23/09 14:48 trouxe 100 de ~1.300 —
+**a trava de coleta parcial (item 6) segurou: 0 lotes desligados**. Consequências: veículos
+SUPERBID (2.168 vencidos) sem apuração; imóveis SUPERBID sem coleta completa.
+**Caminho proposto**: mover SUPERBID (imóveis + veículos) e a apuração dela para o
+`runner-residencial.sh` (IP residencial — o mesmo caminho de HASTA/RJ/PECINI/VENDASGOV).
+**Antes, 1 teste do dono no WSL** (1 min, grátis):
+`cd ~/TSN-app && git pull && SBID_IDS=4977069,4970636,5008418 node scripts/recon-sbid-status-navegador.mjs`
+— se vier `ofertas=1` com campos de status, a API responde do IP residencial e o log mostra
+em qual campo está vendido/sem lance; aí a apuração é escrita em cima desse campo.
