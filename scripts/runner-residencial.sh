@@ -207,6 +207,16 @@ rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 # caminho de produção enquanto o site continuar atrás do Cloudflare.
 rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 
+# ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
+# Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A
+# offer-query dá 403 do Cloudflare em datacenter (Vercel e GitHub, até dentro do Chromium);
+# daqui responde. EM SECO até a distribuição ser conferida contra desfechos conhecidos — a
+# única amostra medida trouxe `offerStatus` todo false numa oferta encerrada. Virar para
+# SBID_APLICAR=1 AQUI (commit), não no .env da máquina, para a decisão ficar no repositório.
+# Não passa pelo `rodar`: grava resultado, não acervo (mesma razão do radar e da triagem).
+env SBID_APLICAR=0 node scripts/apurar-superbid-residencial.mjs \
+  || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"
+
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
 # HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
 # IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
