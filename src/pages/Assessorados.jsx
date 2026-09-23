@@ -53,12 +53,16 @@ function BadgesFases({ c }) {
     </span>
   );
 }
-function ResumoFases({ clientes }) {
+// Os cards viram filtro (23/09): clicar mostra só a seção daquela fase; clicar de novo volta a todas.
+function ResumoFases({ clientes, fase, onFase }) {
   const tot = (k) => clientes.reduce((a, c) => a + (c[k] || 0), 0);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
       {FASES.map((f) => (
-        <div key={f.k} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px' }}>
+        <div key={f.k} onClick={() => onFase(fase === f.k ? null : f.k)} style={{
+          background: fase === f.k ? f.bg : 'white', border: `1px solid ${fase === f.k ? f.cor : '#e2e8f0'}`,
+          borderRadius: 12, padding: '10px 14px', cursor: 'pointer',
+        }}>
           <div style={{ fontSize: 22, fontWeight: 900, color: f.cor }}>{tot(f.k)}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{f.titulo}</div>
           <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{f.sub}</div>
@@ -108,6 +112,7 @@ export default function Assessorados() {
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
   const [designarAberto, setDesignarAberto] = useState(null);
+  const [fase, setFase] = useState(null);
 
   async function carregar() {
     setErro(null);
@@ -141,6 +146,11 @@ export default function Assessorados() {
   if (!dados) return <div style={{ maxWidth: 700, margin: '60px auto', textAlign: 'center', color: '#94a3b8' }}>Carregando...</div>;
 
   const clientes = dados.clientes.filter((c) => !busca.trim() || (c.nome || '').toLowerCase().includes(busca.trim().toLowerCase()));
+  const semCaso = (c) => FASES.every((f) => !(c[f.k] > 0));
+  const secoes = [
+    ...FASES.map((f) => ({ ...f, lista: clientes.filter((c) => c[f.k] > 0) })),
+    { k: 'sem_caso', titulo: 'Sem arrematação', sub: 'nenhum caso aberto ainda', cor: '#94a3b8', bg: '#f1f5f9', lista: clientes.filter(semCaso) },
+  ].filter((sec) => sec.lista.length && (!fase || sec.k === fase));
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px 60px' }}>
@@ -152,46 +162,67 @@ export default function Assessorados() {
         {role === 'admin' ? 'Todos os clientes do plano Assessoria. Clique num nome para ver os arrematados e relatórios dele.' : 'Clientes designados a você.'}
       </div>
 
-      {dados.clientes.length > 0 && <ResumoFases clientes={dados.clientes} />}
+      {dados.clientes.length > 0 && <ResumoFases clientes={dados.clientes} fase={fase} onFase={setFase} />}
 
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..."
         style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, marginBottom: 18, boxSizing: 'border-box' }} />
 
-      {clientes.length === 0 && (
+      {secoes.length === 0 && (
         <div style={{ textAlign: 'center', color: '#94a3b8', padding: '60px 20px', fontSize: 14 }}>
           {dados.clientes.length === 0
             ? (role === 'admin' ? 'Nenhum cliente assessorado no sistema.' : 'Nenhum assessorado foi designado a você ainda — peça ao admin.')
-            : 'Nenhum resultado para essa busca.'}
+            : (fase && !busca.trim() ? 'Nenhum cliente nesta fase.' : 'Nenhum resultado para essa busca.')}
         </div>
       )}
 
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
-        {clientes.map((c, i) => (
-          <div key={c.id}>
-            <div onClick={() => abrirArrematados(c)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer',
-              borderTop: i ? '1px solid #f1f5f9' : 'none',
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {c.nome}
-                </div>
-                <div style={{ marginTop: 2 }}><BadgesFases c={c} /></div>
-              </div>
-              {dados.pode_designar && (
-                <button onClick={(e) => { e.stopPropagation(); setDesignarAberto(designarAberto === c.id ? null : c.id); }}
-                  title="Designar equipe" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', display: 'flex' }}>
-                  <Settings size={15} />
-                </button>
-              )}
-              <ChevronRight size={16} color="#cbd5e1" />
-            </div>
-            {designarAberto === c.id && (
-              <DesignarEquipe cliente={c} equipe={dados.equipe} onDesignar={designar} onRemover={remover} onFechar={() => setDesignarAberto(null)} />
-            )}
+      {/* Separado por fase (pedido do dono, 23/09). Um cliente com casos em fases diferentes
+          aparece em cada seção correspondente, com a contagem daquela fase. */}
+      {secoes.map((sec) => (
+        <div key={sec.k} style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '0 4px 8px' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: sec.cor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{sec.titulo}</span>
+            <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{sec.lista.length} cliente{sec.lista.length === 1 ? '' : 's'} · {sec.sub}</span>
           </div>
-        ))}
-      </div>
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderLeft: `3px solid ${sec.cor}`, borderRadius: 14, overflow: 'hidden' }}>
+            {sec.lista.map((c, i) => {
+              const aberto = designarAberto === `${sec.k}:${c.id}`;
+              const n = c[sec.k] || 0;
+              const alerta = sec.k === 'em_andamento' && n > 1;
+              return (
+                <div key={c.id}>
+                  <div onClick={() => abrirArrematados(c)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer',
+                    borderTop: i ? '1px solid #f1f5f9' : 'none',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.nome}
+                      </div>
+                      <div style={{ marginTop: 2 }}><BadgesFases c={c} /></div>
+                    </div>
+                    {n > 0 && (
+                      <span title={`${n} ${n > 1 ? sec.varios : sec.um}`} style={{
+                        fontSize: 13, fontWeight: 800, minWidth: 26, textAlign: 'center', padding: '2px 8px', borderRadius: 20,
+                        background: alerta ? '#fff7ed' : sec.bg, color: alerta ? '#c2410c' : sec.cor,
+                      }}>{n}</span>
+                    )}
+                    {dados.pode_designar && (
+                      <button onClick={(e) => { e.stopPropagation(); setDesignarAberto(aberto ? null : `${sec.k}:${c.id}`); }}
+                        title="Designar equipe" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', display: 'flex' }}>
+                        <Settings size={15} />
+                      </button>
+                    )}
+                    <ChevronRight size={16} color="#cbd5e1" />
+                  </div>
+                  {aberto && (
+                    <DesignarEquipe cliente={c} equipe={dados.equipe} onDesignar={designar} onRemover={remover} onFechar={() => setDesignarAberto(null)} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
