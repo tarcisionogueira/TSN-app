@@ -125,7 +125,10 @@ async function buscarCorpoNaApi(emailId) {
     // `attachments` da API traz id/filename/size/content_type (metadados; o binário se
     // busca por anexo, em /attachments/{id} → download_url). O payload do webhook NÃO
     // traz o conteúdo — este é o único caminho para o arquivo de verdade.
-    return { text: j.text || '', html: j.html || '', attachments: Array.isArray(j.attachments) ? j.attachments : [] };
+    // `headers` (23/09): o webhook NÃO traz cabeçalho nenhum — sem devolver os da API, o
+    // encadeamento por In-Reply-To/References (resposta voltar ao MESMO chamado) e o
+    // Authentication-Results (spam) liam um objeto vazio desde sempre.
+    return { text: j.text || '', html: j.html || '', attachments: Array.isArray(j.attachments) ? j.attachments : [], headers: j.headers || null };
   } catch (e) {
     console.error('[inbound] corpo: busca falhou', String(e?.message || e).slice(0, 120));
     return null;
@@ -302,7 +305,62 @@ function formatoDoPayload(data) {
   return `keys=[${Object.keys(data || {}).join(',')}] text=${(data?.text || '').length} html=${(data?.html || '').length} anexos=${(data?.attachments || []).length}`;
 }
 
-async function encaminharParaAtendimento(data, headers, messageId) {
+// ─── CAIXA DE E-MAIL DA EQUIPE (23/09) ─────────────────────────────────────────────────────
+// Todo e-mail que entra vira uma linha em `email_caixa` (a tela /atendimento → E-mail), além
+// do fluxo de sempre (chamado / devolutiva do jurídico). É o REGISTRO; o chamado é o trabalho.
+// Falha ao registrar NUNCA derruba o webhook — loga e segue, o chamado continua nascendo.
+
+// Authentication-Results: "spf=pass …; dkim=fail …; dmarc=fail …". Ausente = não sabemos
+// (fica null), e "não sei" NÃO é spam — só falha explícita classifica.
+function autenticacaoDe(headers) {
+  const ar = String(headers['authentication-results'] || headers['arc-authentication-results'] || '').toLowerCase();
+  if (!ar) return null;
+  const le = (k) => (ar.match(new RegExp(`\\b${k}=([a-z]+)`)) || [])[1] || null;
+  return { spf: le('spf'), dkim: le('dkim'), dmarc: le('dmarc') };
+}
+
+// Motivo de spam, ou null. Duas fontes: bloqueio manual da equipe (decisão humana, vence
+// tudo) e autenticação que FALHOU de verdade (remetente forjado é o risco que importa aqui).
+async function motivoDeSpam(endereco, headers, aut) {
+  try {
+    const r = await sb('rpc/email_remetente_bloqueado', { method: 'POST', body: { p_email: endereco } });
+    if (r.ok && (await r.json()) === true) return 'remetente bloqueado pela equipe';
+    if (!r.ok) console.error('[caixa] checagem de bloqueio HTTP', r.status, '— segue sem ela');
+  } catch (e) { console.error('[caixa] checagem de bloqueio falhou — segue sem ela:', String(e?.message || e)); }
+  if (/^yes/i.test(String(headers['x-spam-flag'] || ''))) return 'marcado como spam pelo servidor de origem';
+  if (aut?.dmarc === 'fail') return 'falhou na autenticação DMARC (remetente pode ser forjado)';
+  if (aut?.spf === 'fail' && aut?.dkim === 'fail') return 'falhou em SPF e DKIM (remetente pode ser forjado)';
+  return null;
+}
+
+async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', spamMotivo = null, aut = null } = {}) {
+  try {
+    if (messageId) {
+      const rd = await sb(`email_caixa?direcao=eq.entrada&message_id=eq.${encodeURIComponent(messageId)}&select=id&limit=1`);
+      if (rd.ok) { const [ja] = await rd.json(); if (ja) return ja.id; } // reentrega do webhook
+    }
+    const { endereco, nome } = remetente(data);
+    const nossos = destinatarios(data, headers).map(d => String(d).toLowerCase()).filter(d => /@bidprobrasil\.com\.br$/.test(d));
+    const lista = (v) => [].concat(v || []).map(x => typeof x === 'string' ? x : x?.address).filter(Boolean).map(x => String(x).slice(0, 200));
+    const anexos = (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || [])).slice(0, 20)
+      .map(a => ({ id: a?.id || null, nome: String(a?.filename || 'anexo').slice(0, 160), content_type: a?.content_type || null, tamanho: a?.size ?? null }));
+    const r = await sb('email_caixa', { method: 'POST', prefer: 'return=representation', body: {
+      direcao: 'entrada', pasta, caixa: nossos[0]?.replace(/\+[^@]*@/, '@') || null,
+      de_email: endereco || null, de_nome: nome || null,
+      para: lista(data?.to), cc: lista(data?.cc),
+      assunto: String(data?.subject || '').slice(0, 500) || null,
+      texto: String(data?.text || '').slice(0, 100000) || null,
+      html: String(data?.html || '').slice(0, 300000) || null,
+      message_id: messageId, in_reply_to: headers['in-reply-to'] || null, referencias: headers['references'] || null,
+      resend_email_id: data?.email_id || null, anexos, autenticacao: aut, spam_motivo: spamMotivo,
+    } });
+    if (!r.ok) { console.error('[caixa] registrar HTTP', r.status, (await r.text().catch(() => '')).slice(0, 200)); return null; }
+    const [linha] = await r.json();
+    return linha?.id || null;
+  } catch (e) { console.error('[caixa] registrar falhou:', String(e?.message || e)); return null; }
+}
+
+async function encaminharParaAtendimento(data, headers, messageId, caixaId = null) {
   const { endereco, nome } = remetente(data);
   if (!endereco) {
     console.error('[inbound-atendimento] IGNORADO sem_remetente —', formatoDoPayload(data));
@@ -440,6 +498,10 @@ async function encaminharParaAtendimento(data, headers, messageId) {
   }
 
   await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { atualizado_em: new Date().toISOString() } });
+  if (caixaId) {
+    const rl = await sb(`email_caixa?id=eq.${caixaId}`, { method: 'PATCH', prefer: 'return=minimal', body: { chamado_id: chamado.id } });
+    if (!rl.ok) console.error('[caixa] vincular ao chamado HTTP', rl.status);
+  }
   return json({ ok: true, atendimento: true, chamado_id: chamado.id, novo });
 }
 
@@ -458,7 +520,10 @@ export default async function handler(req) {
   // atendimento leem data.text/data.html, e o payload não os traz.
   if (!data?.text && !data?.html && data?.email_id) {
     const corpo = await buscarCorpoNaApi(data.email_id);
-    if (corpo) { data.text = corpo.text; data.html = corpo.html; data._anexosApi = corpo.attachments; }
+    if (corpo) {
+      data.text = corpo.text; data.html = corpo.html; data._anexosApi = corpo.attachments;
+      if (!data.headers && corpo.headers) data.headers = corpo.headers;
+    }
   }
   const headers = headerMap(data);
   const messageId = headers['message-id'] || data?.message_id || data?.id || null;
@@ -487,7 +552,20 @@ export default async function handler(req) {
   // sumia com HTTP 200, sem log e sem alerta — inclusive a resposta do cliente ao
   // "é só responder este e-mail" que nós mesmos mandamos, e pedido de titular de
   // dados endereçado ao privacidade@, que a LGPD obriga a atender.
-  if (!caso) return await encaminharParaAtendimento(data, headers, messageId);
+  const aut = autenticacaoDe(headers);
+  if (!caso) {
+    // Spam só se decide no ramo de ATENDIMENTO: o do jurídico já foi casado por token secreto
+    // (juridico+<token>@) ou pelo Message-ID que nós mesmos enviamos — isso é prova mais forte
+    // que SPF/DKIM de um escritório com DNS mal configurado.
+    const spamMotivo = await motivoDeSpam(remetente(data).endereco, headers, aut);
+    const caixaId = await registrarNaCaixa(data, headers, messageId, { pasta: spamMotivo ? 'spam' : 'entrada', spamMotivo, aut });
+    if (spamMotivo) {
+      console.warn('[inbound-atendimento] SPAM — não abre chamado:', spamMotivo);
+      return json({ ok: true, spam: true, motivo: spamMotivo, caixa_id: caixaId });
+    }
+    return await encaminharParaAtendimento(data, headers, messageId, caixaId);
+  }
+  await registrarNaCaixa(data, headers, messageId, { aut });
 
   const corpoBruto = data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '';
   const devolutiva = limparResposta(corpoBruto);

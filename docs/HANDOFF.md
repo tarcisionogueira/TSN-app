@@ -32354,3 +32354,32 @@ sem extensão (`octet-stream`). O espelho já tinha recusado essa URL ("resposta
 documento"); o envio não consultava. Corrigido em `api/enviar-email-caso.js`: descarta link de
 login e o que o espelho marcou `ignorado`; nome ganha extensão (`MATRÍCULA.pdf`). 21 anexos da
 LEILOFY estão nessa situação.
+
+**9. ✨ CAIXA DE E-MAIL DA EQUIPE em /atendimento (pedido do dono, 23/09).** Chave
+"Chamados | E-mail" no topo da tela (equipe: admin/analista/consultor — advogado não, a caixa
+mistura privacidade@ e devolutivas). Pastas **Entrada · Spam · Enviados · Lixeira**; ler,
+responder, encaminhar, escrever novo (de suporte@/contato@/privacidade@), baixar anexo,
+**bloquear remetente ou domínio**, "Não é spam", restaurar.
+- Banco: `email_caixa` + `email_bloqueados` + `pode_caixa_email()` +
+  `email_remetente_bloqueado()` (`caixa_email_equipe.sql`). RLS só equipe; a tela só altera
+  `pasta`/`lido` (grant por coluna) — conteúdo é do servidor. Testado: explorador vê 0, admin vê.
+- Entrada: `api/inbound-juridico.js` agora registra TODO e-mail recebido na caixa. **Spam** =
+  remetente bloqueado, `X-Spam-Flag: YES`, DMARC=fail ou SPF+DKIM=fail
+  (Authentication-Results) → pasta Spam e **não abre chamado**. Só no ramo de atendimento: o do
+  jurídico já foi casado por token secreto. Spam nunca renderiza HTML (imagem remota confirmaria
+  ao spammer que o endereço é lido).
+- **Defeito antigo corrigido junto**: `buscarCorpoNaApi` descartava os `headers` da API do
+  Resend, e o webhook não traz nenhum — o encadeamento por In-Reply-To/References (resposta do
+  cliente voltar ao MESMO chamado) lia objeto vazio desde sempre. Agora os cabeçalhos chegam.
+- Saída: `api/email-caixa.js` (enviar / anexo sob demanda). Responder e-mail que virou chamado
+  usa reply-to `suporte+<token>@` e grava a resposta no histórico do chamado. Passa por
+  `enviarEmail` (orçamento diário + supressão). Anexo não é copiado: link temporário do Resend
+  pedido na hora (só ids que pertencem à mensagem).
+- **Limites da v1**: enviar anexo pela caixa ainda não existe; e-mails anteriores a hoje não
+  estão na caixa (a tabela nasceu agora — o histórico segue nos chamados).
+- **A validar em produção**: o formato real de `headers` devolvido por
+  `GET /emails/receiving/{id}` (array `{name,value}` ou objeto — `headerMap` aceita os dois) e
+  se o Authentication-Results vem nele. Conferir `select autenticacao from email_caixa` depois
+  do primeiro e-mail real: tudo `null` = o Resend não repassa e o spam fica só no bloqueio manual.
+- ⚠️ Visto de passagem, NÃO corrigido: `api/notificar-cliente.js` faz `fetch` no Resend sem
+  checar `.ok` (forma #1) e confere equipe só por `role` (ignora `funcao_equipe`).

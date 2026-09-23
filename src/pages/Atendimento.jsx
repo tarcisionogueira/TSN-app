@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, UserCheck, RefreshCw, AlertCircle, Clock, User } from 'lucide-react';
+import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, UserCheck, RefreshCw, AlertCircle, Clock, User, Mail } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import ConviteParceiro from '../components/ConviteParceiro';
+import EmailHtml from '../components/EmailHtml';
+import CaixaEmail from '../components/CaixaEmail';
 
 const STATUS_CFG = {
   // 18/08: NÓS começarmos a conversa não abre chamado. Dois criadores caem aqui — a saudação
@@ -17,29 +19,6 @@ const STATUS_CFG = {
   em_atendimento:       { label: 'Em atendimento',     cor: '#0D63DB', bg: '#dbeafe' },
   finalizado:           { label: 'Finalizado',         cor: '#64748b', bg: '#f1f5f9' },
 };
-
-// ─── RENDER DE MENSAGEM DE E-MAIL (18/08) ─────────────────────────────────────────────
-// O e-mail chega em duas formas: texto plano (fonte para IA/busca) e HTML (parágrafos,
-// links, imagens). Renderizar o HTML CRU aqui seria entregar ao remetente — qualquer um
-// da internet — execução no navegador do ADMIN, a sessão mais privilegiada do sistema.
-// O iframe com `sandbox` SEM allow-scripts e SEM allow-same-origin resolve na raiz:
-// nenhum script executa, nada enxerga a página-mãe; só sobra o layout. Links abrem em
-// aba nova (allow-popups + <base target>). Custo conhecido e aceito: imagens remotas
-// carregam, então o remetente pode saber que o e-mail foi aberto — igual a qualquer
-// cliente de e-mail sem proxy de imagem.
-function EmailHtml({ html }) {
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><base target="_blank">`
-    + `<style>body{margin:8px;font:13px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;word-break:break-word}img{max-width:100%;height:auto}</style>`
-    + `</head><body>${html}</body></html>`;
-  return (
-    <iframe
-      title="Mensagem de e-mail"
-      sandbox="allow-popups"
-      srcDoc={doc}
-      style={{ width: '100%', minHeight: 120, height: 320, border: 'none', borderRadius: 8, background: 'white' }}
-    />
-  );
-}
 
 // Texto plano com quebras preservadas e URLs clicáveis. Era `{m.conteudo}` num <div>
 // comum: o HTML colapsa \n em espaço e um e-mail de 4 linhas virava uma linha só.
@@ -142,6 +121,9 @@ export default function Atendimento() {
   const [enviando, setEnviando] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  // Caixa de e-mail da equipe (23/09): mesma régua de `pode_caixa_email()` no banco — equipe
+  // de atendimento, menos advogado (a caixa mistura privacidade@ e devolutivas de outros casos).
+  const [modo, setModo] = useState('chamados');
   const fileRef = useRef();
   const msgEndRef = useRef();
 
@@ -277,8 +259,31 @@ export default function Atendimento() {
       (c.titulo || '').toLowerCase().includes(buscaLower);
   });
 
+  const podeCaixa = papelEquipe && papelAtendimento !== 'advogado';
+  const seletorModo = podeCaixa && (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {[['chamados', 'Chamados', MessageCircle], ['email', 'E-mail', Mail]].map(([k, l, Icon]) => (
+        <button key={k} onClick={() => setModo(k)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+            background: modo === k ? '#111111' : 'white', color: modo === k ? 'white' : '#334155' }}>
+          <Icon size={15} /> {l}
+        </button>
+      ))}
+    </div>
+  );
+  if (podeCaixa && modo === 'email') {
+    return (
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', display: 'grid', gap: 16 }}>
+        {seletorModo}
+        <CaixaEmail />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
+
+      {seletorModo && <div style={{ gridColumn: '1 / -1' }}>{seletorModo}</div>}
 
       {/* Programa de Parceiros — opt-in da equipe (vira parceiro / pega o link de venda) */}
       <div style={{ gridColumn: '1 / -1' }}><ConviteParceiro maxWidth={1160} style={{ margin: 0 }} /></div>
