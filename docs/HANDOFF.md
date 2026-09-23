@@ -32250,3 +32250,49 @@ que confirma o achado do EDITAL_DJEN, não é regressão nova.
     `manualChunks` registrada acima, não implementada por precisar de teste visual ao vivo.
 
 Sessão encerrada aqui a pedido do dono.
+
+---
+
+## 📌 SESSÃO 23/09/2026 (manhã) — ritual de abertura + marketing "parado" + 21 vigias restaurados
+
+**1. Marketing: a ingestão NÃO quebrou — a VEICULAÇÃO parou.** `marketing_metricas_dia` tem
+último dia 14/09 (Google) e 13/09 (Meta). Mas as duas vias, independentes entre si, seguiram
+rodando: o Google Ads Script fez POST com 200 (5 em 7 dias) e reescreveu linhas até 21/09 10h50;
+o `meta-insights-cron` até 20/09 08h10 — exatamente "último dia com gasto + 7" (a janela de
+reenvio). Depois disso não há linha nova porque **não há dia com impressão/gasto** para mandar.
+Duas fontes independentes concordando = anúncios fora do ar desde ~15/09 nos DOIS canais.
+**Ação do dono**: abrir Google Ads e Meta Ads e ver por que pararam (pausa, orçamento,
+faturamento, reprovação). Nada no HANDOFF registra pausa intencional depois de 13/09.
+
+**⚠️ Windsor.ai está devolvendo número FALSO** (forma #1, erro dentro de um 200): toda leitura
+volta `spend: 0` com a campanha chamada *"Uh-oh! These are not your real numbers: reads are
+paused because you have 15 accounts connected and your Free plan includes 1 account"*. Isso
+explica o "Windsor batia zero 16-18/09" da Routine de conversões (seção 18/09) — aquele zero
+não era medição. **Ação do dono**: desconectar contas no Windsor (onboard.windsor.ai) ou
+assinar plano; até lá, NÃO usar Windsor para medir nada.
+
+**2. 🔴 21 invariantes tinham SUMIDO de `qa_invariantes()`** — por isso nada gritou no item 1.
+Reescritas completas da função (desde `qa_invariante_venda_direta_com_praca.sql`) partiram de
+snapshot antigo do repo e apagaram os vigias adicionados por substituição (forma 7b). Restaurados
+em `qa_invariantes_restaura_21_vigias_perdidos_em_snapshot.sql` (rodado em seco antes; 64 → 85;
+config/grants preservados; segurança 0). **Sete já acusam** e são pauta das próximas sessões:
+`estado_fora_do_padrao=96` (lote some de /leiloes), `praca_fim_antes_do_inicio=20`,
+`lote_sem_area_nem_matricula=526` (lim. 400), `geocode_sem_preco=73` (env
+`LOCATIONIQ_USD_POR_1000`), `brightdata_proposito_sem_teto=1`, `area_truncada_no_milhar=1`,
+`mkt_ingestao_atrasada=2`. **Regra**: reescrita completa da função parte de
+`pg_get_functiondef` (banco), nunca de .sql antigo, e confere a contagem antes/depois.
+**Proposta (não feita)**: pôr no `verificar:schema` a comparação "chaves declaradas nas
+migrações × `qa_invariantes()` vivo" (menos as substituídas de propósito) — é o script que
+achou isto, e custa zero.
+
+**3. HASTA** — mesma situação do veredito de 17/09 ("EM BREVE / AGUARDE EDITAL", não é bug):
+segue `vazio`, agora com 9 eventos no catálogo (eram 8). Não reconferido ao vivo (sandbox sem
+rede para o site; não gastei Bright Data para repetir checagem de 6 dias atrás). Se passar de
+~30 dias em "em breve", vale recon residencial `node scripts/recon-hasta-zerou.mjs`.
+
+**4. Ritual**: consulta de KYC do CLAUDE.md aceitava só `pj/`; os 3 "inválidos" eram docs
+pessoais sadios do `api/doc-pessoal.js` (`pessoais/<uuid>/…`). Consulta ampliada, volta a 0.
+
+**Ainda aberto do ritual**: SUPERBID `falhou` com 0 em 22/09 14h39 (piso 722; 170 ativos) e
+JOAOEMILIO `zerou` — não investigados nesta sessão. `resultado_leilao_atrasado` subiu
+1441 → 1570 → 1746 ao longo do dia (a verificação das ~22h10 UTC já está agendada).
