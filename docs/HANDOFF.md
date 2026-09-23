@@ -32508,3 +32508,25 @@ SUPERBID (2.168 vencidos) sem apuração; imóveis SUPERBID sem coleta completa.
 `cd ~/TSN-app && git pull && SBID_IDS=4977069,4970636,5008418 node scripts/recon-sbid-status-navegador.mjs`
 — se vier `ofertas=1` com campos de status, a API responde do IP residencial e o log mostra
 em qual campo está vendido/sem lance; aí a apuração é escrita em cima desse campo.
+
+**19. ✅ SUPERBID/SOLD: apuração pelo IP residencial + 10 "vendidos" FALSOS desfeitos.**
+O teste do dono no WSL confirmou: do IP residencial a offer-query responde. Dump de 5 ofertas
+encerradas em `recon_dump` (tabela nova, só service key) mostrou que **`offerStatus.sold` e
+"maior lance = mínimo" não separam nada** (iguais em deserto, lance único e retirado). O que
+separa: `totalBids`, `winnerBid.currentWinner`, `reservedPrice`, `offerStatus.removed`.
+Regra em `scripts/lib/superbid-resultado.mjs` (teste com a fixture real: `npm run testar:superbid`):
+vendido = `sold` ou lances>0 com vencedor e lance ≥ reserva · sem_lance = 0 lances e nenhuma
+proposta · **condicional** (lance abaixo da reserva), **retirado** e campo ausente → indeterminado.
+- **Os 10 `vendido` SUPERBID de 21-22/09 eram FALSOS** (regex do cron na página; valor gravado =
+  lance mínimo; 3 conferidos com totalBids=0, um retirado). Zerados
+  (`superbid_reset_vendidos_falsos_regex.sql`). SUPERBID e SOLD saíram do cron da Vercel e do
+  reapurar (`FONTES_APURACAO_NAO_CONFIAVEL`) — isso também para o gasto de proxy ISP nos veículos.
+- `scripts/apurar-superbid-residencial.mjs` roda no `runner-residencial.sh` com `SBID_APLICAR=1`,
+  400 lotes/rodada (≈10 min, 1 consulta/s), mais recentes primeiro. Backlog ≈ 7 mil
+  (4.460 imóveis SUPERBID · 349 SOLD · 2.186 veículos) → ~18 dias. `resultado_origem =
+  'api_superbid_residencial'` nos imóveis. Diagnóstico: `SBID_IDS=…` grava a oferta em `recon_dump`.
+- **Conferir amanhã**: `select resultado_leilao, count(*) from imoveis_leilao where
+  resultado_origem='api_superbid_residencial' group by 1;` + veículos SUPERBID com
+  `resultado_apurado_em > now()-interval '1 day'`. Tudo `sem_lance` com 0 `vendido` em centenas
+  de lotes seria suspeito (forma #10) — conferir 2-3 no site.
+- Pendente: mover a COLETA SUPERBID (imóveis/veículos) para o residencial também.

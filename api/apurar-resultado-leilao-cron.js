@@ -81,7 +81,11 @@ const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || '')
 //   · CEF É APURADA EM OUTRO LUGAR desde 23/09 — sem acessar a Caixa: o gatilho
 //     `trg_cef_sem_lance_por_relistagem` lê o CSV diário (leilão/licitação que volta como venda
 //     online/direta = SEM LANCE). Continua fora daqui porque a página de detalhe segue fechada.
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
+// SUPERBID/SOLD (23/09): a página lida por regex deu 10 'vendido' FALSOS em 21-22/09 — o valor
+// gravado era o lance mínimo e a API mostrou totalBids=0 (3 conferidos, um deles retirado).
+// Apurados agora pela offer-query do IP residencial (scripts/apurar-superbid-residencial.mjs),
+// que tem nº de lances, vencedor e reserva. Tirar daqui também para de gastar o proxy ISP.
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD']);
 
 // Mesma lista acima, mas pronta pro operador `not.in` do PostgREST — aplicada DENTRO da
 // consulta SQL (não só depois em JS). Achado 21/09: aplicar só em JS deixava o `LIMIT 250`

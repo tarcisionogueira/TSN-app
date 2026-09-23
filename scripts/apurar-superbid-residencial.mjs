@@ -15,10 +15,10 @@
  *     Imprime cada oferta com os sinais e a classificação que DARIA, e a distribuição no fim.
  *     Só grava com SBID_APLICAR=1 — e só depois de a distribuição em seco ter sido conferida
  *     contra ofertas cujo desfecho se sabe.
- *   • NUNCA INFERE vendido: só `offerStatus.sold === true` (ou lance máximo ACIMA do mínimo com
- *     o leilão encerrado) vira vendido. Sem lance exige leilão encerrado E lance máximo igual ao
- *     mínimo E `sold` false. Qualquer outra combinação = indeterminado (não grava resultado,
- *     só conta a tentativa).
+ *   • A REGRA (ver `classificar`) usa `totalBids`, `winnerBid` e `reservedPrice` — medidos em
+ *     23/09. `offerStatus.sold` e "máximo = mínimo" NÃO servem: vieram iguais em vendido falso,
+ *     deserto e lance único. Condicional (lance abaixo da reserva) e retirado não gravam
+ *     resultado: ficam indeterminado e voltam na próxima rodada (até 6 tentativas).
  *   • "Não achei a oferta" NÃO é sem lance: vira `nao_encontrada` e não grava resultado (forma
  *     nº 4 — ausência não é resposta).
  *
@@ -26,6 +26,7 @@
  * em seco, 400 aplicando); SBID_IDS=1,2,3 força ids (diagnóstico, nunca grava).
  */
 import puppeteer from 'puppeteer';
+import { classificarOferta } from './lib/superbid-resultado.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -77,7 +78,7 @@ await page.goto('https://www.superbid.net/categorias/imoveis', { waitUntil: 'dom
 await new Promise(r => setTimeout(r, 3000));
 
 async function consultar(ofertaId) {
-  return page.evaluate(async (id, bruto) => {
+  return page.evaluate(async (id) => {
     const erros = [];
     for (const st of ['closed', 'finished', '', 'opened']) {
       const u = `https://offer-query.superbid.net/offers/?portalId=[2,15]&locale=pt_BR${st ? `&searchType=${st}` : ''}&filter=id:${id}&pageNumber=1&pageSize=5`;
@@ -87,69 +88,48 @@ async function consultar(ofertaId) {
         const j = await x.json();
         const lista = j.offers || j.content || j.results || j.items || [];
         const of = lista.find(o => String(o?.id) === String(id));
-        if (!of) continue;
-        // Diagnóstico (SBID_IDS): devolve a oferta INTEIRA — o campo que separa "sem lance" de
-        // "1 lance no mínimo" ainda não foi identificado (maior = mínimo nos dois casos).
-        if (bruto) return { ok: true, via: st || 'nenhum', bruto: JSON.stringify(of) };
-        const s = of.offerStatus || {};
-        const d = of.offerDetail || {};
-        return {
-          ok: true, via: st || 'nenhum',
-          sold: s.sold === true, closed: s.closed === true, closedToBids: s.closedToBids === true,
-          leilaoEncerrado: of.auction?.allOffersOfThisAuctionIsClosed === true,
-          min: Number(d.currentMinBid ?? d.initialBidValue ?? NaN),
-          max: Number(d.currentMaxBid ?? NaN),
-        };
-      } catch (e) { erros.push(`${st || 'nenhum'}:${e.message}`); }
+        if (of) return { ok: true, via: st || 'nenhum', of };
+      } catch (e) { erros.push(`${st || 'nenhum'}:${e.message}`); } // padrao-ok: motivo vai para erros[], impresso e vira 'erro' (exit 3 se todos)
     }
     return { ok: false, erros };
-  }, ofertaId, !!process.env.SBID_IDS);
-}
-
-function classificar(c) {
-  if (!c.ok) return c.erros?.length ? 'erro' : 'nao_encontrada';
-  const temMax = Number.isFinite(c.max) && c.max > 0;
-  const acima = temMax && Number.isFinite(c.min) && c.max > c.min;
-  const encerrado = c.leilaoEncerrado || c.closed || c.closedToBids;
-  if (c.sold) return 'vendido';
-  if (encerrado && acima) return 'vendido';
-  // SUSPENSO (23/09): `max === min` NÃO prova sem lance — 5008418 foi VENDIDA por exatamente o
-  // mínimo (1.721.807,43) e a API mostra max = min. Falta o campo de nº de lances/vencedor.
-  if (encerrado && temMax && c.max === c.min) return 'indeterminado';
-  return 'indeterminado';
+  }, ofertaId);
 }
 
 const dist = {};
 let gravados = 0, falhasGravacao = 0;
 for (const a of alvos) {
-  const c = await consultar(a.ofertaId);
-  if (c.bruto) {
-    // Vai para o BANCO (recon_dump), não para a tela: o JSON é longo demais para print.
+  const q = await consultar(a.ofertaId);
+  if (q.ok && process.env.SBID_IDS) {
+    // Diagnóstico: oferta inteira vai para o BANCO (recon_dump) — JSON longo demais para print.
     try {
-      await sb('recon_dump', { method: 'POST', body: JSON.stringify({ origem: 'sbid_oferta', chave: String(a.ofertaId), conteudo: JSON.parse(c.bruto) }) });
-      console.log(`  ${a.ofertaId} → oferta completa gravada em recon_dump (via=${c.via})`);
+      await sb('recon_dump', { method: 'POST', body: JSON.stringify({ origem: 'sbid_oferta', chave: String(a.ofertaId), conteudo: q.of }) });
+      console.log(`  ${a.ofertaId} → oferta completa gravada em recon_dump (via=${q.via}) · daria ${classificarOferta(q.of).resultado}`);
     } catch (e) { console.log(`  ${a.ofertaId} → falhou gravar dump: ${e.message}`); }
     continue;
   }
-  if (process.env.SBID_IDS && c.ok === false) { console.log(`  ${a.ofertaId} → não encontrada (${(c.erros || []).join(' | ') || 'nenhum searchType'})`); continue; }
-  const res = classificar(c);
+  const r = q.ok ? classificarOferta(q.of) : { resultado: q.erros?.length ? 'erro' : 'nao_encontrada' };
+  const res = r.resultado, c = r.c;
   dist[res] = (dist[res] || 0) + 1;
-  console.log(`  ${a.tabela.padEnd(15)} ${a.ofertaId} → ${res.padEnd(14)} ${c.ok
-    ? `via=${c.via} sold=${c.sold} closed=${c.closed} leilaoEnc=${c.leilaoEncerrado} min=${c.min} max=${c.max}`
-    : `(${(c.erros || []).join(' | ') || 'sem oferta em nenhum searchType'})`}`);
+  console.log(`  ${a.tabela.padEnd(15)} ${a.ofertaId} → ${res.padEnd(13)} ${c
+    ? `lances=${c.lances} vencedor=${c.vencedor} max=${c.max} reserva=${c.reserva} removido=${c.removido} status=${c.statusCode}`
+    : `(${(q.erros || []).join(' | ') || 'sem oferta em nenhum searchType'})`}`);
 
   if (APLICAR && a.id && res !== 'erro') {
     const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: (a.resultado_apuracao_tentativas || 0) + 1 };
-    if (res === 'vendido' || res === 'sem_lance') {
+    // em_andamento: a data do nosso acervo venceu mas o site ainda aceita lance (praça
+    // prorrogada). Conta a tentativa sem gravar resultado — senão o lote volta ao topo da
+    // fila todo dia e come as vagas dos outros.
+    if (res === 'em_andamento') { /* só a tentativa */ }
+    else if (res === 'vendido' || res === 'sem_lance') {
       patch.resultado_leilao = res;
-      if (res === 'vendido' && Number.isFinite(c.max) && c.max > 0) patch.valor_lance_vencedor = c.max;
+      if (res === 'vendido' && r.valor) patch.valor_lance_vencedor = r.valor;
       if (a.tabela === 'imoveis_leilao') patch.resultado_origem = 'api_superbid_residencial';
     } else {
       patch.resultado_leilao = 'indeterminado';
     }
     try {
-      const r = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
-      if (Array.isArray(r) && r.length) gravados++; else { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
+      const rp = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
+      if (Array.isArray(rp) && rp.length) gravados++; else { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
     } catch (e) { falhasGravacao++; console.log(`    ⚠️ ${e.message}`); }
   }
   await new Promise(r => setTimeout(r, 1200)); // 1 oferta/s — IP de casa, sem pressa

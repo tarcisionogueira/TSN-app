@@ -34,7 +34,7 @@ const COOLDOWN_MS = 6 * 3600000; // não refaz o fetch se a última tentativa fo
 // CEF (21/09): fetch direto bloqueado por IP; testado de novo com a sub-cota do Bright Data
 // liberada e AINDA falhou (`via:"fail"`) — bloqueio real do site (provável dependência de
 // sessão), não é mais questão de orçamento.
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF']);
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD']);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

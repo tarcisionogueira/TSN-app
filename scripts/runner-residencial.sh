@@ -210,11 +210,10 @@ rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 # ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
 # Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A
 # offer-query dá 403 do Cloudflare em datacenter (Vercel e GitHub, até dentro do Chromium);
-# daqui responde. EM SECO até a distribuição ser conferida contra desfechos conhecidos — a
-# única amostra medida trouxe `offerStatus` todo false numa oferta encerrada. Virar para
-# SBID_APLICAR=1 AQUI (commit), não no .env da máquina, para a decisão ficar no repositório.
+# daqui responde. Regra (totalBids/winnerBid/reservedPrice) validada em 23/09 contra 5 ofertas
+# reais — scripts/testes/superbid-resultado.mjs. 400 lotes/rodada ≈ 10 min, 1 consulta/s.
 # Não passa pelo `rodar`: grava resultado, não acervo (mesma razão do radar e da triagem).
-env SBID_APLICAR=0 node scripts/apurar-superbid-residencial.mjs \
+env SBID_APLICAR=1 node scripts/apurar-superbid-residencial.mjs \
   || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"
 
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
