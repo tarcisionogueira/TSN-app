@@ -77,7 +77,7 @@ await page.goto('https://www.superbid.net/categorias/imoveis', { waitUntil: 'dom
 await new Promise(r => setTimeout(r, 3000));
 
 async function consultar(ofertaId) {
-  return page.evaluate(async (id) => {
+  return page.evaluate(async (id, bruto) => {
     const erros = [];
     for (const st of ['closed', 'finished', '', 'opened']) {
       const u = `https://offer-query.superbid.net/offers/?portalId=[2,15]&locale=pt_BR${st ? `&searchType=${st}` : ''}&filter=id:${id}&pageNumber=1&pageSize=5`;
@@ -88,6 +88,9 @@ async function consultar(ofertaId) {
         const lista = j.offers || j.content || j.results || j.items || [];
         const of = lista.find(o => String(o?.id) === String(id));
         if (!of) continue;
+        // Diagnóstico (SBID_IDS): devolve a oferta INTEIRA — o campo que separa "sem lance" de
+        // "1 lance no mínimo" ainda não foi identificado (maior = mínimo nos dois casos).
+        if (bruto) return { ok: true, via: st || 'nenhum', bruto: JSON.stringify(of) };
         const s = of.offerStatus || {};
         const d = of.offerDetail || {};
         return {
@@ -100,7 +103,7 @@ async function consultar(ofertaId) {
       } catch (e) { erros.push(`${st || 'nenhum'}:${e.message}`); }
     }
     return { ok: false, erros };
-  }, ofertaId);
+  }, ofertaId, !!process.env.SBID_IDS);
 }
 
 function classificar(c) {
@@ -110,7 +113,9 @@ function classificar(c) {
   const encerrado = c.leilaoEncerrado || c.closed || c.closedToBids;
   if (c.sold) return 'vendido';
   if (encerrado && acima) return 'vendido';
-  if (encerrado && temMax && c.max === c.min) return 'sem_lance';
+  // SUSPENSO (23/09): `max === min` NÃO prova sem lance — 5008418 foi VENDIDA por exatamente o
+  // mínimo (1.721.807,43) e a API mostra max = min. Falta o campo de nº de lances/vencedor.
+  if (encerrado && temMax && c.max === c.min) return 'indeterminado';
   return 'indeterminado';
 }
 
@@ -118,6 +123,7 @@ const dist = {};
 let gravados = 0, falhasGravacao = 0;
 for (const a of alvos) {
   const c = await consultar(a.ofertaId);
+  if (c.bruto) { console.log(`\n══════ ${a.ofertaId} (via=${c.via})\n${c.bruto.slice(0, 12000)}`); continue; }
   const res = classificar(c);
   dist[res] = (dist[res] || 0) + 1;
   console.log(`  ${a.tabela.padEnd(15)} ${a.ofertaId} → ${res.padEnd(14)} ${c.ok
