@@ -207,6 +207,14 @@ rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 # caminho de produção enquanto o site continuar atrás do Cloudflare.
 rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 
+# ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
+# O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
+# Daqui o IP é residencial e a API responde inteira. Gate `SUPERBID` com intervalo de 20 h
+# (DIÁRIO, não 2x/semana: acervo grande e com praça todo dia) e acervo SUPERBID+SOLD.
+# RESERVA: o GitHub (leiloeiros/veiculos-puppeteer) só coleta a rede Superbid se este gate
+# ficar 7+ dias sem concluir — e aí sai pelo proxy ISP. Ver navegadorRedeSuperbid().
+rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS node scripts/scraper-puppeteer.mjs
+
 # ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
 # Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A
 # offer-query dá 403 do Cloudflare em datacenter (Vercel e GitHub, até dentro do Chromium);

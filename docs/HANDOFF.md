@@ -32530,3 +32530,21 @@ proposta · **condicional** (lance abaixo da reserva), **retirado** e campo ause
   `resultado_apurado_em > now()-interval '1 day'`. Tudo `sem_lance` com 0 `vendido` em centenas
   de lotes seria suspeito (forma #10) — conferir 2-3 no site.
 - Pendente: mover a COLETA SUPERBID (imóveis/veículos) para o residencial também.
+
+**20. ✅ Coleta SUPERBID no residencial + reserva ISP no GitHub (decisão do dono).**
+`runner-residencial.sh`: `rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS`,
+gate `coleta_cliente.SUPERBID` com **20 h** (diário) e acervo SUPERBID+SOLD. No GitHub
+(`leiloeiros-puppeteer` e `veiculos-puppeteer`), `navegadorRedeSuperbid()` só coleta a rede
+Superbid se `coleta_cliente.SUPERBID.ultima_em` estiver 7+ dias para trás (ou ilegível), e aí
+sai pelo **proxy ISP** (`BRIGHTDATA_ISP_*`, custo fixo). Input `superbid_forcar_isp=1` testa.
+Enquanto o residencial não concluir a 1ª vez (`ultima_em` nulo), a reserva roda todo dia.
+SBID9/SBID21/TOTAL seguem no GitHub (cabem na 1ª página, que o Cloudflare deixa passar).
+⚠️ Notado: `coleta_cliente.HASTA.ultima_em = 30/08` — HASTA não conclui há 3 semanas.
+
+**21. ✅ Anexo "MATRÍCULA" abria como código (era a tela de login da Leiloaria Smart).**
+LEILOFY publica `/login?redirect=_admin_%2Fupload%2F<x>.pdf`; o e-mail de 23/09 ao leiloeiro
+anexou esse HTML como "MATRÍCULA" (sem extensão). O EDITAL era PDF real, só sem `.pdf`.
+Correções: `urlDiretaDoDocumento` (api/_anexo-nome.js) desembrulha para `/_admin_/upload/<x>.pdf`
+(mesmo host, só extensão de documento) no scraper e no envio; o envio agora **lê o começo de
+cada anexo e descarta HTML**; 23 lotes corrigidos no banco
+(`leilofy_desembrulha_link_de_login.sql`). O e-mail já enviado não muda — reenviar a matrícula.

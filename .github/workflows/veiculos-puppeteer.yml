@@ -19,6 +19,10 @@ on:
         description: 'Fontes a rodar (vazio = todas). Ex.: SODRE_VEICULOS ou SUPERBID_VEICULOS'
         required: false
         default: ''
+      superbid_forcar_isp:
+        description: '1 = roda a rede Superbid (SUPERBID/SOLD/veículos) pelo proxy ISP mesmo com o residencial em dia (teste da reserva)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-veiculos:
@@ -53,6 +57,12 @@ jobs:
           # e do disparo manual default. `ONLY.includes(...)` em scraper-puppeteer.mjs já trata
           # este valor como lista exclusiva, então nenhuma fonte de IMÓVEL roda neste job.
           SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS,SUPERBID_VEICULOS,MEGA_VEICULOS,WEBLEILOES_VEICULOS,ZUK_VEICULOS,LJUD_VEICULOS' }}
+          # Rede Superbid (23/09): coleta no runner residencial; aqui só roda se o residencial
+          # ficou 7+ dias sem concluir, e sai pelo proxy ISP (ver navegadorRedeSuperbid).
+          BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
+          BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
+          BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
+          SUPERBID_FORCAR_ISP: ${{ github.event.inputs.superbid_forcar_isp || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 
       - name: Notify on failure

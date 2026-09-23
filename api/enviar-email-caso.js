@@ -41,7 +41,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
-import { comExtensao } from './_anexo-nome.js';
+import { comExtensao, urlDiretaDoDocumento } from './_anexo-nome.js';
 import { assinarDocumento } from './_storage.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
@@ -164,7 +164,11 @@ export default async function handler(req) {
   // perguntava. Agora: fora o link que é de login por construção, e fora o que o espelho já
   // provou não ser documento. Anexar menos é melhor que anexar algo que não abre.
   const RE_LINK_DE_LOGIN = /\/login\b|[?&](redirect|returnUrl|next)=/i;
-  let anexosLote = (Array.isArray(lote?.anexos) ? lote.anexos : []).filter(a => a?.url && !RE_LINK_DE_LOGIN.test(a.url));
+  // Antes de descartar, DESEMBRULHA: o arquivo por trás do login costuma estar na pasta pública
+  // (urlDiretaDoDocumento). O que continuar sendo login depois disso, sai.
+  let anexosLote = (Array.isArray(lote?.anexos) ? lote.anexos : [])
+    .map(a => (a?.url ? { ...a, url: urlDiretaDoDocumento(a.url) } : a))
+    .filter(a => a?.url && !RE_LINK_DE_LOGIN.test(a.url));
   if (anexosLote.length && lote?.id && imovel) {
     const rEsp = await sb(`documento_espelho?imovel_id=eq.${encodeURIComponent(lote.id)}&status=eq.ignorado&select=url_origem`);
     if (rEsp.ok) {
@@ -173,6 +177,32 @@ export default async function handler(req) {
     } else {
       console.warn('[enviar-email-caso] espelho ilegível — segue só com o filtro de login:', rEsp.status);
     }
+  }
+  // CONFERE O CONTEÚDO antes de anexar (23/09): o Resend busca o `path` e anexa o que vier —
+  // HTML inclusive, com o nome "MATRÍCULA". Lê só o começo de cada arquivo; HTML provado sai.
+  // Não conseguir ler NÃO descarta (o Resend pode conseguir; o espelho decide depois).
+  if (anexosLote.length) {
+    const veredito = await Promise.all(anexosLote.map(async (a) => {
+      try {
+        const r = await fetch(a.url, { headers: { Range: 'bytes=0-511' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+        const tipo = r.headers.get('content-type') || '';
+        let ini = '';
+        if (r.body) { // 1º pedaço só — servidor que ignora Range não faz baixar o PDF inteiro
+          const leitor = r.body.getReader();
+          const { value } = await leitor.read();
+          leitor.cancel().catch(() => {}); // padrao-ok: descarte do resto do corpo, nada a registrar
+          ini = new TextDecoder().decode(value || new Uint8Array()).slice(0, 200).trimStart();
+        }
+        if (/text\/html/i.test(tipo) || /^<(!doctype|html|head|body)/i.test(ini)) return { html: true };
+        return { html: false };
+      } catch (e) {
+        console.warn('[enviar-email-caso] não conferi o anexo (segue):', a.nome, String(e?.message || e).slice(0, 80));
+        return { html: false };
+      }
+    }));
+    const antes = anexosLote.length;
+    anexosLote = anexosLote.filter((_, i) => !veredito[i].html);
+    if (anexosLote.length < antes) console.warn(`[enviar-email-caso] ${antes - anexosLote.length} anexo(s) eram página HTML — fora do envio`);
   }
 
   // ASSESSORADO (e variante anual) → também os documentos PESSOAIS do CLIENTE dono do caso

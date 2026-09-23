@@ -21,6 +21,8 @@ import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
+import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
+import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
@@ -140,6 +142,12 @@ async function salvarImoveis(imoveis, fonte) {
   // Inclui cidade estrangeira da rede Superbid via ehEstrangeiroPelaCidade — roda mesmo com
   // UF preenchida, porque o sufixo extraído pode coincidir com uma UF brasileira de verdade.
   const totalBruto = imoveis.length;
+  // 23/09: link de documento embrulhado em login (LEILOFY `/login?redirect=…pdf`) grava o
+  // endereço DIRETO do arquivo — senão o espelho e o e-mail ao leiloeiro recebem a tela de login.
+  for (const im of imoveis) {
+    for (const k of ['link_matricula', 'link_edital', 'link_regras_venda']) if (im[k]) im[k] = urlDiretaDoDocumento(im[k]);
+    if (Array.isArray(im.anexos)) im.anexos = im.anexos.map(a => (a?.url ? { ...a, url: urlDiretaDoDocumento(a.url) } : a));
+  }
   // 23/09: UF vazia some de /leiloes (invariante `estado_fora_do_padrao`, 96 ativos). Antes de
   // gravar, recupera a UF que a extração perdeu — só com prova do IBGE (ver lib/inferir-uf.mjs).
   // Roda ANTES do filtro de estrangeiro: UF recuperada do texto passa pela mesma guarda.
@@ -5428,6 +5436,37 @@ async function scraperLeilofy(browser) {
   return imoveis;
 }
 
+// ── REDE SUPERBID: RESIDENCIAL PRIMEIRO, ISP COMO RESERVA (23/09, decisão do dono) ──────────
+// O Cloudflare da SUPERBID bloqueia IP de datacenter: do GitHub a offer-query entrega só a 1ª
+// página (100 de ~1.300 lotes em 23/09) e 403 no resto, até de dentro do Chromium. SUPERBID,
+// SOLD e os veículos SUPERBID passaram para o runner-residencial.sh (gate `SUPERBID`, 20 h).
+// Aqui, no GitHub, a rede Superbid só roda se o residencial ficou 7 DIAS sem concluir — a
+// mesma regra do radar do DJEN — e então sai pelo proxy ISP do Bright Data (custo fixo por
+// IP, sem o freio por requisição do Web Unlocker). SUPERBID_FORCAR_ISP=1 força (teste).
+// "Não consegui ler o gate" NÃO é "residencial em dia": nesse caso a reserva roda.
+const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS'];
+async function navegadorRedeSuperbid(browser) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return { browser, proprio: null };
+  const forcar = process.env.SUPERBID_FORCAR_ISP === '1';
+  if (!forcar) {
+    const { data, error } = await supabase.from('coleta_cliente').select('ultima_em').eq('fonte', 'SUPERBID').maybeSingle();
+    if (error) console.log(`  ⚠️ Rede Superbid: não consegui ler o gate residencial (${error.message}) — reserva ISP roda por precaução`);
+    else if (data?.ultima_em && Date.now() - Date.parse(data.ultima_em) < 7 * 864e5) {
+      console.log(`  ⏭️  Rede Superbid: residencial concluiu em ${data.ultima_em} (< 7 dias) — GitHub não coleta.`);
+      return { browser: null, proprio: null };
+    } else console.log(`  ⚠️ Rede Superbid: residencial SEM coleta há 7+ dias (última: ${data?.ultima_em || 'nunca'}) — reserva no GitHub.`);
+  }
+  if (!proxyIspDisponivel()) {
+    console.log('  ⚠️ Rede Superbid: proxy ISP não configurado neste job — tentando direto (o Cloudflare deve cortar na 2ª página; a trava de coleta parcial protege o acervo).');
+    return { browser, proprio: null };
+  }
+  const proprio = await puppeteer.launch({ headless: true, args: [...BROWSER_ARGS, `--proxy-server=${proxyIspServidor()}`] });
+  const novaPagina = proprio.newPage.bind(proprio);
+  proprio.newPage = async () => { const pg = await novaPagina(); await pg.authenticate(proxyIspCredenciais()); return pg; };
+  console.log('  🌐 Rede Superbid: saindo pelo proxy ISP do Bright Data.');
+  return { browser: proprio, proprio };
+}
+
 async function main() {
   console.log(`\n🏠 Scraper Puppeteer — ${new Date().toISOString()}\n`);
 
@@ -5437,6 +5476,7 @@ async function main() {
   });
 
   let total = 0;
+  let sbidProprio = null; // navegador do proxy ISP da rede Superbid (só na reserva do GitHub)
 
   // Filtro opcional de fontes (env SCRAPER_FONTES="VENDASGOV" ou "MEGA,SOLD").
   // Vazio = roda todas. Útil para testar/reprocessar uma fonte isolada sem re-scrapear tudo.
@@ -5489,7 +5529,7 @@ async function main() {
     const coletarFonte = async (fonte, fn, opts = {}) => {
       const imoveis = (await fn()) || [];
       if (opts.enrich) {
-        try { await enriquecerDocumentosLote(browser, imoveis, { cap: opts.enrichCap || 120 }); }
+        try { await enriquecerDocumentosLote(opts.browser || browser, imoveis, { cap: opts.enrichCap || 120 }); }
         catch (e) { console.log(`  ⚠️ Enriquecimento de documentos ${fonte} falhou (segue sem): ${e.message.slice(0, 80)}`); }
       }
       total += await salvarEFinalizar(imoveis, fonte);
@@ -5499,21 +5539,25 @@ async function main() {
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos. O
     // detalhe da oferta (/oferta/{id}) é server-rendered com a seção "Documentação"
     // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
-    if (rodar('SUPERBID')) console.log('\n📋 Superbid...');
-    if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150 });
+    const pedeRedeSbid = REDE_SBID_RESIDENCIAL.some(f => (f === 'SUPERBID_VEICULOS' ? ONLY.includes(f) : rodar(f)));
+    const redeSbid = pedeRedeSbid ? await navegadorRedeSuperbid(browser) : { browser: null, proprio: null };
+    sbidProprio = redeSbid.proprio;
+    const bSbid = redeSbid.browser;
+    if (bSbid && rodar('SUPERBID')) console.log('\n📋 Superbid...');
+    if (bSbid && rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(bSbid, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150, browser: bSbid });
 
     // Superbid — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado do
     // SODRE_VEICULOS/SUPORTE_VEICULOS (ver comentários lá e .github/workflows/
     // veiculos-puppeteer.yml) — fora de `rodar()`, roda pelo job diário dedicado de veículos.
-    if (ONLY.includes('SUPERBID_VEICULOS')) {
+    if (bSbid && ONLY.includes('SUPERBID_VEICULOS')) {
       console.log('\n📋 Superbid (veículos, piloto)...');
-      const veiculosSuperbid = await scraperSuperbidVeiculos(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' });
+      const veiculosSuperbid = await scraperSuperbidVeiculos(bSbid, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' });
       await salvarVeiculos(veiculosSuperbid);
     }
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
-    if (rodar('SOLD')) console.log('\n📋 Sold Leilões...');
-    if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120 });
+    if (bSbid && rodar('SOLD')) console.log('\n📋 Sold Leilões...');
+    if (bSbid && rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(bSbid, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
@@ -5787,6 +5831,7 @@ async function main() {
     await retencaoVeiculosVencidos();
 
   } finally {
+    if (sbidProprio) await sbidProprio.close().catch(e => console.log(`  (fechar navegador ISP: ${e.message})`));
     await browser.close();
   }
 

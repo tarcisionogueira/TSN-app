@@ -21,6 +21,10 @@ on:
         description: '1 = captura a galeria completa de fotos do Superbid/SOLD/SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES (2ª passada de paginação, dobra as requisições dessas 7 fontes). Teste num dispatch manual primeiro e meça o tempo antes de considerar ligar no cron diário — mesmo motivo do ljud_foto_max.'
         required: false
         default: '0'
+      superbid_forcar_isp:
+        description: '1 = roda a rede Superbid (SUPERBID/SOLD/veículos) pelo proxy ISP mesmo com o residencial em dia (teste da reserva)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-puppeteer:
@@ -67,6 +71,12 @@ jobs:
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
           LJUD_FOTO_MAX: ${{ github.event.inputs.ljud_foto_max }}
           SUPERBID_GALERIA: ${{ github.event.inputs.superbid_galeria || '0' }}
+          # Rede Superbid (23/09): coleta no runner residencial; aqui só roda se o residencial
+          # ficou 7+ dias sem concluir, e sai pelo proxy ISP (ver navegadorRedeSuperbid).
+          BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
+          BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
+          BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
+          SUPERBID_FORCAR_ISP: ${{ github.event.inputs.superbid_forcar_isp || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 
       # `cancelled()` junto com `failure()`: estourar o timeout-minutes NAO e failure para o

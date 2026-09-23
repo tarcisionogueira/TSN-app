@@ -12,3 +12,20 @@ export function comExtensao(nome, url) {
   if (!/^(pdf|jpe?g|png|webp|docx?|xlsx?|zip)$/.test(ext)) ext = 'pdf';
   return `${base}.${ext}`;
 }
+
+// Link de documento embrulhado em LOGIN (`/login?redirect=_admin_%2Fupload%2Fx.pdf`, LEILOFY,
+// 23/09): o site manda o visitante anônimo para a tela de login, mas o arquivo em si fica na
+// mesma pasta pública de onde o espelho já copia laudo e edital (`/_admin_/upload/*.pdf`,
+// status `copiado`). Devolve o endereço direto do arquivo; só MESMO host e só extensão de
+// documento — nunca vira redirecionador aberto. Sem padrão reconhecível, devolve como veio.
+export function urlDiretaDoDocumento(url) {
+  const s = String(url || '');
+  if (!/[?&](redirect|returnUrl|next)=/i.test(s)) return s;
+  let u;
+  try { u = new URL(s); } catch { return s; } // não é URL absoluta: não há o que desembrulhar
+  const alvo = u.searchParams.get('redirect') || u.searchParams.get('returnUrl') || u.searchParams.get('next');
+  if (!alvo || !/\.(pdf|jpe?g|png|docx?)$/i.test(alvo.split(/[?#]/)[0])) return s;
+  let d;
+  try { d = new URL(/^https?:/i.test(alvo) || alvo.startsWith('/') ? alvo : `/${alvo}`, u.origin); } catch { return s; }
+  return d.origin === u.origin ? d.toString() : s;
+}
