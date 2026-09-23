@@ -29,6 +29,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { redigirProposta } from './_redator-proposta.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -121,7 +122,19 @@ export default async function handler(req) {
 
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit.
   if (acao === 'preview') {
-    return json({ ok: true, texto: corpoTextoPuro, linkLote: veiculo.link_lote || null, contatoDisponivel: !!contato?.email });
+    // REDATOR (23/09): mesmo aprendizado do e-mail ao leiloeiro (api/_redator-proposta.js) — os
+    // envios reais de quem propõe viram o modelo. Sem exemplo/IA → texto padrão, com o motivo.
+    const rEx = await sb(`email_caixa?enviado_por=eq.${user.id}&pasta=eq.enviados&direcao=eq.saida&assunto=like.Contato*&select=assunto,texto&order=criado_em.desc&limit=15`);
+    const exemplos = rEx.ok ? await rEx.json().catch(() => []) : [];
+    const redator = await redigirProposta({
+      nome: nomeCliente, exemplos,
+      lote: { tipo: 'Veículo', rotulo: veiculoLabel, leiloeiro: veiculo.leiloeiro || veiculo.fonte, link: veiculo.link_lote || null,
+        cidade: veiculo.cidade, estado: veiculo.estado, valorMinimo: veiculo.valor_minimo, valorAvaliacao: veiculo.valor_avaliacao,
+        resultado: veiculo.resultado_leilao, dataLeilao: veiculo.data_leilao ? String(veiculo.data_leilao).slice(0, 10) : null, temDocumentos: false },
+    }).catch((e) => ({ texto: null, motivo: `redator falhou: ${String(e?.message || e).slice(0, 80)}`, exemplos: 0 }));
+    return json({ ok: true, texto: redator.texto || corpoTextoPuro, textoPadrao: corpoTextoPuro,
+      redator: { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos },
+      linkLote: veiculo.link_lote || null, contatoDisponivel: !!contato?.email });
   }
 
   // PASSO 2 — ENVIAR: o corpo é o que o CHAMADOR mandou (o editado, se editou).

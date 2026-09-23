@@ -25,6 +25,7 @@
     "testar:uf": "node scripts/testes/uf-recuperada-so-com-prova-do-ibge.mjs",
     "testar:datas-vizinhos": "node scripts/testes/datas-do-lote-nao-vem-dos-vizinhos.mjs",
     "testar:albertomacedo-cidade": "node scripts/testes/albertomacedo-cidade-do-lote.mjs",
+    "testar:redator": "node scripts/testes/redator-proposta-nao-inventa-valor.mjs",
     "testar:praca-fim": "node scripts/testes/praca-fim-nunca-antes-da-abertura.mjs",
     "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",
     "testar:certidoes": "node scripts/testes/certidao-indisponivel-nao-e-certidao-limpa.mjs",

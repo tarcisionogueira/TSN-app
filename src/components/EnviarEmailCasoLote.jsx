@@ -99,6 +99,17 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
             </div>
           )}
 
+          {emailPreview.redator && (
+            <div style={{ fontSize: 11.5, margin: '0 0 6px', color: emailPreview.redator.usado ? '#15803d' : '#92400e' }}>
+              {emailPreview.redator.usado
+                ? `✍️ Rascunho escrito no seu estilo, aprendido dos seus ${emailPreview.redator.exemplos} último(s) e-mail(s) a leiloeiros — revise antes de enviar.`
+                : `Texto padrão (o redator não usou: ${emailPreview.redator.motivo}).`}
+              {emailPreview.redator.usado && emailPreview.textoPadrao && (
+                <button type="button" onClick={() => setEmailPreview(p => ({ ...p, texto: p.textoPadrao, redator: { ...p.redator, usado: false, motivo: 'você voltou ao texto padrão' } }))}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11.5 }}>usar texto padrão</button>
+              )}
+            </div>
+          )}
           <textarea value={emailPreview.texto} onChange={e => setEmailPreview(p => ({ ...p, texto: e.target.value }))}
             rows={7} style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>

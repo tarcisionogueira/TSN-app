@@ -42,6 +42,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { comExtensao, urlDiretaDoDocumento } from './_anexo-nome.js';
+import { redigirProposta } from './_redator-proposta.js';
 import { assinarDocumento } from './_storage.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
@@ -146,12 +147,12 @@ export default async function handler(req) {
 
   let imovel = null;
   if (imovelId) {
-    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,anexos&limit=1`);
+    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,anexos,leiloeiro,url_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao&limit=1`);
     if (rImovel.ok) [imovel] = await rImovel.json();
   }
   let veiculo = null;
   if (!imovelId && veiculoIdDireto) {
-    const rVeiculo = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoIdDireto)}&select=id,fonte,titulo,marca,modelo,anexos&limit=1`);
+    const rVeiculo = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoIdDireto)}&select=id,fonte,titulo,marca,modelo,anexos,leiloeiro,link_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao,ano_fabricacao,ano_modelo&limit=1`);
     if (rVeiculo.ok) [veiculo] = await rVeiculo.json();
   }
   // Unifica lote (imóvel OU veículo — nunca os dois) para o resto da função não precisar
@@ -257,9 +258,31 @@ export default async function handler(req) {
   // PASSO 1 — PREVIEW: mostra o rascunho e QUANTOS anexos sairiam, sem enviar nada. Sem
   // contato cadastrado, o chamador oferece um campo pra digitar (ver `emailManual` no envio).
   if (acao === 'preview') {
+    // REDATOR (23/09, pedido do dono): e-mail ao leiloeiro já sai no jeito de quem envia,
+    // aprendido dos envios reais dele (`email_caixa`). Falhou → texto padrão + o MOTIVO na tela.
+    let redator = null;
+    if (destino === 'leiloeiro' && lote) {
+      const rEx = await sb(`email_caixa?enviado_por=eq.${user.id}&pasta=eq.enviados&direcao=eq.saida&assunto=like.Contato*&select=assunto,texto&order=criado_em.desc&limit=15`);
+      const exemplos = rEx.ok ? await rEx.json().catch(() => []) : [];
+      if (!rEx.ok) console.warn('[enviar-email-caso] exemplos do redator ilegíveis:', rEx.status);
+      const rotuloVeic = veiculo ? [veiculo.marca, veiculo.modelo, veiculo.ano_fabricacao && `${veiculo.ano_fabricacao}/${veiculo.ano_modelo || veiculo.ano_fabricacao}`].filter(Boolean).join(' ') : null;
+      redator = await redigirProposta({
+        nome: nomeRemetente,
+        exemplos,
+        lote: {
+          tipo: rotuloTipo, rotulo: rotuloVeic || labelLote, leiloeiro: lote.leiloeiro || loteFonte,
+          link: lote.url_lote || lote.link_lote || null, cidade: lote.cidade, estado: lote.estado,
+          valorMinimo: lote.valor_minimo, valorAvaliacao: lote.valor_avaliacao, resultado: lote.resultado_leilao,
+          modalidade: lote.modalidade, dataLeilao: lote.data_leilao ? String(lote.data_leilao).slice(0, 10) : null,
+          temDocumentos: anexosLote.length > 0,
+        },
+      }).catch((e) => ({ texto: null, motivo: `redator falhou: ${String(e?.message || e).slice(0, 80)}`, exemplos: 0 }));
+    }
     return json({
       ok: true,
-      texto: corpoTextoPuro,
+      texto: redator?.texto || corpoTextoPuro,
+      textoPadrao: corpoTextoPuro,
+      redator: redator ? { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos } : null,
       destinatarioEmail,
       contatoDisponivel: !!destinatarioEmail,
       anexosLote: anexosLote.map(a => a.nome || 'documento'),

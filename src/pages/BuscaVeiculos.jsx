@@ -273,7 +273,7 @@ export default function BuscaVeiculos() {
       const r = await apiCall('/api/propor-veiculo-leiloeiro', { method: 'POST', body: JSON.stringify({ veiculo_id: v.id, action: 'preview' }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.error) { setPropostaMsgTipo('error'); setPropostaMsg(j?.error || 'Não foi possível preparar a proposta agora.'); return; }
-      setPropostaTexto(j.texto || ''); setPropostaInfo({ linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel });
+      setPropostaTexto(j.texto || ''); setPropostaInfo({ linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, redator: j.redator || null, textoPadrao: j.textoPadrao || '' });
     } catch {
       setPropostaMsgTipo('error'); setPropostaMsg('Não foi possível preparar a proposta agora.');
     } finally { setPropostaCarregando(false); }
@@ -661,6 +661,17 @@ export default function BuscaVeiculos() {
                   <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#92400e', marginBottom: 10 }}>
                     Este leiloeiro ainda não tem e-mail de contato cadastrado. Copie o texto abaixo e envie manualmente
                     {propostaInfo.linkLote ? <> (a página do lote fica <a href={propostaInfo.linkLote} target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', fontWeight: 700 }}>aqui</a>)</> : null}.
+                  </div>
+                )}
+                {propostaInfo?.redator && (
+                  <div style={{ fontSize: 11.5, marginBottom: 6, color: propostaInfo.redator.usado ? '#15803d' : '#92400e' }}>
+                    {propostaInfo.redator.usado
+                      ? `✍️ Rascunho no seu estilo, aprendido dos seus ${propostaInfo.redator.exemplos} último(s) e-mail(s) a leiloeiros — revise antes de enviar.`
+                      : `Texto padrão (o redator não usou: ${propostaInfo.redator.motivo}).`}
+                    {propostaInfo.redator.usado && propostaInfo.textoPadrao && (
+                      <button type="button" onClick={() => { setPropostaTexto(propostaInfo.textoPadrao); setPropostaInfo(i => ({ ...i, redator: { ...i.redator, usado: false, motivo: 'você voltou ao texto padrão' } })); }}
+                        style={{ marginLeft: 8, background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11.5 }}>usar texto padrão</button>
+                    )}
                   </div>
                 )}
                 <textarea value={propostaTexto} onChange={e => setPropostaTexto(e.target.value)} rows={10}

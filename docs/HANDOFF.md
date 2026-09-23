@@ -32640,3 +32640,16 @@ colada: "sete-lagoasmg"); vence a mais citada. Teste: `npm run testar:albertomac
 dos 12 "Ssp" pelo slug. Restam ~12 cujo slug não tem cidade — a próxima coleta lê a página.
 Achado lateral: a página chama a API do próprio site (`api.albertomacedoleiloes.com.br/rest/v1/
 public_lots`, PostgREST) com `address` estruturado — caminho mais barato que Chromium, se um dia valer.
+
+**30. ✅ Filtro de monta com múltipla escolha + REDATOR de proposta (pedidos do dono, 23/09).**
+- `BuscaVeiculos.jsx`: "Tipo de monta" virou múltipla escolha (`MultiEscolha`), com opção "Não
+  informado" (8.307 de ~8.800 veículos não têm monta; sem ela, "Sem sinistro" escondia o acervo).
+- **Redator de proposta** (`api/_redator-proposta.js`) — não existia agente para isso; segue o
+  desenho de `_mensagens-grupo-estilo.js`. Aprende dos e-mails REAIS que a pessoa mandou a
+  leiloeiros (`email_caixa`, assunto "Contato —", 6 mais recentes, sem repetidos): estrutura, tom,
+  % que costuma propor por tipo de bem, assinatura. Leilão negativo → proposta no padrão dela
+  (sem exemplo do tipo → "[__]%"); senão → pedido de informações. Trava na SAÍDA: R$ fora dos dados
+  do lote, link faltando ou assinatura trocada → descarta e usa o texto padrão, com o motivo na tela.
+  Ligado no preview de `enviar-email-caso` (leiloeiro) e `propor-veiculo-leiloeiro`; a tela mostra
+  "rascunho no seu estilo" + botão "usar texto padrão". Haiku via `iaGeminiPrimary` (custo baixo).
+  Teste: `npm run testar:redator`. Aprende sozinho: cada e-mail enviado vira exemplo do próximo.
