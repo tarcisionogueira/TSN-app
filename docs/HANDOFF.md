@@ -32194,3 +32194,59 @@ sub-utilização por falta de saber que existe)
 marcados ⚠️ não são "instalado à toa": são de uso GERAL da sua conta (não amarrados a um
 projeto), então ficam ociosos até você pedir algo que precise deles — não é desperdício, é
 capacidade disponível. O único item realmente acionável é o Canva, que está desconectado.
+
+---
+
+## 🏁 ENCERRAMENTO DO DIA — 22–23/09/2026
+
+Sessão longa, tudo em produção e confirmado `READY` a cada passo (nenhum deploy pendente).
+Resumo do dia inteiro pra retomar amanhã sem reler tudo:
+
+**Incidente do dia (resolvido):** deploy inteiro travado por causa do `undici` do proxy ISP
+quebrando uma Edge Function — corrigido cedo, produção nunca ficou fora do ar por muito tempo
+(serviu o build anterior enquanto isso).
+
+**Bugs reais corrigidos:** lotes que não eram imóvel nem veículo aparecendo na Busca (VIP e
+mais 3 fontes) + limpeza retroativa; gap de regex "vagas de garagem" (plural); título quebrado
+em 20 lotes ZUK; RLS ausente em `fipe_uso` (buraco de segurança real — anônimo podia adulterar
+cota); 11 policies de RLS otimizadas; 27 índices de FK criados; 53 índices mortos removidos
+(com autocorreção de 14 no mesmo dia).
+
+**Features novas no ar:** kill-switch em `app_config` pro proxy ISP do Bright Data (Feature
+Flags nativo da Vercel não está disponível nesta conta/plano — testado, não é opção); badge
+"arremate em andamento" na lista de Assessorados (destaca quando há mais de um simultâneo).
+
+**Achados via Sentry** (conector que já existia e ninguém tinha olhado): erro real no Asaas
+(antecipação de cartão desativada — ação da conta, não bug) e um alerta de qualidade de dados
+que confirma o achado do EDITAL_DJEN, não é regressão nova.
+
+### O que fica PENDENTE pra amanhã, em ordem de prioridade
+
+1. **Proxy ISP dos veículos — ainda sem confirmação real.** O cron das 21h UTC de ontem
+   (22/09) rodou no build ANTIGO (antes do fix). Um check-in automático já está agendado pra
+   ~22h10 UTC de HOJE (23/09), depois do primeiro disparo real com o código novo — quando essa
+   mensagem chegar, é a primeira medição que vale alguma coisa. Se `resultado_leilao_atrasado`
+   não cair de 1441, é regressão de verdade a investigar, não "ainda não deu tempo".
+2. **FRAZAO → hdleiloes.com.br** — aguardando você testar de novo com hard refresh/aba
+   anônima. Investigação já esgotada do lado do código/banco (ambos corretos).
+3. **EDITAL_DJEN mostrando lotes muito incompletos na Busca pública** — decisão de produto
+   pendente (esconder da busca até ter foto+valor / deixar como está / UI diferenciada).
+4. **Qualidade da integração do Mercado Pago (47/100, precisa 73+)** — gap concreto
+   encontrado (`payer` sem CPF/nome no pagamento direto via Checkout API); proposta de fix
+   pronta em `api/mp-checkout.js`, não implementada ainda por ser código que cobra de verdade
+   (quero validar contra sandbox antes de subir).
+5. **Sentry TSN-APP-2** (Asaas antecipação) — decisão do dono: habilitar no painel do Asaas ou
+   aceitar indisponível (gateway backup).
+6. **Canva desconectado** — reconectar quando for usar.
+7. **`VITE_SENTRY_DSN`** — confirmar se está setada na Vercel (não consegui checar, API sem
+   permissão de leitura de env vars); sem ela, erro de cliente (JS quebrando no navegador do
+   usuário) não chega ao Sentry, só erro de servidor.
+8. **Gemini (Google AI Studio)** — status real não reconfirmado nesta sessão (ver seção acima).
+9. **Google Cloud "projeto-sombra" e Instagram/Meta Business** — só o dono resolve (acesso de
+   conta), pendências antigas, sem novidade.
+10. **`contrato_texto_truncado=2`** — aguardando confirmação do dono pra apagar 2 linhas de
+    teste interno (não fazer sem confirmar).
+11. **Navegabilidade/bundle grande** (`Admin.jsx`/`lib.js`/`index.js`) — proposta concreta de
+    `manualChunks` registrada acima, não implementada por precisar de teste visual ao vivo.
+
+Sessão encerrada aqui a pedido do dono.
