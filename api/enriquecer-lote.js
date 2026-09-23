@@ -115,6 +115,8 @@ export async function fetchLote(url, { semBrightData = false, proposito = 'geral
  * registram só quando não há nenhuma data futura, para nunca rebaixar um prazo bom).
  */
 const RE_DATA_LOTE = /(\d{2})\/(\d{2})\/(\d{2,4})(?:[^0-9]{0,12}(\d{1,2})[:h](\d{2}))?/g;
+// Início das seções de OUTROS lotes na página do lote (vitrine de similares). Ver extrairDatasLeilao.
+const RE_OUTROS_LOTES = /\b(veja tamb[ée]m|im[óo]veis similares|lotes similares|im[óo]veis semelhantes|outros im[óo]veis|outros lotes|lotes relacionados|im[óo]veis relacionados|voc[êe] tamb[ée]m pode gostar|talvez voc[êe] goste|confira tamb[ée]m|veja outros|mais im[óo]veis|mais lotes)\b/i;
 const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmino|termino|licita|aliena|data/i;
 // `fechamento` entrou em 23/08: é como a plataforma de Gustavo Reis/Valero/Sued Peter
 // (fonte SUPORTE) rotula o PRAZO — "1ª Leilão Abertura 06/10 14:30 Fechamento 09/10 14:30".
@@ -210,11 +212,36 @@ export function roteiarDatasPraca(datas, im = {}) {
   return patch;
 }
 
+/**
+ * Corta o texto da página do lote no início da vitrine de OUTROS lotes ("Veja também",
+ * "Imóveis similares"…), que traz as datas dos vizinhos (23/09, ZUK Alameda dos Lírios 196: o
+ * 2º leilão de um apartamento de Barueri virou a 2ª praça do lote aberto). Só corta num marcador
+ * que venha DEPOIS da 1ª data ancorada — marcador no menu/topo não apaga as datas do lote.
+ */
+export function cortarOutrosLotes(txt, ancora = CTX_ANCORA) {
+  RE_DATA_LOTE.lastIndex = 0;
+  let x, primeira = -1;
+  while ((x = RE_DATA_LOTE.exec(txt))) {
+    if (ancora.test(txt.slice(Math.max(0, x.index - 90), x.index))) { primeira = x.index; break; }
+  }
+  RE_DATA_LOTE.lastIndex = 0;
+  if (primeira < 0) return txt;
+  const corte = txt.slice(primeira).search(RE_OUTROS_LOTES);
+  return corte > 0 ? txt.slice(0, primeira + corte) : txt;
+}
+
 export function extrairDatasLeilao(html, { estrito = false } = {}) {
   const vazio = { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
   if (!html) return vazio;
   const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  let txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // A PÁGINA DO LOTE LISTA OUTROS LOTES (23/09). Na ZUK, depois do lote vem "Veja também" com
+  // imóveis vizinhos, cada um com "1º leilão 28/09 às 14:03 · 2º leilão 05/10 às 14:03" — e o
+  // extrator gravou essas datas como a 2ª praça (e o início) do lote aberto: o cliente leu
+  // "encerramento 05/10" num lote que encerra 29/09 (Alameda dos Lírios 196). Corta o texto no
+  // 1º marcador de outros lotes que vier DEPOIS da 1ª data ancorada — marcador no menu/topo
+  // (antes de qualquer data do lote) não corta nada. Faltar data é melhor que data de vizinho.
+  txt = cortarOutrosLotes(txt, ancora);
   const ontem = Date.now() - 86400000;
   const piso = Date.now() - 400 * 86400000;   // datas passadas ainda úteis (ver `passadas`)
   const limite = Date.now() + 730 * 86400000; // 2 anos: janelas de alienação passam de 1 ano

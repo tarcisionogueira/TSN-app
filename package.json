@@ -23,6 +23,7 @@
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:superbid": "node scripts/testes/superbid-resultado.mjs",
     "testar:uf": "node scripts/testes/uf-recuperada-so-com-prova-do-ibge.mjs",
+    "testar:datas-vizinhos": "node scripts/testes/datas-do-lote-nao-vem-dos-vizinhos.mjs",
     "testar:praca-fim": "node scripts/testes/praca-fim-nunca-antes-da-abertura.mjs",
     "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",
     "testar:certidoes": "node scripts/testes/certidao-indisponivel-nao-e-certidao-limpa.mjs",

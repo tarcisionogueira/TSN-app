@@ -22,6 +22,7 @@ import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core
 import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
+import { cortarOutrosLotes } from '../api/enriquecer-lote.js';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -1548,7 +1549,9 @@ async function scraperBancoBrasil(browser, pageNum = 1) {
 // data futura. Retorna 'YYYY-MM-DD' ou null.
 function extrairDataLeilaoHTML(html) {
   if (!html) return null;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Sem a vitrine de outros lotes ("Veja também"): pegar a MENOR data futura da página inteira
+  // escolheria a data de um vizinho mais cedo (ver cortarOutrosLotes, 23/09).
+  const txt = cortarOutrosLotes(html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' '));
   const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
   const ontem = Date.now() - 86400000;
   const limite = Date.now() + 400 * 86400000;

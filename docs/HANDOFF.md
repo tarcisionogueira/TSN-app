@@ -32588,3 +32588,18 @@ apuração residencial não religava (o cron da Vercel religava). Os três respe
 
 **26. ✅ Caixa de e-mail ilegível no celular.** Lista (340px) + leitor lado a lado empurravam a
 mensagem para fora da tela. Abaixo de 900px: OU lista, OU mensagem com "Voltar à lista".
+
+**27. ✅ Data de OUTRO lote gravada como 2ª praça (ZUK Alameda dos Lírios 196, dono 23/09).**
+Tela mostrava "encerramento 05/10" num lote que encerra 29/09 11h40. Recon
+(`recon-datas-pagina-lote.yml`, run 35914174340) reproduziu: `extrairDatasLeilao` lia a página
+INTEIRA, e a vitrine "Veja também" da ZUK traz vizinhos com "1º leilão 28/09 14:03 · 2º leilão
+05/10 14:03" — viraram início e 2ª praça do lote aberto. Fix: `cortarOutrosLotes()` (corta no 1º
+marcador de outros lotes após a 1ª data do lote) no extrator genérico E no `extrairDataLeilaoHTML`
+do coletor ZUK (que pega a MENOR data — um vizinho mais cedo viraria a data do lote). Teste:
+`npm run testar:datas-vizinhos`. Dados: 21 lotes com 2ª praça do extrator suspeita (ZUK 4,
+GRUPOLANCE 11 com horários 17:03/16:05/14:23, FRAZAO, LEFFA, LJUD 3, BIASI) — todos com o prazo
+(`data_fim`) vindo dela, ou seja, apareciam abertos além do fim real. Zerados e devolvidos à fila de
+enriquecimento (`segunda_praca_do_vizinho_desfeita.sql`). TORRES3/WEBLEILOES/DANIELGARCIA
+mantidos (padrão coerente de 2ª praça do leilão). ⚠️ `data_leilao` (início) de fontes cujo coletor
+não traz data pode ter vindo de vizinho também — não há como distinguir no banco; o fix vale daqui
+em diante e a revisita corrige o que for relido.
