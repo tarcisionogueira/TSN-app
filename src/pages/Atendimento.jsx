@@ -208,11 +208,17 @@ export default function Atendimento() {
     if (msg) setMensagens(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
     // Notifica o cliente por e-mail (essencial para leads sem conta)
+    // 23/09: a resposta do e-mail é CONFERIDA — antes era disparar e esquecer, e uma recusa do
+    // provedor deixava a mensagem no chat com cara de entregue enquanto o cliente (que muitas
+    // vezes só tem o e-mail) não recebia nada. Não trava o atendimento; avisa quem respondeu.
     if (texto.trim() && chamadoAtivo.user_email) {
       apiCall('/api/notificar-cliente', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chamado_id: chamadoAtivo.id, mensagem: texto }),
-      }).catch(() => {});
+      }).then(async (res) => {
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || j.error) alert(`A mensagem ficou no chamado, mas o e-mail para ${chamadoAtivo.user_email} NÃO saiu: ${j.error || `HTTP ${res.status}`}. Tente reenviar ou fale com o cliente por outro canal.`);
+      }).catch((e) => alert(`A mensagem ficou no chamado, mas não consegui confirmar o e-mail ao cliente: ${e.message}.`));
     }
     setTexto(''); setAnexos([]);
     setEnviando(false);

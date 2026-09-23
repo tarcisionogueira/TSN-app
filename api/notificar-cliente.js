@@ -28,7 +28,9 @@ export default async function handler(req) {
 
   const user = await getAuthUser(req);
   if (!user) return json({ error: 'Não autenticado' }, 401);
-  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role`)).json();
+  const rPerfil = await sb(`perfis?id=eq.${user.id}&select=role`);
+  if (!rPerfil.ok) return json({ error: `Não consegui conferir o seu perfil (HTTP ${rPerfil.status}).` }, 502);
+  const [perfil] = await rPerfil.json();
   if (!perfil || !ROLES_STAFF.includes(perfil.role)) return json({ error: 'Apenas equipe' }, 403);
 
   let body;
@@ -36,7 +38,11 @@ export default async function handler(req) {
   const { chamado_id, mensagem } = body;
   if (!chamado_id || !String(mensagem || '').trim()) return json({ error: 'chamado_id e mensagem obrigatórios' }, 400);
 
-  const [chamado] = await (await sb(`chamados?id=eq.${encodeURIComponent(chamado_id)}&select=user_email,user_nome,titulo,canal,email_token`)).json();
+  // "Não consegui ler o chamado" não é "chamado sem e-mail" (forma nº 2): o segundo pula de
+  // propósito, o primeiro tem de chegar à tela como falha.
+  const rCham = await sb(`chamados?id=eq.${encodeURIComponent(chamado_id)}&select=user_email,user_nome,titulo,canal,email_token`);
+  if (!rCham.ok) return json({ error: `Não consegui ler o chamado (HTTP ${rCham.status}).` }, 502);
+  const [chamado] = await rCham.json();
   if (!chamado?.user_email) return json({ ok: true, skipped: 'sem_email' });
 
   if (!RESEND_KEY) return json({ ok: true, skipped: 'sem_resend' });
@@ -60,8 +66,12 @@ export default async function handler(req) {
   }
   const replyTo = token ? `suporte+${token}@bidprobrasil.com.br` : 'suporte@bidprobrasil.com.br';
 
+  // O E-MAIL É A ENTREGA (23/09). Antes: resposta do Resend ignorada e `ok: true` sempre — a
+  // equipe via a mensagem no chat e o cliente (que muitas vezes só tem o e-mail) não recebia
+  // nada, sem ninguém saber. Agora a recusa volta como erro, com o motivo, e a tela avisa.
+  let r;
   try {
-    await fetch('https://api.resend.com/emails', {
+    r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -78,7 +88,14 @@ export default async function handler(req) {
         </div>`,
       }),
     });
-  } catch (_) { /* não bloqueia o atendimento */ }
-
-  return json({ ok: true });
+  } catch (e) {
+    console.error('[notificar-cliente] rede Resend:', String(e?.message || e));
+    return json({ error: `O e-mail ao cliente não saiu (rede: ${String(e?.message || e).slice(0, 80)}).` }, 502);
+  }
+  const jr = await r.json().catch(() => null);
+  if (!r.ok || !jr?.id) {
+    console.error('[notificar-cliente] Resend recusou', r.status, jr?.message || jr?.name || '');
+    return json({ error: `O e-mail ao cliente não saiu (Resend ${r.status}${jr?.message ? `: ${String(jr.message).slice(0, 120)}` : ''}).` }, 502);
+  }
+  return json({ ok: true, email_id: jr.id });
 }
