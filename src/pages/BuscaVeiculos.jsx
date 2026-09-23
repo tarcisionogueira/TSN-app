@@ -67,6 +67,47 @@ const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial',
 // não têm ocorrência no acervo ainda (só SODRE/SUPORTE rodaram), mas são categorias REAIS que
 // o leiloeiro usa, não inventadas — ficam disponíveis desde já para quando aparecerem.
 const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande monta', 'perda total'];
+// "Não informado" (23/09): 8.307 dos ~8.800 veículos ativos vêm SEM classificação de monta do
+// leiloeiro — sem esta opção, marcar "Sem sinistro" escondia quase todo o acervo.
+const MONTA_NAO_INFORMADA = 'nao_informado';
+const OPCOES_MONTA = [...TIPOS_MONTA.map(t => [t, t[0].toUpperCase() + t.slice(1)]), [MONTA_NAO_INFORMADA, 'Não informado']];
+
+// Múltipla escolha num campo do tamanho de um <select> (23/09, pedido do dono: "permitir uma
+// múltipla escolha nesse filtro"). Vazio = qualquer. Fecha ao clicar fora.
+function MultiEscolha({ valores, opcoes, onChange }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [aberto]);
+  const rotulo = !valores.length ? 'Qualquer'
+    : valores.length === 1 ? (opcoes.find(([v]) => v === valores[0])?.[1] || valores[0])
+    : `${valores.length} selecionados`;
+  const alternar = (v) => onChange(valores.includes(v) ? valores.filter(x => x !== v) : [...valores, v]);
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setAberto(a => !a)} style={{ ...inp, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rotulo}</span>
+        <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>▾</span>
+      </button>
+      {aberto && (
+        <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0, marginTop: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 20px rgba(15,23,42,.12)', padding: 6 }}>
+          {opcoes.map(([v, l]) => (
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 6 }}>
+              <input type="checkbox" checked={valores.includes(v)} onChange={() => alternar(v)} /> {l}
+            </label>
+          ))}
+          {valores.length > 0 && (
+            <button type="button" onClick={() => onChange([])} style={{ marginTop: 4, width: '100%', background: 'none', border: 'none', color: '#0D63DB', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 6 }}>Limpar seleção</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // PRAZO DO LEILÃO — mesma regra de src/pages/Busca.jsx (imóveis, pedido do dono 11/09):
 // janelas CUMULATIVAS a partir de hoje, e 'sem_data' como opção EXPLÍCITA (não omissão) —
@@ -196,7 +237,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: '', modalidade: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], modalidade: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -276,7 +317,13 @@ export default function BuscaVeiculos() {
       if (f.valorMax) q = q.lte('valor_minimo', Number(f.valorMax));
       if (f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
       if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
-      if (f.tipoMonta) q = q.eq('sinistro', f.tipoMonta);
+      if (f.tipoMonta.length) {
+        const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
+        const conds = [];
+        if (montas.length) conds.push(`sinistro.in.(${montas.map(t => `"${t}"`).join(',')})`);
+        if (f.tipoMonta.includes(MONTA_NAO_INFORMADA)) conds.push('sinistro.is.null');
+        q = q.or(conds.join(','));
+      }
       if (f.modalidade) q = q.eq('modalidade', f.modalidade);
       const janelaPrazo = calcularJanelaPrazo(f.prazo);
       if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
@@ -393,10 +440,7 @@ export default function BuscaVeiculos() {
           </div>
           <div>
             <label style={lbl}>Tipo de monta</label>
-            <select style={inp} value={filtros.tipoMonta} onChange={e => setFiltros(f => ({ ...f, tipoMonta: e.target.value }))}>
-              <option value="">Qualquer</option>
-              {TIPOS_MONTA.map(t => <option key={t} value={t} style={{ textTransform: 'capitalize' }}>{t[0].toUpperCase() + t.slice(1)}</option>)}
-            </select>
+            <MultiEscolha valores={filtros.tipoMonta} opcoes={OPCOES_MONTA} onChange={v => setFiltros(f => ({ ...f, tipoMonta: v }))} />
           </div>
           <div>
             <label style={lbl}>Modalidade</label>
