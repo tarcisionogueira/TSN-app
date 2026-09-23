@@ -32603,3 +32603,28 @@ enriquecimento (`segunda_praca_do_vizinho_desfeita.sql`). TORRES3/WEBLEILOES/DAN
 mantidos (padrão coerente de 2ª praça do leilão). ⚠️ `data_leilao` (início) de fontes cujo coletor
 não traz data pode ter vindo de vizinho também — não há como distinguir no banco; o fix vale daqui
 em diante e a revisita corrige o que for relido.
+
+**28. ✅ Pendentes técnicos (23/09, noite) — o que foi feito e o que ficou.**
+- `notificar-cliente.js`: devolvia `ok:true` com o Resend recusando, e a tela disparava sem ler a
+  resposta — mensagem no chat com cara de entregue, cliente sem e-mail. Agora a recusa volta com
+  motivo e a tela avisa quem respondeu.
+- **Painel de invariantes cego desde 22/09**: `qa_invariantes()` estourava o teto de 8s do
+  PostgREST no monitor (3,3s em repouso; 8-9s às 15h10 UTC com coleta rodando). Join de análises
+  por texto (seq scan de 76 mil), vigias de praça varrendo inativos (e inflando: 20 × 5 reais),
+  agregado de anexos do acervo inteiro. Agora 2,3s; monitor movido para **18h10 UTC**
+  (`qa_invariantes_cabe_no_teto_sob_carga.sql`). Conferir amanhã: `qa_invariantes_execucao.ok`.
+- **`resultado_leilao_atrasado` 1.850 = só veículos** (0 imóveis): SUPERBID 1.441 (fila da
+  apuração residencial, 400/dia), SODRÉ 399, MEGA 10. SODRÉ: recon mostrou que a search-lots é um
+  Elasticsearch repassado e mantém o lote encerrado por pouco tempo com `lot_status = "não
+  vendido"`; depois ele SOME do índice (os 399 já sumiram — não há como apurá-los; saem pela
+  retenção de 15 dias). A coleta diária da Sodré (imóveis e veículos) agora lê os encerrados e
+  grava rótulo explícito (`apurarEncerradosSodre`); 1ª rodada: 68 encerrados, 9 gravados.
+- Apuração SUPERBID só religa leilão encerrado há ≤ 30 dias (backlog antigo não volta à vitrine).
+- `estado_fora_do_padrao` 42 → ~26: 16 corrigidos (inferirUF + evidência textual); 1 Fiat Uno
+  como imóvel desligado. Restam ALBERTOMACEDOLEILOES (13, coletor não traz cidade nenhuma),
+  LEILAOBRASIL, GESTAO — ajuste de parser por site.
+- JOAOEMILIO "zerou": site ativo, vitrine de imóveis vazia, só leilões da FAB (diversos). Real.
+- Fila de espelho CEF (22.372 em 403): inerte (todos com 3 tentativas, fora da fila); espelhar
+  exigiria IP residencial e ~22 mil arquivos — decisão de custo do dono.
+- Não mexido: `pino_generico_como_rua` 81, `lote_sem_area_nem_matricula` 704 (lacuna de dado),
+  `geocode_sem_preco` (precisa da env `LOCATIONIQ_USD_POR_1000` na Vercel), bundle (teste visual).
