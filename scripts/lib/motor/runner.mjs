@@ -17,6 +17,7 @@ import { registrarConhecimento, qualidadeColeta } from '../conhecimento.mjs';
 import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
+import { inferirUF } from '../inferir-uf.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -309,6 +310,20 @@ export async function rodarFonte(cfg, opts) {
       if (exitCodeSeFalha) process.exitCode = 1;
       continue;
     }
+
+    // 23/09: UF vazia some de /leiloes — recupera a UF perdida só com prova do IBGE (mesma
+    // regra de salvarImoveis em scraper-puppeteer.mjs; ver lib/inferir-uf.mjs). Antes do
+    // dry-run, para a amostra já mostrar o que será gravado.
+    let ufRecuperadas = 0;
+    for (const r of prontos) {
+      if (/^[A-Za-z]{2}$/.test(String(r.estado || '').trim())) continue;
+      const x = inferirUF(r);
+      if (!x) continue;
+      r.estado = x.uf;
+      if (x.cidade && !String(r.cidade || '').trim()) r.cidade = x.cidade;
+      ufRecuperadas++;
+    }
+    if (ufRecuperadas) console.log(`[${tenant.fonte}] UF recuperada em ${ufRecuperadas} lote(s) (texto/cidade conferidos no IBGE).`);
 
     if (dryrun) {
       console.log(`[${tenant.fonte}] DRY-RUN amostra:`);

@@ -20,6 +20,7 @@ import { extrairDescricaoDoCorpo, decodificarEntidades } from '../api/_texto-imo
 import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
+import { inferirUF } from './lib/inferir-uf.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
@@ -139,6 +140,19 @@ async function salvarImoveis(imoveis, fonte) {
   // Inclui cidade estrangeira da rede Superbid via ehEstrangeiroPelaCidade — roda mesmo com
   // UF preenchida, porque o sufixo extraído pode coincidir com uma UF brasileira de verdade.
   const totalBruto = imoveis.length;
+  // 23/09: UF vazia some de /leiloes (invariante `estado_fora_do_padrao`, 96 ativos). Antes de
+  // gravar, recupera a UF que a extração perdeu — só com prova do IBGE (ver lib/inferir-uf.mjs).
+  // Roda ANTES do filtro de estrangeiro: UF recuperada do texto passa pela mesma guarda.
+  let ufRecuperadas = 0;
+  for (const im of imoveis) {
+    if (/^[A-Za-z]{2}$/.test(String(im.estado || '').trim())) continue;
+    const r = inferirUF(im);
+    if (!r) continue;
+    im.estado = r.uf;
+    if (r.cidade && !String(im.cidade || '').trim()) im.cidade = r.cidade;
+    ufRecuperadas++;
+  }
+  if (ufRecuperadas) console.log(`  [${fonte}] UF recuperada em ${ufRecuperadas} lote(s) (texto/cidade conferidos no IBGE).`);
   imoveis = imoveis.filter(im => ehBRouSemUF(im.estado) && !ehEstrangeiroPelaCidade(fonte, im.cidade));
   if (imoveis.length < totalBruto) console.log(`  [${fonte}] ${totalBruto - imoveis.length} lote(s) descartado(s) — fora do Brasil / estado inválido.`);
   // 17/09 (achado ao investigar o crash de hoje): este `return` era um `return;` sem valor —

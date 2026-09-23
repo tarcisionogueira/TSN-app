@@ -32261,8 +32261,11 @@ rodando: o Google Ads Script fez POST com 200 (5 em 7 dias) e reescreveu linhas 
 o `meta-insights-cron` até 20/09 08h10 — exatamente "último dia com gasto + 7" (a janela de
 reenvio). Depois disso não há linha nova porque **não há dia com impressão/gasto** para mandar.
 Duas fontes independentes concordando = anúncios fora do ar desde ~15/09 nos DOIS canais.
-**Ação do dono**: abrir Google Ads e Meta Ads e ver por que pararam (pausa, orçamento,
-faturamento, reprovação). Nada no HANDOFF registra pausa intencional depois de 13/09.
+**✅ EXPLICADO PELO DONO (23/09): a verba das campanhas não foi renovada — por isso pararam.
+É decisão dele, não defeito. Ele sinaliza quando retomar.** Até lá: `mkt_ingestao_atrasada`
+vai acusar os 2 canais até ~24/09 e depois apaga sozinho (a janela do vigia é 3–10 dias —
+canal parado há mais de 10 dias é tratado como decisão de mídia). NÃO investigar como bug,
+e não ler "zero cadastro pago" como falha de rastreio enquanto não houver verba no ar.
 
 **⚠️ Windsor.ai está devolvendo número FALSO** (forma #1, erro dentro de um 200): toda leitura
 volta `spend: 0` com a campanha chamada *"Uh-oh! These are not your real numbers: reads are
@@ -32296,3 +32299,21 @@ pessoais sadios do `api/doc-pessoal.js` (`pessoais/<uuid>/…`). Consulta amplia
 **Ainda aberto do ritual**: SUPERBID `falhou` com 0 em 22/09 14h39 (piso 722; 170 ativos) e
 JOAOEMILIO `zerou` — não investigados nesta sessão. `resultado_leilao_atrasado` subiu
 1441 → 1570 → 1746 ao longo do dia (a verificação das ~22h10 UTC já está agendada).
+
+**5. `estado_fora_do_padrao` 96 → 35 (e `sem_cidade` 43 → 35) — causa-raiz + backfill.**
+Lote sem UF some de /leiloes. 50 dos 96 eram SUPERBID em modo loja: `product.location` vem
+como OBJETO sem `state`/`uf`, mas o título traz "Campinas-SP" em todos. Criado
+`scripts/lib/inferir-uf.mjs` — recupera UF só com PROVA do IBGE (`api/_municipios.js`):
+"Cidade-UF"/"Cidade/UF" no título/endereço/descrição com o par conferido, ou cidade que existe
+em UMA só UF (Campo Grande AL/MS fica sem). Ligado nos DOIS caminhos de gravação:
+`salvarImoveis` (scraper-puppeteer) e `runner.mjs` (motor multi-tenant). Teste:
+`npm run testar:uf` (casos reais + negativos). Backfill com o MESMO helper, rodado em seco
+antes: 61 lotes (SUPERBID 50, LEILOTECH 4, BIASI 2, LEILAOBRASIL 2, SOLD 2, KRON 1).
+**Os 35 restantes não têm localização nenhuma no dado — não dá sem chute**: ALBERTOMACEDO
+(13, sem cidade/endereço, coordenada 0,0 ou um ponto genérico repetido — scraper não extrai
+local), LEILOTECH (6), LEILAOBRASIL (5, um deles é **"Fiat Uno Mille Economy"** — veículo no
+acervo de imóveis), HASTA (4 placeholders "Imóvel Hasta Leilões 107xx" de 29/08), NORDESTE (2,
+cidade corrompida "Capri Imbui Salvadorba" — parser grudando bairro+cidade+UF), GESTAO (2),
+SUPORTE (2), WEBLEILOES (1). Cada fonte é um parser a olhar — pauta futura.
+(Build: `node_modules` ausente no container; mudanças só em `scripts/`, validadas com
+`node --check` + `verificar:padroes` + teste.)
