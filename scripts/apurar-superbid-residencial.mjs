@@ -123,7 +123,15 @@ const dist = {};
 let gravados = 0, falhasGravacao = 0;
 for (const a of alvos) {
   const c = await consultar(a.ofertaId);
-  if (c.bruto) { console.log(`\n══════ ${a.ofertaId} (via=${c.via})\n${c.bruto.slice(0, 12000)}`); continue; }
+  if (c.bruto) {
+    // Vai para o BANCO (recon_dump), não para a tela: o JSON é longo demais para print.
+    try {
+      await sb('recon_dump', { method: 'POST', body: JSON.stringify({ origem: 'sbid_oferta', chave: String(a.ofertaId), conteudo: JSON.parse(c.bruto) }) });
+      console.log(`  ${a.ofertaId} → oferta completa gravada em recon_dump (via=${c.via})`);
+    } catch (e) { console.log(`  ${a.ofertaId} → falhou gravar dump: ${e.message}`); }
+    continue;
+  }
+  if (process.env.SBID_IDS && c.ok === false) { console.log(`  ${a.ofertaId} → não encontrada (${(c.erros || []).join(' | ') || 'nenhum searchType'})`); continue; }
   const res = classificar(c);
   dist[res] = (dist[res] || 0) + 1;
   console.log(`  ${a.tabela.padEnd(15)} ${a.ofertaId} → ${res.padEnd(14)} ${c.ok
