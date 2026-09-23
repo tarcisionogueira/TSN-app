@@ -268,7 +268,7 @@ export default function CaixaEmail() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                 {ativa.anexos.map((a, i) => a.id
                   ? <button key={i} onClick={() => baixarAnexo(ativa, a)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
-                  : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome} (indisponível)</span>)}
+                  : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome}{ativa.direcao === 'saida' ? '' : ' (indisponível)'}</span>)}
               </div>
             )}
 

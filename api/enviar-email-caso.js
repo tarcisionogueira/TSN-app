@@ -299,6 +299,23 @@ export default async function handler(req) {
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
   });
 
+  // Caixa de e-mail da equipe (/atendimento → E-mail → Enviados, 23/09): o envio feito do
+  // caso/lote também aparece lá, junto com o resto do que a equipe manda. Histórico, não
+  // envio — falha aqui só loga (o e-mail já saiu e `caso_emails_enviados` já auditou).
+  if (r.ok) {
+    try {
+      const rc = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+        direcao: 'saida', pasta: 'enviados', caixa: 'noreply@bidprobrasil.com.br',
+        de_email: 'noreply@bidprobrasil.com.br', de_nome: nomeRemetente,
+        para: [destinatarioEmail], cc: ccList,
+        assunto: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`.slice(0, 500),
+        texto: textoFinal, html, resend_email_id: r.id || null, lido: true, enviado_por: user.id,
+        anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
+      }) });
+      if (!rc.ok) console.error('[enviar-email-caso] registro na caixa HTTP', rc.status);
+    } catch (e) { console.error('[enviar-email-caso] registro na caixa falhou:', String(e?.message || e)); }
+  }
+
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
   // errado (que o Resend recusou) não pode virar cadastro permanente.
   if (r.ok && usouEmailManual) {
