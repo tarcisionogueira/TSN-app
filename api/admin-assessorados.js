@@ -55,6 +55,16 @@ export default async function handler(req) {
       role === 'admin' ? sbJson(`assessorado_designacao?cliente_id=in.(${clienteIds.join(',')})&select=cliente_id,membro_id`) : Promise.resolve([]),
     ]);
 
+    // Resultado do leilão de cada imóvel dos casos ainda sem arremate (23/09, dono): caso
+    // aberto cujo imóvel foi VENDIDO a outro não é "contratada" — o cliente não arrematou e não
+    // há mais o que arrematar (ex.: Rafael, CEF de 05/08 vendida, caso aberto em 07/08). Falha
+    // nesta leitura devolve [] e o caso volta a contar como contratada: erra para o lado de
+    // mostrar, nunca de esconder.
+    const idsSemArremate = [...new Set(casos.filter((c) => !c.arrematado_em && !c.posse_em && c.imovel_id).map((c) => c.imovel_id))];
+    const vendidos = new Set(idsSemArremate.length
+      ? (await sbJson(`imoveis_leilao?id=in.(${idsSemArremate.join(',')})&resultado_leilao=eq.vendido&select=id`)).map((i) => String(i.id))
+      : []);
+
     let nomeMembro = {};
     if (role === 'admin' && designacoes.length) {
       const membroIds = [...new Set(designacoes.map((d) => d.membro_id))];
@@ -75,7 +85,9 @@ export default async function handler(req) {
       //   contratada   = caso aberto ainda sem arremate (análise solicitada/pronta)
       //   em_andamento = arrematou, imissão de posse ainda não feita
       //   concluida    = posse registrada
-      const contratadas = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em).length;
+      //   (fora das três) caso sem arremate cujo imóvel foi vendido a terceiro — não conta.
+      const perdida = (c) => !c.arrematado_em && !c.posse_em && vendidos.has(String(c.imovel_id));
+      const contratadas = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em && !perdida(c)).length;
       const concluidas = casosCliente.filter((c) => c.posse_em).length;
       return {
         id: p.id, nome: p.nome, telefone: p.telefone,
@@ -83,6 +95,7 @@ export default async function handler(req) {
         casos: casosCliente.map((c) => ({
           id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
           arrematado_em: c.arrematado_em, posse_em: c.posse_em, juridico_status: c.juridico_status,
+          vendido_a_terceiro: perdida(c),
         })),
         equipe_designada: role === 'admin'
           ? designacoes.filter((d) => d.cliente_id === p.id).map((d) => ({ membro_id: d.membro_id, nome: nomeMembro[d.membro_id] || d.membro_id }))

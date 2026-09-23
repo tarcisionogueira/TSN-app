@@ -29,9 +29,9 @@ import { Users, ChevronRight, Settings } from 'lucide-react';
 // _assessoria.js) · CONCLUÍDA (posse registrada). Mais de uma EM ANDAMENTO ao mesmo tempo
 // ganha destaque laranja: pede atenção redobrada da equipe.
 const FASES = [
-  { k: 'contratadas', um: 'contratada', varios: 'contratadas', titulo: 'Contratadas', sub: 'aguardando arremate', cor: '#7c3aed', bg: '#f3e8ff' },
-  { k: 'em_andamento', um: 'em andamento', varios: 'em andamento', titulo: 'Em andamento', sub: 'arrematado, sem imissão de posse', cor: '#0D63DB', bg: '#eff6ff' },
-  { k: 'concluidas', um: 'concluída', varios: 'concluídas', titulo: 'Concluídas', sub: 'imissão de posse feita', cor: '#15803d', bg: '#f0fdf4' },
+  { k: 'contratadas', um: 'contratada', varios: 'contratadas', titulo: 'Contratadas', sub: 'contratou, ainda não arrematou', cor: '#7c3aed', bg: '#f3e8ff' },
+  { k: 'em_andamento', um: 'em andamento', varios: 'em andamento', titulo: 'Em andamento', sub: 'arrematou, sem imissão de posse', cor: '#0D63DB', bg: '#eff6ff' },
+  { k: 'concluidas', um: 'concluída', varios: 'concluídas', titulo: 'Concluídas', sub: 'registrado e com imissão de posse', cor: '#15803d', bg: '#f0fdf4' },
 ];
 function BadgesFases({ c }) {
   const presentes = FASES.filter((f) => (c[f.k] || 0) > 0);
