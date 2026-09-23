@@ -1993,9 +1993,20 @@ async function scraperLJUDVeiculos(browser) {
     // reconstruído do zero a cada rodada, os mesmos ~60 primeiros seriam visitados todo dia.
     // 20/09: cap dobrado (60→120), mesmo motivo do SUPERBID veículos — classificarPatio() é
     // conservador por desenho, então mais cobertura só aumenta veículos exibidos, nunca risco.
-    const detalhePorId = await visitarTextoDetalhe(browser, cards, {
+    // 23/09: 1 lote de CADA leilão é lido antes do rodízio. O leilão (1º número de
+    // /lote/<leilão>/<lote>) tem edital e comitente únicos — leilão de pátio municipal (Franca,
+    // Catanduva, Palestina: centenas de carros de R$ 76 a R$ 261) — e a regra de leilão abaixo
+    // só funciona se cada leilão tiver ao menos uma página lida.
+    const leilaoLJUD = (href) => (String(href || '').match(/\/lote\/(\d+)\//) || [])[1] || null;
+    const representantes = [...new Map(cards.map(c => [leilaoLJUD(c.href), c])).values()].filter(c => leilaoLJUD(c.href));
+    const detalhePorId = await visitarTextoDetalhe(browser, representantes, {
+      getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 80, label: 'LJUD veículos (1 por leilão)',
+    });
+    const jaLidos = new Set(detalhePorId.keys());
+    const rodizio = await visitarTextoDetalhe(browser, cards.filter(c => !jaLidos.has(idLoteLJUD(c.href))), {
       getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 120, label: 'LJUD veículos',
     });
+    for (const [k, v] of rodizio) detalhePorId.set(k, v);
     const seen = new Set();
     const veiculos = cards.map((c) => {
       const id = idLoteLJUD(c.href);
@@ -2053,6 +2064,28 @@ async function scraperLJUDVeiculos(browser) {
         atualizado_em: new Date().toISOString(),
       };
     }).filter(Boolean);
+    // REGRA DE LEILÃO (23/09, decisão do dono: "todos os veículos que estão em pátio"). Um
+    // leilão cujos lotes LIDOS hoje dizem todos "em pátio" (≥1 lido, nenhum lido ficou
+    // indefinido ou com sinal de executado) é leilão de pátio: os lotes ainda não lidos dele
+    // herdam 'confirmado'. Lote com sinal de executado nunca herda (é 'excluido' e nem é salvo).
+    const porLeilao = new Map();
+    for (const v of veiculos) {
+      const l = leilaoLJUD(v.link_lote); if (!l) continue;
+      const lido = detalhePorId.has(idLoteLJUD(v.link_lote));
+      const e = porLeilao.get(l) || { lidosConf: 0, lidosOutro: 0 };
+      if (lido) { if (v.status_patio === 'confirmado') e.lidosConf++; else e.lidosOutro++; }
+      porLeilao.set(l, e);
+    }
+    let herdados = 0;
+    for (const v of veiculos) {
+      const e = porLeilao.get(leilaoLJUD(v.link_lote));
+      if (v.status_patio === 'indefinido' && e && e.lidosConf > 0 && e.lidosOutro === 0) {
+        v.status_patio = 'confirmado';
+        v.status_patio_motivo = `leilão de pátio: ${e.lidosConf} lote(s) lido(s) do mesmo leilão confirmam pátio, nenhum contra`;
+        herdados++;
+      }
+    }
+    if (herdados) console.log(`    LJUD (veículos): ${herdados} lote(s) herdaram pátio do próprio leilão`);
     console.log(`    LJUD (veículos): ${veiculos.length} mapeados`);
     return veiculos;
   } catch (err) {
@@ -2564,6 +2597,30 @@ async function salvarVeiculos(registros, rotulo) {
   const descartados = registros.length - aptos.length;
   if (descartados) console.log(`    ${nome}: ${descartados} descartado(s) — bem ainda com o executado/devedor (status_patio='excluido')`);
   if (!aptos.length) { console.log(`    ${nome}: nada para salvar (tudo excluído).`); return 0; }
+  // PÁTIO NÃO ESQUECE (23/09). A leitura da página do lote (que é de onde sai o sinal de pátio)
+  // cobre ~120 lotes por rodada, em rodízio. O upsert gravava o status do DIA por cima: lote
+  // confirmado ontem e não relido hoje voltava a 'indefinido' e sumia da busca — a cobertura
+  // nunca acumulava (LJUD: 87 de 1.248 visíveis). Agora 'indefinido' ("não li hoje") não
+  // rebaixa um 'confirmado' já provado. Sinal de executado ('excluido') continua vencendo.
+  const fonteV = aptos[0]?.fonte;
+  if (fonteV) {
+    const anteriores = new Map();
+    let leituraOk = true;
+    for (let i = 0; i < aptos.length; i += 200) {
+      const ids = aptos.slice(i, i + 200).map(r => r.fonte_id).filter(Boolean);
+      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo').eq('fonte', fonteV).in('fonte_id', ids);
+      if (error) { leituraOk = false; console.log(`  ⚠️ ${nome}: não li o pátio anterior (${String(error.message).slice(0, 80)}) — status do dia vale sozinho`); break; }
+      for (const d of data || []) anteriores.set(d.fonte_id, d);
+    }
+    let mantidos = 0;
+    if (leituraOk) for (const r of aptos) {
+      const prev = anteriores.get(r.fonte_id);
+      if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado') {
+        r.status_patio = 'confirmado'; r.status_patio_motivo = prev.status_patio_motivo; mantidos++;
+      }
+    }
+    if (mantidos) console.log(`    ${nome}: ${mantidos} mantido(s) como 'confirmado' de rodadas anteriores (não relidos hoje)`);
+  }
   let salvos = 0;
   for (let i = 0; i < aptos.length; i += 200) {
     const lote = aptos.slice(i, i + 200);
