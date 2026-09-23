@@ -392,7 +392,13 @@ export function ehFracaoIdeal(imovel) {
 // vez na abertura em vez do fechamento. Corrigido puxando esta alternativa pra FORA do grupo
 // com `\b` compartilhado (mesmo padrão já usado pra m²/ha), com fronteira própria só no
 // fechamento — lá "rural"/"terra" terminam em letra ASCII, então funciona.
-const RE_SINAL_IMOVEL = /\b(im[óo]ve(l|is)|imobili[áa]ri[ao]s?|casas?|sobrados?|apartament\w*|apto(?:s(?!["']))?(?![a-z])|flats?|kitnets?|studios?|coberturas?|terrenos?|lotes?(?!\s*\d+\)|\s+de\s+(?!terrenos?\b|terras?\b))|loteament\w*|glebas?|ch[áa]caras?|s[íi]tios?|fazendas?|propriedade\s+rural|multipropriedade|galp(?:[ãa]o|[õo]es)s?|barrac(?:[ãa]o|[õo]es)s?|pr[ée]dios?|edif[íi]cios?|edifica[çc](?:[ãa]o|[õo]es)s?|hot(?:el|[ée]is)|posto\s+de\s+(combust[íi]vel|gasolina)|salas?\s*(?:comerciai?s?|n[ºo°.]|\d)|lojas?|com[eé]rcial|industrial|condom[íi]nios?|matr[íi]culas?|escrit[óo]rios?|boxe?s?\s*(?:de\s+garagem|n[ºo°.]?\s*\d|\d)|vaga\s+de\s+garagem|metros?\s+quadrados|hectares?)|m²|m2\b|\d\s*ha\b|[áa]rea\s+(rural|de\s+terra)\b/i;
+//
+// 22/09 (validando VIP/LEILAOBRASIL/LEILOTECH/ROCHALEILOES antes de ligar o filtro nelas):
+// "vaga de garagem" só casava no SINGULAR — um título real da FRAZAO ("Unidade... com 04
+// vagas de garagem") dava falso positivo de fora_do_acervo por causa só disso. Mesma classe
+// de bug do "sala"/"salas comerciais" (18/09): regex testado contra o singular, nunca contra
+// o plural que aparece quando o lote lista MAIS de uma vaga.
+const RE_SINAL_IMOVEL =/\b(im[óo]ve(l|is)|imobili[áa]ri[ao]s?|casas?|sobrados?|apartament\w*|apto(?:s(?!["']))?(?![a-z])|flats?|kitnets?|studios?|coberturas?|terrenos?|lotes?(?!\s*\d+\)|\s+de\s+(?!terrenos?\b|terras?\b))|loteament\w*|glebas?|ch[áa]caras?|s[íi]tios?|fazendas?|propriedade\s+rural|multipropriedade|galp(?:[ãa]o|[õo]es)s?|barrac(?:[ãa]o|[õo]es)s?|pr[ée]dios?|edif[íi]cios?|edifica[çc](?:[ãa]o|[õo]es)s?|hot(?:el|[ée]is)|posto\s+de\s+(combust[íi]vel|gasolina)|salas?\s*(?:comerciai?s?|n[ºo°.]|\d)|lojas?|com[eé]rcial|industrial|condom[íi]nios?|matr[íi]culas?|escrit[óo]rios?|boxe?s?\s*(?:de\s+garagem|n[ºo°.]?\s*\d|\d)|vagas?\s+de\s+garagem|metros?\s+quadrados|hectares?)|m²|m2\b|\d\s*ha\b|[áa]rea\s+(rural|de\s+terra)\b/i;
 const RE_SINAL_VEICULO = /\b(ve[íi]culos?|autom[óo]ve(l|is)|caminh[õo]es|caminh[ãa]o|caminhonetes?|carretas?|reboques?|semirreboques?|[ôo]nibus|motocicletas?|motonetas?|tratores?|trator|colheitadeiras?|retroescavadeiras?|empilhadeiras?|chassi|chevrolet|volkswagen|\bvw\b|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citro[ëe]n|scania|iveco|volvo|mercedes|kia|mitsubishi|suzuki|yamaha|kawasaki|jeep)\b|\b(19|20)\d{2}\/(19|20)\d{2}\b/i;
 
 export function ehForaDoAcervo(imovel) {
