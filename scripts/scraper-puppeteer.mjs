@@ -1387,7 +1387,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     const registros = pendentes.map((x) => {
       const detalhe = detalhePorId.get(x.id);
       const extra = detalhe?.texto || '';
-      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(extra ? `${x.textoCompleto} ${extra}` : x.textoCompleto);
+      const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatioSuperbid(x.base.raw, extra ? `${x.textoCompleto} ${extra}` : x.textoCompleto);
       return {
         ...x.base,
         anexos: x.base.anexos || detalhe?.anexos,
@@ -2310,8 +2310,24 @@ function classificarTipoVeiculo(texto) {
 // de ":" seguido de espaço (dois não-alfanuméricos não formam fronteira de palavra) — testado
 // ao vivo em 11/09 (dispatch 34594866661) e confirmado como o motivo de 50/50 ficarem
 // 'indefinido' mesmo com a frase presente em toda descrição real.
-const SINAL_PATIO = /\b(p[áa]tio|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b|bem encontra-se\s*:/i;
+const SINAL_PATIO = /\b(p[áa]tio|apreendid[oa]|recolhid[oa] ao dep[óo]sito|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b|bem encontra-se\s*:/i;
 const SINAL_EXECUTADO = /\b(n[ãa]o localizado|sujeito a busca e apreens[ãa]o|em poder do (executado|devedor)|posse do (executado|devedor)|aguardando localiza[çc][ãa]o|bem n[ãa]o recolhido)\b/i;
+// PÁTIO NA REDE SUPERBID (23/09, decisão do dono: "corporativo, prefeitura, extrajudicial ou
+// judicial que o veículo está apreendido/em pátio. troca de frota. todos os veículos que estão
+// em pátio"). 94% dos veículos SUPERBID (4.103 de 4.344) ficavam `indefinido` e sumiam da busca
+// — inclusive os apurados "sem lance". Na venda EXTRAJUDICIAL quem vende é o próprio dono do bem
+// (frota de prefeitura, empresa, pátio de trânsito): não existe executado, que é o único risco
+// que o filtro de pátio protege. Judicial continua exigindo sinal textual (apreendido/pátio).
+// A API marca judicial em `auction.modalityId === 4`, `auction.judicialPraca` e `product.judicial`.
+function ehJudicialSuperbid(of) {
+  const a = of?.auction || {};
+  return Number(a.modalityId) === 4 || (a.judicialPraca !== null && a.judicialPraca !== undefined) || !!of?.product?.judicial;
+}
+function classificarPatioSuperbid(of, texto) {
+  const c = classificarPatio(texto);
+  if (c.status !== 'indefinido' || ehJudicialSuperbid(of)) return c;
+  return { status: 'confirmado', motivo: 'venda extrajudicial pelo próprio dono do bem (frota/órgão/empresa) — não há executado' };
+}
 function classificarPatio(texto) {
   const t = String(texto || '');
   if (SINAL_EXECUTADO.test(t)) return { status: 'excluido', motivo: 'sinal textual de bem ainda não recolhido/apreendido' };
