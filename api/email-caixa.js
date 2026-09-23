@@ -59,7 +59,10 @@ export default async function handler(req) {
   let perfil;
   try { perfil = await ler1(`perfis?id=eq.${user.id}&select=role,funcao_equipe,nome`); }
   catch (e) { console.error('[email-caixa] perfil:', e.message); return json({ error: 'Não foi possível verificar seu acesso agora.' }, 500); }
-  if (!perfil || !(PAPEIS_CAIXA.includes(perfil.role) || PAPEIS_CAIXA.includes(perfil.funcao_equipe))) {
+  // Advogado (23/09): usa só a PRÓPRIA caixa pessoal — envia por ela, nunca pela comunicação.
+  const soPessoal = [perfil?.role, perfil?.funcao_equipe].includes('advogado')
+    && !(PAPEIS_CAIXA.includes(perfil?.role) || PAPEIS_CAIXA.includes(perfil?.funcao_equipe));
+  if (!perfil || !(soPessoal || PAPEIS_CAIXA.includes(perfil.role) || PAPEIS_CAIXA.includes(perfil.funcao_equipe))) {
     return json({ error: 'A caixa de e-mail é só da equipe.' }, 403);
   }
 
@@ -69,8 +72,11 @@ export default async function handler(req) {
   if (body?.acao === 'anexo') {
     const id = String(body?.id || ''), anexoId = String(body?.anexo_id || '');
     let msg;
-    try { msg = await ler1(`email_caixa?id=eq.${encodeURIComponent(id)}&select=direcao,resend_email_id,anexos`); }
+    try { msg = await ler1(`email_caixa?id=eq.${encodeURIComponent(id)}&select=direcao,resend_email_id,anexos,dono`); }
     catch (e) { console.error('[email-caixa] anexo:', e.message); return json({ error: 'Não foi possível ler a mensagem.' }, 500); }
+    // Mesma cerca da RLS (a chave aqui é de serviço): caixa pessoal só o dono; comunicação só
+    // quem tem acesso a ela (advogado não).
+    if (msg && (msg.dono ? msg.dono !== user.id : soPessoal)) return json({ error: 'Anexo não encontrado' }, 404);
     const key = process.env.RESEND_API_KEY;
     if (!key) return json({ error: 'Envio de e-mail não configurado' }, 503);
 
@@ -121,6 +127,7 @@ export default async function handler(req) {
 
   // 'pessoal' = o endereço da própria pessoa (equipe_email). Os demais são de COMUNICAÇÃO.
   let pessoal = null;
+  if (soPessoal && body?.acao === 'enviar') body.de = 'pessoal';
   if (body?.de === 'pessoal') {
     try { pessoal = await ler1(`equipe_email?user_id=eq.${user.id}&select=endereco`); }
     catch (e) { console.error('[email-caixa] equipe_email:', e.message); return json({ error: 'Não foi possível ler seu endereço da equipe.' }, 500); }
@@ -140,7 +147,8 @@ export default async function handler(req) {
   let original = null, chamado = null;
   if (body?.responder_a) {
     try {
-      original = await ler1(`email_caixa?id=eq.${encodeURIComponent(body.responder_a)}&select=id,de_email,de_nome,assunto,texto,message_id,referencias,chamado_id,criado_em`);
+      original = await ler1(`email_caixa?id=eq.${encodeURIComponent(body.responder_a)}&select=id,de_email,de_nome,assunto,texto,message_id,referencias,chamado_id,criado_em,dono`);
+      if (original && (original.dono ? original.dono !== user.id : soPessoal)) original = null; // mesma cerca da RLS
       if (original?.chamado_id) chamado = await ler1(`chamados?id=eq.${original.chamado_id}&select=id,email_token,canal`);
     } catch (e) { console.error('[email-caixa] original:', e.message); return json({ error: 'Não foi possível ler a mensagem original.' }, 500); }
     if (!original) return json({ error: 'Mensagem original não encontrada' }, 404);

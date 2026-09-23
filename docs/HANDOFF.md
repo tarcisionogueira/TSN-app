@@ -32427,3 +32427,21 @@ domínio chega ao webhook; a diferença é o roteamento:
   a resposta volta; filtro Todas / Minha caixa / Comunicação.
 - Novo membro da equipe ganha endereço: `insert into equipe_email (endereco, user_id) …`
   (admin). Endereços de comunicação são recusados pela CHECK da tabela.
+
+**14. Remetente corporativo automático + entregue/aberto na caixa (pedido do dono).**
+- `garantir_email_equipe()` + gatilho em `perfis`: quem vira equipe (admin/analista/consultor/
+  advogado) ganha `primeironome@bidprobrasil.com.br` (sem acento); colisão →
+  `primeironome.sobrenome@`; nome reservado (suporte…) → `nome.sobrenome@`; endereço existente
+  nunca muda. Testado em rollback (João/João/Suporte → joao@, joao.alvares@, suporte.silva@).
+- E-mail formal ao jurídico (`enviar-juridico-email.js`): **De** = endereço corporativo de quem
+  envia; **reply-to segue `juridico+<token>@`** (é o que faz o parecer cair no caso). Anexos
+  ganham extensão (helper `api/_anexo-nome.js`, compartilhado com o botão do caso). Envio
+  registrado nos Enviados de quem mandou.
+- Entregue/aberto: `email_caixa.entregue_em/aberto_em/clicado_em/entrega_status`, carimbados
+  pelo `resend-webhook.js` (mesmo evento que já alimentava `emails_log`) + backfill. Tela de
+  Enviados mostra "✓ Entregue · ainda não aberto" / "👁 Aberto dd/mm hh:mm" / bounce.
+  Ressalva: abertura depende de carregar imagem (Apple Mail pode marcar aberto sem leitura;
+  quem bloqueia imagem nunca aparece aberto).
+- Advogado: vê só a própria caixa pessoal e envia só por ela (tela + API + RLS); a ação de
+  anexo e o "responder" da API (chave de serviço) aplicam a mesma cerca da RLS.
+- E-mail de 14:28 à LEILOFY: **entregue 14:28:14, ainda não aberto** (checado 23/09).

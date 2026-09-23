@@ -108,6 +108,29 @@ export default async function handler(req, res) {
         if (casou) await supressao('emails_registrar_reclamacao');
       }
 
+      // CAIXA DE E-MAIL DA EQUIPE (23/09): o mesmo carimbo vai para `email_caixa`, onde a tela
+      // de Enviados mostra "entregue / aberto". Best-effort e independente do emails_log —
+      // envio antigo pode estar num e não no outro. Nunca derruba o webhook.
+      const carimboCaixa = tipo === 'email.delivered' ? [{ entregue_em: at, entrega_status: 'entregue' }, '&entregue_em=is.null']
+        : tipo === 'email.opened' ? [{ aberto_em: at }, '&aberto_em=is.null']
+        : tipo === 'email.clicked' ? [{ clicado_em: at }, '&clicado_em=is.null']
+        : tipo === 'email.bounced' ? [{ entrega_status: 'bounce' }, '']
+        : tipo === 'email.complained' ? [{ entrega_status: 'reclamacao' }, ''] : null;
+      if (carimboCaixa) {
+        for (const cand of cands) {
+          try {
+            const rc = await fetch(`${SB}/rest/v1/email_caixa?resend_email_id=eq.${encodeURIComponent(cand)}${carimboCaixa[1]}`, {
+              method: 'PATCH',
+              headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+              body: JSON.stringify(carimboCaixa[0]), signal: AbortSignal.timeout(4000),
+            });
+            if (!rc.ok) { console.error('[resend-webhook] caixa HTTP', rc.status); break; }
+            const l = await rc.json().catch(() => []);
+            if (Array.isArray(l) && l.length) break;
+          } catch (e) { console.error('[resend-webhook] caixa:', String(e?.message || e)); break; }
+        }
+      }
+
       // NÃO ACHOU A LINHA: registra as CHAVES do payload em vez de sumir em silêncio.
       // Só as chaves e o tamanho — nunca o conteúdo, que traz endereço de cliente. Com isso,
       // o PRÓXIMO clique não casado responde qual campo usar, sem esperar outra semana.

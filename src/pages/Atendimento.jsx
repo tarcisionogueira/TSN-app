@@ -259,7 +259,8 @@ export default function Atendimento() {
       (c.titulo || '').toLowerCase().includes(buscaLower);
   });
 
-  const podeCaixa = papelEquipe && papelAtendimento !== 'advogado';
+  // Advogado vê só a PRÓPRIA caixa pessoal (RLS) e envia só por ela — a de comunicação é da equipe.
+  const podeCaixa = papelEquipe;
   const seletorModo = podeCaixa && (
     <div style={{ display: 'flex', gap: 6 }}>
       {[['chamados', 'Chamados', MessageCircle], ['email', 'E-mail', Mail]].map(([k, l, Icon]) => (
@@ -275,7 +276,7 @@ export default function Atendimento() {
     return (
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', display: 'grid', gap: 16 }}>
         {seletorModo}
-        <CaixaEmail />
+        <CaixaEmail soPessoal={papelAtendimento === 'advogado'} />
       </div>
     );
   }

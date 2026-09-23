@@ -10,6 +10,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { comExtensao } from './_anexo-nome.js';
 import { urlDocumento } from './_storage.js';
 import { addDiasUteis } from './_dias-uteis.js';
 
@@ -153,13 +154,24 @@ export default async function handler(req) {
     <p style="color:#64748b;font-size:12px;margin-top:18px">BidPro Brasil · Jurídico · Ref. ${esc(refCurto)}</p>
   </div>`;
 
-  const attachments = (anexos || []).filter(a => a.url).map(a => ({ filename: a.nome || 'documento', path: a.url }));
+  const attachments = (anexos || []).filter(a => a.url).map(a => ({ filename: comExtensao(a.nome, a.url), path: a.url }));
+
+  // REMETENTE (23/09, decisão do dono): sai pelo endereço CORPORATIVO de quem envia
+  // (equipe_email — tarcisio@, joao@…). O reply-to continua `juridico+<token>@`: é ele que
+  // faz o parecer do advogado cair sozinho no caso. Se o advogado responder ao "De" em vez do
+  // reply-to, a resposta cai na caixa pessoal do remetente — visível, nunca perdida.
+  let enderecoDe = null;
+  const rPes = await sb(`equipe_email?user_id=eq.${user.id}&select=endereco&limit=1`);
+  if (rPes.ok) enderecoDe = ((await rPes.json().catch(() => []))[0] || {}).endereco || null;
+  else console.error('[enviar-juridico-email] equipe_email HTTP', rPes.status, '— sai pelo endereço do caso');
 
   const r = await enviarEmail({
     // Remetente REPLYÁVEL (não noreply): é o próprio endereço do caso, ingerido
     // por /api/inbound-juridico. Assim o advogado responde ao e-mail normalmente
     // (ao "de" ou ao reply-to, ambos caem no mesmo endereço e são registrados).
-    from: `BidPro Brasil Jurídico <juridico+${token}@${INBOUND_DOMAIN}>`,
+    from: enderecoDe
+      ? `${perfil.nome || 'Equipe'} (BidPro Brasil Jurídico) <${enderecoDe}>`
+      : `BidPro Brasil Jurídico <juridico+${token}@${INBOUND_DOMAIN}>`,
     to: toList,
     cc: ccList,
     replyTo,
@@ -168,6 +180,24 @@ export default async function handler(req) {
     attachments,
   });
   if (!r.ok) return json({ error: 'Falha no envio do e-mail: ' + r.error }, 502);
+
+  // Caixa da equipe (23/09): o envio formal ao jurídico aparece nos Enviados de quem enviou,
+  // com o sinal de entregue/aberto do webhook. Histórico: falha aqui só loga.
+  try {
+    const rc = await fetch(`${SUPABASE_URL}/rest/v1/email_caixa`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        direcao: 'saida', pasta: 'enviados', lido: true, enviado_por: user.id, dono: enderecoDe ? user.id : null,
+        caixa: enderecoDe || `juridico@${INBOUND_DOMAIN}`, de_email: enderecoDe || `juridico+${token}@${INBOUND_DOMAIN}`,
+        de_nome: perfil.nome || null, para: toList, cc: ccList,
+        assunto: `Análise documental para confirmação de viabilidade — Caso ${refCurto}`,
+        html, resend_email_id: r.id || null,
+        anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
+      }),
+    });
+    if (!rc.ok) console.error('[enviar-juridico-email] registro na caixa HTTP', rc.status);
+  } catch (e) { console.error('[enviar-juridico-email] registro na caixa:', String(e?.message || e)); }
 
   // Atualiza o caso
   await sb(`casos?id=eq.${encodeURIComponent(caso_id)}`, {
@@ -185,7 +215,7 @@ export default async function handler(req) {
   });
   // Auditoria
   await sb('juridico_emails', { method: 'POST', prefer: 'return=minimal',
-    body: { caso_id, direcao: 'saida', message_id: r.id, de: `juridico+${token}@${INBOUND_DOMAIN}`, para: [...toList, ...ccList.map(c => `cc:${c}`)].join(', '), assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
+    body: { caso_id, direcao: 'saida', message_id: r.id, de: enderecoDe || `juridico+${token}@${INBOUND_DOMAIN}`, para: [...toList, ...ccList.map(c => `cc:${c}`)].join(', '), assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
 
   // Chat interno (visível a analista/admin) amarrado ao caso
   let [chamado] = await (await sb(`chamados?caso_id=eq.${encodeURIComponent(caso_id)}&segmento=eq.interno&select=id&limit=1`)).json();

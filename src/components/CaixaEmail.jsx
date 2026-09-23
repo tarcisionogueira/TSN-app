@@ -22,9 +22,22 @@ const PASTAS = [
   { k: 'lixeira', label: 'Lixeira', Icon: Trash2 },
 ];
 const CAIXAS = ['suporte', 'contato', 'privacidade'];
-const COLS_LISTA = 'id,direcao,pasta,caixa,dono,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,spam_motivo,anexos,resposta_de';
+const COLS_LISTA = 'id,direcao,pasta,caixa,dono,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,spam_motivo,anexos,resposta_de,entregue_em,aberto_em,clicado_em,entrega_status';
 // Filtro de origem (23/09): caixa PESSOAL (endereço da própria pessoa, privada) × COMUNICAÇÃO
 // (contato@/suporte@/privacidade@ — da equipe toda).
+// Sinal de ENTREGA/ABERTURA de e-mail enviado (webhook do Resend → email_caixa). "Aberto"
+// depende de o destinatário carregar imagens: é sinal forte, mas "não aberto" não prova nada.
+const fmtHora = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function StatusEnvio({ m, completo }) {
+  if (m.direcao !== 'saida') return null;
+  const [txt, cor, dica] = m.entrega_status === 'bounce' ? ['✗ Não entregue (bounce)', '#b91c1c', 'O servidor do destinatário recusou.']
+    : m.entrega_status === 'reclamacao' ? ['⚠ Marcado como spam pelo destinatário', '#b91c1c', '']
+    : m.clicado_em ? [`👁 Aberto · clicou ${fmtHora(m.clicado_em)}`, '#15803d', '']
+    : m.aberto_em ? [`👁 Aberto ${fmtHora(m.aberto_em)}`, '#15803d', '']
+    : m.entregue_em ? ['✓ Entregue · ainda não aberto', '#0D63DB', 'Quem bloqueia imagens no e-mail nunca aparece como aberto.']
+    : ['… Enviado · aguardando confirmação de entrega', '#94a3b8', ''];
+  return <span title={dica} style={{ fontSize: completo ? 12.5 : 11, fontWeight: 700, color: cor }}>{txt}</span>;
+}
 const ORIGENS = [['todas', 'Todas'], ['minha', 'Minha caixa'], ['comunicacao', 'Comunicação']];
 
 const fmtData = (iso) => {
@@ -43,7 +56,7 @@ async function lerJsonSeguro(res) {
   catch (e) { return { error: `Resposta inesperada do servidor (HTTP ${res.status}): ${e.message}` }; }
 }
 
-export default function CaixaEmail() {
+export default function CaixaEmail({ soPessoal = false }) {
   const [pasta, setPasta] = useState('entrada');
   const [lista, setLista] = useState([]);
   const [naoLidos, setNaoLidos] = useState({});
@@ -237,7 +250,7 @@ export default function CaixaEmail() {
               <div style={{ fontSize: 11.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
                 {m.chamado_id && <MessageCircle size={11} title="Virou chamado" />}
                 {(m.anexos || []).length > 0 && <Paperclip size={11} />}
-                {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : String(m.texto || '').slice(0, 90)}
+                {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : m.direcao === 'saida' ? <StatusEnvio m={m} /> : String(m.texto || '').slice(0, 90)}
               </div>
             </div>
           );
@@ -269,6 +282,7 @@ export default function CaixaEmail() {
               <div><b>Para:</b> {(ativa.para || []).join(', ') || ativa.caixa}</div>
               {(ativa.cc || []).length > 0 && <div><b>Cc:</b> {ativa.cc.join(', ')}</div>}
               <div><b>Data:</b> {new Date(ativa.criado_em).toLocaleString('pt-BR')}</div>
+              {ativa.direcao === 'saida' && <div><b>Status:</b> <StatusEnvio m={ativa} completo /></div>}
               {ativa.resposta_de && <div style={{ color: '#7c3aed', fontWeight: 700 }}><Reply size={12} /> Resposta a um e-mail enviado pela equipe (veja em Enviados).</div>}
               {ativa.chamado_id && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta mensagem está num chamado da fila — responder daqui também registra no chamado.</div>}
               {ativa.spam_motivo && <div style={{ color: '#dc2626', fontWeight: 700 }}><ShieldAlert size={12} /> Spam: {ativa.spam_motivo}</div>}
@@ -315,7 +329,7 @@ export default function CaixaEmail() {
             {[
               ['De', <select key="de" value={compor.de} onChange={e => setCompor({ ...compor, de: e.target.value })} style={campo}>
                 {meuEndereco && <option value="pessoal">{meuEndereco} (você — respostas voltam para a sua caixa)</option>}
-                {CAIXAS.map(c => <option key={c} value={c}>{c}@bidprobrasil.com.br (comunicação — respostas vão para a fila de atendimento)</option>)}
+                {!soPessoal && CAIXAS.map(c => <option key={c} value={c}>{c}@bidprobrasil.com.br (comunicação — respostas vão para a fila de atendimento)</option>)}
               </select>],
               ['Para', <input key="para" value={compor.para} onChange={e => setCompor({ ...compor, para: e.target.value })} placeholder="email@exemplo.com (vários: separe por vírgula)" style={campo} />],
               ['Cc', <input key="cc" value={compor.cc} onChange={e => setCompor({ ...compor, cc: e.target.value })} placeholder="opcional" style={campo} />],
