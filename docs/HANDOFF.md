@@ -32575,7 +32575,7 @@ em pátio (nenhum contra) passa `confirmado` aos não lidos (motivo "leilão de 
 Run 35889208096: LJUD visíveis 87 → **566** (114 por texto + 452 herdados; Franca, Palestina,
 Catanduva 98983, Cacoal…). Regra segurou onde devia: Araras (4 confirmados + 1 lido sem sinal)
 e Catanduva 98984 / Campo Grande (lote lido sem sinal) NÃO herdaram — 682 seguem ocultos até
-a leitura confirmar. Herança com só 1 lote lido existe (18 lotes) — evidência mais fraca; vigiar.
+a leitura confirmar. Herança com 1 lote lido (18 lotes) desfeita a pedido do dono: agora exige ≥2 lidos, e a herança é recalculada a cada rodada (não preservada).
 
 **25. ✅ Leilões negativos sumiam da vitrine (imóveis e veículos).** A regra de negócio (sem lance /
 indeterminado fica ATIVO 15 dias após a apuração, para proposta de compra) existia só em

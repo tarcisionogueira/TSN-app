@@ -2071,9 +2071,11 @@ async function scraperLJUDVeiculos(browser) {
       };
     }).filter(Boolean);
     // REGRA DE LEILÃO (23/09, decisão do dono: "todos os veículos que estão em pátio"). Um
-    // leilão cujos lotes LIDOS hoje dizem todos "em pátio" (≥1 lido, nenhum lido ficou
-    // indefinido ou com sinal de executado) é leilão de pátio: os lotes ainda não lidos dele
-    // herdam 'confirmado'. Lote com sinal de executado nunca herda (é 'excluido' e nem é salvo).
+    // leilão cujos lotes LIDOS hoje dizem todos "em pátio" (≥2 lidos — decisão do dono: 1 só é
+    // evidência fraca —, nenhum lido ficou indefinido ou com sinal de executado) é leilão de
+    // pátio: os lotes ainda não lidos dele herdam 'confirmado'. Lote com sinal de executado
+    // nunca herda (é 'excluido' e nem é salvo). A herança é RECALCULADA a cada rodada
+    // (salvarVeiculos não a preserva), para não congelar uma conclusão que a leitura desmentiu.
     const porLeilao = new Map();
     for (const v of veiculos) {
       const l = leilaoLJUD(v.link_lote); if (!l) continue;
@@ -2085,7 +2087,7 @@ async function scraperLJUDVeiculos(browser) {
     let herdados = 0;
     for (const v of veiculos) {
       const e = porLeilao.get(leilaoLJUD(v.link_lote));
-      if (v.status_patio === 'indefinido' && e && e.lidosConf > 0 && e.lidosOutro === 0) {
+      if (v.status_patio === 'indefinido' && e && e.lidosConf >= 2 && e.lidosOutro === 0) {
         v.status_patio = 'confirmado';
         v.status_patio_motivo = `leilão de pátio: ${e.lidosConf} lote(s) lido(s) do mesmo leilão confirmam pátio, nenhum contra`;
         herdados++;
@@ -2625,7 +2627,9 @@ async function salvarVeiculos(registros, rotulo) {
     let mantidos = 0;
     if (leituraOk) for (const r of aptos) {
       const prev = anteriores.get(r.fonte_id);
-      if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado') {
+      // Só preserva o que foi LIDO no lote (sinal textual/regra da fonte). Herança de leilão
+      // ('leilão de pátio: …') é recalculada na rodada — preservá-la a congelaria.
+      if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado' && !String(prev.status_patio_motivo || '').startsWith('leilão de pátio')) {
         r.status_patio = 'confirmado'; r.status_patio_motivo = prev.status_patio_motivo; mantidos++;
       }
     }
