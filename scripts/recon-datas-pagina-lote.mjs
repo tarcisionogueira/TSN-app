@@ -16,11 +16,33 @@ const RE = /(\d{2})\/(\d{2})\/(\d{2,4})(?:[^0-9]{0,12}(\d{1,2})[:h](\d{2}))?/g;
 for (const url of URLS) {
   console.log(`\n${'═'.repeat(90)}\n${url}`);
   let html = '';
+  let status = 0;
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR' }, signal: AbortSignal.timeout(30000) });
-    html = await r.text();
+    html = await r.text(); status = r.status;
     console.log(`HTTP ${r.status} · ${html.length} bytes`);
-  } catch (e) { console.log(`falhou: ${e.message}`); continue; }
+  } catch (e) { console.log(`fetch falhou: ${e.message}`); }
+  // 403/Cloudflare: cai para Chromium (como o coletor `dom`), e registra o JSON que a página pedir
+  // — a cidade pode vir estruturada de uma API do próprio site.
+  if (status === 403 || !html) {
+    const puppeteer = (await import('puppeteer')).default;
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    try {
+      const page = await (await browser.createBrowserContext()).newPage();
+      await page.setUserAgent(UA);
+      page.on('response', async (res) => {
+        const ct = res.headers()['content-type'] || '';
+        if (!/json/i.test(ct) || !/albertomacedo|api\./i.test(res.url())) return;
+        const t = await res.text().catch(() => '');
+        const achados = [...t.matchAll(/"(cidade|city|municipio|uf|estado|state|endereco|address|localizacao|bairro)"\s*:\s*("[^"]{0,80}"|null|\{)/gi)].slice(0, 12).map(m => `${m[1]}=${m[2]}`);
+        console.log(`  [json] ${res.url().slice(0, 120)} (${t.length}b) ${achados.join(' · ')}`);
+      });
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }).catch(e => console.log('  goto:', e.message));
+      await new Promise(r => setTimeout(r, 3000));
+      html = await page.content();
+      console.log(`  Chromium · ${html.length} bytes`);
+    } finally { await browser.close(); }
+  }
   console.log('extrairDatasLeilao →', JSON.stringify(extrairDatasLeilao(html)));
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   for (const m of html.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi)) {
