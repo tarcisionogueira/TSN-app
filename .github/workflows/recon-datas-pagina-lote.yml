@@ -1,0 +1,25 @@
+name: Recon — datas lidas da página do lote (não grava)
+
+# Só leitura. Reproduz o extrator genérico de datas (extrairDatasLeilao) sobre a página real
+# do lote e mostra de onde vem cada data. Ver scripts/recon-datas-pagina-lote.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs de lote (vírgula)'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Recon
+        env:
+          URLS: ${{ inputs.urls }}
+        run: node scripts/recon-datas-pagina-lote.mjs
