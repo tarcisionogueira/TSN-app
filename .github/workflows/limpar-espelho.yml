@@ -1,0 +1,27 @@
+name: Limpar espelho de documentos (expirados + cópias idênticas)
+
+# scripts/limpar-espelho.mjs — mesma regra que o limpar-documentos-cron roda todo dia; este
+# workflow existe para a faxina do acumulado. EM SECO por padrão (aplicar=0).
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = apaga; 0 = só mostra'
+        default: '0'
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Limpar espelho
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ESPELHO_APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/limpar-espelho.mjs

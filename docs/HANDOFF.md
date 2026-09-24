@@ -33405,3 +33405,18 @@ Rodada 1: 170 suprimidos, 0 ambíguos; rodada 2 idempotente.
 da página. Agora lê a descrição pelo extrator rotulado; 5 casas TORRES3 corrigidas no banco.
 Não tratado (pequeno, ambíguo): LJUD agregando lote de GIORDANO/GRUPOLANCE (19 pares, sem área para
 confirmar) e LEILAOBRASIL+VLANCE (muitos-para-muitos).
+
+### 🗄️ Armazenamento `documentos`: 64 GB, ~49 GB desnecessários (24/09, noite) — AGUARDA EXECUÇÃO
+Medido: 59 GB em `espelho/` (43.474 arquivos, só 15.829 conteúdos distintos). **33 GB** são cópias de
+imóvel fora do acervo SEM cliente; **15 GB** cópias idênticas (o mesmo edital salvo 1× por lote);
+0,5 GB órfãos em `casos/`. Causa: a retenção (`anexos_expirados`) só enxerga `imovel_anexos`, e
+~41 mil arquivos do espelho nunca entraram lá — nada os apagava.
+Pronto e NÃO executado (a trava de segurança da sessão bloqueou exclusão em massa; decisão do dono):
+`espelho_limpeza_candidatos()` (motivo por arquivo; protege imóvel com análise/caso/arremate/relatório
+— 19 relatórios guardam o caminho no JSON), `storage_paths_em_uso()` (trava para arquivo
+compartilhado), `api/_limpeza-espelho.js` (reaponta ANTES de apagar) e o workflow manual
+`limpar-espelho.yml` (em seco por padrão; `aplicar=1` apaga). Ordem: primeiro
+`limpar-storage-duplicados.yml` (casos/), depois `limpar-espelho.yml`.
+**Falta também (depende do mesmo OK):** ligar a mesma limpeza no `limpar-documentos-cron` (senão o
+espelho volta a acumular) com a trava `storage_paths_em_uso` antes de cada DELETE, e só então fazer
+o `espelhar-docs-cron` reaproveitar a cópia existente de um mesmo `url_origem` em vez de baixar de novo.
