@@ -1,7 +1,8 @@
 name: Enriquecer FIPE (veículos)
 
 # Valor FIPE de referência por veículo, via API pública gratuita (500 req/dia sem token).
-# Lote pequeno por execução para caber com folga na cota — ver scripts/enriquecer-fipe.mjs.
+# O lote vai até a cota diária acabar (trava atômica `registrar_uso_fipe`) — respostas ficam
+# em `fipe_cache` por 25 dias e não gastam cota de novo. Ver scripts/enriquecer-fipe.mjs.
 on:
   schedule:
     - cron: '0 8 * * *'   # 5h BRT
@@ -10,7 +11,7 @@ on:
       limite:
         description: 'Máx. de veículos por execução'
         required: false
-        default: '60'
+        default: '600'
 
 jobs:
   enriquecer-fipe:
@@ -29,5 +30,5 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          FIPE_LIMITE: ${{ github.event.inputs.limite || '60' }}
+          FIPE_LIMITE: ${{ github.event.inputs.limite || '600' }}
         run: node scripts/enriquecer-fipe.mjs

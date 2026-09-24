@@ -33048,3 +33048,16 @@ no título (30% sem `marca`). Avaliação/desconto: só ~2% dos lotes informam �
 aviso de cobertura. ⚠️ FIPE enriquecida em só 178 de 7.580 (`fipe_status` nulo) — pendência.
 **Imóveis:** colunas dos filtros ~100% preenchidas; o defeito era de OPÇÃO — faltava
 "Venda Online" (11.778 imóveis, 51%), e "Venda Direta" devolvia 45. Adicionada.
+
+### 🚗 FIPE dos veículos — de 178 para o acervo inteiro (24/09, tarde)
+Causa dupla: (1) o cron exigia `marca`+`modelo`+`ano` e 93% não tinha `modelo` (SUPERBID/LJUD
+só têm o título) → só ~530 elegíveis; (2) a cota de 450/dia ESGOTAVA todo dia com ~45 veículos:
+as listas de marcas/modelos eram rebaixadas a cada execução e "CG" casava ~40 modelos Honda,
+1 chamada de `/years` para cada. Conserto em `api/_fipe.js`: `marcaModeloDoTitulo()` (lista
+fechada de marcas; só em memória, não grava `marca`/`modelo`), `acharCandidatosModelo` estreita
+pelas palavras seguintes ("CG 160 FAN" → 1 candidato) e separa "CG150"/"YBR125K"; cache
+persistente `fipe_cache` (path → resposta, 25 dias, só service_role; resposta de erro não entra).
+Cron: elegível = ativo + tipo com FIPE + ano; ordem por `data_leilao`; lote até a cota acabar
+(`FIPE_LIMITE` 600); log mostra acertos de cache. `api/veiculo-fipe.js` usa a mesma régua e cache.
+Novo status `sem_dados` (título sem marca/modelo) — retenta em 90 dias como `sem_match`.
+Teste: `npm run testar:fipe` (API simulada). A API da FIPE não é alcançável deste sandbox.

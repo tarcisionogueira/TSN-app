@@ -11,7 +11,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 import { getUser, getUserRoleById } from './_auth.js';
-import { criarFipeFetch, buscarFipe, fipeEstaVelho } from './_fipe.js';
+import { criarFipeFetch, buscarFipe, fipeEstaVelho, RETENTAR_OK_DIAS } from './_fipe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -34,23 +34,39 @@ export default async function handler(req, res) {
   const id = params.get('id');
   if (!id) { res.status(400).json({ error: 'id obrigatório' }); return; }
 
-  const [v] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}&select=id,marca,modelo,ano_fabricacao,ano_modelo,tipo_veiculo,valor_fipe,fipe_codigo,fipe_mes_referencia,fipe_status,fipe_atualizado_em`)).json();
+  const [v] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}&select=id,titulo,marca,modelo,ano_fabricacao,ano_modelo,tipo_veiculo,valor_fipe,fipe_codigo,fipe_mes_referencia,fipe_status,fipe_atualizado_em`)).json();
   if (!v) { res.status(404).json({ error: 'Veículo não encontrado' }); return; }
 
   if (!fipeEstaVelho(v.fipe_status, v.fipe_atualizado_em)) {
     res.status(200).json({ valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, de_cache: true });
     return;
   }
-  if (!v.marca || !v.modelo || !v.ano_fabricacao) {
+  // Sem marca/modelo na fonte, `buscarFipe` tenta pelo título (24/09) e devolve 'sem_dados'
+  // quando nem o título tem — sem gastar cota.
+  if (!v.ano_fabricacao) {
     res.status(200).json({ valor_fipe: null, fipe_status: 'sem_dados', de_cache: false });
     return;
   }
+  // Mesmo cache de respostas do cron (`fipe_cache`, 25 dias) — acerto não gasta cota.
+  const validoDesde = new Date(Date.now() - RETENTAR_OK_DIAS * 86400000).toISOString();
+  const cacheFipe = {
+    async ler(path) {
+      const r = await sb(`fipe_cache?path=eq.${encodeURIComponent(path)}&obtido_em=gte.${validoDesde}&select=resposta`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const [linha] = await r.json();
+      return linha?.resposta;
+    },
+    async gravar(path, resposta) {
+      const r = await sb('fipe_cache', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ path, resposta, obtido_em: new Date().toISOString() }) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    },
+  };
 
   const fipeGet = criarFipeFetch(async () => {
     const r = await sb('rpc/registrar_uso_fipe', { method: 'POST', body: JSON.stringify({ p_teto: 450 }) });
     if (!r.ok) return { permitido: false };
     return r.json();
-  });
+  }, cacheFipe);
   const resultado = await buscarFipe(fipeGet, v);
 
   if (resultado.status === 'sem_cota') {

@@ -10,14 +10,20 @@
  * NUNCA roda no fluxo de captura — a FIPE só atualiza a tabela 1x/mês, não faz sentido chamar
  * a cada scrape.
  *
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: FIPE_LIMITE (padrão 60).
+ * 24/09: (a) marca/modelo vêm do TÍTULO quando a fonte não separa (93% do acervo não tinha
+ * `modelo` e nunca entrava aqui); (b) respostas da API ficam em `fipe_cache` por 25 dias — acerto
+ * não gasta cota; (c) o lote vai até a cota acabar, não para em 60. Prioriza leilão mais próximo.
+ *
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: FIPE_LIMITE (padrão 600).
  */
 import { createClient } from '@supabase/supabase-js';
 import { criarFipeFetch, buscarFipe, RETENTAR_SEM_MATCH_DIAS, RETENTAR_OK_DIAS } from '../api/_fipe.js';
 
+const TIPOS_COM_FIPE = ['carro', 'moto', 'caminhao', 'van_utilitario', 'onibus'];
+
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
-const LIMITE = parseInt(process.env.FIPE_LIMITE || '60', 10);
+const LIMITE = parseInt(process.env.FIPE_LIMITE || '600', 10);
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB, KEY);
@@ -36,24 +42,39 @@ async function main() {
   const desde25 = new Date(Date.now() - RETENTAR_OK_DIAS * 86400000).toISOString();
   const { data: candidatos, error: errBusca } = await supabase
     .from('veiculos_leilao')
-    .select('id, marca, modelo, ano_fabricacao, ano_modelo, tipo_veiculo, fipe_status, fipe_atualizado_em')
+    .select('id, titulo, marca, modelo, ano_fabricacao, ano_modelo, tipo_veiculo, fipe_status, fipe_atualizado_em')
     .eq('ativo', true)
-    .not('marca', 'is', null)
-    .not('modelo', 'is', null)
+    .in('tipo_veiculo', TIPOS_COM_FIPE)
     .not('ano_fabricacao', 'is', null)
-    .or(`fipe_atualizado_em.is.null,and(fipe_status.eq.sem_match,fipe_atualizado_em.lt.${desde90}),and(fipe_status.neq.sem_match,fipe_atualizado_em.lt.${desde25})`)
+    .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde25})`)
+    .order('data_leilao', { ascending: true, nullsFirst: false })
     .limit(LIMITE);
   if (errBusca) { console.error('Erro ao buscar candidatos:', errBusca.message); process.exit(1); }
   if (!candidatos?.length) { console.log('Nada pendente.'); return; }
   console.log(`${candidatos.length} veículo(s) candidato(s) a enriquecer.`);
 
+  const validoDesde = new Date(Date.now() - RETENTAR_OK_DIAS * 86400000).toISOString();
+  let acertos = 0, novos = 0;
+  const cacheFipe = {
+    async ler(path) {
+      const { data, error } = await supabase.from('fipe_cache').select('resposta').eq('path', path).gte('obtido_em', validoDesde).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (data) acertos++;
+      return data?.resposta;
+    },
+    async gravar(path, resposta) {
+      const { error } = await supabase.from('fipe_cache').upsert({ path, resposta, obtido_em: new Date().toISOString() }).select('path');
+      if (error) throw new Error(error.message);
+      novos++;
+    },
+  };
   const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: 450 }).then(r => {
     if (r.error) throw new Error(r.error.message);
     return r.data;
-  }));
+  }), cacheFipe);
   const cache = new Map(); // marcas/modelos por categoria — reaproveitado por todo o lote
 
-  let ok = 0, aproximado = 0, semMatch = 0, erro = 0, semCota = 0;
+  let ok = 0, aproximado = 0, semMatch = 0, semDados = 0, erro = 0, semCota = 0;
   for (const v of candidatos) {
     const resultado = await buscarFipe(fipeGet, v, cache);
     if (resultado.status === 'sem_cota') {
@@ -71,10 +92,13 @@ async function main() {
     } else {
       const gravou = await gravar(v.id, { fipe_status: resultado.status, fipe_atualizado_em: agora });
       if (!gravou) { erro++; continue; }
-      resultado.status === 'sem_match' ? semMatch++ : erro++;
+      if (resultado.status === 'sem_match') semMatch++;
+      else if (resultado.status === 'sem_dados') semDados++;
+      else erro++;
     }
   }
-  console.log(`Concluído: ${ok} ok, ${aproximado} aproximado, ${semMatch} sem_match, ${erro} erro, ${semCota ? 'parado por cota' : 'cota ok'}.`);
+  console.log(`Concluído: ${ok} ok, ${aproximado} aproximado, ${semMatch} sem_match, ${semDados} sem_dados (título sem marca/modelo), ${erro} erro, ${semCota ? 'parado por cota' : 'cota ok'}.`);
+  console.log(`Cache: ${acertos} resposta(s) reaproveitada(s) sem gastar cota, ${novos} nova(s) guardada(s).`);
 }
 
 main();

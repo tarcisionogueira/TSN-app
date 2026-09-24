@@ -68,10 +68,76 @@ export function acharMarca(nossaMarca, marcas, indice) {
 
 // Modelo: só a PRIMEIRA PALAVRA, comparada por IGUALDADE. Retorna todos os candidatos (pode
 // ser mais de um: a FIPE lista cada motorização/câmbio como um "modelo" separado).
+//
+// Estreitamento (24/09): "CG" casa ~40 modelos da Honda e cada um custa 1 chamada de `/years`
+// — era isso que queimava as 450/dia em ~45 veículos. Quando o nosso modelo tem mais palavras
+// ("CG 160 FAN"), ficam só os candidatos com MAIS palavras em comum; empate mantém todos.
+// Se a 1ª palavra não casa e é letra+número colados ("YBR150", "CG150"), tenta a parte em letras.
 export function acharCandidatosModelo(nossoModelo, modelos) {
-  const alvo = primeiraPalavra(nossoModelo);
+  let alvo = primeiraPalavra(nossoModelo);
   if (!alvo || alvo.length < 2) return [];
-  return modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  let cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  let palavras = normalizar(nossoModelo).split(' ').slice(1, 4);
+  const colado = alvo.match(/^([a-z]{2,})(\d{2,4})[a-z]?$/);
+  if (!cands.length && colado) {
+    alvo = colado[1];
+    palavras = [colado[2], ...palavras];
+    cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  }
+  if (cands.length < 2 || !palavras.length) return cands;
+  const pontos = (m) => { const ws = new Set(normalizar(m.name || m.nome || '').split(' ')); return palavras.filter(p => ws.has(p)).length; };
+  const melhor = Math.max(...cands.map(pontos));
+  return melhor > 0 ? cands.filter(m => pontos(m) === melhor) : cands;
+}
+
+// ─── MARCA/MODELO PELO TÍTULO (24/09) ─────────────────────────────────────────────────────
+// 93% do acervo ativo vinha sem `modelo` (SUPERBID 6.688, LJUD 1.248) e o cron exigia
+// marca+modelo+ano — ou seja, só ~530 veículos podiam ter FIPE, nunca os outros 7 mil. O
+// título quase sempre tem os dois: "HONDA CG 160 FAN 2021 2022", "VW/GOL CLI – 96/96 – Franca",
+// "Marca: FORD / Modelo: KA SE", "BIZ 125 ES - HONDA, 2007/2008". Só entra marca de uma lista
+// fechada (nada de "primeira palavra do título"), e a saída é só EM MEMÓRIA — não grava
+// `marca`/`modelo`, porque dado inferido não pode se passar por dado da fonte.
+const MARCA_ALIAS = {
+  vw: 'volkswagen', volks: 'volkswagen', volkswagen: 'volkswagen', gm: 'chevrolet', gmc: 'chevrolet',
+  chevrolet: 'chevrolet', chev: 'chevrolet', fiat: 'fiat', ford: 'ford', renault: 'renault',
+  hyundai: 'hyundai', toyota: 'toyota', honda: 'honda', yamaha: 'yamaha', nissan: 'nissan',
+  peugeot: 'peugeot', citroen: 'citroen', jeep: 'jeep', kia: 'kia', mitsubishi: 'mitsubishi',
+  mmc: 'mitsubishi', suzuki: 'suzuki', mercedes: 'mercedes-benz', audi: 'audi', bmw: 'bmw',
+  volvo: 'volvo', scania: 'scania', iveco: 'iveco', chery: 'chery', caoa: 'caoa chery', jac: 'jac',
+  lifan: 'lifan', byd: 'byd', dafra: 'dafra', shineray: 'shineray', kawasaki: 'kawasaki',
+  harley: 'harley-davidson', triumph: 'triumph', ducati: 'ducati', haojue: 'haojue', bajaj: 'bajaj',
+  ktm: 'ktm', troller: 'troller', ssangyong: 'ssangyong', dodge: 'dodge', ram: 'ram',
+  chrysler: 'chrysler', subaru: 'subaru', land: 'land rover', jta: 'suzuki', kasinski: 'kasinski',
+  sundown: 'sundown', traxx: 'traxx', agrale: 'agrale', effa: 'effa', jaguar: 'jaguar', porsche: 'porsche',
+};
+// palavra que não é modelo (prefixo de categoria, condição, rótulo) — pulada ao procurar o modelo
+const NAO_MODELO = new Set(['i', 'imp', 'importado', 'sucata', 'para', 'prensa', 'motocicleta', 'motoneta',
+  'moto', 'automovel', 'veiculo', 'veiculos', 'lote', 'marca', 'modelo', 'benz', 'rover', 'davidson', 'em', 'leilao', 'de']);
+
+export function marcaModeloDoTitulo(titulo, marcaConhecida = null) {
+  const toks = normalizar(titulo).split(' ').filter(Boolean);
+  const alvoMarca = marcaConhecida ? normalizar(marcaConhecida).split(' ')[0] : null;
+  const ehModelo = (t) => t && !NAO_MODELO.has(t) && !MARCA_ALIAS[t] && !/^(19|20)\d{2}$/.test(t) && /[a-z0-9]/.test(t) && !/^\d{1,2}$/.test(t);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (!(MARCA_ALIAS[t] || (alvoMarca && t === alvoMarca))) continue;
+    if (t === 'land' && toks[i + 1] !== 'rover') continue;
+    const marca = marcaConhecida || MARCA_ALIAS[t];
+    // modelo DEPOIS da marca (o comum) …
+    const depois = [];
+    for (let j = i + 1; j < toks.length && depois.length < 3; j++) {
+      if (/^(19|20)\d{2}$/.test(toks[j])) break;       // ano encerra o modelo
+      if (!depois.length && !ehModelo(toks[j])) continue;
+      if (depois.length && (MARCA_ALIAS[toks[j]] || NAO_MODELO.has(toks[j]))) break;
+      depois.push(toks[j]);
+    }
+    if (depois.length) return { marca, modelo: depois.join(' ') };
+    // … ou ANTES dela ("BIZ 125 ES - HONDA", "YBR125K- YAMAHA")
+    const antes = toks.slice(0, i).filter(ehModelo);
+    if (antes.length) return { marca, modelo: antes.slice(0, 3).join(' ') };
+    return null;
+  }
+  return null;
 }
 
 export function anoBate(nomeAno, anoFabricacao, anoModelo) {
@@ -97,16 +163,31 @@ export class ErroFipeSemCota extends Error {
  * (`reservar()` lançou/devolveu algo inesperado) NUNCA vira "permitido" por omissão — não
  * consegui checar não é o mesmo que "pode gastar" (mesmo princípio do `verificar:schema`).
  */
-export function criarFipeFetch(reservar) {
+// `cache` (opcional, 24/09): { ler(path) → resposta|undefined, gravar(path, resposta) }. A FIPE
+// muda 1x/mês e as listas de marcas/modelos/anos quase nunca — sem cache persistente o cron
+// rebaixava as MESMAS listas todo dia e gastava a cota nelas. Acerto de cache não consome cota.
+export function criarFipeFetch(reservar, cache = null) {
   return async function fipeGet(path) {
+    if (cache) {
+      try { const hit = await cache.ler(path); if (hit !== undefined && hit !== null) return hit; }
+      catch (e) { console.log(`  ⚠️ cache FIPE (leitura ${path}) falhou: ${String(e.message).slice(0, 80)} — segue pela API`); }
+    }
     let decisao;
     try { decisao = await reservar(); }
     catch (e) { console.log(`  ⚠️ reserva de cota FIPE falhou: ${String(e.message).slice(0, 100)}`); decisao = { permitido: false }; }
     if (!decisao?.permitido) throw new ErroFipeSemCota();
     const r = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' } });
-    if (!r.ok) return null;
-    try { return await r.json(); }
+    if (!r.ok) { console.log(`  ⚠️ FIPE ${path}: HTTP ${r.status}`); return null; }
+    let j;
+    try { j = await r.json(); }
     catch (e) { console.log(`  ⚠️ FIPE ${path}: resposta não é JSON válido (${String(e.message).slice(0, 80)})`); return null; }
+    // só resposta ÚTIL vai pro cache: objeto de erro ({error}) ou vazio seria servido por 25 dias
+    const util = Array.isArray(j) ? j.length > 0 : (j && typeof j === 'object' && !j.error);
+    if (cache && util) {
+      try { await cache.gravar(path, j); }
+      catch (e) { console.log(`  ⚠️ cache FIPE (gravação ${path}) falhou: ${String(e.message).slice(0, 80)}`); }
+    }
+    return j;
   };
 }
 
@@ -119,7 +200,11 @@ export function criarFipeFetch(reservar) {
  * cron para o lote, endpoint on-demand devolve "tente mais tarde").
  */
 export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
-  const { marca, modelo, ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
+  const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
+  const doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
+  const marca = veiculo.marca || doTitulo?.marca;
+  const modelo = veiculo.modelo || doTitulo?.modelo;
+  if (!marca || !modelo || !anoFabricacao) return { status: 'sem_dados' };
   try {
     let achado = null;
     for (const categoria of ordemCategorias(tipoVeiculo)) {
