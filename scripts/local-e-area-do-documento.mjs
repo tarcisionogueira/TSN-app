@@ -20,6 +20,7 @@
  * EM SECO por padrão (forma nº 10); DOC_APLICAR=1 grava. DOC_ALVO=veiculos|imoveis|ambos.
  * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; DOC_LIMITE (padrão 800).
  */
+import { createHash } from 'node:crypto';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
@@ -78,12 +79,18 @@ async function textoDe(fonteDoc) {
 // ───────────────────────── VEÍCULOS: cidade do pátio ─────────────────────────
 const UFS = 'AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO';
 const RE_CIDADE_UF = new RegExp(`([A-Za-zÀ-ÿ'’. ]{3,45}?)\\s*(?:/|-|–|,)\\s*(${UFS})\\b`, 'g');
-const RE_GATILHO = /p[áa]tio|retirad[ao]|visita[çc][ãa]o|localizad[oa]s?|dep[óo]sito|guardad[oa]s?|encontra(?:m)?-se/gi;
+// 1º seco (24/09) com gatilhos soltos ("retirada", "depósito", "encontra-se", "localizado"):
+// casou "auditório … localizado em Contagem", "depósito JUDICIAL" e "retirada de Restrição
+// Financeira". Agora só frase que fala do LUGAR DO BEM.
+const RE_GATILHO = /p[áa]tio|localiza[çc][ãa]o\s+do(?:s)?\s+(?:bem|bens|ve[íi]culos?|lotes?)|local\s+(?:de|da|para)\s+(?:retirada|visita[çc][ãa]o|vistoria)|retirada\s+d[oa]s?\s+(?:bem|bens|ve[íi]culos?|lotes?)|visita[çc][ãa]o\s+(?:d[oa]s?\s+(?:bem|bens|ve[íi]culos?|lotes?)|no|na|em|ser[áa])|encontra(?:m)?-se\s+(?:no|na|em|depositad|localizad|guardad|estacionad)|(?:depositad|guardad|estacionad|removid)[oa]s?\s+(?:no|na|em)\b/gi;
+// Leilão de frota MUNICIPAL: o veículo está no município que vende (garagem da prefeitura).
+const RE_PREFEITURA = /(?:prefeitura\s+municipal|munic[íi]pio)\s+de\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'’ ]{2,40})\s*(?:[/–-]\s*|,\s*(?:estado\s+de\s+\S+\s*)?)?(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)?\b/gi;
 
 function cidadesNoTexto(texto, ibge) {
   const achadas = new Map(); // chave norm|uf → { cidade, uf, trecho }
   for (const g of texto.matchAll(RE_GATILHO)) {
-    const janela = texto.slice(Math.max(0, g.index - 60), g.index + 320);
+    const janela = texto.slice(Math.max(0, g.index - 40), g.index + 260);
+    if (/audit[óo]rio|sede\s+d[oa]\s+leiloeir|escrit[óo]rio/i.test(janela)) continue; // endereço do LEILOEIRO, não do bem
     for (const m of janela.matchAll(RE_CIDADE_UF)) {
       const uf = m[2];
       // "Rua X, 170, Cidade Industrial, Contagem" → tenta os sufixos de 1 a 5 palavras e fica
@@ -100,6 +107,22 @@ function cidadesNoTexto(texto, ibge) {
   return [...achadas.values()];
 }
 
+function prefeituraDoTexto(texto, ibge, ufPadrao) {
+  const achadas = new Map();
+  for (const m of texto.matchAll(RE_PREFEITURA)) {
+    const palavras = m[1].trim().split(/\s+/);
+    for (let k = Math.min(5, palavras.length); k >= 1; k--) {
+      const cand = palavras.slice(0, k).join(' ');
+      // Sem UF escrita: só aceita nome de município que existe em UMA UF só (homônimos ficam fora).
+      const ufs = m[2] ? [m[2].toUpperCase()] : ufPadrao ? [ufPadrao] : UFS.split('|');
+      const achou = ufs.filter((u) => ibge.has(`${norm(cand)}|${u}`));
+      const uf = achou.length === 1 ? achou[0] : null;
+      if (uf) { achadas.set(`${norm(cand)}|${uf}`, { cidade: cand, uf, trecho: texto.slice(m.index, m.index + 160) }); break; }
+    }
+  }
+  return [...achadas.values()];
+}
+
 const tituloCidade = (s) => s.toLowerCase().replace(/(^|\s)(\S)/g, (_, a, b) => a + b.toUpperCase())
   .replace(/\s(De|Da|Do|Das|Dos|E)\s/g, (m) => m.toLowerCase());
 
@@ -110,13 +133,16 @@ async function veiculos(ibge) {
     const docs = (Array.isArray(v.anexos) ? v.anexos : []).filter((a) => /^https?:\/\/.+\.pdf(\?|$)/i.test(a?.url || ''))
       .sort((a, b) => (a.tipo === 'edital' ? -1 : 0) - (b.tipo === 'edital' ? -1 : 0)).slice(0, 3);
     if (!docs.length) { motivos.sem_pdf = (motivos.sem_pdf || 0) + 1; continue; }
-    const todasCidades = new Map(); let lidos = 0, ultimoErro = null;
+    const todasCidades = new Map(); let lidos = 0, ultimoErro = null, prefeitura = null;
     for (const d of docs) {
       const r = await textoDe({ chave: d.url, url: d.url });
       if (r.erro) { ultimoErro = r.erro; continue; }
       lidos++;
       for (const c of cidadesNoTexto(r.texto, ibge)) todasCidades.set(`${norm(c.cidade)}|${c.uf}`, c);
+      // Frota municipal: só vale sem frase de pátio e com UMA prefeitura no documento.
+      if (!todasCidades.size) { const pf = prefeituraDoTexto(r.texto, ibge, null); if (pf.length === 1) prefeitura = pf[0]; else if (pf.length > 1) prefeitura = false; }
     }
+    if (!todasCidades.size && prefeitura) todasCidades.set('pf', { ...prefeitura, trecho: `[prefeitura] ${prefeitura.trecho}` });
     const lista = [...todasCidades.values()];
     const motivo = !lidos ? `nao_lido:${ultimoErro}` : lista.length === 0 ? 'sem_cidade_no_doc' : lista.length > 1 ? 'varias_cidades' : null;
     if (motivo) {
@@ -149,10 +175,16 @@ function areasRotuladas(texto) {
   return out.filter((a) => a.v >= 10 && a.v <= 500_000_000);
 }
 
-function areaDoDocumento(texto, tipoImovel) {
+function areaDoDocumento(texto, tipoImovel, ehEdital) {
+  // Edital que cita MAIS DE UMA matrícula é de vários bens: a área única rotulada nele é de UM
+  // deles, não necessariamente deste (1º seco: o mesmo 59,55 m² caiu em terreno, rural e apto).
+  if (ehEdital) {
+    const mats = new Set([...texto.matchAll(/matr[íi]cula(?:s)?\s*(?:sob\s+)?(?:n[º°o.]*\s*)?(\d[\d.]{2,})/gi)].map((m) => m[1].replace(/\D/g, '')));
+    if (mats.size > 1) return { area: 0, motivo: 'edital_varias_matriculas' };
+  }
   const lista = areasRotuladas(texto);
   const distintos = (c) => [...new Set(lista.filter((a) => a.c === c).map((a) => a.v))];
-  const ordem = /terreno|rural|lote|gleba|fazenda|sitio|chacara/i.test(tipoImovel || '') ? ['terreno', 'total'] : ['construida'];
+  const ordem = /terreno|rural/i.test(tipoImovel || '') ? ['terreno', 'total'] : ['construida'];
   for (const c of ordem) {
     const d = distintos(c);
     if (d.length === 1) return { area: d[0], rotulo: c, trecho: texto.slice(Math.max(0, lista.find((a) => a.v === d[0]).i - 40), lista.find((a) => a.v === d[0]).i + 90) };
@@ -168,19 +200,27 @@ async function imoveis() {
   const alvo = (await todas('imoveis_leilao?ativo=eq.true&or=(area_m2.is.null,area_m2.eq.0)&tipo=neq.veiculo&select=id,fonte,tipo,titulo&order=id'))
     .filter((i) => porImovel.has(i.id)).slice(0, LIMITE);
   const motivos = {}; let achou = 0, gravou = 0;
+  const usoDoTexto = new Map(); const candidatos = [];
   for (const im of alvo) {
     const docs = porImovel.get(im.id).sort((a, b) => (a.tipo === 'matricula' ? -1 : 1) - (b.tipo === 'matricula' ? -1 : 1)).slice(0, 3);
     let res = null, ultimo = 'nao_lido';
     for (const d of docs) {
       const r = await textoDe({ chave: `sb:${d.storage_path}`, storage: d.storage_path });
       if (r.erro) { ultimo = `nao_lido`; continue; }
-      const a = areaDoDocumento(r.texto, `${im.tipo} ${im.titulo || ''}`);
-      if (a.area) { res = { ...a, doc: d.tipo }; break; }
+      const h = createHash('sha1').update(r.texto).digest('hex');
+      (usoDoTexto.get(h) || usoDoTexto.set(h, new Set()).get(h)).add(im.id);
+      const a = areaDoDocumento(r.texto, im.tipo, d.tipo === 'edital');
+      if (a.area) { res = { ...a, doc: d.tipo, h }; break; }
       ultimo = a.motivo;
     }
     const titulo = String(im.titulo || '');
     if (res && /\b(apartamento|apto|sala|kitnet|flat)\b/i.test(titulo) && res.area > 1000) { res = null; ultimo = 'apto_area_condominio'; }
     if (!res) { motivos[ultimo] = (motivos[ultimo] || 0) + 1; continue; }
+    candidatos.push({ im, res });
+  }
+  // O MESMO texto lido para mais de um imóvel é documento do LEILÃO, não do bem → recusa todos.
+  for (const { im, res } of candidatos) {
+    if (usoDoTexto.get(res.h).size > 1) { motivos.documento_compartilhado = (motivos.documento_compartilhado || 0) + 1; continue; }
     achou++;
     if (!APLICAR) { if (achou <= 40) console.log(`  [seco] ${im.fonte}/${im.tipo} ${res.area} m² (${res.rotulo}, ${res.doc})  «${res.trecho.replace(/\s+/g, ' ')}»`); continue; }
     const up = await sb(`imoveis_leilao?id=eq.${im.id}&or=(area_m2.is.null,area_m2.eq.0)`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ area_m2: res.area }) })
