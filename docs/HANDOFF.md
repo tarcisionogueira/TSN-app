@@ -33182,6 +33182,13 @@ ar. ZUK 20 sem lance + 9 com lance, mas **128 ainda sem conteúdo**: não era re
 Vercel e a subcota `geral` esgotou de novo → caminho é o runner residencial ler ZUK (como SUPERBID).
 Fila 770 → 700. JELEILOES não entrou nesta rodada (nenhum `cancelado` ainda).
 
+**Check-in 18:35 UTC:** painel de invariantes da rodada 18:10 **ok=true** (10,5 s; 22 e 23/09 tinham
+falhado) — o statement_timeout de 30 s resolveu. Datas BIASI/LJUD: o filtro novo funciona
+(BIASI 2, LJUD 2, WEBLEILOES 1 enriquecidos hoje), mas o volume é mínimo — 384 de 388 BIASI e 666
+de 933 LJUD seguem sem data. Causa: `enriquecer-datas-cron` usa `fetchLote` com a MESMA subcota
+diária `geral` do Bright Data (25/dia) que a apuração esgota. Próximo passo: levar BIASI/LJUD/
+GRUPOLANCE (e ZUK da apuração) para o runner residencial, que é grátis.
+
 ### 🌐 Domínio da masterclass `lucreantesdearrematar.com.br` (24/09, aula de 15/10)
 Dono contratou o domínio; a aula semanal de quarta ACABOU (`leilao-ao-vivo` segue `ativo=false`).
 - Vercel: domínio + `www` (308 → raiz) no projeto tsn-app, verificados.
