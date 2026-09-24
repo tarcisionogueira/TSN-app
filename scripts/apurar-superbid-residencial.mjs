@@ -54,10 +54,15 @@ if (process.env.SBID_IDS) {
   alvos = process.env.SBID_IDS.split(',').map(s => s.trim()).filter(Boolean).map(id => ({ tabela: '-', id: null, ofertaId: id }));
 } else {
   const filtroRes = `or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}`;
+  // FILA JUSTA (24/09): nunca tentado primeiro. Antes (só data desc) os indeterminados recentes
+  // voltavam em toda rodada e os lotes um pouco mais velhos nunca eram alcançados — 1.708
+  // veículos SUPERBID vencidos em 15 dias estavam sem nenhuma apuração.
+  const ordem = 'resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst';
   const meio = Math.ceil(LIMITE / 2);
   const [imo, vei] = await Promise.all([
-    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=data_fim.desc&limit=${meio}`),
-    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=data_leilao.desc&limit=${LIMITE - meio}`),
+    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
+    // indeterminado COM lance registrado já é "Com lance" (condicional) — não gasta vaga retentando
+    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&teve_lance=is.false&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=${ordem},data_leilao.desc&limit=${LIMITE - meio}`),
   ]);
   for (const r of imo) { const o = idDaUrl(r.url_lote); if (o) alvos.push({ tabela: 'imoveis_leilao', ...r, ofertaId: o }); }
   for (const r of vei) { const o = idDaUrl(r.link_lote); if (o) alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); }

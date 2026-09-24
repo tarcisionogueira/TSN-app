@@ -33087,3 +33087,18 @@ fica de fora: pode ser condicional não detectada). Faixa das propostas (50–70
 do redator (`api/_redator-proposta.js`), que aprende com os envios do dono.
 Bônus: `VeiculoDetalhe.jsx` não selecionava `resultado_leilao` — o selo e a reapuração ao abrir
 nunca rodavam na tela do veículo.
+
+### 🔎 Apuração pós-leilão: a fila repetia os mesmos 250 (24/09, tarde)
+Medido nos últimos 15 dias: imóveis — PESTANA 555/555, ZUK 270/310, VIP 75/76, RJLEILOES 71/71…
+"não apurado"; veículos — SUPERBID 1.708/2.084, SODRE 433/437. Log do cron das 12:00: 250
+candidatos = 85 indeterminados retentados + 79 páginas sem conteúdo (não contam tentativa) + os
+de hoje → **os mesmos ~250 voltavam toda rodada**; 517 imóveis na janela com 0 tentativas e 620
+que SAÍRAM da janela de 3 dias sem nenhuma. Conserto (`apurar-resultado-leilao-cron.js`): fila
+`tentativas asc, resultado_apurado_em asc nulls first` (sem conteúdo carimba a hora → rodízio),
+janela 3 → 10 dias (retenção é 15), 4 páginas em paralelo. Simulado: a próxima rodada pega 250
+nunca tentados (fila 1.043). `apurar-superbid-residencial.mjs`: mesma fila e não retenta
+indeterminado com `teve_lance` (já é "Com lance").
+**Pendentes (qualidade, não fila):** ZUK 131 indeterminados × 0 sem_lance e FRAZAO 51 × 4 — o
+regex de `_resultado-leilao.js` não reconhece o "sem lance" dessas páginas (precisa recon da
+página viva; o sandbox não alcança os sites). PESTANA (URL é a agenda, não o lote) e SODRE
+(Nuxt, precisa navegador) seguem fora — candidatos ao runner residencial com Puppeteer.

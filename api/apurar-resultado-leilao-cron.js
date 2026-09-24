@@ -11,7 +11,7 @@
  * individualmente — mesma infraestrutura de fetch+Bright Data de `enriquecer-lote.js` — porque
  * o resultado do leilão só aparece ali, não na busca geral.
  *
- * JANELA: dos ÚLTIMOS 3 DIAS (não só hoje) — cobre o lote de hoje E dá 2 dias de reforço para
+ * JANELA: dos ÚLTIMOS 10 DIAS desde 24/09 (era 3; não só hoje) — cobre o lote de hoje E dá 2 dias de reforço para
  * quem falhou (fonte fora do ar, sem cota do Bright Data naquele dia). Teto de tentativas evita
  * martelar para sempre uma página que nunca resolve.
  *
@@ -95,6 +95,9 @@ const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE'
 // HASTAPUBLICA, LANCEJA, LEFFA, AGOSTINHO, CERULI, RIGOLONLEILOES, ROCHALEILOES,
 // SIMONLEILOES, FRANCOLEILOES — todas com 100% "não apurado", zero tentativas). Excluir na
 // própria query devolve essas vagas pra quem tem URL de lote real e pode ser lido.
+// FILA JUSTA (24/09): nunca tentado primeiro; entre iguais, o que foi olhado há mais tempo.
+const ORDEM_FILA = 'resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst';
+
 const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL].join(',')})`;
 
 // Apura um LOTE de candidatos (imóvel ou veículo — mesma forma mínima: id, url do lote,
@@ -104,9 +107,14 @@ const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL]
 // SUPERBID no backlog, a sub-cota diária do Web Unlocker (25/dia, compartilhada com outros 2
 // crons) nunca daria conta. Imóveis já ficaram saudáveis com o fix de ordenação/filtro de
 // ativo (21/09) e continuam só nas cotas normais — sem motivo pra gastar o proxy ISP ali.
+// 24/09: 4 páginas ao mesmo tempo (era 1 por vez, até 9 s cada) — mesma fila, mesmo orçamento.
+const PARALELO = 4;
+
 async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxyIsp = false) {
   let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, cortado = false;
-  for (const c of candidatos) {
+  const fila = [...candidatos];
+  const trabalhador = async () => { while (fila.length) {
+    const c = fila.shift();
     if (Date.now() - T0 > orcamentoRestante) { cortado = true; break; }
     const tentativas = (Number(c.resultado_apuracao_tentativas) || 0) + 1;
     if (!c.alvo || !/^https?:\/\//.test(c.alvo)) {
@@ -121,9 +129,14 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
     // ramo de "sem conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
     try { ({ html } = await fetchLote(c.alvo, { proposito: 'geral', tentarProxyIsp })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
     if (!html) {
-      // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa —
-      // a janela de 3 dias já cobre o reforço, e martelar sem ter respondido nada não ensina.
+      // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa,
+      // mas CARIMBA a hora (24/09). Sem isso o lote voltava ao topo da fila em toda rodada e,
+      // somado aos indeterminados retentados, os mesmos ~250 ocupavam o lote inteiro: medido
+      // em 24/09, 517 imóveis na janela com ZERO tentativas e 620 que saíram dela sem nenhuma.
+      // A fila agora ordena por tentativas e por esta hora — rodízio, ninguém fica para trás.
       semConteudo++;
+      await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(() => {}); // padrao-ok: carimbo de rodízio; falhar só repete o lote na próxima rodada
       continue;
     }
     const achado = apurarResultadoDoTexto(html);
@@ -141,7 +154,8 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
     // na retenção de 15 dias de `desativar_leiloes_encerrados()`. Vendido continua desligado.
     if (c.religarSeNaoVendido && patch.resultado_leilao !== 'vendido') { patch.ativo = true; patch.suprimido_motivo = null; }
     await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
-  }
+  } };
+  await Promise.all(Array.from({ length: PARALELO }, trabalhador));
   return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
 }
 
@@ -150,7 +164,10 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
   const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const desde = new Date(Date.now() - 3 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  // JANELA 10 dias (24/09; era 3): a retenção mostra o lote vencido por 15 dias, e com 3 o que
+  // não coube na rodada saía da fila sem nunca ser olhado.
+  const JANELA_DIAS = 10;
+  const desde = new Date(Date.now() - JANELA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const T0 = Date.now();
 
   // Interruptor no banco (`app_config.brightdata_isp_proxy_ativo`), sem redeploy — pedido do
@@ -196,7 +213,7 @@ export default async function handler(req, res) {
   // realizados, 50 ativos, 0 apurados. A retenção de 15 dias de 22/09 protegia só o que JÁ
   // tinha sido apurado. Agora entram também os desligados POR PRAÇA VENCIDA (não os
   // "sumiu_da_fonte": esses a fonte tirou do ar) — e o não-vendido é religado (apurarLote).
-  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=data_fim.desc&limit=${LOTE_TAMANHO}`);
+  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -209,13 +226,13 @@ export default async function handler(req, res) {
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
-  const desdeISO = new Date(Date.now() - 3 * 86400000).toISOString();
+  const desdeISO = new Date(Date.now() - JANELA_DIAS * 86400000).toISOString();
   const agoraISO = new Date().toISOString();
   // Mesma correção de ordem do bloco de imóveis acima: DESC prioriza o que venceu HOJE
   // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
   // esgote o orçamento antes de chegar no lote de hoje. Mesma reabertura de 'indeterminado'
   // do bloco de imóveis acima (22/09).
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=data_leilao.desc&limit=${LOTE_TAMANHO}`);
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=${ORDEM_FILA},data_leilao.desc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
