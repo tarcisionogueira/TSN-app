@@ -12,6 +12,7 @@
  * nos outros campos).
  */
 import { extrairGenerico } from '../lib/scraper-core.mjs';
+import { RE_IMG_DESCARTA } from '../lib/dom-parse-util.mjs';
 
 let falhas = 0;
 const ok = (cond, oque, extra = '') => {
@@ -71,6 +72,22 @@ console.log('\nextrairGenerico — og:image/JSON-LD que é a LOGO do site: desca
   const r2 = extrairGenerico(soLogoJsonLd, BASE);
   ok(r2.link_foto === null,
     'JSON-LD image é a logo e não há foto real no corpo: fica null, honesto (nunca serve a logo)', r2.link_foto);
+}
+
+{
+  // 24/09 — amostra de 20% da base: gráficos do SITE gravados como foto do imóvel. O banco já
+  // normaliza (public.foto_placeholder), mas o scraper não deve nem escolher estes.
+  console.log('\nGRÁFICOS DO SITE QUE NÃO SÃO FOTO (24/09)');
+  for (const u of [
+    'https://www.hastapublica.com.br/util/img/favico.png',
+    'https://www.leffaleiloes.com.br/build/images/nopicture.png',
+    'https://www.crleiloes.com.br/cliente/img/banner-01.jpg',
+    'https://leje.com.br/site/view/assets/images/cadastre-se2.webp',
+  ]) ok(RE_IMG_DESCARTA.test(u), `descarta ${u.split('/').pop()}`);
+  for (const u of [
+    'https://s3-sa-east-1.amazonaws.com/906de634c48fb7d34136160b4c353ae4/public/fotos/imoveis/640x480/I_26822_653005_A.webp',
+    'https://cdn1.megaleiloes.com.br/batches/128827/foto_principal.jpg',
+  ]) ok(!RE_IMG_DESCARTA.test(u), `mantém foto real ${u.split('/').pop()}`);
 }
 
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');

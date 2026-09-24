@@ -32776,3 +32776,53 @@ Meta (verificação → Instagram + WhatsApp, envs em `docs/ENVS_VERCEL.md`) · 
 Inter (Pix Cobrança) · certificado A1 + homologação WebISS + código de serviço/alíquota do contador
 · Google (créditos Gemini, projeto-sombra) · Windsor.ai · `VITE_SENTRY_DSN` e
 `LOCATIONIQ_USD_POR_1000` na Vercel · Canva.
+
+## 🧹 SESSÃO 24/09 (manhã) — ITENS 1 E 2 DA FILA + DIAGNÓSTICO POR AMOSTRA DE 20%
+
+**Ritual de abertura (10h UTC):** 0 cliente travado, 0 chamado sem resposta, 0 KYC inválido,
+segurança 0/0, regras 0 crítico, backup ok, deploys READY. ⚠️ **E-mail do dono:** a Vercel
+recusou o cartão final 9666 (2ª tentativa 23/09 e **de novo 24/09 10h24 UTC**, próxima 26/09,
+com aviso de desligamento) e a assinatura Anthropic foi pausada por pagamento — o dono disse ter
+regularizado; **conferir em Vercel → Settings → Invoices que a fatura está Paid**.
+
+### ✅ Item 1 — Bright Data `leilaobrasil` com teto (`brightdata_teto_leilaobrasil.sql`)
+40/semana, 8/dia (uso medido ~4/dia). `brightdata_decisao(450,'leilaobrasil')` → `subcota 40,
+permitido`; `brightdata_proposito_sem_teto` = 0.
+
+### ✅ Item 2 — lixo da página gravado como FOTO e como DOCUMENTO (`lixo_da_pagina_como_foto_e_anexo.sql`)
+Achado pela amostra de 20% (abaixo). **Foto:** `foto_placeholder()` ampliada (favico/favicon,
+nopicture, `/banner-NN.`, `cadastre-se`) → 141 linhas normalizadas (HASTAPUBLICA 103 +
+tenants 4, LEFFA 9, CRLEILOES 8, LEJE 8). **Anexo:** função nova `anexo_lixo(url,nome)` +
+gatilho `trg_anexo_lixo_remove` (roda antes de `zzzz_set_tem_edital_doc`) → removidos aviso de
+cookies (208, plataforma LJUD: GIORDANO/THAISTEIXEIRA/RIGOLON), termos/privacidade NORDESTE
+(56), "Falar via WhatsApp" SUPERBID (22), send/tweet SUPORTE/VIP. Teste em seco antes: 0 falso
+positivo; depois: 0 restante, 23.121 ativos inalterados, `tem_edital_doc`/`tem_matricula_doc`
+inalterados; gatilho testado em transação desfeita. **Causa no JS:** `\bcookies?\b` em
+`RE_DOC_INSTITUCIONAL` (api/_doc-scan.js) não casava `aviso_cookies` (o `_` é caractere de
+palavra → não há borda `\b`) — corrigido; `RE_IMG_DESCARTA` ampliado. Casos novos em
+`testar:anexo-lixo` e `testar:foto-generica`.
+**Correção de leitura:** o invariante `foto_repetida_como_lote=1` ERA a HASTAPUBLICA — o alarme
+estava certo, faltava o conserto. Agora = 0.
+**Consequência honesta:** HASTAPUBLICA fica 126/126 **sem foto** (antes mostrava o ícone do
+site). Buscar a foto real = recon próprio da fonte (pendente).
+
+### 🔍 Diagnóstico por amostra estratificada (20% por fonte, 4.644 lotes, 58 fontes, semente `md5(id||'2409')` — reproduzível)
+Lacunas que ficaram na fila (não são lixo, são falta de captura):
+- **Data ausente**: BIASI 99%, GRUPOLANCE 100%, LJUD 69%, EDITAL_DJEN 68%, GIORDANO/LEJE/PECINI
+  100%, FERREIRALEIL 97% (FERREIRA/PECINI já documentados sem fix).
+- **Descrição = título**: PESTANA 99% (802 lotes), BIASI 83%, SOLD 89%, FRAZAO 76%, SUPERBID 59%.
+- **Matrícula ausente**: SUPERBID 65%, JELEILOES 97%, LEILAOBRASIL/HASTAPUBLICA 100%.
+- **HTML cru na descrição**: EDITAL_DJEN (`<br>`, `<b>`).
+- **CEF venda_online**: 1.909 ativos com data entre 13/07 e 08/09, todos já apurados — confirmar
+  se seguem à venda ou deveriam sair.
+Limpas na amostra: ZUK, MEGA, TORRES3, KLEILOES, CALIL, CERULI, APICE, ISAIAS, SODRE, VEGAS.
+
+### Fila reordenada (próximos, de 2 em 2)
+3. 5 pagantes sem relatório (decisão comercial) · 4. invariantes 18h10 UTC · 5. LEJE zerou +
+regressões · 6. CEF venda_online com data vencida · 7. `alerta_acima_do_capital=3` · 8. data
+ausente BIASI/GRUPOLANCE/LJUD · 9. HTML no EDITAL_DJEN · 10. descrição rasa PESTANA/SUPERBID ·
+11. matrícula ausente · 12. qualidade de parser (estado 37, praças 5) · 13. resultado atrasado ·
+14. verificações passivas (MP, comissão, atendimento celular) · 15. backfill Google Ads · 16.
+leaflet/bundle. Bloqueados pelo dono: Inter, Meta, WebISS/A1, Gemini, Windsor, envs, Canva.
+**Supabase (e-mail 23/09):** tabela nova em `public` criada após 30/10 precisa de `GRANT`
+explícito — incluir nas migrações novas.

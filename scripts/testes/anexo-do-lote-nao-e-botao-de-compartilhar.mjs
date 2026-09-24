@@ -71,6 +71,17 @@ recusa('"Imóveis Recebendo Proposta" — página de categoria com ?order=, não
   'Imóveis Recebendo Proposta Imóveis disponíveis para envio de proposta');
 recusa('mesma classe: página paginada de listagem', 'https://www.exemplo.com.br/imoveis?page=2', 'Ver mais imóveis');
 
+console.log('\nO AVISO DE COOKIES COM "_" (24/09, amostra de 20% da base)');
+// `\bcookies?\b` não casava "aviso_cookies": o `_` é caractere de palavra, então não há borda
+// \b entre ele e o "c". 208 lotes de GIORDANO/THAISTEIXEIRA/RIGOLON (plataforma da LJUD)
+// exibiam o "Aviso de Cookies" do site como documento do lote.
+recusa('aviso_cookies.pdf da plataforma LJUD (GIORDANO/THAIS/RIGOLON)',
+  'https://s3-sa-east-1.amazonaws.com/906de634c48fb7d34136160b4c353ae4/core/aviso_cookies.pdf', 'Documento');
+recusa('termos de uso da plataforma (NORDESTE)',
+  'https://www.nordesteleiloes.com.br/documents/termos-de-uso-gerais-da-plataforma.pdf', 'Documento');
+aceita('e um anexo cujo nome só CONTÉM as letras "cookie" dentro de outra palavra não cai',
+  'https://cdn.exemplo.com.br/anexos/edital-cookiesville-2026.pdf', 'Edital');
+
 console.log('\nAS VARIAÇÕES DO MESMO DOCUMENTO INSTITUCIONAL');
 for (const t of [
   'relatorio-diferencial-salarial/Relatorio de Igualdade 2026.pdf',
