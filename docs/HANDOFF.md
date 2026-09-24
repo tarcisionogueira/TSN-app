@@ -33198,3 +33198,12 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   processo trabalhista do dono (TRT5/BA) consulta só BA + TST + STJ, não os ~60 tribunais.
 - **Robô residencial:** `apurar-superbid-residencial.mjs` consulta 3 ofertas em paralelo
   (`SBID_PARALELO`, pausa de 1,2 s por grupo) — 1.200 lotes em ~8 min em vez de ~25.
+- **MP — leitura das 7 ações (print do dono, 24/09):** a medição de 22/09 usou um pagamento que NÃO é
+  da nossa integração (não está em `mp_pagamentos`; faltava `external_reference`, que todos os nossos
+  fluxos enviam). A conta tem 66 pagamentos "terceiro" (saldo em conta, Pix e links sem
+  `notification_url`). Pontos em aberto e onde estão: external_reference 14 ✓ no código · SDK
+  frontend 10 ✓ (MercadoPago.JS V2 no cartão) · device ID 2 ✓ · items.description 2 ✓ · Secure
+  Fields 8 ✗ (o formulário de cartão lê o número em input nosso e chama `createCardToken` — trocar por
+  `mp.fields`, em Checkout.jsx e PagamentoServico.jsx) · SDK backend 5 ✗ (usamos fetch). Com um
+  pagamento NOSSO (cartão pelo site) a conta estimada passa de 73 sem os dois ✗.
+- **Crontab do dono:** trocado para `0 2,8,14,20 * * *` (dono, 24/09) — conferência agendada 17:45 UTC.
