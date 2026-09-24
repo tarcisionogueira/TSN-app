@@ -33177,6 +33177,21 @@ Recon de 22 páginas reais (`recon-resultado-pagina.yml`, dump em `recon_dump`):
 - Veículos: busca vazia agora diz qual filtro zera (43 de 47 carros "sem lance" sem avaliação).
 - Pendente: KRON (403/JS) e VIP (conexão recusada) — conferir após a 1ª rodada em gru1.
 
+**1ª rodada em gru1 (18:00 UTC):** KLEILOES ok — 15 lotes abertos ganharam data nova e voltaram ao
+ar. ZUK 20 sem lance + 9 com lance, mas **128 ainda sem conteúdo**: não era região, a ZUK barra o
+Vercel e a subcota `geral` esgotou de novo → caminho é o runner residencial ler ZUK (como SUPERBID).
+Fila 770 → 700. JELEILOES não entrou nesta rodada (nenhum `cancelado` ainda).
+
+### 🌐 Domínio da masterclass `lucreantesdearrematar.com.br` (24/09, aula de 15/10)
+Dono contratou o domínio; a aula semanal de quarta ACABOU (`leilao-ao-vivo` segue `ativo=false`).
+- Vercel: domínio + `www` (308 → raiz) no projeto tsn-app, verificados.
+- `vercel.json` redirects: raiz com host do domínio → `/aula/lucre-antes-de-arrematar` (og-share:
+  cartão de prévia da aula e segue para `/#/live/<slug>` mantendo UTMs; só funciona com `ativo=true`).
+- `index.html`: guarda do gtag inclui o domínio (hash CSP atualizado — o 1º push esqueceu e o
+  build reprovou; deploy não entrou). `reportarErro` também conta o domínio como produção.
+- Pendente do DONO: DNS no Registro.br (A @ 76.76.21.21; CNAME www cname.vercel-dns.com),
+  verificação do domínio no Meta Business, GA4 cross-domain (bidprobrasil + lucreantesdearrematar).
+
 ### 🔴 /buscar fora do ar ~5 h (24/09, 11:46 → 16:50)
 `useRolagemDaLista('busca', !loading…)` (commit 490890d) chamado ANTES do `useState` do `loading` →
 ReferenceError em toda renderização, "Algo deu errado". Corrigido (bb4978d) e **trava nova**:
