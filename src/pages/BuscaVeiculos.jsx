@@ -256,6 +256,49 @@ function filtrosVazios() {
   };
 }
 
+// Filtros da busca como FUNÇÃO (24/09): a mesma régua serve à busca e ao diagnóstico do "nenhum
+// veículo" — `ign` tira filtros para medir quanto cada um corta. Uma cópia só da regra.
+function aplicarFiltros(q, f, ign = new Set()) {
+  if (!ign.has('estado') && f.estado) q = q.eq('estado', f.estado);
+  if (!ign.has('cidade') && f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
+  if (!ign.has('tipoVeiculo') && f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
+  // Marca: OR com o título (24/09) — 30% dos lotes vêm sem `marca` (SODRE/SUPERBID trazem só
+  // "HONDA CG 160..." no título) e o ilike só na coluna os escondia, como o `modelo` acima.
+  if (!ign.has('marca') && f.marca.trim()) { const t = f.marca.trim(); q = q.or(`marca.ilike.%${t}%,titulo.ilike.%${t}%`); }
+  // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
+  // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
+  // só em `modelo` esconderia esse leiloeiro inteiro do filtro.
+  if (!ign.has('modelo') && f.modelo.trim()) { const t = f.modelo.trim(); q = q.or(`modelo.ilike.%${t}%,titulo.ilike.%${t}%`); }
+  if (!ign.has('anoMin') && f.anoMin) q = q.gte('ano_fabricacao', Number(f.anoMin));
+  if (!ign.has('anoMax') && f.anoMax) q = q.lte('ano_fabricacao', Number(f.anoMax));
+  if (!ign.has('valorMax') && f.valorMax) q = q.lte('valor_minimo', Number(f.valorMax));
+  if (!ign.has('valorAvaliacaoMax') && f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
+  if (!ign.has('descontoMin') && f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  if (!ign.has('tipoMonta') && f.tipoMonta.length) {
+    const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
+    const conds = [];
+    if (montas.length) conds.push(`sinistro.in.(${montas.map(t => `"${t}"`).join(',')})`);
+    if (f.tipoMonta.includes(MONTA_NAO_INFORMADA)) conds.push('sinistro.is.null');
+    q = q.or(conds.join(','));
+  }
+  if (!ign.has('modalidade') && f.modalidade) q = q.eq('modalidade', f.modalidade);
+  const janelaPrazo = ign.has('prazo') ? null : calcularJanelaPrazo(f.prazo);
+  if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
+  else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
+  // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'sem_lance' agrupa
+  // 'sem_lance' E 'indeterminado' (nenhum tem sinal de venda); 'nao_apurado' é só NULL.
+  if (ign.has('resultadoLeilao')) { /* ignorado no diagnóstico */ }
+  else if (f.resultadoLeilao === 'sem_lance') q = q.eq('resultado_leilao', 'sem_lance').eq('teve_lance', false);
+  else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
+  else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
+  else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
+  return q;
+}
+
+// Rótulo de cada filtro no diagnóstico do resultado vazio.
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', modalidade: 'Modalidade', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão' };
+const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
+
 export default function BuscaVeiculos() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
@@ -267,6 +310,7 @@ export default function BuscaVeiculos() {
   const [mostrarFiltros, setMostrarFiltros] = useState(!isMobile);
   const [resultados, setResultados] = useState([]);
   const [total, setTotal] = useState(0);
+  const [diagnostico, setDiagnostico] = useState(null); // resultado vazio: quanto cada filtro corta
   const [pagina, setPagina] = useState(() => Math.max(1, Number(lerSessao('veic_pagina', 1)) || 1));
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -312,6 +356,38 @@ export default function BuscaVeiculos() {
 
   const fecharProposta = () => { setPropondoVeiculo(null); setPropostaTexto(''); setPropostaInfo(null); setPropostaMsg(''); };
 
+  // RESULTADO VAZIO EXPLICADO (24/09, print do dono: carro + sem lance + ano + lance + avaliação +
+  // monta → 0, sem dizer por quê). Tira UM filtro por vez e conta quantos voltariam — só roda quando
+  // a busca vem vazia (contagens `head`, sem trazer linhas). Motivo real do caso: 43 dos 47 carros
+  // "sem lance" (Superbid) não informam avaliação nem monta, e o filtro por esses campos os exclui.
+  async function diagnosticarVazio(f) {
+    const ativos = Object.keys(ROTULO_FILTRO).filter(k => filtroAtivo(f, k));
+    if (ativos.length < 2) return;
+    const base = () => supabase.from('veiculos_leilao').select('id', { count: 'exact', head: true }).eq('ativo', true).eq('status_patio', 'confirmado');
+    try {
+      const contagens = await Promise.all(ativos.map(async k => {
+        const { count, error } = await aplicarFiltros(base(), f, new Set([k]));
+        return error ? null : { k, n: count || 0 };
+      }));
+      const ok = contagens.filter(Boolean);
+      if (ok.length !== ativos.length) return; // alguma contagem falhou: melhor não sugerir nada do que sugerir errado
+      const umSo = ok.filter(c => c.n > 0).sort((a, b) => b.n - a.n).slice(0, 3);
+      if (umSo.length || ativos.length > 7) { setDiagnostico(umSo); return; }
+      // Nenhum filtro sozinho destrava (o caso do print: avaliação E monta cortam os mesmos
+      // veículos) → testa PARES. Até 21 contagens, e só quando a busca vem vazia.
+      const pares = [];
+      for (let i = 0; i < ativos.length; i++) for (let j = i + 1; j < ativos.length; j++) pares.push([ativos[i], ativos[j]]);
+      const cp = await Promise.all(pares.map(async ks => {
+        const { count, error } = await aplicarFiltros(base(), f, new Set(ks));
+        return error ? null : { ks, n: count || 0 };
+      }));
+      if (cp.some(c => !c)) return;
+      setDiagnostico(cp.filter(c => c.n > 0).sort((a, b) => b.n - a.n).slice(0, 3));
+    } catch (e) {
+      console.warn('[veiculos] diagnóstico do resultado vazio falhou:', e?.message || e);
+    }
+  }
+
   async function buscar(p, f) {
     setLoading(true); setErro('');
     try {
@@ -321,38 +397,7 @@ export default function BuscaVeiculos() {
         // pátio — nunca em posse do executado. `indefinido` é o default conservador de
         // `classificarPatio()` e não deve aparecer para o cliente.
         .eq('status_patio', 'confirmado');
-      if (f.estado) q = q.eq('estado', f.estado);
-      if (f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
-      if (f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
-      // Marca: OR com o título (24/09) — 30% dos lotes vêm sem `marca` (SODRE/SUPERBID trazem só
-      // "HONDA CG 160..." no título) e o ilike só na coluna os escondia, como o `modelo` acima.
-      if (f.marca.trim()) { const t = f.marca.trim(); q = q.or(`marca.ilike.%${t}%,titulo.ilike.%${t}%`); }
-      // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
-      // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
-      // só em `modelo` esconderia esse leiloeiro inteiro do filtro.
-      if (f.modelo.trim()) { const t = f.modelo.trim(); q = q.or(`modelo.ilike.%${t}%,titulo.ilike.%${t}%`); }
-      if (f.anoMin) q = q.gte('ano_fabricacao', Number(f.anoMin));
-      if (f.anoMax) q = q.lte('ano_fabricacao', Number(f.anoMax));
-      if (f.valorMax) q = q.lte('valor_minimo', Number(f.valorMax));
-      if (f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
-      if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
-      if (f.tipoMonta.length) {
-        const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
-        const conds = [];
-        if (montas.length) conds.push(`sinistro.in.(${montas.map(t => `"${t}"`).join(',')})`);
-        if (f.tipoMonta.includes(MONTA_NAO_INFORMADA)) conds.push('sinistro.is.null');
-        q = q.or(conds.join(','));
-      }
-      if (f.modalidade) q = q.eq('modalidade', f.modalidade);
-      const janelaPrazo = calcularJanelaPrazo(f.prazo);
-      if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
-      else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
-      // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'sem_lance' agrupa
-      // 'sem_lance' E 'indeterminado' (nenhum tem sinal de venda); 'nao_apurado' é só NULL.
-      if (f.resultadoLeilao === 'sem_lance') q = q.eq('resultado_leilao', 'sem_lance').eq('teve_lance', false);
-      else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
-      else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
-      else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
+      q = aplicarFiltros(q, f);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
@@ -363,6 +408,8 @@ export default function BuscaVeiculos() {
       const { data, error, count } = await q.range(de, de + POR_PAGINA - 1);
       if (error) { setErro('Não foi possível carregar os veículos agora. Tente de novo em instantes.'); setResultados([]); setTotal(0); return; }
       setResultados(data || []); setTotal(count || 0);
+      setDiagnostico(null);
+      if (!(data || []).length && p === 1) diagnosticarVazio(f);
     } catch {
       setErro('Não foi possível carregar os veículos agora. Tente de novo em instantes.');
     } finally { setLoading(false); }
@@ -527,7 +574,23 @@ export default function BuscaVeiculos() {
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '50px 20px', textAlign: 'center', color: '#64748b' }}>
           <Car size={32} color="#cbd5e1" style={{ marginBottom: 8 }} />
           <div style={{ fontWeight: 700, color: '#111111', marginBottom: 4 }}>Nenhum veículo encontrado</div>
-          <div style={{ fontSize: 12.5 }}>Ajuste os filtros ou volte mais tarde — o piloto ainda está em expansão para novas fontes.</div>
+          {diagnostico?.length > 0 ? (
+            <div style={{ fontSize: 13, color: '#334155', maxWidth: 520, margin: '8px auto 0', textAlign: 'left' }}>
+              <div style={{ marginBottom: 6 }}>A combinação de filtros não fecha. {diagnostico[0]?.ks ? 'Tirando dois deles:' : <>Tirando <strong>um</strong> deles:</>}</div>
+              {diagnostico.map(d => { const ks = d.ks || [d.k]; return (
+                <div key={ks.join('+')} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6 }}>
+                  <span>sem <strong>{ks.map(k => ROTULO_FILTRO[k]).join(' e ')}</strong> → {d.n} veículo{d.n > 1 ? 's' : ''}</span>
+                  <button onClick={() => setFiltros(prev => { const nf = { ...prev }; ks.forEach(k => { nf[k] = Array.isArray(prev[k]) ? [] : ''; }); return nf; })}
+                    style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 12.5, whiteSpace: 'nowrap' }}>{ks.length > 1 ? 'Tirar estes filtros' : 'Tirar este filtro'}</button>
+                </div>
+              ); })}
+              {diagnostico.some(d => (d.ks || [d.k]).some(k => k === 'valorAvaliacaoMax' || k === 'tipoMonta')) && (
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Muitos leiloeiros (ex.: Superbid) não informam avaliação nem tipo de monta — esses veículos saem quando você filtra por esses campos. Em "Tipo de monta", marque também "Não informado" para incluí-los.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5 }}>Ajuste os filtros ou volte mais tarde — o piloto ainda está em expansão para novas fontes.</div>
+          )}
         </div>
       )}
 
