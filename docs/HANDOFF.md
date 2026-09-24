@@ -32740,3 +32740,39 @@ grade esticava um deles na altura da tela); no celular a fila e a conversa viram
 `allow-top-navigation-by-user-activation` e TODO outro link perde o `target` do remetente — só os
 nossos vão ao topo). **Rascunhos**: pasta nova, salvamento automático 1,2 s após a última tecla
 (`email_rascunhos`, RLS só do próprio autor), "Salvar e fechar"/"Descartar", apagado ao enviar.
+
+## 📌 FECHAMENTO DA SESSÃO — 24/09/2026 (madrugada) — retomar amanhã
+
+Tudo desta sessão está em `main` (último commit `24d82b7`), migrações aplicadas no banco e com
+arquivo em `supabase/migrations/`. Segurança 0/0 e regras de negócio 0 crítico conferidas depois
+das mudanças de comissão.
+
+### 1º — VERIFICAÇÕES AO VIVO pendentes (nada disto foi visto rodando em produção ainda)
+1. **Atendimento no celular** (item 34): botões Chamados/E-mail do mesmo tamanho; fila → conversa
+   → "Voltar à fila"; clicar em `canaldireto@leiloariasmart.com.br` numa mensagem abre o Escrever
+   do BidPro com o destinatário; escrever, fechar e achar o texto em **Rascunhos**; enviar e ver o
+   rascunho sumir.
+2. **Comissão a liberar** (item 33): no próximo pagamento real com comissão, conferir
+   `select * from pagamento_liberacao order by registrado_em desc limit 5;` (webhook gravou a data)
+   e `select status, liberar_em from saldo_lancamentos order by criado_em desc limit 5;`
+   (nasceu `a_liberar`, ou `disponivel` se Pix). Resposta do cron diário (12h UTC)
+   `saldo-disponivel-aviso-cron` deve trazer `liberadas` (número, não null).
+3. **Mercado Pago** (item 31): primeiro pagamento com pagador completo sem
+   `enriquecer pagador falhou` nos logs; dono clica "Medir novamente" (meta ≥ 73).
+4. **Painel de invariantes**: 1ª rodada no horário novo é **24/09 18h10 UTC** —
+   `select * from qa_invariantes_execucao order by executado_em desc limit 3;` precisa `ok=true`.
+5. **Espelho de fotos** (item 31): após o cron de documentos, `select count(*) from imoveis_leilao
+   where foto_espelhada_em is not null;` > 0 e resposta do cron com `fotos.copiadas`.
+6. **Busca sem EDITAL_DJEN sem preço**: abrir a Busca (lista, mapa e raio) e confirmar que os
+   cards sem valor do DJEN sumiram.
+
+### 2º — FILA DA OPERAÇÃO
+Seguir a tabela **"PRÓXIMA SESSÃO — fila priorizada da operação (24/09, madrugada)"** acima
+(itens 1–14, por impacto ÷ complexidade), começando pelo **teto do Bright Data para
+`leilaobrasil`** e pelos **5 pagantes sem relatório**. Asaas/antecipação já saiu da fila (item 32).
+
+### 3º — AGUARDANDO O DONO (bloqueios)
+Meta (verificação → Instagram + WhatsApp, envs em `docs/ENVS_VERCEL.md`) · credenciais da API do
+Inter (Pix Cobrança) · certificado A1 + homologação WebISS + código de serviço/alíquota do contador
+· Google (créditos Gemini, projeto-sombra) · Windsor.ai · `VITE_SENTRY_DSN` e
+`LOCATIONIQ_USD_POR_1000` na Vercel · Canva.
