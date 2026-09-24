@@ -8,6 +8,9 @@ import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
 import { AlertTriangle, Info } from 'lucide-react';
 
+// Asaas não antecipa para o segmento do CNPJ (resposta ao dono, 24/09). Trocar para true se mudar.
+const ANTECIPACAO_ASAAS_DISPONIVEL = false;
+
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Card do painel — subiu para o escopo do módulo em 02/09 para que o quadro de taxas de
@@ -392,6 +395,17 @@ export function FinanceiroCaixa() {
             é assim que a API real funciona), mas isso não precisa virar trabalho manual: os
             candidatos são exatamente os `CONFIRMED` do extrato (cobrado, aguardando D+32) —
             o select já mostra valor+cliente+data em vez de pedir o ID de cabeça. */}
+        {/* 24/09: o Asaas respondeu ao dono que NÃO antecipa para o segmento do CNPJ — toda
+            tentativa voltava "Antecipação de cartão de crédito desativada" (Sentry TSN-APP-2).
+            O painel deixa de oferecer; o código fica atrás da chave para o dia em que mudar. */}
+        {!ANTECIPACAO_ASAAS_DISPONIVEL ? (
+          <div style={{ background: '#ffffff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', padding: '20px 24px', gridColumn: '1 / -1' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 4 }}>Antecipar recebível</div>
+            <p style={{ fontSize: 12.5, color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+              Indisponível: o Asaas não oferece antecipação para o segmento do nosso CNPJ. Os valores seguem o prazo padrão de liberação.
+            </p>
+          </div>
+        ) : (
         <div style={{ background: '#ffffff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', padding: '24px', gridColumn: '1 / -1' }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: '#111111', marginBottom: 6 }}>Antecipar recebível</div>
           <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16, lineHeight: 1.5 }}>
@@ -460,6 +474,7 @@ export function FinanceiroCaixa() {
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Modal de confirmação */}

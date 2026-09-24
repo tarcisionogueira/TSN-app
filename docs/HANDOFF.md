@@ -32679,3 +32679,38 @@ public_lots`, PostgREST) com `address` estruturado — caminho mais barato que C
   de 24 h não responde e grava o porquê). Cron de 5 min de rede de segurança. Envs e passo a passo
   em `docs/ENVS_VERCEL.md`. Teste: `npm run testar:whatsapp-oficial`. **Bloqueio:** Verificação de
   Negócio da Meta (a mesma do Instagram).
+
+**32. ✅ Asaas: antecipação encerrada (dono, 24/09).** O Asaas respondeu que NÃO antecipa para o
+segmento do CNPJ. `AdminFinanceiro.jsx` deixa de oferecer (chave `ANTECIPACAO_ASAAS_DISPONIVEL =
+false`, código mantido para o dia em que mudar). Sentry TSN-APP-2 = causa conhecida, pode resolver.
+
+## 🧭 PRÓXIMA SESSÃO — fila priorizada da operação (24/09, madrugada)
+
+Ordem = **impacto imediato ÷ complexidade** (o que mais rende por hora primeiro). Estado medido no
+banco em 24/09 01h UTC (ritual 1b/1c): 0 cliente travado, 0 chamado sem resposta, 0 crítico em
+segurança e em regras de negócio, backup ok em 23/09.
+
+| # | Item | Impacto imediato | Complexidade | Primeiro passo |
+|---|---|---|---|---|
+| 1 | **Bright Data: propósito `leilaobrasil` SEM teto** (`brightdata_proposito_sem_teto=1`) — gasto da cota paga sem freio | Alto (dinheiro) | Baixa | `insert into brightdata_reserva` com teto no padrão dos outros; conferir `brightdata_decisao(450,'leilaobrasil')` |
+| 2 | **Painel de invariantes** — últimas execuções `ok=false` (8,2 s / 9,0 s) foram ANTES da mudança para 18h10 UTC (commit 32638c6 às 20h31 de 23/09). A 1ª rodada que vale é **24/09 18h10 UTC** (check-in agendado 18h35) | Alto (é o alarme de tudo) | Baixa | `select * from qa_invariantes_execucao order by executado_em desc limit 3` |
+| 3 | **5 pagantes sem relatório em 14 dias** (churn em formação) | Alto (receita) | Baixa | query "pagante sem entrega" do CLAUDE.md 1c → contato/ativação (decisão comercial do dono) |
+| 4 | **Mercado Pago — conferir o 1º pagamento com pagador completo** (item 31) e o dono "Medir novamente" | Alto (aprovação/antifraude) | Baixa | logs de `mp-checkout` sem `enriquecer pagador falhou`; nota ≥ 73 no painel |
+| 5 | **`alerta_acima_do_capital=3`** — invariante novo acendendo, não investigado | Médio-alto (cliente recebendo alerta errado?) | Baixa | ler a definição em `qa_invariantes()` e as 3 linhas |
+| 6 | **Fontes em alarme** (`fonte_regressao_suspeita`): LEJE **zerou** (novo); KRONLEILOES, LEILOFY, SODRE, RJLEILOES em regressão; TORRES3, BAYIT, LEFFA sem medição recente. HASTA e JOAOEMILIO zerados = vazios na origem (confirmado 23/09) | Alto (acervo = produto) | Média | por fonte: ler o `motivo`; LEILOFY pode ser expiração legítima (ver armadilha de 27/08); recon só se for parser |
+| 7 | **`resultado_leilao_atrasado` 1.849** (SUPERBID 1.441 pela fila residencial, 400/dia; SODRÉ 399 irrecuperáveis que saem pela retenção) | Médio (filtro "sem lance") | Baixa (só acompanhar) | `coleta_cliente` SUPERBID `ultima_em` recente = runner de casa rodando |
+| 8 | **Pix Cobrança do Inter** para honorário/assessoria (custo ~zero × ~1% no MP; baixa automática por txid) | Alto (custo por honorário) | Média | **bloqueado:** credenciais da API do Inter Empresas (Client ID/Secret + certificado) |
+| 9 | **WhatsApp oficial — ligar** (código pronto, item 31) | Alto (canal de venda) | Baixa depois do bloqueio | **bloqueado:** Verificação de Negócio da Meta + número + envs (`docs/ENVS_VERCEL.md`) |
+| 10 | **Qualidade de dado por parser**: `estado_fora_do_padrao` 26 (LEILAOBRASIL, GESTAO, ~12 ALBERTOMACEDO), `praca_fim_antes_do_inicio` 5, `area_truncada_no_milhar` 1, `foto_repetida_como_lote` 1 | Médio | Baixa-média (1 site por vez) | `select * from qa_invariantes() where status<>'ok'` → amostra por fonte |
+| 11 | **Bug pequeno de tela**: `/planos` "_leaflet_pos" (mapa desmontado antes do Leaflet terminar), 2 ocorrências | Baixo | Baixa | guarda no componente de mapa da página de planos; marcar `erros_cliente` resolvido |
+| 12 | **NFS-e no WebISS** (mensalidade do sistema — obrigatória) | Médio agora, alto fiscal | **Alta** (XML ABRASF assinado com A1, homologação) | **bloqueado:** certificado A1 + acesso de homologação WebISS Feira de Santana + código de serviço/alíquota do contador. Gancho pronto em `api/_nfse.js` |
+| 13 | **Dívida de dado estrutural**: `pino_generico_como_rua` 81, `lote_sem_area_nem_matricula` 750, `geocode_sem_preco` 74 (precisa env `LOCATIONIQ_USD_POR_1000`) | Baixo-médio | Média | só depois dos itens acima |
+| 14 | **Bundle grande** (`Admin.jsx` 505 kB, `lib.js`, `index.js`) — `manualChunks` proposto | Baixo (admin é lazy) | Média (teste visual ao vivo) | — |
+
+**Esperado, NÃO é defeito:** `mkt_ingestao_atrasada` (verba de anúncio pausada pelo dono) e
+`cadastro_duplicado=1` (1º cadastro não concluído). `erros_cliente` "Failed to fetch" isolados
+(/atendimento, analytics) = rede do cliente, resolver sem ação.
+
+**Só o dono resolve** (sem mudança): Meta (verificação), Google (créditos Gemini + projeto-sombra),
+Windsor.ai (plano/contas), `VITE_SENTRY_DSN` e `LOCATIONIQ_USD_POR_1000` na Vercel, Canva,
+credenciais do Inter, certificado A1 + contador para o WebISS.
