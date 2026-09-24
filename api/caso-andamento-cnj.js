@@ -52,6 +52,18 @@ export function ufDoNumeroCnj(numero) {
   return null;
 }
 
+// Nº CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO) num texto, só se o dígito verificador (DD, módulo 97 — Res. CNJ
+// 65/2008) fechar: número lido por IA ou regex com um dígito trocado não pode virar consulta.
+export function numeroCnjNoTexto(texto) {
+  const re = /\b(\d{7})-?(\d{2})\.?(\d{4})\.?(\d)\.?(\d{2})\.?(\d{4})\b/g;
+  for (const m of String(texto || '').matchAll(re)) {
+    const [, n, dd, ano, j, tr, orig] = m;
+    const resto = BigInt(`${n}${ano}${j}${tr}${orig}00`) % 97n;
+    if (98n - resto === BigInt(dd)) return `${n}-${dd}.${ano}.${j}.${tr}.${orig}`;
+  }
+  return null;
+}
+
 // O erro do DataJud chega como corpo de Elasticsearch — útil para a equipe investigar, ilegível
 // para quem só quer saber do processo. Esta é a frase que vai para a tela.
 export function avisoDataJud(erro) {
@@ -168,6 +180,27 @@ export default async function handler(req, res) {
     if (!numero && UUID.test(String(registro.imovel_id || ''))) {
       const [lote] = await sbGet(`imoveis_leilao?id=eq.${registro.imovel_id}&select=numero_processo`);
       if (lote?.numero_processo) { numero = lote.numero_processo; origemNumero = 'do lote arrematado'; }
+    }
+    // Arremate ATRIBUÍDO À MÃO pela equipe (fonte `atribuido_manual`) nasce sem nº de processo, mas
+    // a conferência automática do anexo (auto/carta/edital) já leu o número ao validar o documento
+    // (24/09: o do Rafael estava no `validacao.motivo` da carta desde 22/08). Custo zero: só texto
+    // já gravado, e só vale número com dígito verificador CNJ correto. Achou → lembra no lote.
+    if (!numero && UUID.test(String(registro.imovel_id || ''))) {
+      const anexos = await sbGet(`imovel_anexos?imovel_id=eq.${registro.imovel_id}&select=tipo,validacao,descricao&limit=30`);
+      const prioridade = ['carta_arrematacao', 'auto_arrematacao', 'edital'];
+      anexos.sort((x, y) => (prioridade.indexOf(x.tipo) >>> 0) - (prioridade.indexOf(y.tipo) >>> 0)); // fora da lista → -1 >>> 0 = fim
+      for (const an of anexos) {
+        const achado = numeroCnjNoTexto(`${an?.validacao?.motivo || ''} ${an?.descricao || ''}`);
+        if (achado) { numero = achado; origemNumero = 'lido nos documentos anexados'; break; }
+      }
+      if (numero) {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${registro.imovel_id}&numero_processo=is.null`, {
+          method: 'PATCH',
+          headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify({ numero_processo: numero }),
+        }).catch(e => ({ ok: false, status: String(e?.message || e) }));
+        if (!r.ok) console.warn('[caso-andamento-cnj] nº do processo achado no anexo não gravou no lote:', r.status);
+      }
     }
   } catch (e) {
     return enviar({ error: `não consegui ler o registro: ${e.message}` }, 502);
