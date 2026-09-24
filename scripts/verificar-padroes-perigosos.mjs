@@ -602,6 +602,11 @@ const ENV_PARES_LEGITIMOS = new Set([
   // Duas ações de conversão DISTINTAS no Ads (Cadastro × Assinatura) — cada uma com o
   // próprio id numérico, não um erro de digitação da outra.
   'GOOGLE_ADS_CONVERSION_ACTION_ID_CADASTRO~GOOGLE_ADS_CONVERSION_ACTION_ID',
+  // Meta: a "Chave secreta do app do Instagram" é OUTRO segredo, de outro id (ver o cabeçalho
+  // de instagram-webhook.js) — aceita-se as duas e o log diz qual assina.
+  'IG_APP_SECRET_INSTAGRAM~IG_APP_SECRET',
+  // WhatsApp oficial: o token de VERIFICAÇÃO do webhook (hub.challenge) não é o token de ENVIO.
+  'WA_VERIFY_TOKEN~WA_TOKEN',
 ]);
 function envsSuspeitas() {
   // COMENTÁRIO É IGNORADO POR LINHA, não por parser de estado. A primeira tentativa usou o

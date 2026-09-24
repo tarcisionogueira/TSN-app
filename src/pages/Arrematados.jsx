@@ -905,7 +905,7 @@ export default function Arrematados() {
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}>
                 <div style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FotoImovel imovel={a.imovel} iconSize={22} />
+                  <FotoImovel imovel={a.imovel} imovelId={a.imovel_id || a.imovelId} iconSize={22} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>

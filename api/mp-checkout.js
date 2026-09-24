@@ -10,6 +10,7 @@
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { cpfDoRegistro, validarCPF } from './_cpf.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -326,12 +327,58 @@ export default async function handler(req, res) {
     }
   }
 
+  // DADOS DO PAGADOR (24/09) — a "qualidade da integração" do MP estava em 47/100 (mínimo 73);
+  // o gap concreto era o `payer` mínimo (só e-mail) deste pagamento direto. O MP pede CPF, nome
+  // e sobrenome do comprador e `additional_info.items` (antifraude + aprovação). Vem do PERFIL
+  // de quem é dono da cobrança (sessão ou arrematante do honorário), nunca do body. Opcional:
+  // perfil sem CPF/nome, ou leitura falhou, a cobrança segue exatamente como antes — dado a
+  // mais melhora a nota, dado a menos não pode travar pagamento.
+  let payerExtra = {};
+  const donoCobranca = user?.id || honorarioCtx?.arrematanteId || null;
+  if (donoCobranca) {
+    try {
+      const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+      const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(donoCobranca)}&select=nome,cpf,cpf_enc,telefone,endereco_cep,endereco_logradouro,endereco_numero`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(6000),
+      });
+      if (!r.ok) console.error('[mp-checkout] perfil do pagador devolveu', r.status, '— segue sem enriquecer');
+      const [pf] = r.ok ? await r.json().catch(() => []) : [];
+      if (pf) {
+        const cpf = await cpfDoRegistro(pf);
+        const partes = String(pf.nome || '').trim().split(/\s+/).filter(Boolean);
+        const tel = String(pf.telefone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+        payerExtra = {
+          ...(cpf && validarCPF(cpf) ? { identification: { type: 'CPF', number: cpf } } : {}),
+          ...(partes.length ? { first_name: partes[0], last_name: partes.slice(1).join(' ') || partes[0] } : {}),
+        };
+        if (tel.length >= 10 || pf.endereco_cep) {
+          payerExtra._info = {
+            ...(tel.length >= 10 ? { phone: { area_code: tel.slice(0, 2), number: tel.slice(2) } } : {}),
+            ...(pf.endereco_cep ? { address: { zip_code: String(pf.endereco_cep).replace(/\D/g, ''), street_name: pf.endereco_logradouro || undefined, street_number: pf.endereco_numero || undefined } } : {}),
+          };
+        }
+      }
+    } catch (e) { console.error('[mp-checkout] enriquecer pagador falhou (segue sem):', e?.message || e); }
+  }
+  const { _info: payerInfo, ...payerCampos } = payerExtra;
+
   try {
     const payload = {
       transaction_amount: Number(valor),
       description: String(descricao).slice(0, 256),
       payment_method_id: metodoPagamento || 'pix',
-      payer: mpCustomerId ? { type: 'customer', id: mpCustomerId, email: String(email) } : { email: String(email) },
+      payer: mpCustomerId ? { type: 'customer', id: mpCustomerId, email: String(email), ...payerCampos } : { email: String(email), ...payerCampos },
+      additional_info: {
+        items: [{
+          id: String(proposito).slice(0, 60),
+          title: String(descricao).slice(0, 120),
+          description: String(descricao).slice(0, 256),
+          category_id: 'services',
+          quantity: 1,
+          unit_price: Number(valor),
+        }],
+        ...(payerCampos.first_name || payerInfo ? { payer: { first_name: payerCampos.first_name, last_name: payerCampos.last_name, ...(payerInfo || {}) } } : {}),
+      },
       // SEGURANÇA: este endpoint é SEMPRE pagamento avulso de serviço (tipo='servico').
       // Nunca eleva plano/role — senão um cliente pagaria 1x um valor qualquer e o
       // webhook mapearia valor→plano, virando plano vitalício de graça (pagamento único

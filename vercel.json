@@ -395,6 +395,10 @@
       "schedule": "*/20 * * * *"
     },
     {
+      "path": "/api/whatsapp-responder",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/drenar-fila-emails-cron",
       "schedule": "15 */3 * * *"
     }

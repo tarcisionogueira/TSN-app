@@ -32653,3 +32653,29 @@ public_lots`, PostgREST) com `address` estruturado — caminho mais barato que C
   Ligado no preview de `enviar-email-caso` (leiloeiro) e `propor-veiculo-leiloeiro`; a tela mostra
   "rascunho no seu estilo" + botão "usar texto padrão". Haiku via `iaGeminiPrimary` (custo baixo).
   Teste: `npm run testar:redator`. Aprende sozinho: cada e-mail enviado vira exemplo do próximo.
+
+**31. ✅ Pendências do dono delegadas a mim (24/09) — o que foi feito.**
+- **Mercado Pago, qualidade da integração (47/100):** o pagamento direto (`api/mp-checkout.js`)
+  agora manda o pagador completo — CPF (`cpfDoRegistro`, só se válido), nome/sobrenome, e
+  `additional_info` com item (id, título, descrição, `category_id`) + telefone/CEP quando o
+  perfil tem. Vem do PERFIL do dono da cobrança (sessão ou arrematante do honorário), nunca do
+  body; perfil incompleto ou leitura falhada → cobra exatamente como antes. Preferências do
+  Checkout Pro (`api/mp.js`) ganharam `description`/`category_id`. **Falta:** o dono clicar em
+  "Medir novamente" no painel do MP depois do próximo pagamento real — a nota só recalcula lá.
+- **EDITAL_DJEN sem valor fora da busca pública:** 342 de 464 ativos não tinham preço (458 sem
+  foto). Só saem da BUSCA (lista, mapa e raio: `Busca.jsx` + `buscar_por_raio_v2`); o Radar segue
+  igual e o lote volta sozinho quando o enriquecimento achar o valor.
+- **Fotos: espelho só da capa dos lotes de CLIENTE** (relatório, caso, arremate — hoje 15 a copiar),
+  não do acervo (~1 GB). `espelhar-docs-cron` copia para `imoveis-fotos/espelho/<id>.jpg`;
+  `utils/foto.js` usa como último candidato. **CEF: não espelhar** (22 mil, o site recusa o IP do
+  servidor e o padrão de foto por id é estável) — decisão fechada, não é mais pendência.
+- **`contrato_texto_truncado`:** já estava 0 no invariante — nada a apagar.
+- **FRAZAO:** os 87 lotes ativos apontam para `frazaoleiloes.com.br` (banco correto). Se o
+  navegador abrir outro domínio, é redirecionamento do site do leiloeiro, não nosso.
+- **WhatsApp oficial pronto até onde dá sem credencial:** `api/whatsapp-webhook.js` (escuta,
+  HMAC, grava em `wa_conversas`/`wa_mensagens`, echo da equipe pausa a IA 12 h) +
+  `api/whatsapp-responder.js` (mesmo agente do chat do site, canal 'whatsapp', agora com instrução
+  de venda para quem ainda não é cliente; escalada → e-mail ao dono + pausa 12 h; fora da janela
+  de 24 h não responde e grava o porquê). Cron de 5 min de rede de segurança. Envs e passo a passo
+  em `docs/ENVS_VERCEL.md`. Teste: `npm run testar:whatsapp-oficial`. **Bloqueio:** Verificação de
+  Negócio da Meta (a mesma do Instagram).

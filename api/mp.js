@@ -247,6 +247,8 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
     items: [{
       id:           planoKey,
       title:        titulo,
+      description:  titulo,          // qualidade da integração MP: descrição + categoria do item
+      category_id:  'services',
       quantity:     1,
       currency_id:  'BRL',
       unit_price:   Number(valor),
@@ -308,7 +310,7 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
 
   const back = `${BASE_URL}/#/p/${produto_tipo}/${produto_id}`;
   const pref = await mpPost('/checkout/preferences', {
-    items: [{ id: String(produto_id), title: tituloComExtras(ini), quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
+    items: [{ id: String(produto_id), title: tituloComExtras(ini), description: tituloComExtras(ini), category_id: 'services', quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
     payer: { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined },
     back_urls: { success: `${back}?pago=1`, pending: `${back}?pago=pending`, failure: `${back}?pago=fail` },
     auto_return: 'approved',

@@ -8,7 +8,13 @@
 // 2) padrão de foto da Caixa por id (fallback); 3) proxy da Vercel (para hosts
 // que bloqueiam hotlink por referer — o /api/img-proxy é bloqueado por alguns,
 // então vem por último). Retorna um array; o consumidor tenta o próximo no onError.
-export function fotoCandidatos({ foto, fonte, fonteId }) {
+// Cópia nossa da capa (24/09): só existe para lote que está em relatório/caso/arremate de
+// cliente (api/espelhar-docs-cron.js). Path fixo por id — entra como ÚLTIMO candidato, então
+// só é pedida quando o CDN do leiloeiro já falhou; 404 aqui cai no placeholder como antes.
+const SB_PUBLICO = `${import.meta.env.VITE_SUPABASE_URL || 'https://zuwfiwokkdytvjixiwac.supabase.co'}/storage/v1/object/public/imoveis-fotos/espelho`;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function fotoCandidatos({ foto, fonte, fonteId, imovelId }) {
   // TRAVA DE CREDIBILIDADE (GESTAOLEILOES / "Lance no Leilão"): a foto é nomeada pelo
   // idLote (<idLote>_NN.jpg). Se o prefixo do arquivo não bate com o idLote deste
   // imóvel, é foto de OUTRO lote (bug de fatiamento já corrigido na origem) → descarta
@@ -28,5 +34,6 @@ export function fotoCandidatos({ foto, fonte, fonteId }) {
   if (foto && /^https?:\/\//.test(foto)) cands.push(foto);                 // 1) hotlink direto (o link_foto real)
   if (caixaUrl) cands.push(caixaUrl);                                       // 2) padrão de foto da Caixa por id
   if (!isCef && foto && /^https?:\/\//.test(foto)) cands.push(`/api/img-proxy?url=${encodeURIComponent(foto)}`); // 3) proxy
+  if (!isCef && imovelId && UUID_RE.test(String(imovelId))) cands.push(`${SB_PUBLICO}/${imovelId}.jpg`); // 4) nossa cópia
   return cands;
 }

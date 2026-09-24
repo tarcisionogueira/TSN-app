@@ -285,6 +285,10 @@ const normCidade = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-
 // por estar numa UF vizinha. Fora do raio, UF continua um filtro normal.
 function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   let q = base.eq('ativo', true);
+  // EDITAL_DJEN sem valor mínimo fora da busca pública (24/09) — lead do Radar de Editais sem
+  // preço nem foto; volta sozinho quando o enriquecimento achar o valor. Mesma regra na RPC
+  // buscar_por_raio_v2 (migração edital_djen_sem_valor_fora_da_busca.sql).
+  q = q.or('fonte.neq.EDITAL_DJEN,valor_minimo.gt.0');
   if (f.estado && !raioAtivo) q = q.eq('estado', f.estado);
   if (f.tipos?.length) q = q.in('tipo', [...f.tipos, 'imovel']);
   if (f.modalidades?.length) q = q.in('modalidade', f.modalidades);

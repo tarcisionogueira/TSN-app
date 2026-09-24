@@ -177,6 +177,45 @@ export default async function handler(req, res) {
   // Ou seja, 60s de orçamento sobravam todo dia por um teto que ninguém tinha declarado.
   // Reler funciona porque o que foi copiado sai da fila: a leitura seguinte traz os PRÓXIMOS.
   // A guarda `!lote.itens.length` é o que garante término — fila vazia encerra o laço.
+  // ─── FOTO DE CAPA dos lotes de CLIENTE (24/09) ────────────────────────────────────────
+  // Só o que está num relatório/caso/arremate (`proximas_fotos_espelho`, ~dezenas) — o acervo
+  // inteiro seria ~1 GB pagando para guardar foto que ninguém abriu. Path fixo
+  // `imoveis-fotos/espelho/<id>.jpg`: o front (utils/foto.js) usa como último candidato quando
+  // o CDN do leiloeiro some. Roda antes dos documentos com teto próprio de 30s; falhar aqui
+  // nunca impede os documentos. Resposta HTML ou não-imagem não é foto (forma #1).
+  const fotos = { copiadas: 0, falhas: 0, erro: null };
+  try {
+    const rf = await sb('rpc/proximas_fotos_espelho', { method: 'POST', body: JSON.stringify({ p_limite: 40 }) });
+    if (!rf.ok) fotos.erro = `fila HTTP ${rf.status}`;
+    const lista = rf.ok ? await rf.json().catch(() => []) : [];
+    for (const f of Array.isArray(lista) ? lista : []) {
+      if (Date.now() - t0 > 30000) break;
+      const falhou = async (motivo) => {
+        fotos.falhas++;
+        console.log('[espelhar-docs] foto', f.id, motivo);
+        await sb(`imoveis_leilao?id=eq.${f.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ foto_espelho_tentativas: (f.tentativas || 0) + 1 }) })
+          .catch((e) => console.error('[espelhar-docs] foto: não marquei tentativa', e?.message || e));
+      };
+      if (!hostExternoSeguro(f.link_foto)) { await falhou('host não permitido'); continue; }
+      try {
+        const r = await fetchExternoSeguro(f.link_foto, { headers: { 'User-Agent': UA, Accept: 'image/*' }, signal: AbortSignal.timeout(15000) });
+        const mime = (r.headers.get('content-type') || '').split(';')[0].trim();
+        if (!r.ok || !/^image\//i.test(mime)) { await falhou(`HTTP ${r.status} ${mime}`); continue; }
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (!buf.length || buf.length > 8 * 1024 * 1024) { await falhou(`tamanho ${buf.length}`); continue; }
+        const up = await fetch(`${SUPABASE_URL}/storage/v1/object/imoveis-fotos/espelho/${f.id}.jpg`, {
+          method: 'POST',
+          headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': mime, 'x-upsert': 'true' },
+          body: buf,
+        });
+        if (!up.ok) { await falhou(`upload ${up.status}`); continue; }
+        const pr = await sb(`imoveis_leilao?id=eq.${f.id}&select=id`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ foto_espelhada_em: new Date().toISOString() }) });
+        const alcancou = pr.ok ? await pr.json().catch(() => []) : [];
+        if (alcancou.length) fotos.copiadas++; else await falhou(`carimbo não gravou (HTTP ${pr.status})`);
+      } catch (e) { await falhou(String(e?.message || e).slice(0, 100)); }
+    }
+  } catch (e) { fotos.erro = String(e?.message || e).slice(0, 100); console.error('[espelhar-docs] fotos', fotos.erro); }
+
   for (;;) {
     if (Date.now() - t0 > ORCAMENTO_MS) break;
     const lote = await lerFila();
@@ -213,7 +252,7 @@ export default async function handler(req, res) {
 
   if (leituras === 0) {
     console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: 0, motivo: 'fila vazia' }));
-    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia' });
+    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia', fotos });
     return;
   }
 
@@ -255,7 +294,7 @@ export default async function handler(req, res) {
   } catch (e) { publicados = String(e?.message || e).slice(0, 80); }
 
   const saida = {
-    enfileirados, processados, copiados, falhas, ignorados, publicados,
+    enfileirados, processados, copiados, falhas, ignorados, publicados, fotos,
     sem_tempo: semTempo, pendentes, leituras, ms: Date.now() - t0,
     ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
     ...(enfileirarErro ? { erro_enfileirar: enfileirarErro } : {}),

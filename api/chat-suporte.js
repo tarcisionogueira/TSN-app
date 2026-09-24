@@ -58,7 +58,9 @@ SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnico
 // WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
 const CANAL_HINT = {
   site: '',
-  whatsapp: '\n\n## Canal: WhatsApp\n- Respostas MAIS CURTAS, em tom de conversa de app (mensagem, não e-mail). Evite listas longas; prefira frases curtas. Nada de markdown pesado.',
+  whatsapp: '\n\n## Canal: WhatsApp\n- Respostas MAIS CURTAS, em tom de conversa de app (mensagem, não e-mail). Evite listas longas; prefira frases curtas. Nada de markdown pesado.'
+    + '\n- Muita gente que chega pelo WhatsApp AINDA NÃO é cliente (veja o histórico). Para quem não é: entenda o objetivo (investir, morar, revender), explique em poucas linhas como a plataforma e a ASSESSORIA ajudam, e convide a criar a conta grátis em bidprobrasil.com.br. Sem preço: direcione à página de Planos.'
+    + '\n- Se a pessoa quiser CONTRATAR a assessoria, fechar negócio, ou falar com um consultor, diga que um consultor vai chamar por aqui e encerre com [[ESCALAR]].',
 };
 
 // NÚCLEO REUTILIZÁVEL do agente (site + futuro WhatsApp). Recebe a conversa e a

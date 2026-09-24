@@ -174,3 +174,18 @@ Managed). As duas pontas foram configuradas pelo dono no mesmo dia:
 **Como conferir se está ligado**: cadastro mostra o widget do Turnstile logo acima do botão
 "Criar conta grátis". Se não aparecer, o deploy que segue este commit ainda não terminou —
 env var nova só entra a partir do PRÓXIMO deploy, não retroage no que já estava no ar.
+
+## ⏳ WhatsApp oficial (Cloud API) — código pronto em 24/09, envs AINDA NÃO criadas
+
+Todas marcadas em Production + Preview + Development. Nomes (valores só no painel):
+- `WA_VERIFY_TOKEN` — texto qualquer que você inventa; o mesmo vai no campo "Verify token" do
+  webhook no painel da Meta (URL: `https://bidprobrasil.com.br/api/whatsapp-webhook`, campos
+  `messages` e, se usar o mesmo número no app, `smb_message_echoes`).
+- `WA_APP_SECRET` — Chave secreta do app (Meta → Configurações → Básico). Se o app for o MESMO
+  do Instagram, pode pular: `IG_APP_SECRET` já vale.
+- `WA_TOKEN` — token PERMANENTE de um usuário do sistema (Business Manager → Usuários do sistema),
+  com `whatsapp_business_messaging`. Token temporário do painel expira em 24 h.
+- `WA_PHONE_NUMBER_ID` — o id do número (WhatsApp → Configuração da API), não o telefone.
+- `WA_BOT_ATIVO=1` — liga a RESPOSTA da IA. Sem ele, o webhook escuta e grava, mas ninguém responde.
+
+**Como conferir, sem segredo nenhum:** `GET /api/whatsapp-webhook` devolve `{ escuta, responde, falta: [...] }`.

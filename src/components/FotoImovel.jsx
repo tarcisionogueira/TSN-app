@@ -9,12 +9,13 @@ import { fotoCandidatos } from '../utils/foto';
 // → proxy (/api/img-proxy). Antes cada tela reimplementava e divergia — a de
 // Análises/Arrematados ignorava o self-hosted do CEF e mandava o não-CEF direto ao
 // proxy, que sumia no 403; e não havia fallback (o onError só escondia a imagem).
-export default function FotoImovel({ imovel, iconSize = 22, imgStyle }) {
+export default function FotoImovel({ imovel, imovelId, iconSize = 22, imgStyle }) {
   const cands = React.useMemo(() => fotoCandidatos({
     foto: imovel?.foto || imovel?.link_foto,
     fonte: imovel?.fonte,
     fonteId: imovel?.fonteId || imovel?.fonte_id,
-  }), [imovel?.foto, imovel?.link_foto, imovel?.fonte, imovel?.fonteId, imovel?.fonte_id]);
+    imovelId: imovelId || imovel?.id || imovel?.imovel_id,
+  }), [imovel?.foto, imovel?.link_foto, imovel?.fonte, imovel?.fonteId, imovel?.fonte_id, imovelId, imovel?.id, imovel?.imovel_id]);
   const [idx, setIdx] = React.useState(0);
   const chave = cands.join('|');
   React.useEffect(() => { setIdx(0); }, [chave]);
