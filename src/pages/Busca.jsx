@@ -852,9 +852,10 @@ export default function Busca() {
   // para o selo ao navegar. Não impede selecionar cidade sem imóveis (monitoramento).
   const [cidadeCounts, setCidadeCounts] = useState({});
   const [resultados, setResultados] = useState([]);
-  // Posição na lista ao voltar do imóvel (24/09) — ver utils/estadoLista.js.
-  useRolagemDaLista('busca', !loading && resultados.length > 0);
   const [loading, setLoading] = useState(false);
+  // Posição na lista ao voltar do imóvel (24/09) — ver utils/estadoLista.js. DEPOIS do `loading`:
+  // chamado antes, lia a variável antes de existir e a tela /buscar quebrava inteira (TDZ).
+  useRolagemDaLista('busca', !loading && resultados.length > 0);
   const [erro, setErro] = useState('');
   const [buscaFeita, setBuscaFeita] = useState(false);
   const [showFiltros, setShowFiltros] = useState(true);
