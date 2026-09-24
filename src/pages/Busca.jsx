@@ -123,7 +123,7 @@ const PRAZO_OPTS = [
 // 'nao_apurado' aqui é só NULL — nunca tentado (leilão nem encerrou, ou o cron ainda não chegou).
 const RESULTADO_OPTS = [
   ['vendido', 'Com lance', 'O leilão recebeu lance — o lote foi arrematado.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem lance registrado. Oportunidade de propor compra direta.'],
+  ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
   ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 function calcularJanelaPrazo(opcao) {
@@ -305,7 +305,7 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
   // Resultado do leilão (apurado pelo cron do fim do dia) — 'sem_lance' agrupa 'sem_lance' E
   // 'indeterminado' (21/09: nenhum dos dois tem sinal de venda); 'nao_apurado' é só NULL.
-  if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,resultado_leilao.eq.indeterminado');
+  if (f.resultadoLeilao === 'sem_lance') q = q.eq('resultado_leilao', 'sem_lance'); // só confirmado (24/09): indeterminado pode ter tido lance
   else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).

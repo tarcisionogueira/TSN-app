@@ -23,8 +23,10 @@ const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 const RESULTADO_LEILAO_BADGE = {
   vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
 };
+// 24/09 (tarde, Montana SUPERBID do dono): 'indeterminado' NÃO é sem lance — na SUPERBID quase
+// sempre é lance abaixo da reserva (condicional). Sem confirmação não há selo nem filtro: fica
+// como "ainda não apurado" até a apuração decidir. Continuam só duas saídas visíveis.
 
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
 const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };

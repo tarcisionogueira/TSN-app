@@ -32,7 +32,6 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lo
 const RESULTADO_LEILAO_BADGE = {
   vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' }, // só 2 saídas para o cliente (dono, 24/09)
 };
 
 const TIPO_ANEXO_LABEL = {

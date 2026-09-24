@@ -33137,3 +33137,13 @@ de lances; `enriquecerDatasZuk` grava 1ª em `data_leilao` e 2ª em `data_leilao
 O coletor reativa quem segue no site (`ativo: true`), então os desligados por engano voltam na
 coleta. Teste: `npm run testar:zuk-pracas`. Conferir: `select count(data_leilao_2) from
 imoveis_leilao where fonte='ZUK' and ativo;` (era 18).
+
+### ↩️ "Sem lance" só quando CONFIRMADO (24/09, tarde — Montana SUPERBID do dono)
+Corrige decisão minha da manhã: indeterminado aparecia como "Sem lance". Na SUPERBID o
+indeterminado é quase sempre lance abaixo da reserva (`reservedPrice` = 999999999999 = toda venda
+condicional) e o `raw` guardado é da coleta ANTERIOR aos lances (Montana: raw de 18/09, price =
+mínimo, 4 lances e R$ 29.500 na página) — então `teve_lance` não pega. Afetava 245 veículos e 56
+imóveis. Agora: filtro "Sem lance" = `sem_lance` confirmado (veículo: e `teve_lance` false);
+indeterminado não tem selo nem filtro (igual "não apurado") até a apuração decidir. Continuam só
+duas saídas visíveis. A apuração residencial retenta esses indeterminados (fila justa) e liga
+`teve_lance` quando `totalBids` > 0 — rodar o `runner-residencial.sh` é o que os resolve.

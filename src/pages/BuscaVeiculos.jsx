@@ -44,7 +44,7 @@ const COLUNAS = [
 // 'nao_apurado' aqui é só NULL (nunca tentado).
 const RESULTADO_OPTS = [
   ['vendido', 'Com lance', 'O leilão recebeu lance — arrematado, ou lance abaixo da reserva aguardando o comitente.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance registrado. Oportunidade de propor compra direta.'],
+  ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
   ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 
@@ -174,8 +174,10 @@ function contagemLeilao(d) {
 const RESULTADO_BADGE = {
   vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
 };
+// 24/09 (tarde, Montana SUPERBID do dono): 'indeterminado' NÃO é sem lance — na SUPERBID quase
+// sempre é lance abaixo da reserva (condicional). Sem confirmação não há selo nem filtro: fica
+// como "ainda não apurado" até a apuração decidir. Continuam só duas saídas visíveis.
 // só vale depois de apurado: leilão ainda aberto com lance não tem RESULTADO
 const chaveResultado = (v) => (v.teve_lance && v.resultado_leilao ? 'vendido' : v.resultado_leilao);
 
@@ -347,7 +349,7 @@ export default function BuscaVeiculos() {
       else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
       // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'sem_lance' agrupa
       // 'sem_lance' E 'indeterminado' (nenhum tem sinal de venda); 'nao_apurado' é só NULL.
-      if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,and(resultado_leilao.eq.indeterminado,teve_lance.is.false)');
+      if (f.resultadoLeilao === 'sem_lance') q = q.eq('resultado_leilao', 'sem_lance').eq('teve_lance', false);
       else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
       else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
       else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
