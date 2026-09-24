@@ -67,6 +67,12 @@ const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial',
 // mercado segurador — mesmas que `SINISTRO_COR` já reconhece. "grande monta"/"perda total"
 // não têm ocorrência no acervo ainda (só SODRE/SUPORTE rodaram), mas são categorias REAIS que
 // o leiloeiro usa, não inventadas — ficam disponíveis desde já para quando aparecerem.
+// Avaliação/desconto (24/09): só ~2% dos lotes de veículo trazem avaliação do leiloeiro — o
+// filtro é honesto (não inventa valor), mas precisa DIZER que deixa de fora quem não informa,
+// senão a lista curta parece "não há oportunidade".
+const AVISO_SEM_AVALIACAO = 'Poucos leiloeiros de veículos informam avaliação — este filtro mostra só os lotes que informam.';
+const avisoCobertura = { display: 'block', marginTop: 4, fontSize: 11, color: '#64748b', lineHeight: 1.3 };
+
 const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande monta', 'perda total'];
 // "Não informado" (23/09): 8.307 dos ~8.800 veículos ativos vêm SEM classificação de monta do
 // leiloeiro — sem esta opção, marcar "Sem sinistro" escondia quase todo o acervo.
@@ -310,7 +316,9 @@ export default function BuscaVeiculos() {
       if (f.estado) q = q.eq('estado', f.estado);
       if (f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
       if (f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
-      if (f.marca.trim()) q = q.ilike('marca', `%${f.marca.trim()}%`);
+      // Marca: OR com o título (24/09) — 30% dos lotes vêm sem `marca` (SODRE/SUPERBID trazem só
+      // "HONDA CG 160..." no título) e o ilike só na coluna os escondia, como o `modelo` acima.
+      if (f.marca.trim()) { const t = f.marca.trim(); q = q.or(`marca.ilike.%${t}%,titulo.ilike.%${t}%`); }
       // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
       // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
       // só em `modelo` esconderia esse leiloeiro inteiro do filtro.
@@ -435,6 +443,7 @@ export default function BuscaVeiculos() {
           <div>
             <label style={lbl}>Avaliação máx. (R$)</label>
             <input style={inp} type="number" placeholder="80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
+            {filtros.valorAvaliacaoMax && <small style={avisoCobertura}>{AVISO_SEM_AVALIACAO}</small>}
           </div>
           <div>
             <label style={lbl}>Desconto mín.</label>
@@ -444,6 +453,7 @@ export default function BuscaVeiculos() {
               <option value="40">40% ou mais</option>
               <option value="60">60% ou mais</option>
             </select>
+            {filtros.descontoMin && <small style={avisoCobertura}>{AVISO_SEM_AVALIACAO}</small>}
           </div>
           <div>
             <label style={lbl}>Tipo de monta</label>

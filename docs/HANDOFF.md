@@ -33019,3 +33019,32 @@ RPCs novas: `alertas_sinais_lote(uuid[])`, `email_campanha_permitida(uuid)` (ser
 Dry-run da distribuição: ativo 76 · inativo 57 · novo 26 · pagante 4 · assessorado 4 → ~84
 oportunidades/semana no teto (hoje ~70), redistribuídas para quem clica. Testes:
 `testar:cadencia`, `testar:curadoria`. IA da curadoria LIGADA via `app_config.curadoria_ia`.
+
+### 📬 Teto de 100/dia na cadência + filtros que escondiam o acervo (24/09, tarde)
+**Teto.** Segunda 21/09 saturou: 80 de 80 do orçamento (`enviarEmail` = 100 do Resend − 20 do
+cadastro), 68 deles alertas. O recorrente só saía na SEGUNDA, então quem o teto cortou esperava a
+semana seguinte — o comentário do cron dizia "entra amanhã" e não entrava. Agora
+(`api/_cadencia.js`): `podeRecorrenteHoje` = seg–sex (segunda continua o dia principal; ter–sex
+só alcança quem ficou devendo — `cedoDemais` barra quem já recebeu) e `cabeNoOrcamento`: o cron
+para o GRATUITO com ≤ 25 restantes e o PAGANTE/assessorado com ≤ 15 (`reserva_transacional` 15 +
+`reserva_pagante` 10, editáveis em `app_config.cadencia_email`). O `restanteHoje` é lido 1× por
+invocação (`orcamentoRestanteHoje`) e decrementado a cada reserva; o gate duro segue sendo a
+reserva atômica. Adiado não é marcado como enviado. Resposta/rastro: `adiados_por_teto`,
+`restante_hoje`. Fila transacional (`drenar-fila-emails-cron`, 00:15/03:15/…) drena ANTES do
+cron de alertas das 11h. Teste: `testar:cadencia` (7 casos novos).
+
+**Filtro "Carro" vazio.** `tipo_veiculo` nulo em 59% dos ativos. Migração
+`tipo_veiculo_por_modelo_e_marca.sql`: `classificar_tipo_veiculo()` por modelo/marca (caminhão/
+ônibus/van ANTES do carro) + gatilho que só preenche nulo. Revisão da amostra de caminhões pegou
+preço colado no título ("R$ 35.038,80" ≈ modelo "24.280") e ano depois de MB/Cargo
+("VOYAGE MB 2016", "CG 160 CARGO 2020"): valores em R$ saem do texto e 19xx/20xx não conta como
+modelo; 18 caminhões falsos reclassificados. Hoje, visíveis: carro 3.098 → ~4.000 no total ativo.
+**Mesma causa em outras colunas do /veiculos** (`veiculo_ano_e_uf_pelo_titulo.sql`):
+`ano_fabricacao` 27% → 84% (SUPERBID tem o ano no título; validado 99% contra os que já tinham —
+2000/2008 excluídos por serem nome de modelo: Santana 2000, Peugeot 2008); `estado` 90% → 99%
+(SODRE grava "Guarulhos I/sp" na cidade; resto por `uf_da_cidade_unica`); `desconto_percentual`
+calculado da avaliação quando falta (nunca da FIPE — outra régua). Marca passou a buscar também
+no título (30% sem `marca`). Avaliação/desconto: só ~2% dos lotes informam — o filtro ficou, com
+aviso de cobertura. ⚠️ FIPE enriquecida em só 178 de 7.580 (`fipe_status` nulo) — pendência.
+**Imóveis:** colunas dos filtros ~100% preenchidas; o defeito era de OPÇÃO — faltava
+"Venda Online" (11.778 imóveis, 51%), e "Venda Direta" devolvia 45. Adicionada.

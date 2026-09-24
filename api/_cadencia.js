@@ -14,7 +14,14 @@ export const PADRAO = {
   novo_dias_conta: 14, ativo_janela_dias: 30, pausa_apos_sem_abrir: 7,
   itens_padrao: 12, itens_gratuito_ativo: 6,
   imediato_max_semana: 2, imediato_piso_pontos: 80, imediato_janela_horas: 36,
+  // TETO DE 100/DIA DO RESEND (24/09): o cron de alertas deixa `reserva_transacional` e-mails
+  // do dia para relatório pronto/cadastro/suporte, e o gratuito ainda deixa `reserva_pagante`
+  // para quem paga. O que não coube hoje sai no próximo dia útil (ver `podeRecorrenteHoje`).
+  reserva_transacional: 15, reserva_pagante: 10,
 };
+
+// Pagante e assessorado passam na frente quando o orçamento do dia está acabando.
+const PRIORITARIOS = new Set(['pagante', 'assessorado']);
 
 export const ROLES_PAGANTE = new Set(['top2', 'top2_anual', 'clube', 'admin']);
 
@@ -49,4 +56,27 @@ export function segmentoCadencia(perfil, sinais, cfg = PADRAO, agora = Date.now(
 export function cedoDemais(ultimoEnvio, dias, agora = Date.now()) {
   if (!ultimoEnvio) return false;
   return new Date(ultimoEnvio).getTime() > agora - (dias * 24 - 12) * 3600 * 1000;
+}
+
+/**
+ * O recorrente pode sair HOJE? Segunda é o dia principal, mas até 21/09 era o ÚNICO: com o teto
+ * de 100/dia do Resend a segunda saturou (80 de 80 do orçamento, 68 deles alertas) e quem ficou
+ * de fora esperava a PRÓXIMA segunda — o comentário do cron dizia "entra amanhã", e não entrava.
+ * Agora quem está em dia com a cadência e não recebeu sai no próximo dia útil (ter–sex), e o
+ * `cedoDemais` impede o segundo envio a quem já recebeu na segunda.
+ */
+export function podeRecorrenteHoje(agora = Date.now()) {
+  const d = new Date(agora).getUTCDay();
+  return d >= 1 && d <= 5;
+}
+
+/**
+ * Ainda cabe no orçamento do dia para este segmento? `restante` = o que sobra dos 80 do
+ * `enviarEmail` (100 do Resend − 20 do cadastro). Nunca é o gate duro — esse é a reserva
+ * atômica no banco —, é a ORDEM de quem fica para amanhã.
+ */
+export function cabeNoOrcamento(segmento, restante, cfg = PADRAO) {
+  const c = { ...PADRAO, ...(cfg || {}) };
+  const piso = c.reserva_transacional + (PRIORITARIOS.has(segmento) ? 0 : c.reserva_pagante);
+  return restante > piso;
 }

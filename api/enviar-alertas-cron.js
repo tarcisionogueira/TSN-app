@@ -65,7 +65,7 @@ import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
-import { segmentoCadencia, cedoDemais, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
+import { segmentoCadencia, cedoDemais, podeRecorrenteHoje, cabeNoOrcamento, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
 import { TIPOS_POR_PERFIL, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
@@ -283,6 +283,7 @@ async function handler(req) {
   // daqui é o CONTADOR no rastro da varredura, que é onde se olha.
   let suprimidosNoLote = new Set();
   let reservarOrcamentoEmail = null;
+  let restanteHoje = 0; // e-mails que ainda cabem hoje (leitura; o gate duro é a reserva atômica)
   try {
     const mod = await import('./_email.js');
     const r = await mod.consultarSupressao([...emailMap.values()], 'oportunidades');
@@ -291,7 +292,7 @@ async function handler(req) {
     // Este é o MAIOR volume de e-mail da casa — é ele quem mais rápido bate no teto de
     // 100/dia do plano Free. Corta o loop cedo em vez de deixar o Resend devolver erro pra
     // cada envio; quem ficar de fora não é marcado como enviado (nem `ultimo_envio` nem
-    // `alertas_enviados`), então o cron de AMANHÃ (0 11 * * *) reconsidera essas pessoas
+    // `alertas_enviados`), então o cron do próximo dia útil (0 11 * * *) reconsidera essas pessoas
     // normalmente — dispensa fila própria pra este arquivo.
     // Era uma FOTO lida uma vez aqui e decrementada em memória (linha do loop, abaixo) — sem
     // saber de `enviarEmail`/`drenar-fila-emails-cron.js` reservando o MESMO orçamento ao
@@ -299,7 +300,8 @@ async function handler(req) {
     // real (4 falhas reais do Resend em 13/09). Agora cada envio deste loop reserva 1 slot
     // ATOMICAMENTE no banco (mesma RPC que `enviarEmail` usa) bem antes do fetch ao Resend.
     reservarOrcamentoEmail = mod.reservarOrcamentoEmail;
-  } catch { /* não consegui checar: segue enviando, como antes deste commit */ }
+    restanteHoje = await mod.orcamentoRestanteHoje(); // falha de leitura = 0 (fail-closed, igual ao helper)
+  } catch { /* módulo não carregou: restanteHoje fica 0 e o lote não envia (fail-closed, como o helper) */ }
 
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
   // garante que a próxima já foi acionada — ela roda independente). Não encadeia em teste.
@@ -324,7 +326,7 @@ async function handler(req) {
     const cursorProx = cortadoPorTempo ? ultimoProcessado : ultimoIdLote;
     // Corte por orçamento de E-MAIL nunca encadeia: a próxima invocação bateria no mesmo
     // teto do dia sem enviar nada, só gastando função à toa. Quem ficou de fora reaparece
-    // sozinho no cron de amanhã (não foi marcado como enviado).
+    // sozinho no cron do próximo dia útil (não foi marcado como enviado; `podeRecorrenteHoje`).
     if ((!loteCheio && !cortadoPorTempo) || !cursorProx || testeEmail || !CRON || cortadoPorOrcamentoEmail) return;
     const q = new URLSearchParams({ cursor: cursorProx, batch: String(BATCH) });
     if (forcar) q.set('forcar', '1');
@@ -629,7 +631,8 @@ async function handler(req) {
   const porSegmento = {}; let imediatos = 0;
   let suprimidos = 0;
   let cortadoPorOrcamentoEmail = false;
-  const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
+  const diaDeRecorrente = podeRecorrenteHoje(); // seg–sex; segunda é o dia principal (11h UTC = 8h BRT)
+  let adiadosPorTeto = 0; // não couberam no teto de hoje — saem no próximo dia útil
 
   for (const perfil of perfis) {
     // Corte por ORÇAMENTO DE TEMPO antes de começar mais um usuário. `ultimoProcessado` só
@@ -658,9 +661,10 @@ async function handler(req) {
         } else {
           // CADÊNCIA POR SEGMENTO (24/09): o intervalo vem do segmento (pagante 7 · assessorado
           // 14 · novo 7 · ativo 14 · inativo 28 · pausado 60 dias — app_config.cadencia_email).
-          // Recorrente continua só às segundas (ou ?forcar=1). Fora disso, o PAGANTE pode receber
+          // Recorrente de segunda a sexta (segunda é o dia principal; ter–sex só alcança quem o teto
+          // de segunda deixou de fora — `cedoDemais` barra quem já recebeu). Fora disso, o PAGANTE pode receber
           // o ALERTA IMEDIATO (lote novo e excepcional no perfil dele, até N por semana).
-          const podeRecorrente = (isSegunda || forcar) && !cedoDemais(a.ultimo_envio, seg.dias);
+          const podeRecorrente = (diaDeRecorrente || forcar) && !cedoDemais(a.ultimo_envio, seg.dias);
           if (!podeRecorrente) {
             if (seg.segmento === 'pagante' && !forcar
                 && (sinaisMap[perfil.id]?.imediatos_7d || 0) < cadCfg.imediato_max_semana) modo = 'imediato';
@@ -676,6 +680,10 @@ async function handler(req) {
           // seria punir a pessoa errada, não o padrão.
           // (O piso mensal de quem não abre, de 10/09, virou o segmento "inativo"/"pausado".)
         }
+        // TETO DE 100/DIA (24/09): antes de qualquer trabalho caro. Quem não cabe hoje NÃO é
+        // marcado como enviado e sai no próximo dia útil. O gratuito para antes, deixando a sobra
+        // para pagante/assessorado que ainda estejam adiante neste lote ou nos encadeados.
+        if (!cabeNoOrcamento(seg.segmento, restanteHoje, cadCfg)) { adiadosPorTeto++; continue; }
       }
 
       // ── Seleção assertiva ────────────────────────────────────────────────
@@ -1004,10 +1012,11 @@ async function handler(req) {
       // sem isto os três liam orçamento desatualizado e, somados, estouravam o teto real do
       // Resend (4 falhas reais de "daily email sending quota" em 13/09, mesmo com represamento
       // ativo). Corta o loop aqui — sem chamar o Resend, sem chained `continuar()` (ver
-      // abaixo) — quem ficou de fora entra de novo no cron de amanhã.
+      // abaixo) — quem ficou de fora entra de novo no próximo dia útil.
       if (!testeEmail) {
         const reserva = reservarOrcamentoEmail ? await reservarOrcamentoEmail() : { permitido: true };
         if (!reserva.permitido) { cortadoPorOrcamentoEmail = true; break; }
+        restanteHoje--;
       }
       const assunto = modo === 'imediato'
         ? `⚡ Nova oportunidade no seu perfil em ${local}`
@@ -1081,11 +1090,11 @@ async function handler(req) {
       headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
         chave: 'enviar_alertas_cron',
-        assinatura: JSON.stringify({ enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
+        assinatura: JSON.stringify({ enviados, suprimidos, adiados_por_teto: adiadosPorTeto, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
         atualizado_em: new Date().toISOString(),
       }),
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, cadencia: { cfg: cadCfgOrigem, por_segmento: porSegmento, imediatos }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, cadencia: { cfg: cadCfgOrigem, por_segmento: porSegmento, imediatos, adiados_por_teto: adiadosPorTeto, restante_hoje: restanteHoje }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }

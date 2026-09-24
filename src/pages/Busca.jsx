@@ -93,6 +93,9 @@ const MODALIDADE_OPTS = [
   ['extrajudicial', 'Extrajudicial', 'Leilão do próprio credor, fora do Judiciário (alienação fiduciária). Costuma ser mais rápido e com regras no edital do banco.'],
   ['judicial',      'Judicial',      'Leilão determinado dentro de um processo (execução, falência, inventário). O edital e os autos mandam.'],
   ['venda_direta',  'Venda Direta',  'Sem pregão: o banco vende direto e a proposta pode ser feita a qualquer momento, pelo valor anunciado.'],
+  // 'venda_online' faltava aqui (24/09): 51% dos imóveis ativos (CAIXA) têm essa modalidade e
+  // ninguém conseguia filtrar por ela — marcar "Venda Direta" devolvia só 45 lotes.
+  ['venda_online',  'Venda Online',  'Venda pela internet do banco (CAIXA), com prazo para propostas e sem pregão presencial.'],
 ];
 // PRAZO DO LEILÃO — pedido do dono (11/09): "planejar para leilão nesse mês, no próximo, ou
 // no próximo trimestre". Janelas CUMULATIVAS a partir de hoje (não meses isolados) — quem
