@@ -33207,3 +33207,25 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   `mp.fields`, em Checkout.jsx e PagamentoServico.jsx) · SDK backend 5 ✗ (usamos fetch). Com um
   pagamento NOSSO (cartão pelo site) a conta estimada passa de 73 sem os dois ✗.
 - **Crontab do dono:** trocado para `0 2,8,14,20 * * *` (dono, 24/09) — conferência agendada 17:45 UTC.
+
+### 🔐 Mercado Pago: Secure Fields + SDK de backend (24/09, pedido do dono)
+- **Secure Fields** (`src/utils/cartaoSeguroMP.js`, hook `useCartaoSeguroMP`): número/validade/CVV
+  viram iframes do MP montados DENTRO do nosso formulário (Checkout.jsx top2-sem-login e
+  PagamentoServico.jsx) — layout/borda nossos, número nunca passa pelo nosso JS; token por
+  `mp.fields.createCardToken({ cardholderName, CPF })`; BIN pelo evento `binChange` (fallback
+  `first_six_digits` do token); SDK barrado mantém `sdkBloqueado` (cai no Asaas como antes).
+  Também carrega `security.js` (device ID) — **o CSP bloqueava `www.mercadopago.com`**, então o
+  device ID provavelmente nunca era gerado. CSP: script-src + www.mercadopago.com; connect-src +
+  *.mercadopago.com, *.mercadolibre.com, *.mercadolivre.com.
+  **Teste no navegador** (Puppeteer, SDK falso interceptado, build local): 3 campos montados, token
+  pedido com nome+CPF, servidor recebeu só `cardTokenId` + `deviceId`, nenhum dado de cartão no
+  corpo, 3 desmontagens ao voltar, 0 erros de página. O SDK REAL só se vê no 1º pagamento.
+- **SDK de backend** (`api/_mp-sdk.js`, pacote `mercadopago` 3.6.1): criar pagamento (mp-checkout),
+  preferência e assinatura (mp.js) e consultar pagamento (mp-webhook). Mesma chave de idempotência
+  (sem cortar), mesmo device ID, mesmo corpo, erro com a mesma mensagem. ⚠️ **Armadilha do SDK:**
+  cada chamada GRAVA as opções na config compartilhada — config NOVA por chamada, senão a chave de
+  idempotência/device ID vazava para a cobrança seguinte (teste `testar:mp-sdk` cobre). 12 s por
+  tentativa, 1 nova tentativa, `maxDuration: 30` nas 3 funções. `mp.js` saiu do runtime edge (o
+  SDK usa `crypto`/`process`) → handler Node (req, res), respostas idênticas (testado 405/200/401).
+- **Validar no 1º pagamento real:** cartão pelo site → tela de pagamento abre com os 3 campos
+  seguros → aprovado → no painel MP, "Medir novamente".

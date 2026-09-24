@@ -11,6 +11,11 @@ import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { cpfDoRegistro, validarCPF } from './_cpf.js';
+import { mpSdk } from './_mp-sdk.js';
+
+// 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
+// morrer no meio de uma cobrança.
+export const config = { maxDuration: 30 };
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -442,20 +447,19 @@ export default async function handler(req, res) {
     // adblock, por ex.), a cobrança segue sem o fingerprint, só com aprovação potencialmente
     // mais conservadora — nunca bloqueia o pagamento por isso.
     const deviceId = req.body?.deviceId ? String(req.body.deviceId).slice(0, 200) : null;
-    const mpRes = await fetch(`${MP_BASE}/v1/payments`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': idemKey,
-        ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
+    // SDK oficial (24/09, qualidade MP "SDK do backend") — mesma chave, mesmo device ID, mesmo corpo.
+    // Erro HTTP do MP (status > 0) → a mesma resposta 422 de antes; falha de REDE (status 0) sobe
+    // para o catch de fora, como o `fetch` fazia.
+    let data, erroMp = false;
+    try {
+      data = await mpSdk.criarPagamento(payload, { idempotencyKey: idemKey, deviceId });
+    } catch (e) {
+      if (!e.status) throw e;
+      erroMp = true;
+      data = { message: e.message, cause: e.causa, status: e.status };
+    }
 
-    const data = await mpRes.json();
-
-    if (!mpRes.ok) {
+    if (erroMp) {
       console.error('[mp-checkout] erro MP:', data);
       // "Pagamento recusado" sozinho é beco sem saída pro cliente (achado 17/09: 3 tentativas
       // seguidas do mesmo usuário, mesmo erro, sem indicação do que fazer). As outras respostas

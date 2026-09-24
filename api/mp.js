@@ -10,9 +10,11 @@
  *  status_assinatura
  */
 
-export const config = { runtime: 'edge' };
+// runtime Node desde 24/09: o SDK oficial do MP (api/_mp-sdk.js) usa `crypto`/`process`, que o edge não tem.
+export const config = { runtime: 'nodejs', maxDuration: 30 };
 
-import { getAuthUser } from './_auth.js';
+import { getUser } from './_auth.js';
+import { mpSdk } from './_mp-sdk.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
@@ -32,6 +34,10 @@ const WEBHOOK   = `${BASE_URL}/api/mp-webhook`;
 // ao Checkout Transparente (cobramos direto, sem o cliente passar pela página do MP); nos
 // fluxos hospedados (Checkout Pro) é a própria página deles que já coleta isso.
 async function mpPost(path, body, idemKey, deviceId) {
+  // Criar LINK de pagamento e ASSINATURA vão pelo SDK oficial (24/09, qualidade MP) — mesma chave de
+  // idempotência, mesmo device ID, mesmo corpo; erro volta como Error com a mesma mensagem.
+  if (path === '/checkout/preferences') return mpSdk.criarPreferencia(body, { idempotencyKey: idemKey || crypto.randomUUID() });
+  if (path === '/preapproval') return mpSdk.criarAssinatura(body, { idempotencyKey: idemKey || crypto.randomUUID(), deviceId });
   const res = await fetch(`${MP_URL}${path}`, {
     method: 'POST',
     headers: {
@@ -497,20 +503,20 @@ async function cancelarAssinatura({ assinaturaId, email, userId }) {
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
-export default async function handler(req) {
-  if (req.method === 'OPTIONS') return new Response('ok', { status: 200 });
-  if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
+// Formato Node (req, res) desde 24/09 — mesmas respostas do formato Web anterior.
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') return res.status(200).send('ok');
+  if (req.method !== 'POST') return res.status(405).send('method not allowed');
 
-  if (!TOKEN) return new Response(JSON.stringify({ error: 'MP_ACCESS_TOKEN não configurado' }), { status: 500 });
+  if (!TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
 
   let user;
-  try { user = await getAuthUser(req); } catch { /* getAuthUser retorna null em falha */ }
-  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
+  try { user = await getUser(req); } catch { /* getUser retorna null em falha */ }
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
 
   let body;
-  try { body = await req.json(); } catch {
-    return new Response(JSON.stringify({ error: 'Body inválido' }), { status: 400 });
-  }
+  try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; } catch { body = null; }
+  if (!body || typeof body !== 'object') return res.status(400).json({ error: 'Body inválido' });
 
   const { action, ...params } = body;
   // Segurança: o usuário do checkout é SEMPRE o autenticado (evita IDOR)
@@ -528,7 +534,7 @@ export default async function handler(req) {
   // criar uma 2ª cobrança de assessoria enquanto a atual não teve arremate sinalizado.
   if (/^assessorado/.test(String(params.plano || '')) && ['criar_preferencia', 'criar_assinatura', 'criar_assinatura_transparente'].includes(action)) {
     const gate = await podeContratarAssessoria({ userId: user.id, email: user.email, role: roleAtual });
-    if (!gate.podeContratar) return new Response(JSON.stringify({ error: 'assessoria_bloqueada', motivo: gate.motivo }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    if (!gate.podeContratar) return res.status(409).json({ error: 'assessoria_bloqueada', motivo: gate.motivo });
   }
 
   try {
@@ -541,11 +547,11 @@ export default async function handler(req) {
       case 'verificar':          result = await verificar(params);           break;
       case 'cancelar_assinatura': result = await cancelarAssinatura(params); break;
       default:
-        return new Response(JSON.stringify({ error: `Action desconhecida: ${action}` }), { status: 400 });
+        return res.status(400).json({ error: `Action desconhecida: ${action}` });
     }
-    return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return res.status(200).json(result);
   } catch (err) {
     console.error(`[mp] action=${action}`, err.message);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return res.status(500).json({ error: err.message });
   }
 }

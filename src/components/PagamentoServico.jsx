@@ -11,7 +11,8 @@
  *   2. Cartão de crédito → parcelado em até 12x (cliente absorve taxas MP)
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import { QrCode, CreditCard, CheckCircle2, Loader2, Copy, AlertCircle, ChevronLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -369,7 +370,9 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const { user } = useAuth();
   const email = emailProp || user?.email;
   const [parcelas, setParcelas] = useState(1);
-  const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
+  // Número/validade/CVV são Secure Fields do MP (24/09) — só o nome no cartão fica em estado nosso.
+  const [form, setForm] = useState({ nome: '' });
+  const cartao = useCartaoSeguroMP(true, `svc${useId().replace(/:/g, '')}`);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState('');
   const pollingRef = useRef(null);
@@ -438,14 +441,11 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
     }
   };
 
-  const upd = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
-  const fmtNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-  const fmtVal = v => v.replace(/\D/g, '').replace(/^(\d{2})/, '$1/').slice(0, 5);
 
   const pagar = async () => {
     setErro('');
-    if (!form.numero || !form.nome || !form.validade || !form.cvv) {
-      setErro('Preencha todos os campos do cartão.');
+    if (!form.nome.trim()) {
+      setErro('Informe o nome impresso no cartão.');
       return;
     }
     if (!MP_PUBLIC_KEY) {
@@ -454,33 +454,11 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
     }
     setProcessando(true);
     try {
-      if (!window.MercadoPago) {
-        // Mesmo padrao de src/pages/Checkout.jsx (assinarComCadastro, 18/08): sdk.mercadopago.com
-        // e um dos hosts que bloqueador de anuncio/extensao de privacidade mais barra, e o Event
-        // bruto do onerror nao tem .message - sem isso o catch caia no generico "Erro ao
-        // processar pagamento" sem dizer o motivo nem dar saida (achado 04/09, ver catch abaixo).
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://sdk.mercadopago.com/js/v2';
-          s.onload = resolve;
-          s.onerror = () => reject(Object.assign(
-            new Error('Nao conseguimos carregar o componente de cartao (ele costuma ser barrado por bloqueador de anuncios ou extensao de privacidade).'),
-            { sdkBloqueado: true },
-          ));
-          document.head.appendChild(s);
-        });
-      }
-      const mp = new window.MercadoPago(MP_PUBLIC_KEY);
+      // Secure Fields (24/09): o token sai dos campos do MP montados no formulário — o número do
+      // cartão não passa pelo nosso código. Bloqueio do SDK chega aqui com `sdkBloqueado`,
+      // exatamente como antes (cai no Asaas quando o fluxo permite).
+      const token = await cartao.tokenizar({ cardholderName: form.nome.trim() });
       const deviceId = await obterDeviceId();
-      const [mes, ano] = form.validade.split('/');
-      const token = await mp.createCardToken({
-        cardNumber: form.numero.replace(/\s/g, ''),
-        cardholderName: form.nome,
-        cardExpirationMonth: mes,
-        cardExpirationYear: `20${ano}`,
-        securityCode: form.cvv,
-      });
-      if (!token?.id) throw new Error('Não foi possível tokenizar o cartão.');
 
       // ── Assinatura recorrente transparente (preapproval) ──────────────────
       if (assinatura) {
@@ -524,7 +502,9 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       // recusa com HTTP 400 "Invalid payment_method_id" — indistinguível, pro cliente, de
       // "seu cartão foi recusado", mas o problema era nosso chute, não o cartão dele
       // (4 tentativas seguidas, mesmo erro exato, dados conferidos como corretos).
-      const bin = form.numero.replace(/\s/g, '').slice(0, 6);
+      // BIN do evento binChange dos Secure Fields; se não veio, o próprio token traz os 6 primeiros
+      // dígitos (`first_six_digits`). Nunca lemos o número do cartão.
+      const bin = cartao.bin || token?.first_six_digits || '';
       let metodoPagamentoId;
       try {
         const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
@@ -665,8 +645,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 
       <div>
         <label style={lbl}>Número do cartão</label>
-        <input style={inp} placeholder="0000 0000 0000 0000"
-          value={form.numero} onChange={e => setForm(p => ({ ...p, numero: fmtNum(e.target.value) }))} />
+        <div id={cartao.ids.numero} style={{ ...inp, height: 42, padding: '0 12px' }} />
       </div>
       <div>
         <label style={lbl}>Nome no cartão</label>
@@ -676,14 +655,16 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={lbl}>Validade</label>
-          <input style={inp} placeholder="MM/AA"
-            value={form.validade} onChange={e => setForm(p => ({ ...p, validade: fmtVal(e.target.value) }))} />
+          <div id={cartao.ids.validade} style={{ ...inp, height: 42, padding: '0 12px' }} />
         </div>
         <div>
           <label style={lbl}>CVV</label>
-          <input style={inp} placeholder="000" maxLength={4} name="cvv" value={form.cvv} onChange={upd} />
+          <div id={cartao.ids.cvv} style={{ ...inp, height: 42, padding: '0 12px' }} />
         </div>
       </div>
+      {!cartao.pronto && !cartao.erroSdk && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -8 }}>Carregando campos seguros do cartão…</div>}
+      {cartao.erroSdk && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: -8 }}>{cartao.erroSdk}</div>}
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: -8 }}>🔒 Número, validade e CVV são digitados em campos protegidos do Mercado Pago — não passam pelos nossos servidores.</div>
 
       {erro && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10 }}>

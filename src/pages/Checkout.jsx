@@ -19,6 +19,7 @@ import { salvarRef } from '../utils/ref';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
+import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import { ESTADOS_UF } from '../data/cidades';
 
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
@@ -217,11 +218,13 @@ export default function Checkout() {
   const pixAnualPidRef = React.useRef(null); // paymentId do PIX-anuidade, p/ retry da ativação
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
-  const [card, setCard] = useState({ numero: '', nome: '', validade: '', cvv: '' });
+  const [card, setCard] = useState({ nome: '' }); // número/validade/CVV: Secure Fields do MP
   const [etapa, setEtapa] = useState('ident'); // 'ident' (dados) | 'pgto' (cartão), só top2 não-logado
   const [suErro, setSuErro] = useState('');
   const [suLoading, setSuLoading] = useState(false);
   const [contaCriada, setContaCriada] = useState(false);
+  // Secure Fields do MP (24/09): número/validade/CVV montados só na etapa do cartão do top2 sem login.
+  const cartaoSeguro = useCartaoSeguroMP(!user && !contaCriada && planoKey === 'top2' && etapa === 'pgto', 'checkout');
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
@@ -231,7 +234,7 @@ export default function Checkout() {
   // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
   useEffect(() => {
     setSu({ nome: '', email: '', senha: '', aceite: false });
-    setCard({ numero: '', nome: '', validade: '', cvv: '' });
+    setCard({ nome: '' });
     setEtapa('ident'); setSuErro('');
   }, [planoKey]);
 
@@ -688,8 +691,6 @@ export default function Checkout() {
     setSuLoading(false);
   };
 
-  const fmtCardNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-  const fmtCardVal = v => v.replace(/\D/g, '').replace(/^(\d{2})/, '$1/').slice(0, 5);
 
   // Etapa 1 → 2: valida os dados de identificação (incl. CPF/endereço p/ fiscal)
   // antes de mostrar o cartão. Mesma validação que o servidor refaz.
@@ -714,43 +715,17 @@ export default function Checkout() {
     if (!nome || !email || !senha || !su.aceite) { setSuErro('Complete seus dados no passo 1.'); setEtapa('ident'); return; }
     if (!cpfOk) { setSuErro('Informe um CPF válido (11 dígitos).'); return; }
     if (!enderecoOk) { setSuErro('Preencha o endereço completo para a nota fiscal.'); return; }
-    if (!card.numero || !card.nome || !card.validade || !card.cvv) { setSuErro('Preencha todos os dados do cartão.'); return; }
-    if (!/^\d{2}\/\d{2}$/.test(card.validade)) { setSuErro('Validade no formato MM/AA.'); return; }
+    if (!card.nome.trim()) { setSuErro('Informe o nome impresso no cartão.'); return; }
     const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
     if (!MP_PUBLIC_KEY) { setSuErro('Pagamento indisponível no momento. Tente mais tarde.'); return; }
     if (assinandoRef.current) return; // evita duplo-clique/duplo-envio
     assinandoRef.current = true;
     setSuLoading(true);
     try {
-      if (!window.MercadoPago) {
-        // 18/08: `s.onerror` rejeita com um Event, cujo `.message` e undefined — o catch la
-        // embaixo caia no genérico "Erro ao processar a assinatura." e a pessoa ficava sem
-        // saber o que fazer. E `sdk.mercadopago.com` e um dos hosts que bloqueador de anúncio
-        // e extensão de privacidade barram com mais frequência.
-        //
-        // Importa porque ESTE fluxo (criar conta + pagar de uma vez) é o ÚNICO sem plano B:
-        // o fluxo de quem já tem conta cai automaticamente no Asaas por LINK, que não precisa
-        // de SDK nenhum. Quem chega novo e tem o SDK barrado não tinha rota alguma — foi o
-        // caso de quem tentou o Top2 quatro vezes entre 06 e 17/08 e segue Explorador.
-        //
-        // Não reescrevi o fluxo de pagamento: só deixo de entregar um beco sem saída. A saída
-        // ("Criar conta grátis") já existe nesta mesma tela e leva ao caminho com plano B.
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://sdk.mercadopago.com/js/v2';
-          s.onload = resolve;
-          s.onerror = () => reject(Object.assign(
-            new Error('Não conseguimos carregar o componente de cartão (ele costuma ser barrado por bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo — ou clique em "Criar conta grátis" acima e assine em seguida, por link de pagamento.'),
-            { sdkBloqueado: true },
-          ));
-          document.head.appendChild(s);
-        });
-      }
-      const mp = new window.MercadoPago(MP_PUBLIC_KEY);
+      // Secure Fields (24/09): token sai dos campos do MP montados no formulário — o número do cartão
+      // não passa pelo nosso código. SDK barrado chega com `sdkBloqueado`, como antes.
+      const token = await cartaoSeguro.tokenizar({ cardholderName: card.nome.trim(), cpf: cpfDigits });
       const deviceId = await obterDeviceId();
-      const [mes, ano] = card.validade.split('/');
-      const token = await mp.createCardToken({ cardNumber: card.numero.replace(/\s/g, ''), cardholderName: card.nome, cardExpirationMonth: mes, cardExpirationYear: `20${ano}`, securityCode: card.cvv });
-      if (!token?.id) throw new Error('Não foi possível validar o cartão. Confira os dados.');
       const res = await apiCall('/api/assinar-com-cadastro', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2', deviceId }),
@@ -1580,16 +1555,16 @@ export default function Checkout() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados do cartão</div>
-                    <input value={card.numero} inputMode="numeric" placeholder="Número do cartão"
-                      onChange={e => setCard(p => ({ ...p, numero: fmtCardNum(e.target.value) }))} style={{ ...ckInp, width: '100%' }} />
+                    <div id={cartaoSeguro.ids.numero} style={{ ...ckInp, width: '100%', height: 38, padding: '0 11px' }} />
                     <input value={card.nome} placeholder="Nome impresso no cartão"
                       onChange={e => setCard(p => ({ ...p, nome: e.target.value.toUpperCase() }))} style={{ ...ckInp, width: '100%' }} />
                     <div style={{ display: 'flex', gap: 10 }}>
-                      <input value={card.validade} inputMode="numeric" placeholder="MM/AA"
-                        onChange={e => setCard(p => ({ ...p, validade: fmtCardVal(e.target.value) }))} style={{ ...ckInp, flex: 1 }} />
-                      <input value={card.cvv} inputMode="numeric" placeholder="CVV" maxLength={4}
-                        onChange={e => setCard(p => ({ ...p, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))} style={{ ...ckInp, flex: 1 }} />
+                      <div id={cartaoSeguro.ids.validade} style={{ ...ckInp, flex: 1, minWidth: 0, height: 38, padding: '0 11px' }} />
+                      <div id={cartaoSeguro.ids.cvv} style={{ ...ckInp, flex: 1, minWidth: 0, height: 38, padding: '0 11px' }} />
                     </div>
+                    {!cartaoSeguro.pronto && !cartaoSeguro.erroSdk && <div style={{ fontSize: 11, color: '#94a3b8' }}>Carregando campos seguros do cartão…</div>}
+                    {cartaoSeguro.erroSdk && <div style={{ fontSize: 12, color: '#b91c1c' }}>{cartaoSeguro.erroSdk} Ou clique em "Criar conta grátis" acima e assine em seguida, por link de pagamento.</div>}
+                    <div style={{ fontSize: 11, color: '#64748b' }}>🔒 Número, validade e CVV ficam em campos protegidos do Mercado Pago.</div>
                   </div>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
                   <button onClick={assinarComCadastro} disabled={suLoading || !senhaForte(su.senha)}

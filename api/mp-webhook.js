@@ -10,6 +10,11 @@ import crypto from 'crypto';
 import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
+import { mpSdk } from './_mp-sdk.js';
+
+// 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
+// morrer no meio de uma cobrança.
+export const config = { maxDuration: 30 };
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -384,14 +389,15 @@ export async function processarEventoMp(req, res) {
 
   let pagamento;
   try {
-    const r = await fetch(`${MP_BASE}/v1/payments/${dataId}`, {
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-    });
-    // 19/08: só o 404 é "pagamento não existe". 429/5xx devolvia 200 e o MP parava de
-    // reentregar — a notificação do pagamento se perdia de vez. Agora força reentrega.
-    if (r.status === 404) return res.status(200).json({ ok: true, erro: 'payment not found' });
-    if (!r.ok) return res.status(500).json({ error: `MP ${r.status} ao buscar pagamento — reentregar` });
-    pagamento = await r.json();
+    // SDK oficial (24/09). Mesma regra de 19/08: só o 404 é "pagamento não existe"; 429/5xx e falha
+    // de rede respondem 500 para o MP reentregar — a notificação nunca se perde.
+    try {
+      pagamento = await mpSdk.obterPagamento(dataId);
+    } catch (e) {
+      if (e.status === 404) return res.status(200).json({ ok: true, erro: 'payment not found' });
+      if (e.status) return res.status(500).json({ error: `MP ${e.status} ao buscar pagamento — reentregar` });
+      throw e;
+    }
   } catch (e) {
     console.error('[mp-webhook] erro ao buscar pagamento:', e.message);
     return res.status(500).json({ error: 'Erro interno' });
