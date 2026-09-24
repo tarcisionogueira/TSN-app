@@ -33065,3 +33065,8 @@ Teste: `npm run testar:fipe` (API simulada). A API da FIPE não é alcançável 
 `TETO_CRON_FIPE` = 400, a busca sob demanda (só o dono usa) pode ir até `TETO_DIARIO_FIPE` = 450 —
 50 abaixo dos 500 grátis. Não existe outro caminho que chame a API (grep `parallelum`). Fetch com
 timeout de 15 s.
+**1º run (24/09 12:48, manual):** ~1,6 consulta/veículo (antes ≈10), valores plausíveis (CG 125 2008
+R$ 7.956; HB20 2020 R$ 76.138). Job tinha `timeout-minutes: 15` e era cortado antes da cota → 45.
+Sem casamento eram quase todos nome de VERSÃO no lugar do modelo ("HONDA FAN 125" = "CG 125 Fan",
+"C-100 BIZ" = "Biz 100") e marca em sigla da fonte ("MMC") — fallback por versão + alias da marca.
+Os sem_match do 1º run foram zerados para retentar com a régua nova (senão esperariam 90 dias).

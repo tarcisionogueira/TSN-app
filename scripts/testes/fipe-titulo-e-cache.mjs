@@ -25,6 +25,9 @@ const cgs = ['CG 160 Fan', 'CG 160 Titan', 'CG 160 Start', 'CG 125 Fan KS', 'CG 
 ok(acharCandidatosModelo('cg 160 fan', cgs).length === 1, '"CG 160 FAN": 1 candidato em vez de 5');
 ok(acharCandidatosModelo('cg', cgs).length === 5, 'só "CG": mantém todos (não inventa versão)');
 ok(acharCandidatosModelo('cg150 titan', cgs).map(m => m.name).join() === 'CG 150 Titan ESD', '"CG150" colado: separa letras e número');
+const hondas = ['CG 125 Fan KS', 'CG 125 Titan', 'Biz 100', 'Biz 125 ES'].map((name, i) => ({ code: String(i), name }));
+ok(acharCandidatosModelo('fan 125', hondas).map(m => m.name).join() === 'CG 125 Fan KS', '"HONDA FAN 125": acha "CG 125 Fan" pela versão');
+ok(acharCandidatosModelo('c 100 biz', hondas).map(m => m.name).join() === 'Biz 100', '"C-100 BIZ": acha "Biz 100"');
 ok(acharCandidatosModelo('golf', [{ code: '1', name: 'Gol 1.0' }]).length === 0, '"golf" não casa "gol" (igualdade, não substring)');
 
 console.log('\nCACHE DE RESPOSTAS');

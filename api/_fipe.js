@@ -82,14 +82,26 @@ export function acharMarca(nossaMarca, marcas, indice) {
 // Se a 1ª palavra não casa e é letra+número colados ("YBR150", "CG150"), tenta a parte em letras.
 export function acharCandidatosModelo(nossoModelo, modelos) {
   let alvo = primeiraPalavra(nossoModelo);
-  if (!alvo || alvo.length < 2) return [];
-  let cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  if (!alvo) return [];
+  // 1ª palavra de 1 letra ("C-100 BIZ") não decide sozinha — vai direto ao fallback de versão
+  let cands = alvo.length < 2 ? [] : modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
   let palavras = normalizar(nossoModelo).split(' ').slice(1, 4);
   const colado = alvo.match(/^([a-z]{2,})(\d{2,4})[a-z]?$/);
   if (!cands.length && colado) {
     alvo = colado[1];
     palavras = [colado[2], ...palavras];
     cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  }
+  // Nome de VERSÃO no lugar do modelo ("HONDA FAN 125" = "CG 125 Fan", "C-100 BIZ" = "Biz 100",
+  // "FACTOR YBR 125" = "YBR 125 Factor"): 1ª palavra com 3+ letras do nosso modelo, procurada
+  // em QUALQUER posição do nome FIPE. Visto no 1º run de 24/09 (23 sem_match, quase todos assim).
+  if (!cands.length) {
+    const todas = normalizar(nossoModelo).split(' ');
+    const chave = todas.find(w => /^[a-z]{3,}$/.test(w));
+    if (chave) {
+      cands = modelos.filter(m => normalizar(m.name || m.nome || '').split(' ').includes(chave));
+      palavras = todas.filter(w => w !== chave).slice(0, 3);
+    }
   }
   if (cands.length < 2 || !palavras.length) return cands;
   const pontos = (m) => { const ws = new Set(normalizar(m.name || m.nome || '').split(' ')); return palavras.filter(p => ws.has(p)).length; };
@@ -113,7 +125,7 @@ const MARCA_ALIAS = {
   volvo: 'volvo', scania: 'scania', iveco: 'iveco', chery: 'chery', caoa: 'caoa chery', jac: 'jac',
   lifan: 'lifan', byd: 'byd', dafra: 'dafra', shineray: 'shineray', kawasaki: 'kawasaki',
   harley: 'harley-davidson', triumph: 'triumph', ducati: 'ducati', haojue: 'haojue', bajaj: 'bajaj',
-  ktm: 'ktm', troller: 'troller', ssangyong: 'ssangyong', dodge: 'dodge', ram: 'ram',
+  renalt: 'renault', ktm: 'ktm', troller: 'troller', ssangyong: 'ssangyong', dodge: 'dodge', ram: 'ram',
   chrysler: 'chrysler', subaru: 'subaru', land: 'land rover', jta: 'suzuki', kasinski: 'kasinski',
   sundown: 'sundown', traxx: 'traxx', agrale: 'agrale', effa: 'effa', jaguar: 'jaguar', porsche: 'porsche',
 };
@@ -209,7 +221,9 @@ export function criarFipeFetch(reservar, cache = null) {
 export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
   const doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
-  const marca = veiculo.marca || doTitulo?.marca;
+  // marca da fonte em sigla ("MMC", "VW", "GM") vira o nome que a FIPE usa
+  const marcaFonte = veiculo.marca ? (MARCA_ALIAS[normalizar(veiculo.marca)] || veiculo.marca) : null;
+  const marca = marcaFonte || doTitulo?.marca;
   const modelo = veiculo.modelo || doTitulo?.modelo;
   if (!marca || !modelo || !anoFabricacao) return { status: 'sem_dados' };
   try {

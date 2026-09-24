@@ -16,7 +16,7 @@ on:
 jobs:
   enriquecer-fipe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45  # até a cota do dia acabar (~400 consultas); o cache no banco torna cada veículo mais lento que 1 req
     steps:
       - name: Checkout
         uses: actions/checkout@v4
