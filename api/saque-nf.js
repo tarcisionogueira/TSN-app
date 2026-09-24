@@ -115,7 +115,9 @@ async function lerComIA({ texto, bytes, mime }) {
 
   const res = await anthropicFetch({
     method: 'POST',
-    headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    // CLAUDE_KEY é o nome configurado na Vercel (docs/ENVS_VERCEL.md); só ANTHROPIC_API_KEY
+    // mandava `x-api-key: undefined` → 401 → leitura da nota sempre vazia (achado 24/09).
+    headers: { 'x-api-key': process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       max_tokens: 900,

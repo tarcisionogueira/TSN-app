@@ -65,6 +65,7 @@ import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
+import { TIPOS_POR_PERFIL, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
 // um espelho das constantes dela. A distinção custou caro: até 28/08 este arquivo importava
@@ -79,15 +80,10 @@ const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hi
 // TETO DE CAPITAL por faixa da triagem (folga ~30% cobre entrada+financiamento;
 // 'acima_1mi' = 0 = sem teto). Estava declarado DENTRO do laco por usuario, depois do
 // passo 1 — por isso o caminho dos filtros salvos nunca o enxergava. Ver `tetoEfetivo`.
-// Tipos que fazem sentido para cada perfil da triagem (TriagemPerfil.jsx). Mesma base da
-// intenção da Busca (src/lib/intencao.js) para locação/revenda; uso próprio = moradia;
-// incorporação = terreno. Usado só na sugestão de REGIÃO (passo 2) quando não há filtro salvo.
-const TIPOS_POR_PERFIL = {
-  uso_proprio: ['apartamento', 'casa'],
-  locacao: ['apartamento', 'casa', 'imovel'],
-  revenda: ['apartamento', 'casa', 'comercial', 'imovel'],
-  incorporacao: ['terreno'],
-};
+// TIPOS_POR_PERFIL vive em ./_curadoria.js (24/09) — uma cópia só, usada também na pontuação.
+// Camada de IA da curadoria (./_curadoria.js): DESLIGADA por padrão — liga com CURADORIA_IA=1
+// na Vercel depois do OK de custo do dono. A camada de pontuação roda sempre.
+const CURADORIA_IA = process.env.CURADORIA_IA === '1';
 const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
@@ -138,7 +134,7 @@ function centroide(cidade, uf) {
 // Este arquivo nunca a adotou: filtrava e MOSTRAVA a 1ª praça. `praca1_fim`/`praca2_fim`
 // entram porque `encerradoPorDatas` passou a lê-las — sem vir no SELECT, o e-mail decidiria
 // o prazo pelo início da 2ª praça e descartaria lote ainda em pregão.
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,fonte_id';
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,fonte_id,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento';
 
 // Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
 // site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
@@ -379,6 +375,29 @@ async function handler(req) {
   for (const f of semInteresseArr) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
   const engajamentoMap = {}; for (const e of engajamentoArr || []) engajamentoMap[e.user_id] = e;
 
+  // CURADORIA (24/09) — o que cada cliente ABRIU no site nos últimos 60 dias (pageview de
+  // /imovel/<id>). É o sinal de intenção mais honesto que temos. Lido EM LOTE (2 consultas por
+  // rodada, não por cliente). Falha aqui só tira o sinal de comportamento da pontuação — o
+  // e-mail sai com perfil + cidade + qualidade do lote; o motivo fica no log do sbGet.
+  const vistosMap = {};
+  {
+    const desde60 = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+    const evs = await sbGet(`eventos_atividade?user_id=in.${inList}&tipo=eq.pageview&rota=like./imovel/*&criado_em=gte.${desde60}&select=user_id,rota&limit=5000`);
+    const porUser = {};
+    for (const e of evs || []) {
+      const id = String(e.rota || '').slice('/imovel/'.length, '/imovel/'.length + 36);
+      if (!isUuid(id)) continue;
+      (porUser[e.user_id] ||= new Set()).add(id);
+    }
+    const todos = [...new Set(Object.values(porUser).flatMap(st => [...st]))];
+    const info = {};
+    for (let i = 0; i < todos.length; i += 150) {
+      const fatia = todos.slice(i, i + 150);
+      for (const im of await sbGet(`imoveis_leilao?id=in.(${fatia.join(',')})&select=id,tipo,cidade,valor_minimo_ref,valor_minimo`) || []) info[im.id] = im;
+    }
+    for (const [uid, st] of Object.entries(porUser)) vistosMap[uid] = resumoComportamento([...st].map(id => info[id]).filter(Boolean));
+  }
+
   // Tipos/estados dos imóveis já arrematados (para "similares")
   const arremImovelIds = [...new Set((arremArr || []).map(a => a.imovel_id).filter(Boolean))];
   const arremInfo = {};
@@ -589,6 +608,7 @@ async function handler(req) {
   };
 
   let enviados = 0;
+  let iaUsadas = 0, iaFalhas = 0; // curadoria por IA (./_curadoria.js) — vai na resposta do cron
   let suprimidos = 0;
   let cortadoPorOrcamentoEmail = false;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
@@ -652,6 +672,9 @@ async function handler(req) {
 
       const enviadosSet = enviadosMap[perfil.id] || new Set();
       const LIMITE = 12;
+      // CURADORIA (24/09): junta ~30 candidatos e ESCOLHE 12 (./_curadoria.js), em vez de parar
+      // nos 12 primeiros por desconto. As buscas abaixo enchem até CANDIDATOS.
+      const CANDIDATOS = 30;
       const pool = new Map();
       const add = (im, isNovo, origem) => { if (im && im.id && !pool.has(im.id)) pool.set(im.id, { im, isNovo, origem }); };
       // O e-mail SÓ leva imóveis NOVOS (nunca enviados a este usuário) — sempre novas
@@ -668,7 +691,7 @@ async function handler(req) {
         const ordenados = priorizarTipo(frescos, tipoPreferido);
         let n = 0;
         for (const im of ordenados) {
-          if (n >= limite || pool.size >= LIMITE) break;
+          if (n >= limite || pool.size >= CANDIDATOS) break;
           if (!pool.has(im.id)) { add(im, true, origem); n++; }
         }
       };
@@ -688,9 +711,9 @@ async function handler(req) {
       //    As 12 continuam distribuídas ENTRE os filtros salvos, para que um filtro
       //    prolífico não engula os outros três.
       if (temPerfil) {
-        const porFiltro = Math.max(1, Math.ceil(LIMITE / savedFilters.length));
+        const porFiltro = Math.max(1, Math.ceil(CANDIDATOS / savedFilters.length));
         for (const f of savedFilters) {
-          if (pool.size >= LIMITE) break;
+          if (pool.size >= CANDIDATOS) break;
           despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa, perfil.endereco_cidade, perfil.endereco_uf, alcance), porFiltro, 'filtro');
         }
       }
@@ -739,28 +762,28 @@ async function handler(req) {
         ? [{ tipos: tiposPref, mods: modsPref, pags: [] }, { tipos: tiposFixosDoPerfil ? tiposPref : [], mods: [], pags: [] }]
         : [{ tipos: [], mods: [], pags: [] }];
       for (const pass of passes) {
-        if (pool.size >= LIMITE) break;
+        if (pool.size >= CANDIDATOS) break;
         for (const cid of cidadesRef.slice(0, 3)) {
-          if (pool.size >= LIMITE) break;
+          if (pool.size >= CANDIDATOS) break;
           const cen = centroide(cid, uf);
           if (!cen) continue;
           for (const raio of RAIOS_M) {
-            if (pool.size >= LIMITE) break;
+            if (pool.size >= CANDIDATOS) break;
             despejar(await rpc('buscar_por_raio_v2', {
               lat: cen.lat, lng: cen.lng, raio_metros: raio, lim: 40, desconto_min: DESC_MIN,
               tipos_filtro: pass.tipos, modalidades_filtro: pass.mods, pagamentos_filtro: pass.pags,
               ...(tetoPerfil ? { valor_max: tetoPerfil } : {}),
-            }), LIMITE - pool.size, 'regiao', tipoPreferido);
+            }), CANDIDATOS - pool.size, 'regiao', tipoPreferido);
             alcance.max = Math.max(alcance.max, raio);
           }
         }
       }
       // Fallback por NOME da cidade (sem coordenada no centróide offline): escopado
       // pela UF (homônimas: Palmas/TO vs Palmas/PR) + teto do perfil + desconto ≥ DESC_MIN.
-      if (pool.size < LIMITE) {
+      if (pool.size < CANDIDATOS) {
         for (const cid of cidadesRef.slice(0, 3)) {
-          if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}${tiposFixosDoPerfil ? `&tipo=in.(${tiposPref.map(encodeURIComponent).join(',')})` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size, 'regiao', tipoPreferido);
+          if (pool.size >= CANDIDATOS) break;
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}${tiposFixosDoPerfil ? `&tipo=in.(${tiposPref.map(encodeURIComponent).join(',')})` : ''}&order=desconto_percentual.desc&limit=24`), CANDIDATOS - pool.size, 'regiao', tipoPreferido);
         }
       }
 
@@ -770,12 +793,12 @@ async function handler(req) {
       //     gastava chamada e embaralhava a ordem entre contrato e região.
 
       // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.
-      if (pool.size < LIMITE) {
+      if (pool.size < CANDIDATOS) {
         const meus = arremMap[perfil.id] || [];
         const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
         for (const t of tipos.slice(0, 2)) {
-          if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
+          if (pool.size >= CANDIDATOS) break;
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), CANDIDATOS - pool.size);
         }
       }
 
@@ -784,8 +807,8 @@ async function handler(req) {
       //    salvo). Para quem TEM região, NÃO caímos no acervo nacional — melhor mandar
       //    menos que mandar imóvel de outro estado (push/e-mail seguem cidade+filtros).
       const temRegiao = !!(uf || (cidadesRef && cidadesRef.length));
-      if (pool.size < LIMITE && !temRegiao) {
-        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
+      if (pool.size < CANDIDATOS && !temRegiao) {
+        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), CANDIDATOS - pool.size);
       }
 
       // Rede de segurança: só oportunidade ATRATIVA (desconto ≥ DESC_MIN) entra no e-mail,
@@ -803,16 +826,46 @@ async function handler(req) {
       // de deixar o ponto cego aberto até achar a causa exata, o filtro final — que por
       // desenho é "qualquer que tenha sido o caminho" — passa a barrar os dois invariantes no
       // mesmo lugar: nenhum item entra no e-mail sem desconto mínimo E sem respeitar o teto.
-      const selec = [...pool.values()]
+      // CURADORIA (24/09, ./_curadoria.js). A rede de segurança continua a mesma (desconto ≥
+      // DESC_MIN E teto de capital, qualquer que tenha sido o caminho); o que muda é a ORDEM:
+      // antes "filtro salvo primeiro, depois maior desconto"; agora uma pontuação que pesa perfil,
+      // distância da cidade, faixa de preço ideal, o que o cliente abriu no site e a qualidade do
+      // lote. Com CURADORIA_IA=1 o Haiku escolhe entre os 24 melhores e escreve o motivo; se
+      // falhar, vale a ordem da pontuação (e o motivo da falha vai para o log e para a linha).
+      const centroCli = centroide(cidade, uf);
+      const ctxCur = {
+        perfil_investidor: perfil.perfil_investidor, faixa_capital: perfil.faixa_capital,
+        forma_pagamento: perfil.forma_pagamento, tetoPerfil, centro: centroCli,
+        comportamento: vistosMap[perfil.id] || null, cidade: [cidade, uf].filter(Boolean).join('/'),
+      };
+      const pontuados = [...pool.values()]
         .filter(v => (Number(v.im.desconto_percentual) || 0) >= DESC_MIN)
         .filter(v => !tetoPerfil || (Number(v.im.valor_minimo_ref ?? v.im.valor_minimo) || 0) <= tetoPerfil)
-        .sort((x, y) => {
-          const px = x.origem === 'filtro' ? 0 : 1;
-          const py = y.origem === 'filtro' ? 0 : 1;
-          if (px !== py) return px - py;
-          return (Number(y.im.desconto_percentual) || 0) - (Number(x.im.desconto_percentual) || 0);
+        .map(v => {
+          const r = pontuarCandidato(v.im, { ...ctxCur, origem: v.origem });
+          const km = distanciaKm(centroCli, v.im.latitude != null ? { lat: Number(v.im.latitude), lng: Number(v.im.longitude) } : null);
+          return { ...v, pontos: r.pontos, motivos: r.motivos, km };
         })
-        .slice(0, LIMITE);
+        .sort((x, y) => y.pontos - x.pontos);
+      let selec = pontuados.slice(0, LIMITE).map(v => ({ ...v, motivo: motivoCurto(v.motivos) }));
+      let curadoria = 'regra';
+      if (CURADORIA_IA && pontuados.length > 1) {
+        const ia = await curarComIA(pontuados.slice(0, 24), ctxCur, { limite: LIMITE });
+        if (ia.ok) {
+          const porId = new Map(pontuados.map(v => [v.im.id, v]));
+          const escolhidos = ia.escolhidos.map(e => ({ ...porId.get(e.id), motivo: e.motivo || motivoCurto(porId.get(e.id).motivos) }));
+          // A IA pode escolher menos — completa pela pontuação para o e-mail não sair curto (e o
+          // registro de "cobertura incompleta" do Cliente 360 não acusar falta que não existe).
+          const ja = new Set(escolhidos.map(v => v.im.id));
+          const resto = pontuados.filter(v => !ja.has(v.im.id)).slice(0, Math.max(0, LIMITE - escolhidos.length))
+            .map(v => ({ ...v, motivo: motivoCurto(v.motivos) }));
+          selec = [...escolhidos, ...resto];
+          curadoria = 'ia'; iaUsadas++;
+        } else {
+          curadoria = 'regra:ia_falhou'; iaFalhas++;
+          console.error('[alertas] curadoria IA falhou — ordem da pontuação mantida', perfil.id, ia.erro);
+        }
+      }
       const top = selec.map(v => v.im);
       if (!top.length) continue;
       const nContrato = selec.filter(v => v.origem === 'filtro').length;
@@ -855,7 +908,7 @@ async function handler(req) {
         </div>`;
       const temOsDois = nContrato > 0 && nContrato < selec.length;
 
-      const cards = selec.map(({ im, origem }, idx) => {
+      const cards = selec.map(({ im, origem, motivo }, idx) => {
         let cabecalho = '';
         if (temOsDois && idx === 0) {
           cabecalho = tituloBloco('Do seu filtro salvo', 'Bate com os critérios que você montou na Busca');
@@ -883,6 +936,7 @@ async function handler(req) {
           <div style="padding:14px 16px;">
             <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(im.titulo || im.endereco || 'Imóvel em leilão')}</div></a>
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
+            ${motivo ? `<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border-radius:8px;padding:6px 8px;margin-bottom:8px;">💡 ${escapeHtml(motivo)}</div>` : ''}
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo_ref ?? im.valor_minimo)}</div></div>
@@ -950,7 +1004,7 @@ async function handler(req) {
               headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
               // `valor_ref_enviado` (24/09): o valor que a rede de segurança checou contra o teto — o
               // invariante `alerta_acima_do_capital` julga ESTE, não o valor de hoje do lote.
-              body: JSON.stringify(top.map(im => ({ user_id: perfil.id, imovel_id: im.id, valor_ref_enviado: Number(im.valor_minimo_ref ?? im.valor_minimo) || null }))),
+              body: JSON.stringify(selec.map(({ im, pontos }) => ({ user_id: perfil.id, imovel_id: im.id, valor_ref_enviado: Number(im.valor_minimo_ref ?? im.valor_minimo) || null, curadoria, pontos: pontos ?? null }))),
               signal: AbortSignal.timeout(15000),
             });
           } catch { /* dedup é best-effort */ }
@@ -987,5 +1041,5 @@ async function handler(req) {
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }

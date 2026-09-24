@@ -32976,3 +32976,25 @@ semântica de `data_leilao` mexe no filtro de prazo/contagem regressiva — deci
 desconto. Nenhuma IA; `score_financeiro/juridico/localizacao/viabilidade` e `valor_mercado` do
 lote não são usados; comportamento no site (imóveis vistos, casos, favoritos) também não.
 Proposta apresentada ao dono (aguardando OK — tem custo recorrente de IA).
+
+### 🤖 Curadoria das oportunidades (opção 2 do dono, 24/09) — `api/_curadoria.js`
+**Camada 1 (pontuação, custo zero, JÁ ATIVA):** `enviar-alertas-cron` junta até 30 candidatos
+(antes parava nos 12 primeiros por desconto) e ordena por pontos: desconto (até 30), filtro salvo
+(+20), tipo × perfil declarado (+12/−15), distância contínua da cidade do cliente (até 18, some aos
+120 km), faixa de preço ideal (30–100% do teto +10; <15% −8), COMPORTAMENTO no site (imóveis que
+abriu em 60 d: tipo até +14, cidade +6, preço ±40% da mediana +6 — lido em lote de
+`eventos_atividade`), nota financeira/localização (até 8 cada), ocupação × perfil, financiamento ×
+forma de pagamento, foto/data, e **vaga de garagem −25** (dry-run: 7 das 40 melhores por desconto
+para a Alessandra eram vagas com tipo terreno/imovel/comercial). Cada card do e-mail ganha a linha
+"💡 motivo" (até 3 sinais mais fortes). Rede de segurança (desconto ≥ 40%, teto de capital)
+inalterada. `alertas_enviados.curadoria` ('regra'|'ia'|'regra:ia_falhou') + `pontos` para medir
+clique por método. Teste: `npm run testar:curadoria`.
+**Camada 2 (IA, DESLIGADA até o OK do dono):** `CURADORIA_IA=1` na Vercel → Claude Haiku
+(`claude-haiku-4-5`, US$ 1/5 por MTok) recebe os 24 melhores + perfil + comportamento, escolhe até
+12 e escreve o motivo; completa pela pontuação se escolher menos; qualquer falha → ordem da
+camada 1 e erro no log/linha. **Custo medido pelo tamanho real do prompt:** ~3,5k tokens de entrada
++ ~0,4k de saída ≈ **US$ 0,0055 por cliente/semana** → ~70 e-mails/semana hoje ≈ **US$ 1,70/mês**
+(≈ R$ 9); a cada 1.000 clientes ≈ US$ 5,50/semana. Resposta do cron mostra
+`curadoria_ia: { ligada, usadas, falhas }`.
+**De quebra:** `api/saque-nf.js` mandava só `ANTHROPIC_API_KEY` (a Vercel tem `CLAUDE_KEY`) —
+leitura por IA da nota do saque provavelmente sempre vazia; agora `CLAUDE_KEY || ANTHROPIC_API_KEY`.
