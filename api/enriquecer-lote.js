@@ -230,11 +230,38 @@ export function cortarOutrosLotes(txt, ancora = CTX_ANCORA) {
   return corte > 0 ? txt.slice(0, primeira + corte) : txt;
 }
 
+// LJUD (leiloesjudiciais.com.br) — leitor próprio (24/09, validação em seco antes do runner
+// residencial). O genérico dava INÍCIO = HOJE nos 9 de 9 lotes (uma data do dia escondida no HTML)
+// e, no fim, pegava os "Ciclos" de venda posteriores ("2º Ciclo - 19/11/2026") no lugar do
+// "2º Encerramento - 20/10/2026". A página rotula as praças sem ambiguidade — lê só os rótulos.
+function datasLjud(txt) {
+  const RE = /(?:(\d)\s*[º°ª]\s*)?Encerramento\s*-\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/gi;
+  const pracas = [];
+  for (const m of txt.matchAll(RE)) {
+    const [, n, d, mo, y, hh = '12', mm = '00'] = m;
+    const t = Date.parse(`${y}-${mo}-${d}T${hh}:${mm}:00-03:00`);
+    if (Number.isFinite(t)) pracas.push({ n: Number(n || 1), dia: `${y}-${mo}-${d}`, iso: new Date(t).toISOString(), t });
+  }
+  if (!pracas.length) return null;
+  const p1 = pracas.find(p => p.n === 1) || pracas[0];
+  const p2 = pracas.find(p => p.n === 2) || null;
+  const ultima = p2 || p1;
+  if (ultima.t < Date.now() - 86400000) {
+    return { inicio: null, fim: null, encerradaEm: ultima.dia, encerramento: ultima.iso, praca2: null };
+  }
+  return { inicio: p1.dia, fim: p2 ? p2.iso : null, encerradaEm: null, encerramento: ultima.iso, praca2: p2 ? p2.iso : null };
+}
+
 export function extrairDatasLeilao(html, { estrito = false } = {}) {
   const vazio = { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
   if (!html) return vazio;
   const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
   let txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  if (/leiloesjudiciais\.com\.br/i.test(html)) {
+    // Sem os rótulos, NÃO cai no genérico: foi ele que gravou "hoje" como início.
+    const semScript = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+    return datasLjud(semScript) || vazio;
+  }
   // A PÁGINA DO LOTE LISTA OUTROS LOTES (23/09). Na ZUK, depois do lote vem "Veja também" com
   // imóveis vizinhos, cada um com "1º leilão 28/09 às 14:03 · 2º leilão 05/10 às 14:03" — e o
   // extrator gravou essas datas como a 2ª praça (e o início) do lote aberto: o cliente leu
