@@ -6,6 +6,7 @@ import { parseDataLocal } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 
 // Proposta de compra direta ao leiloeiro (17/09, pedido do dono) — só para lote com resultado
 // REAL apurado "sem lance" (21/09; antes era inferência por data — ver api/apurar-resultado-
@@ -246,11 +247,13 @@ export default function BuscaVeiculos() {
   const isMobile = useIsMobile();
   const { role } = useAuth();
   const podePropor = ROLES_PROPOSTA_VEICULO.includes(role);
-  const [filtros, setFiltros] = useState(filtrosVazios);
+  // Filtros e página sobrevivem a abrir um veículo e voltar (pedido do dono, 24/09) — por aba,
+  // em sessionStorage (ver utils/estadoLista.js). Mescla com o vazio para chave nova não faltar.
+  const [filtros, setFiltros] = useState(() => ({ ...filtrosVazios(), ...(lerSessao('veic_filtros', null) || {}) }));
   const [mostrarFiltros, setMostrarFiltros] = useState(!isMobile);
   const [resultados, setResultados] = useState([]);
   const [total, setTotal] = useState(0);
-  const [pagina, setPagina] = useState(1);
+  const [pagina, setPagina] = useState(() => Math.max(1, Number(lerSessao('veic_pagina', 1)) || 1));
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
@@ -348,7 +351,11 @@ export default function BuscaVeiculos() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { buscar(1, filtros); setPagina(1); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
+  // Carga inicial na página LEMBRADA (voltar do detalhe cai onde estava, não na página 1).
+  useEffect(() => { buscar(pagina, filtros); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { gravarSessao('veic_filtros', filtros); }, [filtros]);
+  useEffect(() => { gravarSessao('veic_pagina', pagina); }, [pagina]);
+  useRolagemDaLista('veiculos', !loading && resultados.length > 0);
 
   // Busca reativa (11/09, pedido do dono: "retire o botão buscar, deixe interativo... como é
   // o dos imóveis") — mesmo padrão de debounce de 600ms de Busca.jsx. `primeiraRef` evita

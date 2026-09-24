@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN, LOCACAO_DESCONTO_MIN, ajustarFiltrosPorIntencao } from '../lib/intencao';
 import { ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT, aluguelAlvoMensal } from '../lib/rentabilidade';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useNavigationType } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
   ExternalLink, RefreshCw, MapPin,
@@ -13,6 +13,7 @@ import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadg
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { parseDataLocal, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
+import { lerSessao, useRolagemDaLista } from '../utils/estadoLista';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -738,8 +739,13 @@ export default function Busca() {
 
   const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'', resultadoLeilao:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
+  // VOLTAR do imóvel (navegação POP) com filtros já na sessão: a URL ainda carrega os
+  // parâmetros do link de e-mail por onde a pessoa ENTROU, e reaplicá-los apagava tudo o que
+  // ela mudou depois (e voltava à página 1). Deep-link vale só na chegada (24/09).
+  const tipoNavegacao = useNavigationType();
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
+    if (tipoNavegacao === 'POP' && lerSessao('busca_filtros', null)) return null;
     return {
       tipos: _urlParams.tipo ? [_urlParams.tipo] : [],
       estado: _urlParams.estado || '',
@@ -842,6 +848,8 @@ export default function Busca() {
   // para o selo ao navegar. Não impede selecionar cidade sem imóveis (monitoramento).
   const [cidadeCounts, setCidadeCounts] = useState({});
   const [resultados, setResultados] = useState([]);
+  // Posição na lista ao voltar do imóvel (24/09) — ver utils/estadoLista.js.
+  useRolagemDaLista('busca', !loading && resultados.length > 0);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [buscaFeita, setBuscaFeita] = useState(false);

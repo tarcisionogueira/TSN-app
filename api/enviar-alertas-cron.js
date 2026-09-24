@@ -79,6 +79,15 @@ const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hi
 // TETO DE CAPITAL por faixa da triagem (folga ~30% cobre entrada+financiamento;
 // 'acima_1mi' = 0 = sem teto). Estava declarado DENTRO do laco por usuario, depois do
 // passo 1 — por isso o caminho dos filtros salvos nunca o enxergava. Ver `tetoEfetivo`.
+// Tipos que fazem sentido para cada perfil da triagem (TriagemPerfil.jsx). Mesma base da
+// intenção da Busca (src/lib/intencao.js) para locação/revenda; uso próprio = moradia;
+// incorporação = terreno. Usado só na sugestão de REGIÃO (passo 2) quando não há filtro salvo.
+const TIPOS_POR_PERFIL = {
+  uso_proprio: ['apartamento', 'casa'],
+  locacao: ['apartamento', 'casa', 'imovel'],
+  revenda: ['apartamento', 'casa', 'comercial', 'imovel'],
+  incorporacao: ['terreno'],
+};
 const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
@@ -246,7 +255,7 @@ async function handler(req) {
   const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
   const cursor = (qs.get('cursor') || '').trim();
 
-  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
   const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
   const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
 
@@ -702,7 +711,16 @@ async function handler(req) {
       // vivem acima (o passo 1 também precisa deles). O valorMax do alerta, quando menor,
       // prevalece — é exatamente o que `tetoEfetivo` faz.
       const tetoPerfil = tetoEfetivo(filtroBase, tetoFaixa);
-      const tiposPref = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
+      // 24/09 — O PERFIL DECLARADO NA TRIAGEM passa a moldar o TIPO da sugestão de região.
+      // Até aqui `perfil_investidor` era perguntado e ignorado: a Alessandra (uso próprio,
+      // 150-400k) abria todo e-mail e nunca clicava — recebia TERRENO em Santana de Parnaíba.
+      // Filtro salvo com tipos continua mandando (é pedido explícito); sem ele, o perfil decide.
+      // E quando o tipo veio do PERFIL, o 2º passe relaxa só modalidade — nunca devolve terreno
+      // a quem declarou que quer morar.
+      const tiposDoFiltro = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
+      const tiposDoPerfil = TIPOS_POR_PERFIL[perfil.perfil_investidor] || [];
+      const tiposPref = tiposDoFiltro.length ? tiposDoFiltro : tiposDoPerfil;
+      const tiposFixosDoPerfil = !tiposDoFiltro.length && tiposDoPerfil.length > 0;
       const modsPref = Array.isArray(filtroBase.modalidades) ? filtroBase.modalidades.filter(Boolean) : [];
       // Só no passo 2 (região) — ver tipoPreferidoMap acima. O passo 1 (contrato) é
       // preferência EXPLÍCITA do cliente e não deve ser reordenado por um sinal inferido.
@@ -718,7 +736,7 @@ async function handler(req) {
       // pagamento: lá é o que o cliente pediu, aqui é o que a região dele oferece.
       const temPref = tiposPref.length || modsPref.length;
       const passes = temPref
-        ? [{ tipos: tiposPref, mods: modsPref, pags: [] }, { tipos: [], mods: [], pags: [] }]
+        ? [{ tipos: tiposPref, mods: modsPref, pags: [] }, { tipos: tiposFixosDoPerfil ? tiposPref : [], mods: [], pags: [] }]
         : [{ tipos: [], mods: [], pags: [] }];
       for (const pass of passes) {
         if (pool.size >= LIMITE) break;
@@ -742,7 +760,7 @@ async function handler(req) {
       if (pool.size < LIMITE) {
         for (const cid of cidadesRef.slice(0, 3)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size, 'regiao', tipoPreferido);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}${tiposFixosDoPerfil ? `&tipo=in.(${tiposPref.map(encodeURIComponent).join(',')})` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size, 'regiao', tipoPreferido);
         }
       }
 
@@ -930,7 +948,9 @@ async function handler(req) {
             await fetch(`${URL_}/rest/v1/alertas_enviados`, {
               method: 'POST',
               headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
-              body: JSON.stringify(top.map(im => ({ user_id: perfil.id, imovel_id: im.id }))),
+              // `valor_ref_enviado` (24/09): o valor que a rede de segurança checou contra o teto — o
+              // invariante `alerta_acima_do_capital` julga ESTE, não o valor de hoje do lote.
+              body: JSON.stringify(top.map(im => ({ user_id: perfil.id, imovel_id: im.id, valor_ref_enviado: Number(im.valor_minimo_ref ?? im.valor_minimo) || null }))),
               signal: AbortSignal.timeout(15000),
             });
           } catch { /* dedup é best-effort */ }

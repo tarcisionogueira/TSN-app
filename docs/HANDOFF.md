@@ -32899,3 +32899,37 @@ Alessandra abre tudo e não clica → CONTEÚDO não agrada: é "uso próprio" e
 Osasco; os 5 imóveis que ela mesma mandou estão parados em casos desde julho. Cadência:
 pagante segue a mesma regra do explorador (semanal, cai p/ mensal se não abre).
 Rascunhos de e-mail apagados (dono: não precisa).
+
+### ✅ Itens 7 e 8 + pedidos do dono (24/09, fim da tarde)
+**7 — `alerta_acima_do_capital=3` era o INSTRUMENTO, não o envio.** Os 3 (R$ 202-220 mil para
+faixa até 150k, teto R$ 200 mil) saíram do `enviar-alertas-cron`, cuja rede de segurança final
+barra tudo acima de `tetoPerfil` — no envio o valor estava dentro. O invariante comparava o valor
+de HOJE do lote (que subiu depois). Agora o cron grava `alertas_enviados.valor_ref_enviado` e o
+invariante julga esse valor (`alerta_acima_do_capital_mede_valor_enviado.sql`, aplicada ANTES do
+deploy do cron — senão o insert de dedup daria 400). Invariante = 0.
+**8 — data ausente BIASI/LJUD: o `enriquecer-datas-cron` não alcançava.** (1) sem `ativo=eq.true`:
+3.981 inativos sem data na frente dos 1.047 ativos — BIASI tinha 0 de 370 enriquecidos; (2) exigia
+`link_edital`, e a LJUD tem só `url_lote` real (651 lotes nunca elegíveis). Corrigido; dry-run SQL
+da nova fila: BIASI 136 · WEBLEILOES 22 · LJUD 19 · ALBERTOMACEDO 14 nos 200 primeiros. Ritmo
+limitado por `PAGO_MAX=10`/run e pela subcota `geral` (hoje estourada no dia). GRUPOLANCE (325)
+depende de Bright Data (403 direto) — mesma fila, mesma cota. ⚠️ Sintaxe PostgREST
+`and=(or(..),or(..))` não pôde ser testada daqui (proxy bloqueia supabase.co): **conferir a
+resposta do próximo run (13h/20h UTC) — `processados` > 0 e sem erro**.
+
+**Oportunidades (referência Alessandra):** o cron IGNORAVA `perfil_investidor`. Agora, sem filtro
+salvo com tipos, a sugestão de região usa `TIPOS_POR_PERFIL` (uso_proprio → casa/apto; locação →
+casa/apto/imóvel; revenda → + comercial; incorporação → terreno) e o 2º passe NÃO devolve terreno a
+quem declarou moradia; o fallback por nome de cidade também respeita. Dry-run Alessandra: 89
+casas/aptos ≤ R$ 520 mil, desconto ≥ 40%, até 25 km de Carapicuíba.
+**Os 5 casos da Alessandra:** 4 (22-24/07) são casos criados ao ABRIR a tela do caso (Caso.jsx
+cria o caso no 1º acesso) — nunca houve job de análise nem pedido de analista; os 4 lotes já foram
+a leilão (2 vendidos). O 5º (Osasco, 25/08) FOI atendido: 4 jobs concluídos, 8 relatórios, leilão
+26/08. Ela nunca usou o relatório self-service (analises_mercado = 0). Sugestão ao dono: encerrar os
+4 casos-casca (lote inativo, sem job) — não feito sem OK.
+
+**Voltar do lote perde filtros/posição (imóveis e veículos):** `src/utils/estadoLista.js`
+(`useRolagemDaLista`: grava o scroll ao sair, devolve em navegação POP depois que os resultados
+chegam). Veículos: filtros + página em sessionStorage (antes nada era salvo) e "Voltar à busca"
+do VeiculoDetalhe usa o histórico (antes empurrava a rota e remontava do zero). Imóveis: filtros
+já persistiam, mas o DEEP-LINK do e-mail (`#/buscar?estado=…`) era reaplicado a cada volta,
+apagando o que a pessoa mudou e voltando à pág. 1 — agora vale só na chegada.

@@ -63,6 +63,9 @@ const FIPE_EXPLICACAO = {
 
 export default function VeiculoDetalhe() {
   const nav = useNavigate();
+  // Voltar = voltar no HISTÓRICO (24/09): empurrar a rota da busca remontava a lista do zero
+  // (filtros e posição perdidos). Sem histórico (link aberto direto), cai na busca.
+  const voltarABusca = () => ((window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/admin/veiculos-leilao'));
   const { id } = useParams();
   const isMobile = useIsMobile();
   const { user, role, effectiveUserId } = useAuth();
@@ -146,7 +149,7 @@ export default function VeiculoDetalhe() {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
         <p>{erro || 'Veículo não encontrado.'}</p>
-        <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        <button onClick={voltarABusca} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
   }
@@ -166,7 +169,7 @@ export default function VeiculoDetalhe() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={() => nav('/admin/veiculos-leilao')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={voltarABusca} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar à busca
       </button>
 

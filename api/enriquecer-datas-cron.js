@@ -43,11 +43,18 @@ export default async function handler(req, res) {
   // `data_leilao=is.null`, então um lote com data de início parecia resolvido e nunca era
   // revisitado — o prazo real (o que decide o lance) nunca era capturado. Foi assim que o
   // `gl_28450` ficou mostrando 03/08 num leilão aberto até 03/11.
+  // 24/09 — DUAS CAUSAS de BIASI (370) e LJUD (651) seguirem sem data, medidas:
+  //   1. Faltava `ativo=eq.true`: 3.981 lotes INATIVOS (leilão já encerrado) sem data disputavam
+  //      a fila com os 1.047 ativos — 40 por run, gastos em lote que ninguém vê. A BIASI, com
+  //      os 370 elegíveis, tinha 0 enriquecidos.
+  //   2. Elegibilidade só por `link_edital`: a LJUD tem `link_edital` nulo e `url_lote` REAL
+  //      (/lote/<leilao>/<lote>) — o "LJUD só tem link de domínio" do cabeçalho é de agosto e
+  //      deixou de ser verdade. `fetchLote` já usa `url_lote` primeiro; o filtro não sabia.
   const filtro = [
-    'or=(data_leilao.is.null,data_leilao_2.is.null)',
+    'ativo=eq.true',
+    'and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))',
     'fonte=not.in.(CEF,caixa)',
     'modalidade=not.ilike.*venda*direta*',
-    'link_edital=ilike.*//*/*', // tem barra após o domínio → página de lote, não home
     'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2',
     // Ordem: primeiro quem não tem data NENHUMA (`data_leilao` nulo). É o lote em que o gate
     // de leilão encerrado fica cego — sem data ele falha aberto e o relatório segue oferecido.
