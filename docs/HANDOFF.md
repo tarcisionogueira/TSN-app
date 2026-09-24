@@ -33137,6 +33137,10 @@ de lances; `enriquecerDatasZuk` grava 1ª em `data_leilao` e 2ª em `data_leilao
 O coletor reativa quem segue no site (`ativo: true`), então os desligados por engano voltam na
 coleta. Teste: `npm run testar:zuk-pracas`. Conferir: `select count(data_leilao_2) from
 imoveis_leilao where fonte='ZUK' and ativo;` (era 18).
+**Resultado (coleta manual 13:36 UTC, 24/09):** 445 ZUK ativos, **218 com 2ª praça** (eram 0 ativos);
+**100 lotes voltaram à vitrine** com a 1ª praça já passada e a 2ª por vir; 0 lotes desligados com
+praça futura. Conferidos: Campo Novo do Parecis 2ª 25/09 11h40, Cabo Frio 25/09 14h38, Prestes Maia
+15/10 13h00 (horários de Brasília).
 
 ### ↩️ "Sem lance" só quando CONFIRMADO (24/09, tarde — Montana SUPERBID do dono)
 Corrige decisão minha da manhã: indeterminado aparecia como "Sem lance". Na SUPERBID o
