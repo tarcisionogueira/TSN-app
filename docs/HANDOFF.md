@@ -33189,6 +33189,16 @@ de 933 LJUD seguem sem data. Causa: `enriquecer-datas-cron` usa `fetchLote` com 
 diária `geral` do Bright Data (25/dia) que a apuração esgota. Próximo passo: levar BIASI/LJUD/
 GRUPOLANCE (e ZUK da apuração) para o runner residencial, que é grátis.
 
+### 🏠 Runner residencial: apuração ZUK + datas BIASI/LJUD/GRUPOLANCE (24/09, pedido do dono)
+`scripts/apurar-e-datar-residencial.mjs` (etapa nova no runner, depois da SUPERBID; `RESID_APLICAR=1`).
+Mesmas regras dos crons, grátis pelo IP de casa. Validado EM SECO em dado real
+(`residencial-seco.yml`): ZUK 27 lidos, 8 com lance / 13 sem / 6 indeterminado, 0 bloqueio.
+**A validação pegou um defeito do cron de datas**: LJUD saía com início = HOJE (data escondida
+no HTML) e fim = "2º Ciclo" de venda — `datasLjud()` em `enriquecer-lote.js` lê só os rótulos
+"1º/2º Encerramento" (teste `testar:datas-ljud`). Revalidado: 14/15 LJUD com data correta.
+Dívida: ~5 LJUD gravados pelo cron com início = dia da leitura (trigger impede zerar; corrigir
+quando o runner reler). `scripts/teste-extrair-datas.mjs` tem 4 ✗ ANTIGOS (datas fixas vencidas).
+
 ### 🌐 Domínio da masterclass `lucreantesdearrematar.com.br` (24/09, aula de 15/10)
 Dono contratou o domínio; a aula semanal de quarta ACABOU (`leilao-ao-vivo` segue `ativo=false`).
 - Vercel: domínio + `www` (308 → raiz) no projeto tsn-app, verificados.
