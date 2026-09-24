@@ -81,9 +81,11 @@ const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hi
 // 'acima_1mi' = 0 = sem teto). Estava declarado DENTRO do laco por usuario, depois do
 // passo 1 — por isso o caminho dos filtros salvos nunca o enxergava. Ver `tetoEfetivo`.
 // TIPOS_POR_PERFIL vive em ./_curadoria.js (24/09) — uma cópia só, usada também na pontuação.
-// Camada de IA da curadoria (./_curadoria.js): DESLIGADA por padrão — liga com CURADORIA_IA=1
-// na Vercel depois do OK de custo do dono. A camada de pontuação roda sempre.
-const CURADORIA_IA = process.env.CURADORIA_IA === '1';
+// Camada de IA da curadoria (./_curadoria.js). Liga por QUALQUER um dos dois:
+// `CURADORIA_IA=1` na Vercel, ou `app_config.curadoria_ia = 'true'` no banco (interruptor sem
+// deploy, mesmo padrão de divulgacao-cron.js — OK do dono em 24/09; a integração não tem
+// permissão de criar env na Vercel). A camada de pontuação roda sempre.
+const CURADORIA_IA_ENV = process.env.CURADORIA_IA === '1';
 const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
@@ -609,6 +611,12 @@ async function handler(req) {
 
   let enviados = 0;
   let iaUsadas = 0, iaFalhas = 0; // curadoria por IA (./_curadoria.js) — vai na resposta do cron
+  let CURADORIA_IA = CURADORIA_IA_ENV;
+  if (!CURADORIA_IA) {
+    // Falha ao ler o interruptor = IA desligada nesta rodada (vale a pontuação) — e fica no log.
+    const [cfg] = await sbGet('app_config?key=eq.curadoria_ia&select=value');
+    CURADORIA_IA = !!cfg && String(cfg.value).replace(/"/g, '') === 'true';
+  }
   let suprimidos = 0;
   let cortadoPorOrcamentoEmail = false;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
