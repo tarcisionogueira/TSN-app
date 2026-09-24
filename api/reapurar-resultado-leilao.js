@@ -20,7 +20,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { fetchLote } from './enriquecer-lote.js';
-import { apurarResultadoDoTexto } from './_resultado-leilao.js';
+import { apurarResultadoDoTexto, patchDaApuracao } from './_resultado-leilao.js';
 import { checkRateLimit, rateLimitedRes } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -82,17 +82,14 @@ export default async function handler(req, res) {
   if (!html) return semAlteracao(); // sem conteúdo agora: não conta tentativa, tenta de novo depois (cron ou próxima visita passado o cooldown)
 
   const achado = apurarResultadoDoTexto(html, alvo);
-  const tentativas = (Number(row.resultado_apuracao_tentativas) || 0) + 1;
-  const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas };
-  if (achado) { patch.resultado_leilao = achado.resultado; if (achado.valor) patch.valor_lance_vencedor = achado.valor; }
-  else { patch.resultado_leilao = 'indeterminado'; }
+  const patch = patchDaApuracao(achado, { tabela, tentativasAntes: row.resultado_apuracao_tentativas });
 
   await sb(`${tabela}?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
 
   res.status(200).json({
     ok: true,
-    resultado_leilao: patch.resultado_leilao,
+    resultado_leilao: patch.resultado_leilao ?? row.resultado_leilao,
     valor_lance_vencedor: patch.valor_lance_vencedor ?? row.valor_lance_vencedor,
-    atualizado: achado ? achado.resultado !== row.resultado_leilao : false,
+    atualizado: achado?.resultado ? achado.resultado !== row.resultado_leilao : false,
   });
 }

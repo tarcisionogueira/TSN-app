@@ -1,6 +1,8 @@
 {
   "functions": {
-    "api/caso-andamento-cnj.js": { "regions": ["gru1"], "maxDuration": 60 }
+    "api/caso-andamento-cnj.js": { "regions": ["gru1"], "maxDuration": 60 },
+    "api/apurar-resultado-leilao-cron.js": { "regions": ["gru1"], "maxDuration": 280 },
+    "api/reapurar-resultado-leilao.js": { "regions": ["gru1"], "maxDuration": 30 }
   },
   "rewrites": [
     {

@@ -33156,6 +33156,27 @@ sem nº de processo: o endpoint agora lê o nº do texto da validação dos anex
 edital; só aceita dígito verificador CNJ válido) e grava no lote. Rafael: 0010959-05.2017.5.15.0030
 (TRT15). Resta 1 arremate manual sem nº em lugar nenhum (R$ 63.714,85, 21/07) — digitar uma vez.
 
+### 🔎 Apuração: "sem conteúdo" e KLEILOES indeterminado (24/09, itens 9 e 10 do dono)
+Recon de 22 páginas reais (`recon-resultado-pagina.yml`, dump em `recon_dump`):
+- **"Sem conteúdo" era o FREIO, não a página**: download direto falhava no Vercel (EUA) e a
+  subcota diária `geral` do Bright Data estava esgotada (25/25) → html vazio. Do GitHub as mesmas
+  páginas ZUK abriram direto e o leitor acertou (vendido R$ 199.680 / sem lance). Correções:
+  `apurar-resultado-leilao-cron.js` e `reapurar-resultado-leilao.js` fixados em **gru1**
+  (`vercel.json`), e o resumo do cron separa `semCota` de `semConteudo` (forma #5).
+- **Suporte Leilões (JELEILOES/KLEILOES/WEBLEILOES)** — leitor próprio em `_resultado-leilao.js`
+  (`statusString` + tabela "Lance Atual · Nº de Lances · Status"): JELEILOES vencido = **CANCELADO**
+  pelo juízo (4 de 4) → `resultado_leilao='cancelado'`, `ativo=false`, `suprimido_motivo=
+  'leilao_cancelado'`; KLEILOES = **ainda ABERTO** (venda direta renovada "Data Até 23/10" ou 2ª
+  praça 07/10 que não tínhamos) → `aberto`: grava a data nova, não gasta tentativa, religa.
+- Regra única `patchDaApuracao()` usada pelo cron e pela reapuração (antes cada um montava o seu).
+- 36 lotes VIP/LEILOTECH que não são imóvel (cadeiras, eletrodomésticos, carros) estavam na fila
+  e seriam RELIGADOS pela apuração → `suprimido_motivo='fora_do_acervo'`. ⚠️ A função
+  `fora_do_acervo_imovel_veiculo()` dá falso positivo em ZUK/JOAOEMILIO/LJUD (títulos "em leilão -
+  Rua…") — só aplicar nas fontes validadas.
+- Teste: `npm run testar:resultado-pagina` (13 casos, 7 novos da Suporte).
+- Veículos: busca vazia agora diz qual filtro zera (43 de 47 carros "sem lance" sem avaliação).
+- Pendente: KRON (403/JS) e VIP (conexão recusada) — conferir após a 1ª rodada em gru1.
+
 ### 🔴 /buscar fora do ar ~5 h (24/09, 11:46 → 16:50)
 `useRolagemDaLista('busca', !loading…)` (commit 490890d) chamado ANTES do `useState` do `loading` →
 ReferenceError em toda renderização, "Algo deu errado". Corrigido (bb4978d) e **trava nova**:

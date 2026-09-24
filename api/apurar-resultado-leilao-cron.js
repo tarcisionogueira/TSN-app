@@ -30,7 +30,7 @@ export const config = { runtime: 'nodejs', maxDuration: 280 };
 
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote } from './enriquecer-lote.js';
-import { apurarResultadoDoTexto } from './_resultado-leilao.js';
+import { apurarResultadoDoTexto, patchDaApuracao } from './_resultado-leilao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -111,7 +111,7 @@ const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL]
 const PARALELO = 4;
 
 async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxyIsp = false) {
-  let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, cortado = false;
+  let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, semCota = 0, abertos = 0, cancelados = 0, cortado = false;
   const fila = [...candidatos];
   const trabalhador = async () => { while (fila.length) {
     const c = fila.shift();
@@ -127,36 +127,35 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
     // fetchLote() já resolve/loga suas próprias falhas (direto→BrightData→proxy ISP→'fail');
     // este catch só protege contra um throw inesperado fora desse contrato — html='' cai no
     // ramo de "sem conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
-    try { ({ html } = await fetchLote(c.alvo, { proposito: 'geral', tentarProxyIsp })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
+    let via = '';
+    try { ({ html, via } = await fetchLote(c.alvo, { proposito: 'geral', tentarProxyIsp })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
     if (!html) {
       // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa,
       // mas CARIMBA a hora (24/09). Sem isso o lote voltava ao topo da fila em toda rodada e,
       // somado aos indeterminados retentados, os mesmos ~250 ocupavam o lote inteiro: medido
       // em 24/09, 517 imóveis na janela com ZERO tentativas e 620 que saíram dela sem nenhuma.
       // A fila agora ordena por tentativas e por esta hora — rodízio, ninguém fica para trás.
-      semConteudo++;
+      // 24/09: "sem conteúdo" misturava a página que não abriu com o FREIO de orçamento (cota
+      // diária 'geral' do Bright Data esgotada — forma #5 do CLAUDE.md). Contados à parte.
+      if (via === 'sem_cota') semCota++; else semConteudo++;
       await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(() => {}); // padrao-ok: carimbo de rodízio; falhar só repete o lote na próxima rodada
       continue;
     }
     const achado = apurarResultadoDoTexto(html, c.alvo);
-    const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas };
-    if (achado) {
-      patch.resultado_leilao = achado.resultado;
-      if (achado.valor) patch.valor_lance_vencedor = achado.valor;
-      if (achado.resultado === 'vendido') vendidos++; else semLance++;
-    } else {
-      patch.resultado_leilao = 'indeterminado';
-      indeterminados++;
-    }
     // Lote que a limpeza HORÁRIA já desligou por praça vencida, antes de este cron diário
     // chegar nele (23/09 — ver a consulta de candidatos): se não vendeu, volta ao ar e entra
-    // na retenção de 15 dias de `desativar_leiloes_encerrados()`. Vendido continua desligado.
-    if (c.religarSeNaoVendido && patch.resultado_leilao !== 'vendido') { patch.ativo = true; patch.suprimido_motivo = null; }
+    // na retenção de 15 dias de `desativar_leiloes_encerrados()`. Vendido/cancelado ficam desligados.
+    const patch = patchDaApuracao(achado, { tabela, tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: !!c.religarSeNaoVendido });
+    if (achado?.aberto) abertos++;
+    else if (achado?.resultado === 'cancelado') cancelados++;
+    else if (achado?.resultado === 'vendido') vendidos++;
+    else if (achado?.resultado) semLance++;
+    else indeterminados++;
     await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
   } };
   await Promise.all(Array.from({ length: PARALELO }, trabalhador));
-  return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, cortado };
+  return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, semCota, abertos, cancelados, cortado };
 }
 
 export default async function handler(req, res) {

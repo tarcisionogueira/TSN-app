@@ -22,5 +22,21 @@ console.log('\nFRAZAO (genérico)');
 const frazaoSem = 'Sem Licitantes 1º Leilão: 18/09/2026 às 15h00 2º Leilão: 21/09/2026 às 15h00 Maior lance atual: R$ 0,00 Lance inicial: R$ 155.500,00 Leilão Finalizado Prezado usuário, esses lote pertence a um leilão que já foi encerrado.';
 ok(ler(frazaoSem, FRAZAO)?.resultado === 'sem_lance', '"Sem Licitantes" → sem lance');
 
+console.log('\nSUPORTE LEILÕES (JELEILOES / KLEILOES)');
+const JE = 'https://jeleiloes.com.br/oferta/leilao/imoveis/casas/1771/id-41302/imovel-c-5-155-48m-em-londrina-pr';
+const KL = 'https://kleiloes.com.br/oferta/leilao/imoveis/casa/14399/id-57568/imovel-paranavai-pr';
+const tabela = (lance, n, st) => `Lance Atual Número de Lances Status Número de visitas 4.1 Casas R$ 12.479.000,00 R$ 9.359.250,00 R$ 0,00 R$ 115.000,00 --> R$ ${lance} ${n} ${st} 10966 Visualizar Edital Visualizar Matrícula`;
+const je = (lance, n, st) => `<script>{"statusString":"Encerrado"}</script> Status Encerrado Data 1º Leilão: 23/09/2026 ${tabela(lance, n, st)} Histórico de lances Internauta Data Hora Pagamento Valor do Lance`;
+ok(ler(je('0,00', 0, 'Cancelado'), JE)?.resultado === 'cancelado', 'tabela "Cancelado" (decisão do juízo) → cancelado, não "sem lance"');
+ok(ler(je('0,00', 0, 'Encerrado'), JE)?.resultado === 'sem_lance', 'encerrado com 0 lances → sem lance');
+const venda = ler(je('150.000,00', 3, 'Encerrado'), JE);
+ok(venda?.resultado === 'vendido' && venda.valor === 150000, 'encerrado com 3 lances → com lance e o valor');
+ok(ler(je('0,00', 0, 'Cancelado'), '')?.resultado === 'cancelado', 'reconhece pela statusString mesmo sem a URL');
+const kl = ler('<script>{"statusString":"Aberto para lances"}</script> Título SICREDI DEXIS Data Até 23/10/2099 Bens em venda direta: Interessados contactar o leiloeiro! Status Aberto para Lances', KL);
+ok(kl?.aberto && kl.resultado === null && kl.novaData?.data_leilao === '2099-10-23', 'venda direta renovada ("Data Até") → aberto + data nova, sem resultado');
+const kl2 = ler('<script>{"statusString":"Aberto para lances"}</script> Data 23/09/2026 10:00 (1º Leilão) Online 07/10/2099 10:00 (2º Leilão) Online', KL);
+ok(kl2?.aberto && kl2.novaData?.data_leilao_2 === '2099-10-07T10:00:00-03:00', '2ª praça por vir → aberto + data da 2ª praça');
+ok(ler('<script>{"statusString":"Aberto para lances"}</script> sem data nenhuma', KL)?.novaData === null, 'aberto sem data futura → aberto, sem data');
+
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);
