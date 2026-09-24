@@ -17,7 +17,7 @@
  * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: FIPE_LIMITE (padrão 600).
  */
 import { createClient } from '@supabase/supabase-js';
-import { criarFipeFetch, buscarFipe, RETENTAR_SEM_MATCH_DIAS, RETENTAR_OK_DIAS } from '../api/_fipe.js';
+import { criarFipeFetch, buscarFipe, RETENTAR_SEM_MATCH_DIAS, RETENTAR_OK_DIAS, TETO_CRON_FIPE } from '../api/_fipe.js';
 
 const TIPOS_COM_FIPE = ['carro', 'moto', 'caminhao', 'van_utilitario', 'onibus'];
 
@@ -68,7 +68,7 @@ async function main() {
       novos++;
     },
   };
-  const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: 450 }).then(r => {
+  const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: TETO_CRON_FIPE }).then(r => {
     if (r.error) throw new Error(r.error.message);
     return r.data;
   }), cacheFipe);

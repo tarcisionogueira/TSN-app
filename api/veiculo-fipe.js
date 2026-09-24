@@ -11,7 +11,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 import { getUser, getUserRoleById } from './_auth.js';
-import { criarFipeFetch, buscarFipe, fipeEstaVelho, RETENTAR_OK_DIAS } from './_fipe.js';
+import { criarFipeFetch, buscarFipe, fipeEstaVelho, RETENTAR_OK_DIAS, TETO_DIARIO_FIPE } from './_fipe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
   };
 
   const fipeGet = criarFipeFetch(async () => {
-    const r = await sb('rpc/registrar_uso_fipe', { method: 'POST', body: JSON.stringify({ p_teto: 450 }) });
+    const r = await sb('rpc/registrar_uso_fipe', { method: 'POST', body: JSON.stringify({ p_teto: TETO_DIARIO_FIPE }) });
     if (!r.ok) return { permitido: false };
     return r.json();
   }, cacheFipe);

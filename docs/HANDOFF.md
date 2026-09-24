@@ -33061,3 +33061,7 @@ Cron: elegível = ativo + tipo com FIPE + ano; ordem por `data_leilao`; lote at�
 (`FIPE_LIMITE` 600); log mostra acertos de cache. `api/veiculo-fipe.js` usa a mesma régua e cache.
 Novo status `sem_dados` (título sem marca/modelo) — retenta em 90 dias como `sem_match`.
 Teste: `npm run testar:fipe` (API simulada). A API da FIPE não é alcançável deste sandbox.
+**Teto da cota grátis (dono, 24/09):** contador único `fipe_uso` (dia UTC); cron para em
+`TETO_CRON_FIPE` = 400, a busca sob demanda (só o dono usa) pode ir até `TETO_DIARIO_FIPE` = 450 —
+50 abaixo dos 500 grátis. Não existe outro caminho que chame a API (grep `parallelum`). Fetch com
+timeout de 15 s.

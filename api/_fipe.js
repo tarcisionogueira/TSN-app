@@ -21,6 +21,13 @@ const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: '
 // 'sem_match' custa 1-3 chamadas de marca sem achar nada — não vale repetir todo dia; 'ok'/
 // 'aproximado' a FIPE só muda 1x/mês, 25 dias é folga suficiente. Usado tanto pelo cron em
 // lote quanto pela busca sob demanda, pra não terem critérios diferentes de "está velho".
+// TETO DA COTA GRÁTIS (500/dia sem token, por dia UTC). Um contador só no banco
+// (`fipe_uso`/`registrar_uso_fipe`) para os dois caminhos: o cron para em TETO_CRON e os 50
+// restantes ficam para a busca sob demanda (o dono abrindo um veículo), que para em
+// TETO_DIARIO — 50 abaixo dos 500, margem para relógio/contagem da API diferirem da nossa.
+export const TETO_DIARIO_FIPE = 450;
+export const TETO_CRON_FIPE = 400;
+
 export const RETENTAR_SEM_MATCH_DIAS = 90;
 export const RETENTAR_OK_DIAS = 25;
 
@@ -176,7 +183,7 @@ export function criarFipeFetch(reservar, cache = null) {
     try { decisao = await reservar(); }
     catch (e) { console.log(`  ⚠️ reserva de cota FIPE falhou: ${String(e.message).slice(0, 100)}`); decisao = { permitido: false }; }
     if (!decisao?.permitido) throw new ErroFipeSemCota();
-    const r = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' } });
+    const r = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
     if (!r.ok) { console.log(`  ⚠️ FIPE ${path}: HTTP ${r.status}`); return null; }
     let j;
     try { j = await r.json(); }
