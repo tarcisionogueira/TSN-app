@@ -6,6 +6,8 @@ import { apiCall } from '../utils/apiCall';
 import ConviteParceiro from '../components/ConviteParceiro';
 import EmailHtml from '../components/EmailHtml';
 import CaixaEmail from '../components/CaixaEmail';
+import { useIsMobile } from '../utils/useIsMobile';
+import { useLocation } from 'react-router-dom';
 
 const STATUS_CFG = {
   // 18/08: NÓS começarmos a conversa não abre chamado. Dois criadores caem aqui — a saudação
@@ -115,6 +117,9 @@ export default function Atendimento() {
   const [filtro, setFiltro] = useState('pendentes');
   const [segFiltro, setSegFiltro] = useState('todos');
   const [chamadoAtivo, setChamadoAtivo] = useState(null);
+  // Celular (24/09): uma coluna só — ou a fila, ou a conversa. Lado a lado, a conversa
+  // ficava cortada para fora da tela e o seletor de modo esticava com a altura da grade.
+  const estreito = useIsMobile(900);
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState('');
   const [anexos, setAnexos] = useState([]);
@@ -123,7 +128,10 @@ export default function Atendimento() {
   const [busca, setBusca] = useState('');
   // Caixa de e-mail da equipe (23/09): mesma régua de `pode_caixa_email()` no banco — equipe
   // de atendimento, menos advogado (a caixa mistura privacidade@ e devolutivas de outros casos).
-  const [modo, setModo] = useState('chamados');
+  const loc = useLocation();
+  // Endereço de e-mail clicado numa mensagem chega como `?escrever=` — abre direto na caixa.
+  const [modo, setModo] = useState(() => (new URLSearchParams(loc.search).get('escrever') ? 'email' : 'chamados'));
+  useEffect(() => { if (new URLSearchParams(loc.search).get('escrever')) setModo('email'); }, [loc.search]);
   const fileRef = useRef();
   const msgEndRef = useRef();
 
@@ -268,10 +276,12 @@ export default function Atendimento() {
   // Advogado vê só a PRÓPRIA caixa pessoal (RLS) e envia só por ela — a de comunicação é da equipe.
   const podeCaixa = papelEquipe;
   const seletorModo = podeCaixa && (
-    <div style={{ display: 'flex', gap: 6 }}>
+    // Tamanho FIXO e igual nos dois (24/09, pedido do dono): antes a grade da página esticava
+    // um deles até a altura da tela no modo e-mail.
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', alignSelf: 'start' }}>
       {[['chamados', 'Chamados', MessageCircle], ['email', 'E-mail', Mail]].map(([k, l, Icon]) => (
         <button key={k} onClick={() => setModo(k)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, width: 140, flex: '0 0 auto', boxSizing: 'border-box', padding: '0 14px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 800, cursor: 'pointer',
             background: modo === k ? '#111111' : 'white', color: modo === k ? 'white' : '#334155' }}>
           <Icon size={15} /> {l}
         </button>
@@ -280,7 +290,7 @@ export default function Atendimento() {
   );
   if (podeCaixa && modo === 'email') {
     return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', display: 'grid', gap: 16 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: estreito ? '16px 12px' : '24px 20px', minHeight: 'calc(100vh - 140px)', display: 'grid', gap: 16, alignContent: 'start' }}>
         {seletorModo}
         <CaixaEmail soPessoal={papelAtendimento === 'advogado'} />
       </div>
@@ -288,7 +298,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '310px 1fr', gap: estreito ? 14 : 20, maxWidth: 1200, margin: '0 auto', padding: estreito ? '16px 12px' : '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start', alignContent: 'start' }}>
 
       {seletorModo && <div style={{ gridColumn: '1 / -1' }}>{seletorModo}</div>}
 
@@ -302,8 +312,8 @@ export default function Atendimento() {
         </div>
       )}
 
-      {/* ===== SIDEBAR — FILA ===== */}
-      <div>
+      {/* ===== SIDEBAR — FILA ===== (no celular some quando há conversa aberta) */}
+      <div style={estreito && chamadoAtivo ? { display: 'none' } : undefined}>
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
 
           {/* Título */}
@@ -410,7 +420,13 @@ export default function Atendimento() {
       </div>
 
       {/* ===== PAINEL PRINCIPAL — CONVERSA ===== */}
-      {!chamadoAtivo ? (
+      {estreito && chamadoAtivo && (
+        <button onClick={() => setChamadoAtivo(null)}
+          style={{ justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: 'white', color: '#0D63DB', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+          ← Voltar à fila
+        </button>
+      )}
+      {estreito && !chamadoAtivo ? null : !chamadoAtivo ? (
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, padding: 60 }}>
           <MessageCircle size={48} color="#e2e8f0" />
           <p style={{ color: '#94a3b8', marginTop: 16, fontSize: 14 }}>Selecione um chamado na fila</p>

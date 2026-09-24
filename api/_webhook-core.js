@@ -452,6 +452,26 @@ export async function enviarEmailResgateCancelamento({ userId, email }) {
 }
 
 // ── ESTORNO DE COMISSÃO (chargeback / reembolso) ──────────────────────────────
+// DATA EM QUE O DINHEIRO CHEGA (24/09, regra do dono: comissão só fica sacável quando a BidPro
+// RECEBE, não quando vende). O banco prende toda comissão como 'a_liberar' (trigger
+// saldo_lancamento_segura_ate_receber); esta chamada diz ATÉ QUANDO — MP `money_release_date`,
+// Asaas `creditDate`/`estimatedCreditDate`. Chamar ANTES de creditar comissão: a trigger lê a data
+// na hora do insert; chamar depois também serve (a RPC ajusta as já presas). Nunca lança — sem
+// a data, a comissão fica presa pelo prazo padrão da regra (33 dias), que é o lado seguro.
+export async function registrarLiberacaoPagamento({ gatewayPaymentId, liberarEm, gateway }) {
+  if (!gatewayPaymentId || !liberarEm || !Number.isFinite(Date.parse(liberarEm))) return { skipped: 'sem_data' };
+  try {
+    const { data, error } = await supabase.rpc('registrar_liberacao_pagamento', {
+      p_gateway_payment_id: String(gatewayPaymentId), p_liberar_em: new Date(liberarEm).toISOString(), p_gateway: gateway || null,
+    });
+    if (error) { console.error(`[${gateway}] registrar_liberacao_pagamento:`, error.message); return { erro: error.message }; }
+    return data;
+  } catch (e) {
+    console.error(`[${gateway}] registrar_liberacao_pagamento:`, e?.message || e);
+    return { erro: String(e?.message || e) };
+  }
+}
+
 // Reverte a comissão de afiliado de um pagamento que foi revertido: cancela a
 // comissão e lança um ESTORNO NEGATIVO no saldo (fonte do saque). Sem isto o
 // afiliado ficava com a comissão MESMO com o pagamento estornado — fraude: indicar

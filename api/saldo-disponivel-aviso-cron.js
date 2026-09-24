@@ -58,6 +58,15 @@ async function handler(req) {
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
+  // Comissão cuja venda JÁ foi recebida pelo gateway vira sacável agora (regra
+  // comissao.libera_no_recebimento) — antes do aviso, para o e-mail já contar com ela.
+  let liberadas = null;
+  {
+    const { data, error } = await supabase.rpc('liberar_comissoes_recebidas');
+    if (error) console.error('[saldo-aviso] liberar_comissoes_recebidas falhou:', error.message);
+    else liberadas = data;
+  }
+
   let pendentes = [];
   try {
     const { data, error } = await supabase.rpc('saldo_avisos_pendentes');
@@ -99,7 +108,7 @@ async function handler(req) {
     console.error('[saldo-disponivel-aviso] sincronização falhou — o snapshot pode ficar desatualizado:', e?.message || e);
   }
 
-  return new Response(JSON.stringify({ ok: true, pendentes: pendentes.length, enviados, sem_email: semEmail, falhas, sincronizados }), {
+  return new Response(JSON.stringify({ ok: true, liberadas, pendentes: pendentes.length, enviados, sem_email: semEmail, falhas, sincronizados }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

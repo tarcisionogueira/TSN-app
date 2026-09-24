@@ -7,7 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
@@ -404,6 +404,11 @@ export async function processarEventoMp(req, res) {
   // já trata à parte); aqui só interessa como base de comissão, então um 0/ausente cai pro bruto.
   const valorLiquidoMp = Number(pagamento.transaction_details?.net_received_amount) > 0
     ? Number(pagamento.transaction_details.net_received_amount) : null;
+  // Quando o dinheiro deste pagamento chega à conta — prende a comissão até lá (ver
+  // registrarLiberacaoPagamento). Só em aprovado: pendente ainda não tem data real.
+  if (pagamento.status === 'approved' && pagamento.money_release_date) {
+    await registrarLiberacaoPagamento({ gatewayPaymentId: String(pagamento.id), liberarEm: pagamento.money_release_date, gateway: 'mercadopago' });
+  }
 
   // Espelho local do pagamento (financeiro) — todas as transições de status. Recorrente vs
   // avulso pelo operation_type do MP. Idempotente por mp_payment_id; roda antes do corte de

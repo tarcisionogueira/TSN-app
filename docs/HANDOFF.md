@@ -32714,3 +32714,29 @@ segurança e em regras de negócio, backup ok em 23/09.
 **Só o dono resolve** (sem mudança): Meta (verificação), Google (créditos Gemini + projeto-sombra),
 Windsor.ai (plano/contas), `VITE_SENTRY_DSN` e `LOCATIONIQ_USD_POR_1000` na Vercel, Canva,
 credenciais do Inter, certificado A1 + contador para o WebISS.
+
+**33. ✅ Comissão só fica sacável quando a BidPro RECEBE (regra do dono, 24/09).** Confirmado o
+defeito: as quatro funções de comissão (`distribuir_comissao_rede` + bônus infinito,
+`comissao_venda_assessoria`, `confirmar_compra_produto`) e o repasse de honorário de êxito à equipe
+(`api/arrematacoes.js`) gravavam o lançamento JÁ `disponivel` na APROVAÇÃO do pagamento — no cartão
+o dinheiro só chega em ~30 dias (MP) / D+32 (Asaas). Correção NO BANCO, vale para qualquer função
+futura: trigger `saldo_lancamento_segura_ate_receber` põe toda comissão/honorário positivo em
+`a_liberar` com `liberar_em` = data de liberação do gateway (`pagamento_liberacao`, gravada pelos
+webhooks via `registrarLiberacaoPagamento`: MP `money_release_date`, Asaas `creditDate`/
+`estimatedCreditDate`; honorário = última parte recebida — Pix externo na hora, cheque +3 dias).
+Sem data: +33 dias (regra `comissao.libera_no_recebimento`, prazo é DADO). O cron diário
+`saldo-disponivel-aviso-cron` chama `liberar_comissoes_recebidas()` antes do aviso. Saldo sacável
+(`saldo_usuarios`, `saque_avaliar`, `solicitar_saque_*`, 360, abandono) exclui `a_liberar`; a view
+ganhou `saldo_a_liberar` e a Minha Rede mostra "+ R$ X a liberar". Estorno de comissão ainda presa
+CANCELA em vez de lançar negativo. Testado em transação desfeita (4 cenários: cartão preso, Pix
+nasce livre, liberação por data, estorno cancela). Retroativo: 4 lançamentos (R$ 49,92) voltaram a
+`a_liberar` até 04–15/10; R$ 74,88 antigos seguem disponíveis. **Fora da trava de propósito:**
+`bonus_rank` (pool mensal sobre receita de competência fechada).
+
+**34. ✅ Atendimento/E-mail (dono, 24/09).** Botões Chamados/E-mail com tamanho fixo e igual (a
+grade esticava um deles na altura da tela); no celular a fila e a conversa viram uma coluna só com
+"Voltar à fila". Endereço de e-mail clicado dentro de uma mensagem abre o **Escrever do BidPro**
+(`EmailHtml` reescreve `mailto:` para `#/atendimento?escrever=`; sandbox ganhou
+`allow-top-navigation-by-user-activation` e TODO outro link perde o `target` do remetente — só os
+nossos vão ao topo). **Rascunhos**: pasta nova, salvamento automático 1,2 s após a última tecla
+(`email_rascunhos`, RLS só do próprio autor), "Salvar e fechar"/"Descartar", apagado ao enviar.

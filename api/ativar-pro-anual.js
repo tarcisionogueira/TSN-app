@@ -15,7 +15,7 @@
  */
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
-import { ativarPlanoDireto, eventoJaProcessado, removerEventoProcessado } from './_webhook-core.js';
+import { ativarPlanoDireto, eventoJaProcessado, removerEventoProcessado, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { auditLog } from './_audit.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
@@ -83,6 +83,7 @@ export default async function handler(req, res) {
   // BASE DA COMISSÃO = valor líquido recebido, não o bruto (15/09, pedido do dono).
   const valorLiquido = Number(pg.transaction_details?.net_received_amount) > 0
     ? Number(pg.transaction_details.net_received_amount) : valor;
+  if (pg.money_release_date) await registrarLiberacaoPagamento({ gatewayPaymentId: String(paymentId), liberarEm: pg.money_release_date, gateway: 'mercadopago' });
 
   // 3) Idempotência: um pagamento ativa UMA vez.
   const evento = 'pix_plano_anual';

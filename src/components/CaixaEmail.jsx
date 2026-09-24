@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText } from 'lucide-react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,6 +21,7 @@ const PASTAS = [
   { k: 'entrada', label: 'Entrada', Icon: Inbox },
   { k: 'spam', label: 'Spam', Icon: ShieldAlert },
   { k: 'enviados', label: 'Enviados', Icon: Send },
+  { k: 'rascunhos', label: 'Rascunhos', Icon: FileText },
   { k: 'lixeira', label: 'Lixeira', Icon: Trash2 },
 ];
 const CAIXAS = ['suporte', 'contato', 'privacidade'];
@@ -40,6 +42,17 @@ function StatusEnvio({ m, completo }) {
   return <span title={dica} style={{ fontSize: completo ? 12.5 : 11, fontWeight: 700, color: cor }}>{txt}</span>;
 }
 const ORIGENS = [['todas', 'Todas'], ['minha', 'Minha caixa'], ['comunicacao', 'Comunicação']];
+const RE_EMAIL = /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+// Texto plano com endereço de e-mail clicável → abre o "Escrever" daqui (24/09), não o app do aparelho.
+function TextoComEmails({ texto, onEscrever }) {
+  const partes = String(texto || '').split(RE_EMAIL);
+  return partes.map((p, i) => (i % 2 === 1
+    ? <button key={i} onClick={() => onEscrever(p)} title="Escrever para este endereço"
+        style={{ background: 'none', border: 'none', padding: 0, color: '#0D63DB', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>{p}</button>
+    : <React.Fragment key={i}>{p}</React.Fragment>));
+}
+const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id'];
+const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim()));
 
 const fmtData = (iso) => {
   const d = new Date(iso);
@@ -69,7 +82,13 @@ export default function CaixaEmail({ soPessoal = false }) {
   // tela. Abaixo de 900px vira app de e-mail: OU a lista, OU a mensagem aberta com "Voltar".
   const estreito = useIsMobile(900);
   const [busca, setBusca] = useState('');
-  const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a }
+  const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a, rascunho_id? }
+  const [rascunhos, setRascunhos] = useState([]);
+  const [salvoEm, setSalvoEm] = useState(null);  // hora do último salvamento automático
+  const rascunhoId = useRef(null);               // ref (não estado): gravar o id não pode redisparar o salvamento
+  const salvando = useRef(Promise.resolve());    // fila: dois salvamentos nunca inserem duas linhas
+  const loc = useLocation();
+  const navigate = useNavigate();
   const [enviando, setEnviando] = useState(false);
   const [bloqueados, setBloqueados] = useState([]);
   const [origem, setOrigem] = useState('todas');
@@ -86,6 +105,13 @@ export default function CaixaEmail({ soPessoal = false }) {
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro('');
+    if (pasta === 'rascunhos') {
+      const { data: rs, error: eR } = await supabase.from('email_rascunhos') // padrao-ok: RLS devolve só os rascunhos do próprio usuário logado
+        .select('*').order('atualizado_em', { ascending: false }).limit(200);
+      if (eR) setErro(`Não consegui ler os rascunhos: ${eR.message}`);
+      setRascunhos(eR ? [] : (rs || [])); setLista([]); setCarregando(false);
+      return;
+    }
     const { data, error } = await supabase.from('email_caixa').select(COLS_LISTA)
       .eq('pasta', pasta).order('criado_em', { ascending: false }).limit(200);
     if (error) { setErro(`Não consegui ler a caixa: ${error.message}`); setLista([]); }
@@ -162,9 +188,71 @@ export default function CaixaEmail({ soPessoal = false }) {
     } catch (e) { setErro(`Não consegui baixar o anexo: ${e.message}`); }
   }
 
+  // ── RASCUNHO (24/09) ────────────────────────────────────────────────────────────────
+  // Abrir o Escrever sempre passa por aqui: zera (ou retoma) o id do rascunho.
+  function abrirCompor(c) {
+    rascunhoId.current = c?.rascunho_id || null;
+    setSalvoEm(null);
+    setCompor(c);
+  }
+  function salvarRascunho(c) {
+    if (!temConteudo(c)) return salvando.current;
+    const linha = Object.fromEntries(CAMPOS_RASCUNHO.map((k) => [k, c[k] ?? null]));
+    linha.atualizado_em = new Date().toISOString();
+    salvando.current = salvando.current.then(async () => {
+      const q = rascunhoId.current
+        ? supabase.from('email_rascunhos').update(linha).eq('id', rascunhoId.current).select('id')
+        : supabase.from('email_rascunhos').insert(linha).select('id');
+      const { data, error } = await q;
+      // `.select()` prova a gravação: update barrado pela RLS devolve error null e 0 linhas.
+      if (error || !data?.length) { setErro(`Rascunho NÃO foi salvo: ${error?.message || 'sem permissão'}`); return; }
+      rascunhoId.current = data[0].id;
+      setSalvoEm(new Date());
+    });
+    return salvando.current;
+  }
+  // Salva sozinho 1,2 s depois da última tecla — pausar no meio não perde nada.
+  useEffect(() => {
+    if (!compor) return;
+    const t = setTimeout(() => { salvarRascunho(compor); }, 1200);
+    return () => clearTimeout(t);
+  }, [compor]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function fecharCompor() {
+    const c = compor;
+    setCompor(null);
+    if (temConteudo(c)) {
+      await salvarRascunho(c);
+      setAviso('Rascunho salvo — continue depois em Rascunhos.');
+      if (pasta === 'rascunhos') carregar();
+    }
+  }
+  async function descartarRascunho() {
+    const id = rascunhoId.current;
+    await salvando.current;
+    setCompor(null);
+    if (!id) return;
+    const { data, error } = await supabase.from('email_rascunhos').delete().eq('id', rascunhoId.current || id).select('id');
+    if (error || !data?.length) { setErro(`Não consegui apagar o rascunho: ${error?.message || 'sem permissão'}`); return; }
+    rascunhoId.current = null;
+    setRascunhos((prev) => prev.filter((r) => r.id !== data[0].id));
+    setAviso('Rascunho descartado.');
+  }
+  function escreverPara(para, assunto = '') {
+    abrirCompor({ de: dePadrao, para, cc: '', assunto, texto: '', responder_a: null });
+  }
+  // Link de e-mail clicado dentro de uma mensagem (EmailHtml reescreve `mailto:` para cá).
+  useEffect(() => {
+    const q = new URLSearchParams(loc.search);
+    const para = q.get('escrever');
+    if (!para) return;
+    escreverPara(para, q.get('assunto') || '');
+    q.delete('escrever'); q.delete('assunto');
+    navigate({ pathname: loc.pathname, search: q.toString() ? `?${q}` : '' }, { replace: true });
+  }, [loc.search]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function responder(m) {
     const caixaNossa = String(m.caixa || '').split('@')[0];
-    setCompor({
+    abrirCompor({
       // Veio pra minha caixa pessoal → respondo como eu; veio pra comunicação → pelo mesmo endereço.
       de: (m.dono && meuEndereco) ? 'pessoal' : (CAIXAS.includes(caixaNossa) ? caixaNossa : dePadrao),
       para: m.de_email || '', cc: '',
@@ -174,7 +262,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   }
   function encaminhar(m) {
     const corpo = `\n\n---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${m.texto || ''}`;
-    setCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${m.assunto || ''}`, texto: corpo.slice(0, 18000), responder_a: null });
+    abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${m.assunto || ''}`, texto: corpo.slice(0, 18000), responder_a: null });
   }
 
   async function enviar() {
@@ -188,6 +276,14 @@ export default function CaixaEmail({ soPessoal = false }) {
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
       setCompor(null);
+      // Enviado: o rascunho some. Espera um salvamento em voo terminar, senão ele recriaria a linha.
+      await salvando.current;
+      if (rascunhoId.current) {
+        const idR = rascunhoId.current; rascunhoId.current = null;
+        const { error: eDel } = await supabase.from('email_rascunhos').delete().eq('id', idR).select('id');
+        if (eDel) console.warn('[caixa] e-mail enviado, mas o rascunho ficou:', eDel.message);
+        setRascunhos((prev) => prev.filter((r) => r.id !== idR));
+      }
       setAviso(j.avisos?.length ? `Enviado — atenção: ${j.avisos.join('; ')}.` : 'E-mail enviado.');
       if (pasta === 'enviados') carregar();
     } catch (e) {
@@ -217,7 +313,7 @@ export default function CaixaEmail({ soPessoal = false }) {
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, minWidth: estreito ? 0 : 220, flex: estreito ? '1 1 100%' : undefined }} />
         <button onClick={carregar} style={btn(false)} title="Atualizar"><RefreshCw size={14} /></button>
-        <button onClick={() => setCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
+        <button onClick={() => abrirCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
           <PenSquare size={14} /> Escrever
         </button>
       </div>
@@ -239,6 +335,20 @@ export default function CaixaEmail({ soPessoal = false }) {
         )}
         {carregando ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}><Loader2 size={18} className="spin" /> Carregando…</div>
+        ) : pasta === 'rascunhos' ? (
+          rascunhos.length === 0
+            ? <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : 'Nenhum rascunho. Tudo que você começar a escrever fica salvo aqui sozinho.'}</div>
+            : rascunhos.map((r) => (
+              <div key={r.id} onClick={() => abrirCompor({ ...Object.fromEntries(CAMPOS_RASCUNHO.map((k) => [k, r[k] ?? ''])), responder_a: r.responder_a || null, chamado_id: r.chamado_id || null, de: r.de || dePadrao, rascunho_id: r.id })}
+                style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', borderLeft: '3px solid #f59e0b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.para ? `Para: ${r.para}` : '(sem destinatário)'}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtData(r.atualizado_em)}</span>
+                </div>
+                <div style={{ fontSize: 12.5, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.assunto || '(sem assunto)'}</div>
+                <div style={{ fontSize: 11.5, color: '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rascunho · {String(r.texto || '').slice(0, 80) || 'sem texto'}</div>
+              </div>
+            ))
         ) : visiveis.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : 'Nenhuma mensagem aqui.'}</div>
         ) : visiveis.map(m => {
@@ -319,7 +429,9 @@ export default function CaixaEmail({ soPessoal = false }) {
             {ativa.pasta === 'spam' || !ativa.html
               // Spam nunca renderiza HTML (nem no iframe isolado): imagem remota confirma ao
               // remetente que o endereço é lido — o que spammer mais quer saber.
-              ? <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#1e293b', lineHeight: 1.6, overflowWrap: 'break-word' }}>{ativa.texto || '(mensagem sem texto)'}</div>
+              ? <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#1e293b', lineHeight: 1.6, overflowWrap: 'break-word' }}>
+                  {ativa.texto ? (ativa.pasta === 'spam' ? ativa.texto : <TextoComEmails texto={ativa.texto} onEscrever={(e) => escreverPara(e)} />) : '(mensagem sem texto)'}
+                </div>
               : <EmailHtml html={ativa.html} altura={520} />}
           </div>
         )}
@@ -330,8 +442,10 @@ export default function CaixaEmail({ soPessoal = false }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ background: 'white', borderRadius: 14, width: 'min(680px, 100%)', maxHeight: '92vh', overflow: 'auto', padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 16 }}>{compor.responder_a ? 'Responder' : 'Nova mensagem'}</span>
-              <button onClick={() => setCompor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
+              <span style={{ fontWeight: 800, fontSize: 16 }}>{compor.responder_a ? 'Responder' : 'Nova mensagem'}
+                {salvoEm && <span style={{ marginLeft: 10, fontSize: 11.5, fontWeight: 600, color: '#94a3b8' }}>rascunho salvo {salvoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+              </span>
+              <button onClick={fecharCompor} title="Fechar (o rascunho fica salvo)" style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
             </div>
             {compor.chamado_id && <div style={{ fontSize: 12, color: '#0D63DB', marginBottom: 8 }}>Esta resposta também entra no histórico do chamado.</div>}
             {[
@@ -349,7 +463,8 @@ export default function CaixaEmail({ soPessoal = false }) {
               placeholder="Escreva sua mensagem… (sua assinatura e o e-mail original, numa resposta, entram automaticamente)"
               style={{ ...campo, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => setCompor(null)} style={btn(false)}>Cancelar</button>
+              {temConteudo(compor) && <button onClick={descartarRascunho} style={{ ...btn(false), color: '#b91c1c', marginRight: 'auto' }}><Trash2 size={13} /> Descartar</button>}
+              <button onClick={fecharCompor} style={btn(false)}>{temConteudo(compor) ? 'Salvar e fechar' : 'Cancelar'}</button>
               <button onClick={enviar} disabled={enviando} style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1 }}>
                 {enviando ? <Loader2 size={14} /> : <Send size={14} />} Enviar
               </button>

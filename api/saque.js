@@ -69,6 +69,8 @@ async function rpc(fn, args) {
 
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
+// Comissão de venda ainda não recebida pelo gateway (regra comissao.libera_no_recebimento): aparece, não saca.
+const aLiberarDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_a_liberar`)).data?.[0]?.saldo_a_liberar || 0);
 
 // Abre um chamado de supervisão/validação do saque (analista + dono veem no Atendimento).
 async function abrirChamadoSaquePJ(user, perfil, valor, titulo) {
@@ -197,6 +199,7 @@ export default async function handler(req) {
       return json({ user_id: uid, linhas, total_repasse: totalRepasse });
     }
     const saldo = await saldoDe(alvoId);
+    const saldoALiberar = await aLiberarDe(alvoId);
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${alvoId}&order=criado_em.desc&limit=200&select=*`)).data || [];
 
     // UM CÉREBRO SÓ (08/08). Esta tela costumava calcular os pré-requisitos por conta
@@ -211,7 +214,7 @@ export default async function handler(req) {
     // Flag INFORMATIVO (não bloqueia): quem não está em plano pago não GANHA comissões
     // novas — mas o parceiro GRÁTIS agora ganha (regra comissao.gratis_ganha).
     const naoGanhaNovas = !podeReceber(alvoRole) && alvoRole !== 'explorador';
-    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
+    return json({ saldo, saldo_a_liberar: saldoALiberar, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
       nao_ganha_novas: naoGanhaNovas,
       pj_pendente: !!av.pj_pendente, pj_revalidar: !!av.pj_revalidar,
       pj_revalidacao_motivo: perfil.pj_revalidacao_motivo || null,

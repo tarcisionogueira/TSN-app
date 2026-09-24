@@ -149,6 +149,7 @@ export default function MinhaRede() {
   // Nível + financeiro (do próprio parceiro)
   const [nivel, setNivel] = useState(null);           // retorno de meu_nivel()
   const [saldo, setSaldo] = useState(0);
+  const [aLiberar, setALiberar] = useState(0);
   const [faltando, setFaltando] = useState([]);       // pré-requisitos do saque (inclui empresa/CNPJ p/ parceiro)
   const [erroSaldo, setErroSaldo] = useState('');     // leitura do saldo FALHOU (≠ saldo zero)
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false);
@@ -223,6 +224,7 @@ export default function MinhaRede() {
       const sq = await res.json();
       setErroSaldo('');
       setSaldo(Number(sq.saldo || 0));
+      setALiberar(Number(sq.saldo_a_liberar || 0));
       setFaltando(Array.isArray(sq.faltando) ? sq.faltando : []);
       setNaoGanhaNovas(!!sq.nao_ganha_novas);
       setProximaLib(sq.proxima_liberacao || null);
@@ -653,6 +655,12 @@ export default function MinhaRede() {
             <div style={{ fontSize: 30, fontWeight: 900, color: '#059669' }}>{fmtBRL(saldo)}</div>
             <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>a receber</div>
           </div>
+          {aLiberar > 0 && (
+            // Comissão de venda cujo pagamento o gateway ainda não repassou à BidPro (cartão ~30 dias).
+            <div style={{ fontSize: 12, color: '#b45309', marginTop: 4 }}>
+              + {fmtBRL(aLiberar)} a liberar — fica disponível para saque quando o pagamento da venda for recebido.
+            </div>
+          )}
 
           {/* Gate: para sacar, precisa cadastrar a PJ que vai receber (B2B) */}
           {precisaEmpresa ? (

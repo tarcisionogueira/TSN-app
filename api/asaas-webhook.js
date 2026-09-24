@@ -12,6 +12,7 @@ import {
   eventoJaProcessado,
   removerEventoProcessado,
   registrarConversaoAnuncio,
+  registrarLiberacaoPagamento,
 } from './_webhook-core.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
@@ -130,6 +131,8 @@ export default async function handler(req, res) {
   // BASE DA COMISSÃO = valor líquido recebido, não o bruto cobrado do cliente (15/09, pedido do
   // dono). `netValue` é o que o Asaas efetivamente repassa após a taxa; cai pro bruto se ausente.
   const valorLiquido = Number(pagReal.netValue ?? valor) > 0 ? Number(pagReal.netValue ?? valor) : valor;
+  // Quando o dinheiro chega (cartão ~D+32; Pix/boleto na hora) — prende a comissão até lá.
+  await registrarLiberacaoPagamento({ gatewayPaymentId: pagReal.id, liberarEm: pagReal.creditDate || pagReal.estimatedCreditDate, gateway: 'asaas' });
   const contexto  = {
     gateway:           'asaas',
     valor,
