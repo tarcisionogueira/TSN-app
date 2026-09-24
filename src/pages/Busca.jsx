@@ -21,6 +21,7 @@ import ScoreRisco from '../components/ScoreRisco';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { fotoCandidatos } from '../utils/foto';
 import { registrarEvento } from '../utils/tracker.js';
+import { carregarLeaflet } from '../utils/leafletSeguro';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -426,7 +427,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   useEffect(() => {
     if (!mapContainerRef.current || leafletRef.current) return;
     const timersMapa = [];
-    import('leaflet').then(async L => {
+    carregarLeaflet().then(async L => {
       // markercluster é PLUGIN: se falhar ao carregar/anexar, NÃO pode impedir o
       // mapa de ficar pronto (senão a centralização nunca roda → mapa no Brasil).
       try { await import('leaflet.markercluster'); } catch (e) { console.warn('[mapa] markercluster falhou', e); }
@@ -531,7 +532,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Atualiza pins — depende de mapReady para garantir que o mapa está pronto
   useEffect(() => {
     if (!mapReady || !leafletRef.current || !markersRef.current) return;
-    import('leaflet').then(L => {
+    carregarLeaflet().then(L => {
       markersRef.current.clearLayers();
       if (circlesRef.current) circlesRef.current.clearLayers();
       imoveisMapa.forEach(im => {

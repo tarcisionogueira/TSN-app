@@ -18,6 +18,7 @@ import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
 import { CUSTO_AQUISICAO_PCT, ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, aluguelAlvoMensal, investidoTotal } from '../lib/rentabilidade';
 import { TIPOS_LIQUIDOS } from '../lib/intencao';
+import { carregarLeaflet } from '../utils/leafletSeguro';
 
 // As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
 // aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
@@ -112,7 +113,7 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
   useEffect(() => {
     let cancel = false;
     const timers = [];
-    import('leaflet').then(({ default: L }) => {
+    carregarLeaflet().then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
       // `zoomAnimation: false` — 4 NOVAS ocorrências deste bug em 5 dias (28/08 a 02/09,
       // confirmadas em erros_cliente) mostraram que o `map.stop()` da limpeza abaixo NÃO

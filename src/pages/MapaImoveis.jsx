@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { useNavigate } from 'react-router-dom';
 import FotoImovel from '../components/FotoImovel';
+import { carregarLeaflet } from '../utils/leafletSeguro';
 
 // Basemaps com FALLBACK: o tile.openstreetmap.org bloqueia app em produção e o CARTO
 // no-token passou a limitar do mesmo jeito — se o primário falhar, cai para o Esri.
@@ -87,7 +88,7 @@ export default function MapaImoveis() {
     const { data } = await q;
     const lista = data || [];
 
-    import('leaflet').then(async L => {
+    carregarLeaflet().then(async L => {
       // Carrega CSS e plugin de cluster dinamicamente
       if (!document.getElementById('leaflet-cluster-css')) {
         const link = document.createElement('link');
@@ -162,7 +163,7 @@ export default function MapaImoveis() {
     if (!mapRef.current || leafletMap.current) return;
 
     let desmontado = false;
-    import('leaflet').then(async L => {
+    carregarLeaflet().then(async L => {
       if (desmontado) return;
       await import('leaflet.markercluster');
       if (desmontado) return;

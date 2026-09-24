@@ -135,7 +135,12 @@ ele mostra em segundos se já é de longa duração, evitando repetir esta novel
 (token precisa ter pelo menos 24h). Nenhuma automação faz isso ainda — é manual, e sem aviso
 programado. Achado a registrar como pendência, não resolvido nesta sessão.
 
-## ⏳ PENDENTE — `VITE_SENTRY_DSN` / `SENTRY_DSN` (Sentry, conectado + instrumentado em 15/09)
+## ✅ `VITE_SENTRY_DSN` / `SENTRY_DSN` — CRIADAS (conferido pelo dono no painel em 24/09)
+
+> 24/09: as duas aparecem em Settings → Environment Variables. `VITE_SENTRY_DSN` entra no
+> bundle no BUILD — vale a partir dos deploys feitos depois de criada. Histórico abaixo.
+
+### (histórico) PENDENTE — Sentry, conectado + instrumentado em 15/09
 
 Conector Sentry autorizado pelo dono e projeto `tsn-app` criado na org `bidpro-brasil`
 (`https://bidpro-brasil.sentry.io`). Código já plugado e dormente até as envs existirem:

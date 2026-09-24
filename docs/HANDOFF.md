@@ -33147,3 +33147,24 @@ imóveis. Agora: filtro "Sem lance" = `sem_lance` confirmado (veículo: e `teve_
 indeterminado não tem selo nem filtro (igual "não apurado") até a apuração decidir. Continuam só
 duas saídas visíveis. A apuração residencial retenta esses indeterminados (fila justa) e liga
 `teve_lance` quando `totalBids` > 0 — rodar o `runner-residencial.sh` é o que os resolve.
+
+### 🧾 Registro do dono (24/09, tarde) + itens 17 e 18
+- **Pagos:** Vercel (a recusa do cartão 9666 está resolvida) e assinatura Anthropic — confirmação do dono.
+- **Windsor.ai:** fim do plano gratuito; o dono vai contratar o pago mais tarde. Até lá a ingestão de
+  marketing fica parada (`mkt_ingestao_atrasada` acende — esperado).
+- **Canva:** reconectado; conector respondeu nesta sessão (`list-brand-kits` ok, nenhum kit cadastrado).
+- **Envs:** `VITE_SENTRY_DSN` e `SENTRY_DSN` existem na Vercel (ENVS_VERCEL.md atualizado).
+  `LOCATIONIQ_USD_POR_1000` NÃO precisa existir (plano grátis declarado em `integracao_preco`,
+  28/08) — listei errado como pendência de manhã. O invariante `geocode_sem_preco` acusava 74 por
+  REGRESSÃO (a restauração de 23/09 voltou a versão sem a checagem de `integracao_preco`): corrigido.
+- **Item 17 (`_leaflet_pos`):** não era do /planos — a pessoa saía da Busca/imóvel durante o zoom do
+  mapa e o fim da animação rodava num mapa já removido. `src/utils/leafletSeguro.js` é a porta única
+  do `import('leaflet')` (5 pontos) e neutraliza `_onZoomTransitionEnd`/`_getMapPanePos` sem painel.
+  `erros_cliente` marcados resolvidos.
+- **Item 18:** `foto_repetida_como_lote` → 0 (PURCENA servia `/banners/banner-modal-cadastro…`;
+  `foto_placeholder` e `RE_IMG_DESCARTA` reconhecem /banners/ e banner de modal);
+  `area_truncada_no_milhar` → 0 (lote rural JELEILOES de 3,5129 alq gravado 300 m² de um barracão
+  → 85.012 m²; zerar não pega por causa de `trg_preservar_area_e_avaliacao`);
+  `praca_fim_antes_do_inicio` 20 → 1: o invariante media outra coisa (MEGA/SODRE/GRUPOLANCE guardam
+  a PRÓXIMA praça em `data_leilao`, WEBLEILOES só a data do fim) — passa a acusar só inversão real;
+  sobra 1 GRUPOLANCE legítimo. Migração `qa_praca_inversao_real_foto_banner_area_rural.sql`.
