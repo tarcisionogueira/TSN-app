@@ -33117,3 +33117,13 @@ cláusula "o Arrematante…" com R$ perto (Prestes Maia 241 gravado vendido por 
 Leilão ocorrerá 24/09"). Leitor próprio `apurarZuk` em `_resultado-leilao.js` (escolhido pela URL;
 sem painel = lote retirado/listagem → null; sem "já foi encerrado" → null). Os 77 resultados ZUK
 zerados para releitura (`zuk_resultado_releitura.sql`). Teste: `npm run testar:resultado-pagina`.
+
+### ⚖️ Andamento do processo no ARREMATADO (24/09, pedido do dono)
+Tela "Arremate atribuído" (`Arrematados.jsx` → `Detalhe`) ganhou o painel `AndamentoProcessoCaso`
+(o mesmo dos casos): equipe (admin/analista/consultor/advogado) informa o nº CNJ, consulta
+DataJud + DJEN (`api/caso-andamento-cnj.js`, agora aceita `arrematado_id` e a equipe toda) e
+registra etapas com comentário; o ASSESSORADO dono do arremate vê as etapas em leitura. Mesmo
+comportamento no `/caso` (antes só admin). Banco (`andamento_processo_arrematado.sql`):
+`caso_andamentos.arrematado_id` (um dono: caso OU arrematado), `visivel_cliente` (padrão sim;
+linhas antigas dos casos = não, pois prometiam "só você vê"), `eh_equipe()`, RLS equipe escreve /
+dono lê. `auditoria_seguranca()` = 0/0 após a mudança.

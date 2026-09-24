@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
+import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS = {
@@ -77,7 +78,7 @@ const ehUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 
 // `podeRemover` espelha a policy `imovel_anexos_delete` (admin/analista). Não é cosmético:
 // mostrar lixeira para quem o banco não autoriza produz a mentira do "removido" que volta.
-function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permitirAnexo = !soLeitura }) {
+function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permitirAnexo = !soLeitura, ehEquipe = false }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos, mesmo assinados).
   const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
@@ -326,6 +327,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
         <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
         <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
       </div>
+
+      {/* ANDAMENTO DO PROCESSO (24/09, pedido do dono): equipe consulta o CNJ (leilão judicial) e
+          registra etapas com comentário; o assessorado dono deste arremate acompanha em leitura. */}
+      <AndamentoProcessoCaso arrematadoId={arr.id} podeEditar={ehEquipe}
+        cardStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: 18 }} />
 
       {/* Revenda — captura a venda real (vira amostra do Índice BidPro + gabarito de precisão) */}
       <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px' }}>
@@ -830,7 +836,7 @@ export default function Arrematados() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sel ? (
-        <Detalhe arr={sel} soLeitura={soLeitura} podeRemover={['admin', 'analista'].includes(role)} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+        <Detalhe arr={sel} soLeitura={soLeitura} ehEquipe={['admin', 'analista', 'consultor', 'advogado'].includes(role)} podeRemover={['admin', 'analista'].includes(role)} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
       ) : (
       <>
       <div>

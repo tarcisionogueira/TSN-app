@@ -3,23 +3,26 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 
 /**
- * ANDAMENTO DO PROCESSO — diário do caso, SÓ ADMIN (pedido do dono, 24/09).
+ * ANDAMENTO DO PROCESSO — diário de um CASO ou de um ARREMATADO (pedido do dono, 24/09).
+ * Equipe (admin/analista/consultor/advogado) consulta o CNJ e registra; o assessorado dono
+ * do registro só LÊ as etapas marcadas "visível ao cliente" (RLS em caso_andamentos).
  *
  * A arrematação do assessorado corre em prazo processual (auto de arrematação, carta, imissão…)
  * e o caso não tinha onde dizer em que passo está. Aqui o dono:
  *   1. registra a etapa à mão (com observação), e/ou
  *   2. clica "Consultar andamento no CNJ" — o servidor busca as movimentações (DataJud) e as
  *      publicações (DJEN) do processo e ele escolhe qual vira etapa registrada.
- * Nada é consultado sozinho (custo zero em repouso) e nada vai para o cliente.
+ * Nada é consultado sozinho (custo zero em repouso).
  *
- * Grava direto em `caso_andamentos` (RLS: só admin). O número do processo mora nas linhas desta
+ * Grava direto em `caso_andamentos` (RLS: equipe escreve, dono lê). O número do processo mora nas linhas desta
  * tabela, não em `casos` — ver a migração caso_andamentos_processo.sql.
  */
 const btn = (bg = '#0D63DB') => ({ padding: '8px 14px', background: bg, color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' });
 const inp = { width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' };
 const fmt = (d) => { if (!d) return '—'; const x = new Date(String(d).length === 10 ? `${d}T12:00:00` : d); return isNaN(x) ? String(d) : x.toLocaleDateString('pt-BR'); };
 
-export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
+export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = null, podeEditar = true, cardStyle }) {
+  const dono = arrematadoId ? { col: 'arrematado_id', id: arrematadoId } : { col: 'caso_id', id: casoId };
   const [linhas, setLinhas] = useState([]);
   const [erroLista, setErroLista] = useState('');
   const [numero, setNumero] = useState('');
@@ -29,17 +32,18 @@ export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
   const [consultando, setConsultando] = useState(false);
   const [consulta, setConsulta] = useState(null);
   const [msg, setMsg] = useState('');
+  const [visivel, setVisivel] = useState(true);
 
   const carregar = useCallback(async () => {
     const { data, error } = await supabase.from('caso_andamentos')
-      .select('id, etapa, observacao, origem, numero_processo, data_evento, criado_em')
-      .eq('caso_id', casoId).order('criado_em', { ascending: false });
+      .select('id, etapa, observacao, origem, numero_processo, data_evento, criado_em, visivel_cliente')
+      .eq(dono.col, dono.id).order('criado_em', { ascending: false });
     if (error) { setErroLista(`Não consegui ler o andamento: ${error.message}`); return; }
     setErroLista('');
     setLinhas(data || []);
     const n = (data || []).find(l => l.numero_processo)?.numero_processo;
     if (n) setNumero(prev => prev || n);
-  }, [casoId]);
+  }, [dono.col, dono.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -48,7 +52,7 @@ export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
     if (e.length < 2) { setMsg('Descreva a etapa.'); return; }
     setSalvando(true); setMsg('');
     const { data, error } = await supabase.from('caso_andamentos').insert({
-      caso_id: casoId, etapa: e.slice(0, 200), observacao: (observacao || '').trim() || null,
+      [dono.col]: dono.id, visivel_cliente: visivel, etapa: e.slice(0, 200), observacao: (observacao || '').trim() || null,
       origem, data_evento: dataEvento, referencia, numero_processo: numero.trim() || null,
     }).select('id');
     setSalvando(false);
@@ -60,7 +64,7 @@ export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
   const consultar = async () => {
     setConsultando(true); setMsg(''); setConsulta(null);
     try {
-      const r = await apiCall('/api/caso-andamento-cnj', { method: 'POST', body: JSON.stringify({ caso_id: casoId, numero_processo: numero.trim() || undefined }) });
+      const r = await apiCall('/api/caso-andamento-cnj', { method: 'POST', body: JSON.stringify({ [dono.col]: dono.id, numero_processo: numero.trim() || undefined }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setConsulta(d);
@@ -80,10 +84,11 @@ export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
       <div style={{ marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>⚖️ Andamento do processo</div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>Só você vê. Etapa atual: <strong>{linhas[0]?.etapa || 'nenhuma registrada'}</strong>{linhas[0] ? ` · ${fmt(linhas[0].data_evento || linhas[0].criado_em)}` : ''}</div>
+          <div style={{ fontSize: 11, color: '#64748b' }}>{podeEditar ? 'Equipe registra; o cliente vê as etapas marcadas como visíveis. ' : ''}Etapa atual: <strong>{linhas[0]?.etapa || 'nenhuma registrada'}</strong>{linhas[0] ? ` · ${fmt(linhas[0].data_evento || linhas[0].criado_em)}` : ''}</div>
         </div>
       </div>
 
+      {podeEditar && <>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input style={{ ...inp, flex: '1 1 240px', minWidth: 0 }} placeholder="Nº do processo (CNJ, 20 dígitos)" value={numero} onChange={e => setNumero(e.target.value)} />
         <button style={btn()} disabled={consultando} onClick={consultar}>{consultando ? 'Consultando…' : 'Consultar andamento no CNJ'}</button>
@@ -130,18 +135,25 @@ export default function AndamentoProcessoCaso({ casoId, cardStyle }) {
       <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
         <input style={inp} placeholder="Etapa (ex.: Auto de arrematação assinado, Aguardando carta, Imissão na posse…)" value={etapa} onChange={e => setEtapa(e.target.value)} />
         <textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} placeholder="Observação (opcional)" value={obs} onChange={e => setObs(e.target.value)} />
-        <div><button style={btn('#0f172a')} disabled={salvando} onClick={() => registrar({ etapaTxt: etapa, observacao: obs })}>{salvando ? 'Salvando…' : 'Registrar etapa'}</button></div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button style={btn('#0f172a')} disabled={salvando} onClick={() => registrar({ etapaTxt: etapa, observacao: obs })}>{salvando ? 'Salvando…' : 'Registrar etapa'}</button>
+          <label style={{ fontSize: 12, color: '#475569', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="checkbox" checked={visivel} onChange={e => setVisivel(e.target.checked)} /> Visível ao cliente
+          </label>
+        </div>
       </div>
+      </>}
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('Etapa') ? '#15803d' : '#b91c1c', marginBottom: 8 }}>{msg}</div>}
       {erroLista && <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 8 }}>{erroLista}</div>}
 
+      {!podeEditar && !linhas.length && !erroLista && <div style={{ fontSize: 12, color: '#64748b' }}>A equipe ainda não registrou etapas deste processo.</div>}
       {linhas.length > 0 && (
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 6 }}>HISTÓRICO</div>
           {linhas.map(l => (
             <div key={l.id} style={{ fontSize: 12, padding: '6px 0', borderTop: '1px solid #e2e8f0' }}>
               <span style={{ color: '#64748b' }}>{fmt(l.data_evento || l.criado_em)}</span> · <strong>{l.etapa}</strong>
-              <span style={{ color: '#94a3b8' }}> ({l.origem === 'manual' ? 'manual' : l.origem.toUpperCase()})</span>
+              {podeEditar && <span style={{ color: '#94a3b8' }}> ({l.origem === 'manual' ? 'manual' : l.origem.toUpperCase()}{l.visivel_cliente ? '' : ' · só equipe'})</span>}
               {l.observacao && <div style={{ color: '#475569', marginTop: 2, whiteSpace: 'pre-wrap' }}>{l.observacao}</div>}
             </div>
           ))}
