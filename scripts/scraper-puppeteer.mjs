@@ -9,7 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
-import { extrairDescricaoDoCorpo, decodificarEntidades } from '../api/_texto-imovel.js';
+import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa } from '../api/_texto-imovel.js';
 // Mesma heurística já validada em texto de matrícula PDF (api/_registro-matricula.js, usada
 // por scripts/enriquecer-cartorio-matricula.mjs): "situado(a) na/no/à <logradouro>". Reaproveitada
 // aqui (20/09) pra preencher `endereco` a partir do TEXTO DA DESCRIÇÃO do lote (nunca da página
@@ -3543,11 +3543,16 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
   // quando não casar — não força endereço num lote rural/loteamento sem logradouro urbano.
   const textoBem = [bem.observacao, ...(bem.caracteristicas || []).map(c => c?.valor)].filter(Boolean).join(' ');
   const enderecoPestana = textoBem ? extrairEnderecoMatricula(textoBem) : null;
+  const tipoPestana = normalizarTipo((bem.subTipoBem && bem.subTipoBem.nome) || desc);
+  const descricaoCompleta = descricaoPestana(desc, bem, leilao.nome);
+  // Ficha CAIXA: as áreas vêm SEM "m²" nas características, então o laço acima não acha nada —
+  // 342 lotes ativos sem área em 24/09 com a área escrita na própria descrição.
+  if (!area) area = areaFichaCaixa(descricaoCompleta, tipoPestana);
   return {
     fonte: 'PESTANA',
     fonte_id: `pestana_${lote.id}`,
     titulo: (desc || `Lote ${lote.numero || lote.id}`).slice(0, 180),
-    tipo: normalizarTipo((bem.subTipoBem && bem.subTipoBem.nome) || desc),
+    tipo: tipoPestana,
     modalidade,
     estado: uf,
     cidade: cidade ? toTitleCase(cidade) : '',
@@ -3561,7 +3566,7 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
     // completo do bem (`observacao` + `caracteristicas`) JÁ era lido acima para o endereço e
     // jogado fora aqui. HTML/entidades que vierem nele são limpos no banco
     // (gatilho trg_a_descricao_sem_html).
-    descricao: descricaoPestana(desc, bem, leilao.nome),
+    descricao: descricaoCompleta,
     link_edital: editalUrl || agenda,
     link_matricula: primeiroDoc('matricula', docsLote) || null, // só por-lote (nunca do leilão)
     link_regras_venda: primeiroDoc('regras', anexos) || null,

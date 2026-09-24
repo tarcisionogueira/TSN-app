@@ -17,7 +17,7 @@
  * - Apartamento/sala com 6.600 m² é a área do CONDOMÍNIO: recusado acima de 1.000 m².
  * - EDITAL_DJEN é publicação de diário (acórdão, intimação) — a área citada nem sempre é do bem.
  */
-import { extrairAreaM2 } from '../api/_texto-imovel.js';
+import { extrairAreaM2, areaFichaCaixa } from '../api/_texto-imovel.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -33,21 +33,10 @@ async function sb(path, init = {}) {
 }
 
 const FONTES_FORA = new Set(['EDITAL_DJEN']);
-const numBR = (x) => { const m = String(x || '').trim().match(/^\d{1,3}(?:\.\d{3})*(?:,\d+)?$|^\d+(?:,\d+)?$/); return m ? Number(m[0].replace(/\./g, '').replace(',', '.')) : 0; };
-
-// Ficha CAIXA do PESTANA: "Tipo - Cidade - UF — Ocupação · 4 campos · TOTAL · PRIVATIVA · TERRENO · …"
-function areaPestana(desc, tipo) {
-  const c = String(desc || '').split(' · ');
-  if (c.length < 8 || !/ — /.test(c[0])) return 0;
-  const [total, priv, terr] = [numBR(c[5]), numBR(c[6]), numBR(c[7])];
-  const ehTerreno = /^terreno/i.test(c[0]) || tipo === 'terreno';
-  return ehTerreno ? (terr || total) : (priv || total);
-}
-
 function areaDe(r) {
   if (FONTES_FORA.has(r.fonte)) return { area: 0, motivo: 'fonte_fora' };
   const texto = `${r.titulo || ''}. ${r.descricao || ''}`;
-  const area = r.fonte === 'PESTANA' ? areaPestana(r.descricao, r.tipo) : extrairAreaM2(texto);
+  const area = r.fonte === 'PESTANA' ? areaFichaCaixa(r.descricao, r.tipo) : extrairAreaM2(texto);
   if (!(area >= 10 && area <= 500_000_000)) return { area: 0, motivo: 'sem_area' };
   if (/alqueire|hectare|\d\s*ha\b/i.test(texto) && area < 10_000) return { area: 0, motivo: 'rural_area_pequena' };
   if (/\b(apartamento|apto|sala comercial|kitnet|flat)\b/i.test(`${r.titulo || ''} ${String(r.descricao || '').slice(0, 80)}`) && area > 1000) return { area: 0, motivo: 'apto_area_condominio' };

@@ -33359,3 +33359,34 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   `/api/endereco-autocomplete` passou a aceitar VISITANTE (o checkout top2 é antes da conta existir)
   com teto próprio por IP: 30 buscas / 10 min (logado continua 60/min). Testado no navegador com a
   API interceptada: sugestão → todos os campos preenchidos, 0 erros.
+
+### 📐 Os 3 passos de área/local (24/09, noite — pedido do dono: "faça os 3 próximos passos")
+Tudo custo zero (lê o que já está no banco/bucket ou no CDN do leiloeiro, pelo GitHub Actions),
+sempre EM SECO antes de gravar — e cada seco pegou erro que teria ido para o banco (forma nº 10).
+1. **Área da descrição** (`scripts/area-da-descricao.mjs`, workflow `area-da-descricao.yml`):
+   imóveis ativos sem área **2.812 → 1.922** (890 preenchidos, só onde estava vazio). Travas nascidas
+   do 1º seco: PESTANA publica a ficha CAIXA em colunas SEM rótulo (`· total · privativa · terreno ·`)
+   → leitura POSICIONAL na convenção CEF (privativa p/ casa/apto, terreno p/ terreno); texto com
+   alqueire/hectare só aceita área ≥ 1 ha; apto/sala > 1.000 m² é área do condomínio; EDITAL_DJEN fora.
+   **Raiz corrigida em `extrairAreaM2`** (api/_texto-imovel.js): em "46,57 M2 DE ÁREA PRIVATIVA,
+   81,42M2 DE ÁREA DO TERRENO" o padrão rótulo→número casava o número do rótulo SEGUINTE e a casa
+   saía com a área do terreno — agora número→rótulo é testado primeiro (vale para a coleta também).
+2. **Pátio dos veículos do SUPORTE** — o recon da página do lote do Golden Lance mostrou que ela
+   NÃO diz onde o veículo está (só o endereço do leiloeiro no rodapé). Quem diz é o edital →
+   `scripts/local-e-area-do-documento.mjs` (workflow `local-e-area-do-documento.yml`, alvo
+   `veiculos`): **69 de 111** receberam cidade/UF; sem cidade no acervo **137 → 68**. Cidade só de
+   frase sobre o LUGAR DO BEM ("LOCALIZAÇÃO DO BEM", "pátio", "local de retirada/visitação"),
+   validada contra o IBGE (`cidade_socio`), e só com UMA cidade distinta no documento; frota
+   municipal pela prefeitura só em leilão da administração (Lei 14.133/8.666). O 1º seco casou
+   "auditório da Golden Lance … Contagem", "depósito judicial" e "retirada de Restrição
+   Financeira" — os 30 do Golden Lance ficaram SEM cidade de propósito (o edital não diz o pátio).
+   `salvarVeiculos` (scraper-puppeteer.mjs) passou a **preservar cidade/UF** quando a rodada não
+   traz — senão o próximo upsert apagaria o que o edital provou.
+3. **Área pelo edital/matrícula do bucket** (mesmo script, alvo `imoveis`): **14 de 303**. Poucos
+   de propósito: edital com mais de uma matrícula (47) ou texto compartilhado entre imóveis é de
+   vários bens — o 1º seco deu o MESMO 59,55 m² para terreno, rural e apto do mesmo edital. 213 não
+   têm área rotulada, 20 são PDF sem texto. Cidade de imóvel: só 25 sem cidade no acervo (5 com doc) — não valia script.
+   **Resultado aplicado:** 14 gravados (BIASI, VEGAS, PESTANA rural 98 ha pela matrícula…).
+4. **Para não voltar a faltar:** a coleta do PESTANA agora lê a ficha CAIXA na hora
+   (`areaFichaCaixa` em api/_texto-imovel.js, usada pelo scraper e pelo backfill) — as áreas vinham
+   nas características SEM "m²" e o laço da coleta só aceitava valor com a unidade.

@@ -142,6 +142,28 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
 }
 
 /**
+ * ÁREA DA FICHA CAIXA publicada SEM RÓTULO (PESTANA, 24/09).
+ * A descrição vem como "Casa - Cidade - UF — Ocupado · Não informado ×4 · TOTAL · PRIVATIVA ·
+ * TERRENO · … · Vide Edital · …" — números sem "m²" e sem nome de campo, então `extrairAreaM2`
+ * não enxerga nada (ou pega outro número). Leitura POSICIONAL na convenção da CEF: privativa
+ * (senão total) para casa/apto; terreno (senão total) para terreno. 0 quando não é esse formato.
+ */
+export function areaFichaCaixa(descricao, tipo) {
+  const d = String(descricao || '');
+  if (!/Vide Edital/i.test(d)) return 0; // assinatura do formato — sem ela, posição não significa nada
+  const c = d.split(' · ');
+  if (c.length < 11 || !/ — /.test(c[0])) return 0;
+  const num = (x) => {
+    const m = String(x || '').trim().match(/^\d{1,3}(?:\.\d{3})*(?:,\d+)?$|^\d+(?:,\d+)?$/);
+    return m ? Number(m[0].replace(/\./g, '').replace(',', '.')) : 0;
+  };
+  const [total, priv, terr] = [num(c[5]), num(c[6]), num(c[7])];
+  const ehTerreno = /^terreno/i.test(c[0]) || tipo === 'terreno';
+  const v = ehTerreno ? (terr || total) : (priv || total);
+  return v >= 10 && v <= 500_000_000 ? v : 0;
+}
+
+/**
  * Decodifica entidades HTML (&#xE3; &#227; &amp; &nbsp;) em texto já sem tags.
  *
  * Existe porque a falta disto NÃO aparece como erro — aparece como classificação errada.
