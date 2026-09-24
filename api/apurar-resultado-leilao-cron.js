@@ -139,7 +139,7 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
         body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(() => {}); // padrao-ok: carimbo de rodízio; falhar só repete o lote na próxima rodada
       continue;
     }
-    const achado = apurarResultadoDoTexto(html);
+    const achado = apurarResultadoDoTexto(html, c.alvo);
     const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas };
     if (achado) {
       patch.resultado_leilao = achado.resultado;

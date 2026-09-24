@@ -51,11 +51,29 @@ function valorPerto(txt, idx) {
   return valor && valor >= 1000 ? valor : null;
 }
 
+// ─── ZUK (portalzuk.com.br) — leitor próprio (24/09, recon de páginas reais) ───────────────
+// O genérico errava nos dois sentidos: (a) nunca reconhecia o "sem lance" — a ZUK escreve
+// "Este leilão já foi encerrado" + "R$ 0,00 Maior lance até agora" (131 indeterminados × 0
+// sem_lance em 10 dias); (b) dava VENDIDO FALSO antes do pregão, pela cláusula "Em caso de
+// arrematação, o Arrematante…" com um R$ por perto (Prestes Maia 241: "O 1º Leilão ocorrerá
+// 24/09 às 13h00… R$ 0,00 Maior lance" gravado como vendido por R$ 389.848). Aqui só vale o
+// PAINEL DE LANCES: sem o painel é página de listagem (lote retirado → redireciona) e sem
+// "já foi encerrado" o pregão não acabou (ex.: 2ª praça por vir) — nos dois casos, null.
+function apurarZuk(txt) {
+  const painel = txt.match(/R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*Maior lance at[ée] agora/i);
+  if (!painel) return null;
+  if (!/Este leil[aã]o j[aá] foi encerrado/i.test(txt)) return null;
+  const valor = parseFloat(painel[1].replace(/\./g, '').replace(',', '.'));
+  return valor > 0 ? { resultado: 'vendido', valor } : { resultado: 'sem_lance', valor: null };
+}
+
 // Extrai o resultado do TEXTO já limpo da página (tags removidas). Devolve
 // `{ resultado: 'vendido'|'sem_lance', valor: number|null }` ou `null` (indeterminado/sem sinal).
-export function apurarResultadoDoTexto(html) {
+// `url` (opcional, 24/09): escolhe o leitor próprio da fonte quando existe (ZUK).
+export function apurarResultadoDoTexto(html, url = '') {
   if (!html) return null;
   const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  if (/portalzuk\.com\.br/i.test(String(url))) return apurarZuk(txt);
 
   // 1) Sinal FORTE — 1º não-negado já basta; procura valor perto, senão na página inteira
   //    (aqui é seguro: a frase já é declarativa o bastante pra confiar num R$ mais distante).

@@ -33102,3 +33102,18 @@ indeterminado com `teve_lance` (já é "Com lance").
 regex de `_resultado-leilao.js` não reconhece o "sem lance" dessas páginas (precisa recon da
 página viva; o sandbox não alcança os sites). PESTANA (URL é a agenda, não o lote) e SODRE
 (Nuxt, precisa navegador) seguem fora — candidatos ao runner residencial com Puppeteer.
+
+### 🧭 ZUK e FRAZAO — resultado do leilão (24/09, tarde)
+**Causa comum (todas as fontes):** o cron apurava `data_fim <= hoje` de 3 em 3 h — abria a página
+ANTES do pregão e as 3 tentativas acabavam no mesmo dia (FRAZAO 49/51 e ZUK 107/131 indeterminados
+lidos no dia; os sem_lance certos da FRAZAO, todos no dia seguinte). Agora `data_fim < hoje`
+(veículo: 3 h após `data_leilao`); 353 imóveis lidos cedo voltaram à fila
+(`apuracao_reset_lidos_no_dia_do_leilao.sql`).
+**Recon de páginas reais** (`recon-resultado-pagina.yml` → `recon_dump` origem 'resultado_pagina',
+fetch direto do GitHub funciona para as duas): FRAZAO escreve "Sem Licitantes" + "Maior lance atual:
+R$ 0,00" — o genérico já lê; o problema era só a hora. ZUK escreve "Este leilão já foi encerrado" +
+"R$ X Maior lance até agora" — o genérico nunca lia, e dava **vendido FALSO** antes do pregão pela
+cláusula "o Arrematante…" com R$ perto (Prestes Maia 241 gravado vendido por R$ 389.848 com "O 1º
+Leilão ocorrerá 24/09"). Leitor próprio `apurarZuk` em `_resultado-leilao.js` (escolhido pela URL;
+sem painel = lote retirado/listagem → null; sem "já foi encerrado" → null). Os 77 resultados ZUK
+zerados para releitura (`zuk_resultado_releitura.sql`). Teste: `npm run testar:resultado-pagina`.

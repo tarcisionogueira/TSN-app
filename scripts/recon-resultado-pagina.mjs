@@ -22,7 +22,7 @@ for (const url of urls) {
   while ((m = RE_CHAVE.exec(txt)) && trechos.length < 60) trechos.push(txt.slice(Math.max(0, m.index - 80), m.index + 120));
   // blocos de dados embutidos (Next/Nuxt/JSON) que citam status — o resultado às vezes só está ali
   const json = (html.match(/"(status|situacao|situation|statusLote|lot_status)[^"]{0,20}"\s*:\s*"[^"]{0,60}"/gi) || []).slice(0, 40);
-  const conteudo = { url, status, erro, html_len: html.length, parser: apurarResultadoDoTexto(html), trechos, json, texto: txt.slice(0, 15000) };
+  const conteudo = { url, status, erro, html_len: html.length, parser: apurarResultadoDoTexto(html, url), trechos, json, texto: txt.slice(0, 15000) };
   console.log(`${status} ${html.length}B parser=${JSON.stringify(conteudo.parser)} trechos=${trechos.length} json=${json.length} ${url}`);
   const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ origem: 'resultado_pagina', chave: url, conteudo }) });
