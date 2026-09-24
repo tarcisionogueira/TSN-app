@@ -140,7 +140,10 @@ async function veiculos(ibge) {
       lidos++;
       for (const c of cidadesNoTexto(r.texto, ibge)) todasCidades.set(`${norm(c.cidade)}|${c.uf}`, c);
       // Frota municipal: só vale sem frase de pátio e com UMA prefeitura no documento.
-      if (!todasCidades.size) { const pf = prefeituraDoTexto(r.texto, ibge, null); if (pf.length === 1) prefeitura = pf[0]; else if (pf.length > 1) prefeitura = false; }
+      // Só em leilão da ADMINISTRAÇÃO (Lei 14.133/8.666): em processo judicial "Município de X"
+      // aparece como credor/interessado (2º seco: Rio Verde/GO numa lista de credores).
+      const leilaoPublico = /14\.133|8\.666/.test(r.texto);
+      if (!todasCidades.size && leilaoPublico) { const pf = prefeituraDoTexto(r.texto, ibge, null); if (pf.length === 1) prefeitura = pf[0]; else if (pf.length > 1) prefeitura = false; }
     }
     if (!todasCidades.size && prefeitura) todasCidades.set('pf', { ...prefeitura, trecho: `[prefeitura] ${prefeitura.trecho}` });
     const lista = [...todasCidades.values()];
