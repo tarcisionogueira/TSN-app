@@ -153,7 +153,7 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
               </div>
             </div>
           )}
-          {resumo && !resumo.ok && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Não foi possível gerar o resumo simples agora ({resumo.erro}). As publicações originais estão abaixo.</div>}
+          {resumo && !resumo.ok && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>{(consulta.datajud?.erro || consulta.djen?.erro) && !movs.length && !pubs.length ? 'O resumo simples sai quando o CNJ ou o Diário Oficial responderem — tente de novo em alguns minutos.' : `Não foi possível gerar o resumo simples agora (${resumo.erro}).`}</div>}
 
           {consulta.datajud?.erro && (
             <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px', marginBottom: 8 }}>
@@ -164,7 +164,7 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
             </div>
           )}
           {!consulta.datajud?.erro && !consulta.datajud?.processo && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>O CNJ respondeu, mas não encontrou este número em {(consulta.datajud?.tribunais || []).join(', ').toUpperCase() || '—'}.</div>}
-          {consulta.djen?.erro && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>O Diário Oficial (DJEN) não respondeu agora — tente de novo em alguns minutos.</div>}
+          {consulta.djen?.erro && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>O Diário Oficial (DJEN) não respondeu agora — tente de novo em alguns minutos. <span style={{ color: '#a8a29e', fontSize: 11 }}>({consulta.djen.erro})</span></div>}
 
           {(movs.length > 0 || pubs.length > 0) && (
           <details open={!resumo?.ok}>

@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/caso-andamento-cnj.js": { "regions": ["gru1"], "maxDuration": 60 }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",

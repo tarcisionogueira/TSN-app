@@ -173,12 +173,15 @@ export default async function handler(req, res) {
 
   const exato = tribunalDoNumeroCnj(numero);
   const uf = exato ? null : ufDoNumeroCnj(numero);
+  const consultarCnj = () => buscarProcessosCNJ({ numero_processo: numero, uf, nacional: !exato && !uf, tribunais: exato ? [exato] : null })
+    .catch(e => ({ processos: [], erros: [String(e?.message || e)] }));
   const [cnj, djen] = await Promise.all([
-    buscarProcessosCNJ({ numero_processo: numero, uf, nacional: !exato && !uf, tribunais: exato ? [exato] : null })
-      .catch(e => ({ processos: [], erros: [String(e?.message || e)] })),
+    // Tribunal único que estourou o tempo: uma nova tentativa ainda cabe nos 60 s (12 s cada).
+    consultarCnj().then(r => (exato && !(r.processos || []).length && /timeout|abort/i.test((r.erros || []).join(' '))) ? consultarCnj() : r),
     buscarDjen({ numero_processo: numero, maxTexto: 3000 }).catch(e => ({ erro: String(e?.message || e) })),
   ]);
 
+  if (djen.erro) console.error('[caso-andamento-cnj] DJEN falhou:', djen.erro);
   const processo = (cnj.processos || [])[0] || null;
   const erroCnj = !processo && (cnj.erros || []).length ? cnj.erros.join(' | ') : null;
   const movimentos = processo ? (processo.movimentos || []).map(m => ({ data: m.data, descricao: m.descricao, codigo: m.codigo })) : [];
