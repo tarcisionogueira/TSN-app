@@ -32826,3 +32826,29 @@ ausente BIASI/GRUPOLANCE/LJUD · 9. HTML no EDITAL_DJEN · 10. descrição rasa 
 leaflet/bundle. Bloqueados pelo dono: Inter, Meta, WebISS/A1, Gemini, Windsor, envs, Canva.
 **Supabase (e-mail 23/09):** tabela nova em `public` criada após 30/10 precisa de `GRANT`
 explícito — incluir nas migrações novas.
+
+### ✅ Item 3 — "5 pagantes sem relatório": NÃO era cliente sumindo, é FILA DE ATENDIMENTO parada
+Os 11 casos do sistema inteiro são de 4 desses 5 clientes, e a equipe cadastrada é só o admin
+(dono) — **0 casos com analista/advogado atribuído**. Estado por cliente:
+- **Alessandra (top2, desde 07/07)**: 4 casos `analise_solicitada` desde 22-24/07 (Carapicuíba) +
+  1 `analises_prontas` (25/08, Osasco); nenhum relatório gerado. Último login 01/09.
+- **Rafael (assessorado)**: 1 `arrematado` (14/07) sem avanço, 1 `analise_solicitada` (07/08),
+  1 `analises_prontas` (23/08), 1 concluído (23/09). Ativo: login 22/09.
+- **Matheus (assessorado)**: 1 `arrematado` (21/07, Alagoinhas) sem avanço; triagem não feita.
+- **Marcos (assessorado)**: 1 `arrematado` (16/09, R$ 548 mil) sem avanço.
+- **Airton (top2, pago 03/09)**: NUNCA usou (0 relatório, 0 caso, último login 03/09) — risco
+  de não renovar em ~03/10.
+**Feito:** rascunhos no Gmail do dono (NÃO enviados) para Airton (ativação: 1º relatório em
+Cotia, perfil locação/400k-1mi) e Alessandra (retorno sobre os 5 imóveis enviados).
+Assessorados (Rafael/Matheus/Marcos) = atendimento direto do dono — decisão dele.
+`tempo_processo()` já mostrava isso ("nenhum caso passou desta etapa até hoje").
+
+### ✅ Item 4 — painel de invariantes: causa era CACHE FRIO + teto de 8 s, não horário
+E-mail do monitor de 23/09: "falha ao ler qa_invariantes_medido apos 8188ms: canceling
+statement due to statement timeout". Medido 24/09 11h UTC (fora de pico): 1ª chamada 10,4 s,
+seguintes 2,5–3,3 s. Nenhuma asserção isolada passa de ~1 s (maior: selo_documento 941 ms).
+Fix: `alter function qa_invariantes_medido() set statement_timeout='30s'`
+(`qa_invariantes_medido_timeout_proprio.sql`) — PostgREST aplica o timeout da função só nela.
+**Prova pendente:** rodada de 24/09 18h10 UTC precisa gravar `ok=true` (check-in agendado 18h35).
+**Plano B** se ainda der timeout (PostgREST não honrou o SET da função): o cron chamar
+`qa_invariantes_medido` duas vezes (1ª aquece o cache, descartada) OU dividir o painel em 2 RPCs.

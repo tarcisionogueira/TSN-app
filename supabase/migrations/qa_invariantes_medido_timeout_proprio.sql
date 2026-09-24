@@ -1,0 +1,20 @@
+-- ─────────────────────────────────────────────────────────────────────────────────────────
+-- PAINEL DE INVARIANTES: timeout PRÓPRIO de 30 s na RPC chamada pelo cron — 24/09/2026
+--
+-- As rodadas de 22/09 e 23/09 gravaram ok=false (9.012 e 8.188 ms). O e-mail do monitor diz
+-- o motivo exato: "falha ao ler qa_invariantes_medido apos 8188ms: canceling statement due to
+-- statement timeout" — o teto de 8 s do `authenticator` (PostgREST) derrubou o painel, e as
+-- ~85 asserções de corretude NÃO RODARAM nesses dias.
+--
+-- A troca de horário para 18h10 UTC (commit 32638c6) partia da hipótese de CARGA no horário.
+-- Medido em 24/09 às 11h UTC, fora de pico: 1ª chamada 10.432 ms, as seguintes 2.493-3.297 ms.
+-- O custo é CACHE FRIO (o painel roda uma vez por dia, lendo imoveis_leilao + anexos jsonb
+-- do disco), não horário — mudar a hora não resolve. Cronometradas uma a uma, nenhuma
+-- asserção passa de ~1 s (a maior: selo_documento_dessincronizado, 941 ms).
+--
+-- PostgREST aplica o `statement_timeout` configurado NA FUNÇÃO (SET LOCAL antes da chamada),
+-- então isto vale só para esta RPC — o teto de 8 s continua valendo para todo o resto.
+-- `qa_invariantes_lenta` continua medindo `ms_servidor` e acusa > 5 s: o painel frio é caro,
+-- e isso segue visível — só deixa de ser motivo para as asserções não rodarem.
+-- ─────────────────────────────────────────────────────────────────────────────────────────
+alter function public.qa_invariantes_medido() set statement_timeout = '30s';
