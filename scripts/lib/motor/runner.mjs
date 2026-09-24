@@ -37,7 +37,8 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
     const r = await fetchFonte(url, { semBD });
-    if (!r.html) break;
+    // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
+    if (!r.html) { if (p === 1) via = r.via || null; break; }
     fetchOk = true; via = via || r.via;
     if (p === 1) htmlPagina1 = r.html;
     const antes = urls.size;
@@ -249,7 +250,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount };
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -269,7 +270,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount, viaCatalogo } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -304,7 +305,13 @@ export async function rodarFonte(cfg, opts) {
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: estado.semCota
           ? 'SEM COTA Bright Data — coleta não tentada (orçamento, não regressão da fonte)'
-          : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
+          // 24/09: LEJE e GLOBO gravavam "sem nenhum lote pronto" por dias com o log dizendo
+          // `[dom] HTTP 403` — o site passou a recusar o IP do runner. O motivo genérico mandava
+          // olhar o PARSER, que está intacto (forma nº 10: o registro mede uma coisa e nomeia
+          // outra). Quando o CATÁLOGO foi recusado, o motivo diz isso.
+          : /^dom-\d{3}$/.test(String(viaCatalogo || '')) || viaCatalogo === 'bloqueado'
+            ? `catálogo recusado (${viaCatalogo === 'bloqueado' ? 'bloqueado também via Bright Data' : `HTTP ${String(viaCatalogo).slice(4)}`}) — acesso negado ao runner, não parser`
+            : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
       });
       console.error(`[${tenant.fonte}] nada a gravar.${estado.semCota ? ' (sem cota Bright Data — orçamento, não regressão.)' : ''}`);
       if (exitCodeSeFalha) process.exitCode = 1;

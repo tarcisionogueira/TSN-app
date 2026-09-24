@@ -32852,3 +32852,50 @@ Fix: `alter function qa_invariantes_medido() set statement_timeout='30s'`
 **Prova pendente:** rodada de 24/09 18h10 UTC precisa gravar `ok=true` (check-in agendado 18h35).
 **Plano B** se ainda der timeout (PostgREST não honrou o SET da função): o cron chamar
 `qa_invariantes_medido` duas vezes (1ª aquece o cache, descartada) OU dividir o painel em 2 RPCs.
+
+### ✅ Itens 5 e 6 + pedidos do dono (24/09, tarde)
+**5 — fontes em alarme (causa por fonte):**
+- **LEJE** (e GLOBOLEILOES): log do Actions = `[dom] HTTP 403 em https://leje.com.br/` — o site
+  passou a RECUSAR o IP do runner (recon de 07/09 dizia "sem anti-bot"). Não é parser. O motor
+  `dom` não tem rota paga; LEJE tem 12 lotes → mover para residencial/Bright Data é decisão de
+  custo, não feita. **Consertado o instrumento:** `runner.mjs` gravava "sem nenhum lote pronto"
+  (mandava olhar o parser); agora grava `catálogo recusado (HTTP 403) — acesso negado ao runner,
+  não parser` (guarda o `via` da falha da página 1).
+- **LEFFA/BAYIT "medição velha"**: coleta SEMANAL por desenho; o teto fixo de 108 h acendia toda
+  semana. `fonte_regressao_suspeita` agora julga pela CADÊNCIA APRENDIDA (1,5× mediana do
+  intervalo entre medições reais, 45 d, mín 108 h, teto 264 h; exige 3+ intervalos) —
+  `fonte_regressao_frescor_pela_cadencia.sql`. LEFFA saiu (limite 258 h). TORRES3 (~110 h, sem
+  medição real desde 18/09 por `sem_cota`) e BAYIT (histórico curto) seguem acusando, corretamente.
+- KRON (134→22-28 desde 20/09, 29 expirados), LEILOFY (22-24), SODRE (17-18): estáveis há 4+
+  dias no novo patamar — encolhimento do acervo na origem, sem sinal de parser. RJLEILOES
+  40→4 em 18/09: não investigado (site inacessível deste ambiente; via BD `rj`, cota livre).
+  FRANCOLEILOES "zerou" com 15 expirados na semana = leilões aconteceram.
+**6 — CEF venda_online 1.909 com data passada:** JÁ tratado em 23/09 (relistagem = sem lance,
+venda online não vence por data; todos vistos no CSV de 23/09 — seguem à venda). Faltava a TELA:
+`fmtData` mostrava "13/07/26" como data do imóvel. Novo `dataResidualDeVenda()` (utils/format.js)
+— data passada em venda_online/venda_direta vira o rótulo "Venda Online"/"Venda Direta" (Busca,
+ImovelDetalhe; o "a partir de <data>" some).
+
+**Pedido do dono — andamento processual dos assessorados (SÓ ADMIN):** tabela nova
+`caso_andamentos` (RLS `is_admin()`, GRANT explícito; número do processo mora aqui, não em
+`casos`, porque o cliente pode dar UPDATE no próprio caso) + `api/caso-andamento-cnj.js` (admin,
+consulta SOB DEMANDA DataJud + DJEN; UF deduzida do nº CNJ J=8 → só o TJ/TRF/TRT da UF; sem UF →
+nacional) + `src/components/AndamentoProcessoCaso.jsx` no `/caso/:id` (registrar etapa manual ou
+"Registrar" direto de uma movimentação/publicação; histórico). `buscarDjen` movido de
+_admin-chat-tools.js para `_cnj.js` (uma cópia só). Nada consulta sozinho, nada vai ao cliente.
+**Próximo passo do dono:** abrir os casos de Rafael (arrematado 14/07), Matheus (21/07) e Marcos
+(16/09), informar o nº do processo e registrar a etapa.
+
+**Pedido do dono — Investidor Pro sem uso (e-mail de oportunidades, emails_log):**
+| Cliente | Perfil | E-mails (todos) | Abriu | Clicou | Oportunidades recebidas 30d |
+|---|---|---|---|---|---|
+| Airton | locação, 400k-1mi, Cotia | 7 | **0** | 0 | Cotia aptos ~R$136k, SP ~R$450-545k |
+| Neuma | sem triagem, Feira de Santana | 10 | **0** | 0 | Salvador/Feira ~R$90-108k |
+| Alessandra | uso próprio, 150-400k, Carapicuíba 25 km | 11 | 9 | **0** | casas Osasco ~R$311k, TERRENOS Santana de Parnaíba |
+| Marcos Oliveira | revenda, até 150k, Sumaré | 4 | 1 | 0 | Campinas aptos ~R$154k |
+Leitura: Airton e Neuma **nunca abriram nenhum e-mail** (entregues, sem bounce/supressão) →
+caixa de spam/promoções ou endereço morto: e-mail não é canal para eles (WhatsApp).
+Alessandra abre tudo e não clica → CONTEÚDO não agrada: é "uso próprio" e recebe terrenos e
+Osasco; os 5 imóveis que ela mesma mandou estão parados em casos desde julho. Cadência:
+pagante segue a mesma regra do explorador (semanal, cai p/ mensal se não abre).
+Rascunhos de e-mail apagados (dono: não precisa).

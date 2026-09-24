@@ -12,7 +12,7 @@ import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidad
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge, soAceitaAVista } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { parseDataLocal, modalidadeLabelDetalhado } from '../utils/format';
+import { parseDataLocal, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -39,6 +39,7 @@ const ROLES_SITE   = ['explorador','top2','assessorado','clube','consultor','ana
 const ROLES_ANALISE = ['top2','assessorado','clube','analista','advogado','admin'];
 
 function fmtData(d, modalidade) {
+  if (dataResidualDeVenda(d, modalidade)) d = null; // data do leilão antigo (ver utils/format.js)
   if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : modalidade === 'venda_online' ? 'Venda Online' : 'A confirmar no edital';
   const dt = parseDataLocal(d); // fuso-safe: data-only não pode virar o dia anterior
   if (!dt) return d;

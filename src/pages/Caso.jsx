@@ -18,6 +18,7 @@ import AgendarReuniao from '../components/AgendarReuniao';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -1415,6 +1416,10 @@ export default function Caso() {
           só manda o que já temos pra quem escolher (jurídico ou o leiloeiro deste lote).
           Componente compartilhado com ImovelDetalhe.jsx — ver EnviarEmailCasoLote.jsx. */}
       {isStaff && <EnviarEmailCasoLote casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
+
+      {/* Andamento do processo (prazo processual pós-arremate) — SÓ ADMIN, pedido do dono 24/09.
+          Diário de etapas + consulta sob demanda ao CNJ (DataJud/DJEN). Ver AndamentoProcessoCaso.jsx. */}
+      {role === 'admin' && <AndamentoProcessoCaso casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
 
       {/* Certidões e diligências (checklist interativo do raio-X jurídico) */}
       {certidoes.length > 0 && (

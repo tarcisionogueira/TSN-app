@@ -362,3 +362,38 @@ export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
   }));
   return { processos: resultado, total: resultado.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined };
 }
+
+/**
+ * Publicações do DJEN (Comunica API do CNJ) de um processo, pelo número CNJ. Sem token, fetch
+ * direto (não passa pelo Bright Data). Movida de _admin-chat-tools.js em 24/09 para ser usada
+ * também pelo andamento do caso (api/caso-andamento-cnj.js) — uma cópia só da regra.
+ * Devolve { total, publicacoes[] } ou { erro } — nunca lista vazia no lugar de falha.
+ */
+export async function buscarDjen({ numero_processo }) {
+  const num = String(numero_processo || '').replace(/\D/g, '');
+  if (!/^\d{15,25}$/.test(num)) return { erro: 'número de processo inválido — precisa do padrão CNJ (20 dígitos)' };
+  const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&itensPorPagina=30`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    if (!r.ok) return { erro: `DJEN respondeu ${r.status}` };
+    const data = await r.json();
+    const items = data?.items || data?.content || data?.comunicacoes || [];
+    if (!items.length) return { total: 0, publicacoes: [], observacao: 'Nenhuma publicação encontrada no DJEN para este processo (a base cobre a partir de 2022).' };
+    return {
+      total: items.length,
+      publicacoes: items.slice(0, 15).map((it) => ({
+        data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null,
+        tribunal: it.siglaTribunal || it.sigla_tribunal || null,
+        orgao: it.nomeOrgao || it.nome_orgao || null,
+        tipo_documento: it.tipoDocumento || it.tipo_documento || null,
+        texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200),
+      })),
+    };
+  } catch (e) {
+    return { erro: `falha ao consultar DJEN: ${e.message}` };
+  } finally {
+    clearTimeout(t);
+  }
+}

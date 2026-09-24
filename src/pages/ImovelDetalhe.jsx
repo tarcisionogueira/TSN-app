@@ -6,7 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
-import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado } from '../utils/format';
+import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -1591,7 +1591,7 @@ export default function ImovelDetalhe() {
                       <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo</div>
                         <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
-                        {imovel.dataLeilao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
+                        {imovel.dataLeilao && !dataResidualDeVenda(imovel.dataLeilao, imovel.modalidade) && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
                       </div>
                     );
                   }
@@ -1605,7 +1605,7 @@ export default function ImovelDetalhe() {
                       <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (1ª praça)</div>
                         <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(p1.valor)}</div>
-                        {p1.data && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(p1.data, imovel.modalidade)}</div>}
+                        {p1.data && !dataResidualDeVenda(p1.data, imovel.modalidade) && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(p1.data, imovel.modalidade)}</div>}
                       </div>
                       <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (2ª praça)</div>

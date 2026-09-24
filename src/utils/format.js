@@ -24,7 +24,20 @@ export function parseDataLocal(d) {
   return isNaN(x) ? null : x;
 }
 
+// Venda online/direta da Caixa não vence por data (migração cef_sem_lance_por_relistagem,
+// 23/09): a data que sobra na linha é a do LEILÃO ANTIGO em que o imóvel não teve lance. Mostrar
+// "13/07/26" num imóvel que segue à venda faz o cliente achar que perdeu o prazo (24/09: 1.909
+// lotes). Data passada nessas modalidades é resto, não prazo — exibe o rótulo da modalidade.
+export function dataResidualDeVenda(d, modalidade) {
+  if (!d || !/^venda_(online|direta)$/.test(String(modalidade || ''))) return false;
+  const dt = parseDataLocal(d);
+  if (!dt) return false;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  return dt < hoje;
+}
+
 export function fmtData(d, modalidade) {
+  if (dataResidualDeVenda(d, modalidade)) d = null;
   if (!d) {
     // Venda direta é compra contínua (não tem data). Nos leilões/licitações da
     // Caixa a data existe, mas no EDITAL (não vem no CSV em massa) — então rotulamos
