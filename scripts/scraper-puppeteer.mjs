@@ -2671,13 +2671,17 @@ async function salvarVeiculos(registros, rotulo) {
     let leituraOk = true;
     for (let i = 0; i < aptos.length; i += 200) {
       const ids = aptos.slice(i, i + 200).map(r => r.fonte_id).filter(Boolean);
-      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo').eq('fonte', fonteV).in('fonte_id', ids);
+      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado').eq('fonte', fonteV).in('fonte_id', ids);
       if (error) { leituraOk = false; console.log(`  ⚠️ ${nome}: não li o pátio anterior (${String(error.message).slice(0, 80)}) — status do dia vale sozinho`); break; }
       for (const d of data || []) anteriores.set(d.fonte_id, d);
     }
     let mantidos = 0;
     if (leituraOk) for (const r of aptos) {
       const prev = anteriores.get(r.fonte_id);
+      // CIDADE NÃO ESQUECE (24/09): a página do lote do SUPORTE não diz onde o veículo está; a
+      // cidade vem do EDITAL (scripts/local-e-area-do-documento.mjs). Sem isto, a rodada seguinte
+      // gravava cidade=null por cima do que o documento provou.
+      if (!r.cidade && prev?.cidade) { r.cidade = prev.cidade; if (!r.estado && prev.estado) r.estado = prev.estado; }
       // Só preserva o que foi LIDO no lote (sinal textual/regra da fonte). Herança de leilão
       // ('leilão de pátio: …') é recalculada na rodada — preservá-la a congelaria.
       if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado' && !String(prev.status_patio_motivo || '').startsWith('leilão de pátio')) {
