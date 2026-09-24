@@ -54,6 +54,7 @@
     "testar:cadencia": "node scripts/testes/cadencia-por-segmento.mjs",
     "testar:fipe": "node scripts/testes/fipe-titulo-e-cache.mjs",
     "testar:resultado-pagina": "node scripts/testes/resultado-leilao-pagina.mjs",
+    "testar:zuk-pracas": "node scripts/testes/zuk-pracas.mjs",
     "testar:sessao": "node scripts/testes/sessao-vencida-se-conserta-sozinha.mjs",
     "testar:analise-url": "node scripts/testes/analise-nao-depende-do-state-volatil.mjs",
     "testar:assessoria": "node scripts/testes/assessoria-so-para-investidor-pro.mjs",

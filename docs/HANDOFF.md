@@ -33127,3 +33127,13 @@ comportamento no `/caso` (antes só admin). Banco (`andamento_processo_arrematad
 `caso_andamentos.arrematado_id` (um dono: caso OU arrematado), `visivel_cliente` (padrão sim;
 linhas antigas dos casos = não, pois prometiam "só você vê"), `eh_equipe()`, RLS equipe escreve /
 dono lê. `auditoria_seguranca()` = 0/0 após a mudança.
+
+### 📅 ZUK: 2ª praça (24/09, pedido do dono)
+Só 18 de 772 lotes ZUK tinham `data_leilao_2`; `data_fim` (maior praça) vencia na 1ª e a limpeza
+horária desligava lote com a 2ª praça — a mais barata — por vir (249 ZUK desligados por
+praça vencida em 3 dias; recon: Campo Novo/Cabo Frio com 23/09 no banco e "Encerra em 25/09" na
+página). `scripts/lib/zuk-pracas.mjs` lê "1º Leilão dd/mm/aa às hhHmm … 2º Leilão …" da tabela
+de lances; `enriquecerDatasZuk` grava 1ª em `data_leilao` e 2ª em `data_leilao_2` (log "2ª praça N").
+O coletor reativa quem segue no site (`ativo: true`), então os desligados por engano voltam na
+coleta. Teste: `npm run testar:zuk-pracas`. Conferir: `select count(data_leilao_2) from
+imoveis_leilao where fonte='ZUK' and ativo;` (era 18).

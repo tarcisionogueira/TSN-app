@@ -23,6 +23,7 @@ import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes } from '../api/enriquecer-lote.js';
+import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -1583,7 +1584,7 @@ async function enriquecerDatasZuk(browser, imoveis) {
       else req.continue();
     });
   } catch { /* segue sem interceptar */ }
-  let ok = 0, edt = 0, feitos = 0;
+  let ok = 0, edt = 0, feitos = 0, pracas2 = 0;
   for (const im of imoveis) {
     if (Date.now() > DEADLINE) { console.log('    PortalZuk: teto de tempo das datas atingido'); break; }
     if (!im.link_edital) continue;
@@ -1592,6 +1593,11 @@ async function enriquecerDatasZuk(browser, imoveis) {
       const txt = await page.evaluate(() => document.body?.innerText || '');
       const d = extrairDataLeilaoHTML(txt);
       if (d) { im.data_leilao = d; ok++; }
+      // 1ª e 2ª praça da tabela de lances (24/09): sem a 2ª, `data_fim` vencia na 1ª e a limpeza
+      // horária tirava da vitrine o lote cuja 2ª praça — a mais barata — ainda ia acontecer.
+      const pr = pracasZuk(cortarOutrosLotes(txt.replace(/\s+/g, ' ')));
+      if (pr.p1) im.data_leilao = pr.p1.data;
+      if (pr.p2) { im.data_leilao_2 = pr.p2.ts; pracas2++; }
       // Mesma visita: captura área e ocupação do texto do lote (grátis) — o Zuk
       // não traz área na listagem, só na página interna.
       const ext = extrairDaDescricao(txt);
@@ -1639,7 +1645,7 @@ async function enriquecerDatasZuk(browser, imoveis) {
     if (feitos % 50 === 0) console.log(`    PortalZuk datas: ${feitos}/${imoveis.length} · ${ok} ok`);
   }
   try { await page.close(); } catch {}
-  console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length} · editais PDF ${edt}`);
+  console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length} · 2ª praça ${pracas2} · editais PDF ${edt}`);
   return imoveis;
 }
 
