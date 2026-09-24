@@ -1,0 +1,26 @@
+name: Recon — resultado do leilão na página do lote (não grava resultado)
+
+# Só leitura da fonte: grava o texto da página em `recon_dump` (origem 'resultado_pagina') para
+# calibrar api/_resultado-leilao.js. Ver scripts/recon-resultado-pagina.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs de lote (vírgula)'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon
+        env:
+          URLS: ${{ inputs.urls }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/recon-resultado-pagina.mjs

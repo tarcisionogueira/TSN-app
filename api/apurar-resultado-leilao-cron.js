@@ -167,6 +167,11 @@ export default async function handler(req, res) {
   // JANELA 10 dias (24/09; era 3): a retenção mostra o lote vencido por 15 dias, e com 3 o que
   // não coube na rodada saía da fila sem nunca ser olhado.
   const JANELA_DIAS = 10;
+  // SÓ DEPOIS DO DIA DO LEILÃO (24/09). Era `data_fim <= hoje`: o cron de 3 em 3 horas abria a
+  // página no PRÓPRIO dia, antes do pregão, lia "indeterminado" e as 3 tentativas acabavam no
+  // mesmo dia — resultado nunca mais lido. Medido: FRAZAO 49 de 51 indeterminados apurados no dia
+  // do leilão (os 4 sem_lance certos, todos no dia seguinte); ZUK 107 de 131. `data_fim` é data
+  // sem hora, então "encerrou" = dia anterior. Veículo tem hora: 3 h de folga após o leilão.
   const desde = new Date(Date.now() - JANELA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const T0 = Date.now();
 
@@ -213,7 +218,7 @@ export default async function handler(req, res) {
   // realizados, 50 ativos, 0 apurados. A retenção de 15 dias de 22/09 protegia só o que JÁ
   // tinha sido apurado. Agora entram também os desligados POR PRAÇA VENCIDA (não os
   // "sumiu_da_fonte": esses a fonte tirou do ar) — e o não-vendido é religado (apurarLote).
-  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lte.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
+  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -227,7 +232,7 @@ export default async function handler(req, res) {
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
   const desdeISO = new Date(Date.now() - JANELA_DIAS * 86400000).toISOString();
-  const agoraISO = new Date().toISOString();
+  const agoraISO = new Date(Date.now() - 3 * 3600000).toISOString();
   // Mesma correção de ordem do bloco de imóveis acima: DESC prioriza o que venceu HOJE
   // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
   // esgote o orçamento antes de chegar no lote de hoje. Mesma reabertura de 'indeterminado'
