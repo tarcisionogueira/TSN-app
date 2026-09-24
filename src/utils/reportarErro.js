@@ -78,7 +78,7 @@ function ehStackDeTerceiro(stack = '') {
 // impede que a pergunta se repita.
 //
 // Preview e localhost seguem mostrando o erro no console de quem testa — que é onde ele serve.
-const HOSTS_PRODUCAO = new Set(['bidprobrasil.com.br', 'www.bidprobrasil.com.br']);
+const HOSTS_PRODUCAO = new Set(['bidprobrasil.com.br', 'www.bidprobrasil.com.br', 'lucreantesdearrematar.com.br']);
 export function ehProducao(href) {   // exportada para scripts/testes/erro-so-de-producao.mjs
   try { return HOSTS_PRODUCAO.has(new URL(href).hostname); }
   catch { return false; }   // sem href confiável, não inventa erro de cliente

@@ -44,6 +44,16 @@ capturarMarketing();
 // estar guardada quando isso acontecer. Medido em 31/08: 22 das 33 visitas pagas da aula caíam
 // na HOME porque o navegador embutido do Instagram corta o que vem depois do "#". Ver
 // `utils/destinoDaCampanha.js`.
+// DOMÍNIO PRÓPRIO DE CAMPANHA (24/09, masterclass de 15/10): lucreantesdearrematar.com.br aponta
+// para este mesmo projeto e abre direto na página da aula. Depois do capturarMarketing (a UTM da
+// URL já foi guardada) e antes do destino de campanha. Só a raiz: /#/admin etc. seguem normais.
+const DOMINIO_AULA = { 'lucreantesdearrematar.com.br': '/live/lucre-antes-de-arrematar' };
+{
+  const rota = DOMINIO_AULA[window.location.hostname.replace(/^www\./, '')];
+  if (rota && (!window.location.hash || window.location.hash === '#/')) {
+    window.location.replace(`${window.location.pathname}${window.location.search}#${rota}`);
+  }
+}
 resgatarDestinoDaCampanha();
 
 class RootErrorBoundary extends React.Component {

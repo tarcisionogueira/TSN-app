@@ -4,6 +4,14 @@
     "api/apurar-resultado-leilao-cron.js": { "regions": ["gru1"], "maxDuration": 280 },
     "api/reapurar-resultado-leilao.js": { "regions": ["gru1"], "maxDuration": 30 }
   },
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "lucreantesdearrematar.com.br" }],
+      "destination": "/aula/lucre-antes-de-arrematar",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
