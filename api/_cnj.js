@@ -95,12 +95,17 @@ const FASES_RISCO = {
 async function buscarTribunal(tribunal, query) {
   try {
     const url = `${BASE_URL}/api_publica_${tribunal}/_search`;
-    const res = await fetch(url, {
+    const pedir = () => fetch(url, {
       method: 'POST',
       headers: { 'Authorization': `APIKey ${CNJ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ size: 10, query }),
       signal: AbortSignal.timeout(12000),
     });
+    let res = await pedir();
+    // 24/09 — HTTP 429 `es_rejected_execution_exception` = a fila de busca do DataJud está cheia
+    // (sobrecarga DO CNJ, não erro nosso). Uma nova tentativa curta costuma passar; mais que isso
+    // só agrava a fila deles e prende a tela.
+    if (res.status === 429) { await new Promise(r => setTimeout(r, 1800)); res = await pedir(); }
     // 19/09 — HTTP 400 sozinho não diz NADA (query malformada? campo inexistente? sintaxe
     // Elasticsearch errada?). Achado ao vivo: 6/6 tribunais devolvendo 400 ao mesmo tempo pra
     // uma busca por NOME DA PARTE (query `nested`) — enquanto a busca por NÚMERO (query
@@ -262,13 +267,32 @@ async function executarBuscaCNJ(tribunais, query) {
  * Consulta o CNJ DataJud por número de processo OU por nome da parte, na UF dada.
  * Retorna { processos, total, tribunais_consultados, erros, parecer }.
  */
-export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null }) {
+/**
+ * O TRIBUNAL EXATO a partir do número CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO): J é o ramo da Justiça e TR o
+ * tribunal. 24/09 — o andamento do arremate (TRT5) consultava TJBA + TRF1 + TRF5 + TST + STJ ao
+ * mesmo tempo, e o DataJud recusou quatro deles com 429: cinco buscas para um processo que só
+ * pode estar num lugar. Devolve null quando o número não permite saber (aí vale a busca por UF).
+ */
+// Justiça Estadual (J=8): o TR é a UF em ordem alfabética do nome do estado (01 AC … 27 TO).
+const UF_POR_TR_ESTADUAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SE','SP','TO'];
+export function tribunalDoNumeroCnj(numero) {
+  const d = String(numero || '').replace(/\D/g, '');
+  if (d.length !== 20) return null;
+  const tr = parseInt(d.slice(14, 16), 10);
+  if (d[13] === '8') return TRIBUNAL_ESTADUAL[UF_POR_TR_ESTADUAL[tr - 1]] || null;
+  if (d[13] === '5' && tr >= 1 && tr <= 24) return `trt${tr}`;
+  if (d[13] === '4' && tr >= 1 && tr <= 6) return `trf${tr}`;
+  return null;
+}
+
+export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null, tribunais: tribunaisExatos = null }) {
   if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([], { erros: ['CNJ_DATAJUD_KEY ausente'], numeroProcesso: numero_processo, modalidade }) };
   const ufUp = String(uf || '').toUpperCase();
   const estadual = TRIBUNAL_ESTADUAL[ufUp];
   const trf = TRF_MAP[ufUp];
   // nacional = varre todos os TJs + TRFs + superiores; senão, foca na UF + STJ.
-  if (!nacional && !estadual) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
+  const exatos = Array.isArray(tribunaisExatos) ? tribunaisExatos.filter(Boolean) : [];
+  if (!nacional && !estadual && !exatos.length) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
 
   let query;
   if (numero_processo) {
@@ -290,13 +314,13 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   // No modo nacional TODOS_TRIBUNAIS já cobre trf1..trf6 e trt1..trt24.
   const trfLegado = ufUp === 'MG' ? 'trf1' : null;
   const trtsUf = TRT_MAP[ufUp] || [];
-  const tribunais = nacional ? [...TODOS_TRIBUNAIS]
+  const tribunais = exatos.length ? [...exatos] : nacional ? [...TODOS_TRIBUNAIS]
     : [estadual, trf, trfLegado, ...trtsUf, trtsUf.length ? 'tst' : null, 'stj'].filter(Boolean);
   // Quando o NÚMERO do processo está disponível, o próprio número já diz a Justiça
   // (segmento J) e a região (segmento TR) — mais confiável que inferir pela UF do
   // imóvel (o executado pode ter ajuizado/ser executado em região diferente). Formato
   // CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO (20 dígitos). J=5 → Justiça do Trabalho.
-  if (numero_processo) {
+  if (numero_processo && !exatos.length) {
     const dig = String(numero_processo).replace(/\D/g, '');
     if (dig.length === 20 && dig[13] === '5') {
       const trtExato = `trt${parseInt(dig.slice(14, 16), 10)}`;
@@ -369,7 +393,7 @@ export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
  * também pelo andamento do caso (api/caso-andamento-cnj.js) — uma cópia só da regra.
  * Devolve { total, publicacoes[] } ou { erro } — nunca lista vazia no lugar de falha.
  */
-export async function buscarDjen({ numero_processo }) {
+export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   const num = String(numero_processo || '').replace(/\D/g, '');
   if (!/^\d{15,25}$/.test(num)) return { erro: 'número de processo inválido — precisa do padrão CNJ (20 dígitos)' };
   const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&itensPorPagina=30`;
@@ -381,14 +405,17 @@ export async function buscarDjen({ numero_processo }) {
     const data = await r.json();
     const items = data?.items || data?.content || data?.comunicacoes || [];
     if (!items.length) return { total: 0, publicacoes: [], observacao: 'Nenhuma publicação encontrada no DJEN para este processo (a base cobre a partir de 2022).' };
+    // A mesma intimação sai uma vez por destinatário (16/09 veio duas vezes, idêntica): uma só basta.
+    const vistos = new Set();
+    const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); });
     return {
-      total: items.length,
-      publicacoes: items.slice(0, 15).map((it) => ({
+      total: unicos.length,
+      publicacoes: unicos.slice(0, 15).map((it) => ({
         data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null,
         tribunal: it.siglaTribunal || it.sigla_tribunal || null,
         orgao: it.nomeOrgao || it.nome_orgao || null,
         tipo_documento: it.tipoDocumento || it.tipo_documento || null,
-        texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200),
+        texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxTexto),
       })),
     };
   } catch (e) {

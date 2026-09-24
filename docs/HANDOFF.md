@@ -33128,6 +33128,22 @@ comportamento no `/caso` (antes só admin). Banco (`andamento_processo_arrematad
 linhas antigas dos casos = não, pois prometiam "só você vê"), `eh_equipe()`, RLS equipe escreve /
 dono lê. `auditoria_seguranca()` = 0/0 após a mudança.
 
+**Resposta do CNJ legível (24/09, tarde — dono: "compreensível para qualquer pessoa… trazer os
+próximos movimentos relevantes").** Print do dono: erro cru de Elasticsearch (429
+`es_rejected_execution_exception`) em TJBA/TRF1/TRF5/TST/STJ para um processo **TRT5**.
+(1) `tribunalDoNumeroCnj()` em `_cnj.js`: J=8→TJ da UF, J=5→`trtN`, J=4→`trfN` — consulta **só o
+tribunal do número** (eram 5 buscas; `buscarProcessosCNJ({ tribunais })`), + 1 nova tentativa em 429.
+(2) O erro vira frase (`datajud.aviso`); o bruto fica em "detalhe técnico". (3) **`resumo`**: Haiku
+lê movimentos + publicações DJEN (texto até 3.000 caracteres) e devolve situação, o que aconteceu
+desde a arrematação, próximos passos, ação do arrematante e alerta — só fatos dos textos. Cache
+em `processo_resumo_cache` (migração `processo_resumo_cache.sql`, RLS sem política) por
+processo + hash do que foi lido: consultar de novo sem publicação nova não chama IA. Botão
+"Registrar este resumo no andamento" grava uma etapa legível para o cliente. Endpoint virou
+**Node** (maxDuration 60: DataJud + DJEN + IA não cabem nos 25 s do Edge). DJEN deduplica a mesma
+intimação repetida por destinatário. **Não testado ponta a ponta daqui** (o DJEN responde 403 a
+este contêiner e não há chave de IA local): conferir no primeiro clique do dono — log
+`[caso-andamento-cnj]` na Vercel e `select * from processo_resumo_cache;`.
+
 ### 📅 ZUK: 2ª praça (24/09, pedido do dono)
 Só 18 de 772 lotes ZUK tinham `data_leilao_2`; `data_fim` (maior praça) vencia na 1ª e a limpeza
 horária desligava lote com a 2ª praça — a mais barata — por vir (249 ZUK desligados por
