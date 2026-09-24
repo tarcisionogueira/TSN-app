@@ -9,12 +9,12 @@
  *   { place_id, sessiontoken? }                 → { endereco: { logradouro, numero, bairro, cidade, uf, cep, lat, lng, formatado } }
  *
  * sessiontoken agrupa as teclas + o detalhe numa ÚNICA sessão de cobrança do Google
- * (economia). Só logado. Se a chave não existir, devolve disabled=true (o front cai no
+ * (economia). Logado, ou visitante com teto próprio por IP (checkout, 24/09). Se a chave não existir, devolve disabled=true (o front cai no
  * preenchimento manual, sem quebrar).
  */
 export const config = { runtime: 'edge' };
 
-import { getUser, unauthorized } from './_auth.js';
+import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 const KEY = (process.env.GOOGLE_MAPS_API_KEY || '').trim();
@@ -48,8 +48,14 @@ export default async function handler(req) {
   const rl = await checkRateLimit(`endereco-ac:${getIP(req)}`, 60, 60_000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
+  // VISITANTE também (24/09, pedido do dono): o checkout do Investidor Pro é preenchido ANTES de a
+  // conta existir. Cada busca tem custo no Google — o visitante tem um teto próprio e mais
+  // apertado por IP (logado segue só com o limite acima).
   const user = await getUser(req);
-  if (!user) return unauthorized();
+  if (!user) {
+    const rlAnon = await checkRateLimit(`endereco-ac-anon:${getIP(req)}`, 30, 10 * 60_000);
+    if (!rlAnon.ok) return rateLimitedResponse(rlAnon.resetAt);
+  }
 
   if (!KEY) return new Response(JSON.stringify({ ok: true, disabled: true, sugestoes: [] }), { status: 200, headers });
 

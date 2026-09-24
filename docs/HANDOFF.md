@@ -33229,3 +33229,9 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   SDK usa `crypto`/`process`) → handler Node (req, res), respostas idênticas (testado 405/200/401).
 - **Validar no 1º pagamento real:** cartão pelo site → tela de pagamento abre com os 3 campos
   seguros → aprovado → no painel MP, "Medir novamente".
+- **Checkout — endereço por autopreenchimento (dono, 24/09):** campo "Digite seu endereço" (mesmo
+  `EnderecoAutocomplete` do Índice/contrato) nos dois blocos de endereço do Checkout; escolher a
+  sugestão preenche CEP/logradouro/nº/bairro/cidade/UF (campos seguem editáveis; CEP segue buscando).
+  `/api/endereco-autocomplete` passou a aceitar VISITANTE (o checkout top2 é antes da conta existir)
+  com teto próprio por IP: 30 buscas / 10 min (logado continua 60/min). Testado no navegador com a
+  API interceptada: sugestão → todos os campos preenchidos, 0 erros.

@@ -20,6 +20,7 @@ import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
+import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { ESTADOS_UF } from '../data/cidades';
 
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
@@ -610,6 +611,17 @@ export default function Checkout() {
   const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
   const cpfOk = cpfDigits.length === 11;
   const perfilFaturamentoOk = cpfOk && !!nomeUsuario && enderecoOk;
+  // Autopreenchimento pelo endereço digitado (24/09, pedido do dono — o mesmo do Índice e do contrato):
+  // escolher a sugestão preenche tudo; os campos continuam editáveis à mão (o CEP segue buscando também).
+  const preencherEnderecoCk = (e) => setEnd(p => ({
+    ...p,
+    cep: e?.cep ? String(e.cep).replace(/\D/g, '') : p.cep,
+    logradouro: e?.logradouro || p.logradouro,
+    numero: e?.numero || p.numero,
+    bairro: e?.bairro || p.bairro,
+    cidade: e?.cidade || p.cidade,
+    uf: e?.uf || p.uf,
+  }));
   const buscarCepCk = async (cepRaw) => {
     const cep = (cepRaw || '').replace(/\D/g, '');
     if (cep.length !== 8) return;
@@ -1531,6 +1543,7 @@ export default function Checkout() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados para a nota fiscal</div>
                     <input value={cpf} inputMode="numeric" placeholder="CPF"
                       onChange={e => setCpf(e.target.value)} style={{ ...ckInp, width: '100%' }} />
+                    <EnderecoAutocomplete placeholder="Digite seu endereço (rua e número) para preencher" inputStyle={{ ...ckInp, width: '100%', paddingLeft: 34 }} onSelect={preencherEnderecoCk} />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input value={end.cep} inputMode="numeric" placeholder="CEP"
                         onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)} style={{ ...ckInp, width: 120 }} />
@@ -1704,6 +1717,9 @@ export default function Checkout() {
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ width: '100%' }}>
+                      <EnderecoAutocomplete placeholder="Digite seu endereço (rua e número) para preencher" inputStyle={{ ...ckInp, width: '100%', paddingLeft: 34 }} onSelect={preencherEnderecoCk} />
+                    </div>
                     <div style={{ width: 110 }}>
                       <input value={end.cep} inputMode="numeric" placeholder="CEP"
                         onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)}
