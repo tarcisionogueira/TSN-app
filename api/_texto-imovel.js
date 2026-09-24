@@ -125,8 +125,11 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
   };
   const plausivel = (v) => (v >= 8 && v <= 1_000_000 ? v : 0);
   const tentativas = [
-    new RegExp(`área\\s+(?:constru[íi]da|privativa|edificada|útil)[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
+    // "46,57 M2 DE ÁREA PRIVATIVA, 81,42M2 DE ÁREA DO TERRENO" (ficha CAIXA/TORRES3): o número
+    // vem ANTES do rótulo. Testar "rótulo → número" primeiro casava "ÁREA PRIVATIVA, 81,42M2" —
+    // o número do rótulo SEGUINTE — e a casa saía com a área do terreno (seco de 24/09).
     new RegExp(`${NUM}\\s*${UNI}\\s+de\\s+área\\s+(?:constru[íi]da|privativa|edificada|útil)`, 'i'),
+    new RegExp(`área\\s+(?:constru[íi]da|privativa|edificada|útil)[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+total[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+do\\s+terreno[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     ...(permitirSolta ? [new RegExp(`${NUM}\\s*${UNI}`, 'i')] : []), // solta, último recurso (só em texto recortado)
