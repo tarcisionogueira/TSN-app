@@ -20,7 +20,7 @@ jobs:
           node-version: '22'
       - name: Recon
         env:
-          URLS: ${{ inputs.urls }}
+          PAGINAS_LOTE: ${{ inputs.urls }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-resultado-pagina.mjs

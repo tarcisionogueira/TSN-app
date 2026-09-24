@@ -2,12 +2,12 @@
  * Recon do RESULTADO na página do lote (24/09) — só leitura da fonte; grava o texto em `recon_dump`
  * (origem 'resultado_pagina') para calibrar `api/_resultado-leilao.js` fonte a fonte (ZUK/FRAZAO
  * davam 'indeterminado' mesmo lidos depois do leilão). Fetch direto — sem Bright Data, custo zero.
- * Env: URLS (vírgula), VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
+ * Env: PAGINAS_LOTE (URLs, vírgula), VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { apurarResultadoDoTexto } from '../api/_resultado-leilao.js';
 
 const SB = process.env.VITE_SUPABASE_URL, KEY = process.env.SUPABASE_SERVICE_KEY;
-const urls = String(process.env.URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+const urls = String(process.env.PAGINAS_LOTE || '').split(',').map(s => s.trim()).filter(Boolean);
 const RE_CHAVE = /(lance|vend|arremat|encerr|desert|licitant|situa|status|finaliz|resultado|proposta|negativ|suspens|cancel|retirad)/gi;
 
 for (const url of urls) {
