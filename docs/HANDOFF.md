@@ -33098,6 +33098,10 @@ que SAÍRAM da janela de 3 dias sem nenhuma. Conserto (`apurar-resultado-leilao-
 janela 3 → 10 dias (retenção é 15), 4 páginas em paralelo. Simulado: a próxima rodada pega 250
 nunca tentados (fila 1.043). `apurar-superbid-residencial.mjs`: mesma fila e não retenta
 indeterminado com `teve_lance` (já é "Com lance").
+**Conferido 15:10 UTC (1ª rodada, 15:00):** 250 imóveis lidos → 38 vendido · 50 sem_lance · 49
+indeterminado · 113 sem conteúdo; 7 veículos. Fila caiu de **1.043 → 770** (766 imóveis, 707 nunca
+tentados; 4 veículos). ZUK com o leitor novo: **24 sem_lance + 11 vendido** (antes 0 sem_lance),
+9 indeterminados, 49 sem conteúdo. Ritmo: ~250/rodada → fila zera em ~3 rodadas.
 **Pendentes (qualidade, não fila):** ZUK 131 indeterminados × 0 sem_lance e FRAZAO 51 × 4 — o
 regex de `_resultado-leilao.js` não reconhece o "sem lance" dessas páginas (precisa recon da
 página viva; o sandbox não alcança os sites). PESTANA (URL é a agenda, não o lote) e SODRE
