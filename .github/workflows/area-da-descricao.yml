@@ -1,0 +1,27 @@
+name: Área a partir da descrição já gravada (custo zero)
+
+# scripts/area-da-descricao.mjs — relê titulo+descricao do banco com o extrator da coleta.
+# Rodar primeiro EM SECO (aplicar=0) e conferir as amostras; depois aplicar=1.
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = grava; 0 = só mostra'
+        default: '0'
+
+jobs:
+  area:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Área da descrição
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          AREA_APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/area-da-descricao.mjs
