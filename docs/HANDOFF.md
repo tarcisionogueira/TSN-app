@@ -33081,5 +33081,9 @@ o script residencial também liga quando `totalBids` > 0). Tela: selo e filtro s
 "Com lance" (vendido, ou teve_lance já apurado) e "Sem lance" (sem_lance, ou indeterminado sem
 lance). 'indeterminado' continua no banco só para a reapuração. 62 saíram do "Sem lance".
 Imóveis: mesmos rótulos (sem sinal de lance equivalente → indeterminado = sem lance).
+**Proposta (dono):** venda condicional pode ou não ser autorizada e NÃO aceita proposta — botão
+"Propor" e `api/propor-veiculo-leiloeiro.js` exigem `sem_lance` E `teve_lance = false` (indeterminado
+fica de fora: pode ser condicional não detectada). Faixa das propostas (50–70% do menor lance) vem
+do redator (`api/_redator-proposta.js`), que aprende com os envios do dono.
 Bônus: `VeiculoDetalhe.jsx` não selecionava `resultado_leilao` — o selo e a reapuração ao abrir
 nunca rodavam na tela do veículo.

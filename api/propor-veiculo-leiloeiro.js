@@ -94,12 +94,13 @@ export default async function handler(req) {
     }
   }
 
-  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao`)).json();
+  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao,teve_lance`)).json();
   if (!veiculo) return json({ error: 'Veículo não encontrado' }, 404);
 
   // SÓ resultado REAL "sem lance" — não mais inferência por data (21/09). Um leilão que ainda
   // não foi apurado (NULL/'indeterminado') ou que na verdade vendeu não passa aqui.
-  if (veiculo.resultado_leilao !== 'sem_lance') {
+  // teve_lance (24/09): lance registrado = venda condicional possível, que não aceita proposta.
+  if (veiculo.resultado_leilao !== 'sem_lance' || veiculo.teve_lance) {
     return json({ error: 'Proposta de compra direta só é oferecida quando o leilão deste veículo foi conferido e confirmado SEM LANCE — ainda não é o caso deste lote.' }, 400);
   }
 

@@ -630,7 +630,9 @@ export default function BuscaVeiculos() {
                   </button>
                   {/* Gate de "Propor" trocado de inferência por data para resultado REAL
                       apurado (21/09) — evita propor compra num lote que na verdade vendeu. */}
-                  {podePropor && ['sem_lance', 'indeterminado'].includes(chaveResultado(v)) && (
+                  {/* Proposta (dono, 24/09): só SEM LANCE CONFIRMADO. Venda condicional (lance abaixo da
+                      reserva, aguardando o comitente) não aceita proposta, e o indeterminado pode ser uma. */}
+                  {podePropor && v.resultado_leilao === 'sem_lance' && !v.teve_lance && (
                     <button onClick={e => { e.stopPropagation(); abrirProposta(v); }} title="Propor compra direta ao leiloeiro — leilão já ocorreu sem comprador"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 10px', background: '#6d28d9', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       <Mail size={12} /> Propor
