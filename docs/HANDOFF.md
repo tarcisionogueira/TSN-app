@@ -33172,3 +33172,16 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   `praca_fim_antes_do_inicio` 20 → 1: o invariante media outra coisa (MEGA/SODRE/GRUPOLANCE guardam
   a PRÓXIMA praça em `data_leilao`, WEBLEILOES só a data do fim) — passa a acusar só inversão real;
   sobra 1 GRUPOLANCE legítimo. Migração `qa_praca_inversao_real_foto_banner_area_rural.sql`.
+
+### 🚗 Página interna do veículo + robô residencial (24/09, tarde)
+- **Card de veículo:** botão principal "Ver detalhes" (página interna `VeiculoDetalhe`), "Leiloeiro"
+  vira secundário. **Página:** seção "📍 Local do veículo (pátio)" (`src/utils/patioVeiculo.js`,
+  teste `testar:patio-veiculo`): SODRE `raw.lot_location_address` (endereço completo), SUPERBID
+  "Endereço:" da descrição ou cidade + mapa pela coordenada (aproximado — 29 de 6.688 trazem rua),
+  ZUK bairro/cidade do cartão, MEGA/SUPORTE/WEBLEILOES cidade; sem rua a tela DIZ que é só a cidade.
+  + "bem já em pátio" (`status_patio`), condições (forma de pagamento, opcionais) e documentos do
+  lote (`anexos`). FIPE continua sob demanda ao abrir (cache 25 dias, teto 450/dia compartilhado).
+- **Robô residencial (Superbid/SOLD):** cron documentado = 1×/dia 08h BRT (`docs/RUNNER_RESIDENCIAL.md`);
+  as rodadas extras de 23-24/09 foram manuais. Fila 24/09: 5.633 (veículos 1.665 + 244 retentar;
+  imóveis 3.665 + 59). `SBID_LIMITE` 400 → 1.200/rodada (~20 min a 1 consulta/s) → ~5-6 dias com a
+  entrada diária. PESTANA/SODRE (resultado) não estão no runner — sem cronologia até implementar.

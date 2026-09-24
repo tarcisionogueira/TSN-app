@@ -221,7 +221,9 @@ rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS node scripts/s
 # daqui responde. Regra (totalBids/winnerBid/reservedPrice) validada em 23/09 contra 5 ofertas
 # reais — scripts/testes/superbid-resultado.mjs. 400 lotes/rodada ≈ 10 min, 1 consulta/s.
 # Não passa pelo `rodar`: grava resultado, não acervo (mesma razão do radar e da triagem).
-env SBID_APLICAR=1 node scripts/apurar-superbid-residencial.mjs \
+# 24/09: 400 → 1.200 lotes/rodada. O cron é 1×/dia (08h BRT) e a fila era 5.633 lotes vencidos
+# (≈14 dias a 400/dia). 1 consulta/s → ~20 min. Fila justa: nunca-apurado primeiro, mais recente antes.
+env SBID_APLICAR=1 SBID_LIMITE=1200 node scripts/apurar-superbid-residencial.mjs \
   || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"
 
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────

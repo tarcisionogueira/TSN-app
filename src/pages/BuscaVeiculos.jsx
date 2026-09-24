@@ -626,9 +626,15 @@ export default function BuscaVeiculos() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
-                  <button onClick={e => { e.stopPropagation(); if (v.link_lote) window.open(v.link_lote, '_blank', 'noopener'); }} disabled={!v.link_lote}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: v.link_lote ? 'pointer' : 'default' }}>
-                    Ver no leiloeiro <ExternalLink size={12} />
+                  {/* Página interna primeiro (24/09, pedido do dono): dados do leiloeiro, local do pátio,
+                      documentos e FIPE sob demanda; o site do leiloeiro vira o botão secundário. */}
+                  <button onClick={e => { e.stopPropagation(); nav(`/admin/veiculos-leilao/${v.id}`); }}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    Ver detalhes
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); if (v.link_lote) window.open(v.link_lote, '_blank', 'noopener'); }} disabled={!v.link_lote} title="Abrir a página do lote no site do leiloeiro"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 10px', background: 'white', color: v.link_lote ? '#0D63DB' : '#94a3b8', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: v.link_lote ? 'pointer' : 'default' }}>
+                    Leiloeiro <ExternalLink size={12} />
                   </button>
                   {/* Gate de "Propor" trocado de inferência por data para resultado REAL
                       apurado (21/09) — evita propor compra num lote que na verdade vendeu. */}

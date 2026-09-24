@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2 } from 'lucide-react';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -8,6 +8,7 @@ import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotaVeiculo } from '../utils/cotaAnalise';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import { localDoPatio } from '../utils/patioVeiculo';
 
 // Tela EXCLUSIVA do operacional (dono/equipe) — nunca do cliente (reafirmado 21/09; a rota
 // em App.jsx já só existe sob /admin/veiculos-leilao*, roles=['admin','analista']). Por isso
@@ -56,6 +57,8 @@ const COLUNAS = [
   'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
   // faltavam até 24/09: sem elas o selo de resultado e a reapuração ao abrir nunca rodavam aqui
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
+  // página interna completa (24/09): local do pátio, documentos e condições do leiloeiro
+  'raw', 'anexos', 'forma_pagamento', 'opcionais', 'status_patio',
 ].join(',');
 
 // FIPE 'aproximado'/'sem_match'/'sem_dados' explicados na tela — nunca um número sem contexto
@@ -161,6 +164,10 @@ export default function VeiculoDetalhe() {
   }
 
   const fotos = fotosArray(v);
+  const patio = localDoPatio(v);
+  const anexos = (Array.isArray(v.anexos) ? v.anexos : []).filter(a => a && /^https?:\/\//i.test(a.url || ''));
+  const opcionais = Array.isArray(v.opcionais) ? v.opcionais.filter(Boolean).map(String) : [];
+  const PAGAMENTO = { a_vista: 'À vista', parcelado: 'Parcelado', financiado: 'Financiável', a_vista_ou_parcelado: 'À vista ou parcelado' };
   const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
   const mostrarFipe = v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado');
   const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
@@ -307,6 +314,42 @@ export default function VeiculoDetalhe() {
           )}
         </div>
       </div>
+
+      {/* ONDE ESTÁ O VEÍCULO (24/09, pedido do dono: "dar atenção a informar endereço do pátio") */}
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>📍 Local do veículo (pátio)</div>
+        {patio.endereco && <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111111', textTransform: 'capitalize' }}>{patio.endereco}</div>}
+        {patio.cidade && <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>{patio.cidade}</div>}
+        {patio.origem && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>{patio.origem}{patio.mapaAproximado ? ' · mapa pela coordenada informada (aproximado)' : ''}</div>}
+        {v.status_patio === 'confirmado' && <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, marginTop: 6 }}>✓ Bem já recolhido em pátio (não está com o executado)</div>}
+        {patio.mapaUrl && (
+          <a href={patio.mapaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>
+            <MapPin size={14} /> Abrir no mapa
+          </a>
+        )}
+        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 10, lineHeight: 1.5 }}>Visitação e retirada são agendadas com o leiloeiro — confira dia e horário no edital ou na página do lote.</div>
+      </div>
+
+      {(v.forma_pagamento || opcionais.length > 0) && (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Condições e itens informados pelo leiloeiro</div>
+          {v.forma_pagamento && <div style={{ fontSize: 13.5, color: '#334155' }}>Pagamento: <strong>{PAGAMENTO[v.forma_pagamento] || v.forma_pagamento}</strong></div>}
+          {opcionais.length > 0 && <div style={{ fontSize: 13, color: '#475569', marginTop: 6 }}>Opcionais: {opcionais.join(' · ')}</div>}
+        </div>
+      )}
+
+      {anexos.length > 0 && (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>Documentos do lote ({anexos.length})</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {anexos.map((a, i) => (
+              <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#0D63DB', textDecoration: 'none', fontWeight: 600 }}>
+                <FileText size={14} /> {a.nome && a.nome !== 'Outro' ? a.nome : (a.tipo && a.tipo !== 'outro' ? a.tipo : `Documento ${i + 1}`)}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Enviar e-mail — só equipe (jurídico ou o leiloeiro deste lote), mesmo componente de
           ImovelDetalhe.jsx/Caso.jsx. Sem cliente/caso nesta tela (mesmo lote pode interessar a
