@@ -26,6 +26,11 @@ export default defineConfig([
       // centenas de avisos não acionáveis neste código.
       'bidpro/checar-response-ok': 'warn',
       'react-hooks/rules-of-hooks': 'error',
+      // 24/09: `useRolagemDaLista('busca', !loading…)` uma linha ANTES do useState do `loading`
+      // derrubou a tela /buscar inteira ("Cannot access 'I' before initialization") por ~5 h.
+      // `variables: false` = só uso no MESMO escopo antes da declaração (o que quebra de fato);
+      // uso dentro de callback que roda depois é ignorado. Erro → trava o build (verificar:sintaxe).
+      'no-use-before-define': ['error', { functions: false, classes: false, variables: false }],
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': 'warn',
       // Ruído cosmético → aviso (não bloqueia).

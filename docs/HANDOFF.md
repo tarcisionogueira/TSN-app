@@ -33147,6 +33147,22 @@ processo + hash do que foi lido: consultar de novo sem publicação nova não ch
 intimação repetida por destinatário. **Não testado ponta a ponta daqui** (o DJEN responde 403 a
 este contêiner e não há chave de IA local): conferir no primeiro clique do dono — log
 `[caso-andamento-cnj]` na Vercel e `select * from processo_resumo_cache;`.
+**Testado pelo dono (24/09, tarde):** 1º resumo real saiu, mas mandava "pagar o lance em até 3 dias
+úteis" com os comprovantes anexados → a IA agora recebe etapas registradas, anexos e lançamentos
+(`ja_registrado`) e não pode citar prazo "típico"; acontecimentos ordenados no servidor. O Node
+rodava nos EUA (DJEN recusa fora do Brasil; DataJud estourou tempo) → `vercel.json` fixa
+`api/caso-andamento-cnj.js` em **gru1**. Arremate ATRIBUÍDO À MÃO (`fonte=atribuido_manual`) nasce
+sem nº de processo: o endpoint agora lê o nº do texto da validação dos anexos (carta > auto >
+edital; só aceita dígito verificador CNJ válido) e grava no lote. Rafael: 0010959-05.2017.5.15.0030
+(TRT15). Resta 1 arremate manual sem nº em lugar nenhum (R$ 63.714,85, 21/07) — digitar uma vez.
+
+### 🔴 /buscar fora do ar ~5 h (24/09, 11:46 → 16:50)
+`useRolagemDaLista('busca', !loading…)` (commit 490890d) chamado ANTES do `useState` do `loading` →
+ReferenceError em toda renderização, "Algo deu errado". Corrigido (bb4978d) e **trava nova**:
+`no-use-before-define` (`variables: false`) como erro no ESLint de `src/` → `verificar:sintaxe`
+no prebuild reprova. Conferido: reprova a versão quebrada, 0 ocorrência no acervo atual.
+Lição: o build passava e o teste local sem login não renderiza `/buscar` — o erro só apareceu em
+`erros_cliente` quando o dono abriu a tela. Rodar o bloco 1b do ritual também DURANTE a sessão.
 
 ### 📅 ZUK: 2ª praça (24/09, pedido do dono)
 Só 18 de 772 lotes ZUK tinham `data_leilao_2`; `data_fim` (maior praça) vencia na 1ª e a limpeza
