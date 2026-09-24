@@ -3434,6 +3434,25 @@ function cidadeUfPestana(bem, desc) {
   return { cidade, uf: temUf() ? uf : '' };
 }
 
+// Descrição completa do bem PESTANA: título curto + texto jurídico (`observacao`) + as
+// características "Nome: valor" (área, quartos, matrícula…), sem repetir trechos e com teto.
+export function descricaoPestana(desc, bem, nomeLeilao) {
+  const limpa = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const partes = [limpa(desc)];
+  const obs = limpa(bem && bem.observacao);
+  if (obs && !partes[0].includes(obs)) partes.push(obs);
+  const carac = (Array.isArray(bem && bem.caracteristicas) ? bem.caracteristicas : [])
+    .map(c => {
+      const v = limpa(c && c.valor);
+      const n = limpa(c && (c.nome || c.descricao || (c.caracteristica && c.caracteristica.nome)));
+      return v ? (n && !v.toLowerCase().startsWith(n.toLowerCase()) ? `${n}: ${v}` : v) : '';
+    })
+    .filter(v => v && !obs.includes(v));
+  if (carac.length) partes.push(carac.join(' · '));
+  if (nomeLeilao) partes.push(limpa(nomeLeilao));
+  return partes.filter(Boolean).join(' — ').slice(0, 4000);
+}
+
 function mapLotePestana(lote, leilao, leiloesPorId) {
   const bens = Array.isArray(lote.bens) ? lote.bens : [];
   const bem = bens.find(b => b && b.tipoBem && Number(b.tipoBem.id) === PESTANA_TIPOBEM_IMOVEL);
@@ -3527,7 +3546,12 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
     valor_avaliacao: 0,
     valor_minimo: valor,
     area_m2: area,
-    descricao: [desc, leilao.nome].filter(Boolean).join(' — ').slice(0, 500),
+    // 24/09 — a descrição era só o título curto ("Casa - Três Corações - MG") + o nome do leilão:
+    // 99% da PESTANA (802 lotes) com descrição = título na amostra de 20% da base. O texto
+    // completo do bem (`observacao` + `caracteristicas`) JÁ era lido acima para o endereço e
+    // jogado fora aqui. HTML/entidades que vierem nele são limpos no banco
+    // (gatilho trg_a_descricao_sem_html).
+    descricao: descricaoPestana(desc, bem, leilao.nome),
     link_edital: editalUrl || agenda,
     link_matricula: primeiroDoc('matricula', docsLote) || null, // só por-lote (nunca do leilão)
     link_regras_venda: primeiroDoc('regras', anexos) || null,

@@ -32933,3 +32933,22 @@ chegam). Veículos: filtros + página em sessionStorage (antes nada era salvo) e
 do VeiculoDetalhe usa o histórico (antes empurrava a rota e remontava do zero). Imóveis: filtros
 já persistiam, mas o DEEP-LINK do e-mail (`#/buscar?estado=…`) era reaplicado a cada volta,
 apagando o que a pessoa mudou e voltando à pág. 1 — agora vale só na chegada.
+
+### ✅ Itens 9 e 10 + 4 casos encerrados (24/09, noite)
+- **4 casos-casca da Alessandra encerrados** (a pedido do dono): `status_etapa='concluido'` +
+  `concluido_em` (mesmo padrão do caso do Rafael, 23/09 — o painel de assessorados lê como
+  "encerrado sem arremate"), com linha em `caso_andamentos` explicando o motivo. Nenhum e-mail
+  disparado (conferido `emails_fila`).
+- **9 — HTML cru na descrição**: função `limpar_html_texto()` + gatilho
+  `trg_a_descricao_sem_html` (qualquer fonte; br/p/div → quebra de linha, entidades
+  decodificadas, `</br>` malformado incluso) — `descricao_sem_html.sql`. 246 descrições limpas
+  (EDITAL_DJEN 151 ativas + `&quot;`/`&#039;` de FERREIRALEIL/LANCEJA/RJLEILOES…), 0 restante.
+  A tela já usa `white-space: pre-wrap`. Lição do dia: em regex do Postgres a borda é `\y`;
+  `\b` é backspace — o teste em seco mostrou diferença ZERO na 1ª versão.
+- **10 — descrição rasa**: PESTANA gravava só título + nome do leilão, jogando fora
+  `bem.observacao` e `bem.caracteristicas` (já lidos para o endereço). Novo `descricaoPestana()`
+  em scraper-puppeteer.mjs — vale a partir da próxima coleta da PESTANA. **SUPERBID** (59%
+  curta): o scraper já concatena `offerDescription`+`offerDetail`+`shortDesc` desde 17/08; o
+  texto longo só existe na página de DETALHE da oferta → exige recon do endpoint de detalhe
+  (site inacessível deste ambiente) e ~1.400 requisições — NÃO feito às cegas. Tentativa de
+  herdar descrição da CEF pelo nº do imóvel: 0 casamentos (PESTANA/SUPERBID não trazem o nº).
