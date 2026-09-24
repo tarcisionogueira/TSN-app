@@ -68,16 +68,18 @@ const SISTEMA_RESUMO = `Você explica andamento de processo judicial para quem A
 Escreva em português do Brasil simples, frases curtas, sem juridiquês. Quando um termo técnico for inevitável, explique entre parênteses em poucas palavras (ex.: "carta de arrematação (o documento que permite registrar o imóvel no seu nome)").
 O foco é a ARREMATAÇÃO: o que aconteceu com ela e o que falta até o arrematante ter o imóvel registrado e a posse. Ignore o que não afeta o arrematante (cálculos entre as partes, intimações só entre credor e devedor, despachos de mero expediente) — a não ser que atrase ou ameace a arrematação.
 Etapas típicas depois do leilão: auto de arrematação assinado; prazo para contestar a arrematação (embargos/impugnação); pagamento/depósito do lance e comissão; expedição da carta de arrematação e do mandado de imissão na posse; registro no cartório; desocupação/imissão na posse; eventual pagamento de dívidas do imóvel com o dinheiro do leilão.
-Use SOMENTE fatos presentes nos textos. Nunca invente data, prazo, valor ou decisão. Se não houver nada relevante depois da arrematação, diga isso claramente. Se o texto não permitir saber algo, diga que não dá para saber pelos documentos publicados.
+Você também recebe "ja_registrado": o que a equipe e o arrematante já registraram (etapas do andamento, documentos anexados, pagamentos lançados). Isso é fato: NÃO peça o que já foi feito (comprovante de pagamento anexado = pagamento feito; etapa registrada = etapa conhecida) e use essas etapas para dizer em que pé está.
+Use SOMENTE fatos presentes nos textos e nos registros. Nunca invente data, prazo, valor ou decisão — nem prazos "típicos" ou "geralmente"; se o prazo não está escrito, não cite prazo. Se não houver nada relevante depois da arrematação, diga isso claramente. Se o texto não permitir saber algo, diga que não dá para saber pelos documentos publicados.
 Responda APENAS com JSON: {"situacao":"1 a 2 frases: em que pé está a arrematação hoje","acontecimentos":[{"data":"AAAA-MM-DD","texto":"o que aconteceu, em linguagem simples"}],"proximos_passos":["o que deve acontecer a seguir, em ordem"],"acao_do_arrematante":"o que o arrematante precisa fazer agora, ou null se nada","alerta":"risco concreto para a arrematação (ex.: pedido para anular), ou null"}
 "acontecimentos": no máximo 6, só os relevantes, do mais recente para o mais antigo.`;
 
-async function resumirAndamento({ numero, contexto, movimentos, publicacoes }) {
+async function resumirAndamento({ numero, contexto, jaRegistrado, movimentos, publicacoes }) {
   const chave = process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY;
   if (!chave) return { ok: false, erro: 'chave da IA ausente' };
   if (!movimentos.length && !publicacoes.length) return { ok: false, erro: 'nada para resumir (sem movimentos nem publicações)' };
   const entrada = {
     arrematacao: contexto,
+    ja_registrado: jaRegistrado,
     movimentos_datajud: movimentos.slice(0, 25).map(m => ({ data: m.data, descricao: m.descricao })),
     publicacoes_diario_oficial: publicacoes.slice(0, 10).map(p => ({ data: p.data_disponibilizacao, tipo: p.tipo_documento, orgao: p.orgao, texto: p.texto })),
   };
@@ -114,7 +116,8 @@ async function resumirAndamento({ numero, contexto, movimentos, publicacoes }) {
   const resumo = {
     situacao: str(r?.situacao, 600),
     acontecimentos: (Array.isArray(r?.acontecimentos) ? r.acontecimentos : []).slice(0, 6)
-      .map(a => ({ data: /^\d{4}-\d{2}-\d{2}$/.test(String(a?.data || '')) ? a.data : null, texto: str(a?.texto, 400) })).filter(a => a.texto),
+      .map(a => ({ data: /^\d{4}-\d{2}-\d{2}$/.test(String(a?.data || '')) ? a.data : null, texto: str(a?.texto, 400) })).filter(a => a.texto)
+      .sort((x, y) => String(y.data || '').localeCompare(String(x.data || ''))),
     proximos_passos: (Array.isArray(r?.proximos_passos) ? r.proximos_passos : []).map(x => str(x, 300)).filter(Boolean).slice(0, 6),
     acao_do_arrematante: str(r?.acao_do_arrematante, 400),
     alerta: str(r?.alerta, 400),
@@ -190,7 +193,23 @@ export default async function handler(req, res) {
   const contexto = dono.tabela === 'arrematados'
     ? { imovel: registro.titulo, cidade: [registro.cidade, registro.estado].filter(Boolean).join('/'), data_arrematacao: registro.data_arrematacao, valor: registro.valor_arrematacao }
     : { imovel: registro.imovel_endereco, data_arrematacao: registro.arrematado_em ? String(registro.arrematado_em).slice(0, 10) : null, valor: registro.imovel_valor, posse_em: registro.posse_em };
-  const resumo = await resumirAndamento({ numero, contexto, movimentos, publicacoes })
+  // O QUE JÁ FOI FEITO (24/09): sem isto o resumo mandou "pagar o lance em até 3 dias úteis" num
+  // arremate com os dois comprovantes anexados em 16/09. Falhar aqui só empobrece o resumo.
+  const jaRegistrado = {};
+  try {
+    const leituras = [sbGet(`caso_andamentos?${dono.col}=eq.${dono.id}&select=etapa,observacao,data_evento,criado_em&order=criado_em.desc&limit=20`)];
+    if (dono.tabela === 'arrematados') {
+      leituras.push(sbGet(`arrematado_lancamentos?arrematado_id=eq.${dono.id}&select=categoria,descricao,valor,data&order=data.desc&limit=20`));
+      if (UUID.test(String(registro.imovel_id || ''))) leituras.push(sbGet(`imovel_anexos?imovel_id=eq.${registro.imovel_id}&or=(arrematacao_id.is.null,arrematacao_id.eq.${dono.id})&select=tipo,nome,criado_em&order=criado_em.desc&limit=20`));
+    }
+    const [etapas, lancamentos, anexos] = await Promise.all(leituras);
+    jaRegistrado.etapas_do_andamento = (etapas || []).map(e => ({ data: e.data_evento || String(e.criado_em).slice(0, 10), etapa: e.etapa, observacao: e.observacao ? String(e.observacao).slice(0, 300) : null }));
+    if (lancamentos) jaRegistrado.pagamentos_lancados = lancamentos;
+    if (anexos) jaRegistrado.documentos_anexados = anexos.map(d => ({ tipo: d.tipo, nome: d.nome, data: String(d.criado_em).slice(0, 10) }));
+  } catch (e) {
+    console.warn('[caso-andamento-cnj] registros para o resumo ilegíveis:', e.message);
+  }
+  const resumo = await resumirAndamento({ numero, contexto, jaRegistrado, movimentos, publicacoes })
     .catch(e => ({ ok: false, erro: String(e?.message || e) }));
 
   return enviar({
