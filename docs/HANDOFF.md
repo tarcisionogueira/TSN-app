@@ -33390,3 +33390,18 @@ sempre EM SECO antes de gravar — e cada seco pegou erro que teria ido para o b
 4. **Para não voltar a faltar:** a coleta do PESTANA agora lê a ficha CAIXA na hora
    (`areaFichaCaixa` em api/_texto-imovel.js, usada pelo scraper e pelo backfill) — as áreas vinham
    nas características SEM "m²" e o laço da coleta só aceitava valor com a unidade.
+
+### 🪞 Lotes repetidos Caixa × leiloeiro (24/09, noite — print do dono, Feira de Santana)
+A mesma casa aparecia 2×: portal CEF + 3 Torres (leiloeira da Caixa no leilão SFI). Medido: **167
+pares CEF+TORRES3 e 3 CEF+KLEILOES**, 1-para-1, mesma cidade/lance/avaliação/data/área (±2%).
+`reconciliar_gemeos_leiloeiro_cef()` (migração `gemeos_leiloeiro_cef.sql`, roda no
+`monitor-fontes-cron` logo após a de HASTA): mesma decisão do dono de 21/08 — fica o lote do
+LEILOEIRO, o CEF sai com `suprimido_motivo='gemeo_leiloeiro'` (o gatilho existente segura a
+ressurreição pelo importador) e volta sozinho se o par desfizer. Antes de esconder, o do leiloeiro
+herda endereço/bairro/coordenada da Caixa (151 enriquecidos; o pino estava no centro da cidade).
+Só par 1-para-1 com área dos dois lados — condomínio com várias unidades do mesmo preço não casa.
+Rodada 1: 170 suprimidos, 0 ambíguos; rodada 2 idempotente.
+**No mesmo print, a área da 3 Torres era o TERRENO (142,5 m²):** o coletor Soleon pegava o 1º "m²"
+da página. Agora lê a descrição pelo extrator rotulado; 5 casas TORRES3 corrigidas no banco.
+Não tratado (pequeno, ambíguo): LJUD agregando lote de GIORDANO/GRUPOLANCE (19 pares, sem área para
+confirmar) e LEILAOBRASIL+VLANCE (muitos-para-muitos).

@@ -170,6 +170,13 @@ async function handler(req) {
     const { data, error: eGem } = await supabase.rpc('reconciliar_gemeos_hasta_cef');
     gemeos = eGem ? { erro: eGem.message } : data;
   }
+  // GÊMEOS CAIXA × LEILOEIRO (24/09, "lotes repetidos"): mesmo imóvel pelo portal CEF e pela
+  // leiloeira da Caixa (3 Torres, K Leilões). Mesma regra acima: fica o do leiloeiro.
+  let gemeosLeiloeiro = null;
+  {
+    const { data, error: eGl } = await supabase.rpc('reconciliar_gemeos_leiloeiro_cef');
+    gemeosLeiloeiro = eGl ? { erro: eGl.message } : data;
+  }
 
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
@@ -194,6 +201,9 @@ async function handler(req) {
   // A4 (22/08): a falha da reconciliação de gêmeos precisa VIRAR problema — antes só saía no
   // corpo HTTP (que ninguém lê), então se a RPC sumisse/perdesse permissão a dedup ficava parada
   // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
+  if (gemeosLeiloeiro?.erro) {
+    problemas.push({ fonte: 'GÊMEOS LEILOEIRO×CEF', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosLeiloeiro.erro}` });
+  }
   if (gemeos?.erro) {
     problemas.push({ fonte: 'GÊMEOS HASTA×CEF', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeos.erro}` });
   }
@@ -500,7 +510,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -561,7 +571,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

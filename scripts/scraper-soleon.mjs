@@ -23,7 +23,7 @@
  */
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
-import { decodificarEntidades } from '../api/_texto-imovel.js';
+import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
 // NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
 // `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
 // chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
@@ -274,7 +274,12 @@ function parseDetalhe(html, url) {
   // PURCENA, TMLEILOES — os 5 tenants desta plataforma Soleon). Padrão correto: 1-3 dígitos +
   // grupos de milhar de 3 dígitos, decimal opcional — o mesmo já usado em `extrairAreaM2`
   // (api/_texto-imovel.js) e no mapper do WEBLEILOES.
-  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
+  // 24/09: o 1º "m²" da PÁGINA pegava o terreno ("66,14 M2 DE ÁREA PRIVATIVA, 142,5M2 DE ÁREA DO
+  // TERRENO" — o "M2" das duas primeiras não casa `m²`). Agora: descrição do lote pelo extrator
+  // rotulado (privativa/construída antes do terreno) → página só com rótulo → regra antiga.
+  const area = extrairAreaM2(base.descricao || '')
+    || extrairAreaM2(txt, { permitirSolta: false })
+    || num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
   const { cidade, estado } = cidadeUF(txt, base.titulo || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
