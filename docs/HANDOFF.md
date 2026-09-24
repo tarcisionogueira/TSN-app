@@ -33070,3 +33070,16 @@ R$ 7.956; HB20 2020 R$ 76.138). Job tinha `timeout-minutes: 15` e era cortado an
 Sem casamento eram quase todos nome de VERSÃO no lugar do modelo ("HONDA FAN 125" = "CG 125 Fan",
 "C-100 BIZ" = "Biz 100") e marca em sigla da fonte ("MMC") — fallback por versão + alias da marca.
 Os sem_match do 1º run foram zerados para retentar com a régua nova (senão esperariam 90 dias).
+
+### 🏷️ Resultado do leilão: só "Com lance" / "Sem lance" (dono, 24/09)
+Dois casos do dono (SUPERBID 5020871 Ford Ka · 5020882 Jeep Compass) apareciam no filtro "Sem
+lance" e tinham lance: a apuração residencial dá `condicional` quando o lance fica abaixo de
+`reservedPrice` (Compass: 8 lances, R$ 87.000 × reserva R$ 157.281) e grava 'indeterminado' — que
+o filtro juntava com sem lance. Novo `veiculos_leilao.teve_lance` (migração `veiculo_teve_lance.sql`,
+gatilho: SUPERBID com `raw.price` > `valor_minimo`; validado: 0 de 419 sem_lance, 35 de 55 vendidos;
+o script residencial também liga quando `totalBids` > 0). Tela: selo e filtro só com DUAS saídas —
+"Com lance" (vendido, ou teve_lance já apurado) e "Sem lance" (sem_lance, ou indeterminado sem
+lance). 'indeterminado' continua no banco só para a reapuração. 62 saíram do "Sem lance".
+Imóveis: mesmos rótulos (sem sinal de lance equivalente → indeterminado = sem lance).
+Bônus: `VeiculoDetalhe.jsx` não selecionava `resultado_leilao` — o selo e a reapuração ao abrir
+nunca rodavam na tela do veículo.

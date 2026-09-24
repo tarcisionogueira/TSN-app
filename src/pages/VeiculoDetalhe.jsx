@@ -18,10 +18,12 @@ const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 // Resultado real do leilão (21/09) — mesmo mapa de BuscaVeiculos.jsx (RESULTADO_BADGE) e de
 // ImovelDetalhe.jsx. 'indeterminado' com nome honesto: a busca já o trata junto de "sem
 // lance", mas aqui, no lote específico, nunca finge uma confirmação que ainda não existe.
+// Só DUAS saídas para o cliente (dono, 24/09): "Com lance" ou "Sem lance". 'indeterminado' continua
+// no banco (a reapuração usa), mas não aparece: sem sinal de lance, é tratado como sem lance.
 const RESULTADO_LEILAO_BADGE = {
-  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Resultado indeterminado', bg: '#f1f5f9', fg: '#64748b' },
+  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
 };
 
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
@@ -50,6 +52,8 @@ const COLUNAS = [
   'link_lote', 'fotos', 'data_leilao', 'leiloeiro', 'sinistro', 'is_sucata', 'financiavel',
   'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao', 'tipo_veiculo',
   'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
+  // faltavam até 24/09: sem elas o selo de resultado e a reapuração ao abrir nunca rodavam aqui
+  'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
 ].join(',');
 
 // FIPE 'aproximado'/'sem_match'/'sem_dados' explicados na tela — nunca um número sem contexto
@@ -212,8 +216,8 @@ export default function VeiculoDetalhe() {
 
           {/* Resultado real do leilão (21/09) — só depois de encerrado e já apurado; ausência
               aqui é "ainda não sei", nunca "não vendeu". */}
-          {v.resultado_leilao && leilaoEncerrado && RESULTADO_LEILAO_BADGE[v.resultado_leilao] && (() => {
-            const rb = RESULTADO_LEILAO_BADGE[v.resultado_leilao];
+          {v.resultado_leilao && leilaoEncerrado && RESULTADO_LEILAO_BADGE[v.teve_lance && v.resultado_leilao ? 'vendido' : v.resultado_leilao] && (() => {
+            const rb = RESULTADO_LEILAO_BADGE[v.teve_lance && v.resultado_leilao ? 'vendido' : v.resultado_leilao];
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: rb.bg, color: rb.fg, padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700 }}>
                 {rb.texto}{v.valor_lance_vencedor > 0 ? ` — ${fmtBRL(v.valor_lance_vencedor)}` : ''}

@@ -33,7 +33,7 @@ const COLUNAS = [
   'valor_fipe', 'fipe_status',
   // Resultado REAL do leilão (21/09) — apurado por api/apurar-resultado-leilao-cron.js
   // revisitando a página de cada lote. Substitui a antiga inferência por data ("negativo").
-  'resultado_leilao', 'valor_lance_vencedor',
+  'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
 ].join(',');
 
 // RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
@@ -43,8 +43,8 @@ const COLUNAS = [
 // veículo, que reapura contra o leiloeiro ao abrir e resolve o indeterminado quando dá. Já
 // 'nao_apurado' aqui é só NULL (nunca tentado).
 const RESULTADO_OPTS = [
-  ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem sinal de venda — inclui os já confirmados "sem lance" e os "indeterminados" (tentamos, mas a página do leiloeiro não deu resposta clara). Oportunidade de propor compra direta.'],
+  ['vendido', 'Com lance', 'O leilão recebeu lance — arrematado, ou lance abaixo da reserva aguardando o comitente.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem nenhum lance registrado. Oportunidade de propor compra direta.'],
   ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 
@@ -167,11 +167,17 @@ function contagemLeilao(d) {
 // apuração já rodou; ausente = "ainda não apurado" (nada exibido, não é "sem resultado").
 // 'indeterminado' aparece no CARD com o nome honesto — o filtro "Sem lance" já o inclui junto
 // (pedido do dono, 21/09), mas o rótulo individual não pode fingir confirmação que não existe.
+// Só DUAS saídas para o cliente (dono, 24/09): "Com lance" ou "Sem lance". 'indeterminado' continua
+// no banco (a reapuração usa), mas não aparece: sem sinal de lance, é tratado como sem lance.
+// `teve_lance` (24/09): lance registrado na fonte (SUPERBID: preço acima do mínimo) — o Ka e o Compass
+// do dono tinham lance abaixo da reserva e apareciam como "indeterminado" dentro de "Sem lance".
 const RESULTADO_BADGE = {
-  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Indeterminado', bg: '#f1f5f9', fg: '#64748b' },
+  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
 };
+// só vale depois de apurado: leilão ainda aberto com lance não tem RESULTADO
+const chaveResultado = (v) => (v.teve_lance && v.resultado_leilao ? 'vendido' : v.resultado_leilao);
 
 // Desconto = quanto o lance mínimo está abaixo da avaliação do PRÓPRIO leiloeiro. Sem
 // avaliação (comum quando a API não a traz), não há desconto para mostrar — melhor
@@ -341,8 +347,9 @@ export default function BuscaVeiculos() {
       else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
       // RESULTADO DO LEILÃO (21/09) — mesma régua de Busca.jsx (imóveis): 'sem_lance' agrupa
       // 'sem_lance' E 'indeterminado' (nenhum tem sinal de venda); 'nao_apurado' é só NULL.
-      if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,resultado_leilao.eq.indeterminado');
+      if (f.resultadoLeilao === 'sem_lance') q = q.or('resultado_leilao.eq.sem_lance,and(resultado_leilao.eq.indeterminado,teve_lance.is.false)');
       else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
+      else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
       else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
@@ -608,8 +615,8 @@ export default function BuscaVeiculos() {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
                     {/* Resultado REAL (21/09) — quando já apurado, é o sinal que importa;
                         a contagem de data abaixo é só complemento, nunca contradiz este. */}
-                    {v.resultado_leilao && RESULTADO_BADGE[v.resultado_leilao] && (() => { const rb = RESULTADO_BADGE[v.resultado_leilao]; return (
-                      <span title={v.resultado_leilao === 'sem_lance' ? 'Apurado na página do leiloeiro — encerrou sem lance, candidato a proposta de venda direta' : 'Apurado na página do leiloeiro — o lote foi arrematado'} style={{ fontSize: 9, fontWeight: 800, background: rb.bg, color: rb.fg, padding: '1px 6px', borderRadius: 8 }}>{rb.texto}</span>
+                    {chaveResultado(v) && RESULTADO_BADGE[chaveResultado(v)] && (() => { const rb = RESULTADO_BADGE[chaveResultado(v)]; return (
+                      <span title={chaveResultado(v) === 'vendido' ? 'Apurado na página do leiloeiro — o lote recebeu lance' : 'Apurado na página do leiloeiro — encerrou sem lance, candidato a proposta de venda direta'} style={{ fontSize: 9, fontWeight: 800, background: rb.bg, color: rb.fg, padding: '1px 6px', borderRadius: 8 }}>{rb.texto}</span>
                     ); })()}
                     {cont
                       ? <span title="Data do leilão" style={{ fontSize: 9, fontWeight: 800, background: cont.bg, color: cont.fg, padding: '1px 6px', borderRadius: 8 }}>🗓 {cont.texto}</span>
@@ -623,7 +630,7 @@ export default function BuscaVeiculos() {
                   </button>
                   {/* Gate de "Propor" trocado de inferência por data para resultado REAL
                       apurado (21/09) — evita propor compra num lote que na verdade vendeu. */}
-                  {podePropor && v.resultado_leilao === 'sem_lance' && (
+                  {podePropor && ['sem_lance', 'indeterminado'].includes(chaveResultado(v)) && (
                     <button onClick={e => { e.stopPropagation(); abrirProposta(v); }} title="Propor compra direta ao leiloeiro — leilão já ocorreu sem comprador"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 10px', background: '#6d28d9', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       <Mail size={12} /> Propor

@@ -119,6 +119,9 @@ for (const a of alvos) {
     // em_andamento: a data do nosso acervo venceu mas o site ainda aceita lance (praça
     // prorrogada). Conta a tentativa sem gravar resultado — senão o lote volta ao topo da
     // fila todo dia e come as vagas dos outros.
+    // Lance registrado (24/09): condicional/indeterminado COM lance não é "sem lance" para o
+    // cliente — só duas saídas na tela (dono). `teve_lance` só liga, nunca desliga.
+    if (a.tabela === 'veiculos_leilao' && c && (c.lances > 0 || c.recebeuLanceOuProposta)) patch.teve_lance = true;
     if (res === 'em_andamento') { /* só a tentativa */ }
     else if (res === 'vendido' || res === 'sem_lance') {
       patch.resultado_leilao = res;

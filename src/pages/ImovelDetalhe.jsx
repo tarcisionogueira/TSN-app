@@ -30,9 +30,9 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lo
 // aparece com o nome honesto: o filtro de busca já o trata como candidato a "sem lance", mas
 // o rótulo individual nunca finge uma confirmação que ainda não existe.
 const RESULTADO_LEILAO_BADGE = {
-  vendido: { texto: 'Vendido', bg: '#dcfce7', fg: '#15803d' },
+  vendido: { texto: 'Com lance', bg: '#dcfce7', fg: '#15803d' },
   sem_lance: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' },
-  indeterminado: { texto: 'Resultado indeterminado', bg: '#f1f5f9', fg: '#64748b' },
+  indeterminado: { texto: 'Sem lance', bg: '#f3e8ff', fg: '#6d28d9' }, // só 2 saídas para o cliente (dono, 24/09)
 };
 
 const TIPO_ANEXO_LABEL = {

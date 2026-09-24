@@ -122,8 +122,8 @@ const PRAZO_OPTS = [
 // (ver ImovelDetalhe.jsx — reabre e tenta de novo contra o leiloeiro ao abrir a tela). Já
 // 'nao_apurado' aqui é só NULL — nunca tentado (leilão nem encerrou, ou o cron ainda não chegou).
 const RESULTADO_OPTS = [
-  ['vendido', 'Vendido', 'O leilão teve lance — o lote foi arrematado.'],
-  ['sem_lance', 'Sem lance', 'O leilão encerrou sem sinal de venda — inclui os já confirmados "sem lance" e os "indeterminados" (tentamos, mas a página do leiloeiro não deu uma resposta clara). Oportunidade de propor compra direta.'],
+  ['vendido', 'Com lance', 'O leilão recebeu lance — o lote foi arrematado.'],
+  ['sem_lance', 'Sem lance', 'O leilão encerrou sem lance registrado. Oportunidade de propor compra direta.'],
   ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
 function calcularJanelaPrazo(opcao) {
