@@ -32952,3 +32952,27 @@ apagando o que a pessoa mudou e voltando à pág. 1 — agora vale só na chegad
   texto longo só existe na página de DETALHE da oferta → exige recon do endpoint de detalhe
   (site inacessível deste ambiente) e ~1.400 requisições — NÃO feito às cegas. Tentativa de
   herdar descrição da CEF pelo nº do imóvel: 0 casamentos (PESTANA/SUPERBID não trazem o nº).
+
+### ✅ Itens 11 e 12 (24/09, noite)
+**11 — matrícula ausente:** não há matrícula escondida para recuperar — mas boa parte dos
+"anexos" desses lotes era lixo que a regra de cedo não conhecia: JELEILOES (cartilha do
+arrematante + currículo em 222 lotes), SUPERBID/SBID9 (MAISATIVO-RELATORIO.pdf = Relatório de
+Transparência e Igualdade Salarial, 1.363 ocorrências — a regra olhava só a URL; agora o NOME
+também), links para OUTRAS ofertas gravados como anexo ("Compre já R$…", "Cód. do Produto",
+"2 praças | … Lote 2") em SUPERBID e WEBLEILOES. `anexo_lixo_cartilha_e_link_de_oferta.sql` +
+`RE_DOC_INSTITUCIONAL` no JS. 0 restante. PDFs UUID da SUPERBID repetidos em ~200 lotes NÃO
+removidos (podem ser edital coletivo). LEILAOBRASIL: 129 lotes têm o NÚMERO da matrícula sem o
+arquivo — obter o PDF exigiria consulta paga (ONR/cartório); fica como está.
+**12 — qualidade:** `estado_fora_do_padrao` 40 → 24 com `uf_da_cidade_unica()` + gatilho
+`trg_zy_uf_pela_cidade_unica` (UF vazia + cidade de nome ÚNICO no IBGE → essa UF; homônima fica
+vazia). 76 linhas recuperadas (SUPERBID/SOLD São Paulo, Manaus). Os 24 restantes não têm cidade
+(ALBERTOMACEDO 12, LEILOTECH 3…) — é captura. `praca_fim_antes_do_inicio` 5: MEGA/SODRE/GRUPOLANCE
+gravam em `data_leilao` a praça VIGENTE (2ª), não a 1ª — o cliente vê a data certa da próxima
+praça; o invariante presume 1ª praça. WEBLEILOES: fim sem hora (fuso). NÃO alterado: mudar a
+semântica de `data_leilao` mexe no filtro de prazo/contagem regressiva — decisão de produto.
+
+### 🤖 Agente de curadoria das oportunidades — NÃO EXISTE (confirmado 24/09)
+`enviar-alertas-cron` é regra fixa: raio/cidade, teto de capital, desconto ≥ 40%, ordena por
+desconto. Nenhuma IA; `score_financeiro/juridico/localizacao/viabilidade` e `valor_mercado` do
+lote não são usados; comportamento no site (imóveis vistos, casos, favoritos) também não.
+Proposta apresentada ao dono (aguardando OK — tem custo recorrente de IA).
