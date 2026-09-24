@@ -1,0 +1,38 @@
+name: Residencial — apuração + datas EM SECO (não grava)
+
+# Validação do scripts/apurar-e-datar-residencial.mjs sobre dado real ANTES de o runner da casa do
+# dono gravar (forma nº 10 do CLAUDE.md). GitHub é datacenter: fonte que barra datacenter aparece
+# como "não abriu" aqui e funciona no runner — o que se confere é a LEITURA das que abrem.
+on:
+  workflow_dispatch:
+    inputs:
+      apurar:
+        description: 'Fontes para apurar (vírgula)'
+        default: 'ZUK'
+      datas:
+        description: 'Fontes para datar (vírgula)'
+        default: 'BIASI,LJUD,GRUPOLANCE'
+      limite:
+        description: 'Lotes por parte'
+        default: '12'
+
+jobs:
+  seco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Em seco
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RESID_APURAR: ${{ inputs.apurar }}
+          RESID_DATAS: ${{ inputs.datas }}
+          RESID_APURAR_LIMITE: ${{ inputs.limite }}
+          RESID_DATAS_LIMITE: ${{ inputs.limite }}
+          RESID_PAUSA_MS: '800'
+        run: node scripts/apurar-e-datar-residencial.mjs
