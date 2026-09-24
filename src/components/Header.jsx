@@ -365,7 +365,7 @@ export default function Header() {
               Fundo transparente de propósito: o depósito traz a marca sobre retângulo escuro
               e o header é #111, então o retângulo apareceria como emenda. `width`/`height`
               explícitos evitam o pulo de layout enquanto a imagem carrega. */}
-          <img src="/logo.png" alt="BidPro Brasil" width={109} height={40} style={{ height: 40, width: 'auto' }} />
+          <img src="/logo.webp" alt="BidPro Brasil" width={109} height={40} style={{ height: 40, width: 'auto' }} />
         </button>
 
         {/* Nav desktop */}

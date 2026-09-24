@@ -33216,6 +33216,24 @@ Gemini) na agenda Google de 28/09. Windsor NÃO será contratado (gestor de trá
 acompanha) — `mkt_ingestao_atrasada` vai seguir em alerta; domínio da masterclass fica com o
 lançador. Restam sem UF 23 lotes sem cidade em lugar nenhum (não chutar).
 
+### 🔧 KRON/VIP, localização e carregamento (24/09, noite)
+- **KRON** = Superbid white-label (store 16180): página /oferta montada no navegador → saiu da
+  leitura por HTML (runner e cron) e entrou em `apurar-superbid-residencial.mjs` (offer-query por
+  id, classificador testado). **VIP**: runner com fetch simples (Vercel/GitHub = conexão recusada);
+  conferir na 1ª rodada real; se o resultado vier por JS, cair para `fetchResidencial` (Chromium).
+- **Localização**: "sem coordenada: 1" MEDIA ERRADO (0,0 contava como coordenada — forma #10);
+  ~270 imóveis ativos estavam em 0,0/centro do Brasil → coordenadas zeradas, voltam à fila de
+  geocode. UF/cidade por vizinho geocodificado (< 0,05°): 4 imóveis SUPERBID + 17 veículos SUPERBID
+  (Campo Grande/MS). Veículos LJUD: "Cidade/UF" do título (20). Lote de teste da LJUD
+  ("LEILÃO SIMULAÇÃO") desligado. ALBERTOMACEDO: coordenada é o ponto do leiloeiro, não do
+  imóvel — não usado. Restam: 134 veículos SUPORTE (tenant Golden Lance, pátio só na página do
+  lote), veículos SUPERBID sem location, imóveis sem nenhuma pista (precisam do edital).
+- **Sem área (799)**: 34 fontes (SUPERBID 188, BIASI 97, JELEILOES 88, LJUD 63, LEILAOBRASIL 59);
+  ~180 já dizem a área na descrição (extração falhou) e quase todos têm edital.
+- **Carregamento inicial**: 215 → 188 KB gz (entrada 129 → 102). 6 componentes do App sob demanda
+  (chat, tour, KYC — levava o QR code de 51 KB —, completar cadastro, boas-vindas, sugestão),
+  logo 65 KB PNG → 10 KB WebP, preconnect ao Supabase.
+
 ### 🌐 Domínio da masterclass `lucreantesdearrematar.com.br` (24/09, aula de 15/10)
 Dono contratou o domínio; a aula semanal de quarta ACABOU (`leilao-ao-vivo` segue `ativo=false`).
 - Vercel: domínio + `www` (308 → raiz) no projeto tsn-app, verificados.

@@ -1,5 +1,6 @@
 /**
- * APURAÇÃO SUPERBID/SOLD pelo IP RESIDENCIAL — 23/09/2026.
+ * APURAÇÃO SUPERBID/SOLD pelo IP RESIDENCIAL — 23/09/2026. (24/09: + KRONLEILOES — é loja white-label
+ * da Superbid, store 16180; a página /oferta/<id> é montada no navegador, então só a offer-query lê.)
  *
  * Por que existe: 4.460 imóveis SUPERBID, 349 SOLD e 2.186 veículos SUPERBID vencidos sem
  * resultado. O cron da Vercel lê a página /oferta/<id>, que é montada no navegador e, de
@@ -60,7 +61,7 @@ if (process.env.SBID_IDS) {
   const ordem = 'resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst';
   const meio = Math.ceil(LIMITE / 2);
   const [imo, vei] = await Promise.all([
-    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
+    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD,KRONLEILOES)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
     // indeterminado COM lance registrado já é "Com lance" (condicional) — não gasta vaga retentando
     sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&teve_lance=is.false&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=${ordem},data_leilao.desc&limit=${LIMITE - meio}`),
   ]);

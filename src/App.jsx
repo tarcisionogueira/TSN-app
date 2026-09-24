@@ -7,17 +7,22 @@ import { PlanosProvider } from './contexts/PlanosContext';
 import { AnalisesProvider } from './contexts/AnalisesContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import TourGuia from './components/TourGuia';
+// CARREGAMENTO INICIAL (24/09): estes 6 só aparecem em certas situações (logado, KYC pendente,
+// tour, chat aberto…) e iam no arquivo de entrada — inclusive o gerador de QR code (51 KB) via
+// KycParceiroModal → ContinuarNoCelular. Sob demanda, a 1ª tela pinta antes; cada um tem o
+// próprio Suspense vazio, então nada espera por eles. (TermosAtualizadosModal fica: exporta
+// funções usadas por módulos que já carregam no início.)
+const TourGuia = lazy(() => import('./components/TourGuia'));
 import ContratoObrigatorio from './components/ContratoObrigatorio';
-import CompletarCadastroModal from './components/CompletarCadastroModal';
-import KycParceiroModal from './components/KycParceiroModal';
+const CompletarCadastroModal = lazy(() => import('./components/CompletarCadastroModal'));
+const KycParceiroModal = lazy(() => import('./components/KycParceiroModal'));
 import TermosAtualizadosModal from './components/TermosAtualizadosModal';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
-import ChatSuporte from './components/ChatSuporte';
-import BoasVindasModal from './components/BoasVindasModal';
+const ChatSuporte = lazy(() => import('./components/ChatSuporte'));
+const BoasVindasModal = lazy(() => import('./components/BoasVindasModal'));
 import SenhaPendenteModal from './components/SenhaPendenteModal';
 import { useVezDoModal } from './utils/filaModais';
-import SugestaoImovel from './components/SugestaoImovel';
+const SugestaoImovel = lazy(() => import('./components/SugestaoImovel'));
 import PwaInstall from './components/PwaInstall.jsx';
 // Páginas carregadas SOB DEMANDA (code-splitting): cada rota vira um chunk próprio,
 // então o navegador baixa só a tela que o usuário abre — abertura mais rápida e menos
@@ -335,19 +340,19 @@ function MainLayout() {
       {/* `user &&` além do estado: o popup depende de user.id e o showBonus é assíncrono —
           sem o guard, a corrida logout×estado quebra o shell em QUALQUER rota. */}
       {showBonus && user && <PopupBonusAnalises userId={user.id} bonus={showBonus} onFechar={() => setShowBonus(false)} />}
-      {isLoggedIn && <TourGuia />}
+      {isLoggedIn && <Suspense fallback={null}><TourGuia /></Suspense>}
       {user && <ContratoObrigatorio userId={user.id} />}
-      {user && <CompletarCadastroModal />}
+      {user && <Suspense fallback={null}><CompletarCadastroModal /></Suspense>}
       {user && <SenhaPendenteModal />}
-      {user && <KycParceiroModal />}
+      {user && <Suspense fallback={null}><KycParceiroModal /></Suspense>}
       {user && <TermosAtualizadosModal />}
       {user && <ToastRelatorioPronto />}
       {/* Boas-vindas: entra por ULTIMO entre os modais para nunca cobrir uma pendência
           que trava a conta (contrato, cadastro, KYC, termos). Ele mesmo se cala quando a
           pessoa já assistiu — ver o componente. */}
-      {user && <BoasVindasModal />}
-      {isLoggedIn && <SugestaoImovel />}
-      <ChatSuporte />
+      {user && <Suspense fallback={null}><BoasVindasModal /></Suspense>}
+      {isLoggedIn && <Suspense fallback={null}><SugestaoImovel /></Suspense>}
+      <Suspense fallback={null}><ChatSuporte /></Suspense>
       <main style={{ flex: 1 }}>
         <Suspense fallback={<PageLoading />}>
         <Routes>

@@ -8,7 +8,9 @@
  * Data — 25/dia — sobra para o resto). Sem carimbo há 7+ dias, ou carimbo ilegível, os crons
  * voltam a cobri-las: na dúvida, cobrir (falhar ABERTO para a reserva, nunca deixar a fonte órfã).
  */
-export const FONTES_APURACAO_RESIDENCIAL = ['ZUK', 'KRONLEILOES', 'VIP', 'JELEILOES'];
+// KRONLEILOES saiu em 24/09: é Superbid white-label (página montada no navegador) — apurada pela
+// offer-query em scripts/apurar-superbid-residencial.mjs, como SUPERBID/SOLD.
+export const FONTES_APURACAO_RESIDENCIAL = ['ZUK', 'VIP', 'JELEILOES'];
 export const FONTES_DATAS_RESIDENCIAL = ['BIASI', 'LJUD', 'GRUPOLANCE'];
 export const HB_APURACAO = 'runner_residencial_apuracao';
 export const HB_DATAS = 'runner_residencial_datas';
