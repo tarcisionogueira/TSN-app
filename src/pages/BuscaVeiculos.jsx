@@ -486,19 +486,19 @@ export default function BuscaVeiculos() {
           </div>
           <div>
             <label style={lbl}>Ano de</label>
-            <input style={inp} type="number" placeholder="2010" value={filtros.anoMin} onChange={e => setFiltros(f => ({ ...f, anoMin: e.target.value }))} />
+            <input style={inp} type="number" placeholder="Ex.: 2010" value={filtros.anoMin} onChange={e => setFiltros(f => ({ ...f, anoMin: e.target.value }))} />
           </div>
           <div>
             <label style={lbl}>Ano até</label>
-            <input style={inp} type="number" placeholder="2024" value={filtros.anoMax} onChange={e => setFiltros(f => ({ ...f, anoMax: e.target.value }))} />
+            <input style={inp} type="number" placeholder="Ex.: 2024" value={filtros.anoMax} onChange={e => setFiltros(f => ({ ...f, anoMax: e.target.value }))} />
           </div>
           <div>
             <label style={lbl}>Lance máx. (R$)</label>
-            <input style={inp} type="number" placeholder="50000" value={filtros.valorMax} onChange={e => setFiltros(f => ({ ...f, valorMax: e.target.value }))} />
+            <input style={inp} type="number" placeholder="Ex.: 50000" value={filtros.valorMax} onChange={e => setFiltros(f => ({ ...f, valorMax: e.target.value }))} />
           </div>
           <div>
             <label style={lbl}>Avaliação máx. (R$)</label>
-            <input style={inp} type="number" placeholder="80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
+            <input style={inp} type="number" placeholder="Ex.: 80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
             {filtros.valorAvaliacaoMax && <small style={avisoCobertura}>{AVISO_SEM_AVALIACAO}</small>}
           </div>
           <div>
