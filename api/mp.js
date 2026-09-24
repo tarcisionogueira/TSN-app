@@ -235,6 +235,32 @@ async function criarPreferencia({ plano: planoKey, email, nome, cpf, userId, par
   return criarPreferenciaSimples({ titulo: cfg.nome, valor: cfg.valor, email, nome, cpf, userId, planoKey, parcelas });
 }
 
+// PAGADOR COMPLETO NO CHECKOUT PRO (24/09) — mesma régua do pagamento direto (mp-checkout.js):
+// a "Qualidade da integração" do MP estava em 47/100 (mínimo 73) e o link de pagamento mandava só
+// nome/e-mail/CPF. O MP pede nome E sobrenome, telefone e endereço do comprador. Vem do PERFIL do
+// dono da cobrança; leitura falhou ou perfil incompleto → segue com o que tinha (nunca trava).
+async function payerDaPreferencia({ nome, email, cpf, userId }) {
+  const base = { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined };
+  if (!userId || !SB_URL || !SB_KEY) return base;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=nome,telefone,endereco_cep,endereco_logradouro,endereco_numero`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) { console.error('[mp] perfil do pagador devolveu', r.status, '— preferência segue sem enriquecer'); return base; }
+    const [pf] = await r.json().catch(() => []);
+    if (!pf) return base;
+    const partes = String(pf.nome || nome || '').trim().split(/\s+/).filter(Boolean);
+    const tel = String(pf.telefone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+    const numero = Number(String(pf.endereco_numero || '').replace(/\D/g, '')) || undefined;
+    return {
+      ...base,
+      ...(partes.length ? { name: partes[0], surname: partes.slice(1).join(' ') || partes[0] } : {}),
+      ...(tel.length >= 10 ? { phone: { area_code: tel.slice(0, 2), number: tel.slice(2) } } : {}),
+      ...(pf.endereco_cep ? { address: { zip_code: String(pf.endereco_cep).replace(/\D/g, ''), street_name: pf.endereco_logradouro || undefined, street_number: numero } } : {}),
+    };
+  } catch (e) { console.error('[mp] enriquecer pagador da preferência falhou (segue sem):', e?.message || e); return base; }
+}
+
 async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId, planoKey, splitIndex, splitTotal, splitMetodo, parcelas }) {
   const excludedMethods = [];
   if (splitMetodo === 'pix')     excludedMethods.push('credit_card', 'debit_card', 'ticket');
@@ -253,7 +279,7 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
       currency_id:  'BRL',
       unit_price:   Number(valor),
     }],
-    payer: { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined },
+    payer: await payerDaPreferencia({ nome, email, cpf, userId }),
     back_urls: {
       success: `${BASE_URL}/#/checkout?plano=${planoKey}&status=approved`,
       failure: `${BASE_URL}/#/checkout?plano=${planoKey}&status=rejected`,
@@ -311,7 +337,7 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
   const back = `${BASE_URL}/#/p/${produto_tipo}/${produto_id}`;
   const pref = await mpPost('/checkout/preferences', {
     items: [{ id: String(produto_id), title: tituloComExtras(ini), description: tituloComExtras(ini), category_id: 'services', quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
-    payer: { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined },
+    payer: await payerDaPreferencia({ nome, email, cpf, userId }),
     back_urls: { success: `${back}?pago=1`, pending: `${back}?pago=pending`, failure: `${back}?pago=fail` },
     auto_return: 'approved',
     notification_url: WEBHOOK,

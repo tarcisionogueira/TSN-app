@@ -33185,3 +33185,16 @@ duas saídas visíveis. A apuração residencial retenta esses indeterminados (f
   as rodadas extras de 23-24/09 foram manuais. Fila 24/09: 5.633 (veículos 1.665 + 244 retentar;
   imóveis 3.665 + 59). `SBID_LIMITE` 400 → 1.200/rodada (~20 min a 1 consulta/s) → ~5-6 dias com a
   entrada diária. PESTANA/SODRE (resultado) não estão no runner — sem cronologia até implementar.
+
+### 💳 MP qualidade · ⚖️ nº do processo automático · 🏠 robô residencial 3× mais rápido (24/09, tarde)
+- **MP 47/100 (mín. 73):** a medição de 22/09 é ANTERIOR às correções — device ID (21/09, cartão) e
+  pagador completo no pagamento direto (24/09 manhã). Faltava o Checkout Pro (`api/mp.js`, link de
+  pagamento): `payerDaPreferencia` põe name/surname, phone e address do perfil nas duas preferências
+  (plano e produto). **Para a nota subir:** 1 pagamento real novo (cartão, pelo site) depois deste
+  deploy e o dono clicar "Medir novamente" com ele. O painel só mostra 1 de 7 ações — se sobrar
+  pendência, ler as 7 expandidas.
+- **Andamento do processo:** nº do processo pré-preenchido do lote arrematado (`imoveis_leilao.
+  numero_processo`, prop `imovelId`); `ufDoNumeroCnj` passa a deduzir o TRT (J=5) → UF, então o
+  processo trabalhista do dono (TRT5/BA) consulta só BA + TST + STJ, não os ~60 tribunais.
+- **Robô residencial:** `apurar-superbid-residencial.mjs` consulta 3 ofertas em paralelo
+  (`SBID_PARALELO`, pausa de 1,2 s por grupo) — 1.200 lotes em ~8 min em vez de ~25.

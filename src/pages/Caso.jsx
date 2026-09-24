@@ -1420,7 +1420,7 @@ export default function Caso() {
       {/* Andamento do processo (prazo processual pós-arremate) — SÓ ADMIN, pedido do dono 24/09.
           Diário de etapas + consulta sob demanda ao CNJ (DataJud/DJEN). Ver AndamentoProcessoCaso.jsx. */}
       {/* 24/09: equipe edita; o assessorado dono do caso acompanha em modo leitura (etapas visíveis ao cliente) */}
-      <AndamentoProcessoCaso casoId={caso.id} podeEditar={['admin', 'analista', 'consultor', 'advogado'].includes(role)} cardStyle={{ ...card, marginBottom:20 }} />
+      <AndamentoProcessoCaso casoId={caso.id} imovelId={caso.imovel_id} podeEditar={['admin', 'analista', 'consultor', 'advogado'].includes(role)} cardStyle={{ ...card, marginBottom:20 }} />
 
       {/* Certidões e diligências (checklist interativo do raio-X jurídico) */}
       {certidoes.length > 0 && (

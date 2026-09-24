@@ -102,8 +102,20 @@ async function consultar(ofertaId) {
 
 const dist = {};
 let gravados = 0, falhasGravacao = 0;
+// 3 CONSULTAS EM PARALELO (24/09): era 1 oferta por vez + 1,2 s de pausa — 1.200 lotes levavam
+// ~25 min. Agora 3 por vez com a mesma pausa entre grupos (~2,5 consultas/s do IP de casa, ainda
+// abaixo do que a própria página do site dispara ao navegar). A gravação continua uma por uma.
+const PARALELO = Number(process.env.SBID_PARALELO || 3);
+const respostas = new Map();
+for (let i = 0; i < alvos.length; i += PARALELO) {
+  const grupo = alvos.slice(i, i + PARALELO);
+  const qs = await Promise.all(grupo.map(a => consultar(a.ofertaId).catch(e => ({ ok: false, erros: [String(e?.message || e)] }))));
+  grupo.forEach((a, k) => respostas.set(a, qs[k]));
+  await new Promise(r => setTimeout(r, 1200)); // pausa por GRUPO — IP de casa, sem pressa
+}
+
 for (const a of alvos) {
-  const q = await consultar(a.ofertaId);
+  const q = respostas.get(a);
   if (q.ok && process.env.SBID_IDS) {
     // Diagnóstico: oferta inteira vai para o BANCO (recon_dump) — JSON longo demais para print.
     try {
@@ -153,7 +165,6 @@ for (const a of alvos) {
       if (Array.isArray(rp) && rp.length) gravados++; else { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
     } catch (e) { falhasGravacao++; console.log(`    ⚠️ ${e.message}`); }
   }
-  await new Promise(r => setTimeout(r, 1200)); // 1 oferta/s — IP de casa, sem pressa
 }
 await browser.close();
 

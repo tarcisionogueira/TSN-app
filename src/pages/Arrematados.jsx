@@ -330,7 +330,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
 
       {/* ANDAMENTO DO PROCESSO (24/09, pedido do dono): equipe consulta o CNJ (leilão judicial) e
           registra etapas com comentário; o assessorado dono deste arremate acompanha em leitura. */}
-      <AndamentoProcessoCaso arrematadoId={arr.id} podeEditar={ehEquipe}
+      <AndamentoProcessoCaso arrematadoId={arr.id} imovelId={arr.imovel_id || imovelId} podeEditar={ehEquipe}
         cardStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: 18 }} />
 
       {/* Revenda — captura a venda real (vira amostra do Índice BidPro + gabarito de precisão) */}

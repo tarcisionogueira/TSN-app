@@ -21,7 +21,7 @@ const btn = (bg = '#0D63DB') => ({ padding: '8px 14px', background: bg, color: '
 const inp = { width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' };
 const fmt = (d) => { if (!d) return '—'; const x = new Date(String(d).length === 10 ? `${d}T12:00:00` : d); return isNaN(x) ? String(d) : x.toLocaleDateString('pt-BR'); };
 
-export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = null, podeEditar = true, cardStyle }) {
+export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = null, imovelId = null, podeEditar = true, cardStyle }) {
   const dono = arrematadoId ? { col: 'arrematado_id', id: arrematadoId } : { col: 'caso_id', id: casoId };
   const [linhas, setLinhas] = useState([]);
   const [erroLista, setErroLista] = useState('');
@@ -46,6 +46,16 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
   }, [dono.col, dono.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Nº do processo JÁ CONHECIDO (24/09, dono: "não preciso digitar, já há o processo que ocasionou o
+  // leilão"): vem do lote arrematado quando o diário ainda não registrou nenhum número.
+  useEffect(() => {
+    if (!podeEditar || !imovelId) return;
+    let vivo = true;
+    supabase.from('imoveis_leilao').select('numero_processo').eq('id', imovelId).maybeSingle()
+      .then(({ data }) => { if (vivo && data?.numero_processo) setNumero(prev => prev || data.numero_processo); });
+    return () => { vivo = false; };
+  }, [imovelId, podeEditar]);
 
   const registrar = async ({ etapaTxt, observacao, origem = 'manual', dataEvento = null, referencia = null }) => {
     const e = String(etapaTxt || '').trim();

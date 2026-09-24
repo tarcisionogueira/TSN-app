@@ -30,10 +30,16 @@ async function sbGet(path) {
 
 // Justiça Estadual (J=8): o segmento TR do número CNJ é o tribunal — 01 AC … 27 TO.
 const UF_POR_TR_ESTADUAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SE','SP','TO'];
+// Justiça do Trabalho (J=5): o TR é o nº do TRT (24/09 — o arremate do dono é TRT5/BA; sem isto a
+// consulta varria os ~60 tribunais do país). TRT2 e TRT15 são ambos SP.
+const UF_POR_TRT = ['RJ','SP','MG','RS','BA','PE','CE','PA','PR','DF','AM','SC','PB','RO','SP','MA','ES','GO','AL','SE','RN','PI','MT','MS'];
 export function ufDoNumeroCnj(numero) {
   const d = String(numero || '').replace(/\D/g, '');
-  if (d.length !== 20 || d[13] !== '8') return null;
-  return UF_POR_TR_ESTADUAL[parseInt(d.slice(14, 16), 10) - 1] || null;
+  if (d.length !== 20) return null;
+  const tr = parseInt(d.slice(14, 16), 10) - 1;
+  if (d[13] === '8') return UF_POR_TR_ESTADUAL[tr] || null;
+  if (d[13] === '5') return UF_POR_TRT[tr] || null;
+  return null;
 }
 
 export default async function handler(req) {
