@@ -32998,3 +32998,24 @@ camada 1 e erro no log/linha. **Custo medido pelo tamanho real do prompt:** ~3,5
 `curadoria_ia: { ligada, usadas, falhas }`.
 **De quebra:** `api/saque-nf.js` mandava só `ANTHROPIC_API_KEY` (a Vercel tem `CLAUDE_KEY`) —
 leitura por IA da nota do saque provavelmente sempre vazia; agora `CLAUDE_KEY || ANTHROPIC_API_KEY`.
+
+### 📬 Cadência de e-mail por segmento (pedido do dono, 24/09) — `api/_cadencia.js`
+Números em `app_config.cadencia_email` (JSON, editável sem deploy). Oportunidades: **pagante**
+(top2/top2_anual/clube/admin) semanal + **alerta imediato** (dias sem a semanal, até 2/semana, só
+lote criado nas últimas 36 h com nota ≥ 80 da curadoria, até 3 itens, `tipo='oportunidade_imediata'`,
+não mexe no `ultimo_envio`); **assessorado** 14 d; **novo** (<14 d de conta) 7 d; **gratuito ativo**
+(site ou clique em 30 d) 14 d com 6 itens + chamada do Investidor Pro; **inativo** 28 d; **pausado**
+60 d (7 envios seguidos sem abrir; pagante nunca pausa). Substitui o piso mensal de 10/09.
+Folga de 12 h no relógio (`cedoDemais`). Resposta do cron: `cadencia: { cfg, por_segmento, imediatos }`.
+**Limite semanal de campanha** em `api/_email.js` (`enviarEmail`, antes do orçamento): tipos que
+casam `^(ativacao|divulgacao_|convite_live|live_reforco|campanha_|lancamento_)` (mesma regex da RPC
+`email_campanha_permitida`); gratuito 1 campanha/semana e máx. 2 e-mails/semana somando
+oportunidades; pagante 2 campanhas/semana. Barrado vira linha `emails_log.status='limitado'` e
+`{ ok:false, limitado:true }`. Lembrete a inscrito na live, boas-vindas, contrato, pagamento: fora.
+⚠️ A RPC conta como "saiu" tudo fora de enfileirado/suprimido/falha/limitado — o webhook troca
+`enviado` → `entregue` (1.816 de ~1.980 linhas); a 1ª versão contava só 'enviado' e o limite nunca
+bateria. Medido após o conserto: 61 de 159 gratuitos já no limite da semana corrente.
+RPCs novas: `alertas_sinais_lote(uuid[])`, `email_campanha_permitida(uuid)` (service_role only).
+Dry-run da distribuição: ativo 76 · inativo 57 · novo 26 · pagante 4 · assessorado 4 → ~84
+oportunidades/semana no teto (hoje ~70), redistribuídas para quem clica. Testes:
+`testar:cadencia`, `testar:curadoria`. IA da curadoria LIGADA via `app_config.curadoria_ia`.

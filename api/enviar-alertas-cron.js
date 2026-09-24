@@ -65,6 +65,7 @@ import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
+import { segmentoCadencia, cedoDemais, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
 import { TIPOS_POR_PERFIL, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
@@ -136,7 +137,7 @@ function centroide(cidade, uf) {
 // Este arquivo nunca a adotou: filtrava e MOSTRAVA a 1ª praça. `praca1_fim`/`praca2_fim`
 // entram porque `encerradoPorDatas` passou a lê-las — sem vir no SELECT, o e-mail decidiria
 // o prazo pelo início da 2ª praça e descartaria lote ainda em pregão.
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,fonte_id,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento';
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,fonte_id,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento,criado_em';
 
 // Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
 // site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
@@ -232,10 +233,6 @@ async function handler(req) {
   const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] GET', r.status, path.slice(0, 300), (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] GET erro', path.slice(0, 200), e?.message); return []; } };
   const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] RPC', fn, r.status, (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] RPC erro', fn, e?.message); return []; } };
 
-  const seteDias = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-  // Piso alternativo p/ quem não abre (ver engajamentoMap/alertas_engajamento_lote abaixo):
-  // reduz a cadência de semanal p/ mensal em vez de desligar — ainda existe chance de abrir.
-  const vinteOitoDias = new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString();
   // Inclui 'admin' (o dono acompanha os disparos) além dos planos.
   const ROLES = 'explorador,top2,top2_anual,assessorado,clube,admin';
 
@@ -253,7 +250,7 @@ async function handler(req) {
   const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
   const cursor = (qs.get('cursor') || '').trim();
 
-  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const perfisRaw = await sbGet(`perfis?select=id,nome,role,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
   const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
   const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
 
@@ -376,6 +373,10 @@ async function handler(req) {
   // "Sem interesse" do widget entra na MESMA exclusão dos já-enviados: não reaparece no e-mail.
   for (const f of semInteresseArr) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
   const engajamentoMap = {}; for (const e of engajamentoArr || []) engajamentoMap[e.user_id] = e;
+  // CADÊNCIA POR SEGMENTO (24/09, ./_cadencia.js): sinais de atividade/abertura em lote.
+  // Falha aqui = sem sinais → ninguém vira "ativo"; o gratuito antigo cai em "inativo" (28 d)
+  // nesta rodada. Degrada para MENOS e-mail, nunca para mais — e o rpc() já loga o erro.
+  const sinaisMap = {}; for (const x of await rpc('alertas_sinais_lote', { p_user_ids: ids }) || []) sinaisMap[x.user_id] = x;
 
   // CURADORIA (24/09) — o que cada cliente ABRIU no site nos últimos 60 dias (pageview de
   // /imovel/<id>). É o sinal de intenção mais honesto que temos. Lido EM LOTE (2 consultas por
@@ -617,6 +618,15 @@ async function handler(req) {
     const [cfg] = await sbGet('app_config?key=eq.curadoria_ia&select=value');
     CURADORIA_IA = !!cfg && String(cfg.value).replace(/"/g, '') === 'true';
   }
+  // Números da cadência (app_config.cadencia_email). Falha na leitura = padrão do código, e o
+  // cron diz isso na resposta (`cadencia_cfg: 'padrao'`) em vez de fingir que leu.
+  let cadCfg = CADENCIA_PADRAO, cadCfgOrigem = 'padrao';
+  {
+    const [row] = await sbGet('app_config?key=eq.cadencia_email&select=value');
+    try { if (row?.value) { cadCfg = { ...CADENCIA_PADRAO, ...JSON.parse(row.value) }; cadCfgOrigem = 'app_config'; } }
+    catch (e) { console.error('[alertas] cadencia_email inválida — usando o padrão', e?.message); }
+  }
+  const porSegmento = {}; let imediatos = 0;
   let suprimidos = 0;
   let cortadoPorOrcamentoEmail = false;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
@@ -636,6 +646,8 @@ async function handler(req) {
       // abaixo é o que aparece no rastro da varredura.
       if (suprimidosNoLote.has(email)) { suprimidos++; continue; }
       const a = alertaMap[perfil.id];
+      const seg = segmentoCadencia(perfil, sinaisMap[perfil.id], cadCfg);
+      let modo = 'recorrente'; // 'recorrente' | 'imediato' (alerta do pagante, ver abaixo)
       if (!testeEmail) {
         if (a && a.ativo === false) continue;                       // opt-out (descadastrado)
         const nunca = !a?.ultimo_envio;
@@ -644,8 +656,16 @@ async function handler(req) {
           const idadeMs = perfil.created_at ? (Date.now() - new Date(perfil.created_at).getTime()) : 0;
           if (idadeMs < 24 * 3600 * 1000) continue;
         } else {
-          // Recorrente: só às segundas (ou com ?forcar=1).
-          if (!isSegunda && !forcar) continue;
+          // CADÊNCIA POR SEGMENTO (24/09): o intervalo vem do segmento (pagante 7 · assessorado
+          // 14 · novo 7 · ativo 14 · inativo 28 · pausado 60 dias — app_config.cadencia_email).
+          // Recorrente continua só às segundas (ou ?forcar=1). Fora disso, o PAGANTE pode receber
+          // o ALERTA IMEDIATO (lote novo e excepcional no perfil dele, até N por semana).
+          const podeRecorrente = (isSegunda || forcar) && !cedoDemais(a.ultimo_envio, seg.dias);
+          if (!podeRecorrente) {
+            if (seg.segmento === 'pagante' && !forcar
+                && (sinaisMap[perfil.id]?.imediatos_7d || 0) < cadCfg.imediato_max_semana) modo = 'imediato';
+            else continue;
+          }
           // FREQUÊNCIA POR ENGAJAMENTO (pedido do dono, 10/09): quem não abriu NENHUM dos
           // últimos 4 e-mails semanais passa a valer o piso de 28 dias em vez de 7 — sem
           // isto o e-mail seguia batendo toda semana na caixa de quem nunca abre, que é o
@@ -654,8 +674,7 @@ async function handler(req) {
           // últimos 4 ENVIOS DE FATO — por isso quem tem menos de 4 nunca cai aqui: a amostra
           // ainda não fecha, e reduzir a cadência de quem ainda não teve a chance de abrir
           // seria punir a pessoa errada, não o padrão.
-          const semAbertura = precisaPisoMensal(engajamentoMap[perfil.id]);
-          if (a.ultimo_envio > (semAbertura ? vinteOitoDias : seteDias)) continue;
+          // (O piso mensal de quem não abre, de 10/09, virou o segmento "inativo"/"pausado".)
         }
       }
 
@@ -679,7 +698,7 @@ async function handler(req) {
       const uf = perfil.endereco_uf || filtroBase.estado || '';
 
       const enviadosSet = enviadosMap[perfil.id] || new Set();
-      const LIMITE = 12;
+      const LIMITE = modo === 'imediato' ? 3 : seg.itens;
       // CURADORIA (24/09): junta ~30 candidatos e ESCOLHE 12 (./_curadoria.js), em vez de parar
       // nos 12 primeiros por desconto. As buscas abaixo enchem até CANDIDATOS.
       const CANDIDATOS = 30;
@@ -857,7 +876,7 @@ async function handler(req) {
         .sort((x, y) => y.pontos - x.pontos);
       let selec = pontuados.slice(0, LIMITE).map(v => ({ ...v, motivo: motivoCurto(v.motivos) }));
       let curadoria = 'regra';
-      if (CURADORIA_IA && pontuados.length > 1) {
+      if (CURADORIA_IA && modo !== 'imediato' && pontuados.length > 1) {
         const ia = await curarComIA(pontuados.slice(0, 24), ctxCur, { limite: LIMITE });
         if (ia.ok) {
           const porId = new Map(pontuados.map(v => [v.im.id, v]));
@@ -874,6 +893,16 @@ async function handler(req) {
           console.error('[alertas] curadoria IA falhou — ordem da pontuação mantida', perfil.id, ia.erro);
         }
       }
+      if (modo === 'imediato') {
+        // ALERTA IMEDIATO DO PAGANTE (24/09): só lote NOVO (criado nas últimas N horas) E
+        // excepcional para ELE (nota ≥ piso da curadoria). Nada disso → não manda nada hoje:
+        // alerta que chega sem ser excepcional ensina a ignorar o alerta.
+        const desde = Date.now() - cadCfg.imediato_janela_horas * 3600 * 1000;
+        selec = pontuados
+          .filter(v => v.pontos >= cadCfg.imediato_piso_pontos && v.im.criado_em && new Date(v.im.criado_em).getTime() >= desde)
+          .slice(0, LIMITE).map(v => ({ ...v, motivo: motivoCurto(v.motivos) }));
+        curadoria = 'imediato';
+      }
       const top = selec.map(v => v.im);
       if (!top.length) continue;
       const nContrato = selec.filter(v => v.origem === 'filtro').length;
@@ -883,7 +912,7 @@ async function handler(req) {
       // visita e arremate). Mas quando nem os 200 km fecham as 12, o e-mail sai curto — e
       // isso NÃO pode acontecer em silêncio: grava aqui, aparece no Cliente 360, e o dono
       // decide a providência. Só grava quando FALTA; e-mail completo não deixa rastro.
-      if (!testeEmail && top.length < LIMITE) {
+      if (!testeEmail && modo !== 'imediato' && top.length < LIMITE) {
         try {
           const rCob = await fetch(`${URL_}/rest/v1/alerta_cobertura`, {
             method: 'POST',
@@ -960,10 +989,13 @@ async function handler(req) {
   <a href="${BASE}/#/buscar" style="text-decoration:none;">${cabecalhoEmailHTML()}</a>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${perfil.nome ? ', ' + escapeHtml(perfil.nome.split(' ')[0]) : ''}!</h2>
-    <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">Selecionamos <strong>${top.length} oportunidade${top.length > 1 ? 's' : ''}</strong> em <strong>${local}</strong> para você esta semana:</p>
+    <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">${modo === 'imediato'
+      ? `⚡ Acabou de entrar ${top.length > 1 ? `<strong>${top.length} oportunidades</strong> que combinam` : '<strong>uma oportunidade</strong> que combina'} muito com o seu perfil em <strong>${local}</strong>:`
+      : `Selecionamos <strong>${top.length} oportunidade${top.length > 1 ? 's' : ''}</strong> em <strong>${local}</strong> para você:`}</p>
     ${cards}
     <div style="text-align:center;margin-top:20px;"><a href="${BASE}/#/buscar" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver todos os imóveis →</a></div>
-    <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">BidPro Brasil · Você recebe estas oportunidades semanalmente · <a href="${unsubUrl}" style="color:#94a3b8;">Cancelar</a></p>
+    ${seg.segmento === 'ativo' ? `<div style="margin-top:18px;padding:14px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:13px;color:#1e3a8a;line-height:1.5;">No <strong>Investidor Pro</strong> você recebe as oportunidades <strong>toda semana</strong> e, quando entra algo excepcional no seu perfil, <strong>na hora</strong>. <a href="${BASE}/#/planos" style="color:#1d4ed8;font-weight:700;">Conhecer o plano →</a></div>` : ''}
+    <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">BidPro Brasil · ${modo === 'imediato' ? 'Alerta imediato do seu plano Investidor Pro' : `Você recebe estas oportunidades ${seg.rotuloFrequencia}`} · <a href="${unsubUrl}" style="color:#94a3b8;">Cancelar</a></p>
   </div>
 </div></body></html>`;
 
@@ -977,9 +1009,12 @@ async function handler(req) {
         const reserva = reservarOrcamentoEmail ? await reservarOrcamentoEmail() : { permitido: true };
         if (!reserva.permitido) { cortadoPorOrcamentoEmail = true; break; }
       }
+      const assunto = modo === 'imediato'
+        ? `⚡ Nova oportunidade no seu perfil em ${local}`
+        : `🏠 ${top.length} oportunidades em ${local}`;
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST', headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: FROM, to: email, subject: `🏠 ${top.length} oportunidades em ${local} esta semana`, html }),
+        body: JSON.stringify({ from: FROM, to: email, subject: assunto, html }),
         signal: AbortSignal.timeout(20000),
       });
       if (emailRes.ok) {
@@ -989,7 +1024,8 @@ async function handler(req) {
         // — nem depois de o webhook voltar ao ar. Best-effort: falha na leitura não
         // derruba o envio (o e-mail já saiu).
         const resendId = await emailRes.json().then((d) => d?.id || null).catch(() => null);
-        await fetch(`${URL_}/rest/v1/alertas_email?on_conflict=user_id`, {
+        // O alerta imediato NÃO mexe no relógio da cadência — a semanal da segunda segue igual.
+        if (modo !== 'imediato') await fetch(`${URL_}/rest/v1/alertas_email?on_conflict=user_id`, {
           method: 'POST',
           headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({ user_id: perfil.id, ultimo_envio: new Date().toISOString(), total_enviados: (a?.total_enviados || 0) + 1 }),
@@ -1000,7 +1036,7 @@ async function handler(req) {
           await fetch(`${URL_}/rest/v1/emails_log`, {
             method: 'POST',
             headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-            body: JSON.stringify({ user_id: perfil.id, destinatario: String(email).toLowerCase(), assunto: `🏠 ${top.length} oportunidades em ${local} esta semana`, tipo: 'oportunidades', status: 'enviado', resend_id: resendId }),
+            body: JSON.stringify({ user_id: perfil.id, destinatario: String(email).toLowerCase(), assunto, tipo: modo === 'imediato' ? 'oportunidade_imediata' : 'oportunidades', status: 'enviado', resend_id: resendId }),
             signal: AbortSignal.timeout(15000),
           });
         } catch { /* histórico é best-effort */ }
@@ -1018,6 +1054,8 @@ async function handler(req) {
           } catch { /* dedup é best-effort */ }
         }
         enviados++;
+        porSegmento[seg.segmento] = (porSegmento[seg.segmento] || 0) + 1;
+        if (modo === 'imediato') imediatos++;
         // Push com o mesmo resumo do e-mail (best-effort, não bloqueia o loop).
         if (!testeEmail) {
           await enviarPushOportunidades(
@@ -1049,5 +1087,5 @@ async function handler(req) {
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, cadencia: { cfg: cadCfgOrigem, por_segmento: porSegmento, imediatos }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }

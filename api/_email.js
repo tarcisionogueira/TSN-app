@@ -179,6 +179,34 @@ export async function consultarSupressao(destinos, tipo) {
   }
 }
 
+// Campanha = o que o cliente não pediu: divulgação, ativação, convite/reforço de live, campanhas,
+// lançamento. MESMA regex da função `email_campanha_permitida` no banco. Lembrete de live a
+// quem se INSCREVEU, boas-vindas, contrato, pagamento etc. não casam — e não são limitados.
+const RE_CAMPANHA = /^(ativacao|divulgacao_|convite_live|live_reforco|campanha_|lancamento_)/;
+export function ehCampanha(tipo) {
+  const t = String(tipo || '');
+  return RE_CAMPANHA.test(t) && !/_teste$/.test(t);
+}
+
+// true = pode · false = limite da semana atingido · null = não consegui verificar.
+async function campanhaPermitida(userId) {
+  if (!SB_URL || !SB_KEY) return null;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/email_campanha_permitida`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) { console.error('[email] email_campanha_permitida HTTP', r.status); return null; }
+    const v = await r.json();
+    return v === true ? true : v === false ? false : null;
+  } catch (e) {
+    console.error('[email] email_campanha_permitida erro', e?.message);
+    return null;
+  }
+}
+
 // meta (opcional): { tipo, userId } — categoriza e vincula o e-mail ao cliente.
 // Checa o orçamento diário ANTES de tudo; represa em `emails_fila` quando estoura. Quem
 // precisa mandar de verdade AGORA e já sabe que o orçamento permite (o cron que drena a
@@ -186,6 +214,29 @@ export async function consultarSupressao(destinos, tipo) {
 // estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
 export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  // LIMITE SEMANAL DE CAMPANHA (24/09, pedido do dono — ver api/_cadencia.js e a migração
+  // cadencia_por_segmento.sql). Gratuito: 1 campanha/semana e no máximo 2 e-mails/semana
+  // somando as oportunidades (que têm prioridade); pagante: 2 campanhas/semana. Checado ANTES
+  // do orçamento: e-mail barrado aqui não consome cota nem vai para a fila.
+  if (meta?.userId && ehCampanha(meta?.tipo)) {
+    const permitida = await campanhaPermitida(meta.userId);
+    if (permitida === false) {
+      await registrarEmailLog(destinos.map((dest) => ({
+        user_id: meta.userId,
+        destinatario: String(dest).toLowerCase().slice(0, 200),
+        assunto: (subject || '').slice(0, 300),
+        tipo: meta.tipo,
+        status: 'limitado',
+        erro: 'limite semanal de campanha do cliente (app_config.cadencia_email)',
+      })));
+      // Diz QUAL "não" (como o `suprimido`): quem chama não pode contar como entregue, nem
+      // gritar "falha de envio" por uma decisão de cadência.
+      return { ok: false, error: 'limite_semanal', limitado: true };
+    }
+    // null = não consegui checar → envia (derrubar campanha por um soluço do banco seria pior
+    // que um e-mail a mais), mas deixa rastro no log do servidor.
+    if (permitida === null) console.error('[email] limite semanal de campanha NÃO verificado — enviado assim mesmo', meta.userId, meta.tipo);
+  }
   const reserva = await reservarOrcamentoEmail();
   if (!reserva.permitido) {
     const enfileirou = await enfileirar({ to: destinos, cc, subject, html, text, replyTo, meta });

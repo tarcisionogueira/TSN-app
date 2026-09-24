@@ -51,6 +51,7 @@
     "testar:doc-teto": "node scripts/testes/matricula-grande-nao-pode-ser-recusada-por-nos.mjs",
     "testar:anexo-lixo": "node scripts/testes/anexo-do-lote-nao-e-botao-de-compartilhar.mjs",
     "testar:curadoria": "node scripts/testes/curadoria-respeita-perfil.mjs",
+    "testar:cadencia": "node scripts/testes/cadencia-por-segmento.mjs",
     "testar:sessao": "node scripts/testes/sessao-vencida-se-conserta-sozinha.mjs",
     "testar:analise-url": "node scripts/testes/analise-nao-depende-do-state-volatil.mjs",
     "testar:assessoria": "node scripts/testes/assessoria-so-para-investidor-pro.mjs",
