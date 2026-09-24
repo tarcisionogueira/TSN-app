@@ -226,6 +226,15 @@ rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS node scripts/s
 env SBID_APLICAR=1 SBID_LIMITE=1200 node scripts/apurar-superbid-residencial.mjs \
   || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"
 
+# ── APURAÇÃO ZUK + DATAS BIASI/LJUD/GRUPOLANCE (24/09, pedido do dono) ─────────────────────
+# Os crons da Vercel dependem da subcota diária `geral` do Bright Data (25/dia), que esgota:
+# ZUK ficava "sem conteúdo" (barra o Vercel, até em gru1) e BIASI/LJUD ganhavam ~2 datas/dia.
+# Daqui as páginas abrem direto e de graça. Mesmas regras dos crons (uma cópia só) — ver o
+# cabeçalho de scripts/apurar-e-datar-residencial.mjs. Sequencial, 1,5 s entre páginas.
+# Validado EM SECO no GitHub antes de ligar aqui (workflow residencial-seco.yml).
+env RESID_APLICAR=1 node scripts/apurar-e-datar-residencial.mjs \
+  || echo "  (apuração ZUK / datas falhou — sem efeito no acervo; ver as linhas [apuração]/[datas] acima)"
+
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
 # HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
 # IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
