@@ -33199,6 +33199,23 @@ no HTML) e fim = "2º Ciclo" de venda — `datasLjud()` em `enriquecer-lote.js` 
 Dívida: ~5 LJUD gravados pelo cron com início = dia da leitura (trigger impede zerar; corrigir
 quando o runner reler). `scripts/teste-extrair-datas.mjs` tem 4 ✗ ANTIGOS (datas fixas vencidas).
 
+### 🏠 Runner residencial — reserva de 7 dias pelo Bright Data (24/09, regra do dono)
+`api/_residencial.js` = lista única: apuração ZUK/KRONLEILOES/VIP/JELEILOES e datas BIASI/LJUD/
+GRUPOLANCE. O script do runner carimba `sistema_heartbeat` (`runner_residencial_apuracao` /
+`_datas`) SÓ quando leu páginas; `apurar-resultado-leilao-cron` e `enriquecer-datas-cron` PULAM
+essas fontes com carimbo < 7 dias e voltam a cobri-las (Bright Data, dentro das cotas) sem ele —
+na dúvida (carimbo ilegível) cobrem. LJUD agora é RELIDA em rodízio e a data sobrescrita (leitor
+exato) — corrige as ~5 gravadas errado. Coleta Suporte (JELEILOES/KLEILOES) lê 1ª E 2ª praça e o
+"Data Até" da venda direta (`testar:pracas-suporte`). NORDESTE: UF colada na cidade
+("guimaraesba") → estado BA (5 lotes corrigidos + parser). `teste-extrair-datas.mjs` com "hoje"
+fixo em 25/08 (os 4 ✗ eram datas vencidas). Veículos: lista do Admin abre a página interna; FIPE
+recarrega ao abrir quando > 25 dias. Arremate EXTRAJUDICIAL: painel troca o CNJ por atalhos de
+etapas (pagamento, escritura, ITBI, registro, desocupação) + link para CNJ se virar ação; lote do
+arremate de R$ 63.714,85 corrigido para `extrajudicial`. Lembretes do dono (Meta, Inter, WebISS,
+Gemini) na agenda Google de 28/09. Windsor NÃO será contratado (gestor de tráfego do lançador
+acompanha) — `mkt_ingestao_atrasada` vai seguir em alerta; domínio da masterclass fica com o
+lançador. Restam sem UF 23 lotes sem cidade em lugar nenhum (não chutar).
+
 ### 🌐 Domínio da masterclass `lucreantesdearrematar.com.br` (24/09, aula de 15/10)
 Dono contratou o domínio; a aula semanal de quarta ACABOU (`leilao-ao-vivo` segue `ativo=false`).
 - Vercel: domínio + `www` (308 → raiz) no projeto tsn-app, verificados.

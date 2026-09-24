@@ -55,6 +55,7 @@
     "testar:fipe": "node scripts/testes/fipe-titulo-e-cache.mjs",
     "testar:resultado-pagina": "node scripts/testes/resultado-leilao-pagina.mjs",
     "testar:datas-ljud": "node scripts/testes/datas-ljud.mjs",
+    "testar:pracas-suporte": "node scripts/testes/pracas-suporte.mjs",
     "testar:zuk-pracas": "node scripts/testes/zuk-pracas.mjs",
     "testar:patio-veiculo": "node scripts/testes/patio-veiculo.mjs",
     "testar:mp-sdk": "node scripts/testes/mp-sdk.mjs",

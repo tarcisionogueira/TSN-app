@@ -104,7 +104,11 @@ export default function VeiculoDetalhe() {
   // (api/veiculo-fipe.js + registrar_uso_fipe) — aqui só reage ao resultado.
   useEffect(() => {
     if (!v?.id) return;
-    const precisaBuscar = !v.fipe_atualizado_em || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'sem_dados');
+    // Recarrega ao abrir quando o valor passou de 25 dias (24/09, dono: "a FIPE deve ser recarregada
+    // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
+    // então reabrir no mesmo mês não gasta consulta da cota gratuita.
+    const velha = Date.now() - Date.parse(v.fipe_atualizado_em || 0) > 25 * 86400000;
+    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'sem_dados');
     if (!precisaBuscar) return;
     let cancelado = false;
     (async () => {

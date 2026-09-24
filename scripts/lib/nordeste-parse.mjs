@@ -52,6 +52,13 @@ function doSlug(slug) {
   for (const [nome, uf] of Object.entries(UF_POR_NOME)) {
     if (s.endsWith(`-${nome}`)) { estado = uf; resto = s.slice(0, -(nome.length + 1)); break; }
   }
+  // UF COLADA NA CIDADE (24/09): "…-wenceslau-guimaraesba", "…-lauro-de-freitasba" — sem hífen e
+  // sem o nome por extenso. Gravava cidade "Wenceslau Guimaraesba" e estado nulo (some de /leiloes).
+  if (!estado) {
+    const ufs = [...new Set(Object.values(UF_POR_NOME))].map(u => u.toLowerCase());
+    const m = resto.match(/-([a-z]{3,})([a-z]{2})$/);
+    if (m && ufs.includes(m[2])) { estado = m[2].toUpperCase(); resto = resto.slice(0, -2); }
+  }
   let area = 0;
   const ma = resto.match(/com-([\d.,]+)-?(m2|metros|hectares?|ha)\b/i) || resto.match(/([\d.,]+)(m2|ha)\b/i);
   if (ma) {
@@ -60,7 +67,7 @@ function doSlug(slug) {
   }
   // Cidade: o que sobra depois do último marcador de área/tipo — melhor esforço: últimas 1-3
   // palavras do slug sem números.
-  const palavras = resto.split('-').filter(w => w && !/\d/.test(w) && !/^(m2|ha|hectares?|com|de|do|da|em|urbano|rural|comercial|residencial|imovel|casa|apartamento|terreno|galpao|sala|lote)$/i.test(w));
+  const palavras = resto.split('-').filter(w => w && !/\d/.test(w) && !/^(m2|ha|hectares?|com|de|do|da|em|e|urbano|rural|comercial|residencial|imovel|casa|apartamento|terreno|galpao|sala|lote)$/i.test(w));
   const cidade = palavras.length ? titleCase(palavras.slice(-3).join(' ')).slice(0, 60) : null;
   return { estado, area, cidade };
 }

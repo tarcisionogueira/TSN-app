@@ -5178,7 +5178,9 @@ function VeiculosPilotoMonitor() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {exibir.slice(0, 30).map(v => (
-                <a key={v.id} href={v.link_lote} target="_blank" rel="noreferrer" style={{ padding: '8px 10px', background: v.status_patio === 'confirmado' ? '#f0fdf4' : '#f8fafc', borderRadius: 8, fontSize: 12.5, color: '#111111', textDecoration: 'none', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                // Página interna (24/09, dono: "ainda há lotes indo direto ao leiloeiro") — o link do
+                // leiloeiro fica dentro dela, junto com pátio, documentos e FIPE sob demanda.
+                <a key={v.id} href={`#/admin/veiculos-leilao/${v.id}`} style={{ padding: '8px 10px', background: v.status_patio === 'confirmado' ? '#f0fdf4' : '#f8fafc', borderRadius: 8, fontSize: 12.5, color: '#111111', textDecoration: 'none', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span>
                     {v.titulo}{v.ano_modelo ? ` (${v.ano_fabricacao}/${v.ano_modelo})` : ''}{v.placa ? ` · ${v.placa}` : ''}
                     {' — '}{v.cidade || '?'}/{v.estado || '?'}

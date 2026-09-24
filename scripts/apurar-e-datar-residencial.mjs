@@ -16,19 +16,26 @@
  * gasta tentativa (forma nº 4 — ausência não é resposta).
  *
  * EM SECO POR PADRÃO (forma nº 10: rodar sobre dado real antes de gravar). Grava com RESID_APLICAR=1.
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; RESID_APURAR (fontes, padrão ZUK);
- *      RESID_DATAS (fontes, padrão BIASI,LJUD,GRUPOLANCE); RESID_APURAR_LIMITE (300);
+ * HEARTBEAT + RESERVA (24/09, regra do dono): cada parte que LEU páginas de verdade grava um
+ * carimbo em `sistema_heartbeat` (ver api/_residencial.js). Enquanto ele tiver menos de 7 dias, os
+ * crons da Vercel PULAM estas fontes (poupa a cota do Bright Data); passou de 7 dias sem carimbo,
+ * os crons voltam a cobri-las pelo Bright Data, dentro das cotas. Rodar e não abrir nada NÃO carimba.
+ * LJUD: o leitor dela é exato (rótulos "1º/2º Encerramento"), então ela é RELIDA em rodízio e a data
+ * é SOBRESCRITA — corrige as gravadas pelo leitor antigo (início = dia da leitura, fim = "Ciclo").
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; RESID_APURAR / RESID_DATAS (fontes, padrão em
+ *      api/_residencial.js); RESID_APURAR_LIMITE (300);
  *      RESID_DATAS_LIMITE (400); RESID_PAUSA_MS (1500).
  */
 import { apurarResultadoDoTexto, patchDaApuracao } from '../api/_resultado-leilao.js';
 import { extrairDatasLeilao } from '../api/enriquecer-lote.js';
+import { FONTES_APURACAO_RESIDENCIAL, FONTES_DATAS_RESIDENCIAL, HB_APURACAO, HB_DATAS } from '../api/_residencial.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const APLICAR = process.env.RESID_APLICAR === '1';
 const lista = (v, pad) => String(v ?? pad).split(',').map(s => s.trim()).filter(Boolean);
-const FONTES_APURAR = lista(process.env.RESID_APURAR, 'ZUK');
-const FONTES_DATAS = lista(process.env.RESID_DATAS, 'BIASI,LJUD,GRUPOLANCE');
+const FONTES_APURAR = lista(process.env.RESID_APURAR, FONTES_APURACAO_RESIDENCIAL.join(','));
+const FONTES_DATAS = lista(process.env.RESID_DATAS, FONTES_DATAS_RESIDENCIAL.join(','));
 const LIM_APURAR = Number(process.env.RESID_APURAR_LIMITE || 300);
 const LIM_DATAS = Number(process.env.RESID_DATAS_LIMITE || 400);
 const PAUSA = Number(process.env.RESID_PAUSA_MS || 1500);
@@ -50,6 +57,11 @@ async function gravar(id, patch) {
   if (!APLICAR) return true;
   const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
   return Array.isArray(rows) && rows.length === 1;
+}
+async function carimbar(chave, detalhe) {
+  if (!APLICAR) return;
+  await sb('rpc/registrar_heartbeat', { method: 'POST', body: JSON.stringify({ p_chave: chave, p_detalhe: detalhe }) })
+    .catch(e => console.error(`  heartbeat ${chave} falhou (os crons podem voltar a cobrir estas fontes):`, e.message));
 }
 const dormir = (ms) => new Promise(r => setTimeout(r, ms));
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
@@ -95,14 +107,20 @@ if (FONTES_APURAR.length) {
     await dormir(PAUSA);
   }
   console.log(`[apuração] fontes=${FONTES_APURAR.join(',')} candidatos=${cand.length}`, JSON.stringify(cont), Object.keys(motivos).length ? `não abriu: ${JSON.stringify(motivos)}` : '');
+  if (cont.lidos > 0 || !cand.length) await carimbar(HB_APURACAO, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}`);
 }
 
 // ── 2) DATAS (mesma fila do enriquecer-datas-cron, só as fontes pedidas) ────────────────────
 if (FONTES_DATAS.length) {
-  const cand = await sb(`imoveis_leilao?ativo=eq.true&and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))`
-    + `&modalidade=not.ilike.*venda*direta*&${inFontes(FONTES_DATAS)}`
-    + `&select=id,fonte,url_lote,link_edital,data_leilao,data_leilao_2`
-    + `&order=data_leilao.asc.nullsfirst,enriquecido_em.asc.nullsfirst&limit=${LIM_DATAS}`);
+  const sel = `select=id,fonte,url_lote,link_edital,data_leilao,data_leilao_2`;
+  const genericas = FONTES_DATAS.filter(f => f !== 'LJUD');
+  const soFaltando = genericas.length ? await sb(`imoveis_leilao?ativo=eq.true&and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))`
+    + `&modalidade=not.ilike.*venda*direta*&${inFontes(genericas)}&${sel}`
+    + `&order=data_leilao.asc.nullsfirst,enriquecido_em.asc.nullsfirst&limit=${LIM_DATAS}`) : [];
+  // LJUD em RODÍZIO (tenha data ou não): quem foi lido há mais tempo primeiro.
+  const ljud = FONTES_DATAS.includes('LJUD') ? await sb(`imoveis_leilao?ativo=eq.true&fonte=eq.LJUD&url_lote=ilike.*//*/*&${sel}`
+    + `&order=enriquecido_em.asc.nullsfirst&limit=${Math.ceil(LIM_DATAS / 2)}`) : [];
+  const cand = [...soFaltando, ...ljud];
   const cont = { lidos: 0, com_inicio: 0, com_fim: 0, ja_encerrado: 0, sem_data_na_pagina: 0, nao_abriu: 0, nao_gravou: 0 };
   const porFonte = {};
   const motivos = {};
@@ -114,9 +132,18 @@ if (FONTES_DATAS.length) {
     cont.lidos++;
     const { inicio, fim, encerradaEm } = extrairDatasLeilao(html);
     const patch = { enriquecido_em: new Date().toISOString() };
-    if (inicio && !im.data_leilao) { patch.data_leilao = inicio; cont.com_inicio++; }
-    if (fim && !im.data_leilao_2) { patch.data_leilao_2 = fim; cont.com_fim++; }
-    if (encerradaEm && !im.data_leilao && !im.data_leilao_2) { patch.data_leilao = encerradaEm; cont.ja_encerrado++; }
+    if (im.fonte === 'LJUD') {
+      // Leitor exato → a página manda: sobrescreve (inclusive o "fim" vindo de um Ciclo, que vira nulo).
+      if (inicio || encerradaEm) {
+        const di = inicio || encerradaEm;
+        if (String(im.data_leilao || '').slice(0, 10) !== di) { patch.data_leilao = di; if (inicio) cont.com_inicio++; else cont.ja_encerrado++; }
+        if ((im.data_leilao_2 || null) !== (fim || null) && !(im.data_leilao_2 && fim && Date.parse(im.data_leilao_2) === Date.parse(fim))) { patch.data_leilao_2 = fim || null; if (fim) cont.com_fim++; }
+      }
+    } else {
+      if (inicio && !im.data_leilao) { patch.data_leilao = inicio; cont.com_inicio++; }
+      if (fim && !im.data_leilao_2) { patch.data_leilao_2 = fim; cont.com_fim++; }
+      if (encerradaEm && !im.data_leilao && !im.data_leilao_2) { patch.data_leilao = encerradaEm; cont.ja_encerrado++; }
+    }
     const achou = Object.keys(patch).length > 1;
     if (!achou) cont.sem_data_na_pagina++;
     porFonte[im.fonte] = porFonte[im.fonte] || { lidos: 0, com_data: 0 };
@@ -126,4 +153,5 @@ if (FONTES_DATAS.length) {
     await dormir(PAUSA);
   }
   console.log(`[datas] fontes=${FONTES_DATAS.join(',')} candidatos=${cand.length}`, JSON.stringify(cont), JSON.stringify(porFonte), Object.keys(motivos).length ? `não abriu: ${JSON.stringify(motivos)}` : '');
+  if (cont.lidos > 0 || !cand.length) await carimbar(HB_DATAS, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}`);
 }

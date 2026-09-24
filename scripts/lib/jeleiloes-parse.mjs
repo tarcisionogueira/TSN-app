@@ -171,11 +171,30 @@ export function parseDetalhe(html, url) {
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     descricao,
-    data_leilao: proximaData(txt.slice(0, 4000)),
+    // 2ª PRAÇA (24/09): KLEILOES escreve "23/09/2026 10:00 (1º Leilão) Online 07/10/2026 10:00
+    // (2º Leilão)" e só a 1ª era lida — a limpeza horária desligava o lote na 1ª com a 2ª por vir.
+    // Venda direta: "Data Até 23/10/2026" (prazo renovado mês a mês) é a data que vale.
+    ...pracasSuporte(txt.slice(0, 4000)),
     numero_matricula: mat, ...docs,
     link_foto: fotoDe(html),
     encerrado: /\b(arrematado|vendido|deserto|cancelad[oa]|suspens[oa])\b/i.test(txt.slice(0, 2500)),
   };
+}
+
+function pracasSuporte(txt) {
+  const iso = (m) => `${m[3]}-${m[2]}-${m[1]}`;
+  const p1 = txt.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}))?[^()]{0,20}\(\s*1\s*[º°ª]?\s*Leil[ãa]o\s*\)/i);
+  const p2 = txt.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}))?[^()]{0,20}\(\s*2\s*[º°ª]?\s*Leil[ãa]o\s*\)/i);
+  const ate = txt.match(/Data\s+At[ée]\s+(\d{2})\/(\d{2})\/(\d{4})/i);
+  if (p1) return { data_leilao: iso(p1), data_leilao_2: p2 ? `${iso(p2)}T${p2[4] || '10:00'}:00-03:00` : null };
+  // JELEILOES: "Data 1º Leilão: 23/09/2026 - Encerramento a partir das 10:00 … Data 2º Leilão: 30/09/2026 - … 14:00"
+  const j1 = txt.match(/Data\s+1\s*[º°ª]?\s*Leil[ãa]o\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  const j2 = txt.match(/Data\s+2\s*[º°ª]?\s*Leil[ãa]o\s*:\s*(\d{2})\/(\d{2})\/(\d{4})(?:[^0-9]{0,40}?(\d{2}:\d{2}))?/i);
+  const ju = txt.match(/Leil[ãa]o\s+[úu]nico\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  if (j1) return { data_leilao: iso(j1), data_leilao_2: j2 ? `${iso(j2)}T${j2[4] || '10:00'}:00-03:00` : null };
+  if (ju) return { data_leilao: iso(ju), data_leilao_2: null };
+  if (ate) return { data_leilao: iso(ate), data_leilao_2: null };
+  return { data_leilao: proximaData(txt), data_leilao_2: null };
 }
 
 export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);

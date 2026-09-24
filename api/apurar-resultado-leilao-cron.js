@@ -31,6 +31,7 @@ export const config = { runtime: 'nodejs', maxDuration: 280 };
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote } from './enriquecer-lote.js';
 import { apurarResultadoDoTexto, patchDaApuracao } from './_resultado-leilao.js';
+import { fontesCobertasPeloResidencial, FONTES_APURACAO_RESIDENCIAL, HB_APURACAO } from './_residencial.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -217,7 +218,11 @@ export default async function handler(req, res) {
   // realizados, 50 ativos, 0 apurados. A retenção de 15 dias de 22/09 protegia só o que JÁ
   // tinha sido apurado. Agora entram também os desligados POR PRAÇA VENCIDA (não os
   // "sumiu_da_fonte": esses a fonte tirou do ar) — e o não-vendido é religado (apurarLote).
-  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
+  // Fontes que o RUNNER RESIDENCIAL cobre (24/09): puladas aqui enquanto o carimbo dele tem < 7
+  // dias — a cota do Bright Data sobra para o resto; sem carimbo, voltam para cá (reserva).
+  const doResidencial = await fontesCobertasPeloResidencial(sb, HB_APURACAO, FONTES_APURACAO_RESIDENCIAL);
+  const excluidasIm = doResidencial.length ? `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL, ...doResidencial].join(',')})` : FONTES_EXCLUIDAS_SQL;
+  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));

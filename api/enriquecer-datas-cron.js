@@ -14,6 +14,7 @@ export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote, extrairDatasLeilao } from './enriquecer-lote.js';
+import { fontesCobertasPeloResidencial, FONTES_DATAS_RESIDENCIAL, HB_DATAS } from './_residencial.js';
 import { enriquecerPeloDocumento } from './_doc-datas.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -50,10 +51,12 @@ export default async function handler(req, res) {
   //   2. Elegibilidade só por `link_edital`: a LJUD tem `link_edital` nulo e `url_lote` REAL
   //      (/lote/<leilao>/<lote>) — o "LJUD só tem link de domínio" do cabeçalho é de agosto e
   //      deixou de ser verdade. `fetchLote` já usa `url_lote` primeiro; o filtro não sabia.
+  // BIASI/LJUD/GRUPOLANCE são do RUNNER RESIDENCIAL (24/09) enquanto o carimbo dele tem < 7 dias.
+  const doResidencial = await fontesCobertasPeloResidencial(sb, HB_DATAS, FONTES_DATAS_RESIDENCIAL);
   const filtro = [
     'ativo=eq.true',
     'and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))',
-    'fonte=not.in.(CEF,caixa)',
+    `fonte=not.in.(${['CEF', 'caixa', ...doResidencial].join(',')})`,
     'modalidade=not.ilike.*venda*direta*',
     'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2',
     // Ordem: primeiro quem não tem data NENHUMA (`data_leilao` nulo). É o lote em que o gate

@@ -29,6 +29,17 @@ const textoDoResumo = (r) => [
   r.proximos_passos?.length ? `Próximos passos:\n${r.proximos_passos.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : null,
 ].filter(Boolean).join('\n\n').slice(0, 4000);
 
+// Etapas típicas do leilão extrajudicial (banco/alienação fiduciária) — atalhos; o texto é editável.
+const ETAPAS_EXTRAJUDICIAL = [
+  'Pagamento do lance confirmado',
+  'Contrato / escritura de compra e venda assinada',
+  'ITBI pago',
+  'Escritura registrada no cartório de imóveis',
+  'Notificação do ocupante para desocupação',
+  'Ação de imissão na posse ajuizada',
+  'Imóvel desocupado — chaves entregues',
+];
+
 export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = null, imovelId = null, podeEditar = true, cardStyle }) {
   const dono = arrematadoId ? { col: 'arrematado_id', id: arrematadoId } : { col: 'caso_id', id: casoId };
   const [linhas, setLinhas] = useState([]);
@@ -41,6 +52,8 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
   const [consulta, setConsulta] = useState(null);
   const [msg, setMsg] = useState('');
   const [visivel, setVisivel] = useState(true);
+  const [extrajudicial, setExtrajudicial] = useState(false);
+  const [mostrarCnj, setMostrarCnj] = useState(false);
 
   const carregar = useCallback(async () => {
     const { data, error } = await supabase.from('caso_andamentos')
@@ -57,11 +70,18 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
 
   // Nº do processo JÁ CONHECIDO (24/09, dono: "não preciso digitar, já há o processo que ocasionou o
   // leilão"): vem do lote arrematado quando o diário ainda não registrou nenhum número.
+  // Leilão EXTRAJUDICIAL (24/09, dono: arremate de R$ 63 mil "não há processo — qual a melhor forma de
+  // apresentar?"): não existe processo para consultar no CNJ. O andamento é de cartório e posse, então o
+  // painel troca a busca do CNJ por atalhos das etapas desse caminho.
   useEffect(() => {
-    if (!podeEditar || !imovelId) return;
+    if (!imovelId) return;
     let vivo = true;
-    supabase.from('imoveis_leilao').select('numero_processo').eq('id', imovelId).maybeSingle()
-      .then(({ data }) => { if (vivo && data?.numero_processo) setNumero(prev => prev || data.numero_processo); });
+    supabase.from('imoveis_leilao').select('numero_processo, modalidade').eq('id', imovelId).maybeSingle()
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        setExtrajudicial(/extra/i.test(String(data.modalidade || '')));
+        if (podeEditar && data.numero_processo) setNumero(prev => prev || data.numero_processo);
+      });
     return () => { vivo = false; };
   }, [imovelId, podeEditar]);
 
@@ -102,16 +122,31 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
     <div style={cardStyle}>
       <div style={{ marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>⚖️ Andamento do processo</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{extrajudicial ? '🏠 Andamento da arrematação' : '⚖️ Andamento do processo'}</div>
+          {extrajudicial && <div style={{ fontSize: 11.5, color: '#475569', margin: '2px 0' }}>Leilão extrajudicial — não há processo na Justiça: o caminho é pagamento, escritura, registro no cartório e posse.</div>}
           <div style={{ fontSize: 11, color: '#64748b' }}>{podeEditar ? 'Equipe registra; o cliente vê as etapas marcadas como visíveis. ' : ''}Etapa atual: <strong>{linhas[0]?.etapa || 'nenhuma registrada'}</strong>{linhas[0] ? ` · ${fmt(linhas[0].data_evento || linhas[0].criado_em)}` : ''}</div>
         </div>
       </div>
 
       {podeEditar && <>
+      {extrajudicial && !mostrarCnj ? (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+          {ETAPAS_EXTRAJUDICIAL.map(t => (
+            <button key={t} type="button" onClick={() => setEtapa(t)}
+              style={{ padding: '5px 10px', background: etapa === t ? '#0D63DB' : '#eff6ff', color: etapa === t ? 'white' : '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+              {t}
+            </button>
+          ))}
+          <button type="button" onClick={() => setMostrarCnj(true)} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 11, textDecoration: 'underline', cursor: 'pointer' }}>
+            Virou ação na Justiça (ex.: imissão na posse)? Consultar no CNJ
+          </button>
+        </div>
+      ) : (
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input style={{ ...inp, flex: '1 1 240px', minWidth: 0 }} placeholder="Nº do processo (CNJ, 20 dígitos)" value={numero} onChange={e => setNumero(e.target.value)} />
         <button style={btn()} disabled={consultando} onClick={consultar}>{consultando ? 'Consultando e resumindo… (até 1 min)' : 'Consultar andamento no CNJ'}</button>
       </div>
+      )}
 
       {consulta && (
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, marginBottom: 12, background: '#f8fafc' }}>

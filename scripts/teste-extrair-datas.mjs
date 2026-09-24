@@ -8,7 +8,12 @@
  * (sai 1 se algo quebrar). Barato e sem rede — dá para rodar antes de qualquer
  * mexida nas âncoras de contexto, que é onde o extrator é frágil.
  */
-import { extrairDatasLeilao } from '../api/enriquecer-lote.js';
+// "HOJE" FIXO (24/09): os trechos são páginas reais de ago/set 2026. A função descarta datas passadas
+// (vira `encerradaEm`), então com o relógio de verdade o teste começou a falhar sozinho quando essas
+// datas passaram — 4 ✗ que não eram defeito. Fixar o dia em que os casos foram escritos.
+const HOJE_DO_TESTE = Date.parse('2026-08-25T12:00:00-03:00');
+Date.now = () => HOJE_DO_TESTE;
+const { extrairDatasLeilao } = await import('../api/enriquecer-lote.js');
 
 // O espaçamento IMPORTA: a classificação lê os 90 caracteres antes da data, então
 // texto colado muda o resultado. Os casos abaixo preservam a distância da página real.
