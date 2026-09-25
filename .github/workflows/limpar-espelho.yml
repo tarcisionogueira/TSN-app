@@ -1,13 +1,16 @@
 name: Limpar espelho de documentos (expirados + cópias idênticas)
 
 # scripts/limpar-espelho.mjs — mesma regra que o limpar-documentos-cron roda todo dia; este
-# workflow existe para a faxina do acumulado. EM SECO por padrão (aplicar=0).
+# workflow existe para a faxina do acumulado. EM SECO por padrão (caixa desmarcada).
 on:
   workflow_dispatch:
     inputs:
-      aplicar:
-        description: '1 = apaga; 0 = só mostra'
-        default: '0'
+      # Caixa de marcar, não texto: com um campo "0/1" o valor padrão 0 passava despercebido e a
+      # faxina rodou em seco duas vezes achando que apagava (24/09).
+      apagar:
+        description: 'Marque para APAGAR de verdade (desmarcado = só mostra)'
+        type: boolean
+        default: false
 
 jobs:
   limpar:
@@ -23,5 +26,5 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ESPELHO_APLICAR: ${{ inputs.aplicar }}
+          ESPELHO_APLICAR: ${{ inputs.apagar && '1' || '0' }}
         run: node scripts/limpar-espelho.mjs
