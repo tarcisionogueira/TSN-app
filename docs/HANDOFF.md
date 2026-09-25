@@ -33586,3 +33586,14 @@ cada mensagem composta leva `chave_envio` → `Idempotency-Key` no Resend (`api/
 opcional `idempotencyKey`, não muda os outros chamadores); `api/email-caixa.js` não grava em
 Enviados um `resend_email_id` que já existe. As 2 linhas de 25/09 13h21 UTC ficaram (o leiloeiro
 recebeu as duas — apagar uma esconderia o que aconteceu).
+
+### ✅ Responder sem arrastar a conversa + Encaminhar última/conversa (dono, 25/09)
+- **Responder** agora envia SÓ o texto digitado + assinatura. Antes o servidor citava sempre o
+  e-mail respondido — e como o do leiloeiro já vinha com todo o histórico dentro, ia quase a
+  conversa inteira junto. A conversa na tela é para CONTEXTO de quem responde. Citar virou caixa
+  desmarcada no Escrever ("Incluir no final o e-mail que estou respondendo"); `In-Reply-To` e
+  `References` continuam, então o fio segue encadeado na caixa do destinatário.
+- **Encaminhar**: "Encaminhar a última" ou "Encaminhar a conversa (n)". Cada mensagem entra sem o
+  histórico citado dela (sem repetir a conversa dentro de si mesma); passou de ~17,5 mil
+  caracteres, ficam as mais recentes com aviso "(mensagens mais antigas omitidas por tamanho)".
+  Anexos continuam NÃO indo no encaminhamento (comportamento anterior, não mudou).

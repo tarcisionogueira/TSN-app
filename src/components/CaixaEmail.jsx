@@ -326,12 +326,24 @@ export default function CaixaEmail({ soPessoal = false }) {
       de: (m.dono && meuEndereco) ? 'pessoal' : (CAIXAS.includes(caixaNossa) ? caixaNossa : dePadrao),
       para: m.de_email || '', cc: '',
       assunto: /^re:/i.test(m.assunto || '') ? m.assunto : `Re: ${m.assunto || ''}`,
-      texto: '', responder_a: m.id, chamado_id: m.chamado_id,
+      texto: '', responder_a: m.id, chamado_id: m.chamado_id, citar: false,
     });
   }
-  function encaminhar(m) {
-    const corpo = `\n\n---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${m.texto || ''}`;
-    abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${m.assunto || ''}`, texto: corpo.slice(0, 18000), responder_a: null });
+  // Encaminhar (25/09): só a última mensagem OU a conversa inteira. Cada mensagem entra sem o
+  // histórico citado dela (senão a conversa se repetiria dentro de si mesma a cada resposta).
+  // Passando do limite do campo, ficam as MAIS RECENTES — é o que quem recebe precisa ler primeiro.
+  function encaminhar(msgs) {
+    const bloco = (m) => `---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nPara: ${(m.para || []).join(', ')}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${separarCitacao(m.texto).principal}`;
+    const blocos = [];
+    let tamanho = 0, cortou = false;
+    for (const m of [...msgs].reverse()) {
+      const b = bloco(m);
+      if (tamanho + b.length > 17500 && blocos.length) { cortou = true; break; }
+      blocos.unshift(b); tamanho += b.length + 2;
+    }
+    const corpo = `\n\n${cortou ? '(mensagens mais antigas omitidas por tamanho)\n\n' : ''}${blocos.join('\n\n')}`;
+    const ult = msgs[msgs.length - 1];
+    abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null });
   }
 
   async function enviar() {
@@ -341,7 +353,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, chave_envio: chaveEnvio.current || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -484,7 +496,8 @@ export default function CaixaEmail({ soPessoal = false }) {
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0' }}>
               {ultimaEntrada && pasta !== 'spam' && <button onClick={() => responder(ultimaEntrada)} style={btn(false)}><Reply size={13} /> Responder</button>}
-              <button onClick={() => encaminhar(conversa[conversa.length - 1] || ativa)} style={btn(false)}><Forward size={13} /> Encaminhar</button>
+              <button onClick={() => encaminhar([conversa[conversa.length - 1] || ativa])} style={btn(false)}><Forward size={13} /> {conversa.length > 1 ? 'Encaminhar a última' : 'Encaminhar'}</button>
+              {conversa.length > 1 && <button onClick={() => encaminhar(conversa)} style={btn(false)}><Forward size={13} /> Encaminhar a conversa ({conversa.length})</button>}
               {pasta === 'entrada' && <button onClick={() => mover(() => 'spam', 'Movido para Spam.')} style={btn(false)}><ShieldAlert size={13} /> Spam</button>}
               {pasta === 'spam' && <button onClick={() => mover(() => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} style={btn(false)}><Undo2 size={13} /> Não é spam</button>}
               {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, false)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear remetente</button>}
@@ -567,8 +580,14 @@ export default function CaixaEmail({ soPessoal = false }) {
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
             <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={12}
-              placeholder="Escreva sua mensagem… (sua assinatura e o e-mail original, numa resposta, entram automaticamente)"
+              placeholder="Escreva sua mensagem… (sua assinatura entra automaticamente)"
               style={{ ...campo, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+            {compor.responder_a && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!compor.citar} onChange={e => setCompor({ ...compor, citar: e.target.checked })} />
+                Incluir no final o e-mail que estou respondendo (citado). Desmarcado: vai só o que você escreveu.
+              </label>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               {temConteudo(compor) && <button onClick={descartarRascunho} style={{ ...btn(false), color: '#b91c1c', marginRight: 'auto' }}><Trash2 size={13} /> Descartar</button>}
               <button onClick={fecharCompor} style={btn(false)}>{temConteudo(compor) ? 'Salvar e fechar' : 'Cancelar'}</button>

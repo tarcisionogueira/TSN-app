@@ -175,7 +175,11 @@ export default async function handler(req) {
     headers['In-Reply-To'] = original.message_id;
     headers['References'] = `${original.referencias || ''} ${original.message_id}`.trim().slice(0, 2000);
   }
-  const citacao = original?.texto
+  // 25/09 (dono): a resposta leva SÓ o que foi digitado + assinatura. A conversa inteira fica na
+  // tela para dar contexto a quem responde; citar o e-mail anterior virou opção (`citar: true`).
+  // Antes citava sempre — e como o e-mail do outro lado já traz o histórico dentro, ia quase a
+  // conversa toda junto. In-Reply-To/References continuam: o fio segue encadeado lá do outro lado.
+  const citacao = body?.citar === true && original?.texto
     ? `\n\nEm ${new Date(original.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}, ${original.de_nome || original.de_email} escreveu:\n`
       + String(original.texto).slice(0, 4000).split('\n').map(l => `> ${l}`).join('\n')
     : '';
