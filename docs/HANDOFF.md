@@ -33670,3 +33670,23 @@ judicial 403 · corporativo 403 · financeira 42. Tela: filtro "Origem da venda"
 todas as origens sem processo), selo colorido com explicação no card e no detalhe; a análise de IA
 do veículo recebe a origem e o que checar em cada uma. `modalidade` continua na tabela.
 Pendente: LJUD (1.294) e WEBLEILOES/SUPORTE sem sinal de comitente — só com leitura da página do lote.
+
+### 25/09 (fim da tarde) — "confirmar os carros pelo edital" (pedido do dono): medido, NÃO aplicado
+Recon `scripts/edital-origem-veiculos.mjs` (em seco, workflow `recon-edital-veiculos.yml`, run
+36172471063): 241 documentos distintos cobrindo ~890 veículos; lidos 193, erro 48.
+**A leitura do edital INTEIRO por palavra-chave não é confiável — nada foi gravado:**
+- **SUPERBID 22/22 editais de evento → HTTP 403 do GitHub** (498 lotes): ponto cego total.
+- **LJUD: cláusula-padrão cita Detran/RENAJUD e busca e apreensão em 75 de 83 editais** →
+  91 lotes "misto"; os 2 editais "órgão público" (52 lotes) se apoiam em 2 citações só.
+- **Um único "Detran/RENAJUD" decidia "pátio"** mesmo com 12–26 sinais judiciais (edital judicial
+  cita restrição RENAJUD); a exceção pátio+órgão público virava 36 lotes de prefeitura em "pátio".
+- **Comitente por regex pega texto-padrão** ("Vendedor ou à Leiloeira… vícios ocultos"); só SUPORTE
+  ("VENDEDOR(ES) … LTDA") nomeia vendedor de verdade.
+- MEGA: o PDF "Edital" de 61 lotes não tem sinal nenhum (provável anexo errado); 14 PDFs >15 MB.
+**Caminho certo (não feito):** ler o TRECHO DO LOTE no edital (achar pelo nº do lote/placa/chassi)
+e o cabeçalho "COMITENTE:", não contar palavras no documento todo — ou IA lendo o edital por lote
+(~240 PDFs; custo a decidir com o dono). SUPERBID precisa baixar pelo runner residencial.
+**Feito:** limpeza de anexos — 5 PDFs institucionais do SUPERBID (privacidade/cookies/termos/
+relatório) estavam em 512 lotes cada: os dois coletores de PDF-no-JSON do scraper passam agora pelo
+portão central `ehDocumento` (_doc-scan.js), e o PDF do evento (`/event/<id>/attachment/`) entra
+como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do evento marcado.

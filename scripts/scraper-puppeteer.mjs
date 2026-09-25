@@ -113,6 +113,11 @@ const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); r
 // Mesma normalização de api/_geo.js (minúsculas, sem acento) para bater com "UF|cidade".
 const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
+// ANEXOS (25/09, medido): 5 PDFs institucionais do SUPERBID (privacidade, cookies, termos, relatório
+// "Mais Ativo") vinham grudados em 512 lotes cada — os dois `add` de PDF-no-JSON não passavam pelo
+// portão central `ehDocumento` (que já barra esses nomes). E o PDF do EVENTO
+// (s.superbid.net/event/<id>/attachment/…), que é o edital, saía como "outro".
+const RE_PDF_DO_EVENTO = /\/event\/\d+\/attachment\//;
 const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
 // Fontes com o classificador ehForaDoAcervo() validado (ver salvarImoveis abaixo). VIP/
 // LEILAOBRASIL/LEILOTECH/ROCHALEILOES entraram em 22/09 (achado real: "236 Cadeiras, Tipo
@@ -1203,11 +1208,11 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
           const add = (url, label) => {
             if (!url || typeof url !== 'string') return;
             const u = url.startsWith('//') ? `https:${url}` : url;
-            if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u)) return;
+            if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u) || !ehDocumento(u, label || '', '')) return; // mesmo portão central (_doc-scan.js) de todo anexo
             vis.add(u);
             const t = `${label || ''} ${u}`.toLowerCase();
             const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
-                       : /(edital|regulament|condi[çc])/.test(t) ? 'edital' : 'outro';
+                       : (/(edital|regulament|condi[çc])/.test(t) || RE_PDF_DO_EVENTO.test(u)) ? 'edital' : 'outro';
             out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url: u, tipo });
           };
           // Varre recursivamente o objeto da oferta: qualquer objeto com uma URL .pdf vira
@@ -4876,11 +4881,11 @@ function extrairAnexosPdfDeObjeto(obj) {
     const add = (url, label) => {
       if (!url || typeof url !== 'string') return;
       const u = url.startsWith('//') ? `https:${url}` : url;
-      if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u)) return;
+      if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u) || !ehDocumento(u, label || '', '')) return; // mesmo portão central (_doc-scan.js) de todo anexo
       vis.add(u);
       const t = `${label || ''} ${u}`.toLowerCase();
       const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
-                 : /(edital|regulament|condi[çc])/.test(t) ? 'edital' : 'outro';
+                 : (/(edital|regulament|condi[çc])/.test(t) || RE_PDF_DO_EVENTO.test(u)) ? 'edital' : 'outro';
       out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url: u, tipo });
     };
     const walk = (node, depth) => {
