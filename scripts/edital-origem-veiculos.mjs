@@ -64,14 +64,17 @@ async function textoDe(url) {
 // pátio). O recon do trecho (recon-edital-trecho-lote.mjs) mostrou que QUEM VENDE está na 1ª
 // página: "PODER JUDICIÁRIO … 6ª VARA", "TRIBUNAL REGIONAL DO TRABALHO", "O MUNICÍPIO DE …
 // Lei 14.133", "Ministério da Justiça … tráfico", "COMITENTE(S) VENDEDOR(ES) … LTDA". Só o
-// cabeçalho entra; a 1ª regra que casar decide.
+// cabeçalho entra; a 1ª regra que casar decide. "Ministério da Fazenda" fica de fora (é o CNPJ da
+// empresa, "inscrita no CNPJ do Ministério da Fazenda", não quem vende).
 const CAB = 3500;
 const REGRAS = [
   ['judicial', /poder judici[áa]rio|\b\d+\s*[ªºa]\s*vara\b|tribunal (?:regional|de justi[çc]a)|hasta p[úu]blica|divis[ãa]o de execu[çc][ãa]o|\bexequente\b|ju[íi]za? de direito|execu[çc][ãa]o fiscal/i],
-  ['patio', /\bdetran\b|\bciretran\b|pol[íi]cia rodovi[áa]ria|ve[íi]culos? (?:removid|recolhid|apreendid)|recolhid[oa]s? (?:ao|em) p[áa]tio|\brenajud\b/i],
+  // "DETRAN" sozinho não decide: a cláusula-padrão "exigências do DETRAN quanto a plaquetas"
+  // aparece em edital de todo tipo (seco de 25/09: 4 lotes). Vale o DETRAN como quem vende.
+  ['patio', /(?:comitente|vendedor|alienante)[^.]{0,60}\bdetran\b|\bdetran\b[^.]{0,40}(?:torna p[úu]blico|faz saber)|\bciretran\b|pol[íi]cia rodovi[áa]ria|ve[íi]culos? (?:removid|recolhid|apreendid)|recolhid[oa]s? (?:ao|em) p[áa]tio|\brenajud\b/i],
   ['seguradora', /\bsegurador[a]\b|\bsalvados?\b/i],
   ['financeira', /aliena[çc][ãa]o fiduci[áa]ria|decreto[-\s]lei\s*n?[º°o.]*\s*911|busca e apreens[ãa]o|arrendamento mercantil/i],
-  ['orgao_publico', /munic[íi]pio de|prefeitura municipal|lei (?:federal )?n?[º°o.]*\s*(?:14\.?133|8\.?666)|minist[ée]rio d[aoe]|governo do estado|secretaria (?:de|da|do|municipal|estadual)|processo sei\b|leil[ãa]o p[úu]blico n/i],
+  ['orgao_publico', /munic[íi]pio de|prefeitura municipal|lei (?:federal )?n?[º°o.]*\s*(?:14\.?133|8\.?666)|minist[ée]rio d[aoe](?! fazenda)|governo do estado|secretaria (?:de|da|do|municipal|estadual)|processo sei\b|leil[ãa]o p[úu]blico n/i],
   ['corporativo', /comitente(?:\(s\)|s)?\s*vendedor(?:\(es\)|es|a)?[^.]{0,160}\b(?:ltda|s\.?\/?a\.?|eireli)\b/i],
 ];
 // Documento que não é edital do evento (política de privacidade da MEGA grudada em 58 lotes;
