@@ -33461,3 +33461,12 @@ imóvel; limites de palavra Unicode (em JS `\b` não vê "Á"/"Ô"). Rigolon: o 
 ("Rancharia/SP - Honda/C100 Biz - 02/02") e o parser só aceitava "Tipo - Desc - Cidade/UF" → os 27
 lotes ativos estavam como "Imóvel Rigolon Leilões N"; agora aceita os dois formatos.
 **Faxina diária do espelho ligada** no limpar-documentos-cron (autorizada pelo dono, 25/09).
+**Rigolon/Giordano/Thaís (plataforma leilao/index):** o aviso de COOKIES ocupa o topo da página
+renderizada e empurrava o título para além da linha 6 → 100% dos lotes sem título. Agora o título é
+procurado abaixo do cabeçalho "Leilão N:". Seco real: Rigolon 6 não-imóveis descartados, Thaís 4.
+`naoEhImovel` ampliada (marca+modelo+ano sem barra, "veículo/moto/sucata"; guarda garagem/edifício/vaga)
+e MEDIDA no acervo ativo: 323 suspeitos → 2 marcados, ambos editais DJEN (fora do motor) = 0 falso positivo.
+**Não resolvidos por falta de dado (decisão: não chutar):** 68 veículos sem cidade (30 Golden Lance — o
+edital só cita o auditório do leiloeiro em Contagem; "retirada no local" não diz qual local); duplicados
+LJUD×leiloeiro original — o LJUD tem 7 lotes DISTINTOS (leilões 99067–99073) com o mesmo título "Prédio
+nº 342" e preço: juntar por cidade+preço+data esconderia lotes reais.
