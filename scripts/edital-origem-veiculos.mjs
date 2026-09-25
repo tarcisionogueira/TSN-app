@@ -7,17 +7,11 @@
  * onde a listagem diz, o edital confirma. Um edital vale para o EVENTO inteiro (no SUPERBID, o mesmo
  * PDF para até 102 lotes), então cada documento é baixado e lido UMA vez.
  *
- * Sinais do documento, em ordem de precedência (o primeiro que casar decide):
- *   patio        — CTB art. 328 / Lei 9.503, "veículos removidos/apreendidos", Detran, RENAJUD
- *   seguradora   — "salvado(s)", seguradora como comitente
- *   financeira   — alienação fiduciária, Decreto-Lei 911, busca e apreensão, retomada
- *   judicial     — vara, juiz(a) de direito, exequente/executado, processo judicial nº
- *   orgao_publico— Lei 14.133 / 8.666, prefeitura/município/governo como vendedor
- *   corporativo  — comitente empresa (Ltda, S/A) ou frota/desmobilização
- * Documento com sinais FORTES de duas categorias (edital de lotes mistos) → 'misto' → não aplica:
- * não sabe qual vale para cada lote (mesma guarda do local do pátio em local-e-area-do-documento.mjs).
+ * Regra: a 1ª página do edital diz quem vende (ver REGRAS abaixo). O edital só PREENCHE o que a
+ * listagem deixou em nao_identificado — o gatilho `trg_veiculo_origem_venda` decide.
  *
- * EM SECO por padrão (forma nº 10): imprime por documento o comitente, os sinais e o que mudaria.
+ * EM SECO por padrão (forma nº 10): imprime por documento a origem, o trecho que decidiu e o que
+ * mudaria. EDITAL_GRAVAR=1 grava `origem_edital`/`comitente_edital` (o gatilho decide a origem).
  * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; EDITAL_LIMITE (documentos, padrão 300).
  */
 import { carregarPDFParse } from '../api/_pdf-safe.js';
@@ -65,27 +59,36 @@ async function textoDe(url) {
   } catch (e) { return { erro: `excecao:${String(e?.message || e).slice(0, 60)}` }; }
 }
 
-const SINAIS = [
-  ['patio', /art(?:igo)?\.?\s*328|lei\s*n?[º°o.]*\s*9\.?503|ve[íi]culos?\s+(?:removidos|apreendidos|recolhidos)|recolhid[oa]s?\s+ao\s+p[áa]tio|\bdetran\b|\brenajud\b|\bciretran\b/gi],
-  ['seguradora', /\bsalvados?\b|\bsegurador[a]\b|\bseguros\s+s\.?\/?a\b/gi],
-  ['financeira', /aliena[çc][ãa]o\s+fiduci[áa]ria|decreto[-\s]lei\s*n?[º°o.]*\s*911|busca\s+e\s+apreens[ãa]o|\bretomad[oa]s?\b|\bleasing\b|arrendamento\s+mercantil/gi],
-  ['judicial', /\b\d+\s*[ªºa]?\s*vara\b|ju[íi]za?\s+de\s+direito|\bexequente\b|\bexecutad[oa]\b|processo\s+(?:judicial\s+)?n?[º°o.]*\s*\d{5,}/gi],
-  ['orgao_publico', /lei\s*(?:federal\s*)?n?[º°o.]*\s*(?:14\.?133|8\.?666)|prefeitura\s+municipal\s+de|governo\s+do\s+estado|bens?\s+inserv[íi]ve(?:l|is)/gi],
-  ['corporativo', /comitente[^.;]{0,90}\b(?:ltda|s\.?\/?a\.?|eireli)\b|renova[çc][ãa]o\s+de\s+frota|desmobiliza[çc][ãa]o|\bfrota\s+pr[óo]pria\b/gi],
+// REGRA PELO CABEÇALHO (25/09, caminho 1 do dono). O 1º seco contou palavras no documento
+// INTEIRO e errou pelo texto-padrão (LJUD cita "juiz" em cláusula; um RENAJUD no rodapé virava
+// pátio). O recon do trecho (recon-edital-trecho-lote.mjs) mostrou que QUEM VENDE está na 1ª
+// página: "PODER JUDICIÁRIO … 6ª VARA", "TRIBUNAL REGIONAL DO TRABALHO", "O MUNICÍPIO DE …
+// Lei 14.133", "Ministério da Justiça … tráfico", "COMITENTE(S) VENDEDOR(ES) … LTDA". Só o
+// cabeçalho entra; a 1ª regra que casar decide.
+const CAB = 3500;
+const REGRAS = [
+  ['judicial', /poder judici[áa]rio|\b\d+\s*[ªºa]\s*vara\b|tribunal (?:regional|de justi[çc]a)|hasta p[úu]blica|divis[ãa]o de execu[çc][ãa]o|\bexequente\b|ju[íi]za? de direito|execu[çc][ãa]o fiscal/i],
+  ['patio', /\bdetran\b|\bciretran\b|pol[íi]cia rodovi[áa]ria|ve[íi]culos? (?:removid|recolhid|apreendid)|recolhid[oa]s? (?:ao|em) p[áa]tio|\brenajud\b/i],
+  ['seguradora', /\bsegurador[a]\b|\bsalvados?\b/i],
+  ['financeira', /aliena[çc][ãa]o fiduci[áa]ria|decreto[-\s]lei\s*n?[º°o.]*\s*911|busca e apreens[ãa]o|arrendamento mercantil/i],
+  ['orgao_publico', /munic[íi]pio de|prefeitura municipal|lei (?:federal )?n?[º°o.]*\s*(?:14\.?133|8\.?666)|minist[ée]rio d[aoe]|governo do estado|secretaria (?:de|da|do|municipal|estadual)|processo sei\b|leil[ãa]o p[úu]blico n/i],
+  ['corporativo', /comitente(?:\(s\)|s)?\s*vendedor(?:\(es\)|es|a)?[^.]{0,160}\b(?:ltda|s\.?\/?a\.?|eireli)\b/i],
 ];
-const RE_COMITENTE = /(comitente(?:\s+vendedor)?|vendedor(?:a)?|propriet[áa]ri[oa]\s+do[s]?\s+bens?)\s*[:\-–]?\s*([^.;]{3,110})/i;
+// Documento que não é edital do evento (política de privacidade da MEGA grudada em 58 lotes;
+// modelo de declaração da LJUD) — não decide nada.
+const RE_NAO_EDITAL = /lgpd|lei geral de prote[çc][ãa]o de dados|tratamento de dados pessoais|modelo de declara[çc][ãa]o/i;
+const RE_COMITENTE = /comitente(?:\(s\)|s)?(?:\s*vendedor(?:\(es\)|es|a)?)?\s*[:\-–]?\s*([^.;]{3,120})/i;
 
 function classificarDoc(texto) {
-  const hits = Object.fromEntries(SINAIS.map(([k, re]) => [k, (texto.match(re) || []).length]));
-  const fortes = Object.entries(hits).filter(([, n]) => n >= 2).map(([k]) => k);
-  const primeiro = SINAIS.find(([k]) => hits[k] > 0)?.[0] || null;
-  // Mais de uma categoria forte, sem ser o par esperado (pátio cita órgão público; judicial cita
-  // financeira em busca e apreensão) → documento de lotes mistos.
-  const par = new Set(fortes);
-  const conviventes = (a, b) => par.has(a) && par.has(b) && par.size === 2;
-  const misto = fortes.length >= 2 && !conviventes('patio', 'orgao_publico') && !conviventes('financeira', 'judicial');
-  return { hits, origem: misto ? 'misto' : primeiro, comitente: (texto.match(RE_COMITENTE)?.[2] || '').trim().slice(0, 110) };
+  const cab = texto.slice(0, CAB);
+  if (RE_NAO_EDITAL.test(cab.slice(0, 1500))) return { origem: null, motivo: 'nao_e_edital_do_evento' };
+  for (const [k, re] of REGRAS) {
+    const m = cab.match(re);
+    if (m) return { origem: k, sinal: cab.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60).trim(), comitente: (cab.match(RE_COMITENTE)?.[1] || '').trim().slice(0, 120) || null };
+  }
+  return { origem: null, motivo: 'sem_sinal_no_cabecalho' };
 }
+const GRAVAR = process.env.EDITAL_GRAVAR === '1';
 
 const veiculos = await todas('veiculos_leilao?ativo=eq.true&anexos=not.is.null&select=id,fonte,origem_venda,anexos');
 const porDoc = new Map();
@@ -95,22 +98,42 @@ for (const v of veiculos) for (const a of (v.anexos || [])) {
   porDoc.get(a.url).lotes.push({ id: v.id, origem: v.origem_venda });
 }
 const docs = [...porDoc.values()].sort((a, b) => b.lotes.length - a.lotes.length).slice(0, LIMITE);
-console.log(`=== edital-origem-veiculos (EM SECO) · ${docs.length} documento(s) de ${porDoc.size}, ${veiculos.length} veículos com anexo ===`);
+console.log(`=== edital-origem-veiculos (${GRAVAR ? 'GRAVANDO' : 'EM SECO'}) · ${docs.length} documento(s) de ${porDoc.size}, ${veiculos.length} veículos com anexo ===`);
 
-const resumo = { lidos: 0, erro: {}, porOrigem: {}, lotesMudariam: 0, lotesConfirmados: 0, lotesPreenchidos: 0, lotesDivergentes: 0 };
+const resumo = { lidos: 0, erro: {}, porOrigem: {}, lotesPreenchidos: 0, lotesConfirmados: 0, lotesDivergentes: 0, gravados: 0 };
+const aGravar = []; // { id, origem_edital, comitente_edital }
 for (const d of docs) {
   const { texto, erro } = await textoDe(d.url);
-  if (!texto) { resumo.erro[erro] = (resumo.erro[erro] || 0) + 1; console.log(`  ✗ ${d.fonte} ${erro} (${d.lotes.length} lotes) ${d.url.slice(0, 90)}`); continue; }
+  if (!texto) { resumo.erro[erro] = (resumo.erro[erro] || 0) + 1; continue; }
   resumo.lidos++;
   const c = classificarDoc(texto);
-  resumo.porOrigem[c.origem || 'sem_sinal'] = (resumo.porOrigem[c.origem || 'sem_sinal'] || 0) + d.lotes.length;
+  const chave = c.origem || c.motivo;
+  resumo.porOrigem[chave] = (resumo.porOrigem[chave] || 0) + d.lotes.length;
   const atual = {};
   for (const l of d.lotes) atual[l.origem] = (atual[l.origem] || 0) + 1;
-  if (c.origem && c.origem !== 'misto') for (const l of d.lotes) {
+  if (c.origem) for (const l of d.lotes) {
     if (l.origem === c.origem) resumo.lotesConfirmados++;
-    else if (l.origem === 'nao_identificado') { resumo.lotesPreenchidos++; resumo.lotesMudariam++; }
-    else { resumo.lotesDivergentes++; resumo.lotesMudariam++; }
+    else if (l.origem === 'nao_identificado') resumo.lotesPreenchidos++;
+    else resumo.lotesDivergentes++;
+    aGravar.push({ id: l.id, origem_edital: c.origem, comitente_edital: c.comitente || null });
   }
-  console.log(`  ${d.fonte} · ${d.lotes.length} lote(s) · edital → ${c.origem || 'sem_sinal'} · hoje ${JSON.stringify(atual)} · sinais ${JSON.stringify(c.hits)}${c.comitente ? ` · comitente: "${c.comitente}"` : ''}`);
+  console.log(`  ${d.fonte} · ${d.lotes.length} lote(s) · edital → ${chave} · hoje ${JSON.stringify(atual)}${c.sinal ? ` · "${c.sinal.replace(/\s+/g, ' ').slice(0, 170)}"` : ''}`);
 }
 console.log(`\n[resumo] ${JSON.stringify(resumo)}`);
+
+// GRAVA SÓ `origem_edital` (e o comitente). Quem decide `origem_venda` é o gatilho: o edital
+// preenche o que a listagem deixou em nao_identificado e NÃO sobrescreve o que ela já sabia.
+if (GRAVAR && aGravar.length) {
+  for (let i = 0; i < aGravar.length; i += 1) {
+    const g = aGravar[i];
+    const r = await fetch(`${SB_URL}/rest/v1/veiculos_leilao?id=eq.${g.id}`, {
+      method: 'PATCH',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ origem_edital: g.origem_edital, comitente_edital: g.comitente_edital }),
+    });
+    const corpo = r.ok ? await r.json() : null;
+    if (!r.ok) { console.error(`  ✗ gravar ${g.id}: HTTP ${r.status} ${(await r.text()).slice(0, 120)}`); continue; }
+    if (Array.isArray(corpo) && corpo.length) resumo.gravados++;
+  }
+  console.log(`[gravados] ${resumo.gravados} de ${aGravar.length}`);
+} else if (!GRAVAR) console.log('(EM SECO — EDITAL_GRAVAR=1 grava)');
