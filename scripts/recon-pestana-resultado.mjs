@@ -27,12 +27,57 @@ function camposInteressantes(obj, prefixo = '', out = {}, prof = 0) {
   return out;
 }
 
+// 2ª rodada (25/09): a 1ª mostrou que `status` traz o texto ("Vendido", "Aguardando repasse",
+// "Retirado", "Disponível", "Em pregão") com `situacaoId=1` até para vendido, e que `leilao=` é
+// IGNORADO (toda chamada devolve a mesma lista). Agora cruza os lotes NOSSOS que encerraram nos
+// últimos dias com o status que a API dá para eles — é isso que decide se dá para apurar.
+async function lotesNossosEncerrados() {
+  const url = process.env.VITE_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) return null;
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const desde = new Date(Date.now() - 4 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const r = await fetch(`${url}/rest/v1/imoveis_leilao?fonte=eq.PESTANA&data_fim=gte.${desde}&data_fim=lt.${hoje}&select=fonte_id,data_fim,ativo,resultado_leilao&limit=5000`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  if (!r.ok) { console.log('leitura do banco falhou HTTP', r.status); return null; }
+  return r.json();
+}
+
 (async () => {
+  const nossos = await lotesNossosEncerrados();
   const browser = await puppeteer.launch({ headless: true, args: ARGS });
   try {
     const page = await browser.newPage();
     await page.goto(`${BASE}/lotes/imoveis`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    for (const id of LEILOES) {
+    // Lista global paginada (o filtro por leilão não funciona), deduplicada por id.
+    const porId = new Map();
+    for (let pg = 1; pg <= 30; pg++) {
+      const lote = await page.evaluate(async (pg) => {
+        try { const res = await fetch(`/api/v2/lote?page=${pg}&qtd=300`, { headers: { Accept: 'application/json' } }); return res.ok ? await res.json() : null; }
+        catch { return null; }
+      }, pg);
+      const arr = Array.isArray(lote) ? lote : (lote?.content || null);
+      if (!Array.isArray(arr) || !arr.length) { console.log(`página ${pg}: ${arr ? 'vazia' : 'sem lista'} — fim`); break; }
+      const antes = porId.size;
+      arr.forEach(l => porId.set(Number(l.id), l));
+      console.log(`página ${pg}: ${arr.length} lotes (${porId.size - antes} novos)`);
+      if (porId.size === antes) break; // paginação ignorada: mesma lista de novo
+    }
+    console.log(`API: ${porId.size} lotes distintos`);
+    if (Array.isArray(nossos)) {
+      const dist = {};
+      const ex = {};
+      for (const n of nossos) {
+        const id = Number(String(n.fonte_id || '').replace('pestana_', ''));
+        const l = porId.get(id);
+        const k = `${n.data_fim} · ${l ? `status="${l.status}"` : 'FORA DA API'} · arrematante=${l ? (l.arrematante ? 'sim' : 'vazio') : '-'}`;
+        dist[k] = (dist[k] || 0) + 1;
+        if (l && !ex[l.status]) ex[l.status] = { id, lanceInicial: l.lanceInicial, lanceMinimo: l.lanceMinimo, valor: l.valor, valorInicial: l.valorInicial, arrematante: l.arrematante, leilao: l.leilao, mensagemRetirada: l.mensagemRetirada };
+      }
+      console.log(`\n=== NOSSOS lotes PESTANA encerrados (${nossos.length}) × status na API ===`);
+      Object.entries(dist).sort().forEach(([k, v]) => console.log(`  ${v}\t${k}`));
+      console.log('exemplos por status:', JSON.stringify(ex, null, 1));
+    }
+    for (const id of LEILOES.slice(0, 1)) {
       const r = await page.evaluate(async (id) => {
         try {
           const res = await fetch(`/api/v2/lote?leilao=${id}&page=1&qtd=300`, { headers: { Accept: 'application/json' } });

@@ -37,5 +37,7 @@ jobs:
 
       - name: Recon Pestana
         env:
-          PESTANA_LEILOES: '6261,6252,6170,6180'
+          PESTANA_LEILOES: '6261'
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-pestana-resultado.mjs
