@@ -33814,3 +33814,11 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   perdeu o agendamento (só roda à mão); a FIPE é consultada SÓ ao abrir a tela do veículo
   (`VeiculoDetalhe.jsx` → `api/veiculo-fipe.js`), com os 450/dia inteiros. Token/cota opcionais
   continuam suportados mas NÃO configurados, por decisão.
+- **Veículo "sem ano" → sem FIPE (dono: "não faz sentido leiloeiro anunciar sem ano; com a placa
+  descobrimos").** Medido: o ano ESTAVA no texto em formatos que o coletor não lia ("ANO/MODELO
+  2016", "Ano Fabric.:2008", "ano 2019, modelo 2020", "ano/mod.: 18/19", título "2008/"); a placa
+  vem MASCARADA pelo leiloeiro ("PLACA FINAL 88", "J*****2" — 13 de 890 tinham placa). Função
+  `extrair_ano_veiculo()` + gatilho que só preenche quando o coletor não trouxe ano
+  (`veiculo_ano_do_texto.sql`); validada contra 6.885 com ano conhecido: 99,9% iguais. Ativos sem
+  ano: **890 → 516** (o resto não tem ano no texto — WEBLEILOES/LJUD/MEGA; ano só na página do
+  lote, a ler sob demanda se o dono quiser).
