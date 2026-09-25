@@ -251,4 +251,10 @@ env RESID_APLICAR=1 node scripts/apurar-e-datar-residencial.mjs \
 # e se um dia precisar encurtá-la, o ajuste é baixar HASTA_MAX_LOTES aqui, não mexer no motor.
 rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
 
+# Carimbo de RODADA COMPLETA (25/09, pedido do dono): o computador desligado (ou o WSL fechado)
+# matava a rodada no meio — em 24/09 o log parou no fim da apuração SUPERBID e os passos
+# seguintes nunca rodaram. `runner-se-atrasado.sh` (cron a cada 30 min) lê este carimbo e roda
+# de novo assim que a máquina volta, se a última rodada COMPLETA passou de 6 h. Só é escrito
+# aqui, no fim: rodada interrompida não conta como feita.
+date +%s > "$HOME/.bidpro-runner.ultimo"
 echo "[$(date)] fim."
