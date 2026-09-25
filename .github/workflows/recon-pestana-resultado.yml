@@ -1,0 +1,41 @@
+name: Recon PESTANA — resultado do lote pela API
+
+# A API JSON da Pestana diz se o lote vendeu/ficou sem lance depois do pregão? Só diagnostica:
+# NÃO grava nada e NÃO usa Bright Data (custo zero). Ver scripts/recon-pestana-resultado.mjs.
+on:
+  # Dispara ao empurrar este workflow/script para a branch de trabalho (path-filtrado p/ não
+  # re-rodar em push não relacionado). É como rodamos o recon "em produção" sem tocar em main.
+  push:
+    branches: [ 'claude/bidpro-brasil-registros-handoff-eulqvz' ]
+    paths:
+      - 'scripts/recon-pestana-resultado.mjs'
+      - '.github/workflows/recon-pestana-resultado.yml'
+  workflow_dispatch: {}
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Recon Pestana
+        env:
+          PESTANA_LEILOES: '6261,6252,6170,6180'
+        run: node scripts/recon-pestana-resultado.mjs
