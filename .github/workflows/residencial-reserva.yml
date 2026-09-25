@@ -42,14 +42,14 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
         if: steps.hb.outputs.rodar == 'sim'
-      - name: Apuração (grava)
+      - name: Apuração + datas (grava)
         if: steps.hb.outputs.rodar == 'sim'
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           RESID_APLICAR: '1'
-          # Datas (BIASI/LJUD/GRUPOLANCE) ficam no runner: o seco de 25/09 decide se entram aqui.
-          RESID_DATAS: ''
+          # Seco de 25/09 (run 36142598080): do GitHub, ZUK 29/30 lidos (25 sem lance, 4 vendidos)
+          # e datas BIASI/LJUD/GRUPOLANCE 43/45 — as duas partes entram (fontes padrão do script).
           RESID_APURAR_LIMITE: '300'
           RESID_PAUSA_MS: '1200'
         run: node scripts/apurar-e-datar-residencial.mjs

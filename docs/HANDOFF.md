@@ -33597,3 +33597,21 @@ recebeu as duas — apagar uma esconderia o que aconteceu).
   histórico citado dela (sem repetir a conversa dentro de si mesma); passou de ~17,5 mil
   caracteres, ficam as mais recentes com aviso "(mensagens mais antigas omitidas por tamanho)".
   Anexos continuam NÃO indo no encaminhamento (comportamento anterior, não mudou).
+
+### ✅ Reserva do runner residencial no GitHub (dono sem computador, 25/09) + Pestana medido
+- **`residencial-reserva.yml`** (main): às 01/07/13/19h40 UTC, se o carimbo
+  `runner_residencial_apuracao` tem **> 7 h**, roda o MESMO `apurar-e-datar-residencial.mjs` no
+  GitHub (grátis, repo público) gravando. Seco de 25/09 (run 36142598080): ZUK **29/30** lidos
+  (25 sem lance, 4 vendidos), datas BIASI/LJUD/GRUPOLANCE **43/45**. Página que não abre não grava
+  nem carimba. Custo Bright Data: zero. O runner de casa continua sendo o principal.
+- **PESTANA — a API NÃO serve para apurar depois do pregão.** Recon (runs 36142536809 e
+  36142747060, só leitura): dos **830** lotes nossos encerrados em 21–24/09, **827 SOMEM** da
+  API `/api/v2/lote` (3 seguem "Disponível"). O campo `status` traz "Vendido"/"Aguardando
+  repasse"/"Retirado" só ENQUANTO o lote está listado; `leilao=` e `page=` são ignorados (sempre
+  os mesmos 928). Sumir não diz se vendeu ou não → NÃO gravar sem_lance por ausência (regra
+  "nunca infere"). Caminhos possíveis, não implementados: (a) a COLETA gravar `resultado_leilao`
+  quando vê "Vendido"/"Aguardando repasse" (sinal explícito, custo zero); (b) medir se lote sem
+  lance reaparece num leilão "Venda Direta" agregador da Pestana (mesma lógica aceita para a CEF).
+- **Bug de coleta PESTANA achado no recon:** o scraper filtra só `situacaoId !== 1`, mas
+  "Vendido" e "Aguardando repasse" vêm com `situacaoId = 1` → podem aparecer como disponíveis.
+  Correção: filtrar por `status === 'Disponível'` (scripts/scraper-puppeteer.mjs ~l.3635).
