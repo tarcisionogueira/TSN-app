@@ -241,7 +241,13 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
       if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });
-      if (q.descartar) { reprov++; continue; }
+      if (q.descartar) {
+        reprov++;
+        // Descarte por DECISÃO DE NEGÓCIO (fração ideal / fora do acervo) é permanente: o lote já
+        // gravado sai junto, como o não-imóvel. Sem valor/data pode ser temporário — fica.
+        if (q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo')) naoImovelIds.push(row.fonte_id);
+        continue;
+      }
       prontos.push(row);
       await sleep(350);
     }
