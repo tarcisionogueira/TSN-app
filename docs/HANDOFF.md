@@ -33710,3 +33710,33 @@ como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do
 - **Espelho (item 12):** "pendente" 30.837 → **1.280** reais. Matrícula CEF saiu da fila
   (`enfileirar_espelho_documentos`; 0 cópias em 24.536 — 403 sempre) e o que esgotou 3 tentativas
   virou `ignorado` com o motivo preservado. Migração `espelho_fila_mede_so_o_que_da_para_copiar.sql`.
+
+### 25/09 (noite) — vários e-mails do jurídico · ZUK com lote vivo desligado · origem pelo edital
+- **Vários destinatários em etiquetas (pedido do dono: "os 3 e-mails do escritório").**
+  `src/components/CampoEmails.jsx`: cada endereço trava ao Tab/Enter/vírgula/espaço, ao sair do
+  campo, ao terminar em `.com.br` (e `.com` após 0,9 s); colar lista separa; inválido fica vermelho.
+  Usado em "Enviar e-mail" do caso/lote (Para já vem com os cadastrados, dá para tirar/pôr) e no
+  Para/Cc da caixa de e-mail. **Defeito silencioso corrigido junto:** `api/enviar-email-caso.js`
+  mandava só para `toList[0]` e descartava os demais destinatários 'Para' do jurídico. Cada
+  endereço novo do jurídico é salvo após envio bem-sucedido (leiloeiro: 1 contato por fonte).
+- **ZUK Z37342 "só aparece o edital" → a causa era outra: o lote estava DESLIGADO.** A página só
+  oferece edital + matrícula atrás de login; a matrícula vem do `matricula-zuk.yml` (60/rodada,
+  100% de acerto), que só olha lote ativo. O lote (2ª praça 14/10, lance correndo) estava
+  `sumiu_da_fonte`. **Raiz (recon `recon-zuk-listagem.mjs`):** o POST `/leilao-de-imoveis/mais`
+  toma **429** no meio; o laço parava com o botão "Carregar mais" ainda na tela (~480 cards) e o
+  sweep desligava o resto — 100–160 ZUK/dia, 34 de 58 "sumidos" com 2ª praça futura estavam na
+  listagem. **Conserto:** 429 → espera crescente (15 s × n, até 6×); terminou com o botão na tela →
+  `coletaParcial`, sweep não roda. Migração `zuk_religa_sumidos_por_429.sql`: **102 religados**
+  (559 → 661 ativos). Matrícula ZUK disparada à mão. ⚠️ `scraperPortalZukVeiculos` usa o mesmo
+  laço (acervo ~64, risco menor) — não mexido.
+- **ZUK judicial gravado como extrajudicial:** o card diz "Tribunal de Justiça do Estado de São
+  Paulo", não "judicial". Coletor corrigido + migração `zuk_modalidade_judicial_pelo_tribunal.sql`
+  (129 ativos + 479 inativos → judicial).
+- **Origem do veículo pelo edital — caminho 1 FEITO.** Recon do trecho mostrou que quem vende está
+  na 1ª página (vara/tribunal, município/ministério, "COMITENTE(S) VENDEDOR(ES) … LTDA").
+  `edital-origem-veiculos.mjs` classifica só o cabeçalho, ignora não-edital (LGPD, modelo de
+  declaração) e grava `origem_edital`/`comitente_edital`. Gatilho (`veiculo_origem_pelo_edital.sql`)
+  usa o edital **só para preencher `nao_identificado`**; a listagem vence. Seco: 234 editais,
+  **245 lotes preenchidos, 44 confirmados, 1 divergente** (era "CNPJ do Ministério da Fazenda" —
+  regra corrigida, junto com "DETRAN" de cláusula-padrão). Gravação: `recon-edital-veiculos.yml`
+  com `gravar=1`. Limites: SUPERBID 403 no GitHub (edital do evento), 16 PDFs > 15 MB, 9 sem texto.
