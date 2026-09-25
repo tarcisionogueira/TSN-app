@@ -3633,6 +3633,10 @@ async function scraperPestana(browser) {
       if (!Array.isArray(lotes)) continue;
       for (const lote of lotes) {
         if (lote && lote.situacaoId != null && Number(lote.situacaoId) !== 1) continue; // só Disponível
+        // 25/09 (recon-pestana-resultado): "Vendido" e "Aguardando repasse" vêm com situacaoId=1 —
+        // o filtro acima deixava lote JÁ VENDIDO entrar como disponível. O texto de `status` é o que
+        // a própria Pestana mostra; "Em pregão" continua (está acontecendo agora).
+        if (lote && /vendid|repasse|retirad|arrematad|suspens|cancelad/i.test(String(lote.status || ''))) continue;
         const row = mapLotePestana(lote, leilao, leiloesPorId);
         if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
         seen.add(row.fonte_id);
