@@ -41,7 +41,14 @@ export const idDaUrl = url => (String(url).match(/\/lote\/(\d+)/) || [])[1] || n
 // "Tipo do bem - descrição curta com área - Cidade/UF" — a 1ª linha do texto renderizado que
 // bater nesse formato. Varre só as primeiras linhas (o resto é edital/matrícula/menu).
 function primeiraLinhaInfo(linhas) {
-  for (const l of linhas.slice(0, 6)) {
+  // 25/09: o aviso de COOKIES ("Centro de preferências de privacidade…") ocupa o topo da página
+  // renderizada, e o título caía depois da linha 6 — os 48 lotes Rigolon e 112 Giordano saíram
+  // TODOS como "Imóvel <leiloeiro> <id>". Âncora no cabeçalho do lote ("Leilão 99718: Aberto…") e
+  // procura logo abaixo; sem âncora, janela larga (o título vem antes dos "lotes relacionados").
+  const ini = linhas.findIndex((l) => /^\s*Leil[aã]o\s+\d+\s*:/i.test(l));
+  const janela = ini >= 0 ? linhas.slice(ini, ini + 20) : linhas.slice(0, 150);
+  for (const l0 of janela) {
+    const l = l0.trim();
     const m = l.match(/^(.+?)\s-\s(.+?)\s-\s([A-ZÀ-Ÿ][A-Za-zÀ-ÿ '.-]+?)\/([A-Z]{2})$/);
     if (m) return { tipoBem: m[1].trim(), descCurta: m[2].trim(), cidade: m[3].trim(), estado: m[4] };
     // 25/09: formato INVERTIDO, cidade primeiro — "Rancharia/SP - Honda/C100 Biz - 02/02". Sem ele
