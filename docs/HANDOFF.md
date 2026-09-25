@@ -33520,3 +33520,60 @@ coleta preserva cidade do veículo, runner recupera rodada perdida (`runner-se-a
 
 ### Check-ins agendados
 - 28/09 13h UTC — Mercado Pago, teto de e-mails, heartbeats do runner residencial.
+
+## 🩺 SESSÃO 25/09 (manhã) — ritual + e-mail do dono + caixa de e-mail em CONVERSA
+
+**Ritual (13h UTC):** 0 cliente travado, 0 chamado sem resposta, 0 KYC quebrado, 0 crítico em
+segurança/regras, backup ok 3 dias, `relatorios_falha_24h: 0`, produção READY em `c07f434` (os
+e-mails "deployment failed" de 24/09 eram de commits já superados).
+
+**Captura — 8 fontes `zerou`, três causas diferentes (não mexer às cegas):**
+- SBID9 / SBID21 / KRONLEILOES / TOTALLEILOES falharam JUNTAS na mesma rodada (24/09 14h53 UTC),
+  todas ok em 23/09 → é a rodada, não os sites. Conferir a rodada de 25/09 ~15h UTC.
+- CALIL / JOAOEMILIO / BAYIT sem medição 20–24 h → rodada residencial perdida de 24/09 (pendência
+  do WSL, abaixo).
+- **HASTA = site sem lote de verdade, parser ÍNTEGRO.** Recon de 23/09 (Actions run 35888508737)
+  e rodada de 25/09 02h15 (run 36085364430): os leilões 569/570/571 mostram literalmente "NENHUM
+  LOTE"; os 584 lotes antigos já estão `ativo=false` (último leilão 03/09). NÃO "consertar" parser
+  (mesmo erro do LEILOFY em 27/08). Melhoria opcional: `hasta-parse.mjs` reconhecer "NENHUM LOTE" e
+  escrever isso no `motivo`, para parar de parecer regressão. `leiloeiro_conhecimento` do HASTA
+  ainda diz `dom-puppeteer-residencial` (desatualizado desde 19/09, proxy ISP).
+- LEJE: HTTP 403 ao runner desde 24/09 (acesso negado, não parser).
+
+**Bright Data (e-mail 25/09 00h01 UTC):** a faixa `54.20.63.0/24` foi posta na blacklist da zona
+`web_unlocker1` como "IP desconhecido". É faixa AWS (compatível com função da Vercel, que troca de
+IP). Nenhuma credencial do Bright Data no repo nem no histórico (conferido). Ledger da semana:
+`sucessos ≈ requests`, 8 `falhas_rede` no total → sem quebra visível. Decisão do dono: se for
+nosso, remover da blacklist (link no e-mail); NÃO fazer whitelist (a Vercel não tem IP fixo e o
+whitelist bloquearia todo o resto).
+
+**Espelho de documentos:** fila `pendente` 30.837 (era 30.258 no fechamento — ainda não caiu);
+links mortos de `imovel_anexos` = **0** ✅. Reconferir amanhã; se não cair, olhar o
+`espelhar-docs-cron`.
+
+**Invariantes novos em alerta** (não investigados hoje): `email_para_endereco_suprimido` 1,
+`cadastro_duplicado` 1, `resultado_leilao_atrasado` 714 (crítico), `qa_invariantes_lenta` 10,3 s.
+
+### ✅ Caixa de e-mail agrupada em CONVERSA (pedido do dono, 25/09)
+`src/components/CaixaEmail.jsx`. Antes: cada e-mail numa linha, a resposta da equipe só em
+Enviados — ler a troca com a Leiloaria Smart era abrir 7 itens em 2 pastas. Agora:
+- **Lista = uma linha por conversa** (outra ponta + assunto sem `Re:/RES:/ENC:/Fwd:`), com `(n)`
+  mensagens, não lida se QUALQUER uma estiver não lida.
+- **Leitor = a conversa inteira em sequência**, da mais antiga para a mais nova, juntando Entrada
+  + Enviados (Spam nunca mistura), cada e-mail num cartão (nosso = barra azul) e rola até a mais
+  nova. O **histórico citado vem recolhido** ("··· Mostrar histórico citado") e o HTML original
+  fica em "Ver formatado" — leitura corrida sem repetir 5 vezes o mesmo texto.
+- Responder sai da última mensagem RECEBIDA da conversa; Spam/Lixeira/Restaurar movem a conversa
+  inteira da pasta (confirmado por `.select()`); abrir marca todas como lidas.
+- Chave NÃO usa `message_id`: o Outlook repete o mesmo id em respostas diferentes e `referencias`
+  chega em formatos misturados (medido no banco). `resposta_de` entra como elo extra.
+- Dry run sobre as 13 linhas reais: a troca Leiloaria Smart vira 1 conversa (3 recebidas + 4
+  enviadas); o corte de citação acerta Outlook ("De: … Enviada em:") e Gmail ("Em … escreveu:").
+
+### ⏭️ Pendências do dono
+**Pelo celular:** (1) Bright Data — decidir se remove `54.20.63.0/24` da blacklist; (2) responder
+o Dr. José Roberto (Cajado de Menezes) com o título apresentado no RI de Cotia; (3) boleto Itaú
+R$ 14.627,92 vence 27/09; (4) conferir o alerta do Serasa no app oficial (e-mail com cara de
+marketing — não clicar no link).
+**No computador:** (5) WSL — crontab `runner-se-atrasado.sh` (*/30) + tarefa "BidPro WSL" (passo a
+passo no evento da Agenda de 25/09 09h).

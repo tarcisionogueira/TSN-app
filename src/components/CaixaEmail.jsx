@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText } from 'lucide-react';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -51,6 +51,33 @@ function TextoComEmails({ texto, onEscrever }) {
         style={{ background: 'none', border: 'none', padding: 0, color: '#0D63DB', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>{p}</button>
     : <React.Fragment key={i}>{p}</React.Fragment>));
 }
+// ── CONVERSA (25/09, pedido do dono) ─────────────────────────────────────────────────────
+// A lista mostrava cada e-mail solto, e a resposta da equipe ficava em "Enviados": ler uma troca
+// era abrir 6 itens em 2 pastas. Agora agrupa por CONVERSA = outra ponta + assunto sem os
+// prefixos (Re:/RES:/ENC:/Fwd:…) e abre tudo em sequência, com o histórico citado recolhido.
+// Não usa message_id/in_reply_to como chave: o Outlook repete o mesmo message_id em respostas
+// diferentes e `referencias` chega em formatos misturados (medido no banco em 25/09) — o
+// `resposta_de` (gravado pelo nosso webhook) entra como elo extra na hora de abrir.
+const RE_PREFIXO = /^\s*((re|res|fw|fwd|enc|tr|rv|aw|wg)\s*(\[\d+\])?\s*:\s*)+/i;
+const normAssunto = (s) => String(s || '').replace(RE_PREFIXO, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const contraparte = (m) => String(m.direcao === 'saida' ? ((m.para || [])[0] || '') : (m.de_email || '')).trim().toLowerCase();
+const chaveConversa = (m) => `${contraparte(m)}|${normAssunto(m.assunto)}`;
+// Endereço que pode ir cru num filtro `.or()` do PostgREST (vírgula/parêntese/aspas quebrariam a sintaxe).
+const RE_FILTRO_SEGURO = /^[^\s,()"{}]+@[^\s,()"{}]+$/;
+// Corta o texto na 1ª linha de histórico citado ("Em … escreveu:", "De: … Enviada em:", ">").
+const RE_CITACAO = /^\s*(-{2,}\s*(mensagem original|original message|mensagem encaminhada|forwarded message)|_{8,}\s*$|(de|from)\s*:\s*\S.*)/i;
+function separarCitacao(texto) {
+  const linhas = String(texto || '').split(/\r?\n/);
+  const corte = linhas.findIndex((l, i) => i > 0 && (/^\s*>/.test(l) || RE_CITACAO.test(l)
+    || /^\s*(em\s.{3,300}escreveu|on\s.{3,300}wrote)\s*:?\s*$/i.test(`${l} ${linhas[i + 1] || ''}`.trim())
+    || /^\s*(em\s.{3,300}escreveu|on\s.{3,300}wrote)\s*:?\s*$/i.test(l)));
+  if (corte < 0) return { principal: String(texto || '').trim(), citado: '' };
+  const principal = linhas.slice(0, corte).join('\n').trim();
+  // Mensagem que é só citação (encaminhamento puro): mostra tudo em vez de um corpo vazio.
+  if (!principal) return { principal: String(texto || '').trim(), citado: '' };
+  return { principal, citado: linhas.slice(corte).join('\n').trim() };
+}
+
 const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id'];
 const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim()));
 
@@ -77,7 +104,10 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
-  const [ativa, setAtiva] = useState(null);      // mensagem aberta (linha completa)
+  const [ativa, setAtiva] = useState(null);      // mensagem mais recente da conversa aberta (linha completa)
+  const [conversa, setConversa] = useState([]);  // todas as mensagens da conversa, da mais antiga à mais nova
+  const [verMais, setVerMais] = useState({});    // { [id]: { html, citado } } — o que cada cartão mostra aberto
+  const ultimaRef = useRef(null);
   // Celular (23/09): lista e leitor lado a lado (340px + 1fr) empurravam a mensagem para fora da
   // tela. Abaixo de 900px vira app de e-mail: OU a lista, OU a mensagem aberta com "Voltar".
   const estreito = useIsMobile(900);
@@ -125,33 +155,66 @@ export default function CaixaEmail({ soPessoal = false }) {
     setCarregando(false);
   }, [pasta]);
 
-  useEffect(() => { setAtiva(null); carregar(); }, [carregar]);
+  useEffect(() => { setAtiva(null); setConversa([]); carregar(); }, [carregar]);
   // Atualiza sozinha a cada minuto com a aba visível — sem depender de alguém lembrar do botão.
   useEffect(() => {
     const t = setInterval(() => { if (document.visibilityState === 'visible') carregar(); }, 60_000);
     return () => clearInterval(t);
   }, [carregar]);
 
-  async function abrir(m) {
-    const { data, error } = await supabase.from('email_caixa').select('*').eq('id', m.id).maybeSingle();
-    if (error || !data) { setErro(error ? `Não consegui abrir a mensagem: ${error.message}` : 'Mensagem não encontrada.'); return; }
-    setAtiva(data);
-    if (estreito) window.scrollTo({ top: 0, behavior: 'smooth' }); // a mensagem ocupa o lugar da lista
-    if (!data.lido) {
-      const { data: up, error: eUp } = await supabase.from('email_caixa').update({ lido: true }).eq('id', m.id).select('id');
-      if (!eUp && up?.length) {
-        setLista(prev => prev.map(x => x.id === m.id ? { ...x, lido: true } : x));
-        setNaoLidos(prev => ({ ...prev, [data.pasta]: Math.max(0, (prev[data.pasta] || 1) - 1) }));
-      }
+  // Abre a CONVERSA inteira: as mensagens desta pasta + o outro lado (Entrada ↔ Enviados), numa
+  // leitura só. Spam nunca mistura com o resto (nem o resto com o spam).
+  async function abrir(grupo) {
+    const base = grupo.msgs[0];
+    const ids = grupo.msgs.map(x => x.id);
+    const c = contraparte(base);
+    const pastas = pasta === 'spam' ? ['spam'] : [...new Set([pasta, 'entrada', 'enviados'])];
+    const filtro = [`id.in.(${ids.join(',')})`];
+    if (RE_FILTRO_SEGURO.test(c)) filtro.push(`de_email.ilike.${c}`, `para.cs.{"${c}"}`);
+    const { data, error } = await supabase.from('email_caixa').select('*')
+      .in('pasta', pastas).or(filtro.join(',')).order('criado_em', { ascending: true }).limit(200);
+    if (error || !data?.length) { setErro(error ? `Não consegui abrir a conversa: ${error.message}` : 'Mensagem não encontrada.'); return; }
+    const chave = chaveConversa(base);
+    const doGrupo = new Set(ids);
+    const msgs = data.filter(x => doGrupo.has(x.id) || chaveConversa(x) === chave);
+    const noFio = new Set(msgs.map(x => x.id));
+    // `resposta_de`: resposta que chegou a um e-mail nosso, mesmo que o assunto tenha mudado.
+    data.forEach(x => { if (!noFio.has(x.id) && (noFio.has(x.resposta_de) || msgs.some(y => y.resposta_de === x.id))) { msgs.push(x); noFio.add(x.id); } });
+    msgs.sort((a, b2) => new Date(a.criado_em) - new Date(b2.criado_em));
+    setConversa(msgs);
+    setVerMais({});
+    setAtiva(msgs.find(x => x.id === base.id) || msgs[msgs.length - 1]);
+    if (estreito) window.scrollTo({ top: 0, behavior: 'smooth' }); // a conversa ocupa o lugar da lista
+    const naoLidas = msgs.filter(x => !x.lido && x.direcao === 'entrada').map(x => x.id);
+    if (naoLidas.length) {
+      const { data: up, error: eUp } = await supabase.from('email_caixa').update({ lido: true }).in('id', naoLidas).select('id,pasta');
+      if (eUp) { console.warn('[caixa] não consegui marcar como lida:', eUp.message); return; }
+      const marcadas = new Set((up || []).map(r => r.id));
+      setLista(prev => prev.map(x => marcadas.has(x.id) ? { ...x, lido: true } : x));
+      setNaoLidos(prev => (up || []).reduce((a, r) => ({ ...a, [r.pasta]: Math.max(0, (a[r.pasta] || 1) - 1) }), prev));
     }
   }
+  // Conversa longa: leva direto à mensagem mais nova (a de baixo), que é a que se veio ler.
+  useEffect(() => {
+    if (conversa.length > 1) ultimaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [conversa]);
 
-  async function mover(m, destino, msgOk) {
-    const { data, error } = await supabase.from('email_caixa').update({ pasta: destino }).eq('id', m.id).select('id');
-    if (error || !data?.length) { setErro(error ? `Não consegui mover: ${error.message}` : 'Sem permissão para mover esta mensagem.'); return false; }
-    setLista(prev => prev.filter(x => x.id !== m.id));
-    setAtiva(null);
-    setAviso(msgOk);
+  // Move a conversa INTEIRA desta pasta (não só a última mensagem — senão ela continuaria na lista).
+  // `destinoDe` recebe a mensagem porque Restaurar devolve saída → Enviados e entrada → Entrada.
+  async function mover(destinoDe, msgOk) {
+    const alvo = conversa.filter(x => x.pasta === pasta);
+    const porDestino = {};
+    alvo.forEach(x => { const d = destinoDe(x); (porDestino[d] = porDestino[d] || []).push(x.id); });
+    const movidas = new Set();
+    for (const [destino, ids] of Object.entries(porDestino)) {
+      const { data, error } = await supabase.from('email_caixa').update({ pasta: destino }).in('id', ids).select('id');
+      if (error) { setErro(`Não consegui mover: ${error.message}`); break; }
+      (data || []).forEach(r => movidas.add(r.id));
+    }
+    if (!movidas.size) { setErro(prev => prev || 'Sem permissão para mover esta conversa.'); return false; }
+    setLista(prev => prev.filter(x => !movidas.has(x.id)));
+    setAtiva(null); setConversa([]);
+    setAviso(movidas.size > 1 ? `${msgOk} (${movidas.size} mensagens da conversa)` : msgOk);
     return true;
   }
 
@@ -167,7 +230,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     q = porDominio ? q.ilike('de_email', `%${padrao}`) : q.eq('de_email', email);
     const { data: movidos, error: eMov } = await q.select('id');
     if (eMov) { setErro(`Bloqueado, mas não consegui mover os e-mails antigos: ${eMov.message}`); }
-    setAtiva(null);
+    setAtiva(null); setConversa([]);
     setAviso(`${alvo} bloqueado. ${movidos?.length || 0} e-mail(s) movido(s) para Spam.`);
     carregar();
   }
@@ -294,6 +357,13 @@ export default function CaixaEmail({ soPessoal = false }) {
   const b = busca.trim().toLowerCase();
   const porOrigem = origem === 'todas' ? lista : lista.filter(m => (origem === 'minha' ? !!m.dono : !m.dono));
   const visiveis = b ? porOrigem.filter(m => [m.de_email, m.de_nome, m.assunto, (m.para || []).join(' ')].some(v => String(v || '').toLowerCase().includes(b))) : porOrigem;
+  // Lista vem da mais nova para a mais antiga: o 1º de cada grupo é a mensagem mais recente.
+  const conversas = useMemo(() => {
+    const mapa = new Map();
+    visiveis.forEach(m => { const k = chaveConversa(m); if (!mapa.has(k)) mapa.set(k, { chave: k, msgs: [] }); mapa.get(k).msgs.push(m); });
+    return [...mapa.values()];
+  }, [visiveis]);
+  const ultimaEntrada = [...conversa].reverse().find(x => x.direcao === 'entrada');
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '340px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
@@ -351,21 +421,26 @@ export default function CaixaEmail({ soPessoal = false }) {
             ))
         ) : visiveis.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : 'Nenhuma mensagem aqui.'}</div>
-        ) : visiveis.map(m => {
-          const sel = ativa?.id === m.id;
-          const quem = m.direcao === 'saida' ? `Para: ${(m.para || []).join(', ')}` : (m.de_nome || m.de_email || '(sem remetente)');
+        ) : conversas.map(({ chave, msgs }) => {
+          const m = msgs[0];
+          const sel = !!ativa && conversa.some(x => x.id === m.id);
+          const naoLida = msgs.some(x => !x.lido);
+          const entrada = msgs.find(x => x.direcao === 'entrada');
+          const quem = entrada ? (entrada.de_nome || entrada.de_email || '(sem remetente)') : `Para: ${(m.para || []).join(', ')}`;
           return (
-            <div key={m.id} onClick={() => abrir(m)}
-              style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: sel ? '#eff6ff' : 'white', borderLeft: `3px solid ${!m.lido ? '#0D63DB' : 'transparent'}` }}>
+            <div key={chave} onClick={() => abrir({ chave, msgs })}
+              style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: sel ? '#eff6ff' : 'white', borderLeft: `3px solid ${naoLida ? '#0D63DB' : 'transparent'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: m.lido ? 600 : 800, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{quem}</span>
+                <span style={{ fontSize: 13, fontWeight: naoLida ? 800 : 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {quem}{msgs.length > 1 && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#64748b' }}>({msgs.length})</span>}
+                </span>
                 <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtData(m.criado_em)}</span>
               </div>
-              <div style={{ fontSize: 12.5, color: '#334155', fontWeight: m.lido ? 500 : 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.assunto || '(sem assunto)'}</div>
+              <div style={{ fontSize: 12.5, color: '#334155', fontWeight: naoLida ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.assunto || '(sem assunto)'}</div>
               <div style={{ fontSize: 11.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {m.chamado_id && <MessageCircle size={11} title="Virou chamado" />}
-                {(m.anexos || []).length > 0 && <Paperclip size={11} />}
-                {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : m.direcao === 'saida' ? <StatusEnvio m={m} /> : String(m.texto || '').slice(0, 90)}
+                {msgs.some(x => x.chamado_id) && <MessageCircle size={11} title="Virou chamado" />}
+                {msgs.some(x => (x.anexos || []).length > 0) && <Paperclip size={11} />}
+                {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : m.direcao === 'saida' ? <StatusEnvio m={m} /> : separarCitacao(m.texto).principal.slice(0, 90)}
               </div>
             </div>
           );
@@ -386,7 +461,7 @@ export default function CaixaEmail({ soPessoal = false }) {
       {/* LEITOR */}
       <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', minHeight: estreito ? 0 : 420, minWidth: 0, display: estreito && !ativa ? 'none' : undefined }}>
         {estreito && ativa && (
-          <button onClick={() => setAtiva(null)} style={{ ...btn(false), margin: '12px 12px 0' }}><ArrowLeft size={14} /> Voltar à lista</button>
+          <button onClick={() => { setAtiva(null); setConversa([]); }} style={{ ...btn(false), margin: '12px 12px 0' }}><ArrowLeft size={14} /> Voltar à lista</button>
         )}
         {!ativa ? (
           <div style={{ padding: 60, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
@@ -394,45 +469,70 @@ export default function CaixaEmail({ soPessoal = false }) {
           </div>
         ) : (
           <div style={{ padding: estreito ? 14 : 18 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 6, overflowWrap: 'anywhere' }}>{ativa.assunto || '(sem assunto)'}</div>
-            <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.7, overflowWrap: 'anywhere' }}>
-              <div><b>De:</b> {ativa.de_nome ? `${ativa.de_nome} <${ativa.de_email}>` : ativa.de_email}</div>
-              <div><b>Para:</b> {(ativa.para || []).join(', ') || ativa.caixa}</div>
-              {(ativa.cc || []).length > 0 && <div><b>Cc:</b> {ativa.cc.join(', ')}</div>}
-              <div><b>Data:</b> {new Date(ativa.criado_em).toLocaleString('pt-BR')}</div>
-              {ativa.direcao === 'saida' && <div><b>Status:</b> <StatusEnvio m={ativa} completo /></div>}
-              {ativa.resposta_de && <div style={{ color: '#7c3aed', fontWeight: 700 }}><Reply size={12} /> Resposta a um e-mail enviado pela equipe (veja em Enviados).</div>}
-              {ativa.chamado_id && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta mensagem está num chamado da fila — responder daqui também registra no chamado.</div>}
-              {ativa.spam_motivo && <div style={{ color: '#dc2626', fontWeight: 700 }}><ShieldAlert size={12} /> Spam: {ativa.spam_motivo}</div>}
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 4, overflowWrap: 'anywhere' }}>{ativa.assunto || '(sem assunto)'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
+              {conversa.length > 1 ? `${conversa.length} mensagens nesta conversa — da mais antiga para a mais nova.` : '1 mensagem.'}
+              {conversa.some(x => x.chamado_id) && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta conversa está num chamado da fila — responder daqui também registra no chamado.</div>}
             </div>
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0' }}>
-              {ativa.direcao === 'entrada' && ativa.pasta !== 'spam' && <button onClick={() => responder(ativa)} style={btn(false)}><Reply size={13} /> Responder</button>}
-              <button onClick={() => encaminhar(ativa)} style={btn(false)}><Forward size={13} /> Encaminhar</button>
-              {ativa.direcao === 'entrada' && ativa.pasta === 'entrada' && <button onClick={() => mover(ativa, 'spam', 'Movido para Spam.')} style={btn(false)}><ShieldAlert size={13} /> Spam</button>}
-              {ativa.pasta === 'spam' && <button onClick={() => mover(ativa, 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} style={btn(false)}><Undo2 size={13} /> Não é spam</button>}
-              {ativa.direcao === 'entrada' && ativa.de_email && <button onClick={() => bloquear(ativa, false)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear remetente</button>}
-              {ativa.direcao === 'entrada' && ativa.de_email && <button onClick={() => bloquear(ativa, true)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear domínio</button>}
-              {ativa.pasta !== 'lixeira'
-                ? <button onClick={() => mover(ativa, 'lixeira', 'Movido para a Lixeira.')} style={btn(false)}><Trash2 size={13} /> Lixeira</button>
-                : <button onClick={() => mover(ativa, ativa.direcao === 'saida' ? 'enviados' : 'entrada', 'Restaurado.')} style={btn(false)}><Undo2 size={13} /> Restaurar</button>}
+              {ultimaEntrada && pasta !== 'spam' && <button onClick={() => responder(ultimaEntrada)} style={btn(false)}><Reply size={13} /> Responder</button>}
+              <button onClick={() => encaminhar(conversa[conversa.length - 1] || ativa)} style={btn(false)}><Forward size={13} /> Encaminhar</button>
+              {pasta === 'entrada' && <button onClick={() => mover(() => 'spam', 'Movido para Spam.')} style={btn(false)}><ShieldAlert size={13} /> Spam</button>}
+              {pasta === 'spam' && <button onClick={() => mover(() => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} style={btn(false)}><Undo2 size={13} /> Não é spam</button>}
+              {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, false)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear remetente</button>}
+              {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, true)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear domínio</button>}
+              {pasta !== 'lixeira'
+                ? <button onClick={() => mover(() => 'lixeira', 'Movido para a Lixeira.')} style={btn(false)}><Trash2 size={13} /> Lixeira</button>
+                : <button onClick={() => mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.')} style={btn(false)}><Undo2 size={13} /> Restaurar</button>}
             </div>
 
-            {(ativa.anexos || []).length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                {ativa.anexos.map((a, i) => (a.id || (ativa.direcao === 'saida' && ativa.resend_email_id))
-                  ? <button key={i} onClick={() => baixarAnexo(ativa, a, i)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
-                  : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome}{ativa.direcao === 'saida' ? '' : ' (indisponível)'}</span>)}
-              </div>
-            )}
-
-            {ativa.pasta === 'spam' || !ativa.html
+            {conversa.map((m, idx) => {
+              const ultima = idx === conversa.length - 1;
+              const nossa = m.direcao === 'saida';
+              const spam = m.pasta === 'spam';
+              const { principal, citado } = separarCitacao(m.texto);
+              const v = verMais[m.id] || {};
+              const alternar = (campo) => setVerMais(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || {}), [campo]: !(prev[m.id] || {})[campo] } }));
+              const linkBtn = { background: 'none', border: 'none', padding: 0, color: '#0D63DB', cursor: 'pointer', fontSize: 12, fontWeight: 700 };
               // Spam nunca renderiza HTML (nem no iframe isolado): imagem remota confirma ao
               // remetente que o endereço é lido — o que spammer mais quer saber.
-              ? <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#1e293b', lineHeight: 1.6, overflowWrap: 'break-word' }}>
-                  {ativa.texto ? (ativa.pasta === 'spam' ? ativa.texto : <TextoComEmails texto={ativa.texto} onEscrever={(e) => escreverPara(e)} />) : '(mensagem sem texto)'}
+              const mostrarHtml = !spam && !!m.html && (v.html || !m.texto);
+              return (
+                <div key={m.id} ref={ultima ? ultimaRef : undefined}
+                  style={{ borderTop: idx ? '1px solid #e2e8f0' : 'none', padding: '14px 0 14px 12px', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, marginBottom: 2, scrollMarginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: '#475569', overflowWrap: 'anywhere' }}>
+                    <span><b style={{ color: '#111' }}>{nossa ? `Nós (${m.de_email})` : (m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email)}</b>
+                      {' → '}{(m.para || []).join(', ') || m.caixa}{(m.cc || []).length > 0 && ` · Cc: ${m.cc.join(', ')}`}</span>
+                    <span style={{ color: '#94a3b8', flexShrink: 0 }}>{new Date(m.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  {nossa && <div style={{ marginTop: 2 }}><StatusEnvio m={m} completo /></div>}
+                  {m.spam_motivo && <div style={{ color: '#dc2626', fontWeight: 700, fontSize: 12 }}><ShieldAlert size={12} /> Spam: {m.spam_motivo}</div>}
+
+                  {(m.anexos || []).length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+                      {m.anexos.map((a, i) => (a.id || (nossa && m.resend_email_id))
+                        ? <button key={i} onClick={() => baixarAnexo(m, a, i)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
+                        : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome}{nossa ? '' : ' (indisponível)'}</span>)}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 8 }}>
+                    {mostrarHtml
+                      ? <EmailHtml html={m.html} altura={ultima ? 520 : 360} />
+                      : <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#1e293b', lineHeight: 1.6, overflowWrap: 'break-word' }}>
+                          {!m.texto ? '(mensagem sem texto)' : spam ? m.texto : <TextoComEmails texto={v.citado ? m.texto : principal} onEscrever={(e) => escreverPara(e)} />}
+                        </div>}
+                  </div>
+                  {!spam && (
+                    <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                      {!mostrarHtml && citado && <button onClick={() => alternar('citado')} style={linkBtn}>{v.citado ? 'Ocultar histórico citado' : '··· Mostrar histórico citado'}</button>}
+                      {m.html && m.texto && <button onClick={() => alternar('html')} style={linkBtn}>{v.html ? 'Ver só o texto' : 'Ver formatado (original)'}</button>}
+                    </div>
+                  )}
                 </div>
-              : <EmailHtml html={ativa.html} altura={520} />}
+              );
+            })}
           </div>
         )}
       </div>
