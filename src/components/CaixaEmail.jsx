@@ -61,6 +61,11 @@ function TextoComEmails({ texto, onEscrever }) {
 // `resposta_de` (gravado pelo nosso webhook) entra como elo extra na hora de abrir.
 const RE_PREFIXO = /^\s*((re|res|fw|fwd|enc|tr|rv|aw|wg)\s*(\[\d+\])?\s*:\s*)+/i;
 const normAssunto = (s) => String(s || '').replace(RE_PREFIXO, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// Endereço de resposta da equipe leva um código (`tarcisio+<token>@bidprobrasil.com.br`) que
+// encadeia a resposta ao envio. O código é só roteamento — na TELA mostra o endereço normal
+// (25/09, dono: "é confuso olhar"). Os dados continuam com o código.
+const semToken = (e) => String(e || '').replace(/\+[a-z0-9]+@(bidprobrasil\.com\.br)$/i, '@$1');
+const listaSemToken = (l) => [...new Set((l || []).map(semToken))].join(', ');
 const contraparte = (m) => String(m.direcao === 'saida' ? ((m.para || [])[0] || '') : (m.de_email || '')).trim().toLowerCase();
 const chaveConversa = (m) => `${contraparte(m)}|${normAssunto(m.assunto)}`;
 // Endereço que pode ir cru num filtro `.or()` do PostgREST (vírgula/parêntese/aspas quebrariam a sintaxe).
@@ -334,7 +339,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   // histórico citado dela (senão a conversa se repetiria dentro de si mesma a cada resposta).
   // Passando do limite do campo, ficam as MAIS RECENTES — é o que quem recebe precisa ler primeiro.
   function encaminhar(msgs) {
-    const bloco = (m) => `---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nPara: ${(m.para || []).join(', ')}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${separarCitacao(m.texto).principal}`;
+    const bloco = (m) => `---------- Mensagem encaminhada ----------\nDe: ${m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email}\nPara: ${listaSemToken(m.para)}\nData: ${new Date(m.criado_em).toLocaleString('pt-BR')}\nAssunto: ${m.assunto || ''}\n\n${separarCitacao(m.texto).principal}`;
     const blocos = [];
     let tamanho = 0, cortou = false;
     for (const m of [...msgs].reverse()) {
@@ -446,7 +451,7 @@ export default function CaixaEmail({ soPessoal = false }) {
           const sel = !!ativa && conversa.some(x => x.id === m.id);
           const naoLida = msgs.some(x => !x.lido);
           const entrada = msgs.find(x => x.direcao === 'entrada');
-          const quem = entrada ? (entrada.de_nome || entrada.de_email || '(sem remetente)') : `Para: ${(m.para || []).join(', ')}`;
+          const quem = entrada ? (entrada.de_nome || entrada.de_email || '(sem remetente)') : `Para: ${listaSemToken(m.para)}`;
           return (
             <div key={chave} onClick={() => abrir({ chave, msgs })}
               style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: sel ? '#eff6ff' : 'white', borderLeft: `3px solid ${naoLida ? '#0D63DB' : 'transparent'}` }}>
@@ -524,7 +529,7 @@ export default function CaixaEmail({ soPessoal = false }) {
                   style={{ borderTop: idx ? '1px solid #e2e8f0' : 'none', padding: '14px 0 14px 12px', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, marginBottom: 2, scrollMarginTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: '#475569', overflowWrap: 'anywhere' }}>
                     <span><b style={{ color: '#111' }}>{nossa ? `Nós (${m.de_email})` : (m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email)}</b>
-                      {' → '}{(m.para || []).join(', ') || m.caixa}{(m.cc || []).length > 0 && ` · Cc: ${m.cc.join(', ')}`}</span>
+                      {' → '}{listaSemToken(m.para) || semToken(m.caixa)}{(m.cc || []).length > 0 && ` · Cc: ${listaSemToken(m.cc)}`}</span>
                     <span style={{ color: '#94a3b8', flexShrink: 0 }}>{new Date(m.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   {nossa && <div style={{ marginTop: 2 }}><StatusEnvio m={m} completo /></div>}
