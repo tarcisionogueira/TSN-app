@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiCall } from '../utils/apiCall';
+import CampoEmails from './CampoEmails';
 
 /**
  * "Enviar e-mail" — jurídico ou leiloeiro do lote, com um clique incluindo todos os
@@ -19,13 +20,14 @@ import { apiCall } from '../utils/apiCall';
  * verdade; o `isStaff` do chamador aqui é só para não desenhar o botão para o cliente.
  */
 const btnLocal = (color = '#0D63DB') => ({ padding: '10px 20px', background: color, color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' });
-const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardStyle }) {
   const [emailPreview, setEmailPreview] = useState(null); // { destino, texto, destinatarioEmail, contatoDisponivel, ... }
   const [enviando, setEnviando] = useState(false);
   const [carregando, setCarregando] = useState(null); // 'juridico'|'leiloeiro'|null
-  const [emailManual, setEmailManual] = useState('');
+  // Lista final de Para (25/09): os cadastrados vêm preenchidos e dá para tirar/pôr outros —
+  // o escritório do jurídico tem 3 e-mails. Novos endereços ficam salvos se o envio der certo.
+  const [emails, setEmails] = useState([]);
   const [msg, setMsg] = useState('');
 
   const corpoAlvo = () => (casoId ? { caso_id: casoId } : veiculoId ? { veiculo_id: veiculoId } : { imovel_id: imovelId });
@@ -37,8 +39,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
       const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino, action: 'preview' }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao montar o e-mail');
-      setEmailManual('');
-      setEmailPreview({ destino, ...d });
+      setEmailPreview({ destino, ...d, chave: Date.now() });
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {
@@ -51,13 +52,12 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
     setEnviando(true);
     setMsg('');
     try {
-      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emailManual: emailManual || undefined }) });
+      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emails }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
       if (d.semContato) { setMsg('Informe um e-mail válido — não há contato cadastrado para este destino ainda.'); return; }
-      setMsg(`📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ' Contato salvo para os próximos envios.' : ''}`);
+      setMsg(`📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}`);
       setEmailPreview(null);
-      setEmailManual('');
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {
@@ -65,8 +65,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
     }
   };
 
-  const emailManualValido = RE_EMAIL.test(emailManual.trim());
-  const podeEnviar = emailPreview && (emailPreview.contatoDisponivel || emailManualValido);
+  const podeEnviar = emailPreview && emails.length > 0;
 
   return (
     <div style={cardStyle}>
@@ -89,15 +88,16 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
             Prévia — {emailPreview.destino === 'juridico' ? 'Jurídico' : 'Leiloeiro deste lote'}
           </div>
 
-          {emailPreview.contatoDisponivel ? (
-            <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 8 }}>Destinatário: <strong>{emailPreview.destinatarioEmail}</strong></div>
-          ) : (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 6 }}>⚠️ Nenhum e-mail de contato cadastrado para este destino ainda — digite um para enviar (fica salvo para os próximos envios):</div>
-              <input type="email" value={emailManual} onChange={e => setEmailManual(e.target.value)} placeholder="email@exemplo.com.br"
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1px solid ${emailManual && !emailManualValido ? '#fca5a5' : '#e2e8f0'}`, fontSize: 13, boxSizing: 'border-box' }} />
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: emailPreview.contatoDisponivel ? '#64748b' : '#b91c1c', marginBottom: 6 }}>
+              {emailPreview.contatoDisponivel
+                ? 'Para (cadastrados — pode tirar ou acrescentar):'
+                : '⚠️ Nenhum e-mail cadastrado para este destino ainda — digite (um ou vários; ficam salvos para os próximos envios):'}
             </div>
-          )}
+            <CampoEmails key={emailPreview.chave} valorInicial={emailPreview.destinatarios || (emailPreview.destinatarioEmail ? [emailPreview.destinatarioEmail] : [])}
+              onChange={setEmails} autoFocus={!emailPreview.contatoDisponivel} />
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Tab, Enter ou vírgula confirma cada endereço (ao terminar em .com.br confirma sozinho).</div>
+          </div>
 
           {emailPreview.redator && (
             <div style={{ fontSize: 11.5, margin: '0 0 6px', color: emailPreview.redator.usado ? '#15803d' : '#92400e' }}>
@@ -124,7 +124,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
             <button onClick={enviar} disabled={enviando || !podeEnviar} style={{ ...btnLocal('#059669'), fontSize: 12, opacity: (enviando || !podeEnviar) ? 0.6 : 1 }}>
               {enviando ? 'Enviando…' : 'Confirmar envio'}
             </button>
-            <button onClick={() => { setEmailPreview(null); setEmailManual(''); }} disabled={enviando} style={{ ...btnLocal('#94a3b8'), fontSize: 12 }}>Cancelar</button>
+            <button onClick={() => setEmailPreview(null)} disabled={enviando} style={{ ...btnLocal('#94a3b8'), fontSize: 12 }}>Cancelar</button>
           </div>
         </div>
       )}

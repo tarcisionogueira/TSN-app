@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import EmailHtml from './EmailHtml';
+import CampoEmails, { separarEmails } from './CampoEmails';
 
 // ─── CAIXA DE E-MAIL DA EQUIPE (23/09, pedido do dono) ────────────────────────────────────
 // Tudo que chega em suporte@/contato@/privacidade@ (via webhook do Resend → `email_caixa`) e
@@ -573,8 +574,10 @@ export default function CaixaEmail({ soPessoal = false }) {
                 {meuEndereco && <option value="pessoal">{meuEndereco} (você — respostas voltam para a sua caixa)</option>}
                 {!soPessoal && CAIXAS.map(c => <option key={c} value={c}>{c}@bidprobrasil.com.br (comunicação — respostas vão para a fila de atendimento)</option>)}
               </select>],
-              ['Para', <input key="para" value={compor.para} onChange={e => setCompor({ ...compor, para: e.target.value })} placeholder="email@exemplo.com (vários: separe por vírgula)" style={campo} />],
-              ['Cc', <input key="cc" value={compor.cc} onChange={e => setCompor({ ...compor, cc: e.target.value })} placeholder="opcional" style={campo} />],
+              // Etiquetas por endereço (25/09): Tab/Enter/vírgula ou terminar em .com.br confirma cada um.
+              // `key` = a chave deste envio: remonta só ao abrir outro rascunho, não a cada tecla.
+              ['Para', <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" />],
+              ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],
             ].map(([rot, el]) => (
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>

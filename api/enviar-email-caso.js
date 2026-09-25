@@ -55,7 +55,8 @@ const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
 // tanto o jurídico quanto o leiloeiro. Só a equipe — nunca o cliente.
 const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 const MAX_TEXTO_EDITADO = 4000;
-const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const RE_EMAIL = /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]{2,}$/;
+const MAX_DESTINATARIOS = 10;
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
@@ -228,12 +229,14 @@ export default async function handler(req) {
   const nomeRemetente = perfilRemetente.nome || 'Equipe BidPro Brasil';
 
   // ── Resolve destinatário ────────────────────────────────────────────────────────────────
-  let destinatarioEmail = null;
+  // Lista, não um endereço só (25/09): o escritório do jurídico tem 3 e-mails, e o `toList[0]`
+  // antigo mandava para o 1º cadastrado e descartava os outros EM SILÊNCIO.
+  let destinatarios = [];
   let ccList = [];
   if (destino === 'leiloeiro') {
     const rContato = await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(loteFonte || '')}&select=email`);
     const [contato] = rContato.ok ? await rContato.json() : [null];
-    destinatarioEmail = contato?.email || null;
+    if (contato?.email) destinatarios = [norm(contato.email)];
   } else {
     // Jurídico: mesma resolução de api/enviar-juridico-email.js (destinatários do escritório
     // do advogado do caso + os globais; copia=false → Para, copia=true → CC), SEM sortear nem
@@ -243,12 +246,14 @@ export default async function handler(req) {
     const rDests = await sb(`juridico_destinatarios?ativo=eq.true${filtroAdv}&select=email,copia`);
     const dests = rDests.ok ? await rDests.json().catch(() => []) : [];
     const lista = Array.isArray(dests) ? dests : [];
-    const toList = lista.filter(d => d.copia === false && d.email).map(d => norm(d.email));
+    destinatarios = [...new Set(lista.filter(d => d.copia === false && d.email).map(d => norm(d.email)))];
     ccList = [...new Set(lista.filter(d => d.copia === true && d.email).map(d => norm(d.email)))];
-    destinatarioEmail = toList[0] || null;
-    if (!destinatarioEmail && advogadoId) destinatarioEmail = await emailDoUsuario(advogadoId);
-    ccList = ccList.filter(e => e && e !== destinatarioEmail);
+    if (!destinatarios.length && advogadoId) {
+      const doAdv = await emailDoUsuario(advogadoId);
+      if (doAdv) destinatarios = [norm(doAdv)];
+    }
   }
+  const cadastrados = new Set(destinatarios);
 
   const rotuloTipo = veiculo ? 'Veículo' : 'Imóvel';
   const corpoTextoPuro = destino === 'leiloeiro'
@@ -283,23 +288,25 @@ export default async function handler(req) {
       texto: redator?.texto || corpoTextoPuro,
       textoPadrao: corpoTextoPuro,
       redator: redator ? { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos } : null,
-      destinatarioEmail,
-      contatoDisponivel: !!destinatarioEmail,
+      destinatarios,
+      destinatarioEmail: destinatarios[0] || null, // compat com a tela antiga
+      contatoDisponivel: destinatarios.length > 0,
       anexosLote: anexosLote.map(a => a.nome || 'documento'),
       anexosPessoais: ehAssessorado ? docsPessoais.map(d => d.nome || 'documento') : null,
       ehAssessorado,
     });
   }
 
-  // PASSO 2 — ENVIAR. Sem contato cadastrado, aceita o e-mail digitado na hora.
+  // PASSO 2 — ENVIAR. A tela manda a lista final (`emails`: os cadastrados que a pessoa manteve +
+  // os digitados na hora). Sem lista, vale o cadastro; `emailManual` é o formato antigo (1 só).
   const textoFinal = String(body?.texto || '').trim().slice(0, MAX_TEXTO_EDITADO) || corpoTextoPuro;
-  let usouEmailManual = false;
-  if (!destinatarioEmail) {
-    const manual = norm(body?.emailManual);
-    if (manual && RE_EMAIL.test(manual)) { destinatarioEmail = manual; usouEmailManual = true; }
-  }
+  const informados = [...new Set((Array.isArray(body?.emails) ? body.emails : [body?.emailManual]).map(norm).filter(e => e && RE_EMAIL.test(e)))].slice(0, MAX_DESTINATARIOS);
+  if (informados.length) destinatarios = informados;
+  const novos = destinatarios.filter(e => !cadastrados.has(e));
+  ccList = ccList.filter(e => e && !destinatarios.includes(e));
+  const destinatarioEmail = destinatarios.join(', ') || null; // auditoria/resposta: texto legível
 
-  if (!destinatarioEmail) {
+  if (!destinatarios.length) {
     await auditar({ caso_id: casoId, imovel_id: imovelId, veiculo_id: veiculoIdDireto, destino, destinatario_email: null, enviado_por: user.id,
       anexos_lote: anexosLote.length, anexos_pessoais: docsPessoais.length, texto_enviado: null, status: 'sem_contato' });
     return json({ ok: false, semContato: true, texto: textoFinal });
@@ -334,7 +341,7 @@ export default async function handler(req) {
   const replyTo = pessoal ? enderecoDe.replace('@', `+${respostaToken}@`) : enderecoDe;
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
-    to: destinatarioEmail,
+    to: destinatarios,
     cc: ccList,
     replyTo,
     subject: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`,
@@ -358,7 +365,7 @@ export default async function handler(req) {
       const rc = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
         direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, dono: pessoal ? user.id : null,
         de_email: enderecoDe, de_nome: nomeRemetente, resposta_token: respostaToken,
-        para: [destinatarioEmail], cc: ccList,
+        para: destinatarios, cc: ccList,
         assunto: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`.slice(0, 500),
         texto: textoFinal, html, resend_email_id: r.id || null, lido: true, enviado_por: user.id,
         anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
@@ -369,11 +376,11 @@ export default async function handler(req) {
 
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
   // errado (que o Resend recusou) não pode virar cadastro permanente.
-  if (r.ok && usouEmailManual) {
-    await salvarContato(destino, destinatarioEmail, { fonte: loteFonte, advogadoId: caso?.advogado_id, nomeRemetente });
-  }
+  // Leiloeiro tem UM contato por fonte (upsert): só grava se não havia nenhum. Jurídico grava cada novo.
+  const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : novos;
+  for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, advogadoId: caso?.advogado_id, nomeRemetente });
 
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);
 
-  return json({ ok: true, destinatario: destinatarioEmail, anexos: attachments.length, contatoSalvo: usouEmailManual });
+  return json({ ok: true, destinatario: destinatarioEmail, anexos: attachments.length, contatoSalvo: aSalvar.length > 0, contatosSalvos: aSalvar.length });
 }
