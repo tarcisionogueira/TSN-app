@@ -33728,7 +33728,7 @@ como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do
   listagem. **Conserto:** 429 → espera crescente (15 s × n, até 6×); terminou com o botão na tela →
   `coletaParcial`, sweep não roda. Migração `zuk_religa_sumidos_por_429.sql`: **102 religados**
   (559 → 661 ativos). Matrícula ZUK disparada à mão. ⚠️ `scraperPortalZukVeiculos` usa o mesmo
-  laço (acervo ~64, risco menor) — não mexido.
+  laço (acervo ~64) — corrigido em seguida (mesma espera no 429; lá não há sweep por ausência, o corte só deixava lote novo de fora).
 - **ZUK judicial gravado como extrajudicial:** o card diz "Tribunal de Justiça do Estado de São
   Paulo", não "judicial". Coletor corrigido + migração `zuk_modalidade_judicial_pelo_tribunal.sql`
   (129 ativos + 479 inativos → judicial).

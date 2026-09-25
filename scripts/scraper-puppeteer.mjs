@@ -1829,17 +1829,36 @@ async function scraperPortalZukVeiculos(browser) {
     }
     try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch { /* padrao-ok: página pode não ter veículo ativo agora — o length check logo abaixo já trata isso */ }
 
-    let prev = 0, estavel = 0;
+    // Mesmo 429 do "carregar mais" dos imóveis (25/09, ver scraperPortalZuk). Aqui não há sweep
+    // por ausência (veículo sai só pela data — retencaoVeiculosVencidos), então o estrago era
+    // outro: o que vinha depois do corte simplesmente nunca entrava no acervo.
+    let n429 = 0, ultimo429 = false;
+    page.on('response', (res) => {
+      if (/\/mais(?:[?#]|$)/.test(res.url()) && res.status() === 429) { n429++; ultimo429 = true; }
+    });
+    let prev = 0, estavel = 0, esperas429 = 0;
     for (let i = 0; i < 400 && estavel < 3; i++) {
-      const n = await page.evaluate(() => {
+      ultimo429 = false;
+      const { n, botao } = await page.evaluate(() => {
         const btn = document.querySelector('#btn_carregarMais');
-        if (btn && btn.offsetParent !== null) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
+        const vis = !!(btn && btn.offsetParent !== null);
+        if (vis) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
         else { window.scrollTo(0, document.body.scrollHeight); }
-        return document.querySelectorAll('.card-property').length;
+        return { n: document.querySelectorAll('.card-property').length, botao: vis };
       });
-      await new Promise(r => setTimeout(r, 1600));
-      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+      await new Promise(r => setTimeout(r, 2200));
+      if (ultimo429 && esperas429 < 6) {
+        esperas429++;
+        const ms = 15000 * esperas429;
+        console.log(`    PortalZuk (veículos): 429 no "carregar mais" com ${n} cards — espero ${ms / 1000}s e sigo`);
+        await new Promise(r => setTimeout(r, ms));
+        estavel = 0;
+        continue;
+      }
+      if (n <= prev) estavel += botao ? 0.5 : 1; else { estavel = 0; prev = n; }
     }
+    const botaoNoFim = await page.evaluate(() => { const b = document.querySelector('#btn_carregarMais'); return !!(b && b.offsetParent !== null); });
+    if (botaoNoFim) console.log(`    ⚠️ PortalZuk (veículos): coleta PARCIAL — "carregar mais" ainda na tela no fim (${n429}× 429)`);
 
     const cards = await page.evaluate(() => {
       const norm = s => (s || '').replace(/\s+/g, ' ').trim();
@@ -1929,7 +1948,8 @@ async function scraperPortalZukVeiculos(browser) {
         atualizado_em: new Date().toISOString(),
       };
     }).filter(Boolean);
-    console.log(`    PortalZuk (veículos): ${veiculos.length} mapeados`);
+    console.log(`    PortalZuk (veículos): ${veiculos.length} mapeados${n429 ? ` · ${n429}× 429 no "carregar mais"` : ''}`);
+    if (botaoNoFim) veiculos.coletaParcial = `ZUK_VEICULOS: "carregar mais" ainda na tela no fim (${n429}× 429)`;
     return veiculos;
   } catch (err) {
     console.log(`  Erro PortalZuk (veículos): ${err.message.slice(0, 100)}`);
