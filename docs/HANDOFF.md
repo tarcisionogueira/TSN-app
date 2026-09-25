@@ -33791,3 +33791,10 @@ como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do
 
 **Runner residencial:** o dono deixou o computador ligado algumas horas na noite de 25/09 — o
 cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada.
+
+**Adendo ao fechamento (25/09, ~23h):**
+- Envio real ao jurídico Z37342 confirmado: saiu de `tarcisio@bidprobrasil.com.br` para os 3 do
+  Cajado de Menezes, com todos os anexos + relatório documental. Resposta do Enock (22:21 UTC)
+  encadeada no lote pelo reply-to `tarcisio+<token>@` — prazo informado: segunda 28/09.
+- Caixa de e-mail: o endereço da equipe aparece SEM o código de resposta (`semToken` em
+  CaixaEmail.jsx) — só exibição; o token segue no dado e no roteamento.
