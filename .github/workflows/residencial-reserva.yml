@@ -1,0 +1,55 @@
+name: Residencial — reserva no GitHub quando o computador do dono não rodou
+
+# 25/09 (dono: "hoje não vou ligar o computador… manter eficiência e economia"). A apuração de
+# ZUK/VIP/JE depende do runner residencial (scripts/runner-residencial.sh, 2/8/14/20h BRT). Quando
+# ele não roda, os crons da Vercel só voltam a cobrir essas fontes depois de 7 DIAS sem carimbo
+# (api/_residencial.js) — e na Vercel a ZUK barra o IP e cai no Bright Data pago.
+# O GitHub abre a página da ZUK normalmente (medido em 24/09, ver o cabeçalho de
+# scripts/apurar-e-datar-residencial.mjs) e é DE GRAÇA (repositório público). Então esta reserva
+# roda o MESMO script, com a MESMA regra de leitura/gravação, só quando o carimbo do runner está
+# velho (> 7 h = perdeu pelo menos uma rodada). Página que não abre aqui não grava nada e não
+# carimba — a fonte continua esperando o runner, sem resultado inventado.
+on:
+  schedule:
+    # ~2h40 depois de cada horário do runner (05/11/17/23 UTC): dá tempo de ele rodar primeiro.
+    - cron: '40 1,7,13,19 * * *'
+  workflow_dispatch: {}
+
+concurrency: { group: residencial-reserva, cancel-in-progress: false }
+
+jobs:
+  reserva:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: O runner residencial rodou nas últimas 7 h?
+        id: hb
+        env:
+          SB_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SB_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          # Falha em ler o carimbo = roda a reserva (na dúvida, cobrir — mesma regra de api/_residencial.js).
+          J=$(curl -sf -m 20 "$SB_URL/rest/v1/sistema_heartbeat?chave=eq.runner_residencial_apuracao&select=ultimo_em" \
+                -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" || echo "ERRO")
+          IDADE=$(node -e 'try{const j=JSON.parse(process.argv[1]);const t=Date.parse(j?.[0]?.ultimo_em);console.log(Number.isFinite(t)?Math.round((Date.now()-t)/3600000):-1)}catch{console.log(-1)}' "$J")
+          echo "carimbo: $J · idade_h=$IDADE"
+          if [ "$IDADE" -ge 0 ] && [ "$IDADE" -lt 7 ]; then echo "rodar=nao" >> "$GITHUB_OUTPUT"; echo "Runner em dia — reserva não roda."; else echo "rodar=sim" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.hb.outputs.rodar == 'sim'
+      - uses: actions/setup-node@v4
+        if: steps.hb.outputs.rodar == 'sim'
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        if: steps.hb.outputs.rodar == 'sim'
+      - name: Apuração (grava)
+        if: steps.hb.outputs.rodar == 'sim'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RESID_APLICAR: '1'
+          # Datas (BIASI/LJUD/GRUPOLANCE) ficam no runner: o seco de 25/09 decide se entram aqui.
+          RESID_DATAS: ''
+          RESID_APURAR_LIMITE: '300'
+          RESID_PAUSA_MS: '1200'
+        run: node scripts/apurar-e-datar-residencial.mjs
