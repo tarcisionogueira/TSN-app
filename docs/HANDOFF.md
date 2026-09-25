@@ -33798,3 +33798,9 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   encadeada no lote pelo reply-to `tarcisio+<token>@` — prazo informado: segunda 28/09.
 - Caixa de e-mail: o endereço da equipe aparece SEM o código de resposta (`semToken` em
   CaixaEmail.jsx) — só exibição; o token segue no dado e no roteamento.
+- **Veículos SUPERBID com item que não é veículo (print do dono: "Rodas de Land Rover").** O
+  filtro da API (`productType.description:veiculos`) volta vazio e o filtro local aceitava
+  qualquer "moto…" (Motobombas 207, Motores Elétricos 86, Motoniveladoras 55…) e as peças de
+  "Carros & Motos". `ehVeiculoSuperbid` (tipo de produto de veículo + subcategoria que não é
+  peça/acessório/equipamento) vale sempre; migração `superbid_veiculos_so_veiculo.sql` tirou da
+  vitrine **453** (7.224 → 6.771). Sucata e sinistrado ficam. Imóveis da rede Superbid: limpos.

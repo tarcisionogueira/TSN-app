@@ -1292,6 +1292,12 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
 // subCategory — o MESMO mecanismo que o modo `stores` já usa (linha ~859) para separar
 // imóvel do catálogo inteiro (imóvel+veículo+equipamento+sucata). Mais lento no pior caso,
 // nunca silenciosamente vazio por nome de categoria errado.
+const RE_TIPO_VEICULO_SBID = /carros?\s*&\s*motos|caminh[õo]es|[ôo]nibus|ve[ií]cul/i;
+const RE_SUB_NAO_VEICULO_SBID = /pe[çc]as|rodas?\b|pneus?|motor(es)?\b|acess[óo]rios|ferramentas|bombas|redutor|turbina|som\b|equipamento/i;
+export function ehVeiculoSuperbid(tipoProduto, subCategoria) {
+  return RE_TIPO_VEICULO_SBID.test(tipoProduto || '') && !RE_SUB_NAO_VEICULO_SBID.test(subCategoria || '');
+}
+
 async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leiloeiro, prefix, baseSite }) {
   console.log(`  ${leiloeiro} (veículos, piloto) — API offers (portal ${portalId})...`);
   const page = await browser.newPage();
@@ -1332,10 +1338,13 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const p = of.product || {};
       const id = of.id || of.offerId;
       if (!id || seen.has(id)) continue;
-      if (!comFiltro) {
-        const sinal = `${str(p.productType)} ${str(p.subCategory)}`.toLowerCase();
-        if (!/ve[ií]cul|autom[oó]vel|\bcarro\b|moto(?:cicleta)?|caminh[ãa]o|caminhonete/.test(sinal)) continue;
-      }
+      // SÓ VEÍCULO (25/09, print do dono: "Rodas de Land Rover" na busca de veículos). O filtro
+      // da API (`productType.description:veiculos`) volta vazio e caía neste filtro local, que
+      // aceitava qualquer "moto…": Motobombas (207), Motores Elétricos (86), Motoniveladoras (55),
+      // Redutores… — e as PEÇAS de dentro de "Carros & Motos" (rodas, pneus, motores, acessórios).
+      // Agora vale SEMPRE, com filtro API ou sem: tipo de produto de veículo + subcategoria que
+      // não seja peça/acessório/equipamento. Sucata e sinistrado continuam (são veículos).
+      if (!ehVeiculoSuperbid(str(p.productType), str(p.subCategory))) continue;
       seen.add(id);
       const loc = (p.location && typeof p.location === 'object') ? p.location : {};
       const locStr = typeof p.location === 'string' ? p.location : (loc.city || '');
