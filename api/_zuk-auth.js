@@ -16,6 +16,30 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 // Cookie jar minimalista (o fetch do Node não persiste cookies entre chamadas).
 export const jarHeader = (jar) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
+
+// TODOS os cards de documento da página logada (25/09, dono: "há mais anexos no leiloeiro que
+// não aparecem no sistema"). Antes só a matrícula era aproveitada e o resto dos cards
+// (laudo, certidões, cópia do processo…) era jogado fora. Nome = texto do card (sem tags); sem
+// texto, o nome do arquivo. O CloudFront exige a URL ASSINADA: decodifica &amp; e tira espaços.
+export function docsDosCards(html) {
+  const out = [];
+  const vistos = new Set();
+  for (const m of String(html || '').matchAll(/<a([^>]*property-documents-item[^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const href = (m[1].match(/href="([^"]*)"/i) || [])[1];
+    const url = String(href || '').replace(/&amp;/g, '&').replace(/\s/g, '');
+    if (!/^https?:\/\//.test(url) || vistos.has(url.split('?')[0])) continue;
+    vistos.add(url.split('?')[0]);
+    const texto = m[2].replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    const arquivo = decodeURIComponent((url.split('?')[0].split('/').pop() || '').replace(/\.[a-z0-9]{2,4}$/i, ''));
+    const nome = (texto || arquivo || 'Documento').slice(0, 120);
+    const chave = `${nome} ${url.split('?')[0]}`;
+    const tipo = /matr[ií]cul/i.test(chave) ? 'matricula' : /edital/i.test(chave) ? 'edital'
+      : /laudo|avalia/i.test(chave) ? 'laudo' : /condi[cç][õo]es|regras/i.test(chave) ? 'regras' : 'outro';
+    out.push({ url, nome, tipo });
+  }
+  return out;
+}
 function absorveCookies(jar, resp) {
   let arr = [];
   try { arr = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : []; } catch { arr = []; }
@@ -67,14 +91,13 @@ export async function capturarDocsZukLogado(loteUrl, deadline) {
     // Extrai o href REAL dos cards de documento (property-documents-item), já logado.
     // O CloudFront exige a URL ASSINADA (Expires/Signature) — decodificamos &amp; e
     // tiramos os espaços que o Zuk deixa dentro do atributo href.
-    const cardHrefs = [...html2.matchAll(/<a[^>]*property-documents-item[^>]*href="([^"]*)"/gi)]
-      .map(m => m[1].replace(/&amp;/g, '&').trim())
-      .filter(u => /^https?:\/\//.test(u));
-    const matricula = cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
-    const laudo = cardHrefs.find(u => /laudo|avalia/i.test(u)) || null;
+    const docs = docsDosCards(html2);
+    const cardHrefs = docs.map(d => d.url);
+    const matricula = docs.find(d => d.tipo === 'matricula' && /\.pdf/i.test(d.url))?.url || cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
+    const laudo = docs.find(d => d.tipo === 'laudo')?.url || null;
     const logado = /\/sair|logout|minha-conta\/area-logada|meus-lances|Ol[áa],/i.test(html2);
     console.log(`[zuk-auth] logado=${logado} cards=${cardHrefs.length} matricula=${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA' : 'sem-assinatura') : 'AUSENTE'} | href: ${(matricula || '(nenhum)').slice(0, 220)}`);
-    return { matricula, laudo, anexos: (matricula ? [{ url: matricula, nome: 'Matrícula do Imóvel', tipo: 'matricula' }] : []) };
+    return { matricula, laudo, anexos: docs.map(d => (d.url === matricula ? { ...d, nome: 'Matrícula do Imóvel' } : d)) };
   } catch (e) {
     console.warn(`[zuk-auth] erro ${e?.message}`);
     return null;
@@ -117,11 +140,10 @@ export async function matriculaLoteLogado(loteUrl, jar) {
     const html = await g.text();
     // Limpa &amp; e QUALQUER espaço (o Zuk deixa espaços dentro do href, que quebram
     // a assinatura CloudFront → 403 no download).
-    const cardHrefs = [...html.matchAll(/<a[^>]*property-documents-item[^>]*href="([^"]*)"/gi)]
-      .map(m => m[1].replace(/&amp;/g, '&').replace(/\s/g, ''))
-      .filter(u => /^https?:\/\//.test(u));
-    const matricula = cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
-    const laudo = cardHrefs.find(u => /laudo|avalia/i.test(u)) || null;
-    return { matricula, laudo, cards: cardHrefs.length };
+    const docs = docsDosCards(html);
+    const matricula = docs.find(d => d.tipo === 'matricula' && /\.pdf/i.test(d.url))?.url
+      || docs.map(d => d.url).find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
+    const laudo = docs.find(d => d.tipo === 'laudo')?.url || null;
+    return { matricula, laudo, cards: docs.length, docs };
   } catch (e) { console.warn(`[zuk-auth] lote erro ${e?.message}`); return null; }
 }

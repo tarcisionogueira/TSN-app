@@ -141,12 +141,19 @@ ${itens(L.resumoOperacao).length ? `<div class="av" style="border:2px solid #111
 `;
 }
 
-export function gerarLaudoPDF(props) {
+// HTML completo do relatório, sem imprimir (25/09): o "Enviar ao Jurídico" anexa o MESMO
+// documento que o "Baixar PDF" gera.
+export function htmlLaudo(props) {
   const d = (props && props.imovel) || {};
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
 <title>Parecer Final BidPro Brasil, ${esc(d.nome || d.endereco || 'Imóvel')}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_LAUDO}</style></head><body>${corpoLaudo(props)}</body></html>`;
-  imprimirHtml(html, `Parecer Final - ${(d.nome || d.endereco || 'Imovel')}`);
+  return html;
 }
+export function gerarLaudoPDF(props) {
+  const d = (props && props.imovel) || {};
+  imprimirHtml(htmlLaudo(props), `Parecer Final - ${(d.nome || d.endereco || 'Imovel')}`);
+}
+

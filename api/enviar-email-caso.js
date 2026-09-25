@@ -97,6 +97,13 @@ async function salvarContato(destino, email, { fonte, advogadoId, nomeRemetente 
     }
   } catch { /* padrao-ok: salvar o contato é bônus — o e-mail já foi enviado, não pode falhar por causa disso */ }
 }
+// base64 de texto UTF-8 sem Buffer (runtime edge).
+function base64Utf8(t) {
+  const bytes = new TextEncoder().encode(t);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const norm = e => String(e || '').trim().toLowerCase();
 
@@ -148,7 +155,7 @@ export default async function handler(req) {
 
   let imovel = null;
   if (imovelId) {
-    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,anexos,leiloeiro,url_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao&limit=1`);
+    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,endereco,tipo,anexos,leiloeiro,url_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao&limit=1`);
     if (rImovel.ok) [imovel] = await rImovel.json();
   }
   let veiculo = null;
@@ -180,6 +187,25 @@ export default async function handler(req) {
       console.warn('[enviar-email-caso] espelho ilegível — segue só com o filtro de login:', rEsp.status);
     }
   }
+  // DOCUMENTOS GUARDADOS NO NOSSO STORAGE (25/09, print do dono: "só seleciona 1 anexo, mesmo
+  // aparecendo matrícula e edital na tela do imóvel"). A tela lê `imovel_anexos` (matrícula da
+  // ZUK capturada com login, PDFs espelhados, o que a equipe anexa); este envio só lia o jsonb
+  // `anexos` da coleta. Agora entram os dois — e a cópia nossa VENCE o link do leiloeiro do mesmo
+  // tipo (o link externo pode exigir login ou expirar; o arquivo guardado abre sempre).
+  if (imovel?.id) {
+    const rDocs = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel.id)}&storage_path=not.is.null&tipo=in.(matricula,edital,regras_venda,laudo,outro)&select=tipo,nome,storage_path&order=criado_em.asc`);
+    if (!rDocs.ok) console.warn('[enviar-email-caso] imovel_anexos ilegível — segue só com os anexos da coleta:', rDocs.status);
+    const guardados = rDocs.ok ? await rDocs.json().catch(() => []) : [];
+    const nossos = [];
+    for (const d of Array.isArray(guardados) ? guardados : []) {
+      const url = await assinarDocumento(d.storage_path, 3600);
+      if (url) nossos.push({ nome: d.nome || d.tipo, url, tipo: d.tipo === 'regras_venda' ? 'regras' : d.tipo, nosso: true });
+      else console.warn('[enviar-email-caso] não assinei', d.storage_path);
+    }
+    const tiposNossos = new Set(nossos.filter(d => d.tipo !== 'outro').map(d => d.tipo));
+    anexosLote = [...nossos, ...anexosLote.filter(a => !tiposNossos.has(a.tipo))];
+  }
+
   // CONFERE O CONTEÚDO antes de anexar (23/09): o Resend busca o `path` e anexa o que vier —
   // HTML inclusive, com o nome "MATRÍCULA". Lê só o começo de cada arquivo; HTML provado sai.
   // Não conseguir ler NÃO descarta (o Resend pode conseguir; o espelho decide depois).
@@ -283,8 +309,25 @@ export default async function handler(req) {
         },
       }).catch((e) => ({ texto: null, motivo: `redator falhou: ${String(e?.message || e).slice(0, 80)}`, exemplos: 0 }));
     }
+    // RELATÓRIOS DO SISTEMA para o jurídico (25/09, pedido do dono): o documental e o laudo
+    // concluídos deste lote vão como anexo. A tela monta o MESMO HTML do "Baixar PDF"
+    // (corpoDocumental/corpoLaudo) e devolve no envio — o servidor só entrega o resultado cru.
+    let relatorios = null;
+    if (destino === 'juridico' && imovel?.id) {
+      const ler = async (tabela) => {
+        const r = await sb(`${tabela}?imovel_id=eq.${encodeURIComponent(imovel.id)}&status=eq.concluida&select=id,result,updated_at&order=updated_at.desc&limit=1`);
+        if (!r.ok) { console.warn(`[enviar-email-caso] ${tabela} ilegível:`, r.status); return null; }
+        const [linha] = await r.json().catch(() => []);
+        // Documental que ainda pede documento é preliminar — não vai como relatório.
+        if (!linha?.result || linha.result.precisaDocumentos) return null;
+        return { id: linha.id, em: linha.updated_at, result: linha.result };
+      };
+      const [documental, laudo] = await Promise.all([ler('analises_documental'), ler('analises_laudo')]);
+      relatorios = { documental, laudo, imovel: { nome: imovel.titulo, endereco: imovel.endereco, cidade: imovel.cidade, estado: imovel.estado, tipo: imovel.tipo } };
+    }
     return json({
       ok: true,
+      relatorios,
       texto: redator?.texto || corpoTextoPuro,
       textoPadrao: corpoTextoPuro,
       redator: redator ? { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos } : null,
@@ -318,6 +361,16 @@ export default async function handler(req) {
   const attachments = [
     ...anexosLote.map(a => ({ filename: comExtensao(a.nome, a.url), path: a.url })),
   ];
+  // Relatórios do sistema (HTML montado pela tela, ver preview). Só para o jurídico, no máximo 2,
+  // cada um ≤ 1,5 MB — entram como arquivo .html (abre no navegador; Imprimir → PDF).
+  if (destino === 'juridico' && Array.isArray(body?.relatorios)) {
+    for (const rel of body.relatorios.slice(0, 2)) {
+      const html = String(rel?.html || '');
+      if (!html.startsWith('<!DOCTYPE html>') || html.length > 1_500_000) continue;
+      const nome = String(rel?.nome || 'Relatorio BidPro').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
+      attachments.push({ filename: `${nome}.html`, content: base64Utf8(html) });
+    }
+  }
   for (const d of docsPessoais) {
     const link = /^https?:\/\//i.test(d.url || '') ? d.url : await assinarDocumento(d.url);
     if (link) attachments.push({ filename: comExtensao(d.nome, d.url), path: link });

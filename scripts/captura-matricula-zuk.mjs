@@ -63,14 +63,22 @@ async function main() {
     .order('id', { ascending: true })
     .limit(LOTE);
   if (error) { console.error('Erro ao ler lotes:', error.message); process.exit(1); }
-  if (!lotes?.length) { console.log('Nenhum lote ZUK pendente de matrícula.'); return; }
-  console.log(`ZUK: ${lotes.length} lote(s) para tentar matrícula (cap ${LOTE}).`);
+  if (!lotes?.length) console.log('Nenhum lote ZUK pendente de matrícula.');
+  else console.log(`ZUK: ${lotes.length} lote(s) para tentar matrícula (cap ${LOTE}).`);
 
-  const jar = await loginZuk(lotes[0].link_edital);
+  // A fase 2 roda mesmo sem matrícula pendente — o login precisa de uma página de lote qualquer.
+  let paginaLogin = lotes?.[0]?.link_edital;
+  if (!paginaLogin) {
+    const { data: um, error: eUm } = await supabase.from('imoveis_leilao').select('link_edital').eq('fonte', 'ZUK').eq('ativo', true).not('link_edital', 'is', null).limit(1);
+    if (eUm) { console.error('Erro ao ler um lote ZUK para o login:', eUm.message); process.exit(1); }
+    paginaLogin = um?.[0]?.link_edital;
+  }
+  if (!paginaLogin) { console.log('Nenhum lote ZUK ativo — nada a fazer.'); return; }
+  const jar = await loginZuk(paginaLogin);
   if (!jar) { console.error('Falha no login do Zuk — abortando (confira ZUK_EMAIL/ZUK_SENHA).'); process.exit(1); }
 
   let ok = 0, semMat = 0, erro = 0;
-  for (const lote of lotes) {
+  for (const lote of lotes || []) {
     try {
       if (await jaTemMatricula(lote.id)) continue;
       const r = await matriculaLoteLogado(lote.link_edital, jar);
@@ -97,6 +105,77 @@ async function main() {
     } catch (e) { erro++; console.log(`- ${lote.id}: erro ${e.message}`); }
   }
   console.log(`\nZUK matrícula — resultado: ${ok} salvas · ${semMat} sem matrícula · ${erro} erro(s).`);
+  await documentosCompletos(jar);
+}
+
+// ── FASE 2: TODOS os documentos da página logada (25/09) ─────────────────────────────────
+// Dono: "há mais anexos no leiloeiro que não estão aparecendo no sistema" (Z37342). A fase 1
+// só guarda a matrícula; laudo, certidões e cópias do processo dos cards ficavam no site. Guardar
+// tudo de todos os ~660 lotes custaria storage à toa, então só entra lote que alguém está
+// trabalhando (caso aberto ou análise gerada) + os pedidos à mão em ZUK_IDS. Um lote é visitado
+// UMA vez (`zuk_docs_em`); para refazer, passe o id em ZUK_IDS.
+const DOCS_LOTE = Number(process.env.ZUK_DOCS_LOTE || 15);
+const slug = (t) => String(t || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) || 'documento';
+
+async function idsDeInteresse() {
+  const pedidos = String(process.env.ZUK_IDS || '').split(',').map(x => x.trim()).filter(Boolean);
+  const ids = new Set(pedidos);
+  for (const [tabela, col] of [['casos', 'imovel_id'], ['analises_documental', 'imovel_id'], ['analises_mercado', 'imovel_id']]) {
+    const { data, error } = await supabase.from(tabela).select(col).not(col, 'is', null).order('created_at', { ascending: false }).limit(1000);
+    if (error) { console.log(`  (fase 2) ${tabela} ilegível: ${error.message} — sigo com o resto`); continue; }
+    for (const r of data || []) ids.add(String(r[col]));
+  }
+  return { pedidos, ids: [...ids] };
+}
+
+async function documentosCompletos(jar) {
+  const { pedidos, ids } = await idsDeInteresse();
+  if (!ids.length) { console.log('\nFase 2 (documentos completos): nenhum lote de interesse.'); return; }
+  const lotes = [];
+  for (let i = 0; i < ids.length && lotes.length < DOCS_LOTE; i += 200) {
+    const fatia = ids.slice(i, i + 200).filter(x => /^[0-9a-f-]{36}$/i.test(x));
+    if (!fatia.length) continue;
+    const { data, error } = await supabase.from('imoveis_leilao').select('id, link_edital, anexos, zuk_docs_em')
+      .eq('fonte', 'ZUK').eq('ativo', true).not('link_edital', 'is', null).in('id', fatia);
+    if (error) { console.log(`  (fase 2) leitura de lotes falhou: ${error.message}`); return; }
+    for (const l of data || []) if (!l.zuk_docs_em || pedidos.includes(l.id)) lotes.push(l);
+  }
+  console.log(`\nFase 2 (documentos completos): ${lotes.length} lote(s) ZUK de interesse (cap ${DOCS_LOTE}).`);
+  let salvos = 0, erros = 0;
+  for (const lote of lotes.slice(0, DOCS_LOTE)) {
+    try {
+      const r = await matriculaLoteLogado(lote.link_edital, jar);
+      if (!r) { erros++; console.log(`- ${lote.id}: página logada ilegível`); continue; }
+      const { data: jaTem, error: eJa } = await supabase.from('imovel_anexos').select('nome, tipo').eq('imovel_id', lote.id).not('storage_path', 'is', null);
+      if (eJa) { erros++; console.log(`- ${lote.id}: imovel_anexos ilegível (${eJa.message})`); continue; }
+      const nomes = new Set((jaTem || []).map(a => String(a.nome).toLowerCase()));
+      const temEditalColeta = (lote.anexos || []).some(a => a?.tipo === 'edital');
+      let novosLote = 0;
+      for (const d of r.docs || []) {
+        if (d.tipo === 'matricula') continue;                     // fase 1 cuida
+        if (d.tipo === 'edital' && temEditalColeta) continue;     // o edital público já está no lote
+        if (nomes.has(String(d.nome).toLowerCase())) continue;
+        const resp = await fetch(d.url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', Referer: lote.link_edital, Origin: 'https://www.portalzuk.com.br', Cookie: jarHeader(jar) }, redirect: 'follow', signal: AbortSignal.timeout(30000) });
+        if (!resp.ok) { erros++; console.log(`- ${lote.id}: "${d.nome}" HTTP ${resp.status}`); continue; }
+        const buf = Buffer.from(await resp.arrayBuffer());
+        if (buf.length < 1000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') { erros++; console.log(`- ${lote.id}: "${d.nome}" não é PDF (${buf.length}b)`); continue; }
+        if (buf.length > 25 * 1024 * 1024) { console.log(`- ${lote.id}: "${d.nome}" > 25 MB, fica só no site`); continue; }
+        const path = `casos/${lote.id}/zuk_${slug(d.nome)}.pdf`;
+        const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: 'application/pdf', upsert: true });
+        if (up.error) { erros++; console.log(`- ${lote.id}: upload "${d.nome}": ${up.error.message}`); continue; }
+        const tipo = d.tipo === 'regras' ? 'regras_venda' : d.tipo;
+        const { error: eIns } = await supabase.from('imovel_anexos').insert({ imovel_id: lote.id, tipo, nome: d.nome, storage_path: path, tamanho_kb: Math.round(buf.length / 1024), role_criador: 'sistema' });
+        if (eIns) { erros++; console.log(`- ${lote.id}: registro "${d.nome}": ${eIns.message}`); continue; }
+        nomes.add(String(d.nome).toLowerCase());
+        novosLote++; salvos++;
+        await new Promise(res => setTimeout(res, 800));
+      }
+      const { error: eMarca } = await supabase.from('imoveis_leilao').update({ zuk_docs_em: new Date().toISOString() }).eq('id', lote.id).select('id');
+      if (eMarca) console.log(`- ${lote.id}: não marquei zuk_docs_em (${eMarca.message}) — volta na próxima rodada`);
+      console.log(`✓ ${lote.id}: ${r.docs?.length || 0} card(s) na página · ${novosLote} documento(s) novo(s) guardado(s)`);
+    } catch (e) { erros++; console.log(`- ${lote.id}: erro ${e.message}`); }
+  }
+  console.log(`Fase 2 — ${salvos} documento(s) guardado(s) · ${erros} erro(s).`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { apiCall } from '../utils/apiCall';
 import CampoEmails from './CampoEmails';
+import { htmlDocumental } from './DocumentalPDF';
+import { htmlLaudo } from './LaudoPDF';
 
 /**
  * "Enviar e-mail" — jurídico ou leiloeiro do lote, com um clique incluindo todos os
@@ -28,6 +30,8 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
   // Lista final de Para (25/09): os cadastrados vêm preenchidos e dá para tirar/pôr outros —
   // o escritório do jurídico tem 3 e-mails. Novos endereços ficam salvos se o envio der certo.
   const [emails, setEmails] = useState([]);
+  // Relatórios do sistema marcados para ir ao jurídico (25/09): { documental: bool, laudo: bool }.
+  const [incluirRel, setIncluirRel] = useState({ documental: false, laudo: false });
   const [msg, setMsg] = useState('');
 
   const corpoAlvo = () => (casoId ? { caso_id: casoId } : veiculoId ? { veiculo_id: veiculoId } : { imovel_id: imovelId });
@@ -40,6 +44,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao montar o e-mail');
       setEmailPreview({ destino, ...d, chave: Date.now() });
+      setIncluirRel({ documental: !!d.relatorios?.documental, laudo: !!d.relatorios?.laudo });
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {
@@ -47,12 +52,27 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
     }
   };
 
+  // Mesmo HTML do "Baixar PDF" da análise (htmlDocumental/htmlLaudo), montado aqui e anexado
+  // pelo servidor como .html. `cab` leva o que o documental extraiu (processo/matrícula).
+  const montarRelatorios = () => {
+    const rel = emailPreview?.relatorios;
+    if (!rel) return undefined;
+    const imovel = rel.imovel || {};
+    const nome = imovel.nome || imovel.endereco || 'Imovel';
+    const ext = rel.documental?.result?.extracao || {};
+    const cab = { executado: ext.executadoNome || '', processo: ext.numeroProcesso || '', matricula: ext.numeroMatricula || '' };
+    const out = [];
+    if (incluirRel.documental && rel.documental?.result) out.push({ nome: `Analise Documental - ${nome}`, html: htmlDocumental({ imovel, parecer: rel.documental.result, bidscore: null, cab }) });
+    if (incluirRel.laudo && rel.laudo?.result) out.push({ nome: `Parecer Final - ${nome}`, html: htmlLaudo({ imovel, laudo: rel.laudo.result, cab }) });
+    return out.length ? out : undefined;
+  };
+
   const enviar = async () => {
     if (!emailPreview) return;
     setEnviando(true);
     setMsg('');
     try {
-      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emails }) });
+      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emails, relatorios: montarRelatorios() }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
       if (d.semContato) { setMsg('Informe um e-mail válido — não há contato cadastrado para este destino ainda.'); return; }
@@ -115,6 +135,19 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
             Anexos do lote ({emailPreview.anexosLote?.length || 0}): {emailPreview.anexosLote?.length ? emailPreview.anexosLote.join(', ') : '— nenhum documento do lote ainda —'}
           </div>
+          {emailPreview.relatorios && (emailPreview.relatorios.documental || emailPreview.relatorios.laudo) ? (
+            <div style={{ fontSize: 11.5, color: '#334155', marginTop: 6, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <span style={{ color: '#64748b' }}>Relatórios do sistema:</span>
+              {emailPreview.relatorios.documental && (
+                <label style={{ cursor: 'pointer' }}><input type="checkbox" checked={incluirRel.documental} onChange={e => setIncluirRel(r => ({ ...r, documental: e.target.checked }))} /> Análise documental ({new Date(emailPreview.relatorios.documental.em).toLocaleDateString('pt-BR')})</label>
+              )}
+              {emailPreview.relatorios.laudo && (
+                <label style={{ cursor: 'pointer' }}><input type="checkbox" checked={incluirRel.laudo} onChange={e => setIncluirRel(r => ({ ...r, laudo: e.target.checked }))} /> Parecer final ({new Date(emailPreview.relatorios.laudo.em).toLocaleDateString('pt-BR')})</label>
+              )}
+            </div>
+          ) : emailPreview.destino === 'juridico' && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Relatórios do sistema: nenhum concluído para este lote ainda.</div>
+          )}
           {emailPreview.ehAssessorado && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
               Documentos pessoais do cliente ({emailPreview.anexosPessoais?.length || 0}): {emailPreview.anexosPessoais?.length ? emailPreview.anexosPessoais.join(', ') : '— nenhum documento pessoal cadastrado ainda —'}
