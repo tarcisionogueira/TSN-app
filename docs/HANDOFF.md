@@ -33690,3 +33690,23 @@ e o cabeçalho "COMITENTE:", não contar palavras no documento todo — ou IA le
 relatório) estavam em 512 lotes cada: os dois coletores de PDF-no-JSON do scraper passam agora pelo
 portão central `ehDocumento` (_doc-scan.js), e o PDF do evento (`/event/<id>/attachment/`) entra
 como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do evento marcado.
+
+### 25/09 (noite) — itens 11 e 12 das pendências
+- **`resultado_leilao_atrasado` 722 → 324 · e o achado maior: VEÍCULO NUNCA SAÍA DA VITRINE.**
+  `desativar_leiloes_encerrados()` só tocava imóveis; nenhum objeto desligava veículo. **512 SUPERBID
+  já VENDIDOS apareciam como disponíveis**, e SODRE/MEGA sumidos da fonte em 11–13/09 ficavam ativos
+  para sempre. Migração `desativar_veiculos_encerrados.sql` (aplicada): vendido/cancelado saem 2 dias
+  após o leilão; sem resultado sai após a janela de apuração (10 d); sem lance/indeterminado apurado
+  < 15 d fica (vitrine de proposta). 1ª execução: **910 veículos desligados**. Os 324 restantes são
+  SUPERBID dentro da janela — a apuração do runner residencial (não filtra `ativo`, religa o não
+  vendido) resolve.
+- **`email_para_endereco_suprimido` = falso positivo, corrigido.** `juridica_preliminar` está em
+  SUPRESSAO_NAO_SE_APLICA (api/_email.js) de propósito; o vigia não conhecia a lista. Migração
+  `qa_supressao_respeita_tipos_isentos.sql` — manter as duas listas em sincronia (comentário nos dois).
+  (O destinatário era `dev…@bidpro.com.br`, endereço interno de teste com bounce repetido.)
+- **`cadastro_duplicado` = pessoa real** que se cadastrou 2× em 30/08 com 3 min de intervalo
+  ("Fabrício Rodriguez"/"Rodrigues", explorador). Decisão do dono: manter ou remover o 1º.
+- **`qa_invariantes_lenta`:** 10,3 s → 5,4 s hoje (limite 5 s). No fio; acompanhar.
+- **Espelho (item 12):** "pendente" 30.837 → **1.280** reais. Matrícula CEF saiu da fila
+  (`enfileirar_espelho_documentos`; 0 cópias em 24.536 — 403 sempre) e o que esgotou 3 tentativas
+  virou `ignorado` com o motivo preservado. Migração `espelho_fila_mede_so_o_que_da_para_copiar.sql`.

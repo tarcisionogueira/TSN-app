@@ -139,6 +139,7 @@ async function registrarEmailLog(rows) {
 // Entra na lista o que é JURÍDICO, FINANCEIRO ou de SEGURANÇA DA CONTA: aqui a tentativa
 // vale mesmo com pouca chance de chegar, e o custo de reputação de um envio único é baixo
 // perto do de engolir um contrato ou um aviso de acesso indevido.
+// MANTER EM SINCRONIA com public.qa_invariantes_supressao() (migração qa_supressao_respeita_tipos_isentos.sql).
 const SUPRESSAO_NAO_SE_APLICA = new Set([
   'contrato', 'assinatura', 'parecer_juridico', 'juridica_preliminar', 'honorario_exito',
   'pagamento', 'estorno', 'estorno_comissao', 'kyc_documento', 'boas_vindas',
