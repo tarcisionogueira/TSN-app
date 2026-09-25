@@ -20,7 +20,7 @@ concurrency: { group: residencial-reserva, cancel-in-progress: false }
 jobs:
   reserva:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - name: O runner residencial rodou nas últimas 7 h?
         id: hb
@@ -54,5 +54,9 @@ jobs:
           # abre do GitHub (6 sem lance lidos). RJLEILOES/TORRES3/DANIELGARCIA… tomaram 403 aqui também.
           RESID_APURAR: 'ZUK,VIP,JELEILOES,FRANCOLEILOES'
           RESID_APURAR_LIMITE: '300'
+          # 1ª rodada (25/09, run 36143312374): apuração 103 lidos de 169 (ZUK 72 sem lance + 19
+          # vendidos de 24/09) e o job foi CORTADO aos 30 min no meio das datas (400 lotes × pausa),
+          # sem carimbar datas. Datas limitadas a 200 por rodada e teto do job em 50 min.
+          RESID_DATAS_LIMITE: '200'
           RESID_PAUSA_MS: '1200'
         run: node scripts/apurar-e-datar-residencial.mjs
