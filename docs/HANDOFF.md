@@ -33615,3 +33615,23 @@ recebeu as duas — apagar uma esconderia o que aconteceu).
 - **Bug de coleta PESTANA achado no recon:** o scraper filtra só `situacaoId !== 1`, mas
   "Vendido" e "Aguardando repasse" vêm com `situacaoId = 1` → podem aparecer como disponíveis.
   Correção: filtrar por `status === 'Disponível'` (scripts/scraper-puppeteer.mjs ~l.3635).
+
+### 25/09 (tarde) — itens 2 a 5 da eficiência com economia (autorizados pelo dono)
+- **Rateio por turno da cota `geral` do Bright Data** (migração `brightdata_rateio_por_turno.sql`,
+  APLICADA): a subcota diária (25) acabava às 00h07 UTC na 1ª rodada de `apurar-resultado-leilao-cron`
+  (roda de 3 em 3 h); as outras 7 rodadas + `enriquecer-datas` + `enriquecer-backfill` ficavam sem
+  nada. Agora `brightdata_reserva.rateio_turnos = 4` libera acumulado 7 · 13 · 19 · 25 por turno de
+  6 h (UTC). Mesmo total diário/semanal; recusa com o mesmo motivo `subcota_dia` (+ `turno`,
+  `liberado_ate_agora`). Só `geral` tem turno; `docs` é um lote único (captura-documentos) e não precisa.
+- **SUPERBID/SOLD/KRON continuam dependendo do runner de casa.** Testado pelo proxy ISP do GitHub
+  (run 36145776295): 20 de 20 consultas à offer-query com "Failed to fetch". Datacenter E ISP
+  bloqueados. `apurar-superbid-residencial.mjs` ganhou `SBID_VIA_ISP=1` (inerte; aborta sem
+  credencial) — o workflow de teste foi removido. Os 115 veículos SUPERBID de 24/09 esperam o runner.
+- **PESTANA grava "vendido" na COLETA** (`registrarVendidosPestana`, scraper-puppeteer.mjs): lote
+  que a API mostra como "Vendido" recebe `resultado_leilao='vendido'`, `resultado_origem='api_pestana'`
+  (só se ainda sem resultado). Nunca grava sem_lance. Conferir no log da próxima coleta PESTANA a
+  linha "N vendido(s) na API · M gravado(s) agora".
+- ⚠️ **Lição do dia:** o recon `recon-pestana-resultado.mjs` foi para a main com um `catch` sem
+  motivo e a trava do prebuild derrubou 2 deploys (e38d5a6, 1d3ccd5) — produção ficou em fb9ecfa,
+  sem queda do site. Corrigido em eb710e5. **Rodar `npm run verificar:padroes` antes de QUALQUER
+  push para a main, inclusive de script de recon.**

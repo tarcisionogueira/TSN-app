@@ -3409,6 +3409,22 @@ async function scraperVendasGov() {
 }
 
 // ─── PESTANA LEILÕES ──────────────────────────────────────────────────────────
+// Grava 'vendido' nos lotes PESTANA que a API mostrou como "Vendido" (ver a coleta, abaixo).
+// Só toca lote ainda sem resultado (ou indeterminado); `.select()` prova quantos mudaram.
+async function registrarVendidosPestana(vendidos) {
+  let gravados = 0;
+  for (const [fonteId, valor] of vendidos) {
+    const patch = { resultado_leilao: 'vendido', resultado_origem: 'api_pestana', resultado_apurado_em: new Date().toISOString() }; // mesmos campos de patchDaApuracao
+    if (valor) patch.valor_lance_vencedor = valor;
+    const { data, error } = await supabase.from('imoveis_leilao').update(patch)
+      .eq('fonte', 'PESTANA').eq('fonte_id', fonteId)
+      .or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado').select('id');
+    if (error) { console.log(`    Pestana: vendido ${fonteId} NÃO gravado — ${error.message}`); continue; }
+    gravados += data?.length || 0;
+  }
+  console.log(`    Pestana: ${vendidos.size} vendido(s) na API · ${gravados} gravado(s) agora`);
+}
+
 // Grande leiloeiro (líder no Sul). API JSON same-origin (o page.evaluate fetch passa,
 // sem WAF). Modelo em 2 níveis, confirmado por captura real (debug_fetch):
 //   /api/v2/leilao                      → todos os leilões (com documentos[]=Edital,
@@ -3624,6 +3640,11 @@ async function scraperPestana(browser) {
     // `lote.leilao` (o leilão DONO real) em vez de usar o leilão-agregador da lista.
     const leiloesPorId = new Map(leiloes.filter(l => l && l.id != null).map(l => [Number(l.id), l]));
 
+    // RESULTADO VISTO NA COLETA (25/09): depois do pregão o lote SOME da API (medido: 827 de 830),
+    // então a apuração não tem o que ler depois. Mas enquanto ele ainda aparece, a própria Pestana
+    // diz "Vendido" — sinal explícito, custo zero. Só "Vendido" grava (Aguardando repasse/Retirado
+    // não afirmam venda). Nunca grava sem_lance: sumir da API não prova nada.
+    const vendidosVistos = new Map();
     // 3) Lotes por leilão (fetch same-origin dentro da página).
     for (const leilao of imovLeiloes) {
       const lotes = await page.evaluate(async (id) => {
@@ -3636,6 +3657,9 @@ async function scraperPestana(browser) {
         // 25/09 (recon-pestana-resultado): "Vendido" e "Aguardando repasse" vêm com situacaoId=1 —
         // o filtro acima deixava lote JÁ VENDIDO entrar como disponível. O texto de `status` é o que
         // a própria Pestana mostra; "Em pregão" continua (está acontecendo agora).
+        if (lote && /^\s*vendid/i.test(String(lote.status || '')) && lote.id != null) {
+          vendidosVistos.set(`pestana_${lote.id}`, Number(lote.valor) > 0 ? Number(lote.valor) : null);
+        }
         if (lote && /vendid|repasse|retirad|arrematad|suspens|cancelad/i.test(String(lote.status || ''))) continue;
         const row = mapLotePestana(lote, leilao, leiloesPorId);
         if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
@@ -3644,6 +3668,7 @@ async function scraperPestana(browser) {
       }
       await new Promise(r => setTimeout(r, 120));
     }
+    if (vendidosVistos.size) await registrarVendidosPestana(vendidosVistos);
   } finally { await page.close().catch(() => {}); }
   console.log(`    Pestana: ${imoveis.length} imóveis mapeados`);
   return imoveis;
