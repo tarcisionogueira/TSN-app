@@ -1738,7 +1738,9 @@ async function scraperPortalZuk(browser) {
       const tituloCompleto = tipoLabel && !new RegExp(`^${tipoLabel}\\b`, 'i').test(tituloBruto)
         ? `${tipoLabel} ${tituloBruto}`.trim()
         : tituloBruto;
-      const modalidade = (/judicial/i.test(c.title) && !/extra/i.test(c.title || '')) ? 'judicial' : 'extrajudicial';
+      // O card judicial da ZUK NÃO diz "judicial": diz o comitente, "Tribunal de Justiça do Estado
+      // de São Paulo" (25/09: 126 de 559 ativos, todos gravados como extrajudicial).
+      const modalidade = (/judicial|tribunal|justi[çc]a|\bvara\b|judici[áa]rio/i.test(c.title) && !/extrajudicial/i.test(c.title || '')) ? 'judicial' : 'extrajudicial';
       return {
         fonte: 'ZUK',
         fonte_id: `zuk_${id}`,
