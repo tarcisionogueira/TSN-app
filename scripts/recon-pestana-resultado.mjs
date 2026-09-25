@@ -53,7 +53,7 @@ async function lotesNossosEncerrados() {
     for (let pg = 1; pg <= 30; pg++) {
       const lote = await page.evaluate(async (pg) => {
         try { const res = await fetch(`/api/v2/lote?page=${pg}&qtd=300`, { headers: { Accept: 'application/json' } }); return res.ok ? await res.json() : null; }
-        catch { return null; }
+        catch { return null; } // padrao-ok: recon só-leitura; null vira "sem lista — fim" impresso na linha seguinte
       }, pg);
       const arr = Array.isArray(lote) ? lote : (lote?.content || null);
       if (!Array.isArray(arr) || !arr.length) { console.log(`página ${pg}: ${arr ? 'vazia' : 'sem lista'} — fim`); break; }
