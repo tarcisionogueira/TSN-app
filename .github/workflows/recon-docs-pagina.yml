@@ -1,0 +1,29 @@
+name: Recon — documentos de uma página de lote (só leitura)
+
+# 25/09: lista os links de documento que a página do lote realmente oferece (Chromium, grátis).
+on:
+  push:
+    branches: [ 'claude/bidpro-brasil-registros-handoff-eulqvz' ]
+    paths: [ 'scripts/recon-docs-pagina.mjs', '.github/workflows/recon-docs-pagina.yml' ]
+  workflow_dispatch:
+    inputs:
+      urls: { description: 'URLs (vírgula)', required: false, default: '' }
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --no-audit --no-fund
+      - name: Dependências do Chromium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        env:
+          RECON_URLS: ${{ github.event.inputs.urls || 'https://www.portalzuk.com.br/imovel/sp/sao-paulo/vila-centenario/rua-jorge-augusto-449/37430-234156' }}
+        run: node scripts/recon-docs-pagina.mjs
