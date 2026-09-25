@@ -33470,3 +33470,53 @@ e MEDIDA no acervo ativo: 323 suspeitos → 2 marcados, ambos editais DJEN (fora
 edital só cita o auditório do leiloeiro em Contagem; "retirada no local" não diz qual local); duplicados
 LJUD×leiloeiro original — o LJUD tem 7 lotes DISTINTOS (leilões 99067–99073) com o mesmo título "Prédio
 nº 342" e preço: juntar por cidade+preço+data esconderia lotes reais.
+
+## 📌 FECHAMENTO DA SESSÃO — 24/09 (noite) → 25/09 (madrugada)
+
+### Evolução do dia (números medidos no banco no fechamento)
+| Frente | Antes | Depois |
+|---|---|---|
+| Imóveis ativos sem área | 2.812 | **1.779** (890 pela descrição + 14 por documento + coleta PESTANA/Soleon corrigida) |
+| Veículos sem cidade | 137 | **68** (69 pelo edital) |
+| Lotes repetidos Caixa × leiloeiro | 170 na busca | **0** (gêmeo CEF suprimido, reconciliação diária) |
+| Veículos gravados como imóvel | ~45 | **0 conhecidos** (43 retirados; trava no motor) |
+| Bucket `documentos` | 64 GB | **11 GB** (faxina + limpeza diária ligada) |
+| Veículos SUPERBID com descrição real | ~0 (título) | **7.492** (+216 anos) |
+| Veículos com FIPE | ~250 | **790** (fila prioriza sem lance/condicional) |
+| Registros apontando para arquivo apagado | ~43 mil + 34 links mortos | **0** (reconciliação diária) |
+
+Consertos de raiz: `extrairAreaM2` (número do rótulo seguinte), `textoDaOferta` (SUPERBID embrulhava a
+descrição), status `purgado` inexistente no CHECK (marcação da limpeza falhava calada desde 29/08),
+`naoEhImovel` no motor (catálogos mistos), título Rigolon/Giordano/Thaís atrás do aviso de cookies,
+coleta preserva cidade do veículo, runner recupera rodada perdida (`runner-se-atrasado.sh`).
+
+### ⏭️ Pendências (ordem de prioridade)
+**Com o dono**
+1. **Lembrete 25/09 09h (Agenda):** crontab do WSL com `runner-se-atrasado.sh` (*/30) + tarefa agendada
+   do Windows "BidPro WSL" (mantém o WSL vivo com o terminal fechado). Sem isso, rodada interrompida
+   continua sendo perdida até o próximo horário.
+2. Lembretes já no Agenda: verificação Meta, Banco Inter, WebISS, restituição de créditos Gemini.
+3. Mercado Pago: no 1º pagamento real, "Medir novamente" no painel de qualidade (check-in 28/09).
+
+**Comigo / automático — conferir na próxima sessão**
+4. **Fila do espelho: 30.258 documentos `pendente`** (inclui os 2.117 de imóvel ativo/cliente que
+   voltaram para recópia). O `espelhar-docs-cron` drena ~1.000/rodada e agora reaproveita cópia da
+   mesma `url_origem`. Conferir se a fila cai e se `espelho_reconciliar_ausentes` volta 0/0/0.
+5. **53 lotes Rigolon/Giordano/Thaís ainda com título genérico** — a releitura do motor pega ~15-25 por
+   rodada; convergem pelas rodadas agendadas do `scraper-dom`. Se algum for veículo, sai sozinho.
+6. **FIPE:** fila nova (sem lance/condicional primeiro) — ~786 alvos de proposta, ~2 dias de cota.
+   125 veículos sem ano (ex.: Polo TSI 5014080) só resolvem lendo a página do lote.
+7. **Imóveis SUPERBID/SOLD/KRON** com descrição = título: corrigem na próxima coleta do runner residencial.
+8. **1ª rodada da limpeza diária com a faxina do espelho** (`limpar-documentos-cron` → campo `espelho`
+   na resposta): conferir que não há `erro` e que `storage_paths_em_uso`/`anexos_expirados` não
+   deixaram link morto (`select count(*) from imovel_anexos a where storage_path is not null and not
+   exists (select 1 from storage.objects o where o.bucket_id='documentos' and o.name=a.storage_path)` = 0).
+
+**Deixados de propósito (decisão: não chutar)**
+9. 68 veículos sem cidade (30 Golden Lance: edital só cita o auditório em Contagem).
+10. Repetidos LJUD × leiloeiro original (LJUD tem lotes distintos com mesmo título/preço — "Prédio nº 342").
+11. 1.779 imóveis sem área: 213 com documento sem área rotulada, 20 PDFs escaneados, 47 editais de
+    várias matrículas; o resto não tem área escrita em lugar nenhum.
+
+### Check-ins agendados
+- 28/09 13h UTC — Mercado Pago, teto de e-mails, heartbeats do runner residencial.
