@@ -72,11 +72,25 @@ console.log(`[apurar-superbid] ${APLICAR ? 'APLICANDO' : 'EM SECO'} · ${alvos.l
 if (!alvos.length) process.exit(0);
 
 // ── navegador: entra no site e consulta a API de dentro dele ──────────────────────────────
+// SBID_VIA_ISP=1 (25/09): mesma consulta, saindo pelo proxy ISP do Bright Data (custo fixo por IP +
+// tráfego; a offer-query devolve JSON de poucos KB) — reserva para quando o runner de casa não roda.
+// Sem as credenciais BRIGHTDATA_ISP_*, sai com erro em vez de consultar pelo IP do datacenter (que
+// toma 403 e viraria 'nao_encontrada' em massa — ausência entregue como resposta).
+const VIA_ISP = process.env.SBID_VIA_ISP === '1';
+let ispCred = null;
+const argsProxy = [];
+if (VIA_ISP) {
+  const { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } = await import('./lib/motor/proxy-isp.mjs');
+  if (!proxyIspDisponivel()) { console.error('SBID_VIA_ISP=1 sem BRIGHTDATA_ISP_HOST/USER/PASS — abortando'); process.exit(2); }
+  argsProxy.push(`--proxy-server=${proxyIspServidor()}`);
+  ispCred = proxyIspCredenciais();
+}
 const browser = await puppeteer.launch({
   headless: true,
-  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled', '--window-size=1280,900'],
+  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled', '--window-size=1280,900', ...argsProxy],
 });
 const page = await browser.newPage();
+if (ispCred) await page.authenticate(ispCred);
 await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
 await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 await page.goto('https://www.superbid.net/categorias/imoveis', { waitUntil: 'domcontentloaded', timeout: 45000 })
