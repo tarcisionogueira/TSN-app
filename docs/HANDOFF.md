@@ -33740,3 +33740,14 @@ como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do
   **245 lotes preenchidos, 44 confirmados, 1 divergente** (era "CNPJ do Ministério da Fazenda" —
   regra corrigida, junto com "DETRAN" de cláusula-padrão). Gravação: `recon-edital-veiculos.yml`
   com `gravar=1`. Limites: SUPERBID 403 no GitHub (edital do evento), 16 PDFs > 15 MB, 9 sem texto.
+- **Envio ao jurídico com 1 anexo só (print do dono, Z37342) — corrigido.** `enviar-email-caso.js`
+  lia só o jsonb `anexos` da coleta; a tela do imóvel lê `imovel_anexos` (storage). Agora os dois,
+  assinados na hora; a cópia nossa vence o link externo do mesmo tipo. **Relatórios do sistema**
+  (pedido do dono): no destino jurídico o preview traz a análise documental e o parecer final
+  concluídos; a tela marca/desmarca e anexa o mesmo HTML do "Baixar PDF" (`htmlDocumental`/
+  `htmlLaudo`). Documental preliminar não vai.
+- **ZUK: documentos da página logada.** Havia 6 cards em Z37342 e só a matrícula era guardada.
+  `docsDosCards` (api/_zuk-auth.js) lê todos; `captura-matricula-zuk.mjs` ganhou a **fase 2**
+  (lotes com caso/análise + `ids` do workflow, uma vez por lote — `zuk_docs_em`). Z37342: Ficha
+  de Dados do Leilão, Dívida Ativa, IPTU, Termo de Direito de Preferência guardados. Não varre o
+  acervo inteiro de propósito (storage); pedir à mão pelo input `ids` do `matricula-zuk.yml`.
