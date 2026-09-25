@@ -33420,3 +33420,16 @@ compartilhado), `api/_limpeza-espelho.js` (reaponta ANTES de apagar) e o workflo
 **Falta também (depende do mesmo OK):** ligar a mesma limpeza no `limpar-documentos-cron` (senão o
 espelho volta a acumular) com a trava `storage_paths_em_uso` antes de cada DELETE, e só então fazer
 o `espelhar-docs-cron` reaproveitar a cópia existente de um mesmo `url_origem` em vez de baixar de novo.
+
+### 🚗 Veículos SUPERBID sem descrição/FIPE (25/09, madrugada — print do dono, Polo TSI)
+**Causa:** a offer-query entrega `offerDescription` como OBJETO (`{offerDescription:"<p>…"}`) e o
+`str()` do mapper só lê `description`/`name` → texto vazio → descrição = título em 6.035 veículos e
+~1.400 imóveis SUPERBID/SOLD/KRON. O comentário de 17/08 ("vem vazio em quase toda oferta") media o
+embrulho, não a ausência. `textoDaOferta()` no scraper-puppeteer corrige os dois mapeadores.
+**Recuperado do `raw`:** 7.492 descrições de veículos + 216 anos (só formato explícito "2019/2020",
+"ano de fabricação/modelo"; "LOTE COM N" fora — o ano é de um dos itens). Imóveis não guardam raw:
+corrigem na próxima coleta SUPERBID (runner residencial).
+**FIPE:** 7.238 SUPERBID + 1.270 LJUD nunca calculados. A fila do `enriquecer-fipe.mjs` era
+`data_leilao asc` (vendidos antigos primeiro); agora 1º sem_lance/condicional (proposta), 2º leilão
+futuro mais próximo; vendido fora. O Polo do print não diz o ano em lugar nenhum da oferta → segue
+"sem dados" até a página do lote ser lida.

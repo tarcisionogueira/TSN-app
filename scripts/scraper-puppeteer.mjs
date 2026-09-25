@@ -1170,7 +1170,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       // fatias diferentes (um costuma ter a condição, o outro a descrição física), e juntá-los
       // dá ao extrator de área mais chance de achar a metragem rotulada. Duplicatas saem.
       // O título só entra se, depois de tudo, não sobrar nada — aí é o que temos.
-      const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
+      const partesDesc = [textoDaOferta(of.offerDescription), str(p.shortDesc)]
         .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
         .filter(Boolean);
       const vistosDesc = new Set();
@@ -1338,7 +1338,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
       if (!valMin) continue;
       const titulo = (str(p.shortDesc) || str(of.title) || `Veículo ${leiloeiro}`).slice(0, 180);
-      const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
+      const partesDesc = [textoDaOferta(of.offerDescription), str(p.shortDesc)]
         .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
       // 20/09: mesmo fix — texto real do leiloeiro (offerDescription/offerDetail), não título.
       const descricao = (partesDesc.join(' — ') || titulo).slice(0, 8000);
@@ -2284,6 +2284,16 @@ async function scraperSodre(browser) {
 // placa. Placa real quase nunca aparece com espaço solto em texto corrido (vem colada ou com
 // hífen); apertar para -?/nada não perde placa verdadeira e corta esse falso positivo.
 const REGEX_PLACA = /\b([A-Z]{3}-?\d[A-Z0-9]\d{2}|[A-Z]{3}-?\d{4})\b/;
+// O TEXTO DO LEILOEIRO NA OFERTA SUPERBID (25/09, achado do dono: Polo TSI sem descrição nem FIPE).
+// A offer-query devolve `offerDescription` como OBJETO — `{ offerDescription: "<p>…</p>" }` — e o
+// `str()` local só sabe ler `description`/`name`: o texto virava '' e a descrição de 6.035 veículos e
+// dos imóveis SUPERBID saía igual ao título. Era isso que o comentário de 17/08 media como "vem vazio
+// em praticamente toda oferta": não vinha vazio, vinha embrulhado. (`offerDetail` é só preço.)
+export function textoDaOferta(v) {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object' && typeof v.offerDescription === 'string') return v.offerDescription;
+  return '';
+}
 const REGEX_ANO = /\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/;
 const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
 // 'mmc' (21/09, achado real — lote SUPORTE "CAMINHONE MMC/L200 TRITON..."): sigla oficial de

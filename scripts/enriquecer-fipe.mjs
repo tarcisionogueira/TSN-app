@@ -40,15 +40,27 @@ async function gravar(id, campos) {
 async function main() {
   const desde90 = new Date(Date.now() - RETENTAR_SEM_MATCH_DIAS * 86400000).toISOString();
   const desde25 = new Date(Date.now() - RETENTAR_OK_DIAS * 86400000).toISOString();
-  const { data: candidatos, error: errBusca } = await supabase
+  // PRIORIDADE (25/09, pedido do dono: "sem FIPE não conseguimos fazer proposta"). A fila era
+  // `data_leilao asc` — o mais ANTIGO primeiro, o que gastava a cota diária em lote já VENDIDO
+  // e deixava por último o "sem lance", que é exatamente onde entra a proposta de compra direta.
+  // Agora: 1º sem lance/condicional (alvo de proposta), 2º leilão futuro mais próximo. Vendido
+  // não entra — FIPE de lote arrematado não serve a ninguém.
+  const base = () => supabase
     .from('veiculos_leilao')
     .select('id, titulo, marca, modelo, ano_fabricacao, ano_modelo, tipo_veiculo, fipe_status, fipe_atualizado_em')
     .eq('ativo', true)
     .in('tipo_veiculo', TIPOS_COM_FIPE)
     .not('ano_fabricacao', 'is', null)
-    .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde25})`)
-    .order('data_leilao', { ascending: true, nullsFirst: false })
-    .limit(LIMITE);
+    .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde25})`);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [propostas, futuros] = await Promise.all([
+    base().in('resultado_leilao', ['sem_lance', 'condicional']).order('resultado_apurado_em', { ascending: false, nullsFirst: false }).limit(LIMITE),
+    base().is('resultado_leilao', null).gte('data_leilao', hoje).order('data_leilao', { ascending: true }).limit(LIMITE),
+  ]);
+  const errBusca = propostas.error || futuros.error;
+  const vistos = new Set();
+  const candidatos = [...(propostas.data || []), ...(futuros.data || [])]
+    .filter((v) => !vistos.has(v.id) && vistos.add(v.id)).slice(0, LIMITE);
   if (errBusca) { console.error('Erro ao buscar candidatos:', errBusca.message); process.exit(1); }
   if (!candidatos?.length) { console.log('Nada pendente.'); return; }
   console.log(`${candidatos.length} veículo(s) candidato(s) a enriquecer.`);
