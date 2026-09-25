@@ -33751,3 +33751,43 @@ como **edital**. Banco limpo: ~570 veículos, 0 lixo restante, 498 com edital do
   (lotes com caso/análise + `ids` do workflow, uma vez por lote — `zuk_docs_em`). Z37342: Ficha
   de Dados do Leilão, Dívida Ativa, IPTU, Termo de Direito de Preferência guardados. Não varre o
   acervo inteiro de propósito (storage); pedir à mão pelo input `ids` do `matricula-zuk.yml`.
+
+## 📌 FECHAMENTO DA SESSÃO — 25/09 (noite)
+
+**Evolução do dia (tudo em produção, deploys READY):**
+- Caixa de e-mail em CONVERSA; envio duplo corrigido (idempotência); resposta sem arrastar a
+  conversa; encaminhar última/conversa inteira; Para/Cc em etiquetas.
+- Envio ao jurídico/leiloeiro: vários destinatários (3 do escritório Cajado de Menezes salvos),
+  todos os cadastrados recebem (antes só o 1º), anexos do nosso storage entram, relatórios do
+  sistema (documental/parecer final) anexáveis. Confirmado pelo dono: chegou com todos os anexos.
+- ZUK: 429 no "carregar mais" desligava lote vivo → consertado (imóveis e veículos), 102 religados
+  (559 → 661); lote de tribunal agora `judicial` (129 ativos); documentos da página logada
+  guardados para lotes em uso (Z37342: +4 docs).
+- Veículos: origem da venda (judicial/financeira/seguradora/pátio/órgão público/corporativo) com
+  filtro; edital preenche 268 lotes que estavam sem origem; 910 veículos encerrados saíram da vitrine.
+- Rede Superbid (SBID9/21, Total, Crepaldi, Kron) no runner residencial; reserva no GitHub com 7 h
+  sem o runner; Pestana lê vendido/repasse; espelho mede só o copiável (30.837 → 1.280); falso
+  positivo de supressão corrigido.
+
+**Pendências — do DONO:**
+1. Bright Data: decisão sobre a faixa `54.20.63.0/24` na blacklist da zona.
+2. Título para o Dr. José Roberto.
+3. Boleto Itaú R$ 14.627,92 — vence 27/09.
+4. Consulta Serasa.
+5. Cadastro duplicado ("Fabrício Rodriguez/Rodrigues", 30/08): manter ou remover o 1º.
+
+**Pendências — técnicas (próxima sessão):**
+1. PESTANA: conferir se a coleta diária gravou `vendido` (`resultado_origem='api_pestana'`) —
+   0 até 25/09 noite.
+2. CREPALDI: 0 lotes em 11 de 11 tentativas (10 dias), também pelo residencial → recon do coletor.
+3. Apuração 24/09: SUPERBID veículos 110 e VIP 37 ainda sem resultado; `resultado_leilao_atrasado`
+   324 (deve cair com as rodadas do runner).
+4. ZUK: conferir na próxima coleta o log "429 … espero" e se `coletaParcial` apareceu (se o botão
+   ficar sempre na tela, o sweep da ZUK nunca roda — aí só a data aposenta; aceitável, mas medir).
+5. Veículos sem origem: 1.243 em LJUD/SUPORTE/WEBLEILOES (sem edital anexado ou edital que é
+   outro documento); editais SUPERBID só pelo runner residencial (403 no GitHub).
+6. `qa_invariantes_lenta` 5,4 s (limite 5 s) — no fio.
+7. Agendado 28/09 13h UTC: Mercado Pago / teto de e-mail / heartbeats do runner.
+
+**Runner residencial:** o dono deixou o computador ligado algumas horas na noite de 25/09 — o
+cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada.
