@@ -5,7 +5,10 @@ name: Enriquecer FIPE (veículos)
 # em `fipe_cache` por 25 dias e não gastam cota de novo. Ver scripts/enriquecer-fipe.mjs.
 on:
   schedule:
-    - cron: '0 8 * * *'   # 5h BRT
+    # 22h UTC = 19h BRT (25/09): a cota é por dia UTC (vira às 21h BRT). Rodando no fim do dia o
+    # cron gasta só a SOBRA e a busca sob demanda (o dono abrindo veículo) tem a cota de dia.
+    # Antes era 8h UTC (5h BRT): o cron comia 400 de 450 e o dia tinha 50.
+    - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       limite:
@@ -31,4 +34,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           FIPE_LIMITE: ${{ github.event.inputs.limite || '600' }}
+          FIPE_TOKEN: ${{ secrets.FIPE_TOKEN }}
+          FIPE_COTA_DIARIA: ${{ secrets.FIPE_COTA_DIARIA }}
         run: node scripts/enriquecer-fipe.mjs

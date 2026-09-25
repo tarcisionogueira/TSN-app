@@ -25,8 +25,17 @@ const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: '
 // (`fipe_uso`/`registrar_uso_fipe`) para os dois caminhos: o cron para em TETO_CRON e os 50
 // restantes ficam para a busca sob demanda (o dono abrindo um veículo), que para em
 // TETO_DIARIO — 50 abaixo dos 500, margem para relógio/contagem da API diferirem da nossa.
-export const TETO_DIARIO_FIPE = 450;
-export const TETO_CRON_FIPE = 400;
+//
+// 25/09 (dono: "alguns carros que entrei não carregaram a FIPE"): o cron rodava às 5h BRT e
+// comia 400 das 450 logo cedo — o dono, abrindo veículo de dia, tinha só 50. O cron passou para
+// o FIM do dia UTC (19h BRT; a cota vira às 21h BRT) e gasta só a sobra; de dia a busca sob
+// demanda tem a cota inteira. COTA configurável: com token grátis do fipe.parallelum (header
+// X-Subscription-Token) a cota do plano sobe — basta FIPE_TOKEN + FIPE_COTA_DIARIA no ambiente
+// (Vercel e secret do GitHub), sem mexer em código. Sem as duas, fica o padrão sem token (500).
+const COTA_DIARIA_FIPE = Math.max(50, Number(process.env.FIPE_COTA_DIARIA) || 500);
+export const TETO_DIARIO_FIPE = COTA_DIARIA_FIPE - 50;
+export const TETO_CRON_FIPE = COTA_DIARIA_FIPE - 80;
+const FIPE_TOKEN = process.env.FIPE_TOKEN || '';
 
 export const RETENTAR_SEM_MATCH_DIAS = 90;
 export const RETENTAR_OK_DIAS = 25;
@@ -195,7 +204,7 @@ export function criarFipeFetch(reservar, cache = null) {
     try { decisao = await reservar(); }
     catch (e) { console.log(`  ⚠️ reserva de cota FIPE falhou: ${String(e.message).slice(0, 100)}`); decisao = { permitido: false }; }
     if (!decisao?.permitido) throw new ErroFipeSemCota();
-    const r = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json', ...(FIPE_TOKEN ? { 'X-Subscription-Token': FIPE_TOKEN } : {}) }, signal: AbortSignal.timeout(15000) });
     if (!r.ok) { console.log(`  ⚠️ FIPE ${path}: HTTP ${r.status}`); return null; }
     let j;
     try { j = await r.json(); }

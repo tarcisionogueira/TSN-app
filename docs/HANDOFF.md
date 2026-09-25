@@ -33804,3 +33804,9 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   "Carros & Motos". `ehVeiculoSuperbid` (tipo de produto de veículo + subcategoria que não é
   peça/acessório/equipamento) vale sempre; migração `superbid_veiculos_so_veiculo.sql` tirou da
   vitrine **453** (7.224 → 6.771). Sucata e sinistrado ficam. Imóveis da rede Superbid: limpos.
+- **FIPE que não carregava ao abrir o veículo (dono, 25/09).** A lista de busca não gasta cota (só
+  mostra o valor gravado); a consulta sob demanda ao abrir o veículo já existia. O problema era o
+  HORÁRIO: o cron rodava 8h UTC e comia 400 das 450 do dia; de dia sobravam 50. A cota zera às
+  21h BRT (dia UTC) → cron passou para **22h UTC (19h BRT)** e gasta só a sobra. Cobertura: 620 de
+  ~9.000 ativos com FIPE (8.336 nunca calculados, 890 sem ano). Opcional sem custo: token grátis
+  do parallelum → `FIPE_TOKEN` + `FIPE_COTA_DIARIA` (Vercel + secret GitHub), sem código.

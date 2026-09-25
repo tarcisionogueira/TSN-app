@@ -194,3 +194,10 @@ Todas marcadas em Production + Preview + Development. Nomes (valores só no pain
 - `WA_BOT_ATIVO=1` — liga a RESPOSTA da IA. Sem ele, o webhook escuta e grava, mas ninguém responde.
 
 **Como conferir, sem segredo nenhum:** `GET /api/whatsapp-webhook` devolve `{ escuta, responde, falta: [...] }`.
+
+## FIPE (opcional, 25/09) — ainda NÃO configurado
+- `FIPE_TOKEN` — token grátis do fipe.parallelum.com.br (header `X-Subscription-Token`). Sem ele a
+  API funciona com a cota sem token.
+- `FIPE_COTA_DIARIA` — a cota diária do plano do token (padrão 500). Os tetos internos saem daqui
+  (sob demanda = cota − 50; cron = cota − 80).
+Os dois também como **secret do GitHub** (o `enriquecer-fipe.yml` lê de lá).
