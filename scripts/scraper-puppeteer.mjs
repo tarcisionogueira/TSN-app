@@ -5654,7 +5654,11 @@ async function scraperLeilofy(browser) {
 // mesma regra do radar do DJEN — e então sai pelo proxy ISP do Bright Data (custo fixo por
 // IP, sem o freio por requisição do Web Unlocker). SUPERBID_FORCAR_ISP=1 força (teste).
 // "Não consegui ler o gate" NÃO é "residencial em dia": nesse caso a reserva roda.
-const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS'];
+// 25/09: + os sub-portais e as lojas white-label da MESMA offer-query (SBID9, SBID21, TOTALLEILOES,
+// CREPALDI, KRONLEILOES). Desde 24/09 14h53 as cinco tomam "Failed to fetch" em TODAS as tentativas
+// do GitHub (run 36015162979) — o mesmo bloqueio que tirou SUPERBID/SOLD daqui em 23/09 — e caíam
+// para 0 com alerta de regressão todo dia. Agora seguem o mesmo gate residencial.
+const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES'];
 async function navegadorRedeSuperbid(browser) {
   if (process.env.GITHUB_ACTIONS !== 'true') return { browser, proprio: null };
   const forcar = process.env.SUPERBID_FORCAR_ISP === '1';
@@ -5775,16 +5779,16 @@ async function main() {
     // página de oferta que SUPERBID/SOLD (que capturam 74%/100% com enrich ligado), mas
     // aqui a chamada saía sem enriquecerDocumentosLote nenhuma vez → 0% de doc num
     // inventário pequeno o bastante (34/72 ativos) pro cap padrão (120) cobrir de sobra.
-    if (rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
-    if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120 });
-    if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120 });
+    if (bSbid && rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
+    if (bSbid && rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(bSbid, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
+    if (bSbid && rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(bSbid, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // 3c. White-labels da rede por LOJA (Round 35 do backlog TRT-15): mesma offer-query,
     // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
     // 20/09: assim como SBID9/SBID21 (09/09), estas duas saíam sem { enrich: true } — mesmo
     // portal/template de oferta que SUPERBID/SOLD (74%/100% de matrícula com enrich ligado).
-    if (rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(browser, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }), { enrich: true, enrichCap: 120 });
-    if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120 });
+    if (bSbid && rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
+    if (bSbid && rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(bSbid, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
     // KRONLEILOES (16/09): candidato do EDITAL_DJEN, site próprio (kronleiloes.com.br)
     // bloqueia Cloudflare direto (403 em fetch puro) — parecia exigir Bright Data pago. Recon
     // com Chromium real (recon-crepaldi.mjs, que passa o Cloudflare) mostrou que o site é só
@@ -5792,7 +5796,7 @@ async function main() {
     // offer-query.superbid.net com stores.id:16180 (444 ofertas na loja, confirmado por
     // teste direto na API pública). Zero Cloudflare, zero Bright Data — mesma API grátis que
     // TOTALLEILOES/CREPALDI já usam.
-    if (rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(browser, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }), { enrich: true, enrichCap: 120 });
+    if (bSbid && rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
     // 20/09: o parser próprio classifica matrícula só pelo texto DENTRO da âncora <a> (frágil —

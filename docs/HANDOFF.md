@@ -33641,3 +33641,17 @@ recebeu as duas — apagar uma esconderia o que aconteceu).
   RJLEILOES/TORRES3/DANIELGARCIA/ALBERTOMACEDO seguem precisando de IP residencial ou Bright Data.
 - **Veículos "atrasados" (115 de 24/09) eram TODOS SUPERBID** — não é o orçamento de tempo do cron
   (SUPERBID nem passa por ele); é o runner de casa. Nada a equilibrar no cron.
+
+### 25/09 (15h45 UTC) — check-in: SBID/KRON/TOTAL e fila do espelho
+- **SBID9, SBID21, TOTALLEILOES, CREPALDI e KRONLEILOES → runner residencial.** Falharam de novo
+  hoje 15h14 (2º dia). Log de 24/09 (run 36015162979): as cinco dão "Failed to fetch" em TODAS as
+  tentativas da offer-query do GitHub — o mesmo bloqueio que tirou SUPERBID/SOLD do GitHub em 23/09.
+  Agora estão em `REDE_SBID_RESIDENCIAL` (scraper-puppeteer.mjs) e na linha `rodar SUPERBID` do
+  runner-residencial.sh: coletam no IP de casa; o GitHub só pega como reserva (proxy ISP) com 7+
+  dias sem o runner. Até o computador ligar, ficam sem coleta nova (antes também: gravavam 0 e a
+  trava "≤50" protegia o acervo).
+- **Fila do espelho NÃO está travada — o número é que engana.** 30.837 "pendente", mas o trabalho
+  possível é **zero** (`proximos_espelho_documentos` só pega tentativas<3 e lote ativo): 24.536
+  são CEF (nunca copiou 1 sequer — HTTP 403, tudo com tentativas≥3), o resto é esgotado ou de lote
+  inativo. Sugestão (não feita): marcar esses como `ignorado` e parar de enfileirar CEF, para o
+  contador medir fila de verdade (forma nº 10).

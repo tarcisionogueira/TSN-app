@@ -213,7 +213,8 @@ rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 # (DIÁRIO, não 2x/semana: acervo grande e com praça todo dia) e acervo SUPERBID+SOLD.
 # RESERVA: o GitHub (leiloeiros/veiculos-puppeteer) só coleta a rede Superbid se este gate
 # ficar 7+ dias sem concluir — e aí sai pelo proxy ISP. Ver navegadorRedeSuperbid().
-rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS node scripts/scraper-puppeteer.mjs
+# 25/09: + SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES — mesma offer-query, bloqueada no GitHub desde 24/09.
+rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,TOTALLEILOES,CREPALDI,KRONLEILOES node scripts/scraper-puppeteer.mjs
 
 # ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
 # Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A
