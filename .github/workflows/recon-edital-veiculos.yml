@@ -1,0 +1,24 @@
+name: Recon — origem do veículo pelo edital (EM SECO, não grava)
+
+# 25/09: lê cada edital de evento de veículo uma vez e imprime a origem da venda que ele indica ×
+# a que o sistema tem hoje. Só leitura; sem Bright Data. Ver scripts/edital-origem-veiculos.mjs.
+on:
+  push:
+    branches: [ 'claude/bidpro-brasil-registros-handoff-eulqvz' ]
+    paths: [ 'scripts/edital-origem-veiculos.mjs', '.github/workflows/recon-edital-veiculos.yml' ]
+  workflow_dispatch: {}
+
+jobs:
+  seco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Em seco
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/edital-origem-veiculos.mjs
