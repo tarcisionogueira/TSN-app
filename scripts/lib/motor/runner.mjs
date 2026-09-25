@@ -18,6 +18,7 @@ import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
+import { naoEhImovel } from '../dom-parse-util.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -175,7 +176,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
   const { urls, fetchOk, via, eventosCount } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
-  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0;
+  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const meta = new Map();
@@ -236,6 +237,8 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       const det = cfg.parse.parseDetalhe(html, url);
       if (det.encerrado) { encerrados++; continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
+      // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
+      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });
       if (q.descartar) { reprov++; continue; }
       prontos.push(row);
@@ -248,7 +251,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const comFoto = prontos.filter(r => r.link_foto).length;
   const comDesc = prontos.filter(r => r.descricao).length;
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via };
 }

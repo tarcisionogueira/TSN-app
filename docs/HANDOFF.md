@@ -33448,3 +33448,16 @@ zerados; `anexos_expirados` não devolve arquivo ainda usado por outro imóvel a
 **espelhar-docs-cron reaproveita** a cópia já existente do mesmo `url_origem` (não baixa/guarda o mesmo
 edital 100×). **Ainda pendente de permissão:** ligar a faxina (`limparEspelho`) no limpar-documentos-cron —
 sem isso o espelho de imóvel encerrado volta a acumular devagar (rodar o workflow manual 1×/mês resolve).
+
+### 🏍️ Veículo gravado como imóvel (25/09 — print do dono, moto Honda/C100 Biz da Rigolon)
+Catálogos MISTOS (Rigolon/Giordano coletados pela HOME, Leilão Brasil, Luthero, Leilotech) punham
+moto, carro, caminhão, trator, carreta e máquina em `imoveis_leilao`. Varredura: **30 lotes ativos**
+(Leilão Brasil 22, Luthero 5, Rigolon 2, Leilotech 1) → `ativo=false, suprimido_motivo='nao_imovel'`.
+Falsos positivos da varredura que FICAM: garagem "para quatro veículos", complexo industrial da Rontan
+(tem áreas), "lote de terreno e Fiat Uno" (misto), editais DJEN.
+**Na raiz:** `naoEhImovel()` (dom-parse-util.mjs) aplicado no motor (`runner.mjs`) antes de gravar —
+sinal forte de bem móvel (RENAVAM, placa, Marca/Modelo, motocicleta, trator…) e nenhuma palavra de
+imóvel; limites de palavra Unicode (em JS `\b` não vê "Á"/"Ô"). Rigolon: o título vinha INVERTIDO
+("Rancharia/SP - Honda/C100 Biz - 02/02") e o parser só aceitava "Tipo - Desc - Cidade/UF" → os 27
+lotes ativos estavam como "Imóvel Rigolon Leilões N"; agora aceita os dois formatos.
+**Faxina diária do espelho ligada** no limpar-documentos-cron (autorizada pelo dono, 25/09).

@@ -44,6 +44,11 @@ function primeiraLinhaInfo(linhas) {
   for (const l of linhas.slice(0, 6)) {
     const m = l.match(/^(.+?)\s-\s(.+?)\s-\s([A-ZÀ-Ÿ][A-Za-zÀ-ÿ '.-]+?)\/([A-Z]{2})$/);
     if (m) return { tipoBem: m[1].trim(), descCurta: m[2].trim(), cidade: m[3].trim(), estado: m[4] };
+    // 25/09: formato INVERTIDO, cidade primeiro — "Rancharia/SP - Honda/C100 Biz - 02/02". Sem ele
+    // o lote saía sem título ("Imóvel Rigolon Leilões 217853"; os 27 ativos estavam assim) e o
+    // motor não tinha como ver que era uma moto.
+    const inv = l.match(/^([A-ZÀ-Ÿ][A-Za-zÀ-ÿ '.-]+?)\/([A-Z]{2})\s-\s(.+)$/);
+    if (inv) return { tipoBem: '', descCurta: inv[3].trim(), cidade: inv[1].trim(), estado: inv[2], linha: l.trim() };
   }
   return null;
 }
@@ -59,7 +64,7 @@ export function parseDetalhe(html, url) {
   if (!avaliacao) avaliacao = minimo;
 
   const titulo = info
-    ? `${info.tipoBem} - ${info.descCurta} - ${info.cidade}/${info.estado}`.slice(0, 180)
+    ? (info.linha || `${info.tipoBem} - ${info.descCurta} - ${info.cidade}/${info.estado}`).slice(0, 180)
     : null;
   // FALLBACK (07/09): a 1ª rodada real mostrou que o formato "Tipo - Desc - Cidade/UF" numa
   // única linha é raro — a amostra que validou o parser era mais limpa que o comum. Sem

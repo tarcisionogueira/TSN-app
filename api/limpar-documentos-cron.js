@@ -47,6 +47,7 @@ async function marcarEspelhoPurgado(paths) {
 }
 
 import { isCronAuthorized } from './_auth.js';
+import { limparEspelho } from './_limpeza-espelho.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -152,7 +153,20 @@ async function handler(req) {
     if (anexos.length < 500) break;
   }
 
+  // ── Faxina do espelho (25/09, autorizada pelo dono): documento de imóvel que saiu do acervo sem
+  // cliente + cópias idênticas. Os arquivos do espelho que nunca entraram em imovel_anexos não
+  // passavam por NADA acima — foi assim que o bucket chegou a 64 GB. Mesma regra do workflow
+  // limpar-espelho.yml (api/_limpeza-espelho.js); usa só o tempo que sobrou.
+  let espelho = null;
+  const restante = DEADLINE - Date.now();
+  if (restante > 20000) {
+    espelho = await limparEspelho({ url: SUPABASE_URL, key: SERVICE_KEY, aplicar: true, prazoMs: restante - 10000, lote: 1000 })
+      .catch((e) => ({ erro: String(e?.message || e).slice(0, 120) }));
+    if (espelho?.erro && espelho.erro !== 'rodada sem progresso') console.error('[limpar-documentos] espelho:', espelho.erro);
+  }
+
   return new Response(JSON.stringify({
+    espelho,
     removidos, removidos_avisados: removidosAvisados, iteracoes, links_matricula_zerados: linksZerados,
     drenado: !ultimoErro && removidos >= 0, erro: ultimoErro || undefined,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
