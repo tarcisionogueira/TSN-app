@@ -33577,3 +33577,12 @@ R$ 14.627,92 vence 27/09; (4) conferir o alerta do Serasa no app oficial (e-mail
 marketing — não clicar no link).
 **No computador:** (5) WSL — crontab `runner-se-atrasado.sh` (*/30) + tarefa "BidPro WSL" (passo a
 passo no evento da Agenda de 25/09 09h).
+
+### ✅ E-mail saindo 2× num toque duplo (dono, 25/09 10h21 BRT)
+Resposta à Leiloaria Smart saiu **duas vezes de verdade** (2 ids do Resend, 1,1 s de diferença),
+não foi só registro duplicado. Causa: a trava `enviando` era estado React (vale só no próximo
+render) e o servidor não tinha idempotência. Conserto em 3 camadas: `useRef` trava o botão na hora;
+cada mensagem composta leva `chave_envio` → `Idempotency-Key` no Resend (`api/_email.js`, parâmetro
+opcional `idempotencyKey`, não muda os outros chamadores); `api/email-caixa.js` não grava em
+Enviados um `resend_email_id` que já existe. As 2 linhas de 25/09 13h21 UTC ficaram (o leiloeiro
+recebeu as duas — apagar uma esconderia o que aconteceu).

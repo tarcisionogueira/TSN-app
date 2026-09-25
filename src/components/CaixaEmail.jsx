@@ -117,6 +117,11 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [salvoEm, setSalvoEm] = useState(null);  // hora do último salvamento automático
   const rascunhoId = useRef(null);               // ref (não estado): gravar o id não pode redisparar o salvamento
   const salvando = useRef(Promise.resolve());    // fila: dois salvamentos nunca inserem duas linhas
+  // Trava de envio (25/09): `enviando` é estado e só vale no próximo render — dois toques rápidos no
+  // celular passavam os dois e o e-mail saía 2×. A ref trava na hora; a chave deixa o servidor
+  // reconhecer a repetição mesmo assim (retry, aba duplicada).
+  const enviandoRef = useRef(false);
+  const chaveEnvio = useRef(null);
   const loc = useLocation();
   const navigate = useNavigate();
   const [enviando, setEnviando] = useState(false);
@@ -255,6 +260,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   // Abrir o Escrever sempre passa por aqui: zera (ou retoma) o id do rascunho.
   function abrirCompor(c) {
     rascunhoId.current = c?.rascunho_id || null;
+    chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
     setSalvoEm(null);
     setCompor(c);
   }
@@ -329,12 +335,13 @@ export default function CaixaEmail({ soPessoal = false }) {
   }
 
   async function enviar() {
-    if (enviando || !compor) return;
+    if (enviandoRef.current || enviando || !compor) return;
+    enviandoRef.current = true;
     setEnviando(true); setErro('');
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -351,7 +358,7 @@ export default function CaixaEmail({ soPessoal = false }) {
       if (pasta === 'enviados') carregar();
     } catch (e) {
       setErro(`Envio falhou: ${e.message}`);
-    } finally { setEnviando(false); }
+    } finally { enviandoRef.current = false; setEnviando(false); }
   }
 
   const b = busca.trim().toLowerCase();

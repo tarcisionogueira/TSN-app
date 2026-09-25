@@ -212,7 +212,9 @@ async function campanhaPermitida(userId) {
 // precisa mandar de verdade AGORA e já sabe que o orçamento permite (o cron que drena a
 // fila, logo abaixo) chama `enviarEmailAgora` direto — nunca esta função, senão um segundo
 // estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
-export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
+// `idempotencyKey` (25/09): o MESMO pedido repetido (toque duplo, retry) sai UMA vez — o Resend
+// devolve o envio original por 24 h em vez de mandar de novo.
+export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   // LIMITE SEMANAL DE CAMPANHA (24/09, pedido do dono — ver api/_cadencia.js e a migração
   // cadencia_por_segmento.sql). Gratuito: 1 campanha/semana e no máximo 2 e-mails/semana
@@ -250,12 +252,12 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
     })));
     return { ok: false, error: 'orcamento_diario_excedido', enfileirado: enfileirou };
   }
-  return enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta });
+  return enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey });
 }
 
 // Envio de verdade, sem checar orçamento (quem chama já garantiu isso). Exportado só para
 // `drenar-fila-emails-cron.js` — todo o resto deve chamar `enviarEmail`.
-export async function enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
+export async function enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!RESEND_KEY) {
     // Sem a key não sai e-mail nenhum — e, sem este registro, isso era INVISÍVEL (o return
@@ -311,7 +313,7 @@ export async function enviarEmailAgora({ from, to, cc, subject, html, text, atta
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json', ...(idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 256) } : {}) },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));

@@ -185,11 +185,16 @@ export default async function handler(req) {
     + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(nomeRemetente)}<br>BidPro Brasil</p>`
     + (citacao ? `<blockquote style="border-left:3px solid #cbd5e1;margin:16px 0 0;padding:4px 12px;color:#64748b;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:13px">${esc(citacao.trim())}</blockquote>` : '');
 
+  // Toque duplo no celular (25/09): o mesmo e-mail saiu 2× ao leiloeiro, 1,1 s de diferença, com
+  // dois ids do Resend. A tela gera uma chave por mensagem composta; com ela o Resend devolve o
+  // envio original em vez de mandar de novo, e o registro abaixo não duplica em Enviados.
+  const chaveEnvio = /^[A-Za-z0-9-]{8,64}$/.test(String(body?.chave_envio || '')) ? String(body.chave_envio) : null;
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
     headers: Object.keys(headers).length ? headers : undefined,
     meta: { tipo: 'caixa_equipe', userId: user.id },
+    idempotencyKey: chaveEnvio ? `caixa:${user.id}:${chaveEnvio}` : undefined,
   });
   if (!r.ok) {
     const msg = r.error === 'orcamento_diario_excedido'
@@ -201,6 +206,12 @@ export default async function handler(req) {
 
   // Registro na caixa (Enviados). O e-mail JÁ SAIU — falha aqui é só histórico: avisa, não esconde.
   const avisos = [];
+  if (r.id) {
+    const ja = await sb(`email_caixa?resend_email_id=eq.${encodeURIComponent(r.id)}&select=id&limit=1`);
+    const linhas = ja.ok ? await ja.json().catch(() => null) : null;
+    if (!ja.ok || !Array.isArray(linhas)) console.error('[email-caixa] checagem de repetido falhou HTTP', ja.status, '— registrando assim mesmo');
+    else if (linhas.length) return json({ ok: true, id: r.id, repetido: true, avisos: ['este envio já tinha saído — não foi mandado de novo'] });
+  }
   const ins = await sb('email_caixa', { method: 'POST', prefer: 'return=minimal', body: {
     direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, de_email: enderecoDe, de_nome: nomeRemetente, dono: pessoal ? user.id : null,
     para, cc, assunto, texto: textoFinal, html, in_reply_to: original?.message_id || null,
