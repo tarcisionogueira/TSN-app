@@ -27,9 +27,9 @@ const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: '
 // TETO_DIARIO — 50 abaixo dos 500, margem para relógio/contagem da API diferirem da nossa.
 //
 // 25/09 (dono: "alguns carros que entrei não carregaram a FIPE"): o cron rodava às 5h BRT e
-// comia 400 das 450 logo cedo — o dono, abrindo veículo de dia, tinha só 50. O cron passou para
-// o FIM do dia UTC (19h BRT; a cota vira às 21h BRT) e gasta só a sobra; de dia a busca sob
-// demanda tem a cota inteira. COTA configurável: com token grátis do fipe.parallelum (header
+// comia 400 das 450 logo cedo — o dono, abrindo veículo de dia, tinha só 50. Decisão do dono: a
+// FIPE passa a ser SÓ sob demanda (ao abrir o veículo) — o `enriquecer-fipe.yml` perdeu o
+// agendamento e só roda à mão (e aí para em TETO_CRON, deixando folga para a tela). COTA configurável: com token grátis do fipe.parallelum (header
 // X-Subscription-Token) a cota do plano sobe — basta FIPE_TOKEN + FIPE_COTA_DIARIA no ambiente
 // (Vercel e secret do GitHub), sem mexer em código. Sem as duas, fica o padrão sem token (500).
 const COTA_DIARIA_FIPE = Math.max(50, Number(process.env.FIPE_COTA_DIARIA) || 500);

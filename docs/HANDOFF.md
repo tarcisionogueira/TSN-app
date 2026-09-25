@@ -33810,3 +33810,7 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   21h BRT (dia UTC) → cron passou para **22h UTC (19h BRT)** e gasta só a sobra. Cobertura: 620 de
   ~9.000 ativos com FIPE (8.336 nunca calculados, 890 sem ano). Opcional sem custo: token grátis
   do parallelum → `FIPE_TOKEN` + `FIPE_COTA_DIARIA` (Vercel + secret GitHub), sem código.
+  **Decisão do dono (mesma noite): sem cota maior e sem lote automático.** `enriquecer-fipe.yml`
+  perdeu o agendamento (só roda à mão); a FIPE é consultada SÓ ao abrir a tela do veículo
+  (`VeiculoDetalhe.jsx` → `api/veiculo-fipe.js`), com os 450/dia inteiros. Token/cota opcionais
+  continuam suportados mas NÃO configurados, por decisão.

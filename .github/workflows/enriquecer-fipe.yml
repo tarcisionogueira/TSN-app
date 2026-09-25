@@ -4,11 +4,9 @@ name: Enriquecer FIPE (veículos)
 # O lote vai até a cota diária acabar (trava atômica `registrar_uso_fipe`) — respostas ficam
 # em `fipe_cache` por 25 dias e não gastam cota de novo. Ver scripts/enriquecer-fipe.mjs.
 on:
-  schedule:
-    # 22h UTC = 19h BRT (25/09): a cota é por dia UTC (vira às 21h BRT). Rodando no fim do dia o
-    # cron gasta só a SOBRA e a busca sob demanda (o dono abrindo veículo) tem a cota de dia.
-    # Antes era 8h UTC (5h BRT): o cron comia 400 de 450 e o dia tinha 50.
-    - cron: '0 22 * * *'
+  # SEM AGENDAMENTO (25/09, decisão do dono): "não faz sentido sair fazendo de tudo sendo que não
+  # estou interessado em tudo". A FIPE é consultada SÓ ao abrir a tela do veículo
+  # (api/veiculo-fipe.js), com a cota do dia inteira. Este lote fica só para rodar à mão.
   workflow_dispatch:
     inputs:
       limite:
