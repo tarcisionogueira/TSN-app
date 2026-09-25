@@ -86,6 +86,12 @@ export async function limparEspelho({ url, key, aplicar = false, prazoMs = 24000
     // Sem progresso = algo travou (Storage recusando, reaponte falhando): parar em vez de girar.
     if (!apagadosNaRodada) { r.erro = r.erro || 'rodada sem progresso'; break; }
   }
+  // Fecha as pontas no banco (25/09): o que ficou apontando para arquivo apagado — por falha de
+  // marcação acima ou por qualquer caminho antigo — é corrigido em SQL, sem depender de URL.
+  if (aplicar) {
+    const rr = await rest('rpc/espelho_reconciliar_ausentes', { method: 'POST', body: '{}' }).catch(() => null);
+    r.reconciliacao = rr?.ok ? await rr.json().catch(() => null) : { erro: `HTTP ${rr?.status}` };
+  }
   r.segundos = Math.round((Date.now() - t0) / 1000);
   return r;
 }

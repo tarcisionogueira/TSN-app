@@ -83,6 +83,17 @@ export default async function handler(req, res) {
   // `tipo` de anexo fora da nossa taxonomia) — e 0 é indistinguível de "não havia nada novo
   // para enfileirar". O cron respondia `ok: true` enquanto o espelhamento estava parado.
   // Agora: null = não consegui enfileirar, e o motivo viaja na resposta (forma #5 do CLAUDE.md).
+  // RECONCILIA ANTES DE TUDO (25/09): espelho 'copiado' cujo arquivo sumiu do bucket volta à fila
+  // (imóvel ativo/com cliente) ou vira 'purgado'; anexo com link morto é zerado. Foi o que a
+  // faxina de 25/09 revelou: 43 mil registros apontando para o nada, porque 'purgado' nem era
+  // status válido e a marcação da limpeza falhava calada. Não apaga nada — só corrige ponteiro.
+  let reconciliacao = null;
+  try {
+    const rr = await sb('rpc/espelho_reconciliar_ausentes', { method: 'POST', body: '{}' });
+    reconciliacao = rr.ok ? await rr.json().catch(() => null) : { erro: `HTTP ${rr.status}` };
+    if (!rr.ok) console.error('[espelhar-docs] reconciliar', rr.status);
+  } catch (e) { reconciliacao = { erro: String(e?.message || e).slice(0, 120) }; console.error('[espelhar-docs] reconciliar', reconciliacao.erro); }
+
   let enfileirados = null;
   let enfileirarErro = null;
   try {
@@ -124,6 +135,19 @@ export default async function handler(req, res) {
       await marcar(d.id, { status: 'ignorado', motivo: 'host não permitido' });
       return 'ignorado';
     }
+    // O MESMO DOCUMENTO JÁ COPIADO PARA OUTRO LOTE (25/09): o edital de um leilão de 100 lotes era
+    // baixado e guardado 100 vezes — 15 GB de cópias idênticas medidos na faxina. Agora o lote
+    // aponta para a cópia que já existe. Seguro porque a retenção (`anexos_expirados` e a faxina
+    // do espelho) não apaga arquivo que outro imóvel ativo ainda usa.
+    try {
+      const rj = await sb(`documento_espelho?url_origem=eq.${encodeURIComponent(d.url_origem)}&status=eq.copiado&storage_path=not.is.null&select=storage_path,bytes&limit=1`);
+      const ja = rj.ok ? await rj.json().catch(() => []) : [];
+      if (Array.isArray(ja) && ja[0]?.storage_path) {
+        await marcar(d.id, { status: 'copiado', storage_path: ja[0].storage_path, bytes: ja[0].bytes, motivo: 'reaproveitado (mesma url de origem)' });
+        return 'copiado';
+      }
+    } catch (e) { console.error('[espelhar-docs] reaproveitar', d.id, e?.message || e); } // segue e baixa normalmente
+
     let bin = null, mime = 'application/pdf';
     try {
       const r = await fetchExternoSeguro(d.url_origem, {
@@ -252,7 +276,7 @@ export default async function handler(req, res) {
 
   if (leituras === 0) {
     console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: 0, motivo: 'fila vazia' }));
-    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia', fotos });
+    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia', fotos, reconciliacao });
     return;
   }
 
@@ -294,7 +318,7 @@ export default async function handler(req, res) {
   } catch (e) { publicados = String(e?.message || e).slice(0, 80); }
 
   const saida = {
-    enfileirados, processados, copiados, falhas, ignorados, publicados, fotos,
+    enfileirados, processados, copiados, falhas, ignorados, publicados, fotos, reconciliacao,
     sem_tempo: semTempo, pendentes, leituras, ms: Date.now() - t0,
     ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
     ...(enfileirarErro ? { erro_enfileirar: enfileirarErro } : {}),

@@ -33433,3 +33433,18 @@ corrigem na próxima coleta SUPERBID (runner residencial).
 `data_leilao asc` (vendidos antigos primeiro); agora 1º sem_lance/condicional (proposta), 2º leilão
 futuro mais próximo; vendido fora. O Polo do print não diz o ano em lugar nenhum da oferta → segue
 "sem dados" até a página do lote ser lida.
+
+### ✅ Faxina do armazenamento executada (25/09, madrugada — dono rodou o workflow)
+`documentos`: **64 GB → ~12,8 GB** (espelho 59 GB → 8,8 GB; casos 5,4 → 4,0 GB). Apagados 27.580
+arquivos de imóvel fora do acervo sem cliente + 11.383 cópias idênticas (12.208 linhas reapontadas
+para a cópia que ficou), 1.426 órfãos/duplicados em casos/.
+**Achado da checagem de integridade (forma nº 7):** o status `'purgado'` que o limpar-documentos-cron
+grava desde 29/08 NUNCA foi permitido pelo CHECK de `documento_espelho` — o PATCH dava 400 e falhava
+calado todo dia. Resultado: ~15 mil registros herdados apontando para arquivo apagado e 34 anexos com
+link morto (a "ressurreição" que aquele conserto devia impedir). Migração `espelho_purgado_e_ausentes.sql`:
+CHECK aceita 'purgado'; `espelho_reconciliar_ausentes()` (roda todo dia no espelhar-docs-cron e no fim da
+faxina) → 2.117 documentos de imóvel ativo/cliente voltaram à fila para recópia, 41.303 purgados, 34 anexos
+zerados; `anexos_expirados` não devolve arquivo ainda usado por outro imóvel ativo (dedup).
+**espelhar-docs-cron reaproveita** a cópia já existente do mesmo `url_origem` (não baixa/guarda o mesmo
+edital 100×). **Ainda pendente de permissão:** ligar a faxina (`limparEspelho`) no limpar-documentos-cron —
+sem isso o espelho de imóvel encerrado volta a acumular devagar (rodar o workflow manual 1×/mês resolve).
