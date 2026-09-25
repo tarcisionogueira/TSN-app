@@ -1672,17 +1672,39 @@ async function scraperPortalZuk(browser) {
     // POST leilao-de-imoveis/mais (rota Ziggy carrega.mais) e faz o append dos
     // próximos cards. O scroll puro NÃO aciona o botão — por isso parávamos em 30.
     // Clicamos o botão repetidamente (com scroll como fallback) até parar de crescer.
-    let prev = 0, estavel = 0;
+    //
+    // O "/mais" TOMA 429 (25/09, recon-zuk-listagem.mjs): a 19ª chamada volta rate-limited, a
+    // lista para de crescer com o botão AINDA na tela, e o laço antigo (3 voltas paradas) saía
+    // achando que era o fim — ~480 de um acervo maior, e o sweep desligava como `sumiu_da_fonte`
+    // lote com lance correndo (34 de 58 com 2ª praça futura estavam na listagem). Agora: 429 →
+    // espera crescente e tenta de novo; se terminar com o botão visível, a coleta é PARCIAL e o
+    // sweep não aposenta ninguém.
+    let n429 = 0, ultimo429 = false;
+    page.on('response', (res) => {
+      if (/leilao-de-imoveis\/mais/.test(res.url()) && res.status() === 429) { n429++; ultimo429 = true; }
+    });
+    let prev = 0, estavel = 0, esperas429 = 0;
     for (let i = 0; i < 400 && estavel < 3; i++) {
-      const n = await page.evaluate(() => {
+      ultimo429 = false;
+      const { n, botao } = await page.evaluate(() => {
         const btn = document.querySelector('#btn_carregarMais');
-        if (btn && btn.offsetParent !== null) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
+        const vis = !!(btn && btn.offsetParent !== null);
+        if (vis) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
         else { window.scrollTo(0, document.body.scrollHeight); }
-        return document.querySelectorAll('.card-property').length;
+        return { n: document.querySelectorAll('.card-property').length, botao: vis };
       });
-      await new Promise(r => setTimeout(r, 1600));
-      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+      await new Promise(r => setTimeout(r, 2200));
+      if (ultimo429 && esperas429 < 6) {
+        esperas429++;
+        const ms = 15000 * esperas429;
+        console.log(`    PortalZuk: 429 no "carregar mais" com ${n} cards — espero ${ms / 1000}s e sigo`);
+        await new Promise(r => setTimeout(r, ms));
+        estavel = 0;
+        continue;
+      }
+      if (n <= prev) estavel += botao ? 0.5 : 1; else { estavel = 0; prev = n; }
     }
+    const botaoNoFim = await page.evaluate(() => { const b = document.querySelector('#btn_carregarMais'); return !!(b && b.offsetParent !== null); });
 
     const cards = await page.evaluate(() => {
       const norm = s => (s || '').replace(/\s+/g, ' ').trim();
@@ -1763,7 +1785,8 @@ async function scraperPortalZuk(browser) {
         forma_pagamento: 'a_vista',
       };
     }).filter(Boolean);
-    console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados`);
+    console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados${n429 ? ` · ${n429}× 429 no "carregar mais"` : ''}`);
+    if (botaoNoFim) imoveis.coletaParcial = `ZUK: "carregar mais" ainda na tela no fim (${n429}× 429)`;
     return await enriquecerDatasZuk(browser, imoveis);
   } catch (err) {
     console.log(`  Erro PortalZuk: ${err.message.slice(0, 100)}`);
