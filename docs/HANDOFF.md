@@ -33635,3 +33635,9 @@ recebeu as duas — apagar uma esconderia o que aconteceu).
   motivo e a trava do prebuild derrubou 2 deploys (e38d5a6, 1d3ccd5) — produção ficou em fb9ecfa,
   sem queda do site. Corrigido em eb710e5. **Rodar `npm run verificar:padroes` antes de QUALQUER
   push para a main, inclusive de script de recon.**
+- **Mais fontes para o GitHub grátis — medido, pouco ganho:** das 9 fontes que a Vercel não abre na
+  apuração (127 lotes: RJLEILOES 68, FRANCO 15, TORRES3 15, DANIELGARCIA 11…), do GitHub só 10 de 60
+  páginas abriram (48× HTTP 403). Só **FRANCOLEILOES** entrou na reserva (6 sem lance lidos certo).
+  RJLEILOES/TORRES3/DANIELGARCIA/ALBERTOMACEDO seguem precisando de IP residencial ou Bright Data.
+- **Veículos "atrasados" (115 de 24/09) eram TODOS SUPERBID** — não é o orçamento de tempo do cron
+  (SUPERBID nem passa por ele); é o runner de casa. Nada a equilibrar no cron.

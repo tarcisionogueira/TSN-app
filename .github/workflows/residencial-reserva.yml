@@ -50,6 +50,9 @@ jobs:
           RESID_APLICAR: '1'
           # Seco de 25/09 (run 36142598080): do GitHub, ZUK 29/30 lidos (25 sem lance, 4 vendidos)
           # e datas BIASI/LJUD/GRUPOLANCE 43/45 — as duas partes entram (fontes padrão do script).
+          # + FRANCOLEILOES (seco 25/09, run 36145487582): das 9 fontes que a Vercel não abre, só ela
+          # abre do GitHub (6 sem lance lidos). RJLEILOES/TORRES3/DANIELGARCIA… tomaram 403 aqui também.
+          RESID_APURAR: 'ZUK,VIP,JELEILOES,FRANCOLEILOES'
           RESID_APURAR_LIMITE: '300'
           RESID_PAUSA_MS: '1200'
         run: node scripts/apurar-e-datar-residencial.mjs
