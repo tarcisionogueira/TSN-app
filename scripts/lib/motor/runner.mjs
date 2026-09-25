@@ -177,6 +177,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const { urls, fetchOk, via, eventosCount } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
+  const naoImovelIds = [];
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const meta = new Map();
@@ -238,7 +239,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       if (det.encerrado) { encerrados++; continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
-      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; continue; }
+      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });
       if (q.descartar) { reprov++; continue; }
       prontos.push(row);
@@ -253,7 +254,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via };
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -273,7 +274,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount, viaCatalogo } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -341,6 +342,16 @@ export async function rodarFonte(cfg, opts) {
       continue;
     }
 
+    // Lote JÁ GRAVADO que agora se revela veículo/máquina (título passou a ser lido): pular não
+    // basta — ele ficaria ativo para sempre com o título antigo. Sai com motivo (o gatilho de
+    // gemeos_hasta_cef.sql segura a ressurreição de linha com suprimido_motivo). `.select()`
+    // prova quantas saíram (forma nº 3).
+    if (naoImovelIds.length) {
+      const { data: saiu, error: eNi } = await supabase.from('imoveis_leilao')
+        .update({ ativo: false, suprimido_motivo: 'nao_imovel' }).in('fonte_id', naoImovelIds).eq('ativo', true).select('id');
+      if (eNi) console.error(`[${tenant.fonte}] não consegui retirar os não-imóveis:`, eNi.message);
+      else if (saiu?.length) console.log(`🚗 [${tenant.fonte}] ${saiu.length} lote(s) que eram veículo/máquina retirados do acervo de imóveis.`);
+    }
     const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
     if (error) { console.error(`[${tenant.fonte}] erro ao gravar:`, error.message); process.exitCode = 1; continue; }
     console.log(`✅ [${tenant.fonte}] ${prontos.length} imóveis gravados/atualizados.`);
