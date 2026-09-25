@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ORIGEM_VENDA } from '../utils/origemVeiculo';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText } from 'lucide-react';
 import { supabase } from '../utils/supabase';
@@ -30,7 +31,6 @@ const RESULTADO_LEILAO_BADGE = {
 // como "ainda não apurado" até a apuração decidir. Continuam só duas saídas visíveis.
 
 // Mesmo léxico/cores de BuscaVeiculos.jsx (sinal do PRÓPRIO leiloeiro — nunca inventado).
-const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };
 const SINISTRO_COR = {
   pequeno: { bg: '#fef3c7', fg: '#92400e' }, médio: { bg: '#fed7aa', fg: '#9a3412' },
   medio: { bg: '#fed7aa', fg: '#9a3412' }, grande: { bg: '#fecaca', fg: '#991b1b' },
@@ -51,7 +51,7 @@ function fmtDataLeilao(d) {
 
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'chassi', 'renavam', 'km',
-  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'cidade', 'estado',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
   'link_lote', 'fotos', 'data_leilao', 'leiloeiro', 'sinistro', 'is_sucata', 'financiavel',
   'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao', 'tipo_veiculo',
   'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
@@ -239,8 +239,8 @@ export default function VeiculoDetalhe() {
           })()}
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {v.modalidade && v.modalidade !== 'nao_identificado' && (
-              <span style={{ fontSize: 11, fontWeight: 700, background: v.modalidade === 'judicial' ? '#ede9fe' : '#e0f2fe', color: v.modalidade === 'judicial' ? '#6d28d9' : '#075985', padding: '3px 9px', borderRadius: 8 }}>{MODALIDADE_LABEL[v.modalidade]}</span>
+            {ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' && (
+              <span title={ORIGEM_VENDA[v.origem_venda].dica} style={{ fontSize: 11, fontWeight: 700, background: ORIGEM_VENDA[v.origem_venda].fundo, color: ORIGEM_VENDA[v.origem_venda].cor, padding: '3px 9px', borderRadius: 8 }}>{ORIGEM_VENDA[v.origem_venda].rotulo}</span>
             )}
             {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
               <span style={{ fontSize: 11, fontWeight: 700, background: c.bg, color: c.fg, padding: '3px 9px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>

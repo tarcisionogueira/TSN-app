@@ -33655,3 +33655,18 @@ recebeu as duas — apagar uma esconderia o que aconteceu).
   são CEF (nunca copiou 1 sequer — HTTP 403, tudo com tentativas≥3), o resto é esgotado ou de lote
   inativo. Sugestão (não feita): marcar esses como `ignorado` e parar de enfileirar CEF, para o
   contador medir fila de verdade (forma nº 10).
+
+### ✅ Veículos: "Origem da venda" no lugar de "Modalidade" (pedido do dono, 25/09)
+O filtro só tinha Judicial/Extrajudicial e o SUPERBID inteiro (7.492) vinha "extrajudicial" por
+padrão. Nova coluna `veiculos_leilao.origem_venda`, preenchida no BANCO por
+`classificar_origem_veiculo()` + gatilho (migração `veiculo_origem_venda.sql`, aplicada, backfill
+feito): **judicial · financeira · seguradora · patio (Detran/PRF/pátio municipal) · orgao_publico ·
+corporativo · nao_identificado**. Sinal, em ordem: campo explícito do leiloeiro (SODRE `lot_origin`/
+`lot_is_judicial`), modalidade, nome do LEILÃO/comitente (SUPERBID `auction.desc`/`store.name`) e
+título. A DESCRIÇÃO só vale para o sinal judicial — o 1º seco pôs Heineken/CPFL/20 prefeituras em
+"financeira" por causa de "banco de couro" e todo lote em "pátio" por "no pátio do leiloeiro".
+Resultado nos ativos: pátio 5.521 · não identificado 2.462 · seguradora 487 · órgão público 420 ·
+judicial 403 · corporativo 403 · financeira 42. Tela: filtro "Origem da venda" (Extrajudicial =
+todas as origens sem processo), selo colorido com explicação no card e no detalhe; a análise de IA
+do veículo recebe a origem e o que checar em cada uma. `modalidade` continua na tabela.
+Pendente: LJUD (1.294) e WEBLEILOES/SUPORTE sem sinal de comitente — só com leitura da página do lote.

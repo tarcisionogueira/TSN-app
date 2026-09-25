@@ -116,6 +116,7 @@ DADOS DO LOTE (do sistema, não do documento — confie neles):
 - KM: ${v.km != null ? Number(v.km).toLocaleString('pt-BR') : 'não informado'} · Placa: ${v.placa || 'não informada'}
 - Câmbio/combustível/cor: ${[v.cambio, v.combustivel, v.cor].filter(Boolean).join(' · ') || 'não informados'}
 - Modalidade: ${v.modalidade === 'judicial' ? 'Judicial' : v.modalidade === 'extrajudicial' ? 'Extrajudicial' : 'não identificada'}
+- Origem da venda: ${ORIGEM_PROMPT[v.origem_venda] || 'não identificada (o leiloeiro não informa quem vende)'}
 - Forma de pagamento: ${v.forma_pagamento || 'não informada'}
 - Lance mínimo: R$ ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: R$ ${brl(v.valor_avaliacao)}` : ''}
 ${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
@@ -133,6 +134,16 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
 }
 NUNCA presuma que o veículo está em bom estado por AUSÊNCIA de menção — ausência de informação é "não informado", não é sinal positivo.`;
 }
+
+// Origem da venda (25/09 — public.classificar_origem_veiculo): muda o que a análise deve checar.
+const ORIGEM_PROMPT = {
+  judicial: 'Judicial — há processo; confira no edital ônus, débitos que ficam com o arrematante e prazo de entrega',
+  financeira: 'Financeira/banco — retomada de financiamento; costuma ter documentação regular, confira débitos anteriores',
+  seguradora: 'Seguradora — sinistro ou recuperado de roubo; a MONTA (pequena/média/grande) e o histórico definem o valor',
+  patio: 'Detran/pátio — removido ou apreendido; atenção a débitos, restrições (RENAJUD) e se sai com documento ou só baixa',
+  orgao_publico: 'Órgão público — frota pública usada; desgaste de uso intenso é comum, manutenção costuma ser registrada',
+  corporativo: 'Corporativo — empresa vendendo a própria frota; em geral manutenção em dia e documentação regular',
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }

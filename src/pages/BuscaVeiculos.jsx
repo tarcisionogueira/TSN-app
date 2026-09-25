@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ORIGEM_VENDA, ORIGENS_EXTRAJUDICIAIS } from '../utils/origemVeiculo';
 import { useNavigate } from 'react-router-dom';
 import { Car, Filter, Loader2, MapPin, ExternalLink, X, Mail, Send } from 'lucide-react';
 import { supabase } from '../utils/supabase';
@@ -22,7 +23,7 @@ const POR_PAGINA = 20;
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
   // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
@@ -61,7 +62,6 @@ const TIPOS_VEICULO_LABEL = {
 
 // 'nao_identificado' é ESTADO, não ausência — mesmo princípio de classificarPatio() (a
 // dúvida também aparece na lista, nunca vira um lote invisível).
-const MODALIDADE_LABEL = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', nao_identificado: 'Não identificado' };
 
 // Opções de "tipo de monta" (11/09, filtro pedido pelo dono). As 4 classificações padrão do
 // mercado segurador — mesmas que `SINISTRO_COR` já reconhece. "grande monta"/"perda total"
@@ -252,7 +252,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], modalidade: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -281,7 +281,8 @@ function aplicarFiltros(q, f, ign = new Set()) {
     if (f.tipoMonta.includes(MONTA_NAO_INFORMADA)) conds.push('sinistro.is.null');
     q = q.or(conds.join(','));
   }
-  if (!ign.has('modalidade') && f.modalidade) q = q.eq('modalidade', f.modalidade);
+  // Origem da venda (25/09): "extrajudicial" agrupa todas as origens sem processo.
+  if (!ign.has('origem') && f.origem) q = f.origem === 'extrajudicial' ? q.in('origem_venda', ORIGENS_EXTRAJUDICIAIS) : q.eq('origem_venda', f.origem);
   const janelaPrazo = ign.has('prazo') ? null : calcularJanelaPrazo(f.prazo);
   if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
   else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
@@ -296,7 +297,7 @@ function aplicarFiltros(q, f, ign = new Set()) {
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', modalidade: 'Modalidade', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 export default function BuscaVeiculos() {
@@ -516,11 +517,12 @@ export default function BuscaVeiculos() {
             <MultiEscolha valores={filtros.tipoMonta} opcoes={OPCOES_MONTA} onChange={v => setFiltros(f => ({ ...f, tipoMonta: v }))} />
           </div>
           <div>
-            <label style={lbl}>Modalidade</label>
-            <select style={inp} value={filtros.modalidade} onChange={e => setFiltros(f => ({ ...f, modalidade: e.target.value }))}>
+            <label style={lbl} title="Quem está vendendo o veículo">Origem da venda</label>
+            <select style={inp} value={filtros.origem} onChange={e => setFiltros(f => ({ ...f, origem: e.target.value }))}>
               <option value="">Qualquer</option>
-              <option value="judicial">Judicial</option>
-              <option value="extrajudicial">Extrajudicial</option>
+              <option value="judicial">Judicial (com processo)</option>
+              <option value="extrajudicial">Extrajudicial (todas abaixo)</option>
+              {ORIGENS_EXTRAJUDICIAIS.map(k => <option key={k} value={k}>  · {ORIGEM_VENDA[k].rotulo}</option>)}
               <option value="nao_identificado">Não identificado</option>
             </select>
           </div>
@@ -635,8 +637,8 @@ export default function BuscaVeiculos() {
                   {/* Sinal do próprio leiloeiro (11/09) — sinistro, sucata, financiamento e
                       alerta de motor. Nunca inventado: o que ele não informa fica de fora. */}
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {v.modalidade && v.modalidade !== 'nao_identificado' && (
-                      <span title="Modalidade da venda, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: v.modalidade === 'judicial' ? '#ede9fe' : '#e0f2fe', color: v.modalidade === 'judicial' ? '#6d28d9' : '#075985', padding: '1px 6px', borderRadius: 8 }}>{MODALIDADE_LABEL[v.modalidade]}</span>
+                    {ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' && (
+                      <span title={ORIGEM_VENDA[v.origem_venda].dica} style={{ fontSize: 9, fontWeight: 700, background: ORIGEM_VENDA[v.origem_venda].fundo, color: ORIGEM_VENDA[v.origem_venda].cor, padding: '1px 6px', borderRadius: 8 }}>{ORIGEM_VENDA[v.origem_venda].rotulo}</span>
                     )}
                     {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
                       <span title="Classificação do sinistro, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: c.bg, color: c.fg, padding: '1px 6px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
