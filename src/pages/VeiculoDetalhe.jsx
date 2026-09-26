@@ -118,7 +118,10 @@ export default function VeiculoDetalhe() {
         const dados = await r.json();
         if (cancelado) return;
         if (r.ok) {
-          setV(prev => prev && ({ ...prev, valor_fipe: dados.valor_fipe, fipe_codigo: dados.fipe_codigo, fipe_mes_referencia: dados.fipe_mes_referencia, fipe_status: dados.fipe_status }));
+          // ano/placa vêm quando o servidor os achou no edital ou na página do lote (26/09).
+          setV(prev => prev && ({ ...prev, valor_fipe: dados.valor_fipe, fipe_codigo: dados.fipe_codigo, fipe_mes_referencia: dados.fipe_mes_referencia, fipe_status: dados.fipe_status,
+            ...(dados.ano_fabricacao && !prev.ano_fabricacao ? { ano_fabricacao: dados.ano_fabricacao, ano_modelo: dados.ano_modelo } : {}),
+            ...(dados.placa && !prev.placa ? { placa: dados.placa } : {}) }));
           setCotaEsgotada(!!dados.cota_esgotada);
         }
       } catch { /* padrao-ok: busca best-effort — a tela funciona normalmente sem FIPE */ }

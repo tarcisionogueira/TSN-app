@@ -1,0 +1,129 @@
+/**
+ * ANO (E PLACA) DO VEÍCULO PELO EDITAL OU PELA PÁGINA DO LOTE — sob demanda, ao abrir a tela
+ * (26/09, dono: "quase todos disponibilizam de alguma forma um edital, seja texto, PDF ou imagem").
+ *
+ * Sem ano não há FIPE. O gatilho `veiculo_ano_do_texto` já lê o texto da LISTAGEM; aqui vai um
+ * degrau além, só para o veículo que alguém abriu (custo zero — PDF com camada de texto e HTML
+ * público, sem Bright Data e sem IA):
+ *   1. edital(is) em PDF do lote → acha o TRECHO do lote (placa/chassi/modelo) e lê o ano ali;
+ *      documento de um lote só → o texto todo vale;
+ *   2. senão, a página do lote (HTML) — é a página de UM lote, o texto todo vale.
+ * Edital que é imagem/escaneado (sem camada de texto) fica de fora: ler exigiria OCR/IA (custo).
+ * Mesmas regras de `extrair_ano_veiculo()` no banco (supabase/migrations/veiculo_ano_do_texto.sql)
+ * — manter as duas em sincronia.
+ */
+import { carregarPDFParse } from './_pdf-safe.js';
+import { urlDiretaDoDocumento } from './_anexo-nome.js';
+
+const A = '(19[5-9]\\d|20[0-4]\\d)';
+const RE = {
+  barra: new RegExp(`${A}\\s*/\\s*${A}`),
+  mod2: /ano\s*\/?\s*mod[a-z.]*\s*[:\-]?\s*(\d{2})\s*\/\s*(\d{2})\b/i,
+  fabMod: new RegExp(`ano\\s*(?:de\\s*)?fab[a-zçãõ.]*\\s*[:\\-]?\\s*${A}[^0-9]{1,25}?mod[a-z.]*\\s*[:\\-]?\\s*${A}`, 'i'),
+  anoModelo: new RegExp(`\\bano\\s*[:\\-]?\\s*${A}[\\s,;/]*modelo\\s*[:\\-]?\\s*${A}`, 'i'),
+  anoBarraModelo: new RegExp(`ano\\s*(?:de\\s*)?(?:fabrica[çc][ãa]o\\s*)?/\\s*modelo\\s*[:\\-]?\\s*${A}`, 'i'),
+  fab: new RegExp(`ano\\s*(?:de\\s*)?fab[a-zçãõ.]*\\s*[:\\-]?\\s*${A}`, 'i'),
+  ano: new RegExp(`\\bano\\s*[:\\-]?\\s*${A}\\b`, 'i'),
+};
+const dois = (yy) => (Number(yy) <= 30 ? 2000 : 1900) + Number(yy);
+
+/** Ano de fabricação/modelo num texto (mesma ordem da função do banco). null = não achou. */
+export function extrairAnoTexto(texto) {
+  const t = String(texto || '').replace(/&nbsp;|\s+/g, ' ');
+  if (/lote com \d+|\b\d+ ve[ií]culos\b/i.test(t)) return null;
+  let r = null, m;
+  if ((m = t.match(RE.barra))) r = [+m[1], +m[2]];
+  else if ((m = t.match(RE.mod2))) r = [dois(m[1]), dois(m[2])];
+  else if ((m = t.match(RE.fabMod))) r = [+m[1], +m[2]];
+  else if ((m = t.match(RE.anoModelo))) r = [+m[1], +m[2]];
+  else if ((m = t.match(RE.anoBarraModelo))) r = [+m[1], +m[1]];
+  else if ((m = t.match(RE.fab))) r = [+m[1], null];
+  else if ((m = t.match(RE.ano))) r = [+m[1], null];
+  if (!r) return null;
+  const lim = new Date().getFullYear() + 1;
+  if (r[0] > lim || (r[1] ?? r[0]) > lim || (r[1] != null && (r[1] < r[0] || r[1] - r[0] > 1))) return null;
+  return r;
+}
+
+// Placa COMPLETA (antiga ou Mercosul). Mascarada ("J*****2", "final 88") não casa, de propósito.
+const RE_PLACA = /\bplacas?\s*[:\-]?\s*([A-Z]{3}[\s-]?\d[A-Z0-9]\d{2})\b/i;
+export function extrairPlacaCompleta(texto) {
+  const m = String(texto || '').match(RE_PLACA);
+  return m ? m[1].replace(/[\s-]/g, '').toUpperCase() : null;
+}
+
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Janela do texto em volta do lote, achada pela âncora mais forte que existir.
+function janelaDoLote(texto, v) {
+  const tn = norm(texto);
+  const ancoras = [];
+  if (v.placa) ancoras.push(String(v.placa).replace(/[^A-Za-z0-9]/g, ''));
+  if (v.chassi) ancoras.push(String(v.chassi));
+  const modelo = String(v.modelo || v.titulo || '').replace(/^.*?\//, '').split(/[-–,|]/)[0].trim().split(/\s+/).slice(0, 2).join(' ');
+  if (modelo.length >= 4) ancoras.push(modelo);
+  for (const a of ancoras) {
+    const i = tn.indexOf(norm(a));
+    if (i >= 0 && tn.split(norm(a)).length - 1 === 1) return texto.slice(Math.max(0, i - 400), i + 700); // âncora única no documento
+  }
+  return null;
+}
+
+async function textoDoPdf(url, PDFParse) {
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) return { erro: `pdf http_${r.status}` };
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.subarray(0, 5).toString() !== '%PDF-') return { erro: 'nao_e_pdf' };
+  if (buf.length > 10 * 1024 * 1024) return { erro: 'pdf > 10 MB' };
+  const p = new PDFParse({ data: buf });
+  try {
+    const t = String((await p.getText())?.text || '').replace(/\s+/g, ' ');
+    return t.replace(/\s/g, '').length < 200 ? { erro: 'pdf sem camada de texto (imagem)' } : { t };
+  } finally { await p.destroy().catch(() => {}); }
+}
+
+async function textoDaPagina(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0', 'Accept-Language': 'pt-BR' }, redirect: 'follow', signal: AbortSignal.timeout(7000) });
+  if (!r.ok) return { erro: `pagina http_${r.status}` };
+  const html = await r.text();
+  return { t: html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ') };
+}
+
+/**
+ * @param v veículo com {id, titulo, modelo, placa, chassi, anexos, link_lote}
+ * @param lotesPorDoc (url) => quantos veículos do acervo usam aquele PDF (1 = documento do lote)
+ * @returns {Promise<{ano: number[]|null, placa: string|null, fonte: string|null, motivos: string[]}>}
+ */
+export async function anoPorDocumento(v, lotesPorDoc = async () => 2) {
+  const motivos = [];
+  const pdfs = (Array.isArray(v.anexos) ? v.anexos : [])
+    .filter((a) => a?.url && (a.tipo === 'edital' || /\.pdf(?:[?#]|$)/i.test(a.url)))
+    .sort((a, b) => (b.tipo === 'edital') - (a.tipo === 'edital'))
+    .slice(0, 2);
+  if (pdfs.length) {
+    const PDFParse = await carregarPDFParse().catch((e) => { motivos.push(`pdf-parse indisponível: ${String(e?.message || e).slice(0, 60)}`); return null; });
+    for (const a of PDFParse ? pdfs : []) {
+      const url = urlDiretaDoDocumento(a.url);
+      try {
+        const { t, erro } = await textoDoPdf(url, PDFParse);
+        if (!t) { motivos.push(erro); continue; }
+        const janela = janelaDoLote(t, v) || ((await lotesPorDoc(a.url)) <= 1 ? t : null);
+        if (!janela) { motivos.push('lote não localizado no edital'); continue; }
+        const ano = extrairAnoTexto(janela);
+        if (ano) return { ano, placa: extrairPlacaCompleta(janela), fonte: 'edital', motivos };
+        motivos.push('edital sem ano no trecho do lote');
+      } catch (e) { motivos.push(`pdf: ${String(e?.message || e).slice(0, 60)}`); }
+    }
+  }
+  if (v.link_lote) {
+    try {
+      const { t, erro } = await textoDaPagina(v.link_lote);
+      if (t) {
+        const ano = extrairAnoTexto(t);
+        if (ano) return { ano, placa: extrairPlacaCompleta(t), fonte: 'pagina_do_lote', motivos };
+        motivos.push('página do lote sem ano');
+      } else motivos.push(erro);
+    } catch (e) { motivos.push(`página: ${String(e?.message || e).slice(0, 60)}`); }
+  }
+  return { ano: null, placa: null, fonte: null, motivos };
+}

@@ -1,0 +1,24 @@
+name: Recon — ano do veículo pelo edital/página (em seco)
+
+# 26/09: mede o que a leitura sob demanda (api/_ano-veiculo.js) acha nos veículos sem ano. Não grava.
+on:
+  push:
+    branches: [ 'claude/bidpro-brasil-registros-handoff-eulqvz' ]
+    paths: [ 'scripts/recon-ano-edital.mjs', 'api/_ano-veiculo.js', '.github/workflows/recon-ano-edital.yml' ]
+  workflow_dispatch: {}
+
+jobs:
+  seco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Em seco
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RECON_LIMITE: '200'
+        run: node scripts/recon-ano-edital.mjs
