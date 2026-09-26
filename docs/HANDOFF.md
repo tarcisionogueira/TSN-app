@@ -36,8 +36,8 @@ invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`
   declaram `dryrun: '1'` → o `|| '0'` do env nunca entrava. Coleta automática rodava EM SECO,
   gastava Bright Data (soleon 22/22 em 26/09, log termina "Para gravar, rode com
   SOLEON_DRYRUN=0") e não gravava nada, check verde. Corrigido: `inputs: { dryrun: '0' }`.
-- **LEJE:** 403 ao IP do runner desde 24/09 → `usarProxyIsp: true` + env ISP no step (remédio
-  do HASTA). Validar pelo dry-run do push (scraper-dom run 36271000254).
+- **LEJE:** 403 ao IP do runner desde 24/09. Testado proxy ISP (run 36271000254): home passa,
+  DETALHE segue 403 — igual ao GLOBO (20/09). Revertido; só o runner residencial resolve.
 - **HASTA / JOAOEMILIO:** vazios NA ORIGEM (conferido 23/09). Não mexer em parser.
 
 **Freitas / Milan (recon 26/09, 2 req. Bright Data):**

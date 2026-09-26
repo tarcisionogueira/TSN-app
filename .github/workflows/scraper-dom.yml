@@ -181,10 +181,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          # 26/09: leje.com.br passou a dar 403 ao IP do runner (24/09) — mesmo remédio do HASTA.
-          BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
-          BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
-          BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
           LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
 
