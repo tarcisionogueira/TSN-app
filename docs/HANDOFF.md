@@ -30,6 +30,26 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**Fontes zeradas (26/09, noite) — causa por fonte:**
+- **CALIL (e os 15 tenants SOLEON sem medição desde 24/09):** `api/coleta-oportunista.js`
+  despachava sem `inputs`; o GitHub aplica o DEFAULT declarado no workflow, e SOLEON/GESTAO
+  declaram `dryrun: '1'` → o `|| '0'` do env nunca entrava. Coleta automática rodava EM SECO,
+  gastava Bright Data (soleon 22/22 em 26/09, log termina "Para gravar, rode com
+  SOLEON_DRYRUN=0") e não gravava nada, check verde. Corrigido: `inputs: { dryrun: '0' }`.
+- **LEJE:** 403 ao IP do runner desde 24/09 → `usarProxyIsp: true` + env ISP no step (remédio
+  do HASTA). Validar pelo dry-run do push (scraper-dom run 36271000254).
+- **HASTA / JOAOEMILIO:** vazios NA ORIGEM (conferido 23/09). Não mexer em parser.
+
+**Freitas / Milan (recon 26/09, 2 req. Bright Data):**
+- `freitasleiloeiro.com.br`: Laravel próprio, SEM Cloudflare, misto (imóvel+veículo), lote em
+  `/LoteDetalhes?leilaoId=<id>&loteNumero=<n>`, listagem `/Lotes?leilaoId=<id>`. NÃO coletado.
+- `franciscofreitasleiloes.com.br`: plataforma **Vlance** — candidato a tenant de
+  `scripts/scraper_vlance.py` (hoje chega só via LJUD, 18 lotes). Cota vlance 60/60 esgotada
+  na semana — dry-run `--dominios franciscofreitasleiloes.com.br` na próxima semana; cuidado com
+  duplicata do LJUD.
+- `milanleiloes.com.br`: NÃO é cluster GESTAO (home 191 KB via BD, 0 `idLeilao`); a hipótese de
+  20/08 estava errada. Unlocker deu timeout no recon de plataforma.
+
 **Diagnóstico de abertura 26/09 (pendências vistas, não atacadas):** `resultado_leilao_atrasado`
 = 287 (crítico no `qa_invariantes`); fontes zeradas HASTA, JOAOEMILIO, CALIL, LEJE; BAYIT em
 regressão; TORRES3/CRLEILOES com medição velha; EDITAL_DJEN (547 lotes) no ponto cego de
