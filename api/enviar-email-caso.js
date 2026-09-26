@@ -97,6 +97,8 @@ async function salvarContato(destino, email, { fonte, advogadoId, nomeRemetente 
     }
   } catch { /* padrao-ok: salvar o contato é bônus — o e-mail já foi enviado, não pode falhar por causa disso */ }
 }
+// Tipo declarado do anexo (26/09): sem ele o Resend marca tudo como octet-stream e celular não abre.
+const tipoAnexo = (nome) => ({ pdf: 'application/pdf', html: 'text/html; charset=utf-8', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })[String(nome || '').toLowerCase().split('.').pop()] || undefined;
 // base64 de texto UTF-8 sem Buffer (runtime edge).
 function base64Utf8(t) {
   const bytes = new TextEncoder().encode(t);
@@ -359,7 +361,7 @@ export default async function handler(req) {
   // nosso servidor. Anexos PESSOAIS: bucket privado nosso — cada um assinado agora (curta
   // duração), o suficiente para o Resend buscar no ato do envio.
   const attachments = [
-    ...anexosLote.map(a => ({ filename: comExtensao(a.nome, a.url), path: a.url })),
+    ...anexosLote.map(a => { const filename = comExtensao(a.nome, a.url); return { filename, path: a.url, content_type: tipoAnexo(filename) }; }),
   ];
   // Relatórios do sistema (HTML montado pela tela, ver preview). Só para o jurídico, no máximo 2,
   // cada um ≤ 1,5 MB — entram como arquivo .html (abre no navegador; Imprimir → PDF).
@@ -368,12 +370,12 @@ export default async function handler(req) {
       const html = String(rel?.html || '');
       if (!html.startsWith('<!DOCTYPE html>') || html.length > 1_500_000) continue;
       const nome = String(rel?.nome || 'Relatorio BidPro').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
-      attachments.push({ filename: `${nome}.html`, content: base64Utf8(html) });
+      attachments.push({ filename: `${nome}.html`, content: base64Utf8(html), content_type: 'text/html; charset=utf-8' });
     }
   }
   for (const d of docsPessoais) {
     const link = /^https?:\/\//i.test(d.url || '') ? d.url : await assinarDocumento(d.url);
-    if (link) attachments.push({ filename: comExtensao(d.nome, d.url), path: link });
+    if (link) { const filename = comExtensao(d.nome, d.url); attachments.push({ filename, path: link, content_type: tipoAnexo(filename) }); }
   }
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;white-space:pre-wrap;line-height:1.6">${esc(textoFinal)}

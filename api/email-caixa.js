@@ -28,6 +28,22 @@ const CAIXAS_ENVIO = ['suporte', 'contato', 'privacidade'];
 const RE_EMAIL = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/;
 const MAX_TEXTO = 20000;
 
+// TIPO PELO NOME DO ARQUIVO (26/09, dono: anexo abria página em branco no iPhone). O Resend
+// devolve todo anexo como application/octet-stream + "attachment" — o navegador do app não sabe
+// mostrar e fica em branco. Com `proxy: true` o arquivo passa por aqui, com o tipo certo e inline.
+const TIPOS = { pdf: 'application/pdf', html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain; charset=utf-8', csv: 'text/csv; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+const tipoPeloNome = (nome) => TIPOS[String(nome || '').toLowerCase().split('.').pop()] || 'application/octet-stream';
+async function entregarArquivo(url, nome) {
+  const up = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!up.ok || !up.body) return json({ error: `O provedor não entregou o arquivo (HTTP ${up.status}).` }, 502);
+  return new Response(up.body, { headers: {
+    'Content-Type': tipoPeloNome(nome),
+    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(nome || 'anexo')}`,
+    'Cache-Control': 'private, no-store',
+    'Access-Control-Allow-Origin': APP_ORIGIN,
+  } });
+}
+
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
 }
@@ -105,6 +121,7 @@ export default async function handler(req) {
         if (!url) console.error('[email-caixa] anexo enviado: Resend', ra.status, ja ? Object.keys(ja).join(',') : '(sem corpo)');
       }
       if (!url) return json({ error: 'O provedor não entregou o anexo agora. Tente de novo em instantes.' }, 502);
+      if (body?.proxy === true) return entregarArquivo(url, alvo?.filename || esperado.nome);
       return json({ ok: true, url });
     }
 
@@ -117,6 +134,7 @@ export default async function handler(req) {
       console.error('[email-caixa] anexo: Resend', r.status, j ? Object.keys(j).join(',') : '(sem corpo)');
       return json({ error: 'O provedor não entregou o anexo agora. Tente de novo em instantes.' }, 502);
     }
+    if (body?.proxy === true) return entregarArquivo(j.download_url, j.filename || (msg.anexos || []).find(a => a?.id === anexoId)?.nome);
     return json({ ok: true, url: j.download_url });
   }
 

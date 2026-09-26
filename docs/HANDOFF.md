@@ -33831,3 +33831,9 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   CYA8653"; 4 placas repetidas) → corrigido; final: **63 de 164** (SUPORTE 52/70, WEBLEILOES 8/29,
   ZUK 2/29), **0 placa repetida**. Fora do alcance: SUPERBID (403 para servidor, página e PDF),
   MEGA (edital > 10 MB e página com vários lotes), edital-imagem (exigiria OCR/IA — custo).
+- **Anexo abria em branco no iPhone (dono, 26/09).** Os advogados RECEBERAM os arquivos (Resend
+  confirma os 7 anexos com tamanho real: matrícula 549 KB … Análise Documental 23 KB). O defeito era
+  só a abertura pela caixa: o Resend serve tudo como `application/octet-stream` + "attachment" e o
+  navegador do app mostra branco. `api/email-caixa.js` ganhou `proxy: true` (repassa o arquivo em
+  streaming com o tipo pelo nome e `inline`); `CaixaEmail.jsx` abre a aba no clique e carrega o
+  arquivo nela. `enviar-email-caso.js` passa a declarar `content_type` de cada anexo no envio.

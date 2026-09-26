@@ -253,13 +253,24 @@ export default function CaixaEmail({ soPessoal = false }) {
     setAviso(`${b.padrao} desbloqueado. Mensagens já em Spam continuam lá — use “Não é spam” para trazer de volta.`);
   }
 
+  // Abre o anexo COM O TIPO CERTO (26/09, dono: página em branco no iPhone). O link do Resend
+  // entrega tudo como "download genérico" e o navegador do app não mostra; o servidor repassa o
+  // arquivo com o tipo pelo nome (PDF, página…). A aba abre JÁ no clique — aberta depois do
+  // await, o iPhone a trata como pop-up e bloqueia.
   async function baixarAnexo(m, a, idx) {
+    const aba = window.open('', '_blank');
     try {
-      const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'anexo', id: m.id, anexo_id: a.id || undefined, anexo_idx: idx }) });
-      const j = await lerJsonSeguro(res);
-      if (!res.ok || !j.url) { setErro(j.error || `Não consegui baixar o anexo (HTTP ${res.status}).`); return; }
-      window.open(j.url, '_blank', 'noopener,noreferrer');
-    } catch (e) { setErro(`Não consegui baixar o anexo: ${e.message}`); }
+      const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'anexo', id: m.id, anexo_id: a.id || undefined, anexo_idx: idx, proxy: true }) });
+      if (!res.ok || /application\/json/.test(res.headers.get('content-type') || '')) {
+        const j = await lerJsonSeguro(res);
+        aba?.close();
+        setErro(j.error || `Não consegui abrir o anexo (HTTP ${res.status}).`);
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      if (aba) aba.location.href = url; else window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (e) { aba?.close(); setErro(`Não consegui abrir o anexo: ${e.message}`); }
   }
 
   // ── RASCUNHO (24/09) ────────────────────────────────────────────────────────────────
