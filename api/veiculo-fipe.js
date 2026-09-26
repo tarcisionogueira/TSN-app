@@ -61,6 +61,16 @@ export default async function handler(req, res) {
       res.status(200).json({ valor_fipe: null, fipe_status: 'sem_dados', de_cache: false, motivo: achado.motivos[achado.motivos.length - 1] || null });
       return;
     }
+    // Placa que já é de OUTRO veículo do acervo = o trecho lido era de outro lote → descarta tudo.
+    if (achado.placa) {
+      const rP = await sb(`veiculos_leilao?placa=eq.${encodeURIComponent(achado.placa)}&id=neq.${encodeURIComponent(id)}&select=id&limit=1`);
+      const outro = rP.ok ? await rP.json().catch(() => []) : [];
+      if (!rP.ok || outro.length) {
+        console.log(`[veiculo-fipe] ${id}: placa ${achado.placa} ${rP.ok ? 'é de outro veículo' : 'não conferida'} — leitura descartada`);
+        res.status(200).json({ valor_fipe: null, fipe_status: v.fipe_status || null, de_cache: false, motivo: 'leitura do documento não confiável' });
+        return;
+      }
+    }
     const patchAno = { ano_fabricacao: achado.ano[0], ano_modelo: achado.ano[1] };
     if (achado.placa && !v.placa) patchAno.placa = achado.placa;
     const gAno = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patchAno) });

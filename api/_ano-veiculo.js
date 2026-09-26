@@ -54,15 +54,43 @@ export function extrairPlacaCompleta(texto) {
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-// Janela do texto em volta do lote, achada pela âncora mais forte que existir.
-function janelaDoLote(texto, v) {
-  const tn = norm(texto);
+function ancorasDoLote(v) {
   const ancoras = [];
   if (v.placa) ancoras.push(String(v.placa).replace(/[^A-Za-z0-9]/g, ''));
   if (v.chassi) ancoras.push(String(v.chassi));
-  const modelo = String(v.modelo || v.titulo || '').replace(/^.*?\//, '').split(/[-–,|]/)[0].trim().split(/\s+/).slice(0, 2).join(' ');
+  // Modelo pelo título, sem a palavra genérica do começo ("Carro Fiat Uno" → "Fiat Uno").
+  const base = String(v.modelo || v.titulo || '').replace(/^.*?\//, '').replace(/^(carro|moto(cicleta)?|ve[ií]culo|caminh[ãa]o|caminhonete|carca[çc]a de carro|carca[çc]a)\s+/i, '');
+  const modelo = base.split(/[-–,|(]/)[0].trim().split(/\s+/).slice(0, 2).join(' ');
   if (modelo.length >= 4) ancoras.push(modelo);
-  for (const a of ancoras) {
+  return ancoras;
+}
+
+// PÁGINA DO LOTE (26/09, seco): a página da MEGA mostra OUTROS lotes (carrossel/relacionados) e o
+// 1º "ano" da página era de outro lote — 14 lotes diferentes saíram "2003, placa CYA8653". Aqui
+// só vale o texto em volta do NOSSO lote (cada ocorrência da âncora), e só se todas as janelas
+// que têm ano concordarem. Divergiu ou não achou âncora → não usa.
+function anoNaPagina(texto, v) {
+  const tn = norm(texto);
+  for (const a of ancorasDoLote(v)) {
+    const an = norm(a);
+    const achados = [];
+    for (let i = tn.indexOf(an), n = 0; i >= 0 && n < 6; i = tn.indexOf(an, i + an.length), n++) {
+      const jan = texto.slice(Math.max(0, i - 300), i + 600);
+      const ano = extrairAnoTexto(jan);
+      if (ano) achados.push({ ano, placa: extrairPlacaCompleta(jan) });
+    }
+    if (!achados.length) continue;
+    const chave = (x) => x.ano.join('/');
+    if (achados.every((x) => chave(x) === chave(achados[0]))) return achados[0];
+    return { divergente: true };
+  }
+  return null;
+}
+
+// Janela do texto em volta do lote, achada pela âncora mais forte que existir.
+function janelaDoLote(texto, v) {
+  const tn = norm(texto);
+  for (const a of ancorasDoLote(v)) {
     const i = tn.indexOf(norm(a));
     if (i >= 0 && tn.split(norm(a)).length - 1 === 1) return texto.slice(Math.max(0, i - 400), i + 700); // âncora única no documento
   }
@@ -92,6 +120,7 @@ async function textoDaPagina(url) {
 /**
  * @param v veículo com {id, titulo, modelo, placa, chassi, anexos, link_lote}
  * @param lotesPorDoc (url) => quantos veículos do acervo usam aquele PDF (1 = documento do lote)
+ * O chamador ainda confere a placa contra o acervo (placa de OUTRO veículo = leitura errada).
  * @returns {Promise<{ano: number[]|null, placa: string|null, fonte: string|null, motivos: string[]}>}
  */
 export async function anoPorDocumento(v, lotesPorDoc = async () => 2) {
@@ -119,9 +148,9 @@ export async function anoPorDocumento(v, lotesPorDoc = async () => 2) {
     try {
       const { t, erro } = await textoDaPagina(v.link_lote);
       if (t) {
-        const ano = extrairAnoTexto(t);
-        if (ano) return { ano, placa: extrairPlacaCompleta(t), fonte: 'pagina_do_lote', motivos };
-        motivos.push('página do lote sem ano');
+        const achado = anoNaPagina(t, v);
+        if (achado?.ano) return { ano: achado.ano, placa: achado.placa, fonte: 'pagina_do_lote', motivos };
+        motivos.push(achado?.divergente ? 'página do lote com anos divergentes (outros lotes na página)' : 'página do lote sem ano no trecho do lote');
       } else motivos.push(erro);
     } catch (e) { motivos.push(`página: ${String(e?.message || e).slice(0, 60)}`); }
   }
