@@ -62,8 +62,10 @@ if (process.env.SBID_IDS) {
   const meio = Math.ceil(LIMITE / 2);
   const [imo, vei] = await Promise.all([
     sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD,KRONLEILOES)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
-    // indeterminado COM lance registrado já é "Com lance" (condicional) — não gasta vaga retentando
-    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&${filtroRes}&teve_lance=is.false&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=${ordem},data_leilao.desc&limit=${LIMITE - meio}`),
+    // indeterminado COM lance registrado já é "Com lance" (condicional) — não gasta vaga retentando.
+    // Mas só o INDETERMINADO com lance: o `teve_lance=is.false` de antes barrava também o lote com
+    // lance NUNCA apurado (26/09: 221 veículos ativos, 0 tentativas, fora da fila para sempre).
+    sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&and=(or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado),or(resultado_leilao.is.null,teve_lance.not.is.true))&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=${ordem},data_leilao.desc&limit=${LIMITE - meio}`),
   ]);
   for (const r of imo) { const o = idDaUrl(r.url_lote); if (o) alvos.push({ tabela: 'imoveis_leilao', ...r, ofertaId: o }); }
   for (const r of vei) { const o = idDaUrl(r.link_lote); if (o) alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); }
@@ -129,6 +131,12 @@ for (let i = 0; i < alvos.length; i += PARALELO) {
   await new Promise(r => setTimeout(r, 1200)); // pausa por GRUPO — IP de casa, sem pressa
 }
 
+// 'erro' de UMA oferta com a API respondendo às outras (26/09): antes não gravava nem a tentativa,
+// e o lote voltava ao topo da fila todo dia com 0 tentativas — é o único caminho que deixa 0 (56
+// veículos assim desde 17/09, com o runner apurando ~300/dia). Agora conta a tentativa. Com a API fora para TODAS, não conta nada:
+// isso é bloqueio do IP, não defeito da oferta (e o exit 3 lá embaixo avisa).
+const apiRespondeu = [...respostas.values()].some(q => q.ok);
+
 for (const a of alvos) {
   const q = respostas.get(a);
   if (q.ok && process.env.SBID_IDS) {
@@ -146,6 +154,13 @@ for (const a of alvos) {
     ? `lances=${c.lances} vencedor=${c.vencedor} max=${c.max} reserva=${c.reserva} removido=${c.removido} status=${c.statusCode}`
     : `(${(q.erros || []).join(' | ') || 'sem oferta em nenhum searchType'})`}`);
 
+  if (APLICAR && a.id && res === 'erro' && apiRespondeu) {
+    try {
+      const rp = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: (a.resultado_apuracao_tentativas || 0) + 1 }) });
+      if (!(Array.isArray(rp) && rp.length)) { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
+    } catch (e) { falhasGravacao++; console.log(`    ⚠️ ${e.message}`); }
+  }
   if (APLICAR && a.id && res !== 'erro') {
     const patch = { resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: (a.resultado_apuracao_tentativas || 0) + 1 };
     // em_andamento: a data do nosso acervo venceu mas o site ainda aceita lance (praça

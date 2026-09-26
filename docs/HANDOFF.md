@@ -18,6 +18,18 @@ manipulador, semeadora etc. e marcas de linha amarela (Bobcat, Komatsu, JCB, Cat
 Backfill: 11 lotes → `maquina` (3 eram "carro", 8 sem tipo). Migração
 `tipo_veiculo_linha_amarela.sql`, aplicada em produção.
 
+**`resultado_leilao_atrasado` = 287 (26/09) — eram TODOS veículos, 0 imóveis.** SUPERBID 278 +
+SODRE 9. Dois defeitos em `scripts/apurar-superbid-residencial.mjs` (runner residencial):
+(a) o filtro `teve_lance=is.false` barrava lote com lance NUNCA apurado (221, 0 tentativas) —
+agora só pula o INDETERMINADO com lance; fila alcançável foi de 91 → 656; (b) consulta com
+`erro` não gravava nem a tentativa → lote preso no topo da fila com 0 tentativas (56) — agora
+conta a tentativa quando a API respondeu às outras. SODRE saiu do invariante
+(`qa_invariante_resultado_atrasado_sem_sodre.sql`): nenhum apurador lê SODRE por desenho.
+⚠️ **Só vale no runner depois do merge na `main`** (ele dá `git pull` da main). Conferir 1–2
+dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atrasado'`. Lote
+com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
+invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
+
 **Diagnóstico de abertura 26/09 (pendências vistas, não atacadas):** `resultado_leilao_atrasado`
 = 287 (crítico no `qa_invariantes`); fontes zeradas HASTA, JOAOEMILIO, CALIL, LEJE; BAYIT em
 regressão; TORRES3/CRLEILOES com medição velha; EDITAL_DJEN (547 lotes) no ponto cego de
