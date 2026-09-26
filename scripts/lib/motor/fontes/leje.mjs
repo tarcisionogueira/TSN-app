@@ -12,7 +12,10 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'leje',
   fetch: 'dom',
-  dom: { esperaMs: 4000 },
+  // `usarProxyIsp` (26/09): desde 24/09 o site devolve HTTP 403 ao IP do runner do GitHub
+  // (datacenter) — reputação de IP, mesmo quadro do HASTA resolvido assim em 19/09. Proxy ISP é
+  // custo fixo por IP; sem as env BRIGHTDATA_ISP_* cai para o IP da máquina (runner residencial).
+  dom: { esperaMs: 4000, usarProxyIsp: true },
   catalogo: '/',
   paginaParam: 'page',
   maxPages: 1,
@@ -20,7 +23,7 @@ export default {
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Própria (PHP antigo, URL por query string)', acesso: 'dom-puppeteer',
-    custo: 'gratis', anti_bot: 'nenhum',
+    custo: 'proxy_isp (fixo)', anti_bot: 'bloqueio de IP de datacenter (403, desde 24/09)',
     enumeracao: '/ (home — todo outro path testado é a mesma home)',
     url_lote: '/index.php?acao=evento&cod=<leilaoId>&lote=<loteId>',
     scraper: 'scraper-leje.mjs',

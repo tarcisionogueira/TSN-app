@@ -107,7 +107,12 @@ async function dispatch(wf) {
     const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${wf}/dispatches`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'main' }),
+      // `dryrun: '0'` EXPLÍCITO (26/09): dispatch sem inputs recebe o DEFAULT declarado no
+      // workflow, e SOLEON/GESTAO declaram dryrun='1' (seguro p/ clique manual) — o `|| '0'` do
+      // env nunca entrava. Toda coleta oportunista desses dois rodava em seco: gastava Bright Data
+      // (cota soleon 22/22 em 26/09) e não gravava nada, com check verde. CALIL/Soleon ficou sem
+      // medição de 24/09 em diante. Os 5 workflows de FONTES declaram o input `dryrun`.
+      body: JSON.stringify({ ref: 'main', inputs: { dryrun: '0' } }),
     });
     return r.ok;
   } catch { return false; }
