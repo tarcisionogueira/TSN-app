@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ RESOLVIDO 26/09 — linha amarela no filtro "Carro" de /veiculos (print do dono)
+
+"MINI CARREGADEIRA BOBCAT/CASE/CAT" caía na marca de carro **Mini** (última regra de
+`classificar_tipo_veiculo`), porque a regra de máquina só conhecia "pá carregadeira". Nova regra
+1b (só título/modelo/marca — a descrição puxava uma Hilux no dry-run) com carregadeira,
+manipulador, semeadora etc. e marcas de linha amarela (Bobcat, Komatsu, JCB, Caterpillar, Massey…).
+Backfill: 11 lotes → `maquina` (3 eram "carro", 8 sem tipo). Migração
+`tipo_veiculo_linha_amarela.sql`, aplicada em produção.
+
+**Diagnóstico de abertura 26/09 (pendências vistas, não atacadas):** `resultado_leilao_atrasado`
+= 287 (crítico no `qa_invariantes`); fontes zeradas HASTA, JOAOEMILIO, CALIL, LEJE; BAYIT em
+regressão; TORRES3/CRLEILOES com medição velha; EDITAL_DJEN (547 lotes) no ponto cego de
+`fonte_saude`; Bright Data com `docs`/`geral`/`soleon` na subcota diária e `vlance` na semanal.
+Segurança e regras de negócio: 0 achados. KYC, chamados e cliente travado: verdes.
+
 ### ✅ RESOLVIDO 18/09 — conversão de Cadastro nunca chegava ao Google Ads (0 de 54, desde sempre)
 
 Achado durante a Routine diária "Checar 1ª conversão real Google Ads" (Windsor.ai batia zero
