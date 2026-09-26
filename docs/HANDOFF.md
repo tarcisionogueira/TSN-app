@@ -47,6 +47,9 @@ invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`
   `scripts/scraper_vlance.py` (hoje chega só via LJUD, 18 lotes). Cota vlance 60/60 esgotada
   na semana — dry-run `--dominios franciscofreitasleiloes.com.br` na próxima semana; cuidado com
   duplicata do LJUD.
+- Recon por navegador do GitHub (grátis, IP de datacenter): Freitas renderiza só página genérica
+  ("Em caso de dúvidas entre em contato…") e Milan vem vazio — os dois recusam datacenter. Próximo
+  passo: navegador pelo proxy ISP (como HASTA/LEJE) ou runner residencial.
 - `milanleiloes.com.br`: NÃO é cluster GESTAO (home 191 KB via BD, 0 `idLeilao`); a hipótese de
   20/08 estava errada. Unlocker deu timeout no recon de plataforma.
 
