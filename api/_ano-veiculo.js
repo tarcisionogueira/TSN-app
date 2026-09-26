@@ -47,6 +47,12 @@ export function extrairAnoTexto(texto) {
 
 // Placa COMPLETA (antiga ou Mercosul). Mascarada ("J*****2", "final 88") não casa, de propósito.
 const RE_PLACA = /\bplacas?\s*[:\-]?\s*([A-Z]{3}[\s-]?\d[A-Z0-9]\d{2})\b/i;
+// Trecho com DUAS placas completas diferentes cobre mais de um veículo → não dá para saber de quem é
+// o ano (seco de 26/09: "Twister" e "S10" saíram com a mesma placa e o mesmo ano).
+export function trechoDeUmVeiculo(texto) {
+  const placas = new Set([...String(texto || '').matchAll(new RegExp(RE_PLACA.source, 'gi'))].map((m) => m[1].replace(/[\s-]/g, '').toUpperCase()));
+  return placas.size <= 1;
+}
 export function extrairPlacaCompleta(texto) {
   const m = String(texto || '').match(RE_PLACA);
   return m ? m[1].replace(/[\s-]/g, '').toUpperCase() : null;
@@ -76,7 +82,7 @@ function anoNaPagina(texto, v) {
     const achados = [];
     for (let i = tn.indexOf(an), n = 0; i >= 0 && n < 6; i = tn.indexOf(an, i + an.length), n++) {
       const jan = trechoAPartir(texto, i);
-      const ano = extrairAnoTexto(jan);
+      const ano = trechoDeUmVeiculo(jan) ? extrairAnoTexto(jan) : null;
       if (ano) achados.push({ ano, placa: extrairPlacaCompleta(jan) });
     }
     if (!achados.length) continue;
@@ -153,6 +159,7 @@ export async function anoPorDocumento(v, lotesPorDoc = async () => 2) {
         if (!t) { motivos.push(erro); continue; }
         const janela = janelaDoLote(t, v) || ((await lotesPorDoc(a.url)) <= 1 ? t : null);
         if (!janela) { motivos.push('lote não localizado no edital'); continue; }
+        if (!trechoDeUmVeiculo(janela)) { motivos.push('trecho do edital com mais de um veículo'); continue; }
         const ano = extrairAnoTexto(janela);
         if (ano) return { ano, placa: extrairPlacaCompleta(janela), fonte: 'edital', motivos };
         motivos.push('edital sem ano no trecho do lote');
