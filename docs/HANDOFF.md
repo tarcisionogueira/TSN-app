@@ -33822,3 +33822,12 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   (`veiculo_ano_do_texto.sql`); validada contra 6.885 com ano conhecido: 99,9% iguais. Ativos sem
   ano: **890 → 516** (o resto não tem ano no texto — WEBLEILOES/LJUD/MEGA; ano só na página do
   lote, a ler sob demanda se o dono quiser).
+- **Ano pelo EDITAL/página do lote, sob demanda (dono, 26/09: "quase todos disponibilizam um
+  edital").** `api/_ano-veiculo.js`, chamado pelo `veiculo-fipe.js` ao abrir veículo SEM ano:
+  título → edital PDF (trecho do lote pela placa/chassi/modelo, só até o próximo lote) → página do
+  lote (só janelas do NOSSO lote e todas concordando). Trecho com 2 placas diferentes não decide;
+  placa que já é de outro veículo descarta a leitura. Não achou → `sem_dados` com data (não relê).
+  **Seco em 3 rodadas (recon-ano-edital.yml):** 1ª pegava lote vizinho (MEGA: 14 lotes "2003,
+  CYA8653"; 4 placas repetidas) → corrigido; final: **63 de 164** (SUPORTE 52/70, WEBLEILOES 8/29,
+  ZUK 2/29), **0 placa repetida**. Fora do alcance: SUPERBID (403 para servidor, página e PDF),
+  MEGA (edital > 10 MB e página com vários lotes), edital-imagem (exigiria OCR/IA — custo).
