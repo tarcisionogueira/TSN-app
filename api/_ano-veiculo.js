@@ -75,7 +75,7 @@ function anoNaPagina(texto, v) {
     const an = norm(a);
     const achados = [];
     for (let i = tn.indexOf(an), n = 0; i >= 0 && n < 6; i = tn.indexOf(an, i + an.length), n++) {
-      const jan = texto.slice(Math.max(0, i - 300), i + 600);
+      const jan = trechoAPartir(texto, i);
       const ano = extrairAnoTexto(jan);
       if (ano) achados.push({ ano, placa: extrairPlacaCompleta(jan) });
     }
@@ -87,12 +87,24 @@ function anoNaPagina(texto, v) {
   return null;
 }
 
+// Trecho do LOTE: começa um pouco antes da âncora e vai só até onde começa o PRÓXIMO lote (seco
+// de 26/09: com ±700 caracteres a janela pegava o lote vizinho do edital — a mesma placa saiu em
+// dois lotes diferentes, "Gol 1.0L" e "Spin"). Marcador de lote: "Lote 12", "LOTE: 3", "\n 07 ".
+const RE_PROXIMO_LOTE = /\blote\s*(?:n[º°o.]*\s*)?:?\s*\d{1,4}\b|\s\d{2,3}\s+(?=[A-Z]{3}\d[A-Z0-9]\d{2}\b)/gi;
+export function trechoAPartir(texto, i) {
+  const ini = Math.max(0, i - 60);
+  RE_PROXIMO_LOTE.lastIndex = i + 40;
+  const m = RE_PROXIMO_LOTE.exec(texto);
+  const fim = Math.min(texto.length, i + 450, m ? m.index : Infinity);
+  return texto.slice(ini, fim);
+}
+
 // Janela do texto em volta do lote, achada pela âncora mais forte que existir.
 function janelaDoLote(texto, v) {
   const tn = norm(texto);
   for (const a of ancorasDoLote(v)) {
     const i = tn.indexOf(norm(a));
-    if (i >= 0 && tn.split(norm(a)).length - 1 === 1) return texto.slice(Math.max(0, i - 400), i + 700); // âncora única no documento
+    if (i >= 0 && tn.split(norm(a)).length - 1 === 1) return trechoAPartir(texto, i); // âncora única no documento
   }
   return null;
 }
@@ -125,6 +137,9 @@ async function textoDaPagina(url) {
  */
 export async function anoPorDocumento(v, lotesPorDoc = async () => 2) {
   const motivos = [];
+  // O próprio TÍTULO com ano ("KOMATSU PC 200 SÉRIE 8 2011-NO ESTADO") vence qualquer documento.
+  const doTitulo = String(v.titulo || '').match(/(?:^|[\s\-–(])(19[6-9]\d|20[0-4]\d)(?=$|[\s\-–,|)/])/);
+  if (doTitulo && +doTitulo[1] <= new Date().getFullYear() + 1) return { ano: [+doTitulo[1], null], placa: null, fonte: 'titulo', motivos };
   const pdfs = (Array.isArray(v.anexos) ? v.anexos : [])
     .filter((a) => a?.url && (a.tipo === 'edital' || /\.pdf(?:[?#]|$)/i.test(a.url)))
     .sort((a, b) => (b.tipo === 'edital') - (a.tipo === 'edital'))

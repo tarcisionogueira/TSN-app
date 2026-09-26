@@ -16,6 +16,7 @@ const sb = async (path) => {
 const vs = await sb(`veiculos_leilao?ativo=eq.true&ano_fabricacao=is.null&ano_modelo=is.null&select=id,fonte,titulo,modelo,placa,chassi,anexos,link_lote${FONTES}&limit=${LIMITE}&order=fonte`);
 const lotesPorDoc = async (url) => (await sb(`veiculos_leilao?anexos=cs.${encodeURIComponent(JSON.stringify([{ url }]))}&select=id&limit=2`)).length;
 const res = {};
+const placasVistas = new Map(); // placa → título (a mesma placa em 2 lotes = leitura do vizinho)
 for (const v of vs) {
   const t0 = Date.now();
   const a = await anoPorDocumento(v, lotesPorDoc).catch((e) => ({ ano: null, motivos: [`exceção ${e.message}`] }));
@@ -23,6 +24,10 @@ for (const v of vs) {
   if (a.placa) {
     const outro = await sb(`veiculos_leilao?placa=eq.${encodeURIComponent(a.placa)}&id=neq.${v.id}&select=id&limit=1`);
     if (outro.length) { a.motivos = [...(a.motivos || []), `placa ${a.placa} é de outro veículo — descartado`]; a.ano = null; }
+  }
+  if (a.ano && a.placa) {
+    if (placasVistas.has(a.placa)) { res.PLACA_REPETIDA = (res.PLACA_REPETIDA || 0) + 1; console.log(`  ⚠️ placa ${a.placa} já saiu para "${placasVistas.get(a.placa)}"`); }
+    else placasVistas.set(a.placa, String(v.titulo).slice(0, 40));
   }
   const k = `${v.fonte}:${a.ano ? a.fonte : 'nao_achou'}`;
   res[k] = (res[k] || 0) + 1;
