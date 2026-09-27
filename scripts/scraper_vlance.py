@@ -69,7 +69,8 @@ import requests
 # franciscofreitasleiloes.com.br (27/09): dry-run pela via GRÁTIS do GitHub = 37 imóveis (o LJUD
 # trazia 18 do mesmo leiloeiro). Mesmo backend do LJUD, mesmo lote_id: o que já existe como
 # `ljud_<lote_id>` ativo é suprimido como gêmeo (reconciliar_gemeos_vlance_ljud, cron diário).
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br", "franciscofreitasleiloes.com.br"]
+# fabiobarbosaleiloes.com.br (27/09): achado no RADAR DE EDITAIS (DJEN, PR); dry-run grátis = 12 imóveis.
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br", "franciscofreitasleiloes.com.br", "fabiobarbosaleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 

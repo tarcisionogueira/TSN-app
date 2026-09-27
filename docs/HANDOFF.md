@@ -30,6 +30,25 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**Fontes zeradas + radar de editais (27/09, madrugada).**
+- **CALIL de volta**: Soleon disparado com `dryrun=0` explícito (conserto do coleta-oportunista):
+  15 lotes gravados (`parcial_cota`, 39 por buscar). A sub-cota diária `soleon` (22) não cobre 15
+  tenants — o resto do Soleon só anda pelo runner residencial (grátis). TORRES3 idem.
+- **BAYIT era alarme falso (forma nº 10)**: coleta incremental gravava só os processados da rodada
+  como `total` (5 de um feed com 91 válidos, 85 já no acervo). Agora total = processados + já no
+  acervo e ainda no feed; `enumerados` = candidatos. Próxima rodada de quarta confirma.
+- **CRLEILOES não tinha agendamento** (só dispatch manual → "medição velha"). Coletado agora (10
+  lotes, ok). Modo `CRLEILOES_NO_BD` no runner residencial + cron semanal no GitHub com freio de 7 dias.
+- HASTA/JOAOEMILIO: vazios na origem (inalterado). LEJE: só residencial.
+- **Radar de editais** (`editais_leilao`, 90 dias): a flag `leiloeiro_integrado` compara NOME e
+  erra (Maria Clarice é tenant LEILOTECH; Frazão/Hasta Pública já coletados; hastavip = grupo VIP).
+  Cruzado por DOMÍNIO e classificado (11 req.): **integrado Fabio Barbosa** (Vlance, 12 imóveis);
+  **dilsonmoreira / jmfleiloes / sublimeleiloes = site NOVO da Gestão** (CDN d335luupugsy2, 0 no
+  scraper-gestao antigo) — mesmo caso do MILAN: um coletor "Gestão Next" escrito a partir do recon
+  do Milan cobre os 4. **Independentes (coletor próprio, backlog)**: leiloesuberlandia (23 imóveis),
+  alexandrepedrosaleiloeiro (34, `/lotes/imovel`), lgcorretorjudicial (57, Next.js). Sem conteúdo:
+  saulojulioleiloeiro (1,6 KB), gestornacional (vazio).
+
 **✅ FRANCISCO FREITAS no Vlance + 🔴 48 DUPLICADOS VLANCE×LJUD corrigidos (27/09).**
 `franciscofreitasleiloes.com.br` entrou em `TENANTS_PADRAO` do `scraper_vlance.py`: dry-run pela
 via GRÁTIS do GitHub (novas entradas `dominios`/`no_bd` do `scraper-vlance.yml`) = **37 imóveis**
