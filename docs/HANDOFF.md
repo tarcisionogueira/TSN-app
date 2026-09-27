@@ -51,17 +51,22 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
-**🗂️ RETENÇÃO DA CAIXA (27/09, dono: "armazenar só o que tenha relevância jurídica ou operacional").**
-A caixa é de OPERAÇÃO de leilão, não pessoal; e-mail de oportunidade/marketing ao cliente não é
-guardado (vive só em `emails_log` como metadado). Migração `email_caixa_categoria_e_retencao.sql`:
-trigger classifica cada linha em `juridico` (reter=true) · `leiloeiro` · `operacao` · `avulso` ·
-`spam`, herdando a categoria da conversa. `email_caixa_expiraveis()` decide o vencido pela CONVERSA
-inteira: spam 30 d · avulso 90 d · conversa sem resposta 180 d · com resposta 365 d · jurídico ou
-`reter=true` NUNCA. O mesmo cron (agora a cada 6 h) apaga storage → linha (provada) → grava
-`email_expurgo_log` sem conteúdo. Spam não é arquivado nem vai ao backup R2. Testado em transação
-desfeita (spam 40 d e proposta sem resposta 200 d saem; jurídico de 2 anos fica). Para segurar uma
-conversa de acordo/arremate além de 1 ano: `update email_caixa set reter=true where id=…` (a
-resposta herda). Pendência opcional: botão "reter" na tela da caixa.
+**🗂️ RETENÇÃO DA CAIXA PELA OPERAÇÃO (27/09, dono: "o principal são os documentos expedidos").**
+Caixa é de OPERAÇÃO de leilão; e-mail de oportunidade ao cliente não é guardado (só metadado em
+`emails_log`). Prazo por CONVERSA (mesma chave da tela: contraparte + assunto sem Re:/Enc:,
+coluna gerada `email_caixa.conversa_chave`), regra única em `_email_caixa_prazos()`:
+vinculada a **caso aberto** ou **retenção manual** → sem prazo · **caso concluído** → conclusão
++ **10 anos** · **jurídico** sem caso → 10 anos · negociação **sem resposta** 180 d · **sem acordo**
+1 ano · avulso 90 d · spam 30 d. **Base legal:** CC art. 1.194 (guardar correspondência até a
+prescrição) + art. 205 e STJ EREsp 1.281.594 (contratual = 10 anos) cobrem Lei 9.613/98 art. 10
+(5 anos da conclusão, assessoria em compra e venda de imóveis — ⚠️ jurídico confirmar se a empresa
+é sujeita: se for, há também deveres no COAF), CDC art. 27 e CTN (5 anos); LGPD arts. 15-16
+justifica apagar o que não evoluiu. Tela: na conversa aberta, faixa "🗂️ … guardar até" +
+**Vincular à operação** (RPC `email_caixa_definir_retencao`, conversa inteira) + **Reter sem
+prazo** (litígio/ordem). Resposta nova herda caso e retenção (cabeçalho OU mesma conversa).
+O cron `arquivar-anexos-email-cron` (6/6 h) apaga storage → linha provada → `email_expurgo_log`
+sem conteúdo. Spam não é arquivado nem vai ao R2. Testado em transação desfeita. Pendência
+opcional: listar na tela do CASO os e-mails/anexos vinculados (hoje o vínculo aparece na caixa).
 **🔴 REGRA DO DONO (27/09): fonte que falha NÃO apaga o acervo — fica só sem lote NOVO.**
 "Zerou" no `fonte_regressao_suspeita()` quer dizer **a última coleta trouxe 0**, NÃO que o acervo
 sumiu — ao reportar, dizer "a coleta voltou vazia; o acervo guardado continua X lotes na busca".

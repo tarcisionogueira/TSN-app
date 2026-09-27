@@ -103,6 +103,76 @@ async function lerJsonSeguro(res) {
   catch (e) { return { error: `Resposta inesperada do servidor (HTTP ${res.status}): ${e.message}` }; }
 }
 
+// ── GUARDA DA CONVERSA (27/09, dono: "o principal são os documentos expedidos") ──────────────
+// Mostra até quando a conversa fica guardada e por quê, e deixa VINCULAR à operação (caso).
+// Vinculada a caso aberto = sem prazo; concluído = conclusão + 10 anos (CC art. 205/1.194 — a
+// regra inteira mora no banco, `_email_caixa_prazos`, migração email_retencao_por_operacao.sql).
+const REGRAS_GUARDA = {
+  retencao_manual: 'Retenção manual — sem prazo',
+  operacao_em_andamento: 'Operação em andamento — sem prazo',
+  operacao_concluida_10a: 'Operação concluída — 10 anos da conclusão',
+  juridico_10a: 'Jurídico — 10 anos',
+  spam_30d: 'Spam — 30 dias',
+  avulso_90d: 'Avulso — 90 dias',
+  sem_resposta_180d: 'Negociação sem resposta — 180 dias',
+  com_resposta_365d: 'Negociação sem acordo — 1 ano',
+};
+function GuardaConversa({ conversa, onErro, onAviso, soLeitura }) {
+  const ids = useMemo(() => conversa.map(m => m.id), [conversa]);
+  const [prazos, setPrazos] = useState(null);
+  const [casos, setCasos] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const ler = useCallback(async () => {
+    if (!ids.length) return;
+    const { data, error } = await supabase.rpc('email_caixa_prazos', { p_ids: ids });
+    if (error) { setPrazos(null); onErro(`Não consegui ler o prazo de guarda: ${error.message}`); return; }
+    setPrazos(data || []);
+  }, [ids, onErro]);
+  useEffect(() => { setPrazos(null); ler(); }, [ler]);
+  async function abrirCasos() {
+    if (casos) return;
+    const { data, error } = await supabase.rpc('email_caixa_casos_opcoes');
+    if (error) { onErro(`Não consegui listar as operações: ${error.message}`); return; }
+    setCasos(data || []);
+  }
+  async function definir({ caso, mudarCaso, reter }) {
+    setSalvando(true);
+    const { data: n, error } = await supabase.rpc('email_caixa_definir_retencao', { p_ids: ids, p_caso: caso || null, p_mudar_caso: mudarCaso, p_reter: reter ?? null });
+    setSalvando(false);
+    if (error) { onErro(`Não consegui salvar: ${error.message}`); return; }
+    if (!n) { onErro('Nada foi alterado — sem acesso a estas mensagens?'); return; }
+    onAviso(mudarCaso ? (caso ? `Conversa vinculada à operação (${n} mensagem(ns)).` : 'Vínculo removido.') : (reter ? 'Retenção manual ligada — sem prazo.' : 'Retenção manual desligada.'));
+    ler();
+  }
+  if (!prazos) return null;
+  // A conversa inteira compartilha a regra; o prazo mais longo é o que vale para ela.
+  const p = prazos.find(x => !x.guardar_ate) || [...prazos].sort((a, b) => new Date(b.guardar_ate) - new Date(a.guardar_ate))[0];
+  if (!p) return null;
+  const casoAtual = prazos.find(x => x.caso_id)?.caso_id || '';
+  const manual = p.regra === 'retencao_manual';
+  const opcoes = casos || [];
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 12px', padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12, color: '#334155' }}>
+      <span title="Base: Código Civil arts. 1.194 e 205; Lei 9.613/98 art. 10; LGPD arts. 15-16.">
+        🗂️ <b>{REGRAS_GUARDA[p.regra] || p.regra}</b>{p.guardar_ate ? ` · guardar até ${new Date(p.guardar_ate).toLocaleDateString('pt-BR')}` : ''}
+      </span>
+      {!soLeitura && <>
+      <select value={casoAtual} disabled={salvando} onFocus={abrirCasos} onMouseDown={abrirCasos}
+        onChange={e => definir({ caso: e.target.value, mudarCaso: true })}
+        style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8, border: '1px solid #cbd5e1', maxWidth: '100%' }}>
+        <option value="">{casoAtual ? '— desvincular da operação —' : 'Vincular à operação…'}</option>
+        {casoAtual && !opcoes.some(c => c.id === casoAtual) && <option value={casoAtual}>Operação vinculada</option>}
+        {opcoes.map(c => <option key={c.id} value={c.id}>{(c.imovel_endereco || 'Caso sem endereço').slice(0, 60)} · {c.concluido_em ? 'concluído' : c.status_etapa}</option>)}
+      </select>
+      <button disabled={salvando} onClick={() => definir({ mudarCaso: false, reter: !manual })} style={{ ...btn(false), padding: '4px 10px' }}
+        title="Retenção manual: para litígio ou ordem judicial. A conversa não é apagada enquanto estiver ligada.">
+        {manual ? 'Desligar retenção manual' : 'Reter sem prazo'}
+      </button>
+      </>}
+    </div>
+  );
+}
+
 export default function CaixaEmail({ soPessoal = false }) {
   const [pasta, setPasta] = useState('entrada');
   const [lista, setLista] = useState([]);
@@ -523,6 +593,8 @@ export default function CaixaEmail({ soPessoal = false }) {
                 ? <button onClick={() => mover(() => 'lixeira', 'Movido para a Lixeira.')} style={btn(false)}><Trash2 size={13} /> Lixeira</button>
                 : <button onClick={() => mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.')} style={btn(false)}><Undo2 size={13} /> Restaurar</button>}
             </div>
+
+            <GuardaConversa conversa={conversa} onErro={setErro} onAviso={setAviso} soLeitura={soPessoal} />
 
             {conversa.map((m, idx) => {
               const ultima = idx === conversa.length - 1;

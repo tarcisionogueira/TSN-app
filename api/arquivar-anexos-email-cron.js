@@ -16,9 +16,10 @@
  * O invariante `anexo_email_nao_arquivado` grita se algo passar de 3 dias sem arquivo.
  *
  * RETENÇÃO (27/09, dono: "armazenar só o que possa ter relevância jurídica ou operacional"): na
- * mesma rodada, expurga o que `email_caixa_expiraveis()` declara vencido — spam 30 d · avulso 90 d
- * · conversa sem resposta 180 d · com resposta 365 d · jurídico/`reter` NUNCA (a regra mora no
- * banco, na migração email_caixa_categoria_e_retencao.sql). Ordem: arquivos do storage → linha
+ * mesma rodada, expurga o que `email_caixa_expiraveis()` declara vencido. A regra mora no banco
+ * (`_email_caixa_prazos`, migração email_retencao_por_operacao.sql): conversa vinculada a caso
+ * aberto ou com retenção manual NUNCA sai; caso concluído = conclusão + 10 anos (CC arts. 1.194 e
+ * 205); jurídico 10 anos; negociação que não evoluiu 180 d/1 ano; avulso 90 d; spam 30 d. Ordem: arquivos do storage → linha
  * (provada por return=representation) → `email_expurgo_log` sem conteúdo (prestação de contas).
  * Spam nem é arquivado: não vale o storage nem o backup.
  */
