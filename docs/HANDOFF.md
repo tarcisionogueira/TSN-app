@@ -30,6 +30,19 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**🔴 REGRA DO DONO (27/09): fonte que falha NÃO apaga o acervo — fica só sem lote NOVO.**
+"Zerou" no `fonte_regressao_suspeita()` quer dizer **a última coleta trouxe 0**, NÃO que o acervo
+sumiu — ao reportar, dizer "a coleta voltou vazia; o acervo guardado continua X lotes na busca".
+Achado ao conferir a regra: `desativar_imoveis_leiloeiro_stale()` (limpeza diária) VIOLAVA isso —
+desligava como `sumiu_da_fonte` todo lote não tocado pela última coleta, olhando a última medição
+**'ok'** (de dias atrás) e ignorando que a MAIS RECENTE era parcial/sem cota; o `teto_pct` (0,40)
+existia e nunca era usado. **Corrigido** (`stale_so_com_coleta_completa.sql`): pula fonte cuja
+última medição indica coleta incompleta (parcial_cota, sem_cota, falhou, vazio, degradado POR
+QUEDA — degradado por qualidade, ex. LJUD link, não trava) e aplica o teto de 40%. **Devolvidos**
+os lotes com praça futura escondidos assim: CALIL 45 (12 → 57 na busca), BAYIT 31, CERULI 13,
+ISAIAS 10, VEGAS 9, APICE 2. BAYIT tinha causa própria: a coleta incremental pulava os já
+conhecidos sem renovar `atualizado_em` → agora renova ("visto hoje") para os que seguem no feed.
+
 **Fontes zeradas + radar de editais (27/09, madrugada).**
 - **CALIL de volta**: Soleon disparado com `dryrun=0` explícito (conserto do coleta-oportunista):
   15 lotes gravados (`parcial_cota`, 39 por buscar). A sub-cota diária `soleon` (22) não cobre 15

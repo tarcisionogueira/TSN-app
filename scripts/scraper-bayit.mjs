@@ -535,6 +535,18 @@ async function main() {
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
   console.log(`✅ ${prontos.length} imóveis do Portal Bayit gravados/atualizados.`);
 
+  // "VISTO HOJE" para quem foi PULADO por já estar enriquecido (27/09): continua no feed, logo
+  // continua à venda — só não foi reprocessado para economizar cota. Sem renovar `atualizado_em`,
+  // desativar_imoveis_leiloeiro_stale() lia "não tocado na última coleta" como "sumiu da fonte" e
+  // escondia o acervo inteiro a cada rodada (31 lotes com praça futura em 27/09).
+  const idsNoFeed = todosCandidatos.filter((it) => jaEnriquecidos.has(`bayit_${it.id}`)).map((it) => `bayit_${it.id}`);
+  for (let i = 0; i < idsNoFeed.length; i += 200) {
+    const { data: tocados, error: eToque } = await supabase.from('imoveis_leilao')
+      .update({ atualizado_em: new Date().toISOString() }).eq('fonte', 'BAYIT').in('fonte_id', idsNoFeed.slice(i, i + 200)).select('id');
+    if (eToque) console.error(`  ⚠️ não renovei "visto hoje" dos já enriquecidos: ${eToque.message}`);
+    else if (i === 0) console.log(`  ${idsNoFeed.length} já no acervo e ainda no feed — "visto hoje" renovado (${(tocados || []).length} no 1º bloco).`);
+  }
+
   // SAÚDE DA FONTE: entra no monitor de regressão junto das demais desde o 1º dia.
   // TOTAL = acervo válido no feed AGORA (27/09, forma nº 10): a coleta é INCREMENTAL — os já
   // enriquecidos que continuam no feed são pulados de propósito (custo). Gravar só os
