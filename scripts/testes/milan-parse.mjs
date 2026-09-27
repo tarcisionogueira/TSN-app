@@ -49,6 +49,14 @@ const home = `<a href="/leilao/imoveis/15582"></a><a href="/leilao/veiculos/1558
   + `{\\"codLeilao\\":15605,\\"dataInicio\\":\\"2026-10-02T13:00:00.000+00:00\\",\\"categorias\\":\\" Imóveis\\"}]"])`;
 assert.deepEqual(extrairEventosImoveis(home).sort(), ['15582', '15605']);
 
+// Rural em hectares, com nome próprio no trecho do tipo (dry-run real 27/09, evento 15592 lote 003).
+const rural = montarRow({ ...ev, cod: '15592' }, { lote: '003', url: `${BASE}/leilao/15592/lote/003`, minimo: 367000, status: 'RECEBENDO LANCES',
+  foto: 'https://adm.milanleiloes.com.br/Fotos/20261008_15592/003_a.JPG?v=1',
+  titulo: 'Bambui - MG. Zona Rural. Fazenda São Jorge. Áreas Totais. Terr. 21,88ha' }, TENANTS.milan);
+assert.equal(rural.titulo, 'Fazenda - Bambui/MG');
+assert.equal(rural.area_m2, 218800);
+assert.equal(rural.tipo, 'rural');
+
 // Detector de desafio (27/09): página BOA traz o beacon `challenge-platform` lá no fim; o
 // desafio de verdade anuncia no <title>. O 1º dry-run reprovou a home real por isso.
 const boa = '<!doctype html><html lang="pt-BR"><head><title>Milan</title></head><body>' + 'x'.repeat(60000)

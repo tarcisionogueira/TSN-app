@@ -99,10 +99,25 @@ export function parseEvento(html, cod, base) {
 function cidadeUfTipo(titulo) {
   const m = String(titulo || '').match(/^\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,60}?)\s*[-–—]\s*([A-Z]{2})\b/);
   const cidade = m ? titleCase(m[1].trim()) : null, estado = m ? m[2] : null;
-  const partes = String(titulo || '').split(/\.\s+/);
-  const tipoRaw = partes.find(p => /^(casa|apto|apartamento|terreno|sala|loja|galp[ãa]o|pr[ée]dio|sobrado|lote|fazenda|s[íi]tio|ch[áa]cara|gleba|im[óo]vel|conjunto|box|vaga)/i.test(p.trim())) || '';
-  const tipo = tipoRaw.trim().replace(/^apto\b.*/i, 'Apartamento').replace(/\s+[ÁA]rea.*$/i, '').slice(0, 30) || 'Imóvel';
-  return { cidade, estado, tipo: titleCase(tipo) };
+  // Tipo = a PALAVRA-CHAVE do trecho, não o trecho inteiro: "Fazenda São Jorge" virava título
+  // "Fazenda São Jorge - Bambui/MG" (dry-run 27/09). O nome próprio fica na descrição.
+  const TIPOS = [['apto', 'Apartamento'], ['apartamento', 'Apartamento'], ['casa', 'Casa'], ['sobrado', 'Sobrado'],
+    ['terreno', 'Terreno'], ['sala', 'Sala Comercial'], ['loja', 'Loja'], ['galp[ãa]o', 'Galpão'], ['pr[ée]dio', 'Prédio'],
+    ['fazenda', 'Fazenda'], ['s[íi]tio', 'Sítio'], ['ch[áa]cara', 'Chácara'], ['gleba', 'Gleba'], ['lote', 'Lote'],
+    ['box', 'Box'], ['vaga', 'Vaga de Garagem'], ['conjunto', 'Conjunto Comercial']];
+  const partes = String(titulo || '').split(/\.\s+/).map(p => p.trim());
+  let tipo = 'Imóvel';
+  for (const p of partes) {
+    const t = TIPOS.find(([re]) => new RegExp(`^${re}\\b`, 'i').test(p));
+    if (t) { tipo = t[1]; break; }
+  }
+  return { cidade, estado, tipo };
+}
+
+// "Terr. 21,88ha" (rural) — extrairArea só lê m². 1 ha = 10.000 m².
+function areaHectares(titulo) {
+  const m = String(titulo || '').match(/([\d.]+(?:,\d+)?)\s*ha\b/i);
+  return m ? Math.round(num(m[1]) * 10000 * 100) / 100 : 0;
 }
 
 export function montarRow(ev, card, tenant) {
@@ -112,7 +127,7 @@ export function montarRow(ev, card, tenant) {
     cidade, estado,
     valor_avaliacao: 0, valor_minimo: card.minimo || 0,
     modalidade: ev.judicial ? 'judicial' : 'extrajudicial',
-    area_m2: extrairArea(card.titulo, ''),
+    area_m2: extrairArea(card.titulo, '') || areaHectares(card.titulo),
     descricao: card.titulo || null,
     data_leilao: ev.inicio,
     link_edital: ev.edital, anexos: ev.edital ? [{ tipo: 'edital', nome: 'Edital do leilão', url: ev.edital }] : [],
