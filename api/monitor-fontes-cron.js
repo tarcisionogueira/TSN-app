@@ -177,6 +177,13 @@ async function handler(req) {
     const { data, error: eGl } = await supabase.rpc('reconciliar_gemeos_leiloeiro_cef');
     gemeosLeiloeiro = eGl ? { erro: eGl.message } : data;
   }
+  // GÊMEOS VLANCE × LJUD (27/09): mesmo backend, mesmo lote_id — 48 de 84 VLANCE eram cópia
+  // de lote LJUD ativo. Fica o LJUD. Ver supabase/migrations/gemeos_vlance_ljud.sql.
+  let gemeosVlance = null;
+  {
+    const { data, error: eGv } = await supabase.rpc('reconciliar_gemeos_vlance_ljud');
+    gemeosVlance = eGv ? { erro: eGv.message } : data;
+  }
 
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
@@ -201,6 +208,9 @@ async function handler(req) {
   // A4 (22/08): a falha da reconciliação de gêmeos precisa VIRAR problema — antes só saía no
   // corpo HTTP (que ninguém lê), então se a RPC sumisse/perdesse permissão a dedup ficava parada
   // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
+  if (gemeosVlance?.erro) {
+    problemas.push({ fonte: 'GÊMEOS VLANCE×LJUD', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosVlance.erro}` });
+  }
   if (gemeosLeiloeiro?.erro) {
     problemas.push({ fonte: 'GÊMEOS LEILOEIRO×CEF', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosLeiloeiro.erro}` });
   }
@@ -510,7 +520,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -571,7 +581,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

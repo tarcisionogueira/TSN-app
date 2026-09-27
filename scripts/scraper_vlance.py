@@ -66,7 +66,10 @@ import requests
 # JSON de verdade nos dois (28 e 29 leilões ativos, formato idêntico ao já usado aqui). Ainda
 # não validados com `coletar_lotes` (o endpoint de LOTE em si) — entram como qualquer tenant
 # novo: primeiro dry-run (--dominios, sem --supabase), só grava depois de confirmar lote > 0.
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br"]
+# franciscofreitasleiloes.com.br (27/09): dry-run pela via GRÁTIS do GitHub = 37 imóveis (o LJUD
+# trazia 18 do mesmo leiloeiro). Mesmo backend do LJUD, mesmo lote_id: o que já existe como
+# `ljud_<lote_id>` ativo é suprimido como gêmeo (reconciliar_gemeos_vlance_ljud, cron diário).
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br", "franciscofreitasleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 
