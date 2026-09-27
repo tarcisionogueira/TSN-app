@@ -251,14 +251,8 @@ rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
 # 27/09 (2ª rodada): do PC o Milan também dá challenge do Cloudflare (recon_dump 62). O coletor
 # roda pelo GitHub com Bright Data (scraper-milan.yml) — recon daqui não tem mais o que ver.
 
-# ── RECON dilsonmoreira + jmfleiloes (27/09) — SPA client-side, mesma plataforma entre si (HTML
-# de ~69 KB idêntico, zero link de lote: recon_dump 69/70). NÃO é o front do Milan (a pista antiga
-# era o script do RD Station). SPA busca os lotes numa API JSON — o recon-dom-browser captura essas
-# chamadas daqui, de graça. Uma vez (RECON_UMA_VEZ só pula dump COM conteúdo). Falha não derruba nada.
-for _spa in https://www.dilsonmoreira.com.br https://www.jmfleiloes.com.br; do
-  quer RECON_SPA && { env RECON_BASE="$_spa" RECON_ROTAS='/' RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs \
-    || echo "  (recon $_spa falhou — sem efeito no acervo)"; }
-done
+# (27/09) O recon único de dilsonmoreira/jmfleiloes cumpriu o papel: eram lojas da rede Superbid
+# (recon_dump 75/76) e entraram no passo SUPERBID abaixo.
 
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
@@ -267,7 +261,8 @@ done
 # RESERVA: o GitHub (leiloeiros/veiculos-puppeteer) só coleta a rede Superbid se este gate
 # ficar 7+ dias sem concluir — e aí sai pelo proxy ISP. Ver navegadorRedeSuperbid().
 # 25/09: + SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES — mesma offer-query, bloqueada no GitHub desde 24/09.
-rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,TOTALLEILOES,CREPALDI,KRONLEILOES node scripts/scraper-puppeteer.mjs
+# 27/09: + DILSONMOREIRA/JMFLEILOES — lojas white-label da rede (stores 16253/16060).
+rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,TOTALLEILOES,CREPALDI,KRONLEILOES,DILSONMOREIRA,JMFLEILOES node scripts/scraper-puppeteer.mjs
 
 # ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
 # Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A

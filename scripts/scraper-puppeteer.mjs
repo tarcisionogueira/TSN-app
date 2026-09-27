@@ -5717,7 +5717,7 @@ async function scraperLeilofy(browser) {
 // CREPALDI, KRONLEILOES). Desde 24/09 14h53 as cinco tomam "Failed to fetch" em TODAS as tentativas
 // do GitHub (run 36015162979) — o mesmo bloqueio que tirou SUPERBID/SOLD daqui em 23/09 — e caíam
 // para 0 com alerta de regressão todo dia. Agora seguem o mesmo gate residencial.
-const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES'];
+const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES', 'DILSONMOREIRA', 'JMFLEILOES'];
 async function navegadorRedeSuperbid(browser) {
   if (process.env.GITHUB_ACTIONS !== 'true') return { browser, proprio: null };
   const forcar = process.env.SUPERBID_FORCAR_ISP === '1';
@@ -5856,6 +5856,13 @@ async function main() {
     // teste direto na API pública). Zero Cloudflare, zero Bright Data — mesma API grátis que
     // TOTALLEILOES/CREPALDI já usam.
     if (bSbid && rodar('KRONLEILOES')) await coletarFonte('KRONLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16180', fonte: 'KRONLEILOES', leiloeiro: 'Kron Leilões', prefix: 'kron', baseSite: 'https://www.kronleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
+    // DILSONMOREIRA + JMFLEILOES (27/09): o "SPA sem link" dos dois (HTML de ~69 KB, recon_dump
+    // 69/70) é white-label da rede Superbid — o recon-dom-browser do PC do dono pegou as chamadas
+    // ao vivo (recon_dump 75/76): offer-query com stores.id:16253 (Dilson) e 16060 (JMF). Até aqui
+    // estavam marcados como "precisa do Scraping Browser" (16/09) e "site do Milan" (27/09) — os
+    // dois errados. Mesma API grátis de KRON/CREPALDI/TOTAL.
+    if (bSbid && rodar('DILSONMOREIRA')) await coletarFonte('DILSONMOREIRA', () => scraperSuperbidNet(bSbid, { stores: '16253', fonte: 'DILSONMOREIRA', leiloeiro: 'Dilson Moreira Leiloeiro', prefix: 'dilson', baseSite: 'https://www.dilsonmoreira.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
+    if (bSbid && rodar('JMFLEILOES')) await coletarFonte('JMFLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16060', fonte: 'JMFLEILOES', leiloeiro: 'JMF Leilões', prefix: 'jmf', baseSite: 'https://www.jmfleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
     // 20/09: o parser próprio classifica matrícula só pelo texto DENTRO da âncora <a> (frágil —
