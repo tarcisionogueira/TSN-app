@@ -19,7 +19,8 @@ const DEEP_MAX = parseInt(process.env.DEEP_MAX || '12', 10);
 const URLS = (process.env.DEEP_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 let usados = 0;
-async function bdFetch(url, timeoutMs = 60000) {
+// 90 s (27/09): páginas Next.js renderizadas pelo Unlocker (Milan) passam de 60 s e o recon abortava sem gravar.
+async function bdFetch(url, timeoutMs = 90000) {
   const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
