@@ -36,7 +36,21 @@ import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
 
-const BASE = 'https://www.pecinileiloes.com.br';
+// MULTI-LEILOEIRO (27/09): a plataforma ASP.NET "DefaultClean" (suaplataformadeleilao.com.br) é
+// a mesma em outros leiloeiros — confirmado no Sublime pelo recon (recon_dump 71): /Core/V1,
+// /Themes/DefaultClean, lotes em /lote/<slug>/<id>/. `PECINI_TENANT` escolhe o site; o padrão
+// continua sendo o Pecini, com o MESMO comportamento de antes.
+const TENANTS = {
+  PECINI:  { base: 'https://www.pecinileiloes.com.br', leiloeiro: 'Pecini Leilões' },
+  SUBLIME: { base: 'https://www.sublimeleiloes.com.br', leiloeiro: 'Sublime Leilões' },
+};
+const FONTE = (process.env.PECINI_TENANT || 'PECINI').toUpperCase();
+if (!TENANTS[FONTE]) { console.error(`PECINI_TENANT desconhecido: ${FONTE} (conhecidos: ${Object.keys(TENANTS).join(', ')})`); process.exit(1); }
+const BASE = TENANTS[FONTE].base;
+// fonte_id por leiloeiro: o id do lote é sequencial por SITE — sem prefixo próprio o lote 100 do
+// Sublime sobrescreveria o 100 do Pecini em silêncio (upsert por fonte_id não reclama). Para o
+// Pecini o prefixo continua `pecini_`, idêntico ao acervo existente.
+const PREFIXO = `${FONTE.toLowerCase()}_`;
 const MAX_LOTES = Number(process.env.PECINI_MAX_LOTES || 40);
 const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grava)
 const ALVO = ['novos', 'antigos', 'todos'].includes(process.env.PECINI_ALVO) ? process.env.PECINI_ALVO : 'novos';
@@ -319,8 +333,8 @@ function parseDetalhe(html, rec) {
 function montarRow(rec, det) {
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
   return {
-    fonte: 'PECINI',
-    fonte_id: `pecini_${rec.id}`,
+    fonte: FONTE,
+    fonte_id: `${PREFIXO}${rec.id}`,
     titulo: det.titulo,
     tipo: inferirTipo(det.titulo),
     modalidade: det.modalidade,
@@ -337,7 +351,7 @@ function montarRow(rec, det) {
     anexos: det.anexos,
     link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula,
-    leiloeiro: 'Pecini Leilões',
+    leiloeiro: TENANTS[FONTE].leiloeiro,
     data_leilao: det.data_leilao || null,
     forma_pagamento: 'a_vista',
     ativo: true,
@@ -382,7 +396,7 @@ async function main() {
   //   novos   → só os que ainda não estão no banco (default; cai nos antigos se não houver novo)
   //   antigos → só os JÁ capturados, do mais desatualizado para o mais recente
   //   todos   → novos primeiro, antigos em seguida, na mesma rodada
-  const ids = lotes.map(l => `pecini_${l.id}`);
+  const ids = lotes.map(l => `${PREFIXO}${l.id}`);
   const visto = new Map();   // fonte_id → atualizado_em (null = nunca)
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase.from('imoveis_leilao')
@@ -392,9 +406,9 @@ async function main() {
     if (error) { console.error(`falha ao ler o acervo (${error.message}). Abortado.`); process.exitCode = 1; return; }
     for (const r of data || []) visto.set(r.fonte_id, r.atualizado_em || null);
   }
-  const novos = lotes.filter(l => !visto.has(`pecini_${l.id}`));
-  const antigos = lotes.filter(l => visto.has(`pecini_${l.id}`))
-    .sort((a, b) => String(visto.get(`pecini_${a.id}`) || '').localeCompare(String(visto.get(`pecini_${b.id}`) || '')));
+  const novos = lotes.filter(l => !visto.has(`${PREFIXO}${l.id}`));
+  const antigos = lotes.filter(l => visto.has(`${PREFIXO}${l.id}`))
+    .sort((a, b) => String(visto.get(`${PREFIXO}${a.id}`) || '').localeCompare(String(visto.get(`${PREFIXO}${b.id}`) || '')));
   const fila = ALVO === 'antigos' ? antigos
     : ALVO === 'todos' ? [...novos, ...antigos]
     : (novos.length ? novos : antigos);
@@ -419,9 +433,9 @@ async function main() {
   // e o número enumerado vai para o log de toda rodada, que é de onde esse histórico sai.
   const PISO_ENUMERACAO = 40;   // observado: 52. Sitemap quebrado devolve 0 ou punhado.
   if (!DRYRUN && lotes.length >= PISO_ENUMERACAO) {
-    const noSitemap = new Set(lotes.map(l => `pecini_${l.id}`));
+    const noSitemap = new Set(lotes.map(l => `${PREFIXO}${l.id}`));
     const { data: ativosNoBanco, error: eAtivos } = await supabase
-      .from('imoveis_leilao').select('fonte_id').eq('fonte', 'PECINI').eq('ativo', true);
+      .from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE).eq('ativo', true);
     if (eAtivos) {
       console.error(`  não consegui ler os ativos para a varredura (${eAtivos.message}) — sweep PULADO.`);
     } else {
@@ -476,7 +490,7 @@ async function main() {
     // 'falhou': o monitor acusava o leiloeiro por uma decisão de orçamento nossa. Aconteceu
     // em 19/08 (`reservado_para_outros`, 1 linha). É a forma #5 do CLAUDE.md — o freio de
     // custo tem de dizer QUAL "não", e dizer no lugar em que alguém escuta.
-    await registrarSaude(supabase, 'PECINI', [], 'principal',
+    await registrarSaude(supabase, FONTE, [], 'principal',
       { ok: false, semCota: !!recusaDeCota,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         enumerados: lotes.length,
@@ -504,12 +518,12 @@ async function main() {
   // por run é 4-6 e a mediana nunca alcança o gate de baseline — ficava presa no piso fixo
   // para sempre. `enumerados` = o sitemap INTEIRO (o que a fonte LISTA), que é o número que
   // a regressão deve vigiar; com ~3 runs gravando isto, o piso aprendido assume sozinho.
-  await registrarSaude(supabase, 'PECINI', prontos, 'principal', { enumerados: lotes.length });
+  await registrarSaude(supabase, FONTE, prontos, 'principal', { enumerados: lotes.length });
   // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
   await registrarConhecimento(supabase, {
     // `acesso`/`custo` são o caminho que ESTA execução usou, não o que o scraper sabe fazer:
     // gravar 'pago' numa coleta residencial é o instrumento reportando outra coisa (forma #10).
-    fonte: 'PECINI', plataforma: 'ASP.NET-DefaultClean',
+    fonte: FONTE, plataforma: 'ASP.NET-DefaultClean',
     acesso: RESIDENCIAL ? 'residencial' : 'brightdata', custo: RESIDENCIAL ? 'gratis' : 'pago',
     anti_bot: 'cloudflare', enumeracao: 'sitemap', url_lote: '/lote/{slug}/{id}/',
     scraper: 'scraper-pecini.mjs', qualidade: qualidadeColeta(prontos),
@@ -530,5 +544,5 @@ function logPlacarResidencial(tag) {
 // código de saída é o que o main decidiu (0 por padrão, 1 quando não coletou nada).
 
 main()
-  .then(() => { logPlacarResidencial('PECINI'); return fecharHeadless().finally(() => process.exit(process.exitCode || 0)); })
-  .catch(e => { console.error(e); logPlacarResidencial('PECINI'); fecharHeadless().finally(() => process.exit(1)); });
+  .then(() => { logPlacarResidencial(FONTE); return fecharHeadless().finally(() => process.exit(process.exitCode || 0)); })
+  .catch(e => { console.error(e); logPlacarResidencial(FONTE); fecharHeadless().finally(() => process.exit(1)); });

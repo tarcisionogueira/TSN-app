@@ -18,6 +18,10 @@ on:
   #   - cron: '0 9 * * 1'   # era 1x/semana (seg), 9h UTC — fonte PAGA (Bright Data)
   workflow_dispatch:
     inputs:
+      tenant:
+        description: 'Leiloeiro da plataforma DefaultClean: PECINI (padrão) ou SUBLIME'
+        required: false
+        default: 'PECINI'
       forcar:
         # 29/08 — POR QUE ESTE INPUT EXISTE, e por que o freio deixou de ignorar o dispatch:
         # o `if` deste job era `github.event_name != 'schedule' || pular != '1'`, escrito quando
@@ -96,7 +100,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/coleta-recente.mjs PECINI 7 >> "$GITHUB_OUTPUT"
+        run: node scripts/coleta-recente.mjs ${{ github.event.inputs.tenant || 'PECINI' }} 7 >> "$GITHUB_OUTPUT"
       - name: Scraper Pecini
         if: github.event.inputs.forcar == '1' || steps.freio.outputs.pular != '1'
         env:
@@ -104,6 +108,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          PECINI_TENANT: ${{ github.event.inputs.tenant || 'PECINI' }}
           PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
           PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
