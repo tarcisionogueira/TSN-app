@@ -61,6 +61,21 @@ async function pagina(url, minimo = 5000) {
   throw new FalhaDeAcesso('pagina_invalida', `${ultimo} em ${url}`);
 }
 
+// Amostra dos cards sem valor → recon_dump (origem `milan-sem-valor`, 1×/20 h por evento). É
+// diagnóstico: falhar aqui nunca derruba a coleta, mas o motivo vai para o log.
+async function amostrarSemValor(cod, ev, cards) {
+  try {
+    const chave = `evento:${cod}`;
+    const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
+    const { data: ja, error: eJa } = await supabase.from('recon_dump').select('id').eq('origem', 'milan-sem-valor').eq('chave', chave).gte('criado_em', desde).limit(1);
+    if (eJa) { console.log(`    (amostra sem valor: não consegui checar — ${eJa.message})`); return; }
+    if (ja?.length) return;
+    const { error } = await supabase.from('recon_dump').insert({ origem: 'milan-sem-valor', chave,
+      conteudo: { evento: ev.tituloEvento, inicio: ev.inicio, n: cards.length, cards: cards.slice(0, 3).map(c => ({ lote: c.lote, titulo: c.titulo, html: c.htmlSemValor })) } });
+    console.log(`    ${cards.length} card(s) sem LANCE MÍNIMO — amostra ${error ? `NÃO gravada (${error.message})` : 'gravada em recon_dump (milan-sem-valor)'}`);
+  } catch (e) { console.log(`    (amostra sem valor falhou: ${String(e?.message || e).slice(0, 120)})`); }
+}
+
 async function main() {
   if (!brightDataDisponivel()) throw new FalhaDeAcesso('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes — o site só abre pelo Web Unlocker');
   console.log(`MILAN ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · até ${MAX_EVENTOS} evento(s)`);
@@ -89,6 +104,8 @@ async function main() {
     }
     const ev = parseEvento(html, cod, T.base);
     enumerados += ev.lotes.length;
+    const semValor = ev.lotes.filter(l => l.htmlSemValor && !l.encerrado);
+    if (semValor.length) await amostrarSemValor(cod, ev, semValor);
     console.log(`  evento ${cod} "${ev.tituloEvento}" · início ${ev.inicio || '?'} · ${ev.lotes.length} lote(s)`);
     for (const card of ev.lotes) {
       if (card.encerrado) { encerrados++; continue; }

@@ -85,7 +85,10 @@ export function parseEvento(html, cod, base) {
     const status = limpar((bloco.match(/id="estado_lote_tag_estadoLote[^"]*"[^>]*>(?:<div[^>]*><\/div>)?([^<]{3,40})</) || [])[1]);
     const fotoEnc = (bloco.match(/url=(https%3A%2F%2Fadm\.milanleiloes\.com\.br%2FFotos%2F[^&"]+)/) || [])[1];
     const foto = fotoEnc ? decodeURIComponent(fotoEnc) : ((bloco.match(/https:\/\/adm\.milanleiloes\.com\.br\/Fotos\/[^"'&\s]+/) || [])[0] || null);
-    lotes.push({ lote, url: new URL(href, base).href, titulo, minimo, status, foto, encerrado: RE_ENCERRADO.test(status) });
+    lotes.push({ lote, url: new URL(href, base).href, titulo, minimo, status, foto, encerrado: RE_ENCERRADO.test(status),
+      // Card sem "LANCE MÍNIMO" (27/09: 41 de 69 lotes, eventos 15582/15507/15379/15605) — guarda o
+      // HTML enxuto para o coletor gravar uma amostra e o rótulo real ser lido, não chutado.
+      htmlSemValor: minimo ? null : bloco.slice(0, 6000).replace(/ (srcset|style|sizes|decoding|data-nimg|class)="[^"]*"/g, '') });
   }
   return {
     cod: String(cod), tituloEvento,
