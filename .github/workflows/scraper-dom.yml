@@ -49,11 +49,14 @@ on:
       - 'scripts/scraper-simon.mjs'
       - 'scripts/scraper-globo.mjs'
       - 'scripts/scraper-leje.mjs'
+      - 'scripts/scraper-freitas.mjs'
+      - 'scripts/lib/freitas-parse.mjs'
+      - 'scripts/lib/motor/fontes/freitas.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -183,6 +186,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
+
+      - name: Freitas
+        # 27/09: freitasleiloeiro.com.br (imóveis). Fetch direto, sem Bright Data (FREITAS_BD
+        # desligado) — o site não tem Cloudflare; se passar a recusar o runner, a saúde registra.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'freitas')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FREITAS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-freitas.mjs
 
       - name: Notify on failure
         # `cancelled()` também: estourar o timeout-minutes não é `failure()` pro GitHub, e sem
