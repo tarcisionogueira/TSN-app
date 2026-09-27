@@ -229,11 +229,16 @@ rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 
 # FREITAS (27/09) — freitasleiloeiro.com.br, imóveis. Recusa o IP do GitHub; de casa é fetch
 # direto, grátis (FREITAS_BD desligado por padrão).
-rodar FREITAS env FREITAS_DRYRUN=0 node scripts/scraper-freitas.mjs
+# 27/09: FREITAS_BD=1 — a via direta falhou também do PC (motivo agora vai para fonte_saude);
+# o Bright Data já coletou este site (recon 26-27/09). Custo limitado pelo teto `freitas` 25/sem.
+rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
 
 # CRLEILOES (27/09) — crleiloes.com.br: Cloudflare por reputação de IP de datacenter; daqui é
 # fetch direto, grátis. O workflow do GitHub (Bright Data) vira reserva semanal com freio.
-rodar CRLEILOES env CRLEILOES_NO_BD=1 CRLEILOES_DRYRUN=0 node scripts/scraper-crleiloes.mjs
+# 27/09 (2ª rodada): do PC também dá `challenge` do Cloudflare — o bloqueio não é só de
+# datacenter. Sai do runner; a coleta segue pelo GitHub (scraper-crleiloes.yml, semanal, Bright
+# Data com teto `crleiloes` 40/sem). Deixar aqui só gastaria tempo da rodada.
+# rodar CRLEILOES env CRLEILOES_NO_BD=1 CRLEILOES_DRYRUN=0 node scripts/scraper-crleiloes.mjs
 
 # RECON MILAN (27/09, UMA VEZ) — milanleiloes.com.br é Next.js (backend da plataforma Gestão, CDN
 # d335luupugsy2) e monta tudo no navegador; do GitHub vem vazio e o Bright Data dá timeout nas

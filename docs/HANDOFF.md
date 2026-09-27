@@ -51,6 +51,16 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
+**🏠 RODADAS NO PC DO DONO (27/09, tarde) — resultado medido.** SOLEON grátis ok (CALIL 37, VEGAS
+37, demais tenants); apuração SUPERBID +30. **HASTA não está quebrada**: amostra `recon_dump`
+id 61 (origem `motor-vazio`) mostra os 10 leilões "Em Breve"/"Em Loteamento" e o 569 da CAIXA com
+"NENHUM LOTE ENCONTRADO NO MOMENTO" — site entre leilões; o acervo antigo venceu legitimamente.
+**CRLEILOES**: `challenge` do Cloudflare também do PC → saiu do runner, fica só no GitHub semanal
+com Bright Data. **FREITAS** no PC agora com `FREITAS_BD=1` (fallback pago, teto 25/sem).
+**LEJE/FREITAS** falhavam com "sem nenhum lote pronto" porque `fetch-fonte.mjs` engolia o motivo
+da via grátis — agora vai no `via` (`sem-bd (grátis: HTTP 403|challenge|rede…)`) e no motivo da
+saúde. Milan: `recon_dump` id 62 tem 3 páginas renderizadas (próximo passo: escrever o coletor).
+
 **⚙️ RUNNER / BRIGHT DATA (27/09, fim do dia).** (a) Tetos cadastrados para `crleiloes` (40/sem) e
 `freitas` (25/sem) — invariante `brightdata_proposito_sem_teto` voltou a ok. (b) CALIL e JOAOEMILIO
 "zerados" eram `sem_cota`: do GitHub o Soleon cai no Bright Data e esgota a subcota diária

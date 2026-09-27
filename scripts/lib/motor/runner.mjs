@@ -344,7 +344,9 @@ export async function rodarFonte(cfg, opts) {
           // outra). Quando o CATÁLOGO foi recusado, o motivo diz isso.
           : /^dom-\d{3}$/.test(String(viaCatalogo || '')) || viaCatalogo === 'bloqueado'
             ? `catálogo recusado (${viaCatalogo === 'bloqueado' ? 'bloqueado também via Bright Data' : `HTTP ${String(viaCatalogo).slice(4)}`}) — acesso negado ao runner, não parser`
-            : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
+            : String(viaCatalogo || '').startsWith('sem-bd')
+              ? `catálogo não abriu: ${viaCatalogo} — acesso do runner, não parser`
+              : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
       });
       console.error(`[${tenant.fonte}] nada a gravar.${estado.semCota ? ' (sem cota Bright Data — orçamento, não regressão.)' : ''}`);
       if (exitCodeSeFalha) process.exitCode = 1;

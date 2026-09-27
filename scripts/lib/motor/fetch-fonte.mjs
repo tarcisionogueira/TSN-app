@@ -20,6 +20,10 @@ export function criarMotorFetch(proposito) {
 
   async function fetchFonte(url, { timeoutMs = 45000, semBD = false } = {}) {
     // 1) VIA GRÁTIS — fetch direto do runner (custo zero). Só aceita HTML que não seja challenge.
+    // `porQueGratis` (27/09): o motivo da recusa era engolido e a saúde dizia só "sem nenhum
+    // lote pronto" — LEJE e FREITAS falharam do PC do dono sem ninguém saber se foi 403,
+    // challenge ou rede. Agora o motivo segue no `via` até o registro de saúde.
+    let porQueGratis = null;
     try {
       const c = new AbortController();
       const t = setTimeout(() => c.abort(), 20000);
@@ -28,10 +32,11 @@ export function criarMotorFetch(proposito) {
       if (r.ok) {
         const html = await r.text().catch(() => '');
         if (html && !ehChallenge(html)) return { html, via: 'gratis' };
-      }
-    } catch { /* cai p/ Bright Data */ }
+        porQueGratis = html ? 'challenge' : 'corpo vazio';
+      } else porQueGratis = `HTTP ${r.status}`;
+    } catch (e) { porQueGratis = `rede: ${String(e?.name === 'AbortError' ? 'timeout 20s' : e?.cause?.code || e?.message || e).slice(0, 60)}`; }
 
-    if (semBD) return { html: null, via: 'sem-bd' };
+    if (semBD) return { html: null, via: `sem-bd (grátis: ${porQueGratis})` };
 
     // 2) VIA BRIGHT DATA — passa Cloudflare, cobrado por chamada, respeita a cota do proposito.
     try {
