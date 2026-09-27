@@ -414,6 +414,10 @@
     {
       "path": "/api/drenar-fila-emails-cron",
       "schedule": "15 */3 * * *"
+    },
+    {
+      "path": "/api/arquivar-anexos-email-cron",
+      "schedule": "25 * * * *"
     }
   ]
 }

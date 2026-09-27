@@ -30,6 +30,21 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**🔒 E-MAILS NÃO SE PERDEM (27/09, pedido do dono).** Levantamento: o CORPO de todo e-mail da
+caixa (`email_caixa.texto/html`, entrada e saída) já ficava no nosso banco; nenhuma rotina apaga
+e-mail. Mas os ANEXOS ficavam só no Resend (a linha guardava nome+id), e o Resend retém e-mails e
+anexos por **30 dias** (resend.com/docs/knowledge-base/account-quotas-and-limits) — a proposta do
+leiloeiro e as matrículas enviadas sumiriam. Corrigido: `api/arquivar-anexos-email-cron.js`
+(de hora em hora, :25) copia cada anexo para `documentos/email/<id>/...` (já no manifesto do backup
+R2) e marca `arquivo`; `api/email-caixa.js` abre a cópia NOSSA primeiro. Invariante
+`anexo_email_nao_arquivado` (crítico) grita se algo passar 3 dias sem cópia. `email_caixa` e
+`chamados_mensagens` entraram no snapshot diário off-region (R2) — o backup nativo do banco guarda só
+7 dias na mesma região. **Retenção**: nada é apagado hoje. O dono autorizou que conversa com
+leiloeiro SEM desfecho (sem resposta / sem arremate / sem proposta aceita) possa ser apagada após
+um prazo — NÃO implementado (volume ínfimo: 18 e-mails, 320 kB); decidir prazo quando pesar.
+E-mail transacional do sistema (`emails_log`) guarda só o registro (destinatário, assunto, status),
+não o corpo — é template, regerável.
+
 **🔴 REGRA DO DONO (27/09): fonte que falha NÃO apaga o acervo — fica só sem lote NOVO.**
 "Zerou" no `fonte_regressao_suspeita()` quer dizer **a última coleta trouxe 0**, NÃO que o acervo
 sumiu — ao reportar, dizer "a coleta voltou vazia; o acervo guardado continua X lotes na busca".

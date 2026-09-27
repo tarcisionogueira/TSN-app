@@ -66,6 +66,11 @@ const R2_ON = !!(R2.account && R2.keyId && R2.secret && R2.bucket);
 const TABELAS_NEGOCIO = [
   'perfis', 'arrematacoes', 'arrematados', 'planos_config',
   'indice_amostra', 'cidade_indicadores', 'leiloeiro_conhecimento',
+  // 27/09 (dono: "não podemos perder nenhum e-mail"): a comunicação é registro de operação
+  // (proposta ao leiloeiro, resposta do jurídico, conversa de chamado). O backup nativo do banco
+  // guarda 7 dias na mesma região — apagamento notado depois disso era perda definitiva. Os
+  // ANEXOS vão pelo storage (documentos/email/..., já no manifesto); aqui vai o corpo.
+  'email_caixa', 'chamados_mensagens',
 ];
 
 // MINIMIZAÇÃO NA CÓPIA (LGPD Art. 6º, III — necessidade). A cópia existe para RESTAURAR um

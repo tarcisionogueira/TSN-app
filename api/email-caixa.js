@@ -93,6 +93,28 @@ export default async function handler(req) {
     // Mesma cerca da RLS (a chave aqui é de serviço): caixa pessoal só o dono; comunicação só
     // quem tem acesso a ela (advogado não).
     if (msg && (msg.dono ? msg.dono !== user.id : soPessoal)) return json({ error: 'Anexo não encontrado' }, 404);
+    // CÓPIA NOSSA PRIMEIRO (27/09): o arquivar-anexos-email-cron copia cada anexo para o bucket
+    // privado `documentos` (o Resend apaga em 30 dias). Com `arquivo` gravado, o Resend nem é
+    // consultado — o anexo continua abrindo depois que o provedor esqueceu dele.
+    {
+      const lista = msg?.anexos || [];
+      const item = msg?.direcao === 'saida' ? lista[Number(body?.anexo_idx)] : lista.find(a => a?.id && a.id === anexoId);
+      if (item?.arquivo && String(item.arquivo).startsWith('email/')) {
+        const rs = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${item.arquivo}`, {
+          method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expiresIn: 300 }), signal: AbortSignal.timeout(10000),
+        });
+        const js = rs.ok ? await rs.json().catch(() => null) : null;
+        if (js?.signedURL) {
+          const url = `${SUPABASE_URL}/storage/v1${js.signedURL}`;
+          if (body?.proxy === true) return entregarArquivo(url, item.nome);
+          return json({ ok: true, url });
+        }
+        // Cópia registrada mas não assinável: diz, e segue para o Resend enquanto ele ainda tiver.
+        console.error('[email-caixa] anexo arquivado não assinou:', rs.status, item.arquivo);
+      }
+    }
+
     const key = process.env.RESEND_API_KEY;
     if (!key) return json({ error: 'Envio de e-mail não configurado' }, 503);
 
