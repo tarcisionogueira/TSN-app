@@ -30,6 +30,27 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**✅ FRANCISCO FREITAS no Vlance + 🔴 48 DUPLICADOS VLANCE×LJUD corrigidos (27/09).**
+`franciscofreitasleiloes.com.br` entrou em `TENANTS_PADRAO` do `scraper_vlance.py`: dry-run pela
+via GRÁTIS do GitHub (novas entradas `dominios`/`no_bd` do `scraper-vlance.yml`) = **37 imóveis**
+(o LJUD tinha 18 do mesmo leiloeiro). Roda no residencial (`rodar VLANCE`, grátis) e no GitHub
+quando o residencial some. **Achado:** Vlance e LJUD são o MESMO backend com o MESMO `lote_id` —
+**48 dos 84 VLANCE ativos eram cópia de lote LJUD ativo** (título idêntico, conferido par a par).
+`reconciliar_gemeos_vlance_ljud()` (migração `gemeos_vlance_ljud.sql`) suprime o VLANCE
+(`suprimido_motivo='gemeo_ljud'`, protegido pelo gatilho `preservar_supressao_gemeo`), reativa se o
+LJUD sair; roda no `monitor-fontes-cron` e alerta se falhar. Aplicada: 84 → 36 VLANCE ativos.
+Decisão tomada: fica o LJUD (monitor e apuração maduros) — inverter é trocar os dois lados da função.
+
+**⏳ MILAN — recon agendado no residencial (27/09).** `milanleiloes.com.br` (SEM `www`; o `www`
+dá timeout) é Next.js app router sobre o backend da plataforma Gestão (CDN `d335luupugsy2`,
+`adm.milanleiloes.com.br`) — por isso o `scraper-gestao` (que procura `leilao.php`) achava 0.
+Rotas: `/agenda?categoria=imoveis`, `/leilao/imoveis/<id>`, `?olha_esse_lote=<nnn>`. Tudo montado
+no navegador (a agenda vem vazia no HTML); do GitHub vem vazio e o Bright Data dá timeout nas
+páginas internas. O `runner-residencial.sh` roda UMA vez `recon-dom-browser.mjs` com
+`RECON_DUMP=1` e grava as chamadas de API em `recon_dump` (origem `dom-browser`). **Próximo:**
+`select conteudo from recon_dump where origem='dom-browser' and chave like '%milan%'` → escrever o
+coletor sobre a API real.
+
 **✅ FREITAS LEILOEIRO — coletor novo (27/09).** `scripts/scraper-freitas.mjs` +
 `lib/freitas-parse.mjs` + `lib/motor/fontes/freitas.mjs`, teste `npm run testar:freitas` (trechos
 REAIS do recon, `recon_dump` origem='deep' ids 50-56). Catálogo `/Leiloes/Pesquisar?Categoria=2`

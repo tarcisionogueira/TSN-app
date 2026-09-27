@@ -13,6 +13,17 @@ const BASE = process.env.RECON_BASE || process.env.NORDESTE_BASE;
 const ROTAS = (process.env.RECON_ROTAS || '/').split(',').map(s => s.trim()).filter(Boolean);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 if (!BASE) { console.log('⚠️ defina RECON_BASE'); process.exit(1); }
+// RECON_DUMP=1 grava as chamadas capturadas em recon_dump (origem='dom-browser', chave=BASE) —
+// feito para rodar do IP RESIDENCIAL (runner do dono) em site que recusa datacenter, e o resultado
+// chegar ao banco sem ninguém copiar log. RECON_UMA_VEZ=1: sai se já houver dump < 30 dias.
+const SB = process.env.VITE_SUPABASE_URL, SK = process.env.SUPABASE_SERVICE_KEY;
+const sbH = { apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' };
+if (process.env.RECON_UMA_VEZ === '1' && SB && SK) {
+  const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+  const r = await fetch(`${SB}/rest/v1/recon_dump?origem=eq.dom-browser&chave=eq.${encodeURIComponent(BASE)}&criado_em=gte.${desde}&select=id&limit=1`, { headers: sbH });
+  if (!r.ok) { console.log(`⚠️ não consegui checar recon_dump (HTTP ${r.status}) — rodando mesmo assim`); }
+  else if ((await r.json()).length) { console.log(`recon ${BASE}: já gravado nos últimos 30 dias — nada a fazer`); process.exit(0); }
+}
 
 const pareceLote = (o) => {
   if (!o || typeof o !== 'object') return false;
@@ -45,7 +56,10 @@ page.on('response', async (resp) => {
     if (!txt || txt.length < 40) return;
     let json; try { json = JSON.parse(txt); } catch { return; }
     const arr = acharArrayLote(json);
-    respostas.push({ url: url.slice(0, 180), ct: ct.split(';')[0], len: txt.length, temLote: !!arr, nLote: arr?.length || 0, amostra: arr?.length ? JSON.stringify(arr[0]).slice(0, 1000) : (txt.length < 300 ? txt : '') });
+    const req = resp.request();
+    respostas.push({ url: url.slice(0, 180), ct: ct.split(';')[0], len: txt.length, temLote: !!arr, nLote: arr?.length || 0, amostra: arr?.length ? JSON.stringify(arr[0]).slice(0, 1000) : (txt.length < 300 ? txt : ''),
+      // RECON_DUMP (27/09): o que o parser precisa para CHAMAR a API sem navegador.
+      metodo: req.method(), corpo: (req.postData() || '').slice(0, 2000), urlInteira: url, bruto: arr?.length ? txt.slice(0, 30000) : '' });
   } catch { /* ignora */ }
 });
 
@@ -90,3 +104,11 @@ console.log(`>>> COM ARRAY DE LOTE (${comLote.length}) — se houver, o parser l
 for (const r of comLote) { console.log(`  ${r.url}  [${r.nLote} lotes, ${r.len}b]`); console.log(`    amostra: ${r.amostra}`); }
 console.log(`>>> demais JSON (${respostas.length - comLote.length}):`);
 for (const r of respostas.filter(r => !r.temLote).slice(0, 20)) console.log(`  ${r.url}  [${r.ct}, ${r.len}b]${r.amostra ? ' → ' + r.amostra.slice(0, 120) : ''}`);
+
+if (process.env.RECON_DUMP === '1') {
+  if (!SB || !SK) { console.log('⚠️ RECON_DUMP=1 sem VITE_SUPABASE_URL/SUPABASE_SERVICE_KEY — nada gravado'); process.exit(2); }
+  const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { ...sbH, Prefer: 'return=minimal' },
+    body: JSON.stringify({ origem: 'dom-browser', chave: BASE, conteudo: { rotas: ROTAS, respostas } }) });
+  console.log(`recon_dump: ${r.ok ? `gravado (${respostas.length} respostas JSON)` : `FALHOU HTTP ${r.status} ${(await r.text()).slice(0, 150)}`}`);
+  if (!r.ok) process.exit(3);
+}

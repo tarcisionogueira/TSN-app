@@ -215,6 +215,13 @@ rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 # direto, grátis (FREITAS_BD desligado por padrão).
 rodar FREITAS env FREITAS_DRYRUN=0 node scripts/scraper-freitas.mjs
 
+# RECON MILAN (27/09, UMA VEZ) — milanleiloes.com.br é Next.js (backend da plataforma Gestão, CDN
+# d335luupugsy2) e monta tudo no navegador; do GitHub vem vazio e o Bright Data dá timeout nas
+# páginas internas. Daqui o navegador grava as chamadas de API em recon_dump para o coletor ser
+# escrito. RECON_UMA_VEZ: não repete se já gravou nos últimos 30 dias. Falha não derruba a rodada.
+env RECON_BASE=https://milanleiloes.com.br RECON_ROTAS='/agenda?categoria=imoveis,/leilao/imoveis/15573,/leilao/imoveis/15573?olha_esse_lote=001' \
+  RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs || echo "  (recon Milan falhou — sem efeito no acervo)"
+
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
 # Daqui o IP é residencial e a API responde inteira. Gate `SUPERBID` com intervalo de 20 h
