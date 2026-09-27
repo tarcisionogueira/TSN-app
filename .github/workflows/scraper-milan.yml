@@ -1,0 +1,46 @@
+name: Scraper Milan Leilões (Bright Data)
+
+# milanleiloes.com.br: Cloudflare dá challenge até para o IP residencial do dono (27/09) —
+# só o Web Unlocker passa, então roda daqui. Lê a home + páginas de EVENTO de imóveis (o card
+# do evento já traz tudo; não abre lote a lote): ~1 + nº de eventos requisições por rodada.
+# Teto `milan` em brightdata_reserva (30/semana) segura qualquer laço quebrado.
+#
+# dryrun default '0' (GRAVA) no cron e no dispatch sem input — lição do RJLEILOES (11/08):
+# default dry-run por engano gastou cota 8× sem gravar nada.
+on:
+  schedule:
+    - cron: '35 11 * * 1,4'   # segunda e quinta, 11h35 UTC (08h35 BRT)
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_eventos:
+        description: 'Máx. de eventos de imóveis por execução'
+        required: false
+        default: '10'
+
+jobs:
+  scraper-milan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper MILAN
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          MILAN_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          MILAN_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '10' }}
+        run: node scripts/scraper-milan.mjs

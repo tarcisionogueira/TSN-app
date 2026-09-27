@@ -244,8 +244,8 @@ rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
 # d335luupugsy2) e monta tudo no navegador; do GitHub vem vazio e o Bright Data dá timeout nas
 # páginas internas. Daqui o navegador grava as chamadas de API em recon_dump para o coletor ser
 # escrito. RECON_UMA_VEZ: não repete se já gravou nos últimos 30 dias. Falha não derruba a rodada.
-quer MILAN && { env RECON_BASE=https://milanleiloes.com.br RECON_ROTAS='/agenda?categoria=imoveis,/leilao/imoveis/15573,/leilao/imoveis/15573?olha_esse_lote=001' \
-  RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs || echo "  (recon Milan falhou — sem efeito no acervo)"; }
+# 27/09 (2ª rodada): do PC o Milan também dá challenge do Cloudflare (recon_dump 62). O coletor
+# roda pelo GitHub com Bright Data (scraper-milan.yml) — recon daqui não tem mais o que ver.
 
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
