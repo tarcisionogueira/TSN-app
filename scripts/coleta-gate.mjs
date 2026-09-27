@@ -5,11 +5,12 @@
 // Uso no wrapper:
 //   node coleta-gate.mjs claim <FONTE>     # exit 0 = pode rodar; exit 3 = não é a hora/está travado
 //   node coleta-gate.mjs concluir <FONTE>  # marca sucesso (fecha a janela de ~2x/semana)
+//   node coleta-gate.mjs atrasada <FONTE> <HORAS>  # exit 0 = sem coleta concluída há HORAS+ (ou nunca)
 //
 // Env: VITE_SUPABASE_URL (ou SUPABASE_URL), SUPABASE_SERVICE_KEY.
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
-const [, , acao, fonte] = process.argv;
+const [, , acao, fonte, arg3] = process.argv;
 
 if (!SB_URL || !SB_KEY) { console.error('[gate] faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(2); }
 if (!acao || !fonte) { console.error('[gate] uso: coleta-gate.mjs claim|concluir <FONTE>'); process.exit(2); }
@@ -21,6 +22,17 @@ const rpc = (fn, args) => fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
 });
 
 try {
+  if (acao === 'atrasada') {
+    const horas = Number(arg3 || 168);
+    const r = await fetch(`${SB_URL}/rest/v1/coleta_cliente?fonte=eq.${encodeURIComponent(fonte)}&select=ultima_em,ativo`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+    // Não conseguiu ler = NÃO antecipa (a fonte ainda roda na posição normal da fila).
+    if (!r.ok) { console.error(`[gate] ${fonte}: não consegui ler o atraso (HTTP ${r.status}) — segue na ordem normal`); process.exit(5); }
+    const [l] = await r.json().catch(() => []);
+    if (!l || l.ativo === false) process.exit(3);
+    const atrasada = !l.ultima_em || (Date.now() - new Date(l.ultima_em).getTime()) > horas * 3600e3;
+    process.exit(atrasada ? 0 : 3);
+  }
   if (acao === 'claim') {
     const r = await rpc('coleta_cliente_claim', { p_fonte: fonte });
     // "Não consegui perguntar" não é "a resposta foi não" (29/08). Um HTTP ruim caía na MESMA

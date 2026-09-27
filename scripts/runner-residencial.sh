@@ -100,8 +100,14 @@ echo "===== [$(date)] runner residencial ($(git rev-parse --short HEAD 2>/dev/nu
 # bloqueava o caminho pago — 12 dias de acervo congelado, tudo verde. O `concluir` agora
 # consulta o acervo antes de carimbar (migração coleta_gate_concluir_exige_prova.sql) e
 # sai 4 quando não houve gravação; a linha abaixo torna isso VISÍVEL no log do runner.
+# RODADA PARCIAL (27/09): `RUNNER_SO=LEJE,FREITAS,HASTA,MILAN ./scripts/runner-residencial.sh` roda
+# SÓ o que está na lista (fontes do gate e passos sem gate: RADAR, TRIAGEM, MILAN, APURACAO_SUPERBID,
+# APURACAO_ZUK). Serve para pôr em dia o que ficou para trás sem esperar a rodada inteira (~2 h).
+# O gate continua valendo: fonte dentro da janela de 72 h é pulada do mesmo jeito.
+quer() { [ -z "${RUNNER_SO:-}" ] || [[ ",${RUNNER_SO^^}," == *",$1,"* ]]; }
 rodar() {
   local fonte="$1"; shift
+  quer "$fonte" || return 0
   if node scripts/coleta-gate.mjs claim "$fonte"; then
     if "$@"; then
       node scripts/coleta-gate.mjs concluir "$fonte" \
@@ -112,6 +118,16 @@ rodar() {
     sleep 5   # respiro entre fontes (uma de cada vez, IP tranquilo)
   fi
 }
+
+# ── FONTE ATRASADA VAI PARA A FRENTE (27/09) ────────────────────────────────────────────────
+# HASTA é a ÚLTIMA da fila por ser longa (decisão do dono, 29/08). Mas o computador desligando
+# no meio fazia a rodada nunca chegar nela: 28 dias sem coleta (30/08→27/09), e os 584 lotes
+# venceram sem reposição. Se ela passou de 7 dias sem concluir, roda PRIMEIRO; nos dias normais
+# a ordem continua a de sempre. O gate impede rodar duas vezes.
+if quer HASTA && node scripts/coleta-gate.mjs atrasada HASTA 168; then
+  echo "[$(date)] HASTA atrasada (7+ dias) — rodando primeiro"
+  rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
+fi
 
 # SOLEON (calil/vegas/3torres) — sem Cloudflare: fetch direto do IP residencial = grátis (SOLEON_NO_BD).
 rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
@@ -155,8 +171,8 @@ rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --i
 # assim sair 1 porque UM combo tribunal×termo caiu (foi o caso da 1ª rodada real: 98 editais
 # gravados, `exit 1` por `TRT15: fetch failed`). Dizer "sem efeito" ali seria o instrumento
 # reportando outra coisa — leia os `vistos=/novos=` da linha acima, que são o que de fato entrou.
-node scripts/radar-editais-residencial.mjs \
-  || echo "  (radar: run PARCIAL ou falho — o que entrou está no 'novos=' acima; não conta como sucesso, e a rede de segurança paga entra após 7 dias sem NENHUM sucesso)"
+quer RADAR && { node scripts/radar-editais-residencial.mjs \
+  || echo "  (radar: run PARCIAL ou falho — o que entrou está no 'novos=' acima; não conta como sucesso, e a rede de segurança paga entra após 7 dias sem NENHUM sucesso)"; }
 
 # ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
 # NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.
@@ -179,8 +195,8 @@ node scripts/radar-editais-residencial.mjs \
 # em TODA rodada. Alarme falso recorrente é o que treina o dono a ignorar o log (lição da
 # CREPALDI). Descoberta tem contrato diferente de coleta, então roda direto.
 # Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
-env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
-  || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"
+quer TRIAGEM && { env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
+  || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"; }
 
 # VENDASGOV — Imóveis da União (SPU/SERPRO). Veio do GitHub Actions em 29/08 sob a hipótese de
 # que o WAF do SERPRO bloqueava IP de DATACENTER. Daqui o IP já é residencial, mesmo remédio de
@@ -223,8 +239,8 @@ rodar CRLEILOES env CRLEILOES_NO_BD=1 CRLEILOES_DRYRUN=0 node scripts/scraper-cr
 # d335luupugsy2) e monta tudo no navegador; do GitHub vem vazio e o Bright Data dá timeout nas
 # páginas internas. Daqui o navegador grava as chamadas de API em recon_dump para o coletor ser
 # escrito. RECON_UMA_VEZ: não repete se já gravou nos últimos 30 dias. Falha não derruba a rodada.
-env RECON_BASE=https://milanleiloes.com.br RECON_ROTAS='/agenda?categoria=imoveis,/leilao/imoveis/15573,/leilao/imoveis/15573?olha_esse_lote=001' \
-  RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs || echo "  (recon Milan falhou — sem efeito no acervo)"
+quer MILAN && { env RECON_BASE=https://milanleiloes.com.br RECON_ROTAS='/agenda?categoria=imoveis,/leilao/imoveis/15573,/leilao/imoveis/15573?olha_esse_lote=001' \
+  RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs || echo "  (recon Milan falhou — sem efeito no acervo)"; }
 
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
@@ -243,8 +259,8 @@ rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,T
 # Não passa pelo `rodar`: grava resultado, não acervo (mesma razão do radar e da triagem).
 # 24/09: 400 → 1.200 lotes/rodada. O cron é 1×/dia (08h BRT) e a fila era 5.633 lotes vencidos
 # (≈14 dias a 400/dia). 1 consulta/s → ~20 min. Fila justa: nunca-apurado primeiro, mais recente antes.
-env SBID_APLICAR=1 SBID_LIMITE=1200 node scripts/apurar-superbid-residencial.mjs \
-  || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"
+quer APURACAO_SUPERBID && { env SBID_APLICAR=1 SBID_LIMITE=1200 node scripts/apurar-superbid-residencial.mjs \
+  || echo "  (apuração SUPERBID falhou — sem efeito no acervo; ver a linha de distribuição acima)"; }
 
 # ── APURAÇÃO ZUK + DATAS BIASI/LJUD/GRUPOLANCE (24/09, pedido do dono) ─────────────────────
 # Os crons da Vercel dependem da subcota diária `geral` do Bright Data (25/dia), que esgota:
@@ -252,8 +268,8 @@ env SBID_APLICAR=1 SBID_LIMITE=1200 node scripts/apurar-superbid-residencial.mjs
 # Daqui as páginas abrem direto e de graça. Mesmas regras dos crons (uma cópia só) — ver o
 # cabeçalho de scripts/apurar-e-datar-residencial.mjs. Sequencial, 1,5 s entre páginas.
 # Validado EM SECO no GitHub antes de ligar aqui (workflow residencial-seco.yml).
-env RESID_APLICAR=1 node scripts/apurar-e-datar-residencial.mjs \
-  || echo "  (apuração ZUK / datas falhou — sem efeito no acervo; ver as linhas [apuração]/[datas] acima)"
+quer APURACAO_ZUK && { env RESID_APLICAR=1 node scripts/apurar-e-datar-residencial.mjs \
+  || echo "  (apuração ZUK / datas falhou — sem efeito no acervo; ver as linhas [apuração]/[datas] acima)"; }
 
 # ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
 # HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia

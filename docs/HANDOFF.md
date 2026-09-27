@@ -51,6 +51,16 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
+**⚙️ RUNNER / BRIGHT DATA (27/09, fim do dia).** (a) Tetos cadastrados para `crleiloes` (40/sem) e
+`freitas` (25/sem) — invariante `brightdata_proposito_sem_teto` voltou a ok. (b) CALIL e JOAOEMILIO
+"zerados" eram `sem_cota`: do GitHub o Soleon cai no Bright Data e esgota a subcota diária
+(22/22); o caminho grátis é o runner (SOLEON_NO_BD). (c) HASTA: 584 lotes venceram legitimamente
+(praças 30/08→26/09), mas NENHUMA coleta desde 30/08 — no GitHub (proxy ISP) acha 10 eventos e 0
+lotes desde 29/08; no runner ela é a última da fila e a rodada nunca chegava lá. Agora: HASTA com
+7+ dias sem concluir roda PRIMEIRO (`coleta-gate.mjs atrasada`). (d) `RUNNER_SO=LEJE,FREITAS,...`
+roda só a lista (fontes e passos RADAR/TRIAGEM/MILAN/APURACAO_SUPERBID/APURACAO_ZUK).
+Pendente: investigar por que o caminho ISP do HASTA enumera 0 (estrutura mudou ou bloqueio).
+
 **🗂️ RETENÇÃO DA CAIXA PELA OPERAÇÃO (27/09, dono: "o principal são os documentos expedidos").**
 Caixa é de OPERAÇÃO de leilão; e-mail de oportunidade ao cliente não é guardado (só metadado em
 `emails_log`). Prazo por CONVERSA (mesma chave da tela: contraparte + assunto sem Re:/Enc:,
