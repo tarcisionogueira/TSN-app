@@ -102,7 +102,7 @@ echo "===== [$(date)] runner residencial ($(git rev-parse --short HEAD 2>/dev/nu
 # sai 4 quando não houve gravação; a linha abaixo torna isso VISÍVEL no log do runner.
 # RODADA PARCIAL (27/09): `RUNNER_SO=LEJE,FREITAS,HASTA,MILAN ./scripts/runner-residencial.sh` roda
 # SÓ o que está na lista (fontes do gate e passos sem gate: RADAR, TRIAGEM, MILAN, APURACAO_SUPERBID,
-# APURACAO_ZUK). Serve para pôr em dia o que ficou para trás sem esperar a rodada inteira (~2 h).
+# APURACAO_ZUK, RECON_SPA). Serve para pôr em dia o que ficou para trás sem esperar a rodada inteira (~2 h).
 # O gate continua valendo: fonte dentro da janela de 72 h é pulada do mesmo jeito.
 quer() { [ -z "${RUNNER_SO:-}" ] || [[ ",${RUNNER_SO^^}," == *",$1,"* ]]; }
 rodar() {
@@ -143,6 +143,10 @@ rodar RJ env RJ_HEADLESS=1 RJ_DRYRUN=0 node scripts/scraper-rj.mjs
 
 # PECINI — Cloudflare (só saía via Web Unlocker pago): Chromium real residencial, sem BD.
 rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+# SUBLIME (27/09) — mesma plataforma DefaultClean do Pecini, mas o lance só aparece depois do
+# JS (template trimpath + POST com token). Só dá daqui: o Chromium local renderiza a página de
+# lote quando o fetch puro traz o template vazio. Grátis, sem Bright Data.
+rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
@@ -246,6 +250,15 @@ rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
 # escrito. RECON_UMA_VEZ: não repete se já gravou nos últimos 30 dias. Falha não derruba a rodada.
 # 27/09 (2ª rodada): do PC o Milan também dá challenge do Cloudflare (recon_dump 62). O coletor
 # roda pelo GitHub com Bright Data (scraper-milan.yml) — recon daqui não tem mais o que ver.
+
+# ── RECON dilsonmoreira + jmfleiloes (27/09) — SPA client-side, mesma plataforma entre si (HTML
+# de ~69 KB idêntico, zero link de lote: recon_dump 69/70). NÃO é o front do Milan (a pista antiga
+# era o script do RD Station). SPA busca os lotes numa API JSON — o recon-dom-browser captura essas
+# chamadas daqui, de graça. Uma vez (RECON_UMA_VEZ só pula dump COM conteúdo). Falha não derruba nada.
+for _spa in https://www.dilsonmoreira.com.br https://www.jmfleiloes.com.br; do
+  quer RECON_SPA && { env RECON_BASE="$_spa" RECON_ROTAS='/' RECON_DUMP=1 RECON_UMA_VEZ=1 node scripts/recon-dom-browser.mjs \
+    || echo "  (recon $_spa falhou — sem efeito no acervo)"; }
+done
 
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).

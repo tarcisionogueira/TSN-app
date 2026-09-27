@@ -42,7 +42,11 @@ import { registrarSaude } from './_saude-fonte.mjs';
 // continua sendo o Pecini, com o MESMO comportamento de antes.
 const TENANTS = {
   PECINI:  { base: 'https://www.pecinileiloes.com.br', leiloeiro: 'Pecini Leilões' },
-  SUBLIME: { base: 'https://www.sublimeleiloes.com.br', leiloeiro: 'Sublime Leilões' },
+  // SUBLIME: o lance NÃO vem no HTML — só `${ValorMinimoLanceSegundaPraca}` (template trimpath)
+  // preenchido depois pelo JS via POST com token anti-forgery (/ApiEngine/…, recon 27/09 ids
+  // 72-74). Por isso `renderizar`: no runner residencial a página de lote só serve depois que o
+  // Chromium roda o JS e o valor aparece. Pelo Web Unlocker (CI) não há lance → não roda lá.
+  SUBLIME: { base: 'https://www.sublimeleiloes.com.br', leiloeiro: 'Sublime Leilões', renderizar: true },
 };
 const FONTE = (process.env.PECINI_TENANT || 'PECINI').toUpperCase();
 if (!TENANTS[FONTE]) { console.error(`PECINI_TENANT desconhecido: ${FONTE} (conhecidos: ${Object.keys(TENANTS).join(', ')})`); process.exit(1); }
@@ -70,7 +74,10 @@ let recusaDeCota = null;   // motivo da última recusa do FREIO DE CUSTO (não d
 
 async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
   if (RESIDENCIAL) {   // runner residencial: fetch puro, Chromium de rede de segurança
-    return await fetchResidencial(url, { timeoutMs });
+    // Tenant `renderizar`: página de LOTE só "serve" com o lance já preenchido pelo JS — o fetch
+    // puro devolve o template vazio, `valido` recusa e o fetchResidencial cai no Chromium.
+    const valido = TENANTS[FONTE].renderizar && /\/lote\//.test(url) ? (h) => RE_VALOR_RENDERIZADO_1.test(h) : null;
+    return await fetchResidencial(url, { timeoutMs, valido });
   }
   // O `null` daqui segue sendo o fallback deliberado deste arquivo — mas o MOTIVO para de ser
   // adivinhado. `fetchViaBrightData` engolia o ErroBrightData e o laço imprimia
@@ -216,6 +223,12 @@ function parseSitemap(xml) {
 // R$ da página em lance. O regex antigo pedia "Público Leilão" e essa fonte escreve só
 // "1º Leilão:", que é o suficiente para identificar a praça sem abrir a porta.
 const RE_PRACA_ROTULO = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o/i;
+// Valor já renderizado no span do template (Sublime/DefaultClean novo):
+// `<span class="ValorMinimoLanceSegundaPraca" DataLabel="R$ ">R$ 180.000,00</span>`.
+const RE_VALOR_RENDERIZADO = /class="ValorMinimoLance(?:Primeira|Segunda|Terceira)Praca"[^>]*>\s*(?:R\$\s*)?([\d.]+,\d{2})/gi;
+// Cópia SEM `g` para `.test()`: regex global guarda `lastIndex` entre chamadas e o validador
+// alternaria aceita/recusa de um lote para o outro.
+const RE_VALOR_RENDERIZADO_1 = new RegExp(RE_VALOR_RENDERIZADO.source, 'i');
 const RE_PRACA_VALOR = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi;
 
 // Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos
@@ -244,6 +257,7 @@ function parseDetalhe(html, rec) {
   const pracas = [];
   for (const m of txt.matchAll(RE_PRACA_VALOR)) pracas.push(num(m[1]));
   for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
+  for (const m of html.matchAll(RE_VALOR_RENDERIZADO)) pracas.push(num(m[1]));
   const pracasValidas = pracas.map(plaus).filter(v => v > 0);
   const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
   // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.

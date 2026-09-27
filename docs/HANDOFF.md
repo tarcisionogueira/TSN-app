@@ -51,6 +51,16 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
+**🔎 "MESMO SITE DO MILAN" ERA FALSO (27/09).** A pista que juntava dilsonmoreira/jmfleiloes/sublime
+ao Milan era a CDN `d335luupugsy2` = **RD Station (marketing)**, presente em qualquer site — forma
+nº 10. Recon real (recon_dump 69-71): **SUBLIME** = plataforma ASP.NET DefaultClean do PECINI →
+`scraper-pecini.mjs` virou multi-leiloeiro (`PECINI_TENANT`, fonte_id com prefixo próprio, Pecini
+inalterado). Mas o lance do Sublime só existe após o JS (template trimpath + POST com token
+anti-forgery em `/ApiEngine/…`, ids 72-74): pelo Unlocker saem 0 de 5 lotes com valor. Roda no
+runner do PC com `valido` exigindo o valor renderizado → cai no Chromium local. Gate `SUBLIME`
+criado. **dilsonmoreira + jmfleiloes** = mesma SPA entre si (sem link no HTML) → recon único no
+runner (`RECON_SPA`) captura a API JSON; próximo passo: coletor a partir desse dump.
+
 **🏛️ MILAN LEILÕES INTEGRADO (27/09).** `scripts/scraper-milan.mjs` + `lib/milan-parse.mjs` +
 `scraper-milan.yml` (seg/qui 11h35 UTC). Cloudflare barra até o PC do dono → só Web Unlocker
 (propósito `milan`, teto 30/sem). Lê a HOME (agenda RSC + links `/leilao/imoveis/<cod>`) e cada
