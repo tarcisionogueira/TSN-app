@@ -156,6 +156,9 @@ async function baixarAnexoApi(emailId, attId) {
       const u = new URL(j.download_url);
       hostOk = u.protocol === 'https:' && (
         u.hostname === 'resend.com' || u.hostname.endsWith('.resend.com') ||
+        // 27/09: o download_url REAL do Resend é `cdn.resend.app` — sem isto todo anexo recebido
+        // era recusado aqui e virava só NOME (chamado/jurídico sem o arquivo).
+        u.hostname === 'resend.app' || u.hostname.endsWith('.resend.app') ||
         u.hostname.endsWith('.amazonaws.com') || u.hostname.endsWith('.cloudflarestorage.com'));
     } catch { hostOk = false; }
     if (!hostOk) { console.error('[inbound] anexo: download_url com host fora da allowlist — ignorado:', String(j.download_url).slice(0, 80)); return null; }

@@ -33,7 +33,10 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, 
 function hostPermitido(url) {
   try {
     const u = new URL(url);
+    // `cdn.resend.app` é o host REAL do download_url do Resend (medido 27/09 na 1ª rodada: 12 de 12
+    // anexos recusados por faltar aqui — a lista original, copiada do inbound, só tinha resend.com).
     return u.protocol === 'https:' && (u.hostname === 'resend.com' || u.hostname.endsWith('.resend.com')
+      || u.hostname === 'resend.app' || u.hostname.endsWith('.resend.app')
       || u.hostname.endsWith('.amazonaws.com') || u.hostname.endsWith('.cloudflarestorage.com'));
   } catch { return false; }
 }
@@ -71,13 +74,16 @@ async function baixar(msg, anexo, idx, cacheEnviados) {
     }
     tipo = tipo || alvo.content_type || null;
   }
-  if (!url || !hostPermitido(url)) throw new Error('download_url ausente ou com host fora da allowlist');
+  if (!url) throw new Error('download_url ausente');
+  if (!hostPermitido(url)) throw new Error(`download_url com host fora da allowlist: ${(() => { try { return new URL(url).hostname; } catch { return '?'; } })()}`);
   const bin = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!bin.ok) throw new Error(`download HTTP ${bin.status}`);
   return { bytes: new Uint8Array(await bin.arrayBuffer()), contentType: tipo || bin.headers.get('content-type') || 'application/octet-stream' };
 }
 
-export default async function handler(req) {
+// Named export `GET` (27/09): no runtime Node, `export default` que devolve `Response` é IGNORADO
+// pela Vercel — a 1ª rodada ficou pendurada até o timeout de 120 s (504), sem resposta.
+export async function GET(req) {
   if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
   if (!SUPABASE_URL || !SERVICE_KEY) return json({ error: 'Supabase ausente' }, 500);
   if (!RESEND_KEY) return json({ error: 'RESEND_API_KEY ausente — nada arquivado' }, 500);
