@@ -30,6 +30,21 @@ dias depois: `select * from qa_invariantes() where chave='resultado_leilao_atras
 com `erro` persistente vai parar em 6 tentativas SEM resultado e continuar contando no
 invariante — se sobrar resíduo assim, investigar o portalId dessas ofertas (`SBID_IDS=...`).
 
+**✅ FREITAS LEILOEIRO — coletor novo (27/09).** `scripts/scraper-freitas.mjs` +
+`lib/freitas-parse.mjs` + `lib/motor/fontes/freitas.mjs`, teste `npm run testar:freitas` (trechos
+REAIS do recon, `recon_dump` origem='deep' ids 50-56). Catálogo `/Leiloes/Pesquisar?Categoria=2`
+(página única) → `/Leiloes/LoteDetalhes?leilaoId=&loteNumero=`. Dry-run via Bright Data (run
+36284002216): **12 enumerados, 11 prontos**, descrição 100%, foto 73%. Armadilhas registradas no
+parser: `<script` sem par no topo apaga o conteúdo se limpar o HTML inteiro (recorta em
+`dvFotos`); lote por PROPOSTAS não mostra valor no detalhe (usa o card). O recon por navegador de
+26/09 que "mostrou bloqueio" tinha usado o caminho ERRADO (404) — mas o fetch direto do GitHub é
+recusado de fato (dry-run 27/09, via grátis vazia).
+**Produção = runner residencial** (grátis): `rodar FREITAS` e `rodar LEJE` entraram em
+`runner-residencial.sh` (LEJE não estava — por isso ficou sem caminho desde 24/09) + linhas em
+`coleta_cliente` (sem elas o gate pula em silêncio). No GitHub os dois ficaram só no push
+(sinalizador). Validar de novo sem o computador de casa: dispatch `scraper-dom.yml` com
+`fontes=freitas freitas_bd=1` (~13 req.).
+
 **Fontes zeradas (26/09, noite) — causa por fonte:**
 - **CALIL (e os 15 tenants SOLEON sem medição desde 24/09):** `api/coleta-oportunista.js`
   despachava sem `inputs`; o GitHub aplica o DEFAULT declarado no workflow, e SOLEON/GESTAO
