@@ -11,9 +11,16 @@
  * /emails/receiving/{id}/attachments/{att}; enviado: /emails/{id}/attachments) e grava no bucket
  * privado `documentos` em `email/<email_caixa.id>/<idx>_<nome>` — que o backup off-region (R2) já
  * copia sozinho (backup_manifesto_irrecuperaveis). Marca `arquivo` + `arquivado_em` no próprio anexo.
- * Idempotente; o que falha fica sem `arquivo` e é tentado de novo na próxima hora (dentro dos 30
+ * Idempotente; o que falha fica sem `arquivo` e é tentado de novo na próxima rodada (a cada 6 h) (dentro dos 30
  * dias). A tela (`api/email-caixa.js`) abre a cópia NOSSA primeiro e só cai no Resend sem ela.
  * O invariante `anexo_email_nao_arquivado` grita se algo passar de 3 dias sem arquivo.
+ *
+ * RETENÇÃO (27/09, dono: "armazenar só o que possa ter relevância jurídica ou operacional"): na
+ * mesma rodada, expurga o que `email_caixa_expiraveis()` declara vencido — spam 30 d · avulso 90 d
+ * · conversa sem resposta 180 d · com resposta 365 d · jurídico/`reter` NUNCA (a regra mora no
+ * banco, na migração email_caixa_categoria_e_retencao.sql). Ordem: arquivos do storage → linha
+ * (provada por return=representation) → `email_expurgo_log` sem conteúdo (prestação de contas).
+ * Spam nem é arquivado: não vale o storage nem o backup.
  */
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
@@ -22,8 +29,9 @@ import { isCronAuthorized } from './_auth.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
-const LOTE = 25;                 // mensagens por rodada (hora a hora; o volume é pequeno)
+const LOTE = 25;                 // mensagens por rodada (a cada 6 h; o volume é pequeno)
 const ORCAMENTO_MS = 100_000;    // sobra tempo para responder antes do maxDuration
+const LOTE_EXPURGO = 50;
 
 const sbH = () => ({ apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` });
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
@@ -132,5 +140,47 @@ export async function GET(req) {
       if (!p.ok || !linhas.length) out.falhas.push({ email_caixa: msg.id, motivo: `PATCH não alcançou a linha (HTTP ${p.status}) — arquivo gravado, marca pendente` });
     }
   }
-  return json({ ok: out.falhas.length === 0, ...out });
+  out.expurgo = await expurgar(T0);
+  return json({ ok: out.falhas.length === 0 && out.expurgo.falhas.length === 0, ...out });
+}
+
+async function expurgar(T0) {
+  const res = { vencidos: 0, apagados: 0, arquivos: 0, falhas: [] };
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/email_caixa_expiraveis`, {
+    method: 'POST', headers: { ...sbH(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_limite: LOTE_EXPURGO }),
+  });
+  if (!r.ok) { res.falhas.push({ motivo: `expiraveis: HTTP ${r.status} ${(await r.text()).slice(0, 160)}` }); return res; }
+  const vencidos = await r.json();
+  res.vencidos = vencidos.length;
+  for (const v of vencidos) {
+    if (Date.now() - T0 > ORCAMENTO_MS + 10_000) { res.cortado = true; break; }
+    try {
+      const paths = (Array.isArray(v.anexos) ? v.anexos : []).map(a => a?.arquivo).filter(Boolean);
+      if (paths.length) {
+        // Storage primeiro: se a linha sumisse antes, o arquivo ficaria órfão e SEM rastro — dado
+        // guardado sem ninguém saber, o oposto do que o expurgo promete.
+        const d = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos`, {
+          method: 'DELETE', headers: { ...sbH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: paths }),
+        });
+        if (!d.ok) throw new Error(`storage DELETE HTTP ${d.status} ${(await d.text()).slice(0, 120)}`);
+        res.arquivos += (await d.json().catch(() => [])).length || 0;
+      }
+      const del = await fetch(`${SUPABASE_URL}/rest/v1/email_caixa?id=eq.${v.id}`, {
+        method: 'DELETE', headers: { ...sbH(), Prefer: 'return=representation' },
+      });
+      const linhas = del.ok ? await del.json().catch(() => []) : [];
+      if (!del.ok || !linhas.length) throw new Error(`DELETE não alcançou a linha (HTTP ${del.status})`);
+      const log = await fetch(`${SUPABASE_URL}/rest/v1/email_expurgo_log`, {
+        method: 'POST', headers: { ...sbH(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ email_id: v.id, categoria: v.categoria, direcao: v.direcao, criado_em: v.criado_em, regra: v.regra, anexos: paths.length }),
+      });
+      if (!log.ok) res.falhas.push({ email_caixa: v.id, motivo: `apagado, mas log HTTP ${log.status}` });
+      res.apagados++;
+    } catch (e) {
+      res.falhas.push({ email_caixa: v.id, motivo: String(e?.message || e).slice(0, 160) });
+      console.error('[expurgo-email] falha', v.id, String(e?.message || e).slice(0, 160));
+    }
+  }
+  return res;
 }

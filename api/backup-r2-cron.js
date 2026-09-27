@@ -72,6 +72,9 @@ const TABELAS_NEGOCIO = [
   // ANEXOS vão pelo storage (documentos/email/..., já no manifesto); aqui vai o corpo.
   'email_caixa', 'chamados_mensagens', 'juridico_emails',
 ];
+// Linhas que NÃO vão para a cópia (27/09): spam não tem valor jurídico/operacional e seria só PII
+// de terceiros fora do país. `categoria` nula (linha anterior ao classificador) continua indo.
+const FILTRO_LINHAS = { email_caixa: 'or=(categoria.is.null,categoria.neq.spam)' };
 
 // MINIMIZAÇÃO NA CÓPIA (LGPD Art. 6º, III — necessidade). A cópia existe para RESTAURAR um
 // desastre; para isso não é preciso levar chave financeira nem documento legível para fora
@@ -294,7 +297,7 @@ async function executar(req, res) {
       // silencioso (seria copiar justamente o que se decidiu não copiar).
       const sel = await selectDaTabela(t);
       if (sel === null) { out.negocio.falhas++; continue; }
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?select=${encodeURIComponent(sel)}`, { headers: sbHeaders(), signal: AbortSignal.timeout(45000) });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?select=${encodeURIComponent(sel)}${FILTRO_LINHAS[t] ? `&${FILTRO_LINHAS[t]}` : ''}`, { headers: sbHeaders(), signal: AbortSignal.timeout(45000) });
       if (!r.ok) { out.negocio.falhas++; continue; }
       const json = Buffer.from(await r.text());
       if (await r2Put(`${pfx}db/${carimbo}/${t}.json`, json, 'application/json')) out.negocio.tabelas++;

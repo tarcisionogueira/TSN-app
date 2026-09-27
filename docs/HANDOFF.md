@@ -50,6 +50,18 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 `_email.js`) e inclui o registro de envio de CONTRATO. A caixa é de OPERAÇÃO, não pessoal — hoje
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
+
+**🗂️ RETENÇÃO DA CAIXA (27/09, dono: "armazenar só o que tenha relevância jurídica ou operacional").**
+A caixa é de OPERAÇÃO de leilão, não pessoal; e-mail de oportunidade/marketing ao cliente não é
+guardado (vive só em `emails_log` como metadado). Migração `email_caixa_categoria_e_retencao.sql`:
+trigger classifica cada linha em `juridico` (reter=true) · `leiloeiro` · `operacao` · `avulso` ·
+`spam`, herdando a categoria da conversa. `email_caixa_expiraveis()` decide o vencido pela CONVERSA
+inteira: spam 30 d · avulso 90 d · conversa sem resposta 180 d · com resposta 365 d · jurídico ou
+`reter=true` NUNCA. O mesmo cron (agora a cada 6 h) apaga storage → linha (provada) → grava
+`email_expurgo_log` sem conteúdo. Spam não é arquivado nem vai ao backup R2. Testado em transação
+desfeita (spam 40 d e proposta sem resposta 200 d saem; jurídico de 2 anos fica). Para segurar uma
+conversa de acordo/arremate além de 1 ano: `update email_caixa set reter=true where id=…` (a
+resposta herda). Pendência opcional: botão "reter" na tela da caixa.
 **🔴 REGRA DO DONO (27/09): fonte que falha NÃO apaga o acervo — fica só sem lote NOVO.**
 "Zerou" no `fonte_regressao_suspeita()` quer dizer **a última coleta trouxe 0**, NÃO que o acervo
 sumiu — ao reportar, dizer "a coleta voltou vazia; o acervo guardado continua X lotes na busca".
