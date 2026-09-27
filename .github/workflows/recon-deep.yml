@@ -13,6 +13,10 @@ on:
         description: 'Teto de requests Bright Data. Default 12.'
         required: false
         default: '12'
+      dump:
+        description: '1 = grava o HTML BRUTO de cada URL em recon_dump (origem=deep) p/ escrever parser'
+        required: false
+        default: '0'
 
 jobs:
   recon-deep:
@@ -33,4 +37,7 @@ jobs:
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           DEEP_URLS: ${{ github.event.inputs.urls }}
           DEEP_MAX: ${{ github.event.inputs.max || '12' }}
+          DEEP_DUMP: ${{ github.event.inputs.dump || '0' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-deep.mjs

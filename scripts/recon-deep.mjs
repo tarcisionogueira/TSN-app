@@ -90,6 +90,16 @@ function blocoBruto(html, re, ctx = 900, max = 2) {
       const titulo = ((html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
       const cf = /just a moment|challenge-platform|cf-chl|cf-mitigated/i.test(html);
       const txt = textoVisivel(html);
+      // DEEP_DUMP=1 (27/09): o HTML BRUTO vai para recon_dump — escrever parser a partir do
+      // extrato impresso é adivinhar; a partir do HTML real, é testar. Falha de gravação é dita.
+      if (process.env.DEEP_DUMP === '1') {
+        const r = await fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/recon_dump`, {
+          method: 'POST',
+          headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ origem: 'deep', chave: url, conteudo: { status, html } }),
+        });
+        console.log(`  recon_dump: ${r.ok ? 'gravado' : `FALHOU HTTP ${r.status} ${(await r.text()).slice(0, 150)}`}`);
+      }
       console.log(`\n\n█████████ ${url}`);
       console.log(`  HTTP ${status} · len=${html.length}${cf ? ' · CHALLENGE' : ''} · título="${titulo}"`);
 
