@@ -225,7 +225,9 @@ function montarVeiculo(c, base, textoDetalhe) {
 }
 
 async function main() {
-  if (!brightDataDisponivel()) {
+  // No PC (CRLEILOES_NO_BD=1) a via é o fetch direto: exigir credencial do Bright Data aqui fez a
+  // 1ª rodada residencial (27/09) sair com `sem_config` sem nem tentar o site.
+  if (process.env.CRLEILOES_NO_BD !== '1' && !brightDataDisponivel()) {
     throw new FalhaDeAcesso('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes — crleiloes é 100% Cloudflare (IP de datacenter), só acessível via Web Unlocker');
   }
   console.log(`CRLEILOES ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);

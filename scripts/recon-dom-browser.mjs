@@ -20,9 +20,13 @@ const SB = process.env.VITE_SUPABASE_URL, SK = process.env.SUPABASE_SERVICE_KEY;
 const sbH = { apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' };
 if (process.env.RECON_UMA_VEZ === '1' && SB && SK) {
   const desde = new Date(Date.now() - 30 * 864e5).toISOString();
-  const r = await fetch(`${SB}/rest/v1/recon_dump?origem=eq.dom-browser&chave=eq.${encodeURIComponent(BASE)}&criado_em=gte.${desde}&select=id&limit=1`, { headers: sbH });
+  // Só conta como FEITO o dump que trouxe algo (27/09: o do Milan veio com `respostas: []` e
+  // `paginas: []` e a trava pulou todas as rodadas seguintes — vazio não é resultado).
+  const r = await fetch(`${SB}/rest/v1/recon_dump?origem=eq.dom-browser&chave=eq.${encodeURIComponent(BASE)}&criado_em=gte.${desde}&select=conteudo&order=criado_em.desc&limit=5`, { headers: sbH });
   if (!r.ok) { console.log(`⚠️ não consegui checar recon_dump (HTTP ${r.status}) — rodando mesmo assim`); }
-  else if ((await r.json()).length) { console.log(`recon ${BASE}: já gravado nos últimos 30 dias — nada a fazer`); process.exit(0); }
+  else if ((await r.json()).some(d => (d?.conteudo?.respostas || []).length || (d?.conteudo?.paginas || []).some(p => p?.html))) {
+    console.log(`recon ${BASE}: já gravado (com conteúdo) nos últimos 30 dias — nada a fazer`); process.exit(0);
+  }
 }
 
 const pareceLote = (o) => {
@@ -63,6 +67,7 @@ page.on('response', async (resp) => {
   } catch { /* ignora */ }
 });
 
+const paginas = [];
 for (const rota of ROTAS) {
   const url = BASE + rota;
   try {
@@ -94,7 +99,10 @@ for (const rota of ROTAS) {
     info.rotulado.forEach(r => console.log(`     ${r}`));
     console.log(`   hrefs lote/listagem (${info.hrefs.length}): ${JSON.stringify(info.hrefs)}`);
     if (info.cardHtml) console.log(`   card: ${info.cardHtml.replace(/\s+/g, ' ')}`);
-  } catch (e) { console.log(`   erro: ${String(e.message).slice(0, 100)}`); }
+    // DOM RENDERIZADO (27/09): site Next.js pode vir inteiro no HTML (SSR/__NEXT_DATA__) sem
+    // nenhuma chamada JSON — aí `respostas` sai vazio e o dump não servia para escrever o parser.
+    paginas.push({ rota, hrefs: info.hrefs, html: (await page.content()).slice(0, 250000) });
+  } catch (e) { console.log(`   erro: ${String(e.message).slice(0, 100)}`); paginas.push({ rota, erro: String(e.message).slice(0, 200) }); }
 }
 
 await browser.close();
@@ -108,7 +116,7 @@ for (const r of respostas.filter(r => !r.temLote).slice(0, 20)) console.log(`  $
 if (process.env.RECON_DUMP === '1') {
   if (!SB || !SK) { console.log('⚠️ RECON_DUMP=1 sem VITE_SUPABASE_URL/SUPABASE_SERVICE_KEY — nada gravado'); process.exit(2); }
   const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { ...sbH, Prefer: 'return=minimal' },
-    body: JSON.stringify({ origem: 'dom-browser', chave: BASE, conteudo: { rotas: ROTAS, respostas } }) });
-  console.log(`recon_dump: ${r.ok ? `gravado (${respostas.length} respostas JSON)` : `FALHOU HTTP ${r.status} ${(await r.text()).slice(0, 150)}`}`);
+    body: JSON.stringify({ origem: 'dom-browser', chave: BASE, conteudo: { rotas: ROTAS, respostas, paginas } }) });
+  console.log(`recon_dump: ${r.ok ? `gravado (${respostas.length} respostas JSON, ${paginas.filter(p => p.html).length} página(s) renderizada(s))` : `FALHOU HTTP ${r.status} ${(await r.text()).slice(0, 150)}`}`);
   if (!r.ok) process.exit(3);
 }

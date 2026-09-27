@@ -34,7 +34,7 @@ const idFonte = (tenant, id) => (tenant.chaveTenant
 // respondeu (fonte pode estar vazia)" de "não consegui buscar" (challenge/teto).
 export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   const urls = new Map();
-  let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null;
+  let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
     const r = await fetchFonte(url, { semBD });
@@ -83,6 +83,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         const sep = ev.includes('?') ? '&' : '?';
         const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
         if (!re.html) break;
+        if (!htmlEvento1) htmlEvento1 = { url: ev, html: re.html };
         const antes = urls.size;
         for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
         if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
@@ -93,7 +94,29 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
       await sleep(400);
     }
   }
+  if (fetchOk && urls.size === 0) await amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1);
   return { urls: [...urls.values()], fetchOk, via, eventosCount };
+}
+
+// AMOSTRA DO VAZIO (27/09). "Respondeu 200 e enumerou 0" diz QUE o parser não achou lote, mas
+// não O QUE a página trouxe — e sem isso o diagnóstico dependia de o dono copiar log do PC
+// (HASTA ficou 28 dias assim). Grava o HTML (catálogo + 1º evento) em recon_dump, no máximo
+// 1×/20 h por fonte. Falha aqui nunca derruba a coleta: é diagnóstico, não dado.
+async function amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL, SK = process.env.SUPABASE_SERVICE_KEY;
+  if (!SB || !SK || !htmlPagina1) return;
+  const h = { apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' };
+  const chave = `vazio:${tenant.fonte}`;
+  try {
+    const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
+    const ja = await fetch(`${SB}/rest/v1/recon_dump?origem=eq.motor-vazio&chave=eq.${encodeURIComponent(chave)}&criado_em=gte.${desde}&select=id&limit=1`, { headers: h });
+    if (!ja.ok || (await ja.json()).length) return;
+    const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { ...h, Prefer: 'return=minimal' },
+      body: JSON.stringify({ origem: 'motor-vazio', chave, conteudo: {
+        catalogo: `${tenant.base}${cfg.catalogo}`, html: String(htmlPagina1).slice(0, 200000),
+        evento: htmlEvento1 ? { url: htmlEvento1.url, html: String(htmlEvento1.html).slice(0, 200000) } : null } }) });
+    console.log(`   [${tenant.fonte}] 0 lotes — amostra do HTML ${r.ok ? 'gravada em recon_dump (motor-vazio)' : `NÃO gravada (HTTP ${r.status})`}`);
+  } catch (e) { console.log(`   [${tenant.fonte}] amostra do vazio falhou: ${String(e?.message || e).slice(0, 120)}`); }
 }
 
 // A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA (29/08).
