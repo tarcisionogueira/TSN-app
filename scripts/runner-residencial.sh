@@ -207,6 +207,14 @@ rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 # caminho de produção enquanto o site continuar atrás do Cloudflare.
 rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 
+# LEJE (27/09) — 403 ao IP de datacenter desde 24/09; proxy ISP não resolve (home passa, detalhe
+# não — ver lib/motor/fontes/leje.mjs). Não estava aqui: ficou zerado sem nenhum caminho vivo.
+rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
+
+# FREITAS (27/09) — freitasleiloeiro.com.br, imóveis. Recusa o IP do GitHub; de casa é fetch
+# direto, grátis (FREITAS_BD desligado por padrão).
+rodar FREITAS env FREITAS_DRYRUN=0 node scripts/scraper-freitas.mjs
+
 # ── REDE SUPERBID: SUPERBID + SOLD + VEÍCULOS SUPERBID (23/09, decisão do dono) ─────────────
 # O Cloudflare corta o GitHub depois da 1ª página da offer-query (100 de ~1.300 lotes em 23/09).
 # Daqui o IP é residencial e a API responde inteira. Gate `SUPERBID` com intervalo de 20 h

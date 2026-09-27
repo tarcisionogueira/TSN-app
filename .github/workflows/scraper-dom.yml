@@ -63,6 +63,10 @@ on:
         description: '1 = grava no banco (default DRY-RUN; agendado sempre grava)'
         required: false
         default: '0'
+      freitas_bd:
+        description: 'Freitas: 1 = passa pelo Bright Data se a via grátis falhar (validação)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-dom:
@@ -180,7 +184,9 @@ jobs:
         run: node scripts/scraper-globo.mjs
 
       - name: Leje
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leje')) }}
+        # 27/09: fora do RODA_TUDO — o site dá 403 ao IP do runner desde 24/09 e o proxy ISP não
+        # resolve (ver leje.mjs). Produção: scripts/runner-residencial.sh. Push = sinalizador.
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leje')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -188,12 +194,17 @@ jobs:
         run: node scripts/scraper-leje.mjs
 
       - name: Freitas
-        # 27/09: freitasleiloeiro.com.br (imóveis). Fetch direto, sem Bright Data (FREITAS_BD
-        # desligado) — o site não tem Cloudflare; se passar a recusar o runner, a saúde registra.
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'freitas')) }}
+        # 27/09: freitasleiloeiro.com.br (imóveis). O site recusa o IP do runner (dry-run 27/09:
+        # via grátis vazia) — produção é scripts/runner-residencial.sh, grátis. Aqui: push como
+        # sinalizador; dispatch com `freitas_bd=1` passa pelo Bright Data (~13 req.) só para
+        # validar parser de ponta a ponta sem depender do computador de casa.
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'freitas')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          FREITAS_BD: ${{ github.event.inputs.freitas_bd || '0' }}
           FREITAS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-freitas.mjs
 
