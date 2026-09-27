@@ -310,5 +310,11 @@ rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mj
 # seguintes nunca rodaram. `runner-se-atrasado.sh` (cron a cada 30 min) lê este carimbo e roda
 # de novo assim que a máquina volta, se a última rodada COMPLETA passou de 6 h. Só é escrito
 # aqui, no fim: rodada interrompida não conta como feita.
-date +%s > "$HOME/.bidpro-runner.ultimo"
+# Rodada PARCIAL (RUNNER_SO) não é rodada completa: carimbar aqui faria o runner-se-atrasado.sh
+# achar que tudo rodou e pular a rodada inteira que ficou devendo (27/09).
+if [ -z "${RUNNER_SO:-}" ]; then
+  date +%s > "$HOME/.bidpro-runner.ultimo"
+else
+  echo "[$(date)] rodada parcial (RUNNER_SO=$RUNNER_SO) — carimbo de rodada completa NÃO gravado"
+fi
 echo "[$(date)] fim."
