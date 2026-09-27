@@ -70,7 +70,7 @@ const TABELAS_NEGOCIO = [
   // (proposta ao leiloeiro, resposta do jurídico, conversa de chamado). O backup nativo do banco
   // guarda 7 dias na mesma região — apagamento notado depois disso era perda definitiva. Os
   // ANEXOS vão pelo storage (documentos/email/..., já no manifesto); aqui vai o corpo.
-  'email_caixa', 'chamados_mensagens',
+  'email_caixa', 'chamados_mensagens', 'juridico_emails',
 ];
 
 // MINIMIZAÇÃO NA CÓPIA (LGPD Art. 6º, III — necessidade). A cópia existe para RESTAURAR um

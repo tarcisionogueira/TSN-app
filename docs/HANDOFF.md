@@ -42,8 +42,13 @@ R2) e marca `arquivo`; `api/email-caixa.js` abre a cópia NOSSA primeiro. Invari
 7 dias na mesma região. **Retenção**: nada é apagado hoje. O dono autorizou que conversa com
 leiloeiro SEM desfecho (sem resposta / sem arremate / sem proposta aceita) possa ser apagada após
 um prazo — NÃO implementado (volume ínfimo: 18 e-mails, 320 kB); decidir prazo quando pesar.
-E-mail transacional do sistema (`emails_log`) guarda só o registro (destinatário, assunto, status),
-não o corpo — é template, regerável.
+**Decisão do dono (27/09):** o que importa guardar é a COMUNICAÇÃO DE OPERAÇÃO — jurídico
+(`juridico_emails`, também no snapshot R2), cliente (chamados/caixa) e leiloeiros (caixa). E-mail
+automático (oportunidades, divulgação, lives, boas-vindas) é irrelevante e já NÃO guarda corpo —
+`emails_log` tem só destinatário/assunto/status (~500 kB no total) e NÃO deve ser expurgado: é
+lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, teto diário do
+`_email.js`) e inclui o registro de envio de CONTRATO. A caixa é de OPERAÇÃO, não pessoal — hoje
+os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 **🔴 REGRA DO DONO (27/09): fonte que falha NÃO apaga o acervo — fica só sem lote NOVO.**
 "Zerou" no `fonte_regressao_suspeita()` quer dizer **a última coleta trouxe 0**, NÃO que o acervo
