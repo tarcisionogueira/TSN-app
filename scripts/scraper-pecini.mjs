@@ -35,6 +35,7 @@ import { nomeiaUmDocumento } from '../api/_doc-scan.js';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
+import { inferirUF } from './lib/inferir-uf.mjs';
 
 // MULTI-LEILOEIRO (27/09): a plataforma ASP.NET "DefaultClean" (suaplataformadeleilao.com.br) é
 // a mesma em outros leiloeiros — confirmado no Sublime pelo recon (recon_dump 71): /Core/V1,
@@ -274,7 +275,28 @@ function parseDetalhe(html, rec) {
   const pracas = [];
   for (const m of txt.matchAll(RE_PRACA_VALOR)) pracas.push(num(m[1]));
   for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
-  for (const m of html.matchAll(RE_VALOR_RENDERIZADO)) pracas.push(num(m[1]));
+  // Tenant renderizado (Sublime): praça só CONTA se tiver data de abertura. O site preenche
+  // `ValorMinimoLanceTerceiraPraca` com 10% da avaliação mesmo sem 3ª praça (data vazia) — medido
+  // na amostra pecini-render de 27/09 (4 de 4 lotes); o `Math.min` abaixo pegava esse valor e o
+  // acervo saiu com desconto falso de 90%. A página tem 2 cópias dos campos (a 2ª é o template
+  // vazio): vale a 1ª ocorrência de cada.
+  const pracasDatadas = [];
+  if (TENANTS[FONTE].renderizar) {
+    const NOMES = ['Primeira', 'Segunda', 'Terceira'];
+    for (let n = 1; n <= 3; n++) {
+      const data = (html.match(new RegExp(`class="Praca${n}DataHoraAbertura"[^>]*>\\s*(\\d{2})/(\\d{2})/(\\d{4})`)) || []);
+      const val = (html.match(new RegExp(`class="ValorMinimoLance${NOMES[n - 1]}Praca"[^>]*>\\s*(?:R\\$\\s*)?([\\d.]+,\\d{2})`)) || [])[1];
+      if (data[3] && val) pracasDatadas.push({ n, data: `${data[3]}-${data[2]}-${data[1]}`, valor: num(val) });
+    }
+    if (pracasDatadas.length) pracas.push(...pracasDatadas.map(p => p.valor));
+    else {
+      // Sem nenhuma praça datada: o "Lance Mínimo" corrente da página é o único valor seguro.
+      const corrente = (txt.match(/Lance M[íi]nimo:\s*R\$\s*([\d.]+,\d{2})/i) || [])[1];
+      if (corrente) pracas.push(num(corrente));
+    }
+  } else {
+    for (const m of html.matchAll(RE_VALOR_RENDERIZADO)) pracas.push(num(m[1]));
+  }
   if (TENANTS[FONTE].renderizar && AMOSTRAS_RENDER.length < 4) {
     AMOSTRAS_RENDER.push({
       id: rec.id, url: rec.loteUrl, titulo: base.titulo || null,
@@ -363,7 +385,8 @@ function parseDetalhe(html, rec) {
     // `extrairDescricaoDoCorpo` (api/_texto-imovel.js) já foi ao mesmo teto — sem repetir aqui
     // o corte voltaria a acontecer, só que num ponto diferente.
     descricao: (base.descricao || '').slice(0, 8000) || null,
-    data_leilao: base.data_leilao || extrairData(html),
+    data_leilao: pracasDatadas[0]?.data || base.data_leilao || extrairData(html),
+    data_leilao_2: pracasDatadas[1]?.data || null,
     numero_matricula: base.numero_matricula || null,
     link_matricula: matriculaDoc,
     link_edital_doc: editalDoc,
@@ -375,6 +398,7 @@ function parseDetalhe(html, rec) {
 // Monta a linha compatível com imoveis_leilao (mesmos campos computados do
 // salvarImoveis: ativo/viavel/score/desconto/atualizado_em).
 function montarRow(rec, det) {
+  const ufInferida = rec.uf ? null : inferirUF({ cidade: rec.cidade, titulo: det.titulo, descricao: det.descricao });
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
   return {
     fonte: FONTE,
@@ -382,8 +406,10 @@ function montarRow(rec, det) {
     titulo: det.titulo,
     tipo: inferirTipo(det.titulo),
     modalidade: det.modalidade,
-    estado: (rec.uf || '').toString().toUpperCase().slice(0, 2) || null,
-    cidade: rec.cidade || null,
+    // UF do slug; faltando (Sublime: "casa-em-campinas" não traz UF), deduz pela cidade e pelo
+    // texto ("município e comarca de Atibaia - SP") com o mesmo inferirUF do motor.
+    estado: (rec.uf || ufInferida?.uf || '').toString().toUpperCase().slice(0, 2) || null,
+    cidade: rec.cidade || ufInferida?.cidade || null,
     valor_avaliacao: va,
     valor_minimo: vm,
     area_m2: det.area_m2 || 0,
@@ -397,6 +423,7 @@ function montarRow(rec, det) {
     numero_matricula: det.numero_matricula,
     leiloeiro: TENANTS[FONTE].leiloeiro,
     data_leilao: det.data_leilao || null,
+    ...(det.data_leilao_2 ? { data_leilao_2: det.data_leilao_2 } : {}),
     forma_pagamento: 'a_vista',
     ativo: true,
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
