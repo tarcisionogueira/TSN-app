@@ -296,6 +296,11 @@ export const RE_FRACAO_IDEAL = /\b(parte\s+ideal|fra[çc][ãa]o\s+ideal|fra[çc]
 //   "fração ideal de 561/100.000 sobre o terreno"  (fração com barra)
 const RE_CLAUSULA_NUM_ANTES = /fra[çc][ãa]o\s+ideal\s+de\s+[0-9][0-9./,]*\s*%?\s*(no|do|na|da|nas|das|em|sobre)\s+(o\s+|a\s+|os\s+|as\s+)?([áa]rea|terreno|solo)/i;
 const RE_CLAUSULA_NUM_DEPOIS = /fra[çc][ãa]o\s+ideal\s+(de\s+|do\s+|no\s+|na\s+|em\s+|sobre\s+)?(o\s+|a\s+)?(terreno|solo|[áa]rea\s+comum)\s*(condominial\s*)?(e\s+[^,;.]{0,40})?\s*(de\s+|em\s+)?[0-9]/i;
+// 3ª ORDEM (27/09, Sublime): "correspondendo NO TERRENO uma fração ideal de 0,004130 ou 0,4130%"
+// — o terreno vem ANTES da âncora. Apartamento inteiro (lote 3427, área privativa 86,41 m²) saía
+// barrado. Medido antes de aplicar: dos 521 lotes barrados no acervo, 0 são liberados por esta
+// ordem (só os do Sublime, que nem chegavam ao banco). Espelhado em fracao_ideal_barrada().
+const RE_CLAUSULA_TERRENO_ANTES = /(no|do|ao)\s+(terreno|solo)\s+(uma\s+|a\s+)?fra[çc][ãa]o\s+ideal\s+de\s+[0-9]/i;
 const RE_CONTEXTO_CONDOMINIO = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[úu]til|[áa]rea\s+real|unidade\s+aut[ôo]noma|coisas\s+comuns|[áa]reas\s+comuns|coisas\s+de\s+uso\s+comum)/i;
 // Termos que NUNCA são cláusula descritiva. Se qualquer um aparecer, a exceção não vale.
 const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s]?\s+credit[óo]rio|nua[\s-]propriedade)\b/i;
@@ -311,7 +316,7 @@ export function ehFracaoIdeal(imovel) {
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
   // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
   // Por isso a exceção exige as três condições juntas.
-  const clausulaDescritiva = (RE_CLAUSULA_NUM_ANTES.test(txt) || RE_CLAUSULA_NUM_DEPOIS.test(txt))
+  const clausulaDescritiva = (RE_CLAUSULA_NUM_ANTES.test(txt) || RE_CLAUSULA_NUM_DEPOIS.test(txt) || RE_CLAUSULA_TERRENO_ANTES.test(txt))
     && RE_CONTEXTO_CONDOMINIO.test(txt)
     && !RE_FATIA_INEQUIVOCA.test(txt);
   return !clausulaDescritiva;
