@@ -52,6 +52,13 @@ function dataDoCabecalho(txt, anoFoto, hoje = new Date()) {
   return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
+// DESAFIO do Cloudflare: só no COMEÇO da página. O Cloudflare injeta `/cdn-cgi/challenge-platform/`
+// também em página BOA (medido 27/09: posição 161.291 de 187.987 na home real, 69.526 na agenda)
+// — procurar no corpo inteiro reprovou a home verdadeira duas vezes e gastou 2 créditos à toa.
+// O desafio de verdade se anuncia no <title> ("Just a moment…" na posição 58). Mesma janela de
+// 4.000 caracteres que motor/fetch-fonte.mjs já usa.
+export const ehDesafio = h => /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required/i.test(String(h || '').slice(0, 4000));
+
 const RE_ENCERRADO = /(VENDIDO|ARREMATADO|ENCERRADO|CANCELADO|RETIRADO|SUSPENSO|SEM LICITANTE|DESERTO|PREJUDICADO)/i;
 
 /** Evento → { cod, inicio, encerramento, edital, judicial, lotes:[{lote,url,titulo,minimo,status,foto,encerrado}] } */

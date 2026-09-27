@@ -18,7 +18,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
 import { registrarSaude } from './_saude-fonte.mjs';
-import { TENANTS, extrairEventosImoveis, parseEvento, montarRow, checarQualidade } from './lib/milan-parse.mjs';
+import { TENANTS, extrairEventosImoveis, parseEvento, montarRow, checarQualidade, ehDesafio } from './lib/milan-parse.mjs';
 
 const T = TENANTS.milan;
 const DRYRUN = process.env.MILAN_DRYRUN !== '0';
@@ -52,7 +52,7 @@ async function pagina(url, minimo = 5000) {
     }
     const body = await r.text().catch(() => '');
     if (!r.ok) throw new FalhaDeAcesso('http', `HTTP ${r.status} em ${url}`);
-    if (/just a moment|challenge-platform|cf-chl/i.test(body)) ultimo = 'challenge';
+    if (ehDesafio(body)) ultimo = 'challenge';
     else if (body.length < minimo) ultimo = `corpo com ${body.length} bytes`;
     else return body;
     console.log(`  ${url}: ${ultimo} — ${tentativa === 1 ? 'tentando de novo' : 'desistindo'}`);

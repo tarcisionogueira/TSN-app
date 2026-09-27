@@ -81,7 +81,8 @@ async function bd(url, { timeoutMs = 60000 } = {}) {
     const body = await r.text().catch(() => null);
     if (!r.ok) throw new FalhaDeAcesso('http', `HTTP ${r.status} em ${url} (via direta)`);
     if (body == null) throw new FalhaDeAcesso('corpo_ilegivel', url);
-    if (/just a moment|challenge-platform|cf-chl/i.test(body)) throw new FalhaDeAcesso('challenge', `Cloudflare em ${url} (via direta)`);
+    // Só o começo da página: o Cloudflare injeta `challenge-platform` também em página boa (27/09, Milan).
+    if (/just a moment|challenge-platform|cf-chl/i.test(body.slice(0, 4000))) throw new FalhaDeAcesso('challenge', `Cloudflare em ${url} (via direta)`);
     return body;
   }
   let r;

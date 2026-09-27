@@ -3,7 +3,7 @@
 // cobrir o descarte de encerrado. Home: trecho real do RSC (recon_dump id 57).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { extrairEventosImoveis, parseEvento, montarRow, TENANTS, checarQualidade } from '../lib/milan-parse.mjs';
+import { extrairEventosImoveis, parseEvento, montarRow, TENANTS, checarQualidade, ehDesafio } from '../lib/milan-parse.mjs';
 
 const BASE = TENANTS.milan.base;
 const html = readFileSync(new URL('./fixtures/milan-evento-15573.html', import.meta.url), 'utf8');
@@ -48,5 +48,12 @@ const home = `<a href="/leilao/imoveis/15582"></a><a href="/leilao/veiculos/1558
   + `self.__next_f.push([1,"\\"agenda\\":[{\\"codLeilao\\":15554,\\"categorias\\":\\" Equip. Diversos\\"},`
   + `{\\"codLeilao\\":15605,\\"dataInicio\\":\\"2026-10-02T13:00:00.000+00:00\\",\\"categorias\\":\\" Imóveis\\"}]"])`;
 assert.deepEqual(extrairEventosImoveis(home).sort(), ['15582', '15605']);
+
+// Detector de desafio (27/09): página BOA traz o beacon `challenge-platform` lá no fim; o
+// desafio de verdade anuncia no <title>. O 1º dry-run reprovou a home real por isso.
+const boa = '<!doctype html><html lang="pt-BR"><head><title>Milan</title></head><body>' + 'x'.repeat(60000)
+  + '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body></html>';
+assert.equal(ehDesafio(boa), false);
+assert.equal(ehDesafio('<!DOCTYPE html><html lang="en-US" dir="ltr"><head><title>Just a moment...</title>'), true);
 
 console.log('milan-parse: todos os casos passaram');
