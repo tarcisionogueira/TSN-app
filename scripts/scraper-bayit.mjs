@@ -63,7 +63,7 @@ import { checarQualidade } from './lib/scraper-core.mjs';
 import { sintetizarDescricao } from './lib/dom-parse-util.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
-import { registrarSaude } from './_saude-fonte.mjs';
+import { registrarSaude, metricasColeta } from './_saude-fonte.mjs';
 
 const BASE = 'https://www.portalbayit.com.br';
 const DRYRUN = process.env.BAYIT_DRYRUN !== '0';
@@ -536,7 +536,18 @@ async function main() {
   console.log(`✅ ${prontos.length} imóveis do Portal Bayit gravados/atualizados.`);
 
   // SAÚDE DA FONTE: entra no monitor de regressão junto das demais desde o 1º dia.
-  await registrarSaude(supabase, 'BAYIT', prontos, 'feed_xml', semCotaVisto ? { semCota: true } : undefined);
+  // TOTAL = acervo válido no feed AGORA (27/09, forma nº 10): a coleta é INCREMENTAL — os já
+  // enriquecidos que continuam no feed são pulados de propósito (custo). Gravar só os
+  // processados desta rodada media "quanto havia de novo" com o nome de "total da fonte": em
+  // 24/09 saiu 5 (feed com 91 válidos, 85 já no acervo) e o monitor acusou regressão 31→5.
+  const jaNoFeed = todosCandidatos.length - candidatos.length;
+  const m = metricasColeta(prontos);
+  await registrarSaude(supabase, 'BAYIT', prontos, 'feed_xml', {
+    ...(semCotaVisto ? { semCota: true } : {}),
+    metricas: { ...m, n: prontos.length + jaNoFeed },
+    enumerados: todosCandidatos.length,
+    motivo: jaNoFeed ? `incremental: ${prontos.length} processado(s) + ${jaNoFeed} já no acervo e ainda no feed` : '',
+  });
   await registrarConhecimento(supabase, {
     fonte: 'BAYIT',
     plataforma: 'Motor próprio (jQuery/AJAX, Cloudflare) + feed XML Dynamic-Ads-for-Real-Estate em /sitemap.xml',

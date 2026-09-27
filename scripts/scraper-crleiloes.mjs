@@ -70,6 +70,20 @@ class FalhaDeAcesso extends Error {
 }
 
 async function bd(url, { timeoutMs = 60000 } = {}) {
+  // CRLEILOES_NO_BD=1 (27/09): fetch direto — o Cloudflare daqui barra por reputação de IP de
+  // DATACENTER; do IP residencial (runner do dono) passa de graça. 403/challenge vira FalhaDeAcesso
+  // (nunca "fonte vazia"), igual à via paga.
+  if (process.env.CRLEILOES_NO_BD === '1') {
+    const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' } })
+      .catch((e) => { throw new FalhaDeAcesso('rede', `${e.message} em ${url}`); });
+    const body = await r.text().catch(() => null);
+    if (!r.ok) throw new FalhaDeAcesso('http', `HTTP ${r.status} em ${url} (via direta)`);
+    if (body == null) throw new FalhaDeAcesso('corpo_ilegivel', url);
+    if (/just a moment|challenge-platform|cf-chl/i.test(body)) throw new FalhaDeAcesso('challenge', `Cloudflare em ${url} (via direta)`);
+    return body;
+  }
   let r;
   try {
     r = await buscarViaBrightData(url, { proposito: 'crleiloes', timeoutMs, exigirOk: false });
