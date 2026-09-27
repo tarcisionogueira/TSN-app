@@ -187,7 +187,19 @@ function extrairDocs(html) {
 
 // "barreiras-ba" → { cidade: 'Barreiras', uf: 'BA' } (o slug do lote traz cidade+UF).
 function cidadeUfDoSlug(slug) {
+  // Sublime (27/09): slug "<tipo>-em-<cidade>[-<uf>]" ("casa-em-campinas",
+  // "2-apartamentos-em-dourados-ms") — o formato do Pecini é "<cidade>-<uf>". Sem isto a cidade
+  // saiu "2 Apartamentos Em Dourados" e 28 de 34 lotes ficaram sem UF.
+  // Sem "-em-" ("casa-no-interlagos": bairro, não cidade) → vazio, melhor que cidade inventada.
+  if (FONTE !== 'PECINI') {
+    if (!/-em-/.test(String(slug || ''))) return { cidade: null, uf: null };
+    slug = String(slug).split('-em-').pop();
+  }
   const m = String(slug || '').match(/^(.+)-([a-z]{2})$/i);
+  if (!m && FONTE !== 'PECINI' && slug) {
+    const cidade = String(slug).split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { cidade: cidade || null, uf: null };
+  }
   if (!m) return { cidade: null, uf: null };
   const cidade = m[1].split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   return { cidade: cidade || null, uf: m[2].toUpperCase() };
@@ -229,6 +241,11 @@ const RE_VALOR_RENDERIZADO = /class="ValorMinimoLance(?:Primeira|Segunda|Terceir
 // Cópia SEM `g` para `.test()`: regex global guarda `lastIndex` entre chamadas e o validador
 // alternaria aceita/recusa de um lote para o outro.
 const RE_VALOR_RENDERIZADO_1 = new RegExp(RE_VALOR_RENDERIZADO.source, 'i');
+// AMOSTRA DO RENDERIZADO (27/09): a 1ª gravação do Sublime saiu com lance = 10% da avaliação em
+// vários lotes. Os valores só existem depois do JS (no PC do dono) — então o coletor guarda, dos
+// primeiros lotes, cada campo de valor/praça COM o nome da classe e o texto em volta dos R$, em
+// recon_dump (origem `pecini-render`). Diagnóstico, não dado.
+const AMOSTRAS_RENDER = [];
 const RE_PRACA_VALOR = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi;
 
 // Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos
@@ -258,6 +275,16 @@ function parseDetalhe(html, rec) {
   for (const m of txt.matchAll(RE_PRACA_VALOR)) pracas.push(num(m[1]));
   for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
   for (const m of html.matchAll(RE_VALOR_RENDERIZADO)) pracas.push(num(m[1]));
+  if (TENANTS[FONTE].renderizar && AMOSTRAS_RENDER.length < 4) {
+    AMOSTRAS_RENDER.push({
+      id: rec.id, url: rec.loteUrl, titulo: base.titulo || null,
+      campos: [...html.matchAll(/class="((?:ValorMinimoLance|ValorAvaliacao|ValorLanceAtual|ValorDescDiff|ValorIncremento|Praca\d|PracaAtual|QtdPracas|BoxDesc)\w*)"[^>]*>([^<]{0,80})</g)]
+        .map(m => `${m[1]}=${m[2].trim()}`).slice(0, 40),
+      contextos: [...txt.matchAll(/(.{0,60})R\$\s*([\d.]+,\d{2})/g)].map(m => `${m[1].trim()} » ${m[2]}`).slice(0, 15),
+      local: [...txt.matchAll(/(?:Localiza\S*o|Endere\S*o|Cidade|Comarca)\s*:?\s*.{0,120}/gi)].map(m => m[0]).slice(0, 4),
+      pracasLidas: pracas,
+    });
+  }
   const pracasValidas = pracas.map(plaus).filter(v => v > 0);
   const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
   // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.
@@ -322,7 +349,10 @@ function parseDetalhe(html, rec) {
   const paginaInvalida = pareceInstitucional || (!base.link_foto && semSinalDeLote);
 
   return {
-    titulo: (base.titulo || `Imóvel Pecini ${rec.id}`).slice(0, 180),
+    // Sublime (27/09): o og:title/<title> traz " Casas em leilão | Sublime Leilões" colado.
+    titulo: (base.titulo || `Imóvel Pecini ${rec.id}`)
+      .replace(/\s*\|\s*(?:Sublime|Pecini) Leil[õo]es\s*$/i, '')
+      .replace(/\s+[A-Za-zÀ-ÿ]+ em leil[ãa]o\s*$/i, '').trim().slice(0, 180),
     link_foto: base.link_foto,
     valor_avaliacao: avaliacao,
     valor_minimo: valorMinimo,
@@ -498,6 +528,10 @@ async function main() {
   // Zero pronto não é "a fonte está vazia" — é coleta quebrada até prova em contrário.
   // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
   // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
+  if (AMOSTRAS_RENDER.length) {
+    const { error: eA } = await supabase.from('recon_dump').insert({ origem: 'pecini-render', chave: FONTE, conteudo: { amostras: AMOSTRAS_RENDER } });
+    console.log(`amostra do renderizado (${AMOSTRAS_RENDER.length} lotes) ${eA ? `NÃO gravada: ${eA.message}` : 'gravada em recon_dump (pecini-render)'}`);
+  }
   if (!prontos.length) {
     // `semCota` NO CAMPO, não só na prosa (29/08). O motivo já dizia "sem cota: …" — mas
     // quem lê o estado da fonte é o STATUS, e sem esta flag `registrarSaude` gravava

@@ -51,6 +51,16 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
+**⚠️ SUBLIME OCULTO / DILSON+JMF NA REDE SUPERBID (27/09, noite).** A 1ª gravação do SUBLIME (34
+lotes, PC do dono) saiu com **lance = 10% da avaliação** em vários lotes (ex.: 431.283,64 → 43.128,36
+— desconto falso de ~75%), 28/34 sem UF e título com " Casas em leilão | Sublime Leilões". Os 34
+foram **ocultados** (`ativo=false`, com aprovação do dono) e o runner roda SUBLIME em
+`PECINI_DRYRUN=1`. Corrigidos: cidade pelo slug "<tipo>-em-<cidade>[-<uf>]" e o título. Pendente:
+a origem dos 10% — a próxima rodada grava `recon_dump` origem `pecini-render` (campos de valor/praça
+com o nome da classe + contextos de R$ + trecho de localização) para ler, não chutar. Voltar a
+`PECINI_DRYRUN=0` e reativar só depois. **DILSONMOREIRA (store 16253) e JMFLEILOES (16060)** eram
+lojas white-label da rede Superbid (recon_dump 75/76) → passo SUPERBID do runner.
+
 **🔎 "MESMO SITE DO MILAN" ERA FALSO (27/09).** A pista que juntava dilsonmoreira/jmfleiloes/sublime
 ao Milan era a CDN `d335luupugsy2` = **RD Station (marketing)**, presente em qualquer site — forma
 nº 10. Recon real (recon_dump 69-71): **SUBLIME** = plataforma ASP.NET DefaultClean do PECINI →

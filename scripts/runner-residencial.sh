@@ -146,7 +146,10 @@ rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.m
 # SUBLIME (27/09) — mesma plataforma DefaultClean do Pecini, mas o lance só aparece depois do
 # JS (template trimpath + POST com token). Só dá daqui: o Chromium local renderiza a página de
 # lote quando o fetch puro traz o template vazio. Grátis, sem Bright Data.
-rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+# 27/09 (noite): DRY-RUN até corrigir o parser — a 1ª gravação saiu com lance = 10% da avaliação
+# em vários lotes e 28 de 34 sem UF (os 34 foram ocultados). A rodada só grava a amostra
+# `pecini-render` em recon_dump para o diagnóstico. Voltar para PECINI_DRYRUN=0 depois do conserto.
+rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=1 node scripts/scraper-pecini.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
