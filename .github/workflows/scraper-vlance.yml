@@ -28,6 +28,14 @@ on:
         description: '1 = imprime no log o JSON completo do 1º lote de cada domínio (diagnóstico)'
         required: false
         default: '0'
+      dominios:
+        description: 'csv de domínios (vazio = TENANTS_PADRAO). Para testar tenant novo em dry-run.'
+        required: false
+        default: ''
+      no_bd:
+        description: '1 = só via grátis (sem Bright Data) — teste de tenant novo sem gastar cota'
+        required: false
+        default: '0'
       forcar:
         description: '1 = ignora o freio de 168h e coleta mesmo com acervo "fresco" (ex.: logo após um fix de código que precisa recoletar já). Tem custo Bright Data — usar com intenção, não por padrão.'
         required: false
@@ -53,14 +61,16 @@ jobs:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           # CI = datacenter → o direto sempre dá 403; força Bright Data e não desperdiça tentativa.
-          VLANCE_FORCE_BD: '1'
+          VLANCE_FORCE_BD: ${{ github.event.inputs.no_bd == '1' && '0' || '1' }}
+          VLANCE_NO_BD: ${{ github.event.inputs.no_bd || '0' }}
+          VLANCE_DOMINIOS_ARG: ${{ github.event.inputs.dominios && format('--dominios {0}', github.event.inputs.dominios) || '' }}
           VLANCE_DEBUG_PAYLOAD: ${{ github.event.inputs.debug_payload || '0' }}
         run: |
           # FALLBACK: se o runner RESIDENCIAL do dono já atualizou o VLANCE nos últimos 7 dias
           # (168h — mesmo critério das outras 4 fontes pagas, 15/09), pula e não gasta Bright
           # Data. Só coleta quando o residencial não rodou (rede de segurança).
           if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then
-            python3 scripts/scraper_vlance.py --ignorar-robots
+            python3 scripts/scraper_vlance.py --ignorar-robots $VLANCE_DOMINIOS_ARG
           elif [ "${{ github.event.inputs.forcar }}" = "1" ]; then
             python3 scripts/scraper_vlance.py --supabase --ignorar-robots
           else
