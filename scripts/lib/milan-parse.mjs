@@ -81,7 +81,9 @@ export function parseEvento(html, cod, base) {
     const href = (bloco.match(/href="(\/leilao\/\d+\/lote\/\d+)"/) || [])[1];
     if (!lote || !href) continue;
     const titulo = limpar((bloco.match(/id="card_lote_tituloGrande[^"]*">([\s\S]*?)<\/p>/) || [])[1]);
-    const minimo = plaus(num((bloco.match(/LANCE M[ÍI]NIMO:<\/span>\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+    // "LANCE MÍNIMO" (leilão convencional) ou "LANCE INICIAL" (Porto Seguro e outros — medido em
+    // 27/09: 41 de 69 lotes, 4 eventos, mesmo elemento `card_lote_lanceMinimo`).
+    const minimo = plaus(num((bloco.match(/LANCE (?:M[ÍI]NIMO|INICIAL):<\/span>\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
     const status = limpar((bloco.match(/id="estado_lote_tag_estadoLote[^"]*"[^>]*>(?:<div[^>]*><\/div>)?([^<]{3,40})</) || [])[1]);
     const fotoEnc = (bloco.match(/url=(https%3A%2F%2Fadm\.milanleiloes\.com\.br%2FFotos%2F[^&"]+)/) || [])[1];
     const foto = fotoEnc ? decodeURIComponent(fotoEnc) : ((bloco.match(/https:\/\/adm\.milanleiloes\.com\.br\/Fotos\/[^"'&\s]+/) || [])[0] || null);

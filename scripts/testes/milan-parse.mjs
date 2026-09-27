@@ -57,6 +57,12 @@ assert.equal(rural.titulo, 'Fazenda - Bambui/MG');
 assert.equal(rural.area_m2, 218800);
 assert.equal(rural.tipo, 'rural');
 
+// "LANCE INICIAL" em vez de "LANCE MÍNIMO" — card REAL do evento 15582 (Porto Seguro), amostra
+// milan-sem-valor de 27/09. Era o motivo de 41 dos 69 lotes saírem "sem valor".
+const inicial = parseEvento(`<h1>Leilão de  Imóveis</h1><h2><span>Início:</span> 28 SET 11:00</h2><ul><li id="card-001"><div><a href="/leilao/15582/lote/001"><div></div><div><div><div><span id="card_lote_lote__xyHtm">Lote 001</span><p id="card_lote_tituloGrande__w2pVU">Orós - CE. Bairro São Geraldo. Terreno. Áreas Totais. Terr. 10.000,00m²</p><p id="card_lote_lanceMinimo__l2ivg"><span>LANCE INICIAL:</span> R$ 598.500,00</p></div></div><div><div id="estado_lote_tag_estadoLote__QA3i6"><div id="estado_lote_tag_dotEstadolote___Lj6t"></div>RECEBENDO LANCES</div></div></div></a></div></li></ul>`, 15582, BASE);
+assert.equal(inicial.lotes[0].minimo, 598500);
+assert.equal(inicial.lotes[0].htmlSemValor, null);
+
 // Detector de desafio (27/09): página BOA traz o beacon `challenge-platform` lá no fim; o
 // desafio de verdade anuncia no <title>. O 1º dry-run reprovou a home real por isso.
 const boa = '<!doctype html><html lang="pt-BR"><head><title>Milan</title></head><body>' + 'x'.repeat(60000)

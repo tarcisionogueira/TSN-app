@@ -51,6 +51,19 @@ lido para não reenviar (`_webhook-core.js` resgate_cancelamento, `clique.js`, t
 os 18 e-mails estão em tarcisio@ (marcado `dono`, mas usado para operação).
 
 
+**🏛️ MILAN LEILÕES INTEGRADO (27/09).** `scripts/scraper-milan.mjs` + `lib/milan-parse.mjs` +
+`scraper-milan.yml` (seg/qui 11h35 UTC). Cloudflare barra até o PC do dono → só Web Unlocker
+(propósito `milan`, teto 30/sem). Lê a HOME (agenda RSC + links `/leilao/imoveis/<cod>`) e cada
+EVENTO — o card já traz cidade/UF, tipo, área, lance, foto e status: 1 requisição por evento, não
+por lote. 1ª gravação: **27 lotes, 13 UFs**. Achados do dry-run real, todos com teste
+(`npm run testar:milan`, fixture com HTML real do evento 15573): (1) o Cloudflare injeta
+`challenge-platform` em página BOA — detector só olha os 4.000 primeiros caracteres (corrigido
+também no CRLEILOES); (2) o Unlocker às vezes devolve corpo VAZIO com HTTP 200 → retentativa;
+(3) 41 lotes (Porto Seguro e outros) usam "LANCE INICIAL" em vez de "LANCE MÍNIMO" — corrigido,
+entram na rodada de segunda; (4) título "Fazenda - UF" e área em hectares. Card sem valor grava
+amostra em `recon_dump` (origem `milan-sem-valor`). Pendente: dilsonmoreira/jmfleiloes/sublime —
+confirmar se usam o MESMO front antes de virar tenant.
+
 **🏠 RODADAS NO PC DO DONO (27/09, tarde) — resultado medido.** SOLEON grátis ok (CALIL 37, VEGAS
 37, demais tenants); apuração SUPERBID +30. **HASTA não está quebrada**: amostra `recon_dump`
 id 61 (origem `motor-vazio`) mostra os 10 leilões "Em Breve"/"Em Loteamento" e o 569 da CAIXA com
