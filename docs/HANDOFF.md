@@ -24,6 +24,11 @@ do lote inteiro) e no `gerar-analise` (terreno/rural: soma prevalece). (3) `gera
 terreno/rural a área da MATRÍCULA passa a valer também em `areaM2` (antes só em `areaTerrenoM2`, e o
 valor saía pela área do anúncio). Log `[metragem-doc]` ganha `multiBem`. Teste:
 `npm run testar:area-multi-bem`. Outros 3 lotes LEILAOBRASIL multi-bem se corrigem na próxima coleta.
+**Regerar sob demanda (novo):** `regenerar-relatorios-cron?mercado=<id>,<id>` (auth do cron) regera AGORA
+com os inputs gravados e `semCache: true` (reaproveitar traria o valor errado de volta); disparo pelo
+workflow manual **`regerar-relatorios.yml`** (input `ids`). Não cobra cota. Usado em 28/09 para Embu
+(5ce900e4…) e Araraquara (2d862426…) depois de corrigir `inputs` (tipo terreno / área 2.503 m² +
+avaliação R$ 66.650,75). Boituva estava certo e não foi regerado.
 
 ### 🔶 28/09 — Índice: "atualizar" endereço/condomínio falhava — Haiku respondia SEM BUSCAR
 **Sintoma (dono):** atualizar o Índice de um endereço/condomínio dá falha. **Medido:** nenhuma amostra

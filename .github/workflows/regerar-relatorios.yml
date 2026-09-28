@@ -1,0 +1,32 @@
+name: Regerar relatórios mercadológicos (sob demanda)
+
+# Regera AGORA relatórios mercadológicos específicos com os inputs gravados — sem esperar a janela
+# de 2 h nem a cadência de 6 h do regenerar-relatorios-cron. Uso: corrigir o dado/gerador e
+# re-emitir os relatórios que já tinham saído errados. Não cobra cota do cliente (é o caminho do cron).
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'ids de analises_mercado separados por vírgula (máx. 10)'
+        required: true
+      base_url:
+        description: 'Base URL de produção'
+        required: false
+        default: 'https://www.bidprobrasil.com.br'
+
+jobs:
+  regerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Disparar regeração
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          IDS: ${{ github.event.inputs.ids }}
+          BASE: ${{ github.event.inputs.base_url }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio"; exit 1; fi
+          IDS_LIMPOS=$(echo "$IDS" | tr -d ' ')
+          HTTP=$(curl -sS --max-time 120 "$BASE/api/regenerar-relatorios-cron?mercado=$IDS_LIMPOS" -H "x-cron-secret: $CRON_SECRET" -o resp.json -w "%{http_code}")
+          cat resp.json; echo
+          if [ "$HTTP" != "200" ]; then echo "::error::HTTP $HTTP"; exit 1; fi

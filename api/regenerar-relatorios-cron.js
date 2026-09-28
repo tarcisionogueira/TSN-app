@@ -52,6 +52,36 @@ export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY || !CRON_SECRET) { res.status(500).json({ error: 'env ausente' }); return; }
 
+  // REGERAR SOB DEMANDA (28/09): `?mercado=<id>,<id>` regera AGORA esses relatórios mercadológicos
+  // com os inputs gravados (corrija-os antes, se o vício estava neles), sem esperar a janela de
+  // assentamento nem a cadência de 6 h. Mesma autenticação do cron; acionado pelo workflow
+  // `regerar-relatorios.yml`. Caso que motivou: relatórios do dono com área/tipo errados — o
+  // conserto do gerador só vale para a PRÓXIMA geração, e os que ele já tinha continuavam errados.
+  const idsSob = String(req.query?.mercado || '').split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+  if (idsSob.length) {
+    const r = await sb(`analises_mercado?id=in.(${idsSob.join(',')})&select=id,user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`);
+    if (!r.ok) { res.status(502).json({ ok: false, motivo: 'leitura_falhou', status: r.status }); return; }
+    const rows = await r.json();
+    const disparados = [];
+    for (const row of rows) {
+      if (!row?.inputs?.mercadoInputs) { disparados.push({ id: row.id, pulado: 'sem inputs gravados' }); continue; }
+      await sb(`analises_mercado?id=eq.${row.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ regen_tentativas: (row.regen_tentativas || 0) + 1, regen_em: new Date().toISOString()}) }).catch(() => {});
+      const g = await fetch(`${BASE}/api/gerar-analise`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+        body: JSON.stringify({ imovelId: row.imovel_id, paraUserId: row.user_id, titulo: row.titulo, cidade: row.cidade, estado: row.estado,
+          imovel: row.imovel || null, mercadoInputs: row.inputs.mercadoInputs, parecerInputs: row.inputs.parecerInputs,
+          // Pesquisa NOVA: reaproveitar a anterior devolveria o mesmo valor errado (o consolidado
+          // guardado já traz o `valorEstimadoImovel` calculado sobre a área/tipo antigos).
+          semCache: true }),
+        signal: AbortSignal.timeout(9000),
+      }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`); // a geração segue na própria função
+      disparados.push({ id: row.id, gerar: g });
+    }
+    res.status(200).json({ ok: true, sobDemanda: disparados, naoEncontrados: idsSob.filter((i) => !rows.some((x) => x.id === i)) });
+    return;
+  }
+
   const agora = Date.now();
   const settle = new Date(agora - SETTLE_H * 3600 * 1000).toISOString();
   const janela = new Date(agora - JANELA_H * 3600 * 1000).toISOString();
