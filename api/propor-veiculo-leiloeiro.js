@@ -119,7 +119,10 @@ export default async function handler(req) {
   ].filter(Boolean).join('\n');
   const corpoTextoPuro = `Prezados,\n\nNotamos que o leilão do veículo abaixo já foi encerrado sem arrematação:\n\n${detalhes}\n\nTemos interesse em negociar a compra direta deste bem, fora do processo de leilão. Poderiam nos informar se há essa possibilidade e, em caso positivo, as condições?\n\nAgradecemos desde já a atenção.\n\n${nomeCliente}`;
 
-  const [contato] = await (await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(veiculo.fonte || '')}&select=email`)).json();
+  // Contato do LEILOEIRO do lote (28/09) — ver api/pedir-documento-leiloeiro.js.
+  const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: veiculo.fonte || '', p_leiloeiro: veiculo.leiloeiro || null }) });
+  if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
+  const [contato] = await rContato.json();
 
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit.
   if (acao === 'preview') {

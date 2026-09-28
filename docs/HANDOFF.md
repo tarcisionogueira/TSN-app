@@ -29,10 +29,23 @@ HASTAPUBLICA→Valland, MEGA→agência do site. 6 pedidos de veículos do SUPER
   registro em `leiloeiro_contato_descartado` (a tela passa a pedir o e-mail certo);
 - os 5 contatos de terceiro removidos (registrados na mesma tabela — reversível).
 
-⚠️ **Aberto:** o e-mail digitado À MÃO num envio também é gravado por FONTE
-(`enviar-email-caso.js`/`salvarContato`). Num lote do SUPERBID isso vira o contato de todos os
-leiloeiros da plataforma. Conserto de verdade exige guardar o leiloeiro (tenant) do lote —
-hoje `imoveis_leilao.leiloeiro` do SUPERBID é "Superbid" para os 1.392.
+**Correção completa (mesmo dia) — contato por LEILOEIRO, não por fonte:**
+- `leiloeiro_contato_tenant` (fonte + leiloeiro → e-mail). `contato_leiloeiro_resolver(fonte,
+  leiloeiro)` é a porta única dos 3 envios (pedir-documento, enviar-email-caso,
+  propor-veiculo): 1º o contato do leiloeiro do lote; senão o da fonte — em fonte multi-tenant
+  só o automático (= e-mail da própria plataforma, pela regra de domínio). Endereço suprimido
+  nunca sai.
+- E-mail digitado à mão: `contato_leiloeiro_salvar_manual` grava no leiloeiro quando a fonte é
+  multi-tenant; lote com rótulo genérico ("Superbid", "Sold Leilões", "Rede Superbid") NÃO grava.
+- Multi-tenant vem do dado (`fonte_multi_tenant`: 2º leiloeiro distinto no histórico, ~9 ms).
+  Medido: SUPERBID, SOLD, LJUD, HASTAPUBLICA, SBID9 = sim; ZUK, MEGA, SODRE, LEILOFY = não.
+- Coleta: SUPERBID e SOLD (imóveis) e SUPERBID (veículos) passam a gravar o leiloeiro real
+  (`store` da oferta) — eram "Superbid" em 6.409 imóveis/6.851 veículos — e o e-mail que o
+  `store` publica vai para `leiloeiro_contato_tenant` (auto nunca pisa em manual).
+- **Conferir na próxima rodada do SUPERBID:** o log deve mostrar `📧 SUPERBID: N contato(s) por
+  leiloeiro`. Se disser "nenhum e-mail de leiloeiro publicado", o `store` da API não traz o
+  `ticker` com o fieldList atual (o da home trazia) — aí o contato por leiloeiro fica só pelo
+  manual, e o lote continua indo para o e-mail da plataforma, nunca para outro leiloeiro.
 
 ### ✅ RESOLVIDO 26/09 — linha amarela no filtro "Carro" de /veiculos (print do dono)
 

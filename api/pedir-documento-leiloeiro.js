@@ -136,7 +136,11 @@ export default async function handler(req) {
   const assunto = `Documentação do lote — ${enderecoLabel}${imovel.numero_processo ? ` (proc. ${imovel.numero_processo})` : ''}`;
   const corpoTextoPuro = `Prezados,\n\nSou interessado(a) no lote abaixo e, para concluir minha análise antes do leilão, peço a gentileza de confirmar os pontos a seguir:\n\nLote: ${enderecoLabel}${linkLote ? `\nPágina do lote: ${linkLote}` : ''}${imovel.numero_processo ? `\nProcesso: ${imovel.numero_processo}` : ''}\n\n${itensTexto.map(t => `• ${t}`).join('\n')}\n\nAgradeço desde já a atenção.\n\n${nomeCliente}`;
 
-  const [contato] = await (await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(imovel.fonte || '')}&select=email`)).json();
+  // Contato do LEILOEIRO do lote, não da fonte (28/09): em plataforma multi-tenant a fonte são
+  // dezenas de leiloeiros. Falha ao resolver é erro — nunca "sem contato" (forma #2).
+  const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null }) });
+  if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
+  const [contato] = await rContato.json();
 
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit. O
   // front mostra num campo editável; quem usa complementa (ou não) antes de confirmar o envio.

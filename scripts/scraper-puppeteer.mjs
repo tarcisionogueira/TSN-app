@@ -28,7 +28,7 @@ import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
-import { capturarContatoSeAusente } from './_contato-leiloeiro.mjs';
+import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './_contato-leiloeiro.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -1268,6 +1268,12 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
     }).filter(Boolean);
 
     console.log(`    ${leiloeiro}: ${imoveis.length} imóveis mapeados`);
+    // Contato de CADA leiloeiro da plataforma (28/09) — o `store` publica o e-mail dele.
+    if (storeAsLeiloeiro) {
+      const porLoja = new Map();
+      for (const of of offers) { const l = lojaSuperbid(of.store); if (l.nome && l.email && !porLoja.has(l.nome)) porLoja.set(l.nome, { leiloeiro: l.nome.slice(0, 120), email: l.email, obs: `store da oferta ${of.id || ''} (${fonte})` }); }
+      await gravarContatosTenant(supabase, fonte, [...porLoja.values()]);
+    }
     // 23/09: a paginação que parou por FALHA (não por fim do catálogo) viaja até o sweep de
     // salvarEFinalizar — antes o aviso morria no log e o sweep aposentava o resto do acervo.
     if (diagParcial) imoveis.coletaParcial = diagParcial;
@@ -1365,7 +1371,9 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       pendentes.push({
         id, link_lote, textoCompleto,
         base: {
-          fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro, titulo, descricao,
+          // O leiloeiro de verdade é a loja (store) da oferta (28/09) — o rótulo da plataforma
+          // fica só de reserva. Era "Superbid" para os 6.851 veículos.
+          fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro: (lojaSuperbid(of.store).nome || leiloeiro).slice(0, 120), titulo, descricao,
           marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
           tipo_veiculo: classificarTipoVeiculo(textoCompleto),
           modelo: null,
@@ -1417,6 +1425,11 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       };
     });
     console.log(`    ${leiloeiro} (veículos): ${registros.length} registros mapeados`);
+    {
+      const porLoja = new Map();
+      for (const of of lista) { const l = lojaSuperbid(of.store); if (l.nome && l.email && !porLoja.has(l.nome)) porLoja.set(l.nome, { leiloeiro: l.nome.slice(0, 120), email: l.email, obs: `store da oferta ${of.id || ''} (${fonte} veículos)` }); }
+      await gravarContatosTenant(supabase, fonte, [...porLoja.values()]);
+    }
     return registros;
   } catch (err) {
     console.log(`  Erro ${leiloeiro} (veículos): ${err.message.slice(0, 100)}`);
@@ -5817,7 +5830,7 @@ async function main() {
     sbidProprio = redeSbid.proprio;
     const bSbid = redeSbid.browser;
     if (bSbid && rodar('SUPERBID')) console.log('\n📋 Superbid...');
-    if (bSbid && rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(bSbid, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150, browser: bSbid });
+    if (bSbid && rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(bSbid, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' , storeAsLeiloeiro: true }), { enrich: true, enrichCap: 150, browser: bSbid });
 
     // Superbid — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado do
     // SODRE_VEICULOS/SUPORTE_VEICULOS (ver comentários lá e .github/workflows/
@@ -5830,7 +5843,7 @@ async function main() {
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
     if (bSbid && rodar('SOLD')) console.log('\n📋 Sold Leilões...');
-    if (bSbid && rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(bSbid, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
+    if (bSbid && rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(bSbid, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' , storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.

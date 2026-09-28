@@ -85,12 +85,15 @@ async function auditar(row) {
 }
 // Grava o e-mail digitado na mão para os PRÓXIMOS envios não pedirem de novo — mesmo padrão
 // de api/leiloeiro-contato.js (upsert por `fonte`) e api/juridico-destinatarios.js (insert).
-async function salvarContato(destino, email, { fonte, advogadoId, nomeRemetente }) {
+async function salvarContato(destino, email, { fonte, leiloeiro, advogadoId, nomeRemetente }) {
   try {
     if (destino === 'leiloeiro') {
       if (!fonte) return;
-      await sb('leiloeiro_contato?on_conflict=fonte', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ fonte: String(fonte).toUpperCase(), email, origem: 'manual', observacao: `cadastrado via "Enviar e-mail" por ${nomeRemetente} em ${new Date().toISOString().slice(0, 10)}`, atualizado_em: new Date().toISOString() }) });
+      // O banco decide ONDE gravar (28/09): fonte multi-tenant → contato do leiloeiro do lote;
+      // lote sem leiloeiro identificado numa plataforma → não grava (viraria o de todos).
+      const r = await sb('rpc/contato_leiloeiro_salvar_manual', { method: 'POST',
+        body: JSON.stringify({ p_fonte: fonte, p_leiloeiro: leiloeiro || null, p_email: email, p_obs: `cadastrado via "Enviar e-mail" por ${nomeRemetente} em ${new Date().toISOString().slice(0, 10)}` }) });
+      if (!r.ok) console.warn('[enviar-email-caso] contato do leiloeiro não gravado:', r.status);
     } else {
       await sb('juridico_destinatarios', { method: 'POST', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ nome: `Jurídico (cadastrado por ${nomeRemetente})`, email, papel: null, copia: false, ativo: true, advogado_id: advogadoId || null }) });
@@ -262,8 +265,11 @@ export default async function handler(req) {
   let destinatarios = [];
   let ccList = [];
   if (destino === 'leiloeiro') {
-    const rContato = await sb(`leiloeiro_contato?fonte=eq.${encodeURIComponent(loteFonte || '')}&select=email`);
-    const [contato] = rContato.ok ? await rContato.json() : [null];
+    // Contato do LEILOEIRO do lote, não da fonte (28/09): em plataforma multi-tenant o contato
+    // por fonte era o de UM leiloeiro (6 pedidos de veículos diversos do SUPERBID foram à JRF).
+    const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: loteFonte || '', p_leiloeiro: lote?.leiloeiro || null }) });
+    if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
+    const [contato] = await rContato.json();
     if (contato?.email) destinatarios = [norm(contato.email)];
   } else {
     // Jurídico: mesma resolução de api/enviar-juridico-email.js (destinatários do escritório
@@ -433,7 +439,7 @@ export default async function handler(req) {
   // errado (que o Resend recusou) não pode virar cadastro permanente.
   // Leiloeiro tem UM contato por fonte (upsert): só grava se não havia nenhum. Jurídico grava cada novo.
   const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : novos;
-  for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, advogadoId: caso?.advogado_id, nomeRemetente });
+  for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, leiloeiro: lote?.leiloeiro || null, advogadoId: caso?.advogado_id, nomeRemetente });
 
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);
 

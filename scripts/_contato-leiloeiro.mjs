@@ -174,3 +174,29 @@ export async function capturarContatoSeAusente(supabase, fonte, urlAmostra) {
     }
   } catch { /* padrao-ok: captura de contato/recon é best-effort — nunca pode atrasar/derrubar a coleta */ }
 }
+
+// ── CONTATO POR LEILOEIRO NA REDE SUPERBID (28/09) ──────────────────────────────────────────
+// Na rede Superbid cada oferta traz o `store` = o leiloeiro de verdade daquele lote. O mesmo
+// objeto que a home exibe carregava o e-mail dele no `ticker` ("+55 (18) 3351-2317 ::
+// contato@jrfleiloes.com.br :: :: ") — foi daí que o coletor antigo tirou a JRF e a gravou como
+// contato do SUPERBID INTEIRO. Aqui o e-mail fica preso ao leiloeiro que o publicou.
+const RE_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+export function lojaSuperbid(store) {
+  if (!store || typeof store !== 'object') return { nome: typeof store === 'string' ? store.trim() : '', email: null };
+  const nome = String(store.description ?? store.name ?? '').trim();
+  const fonteEmail = typeof store.ticker === 'string' ? store.ticker : JSON.stringify(store);
+  const email = (fonteEmail.match(RE_EMAIL) || [])[0]?.toLowerCase() || null;
+  return { nome, email: email && !BLOQUEADOS.test(email) ? email : null };
+}
+
+/** Grava {leiloeiro,email} da coleta. Nunca lança; loga quanto gravou (ou por que não). */
+export async function gravarContatosTenant(supabase, fonte, itens) {
+  const lista = (itens || []).filter(i => i?.leiloeiro && i?.email);
+  if (!lista.length) { console.log(`    📧 ${fonte}: nenhum e-mail de leiloeiro publicado nas ofertas desta rodada`); return 0; }
+  try {
+    const { data, error } = await supabase.rpc('contato_leiloeiro_tenant_auto', { p_fonte: fonte, p_itens: lista });
+    if (error) { console.log(`    📧 ${fonte}: contatos por leiloeiro NÃO gravados (${error.message})`); return 0; }
+    console.log(`    📧 ${fonte}: ${data} contato(s) por leiloeiro gravados/atualizados (${lista.length} leiloeiro(s) com e-mail na rodada)`);
+    return data;
+  } catch (e) { console.log(`    📧 ${fonte}: contatos por leiloeiro falharam (${String(e?.message || e).slice(0, 120)})`); return 0; }
+}
