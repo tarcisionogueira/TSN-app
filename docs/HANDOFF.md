@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — fotos VLANCE/DANIELGARCIA: não existem na origem + varredura de sumidos na Soleon
+- **VLANCE (30/134 sem foto):** mesma plataforma V-Lance da LJUD. 29 dos 30 casam na API
+  `core/api/get-lotes` e **nenhum tem foto lá** — não há o que buscar.
+- **DANIELGARCIA (16/114 sem foto):** 14 mostram `sem-imagem-lote.jpg` no próprio site (sem foto na
+  origem); os outros 2 são lotes MORTOS (404). Medidos os 114 via pg_net: **9 com a página em 404**.
+  8 deles são leilão de 14–21/09 com `resultado_leilao='indeterminado'` — ficam ativos por DECISÃO
+  do dono (janela de 15 dias para proposta de compra, igual a `desativar_leiloes_encerrados()`) e
+  saem sozinhos até ~06/10. O 9º (`danielgarcia_59450`, sem data, fora do site desde 08/09) só
+  ficou porque **a família Soleon nunca desativava lote sumido** — desativado à mão.
+- **Conserto na raiz (`scraper-soleon.mjs`):** `varrerSumidos()` com as travas do sweep do
+  `scraper-puppeteer.mjs`: só com enumeração COMPLETA (terminou pelo fim da lista, não por falha
+  ou teto de páginas), enumerados ≥ 50% do acervo ativo, janela de 15 dias do leilão negativo, e
+  **reativa** `sumiu_da_fonte` que reaparece (o `planejarAlvo` não relê lote inativo — sem isto um
+  lote escondido por um dia sumiria para sempre). Linha gravada também zera `suprimido_motivo`.
+
 ### 🔶 28/09 — Uberlândia Leilões (Leiloar): dry-run no CI levou HTTP 403 → vai pelo PC
 Run 36440506134: `enumerados 0 (via sem-bd (grátis: HTTP 403))` na home. O recon do mesmo dia pelo
 servidor do banco (AWS) recebeu 200 em todas as rotas, com os mesmos cabeçalhos de navegador —

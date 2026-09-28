@@ -343,6 +343,7 @@ function montarRow(tenant, url, det) {
     data_leilao: det.data_leilao || null,
     forma_pagamento: 'a_vista',
     ativo: true,
+    suprimido_motivo: null, // voltou a ser coletado ⇒ motivo velho (ex.: sumiu_da_fonte) não vale mais
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
     score_viabilidade: va > 0 ? Math.min(100, Math.round((1 - vm / va) * 150)) : 30,
     desconto_percentual: va > 0 ? Math.round((1 - vm / va) * 100) : null,
@@ -375,6 +376,11 @@ const COTA_NEGADA = new Map();
 // pra `'degradado'` sozinho SE houver queda de verdade vs a execução anterior — a distinção só
 // não chegava até lá).
 const VIA_TENANT = new Map();
+// ENUMERAÇÃO COMPLETA × PARCIAL (28/09). A varredura de sumidos só pode confiar numa lista que
+// terminou porque a fonte acabou (página sem lote novo), nunca numa que terminou porque uma
+// página FALHOU ou bateu o teto de páginas — aí o que "sumiu" pode só não ter sido lido.
+const ENUM_COMPLETA = new Set();
+const ENUM_IDS = new Map();
 // Site que DECLARA não ter lote ("NENHUM LOTE ENCONTRADO NO MOMENTO", 28/09 — JOAOEMILIO entre
 // leilões). Zero afirmado pela fonte é resposta; o motivo "site declara…" faz
 // fonte_regressao_suspeita() não acusar `zerou` (ver fonte_regressao_zero_declarado_pelo_site.sql).
@@ -390,7 +396,7 @@ const RE_VAZIO_DECLARADO = /nenhum\s+lote\s+encontrado|nenhum\s+im[óo]vel\s+enc
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
-  let via = null;
+  let via = null, completa = false;
   for (let p = 1; p <= MAX_PAGES; p++) {
     // Listagem de imóveis do SOLEON: /lotes/imovel (pág 1) e ?tipo=imovel&page=N (2+).
     const url = `${tenant.base}/lotes/imovel${p > 1 ? `?tipo=imovel&page=${p}` : ''}`;
@@ -402,10 +408,11 @@ async function enumerarLotes(tenant) {
     const antes = setUrls.size;
     for (const u of extrairUrlsDeLote(html, tenant.base)) setUrls.add(u);
     if (DEBUG) console.log(`   [${tenant.fonte}] pág ${p} (${v}): +${setUrls.size - antes} (total ${setUrls.size})`);
-    if (setUrls.size === antes) break;
+    if (setUrls.size === antes) { completa = true; break; }
     await sleep(400);
   }
   ENUMERADOS.set(tenant.fonte, setUrls.size);
+  if (completa && setUrls.size) ENUM_COMPLETA.add(tenant.fonte);
   return { urls: [...setUrls], via };
 }
 
@@ -485,6 +492,7 @@ async function coletarTenant(tenant) {
   if (!urls.length) { console.log(`  [${tenant.fonte}] 0 lotes enumerados (via ${via}). Pulando.`); return []; }
   const chaveDe = u => `${tenant.fonte.toLowerCase()}_${idDaUrl(u)}`;
   const ids = urls.map(chaveDe);
+  ENUM_IDS.set(tenant.fonte, new Set(ids));
   const meta = new Map();
   for (let i = 0; i < ids.length; i += 200) {
     const { data } = await supabase.from('imoveis_leilao')
@@ -549,6 +557,48 @@ async function coletarTenant(tenant) {
   return prontos;
 }
 
+// VARREDURA DE SUMIDOS (28/09). A família Soleon nunca desativava lote que saiu do site: a
+// DANIELGARCIA tinha 9 ativos com a página em 404, um deles (59450, sem data) fora do site desde
+// 08/09. Só a limpeza por DATA aposentava — e lote sem data nunca vence. Regra IGUAL à de
+// salvarEFinalizar (scraper-puppeteer.mjs), com as mesmas travas:
+//   · só com enumeração COMPLETA (ver ENUM_COMPLETA) e enumerando ≥ 50% do acervo ativo;
+//   · leilão negativo (sem_lance/indeterminado) apurado há < 15 dias fica — é decisão do dono,
+//     para a proposta de compra, igual a desativar_leiloes_encerrados();
+//   · e o CAMINHO DE VOLTA: `planejarAlvo` não relê lote inativo, então um `sumiu_da_fonte` que
+//     reaparece na enumeração é reativado aqui mesmo, sem custo de leitura. Sem isto, um lote
+//     escondido por um dia sumiria para sempre.
+async function varrerSumidos(tenant) {
+  const fonte = tenant.fonte;
+  const vistos = ENUM_IDS.get(fonte);
+  if (!ENUM_COMPLETA.has(fonte) || !vistos?.size) { console.log(`  [${fonte}] varredura de sumidos PULADA — enumeração não terminou pelo fim da lista.`); return; }
+  const { data: ativos, error: eAt } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', fonte).eq('ativo', true).limit(5000);
+  if (eAt) { console.error(`  [${fonte}] varredura PULADA — não consegui ler o acervo ativo (${eAt.message}).`); return; }
+  if (vistos.size < (ativos?.length || 0) * 0.5) { console.error(`  🛑 [${fonte}] varredura PULADA — enumerou ${vistos.size} de ${ativos.length} ativos (< 50%).`); return; }
+  const sumidos = (ativos || []).map(r => r.fonte_id).filter(id => !vistos.has(id));
+  const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
+  let desligados = 0;
+  for (let i = 0; i < sumidos.length; i += 200) {
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' })
+      .eq('fonte', fonte).eq('ativo', true).in('fonte_id', sumidos.slice(i, i + 200))
+      .or(`resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${janelaNegativo}`)
+      .select('fonte_id');
+    if (error) { console.error(`  [${fonte}] erro ao desativar sumidos: ${error.message}`); break; }
+    desligados += data?.length || 0;
+  }
+  let religados = 0;
+  const idsVistos = [...vistos];
+  for (let i = 0; i < idsVistos.length; i += 200) {
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .update({ ativo: true, suprimido_motivo: null })
+      .eq('fonte', fonte).eq('ativo', false).eq('suprimido_motivo', 'sumiu_da_fonte').in('fonte_id', idsVistos.slice(i, i + 200))
+      .select('fonte_id');
+    if (error) { console.error(`  [${fonte}] erro ao reativar quem voltou: ${error.message}`); break; }
+    religados += data?.length || 0;
+  }
+  console.log(`  [${fonte}] varredura: ${sumidos.length} fora da enumeração · ${desligados} desativados (sumiu_da_fonte) · ${sumidos.length - desligados} retidos (leilão negativo < 15 dias) · ${religados} reativados`);
+}
+
 async function main() {
   if (DEBUG) {
     if (!brightDataDisponivel()) console.log('(aviso: Bright Data ausente — só a via grátis será tentada)');
@@ -601,6 +651,7 @@ async function main() {
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
   console.log(`✅ ${prontos.length} imóveis SOLEON gravados/atualizados.`);
+  for (const tenant of TENANTS) await varrerSumidos(tenant);
   // Auto-aprendizado por tenant.
   for (const tenant of TENANTS) {
     const rows = prontos.filter(r => r.fonte === tenant.fonte);
