@@ -42,6 +42,8 @@ vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
   manda o Referer exigido e reconhece imagem pelos bytes quando o tipo é genérico; página pública,
   og:image e os dois e-mails passam pelo proxy nesses hosts. Os PDFs do mesmo bucket também dão 403
   sem Referer — se algum leitor de documento falhar nessa fonte, é isso.
+  **Validado em produção 28/09 16:52 UTC:** `/api/img-proxy` com foto cdnhp → 200 `image/jpeg`;
+  123/126 lotes regravados com foto (123 distintas, `foto_repetida_como_lote` = 0).
 
 ### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
 
