@@ -68,7 +68,7 @@ export default async function handler(req) {
   // RPC v2 via POST (JSON lida com arrays nativamente). Faz TODOS os filtros
   // simultâneos no banco e devolve o total na coluna `total`.
   // REGRA ABSOLUTA: todo filtro da Busca deve valer TAMBÉM aqui (modo raio).
-  // Filtros atuais: tipos, estado, modalidades, pagamento, valor_min/max, desconto_min.
+  // Filtros atuais: tipos, estado, modalidades, pagamento, valor_min/max, desconto_min, prazo, resultado.
   // Ao adicionar um filtro novo, inclua-o aqui, na RPC buscar_por_raio_v2 (SQL) e no
   // helper aplicarFiltrosImoveis do front — os três caminhos precisam ficar em sincronia.
   const filtrosComuns = {
@@ -83,6 +83,9 @@ export default async function handler(req) {
     valor_max: filtros.valorMax || 9999999999,
     desconto_min: filtros.descontoMin || 0,
     data_de: dataDe, data_ate: dataAte, sem_data: semData,
+    // 28/09 (print do dono): o filtro "Sem lance" existia só no caminho SEM raio — aqui a lista
+    // mostrava leilão futuro com ele ligado. Mesmos valores de aplicarFiltrosImoveis (Busca.jsx).
+    resultado_filtro: ['sem_lance', 'nao_apurado', 'vendido', 'cancelado'].includes(filtros.resultadoLeilao) ? filtros.resultadoLeilao : '',
   };
 
   // 21/09 (pedido do dono, "busca por raio, qual melhor forma de resolver [o gap de

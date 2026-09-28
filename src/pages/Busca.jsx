@@ -1292,6 +1292,8 @@ export default function Busca() {
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
             descontoMin: ajInt.descontoMin,
             prazo: filtrosAtivos.prazo || '',
+            // 28/09: faltava — "Sem lance" no modo raio não filtrava nada (print do dono).
+            resultadoLeilao: filtrosAtivos.resultadoLeilao || '',
             // Habilita o aviso de "imóveis sem geocode" no back — sem isso não dá pra saber
             // se um imóvel sem coordenada seria desta busca (ver comentário em busca-raio.js).
             cidadeNormCentro: normCidade(filtrosAtivos.cidades?.[0] || ''),
