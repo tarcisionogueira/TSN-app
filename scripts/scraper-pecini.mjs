@@ -187,6 +187,7 @@ function extrairDocs(html) {
 }
 
 // "barreiras-ba" → { cidade: 'Barreiras', uf: 'BA' } (o slug do lote traz cidade+UF).
+const UFS_BR = new Set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' '));
 function cidadeUfDoSlug(slug) {
   // Sublime (27/09): slug "<tipo>-em-<cidade>[-<uf>]" ("casa-em-campinas",
   // "2-apartamentos-em-dourados-ms") — o formato do Pecini é "<cidade>-<uf>". Sem isto a cidade
@@ -196,7 +197,9 @@ function cidadeUfDoSlug(slug) {
     if (!/-em-/.test(String(slug || ''))) return { cidade: null, uf: null };
     slug = String(slug).split('-em-').pop();
   }
-  const m = String(slug || '').match(/^(.+)-([a-z]{2})$/i);
+  let m = String(slug || '').match(/^(.+)-([a-z]{2})$/i);
+  // Sufixo de 2 letras só é UF se FOR uma UF: "sapopemba-zl" (Zona Leste) virou estado "ZL" (28/09).
+  if (m && !UFS_BR.has(m[2].toUpperCase())) m = null;
   if (!m && FONTE !== 'PECINI' && slug) {
     const cidade = String(slug).split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     return { cidade: cidade || null, uf: null };
@@ -610,7 +613,7 @@ async function main() {
 
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
-  console.log(`✅ ${prontos.length} imóveis PECINI gravados/atualizados.`);
+  console.log(`✅ ${prontos.length} imóveis ${FONTE} gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
   // 19/08 (paga a dívida do "piso ABSOLUTO"): a PECINI só visita lotes NOVOS, então `total`
