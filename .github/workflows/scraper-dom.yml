@@ -52,11 +52,14 @@ on:
       - 'scripts/scraper-freitas.mjs'
       - 'scripts/lib/freitas-parse.mjs'
       - 'scripts/lib/motor/fontes/freitas.mjs'
+      - 'scripts/scraper-leiloar.mjs'
+      - 'scripts/lib/leiloar-parse.mjs'
+      - 'scripts/lib/motor/fontes/leiloar.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -169,6 +172,15 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SIMON_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-simon.mjs
+
+      - name: Leiloar (Uberlândia Leilões)
+        # 28/09: Plataforma Leiloar, HTML estático sem Cloudflare neste tenant — grátis (semBD).
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leiloar')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILOAR_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-leiloar.mjs
 
       - name: Globo
         # NÃO entra em env.RODA_TUDO (17/09, retestado 20/09 com proxy ISP — não resolveu,

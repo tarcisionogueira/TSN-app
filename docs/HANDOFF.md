@@ -9,7 +9,28 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
-### 🔴🔴 28/09 — ANÚNCIOS PARADOS DESDE ~14/09, SEM NINGUÉM AVISADO + pendências de Google consolidadas
+### ✅ 28/09 — fila de leiloeiros do Radar (3)
+
+Recon feito pelo SERVIDOR DO BANCO (`net.http_get` do pg_net — a nuvem do Claude não alcança os
+sites; resposta em `net._http_response`, resultado grande sai em arquivo e vira fixture).
+- **ALEXANDREPEDROSA** — é tenant SOLEON (meta author). `/lotes/imovel` com 7 lotes. Entrou em
+  `scraper-soleon.mjs` (TODOS_TENANTS); coleta na próxima rodada do PC/Actions.
+- **UBERLANDIALEILOES** — Plataforma Leiloar (a mesma do crleiloes), SEM Cloudflare neste tenant.
+  Coletor novo `scraper-leiloar.mjs` (motor, 2 níveis, grátis/semBD) + `lib/leiloar-parse.mjs`
+  + `npm run testar:leiloar` (13 asserções sobre HTML real). No `scraper-dom.yml` diário (8h UTC).
+  Hoje: 14 leilões na home (Uberlândia e Boa Esperança/MG).
+- **lgcorretorjudicial** — NÃO é leilão: alienação judicial por iniciativa particular (venda
+  direta, CPC 880). Catálogo carregado no navegador a partir de `/api/*`, que exige credencial
+  (401) — **não contornar**. Próximo passo: recon renderizado (recon-dom no Actions ou no PC)
+  para achar a página pública de busca; e decidir se venda direta de corretor entra no acervo.
+
+### ✅ 28/09 — anúncios PAUSADOS PELO DONO em 14/09 (decisão, não falha) + pendências de Google consolidadas
+
+> **Confirmado pelo dono (28/09): ele PAUSOU Google Ads e Meta Ads em 14/09.** Registrado em
+> `marketing_canal_pausa` (uma linha por canal, `retomado_em` nulo). O vigia `mkt_ingestao_atrasada`
+> ignora canal com pausa aberta. **Ao religar os anúncios: preencher `retomado_em`** — senão o
+> vigia não volta a proteger aquele canal:
+> `update marketing_canal_pausa set retomado_em = current_date where canal = 'Google Ads' and retomado_em is null;`
 
 **Medido no banco (28/09):** Google Ads sem dado desde 14/09 e Meta desde 13/09 (o último dia de
 cada um já com gasto residual: R$ 2,43 / R$ 2,95). Visitas por semana 2.091 → 598 → 111 → 14;
@@ -25,7 +46,7 @@ Workspace). **Só o dono vê as contas de anúncio.**
   dentro do Google Ads → /api/ads-metrics-ingest; Meta = /api/meta-insights-cron).
 
 **Pendências de Google que continuam abertas (todas do dono):**
-1. Conferir por que as campanhas do Google e do Meta pararam (~13-14/09) — faturamento/pausa.
+1. ~~Conferir por que as campanhas pararam~~ — ✅ pausa deliberada do dono em 14/09.
 2. Backfill dos 53 cadastros históricos com gclid nunca reportados ao Google Ads (decisão do dono;
    a função `enviarCadastroOffline` existe). Desde 18/09 não houve cadastro pago novo para testar.
 3. App OAuth do Google Ads em modo **Teste** → refresh token expira em 7 dias. Publicar o app

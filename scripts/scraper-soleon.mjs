@@ -72,6 +72,10 @@ const TODOS_TENANTS = [
   // pequeno no momento, não falha de catálogo. O baseline aprendido acompanha daqui.
   { fonte: 'CASAMARTILLO', leiloeiro: 'Casa Martillo Leilões',      base: 'https://www.casamartillo.com.br' },           //   1
   { fonte: 'INFINITY',     leiloeiro: 'Carlos Augusto Ribeiro Lima', base: 'https://www.infinityleiloes.com.br' },       //   1
+  // 28/09 — da fila do Radar de editais. Recon pelo servidor do banco: meta author "SOLEON
+  // Soluções para Leilões Online", /lotes/imovel com 7 links /item/N/detalhes (pág. 2 declara
+  // "nenhum lote encontrado") — mesmo formato dos tenants acima.
+  { fonte: 'ALEXANDREPEDROSA', leiloeiro: 'Alexandre Reis Pedrosa', base: 'https://www.alexandrepedrosaleiloeiro.com.br' }, //   7
 ];
 
 // ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:

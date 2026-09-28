@@ -83,7 +83,8 @@
     "testar:foto-generica": "node scripts/testes/foto-generica-nao-pega-logo-do-site.mjs",
     "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs",
     "testar:albertomacedo-pacote": "node scripts/testes/albertomacedo-descobre-lote-dentro-de-pacote.mjs",
-    "testar:francoleiloes": "node scripts/testes/francoleiloes-extrai-campos-reais.mjs"
+    "testar:francoleiloes": "node scripts/testes/francoleiloes-extrai-campos-reais.mjs",
+    "testar:leiloar": "node scripts/testes/leiloar-parse.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",
