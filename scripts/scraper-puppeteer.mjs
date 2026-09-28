@@ -21,6 +21,7 @@ import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
+import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
@@ -4048,22 +4049,22 @@ export async function scraperHastaPublica(browser) {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
         const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
         if (!texto) continue;
-        // AMOSTRA DO PAINEL RENDERIZADO (28/09): 126/126 lotes sem foto — este parser lê só o TEXTO
-        // e o painel é montado por JS (o HTML cru não tem nada). Associar <img> a lote sem ver o DOM
-        // arriscaria a foto de um imóvel no outro. Grava 1 painel/20 h em recon_dump para a leitura
-        // das fotos ser escrita sobre HTML real. Diagnóstico: nunca derruba a coleta.
-        if (visitados === 1) {
-          try {
-            const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
-            const { data: ja, error: eJa } = await supabase.from('recon_dump').select('id').eq('origem', 'hastapublica-painel').gte('criado_em', desde).limit(1);
-            if (eJa) console.log(`    (amostra do painel: não consegui checar — ${eJa.message})`);
-            else if (!ja?.length) {
-              const html = await page.content();
-              const { error: eIns } = await supabase.from('recon_dump').insert({ origem: 'hastapublica-painel', chave: `painel:${id}`, conteudo: { url, html: html.slice(0, 300000) } });
-              console.log(`    amostra do painel ${id} ${eIns ? `NÃO gravada (${eIns.message})` : 'gravada em recon_dump (hastapublica-painel)'}`);
-            }
-          } catch (e) { console.log(`    (amostra do painel falhou: ${String(e?.message || e).slice(0, 120)})`); }
-        }
+        // FOTO + LEILOEIRO (28/09): o painel é montado por socket.io e este laço lê só o texto —
+        // 126/126 lotes saíam sem foto, e `leiloeiro` recebia o "Comitente:" (a vara, o banco, às
+        // vezes com a data da praça colada). A página ESTÁTICA /leilao/<id> vem pronta do servidor
+        // e amarra nº do lote + foto + link do lote no mesmo cartão, e diz o leiloeiro de verdade
+        // (parser e fixtures em lib/hastapublica-parse.mjs). Fetch de dentro da página (mesma
+        // origem, caminho relativo — o painel pode estar em www. e BASE não). Falhou = lote sem
+        // foto, com o motivo no log; nunca derruba o leilão.
+        let estatica = { leiloeiro: null, lotes: new Map() };
+        try {
+          const r = await page.evaluate(async (u) => {
+            try { const x = await fetch(u); return x.ok ? { html: await x.text() } : { status: x.status }; }
+            catch (e) { return { erro: String((e && e.message) || e) }; }
+          }, `/leilao/${id}`);
+          if (r?.html) estatica = parseLeilaoHasta(r.html);
+          if (!estatica.lotes.size) console.log(`    HastaPública ${id}: página estática sem cartões (${r?.html ? 'HTML sem card-leilao' : r?.status ? `HTTP ${r.status}` : r?.erro}) — lotes sem foto`);
+        } catch (e) { console.log(`    HastaPública ${id}: página estática falhou (${String(e?.message || e).slice(0, 80)}) — lotes sem foto`); }
 
         const mTitulo = texto.match(/#\d+\s*-\s*([^\n]+)\n([^\n]+)/);
         const varaComarca = mTitulo ? mTitulo[2].trim() : '';
@@ -4113,9 +4114,12 @@ export async function scraperHastaPublica(browser) {
             valor_avaliacao: 0,
             valor_minimo: valor,
             area_m2: 0,
-            descricao: [tituloLote, varaComarca].filter(Boolean).join(' · ').slice(0, 500),
-            link_edital: url, url_lote: url, link_foto: null,
-            leiloeiro: (mComitente ? mComitente[1].trim() : 'HastaPública').slice(0, 120),
+            descricao: [tituloLote, varaComarca, mComitente && `Comitente: ${mComitente[1].trim()}`].filter(Boolean).join(' · ').slice(0, 500),
+            link_edital: url,
+            url_lote: estatica.lotes.get(numLote)?.urlLote || url,
+            link_foto: estatica.lotes.get(numLote)?.foto || null,
+            // O comitente (vara/banco) NÃO é o leiloeiro — vai para a descrição acima.
+            leiloeiro: (estatica.leiloeiro || 'HastaPública Leilões').slice(0, 120),
             data_leilao,
             forma_pagamento: 'a_vista',
           });

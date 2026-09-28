@@ -30,6 +30,8 @@
  * não redireciona ninguém, porque página que redireciona não indexa.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+import { fotoServivel } from './_foto-hotlink.js';
+
 export const config = { runtime: 'nodejs', maxDuration: 15 };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -599,7 +601,7 @@ function cardImovel(im) {
   ].filter(Boolean).join('');
   return `<article class="card">
     <div class="foto">
-      ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : '<img alt="" loading="lazy"/>'}
+      ${im.link_foto ? `<img src="${esc(fotoServivel(im.link_foto))}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : '<img alt="" loading="lazy"/>'}
       ${pct > 0 ? `<span class="badge-desc ${grau}">-${pct}%</span>` : ''}
       ${fonteLabel ? `<span class="fonte${ehCaixa ? ' caixa' : ''}">${esc(fonteLabel)}</span>` : ''}
     </div>
@@ -966,7 +968,7 @@ async function paginaImovel(id) {
       <div class="ficha">
         <div class="ficha-main">
           <div class="foto-hero">
-            ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" fetchpriority="high"/>` : `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px">Sem foto disponível</div>`}
+            ${im.link_foto ? `<img src="${esc(fotoServivel(im.link_foto))}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" fetchpriority="high"/>` : `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px">Sem foto disponível</div>`}
             <div class="over-tl"><span class="chip">${esc(t)}</span>${modalCurto ? `<span class="chip modal">${esc(modalCurto)}</span>` : ''}</div>
             ${pct > 0 ? `<div class="over-tr"><span class="badge-desc ${grau}">-${pct}%</span></div>` : ''}
             ${fonteLabel ? `<div class="over-bl"><span class="fonte${ehCaixa ? ' caixa' : ''}">${esc(fonteLabel)}</span></div>` : ''}
@@ -1088,7 +1090,7 @@ async function paginaImovel(id) {
       description: `${t} em leilão em ${local}.`,
       url: canonical,
       ...(im.fonte_id ? { sku: String(im.fonte_id) } : {}),
-      ...(im.link_foto ? { image: im.link_foto } : {}),
+      ...(im.link_foto ? { image: fotoServivel(im.link_foto, 'https://www.bidprobrasil.com.br') } : {}),
       offers: {
         '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
         availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',

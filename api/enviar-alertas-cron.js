@@ -58,6 +58,7 @@ import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { linkRastreado } from './_link-email.js';
+import { fotoServivel, refererExigido } from './_foto-hotlink.js';
 import { utmEmail } from './_utm.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
@@ -167,6 +168,8 @@ function fotoParaEmail(im, base) {
   if (!src) return null;
   if (src.startsWith('/')) return `${proxBase}${src}`;
   if (!/^https?:\/\//.test(src)) return null;
+  // CDN com hotlink protegido por Referer (28/09, HASTAPÚBLICA): o Gmail busca sem Referer → 403.
+  if (refererExigido(src)) return fotoServivel(src, proxBase);
   // Demais leiloeiros carregam hotlink direto no e-mail (como no print) — não roteamos p/ não regredir.
   return src;
 }

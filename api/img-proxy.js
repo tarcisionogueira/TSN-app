@@ -7,6 +7,7 @@ export const config = { runtime: 'nodejs' };
 
 import dns from 'node:dns/promises';
 import { hostExternoSeguro, fetchExternoSeguro, ipLiteralEhInterna } from './_allowed-hosts.js';
+import { refererExigido } from './_foto-hotlink.js';
 
 // Resolve o hostname e reprova se QUALQUER endereço resolvido (IPv4 ou IPv6) for
 // interno/reservado. `hostExternoSeguro` já bloqueou o caso óbvio (IP literal na URL);
@@ -20,6 +21,17 @@ async function hostnameResolveParaSeguro(hostname) {
   } catch {
     return false; // padrao-ok: fail-closed deliberado — DNS não resolveu, não confia no host
   }
+}
+
+// Alguns buckets servem foto como `binary/octet-stream` (o mesmo cdnhp). Só nesse caso genérico
+// a imagem é reconhecida pela ASSINATURA dos primeiros bytes — HTML/JSON/PDF seguem recusados.
+function tipoPelaAssinatura(buf) {
+  const b = new Uint8Array(buf.slice(0, 12));
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  return null;
 }
 
 export const GET = handler;
@@ -61,7 +73,7 @@ async function handler(req) {
     const res = await fetchExternoSeguro(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': `https://${targetUrl.hostname}/`,
+        'Referer': refererExigido(url) || `https://${targetUrl.hostname}/`, // CDN com hotlink protegido: ver _foto-hotlink.js
         'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
       },
       signal: AbortSignal.timeout(8000),
@@ -69,10 +81,16 @@ async function handler(req) {
 
     if (!res.ok) return new Response('Image not found', { status: 404 });
 
-    const contentType = res.headers.get('content-type') || '';
+    let contentType = res.headers.get('content-type') || '';
     // SEGURANÇA: só repassa IMAGEM (impede usar o proxy p/ conteúdo arbitrário/HTML de negação).
-    if (!/^image\//i.test(contentType)) return new Response('Not an image', { status: 415 });
+    // Tipo genérico (octet-stream/vazio) só passa se os bytes forem de imagem.
+    const generico = !contentType || /^(binary|application)\/octet-stream/i.test(contentType);
+    if (!/^image\//i.test(contentType) && !generico) return new Response('Not an image', { status: 415 });
     const body = await res.arrayBuffer();
+    if (generico) {
+      contentType = tipoPelaAssinatura(body);
+      if (!contentType) return new Response('Not an image', { status: 415 });
+    }
 
     return new Response(body, {
       status: 200,

@@ -36,6 +36,7 @@ export const config = { runtime: 'nodejs', maxDuration: 10 };
 
 import { CURSOS, EBOOKS } from '../src/data/cursos.js';
 import { lanceVitrine } from './_lance-vitrine.js';
+import { fotoServivel } from './_foto-hotlink.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -114,7 +115,7 @@ export default async function handler(req, res) {
         const praca = String(v.data || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
         if (praca) partes.push(`praça ${praca[3]}/${praca[2]}`);
         desc = partes.length ? partes.join(' · ') : 'Imóvel em leilão com análise de viabilidade na BidPro Brasil.';
-        if (/^https?:\/\//.test(im.link_foto || '')) img = im.link_foto;
+        if (/^https?:\/\//.test(im.link_foto || '')) img = fotoServivel(im.link_foto, 'https://www.bidprobrasil.com.br'); // CDN com hotlink protegido → proxy
       }
     } else if ((tipo === 'curso' || tipo === 'ebook') && idOk) {
       destino = `/#/p/${tipo}/${id}`;

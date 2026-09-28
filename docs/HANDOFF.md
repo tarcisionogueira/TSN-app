@@ -17,7 +17,7 @@ no `scripts/runner-residencial.sh` com `LEILOAR_DRYRUN=0`. **Conferir após a pr
 `select * from fonte_saude where fonte='UBERLANDIALEILOES' order by 1 desc limit 3;` — se o motivo
 vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
 
-### 🔶 28/09 — lotes "Sem foto": LJUD concluído (foto não existe na origem), HASTAPUBLICA em curso
+### ✅ 28/09 — lotes "Sem foto": LJUD (foto não existe na origem) e HASTAPUBLICA (resolvido)
 - **LJUD (307/754 sem foto, 41%) — CONCLUÍDO 28/09: a foto NÃO existe no site do leiloeiro.**
   Os sites dos leiloeiros da LJUD (doleiloes, jrleiloes, giordano, alvaro…) são white-label da
   plataforma **V-Lance**: mesma API `core/api/get-lotes`, mesma base, mesmo bucket S3. Com
@@ -29,11 +29,19 @@ vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
   PDF — custo alto, não feito.
   Conserto de quebra: o backfill por og:image visitava `/lote/{lote_id}` (1 segmento = "Leilão não
   encontrado") — agora usa `url_lote` (`/lote/{leilao}/{lote}`).
-- **HASTAPUBLICA (126/126, 100%)**: o scraper lê só `innerText` do painel renderizado
-  (`/leilao/painel/<id>`), nunca as `<img>`; o HTML cru é casca vazia (SPA). Adicionado dump do painel
-  RENDERIZADO em `recon_dump` (origem `hastapublica-painel`, 1×/20 h) para escrever a extração de foto
-  sobre HTML real na próxima rodada, sem chutar o mapeamento img→lote.
-- **HASTAPUBLICA grava a VARA como leiloeiro** ("JUIZADO ESPECIAL CÍVEL E CRIMINAL") — corrigir junto.
+- **HASTAPUBLICA — RESOLVIDO 28/09 (foto + leiloeiro).** A página ESTÁTICA `/leilao/<id>` vem pronta
+  do servidor e amarra nº do lote + foto + link do lote no mesmo cartão, e traz o leiloeiro real
+  ("Leiloeiro: Euclides Maraschi Junior"; 6 pessoas no acervo, 7 páginas sem nome → "HastaPública
+  Leilões"). Parser `scripts/lib/hastapublica-parse.mjs` + `npm run testar:hastapublica` (3 fixtures
+  reais). O coletor busca a página de dentro do painel (mesma origem). Medido nos 100 leilões ativos:
+  126/126 lotes casam por nº **e** título, 123 com foto real, 3 com `nopicfull.png` (sem foto de fato).
+  `leiloeiro` gravava o "Comitente:" (vara/banco/data) — agora vai para a descrição.
+  ⚠️ **O CDN deles (`s3…/cdnhp/`) só entrega com Referer do hastapublica** (200 com ele; 403 com o
+  nosso e sem nenhum) e serve `binary/octet-stream`. Gravar o link cru = 123 fotos quebradas (foi
+  gravado e DESFEITO na mesma hora). Conserto: lista única `api/_foto-hotlink.js` → `img-proxy`
+  manda o Referer exigido e reconhece imagem pelos bytes quando o tipo é genérico; página pública,
+  og:image e os dois e-mails passam pelo proxy nesses hosts. Os PDFs do mesmo bucket também dão 403
+  sem Referer — se algum leitor de documento falhar nessa fonte, é isso.
 
 ### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
 

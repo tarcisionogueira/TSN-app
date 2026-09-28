@@ -3,6 +3,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { utmEmail } from './_utm.js';
+import { fotoServivel } from './_foto-hotlink.js';
 
 // Assina o token de descadastro no MESMO esquema de cancelar-alertas.js
 // (base64url(userId).hmac_sha256(userId, SECRET)[0..16]), aqui via WebCrypto (edge).
@@ -83,7 +84,7 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, unsubToken, base
 
     const fotoHTML = im.link_foto
       ? `<a href="${imovelLink}" style="display:block;text-decoration:none;">
-          <img src="${im.link_foto}" alt="${tipoLabel}" width="560" style="width:100%;max-height:220px;object-fit:cover;display:block;border-radius:0;" />
+          <img src="${fotoServivel(im.link_foto, 'https://www.bidprobrasil.com.br')}" alt="${tipoLabel}" width="560" style="width:100%;max-height:220px;object-fit:cover;display:block;border-radius:0;" />
         </a>`
       : `<div style="width:100%;height:80px;background:linear-gradient(135deg,#1e3a5f 0%,#0D63DB 100%);display:flex;align-items:center;justify-content:center;">
           <span style="color:rgba(255,255,255,0.3);font-size:32px;">🏠</span>
