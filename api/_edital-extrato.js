@@ -57,6 +57,18 @@ const parseValor = (s) => {
 // de extrair elimina a dependência dessa coincidência. Só entra quando o documento tem 2+
 // marcações "Lote N" E algum bloco contém um valor conhecido deste lote (avaliação/lance mínimo) —
 // um edital de lote único (o caso comum, e a esmagadora maioria) devolve null e nada muda.
+// DOCUMENTO DE VÁRIOS LOTES (28/09). Quando o bloco do lote NÃO é isolado, o texto inteiro do
+// edital era usado para identidade e MATRÍCULA — e a 1ª matrícula do edital ia para TODOS os lotes
+// dele: 5 lotes GRUPOLANCE em cidades diferentes com a mesma "matrícula" de 177 m², 7 ZUK com 774,5,
+// uma gleba de 29.273 m² com 255 m² (27 lotes ativos contaminados). Só conta como multi-lote a
+// ENUMERAÇÃO ("Lote 1)", "LOTE 02 –", "Lote 3:"), com 2+ números distintos — "confronta com o lote
+// 30," de uma matrícula de loteamento não é enumeração e não pode apagar os fatos de um lote único.
+export function ehDocMultiLote(texto) {
+  const nums = new Set();
+  for (const m of String(texto || '').matchAll(/(?:^|[\n.;]\s*|\s{2,})Lotes?\s*(?:n[ºo°.]?\s*)?0?(\d{1,3})\s*[)\-–:]/gi)) nums.add(m[1]);
+  return nums.size >= 2;
+}
+
 export function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
   const marcas = [...String(texto || '').matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
   if (marcas.length < 2) return null;
@@ -595,12 +607,15 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // nunca a contém, e ampliar aqui reabriria o risco que `isolarBlocoDoLote` existe para
       // fechar (identidade de outro lote vizinho).
       custos = extrairCustosTexto(txtPagamento);
-      identidade = extrairIdentidadeTexto(txtLote);
+      // Sem o bloco deste lote isolado num edital de VÁRIOS lotes, identidade e matrícula seriam de
+      // outro lote (ver ehDocMultiLote). Condições/pagamento seguem: valem para o edital todo.
+      const blocoConfiavel = !!blocoLote || !ehDocMultiLote(txt);
+      identidade = blocoConfiavel ? extrairIdentidadeTexto(txtLote) : null;
       // NÚMERO DO PROCESSO (CNJ) — grátis, no texto que já está em mãos. É a chave que abre a
       // consulta de movimentação e responde "este processo anda rápido?". Até 15/08 só a IA do
       // relatório documental o lia, e por isso 1.782 lotes judiciais tinham 3 números.
       processo = extrairNumeroProcessoTexto(txtLote);
-      const mat = extrairMatriculaTexto(txtLote);
+      const mat = blocoConfiavel ? extrairMatriculaTexto(txtLote) : null;
       const campos = { condicoes: cond, datas, pagamento, custos, identidade, ...(processo ? { processo } : {}), ...(mat ? { matricula: mat } : {}) };
       const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
       // MULTI-LOTE NÃO PODE CACHEAR POR URL: o mesmo PDF serve outros lotes, cada um com seu

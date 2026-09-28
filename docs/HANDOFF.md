@@ -9,6 +9,31 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🛡️ 28/09 (noite) — Medidas para o erro de tipo/área não voltar (pedido do dono)
+Três camadas, todas em produção e vigiadas por `qa_invariantes()` (verde = 0):
+1. **Tipo pelo TÍTULO no banco** — `tipo_construido_pelo_titulo(t)` + trigger
+   `trg_tipo_construido_pelo_titulo` (migração `20260928_tipo_construido_pelo_titulo.sql`): lote gravado
+   como `terreno` com casa/edificação/"Constr. de N m²"/prédio/galpão no título vira `casa`/`comercial`,
+   **qualquer que seja o coletor**. Achado: **142 ativos** estavam errados (64 → casa, 78 → comercial;
+   LJUD, SUBLIME, FERREIRALEIL, MEGA, PESTANA, VLANCE, SUPERBID…) — o mercadológico comparava com
+   terrenos e a construção sumia do preço. Nenhum relatório existente era desses lotes (conferido).
+   Direção única: só tira de `terreno`. Invariantes `tipo_terreno_com_construcao` (sobe se o trigger
+   sumir) e `tipo_casa_titulo_lote` (o inverso — nome de loteamento "Residencial" virando casa; delega
+   à mesma função para os dois nunca discordarem). Classificadores JS: "benfeitoria/prédio residencial"
+   e "Constr. de N" = casa.
+2. **Matrícula de OUTRO lote** — edital de vários lotes sem o bloco do nosso isolado não doa mais
+   identidade/matrícula (`ehDocMultiLote` em `_edital-extrato.js`, usado também em
+   `captura-documentos.mjs`; teste `edital-de-varios-lotes-nao-empresta-matricula.mjs`). **27 lotes**
+   (19 GRUPOLANCE em 9 cidades, 8 TORRES3 em 8 cidades, todos com a MESMA área e sem nº de matrícula)
+   tiveram `doc_fatos.matricula` limpo. Invariante `matricula_area_de_outro_lote` (mesma área em 3+
+   lotes da fonte e 2+ cidades; mesma cidade não conta — ZUK Carangola 7 × 774,5 m² é loteamento real).
+3. **Trava no relatório** — `gerar-analise`: em terreno/rural a área da matrícula só substitui a do
+   anúncio se a razão estiver entre 0,7 e 1,43; fora disso mantém o anúncio e grava anomalia
+   `area_matricula_incompativel` em `relatorio_anomalias`. PESTANA: tipo cai para a descrição quando o
+   subtipo do site é genérico.
+⚠️ Lição (forma #10 em mim mesmo): o 1º dry-run do invariante usou `\b` — em regex do Postgres é
+BACKSPACE, não fronteira de palavra (lá é `\m`/`\M`). Deu 0 e parecia verde; a função real deu 6.
+
 ### ✅ 28/09 — Mercadológico com preço errado: área da matrícula ignorada, lote com 2 bens e "Residencial" virando casa
 Relatórios do dono (28/09 ~23h): **Boituva** certo (200,39 m² da matrícula × R$ 779); **Embu-Guaçu**
 (leilaobrasil_449) R$ 373.611 = R$ 287 × 1.303 m² — o lote são DOIS terrenos (1.303 + 1.200 = 2.503 m²,

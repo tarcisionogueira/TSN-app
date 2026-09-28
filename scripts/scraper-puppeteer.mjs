@@ -63,6 +63,8 @@ function normalizarTipo(tipo) {
   // Jardim Ipanema" e o "Lote 200 m²" virava CASA — o relatório mercadológico comparou com casas
   // (R$ 5.710/m²) e o preço saiu errado. Casa = casa/sobrado/residência/área construída/edificação.
   if (t.includes('casa') || t.includes('sobrado') || /\bresid[eê]ncias?\b/.test(t) ||
+      // ...mas 'residencial' qualificando CONSTRUÇÃO é moradia: benfeitoria residencial, prédios residenciais.
+      /(benfeitorias?|pr[eé]dios?|constru[cç][aã]o|im[oó]vel)\s+residenc/.test(t) || /\bconstr\.?\s+de\s+\d/.test(t) ||
       t.includes('area construida') || /edifica[cç][aã]o|edificad/.test(t)) return 'casa';
   // 'area' CRU sai de propósito (bate com api/_tipo.js): senão "Galpão com área…" cairia
   // em terreno (este ramo vem antes do comercial). Só "area/data de terra" indica terreno.
@@ -3653,7 +3655,10 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
   // quando não casar — não força endereço num lote rural/loteamento sem logradouro urbano.
   const textoBem = [bem.observacao, ...(bem.caracteristicas || []).map(c => c?.valor)].filter(Boolean).join(' ');
   const enderecoPestana = textoBem ? extrairEnderecoMatricula(textoBem) : null;
-  const tipoPestana = normalizarTipo((bem.subTipoBem && bem.subTipoBem.nome) || desc);
+  // Subtipo PRIMEIRO, descrição se ele não decidir (28/09). O subtipo da PESTANA para terreno é
+  // "Residencial" — antes virava CASA pelo 'resid' (29 "Terreno - <cidade>" como casa); agora
+  // "Residencial" sozinho não decide, e o `||` antigo nunca chegava a olhar a descrição.
+  const tipoPestana = [bem.subTipoBem && bem.subTipoBem.nome, desc].map(normalizarTipo).find((t) => t !== 'imovel') || 'imovel';
   const descricaoCompleta = descricaoPestana(desc, bem, leilao.nome);
   // Ficha CAIXA: as áreas vêm SEM "m²" nas características, então o laço acima não acha nada —
   // 342 lotes ativos sem área em 24/09 com a área escrita na própria descrição.

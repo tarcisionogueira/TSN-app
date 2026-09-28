@@ -33,6 +33,8 @@ export function normalizarTipo(t) {
   // Jardim Ipanema" e o "Lote 200 m²" virava CASA — o relatório mercadológico comparou com casas
   // (R$ 5.710/m²) e o preço saiu errado. Casa = casa/sobrado/residência/área construída/edificação.
   if (s.includes('casa') || s.includes('sobrado') || /\bresid[eê]ncias?\b/.test(s) ||
+      // ...mas 'residencial' qualificando CONSTRUÇÃO é moradia: benfeitoria residencial, prédios residenciais.
+      /(benfeitorias?|pr[eé]dios?|constru[cç][aã]o|im[oó]vel)\s+residenc/.test(s) || /\bconstr\.?\s+de\s+\d/.test(s) ||
       s.includes('area construida') || /edifica[cç][aã]o|edificad/.test(s)) return 'casa';
 
   if (s.includes('terreno') || s.includes('lote') || s.includes('gleba') ||

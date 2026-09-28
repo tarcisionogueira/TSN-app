@@ -13,5 +13,8 @@ eq('Araraquara: lote em "Parque Residencial" é terreno', normalizarTipo('Lote 2
 eq('"Lote, Residencial, Sagres" é terreno', normalizarTipo('Lote, Residencial, Sagres'), 'terreno');
 eq('terreno com residência é casa', normalizarTipo('Terreno urbano possui uma residência em sua área'), 'casa');
 eq('lote com área construída é casa', normalizarTipo('Lote nº 01 da quadra A com área de 366,33m² e área construída de 98,74m²'), 'casa');
+eq('benfeitoria residencial é casa', normalizarTipo('Terreno contendo benfeitoria residencial, Blumenau/SC'), 'casa');
+eq('prédios residenciais é casa', normalizarTipo('Lote de Terreno com 01 barracão, 02 prédios residenciais, 01 escritório'), 'casa');
+eq('"Constr. de 256m²" é casa', normalizarTipo('Terreno de 360m² | Constr. de 256m² - Guarujá/SP'), 'casa');
 console.log(`${falhas ? '✗' : '✓'} area-multi-bem-e-tipo: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);

@@ -2165,8 +2165,21 @@ export default async function handler(req, res) {
     // TERRENO: a área da matrícula É a área do imóvel (28/09). Só `areaTerrenoM2` recebia a
     // matrícula; `areaM2` — a que vai no pedido da pesquisa e na conta do valor — ficava com a do
     // anúncio. Embu-Guaçu: matrícula 1.200 m² lida, relatório precificou 1.303 m².
+    // TRAVA (28/09, mesma noite): a "matrícula" lida às vezes é de OUTRO imóvel — 5 lotes GRUPOLANCE
+    // em cidades diferentes com a mesma área de matrícula (177 m²), 7 ZUK com 774,5, uma gleba de
+    // 29.273 m² com 255 m². Deixar a matrícula vencer sempre trocaria um erro pequeno do anúncio por
+    // um erro enorme. Só substitui quando as duas são COMPATÍVEIS (±30%, a faixa de arredondamento e
+    // de área de anúncio desatualizada — Embu: 1.200 × 1.303); fora disso fica a do anúncio e a
+    // divergência vira anomalia para revisão, em vez de uma escolha às cegas.
     const ehTerreno = /terreno|rural/.test(String(mercadoInputs.tipoImovel || ''));
-    if (ehTerreno && aTer >= 5 && aTer <= 10000000) { mercadoInputs.areaTerrenoM2 = aTer; mercadoInputs.areaM2 = aTer; }
+    if (ehTerreno && aTer >= 5 && aTer <= 10000000) {
+      const razao = areaAnunciada > 0 ? aTer / areaAnunciada : 1;
+      if (razao >= 0.7 && razao <= 1.43) { mercadoInputs.areaTerrenoM2 = aTer; mercadoInputs.areaM2 = aTer; }
+      else {
+        mercadoInputs.areaTerrenoM2 = areaAnunciada;
+        try { await registrarAnomalia('area_matricula_incompativel', imovel?.fonte || '', imovelId, 'area_m2', `Terreno: matrícula lida diz ${aTer} m², anúncio ${areaAnunciada} m² (${razao.toFixed(2)}x). Mantida a do anúncio — a matrícula lida pode ser de outro imóvel.`); } catch { /* anomalia é best-effort */ }
+      }
+    }
   }
   // LOTE COM VÁRIOS BENS (28/09): "Lote 1) … 1.303 m² … Lote 2) … 1.200 m²" — o arrematante leva
   // a SOMA, e a matrícula lida cobre um bem só. Para terreno a soma prevalece sobre as duas

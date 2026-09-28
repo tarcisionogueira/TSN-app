@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
-import { isolarBlocoDoLote } from '../api/_edital-extrato.js';
+import { isolarBlocoDoLote, ehDocMultiLote } from '../api/_edital-extrato.js';
 import { ehDocInstitucional } from '../api/_doc-scan.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -85,9 +85,13 @@ async function publicarFatosDoPdf(imovelId, buffer, tipo, valores = {}) {
     if (txt.length < 200) return;
     const blocoLote = isolarBlocoDoLote(txt, { valorMinimo: valores.valorMinimo, valorAvaliacao: valores.valorAvaliacao });
     const txtLote = blocoLote || txt;
-    const fatos = { identidade: extrairIdentidadeTexto(txtLote) };
+    // Edital de VÁRIOS lotes sem o bloco deste isolado: identidade e matrícula seriam do 1º lote do
+    // documento, gravadas em todos (28/09: 27 lotes com "matrícula" de outro — ver ehDocMultiLote).
+    // A matrícula PRÓPRIA do lote (tipo 'matricula') continua lida inteira.
+    const confiavel = tipo === 'matricula' || !!blocoLote || !ehDocMultiLote(txt);
+    const fatos = { identidade: confiavel ? extrairIdentidadeTexto(txtLote) : null };
     if (tipo === 'matricula') fatos.matricula = extrairMatriculaTexto(txtLote);
-    else { fatos.custos = extrairCustosTexto(txtLote); fatos.pagamento = extrairPagamentoTexto(txtLote); fatos.matricula = extrairMatriculaTexto(txtLote); }
+    else { fatos.custos = extrairCustosTexto(txtLote); fatos.pagamento = extrairPagamentoTexto(txtLote); fatos.matricula = confiavel ? extrairMatriculaTexto(txtLote) : null; }
     if (!Object.values(fatos).some(Boolean)) return;
     await supabase.rpc('registrar_doc_fatos', { p_imovel_id: imovelId, p_fatos: { ...fatos, em: new Date().toISOString() } });
   } catch { /* enriquecer a ficha nunca bloqueia a captura */ }
