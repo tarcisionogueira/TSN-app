@@ -175,7 +175,11 @@ jobs:
 
       - name: Leiloar (Uberlândia Leilões)
         # 28/09: Plataforma Leiloar, HTML estático sem Cloudflare neste tenant — grátis (semBD).
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leiloar')) }}
+        # Fora do RODA_TUDO: o dry-run de 28/09 (run 36440506134) levou HTTP 403 do IP do runner
+        # (Azure) na home — o MESMO site respondeu 200 ao servidor do banco (AWS) no recon.
+        # Bloqueio por faixa de IP, não por cabeçalho. Produção: scripts/runner-residencial.sh.
+        # Push = sinalizador, como LEJE/FREITAS.
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leiloar')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

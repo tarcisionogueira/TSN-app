@@ -9,6 +9,14 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔶 28/09 — Uberlândia Leilões (Leiloar): dry-run no CI levou HTTP 403 → vai pelo PC
+Run 36440506134: `enumerados 0 (via sem-bd (grátis: HTTP 403))` na home. O recon do mesmo dia pelo
+servidor do banco (AWS) recebeu 200 em todas as rotas, com os mesmos cabeçalhos de navegador —
+bloqueio por faixa de IP (Azure/GitHub). Saiu do `RODA_TUDO` (push segue como sinalizador) e entrou
+no `scripts/runner-residencial.sh` com `LEILOAR_DRYRUN=0`. **Conferir após a próxima rodada do PC:**
+`select * from fonte_saude where fonte='UBERLANDIALEILOES' order by 1 desc limit 3;` — se o motivo
+vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
+
 ### 🔶 28/09 — lotes "Sem foto": LJUD concluído (foto não existe na origem), HASTAPUBLICA em curso
 - **LJUD (307/754 sem foto, 41%) — CONCLUÍDO 28/09: a foto NÃO existe no site do leiloeiro.**
   Os sites dos leiloeiros da LJUD (doleiloes, jrleiloes, giordano, alvaro…) são white-label da

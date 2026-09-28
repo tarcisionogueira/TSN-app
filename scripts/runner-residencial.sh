@@ -240,6 +240,12 @@ rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 # o Bright Data já coletou este site (recon 26-27/09). Custo limitado pelo teto `freitas` 25/sem.
 rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
 
+# UBERLANDIALEILOES (28/09) — Plataforma Leiloar (leiloesuberlandia.com.br). HTTP 403 ao IP do
+# GitHub (Azure); o servidor do banco (AWS) recebeu 200 no recon. Fetch direto, grátis (semBD —
+# nunca cai no pago). Parser validado em fixtures reais (npm run testar:leiloar). Se o motivo em
+# fonte_saude vier "HTTP 403" também daqui, o bloqueio não é só de datacenter: reavaliar.
+rodar UBERLANDIALEILOES env LEILOAR_DRYRUN=0 node scripts/scraper-leiloar.mjs
+
 # CRLEILOES (27/09) — crleiloes.com.br: Cloudflare por reputação de IP de datacenter; daqui é
 # fetch direto, grátis. O workflow do GitHub (Bright Data) vira reserva semanal com freio.
 # 27/09 (2ª rodada): do PC também dá `challenge` do Cloudflare — o bloqueio não é só de
