@@ -371,6 +371,18 @@ const COTA_NEGADA = new Map();
 // pra `'degradado'` sozinho SE houver queda de verdade vs a execução anterior — a distinção só
 // não chegava até lá).
 const VIA_TENANT = new Map();
+// Site que DECLARA não ter lote ("NENHUM LOTE ENCONTRADO NO MOMENTO", 28/09 — JOAOEMILIO entre
+// leilões). Zero afirmado pela fonte é resposta; o motivo "site declara…" faz
+// fonte_regressao_suspeita() não acusar `zerou` (ver fonte_regressao_zero_declarado_pelo_site.sql).
+const VAZIO_DECLARADO = new Set();
+// Freio de frescor do TORRES3 (28/09): entra em SEM_COTA (é decisão de custo, o monitor não
+// acusa), mas o motivo dizia "SEM COTA Bright Data" — e há 10 dias quem lia ia procurar teto
+// semanal esgotado, com a cota sobrando. Forma nº 10: o registro nomeava outra coisa.
+const FREIO_FRESCOR = new Set();
+const MOTIVO_SEM_COTA = (fonte) => FREIO_FRESCOR.has(fonte)
+  ? `freio de frescor próprio: ${fonte} só é coletado a cada ${TORRES3_FRESCOR_DIAS} dias (decisão de custo, não regressão da fonte)`
+  : 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)';
+const RE_VAZIO_DECLARADO = /nenhum\s+lote\s+encontrado|nenhum\s+im[óo]vel\s+encontrado|n[ãa]o\s+h[áa]\s+lotes?\s+dispon[íi]veis/i;
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -382,6 +394,7 @@ async function enumerarLotes(tenant) {
     if (semCota) SEM_COTA.add(tenant.fonte);
     if (!html) break;
     via = via || v;
+    if (p === 1 && !extrairUrlsDeLote(html, tenant.base).length && RE_VAZIO_DECLARADO.test(html.replace(/<[^>]+>/g, ' '))) VAZIO_DECLARADO.add(tenant.fonte);
     const antes = setUrls.size;
     for (const u of extrairUrlsDeLote(html, tenant.base)) setUrls.add(u);
     if (DEBUG) console.log(`   [${tenant.fonte}] pág ${p} (${v}): +${setUrls.size - antes} (total ${setUrls.size})`);
@@ -459,6 +472,7 @@ async function coletarTenant(tenant) {
       // execução" em fonte_saude — exatamente a forma nº 5 do CLAUDE.md que este próprio
       // arquivo já corrigiu uma vez para o teto de verdade.
       SEM_COTA.add('TORRES3');
+      FREIO_FRESCOR.add('TORRES3'); // o motivo tem que dizer QUAL "não" — ver MOTIVO_SEM_COTA
       return [];
     }
   }
@@ -560,7 +574,8 @@ async function main() {
         enumerados: ENUMERADOS.get(tenant.fonte) ?? null,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCota
-          ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
+          ? MOTIVO_SEM_COTA(tenant.fonte)
+          : VAZIO_DECLARADO.has(tenant.fonte) ? 'site declara "nenhum lote encontrado" — leiloeiro sem lote publicado (não é regressão)'
           : 'execução sem nenhum lote pronto',
       });
     }
@@ -609,7 +624,8 @@ async function main() {
         enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: SEM_COTA.has(tenant.fonte)
-          ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
+          ? MOTIVO_SEM_COTA(tenant.fonte)
+          : VAZIO_DECLARADO.has(tenant.fonte) ? 'site declara "nenhum lote encontrado" — leiloeiro sem lote publicado (não é regressão)'
           : 'tenant sem lote nesta execução',
       });
     if (!rows.length) continue;

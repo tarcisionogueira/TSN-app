@@ -9,6 +9,23 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — resumo do processo, destino do arremate, JOAOEMILIO/TORRES3
+
+- **Resumo do processo (IA) informava errado ao cliente** — 0010959-05.2017.5.15.0030: decisão de
+  31/07 homologou, oficiou o CRI de Cotia só para AVERBAR "sem a efetiva transferência" e
+  condicionou carta/imissão/cancelamento da penhora à integralização das parcelas. O resumo dizia
+  "já pagou", "cartório notificado para registrar", "carta expedida 22/08" (sem publicação) e
+  mandava ao cartório. 3 itens do histórico do cliente corrigidos no banco (22/08 removido; 04/08
+  e 14/07 reescritos — leilão foi 23/06). Prompt endurecido + **trecho literal obrigatório**
+  conferido no servidor. Publicações lidas via `net.http_get` do banco (a nuvem bloqueia o DJEN).
+  ⚠️ **Não conferido:** o que é o movimento DataJud de 22/08 (precisa da chave do DataJud).
+- **Destino do arremate**: venda | locação | uso próprio (`arrematados.destino/destino_data/
+  aluguel_valor`); locação vira amostra `locacao` do Índice.
+- **JOAOEMILIO "zerou" = site vazio de verdade** ("NENHUM LOTE ENCONTRADO NO MOMENTO", conferido
+  28/09). SOLEON grava "site declara…" e `fonte_regressao_suspeita` não acusa mais esse caso.
+- **TORRES3 "medição velha" = freio de frescor de 14 dias por desenho** (próxima coleta ~02/10).
+  O motivo dizia "SEM COTA Bright Data" — agora diz "freio de frescor próprio".
+
 ### ✅ 28/09 — invariantes em alerta: 12 → 7 (e os 7 restantes explicados)
 
 Rodado `qa_invariantes()` e atacado um por um. Corrigidos na raiz:
