@@ -68,6 +68,7 @@ import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
+import { inferirUF } from './lib/inferir-uf.mjs';
 import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/fetch-residencial.mjs';
 
 // vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
@@ -259,6 +260,12 @@ function parseCard(card, ctx) {
   if (!cidade) {
     const m2 = txt.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ. ]{2,30}?)\s*\(([A-Z]{2})\)/);
     if (m2) { cidade = tituloCase(m2[1].trim()); estado = estado || m2[2]; }
+  }
+  // Sem o bloco "ESTADO:" (28/09: 2 lotes do lancenoleilao/granado sem UF, invisíveis em
+  // /leiloes, com "CEP sob nº 05449-050" no texto) — mesmo recuperador do motor, só com prova.
+  if (!estado) {
+    const x = inferirUF({ cidade, titulo: null, endereco, descricao: txt });
+    if (x) { estado = x.uf; if (x.cidade && !cidade) cidade = tituloCase(x.cidade); }
   }
   // Matrícula: aceita "MATRÍCULA: 44034" e "Matrícula 101339 do 6º CRI" (venda direta, sem ":").
   const matricula = (txt.match(/matr[íi]cula[:\s]*n?[ºo°.]?\s*(\d[\d.\-\/]{2,})/i) || [])[1] || null;

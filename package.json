@@ -22,7 +22,7 @@
     "testar:cortesia-vencendo": "node scripts/testes/cortesia-vencendo-avisa-na-janela-certa.mjs",
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:superbid": "node scripts/testes/superbid-resultado.mjs",
-    "testar:uf": "node scripts/testes/uf-recuperada-so-com-prova-do-ibge.mjs",
+    "testar:uf": "node scripts/testes/inferir-uf-sinais.mjs && node scripts/testes/uf-recuperada-so-com-prova-do-ibge.mjs && node scripts/testes/uf-de-edital-e-uf-de-verdade.mjs",
     "testar:datas-vizinhos": "node scripts/testes/datas-do-lote-nao-vem-dos-vizinhos.mjs",
     "testar:albertomacedo-cidade": "node scripts/testes/albertomacedo-cidade-do-lote.mjs",
     "testar:freitas": "node scripts/testes/freitas-parse.mjs",
