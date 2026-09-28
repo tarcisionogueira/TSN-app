@@ -78,6 +78,7 @@ export function extrairDocumentos(html) {
     if (docs.has(m[0])) continue;
     let nome = m[1];
     try { nome = decodeURIComponent(nome); } catch { /* nome cru */ }
+    nome = nome.normalize('NFC'); // parte dos arquivos vem com acento decomposto (NFD)
     docs.set(m[0], { nome: nome.slice(0, 120), url: m[0], tipo: tipoDoc(nome) });
   }
   return [...docs.values()];
@@ -107,7 +108,8 @@ export function montarRow(p, docs = []) {
     titulo, tipo: TIPO_CATALOGO.find(([re]) => re.test(tipoNome))?.[1] || 'imovel',
     modalidade: 'venda_direta',
     cidade: p.city || null, estado: p.federativeUnit || null, bairro: p.neighborhood || '', endereco: '',
-    cep: p.zipCode || null,
+    // CEP ausente vem como 8 espaços (dry-run 28/09) — só 8 dígitos valem.
+    cep: /^\d{8}$/.test(String(p.zipCode || '').replace(/\D/g, '')) ? String(p.zipCode).replace(/\D/g, '') : null,
     // `price` é o preço mínimo fixado pelo juízo. A avaliação fica 0 (desconhecida) de propósito:
     // a descrição traz a do imóvel INTEIRO mesmo quando se vende fração (LGCJ-32404: "integral =
     // R$ 380.000 … 50% = R$ 190.000") — tirar dali daria número plausível e errado.

@@ -16,6 +16,7 @@ eq('Jaú: venda direta, sem data, avaliação desconhecida', [jau.modalidade, ja
 eq('Jaú: foto do blob público', /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\/.+\.webp$/.test(jau.link_foto), true);
 eq('Jaú: link do imóvel', jau.url_lote, 'https://www.lgcorretorjudicial.com.br/imovel/57f69e14-5ae4-40e2-a5c9-0628e1a6e66b');
 // Descrição longa vem como referência "$<id>" para uma linha T do RSC — tem de ser resolvida.
+eq('CEP ausente vira nulo (não 8 espaços)', montarRow(busca.find((p) => p.code === 'LGCJ-41295'), []).cep, null);
 const tatui = busca.find((p) => p.code === 'LGCJ-59985');
 eq('Tatuí: descrição resolvida da linha T', /Tatu[íi]/.test(tatui.description) && !/^\$/.test(tatui.description), true);
 eq('Parte ideal: barrada pela regra de fração', ehFracaoIdeal(montarRow(tatui, [])), true);
