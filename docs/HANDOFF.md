@@ -9,6 +9,33 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔴🔴 28/09 — ANÚNCIOS PARADOS DESDE ~14/09, SEM NINGUÉM AVISADO + pendências de Google consolidadas
+
+**Medido no banco (28/09):** Google Ads sem dado desde 14/09 e Meta desde 13/09 (o último dia de
+cada um já com gasto residual: R$ 2,43 / R$ 2,95). Visitas por semana 2.091 → 598 → 111 → 14;
+cadastros 44 → 33 → 10 → 4; visitas e cadastros com clique pago do Google = 0 desde 21/09. Não é
+o rastreador (cadastros caíram na mesma proporção): o tráfego pago acabou. Padrão de campanha
+pausada ou **pagamento recusado** nas duas contas (cartão já recusado por saldo em 01/09 no
+Workspace). **Só o dono vê as contas de anúncio.**
+- O vigia `mkt_ingestao_atrasada` estava VERDE: contava canal parado só entre D-3 e D-10 e se
+  apagou no 11º dia. Corrigido (janela de 60 dias) — agora acusa 2 e o e-mail diário avisa.
+- **Windsor.ai (a ferramenta de consulta do Claude, não a ingestão)**: leitura PAUSADA — "15 contas
+  conectadas, plano Free inclui 1"; devolve zeros com HTTP 200. Desconectar 14 contas em
+  onboard.windsor.ai/app ou assinar. A ingestão do painel NÃO depende dele (Google = script
+  dentro do Google Ads → /api/ads-metrics-ingest; Meta = /api/meta-insights-cron).
+
+**Pendências de Google que continuam abertas (todas do dono):**
+1. Conferir por que as campanhas do Google e do Meta pararam (~13-14/09) — faturamento/pausa.
+2. Backfill dos 53 cadastros históricos com gclid nunca reportados ao Google Ads (decisão do dono;
+   a função `enviarCadastroOffline` existe). Desde 18/09 não houve cadastro pago novo para testar.
+3. App OAuth do Google Ads em modo **Teste** → refresh token expira em 7 dias. Publicar o app
+   (domínio verificado + política de privacidade) antes de depender de cron.
+4. Conversão offline do PIX (`api/_google-ads.js`) depende das envs `GOOGLE_ADS_*` — confirmar em
+   `/api/system-status` (a Vercel nega listar envs ao Claude).
+5. Projeto "BidPro métricas diárias" no Google Cloud — quem criou e se gera custo (Console → IAM).
+6. Perfil da Empresa no Google (business.google.com) — o item -4 do PENDENCIAS_DONO só teve o
+   Search Console concluído.
+
 ### ✅ 28/09 — resumo do processo, destino do arremate, JOAOEMILIO/TORRES3
 
 - **Resumo do processo (IA) informava errado ao cliente** — 0010959-05.2017.5.15.0030: decisão de
