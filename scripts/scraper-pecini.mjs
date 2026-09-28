@@ -385,6 +385,8 @@ function parseDetalhe(html, rec) {
     // `extrairDescricaoDoCorpo` (api/_texto-imovel.js) já foi ao mesmo teto — sem repetir aqui
     // o corte voltaria a acontecer, só que num ponto diferente.
     descricao: (base.descricao || '').slice(0, 8000) || null,
+    // "Comarca: Sorocaba Vara: 4ª Vara Cível …" — cidade quando o slug só traz o BAIRRO (Sublime).
+    comarca: ((txt.match(/Comarca:\s*(.{2,60}?)\s+Vara:/i) || [])[1] || '').trim() || null,
     data_leilao: pracasDatadas[0]?.data || base.data_leilao || extrairData(html),
     data_leilao_2: pracasDatadas[1]?.data || null,
     numero_matricula: base.numero_matricula || null,
@@ -397,13 +399,33 @@ function parseDetalhe(html, rec) {
 
 // Monta a linha compatível com imoveis_leilao (mesmos campos computados do
 // salvarImoveis: ativo/viavel/score/desconto/atualizado_em).
+// VEÍCULO NÃO É IMÓVEL (28/09, Sublime): o site leiloa carros no mesmo sitemap e 8 entraram em
+// imoveis_leilao ("Mercedes-Benz C180 | Modelo 2015", "Lote principal" de "/lote/11-veiculos-no-
+// tatuape/"). Pelo SLUG decide antes de abrir o navegador; pelo título, depois.
+// Palavra INTEIRA no slug ("terreno-em-fordlandia-pa" não é Ford).
+const RE_VEICULO_SLUG = /\/lote\/(?:[^/]*-)?(veiculos?|motos?|carros?|caminh(?:ao|oes)|onibus|mercedes|fiat|hyundai|honda|toyota|chevrolet|volkswagen|vw|ford|renault|nissan|jeep)(?:-|\/)/i;
+const RE_VEICULO_TITULO = /\b(mercedes|fiat|hyundai|honda|toyota|chevrolet|volkswagen|vw|ford|renault|nissan|jeep|peugeot|citro[eë]n|bmw|audi|kia|mitsubishi|motocicleta|caminh[ãa]o|ve[íi]culo)\b|\bmod(?:elo|\.)\s*(19|20)\d{2}\b/i;
+const ehVeiculo = (url, titulo = '') => RE_VEICULO_SLUG.test(url || '') || RE_VEICULO_TITULO.test(titulo || '');
+
 function montarRow(rec, det) {
+  // Slug do Sublime às vezes é BAIRRO ("casa-na-vila-madalena") ou traz sufixo ("casa-em-jacarei-
+  // cond-fechado"): a COMARCA da página manda. Foro regional da capital paulista = São Paulo/SP.
+  const FOROS_SP = /^(central|penha de fran[çc]a|santo amaro|tatuap[ée]|jabaquara|lapa|pinheiros|santana|itaquera|ipiranga|vila prudente|s[ãa]o miguel paulista|nossa senhora do [óo]|butant[ãa]|parelheiros|jo[ãa]o mendes|barra funda)$/i;
+  if (FONTE !== 'PECINI' && det.comarca && !rec.uf) {
+    if (FOROS_SP.test(det.comarca)) { rec.cidade = 'São Paulo'; rec.uf = 'SP'; }
+    else rec.cidade = det.comarca;
+  } else if (FONTE !== 'PECINI' && rec.cidade) {
+    rec.cidade = rec.cidade.replace(/\s+Cond(ominio)?\s+Fechado$/i, '');
+  }
   const ufInferida = rec.uf ? null : inferirUF({ cidade: rec.cidade, titulo: det.titulo, descricao: det.descricao });
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
   return {
     fonte: FONTE,
     fonte_id: `${PREFIXO}${rec.id}`,
-    titulo: det.titulo,
+    // Título do Sublime não diz ONDE ("Terreno de 250m² | Constr. de 150m²"): acrescenta Cidade/UF.
+    titulo: (FONTE !== 'PECINI' && (rec.cidade || ufInferida?.cidade))
+      ? `${det.titulo} - ${rec.cidade || ufInferida.cidade}${(rec.uf || ufInferida?.uf) ? '/' + (rec.uf || ufInferida.uf) : ''}`.slice(0, 180)
+      : det.titulo,
     tipo: inferirTipo(det.titulo),
     modalidade: det.modalidade,
     // UF do slug; faltando (Sublime: "casa-em-campinas" não traz UF), deduz pela cidade e pelo
@@ -535,11 +557,13 @@ async function main() {
   const prontos = [];
   let semDetalhe = 0, reprovados = 0;
   for (const rec of alvoLotes) {
+    if (FONTE !== 'PECINI' && ehVeiculo(rec.loteUrl)) { reprovados++; console.log(`  ${rec.id} · DESCARTADO(veiculo — pelo endereço, sem abrir)`); continue; }
     if (recusaDeCota) { semDetalhe++; continue; }   // o freio já disse não: insistir só repete a recusa
     const html = await bd(rec.loteUrl);
     if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio`); continue; }
     const det = parseDetalhe(html, rec);
     if (det.paginaInvalida) { semDetalhe++; console.log(`- ${rec.id}: página genérica/sem lote (pulado)`); continue; }
+    if (FONTE !== 'PECINI' && ehVeiculo(rec.loteUrl, det.titulo)) { reprovados++; console.log(`  ${rec.id} · DESCARTADO(veiculo — pelo título)`); continue; }
     const row = montarRow(rec, det);
     const q = checarQualidade(row, { estrito: false });
     console.log(`  ${rec.id} ${rec.cidade || '?'}/${rec.uf || '?'} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · desc ${row.desconto_percentual ?? '?'}% · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
