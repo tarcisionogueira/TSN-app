@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download, Plus, Trash2, Link2, Search } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download, Plus, Trash2, Link2, Search, Copy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -140,9 +140,18 @@ export default function Contratos() {
     } catch { setPartes(montarRoster(g)); }
     setPartesLoad(false);
   };
+  const [linkCopiado, setLinkCopiado] = useState(null);
+  const copiarLinkParte = async (p) => {
+    const url = `${window.location.origin}/#/c/${p.link_token}`; // HashRouter (App.jsx)
+    try { await navigator.clipboard.writeText(url); }
+    catch { window.prompt('Copie o link de assinatura:', url); } // padrao-ok: clipboard bloqueado (http/iframe) — o fallback mostra o link para copiar à mão
+    setLinkCopiado(p.id); setTimeout(() => setLinkCopiado(c => (c === p.id ? null : c)), 2500);
+  };
   const montarRoster = (g) => g.linhas.map(l => ({
-    id: l.id, nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || l.assinante_email,
+    id: l.id, nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || l.assinante_nome?.trim() || l.assinante_email,
     email: l.assinante_email, assinou: l.status === 'assinado' || !!l.assinado_em, assinado_em: l.assinado_em,
+    // Mesma cerca da RPC get_partes_contrato: link só para quem reencaminha (equipe/quem criou).
+    link_token: (l.status !== 'assinado' && !l.assinado_em && (isAdmin || l.criado_por === user?.id)) ? l.token : null,
     requer_testemunha: !!l.requer_testemunha, testemunha_assinou: !!l.testemunha_em, nome_testemunha: l.nome_testemunha,
   }));
 
@@ -621,13 +630,21 @@ export default function Contratos() {
                       {partes.map(p => (
                         <div key={p.id || p.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 10 }}>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: 13.5, color: '#111111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
-                            <div style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.email}</div>
+                            <div style={{ fontWeight: 700, fontSize: 13.5, color: '#111111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome || 'Signatário sem nome'}</div>
+                            <div style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.email || 'sem e-mail — assina pelo link'}</div>
                             {p.requer_testemunha && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Testemunha: {p.testemunha_assinou ? `assinou${p.nome_testemunha ? ` (${p.nome_testemunha})` : ''}` : 'pendente'}</div>}
                           </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          {!p.assinou && p.link_token && (
+                            <button onClick={() => copiarLinkParte(p)} title="Copia o link de assinatura desta parte para reencaminhar"
+                              style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, border: '1px solid #bfdbfe', background: linkCopiado === p.id ? '#dcfce7' : 'white', color: linkCopiado === p.id ? '#059669' : '#0D63DB', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {linkCopiado === p.id ? <><CheckCircle2 size={12} /> Copiado</> : <><Copy size={12} /> Copiar link</>}
+                            </button>
+                          )}
                           <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: p.assinou ? '#dcfce7' : '#fef3c7', color: p.assinou ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
                             {p.assinou ? <CheckCircle2 size={12} /> : <Clock size={12} />} {p.assinou ? (p.assinado_em ? `Assinou ${new Date(p.assinado_em).toLocaleDateString('pt-BR')}` : 'Assinou') : 'Pendente'}
                           </span>
+                          </div>
                         </div>
                       ))}
                     </div>
