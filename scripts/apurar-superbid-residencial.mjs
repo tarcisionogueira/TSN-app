@@ -169,7 +169,17 @@ for (const a of alvos) {
     // Lance registrado (24/09): condicional/indeterminado COM lance não é "sem lance" para o
     // cliente — só duas saídas na tela (dono). `teve_lance` só liga, nunca desliga.
     if (a.tabela === 'veiculos_leilao' && c && (c.lances > 0 || c.recebeuLanceOuProposta)) patch.teve_lance = true;
-    if (res === 'em_andamento') { /* só a tentativa */ }
+    if (res === 'em_andamento') {
+      // Praça PRORROGADA (28/09): a data do acervo venceu e o site ainda aceita lance. Só contar a
+      // tentativa gastava as 6 antes do fim verdadeiro — 4 veículos chegaram a 6 com o leilão
+      // aberto e nunca mais seriam apurados, ativos com data errada (invariante
+      // resultado_leilao_atrasado). Com o fim real no futuro: grava a data e zera o contador
+      // (é um prazo novo); o lote sai da fila e volta quando encerrar de verdade.
+      if (a.tabela === 'veiculos_leilao' && c?.fimMs && c.fimMs > Date.now()) {
+        patch.data_leilao = new Date(c.fimMs).toISOString();
+        patch.resultado_apuracao_tentativas = 0;
+      }
+    }
     else if (res === 'vendido' || res === 'sem_lance') {
       patch.resultado_leilao = res;
       if (res === 'vendido' && r.valor) patch.valor_lance_vencedor = r.valor;

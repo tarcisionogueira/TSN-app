@@ -2801,7 +2801,11 @@ function extrairDaDescricao(txt) {
   // (recon 30/07: a API zerou lot_useful_area e a descrição virou a fonte da área).
   const ap = t.match(/(?:privativa|útil|util)\s*(?:de\s*)?[:\s]*([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
   const am = ap || t.match(/([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
-  if (am) { const n = parseFloat(am[1].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e7) out.area_m2 = n; }
+  // Rural "187ha0.323m²" (= 187 hectares + 323 m², 28/09, SUPERBID fazenda em MS): o regex acima
+  // lia "0.323m²" e gravava 323 m² para 1.870.323 m² (invariante area_truncada_no_milhar).
+  const ha = !ap && t.match(/(\d{1,3}(?:\.\d{3})*|\d+)\s*ha\s*(\d[\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
+  if (ha) { const n = Number(ha[1].replace(/\./g, '')) * 10000 + parseFloat(ha[2].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e9) out.area_m2 = n; }
+  else if (am) { const n = parseFloat(am[1].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e7) out.area_m2 = n; }
   const om = t.match(/\b(desocupad[ao]|ocupad[ao])\b/i);
   if (om) out.ocupacao = /desocupad/i.test(om[1]) ? 'Desocupado' : 'Ocupado';
   return out;

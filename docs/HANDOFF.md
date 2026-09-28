@@ -9,6 +9,45 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — invariantes em alerta: 12 → 7 (e os 7 restantes explicados)
+
+Rodado `qa_invariantes()` e atacado um por um. Corrigidos na raiz:
+- **estado_fora_do_padrao 20 → 5**: `inferirUF` ganhou comarca/cidade citada (conferida no IBGE)
+  e faixa de CEP (99,4% medido). Processo CNJ REJEITADO (93%, carta precatória). 9 sobras da
+  Alberto Macedo desativadas (sem motivo: voltam se regravadas). **Os 5 restantes não têm prova
+  no texto** (VM Leilões ×2, AM Leiloeiro, Leilão Brasil, SUPERBID "Vila Andrade/SP") — precisam
+  de leitura do site (bloqueado na nuvem; recon no PC).
+- **editais_avaliacao_perdida 7 → 0**: gatilho `trg_editais_propagar_valores` leva ao lote o
+  valor que o edital ganha depois da promoção; backfill de 105 (103 sem lance, fora da busca).
+- **resultado_leilao_atrasado 4**: `apurar-superbid-residencial.mjs` agora grava a data real de
+  leilão PRORROGADO e zera as tentativas (antes gastava as 6 com o leilão aberto). Os 4 voltaram à
+  fila — zera na próxima rodada do runner.
+- **fonte_cega_no_monitor → 0**: EDITAL_DJEN é vigiado por frescor; alarme permanente removido.
+- **foto_repetida_como_lote → 0**: logo de tribunal/Justiça do Trabalho como foto (SIMON) —
+  `foto_placeholder()` + `RE_IMG_DESCARTA`.
+- **praca_fim_antes_do_inicio 2 → 1**: data de fim SEM HORA virava 21h da véspera (UTC).
+  Gatilho `trg_praca_fim_sem_hora_brt`: vale o dia inteiro em Brasília.
+- **area_truncada_no_milhar 2 → 1**: "187ha0.323m²" (fazenda) era gravado 323 m² — extrator do
+  SUPERBID lê hectare + m².
+
+**Ficam (com motivo):**
+- `area_truncada_no_milhar` 1 — JE Leilões: coincidência (300 m² de uma construção vs "1.300"
+  de um barracão), mas a área está errada de outro jeito: o título é "3,5129 **alqueires**"
+  (~85 mil m² em alqueire paulista, PR). Conversão de alqueire depende da região — decidir regra.
+- `praca_fim_antes_do_inicio` 1 — GRUPOLANCE gl_28149: 1ª praça termina 20/10, data_leilao diz
+  09/11 (provável 2ª praça no campo da 1ª). Conferir na página.
+- `data_edital_recuou_prazo` 1 — GRUPOLANCE: edital diz 17/09, acervo 01/12; o sistema manteve
+  o acervo de propósito. Conferência humana.
+- `cadastro_duplicado` 1 — 30/08, mesma pessoa 2 contas em 3 min; sai da janela amanhã.
+- `sem_foto` / `lote_sem_area_nem_matricula` — gaps de volume, acima do teto por pouco.
+- `qa_invariantes_lenta` — o painel custa 5-10 s no servidor; a tela já não depende disso.
+
+🆕 **Pendência nova — edital de VARA CRIMINAL vira "imóvel"**: 38 lotes ativos do Radar vêm de
+Vara Criminal (bens apreendidos); 18 com avaliação < R$ 20 mil, um é "Pátio da 7ª SDP"
+(veículos). A maioria está fora da busca (sem lance), ~4 aparecem. 2 piores desativados
+(`suprimido_motivo='edital_multibens_vara_criminal'`). Falta a regra "isto é imóvel?" na
+promoção de edital — Vara Criminal também leiloa imóvel de verdade, então não é bloquear tudo.
+
 ### ✅ RESOLVIDO 28/09 — painel de Qualidade lento + contato de leiloeiro errado (bounce da JRF)
 
 **Painel de Qualidade (/admin):** a aba recalculava os ~90 invariantes no clique (5–10 s; 8,2 s
