@@ -258,7 +258,16 @@ export default async function handler(req, res) {
   console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, motor: motorUsado, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
   // Custo REAL desta pesquisa. É a única forma de comparar o índice (Claude web_search) com o
   // mercadológico (Gemini grounding) na mesma régua — os dois fazem o mesmo tipo de trabalho.
-  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000) } });
+  // ZERO AMOSTRA COM PESQUISA FEITA (28/09): sem isto o registro dizia só "amostras: 0" e não
+  // havia como saber se o modelo devolveu listas vazias ou itens que a montagem descartou.
+  const diagVazio = amostras.length ? undefined : (() => {
+    const lista = (n, k) => (Array.isArray(mercado?.[`nivel${n}`]?.[k]) ? mercado[`nivel${n}`][k] : []);
+    const itens = [lista(1, 'vendas'), lista(1, 'locacoes'), lista(2, 'vendas'), lista(2, 'locacoes')];
+    const primeiro = itens.flat()[0];
+    return { n1v: itens[0].length, n1l: itens[1].length, n2v: itens[2].length, n2l: itens[3].length,
+      chaves: primeiro ? Object.keys(primeiro).slice(0, 14) : [], exemplo: primeiro ? JSON.stringify(primeiro).slice(0, 220) : null };
+  })();
+  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000), ...(diagVazio ? { diag: diagVazio } : {}) } });
 
   // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
   const cobrar = async () => {

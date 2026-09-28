@@ -33,6 +33,13 @@ gravado leva o trecho do texto devolvido (meta.motivo até 300 chars) para o pr�
   até a primeira pesquisa pós-conserto concluir.
 - Mercadológico em 28/09: operando no Haiku (Gemini 402), 2–6 buscas por relatório, sem falha
   seguida; tem ainda a almofada do Índice BidPro (base própria) quando a busca ao vivo falha.
+**2ª rodada (28/09 21:34, Uptown Housing/Alphaville, casa):** a busca AGORA aconteceu (Haiku, 14 s,
+R$ 0,11 de tokens de resultado — 10× as falhas anteriores), o JSON veio legível, e saíram **0
+amostras**. A venda só entrava com `valorM2` preenchido; o anúncio mostra o PREÇO CHEIO. Conserto:
+prompt pede também `valorTotal` na venda (espelho do `valorMensal` da locação) e `montarAmostras`
+calcula total ÷ área quando o por-m² falta (aceita `valor`/`preco`/`valor_m2`/`precoM2`). Pesquisa
+feita com 0 amostras grava `meta.diag` (tamanho de cada lista, chaves e um exemplo do 1º item) —
+se voltar a zerar, o motivo está no banco.
 
 ### ✅ 28/09 — fotos VLANCE/DANIELGARCIA: não existem na origem + varredura de sumidos na Soleon
 - **VLANCE (30/134 sem foto):** mesma plataforma V-Lance da LJUD. 29 dos 30 casam na API

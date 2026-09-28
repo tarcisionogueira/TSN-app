@@ -62,7 +62,7 @@ ${regraTipo}
 - Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
-Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações E TAMBÉM valorMensal (o aluguel CHEIO anunciado, em R$/mês — traga sempre, é o número que aparece no anúncio); area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária); link (URL do anúncio).
+Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas E TAMBÉM valorTotal (o preço CHEIO anunciado, em R$ — traga sempre, é o número que aparece no anúncio); aluguelM2 (R$/m²/mês) nas locações E TAMBÉM valorMensal (o aluguel CHEIO anunciado, em R$/mês — traga sempre, é o número que aparece no anúncio); area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária); link (URL do anúncio).
 
 ÂNCORA DE LOCALIZAÇÃO (obrigatória): cada amostra precisa de PELO MENOS o "bairro". Sempre que o
 anúncio mostrar o logradouro ou o nome do empreendimento — o ZAP/VivaReal costumam exibir a rua no
@@ -74,7 +74,7 @@ LINK (obrigatório quando houver): "link" com a URL do anúncio que você abriu.
 amostra auditável e re-lível depois; sem link não há como conferir o número.
 
 Retorne SOMENTE JSON válido, sem texto fora do JSON:
-{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"valorMensal":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
+{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"valorTotal":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"valorMensal":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
 };
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
@@ -111,7 +111,15 @@ export function montarAmostras(mercado, ctx) {
   for (const nivel of [1, 2]) {
     const bloco = mercado?.[`nivel${nivel}`] || {};
     for (const v of (bloco.vendas || [])) {
-      const vm = Number(v?.valorM2); const tp = tipoDe(v); const brr = bairroDe(v) || '';
+      // R$/m² DE VENDA RECALCULADO (28/09), espelho do que a locação já fazia. A amostra só
+      // entrava com `valorM2` preenchido — e o anúncio mostra o PREÇO CHEIO. Pesquisa do Uptown
+      // Housing (Alphaville) com o Haiku: buscou, voltou JSON, e saiu com 0 amostras. Agora o
+      // preço cheio ÷ área vale quando o por-m² não vem; nomes alternativos também contam.
+      const areaV = Number(v?.area) || 0;
+      const total = Number(v?.valorTotal ?? v?.valor ?? v?.preco) || 0;
+      const vmDeclarado = Number(v?.valorM2 ?? v?.valor_m2 ?? v?.precoM2) || 0;
+      const vm = vmDeclarado > 0 ? vmDeclarado : (areaV > 0 && total > 0 ? Math.round(total / areaV) : 0);
+      const tp = tipoDe(v); const brr = bairroDe(v) || '';
       if (tp && vm > 0 && !FONTE_LEILAO.test(String(v?.fonte || ''))) out.push({ ...linha(v, 'venda', vm), nivel, data_anuncio: dataOk(v?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
     }
