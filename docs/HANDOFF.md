@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — edital de BEM MÓVEL não vira mais "imóvel" (Vara Criminal e geral)
+
+`edital_natureza_bem(texto, matrícula, área)` → imovel | movel | indefinido (regras na migração
+`edital_bem_movel_nao_vira_imovel.sql`). **56 lotes EDITAL_DJEN desativados** com
+`suprimido_motivo='edital_bem_movel'` — 25 estavam na busca como "Imóvel em leilão judicial"
+(Fiat Uno, Gol, compressor, mesa de escritório a R$ 255 mil, máquina de tear…). Conferidos um a
+um antes: nenhum imóvel. `editais_promover_pendentes` agora marca o edital móvel como processado
+e devolve `bens_moveis_ignorados`. Indefinido (38) NÃO é escondido.
+💡 Oportunidade: esses editais de VEÍCULO poderiam alimentar `veiculos_leilao` (hoje descartados).
+
 ### ✅ 28/09 — fila de leiloeiros do Radar (3)
 
 Recon feito pelo SERVIDOR DO BANCO (`net.http_get` do pg_net — a nuvem do Claude não alcança os
