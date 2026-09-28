@@ -116,7 +116,11 @@ sites; resposta em `net._http_response`, resultado grande sai em arquivo e vira 
   Fração ideal barrada por `ehFracaoIdeal` (2 "Parte Ideal de Casa"). Anúncio repetido deduplicado
   por cidade+matrícula (LGCJ-22039 × 48492 = matrícula 11.963 de Jaú). Varredura de sumidos só com
   lista completa. Parser `scripts/lib/lgcorretor-parse.mjs` + `npm run testar:lgcorretor` (14
-  asserções, 3 fixtures reais); coletor `scripts/scraper-lgcorretor.mjs` no `scraper-dom.yml`.
+  asserções, 3 fixtures reais); coletor `scripts/scraper-lgcorretor.mjs` no `scraper-dom.yml`
+  (o site responde ao IP do GitHub — roda no agendado diário, grátis).
+  **No ar em 28/09 18:19 UTC** (dispatch gravar=1, run após o dry-run 36463492987): 14 ativos, 14 com
+  foto, 14 com matrícula, 13 com edital (o `lgcorretor_77232`, Barra Bonita, não tem edital no site),
+  `fonte_saude` ok (enumerados 17). Geocodificação segue a fila normal.
 
 ### ✅ 28/09 — anúncios PAUSADOS PELO DONO em 14/09 (decisão, não falha) + pendências de Google consolidadas
 
