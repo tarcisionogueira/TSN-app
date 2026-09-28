@@ -3253,12 +3253,15 @@ async function scraperLJUD_navegador(browser, endpoint) {
   let fotoOk = 0;
   for (const im of semFoto) {
     let p2;
-    // A foto (path S3 fotos/imoveis) está na PÁGINA DO LOTE do agregador, não no site do
-    // leiloeiro. Como url_lote agora aponta p/ o leiloeiro real, reconstruímos a URL do lote
-    // no agregador a partir do fonte_id (ljud_{lote_id}) só p/ este backfill best-effort.
-    const loteId = String(im.fonte_id || '').replace(/^ljud_/, '');
-    if (!loteId) continue;
-    const aggUrl = `https://www.leiloesjudiciais.com.br/lote/${loteId}`;
+    // A URL do lote no agregador tem DOIS segmentos (/lote/{leilao_id}/{lote_id}, achado de
+    // 09/09) e é o próprio `url_lote`. A forma antiga, só com o lote_id, abre "Leilão não
+    // encontrado" na maioria dos lotes: o backfill visitava página de erro e contava 0 sem
+    // dizer por quê. Sem a forma de dois segmentos, não há o que visitar.
+    // Medido em 28/09 (1.209 lotes da API): dos 303 sem foto, 302 NÃO têm foto em lugar
+    // nenhum — o site do leiloeiro (plataforma V-Lance, mesma API core/api/get-lotes) lê a
+    // mesma base e mostra "nao-disponivel.jpg". Buscar "no site do leiloeiro" não acha nada.
+    const aggUrl = /\/lote\/\d+\/\d+/.test(im.url_lote || '') ? im.url_lote : null;
+    if (!aggUrl) continue;
     try {
       p2 = await browser.newPage();
       await p2.setUserAgent(USER_AGENT);

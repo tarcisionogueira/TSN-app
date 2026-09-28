@@ -9,12 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
-### 🔶 28/09 — lotes "Sem foto" com foto no site do leiloeiro (investigação em curso)
-- **LJUD (307/754 sem foto, 41%)**: o próprio agregador não tem foto — o `__NUXT_DATA__` do lote
-  `ljud_217021` traz `fotos: []`. A foto mora no site PRÓPRIO do leiloeiro; o payload Nuxt da LJUD
-  carrega links para ele em parte dos lotes (ex.: giordanoleiloes `/leilao/index/leilao_id/N/lote/M`,
-  jrleiloes, planaltoleiloes, rioleiloes…). Próximo passo: capturar esse link no scraper e buscar a
-  foto de lá (só quando o link é do MESMO lote — foto errada é pior que nenhuma).
+### 🔶 28/09 — lotes "Sem foto": LJUD concluído (foto não existe na origem), HASTAPUBLICA em curso
+- **LJUD (307/754 sem foto, 41%) — CONCLUÍDO 28/09: a foto NÃO existe no site do leiloeiro.**
+  Os sites dos leiloeiros da LJUD (doleiloes, jrleiloes, giordano, alvaro…) são white-label da
+  plataforma **V-Lance**: mesma API `core/api/get-lotes`, mesma base, mesmo bucket S3. Com
+  `fotos: []` a página do leiloeiro mostra `nao-disponivel.jpg`. Medido via pg_net nos 1.209 lotes
+  da API: dos 303 sem foto, **302 não têm foto em lugar nenhum**; 1 (`ljud_219128`) ganhou foto
+  depois da coleta de 27/09 e foi gravado. Metade do buraco é um leilão só: **710º Unificado TRT-2
+  (Daniel Oliveira) — 154 de 164 lotes sem foto**. Os links externos no `__NUXT_DATA__` eram
+  BANNERS de outros leilões, não o lote. Única fonte restante seria imagem DENTRO do edital/laudo
+  PDF — custo alto, não feito.
+  Conserto de quebra: o backfill por og:image visitava `/lote/{lote_id}` (1 segmento = "Leilão não
+  encontrado") — agora usa `url_lote` (`/lote/{leilao}/{lote}`).
 - **HASTAPUBLICA (126/126, 100%)**: o scraper lê só `innerText` do painel renderizado
   (`/leilao/painel/<id>`), nunca as `<img>`; o HTML cru é casca vazia (SPA). Adicionado dump do painel
   RENDERIZADO em `recon_dump` (origem `hastapublica-painel`, 1×/20 h) para escrever a extração de foto
