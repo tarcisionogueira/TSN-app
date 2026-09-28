@@ -5,7 +5,11 @@
  * calibrar a precisão das estimativas e (2) vira AMOSTRA do Índice BidPro (com a data),
  * do MESMO jeito que um anúncio de portal. O preço do ARREMATE nunca entra no Índice.
  *
- * Body: { arrematado_id?, imovel_id?, valor, data_mes ("AAAA-MM"), area_m2? }
+ * Body: { arrematado_id?, imovel_id?, destino?, valor, data_mes ("AAAA-MM"), area_m2? }
+ *
+ * DESTINO (28/09, pedido do dono): além da venda, registra LOCAÇÃO (valor = aluguel mensal →
+ * amostra `especie='locacao'` do Índice, que já existe) e USO PRÓPRIO (sem valor, sem amostra —
+ * não é dado de mercado). Sem `destino` = venda, como sempre foi.
  */
 export const config = { runtime: 'edge' };
 
@@ -41,8 +45,11 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
 
+  const destino = ['venda', 'locacao', 'uso_proprio'].includes(body.destino) ? body.destino : 'venda';
   const valor = Number(body.valor);
-  if (!Number.isFinite(valor) || valor <= 0) return new Response(JSON.stringify({ error: 'Informe o valor da revenda.' }), { status: 400, headers });
+  if (destino !== 'uso_proprio' && (!Number.isFinite(valor) || valor <= 0)) {
+    return new Response(JSON.stringify({ error: destino === 'locacao' ? 'Informe o valor do aluguel mensal.' : 'Informe o valor da revenda.' }), { status: 400, headers });
+  }
   const mes = /^\d{4}-\d{2}$/.test(String(body.data_mes || '')) ? String(body.data_mes) : new Date().toISOString().slice(0, 7);
   const dataRef = `${mes}-01`;
   const imovelId = String(body.imovel_id || '').trim();
@@ -82,7 +89,9 @@ export default async function handler(req) {
       }
     }
     const temAncora = !!(bairro || endereco || condominio);
-    const valorM2 = area > 0 ? Math.round(valor / area) : null;
+    // Aluguel é R$/m² por MÊS (mediana do Índice ~R$ 34): arredonda em centavos, não em reais.
+    const valorM2 = destino === 'uso_proprio' || !(area > 0) ? null
+      : destino === 'locacao' ? Math.round((valor / area) * 100) / 100 : Math.round(valor / area);
 
     // 1) Gabarito na tabela do arremate.
     // FALHA-ALTO (10/08) — mesmo remédio do irmão `sinalizar-arremate.js:87`, que foi corrigido
@@ -93,7 +102,9 @@ export default async function handler(req) {
     // que o cliente acredita ter entregue simplesmente não entrava.
     const pat = await sb(`arrematados?id=eq.${arr.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ revenda_valor: valor, revenda_data: dataRef, revenda_m2: area || null }),
+      body: JSON.stringify(destino === 'venda'
+        ? { destino, destino_data: dataRef, revenda_valor: valor, revenda_data: dataRef, revenda_m2: area || null }
+        : { destino, destino_data: dataRef, aluguel_valor: destino === 'locacao' ? valor : null }),
     });
     if (!pat.ok) {
       const corpo = await pat.text().catch(() => '');
@@ -106,7 +117,8 @@ export default async function handler(req) {
     // resposta, mas também NÃO pode ser reportada como sucesso — `amostra` passa a refletir o
     // que de fato entrou, porque é isso que a tela mostra ao cliente.
     let amostra = false;
-    if (cidadeNorm && uf && valorM2 && valorM2 >= 200 && valorM2 <= 50000 && temAncora) {
+    const faixaOk = destino === 'locacao' ? (valorM2 >= 3 && valorM2 <= 500) : (valorM2 >= 200 && valorM2 <= 50000);
+    if (destino !== 'uso_proprio' && cidadeNorm && uf && valorM2 && faixaOk && temAncora) {
       // Via RPC (28/08): `resolution=ignore-duplicates` sem `on_conflict` resolve pela PRIMARY
       // KEY — aqui um `id` gerado, que nunca conflita —, e o insert ia bater no índice de dedupe
       // real (`uq_indice_amostra_deduce`, sobre EXPRESSÕES) e voltar 409. `on_conflict=` na URL
@@ -116,8 +128,8 @@ export default async function handler(req) {
         method: 'POST',
         body: JSON.stringify({ p_linhas: [{
           cidade_norm: cidadeNorm, uf, bairro_norm: bairro, geo_grid: '', tipo: 'residencial',
-          especie: 'venda', valor_m2: valorM2, valor_total: valor, area_m2: area,
-          data_ref: dataRef, fonte: 'Revenda (cliente)', origem: 'revenda', imovel_id: iid,
+          especie: destino === 'locacao' ? 'locacao' : 'venda', valor_m2: valorM2, valor_total: valor, area_m2: area,
+          data_ref: dataRef, fonte: destino === 'locacao' ? 'Locação (cliente)' : 'Revenda (cliente)', origem: 'revenda', imovel_id: iid,
           endereco, condominio,
         }] }),
       });
@@ -134,11 +146,13 @@ export default async function handler(req) {
     try {
       await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
         p_user_id: user.id, p_evento: 'revenda',
-        p_detalhe: `Revenda registrada — R$ ${Math.round(valor).toLocaleString('pt-BR')}${valorM2 ? ` (R$ ${valorM2.toLocaleString('pt-BR')}/m²)` : ''}`,
-        p_meta: { imovel_id: iid, valor, valor_m2: valorM2, amostra } }) });
+        p_detalhe: destino === 'uso_proprio' ? 'Destino registrado — uso próprio'
+          : destino === 'locacao' ? `Locação registrada — aluguel R$ ${Math.round(valor).toLocaleString('pt-BR')}/mês${valorM2 ? ` (R$ ${valorM2.toLocaleString('pt-BR')}/m²)` : ''}`
+          : `Revenda registrada — R$ ${Math.round(valor).toLocaleString('pt-BR')}${valorM2 ? ` (R$ ${valorM2.toLocaleString('pt-BR')}/m²)` : ''}`,
+        p_meta: { imovel_id: iid, destino, valor: destino === 'uso_proprio' ? null : valor, valor_m2: valorM2, amostra } }) });
     } catch { /* log best-effort */ }
 
-    return new Response(JSON.stringify({ ok: true, valor_m2: valorM2, area, amostra }), { status: 200, headers });
+    return new Response(JSON.stringify({ ok: true, destino, valor_m2: valorM2, area, amostra }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha ao registrar revenda' }), { status: 500, headers });
   }

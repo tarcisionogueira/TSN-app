@@ -104,26 +104,29 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [comprovanteFile, setComprovanteFile] = React.useState(null);
   const [enviandoLanc, setEnviandoLanc] = React.useState(false);
   // Revenda: valor real de venda do imóvel arrematado → amostra do Índice + gabarito.
-  const [revenda, setRevenda] = React.useState({ open: false, valor: '', mes: new Date().toISOString().slice(0, 7), enviando: false, ok: !!arr.revenda_valor, erro: '' });
+  // Destino do imóvel (28/09, pedido do dono): venda, locação ou uso próprio.
+  const [revenda, setRevenda] = React.useState({ open: false, destino: 'venda', valor: '', mes: new Date().toISOString().slice(0, 7), enviando: false, ok: !!(arr.revenda_valor || arr.destino), erro: '' });
   const enviarRevenda = async () => {
     // "R$ 320.000,00" precisa virar 320000, não 32.000.000. O parse antigo removia TODO
     // não-dígito, então os centavos viravam ordem de grandeza (100x) — e este valor é
     // justamente o gabarito que calibra a precisão das estimativas futuras (ver o texto
     // logo abaixo do botão). Mesma regra do addLanc e do NovoArrematado nesta tela.
     const valor = Number(String(revenda.valor).replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''));
-    if (!valor || valor <= 0) { setRevenda(r => ({ ...r, erro: 'Informe o valor da revenda.' })); return; }
-    if (!/^\d{4}-\d{2}$/.test(revenda.mes)) { setRevenda(r => ({ ...r, erro: 'Informe o mês/ano da revenda.' })); return; }
+    const semValor = revenda.destino === 'uso_proprio';
+    if (!semValor && (!valor || valor <= 0)) { setRevenda(r => ({ ...r, erro: r.destino === 'locacao' ? 'Informe o aluguel mensal.' : 'Informe o valor da revenda.' })); return; }
+    if (!/^\d{4}-\d{2}$/.test(revenda.mes)) { setRevenda(r => ({ ...r, erro: 'Informe o mês/ano.' })); return; }
     setRevenda(r => ({ ...r, enviando: true, erro: '' }));
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/sinalizar-revenda', {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-        body: JSON.stringify({ arrematado_id: arr.id, imovel_id: arr.imovel_id || imovelId, valor, data_mes: revenda.mes }),
+        body: JSON.stringify({ arrematado_id: arr.id, imovel_id: arr.imovel_id || imovelId, destino: revenda.destino, valor: semValor ? null : valor, data_mes: revenda.mes }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Falha ao registrar a revenda.');
+      if (!res.ok) throw new Error(d.error || 'Falha ao registrar.');
       setRevenda(r => ({ ...r, enviando: false, ok: true, open: false }));
-      onChange?.({ ...arr, revenda_valor: valor });
+      onChange?.({ ...arr, destino: revenda.destino, destino_data: `${revenda.mes}-01`,
+        ...(revenda.destino === 'venda' ? { revenda_valor: valor } : revenda.destino === 'locacao' ? { aluguel_valor: valor } : {}) });
     } catch (e) { setRevenda(r => ({ ...r, enviando: false, erro: e.message })); }
   };
 
@@ -336,29 +339,46 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
       {/* Revenda — captura a venda real (vira amostra do Índice BidPro + gabarito de precisão) */}
       <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px' }}>
         {revenda.ok ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#065f46', fontWeight: 700 }}>
-            <TrendingUp size={15} /> Revenda registrada — obrigado! Isso entra como amostra de mercado e melhora o Índice BidPro da região.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#065f46', fontWeight: 700, flexWrap: 'wrap' }}>
+            <TrendingUp size={15} />
+            {(arr.destino || 'venda') === 'uso_proprio' ? 'Destino registrado: uso próprio.'
+              : (arr.destino || 'venda') === 'locacao' ? `Locação registrada${arr.aluguel_valor ? ` — aluguel de R$ ${Number(arr.aluguel_valor).toLocaleString('pt-BR')}/mês` : ''}. Entra como amostra de aluguel no Índice BidPro.`
+              : 'Revenda registrada — obrigado! Isso entra como amostra de mercado e melhora o Índice BidPro da região.'}
+            <button onClick={() => setRevenda(r => ({ ...r, ok: false, open: true, destino: arr.destino || 'venda' }))} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Alterar</button>
           </div>
         ) : !revenda.open ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, color: '#334155' }}><strong>Já revendeu este imóvel?</strong> Registre o valor da venda — vira referência real de mercado (não é o valor do arremate).</div>
-            <button onClick={() => setRevenda(r => ({ ...r, open: true }))} style={{ marginLeft: 'auto', background: '#059669', color: 'white', border: 'none', borderRadius: 10, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Revendi este imóvel</button>
+            <div style={{ fontSize: 13, color: '#334155' }}><strong>Qual o destino deste imóvel?</strong> Venda, locação ou uso próprio — venda e aluguel viram referência real de mercado (não é o valor do arremate).</div>
+            <button onClick={() => setRevenda(r => ({ ...r, open: true }))} style={{ marginLeft: 'auto', background: '#059669', color: 'white', border: 'none', borderRadius: 10, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Registrar destino</button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>Registrar revenda</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>Destino do imóvel</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[['venda', 'Vendi'], ['locacao', 'Aluguei'], ['uso_proprio', 'Uso próprio']].map(([k, rot]) => (
+                <button key={k} onClick={() => setRevenda(r => ({ ...r, destino: k, erro: '' }))}
+                  style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    border: `1.5px solid ${revenda.destino === k ? '#059669' : '#a7f3d0'}`, background: revenda.destino === k ? '#059669' : 'white', color: revenda.destino === k ? 'white' : '#065f46' }}>{rot}</button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input value={revenda.valor} onChange={e => setRevenda(r => ({ ...r, valor: e.target.value, erro: '' }))} placeholder="Valor da revenda (ex: 320000)" inputMode="numeric"
-                style={{ flex: 1, minWidth: 160, padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
-              <input type="month" value={revenda.mes} onChange={e => setRevenda(r => ({ ...r, mes: e.target.value, erro: '' }))}
-                style={{ padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              {revenda.destino !== 'uso_proprio' && (
+                <input value={revenda.valor} onChange={e => setRevenda(r => ({ ...r, valor: e.target.value, erro: '' }))}
+                  placeholder={revenda.destino === 'locacao' ? 'Aluguel mensal (ex: 2500)' : 'Valor da venda (ex: 320000)'} inputMode="numeric"
+                  style={{ flex: 1, minWidth: 160, padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#065f46' }}>
+                {revenda.destino === 'venda' ? 'Mês da venda' : revenda.destino === 'locacao' ? 'Início da locação' : 'Desde'}
+                <input type="month" value={revenda.mes} onChange={e => setRevenda(r => ({ ...r, mes: e.target.value, erro: '' }))}
+                  style={{ padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              </label>
             </div>
             {revenda.erro && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>{revenda.erro}</div>}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={enviarRevenda} disabled={revenda.enviando} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: revenda.enviando ? 'default' : 'pointer' }}>{revenda.enviando ? 'Enviando…' : 'Salvar revenda'}</button>
-              <button onClick={() => setRevenda(r => ({ ...r, open: false, erro: '' }))} style={{ background: 'white', color: '#334155', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={enviarRevenda} disabled={revenda.enviando} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: revenda.enviando ? 'default' : 'pointer' }}>{revenda.enviando ? 'Enviando…' : 'Salvar'}</button>
+              <button onClick={() => setRevenda(r => ({ ...r, open: false, erro: '', ok: !!(arr.revenda_valor || arr.destino) }))} style={{ background: 'white', color: '#334155', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
             </div>
-            <div style={{ fontSize: 10.5, color: '#047857', lineHeight: 1.5 }}>Usamos o valor da revenda (com a data) como amostra real de mercado e para calibrar a precisão das próximas estimativas. O preço do <strong>arremate</strong> não entra no Índice.</div>
+            {revenda.destino !== 'uso_proprio' && <div style={{ fontSize: 10.5, color: '#047857', lineHeight: 1.5 }}>Usamos o valor {revenda.destino === 'locacao' ? 'do aluguel' : 'da venda'} (com a data) como amostra real de mercado e para calibrar as próximas estimativas. O preço do <strong>arremate</strong> não entra no Índice.</div>}
           </div>
         )}
       </div>
