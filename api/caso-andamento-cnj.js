@@ -82,8 +82,15 @@ O foco é a ARREMATAÇÃO: o que aconteceu com ela e o que falta até o arremata
 Etapas típicas depois do leilão: auto de arrematação assinado; prazo para contestar a arrematação (embargos/impugnação); pagamento/depósito do lance e comissão; expedição da carta de arrematação e do mandado de imissão na posse; registro no cartório; desocupação/imissão na posse; eventual pagamento de dívidas do imóvel com o dinheiro do leilão.
 Você também recebe "ja_registrado": o que a equipe e o arrematante já registraram (etapas do andamento, documentos anexados, pagamentos lançados). Isso é fato: NÃO peça o que já foi feito (comprovante de pagamento anexado = pagamento feito; etapa registrada = etapa conhecida) e use essas etapas para dizer em que pé está.
 Use SOMENTE fatos presentes nos textos e nos registros. Nunca invente data, prazo, valor ou decisão — nem prazos "típicos" ou "geralmente"; se o prazo não está escrito, não cite prazo. Se não houver nada relevante depois da arrematação, diga isso claramente. Se o texto não permitir saber algo, diga que não dá para saber pelos documentos publicados.
-Responda APENAS com JSON: {"situacao":"1 a 2 frases: em que pé está a arrematação hoje","acontecimentos":[{"data":"AAAA-MM-DD","texto":"o que aconteceu, em linguagem simples"}],"proximos_passos":["o que deve acontecer a seguir, em ordem"],"acao_do_arrematante":"o que o arrematante precisa fazer agora, ou null se nada","alerta":"risco concreto para a arrematação (ex.: pedido para anular), ou null"}
-"acontecimentos": no máximo 6, só os relevantes, do mais recente para o mais antigo.`;
+REGRAS QUE JÁ CUSTARAM CARO (28/09 — o resumo disse ao cliente "vá ao cartório registrar" num processo em que o juiz condicionou a carta ao pagamento integral):
+- ORDEM CONDICIONAL NÃO É FATO. "Integralizado o pagamento, expeça-se a carta", "somente após…", "após o trânsito…" descrevem o que VAI acontecer SE a condição se cumprir: vão em "proximos_passos" com a condição escrita, NUNCA em "acontecimentos" nem como algo já feito.
+- AVERBAR NÃO É REGISTRAR. Ofício ao cartório "para averbação/ciência, sem a efetiva transferência da propriedade" é só uma anotação na matrícula; não transfere o imóvel e não autoriza o arrematante a registrar. Diga exatamente isso.
+- PAGAMENTO: um lançamento ou comprovante prova que AQUELE valor foi pago, não que o preço foi quitado. Se os textos falam em parcelas ou integralização e nada prova a quitação, diga que não dá para confirmar pelos documentos se todas as parcelas foram pagas.
+- MOVIMENTO DO DATAJUD diz só o que o nome dele diz. "Expedição de documento", "Juntada de petição" etc. NÃO viram "carta de arrematação expedida". Só afirme carta, mandado ou registro se o nome do movimento ou o texto publicado disser isso.
+- Refira-se ao julgador como "o juízo" ou "o(a) juiz(a)" — não deduza gênero.
+- Data do acontecimento = data do ATO quando o texto a diz (ex.: "arrematação dada em 23/06/2026"); senão, a data da publicação/movimento.
+Responda APENAS com JSON: {"situacao":"1 a 2 frases: em que pé está a arrematação hoje","acontecimentos":[{"data":"AAAA-MM-DD","texto":"o que aconteceu, em linguagem simples","trecho":"cópia LITERAL de até 200 caracteres do texto da publicação ou da descrição do movimento que prova isto"}],"proximos_passos":["o que deve acontecer a seguir, em ordem, com a condição quando houver"],"acao_do_arrematante":"o que o arrematante precisa fazer agora, ou null se nada","alerta":"risco concreto para a arrematação (ex.: pedido para anular), ou null"}
+"acontecimentos": no máximo 6, só os relevantes, do mais recente para o mais antigo. "trecho" é OBRIGATÓRIO e copiado letra por letra — acontecimento sem trecho que exista nos textos é descartado.`;
 
 async function resumirAndamento({ numero, contexto, jaRegistrado, movimentos, publicacoes }) {
   const chave = process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY;
@@ -125,16 +132,25 @@ async function resumirAndamento({ numero, contexto, jaRegistrado, movimentos, pu
   try { r = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
   catch { return { ok: false, erro: 'IA devolveu JSON inválido' }; }
   const str = (x, n) => (typeof x === 'string' && x.trim() && x.trim().toLowerCase() !== 'null') ? x.trim().slice(0, n) : null;
+  const normTrecho = (t) => String(t || '').replace(/<[^>]+>/g, ' ').normalize('NFC').replace(/[“”"]/g, '"').replace(/\s+/g, ' ').trim().toLowerCase();
+  const fontes = normTrecho([...entrada.movimentos_datajud.map(m => m.descricao), ...entrada.publicacoes_diario_oficial.map(p => p.texto)].join(' \n '));
+  const brutos = Array.isArray(r?.acontecimentos) ? r.acontecimentos.length : 0;
   const resumo = {
     situacao: str(r?.situacao, 600),
+    // PROVA LITERAL (28/09): acontecimento só entra se o `trecho` existir nos textos que a IA
+    // recebeu. Sem isto, "carta de arrematação expedida" entrou no histórico do cliente sem
+    // publicação nenhuma que a sustentasse. O que não se prova vira descarte contado, não fato.
     acontecimentos: (Array.isArray(r?.acontecimentos) ? r.acontecimentos : []).slice(0, 6)
-      .map(a => ({ data: /^\d{4}-\d{2}-\d{2}$/.test(String(a?.data || '')) ? a.data : null, texto: str(a?.texto, 400) })).filter(a => a.texto)
+      .map(a => ({ data: /^\d{4}-\d{2}-\d{2}$/.test(String(a?.data || '')) ? a.data : null, texto: str(a?.texto, 400), trecho: str(a?.trecho, 240) }))
+      .filter(a => a.texto && a.trecho && fontes.includes(normTrecho(a.trecho)))
       .sort((x, y) => String(y.data || '').localeCompare(String(x.data || ''))),
     proximos_passos: (Array.isArray(r?.proximos_passos) ? r.proximos_passos : []).map(x => str(x, 300)).filter(Boolean).slice(0, 6),
     acao_do_arrematante: str(r?.acao_do_arrematante, 400),
     alerta: str(r?.alerta, 400),
   };
   if (!resumo.situacao) return { ok: false, erro: 'IA não disse a situação' };
+  resumo.descartados_sem_prova = Math.max(0, Math.min(brutos, 6) - resumo.acontecimentos.length);
+  if (resumo.descartados_sem_prova) console.warn(`[caso-andamento-cnj] ${resumo.descartados_sem_prova} acontecimento(s) sem trecho literal nas fontes — descartados`);
 
   // Grava o cache; falhar aqui só custa uma chamada de IA na próxima consulta.
   const g = await fetch(`${SUPABASE_URL}/rest/v1/processo_resumo_cache`, {

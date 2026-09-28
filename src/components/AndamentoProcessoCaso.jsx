@@ -40,6 +40,16 @@ const ETAPAS_EXTRAJUDICIAL = [
   'Imóvel desocupado — chaves entregues',
 ];
 
+// A etapa aceita 200 caracteres (check no banco): corta na última frase/palavra inteira, nunca
+// no meio ("…notificado sobre a arrem" chegou ao histórico do cliente assim).
+function etapaCurta(t) {
+  const s = String(t || '').trim();
+  if (s.length <= 200) return s;
+  const corte = s.slice(0, 199);
+  const fim = Math.max(corte.lastIndexOf('. '), corte.lastIndexOf('; '));
+  return fim >= 60 ? corte.slice(0, fim + 1) : `${corte.slice(0, corte.lastIndexOf(' '))}…`;
+}
+
 export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = null, imovelId = null, podeEditar = true, cardStyle }) {
   const dono = arrematadoId ? { col: 'arrematado_id', id: arrematadoId } : { col: 'caso_id', id: casoId };
   const [linhas, setLinhas] = useState([]);
@@ -166,14 +176,22 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
                 {resumo.acontecimentos.map((a, i) => (
                   <div key={`a${i}`} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, padding: '5px 0', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
                     <span style={{ color: '#64748b', minWidth: 72 }}>{fmt(a.data)}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: '#1e293b' }}>{a.texto}</span>
+                    <span style={{ flex: 1, minWidth: 0, color: '#1e293b' }}>
+                      {a.texto}
+                      {/* Prova literal (28/09): o trecho da publicação/movimento que sustenta o item —
+                          para a equipe conferir ANTES de registrar no histórico do cliente. */}
+                      {a.trecho && <span style={{ display: 'block', fontSize: 11, color: '#64748b', fontStyle: 'italic', marginTop: 2 }}>“{a.trecho}”</span>}
+                    </span>
                     <button style={{ ...btn('#15803d'), padding: '4px 8px', fontSize: 11 }} disabled={salvando}
-                      onClick={() => registrar({ etapaTxt: a.texto.slice(0, 200), observacao: obs, origem: 'cnj', dataEvento: a.data, referencia: { resumo_ia: true } })}>
+                      onClick={() => registrar({ etapaTxt: etapaCurta(a.texto), observacao: a.texto.length > 200 ? a.texto : obs, origem: 'cnj', dataEvento: a.data, referencia: { resumo_ia: true, trecho: a.trecho || null } })}>
                       Registrar
                     </button>
                   </div>
                 ))}
               </>}
+              {resumo.descartados_sem_prova > 0 && <div style={{ fontSize: 11, color: '#92400e', margin: '4px 0' }}>
+                {resumo.descartados_sem_prova} item(ns) do resumo automático foram descartados por não terem trecho correspondente nas publicações — confira o processo.
+              </div>}
               {resumo.proximos_passos?.length > 0 && <>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>PRÓXIMOS PASSOS ESPERADOS</div>
                 <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#1e293b', lineHeight: 1.5 }}>
