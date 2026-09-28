@@ -547,6 +547,26 @@ async function main() {
     else if (i === 0) console.log(`  ${idsNoFeed.length} já no acervo e ainda no feed — "visto hoje" renovado (${(tocados || []).length} no 1º bloco).`);
   }
 
+  // RELIGA quem está no feed mas foi desligado por engano (28/09). `jaEnriquecidos` inclui
+  // INATIVOS: um lote à venda no feed, com documento, desligado pela varredura de "sumiu da
+  // fonte" (foi o que escondeu 31 lotes em 24/09) só tinha `atualizado_em` renovado acima e
+  // ficava fora do acervo PARA SEMPRE. Religa só o que tem praça futura e nenhum
+  // suprimido_motivo (o motivo marca retirada deliberada — ex.: os 8 não-imóveis de 21/09).
+  // Sem gasto de Bright Data: é só o que o feed desta rodada já provou.
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  for (let i = 0; i < idsNoFeed.length; i += 200) {
+    const { data: desligados, error: eDes } = await supabase.from('imoveis_leilao')
+      .select('id,fonte_id,data_leilao,data_leilao_2,data_fim').eq('fonte', 'BAYIT').eq('ativo', false).is('suprimido_motivo', null)
+      .in('fonte_id', idsNoFeed.slice(i, i + 200));
+    if (eDes) { console.error(`  ⚠️ não consegui checar desligados que seguem no feed: ${eDes.message}`); continue; }
+    const futuro = (r) => [r.data_leilao, r.data_leilao_2, r.data_fim].some(d => d && String(d).slice(0, 10) >= hojeISO);
+    const religar = (desligados || []).filter(futuro).map(r => r.id);
+    if (!religar.length) continue;
+    const { data: voltou, error: eRel } = await supabase.from('imoveis_leilao').update({ ativo: true }).in('id', religar).select('fonte_id');
+    if (eRel) console.error(`  ⚠️ não religuei ${religar.length} lote(s) que seguem no feed: ${eRel.message}`);
+    else console.log(`  ♻️ ${(voltou || []).length} lote(s) ainda à venda no feed estavam desligados — religados.`);
+  }
+
   // SAÚDE DA FONTE: entra no monitor de regressão junto das demais desde o 1º dia.
   // TOTAL = acervo válido no feed AGORA (27/09, forma nº 10): a coleta é INCREMENTAL — os já
   // enriquecidos que continuam no feed são pulados de propósito (custo). Gravar só os
