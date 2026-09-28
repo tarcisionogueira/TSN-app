@@ -106,10 +106,17 @@ sites; resposta em `net._http_response`, resultado grande sai em arquivo e vira 
   Coletor novo `scraper-leiloar.mjs` (motor, 2 níveis, grátis/semBD) + `lib/leiloar-parse.mjs`
   + `npm run testar:leiloar` (13 asserções sobre HTML real). No `scraper-dom.yml` diário (8h UTC).
   Hoje: 14 leilões na home (Uberlândia e Boa Esperança/MG).
-- **lgcorretorjudicial** — NÃO é leilão: alienação judicial por iniciativa particular (venda
-  direta, CPC 880). Catálogo carregado no navegador a partir de `/api/*`, que exige credencial
-  (401) — **não contornar**. Próximo passo: recon renderizado (recon-dom no Actions ou no PC)
-  para achar a página pública de busca; e decidir se venda direta de corretor entra no acervo.
+- **lgcorretorjudicial → fonte `LGCORRETOR` (28/09, decisão do dono: entra no catálogo).** Alienação
+  judicial por iniciativa particular (CPC 880) — `modalidade='venda_direta'`, sem data, preço mínimo
+  do juízo em `valor_minimo`, avaliação 0 de propósito (a descrição traz a do imóvel INTEIRO mesmo
+  em fração). **A API `/api/*` (401) NÃO é usada:** a busca pública `/buscar?business=JUDICIAL&page=N`
+  vem renderizada pelo servidor com os dados estruturados no payload RSC (8/página, 17 imóveis em
+  28/09); `/imovel/<uuid>` traz os PDFs (edital de alienação → `link_edital` e `link_regras_venda`,
+  matrícula, auto de penhora/avaliação, despachos). `business=PRIVATE` (venda particular) fica fora.
+  Fração ideal barrada por `ehFracaoIdeal` (2 "Parte Ideal de Casa"). Anúncio repetido deduplicado
+  por cidade+matrícula (LGCJ-22039 × 48492 = matrícula 11.963 de Jaú). Varredura de sumidos só com
+  lista completa. Parser `scripts/lib/lgcorretor-parse.mjs` + `npm run testar:lgcorretor` (14
+  asserções, 3 fixtures reais); coletor `scripts/scraper-lgcorretor.mjs` no `scraper-dom.yml`.
 
 ### ✅ 28/09 — anúncios PAUSADOS PELO DONO em 14/09 (decisão, não falha) + pendências de Google consolidadas
 

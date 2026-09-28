@@ -85,7 +85,8 @@
     "testar:albertomacedo-pacote": "node scripts/testes/albertomacedo-descobre-lote-dentro-de-pacote.mjs",
     "testar:francoleiloes": "node scripts/testes/francoleiloes-extrai-campos-reais.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
-    "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs"
+    "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs",
+    "testar:lgcorretor": "node scripts/testes/lgcorretor-parse.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

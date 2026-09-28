@@ -55,11 +55,13 @@ on:
       - 'scripts/scraper-leiloar.mjs'
       - 'scripts/lib/leiloar-parse.mjs'
       - 'scripts/lib/motor/fontes/leiloar.mjs'
+      - 'scripts/scraper-lgcorretor.mjs'
+      - 'scripts/lib/lgcorretor-parse.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -185,6 +187,17 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILOAR_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leiloar.mjs
+
+      - name: LG Corretor Judicial (venda direta judicial)
+        # 28/09: alienação judicial por iniciativa particular (CPC 880), incluída por decisão do dono.
+        # Busca pública renderizada pelo servidor (a API /api/* exige credencial e NÃO é usada).
+        # ~20 requisições/dia, grátis, sem Bright Data. Parser: lib/lgcorretor-parse.mjs.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'lgcorretor')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LGCORRETOR_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-lgcorretor.mjs
 
       - name: Globo
         # NÃO entra em env.RODA_TUDO (17/09, retestado 20/09 com proxy ISP — não resolveu,
