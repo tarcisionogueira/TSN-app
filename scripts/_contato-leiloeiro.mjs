@@ -47,8 +47,9 @@ function candidatosEmail(html) {
 }
 
 /** Exportado para poder testar isoladamente (ver scripts/lib scraper-core não se aplica aqui — HTML puro). */
-export function extrairEmailDeHtml(html) {
-  const cands = candidatosEmail(html).filter(c => !BLOQUEADOS.test(c.email));
+export function extrairEmailDeHtml(html, origemSite = null) {
+  const cands = candidatosEmail(html).filter(c => !BLOQUEADOS.test(c.email)
+    && (!origemSite || motivoRecusaEmail(c.email, origemSite, c.forte) === null));
   if (!cands.length) return null;
   const escolhido = cands.find(c => PREFERIDOS.test(c.email)) || cands.find(c => c.forte) || cands[0];
   // Contexto: texto ao redor da posição onde o candidato foi achado, sem tags — é o "texto
@@ -60,6 +61,32 @@ export function extrairEmailDeHtml(html) {
 }
 
 const TRINTA_DIAS_MS = 30 * 24 * 3600 * 1000;
+
+// ── O E-MAIL É DO DONO DO SITE? (28/09) ─────────────────────────────────────────────────────
+// A home de plataforma multi-tenant exibe e-mail de TERCEIRO: o SUPERBID mostrava o de UM
+// leiloeiro em destaque (contato@jrfleiloes.com.br, que passou a receber pedido de veículo de
+// leiloeiros que não eram ele), a HASTAPUBLICA o da Valland, a MEGA o da agência que fez o
+// site (meta "copyright"). Regra: só vale e-mail do MESMO domínio do site; provedor gratuito
+// (leiloeiro pequeno usa gmail) só se vier num `mailto:` — link clicável de contato, não texto
+// solto de vitrine/JSON. Fora disso não grava: sem contato a tela PEDE o e-mail certo, com
+// contato errado o pedido vai para a pessoa errada e parece ter funcionado.
+const SUFIXOS_2 = /^(com|net|org|gov|edu|adv|art|ind|inf|leilao|srv|eco|blog|emp|log|imb)$/;
+const GRATUITOS = /^(gmail\.com|googlemail\.com|hotmail\.com(\.br)?|outlook\.com(\.br)?|live\.com|yahoo\.com(\.br)?|uol\.com\.br|bol\.com\.br|terra\.com\.br|ig\.com\.br|icloud\.com)$/;
+export function dominioBase(host) {
+  const p = String(host || '').toLowerCase().replace(/^www\./, '').split('.').filter(Boolean);
+  if (p.length < 2) return p.join('.');
+  const n = (p[p.length - 1].length === 2 && SUFIXOS_2.test(p[p.length - 2])) ? 3 : 2;
+  return p.slice(-n).join('.');
+}
+/** `null` = aceito; string = motivo da recusa. */
+export function motivoRecusaEmail(email, origemSite, forte) {
+  const dom = String(email || '').split('@')[1] || '';
+  let host = '';
+  try { host = new URL(origemSite).hostname; } catch { return 'site sem URL válida'; }
+  if (dominioBase(dom) === dominioBase(host)) return null;
+  if (GRATUITOS.test(dom)) return forte ? null : 'provedor gratuito fora de mailto:';
+  return `domínio de terceiro (${dom} ≠ ${dominioBase(host)})`;
+}
 
 // ── RECON: "este leiloeiro vende veículo?" (11/09) ──────────────────────────────────────────
 // Reaproveita o MESMO fetch da home (já feito para o e-mail) para procurar um link de menu
@@ -117,8 +144,16 @@ export async function capturarContatoSeAusente(supabase, fonte, urlAmostra) {
     const html = await res.text();
 
     if (!emailEmDia) {
-      const achado = extrairEmailDeHtml(html);
+      const achado = extrairEmailDeHtml(html, origin);
+      // Endereço já suprimido (bounce permanente / reclamação) não volta pela porta dos fundos:
+      // o gatilho do banco o tirou daqui, e recapturá-lo desfaria a contramedida.
+      let suprimido = false;
       if (achado) {
+        const { data: sup, error: eSup } = await supabase.from('emails_supressao').select('suprimido').eq('destinatario', achado.email).maybeSingle();
+        suprimido = eSup ? true : !!sup?.suprimido; // não consegui checar → não grava (conservador)
+        if (suprimido) console.log(`    📧 ${fonte}: ${achado.email} ignorado (${eSup ? `supressão ilegível: ${eSup.message}` : 'endereço suprimido'})`);
+      }
+      if (achado && !suprimido) {
         const { error } = await supabase.from('leiloeiro_contato').upsert({
           fonte, email: achado.email, origem: 'auto', observacao: achado.contexto,
           atualizado_em: new Date().toISOString(),

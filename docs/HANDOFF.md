@@ -9,6 +9,31 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ RESOLVIDO 28/09 — painel de Qualidade lento + contato de leiloeiro errado (bounce da JRF)
+
+**Painel de Qualidade (/admin):** a aba recalculava os ~90 invariantes no clique (5–10 s; 8,2 s
+no servidor em 27/09) sob o teto de 8 s do `authenticated`. Agora o monitor diário grava o
+resultado em `qa_invariantes_execucao.resultado` e a aba abre por `admin_qa_invariantes_ultima()`
+mostrando a hora da medição; "↻ Recalcular" chama `admin_qa_invariantes()` com timeout próprio de
+30 s. O monitor já não falhava desde 24/09 (timeout de 30 s na `qa_invariantes_medido`).
+**Até a rodada de hoje às 18h10 UTC não há resultado gravado — a aba calcula na hora (como antes).**
+
+**Contato de leiloeiro (print do dono: "Contato — FORD" → contato@jrfleiloes.com.br, bounce):**
+o bounce era sintoma. `leiloeiro_contato` é por FONTE e o coletor pegava o 1º e-mail da home: em
+plataforma multi-tenant é o de um tenant em destaque. SUPERBID→JRF, SBID9/21→Dantas,
+HASTAPUBLICA→Valland, MEGA→agência do site. 6 pedidos de veículos do SUPERBID foram para a JRF
+(5 "entregues" a quem não tinha nada com o lote). Feito:
+- coletor (`_contato-leiloeiro.mjs`) só aceita e-mail do domínio do site (gratuito só via
+  `mailto:`) e nunca endereço suprimido;
+- gatilho em `emails_supressao`: endereço suprimido sai de `leiloeiro_contato` na hora, com
+  registro em `leiloeiro_contato_descartado` (a tela passa a pedir o e-mail certo);
+- os 5 contatos de terceiro removidos (registrados na mesma tabela — reversível).
+
+⚠️ **Aberto:** o e-mail digitado À MÃO num envio também é gravado por FONTE
+(`enviar-email-caso.js`/`salvarContato`). Num lote do SUPERBID isso vira o contato de todos os
+leiloeiros da plataforma. Conserto de verdade exige guardar o leiloeiro (tenant) do lote —
+hoje `imoveis_leilao.leiloeiro` do SUPERBID é "Superbid" para os 1.392.
+
 ### ✅ RESOLVIDO 26/09 — linha amarela no filtro "Carro" de /veiculos (print do dono)
 
 "MINI CARREGADEIRA BOBCAT/CASE/CAT" caía na marca de carro **Mini** (última regra de
