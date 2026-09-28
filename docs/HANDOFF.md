@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔶 28/09 — lotes "Sem foto" com foto no site do leiloeiro (investigação em curso)
+- **LJUD (307/754 sem foto, 41%)**: o próprio agregador não tem foto — o `__NUXT_DATA__` do lote
+  `ljud_217021` traz `fotos: []`. A foto mora no site PRÓPRIO do leiloeiro; o payload Nuxt da LJUD
+  carrega links para ele em parte dos lotes (ex.: giordanoleiloes `/leilao/index/leilao_id/N/lote/M`,
+  jrleiloes, planaltoleiloes, rioleiloes…). Próximo passo: capturar esse link no scraper e buscar a
+  foto de lá (só quando o link é do MESMO lote — foto errada é pior que nenhuma).
+- **HASTAPUBLICA (126/126, 100%)**: o scraper lê só `innerText` do painel renderizado
+  (`/leilao/painel/<id>`), nunca as `<img>`; o HTML cru é casca vazia (SPA). Adicionado dump do painel
+  RENDERIZADO em `recon_dump` (origem `hastapublica-painel`, 1×/20 h) para escrever a extração de foto
+  sobre HTML real na próxima rodada, sem chutar o mapeamento img→lote.
+- **HASTAPUBLICA grava a VARA como leiloeiro** ("JUIZADO ESPECIAL CÍVEL E CRIMINAL") — corrigir junto.
+
 ### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
 
 - **Filtro "Sem lance" (print do dono, 36 imóveis com "Encerra amanhã")**: o modo RAIO nunca

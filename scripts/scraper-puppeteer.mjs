@@ -4045,6 +4045,22 @@ export async function scraperHastaPublica(browser) {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
         const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
         if (!texto) continue;
+        // AMOSTRA DO PAINEL RENDERIZADO (28/09): 126/126 lotes sem foto — este parser lê só o TEXTO
+        // e o painel é montado por JS (o HTML cru não tem nada). Associar <img> a lote sem ver o DOM
+        // arriscaria a foto de um imóvel no outro. Grava 1 painel/20 h em recon_dump para a leitura
+        // das fotos ser escrita sobre HTML real. Diagnóstico: nunca derruba a coleta.
+        if (visitados === 1) {
+          try {
+            const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
+            const { data: ja, error: eJa } = await supabase.from('recon_dump').select('id').eq('origem', 'hastapublica-painel').gte('criado_em', desde).limit(1);
+            if (eJa) console.log(`    (amostra do painel: não consegui checar — ${eJa.message})`);
+            else if (!ja?.length) {
+              const html = await page.content();
+              const { error: eIns } = await supabase.from('recon_dump').insert({ origem: 'hastapublica-painel', chave: `painel:${id}`, conteudo: { url, html: html.slice(0, 300000) } });
+              console.log(`    amostra do painel ${id} ${eIns ? `NÃO gravada (${eIns.message})` : 'gravada em recon_dump (hastapublica-painel)'}`);
+            }
+          } catch (e) { console.log(`    (amostra do painel falhou: ${String(e?.message || e).slice(0, 120)})`); }
+        }
 
         const mTitulo = texto.match(/#\d+\s*-\s*([^\n]+)\n([^\n]+)/);
         const varaComarca = mTitulo ? mTitulo[2].trim() : '';
