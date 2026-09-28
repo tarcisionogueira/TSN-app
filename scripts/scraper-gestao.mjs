@@ -279,7 +279,10 @@ function parseCard(card, ctx) {
   // só o fallback textual passa a exigir ausência de valor de praça rotulado (inicial/2ª praça/
   // venda 1º ou 2º leilão) — os mesmos valores já extraídos acima pra avaliação/mínimo.
   const temPracaValor = inicial > 0 || praca2 > 0 || dVenda1 > 0 || dVenda2 > 0;
-  const modalidade = card.vendaDireta || (!temPracaValor && /venda\s*direta/i.test(txt)) ? 'venda_direta'
+  // 28/09: o fallback TEXTUAL também exige ausência de DATA de praça (ctx.data_leilao) — 13 lotes do
+  // lancenoleilao (lote.php, não loteVendaDireta.php) saíam venda_direta COM data 10/09, contra a
+  // regra do dono "praça com data ⇒ nunca venda direta". O sinal estrutural segue incondicional.
+  const modalidade = card.vendaDireta || (!temPracaValor && !ctx.data_leilao && /venda\s*direta/i.test(txt)) ? 'venda_direta'
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
 
@@ -316,7 +319,8 @@ function parseCard(card, ctx) {
     url_lote: `https://${ctx.dominio}/lote.php?idLote=${card.idLote}`,
     link_foto: fotoAbs,
     leiloeiro: ctx.leiloeiro,
-    data_leilao: ctx.data_leilao || null,
+    // venda direta estrutural não tem praça: a data do EVENTO não é prazo do lote.
+    data_leilao: modalidade === 'venda_direta' ? null : (ctx.data_leilao || null),
     forma_pagamento: 'a_vista',
     ativo: true,
     // Só há desconto quando o mínimo é ABAIXO da avaliação; senão (lote premium/CAIXA sem 2º
