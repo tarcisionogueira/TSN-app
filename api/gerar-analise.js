@@ -28,6 +28,7 @@ import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculo
 import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 import { comCascataBusca } from './_busca-modelo.js';
+import { somaAreasMultiBem } from './_texto-imovel.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -2003,8 +2004,10 @@ export default async function handler(req, res) {
   // quando não dá pra desempatar com segurança, os DOIS candidatos ficam registrados em vez
   // de escolher às cegas — exposta ao parecer via `pInp._divergencia` mais abaixo.
   let divergenciaLocalizacao = null;
+  let descricaoImovel = null; // usada adiante pela soma de áreas de lote com vários bens
   try {
     const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte&limit=1`)).json();
+    descricaoImovel = imA?.descricao || null;
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
       const ruaOk = (e) => { const s = String(e || '').trim(); return s.length >= 6 && /[a-zà-ú]{3}/i.test(s) && !lixo.test(s); };
@@ -2159,6 +2162,19 @@ export default async function handler(req, res) {
     const aTer = Number(matriculaPre.areaTerrenoM2) || 0;
     if (aMat >= 5 && aMat <= 100000) mercadoInputs.areaM2 = aMat;
     if (aTer >= 5 && aTer <= 10000000 && !(Number(mercadoInputs.areaTerrenoM2) > 0)) mercadoInputs.areaTerrenoM2 = aTer;
+    // TERRENO: a área da matrícula É a área do imóvel (28/09). Só `areaTerrenoM2` recebia a
+    // matrícula; `areaM2` — a que vai no pedido da pesquisa e na conta do valor — ficava com a do
+    // anúncio. Embu-Guaçu: matrícula 1.200 m² lida, relatório precificou 1.303 m².
+    const ehTerreno = /terreno|rural/.test(String(mercadoInputs.tipoImovel || ''));
+    if (ehTerreno && aTer >= 5 && aTer <= 10000000) { mercadoInputs.areaTerrenoM2 = aTer; mercadoInputs.areaM2 = aTer; }
+  }
+  // LOTE COM VÁRIOS BENS (28/09): "Lote 1) … 1.303 m² … Lote 2) … 1.200 m²" — o arrematante leva
+  // a SOMA, e a matrícula lida cobre um bem só. Para terreno a soma prevalece sobre as duas
+  // (anúncio e matrícula); nos demais tipos só registra, porque somar área construída de um bem
+  // com área de terreno de outro daria um número sem sentido.
+  const multiBem = somaAreasMultiBem(descricaoImovel);
+  if (mercadoInputs && multiBem && /terreno|rural/.test(String(mercadoInputs.tipoImovel || ''))) {
+    mercadoInputs.areaTerrenoM2 = multiBem.soma; mercadoInputs.areaM2 = multiBem.soma;
   }
   // Log INCONDICIONAL. A versão anterior só registrava quando a matrícula trazia alguma
   // metragem — ou seja, calava-se exatamente no caso que precisava ser investigado, e o
@@ -2170,6 +2186,7 @@ export default async function handler(req, res) {
     anuncio: areaAnunciada || null,
     matricula: Number(matriculaPre?.areaPrivativaM2) || null,
     terreno: Number(matriculaPre?.areaTerrenoM2) || null,
+    multiBem: multiBem ? multiBem.partes : null,
     usadaNaBusca: mercadoInputs?.areaM2 || null,
   }));
   // IDENTIDADE lida no edital (06/08): o NOME DO CONDOMÍNIO é a âncora Nível 1 da busca

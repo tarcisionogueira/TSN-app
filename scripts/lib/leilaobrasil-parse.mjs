@@ -51,6 +51,7 @@ import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs
 // endereço do ESCRITÓRIO do leiloeiro (que vive no rodapé/chrome da página, fora do `bem`) —
 // exatamente a armadilha documentada em 17/09 (extrairIdentidadeTexto).
 import { extrairEnderecoMatricula } from '../../api/_registro-matricula.js';
+import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
   leilaobrasil: { fonte: 'LEILAOBRASIL', leiloeiro: 'Leilão Brasil', base: 'https://www.leilaobrasil.com.br' },
@@ -153,7 +154,11 @@ export function parseDetalhe(html, url) {
   const enderecoTxt = (!bem.endereco && !bem.numero) ? extrairEnderecoMatricula(descTexto) : null;
   const endereco = [bem.endereco, bem.numero].filter(Boolean).join(', ') || enderecoTxt?.logradouro || null;
   const bairro = bem.bairro || enderecoTxt?.bairro || null;
-  const avaliacao = plaus(num(lote.valorAvaliacao ?? bem.valorAvaliacao));
+  // Lote com VÁRIOS BENS (28/09, Embu-Guaçu: 2 terrenos): o campo estruturado traz a área e a
+  // avaliação ORIGINAL do 1º bem (1.303 m², R$ 11.700 de 2005). A descrição traz a soma e a
+  // avaliação atualizada (2.503 m², R$ 66.650,75) — é o que o arrematante leva e o que vale.
+  const multiBem = somaAreasMultiBem(descTexto);
+  const avaliacao = avaliacaoAtualizadaDoTexto(descTexto) || plaus(num(lote.valorAvaliacao ?? bem.valorAvaliacao));
   const minimo = plaus(num(lote.valorMinimo ?? bem.valorMinimo)) || avaliacao;
   const linkEdital = leilao?._urls?.edital
     || (Array.isArray(leilao.documentos) ? leilao.documentos[0]?.url : null)
@@ -166,7 +171,7 @@ export function parseDetalhe(html, url) {
   return {
     titulo, cidade: bem.cidade || null, estado: bem.uf || null, endereco, bairro,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
-    area_m2: num(bem.areaEdificada) || num(bem.areaTerreno) || extrairArea(descTexto) || 0,
+    area_m2: multiBem?.soma || num(bem.areaEdificada) || num(bem.areaTerreno) || extrairArea(descTexto) || 0,
     // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica) — descTexto é o
     // texto real de bem.siteDescricao, sem limite útil de trazer inteiro (coluna `text`).
     descricao: descTexto.slice(0, 8000) || null,

@@ -59,7 +59,11 @@ function normalizarTipo(tipo) {
       t.includes('pecuari') || t.includes('haras') || t.includes('lavoura')) return 'rural';
   if (t.includes('apart') || t.includes('apto') || t.includes('flat') ||
       t.includes('kitnet') || t.includes('kitinete') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
-  if (t.includes('casa') || t.includes('sobrado') || t.includes('resid')) return 'casa';
+  // "RESIDENCIAL" É NOME DE LOTEAMENTO, NÃO TIPO (28/09): 'resid' casava "Parque Residencial
+  // Jardim Ipanema" e o "Lote 200 m²" virava CASA — o relatório mercadológico comparou com casas
+  // (R$ 5.710/m²) e o preço saiu errado. Casa = casa/sobrado/residência/área construída/edificação.
+  if (t.includes('casa') || t.includes('sobrado') || /\bresid[eê]ncias?\b/.test(t) ||
+      t.includes('area construida') || /edifica[cç][aã]o|edificad/.test(t)) return 'casa';
   // 'area' CRU sai de propósito (bate com api/_tipo.js): senão "Galpão com área…" cairia
   // em terreno (este ramo vem antes do comercial). Só "area/data de terra" indica terreno.
   if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') ||

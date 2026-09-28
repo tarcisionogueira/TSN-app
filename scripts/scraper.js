@@ -1544,7 +1544,11 @@ function normalizarTipo(tipo) {
       t.includes('pecuari') || t.includes('haras') || t.includes('lavoura')) return 'rural';
   if (t.includes('apart') || t.includes('apto') || t.includes('flat') ||
       t.includes('kitnet') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
-  if (t.includes('casa') || t.includes('sobrado') || t.includes('resid')) return 'casa';
+  // "RESIDENCIAL" É NOME DE LOTEAMENTO, NÃO TIPO (28/09): 'resid' casava "Parque Residencial
+  // Jardim Ipanema" e o "Lote 200 m²" virava CASA — o relatório mercadológico comparou com casas
+  // (R$ 5.710/m²) e o preço saiu errado. Casa = casa/sobrado/residência/área construída/edificação.
+  if (t.includes('casa') || t.includes('sobrado') || /\bresid[eê]ncias?\b/.test(t) ||
+      t.includes('area construida') || /edifica[cç][aã]o|edificad/.test(t)) return 'casa';
   if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') || t.includes('area')) return 'terreno';
   if (t.includes('comerc') || t.includes('sala') || t.includes('loja') || t.includes('galp') ||
       t.includes('barrac') || t.includes('industr') || t.includes('armazem') ||

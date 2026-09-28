@@ -105,6 +105,34 @@ export function extrairDescricaoDoCorpo(html) {
  * plausível. Terreno vem por último de propósito — quando existem as duas, a área da
  * EDIFICAÇÃO é a que baliza o R$/m² do relatório (ver `gerar-documental.js`).
  */
+// VÁRIOS BENS NUM LOTE SÓ (28/09). "Lote 1) Terreno … com a área de 1.303,00 m² … Lote 2) Terreno
+// … com a área de 1.200,00 m² …" é UM lote de leilão com DOIS terrenos (Embu-Guaçu, LEILAOBRASIL):
+// o site grava a área do 1º bem, a matrícula lida é a de um só, e o relatório precificou 1.303 m²
+// quando o arrematante leva 2.503 m². Soma só quando TODOS os bens enumerados têm área legível —
+// um bem sem área faria a soma parecer completa e sair menor que a verdade.
+// Devolve `{ soma, partes }` (partes = área de cada bem) ou null quando não é multi-bem.
+export function somaAreasMultiBem(texto) {
+  const t = decodificarEntidades(String(texto || '')).replace(/\s+/g, ' ');
+  const cortes = [...t.matchAll(/\b(?:Lote|Bem|Im[óo]vel)\s*(?:n[º°o.]?\s*)?0?(\d{1,2})\s*[)\-–:]/gi)];
+  if (cortes.length < 2) return null;
+  // Numeração tem de começar em 1 e ser sequencial: "lote 29 da quadra 43" não é enumeração de bens.
+  const nums = cortes.map((m) => Number(m[1]));
+  if (nums[0] !== 1 || nums.some((n, i) => n !== i + 1)) return null;
+  const partes = cortes.map((m, i) => extrairAreaM2(t.slice(m.index, i + 1 < cortes.length ? cortes[i + 1].index : undefined)));
+  if (partes.some((a) => !(a > 0))) return null;
+  return { soma: Math.round(partes.reduce((x, y) => x + y, 0) * 100) / 100, partes };
+}
+
+// Avaliação ATUALIZADA declarada no texto ("Avaliação atualizada R$ 66.650,75 (agosto/2025)").
+// Em lote judicial antigo o campo estruturado costuma trazer a avaliação ORIGINAL de um só bem
+// (R$ 11.700 de 2005, no mesmo Embu-Guaçu); a atualizada é a que o juízo usa para o lance.
+export function avaliacaoAtualizadaDoTexto(texto) {
+  const t = decodificarEntidades(String(texto || '')).replace(/\s+/g, ' ');
+  const m = t.match(/Avalia[çc][ãa]o\s+(?:total\s+)?atualizada[^R]{0,20}R\$\s*([\d.]+,\d{2})/i);
+  const v = m ? Number(m[1].replace(/\./g, '').replace(',', '.')) : 0;
+  return v > 0 ? v : 0;
+}
+
 export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
   // `permitirSolta=false` (22/08): quando o texto é a PÁGINA INTEIRA (e não uma descrição
   // recortada), o último recurso `NUM m²` casa "área de lazer 300 m²", a metragem de OUTRO lote

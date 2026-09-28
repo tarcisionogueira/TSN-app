@@ -87,7 +87,8 @@
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs",
     "testar:lgcorretor": "node scripts/testes/lgcorretor-parse.mjs",
-    "testar:busca-com-prova": "node scripts/testes/busca-com-prova.mjs"
+    "testar:busca-com-prova": "node scripts/testes/busca-com-prova.mjs",
+    "testar:area-multi-bem": "node scripts/testes/area-multi-bem-e-tipo-residencial.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

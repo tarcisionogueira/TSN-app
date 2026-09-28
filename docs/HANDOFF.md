@@ -9,6 +9,22 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — Mercadológico com preço errado: área da matrícula ignorada, lote com 2 bens e "Residencial" virando casa
+Relatórios do dono (28/09 ~23h): **Boituva** certo (200,39 m² da matrícula × R$ 779); **Embu-Guaçu**
+(leilaobrasil_449) R$ 373.611 = R$ 287 × 1.303 m² — o lote são DOIS terrenos (1.303 + 1.200 = 2.503 m²,
+matrículas 50.063/50.062), avaliação atualizada R$ 66.650,75 (o cadastro tinha R$ 11.700 de 2005, só
+do 1º bem); **Araraquara** (webleiloes_2083) R$ 2.863 — o "Lote 200 m² – Parque **Residencial**…" estava
+como CASA ('resid' casava "Residencial"), comparou com casas (R$ 5.710/m²) e o alerta de coerência
+ancorou na avaliação da fonte (R$ 1.431 no próprio site).
+**Consertos:** (1) `normalizarTipo` (api/_tipo.js, scraper.js, scraper-puppeteer.mjs): casa só com
+casa/sobrado/residência/área construída/edificação — "residencial" não; 44 ativos reclassificados para
+terreno (título lote/terreno + "residencial", sem casa na descrição). (2) `somaAreasMultiBem` e
+`avaliacaoAtualizadaDoTexto` (api/_texto-imovel.js) — usados no parser da LEILAOBRASIL (área e avaliação
+do lote inteiro) e no `gerar-analise` (terreno/rural: soma prevalece). (3) `gerar-analise`: em
+terreno/rural a área da MATRÍCULA passa a valer também em `areaM2` (antes só em `areaTerrenoM2`, e o
+valor saía pela área do anúncio). Log `[metragem-doc]` ganha `multiBem`. Teste:
+`npm run testar:area-multi-bem`. Outros 3 lotes LEILAOBRASIL multi-bem se corrigem na próxima coleta.
+
 ### 🔶 28/09 — Índice: "atualizar" endereço/condomínio falhava — Haiku respondia SEM BUSCAR
 **Sintoma (dono):** atualizar o Índice de um endereço/condomínio dá falha. **Medido:** nenhuma amostra
 nova em `indice_amostras` desde **11/09**. Em `geracao_custos` (funcao='indice'): até 04/09 o motor era

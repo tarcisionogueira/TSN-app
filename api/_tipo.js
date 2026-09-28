@@ -29,7 +29,11 @@ export function normalizarTipo(t) {
       s.includes('kitnet') || s.includes('kitinete') || s.includes('studio') ||
       s.includes('cobertura')) return 'apartamento';
 
-  if (s.includes('casa') || s.includes('sobrado') || s.includes('resid')) return 'casa';
+  // "RESIDENCIAL" É NOME DE LOTEAMENTO, NÃO TIPO (28/09): 'resid' casava "Parque Residencial
+  // Jardim Ipanema" e o "Lote 200 m²" virava CASA — o relatório mercadológico comparou com casas
+  // (R$ 5.710/m²) e o preço saiu errado. Casa = casa/sobrado/residência/área construída/edificação.
+  if (s.includes('casa') || s.includes('sobrado') || /\bresid[eê]ncias?\b/.test(s) ||
+      s.includes('area construida') || /edifica[cç][aã]o|edificad/.test(s)) return 'casa';
 
   if (s.includes('terreno') || s.includes('lote') || s.includes('gleba') ||
       s.includes('data de terra') || s.includes('area de terra')) return 'terreno';
