@@ -11,7 +11,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
-import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica } from '../utils/documento';
+import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica, hrefDoc } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
@@ -522,7 +522,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <FileText size={14} color="#7c3aed" />
-                      <a href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{a.nome}</a>
+                      <a href={hrefDoc(a.url)} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{a.nome}</a>
                       <span style={{ fontSize: 11, color: '#94a3b8' }}>{TIPO_ANEXO_LABEL[a.tipo] || a.tipo}</span>
                     </div>
                     {podeEscrever && <button onClick={() => deletarAnexo(a.id, 'imovel_anexos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={13} /></button>}
@@ -557,7 +557,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <FileText size={14} color="#0891b2" />
-                        <a href={d.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{d.nome}</a>
+                        <a href={hrefDoc(d.url)} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{d.nome}</a>
                         <span style={{ fontSize: 11, color: '#94a3b8' }}>{TIPO_DOC_LABEL[d.tipo] || d.tipo}</span>
                       </div>
                       <button onClick={() => deletarDocPessoal(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={13} /></button>
@@ -1822,13 +1822,13 @@ export default function ImovelDetalhe() {
                 {(matriculaHref || regrasEditalUrl) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {matriculaHref && (
-                      <a href={matriculaHref} target="_blank" rel="noopener noreferrer" onClick={verificarMatricula}
+                      <a href={hrefDoc(matriculaHref)} target="_blank" rel="noopener noreferrer" onClick={verificarMatricula}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none', opacity: verifMatricula ? 0.7 : 1 }}>
                         <FileText size={15} /> {verifMatricula ? 'Verificando…' : 'Matrícula'}
                       </a>
                     )}
                     {regrasEditalUrl && (
-                      <a href={regrasEditalUrl} target="_blank" rel="noopener noreferrer" onClick={verificarRegras}
+                      <a href={hrefDoc(regrasEditalUrl)} target="_blank" rel="noopener noreferrer" onClick={verificarRegras}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none', opacity: verifRegras ? 0.7 : 1 }}>
                         {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {verifRegras ? 'Verificando…' : regrasEditalLabel}
                       </a>
@@ -1949,7 +1949,7 @@ export default function ImovelDetalhe() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Documentos do lote</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {anexosCapturados.map((a, i) => (
-                        <a key={`cap${i}`} href={a.url} target="_blank" rel="noopener noreferrer"
+                        <a key={`cap${i}`} href={hrefDoc(a.url)} target="_blank" rel="noopener noreferrer"
                           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#334155', fontSize: 13, textDecoration: 'none' }}>
                           <FileText size={14} color="#15803d" style={{ flexShrink: 0 }} />
                           <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 11, color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: 5 }}>{TIPO_DOC_LABEL[a.tipo] || 'Documento'}</span>
@@ -1969,7 +1969,7 @@ export default function ImovelDetalhe() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Documentos no leiloeiro</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {anexosLeiloeiro.map((a, i) => (
-                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                        <a key={i} href={hrefDoc(a.url)} target="_blank" rel="noopener noreferrer"
                           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, color: '#334155', fontSize: 13, textDecoration: 'none' }}>
                           <FileText size={14} color="#0D63DB" style={{ flexShrink: 0 }} />
                           <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 11, color: '#0D63DB', background: '#eff6ff', padding: '1px 6px', borderRadius: 5 }}>{TIPO_DOC_LABEL[a.tipo] || 'Anexo'}</span>
@@ -2065,7 +2065,7 @@ export default function ImovelDetalhe() {
                   )}
                   <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 14 }}>
                     Leitura automática do documento{imovel.docFatosEm ? ` em ${fmtData(imovel.docFatosEm)}` : ''}
-                    {fonte ? <> · <a href={fonte} target="_blank" rel="noreferrer" style={{ color: '#0D63DB' }}>abrir o documento</a></> : null}. Não substitui a conferência do edital e da matrícula.
+                    {fonte ? <> · <a href={hrefDoc(fonte)} target="_blank" rel="noreferrer" style={{ color: '#0D63DB' }}>abrir o documento</a></> : null}. Não substitui a conferência do edital e da matrícula.
                   </div>
                 </div>
               );

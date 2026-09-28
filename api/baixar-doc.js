@@ -14,6 +14,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser } from './_auth.js';
 import { hostPermitido, fetchExternoSeguro } from './_allowed-hosts.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { refererExigido } from './_foto-hotlink.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -98,14 +99,16 @@ export default async function handler(req) {
     // do próprio host permitido para 169.254.169.254/10.x/localhost passava batido com
     // `redirect:'follow'` cru. `fetchExternoSeguro` revalida CADA hop (mesmo padrão já usado
     // em enriquecer-lote.js/gerar-analise.js/etc.).
-    let resp = await fetchExternoSeguro(url, { signal: ctrl.signal }).catch(() => null);
+    // CDN com Referer exigido (HASTAPÚBLICA/cdnhp): sem ele é 403 garantido — e o fallback PAGO também.
+    const ref = refererExigido(url);
+    let resp = await fetchExternoSeguro(url, { signal: ctrl.signal, ...(ref ? { headers: { Referer: ref } } : {}) }).catch(() => null);
     clearTimeout(timer);
 
     // Fallback: a fonte bloqueou o IP do servidor (ex.: Caixa bloqueia a Vercel).
     // Tenta via Bright Data Web Unlocker (respeitando o teto semanal). Se BD não
     // estiver configurado ou o teto for atingido, retorna null e mantém o erro.
     if (!resp || !resp.ok) {
-      const bd = await fetchViaBrightData(url);
+      const bd = await fetchViaBrightData(url, ref ? { headers: { Referer: ref } } : {});
       if (bd && bd.ok) resp = bd;
     }
     if (!resp || !resp.ok) throw new Error(`HTTP ${resp?.status || 'falha'} ao baixar ${url}`);

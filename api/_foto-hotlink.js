@@ -1,5 +1,6 @@
-// CDNs de foto com hotlink PROTEGIDO POR REFERER — única lista, usada pelo img-proxy (para mandar
-// o Referer certo) e por quem monta <img> fora do React (página pública, e-mails), que não tem o
+// CDNs com hotlink PROTEGIDO POR REFERER (foto E documento) — única lista, usada pelo img-proxy e
+// pelos leitores de PDF do servidor (gerar-documental, baixar-doc) para mandar o Referer certo, e
+// por quem monta <img> fora do React (página pública, e-mails), que não tem o
 // fallback onError de src/utils/foto.js e precisa ir direto pelo proxy.
 //
 // cdnhp (HASTAPÚBLICA), medido 28/09 pelo servidor do banco: 200 com Referer do hastapublica,

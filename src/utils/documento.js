@@ -16,6 +16,13 @@
 
 // URL de verdade — o scraper da Caixa às vezes grava RÓTULO no campo de link
 // ("Venda Direta Online", "Leilão SFI - Edital Único").
+import { fotoServivel } from '../../api/_foto-hotlink.js';
+
+// Link de DOCUMENTO para o cliente clicar. Em CDN com hotlink protegido por Referer
+// (HASTAPÚBLICA/cdnhp, 28/09) o link do leiloeiro dá 403 no navegador — passa pelo nosso proxy,
+// que manda o Referer exigido. Qualquer outro link sai intacto. Lista única em api/_foto-hotlink.js.
+export const hrefDoc = (v) => (typeof v === 'string' ? fotoServivel(v) : v);
+
 export const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
 
 /**

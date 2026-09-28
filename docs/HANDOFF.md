@@ -44,6 +44,15 @@ vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
   sem Referer — se algum leitor de documento falhar nessa fonte, é isso.
   **Validado em produção 28/09 16:52 UTC:** `/api/img-proxy` com foto cdnhp → 200 `image/jpeg`;
   123/126 lotes regravados com foto (123 distintas, `foto_repetida_como_lote` = 0).
+- **PDFs da HASTAPUBLICA (28/09):** o `captura-documentos.mjs` sempre mandou a página do lote como
+  Referer → copiou 96/126 para o nosso storage (87 com `doc_fatos`). Os outros 30 esperam a fila
+  (~200/dia, posições 29–1.711). Dois furos fechados: (1) `gerar-documental` (`lerDoc`) e
+  `baixar-doc` buscavam o link cdnhp SEM Referer → 403 no direto e **Bright Data pago chamado à toa**
+  (também sem Referer, 403 de novo) — agora mandam o Referer da lista `_foto-hotlink.js`, e o
+  direto (grátis) passa; (2) o cliente clicando no edital cdnhp levava 403 no navegador — o
+  `img-proxy` passou a entregar **PDF só para os hosts dessa lista fechada** (valida `%PDF-`), e os
+  links de documento de ImovelDetalhe/Analise/Caso passam por `hrefDoc()` (src/utils/documento.js),
+  que só mexe nesses hosts. PDFs da fonte: mediana 206 KB, máx. 1 MB (limite de resposta 4,5 MB).
 
 ### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
 

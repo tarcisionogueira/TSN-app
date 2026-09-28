@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { hrefDoc } from '../utils/documento';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Loader2, CheckCircle2, AlertTriangle,
@@ -358,7 +359,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
           {extras.map(a => (
             <div key={a.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:12 }}>
               <FileText size={13} color="#10b981"/>
-              <a href={a.url} target="_blank" rel="noreferrer" style={{ flex:1, color:'#0D63DB', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.nome}</a>
+              <a href={hrefDoc(a.url)} target="_blank" rel="noreferrer" style={{ flex:1, color:'#0D63DB', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.nome}</a>
             </div>
           ))}
           <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:4, padding:'6px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor: enviando?'default':'pointer', opacity: enviando==='outro'?0.6:1 }}>

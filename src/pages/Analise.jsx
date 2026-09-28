@@ -15,7 +15,7 @@ import { registrarEvento } from '../utils/tracker';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
-import { ehDocArquivo } from '../utils/documento';
+import { ehDocArquivo, hrefDoc } from '../utils/documento';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -2130,7 +2130,7 @@ export default function Analise() {
               return (
                 <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                   {docsFinal.map(it => it.url ? (
-                    <a key={it.t} href={it.url} target="_blank" rel="noreferrer"
+                    <a key={it.t} href={hrefDoc(it.url)} target="_blank" rel="noreferrer"
                       onClick={it.anexoId ? (e) => abrirAnexo(e, it.anexoId, it.url) : undefined}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB', minWidth:0 }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
@@ -2568,7 +2568,7 @@ export default function Analise() {
               {(parecerDocumental.documentosLidos || []).length > 0 && (
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                   {parecerDocumental.documentosLidos.map((dl, i) => (
-                    <a key={i} href={dl.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, color:'#1e3a8a', background:'#eef2ff', padding:'3px 9px', borderRadius:6, textDecoration:'none' }}>📄 {dl.rotulo}</a>
+                    <a key={i} href={hrefDoc(dl.url)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, color:'#1e3a8a', background:'#eef2ff', padding:'3px 9px', borderRadius:6, textDecoration:'none' }}>📄 {dl.rotulo}</a>
                   ))}
                 </div>
               )}
@@ -3603,7 +3603,7 @@ export default function Analise() {
               {ce.identidade?.nomeCondominio && (
                 <div style={{ fontSize:11.5, color:'#0c4a6e', marginTop:6 }}><strong>Empreendimento no documento:</strong> {ce.identidade.nomeCondominio} — usado como âncora da pesquisa de comparáveis.</div>
               )}
-              <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{ce.fonte ? <> (<a href={ce.fonte} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
+              <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{ce.fonte ? <> (<a href={hrefDoc(ce.fonte)} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
             </div>
           );
         })()}

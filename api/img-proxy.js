@@ -84,11 +84,16 @@ async function handler(req) {
     let contentType = res.headers.get('content-type') || '';
     // SEGURANÇA: só repassa IMAGEM (impede usar o proxy p/ conteúdo arbitrário/HTML de negação).
     // Tipo genérico (octet-stream/vazio) só passa se os bytes forem de imagem.
+    // EXCEÇÃO FECHADA (28/09): PDF, e só dos CDNs da lista de Referer exigido (_foto-hotlink.js).
+    // Ali o cliente NÃO consegue abrir o edital pelo link do leiloeiro (403 sem o Referer deles),
+    // e o proxy é o único caminho. Fora da lista, PDF continua recusado — não vira proxy aberto.
+    const pdfPermitido = !!refererExigido(url);
     const generico = !contentType || /^(binary|application)\/octet-stream/i.test(contentType);
-    if (!/^image\//i.test(contentType) && !generico) return new Response('Not an image', { status: 415 });
+    if (!/^image\//i.test(contentType) && !generico && !(pdfPermitido && /^application\/pdf/i.test(contentType))) return new Response('Not an image', { status: 415 });
     const body = await res.arrayBuffer();
-    if (generico) {
-      contentType = tipoPelaAssinatura(body);
+    if (generico || /^application\/pdf/i.test(contentType)) {
+      const ehPdf = pdfPermitido && new TextDecoder().decode(new Uint8Array(body.slice(0, 5))) === '%PDF-';
+      contentType = ehPdf ? 'application/pdf' : tipoPelaAssinatura(body);
       if (!contentType) return new Response('Not an image', { status: 415 });
     }
 

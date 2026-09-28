@@ -13,6 +13,7 @@ import { getUser, isCronAuthorized } from './_auth.js';
 import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
 import { classificarDocumento } from './_doc-leitura.js';
@@ -466,7 +467,10 @@ async function lerDoc(url, deadline) {
   // Anti-SSRF: URLs de documento vêm do banco E do body do cliente (urlMatricula/
   // urlEdital/urlRegras) — bloqueia destinos internos/metadados, permite CDN público.
   if (!hostExternoSeguro(url) || Date.now() > deadline) return null;
-  const h = { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9' };
+  // CDN que só entrega com o Referer do próprio leiloeiro (HASTAPÚBLICA/cdnhp, 28/09): sem ele o
+  // direto dava 403 e o Bright Data — PAGO — era chamado também sem ele, e dava 403 de novo.
+  const ref = refererExigido(url);
+  const h = { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9', ...(ref ? { Referer: ref } : {}) };
   const ehPdfUrl = /\.pdf(\?|#|$)/i.test(url);
 
   // Extrai um documento útil de UMA resposta (fetch direto OU Bright Data). Só aceita
@@ -503,7 +507,7 @@ async function lerDoc(url, deadline) {
   const ehCaixaUrl = /venda-imoveis\.caixa\.gov\.br/i.test(url);
   const bdHeaders = ehCaixaUrl
     ? { 'User-Agent': UA, Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp', Accept: 'application/pdf,application/octet-stream,*/*' }
-    : { 'User-Agent': UA, Accept: '*/*' };
+    : { 'User-Agent': UA, Accept: '*/*', ...(ref ? { Referer: ref } : {}) };
   try {
     const bd = await fetchViaBrightData(url, { headers: bdHeaders });
     if (bd) {
