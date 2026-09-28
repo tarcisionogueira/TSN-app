@@ -423,7 +423,7 @@ async function handler(req) {
     problemas.push({ fonte: 'QA', tipo: 'medicao de pinos genericos falhou', detalhe: String(e?.message || e) });
   }
 
-  let msInv = null, msServidor = null, invOk = false;
+  let msInv = null, msServidor = null, invOk = false, invResultado = null;
   try {
     const t0 = Date.now();
     // `qa_invariantes_medido` devolve os MESMOS invariantes mais o custo do painel
@@ -442,6 +442,9 @@ async function handler(req) {
         detalhe: `falha ao ler qa_invariantes_medido apos ${msInv}ms: ${eInv.message}. As assercoes de corretude nao rodaram nesta rodada — silencio aqui NAO significa acervo sao.` });
     } else {
       invOk = true;
+      // A aba Qualidade do /admin abre por ESTE resultado (28/09) — recalcular na hora do clique
+      // custava 5-10 s e estourava o teto de 8 s do `authenticated`.
+      invResultado = (inv || []).map(({ ms_servidor, ...resto }) => resto);
       for (const i of inv || []) {
         if (i.status !== 'alerta') continue;
         problemas.push({ fonte: 'QA', tipo: `invariante ${i.chave}`,
@@ -469,7 +472,7 @@ async function handler(req) {
     }
     const { error: eMedida } = await supabase
       .from('qa_invariantes_execucao')
-      .insert({ ms: msInv, ok: invOk, ms_servidor: msServidor });
+      .insert({ ms: msInv, ok: invOk, ms_servidor: msServidor, resultado: invResultado });
     if (eMedida) console.error('[qa] nao gravou a duracao dos invariantes:', eMedida.message);
   }
 

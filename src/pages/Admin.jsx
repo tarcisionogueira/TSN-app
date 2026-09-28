@@ -11516,12 +11516,25 @@ function QualidadeTab() {
   const [inv, setInv] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState('');
-  const carregar = React.useCallback(() => {
+  // Hora da medição exibida: null = calculado agora. A aba abre pela rodada diária do monitor
+  // (28/09) — recalcular os ~90 invariantes no clique custava 5-10 s e estourava o teto de 8 s.
+  const [medidoEm, setMedidoEm] = React.useState(null);
+  const recalcular = React.useCallback(() => {
     setLoading(true); setErro('');
     supabase.rpc('admin_qa_invariantes')
-      .then(({ data, error }) => { if (error) setErro(error.message); else setInv(data || []); })
+      .then(({ data, error }) => { if (error) setErro(error.message); else { setInv(data || []); setMedidoEm(null); } })
       .catch(e => setErro(String(e.message))).finally(() => setLoading(false));
   }, []);
+  const carregar = React.useCallback(() => {
+    setLoading(true); setErro('');
+    supabase.rpc('admin_qa_invariantes_ultima')
+      .then(({ data, error }) => {
+        // Sem rodada gravada (ou falha ao ler), calcula na hora em vez de mostrar vazio.
+        if (error || !Array.isArray(data?.itens)) { if (error) console.error('[qualidade] última rodada:', error.message); recalcular(); return; }
+        setInv(data.itens); setMedidoEm(data.executado_em); setLoading(false);
+      })
+      .catch(e => { setErro(String(e.message)); setLoading(false); });
+  }, [recalcular]);
   // Sugestões do supervisor de IA (Gemini) — meta-aprendizado. Leitura admin-gated.
   const [sug, setSug] = React.useState([]);
   const carregarSug = React.useCallback(() => {
@@ -11571,7 +11584,10 @@ function QualidadeTab() {
           <h2 style={{ margin:0, fontSize:18 }}>✅ Qualidade — invariantes de funcionalidade</h2>
           <div style={{ fontSize:12, color:'#64748b' }}>"Bug bounty" de features: cada linha é uma asserção com limite calibrado. Regressão dispara alerta no monitor diário.</div>
         </div>
-        <button onClick={carregar} style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #e2e8f0', background:'white', cursor:'pointer' }}>↻</button>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:'#64748b' }}>{loading ? '' : medidoEm ? `medido em ${new Date(medidoEm).toLocaleString('pt-BR')}` : 'calculado agora'}</span>
+          <button onClick={recalcular} disabled={loading} title="Recalcula todos os invariantes agora (pode levar ~10 s)" style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #e2e8f0', background:'white', cursor:'pointer' }}>↻ Recalcular</button>
+        </div>
       </div>
       {erro && <div style={{ background:'#fef2f2', color:'#b91c1c', padding:10, borderRadius:8, marginBottom:12, fontSize:13 }}>Erro: {erro}</div>}
       <div style={{ marginBottom:12, fontSize:14, fontWeight:800, color: alertas.length ? '#b91c1c' : '#059669' }}>
