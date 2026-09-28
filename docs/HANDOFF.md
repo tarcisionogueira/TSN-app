@@ -53,6 +53,8 @@ vier "HTTP 403" também de casa, o bloqueio não é só de datacenter.
   `img-proxy` passou a entregar **PDF só para os hosts dessa lista fechada** (valida `%PDF-`), e os
   links de documento de ImovelDetalhe/Analise/Caso passam por `hrefDoc()` (src/utils/documento.js),
   que só mexe nesses hosts. PDFs da fonte: mediana 206 KB, máx. 1 MB (limite de resposta 4,5 MB).
+  **Validado em produção 28/09 17:53 UTC:** edital cdnhp pelo proxy → 200 `application/pdf`;
+  PDF de host fora da lista → 415 (a exceção continua fechada).
 
 ### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
 
