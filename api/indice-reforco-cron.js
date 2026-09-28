@@ -16,10 +16,10 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
-import { anthropicFetch } from './_claude.js';
 import { isCronAuthorized } from './_auth.js';
-import { norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
+import { norm, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 import { comCascataBusca } from './_busca-modelo.js';
+import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -60,23 +60,19 @@ async function marcarEstado(cn, uf, patch) {
 async function reforcarCidade(cidade, uf) {
   const cidadeNorm = norm(cidade);
   const t0 = Date.now();
-  const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   // FALLBACK EM CASCATA (09/09): Haiku primeiro (US$ 1/US$ 5 por milhão contra US$ 3/US$ 15 do
   // Sonnet) e o Sonnet só se o Haiku for recusado por ESTRUTURA. Este cron é onde a economia
   // mais pesa: ele varre CIDADE POR CIDADE, com 8 buscas cada, sem ninguém esperando na tela.
-  // A variante da ferramenta vem pareada ao modelo — a nova não existe no Haiku e daria 400.
+  // A busca PROVA que buscou (`_busca-com-prova.js`, 28/09): resposta sem nenhuma busca web não
+  // semeia nada — seria semear o índice com o que o modelo "lembra", não com anúncio.
   const buscar = async (webUses, timeoutMs) => comCascataBusca(async (degrau) => {
-    const r = await anthropicFetch({
-      method: 'POST', headers,
-      body: JSON.stringify({
-        model: degrau.model, max_tokens: 16000,
-        tools: [degrau.ferramenta(webUses)],
-        system: 'Perito avaliador. Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra. Só mercado livre (descarte leilão). Retorne apenas JSON válido.',
-        messages: [{ role: 'user', content: promptIndice({ tipo: 'todos', cidade, uf }) }],
-      }),
-    }, { retries: 0, timeoutMs, noFallback: true });
-    if (!r.ok) throw new Error(`anthropic_http_${r.status}`);
-    return parseJSON(extractText(await r.json())); // null se truncou
+    const { texto, buscas } = await buscarComProva({
+      degrau, chave: CLAUDE_KEY, webUses, timeoutMs, maxTokens: 16000,
+      system: `Perito avaliador. Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra. Só mercado livre (descarte leilão). ${EXIGE_BUSCA}`,
+      prompt: promptIndice({ tipo: 'todos', cidade, uf }),
+    });
+    if (!buscas) return null;
+    return parseJSON(texto); // null se truncou
   });
   try {
     // 1ª arrojada (8 buscas); se travar/truncar, 2ª ESTREITA (3) que conclui (igual ao gerador ao vivo).

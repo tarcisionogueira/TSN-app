@@ -23,6 +23,16 @@ sem busca recebe UMA cobrança na mesma conversa; `pause_turn` continuado (como 
 gravado leva o trecho do texto devolvido (meta.motivo até 300 chars) para o próximo diagnóstico.
 **Conferir após a próxima tentativa:** `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
 **Raiz de custo/qualidade:** créditos do Gemini (pendência do dono) — com eles o Índice volta ao motor primário.
+**Blindagem (28/09, pedido do dono "que índice e mercadológico não parem"):**
+- `api/_busca-com-prova.js` — busca no Claude que PROVA que buscou (pause_turn, 1 cobrança,
+  `buscas===0` nunca é resultado). Usada pelo Índice ao vivo E pelo `indice-reforco-cron` (hoje
+  desligado por env — voltaria quebrado igual quando ligado). `npm run testar:busca-com-prova`.
+- `health-check` ganhou **"Pesquisa de mercado — motor de busca"**: 3+ falhas SEGUIDAS de
+  `indice` ou `mercadologico` em `geracao_custos` (7 dias) = ERRO no e-mail, com o motivo gravado;
+  Índice sem amostra nova há >7 dias com tentativas = aviso. Em 28/09 acusa o Índice (5 seguidas)
+  até a primeira pesquisa pós-conserto concluir.
+- Mercadológico em 28/09: operando no Haiku (Gemini 402), 2–6 buscas por relatório, sem falha
+  seguida; tem ainda a almofada do Índice BidPro (base própria) quando a busca ao vivo falha.
 
 ### ✅ 28/09 — fotos VLANCE/DANIELGARCIA: não existem na origem + varredura de sumidos na Soleon
 - **VLANCE (30/134 sem foto):** mesma plataforma V-Lance da LJUD. 29 dos 30 casam na API

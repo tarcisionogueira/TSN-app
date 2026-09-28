@@ -10,11 +10,11 @@
 export const config = { runtime: 'nodejs', maxDuration: 250 };
 
 import { getUser } from './_auth.js';
-import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
+import { registrarCustoGeracao } from './_uso.js';
 import { groundingGemini, geminiDisponivel } from './_grounding.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { SEG_TIPOS, norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
+import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
+import { SEG_TIPOS, norm, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -129,7 +129,6 @@ export default async function handler(req, res) {
   // ESTREITA (3 buscas) que costuma CONCLUIR — evita 502 e "0 amostras" numa pesquisa cara.
   const T0 = Date.now();
   let custoMicro = 0, mercado = null, motivoFalha = null, motorUsado = null;
-  const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   // MOTOR PRIMÁRIO: Gemini grounding — o MESMO do mercadológico desde 30/07. O Índice tinha
   // ficado para trás no Claude web_search e a conta chegou em 06/08: a pesquisa de "casa" em
   // Santana de Parnaíba/Jardim Paula ABORTOU nas duas tentativas (200s) e o cliente recebeu
@@ -166,46 +165,19 @@ export default async function handler(req, res) {
   // UMA cobrança na mesma conversa; (3) resultado sem nenhuma busca nunca é aceito. `pause_turn`
   // é continuado como no mercadológico (a busca server-side pausa em pesquisas longas).
   const buscar = async (webUses, timeoutMs, compacto = false) => comCascataBusca(async (degrau) => {
-    const prazo = Date.now() + timeoutMs;
-    const messages = [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }];
-    let data = null, buscas = 0, pausas = 0, cobrou = false;
-    for (;;) {
-      const resta = prazo - Date.now();
-      if (data && resta < 15000) break; // sem tempo para mais uma volta: avalia o que já veio
-      let r;
-      try {
-        r = await anthropicFetch({
-          method: 'POST', headers,
-          body: JSON.stringify({
-            model: degrau.model, max_tokens: 12000,
-            tools: [degrau.ferramenta(webUses)],
-            system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Use a ferramenta web_search para pesquisar os anúncios ANTES de responder — nunca responda de memória. Ao final, retorne apenas JSON válido.`,
-            messages,
-          }),
-          // SEM retry interno: ele MULTIPLICA o relógio (150s + backoff + 150s ≈ 300s) e estoura o
-          // maxDuration de 250s antes de a 2ª tentativa existir — foi o 504 de 13:43. Quem faz o
-          // papel de retry é a 2ª tentativa (compacta), que é orçada e cabe no tempo.
-        }, { retries: 0, timeoutMs: Math.max(10000, resta), noFallback: true });
-      } catch (e) {
-        motivoFalha = `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
-        throw e;
-      }
-      if (!r.ok) { motivoFalha = `anthropic_http_${r.status}`; throw new Error(motivoFalha); }
-      data = await r.json();
-      try { custoMicro += custoRespostaClaude(degrau.model, data?.usage); } catch { /* medição best-effort */ }
-      buscas += Number(data?.usage?.server_tool_use?.web_search_requests) || 0;
-      if (data?.stop_reason === 'pause_turn' && Array.isArray(data.content) && pausas < 3) {
-        messages.push({ role: 'assistant', content: data.content }); pausas++; continue;
-      }
-      if (!buscas && !cobrou && Array.isArray(data?.content) && data.content.length) {
-        cobrou = true;
-        messages.push({ role: 'assistant', content: data.content });
-        messages.push({ role: 'user', content: 'Você respondeu sem pesquisar. Use AGORA a ferramenta web_search nos portais (ZAP, VivaReal, OLX, QuintoAndar, Imovelweb) e em imobiliárias locais, e responda SOMENTE com o JSON pedido, só com anúncios reais encontrados.' });
-        continue;
-      }
-      break;
+    let res;
+    try {
+      res = await buscarComProva({
+        degrau, chave: CLAUDE_KEY, webUses, timeoutMs, maxTokens: 12000,
+        system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). ${EXIGE_BUSCA}`,
+        prompt: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }),
+        aoCusto: (c) => { custoMicro += c; },
+      });
+    } catch (e) {
+      motivoFalha = /anthropic_http_/.test(String(e?.message)) ? String(e.message) : `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
+      throw e;
     }
-    const texto = extractText(data);
+    const { data, texto, buscas, cobrou } = res;
     const trecho = texto.replace(/\s+/g, ' ').slice(0, 140);
     if (!buscas) {
       // Nem com a cobrança: não há mercado para mostrar — há uma pesquisa que não aconteceu.
@@ -214,8 +186,7 @@ export default async function handler(req, res) {
     }
     const json = parseJSON(texto); // null se truncou (JSON incompleto)
     if (json) motorUsado = `claude:${degrau.model}`; // qual Claude importa: Haiku e Sonnet custam 3x diferente
-    // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — no log da Vercel só aparecia o status, sem
-    // dizer se foi 429, timeout ou JSON cortado, e sem isso não dá para saber o que corrigir.
+    // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — sem dizer se foi 429, timeout ou JSON cortado.
     if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${buscas}) texto="${trecho}"`;
     return json;
   }, { aoFalhar: (degrau, e, subiu) => { motivoFalha = `${degrau.model}: ${motivoFalha || String(e?.message || e).slice(0, 80)}${subiu ? ' (subiu de degrau)' : ''}`; } });

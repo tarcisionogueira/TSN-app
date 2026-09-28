@@ -313,6 +313,39 @@ export default async function handler(req) {
   // cliente via "Erro ao gerar". Agora a saúde conta as falhas recentes de cada
   // gerador; uma MESMA mensagem repetida = regressão sistêmica → escala p/ ERRO
   // (teria pego este bug no mesmo dia). Timeout pontual fica como aviso leve.
+  // ── Pesquisa de mercado — o MOTOR DE BUSCA ainda entrega? (28/09) ──
+  // O Índice ficou 17 dias sem gravar UMA amostra (11/09 → 28/09) e nenhum item daqui acusou:
+  // o Gemini caiu (403, depois 402 sem crédito), a busca foi para o Claude Haiku, e no Índice
+  // o Haiku respondia sem pesquisar. Cada tentativa virava uma linha `ok=false` em
+  // `geracao_custos` — o rastro existia, só ninguém lia. Este item lê: N falhas SEGUIDAS da
+  // mesma função (sem um sucesso no meio) é motor parado, não azar; e Índice sem amostra nova
+  // há dias, mesmo com tentativas "ok", é o vazio que se disfarça de resposta.
+  itens.push(await check('Pesquisa de mercado — motor de busca (índice e mercadológico)', async () => {
+    const desde = new Date(Date.now() - 7 * 864e5).toISOString();
+    const r = await sb(`geracao_custos?select=funcao,ok,criado_em,meta&funcao=in.(indice,mercadologico)&criado_em=gte.${desde}&order=criado_em.desc&limit=300`);
+    if (!r.ok) throw new Error(`HTTP ${r.status} em geracao_custos`);
+    const rows = await r.json();
+    const problemas = [], avisos = [];
+    for (const f of ['indice', 'mercadologico']) {
+      const doF = rows.filter((x) => x.funcao === f);
+      let seguidas = 0;
+      for (const x of doF) { if (x.ok) break; seguidas++; }
+      if (seguidas >= 3) {
+        const motivo = String(doF[0]?.meta?.motivo || 'sem motivo gravado').slice(0, 140);
+        problemas.push(`${f}: ${seguidas} falhas seguidas (última ${doF[0].criado_em.slice(0, 16)}) — "${motivo}"`);
+      }
+    }
+    const ra = await sb('indice_amostras?select=criado_em&order=criado_em.desc&limit=1');
+    if (!ra.ok) throw new Error(`HTTP ${ra.status} em indice_amostras`);
+    const ultima = (await ra.json())[0]?.criado_em;
+    const diasSemAmostra = ultima ? (Date.now() - Date.parse(ultima)) / 864e5 : Infinity;
+    const tentativasIndice = rows.filter((x) => x.funcao === 'indice').length;
+    if (diasSemAmostra > 7 && tentativasIndice > 0) avisos.push(`índice sem amostra nova há ${Math.floor(diasSemAmostra)} dias com ${tentativasIndice} tentativa(s) na semana`);
+    if (problemas.length) return { status: 'erro', detalhe: `Pesquisa de mercado PARADA — ${problemas.join(' · ')}${avisos.length ? ` · ${avisos.join(' · ')}` : ''}. Conferir créditos do Gemini e o motivo gravado em geracao_custos.meta.` };
+    if (avisos.length) return { status: 'aviso', detalhe: avisos.join(' · ') };
+    return { status: 'ok', detalhe: 'Índice e mercadológico sem falhas seguidas na semana' };
+  }));
+
   itens.push(await check('Relatórios — falhas de geração', async () => {
     const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const tabelas = { mercado: 'analises_mercado', documental: 'analises_documental', laudo: 'analises_laudo' };
