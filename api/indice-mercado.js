@@ -156,33 +156,67 @@ export default async function handler(req, res) {
   // rodou (vai em `motorUsado`), para a medição de custo não sair no nome do modelo errado. A
   // variante da ferramenta vem PAREADA ao modelo (`_busca-modelo.js`): a nova não existe no
   // Haiku e daria 400.
+  // RESPOSTA SEM BUSCA NÃO É MERCADO (28/09). Com o Gemini fora (403 em 08/09, 402 sem crédito
+  // depois), o Índice caiu no Haiku e parou de gravar amostra: 0 desde 11/09. O rastro em
+  // `geracao_custos` mostrou a assinatura — `end_turn` com ~400 tokens e `server_tool_use`
+  // AUSENTE: o modelo respondeu de memória, sem uma busca sequer. A 1ª tentativa vinha sem JSON
+  // ("falhou") e a compacta devolvia JSON de listas vazias em 6 s, que a tela mostrava como
+  // "não encontramos anúncios nesta localidade" — ausência de busca entregue como resposta.
+  // Três travas: (1) o sistema manda buscar antes de responder; (2) se a volta vier sem busca,
+  // UMA cobrança na mesma conversa; (3) resultado sem nenhuma busca nunca é aceito. `pause_turn`
+  // é continuado como no mercadológico (a busca server-side pausa em pesquisas longas).
   const buscar = async (webUses, timeoutMs, compacto = false) => comCascataBusca(async (degrau) => {
-    let r;
-    try {
-      r = await anthropicFetch({
-        method: 'POST', headers,
-        body: JSON.stringify({
-          model: degrau.model, max_tokens: 12000,
-          tools: [degrau.ferramenta(webUses)],
-          system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
-          messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }],
-        }),
-        // SEM retry interno: ele MULTIPLICA o relógio (150s + backoff + 150s ≈ 300s) e estoura o
-        // maxDuration de 250s antes de a 2ª tentativa existir — foi o 504 de 13:43. Quem faz o
-        // papel de retry é a 2ª tentativa (compacta), que é orçada e cabe no tempo.
-      }, { retries: 0, timeoutMs, noFallback: true });
-    } catch (e) {
-      motivoFalha = `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
-      throw e;
+    const prazo = Date.now() + timeoutMs;
+    const messages = [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }];
+    let data = null, buscas = 0, pausas = 0, cobrou = false;
+    for (;;) {
+      const resta = prazo - Date.now();
+      if (data && resta < 15000) break; // sem tempo para mais uma volta: avalia o que já veio
+      let r;
+      try {
+        r = await anthropicFetch({
+          method: 'POST', headers,
+          body: JSON.stringify({
+            model: degrau.model, max_tokens: 12000,
+            tools: [degrau.ferramenta(webUses)],
+            system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Use a ferramenta web_search para pesquisar os anúncios ANTES de responder — nunca responda de memória. Ao final, retorne apenas JSON válido.`,
+            messages,
+          }),
+          // SEM retry interno: ele MULTIPLICA o relógio (150s + backoff + 150s ≈ 300s) e estoura o
+          // maxDuration de 250s antes de a 2ª tentativa existir — foi o 504 de 13:43. Quem faz o
+          // papel de retry é a 2ª tentativa (compacta), que é orçada e cabe no tempo.
+        }, { retries: 0, timeoutMs: Math.max(10000, resta), noFallback: true });
+      } catch (e) {
+        motivoFalha = `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
+        throw e;
+      }
+      if (!r.ok) { motivoFalha = `anthropic_http_${r.status}`; throw new Error(motivoFalha); }
+      data = await r.json();
+      try { custoMicro += custoRespostaClaude(degrau.model, data?.usage); } catch { /* medição best-effort */ }
+      buscas += Number(data?.usage?.server_tool_use?.web_search_requests) || 0;
+      if (data?.stop_reason === 'pause_turn' && Array.isArray(data.content) && pausas < 3) {
+        messages.push({ role: 'assistant', content: data.content }); pausas++; continue;
+      }
+      if (!buscas && !cobrou && Array.isArray(data?.content) && data.content.length) {
+        cobrou = true;
+        messages.push({ role: 'assistant', content: data.content });
+        messages.push({ role: 'user', content: 'Você respondeu sem pesquisar. Use AGORA a ferramenta web_search nos portais (ZAP, VivaReal, OLX, QuintoAndar, Imovelweb) e em imobiliárias locais, e responda SOMENTE com o JSON pedido, só com anúncios reais encontrados.' });
+        continue;
+      }
+      break;
     }
-    if (!r.ok) { motivoFalha = `anthropic_http_${r.status}`; throw new Error(motivoFalha); }
-    const data = await r.json();
-    try { custoMicro += custoRespostaClaude(degrau.model, data?.usage); } catch { /* medição best-effort */ }
-    const json = parseJSON(extractText(data)); // null se truncou (JSON incompleto)
+    const texto = extractText(data);
+    const trecho = texto.replace(/\s+/g, ' ').slice(0, 140);
+    if (!buscas) {
+      // Nem com a cobrança: não há mercado para mostrar — há uma pesquisa que não aconteceu.
+      motivoFalha = `sem nenhuma busca na web (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, cobrado=${cobrou}) texto="${trecho}"`;
+      return null;
+    }
+    const json = parseJSON(texto); // null se truncou (JSON incompleto)
     if (json) motorUsado = `claude:${degrau.model}`; // qual Claude importa: Haiku e Sonnet custam 3x diferente
     // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — no log da Vercel só aparecia o status, sem
     // dizer se foi 429, timeout ou JSON cortado, e sem isso não dá para saber o que corrigir.
-    if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${data?.usage?.server_tool_use?.web_search_requests})`;
+    if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${buscas}) texto="${trecho}"`;
     return json;
   }, { aoFalhar: (degrau, e, subiu) => { motivoFalha = `${degrau.model}: ${motivoFalha || String(e?.message || e).slice(0, 80)}${subiu ? ' (subiu de degrau)' : ''}`; } });
   // ORÇAMENTO DE TEMPO (achado 06/08 — 504 "Task timed out after 250 seconds"): os timeouts
@@ -223,7 +257,7 @@ export default async function handler(req, res) {
     console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, segundos: Math.round((Date.now() - T0) / 1000), motivo: motivoFalha });
     // Pesquisa que falhou GASTOU: registra como desperdício (ok:false) para a média por
     // geração distinguir o custo do produto do custo das tentativas perdidas.
-    await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: String(motivoFalha || '').slice(0, 120) } });
+    await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: String(motivoFalha || '').slice(0, 300) } });
     res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: motivoFalha || 'busca instável' });
     return;
   }

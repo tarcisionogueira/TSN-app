@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔶 28/09 — Índice: "atualizar" endereço/condomínio falhava — Haiku respondia SEM BUSCAR
+**Sintoma (dono):** atualizar o Índice de um endereço/condomínio dá falha. **Medido:** nenhuma amostra
+nova em `indice_amostras` desde **11/09**. Em `geracao_custos` (funcao='indice'): até 04/09 o motor era
+o Gemini e concluía; o Gemini caiu (403 em 08/09, depois **402 "prepayment credits are depleted"**) e
+tudo foi para o Claude Haiku, que falhava com a mesma assinatura — 1ª tentativa `end_turn`,
+~400 tokens, `server_tool_use` AUSENTE (zero buscas, respondeu de memória, sem JSON); a compacta
+devolvia JSON de listas vazias em 6 s → a tela dizia "não encontramos anúncios" (vazio que é falha).
+O mercadológico, na mesma cascata Haiku, busca normalmente (6–15 blocos, 4–7 mil tokens).
+**Conserto (`api/indice-mercado.js`):** sistema manda usar `web_search` antes de responder; volta
+sem busca recebe UMA cobrança na mesma conversa; `pause_turn` continuado (como no mercadológico);
+**resultado sem nenhuma busca nunca é aceito** (vira falha com motivo, não "sem anúncios"); o motivo
+gravado leva o trecho do texto devolvido (meta.motivo até 300 chars) para o próximo diagnóstico.
+**Conferir após a próxima tentativa:** `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
+**Raiz de custo/qualidade:** créditos do Gemini (pendência do dono) — com eles o Índice volta ao motor primário.
+
 ### ✅ 28/09 — fotos VLANCE/DANIELGARCIA: não existem na origem + varredura de sumidos na Soleon
 - **VLANCE (30/134 sem foto):** mesma plataforma V-Lance da LJUD. 29 dos 30 casam na API
   `core/api/get-lotes` e **nenhum tem foto lá** — não há o que buscar.
