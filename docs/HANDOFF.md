@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 28/09 — filtro "Sem lance" com leilão futuro + veículos de edital na vitrine de veículos
+
+- **Filtro "Sem lance" (print do dono, 36 imóveis com "Encerra amanhã")**: o modo RAIO nunca
+  recebeu o filtro — `buscar_por_raio_v2`/`…_sem_geocode_count` ganharam `resultado_filtro`
+  (assinatura antiga removida, permissões refeitas). E 9 lotes (KLEILOES/FRANCO) tinham
+  `sem_lance` com praça futura (voltaram a leilão): gatilho `trg_zy_resultado_vs_praca_futura`
+  zera o resultado quando `data_fim >= hoje` (venda direta fora — regra da Caixa).
+- **Veículos de edital → `veiculos_leilao`** (`edital_para_veiculo`, chamado na promoção):
+  chave por PLACA (Aracruz eram 7 publicações de 1 carro), marca/modelo/ano/chassi/renavam do
+  trecho do bem, pátio pela mesma regra do coletor. Hoje: 18 veículos com leilão por vir —
+  2 em pátio (visíveis: Palio/Contagem, caminhão VW/Vespasiano), 15 indefinidos e 1 com o
+  devedor (ocultos pela regra "só pátio"). Cidade só entra com UF validada pelo Radar
+  ("Dra. Glauciene…" chegou como cidade). `resultado_leilao_atrasado` ignora EDITAL_DJEN
+  (sem página de lote para apurar), como já fazia com SODRE.
+
 ### ✅ 28/09 — edital de BEM MÓVEL não vira mais "imóvel" (Vara Criminal e geral)
 
 `edital_natureza_bem(texto, matrícula, área)` → imovel | movel | indefinido (regras na migração
