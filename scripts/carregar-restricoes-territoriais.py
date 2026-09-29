@@ -120,17 +120,23 @@ def carregar_ucs():
     c_id = coluna(df, [r'id_uc\d*', r'cd_cnuc\d*', r'cnuc', r'codigo_uc', r'uc_id'])
     if not c_nome:
         raise SystemExit('CNUC: coluna de nome não identificada — nada gravado.')
-    itens = []
+    itens, sem_geom = [], 0
     for i, row in df.iterrows():
-        g = simplificar(row.geometry) if row.geometry is not None else None
+        # UC cadastrada SEM polígono vem com geometria nula/NaN (29/09, CNUC 2025_08) — fica de
+        # fora e é contada no log, em vez de derrubar a carga inteira.
+        if not isinstance(row.geometry, shapely.Geometry):
+            sem_geom += 1
+            continue
+        g = simplificar(row.geometry)
         if g is None:
+            sem_geom += 1
             continue
         cat = str(row[c_cat]) if c_cat else None
         grupo = str(row[c_grupo]) if c_grupo else ('PI' if cat and PROTECAO_INTEGRAL.search(cat) else 'US')
         itens.append({'camada': 'uc', 'codigo': str(row[c_id]) if c_id else f'uc{i}', 'nome': str(row[c_nome]),
                       'categoria': cat, 'grupo': grupo, 'subarea': None,
                       'esfera': str(row[c_esf]) if c_esf else None, 'uf': str(row[c_uf])[:40] if c_uf else None, 'geom': g})
-    print(f'   {len(itens)} UCs com geometria · amostra: {[x["nome"] for x in itens[:3]]}')
+    print(f'   {len(itens)} UCs com geometria · {sem_geom} sem polígono (fora) · amostra: {[x["nome"] for x in itens[:3]]}')
     return itens
 
 
