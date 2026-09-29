@@ -9,6 +9,37 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✅ 29/09 — Veículos: filtro Motor, cidade do pátio, estado/cidade em múltipla escolha
+- **Motor** (`veiculos_leilao.motor_status`, trigger `trg_veiculo_motor_status`): o que o leiloeiro
+  DECLARA — campo de vistoria "motor: funcionando/danificado" vence frase livre; "sem garantia de
+  funcionamento" e "não testado" não contam; negação de outra peça (ar-condicionado) não conta.
+  29/09: 288 funcionando · 357 não funciona/avariado · 7.518 não informado (LJUD nunca informa).
+  Amostra 20/20. Filtro com "Não informado" próprio; padrão "Qualquer".
+- **Cidade do pátio**: `cidade`/`estado` JÁ eram o local do pátio (Sodré grava o nome do pátio,
+  "Guarulhos I/sp"). Trigger `trg_zz_veiculo_local` normaliza pelo nome OFICIAL do IBGE
+  (`area_urbana_municipio`): tira "/sp", separa o numeral em `patio` ("Guarulhos III"), corrige UF
+  errada por nome único ("Barretos/MG" → SP) e truncamento ("Janeiro/RJ" → Rio de Janeiro).
+  99,7% casam; `cidade_origem` guarda o bruto; invariante `veiculo_cidade_fora_do_ibge` (limite 30)
+  aponta fonte nova com formato novo — é assim que o filtro melhora com a coleta.
+- **Múltipla escolha** de estado e cidade (valor "Cidade|UF" — há homônimos entre estados); opções
+  vêm da RPC `veiculos_cidades(p_ufs)` (só onde há veículo ativo, com contagem).
+- **Filtros combinados**: validado AO VIVO na API pública (via pg_net) — 8/8 combinações com a mesma
+  contagem do SQL direto, incluindo 12 filtros juntos com 4 ORs. Teste permanente
+  `npm run testar:filtros-veiculos` (lê o `aplicarFiltros` do próprio .jsx, sem cópia).
+
+### ✅ 29/09 — Urbano × rural e restrição territorial pela LOCALIZAÇÃO (passos 1 e 2)
+- **Área urbana IBGE** (setores 2022) carregada: 27 UFs, 5.570 municípios (`area_urbana_municipio`),
+  `situacao_geo` por trigger. Ativos: 16.415 urbana · 9.317 indeterminada · 269 rural. Pino de
+  cidade = indeterminada; margem da divisa por precisão (150/300/800 m). **Atenção:** 31
+  apartamentos saíram "rurais" (pino errado ou condomínio posterior ao Censo 2022) — por isso o
+  mercadológico só troca terreno↔rural quando o PRÓPRIO imóvel concorda (≥/≤ 1 ha ou texto, sem
+  "urbano/quadra/condomínio/loteamento"). Em seco: 18 viram rural, lotes urbanos ficam.
+  Recarregar: workflow `carregar-area-urbana-ibge.yml` (seco primeiro — confere pontos conhecidos).
+- **Restrição territorial** (`restricao_territorial`: UCs do CNUC/MMA + APRM/APM do DataGEO-SP),
+  `restricoes_geo` no mesmo trigger; o mercadológico pede comparáveis DENTRO da mesma restrição e o
+  parecer cita. Carga: workflow `carregar-restricoes-territoriais.yml` (a versão 2026 do CNUC é link
+  do SharePoint — usa o último ZIP direto do portal). Caso-motivo: Embu-Guaçu na APRM Guarapiranga.
+
 ### 🛡️ 28/09 (noite) — Medidas para o erro de tipo/área não voltar (pedido do dono)
 Três camadas, todas em produção e vigiadas por `qa_invariantes()` (verde = 0):
 1. **Tipo pelo TÍTULO no banco** — `tipo_construido_pelo_titulo(t)` + trigger

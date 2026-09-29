@@ -37,6 +37,8 @@ const COLUNAS = [
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
   // Motor declarado pelo leiloeiro (29/09) — ver supabase/migrations/20260929_veiculo_motor_status.sql
   'motor_status',
+  // Pátio (29/09): nome do pátio quando o leiloeiro tem vários na mesma cidade ("Guarulhos III").
+  'patio',
 ].join(',');
 
 // RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
@@ -94,8 +96,10 @@ const OPCOES_MONTA = [...TIPOS_MONTA.map(t => [t, t[0].toUpperCase() + t.slice(1
 
 // Múltipla escolha num campo do tamanho de um <select> (23/09, pedido do dono: "permitir uma
 // múltipla escolha nesse filtro"). Vazio = qualquer. Fecha ao clicar fora.
-function MultiEscolha({ valores, opcoes, onChange }) {
+const chaveBusca = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function MultiEscolha({ valores, opcoes, onChange, busca = false, vazio = 'Qualquer' }) {
   const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState('');
   const ref = useRef(null);
   useEffect(() => {
     if (!aberto) return undefined;
@@ -103,7 +107,7 @@ function MultiEscolha({ valores, opcoes, onChange }) {
     document.addEventListener('mousedown', fora);
     return () => document.removeEventListener('mousedown', fora);
   }, [aberto]);
-  const rotulo = !valores.length ? 'Qualquer'
+  const rotulo = !valores.length ? vazio
     : valores.length === 1 ? (opcoes.find(([v]) => v === valores[0])?.[1] || valores[0])
     : `${valores.length} selecionados`;
   const alternar = (v) => onChange(valores.includes(v) ? valores.filter(x => x !== v) : [...valores, v]);
@@ -114,8 +118,16 @@ function MultiEscolha({ valores, opcoes, onChange }) {
         <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>▾</span>
       </button>
       {aberto && (
-        <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0, marginTop: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 20px rgba(15,23,42,.12)', padding: 6 }}>
-          {opcoes.map(([v, l]) => (
+        <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: busca ? 'auto' : 0, minWidth: '100%', width: busca ? 260 : undefined, marginTop: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 20px rgba(15,23,42,.12)', padding: 6, maxHeight: 320, overflowY: 'auto' }}>
+          {busca && (
+            <input autoFocus placeholder="Buscar…" value={termo} onChange={e => setTermo(e.target.value)}
+              style={{ ...inp, marginBottom: 4, position: 'sticky', top: 0 }} />
+          )}
+          {valores.length > 0 && (
+            <button type="button" onClick={() => onChange([])} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '4px 8px' }}>Limpar seleção</button>
+          )}
+          {busca && !opcoes.length && <div style={{ padding: '6px 8px', fontSize: 12, color: '#94a3b8' }}>Carregando…</div>}
+          {opcoes.filter(([v, l]) => !busca || !termo || valores.includes(v) || chaveBusca(l).includes(chaveBusca(termo))).map(([v, l]) => (
             <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 6 }}>
               <input type="checkbox" checked={valores.includes(v)} onChange={() => alternar(v)} /> {l}
             </label>
@@ -264,7 +276,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 
 function filtrosVazios() {
   return {
-    estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
+    estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
     valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
   };
 }
@@ -272,8 +284,14 @@ function filtrosVazios() {
 // Filtros da busca como FUNÇÃO (24/09): a mesma régua serve à busca e ao diagnóstico do "nenhum
 // veículo" — `ign` tira filtros para medir quanto cada um corta. Uma cópia só da regra.
 function aplicarFiltros(q, f, ign = new Set()) {
-  if (!ign.has('estado') && f.estado) q = q.eq('estado', f.estado);
-  if (!ign.has('cidade') && f.cidade.trim()) q = q.ilike('cidade', `%${f.cidade.trim()}%`);
+  // ESTADO e CIDADE DO PÁTIO em múltipla escolha (29/09, pedido do dono). A cidade vem normalizada
+  // pelo nome oficial do IBGE (trigger trg_zz_veiculo_local) e o valor é "Cidade|UF" — há
+  // municípios homônimos em estados diferentes, então o par é comparado junto.
+  if (!ign.has('estado') && f.estado.length) q = q.in('estado', f.estado);
+  if (!ign.has('cidade') && f.cidade.length) {
+    const pares = f.cidade.map((c) => { const [nome, uf] = String(c).split('|'); return `and(cidade.eq."${nome.replace(/"/g, '')}",estado.eq.${uf})`; });
+    q = q.or(pares.join(','));
+  }
   if (!ign.has('tipoVeiculo') && f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
   // Marca: OR com o título (24/09) — 30% dos lotes vêm sem `marca` (SODRE/SUPERBID trazem só
   // "HONDA CG 160..." no título) e o ilike só na coluna os escondia, como o `modelo` acima.
@@ -313,7 +331,7 @@ function aplicarFiltros(q, f, ign = new Set()) {
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 export default function BuscaVeiculos() {
@@ -323,7 +341,28 @@ export default function BuscaVeiculos() {
   const podePropor = ROLES_PROPOSTA_VEICULO.includes(role);
   // Filtros e página sobrevivem a abrir um veículo e voltar (pedido do dono, 24/09) — por aba,
   // em sessionStorage (ver utils/estadoLista.js). Mescla com o vazio para chave nova não faltar.
-  const [filtros, setFiltros] = useState(() => ({ ...filtrosVazios(), ...(lerSessao('veic_filtros', null) || {}) }));
+  const [filtros, setFiltros] = useState(() => {
+    const salvo = { ...filtrosVazios(), ...(lerSessao('veic_filtros', null) || {}) };
+    // Sessão de antes de 29/09 guardava estado/cidade como TEXTO: vira lista (cidade livre não
+    // tem UF para formar o par, então é descartada em vez de filtrar errado).
+    if (!Array.isArray(salvo.estado)) salvo.estado = salvo.estado ? [salvo.estado] : [];
+    if (!Array.isArray(salvo.cidade)) salvo.cidade = [];
+    return salvo;
+  });
+  // Opções de cidade: só onde HÁ veículo ativo, com contagem (RPC veiculos_cidades) — a lista
+  // acompanha a coleta sozinha, e segue os estados marcados.
+  const [cidadesOpc, setCidadesOpc] = useState([]);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const { data, error } = await supabase.rpc('veiculos_cidades', { p_ufs: filtros.estado.length ? filtros.estado : null });
+      if (!vivo) return;
+      if (error) { console.warn('[veiculos] cidades do filtro:', error.message); setCidadesOpc([]); return; }
+      const variosUf = filtros.estado.length !== 1;
+      setCidadesOpc((data || []).map((r) => [`${r.cidade}|${r.estado}`, `${r.cidade}${variosUf ? ` — ${r.estado}` : ''} (${r.n})`]));
+    })();
+    return () => { vivo = false; };
+  }, [filtros.estado.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   const [mostrarFiltros, setMostrarFiltros] = useState(!isMobile);
   const [resultados, setResultados] = useState([]);
   const [total, setTotal] = useState(0);
@@ -477,14 +516,17 @@ export default function BuscaVeiculos() {
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={lbl}>Estado</label>
-            <select style={inp} value={filtros.estado} onChange={e => setFiltros(f => ({ ...f, estado: e.target.value }))}>
-              <option value="">Todos</option>
-              {ESTADOS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-            </select>
+            <MultiEscolha valores={filtros.estado} opcoes={ESTADOS.map(uf => [uf, uf])} vazio="Todos" busca
+              onChange={v => setFiltros(f => ({
+                ...f, estado: v,
+                // Desmarcar um estado tira as cidades dele — senão o filtro pede cidade de UF fora da lista e zera.
+                cidade: v.length ? f.cidade.filter(c => v.includes(String(c).split('|')[1])) : f.cidade,
+              }))} />
           </div>
           <div>
-            <label style={lbl}>Cidade</label>
-            <input style={inp} placeholder="Ex.: Campinas" value={filtros.cidade} onChange={e => setFiltros(f => ({ ...f, cidade: e.target.value }))} />
+            <label style={lbl}>Cidade do pátio</label>
+            <MultiEscolha valores={filtros.cidade} opcoes={cidadesOpc} vazio="Todas" busca
+              onChange={v => setFiltros(f => ({ ...f, cidade: v }))} />
           </div>
           <div>
             <label style={lbl}>Tipo de veículo</label>
@@ -655,7 +697,7 @@ export default function BuscaVeiculos() {
                     {v.placa && <span>· {v.placa}</span>}
                   </div>
                   <div style={{ fontSize: 10, color: '#64748b', display: 'flex', alignItems: 'center', gap: 3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                    <MapPin size={9} style={{ flexShrink: 0 }} />{[v.cidade, v.estado].filter(Boolean).join(', ') || '—'}
+                    <MapPin size={9} style={{ flexShrink: 0 }} />{[v.patio ? `Pátio ${v.patio}` : null, [v.cidade, v.estado].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || '—'}
                   </div>
                   {/* Sinal do próprio leiloeiro (11/09) — sinistro, sucata, financiamento e
                       alerta de motor. Nunca inventado: o que ele não informa fica de fora. */}
