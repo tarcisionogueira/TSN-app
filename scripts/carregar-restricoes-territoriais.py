@@ -77,12 +77,13 @@ def carregar_ucs():
     print('CNUC — recursos no portal:')
     for r in recursos:
         print(f"   · {r.get('name')!r} [{r.get('format')}] {r.get('url')}")
-    geo = [r for r in recursos if re.search(r'shp|shape|zip|geojson|gpkg|kml', f"{r.get('format')} {r.get('url')}", re.I)
-           and not re.search(r'\.csv$|\.pdf$|\.xlsx?$', str(r.get('url')), re.I)]
+    # Só ZIP servido pelo PRÓPRIO portal: a versão 2026 aponta para o SharePoint do MMA, que
+    # devolve uma página HTML de login em vez do arquivo (29/09 — quebrou o 1º seco).
+    geo = [r for r in recursos if re.match(r'https?://dados\.mma\.gov\.br/.+\.zip$', str(r.get('url') or ''), re.I)]
     if not geo:
-        raise SystemExit('CNUC: nenhum recurso geográfico no portal — nada gravado.')
-    # Mais recente primeiro (o portal ordena, mas a data no nome manda quando existe).
-    geo.sort(key=lambda r: str(r.get('last_modified') or r.get('created') or ''), reverse=True)
+        raise SystemExit('CNUC: nenhum ZIP geográfico direto no portal — nada gravado.')
+    # Mais recente pela data no NOME do arquivo (shp_cnuc_2025_08.zip).
+    geo.sort(key=lambda r: re.sub(r'\D', '', str(r['url']).rsplit('/', 1)[1]), reverse=True)
     r = geo[0]
     print(f"CNUC — usando: {r.get('name')!r} {r.get('url')}")
     df = ler_geo(baixar(r['url']), 'CNUC').to_crs(4326)
