@@ -18,6 +18,7 @@ import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
+import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
 import { naoEhImovel } from '../dom-parse-util.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -34,7 +35,7 @@ const idFonte = (tenant, id) => (tenant.chaveTenant
 // respondeu (fonte pode estar vazia)" de "não consegui buscar" (challenge/teto).
 export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   const urls = new Map();
-  let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null;
+  let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
     const r = await fetchFonte(url, { semBD });
@@ -77,12 +78,17 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     // O laço para sozinho quando uma página não traz id novo — então, se algum evento ignorar
     // o parâmetro, ele degrada para o comportamento antigo (1 página) em vez de repetir à toa.
     const maxPagEvento = cfg.maxPagesEvento ?? cfg.maxPages ?? 3;
+    // ZERO DECLARADO (29/09): a HASTA acusou `zerou` por 30 dias com o evento dizendo "NENHUM LOTE
+    // ENCONTRADO NO MOMENTO" (conferido em recon_dump). Só vale se TODO evento abriu e TODO evento
+    // afirma isso — evento que não abriu é "não consegui ver", nunca "o site disse que não tem".
+    eventosDeclaramVazio = eventos.length > 0;
     for (const ev of eventos) {
       const antesEvento = urls.size;
       for (let p = 1; p <= maxPagEvento; p++) {
         const sep = ev.includes('?') ? '&' : '?';
         const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
-        if (!re.html) break;
+        if (!re.html) { if (p === 1) eventosDeclaramVazio = false; break; }
+        if (p === 1 && (cfg.parse.extrairUrlsDeLote(re.html, tenant.base).size || !siteDeclaraVazio(re.html))) eventosDeclaramVazio = false;
         if (!htmlEvento1) htmlEvento1 = { url: ev, html: re.html };
         const antes = urls.size;
         for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
@@ -95,7 +101,8 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     }
   }
   if (fetchOk && urls.size === 0) await amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1);
-  return { urls: [...urls.values()], fetchOk, via, eventosCount };
+  const vazioDeclarado = fetchOk && urls.size === 0 && (eventosDeclaramVazio || (!eventosCount && siteDeclaraVazio(htmlPagina1)));
+  return { urls: [...urls.values()], fetchOk, via, eventosCount, vazioDeclarado };
 }
 
 // AMOSTRA DO VAZIO (27/09). "Respondeu 200 e enumerou 0" diz QUE o parser não achou lote, mas
@@ -197,7 +204,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
 }
 
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
-  const { urls, fetchOk, via, eventosCount } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
+  const { urls, fetchOk, via, eventosCount, vazioDeclarado } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
   const naoImovelIds = [];
@@ -283,7 +290,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, vazioDeclarado, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -303,7 +310,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -322,7 +329,8 @@ export async function rodarFonte(cfg, opts) {
         // NÍVEL 2 (HASTA/NORDESTE) podem estar vazias porque o CATÁLOGO não listou evento nenhum
         // (eventosCount=0 — provável mudança na home) ou porque listou eventos e nenhum deles
         // devolveu lote (eventosCount>0 — o problema está dentro do evento, não na home).
-        const motivo = eventosCount != null
+        const motivo = vazioDeclarado ? MOTIVO_VAZIO_DECLARADO
+          : eventosCount != null
           ? `respondeu 200 e enumerou 0 lote(s) (${eventosCount} evento(s) no catálogo)`
           : 'respondeu 200 e enumerou 0 lote(s)';
         console.log(`[${tenant.fonte}] ${motivo} — registrando a medição.`);

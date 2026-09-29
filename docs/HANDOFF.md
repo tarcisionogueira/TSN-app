@@ -62,6 +62,21 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
    Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
 
+### ✅ 29/09 — HASTA e JOAOEMILIO: o alarme `zerou` era ruído, não regressão
+- **HASTA ≠ HASTAPUBLICA** (Hasta Leilões/BA × Hasta Pública/Valland). HASTA seguia acusando
+  `zerou` (mediana 579) há 30 dias com o site dizendo "NENHUM LOTE ENCONTRADO NO MOMENTO" em
+  todo evento (HTML conferido em `recon_dump`, origem `motor-vazio`). O motor genérico
+  (`scripts/lib/motor/runner.mjs`) agora grava o motivo "site declara…" — o mesmo que o SOLEON
+  grava desde 28/09 — e `fonte_regressao_suspeita()` para de acusar. Regra: só declara se TODO
+  evento abriu e TODO evento afirma o vazio; evento que não abriu continua acusando. Regex único em
+  `scripts/lib/vazio-declarado.mjs` (SOLEON e motor). Teste: `npm run testar:zero-declarado`.
+  Vale para qualquer fonte do motor (LEJE, FRANCOLEILOES, CRLEILOES… se o site declarar).
+- **JOAOEMILIO**: conserto de 28/09 já aplicado; a última medição real é de 27/09 (antes dele) e
+  a de 28/09 foi `sem_cota`. Some da lista na próxima coleta SOLEON. Os 17 lotes ativos com
+  leilão em 14/09 estão `indeterminado` (apurado 25/09, 1 de 3 tentativas): a retenção de 15 dias
+  é proposital (pode virar venda direta) e expira sozinha até meados de outubro.
+- Conferir: `select fonte, motivo from public.fonte_regressao_suspeita();` sem HASTA/JOAOEMILIO.
+
 **Checar ao abrir a próxima sessão (custo zero):**
 `select chave, valor, limite, status from public.qa_invariantes() where chave in ('tipo_casa_titulo_lote','tipo_terreno_com_construcao','matricula_area_de_outro_lote','veiculo_cidade_fora_do_ibge');`
 e `select tipo, count(*) from relatorio_anomalias where not resolvido and tipo like 'aprendizado_%' group by 1;`

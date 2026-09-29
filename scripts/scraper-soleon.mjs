@@ -42,6 +42,7 @@ import { registrarSaude } from './_saude-fonte.mjs';
 // planejar-alvo.test.mjs) que o runner.mjs ganhou em 29/08 pela MESMA razão descrita aqui —
 // ver o comentário completo acima de `coletarTenant`.
 import { planejarAlvo } from './lib/motor/runner.mjs';
+import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from './lib/vazio-declarado.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -392,7 +393,6 @@ const FREIO_FRESCOR = new Set();
 const MOTIVO_SEM_COTA = (fonte) => FREIO_FRESCOR.has(fonte)
   ? `freio de frescor próprio: ${fonte} só é coletado a cada ${TORRES3_FRESCOR_DIAS} dias (decisão de custo, não regressão da fonte)`
   : 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)';
-const RE_VAZIO_DECLARADO = /nenhum\s+lote\s+encontrado|nenhum\s+im[óo]vel\s+encontrado|n[ãa]o\s+h[áa]\s+lotes?\s+dispon[íi]veis/i;
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -404,7 +404,7 @@ async function enumerarLotes(tenant) {
     if (semCota) SEM_COTA.add(tenant.fonte);
     if (!html) break;
     via = via || v;
-    if (p === 1 && !extrairUrlsDeLote(html, tenant.base).length && RE_VAZIO_DECLARADO.test(html.replace(/<[^>]+>/g, ' '))) VAZIO_DECLARADO.add(tenant.fonte);
+    if (p === 1 && !extrairUrlsDeLote(html, tenant.base).length && siteDeclaraVazio(html)) VAZIO_DECLARADO.add(tenant.fonte);
     const antes = setUrls.size;
     for (const u of extrairUrlsDeLote(html, tenant.base)) setUrls.add(u);
     if (DEBUG) console.log(`   [${tenant.fonte}] pág ${p} (${v}): +${setUrls.size - antes} (total ${setUrls.size})`);
@@ -629,7 +629,7 @@ async function main() {
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCota
           ? MOTIVO_SEM_COTA(tenant.fonte)
-          : VAZIO_DECLARADO.has(tenant.fonte) ? 'site declara "nenhum lote encontrado" — leiloeiro sem lote publicado (não é regressão)'
+          : VAZIO_DECLARADO.has(tenant.fonte) ? MOTIVO_VAZIO_DECLARADO
           : 'execução sem nenhum lote pronto',
       });
     }
@@ -680,7 +680,7 @@ async function main() {
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: SEM_COTA.has(tenant.fonte)
           ? MOTIVO_SEM_COTA(tenant.fonte)
-          : VAZIO_DECLARADO.has(tenant.fonte) ? 'site declara "nenhum lote encontrado" — leiloeiro sem lote publicado (não é regressão)'
+          : VAZIO_DECLARADO.has(tenant.fonte) ? MOTIVO_VAZIO_DECLARADO
           : 'tenant sem lote nesta execução',
       });
     if (!rows.length) continue;
