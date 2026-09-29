@@ -64,8 +64,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    'cidade': `select geocod_nivel, count(*) from imoveis_leilao where ativo and tipo in
    ('terreno','rural') and geocod_nivel in ('refazer','cidade','rua','endereco','bairro') group by 1;`
    Ressalva: "Rodovia BR-470" sem km põe o pino em algum ponto da rodovia no município. Recusados:
-   205 com mais de um logradouro, 1.028 sem logradouro no texto. **Falta a 2ª parte**: rural pelo
-   polígono do SIGEF/INCRA (122 citam código/CAR no texto) e endereço da matrícula/edital.
+   205 com mais de um logradouro, 1.028 sem logradouro no texto.
+   **2ª parte (29/09, feita em parte):** coordenada pelos VÉRTICES transcritos da matrícula
+   (`scripts/coordenadas-do-texto.mjs` + workflow homônimo; lib `scripts/lib/coordenadas-do-texto.mjs`,
+   teste `testar:coordenadas-do-texto`): o grau separa lat (≤ 33) de lng (≥ 34); mediana dos vértices;
+   ponto a até 80 km do pino atual; vértice único exige rótulo (RUMO de perímetro tem o mesmo formato —
+   no seco, 29 caíam a 600–5.700 km). **32 gravados** com `geocod_nivel='endereco'` (proximidades
+   zeradas). Conferir: `select situacao_geo, count(*) from imoveis_leilao where ativo and tipo in
+   ('terreno','rural') and geocod_nivel='endereco' and pontos_proximos is null group by 1;`
+   **Falta:** polígono do SIGEF pelo código SNCR/CCIR (78 lotes citam o código) — depende do WFS do
+   acervo fundiário do INCRA; UTM (precisa do fuso) e endereço da matrícula/edital.
 8. **Motor de veículos — cobertura** (proposto): só ~7% dos lotes declaram; ler os laudos de
    vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
@@ -116,6 +124,20 @@ tipos é igual ("Regras da Venda Online", "Fazer uma proposta", sem contador no 
 o RÓTULO da Caixa, e a regra de 03/09 é seguir o rótulo exato. Agora "direta" vem primeiro; lote que a
 Caixa chama só de "Venda Online" (caso Morisot) segue `venda_online`. Teste `testar:modalidade-cef`
 atualizado. Dados: 8.635 reclassificados (5.242 ativos, 80 em SP). O filtro do print: 0 → 43.
+
+### ✅ 29/09 — Arremate: data da arrematação, cronograma de pagamento e lembrete
+Print do dono. Tela do arremate (`src/components/PagamentoArremate.jsx`): marcador "Arrematado em
+dd/mm/aaaa · há N dias", condições (à vista / entrada % + nº de parcelas + 1º vencimento + índice),
+próxima parcela com contagem (âmbar ≤ 7 dias, vermelho atrasada), marcar paga, e o risco: judicial →
+multa de 10% sobre parcela + vincendas e desfazimento (art. 895 §§4º-5º CPC); extrajudicial → edital.
+Regra única `src/utils/parcelamentoArremate.js` (teste `testar:parcelamento-arremate`). Cron
+`api/parcelas-arremate-cron.js` (11h45 UTC): e-mail ao cliente com cópia à equipe 5 d e 1 d antes e
+1 d depois; dedup em webhook_eventos_processados; `?seco=1`. Salvamento pela RPC
+`salvar_parcelamento_arremate` (dono OU equipe — a RLS da tabela só deixa o dono); auditoria 0/0.
+**A guia NÃO é gerada automaticamente**: sai do portal do banco/tribunal pelo nº do processo, sem API
+pública (captcha). Modalidade lida do imóvel do acervo: `arrematacoes.tipo_leilao` do arremate de Feira
+de Santana diz "extrajudicial" e o imóvel é judicial (processo 0000199-97.2016.5.05.0195) — corrigir.
+Condições do arremate ainda NÃO registradas: a equipe precisa preencher pelo auto de arrematação.
 
 ### ✅ 29/09 — Régua de e-mails: o envio fazia o cliente parecer "ativo"
 Pedido do dono: confirmar que a cadência (`api/_cadencia.js`, `app_config.cadencia_email`) está em
