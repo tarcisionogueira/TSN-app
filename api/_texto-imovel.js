@@ -159,7 +159,10 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
     new RegExp(`${NUM}\\s*${UNI}\\s+de\\s+área\\s+(?:constru[íi]da|privativa|edificada|útil)`, 'i'),
     new RegExp(`área\\s+(?:constru[íi]da|privativa|edificada|útil)[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+total[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
-    new RegExp(`área\\s+do\\s+terreno[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
+    // "260 m² de área terreno" / "Área Terreno: 260.00 m²" (BIASI, 29/09): sem o "do". Número
+    // ANTES do rótulo primeiro — "área terreno, 144,52 m² de área comum" casaria a área COMUM.
+    new RegExp(`${NUM}\\s*${UNI}\\s+de\\s+área\\s+(?:do\\s+)?terreno`, 'i'),
+    new RegExp(`área\\s+(?:do\\s+|de\\s+)?terreno[^\\d,;]{0,20}${NUM}\\s*${UNI}`, 'i'),
   ];
   for (const re of tentativas) {
     const v = plausivel(paraNumero((t.match(re) || [])[1]));

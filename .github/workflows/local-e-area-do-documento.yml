@@ -9,7 +9,7 @@ on:
         description: '1 = grava; 0 = só mostra'
         default: '0'
       alvo:
-        description: 'veiculos | imoveis | ambos | editais_cdn'
+        description: 'veiculos | imoveis | ambos | editais_cdn | pagina_lote'
         default: 'ambos'
       fonte:
         description: 'fonte para editais_cdn (padrão BIASI)'

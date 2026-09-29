@@ -295,6 +295,44 @@ async function editaisCdn() {
   console.log(`[editais_cdn ${fonte}] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área · ${cacheTexto.size} documentos lidos · ${achou} com área no bloco do lote · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
 }
 
+// ───────────── IMÓVEIS: área na PÁGINA DO LOTE (29/09) ─────────────
+// BIASI: o edital é genérico (condições do banco, sem descrição de lote) — a área mora na página
+// /sale/detail ("Área(s): 72 m² de área construída…"). O enriquecimento diário do coletor já lê
+// essa página, mas com teto de 120 lotes/8 min não alcança o acervo (74 de 364 com área). Esta
+// passada lê só os lotes SEM área, com o mesmo extrator ANCORADO (permitirSolta: false — página
+// inteira nunca aceita m² solto, ver api/_texto-imovel.js).
+async function paginaLote() {
+  const { extrairAreaM2, decodificarEntidades } = await import('../api/_texto-imovel.js');
+  const fonte = process.env.DOC_FONTE || 'BIASI';
+  const alvo = (await todas(`imoveis_leilao?ativo=eq.true&fonte=eq.${fonte}&or=(area_m2.is.null,area_m2.eq.0)&url_lote=not.is.null&select=id,tipo,titulo,url_lote&order=id`)).slice(0, LIMITE);
+  const motivos = {}; let achou = 0, gravou = 0;
+  const conta = (m) => { motivos[m] = (motivos[m] || 0) + 1; };
+  for (const im of alvo) {
+    let html = '';
+    try {
+      const r = await fetch(im.url_lote, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124', 'Accept-Language': 'pt-BR' }, signal: AbortSignal.timeout(25000) });
+      if (!r.ok) { conta(`http_${r.status}`); continue; }
+      html = await r.text();
+    } catch (e) { conta(`rede:${String(e?.message || e).slice(0, 30)}`); continue; }
+    const texto = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+    if (texto.length < 500) { conta('pagina_vazia'); continue; }
+    const area = extrairAreaM2(texto, { permitirSolta: false });
+    if (!(area > 0)) { conta('sem_area_rotulada'); continue; }
+    if (/\b(apartamento|apto|sala|kitnet|flat)\b/i.test(im.titulo || '') && area > 1000) { conta('apto_area_condominio'); continue; }
+    achou++;
+    if (!APLICAR) {
+      if (achou <= 40) { const i = texto.search(/Área\(s\)|Área\s+(?:Privativa|Terreno|Constru)/i); console.log(`  [seco] ${im.tipo} ${area} m² — ${String(im.titulo).slice(0, 60)}  «${texto.slice(Math.max(0, i), Math.max(0, i) + 140)}»`); }
+      continue;
+    }
+    const up = await sb(`imoveis_leilao?id=eq.${im.id}&or=(area_m2.is.null,area_m2.eq.0)`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ area_m2: area }) })
+      .catch((e) => { console.error(`  falhou ${im.id}: ${e.message}`); return null; });
+    if (Array.isArray(up) && up.length === 1) gravou++;
+    await new Promise((r) => setTimeout(r, 300)); // gentileza com o site
+  }
+  console.log(`[pagina_lote ${fonte}] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área · ${achou} com área rotulada na página · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
+}
+
+if (ALVO === 'pagina_lote') { await paginaLote(); process.exit(0); }
 if (ALVO === 'editais_cdn') { await editaisCdn(); process.exit(0); }
 if (ALVO !== 'imoveis') {
   const ibge = new Set((await todas('cidade_socio?nivel=eq.cidade&select=cidade_norm,uf&order=cidade_norm')).map((c) => `${c.cidade_norm}|${c.uf}`));

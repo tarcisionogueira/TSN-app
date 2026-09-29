@@ -29,6 +29,12 @@ eq('Area Com 21769 Ha Bonfinopolisgo', 0);                             // separa
 eq('Fazenda c/ 304 ha. e 290ms2 - Caracol/MS', 3040000);               // m² solto é a sede
 eq('Direito de Posse - Sítio 26.08.27ha - Bocaiúva/MG', 260827);       // ha.a.ca
 eq('Fazenda São Bento c/ 16.040 hectares - Alto Parnaíba/MA', 160400000);
+// BIASI (29/09): rótulo "área terreno" sem o "do"; número antes do rótulo tem prioridade.
+eq('Área(s): 260 m² de área terreno, 144,52 m² de área comum. Área Terreno: 260.00 m²', 260, { permitirSolta: false });
+eq('Área(s): 162 m² de área terreno, 110,28 m² de área construída', 110.28, { permitirSolta: false });
+eq('Área Terreno: 162.00 m²', 162, { permitirSolta: false });
+eq('terreno com área do terreno de 300,00 m²', 300, { permitirSolta: false });
+eq('Lote com área terreno, 144,52 m² de área comum', 0, { permitirSolta: false });
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');
