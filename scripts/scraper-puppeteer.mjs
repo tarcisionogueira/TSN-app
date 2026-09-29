@@ -30,6 +30,7 @@ import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
 import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './_contato-leiloeiro.mjs';
+import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -1945,8 +1946,8 @@ async function scraperPortalZukVeiculos(browser) {
       const textoParaPatio = detalhe?.texto ? `${textoCompleto} ${detalhe.texto}` : textoCompleto;
       const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoParaPatio);
       const anoMatch = textoCompleto.match(REGEX_ANO);
-      // UF/cidade best-effort — "Cidade, UF" ou "Cidade/UF" no endereço do card, quando existe.
-      const locMatch = (c.addr || c.textoCard || '').match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*[,/]\s*([A-Z]{2})\b/);
+      // Local: " - Cidade/UF - " do título primeiro (o 1º "X/YY" do card é a MARCA — "Honda/CB"). Ver lib.
+      const local = localVeiculoZuk(c);
       return {
         fonte: 'ZUK', fonte_id: `zuk_veic_${id}`, leiloeiro: 'Zukerman (PortalZuk)',
         titulo, descricao,
@@ -1961,8 +1962,8 @@ async function scraperPortalZukVeiculos(browser) {
         valor_avaliacao: valAval > valMin ? valAval : null,
         desconto_percentual: descontoPercentualVeiculo(valMin, valAval > valMin ? valAval : null),
         modalidade: (/judicial/i.test(c.title) && !/extra/i.test(c.title || '')) ? 'judicial' : (/extra/i.test(c.title || '') ? 'extrajudicial' : 'nao_identificado'),
-        cidade: locMatch ? toTitleCase(locMatch[1].trim()) : null,
-        estado: locMatch ? locMatch[2].toUpperCase() : null,
+        cidade: local.cidade ? toTitleCase(local.cidade) : null,
+        estado: local.estado,
         link_lote: c.href,
         fotos: c.img ? [c.img] : [],
         anexos: detalhe?.anexos,

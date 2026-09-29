@@ -77,6 +77,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   é proposital (pode virar venda direta) e expira sozinha até meados de outubro.
 - Conferir: `select fonte, motivo from public.fonte_regressao_suspeita();` sem HASTA/JOAOEMILIO.
 
+### ✅ 29/09 — ZUK veículos: cidade/UF vinham da MARCA
+O 1º "X/YY" do card do PortalZuk é a marca/modelo: "Honda/CB 300R" gravava cidade "Honda" UF "CB",
+"VW/Fusca" → "Carro"/"VW". O local certo está no título (" - Francisco Morato/SP - Tribunal…").
+`scripts/lib/zuk-local-veiculo.mjs` (título primeiro, UF validada) + teste `testar:zuk-local-veiculo`.
+Em seco: 34 → 71 de 73 ZUK casando com o IBGE; 40 registros corrigidos no banco.
+`veiculo_cidade_fora_do_ibge`: 123 → 85. O que resta NÃO é formato errado, é local AUSENTE (SUPORTE
+69 nulos, SUPERBID vazio/"Campo Grande" sem UF, MEGA "Sem Informação", SODRE "Outros Locais", LJUD
+"Sul") — decidir se o invariante deve contar nulo (hoje mistura "sem local" com "formato novo").
+
 **Checar ao abrir a próxima sessão (custo zero):**
 `select chave, valor, limite, status from public.qa_invariantes() where chave in ('tipo_casa_titulo_lote','tipo_terreno_com_construcao','matricula_area_de_outro_lote','veiculo_cidade_fora_do_ibge');`
 e `select tipo, count(*) from relatorio_anomalias where not resolvido and tipo like 'aprendizado_%' group by 1;`
