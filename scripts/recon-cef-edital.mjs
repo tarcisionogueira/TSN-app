@@ -104,7 +104,7 @@ async function reconPagina() {
     if (++k > 12) break;
     console.log(`    [${k}] ${m[0].trim()}`);
   }
-  if (!k) console.log('    (nenhuma menção)');
+  if (!k) console.log(`    (nenhuma menção) — texto da página: ${plano.slice(0, 1500)}`);
 
   const numEdital = html.match(/(\d{4})\s*\/\s*(\d{4})\s*-\s*([A-Z]{2,6}\s*\/\s*[A-Z]{2,4})/);
   console.log(`\n  Número do edital impresso: ${numEdital ? `${numEdital[1]}/${numEdital[2]} - ${numEdital[3]}` : '(não casou)'}`);
