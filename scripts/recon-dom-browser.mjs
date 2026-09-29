@@ -80,7 +80,8 @@ for (const rota of ROTAS) {
       const rotulado = [];
       // rótulos ao redor de R$ (avaliação/lance/1ª/2ª praça) — o que o parser precisa mapear
       for (const m of txt.matchAll(/(.{0,32})R\$\s?([\d.]+,\d{2})/g)) { rotulado.push(`${m[1].replace(/\s+/g, ' ').trim()} → R$ ${m[2]}`); if (rotulado.length >= 8) break; }
-      const area = (txt.match(/[\d.]+,?\d*\s*m[²2]/i) || [])[0] || '';
+      // Com CONTEXTO (29/09): o número sozinho não diz se é construída, privativa ou terreno.
+      const area = [...txt.matchAll(/(.{0,70})([\d.]+,?\d*\s*m[²2])(.{0,40})/gi)].slice(0, 6).map((m) => `${m[1]}[${m[2]}]${m[3]}`.replace(/\s+/g, ' ').trim()).join(' ‖ ');
       const cidade = (txt.match(/(?:comarca|cidade|munic[íi]pio|em)\s+[A-ZÀ-Ú][^.,;\n]{2,40}\/?\s*[A-Z]{2}?/i) || [])[0] || '';
       let cardHtml = '';
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
