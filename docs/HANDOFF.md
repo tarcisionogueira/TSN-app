@@ -129,6 +129,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    `judicial@vipleiloes.com.br` ×5 — domínio ≠ leilaovip, aguarda dono), LGCORRETOR
    (`lucianogrizzo@creci.org.br`, aguarda dono), MILAN (só WhatsApp/formulário — conferido no HTML
    do recon_dump), PECINI, BIASI, INFINITY, TOTALLEILOES, FRAZAO (nenhum e-mail em site, lote ou DJEN).
+   VIP (`judicial@vipleiloes.com.br`) e LGCORRETOR (`lucianogrizzo@creci.org.br`) confirmados pelo
+   dono → manual. **46 fontes com contato. Itens 2–6 fechados;** sem e-mail publicado (precisam do
+   dono): MILAN, PECINI, BIASI, INFINITY, TOTALLEILOES, FRAZAO. Aberto só o item 1 (multi-tenant).
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
