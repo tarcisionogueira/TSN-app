@@ -59,6 +59,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    0/0). Dry-run: 16 enumerados, 13 prontos, foto 85%. Voltou ao agendado do `scraper-dom.yml`.
    Vale para qualquer fonte do motor barrada por IP (FREITAS não: certificado SSL do site é inválido).
    **Visto no mesmo dry-run:** GLOBOLEILOES caiu de 3 para 0 lotes (HTML em recon_dump, motor-vazio).
+2a. ✅ **WEBLEILOES — avaliação em DOBRO e lance desatualizado (29/09, achado em Araraquara).** O card
+   mostra o valor do 1º LEILÃO e um %; o coletor lia ao contrário (avaliação = valor ÷ (1 − %)). Conferido
+   em 10 páginas (pg_net): "Valor atual" = card × (1 − %) ao centavo. Só vale em /oferta/leilao/ — venda
+   direta e veículo têm o card = valor atual (conferido, não mudaram). 36 lotes ativos corrigidos
+   (ex.: Bauru casa R$ 158.149 → lance real R$ 79.074; Araraquara R$ 1.431 → R$ 715,69).
+2c. **Veículo — revenda pela média dos 5 anúncios mais baratos − 10% (29/09, pedido do dono).** Webmotors
+   bloqueia robô (PerimeterX) e o robots.txt proíbe a busca — a Bright Data recusou nesses termos.
+   Caminho legítimo: busca web da IA com prova (`_busca-com-prova`), Webmotors primeiro, completa com
+   OLX/iCarros/Mobiauto; conta no código (`revendaPorAnuncios`, 30–200% da FIPE); < 3 anúncios → régua
+   de deságio e o motivo aparece. **Conferir no próximo relatório de veículo gerado** (`veiculo_mercado`
+   em geracao_custos e `result.revendaMercado` em analises_veiculo).
 2b. ⏸️ **Item 2 (Embu) depende do 5 (Gemini):** health-check 29/09 06h = "Pesquisa de mercado PARADA";
    São Carlos (casa 150 m², teste do dono) saiu vazio 2× no Haiku. Regerar antes da recarga gasta IA
    para repetir o vazio. Araraquara (item 3): regeração automática trouxe 4 comparáveis, mas a

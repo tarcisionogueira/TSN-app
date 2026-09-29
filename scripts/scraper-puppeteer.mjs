@@ -4053,11 +4053,21 @@ function mapLoteWebLeiloes(l) {
   // "Data Única R$ X"; o .r1 strong às vezes traz o título, não o valor).
   const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
   const valor = pm ? parseBRL(pm[1]) : 0;
-  // Desconto vs avaliação: o card MOSTRA o percentual ("50% Lance mínimo"). Captura do
-  // .r1 small (fallback no texto). Deriva a avaliação p/ o desconto ficar consistente.
+  // O card mostra o valor do 1º LEILÃO e um percentual ("50%"). ERA LIDO AO CONTRÁRIO até 29/09:
+  // o código tratava o valor como lance e derivava avaliação = valor ÷ (1 − %), gravando a
+  // avaliação em DOBRO e o lance DESATUALIZADO. Conferido na página de 8 lotes (pg_net): o valor
+  // do card é o 1º leilão (= avaliação; o edital de Araraquara diz R$ 1.436 × card R$ 1.431) e o
+  // "Valor atual" da página é SEMPRE card × (1 − %) — 158.149 × 0,5 = 79.074; 787.194 × 0,6 = 472.316.
+  // Logo: avaliação = valor do card; lance mínimo = valor × (1 − %). Sem % no card, nada muda.
+  // SÓ NO LEILÃO (/oferta/leilao/). Na VENDA DIRETA o valor do card JÁ É o valor atual (conferido:
+  // 528.259 = 528.259) e o % é o desconto sobre a avaliação — ali vale a conta antiga. Veículo idem
+  // (mapLoteWebLeiloesVeiculo, 5.100 = 5.100), por isso aquele mapeador não mudou.
   const dm = String(l.descPct || l.texto || '').match(/(\d{1,3})\s*%/);
   const desc = dm ? Math.min(99, Math.max(0, Number(dm[1]))) : 0;
-  const avaliacao = (desc > 0 && desc < 100 && valor > 0) ? Math.round(valor / (1 - desc / 100)) : 0;
+  const comDesconto = desc > 0 && desc < 100 && valor > 0;
+  const ehLeilao = /\/oferta\/leilao\//.test(url);
+  const avaliacao = !comDesconto ? 0 : (ehLeilao ? valor : Math.round(valor / (1 - desc / 100)));
+  const lanceAtual = comDesconto && ehLeilao ? Math.round(valor * (1 - desc / 100) * 100) / 100 : valor;
   // Cidade/UF: prioriza a <li> de localização; fallback no alt e no slug da URL.
   let { cidade, uf } = cidadeUfWL(l.local);
   if (!uf) ({ cidade, uf } = cidadeUfWL(l.alt));
@@ -4082,8 +4092,8 @@ function mapLoteWebLeiloes(l) {
     estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
     cidade: cidade ? toTitleCase(cidade) : '',
     bairro: '', endereco: '',
-    // avaliação derivada do % do card → salvarImoveis calcula desconto_percentual consistente.
-    valor_avaliacao: avaliacao, valor_minimo: valor, area_m2: area || 0,
+    // avaliação = 1º leilão do card; mínimo = valor atual (card × (1 − %)) — ver acima.
+    valor_avaliacao: avaliacao, valor_minimo: lanceAtual, area_m2: area || 0,
     descricao: String(l.alt || l.texto || '').slice(0, 500),
     link_edital: url, url_lote: url, link_foto: foto,
     leiloeiro: 'WebLeilões', data_leilao: null, forma_pagamento: 'a_vista',
