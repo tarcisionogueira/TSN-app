@@ -21,6 +21,9 @@ SB_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
 CNUC_API = 'https://dados.mma.gov.br/api/3/action/package_show?id=unidadesdeconservacao'
 DATAGEO_WFS = 'http://datageo.ambiente.sp.gov.br/geoserver/wfs'
 RE_MANANCIAL = re.compile(r'APRM|\bAPM\b|MANANC', re.I)
+# Não são restrição: grade de folhas topográficas ("Articulação EMPLASA 1:10.000"), faixa de 50 m
+# e linhas. Entrariam no relatório como se fossem restrição (29/09, 5º seco).
+RE_NAO_RESTRICAO = re.compile(r'ARTICULACAO|FX50M|_LN$', re.I)
 TOLERANCIA = 0.0002   # ~22 m
 LOTE_BYTES = 3_000_000
 UA = {'User-Agent': 'Mozilla/5.0 (BidPro carga de dados abertos)'}
@@ -160,7 +163,7 @@ def carregar_mananciais():
         for ft in tipos:
             nome = next((c.text for c in ft if c.tag.endswith('Name')), '') or ''
             titulo = next((c.text for c in ft if c.tag.endswith('Title')), '') or ''
-            if RE_MANANCIAL.search(nome) or RE_MANANCIAL.search(titulo):
+            if (RE_MANANCIAL.search(nome) or RE_MANANCIAL.search(titulo)) and not RE_NAO_RESTRICAO.search(nome):
                 camadas.setdefault(nome.split(':')[-1], (nome, titulo, base))
     for nome, titulo, url in CAMADAS_CONHECIDAS:
         camadas.setdefault(nome, (nome, titulo, url))
@@ -182,7 +185,7 @@ def carregar_mananciais():
         if df.crs is None:
             df = df.set_crs(4326)
         df = df.to_crs(4326)
-        c_sub = coluna(df, [r'sub\w*', r'nm_sub\w*', r'zona\w*', r'classe\w*'])
+        c_sub = coluna(df, [r'sub\w*', r'nm_sub\w*', r'zona\w*', r'classe\w*', r'dclass', r'darea'])
         print(f'   {nome}: {len(df)} feições · colunas {list(df.columns)[:12]} · subárea={c_sub}')
         grupos = df.groupby(df[c_sub].astype(str)) if c_sub else [(None, df)]
         for sub, gdf in grupos:
