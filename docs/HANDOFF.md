@@ -58,7 +58,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    (`pagina_pedir`/`pagina_ler`, só service_role, migração `20260929_pagina_pelo_banco.sql`, segurança
    0/0). Dry-run: 16 enumerados, 13 prontos, foto 85%. Voltou ao agendado do `scraper-dom.yml`.
    Vale para qualquer fonte do motor barrada por IP (FREITAS não: certificado SSL do site é inválido).
-   **Visto no mesmo dry-run:** GLOBOLEILOES caiu de 3 para 0 lotes (HTML em recon_dump, motor-vazio).
+   ✅ **GLOBOLEILOES (29/09): 6 → 715 imóveis.** Não era regressão: o site é Inertia.js e os lotes vêm no
+   JSON `data-page`, não em links — o coletor `dom` achava 0 (e os 6 gravados tinham cidade/tipo errados).
+   Reescrito (`lib/globo-json.mjs`, teste `testar:globo-json`): listagem por categoria 1–3, detalhe só dos
+   lotes próprios novos (fotos, PDFs, CEP). A plataforma agrega parceiros: Globo 533, PGFN—Comprei 127,
+   Balbino 34, Bom Valor 21. Lance = praça vigente; avaliação = maior entre laudo e praças. Pela via banco
+   (a CI leva 403). De volta ao agendado; timeout do scraper-dom 40 → 55 min. Detalhe tem teto de 400/rodada
+   — o restante dos lotes próprios ganha foto/PDF na próxima.
 2a. ✅ **WEBLEILOES — avaliação em DOBRO e lance desatualizado (29/09, achado em Araraquara).** O card
    mostra o valor do 1º LEILÃO e um %; o coletor lia ao contrário (avaliação = valor ÷ (1 − %)). Conferido
    em 10 páginas (pg_net): "Valor atual" = card × (1 − %) ao centavo. Só vale em /oferta/leilao/ — venda
