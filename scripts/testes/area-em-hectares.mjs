@@ -4,6 +4,7 @@
  * `areaEmHectares` em api/_texto-imovel.js.
  */
 import { extrairAreaM2 } from '../../api/_texto-imovel.js';
+import { extrairArea } from '../lib/leilaopro-parse.mjs';
 
 let falhas = 0;
 const eq = (txt, esperado, opts) => {
@@ -35,6 +36,10 @@ eq('Área(s): 162 m² de área terreno, 110,28 m² de área construída', 110.28
 eq('Área Terreno: 162.00 m²', 162, { permitirSolta: false });
 eq('terreno com área do terreno de 300,00 m²', 300, { permitirSolta: false });
 eq('Lote com área terreno, 144,52 m² de área comum', 0, { permitirSolta: false });
+
+// JELEILOES (29/09, invariante area_truncada_no_milhar): o 1º m² do texto era o do barracão.
+{ const v = extrairArea('Imóvel C 3 5129 Alq em Palmeira/PR', 'Terreno rural com área de 8,5013ha. Barracão com área aproximada de 1.300,00m².');
+  const ok = v === 85013; if (!ok) falhas++; console.log(`  ${ok ? '✓' : '✗'} extrairArea (LeilãoPro/JELEILOES) sítio em ha, não o barracão → ${v}`); }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

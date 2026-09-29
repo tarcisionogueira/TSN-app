@@ -133,9 +133,19 @@ maiores são `area_truncada_no_milhar`, `anexo_de_espelho_purgado`, `leilao_venc
   (varia por região); inteiro de 5+ dígitos sem separador ("21769 Ha") é recusado por ambiguidade.
   Teste `testar:area-hectares`. Backfill `area-da-descricao.yml`: 2 secos (o 1º achou 2 leituras
   erradas, corrigidas) e aplicado — 277 lotes ganharam área; invariante 566 → 485.
-- **BIASI**: 193 dos 566 (53% do acervo dela), apto/casa sem área no texto; anexos são edital +
-  minutas de escritura, matrícula só em parte. Área só sai lendo o edital (custo de leitura) —
-  decisão pendente.
+- **BIASI — resolvido (74 → 338 de 364 com área).** O edital NÃO tem a área: os grandes
+  (Santander/Itaú, 185 + 74 lotes) são editais genéricos de condições, 0 marcas de lote (seco do
+  modo `editais_cdn`, que fica no script para editais que listam lotes). A área mora na página
+  `/sale/detail` ("Área(s): 72 m² de área construída…", "Área Terreno: 162.00 m²"); o extrator
+  já lia apto/casa, terreno falhava ("área terreno" sem o "do" — corrigido, número antes do rótulo
+  para não pegar a área comum). O enriquecimento diário (teto 120/8 min) não alcançava o acervo.
+  Passada única: `local-e-area-do-documento.yml` com `alvo=pagina_lote` (pausa de 1,5 s; a BIASI
+  deu 403 em 240 de 290 no 1º seco sem pausa). Custo zero, sem IA.
+- **`area_truncada_no_milhar` (1 → 0)**: JELEILOES gravou 300 m² (resto de "Barracão 1.300,00 m²")
+  num sítio de 8,5013 ha. `extrairArea` do LeilãoPro (usado por ~13 coletores) pegava o 1º m² do
+  texto; agora consulta primeiro o extrator central (rótulo > hectare > m² solto). Testes dos
+  coletores idênticos antes/depois. Dado corrigido (85.013 m²).
+- **Invariante `lote_sem_area_nem_matricula`: 566 → 291 (limite 400, verde).**
 
 ### 🔶 29/09 — `estado_fora_do_padrao` 5 → 2 e `cadastro_duplicado` (1)
 - **Corrigidos com prova (3):** SUPERBID aec7cc99 → São Paulo/SP (título "Vila Andrade/SP"; o pino

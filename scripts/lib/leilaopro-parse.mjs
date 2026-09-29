@@ -17,7 +17,7 @@
  *   • Docs: /uploads/media/documentos_leilao/… (edital) e /documentos_bem/… (matrícula/laudo).
  */
 import { extrairGenerico, checarQualidade } from './scraper-core.mjs';
-import { decodificarEntidades } from '../../api/_texto-imovel.js';
+import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
 
 // Tenants da plataforma (fonte por LEILOEIRO — o monitor aprende baseline por fonte).
 export const TENANTS = {
@@ -95,6 +95,11 @@ export function cidadeUF(titulo = '', descricao = '') {
 // "ÁREA DE 300M²"). Comma = decimal; ponto = milhar (num() cuida das duas).
 export function extrairArea(titulo = '', descricao = '') {
   const s = `${titulo} ${descricao}`;
+  // 29/09: o 1º "N m²" do texto nem sempre é o imóvel — JELEILOES gravou 300 m² (resto de
+  // "Barracão … 1.300,00 m²") num sítio de "8,5013 ha". O extrator central prioriza área
+  // ROTULADA, entende hectare e só usa o m² solto por último; o regex abaixo fica de reserva.
+  const central = extrairAreaM2(s);
+  if (central > 0) return central;
   // Sem \b no fim: "²" é não-palavra, então \b nunca assertaria após "m²" e a área saía 0.
   const m = s.match(/([\d]{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:,\d+)?)\s*m\s*[²2]/i);
   return m ? num(m[1]) : 0;
