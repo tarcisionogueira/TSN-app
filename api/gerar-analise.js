@@ -2185,9 +2185,18 @@ export default async function handler(req, res) {
         mercadoInputs.restricoes = itensRestr.slice(0, 4)
           .map((r) => `${r.nome}${r.categoria ? ` (${r.categoria})` : ''}${r.subarea ? `, ${r.subarea}` : ''}`).join('; ');
       }
+      // O MAPA SOZINHO NÃO DECIDE (29/09, medido na carga): dos 61 terrenos que o IBGE pôs em área
+      // rural, parte era "Terreno urbano 610 m²", lote de condomínio e quadra de loteamento —
+      // pino de bairro, ou loteamento aberto DEPOIS do Censo 2022 (31 apartamentos saíram
+      // "rurais" pelo mesmo motivo). Só troca quando o PRÓPRIO imóvel concorda com o mapa:
+      // porte (gleba ≥ 1 ha / lote ≤ 1 ha) ou o texto, e o texto não diz o contrário.
       const tipoAntes = String(mercadoInputs.tipoImovel || '');
-      const tipoGeo = imA.situacao_geo === 'urbana' && tipoAntes === 'rural' ? 'terreno'
-        : imA.situacao_geo === 'rural' && tipoAntes === 'terreno' ? 'rural' : null;
+      const txtIm = `${imA.titulo || ''} ${imA.descricao || ''}`.toLowerCase();
+      const areaIm = Number(mercadoInputs.areaTerrenoM2) || Number(mercadoInputs.areaM2) || 0;
+      const textoRural = /\brural\b|hectare|\bha\b|alqueire|gleba|fazenda|s[íi]tio|ch[áa]cara/.test(txtIm);
+      const textoUrbano = /\burban[oa]\b|\bquadra\b|condom[íi]nio|loteamento|\blote\s+(n[ºo°.]?\s*)?\d/.test(txtIm);
+      const tipoGeo = imA.situacao_geo === 'urbana' && tipoAntes === 'rural' && !textoRural && areaIm > 0 && areaIm <= 10000 ? 'terreno'
+        : imA.situacao_geo === 'rural' && tipoAntes === 'terreno' && !textoUrbano && (textoRural || areaIm >= 10000) ? 'rural' : null;
       if (tipoGeo) {
         mercadoInputs.tipoImovel = tipoGeo;
         mercadoInputs.situacaoGeo = imA.situacao_geo;
