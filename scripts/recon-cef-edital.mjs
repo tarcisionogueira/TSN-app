@@ -95,6 +95,17 @@ async function reconPagina() {
   }
   if (!html) { console.log('  ✗ não obtive o HTML REAL da página.'); return null; }
 
+  // MODALIDADE E PRAZO (29/09): "Venda Direta Online" × "Venda Online" — a página mostra
+  // contador/data de encerramento para qual das duas? Decide a classificação do acervo CEF.
+  const plano = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  console.log('\n  Modalidade e prazo na página:');
+  let k = 0;
+  for (const m of plano.matchAll(/.{0,80}(?:Venda Direta|Venda Online|Licita|Leil[ãa]o|encerra|Tempo restante|t[ée]rmino|prazo|proposta).{0,120}/gi)) {
+    if (++k > 12) break;
+    console.log(`    [${k}] ${m[0].trim()}`);
+  }
+  if (!k) console.log('    (nenhuma menção)');
+
   const numEdital = html.match(/(\d{4})\s*\/\s*(\d{4})\s*-\s*([A-Z]{2,6}\s*\/\s*[A-Z]{2,4})/);
   console.log(`\n  Número do edital impresso: ${numEdital ? `${numEdital[1]}/${numEdital[2]} - ${numEdital[3]}` : '(não casou)'}`);
 
