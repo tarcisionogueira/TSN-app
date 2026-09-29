@@ -243,7 +243,7 @@ export default function AnaliseVeiculo() {
       {/* LOOP (29/09, print do dono): "Voltar ao veículo" EMPURRAVA a rota do veículo; lá, "Voltar à
           busca" faz nav(-1) — e voltava para ESTE relatório, ida e volta sem fim. Quem veio da página
           do veículo (que passa `state.veiculo`) volta no histórico; link direto troca a entrada. */}
-      <button onClick={() => (loc.state?.veiculo && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(`/admin/veiculos-leilao/${v.id}`, { replace: true }))} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={() => (loc.state?.veiculo && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(`/admin/veiculos-leilao/${v.id}`, { replace: true, state: { deBusca: false } }))} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar ao veículo
       </button>
 

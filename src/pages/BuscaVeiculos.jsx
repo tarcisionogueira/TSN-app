@@ -673,7 +673,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
             return (
               <div key={v.id}
                 style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-                onClick={e => { if (e.target.closest('a,button')) return; nav(`/admin/veiculos-leilao/${v.id}`); }}
+                onClick={e => { if (e.target.closest('a,button')) return; nav(`/admin/veiculos-leilao/${v.id}`, { state: { deBusca: true } }); }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ width: '100%', height: isMobile ? 180 : 150, position: 'relative' }}>
@@ -763,7 +763,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                 <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
                   {/* Página interna primeiro (24/09, pedido do dono): dados do leiloeiro, local do pátio,
                       documentos e FIPE sob demanda; o site do leiloeiro vira o botão secundário. */}
-                  <button onClick={e => { e.stopPropagation(); nav(`/admin/veiculos-leilao/${v.id}`); }}
+                  <button onClick={e => { e.stopPropagation(); nav(`/admin/veiculos-leilao/${v.id}`, { state: { deBusca: true } }); }}
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     Ver detalhes
                   </button>

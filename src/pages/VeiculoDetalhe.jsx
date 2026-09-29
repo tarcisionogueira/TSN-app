@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ORIGEM_VENDA } from '../utils/origemVeiculo';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
@@ -72,9 +72,12 @@ const FIPE_EXPLICACAO = {
 
 export default function VeiculoDetalhe() {
   const nav = useNavigate();
+  const loc = useLocation();
   // Voltar = voltar no HISTÓRICO (24/09): empurrar a rota da busca remontava a lista do zero
-  // (filtros e posição perdidos). Sem histórico (link aberto direto), cai na busca.
-  const voltarABusca = () => ((window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/admin/veiculos-leilao'));
+  // (filtros e posição perdidos). MAS só quando a entrada anterior É a busca — marcada por ela
+  // (`state.deBusca`). Voltar "uma página" às cegas era o loop do dono (29/09): com o relatório
+  // no meio da pilha, "Voltar à busca" caía no relatório. Sem a marca, vai direto à busca.
+  const voltarABusca = () => (loc.state?.deBusca && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/admin/veiculos-leilao'));
   const { id } = useParams();
   const isMobile = useIsMobile();
   const { user, role, effectiveUserId } = useAuth();
@@ -310,7 +313,7 @@ export default function VeiculoDetalhe() {
             </div>
           ) : (
             <>
-              <button onClick={() => nav(`/analise-veiculo?veiculo=${encodeURIComponent(v.id)}`, { state: { veiculo: v } })}
+              <button onClick={() => nav(`/analise-veiculo?veiculo=${encodeURIComponent(v.id)}`, { state: { veiculo: v, deBusca: !!loc.state?.deBusca } })}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 <BarChart2 size={15} /> {rotuloAnalise}
               </button>
