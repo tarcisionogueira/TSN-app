@@ -70,7 +70,7 @@ def ler_geo(conteudo, nome_hint=''):
                 print(f'   {nome_hint}: texto com UTF-8 cortado ({e.reason}) — relendo byte a byte')
                 df = gpd.read_file(f'zip://{caminho}!{alvo}', encoding='latin1')
                 for c in df.columns:
-                    if c != 'geometry' and df[c].dtype == object:
+                    if c != 'geometry' and not str(df[c].dtype).startswith(('geometry', 'int', 'float', 'bool', 'datetime')):
                         df[c] = df[c].map(consertar_texto)
                 return df
     return gpd.read_file(io.BytesIO(conteudo))
@@ -140,24 +140,36 @@ def carregar_ucs():
     return itens
 
 
+# Camada confirmada na busca de 29/09 (DataGEO: APRM Guarapiranga, Lei 12.233/2006 — inclui
+# Embu-Guaçu). Entra mesmo se o catálogo não a listar: o 1º seco achou 0 camadas no catálogo global.
+CAMADAS_CONHECIDAS = [('APRMG_SMA2007', 'APRM Guarapiranga',
+                       'http://datageo.ambiente.sp.gov.br/geoserver/datageo/APRMG_SMA2007/wfs')]
+
+
 def carregar_mananciais():
-    cap = baixar(f'{DATAGEO_WFS}?service=WFS&version=1.0.0&request=GetCapabilities', 120)
-    raiz = ET.fromstring(cap)
-    camadas = []
-    for ft in raiz.iter():
-        if ft.tag.endswith('FeatureType'):
+    camadas = {}
+    for base in (DATAGEO_WFS, 'http://datageo.ambiente.sp.gov.br/geoserver/datageo/wfs'):
+        try:
+            cap = baixar(f'{base}?service=WFS&version=1.0.0&request=GetCapabilities', 120)
+            raiz = ET.fromstring(cap)
+        except Exception as e:   # catálogo fora não derruba: a camada conhecida segue abaixo
+            print(f'   catálogo {base}: falhou ({str(e)[:120]})')
+            continue
+        tipos = [ft for ft in raiz.iter() if ft.tag.endswith('FeatureType')]
+        print(f'   catálogo {base}: {len(tipos)} camada(s) no total')
+        for ft in tipos:
             nome = next((c.text for c in ft if c.tag.endswith('Name')), '') or ''
             titulo = next((c.text for c in ft if c.tag.endswith('Title')), '') or ''
             if RE_MANANCIAL.search(nome) or RE_MANANCIAL.search(titulo):
-                camadas.append((nome, titulo))
+                camadas.setdefault(nome.split(':')[-1], (nome, titulo, base))
+    for nome, titulo, url in CAMADAS_CONHECIDAS:
+        camadas.setdefault(nome, (nome, titulo, url))
     print(f'DataGEO — {len(camadas)} camada(s) de mananciais:')
-    for n, t in camadas:
-        print(f'   · {n} — {t}')
-    if not camadas:
-        raise SystemExit('DataGEO: nenhuma camada de mananciais no GetCapabilities — nada gravado.')
+    for n, t, b in camadas.values():
+        print(f'   · {n} — {t} ({b})')
     itens = []
-    for nome, titulo in camadas:
-        url = (f'{DATAGEO_WFS}?service=WFS&version=1.0.0&request=GetFeature&typeName={nome}'
+    for nome, titulo, base in camadas.values():
+        url = (f'{base}?service=WFS&version=1.0.0&request=GetFeature&typeName={nome}'
                f'&outputFormat=application/json&srsName=EPSG:4326')
         try:
             df = ler_geo(baixar(url), nome)
