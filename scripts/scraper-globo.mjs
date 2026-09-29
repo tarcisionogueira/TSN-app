@@ -27,13 +27,15 @@ const MAX_PAGINAS = 150;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let viaUsada = 'direto';
+let diretoBarrado = false; // o runner levou 403 uma vez → o resto vai direto pelo banco (poupa ~30 s/página)
 
 async function baixar(url) {
-  let motivo;
-  try {
+  let motivo = 'direto pulado (403 antes)';
+  if (!diretoBarrado) try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html' }, signal: AbortSignal.timeout(30000) });
     if (r.ok) return await r.text();
     motivo = `HTTP ${r.status}`;
+    if (r.status === 403) diretoBarrado = true;
   } catch (e) { motivo = String(e?.message || e).slice(0, 60); }
   const b = await viaBanco(url);
   if (b.html) { viaUsada = 'banco'; return b.html; }
@@ -95,10 +97,16 @@ async function main() {
 
   // Detalhe (fotos/PDFs/CEP) só de lote NOVO ou ainda sem foto: isso quase não muda, e ler os ~500
   // detalhes toda rodada custava ~20 min pela via banco (dry-run 29/09). Leitura falha → lê todos.
-  const { data: jaTem, error: eJa } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE).not('link_foto', 'is', null);
-  const comFoto = new Set(eJa ? [] : (jaTem || []).map((r) => r.fonte_id));
-  if (eJa) console.log(`  aviso: não li quem já tem foto (${eJa.message}) — lê o detalhe de todos`);
-  const prontos = []; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
+  // Paginado: o PostgREST corta em 1.000 linhas e o resto releria detalhe todo dia.
+  const comFoto = new Set();
+  for (let de = 0; ; de += 1000) {
+    const { data, error: eJa } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE)
+      .not('link_foto', 'is', null).order('fonte_id').range(de, de + 999);
+    if (eJa) { comFoto.clear(); console.log(`  aviso: não li quem já tem foto (${eJa.message}) — lê o detalhe de todos`); break; }
+    for (const r of data || []) comFoto.add(r.fonte_id);
+    if (!data || data.length < 1000) break;
+  }
+  const prontos = []; let gravados = 0; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
   for (const l of lotes) {
     const previa = montarRowGlobo(l);
     if (ehFracaoIdeal(previa)) { fracao++; continue; }
@@ -111,6 +119,10 @@ async function main() {
       catch (e) { semDetalhe++; if (semDetalhe <= 3) console.log(`  ${previa.fonte_id}: detalhe não lido (${String(e.message).slice(0, 60)})`); }
     }
     prontos.push(montarRowGlobo(l, det));
+    // Grava em BLOCOS durante o laço (revisão 29/09): na 1ª rodada são ~400 detalhes pela via banco
+    // (~20 min) e o job tem teto de 55 — gravar só no fim era perder tudo no corte e repetir o
+    // mesmo trabalho no dia seguinte, para sempre. Assim cada bloco gravado já tira lote da fila.
+    if (!DRYRUN && prontos.length - gravados >= 100) gravados += await gravar(prontos.slice(gravados));
   }
   const porLeiloeiro = prontos.reduce((m, r) => ({ ...m, [r.leiloeiro]: (m[r.leiloeiro] || 0) + 1 }), {});
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
@@ -129,8 +141,8 @@ async function main() {
     if (!completa) process.exitCode = 1;
     return;
   }
-  const n = await gravar(prontos);
-  console.log(`✅ ${n} imóveis gravados/atualizados.`);
+  if (prontos.length > gravados) gravados += await gravar(prontos.slice(gravados));
+  console.log(`✅ ${gravados} imóveis gravados/atualizados.`);
   if (completa) await varrerSumidos(new Set(prontos.map((r) => r.fonte_id)));
   else console.log('  varredura PULADA — enumeração parcial.');
   await registrarSaude(supabase, FONTE, prontos, 'inertia-json', { enumerados: lotes.length });

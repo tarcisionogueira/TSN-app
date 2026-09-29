@@ -30,10 +30,12 @@ export function coordenadasDoTexto(texto) {
   }
   if (!lats.length || !lngs.length) return null;
   // Rumo/azimute de perímetro ("rumo 21°12'…") tem o MESMO formato: no 1º seco (29/09) 29 caíram a
-  // 600–5.700 km do município. Com vértice ÚNICO, exige rótulo de coordenada ou hemisfério.
+  // 600–5.700 km do município. Exige rótulo de coordenada ou hemisfério SEMPRE (revisão 29/09: com
+  // 2+ "vértices" a exigência caía, e dois rumos ≥ 34° viravam longitude — só a trava dos 80 km
+  // segurava, e ela é fraca quando o pino de referência não é o centro da cidade).
   const rotulado = /latitud|longitud|coordenad|geogr[áa]fic|°[^°]{0,14}["”″']\s*[NSWO]\b/i.test(t);
   const vertices = Math.min(lats.length, lngs.length);
-  if (vertices === 1 && !rotulado) return null;
+  if (!rotulado) return null;
   return { lat: Math.round(mediana(lats) * 1e6) / 1e6, lng: Math.round(mediana(lngs) * 1e6) / 1e6, vertices };
 }
 

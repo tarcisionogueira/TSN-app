@@ -44,14 +44,23 @@ export async function viaBanco(url) {
 
 export function criarMotorFetch(proposito) {
   const estado = { semCota: false };
+  // DISJUNTOR POR HOST (revisão 29/09): sem memória, fonte que SEMPRE é Cloudflare (leilaobrasil,
+  // emiliomatos) pagava ~20 s do direto + até 30 s do banco em CADA página antes do Bright Data —
+  // risco de estourar o teto do job. Banco falhou 2× no host → pula o banco nele; banco funcionou e
+  // o direto falhou → pula o direto nele. Vale só nesta execução (o próximo run reaprende).
+  const hostDe = (u) => { try { return new URL(u).host; } catch { return ''; } };
+  const bancoFalhas = new Map();
+  const diretoInutil = new Set();
 
   async function fetchFonte(url, { timeoutMs = 45000, semBD = false } = {}) {
+    const host = hostDe(url);
     // 1) VIA GRÁTIS — fetch direto do runner (custo zero). Só aceita HTML que não seja challenge.
     // `porQueGratis` (27/09): o motivo da recusa era engolido e a saúde dizia só "sem nenhum
     // lote pronto" — LEJE e FREITAS falharam do PC do dono sem ninguém saber se foi 403,
     // challenge ou rede. Agora o motivo segue no `via` até o registro de saúde.
     let porQueGratis = null;
-    try {
+    if (diretoInutil.has(host)) porQueGratis = 'direto pulado (banco serve este host)';
+    else try {
       const c = new AbortController();
       const t = setTimeout(() => c.abort(), 20000);
       const r = await fetch(url, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' } });
@@ -64,9 +73,13 @@ export function criarMotorFetch(proposito) {
     } catch (e) { porQueGratis = `rede: ${String(e?.name === 'AbortError' ? 'timeout 20s' : e?.cause?.code || e?.message || e).slice(0, 60)}`; }
 
     // 1b) VIA BANCO — grátis, outro IP (AWS). Antes de gastar Bright Data.
-    const banco = await viaBanco(url);
-    if (banco.html) return { html: banco.html, via: 'banco' };
-    porQueGratis = `${porQueGratis} · banco: ${banco.motivo}`;
+    if ((bancoFalhas.get(host) || 0) >= 2) porQueGratis = `${porQueGratis} · banco: pulado (2 falhas neste host)`;
+    else {
+      const banco = await viaBanco(url);
+      if (banco.html) { bancoFalhas.set(host, 0); diretoInutil.add(host); return { html: banco.html, via: 'banco' }; }
+      bancoFalhas.set(host, (bancoFalhas.get(host) || 0) + 1);
+      porQueGratis = `${porQueGratis} · banco: ${banco.motivo}`;
+    }
 
     if (semBD) return { html: null, via: `sem-bd (grátis: ${porQueGratis})` };
 

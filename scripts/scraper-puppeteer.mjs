@@ -1328,7 +1328,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     // (mesmo achado dos imóveis, 17/09 — ver scraperSuperbidNet) → 2ª passada aditiva. Aqui fica
     // LIGADA por padrão (~70 páginas, fetch grátis dentro do navegador); SUPERBID_VEIC_GALERIA=0 desliga.
     const comGaleria = process.env.SUPERBID_VEIC_GALERIA !== '0';
-    const { offers: lista, comFiltro, galeria, lojas: lojasCheias } = await page.evaluate(async ([portal, comGaleria]) => {
+    const { offers: lista, comFiltro } = await page.evaluate(async ([portal]) => {
       const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
       const apiUrl = (n, comFiltro) =>
         `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
@@ -1348,34 +1348,43 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
           if (arr.length < 100) break;
         }
       }
-      const galeria = {};
-      const lojas = {};
-      if (comGaleria && all.length) {
-        const urlCheia = (n) => `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc`;
-        for (let n = 1; n <= 100; n++) {
-          let arr;
-          try {
-            const r = await fetch(urlCheia(n), { headers: { Accept: 'application/json' } });
-            if (!r.ok) { galeria.__erro = `HTTP ${r.status} na página ${n}`; break; }
+      return { offers: all, comFiltro };
+    }, [portalId]);
+    // 2ª passada (galeria + loja completa) em UM evaluate POR PÁGINA, com timeout por fetch (revisão
+    // 29/09): dentro do evaluate da listagem, ~72 páginas pesadas somavam mais que o protocolTimeout
+    // do puppeteer (180 s) — o evaluate lançava e o catch lá embaixo devolvia [] = os 7 mil veículos
+    // do dia perdidos por causa de FOTO. Agora falha da galeria só para a galeria.
+    const galeria = {};
+    const lojasCheias = {};
+    if (comGaleria && lista.length) {
+      for (let n = 1; n <= 100; n++) {
+        let pg;
+        try {
+          pg = await page.evaluate(async ([portal, comFiltro, n]) => {
+            const url = `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc`;
+            const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(45000) });
+            if (!r.ok) return { erro: `HTTP ${r.status} na página ${n}` };
             const d = await r.json();
-            arr = d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []);
-          } catch (e) { galeria.__erro = `página ${n}: ${String(e?.message || e).slice(0, 80)}`; break; }
-          if (!arr || !arr.length) break;
-          for (const of of arr) {
-            const gid = of.id || of.offerId;
-            const g = of.product?.galleryJson;
-            if (gid && Array.isArray(g)) { const links = g.map((f) => f?.link).filter(Boolean); if (links.length) galeria[gid] = links.slice(0, 30); }
-            // CONTATO DE CADA LEILOEIRO (29/09): o `store` completo (com `ticker`, onde a loja publica
-            // o e-mail) só vem neste payload sem fieldList — a 1ª passada nunca o via, e a tabela
-            // por leiloeiro ficou vazia desde 28/09. Um por loja, cru; o parse é o de lojaSuperbid.
-            const nomeLoja = of.store && (of.store.description || of.store.name);
-            if (nomeLoja && !lojas[nomeLoja]) lojas[nomeLoja] = JSON.stringify(of.store).slice(0, 3000);
-          }
-          if (arr.length < 100) break;
-        }
+            const arr = d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []);
+            const galeria = {}, lojas = {};
+            for (const of of arr) {
+              const gid = of.id || of.offerId;
+              const g = of.product?.galleryJson;
+              if (gid && Array.isArray(g)) { const links = g.map((f) => f?.link).filter(Boolean); if (links.length) galeria[gid] = links.slice(0, 30); }
+              // CONTATO DE CADA LEILOEIRO (29/09): o `store` completo (com `ticker`, onde a loja publica
+              // o e-mail) só vem neste payload sem fieldList. Um por loja, cru; o parse é o de lojaSuperbid.
+              const nomeLoja = of.store && (of.store.description || of.store.name);
+              if (nomeLoja && !lojas[nomeLoja]) lojas[nomeLoja] = JSON.stringify(of.store).slice(0, 3000);
+            }
+            return { n: arr.length, galeria, lojas };
+          }, [portalId, comFiltro, n]);
+        } catch (e) { galeria.__erro = `página ${n}: ${String(e?.message || e).slice(0, 80)}`; break; }
+        if (pg.erro) { galeria.__erro = pg.erro; break; }
+        Object.assign(galeria, pg.galeria);
+        for (const [k, v] of Object.entries(pg.lojas)) if (!lojasCheias[k]) lojasCheias[k] = v;
+        if (pg.n < 100) break;
       }
-      return { offers: all, comFiltro, galeria, lojas };
-    }, [portalId, comGaleria]);
+    }
     const erroGaleria = galeria.__erro; delete galeria.__erro;
     if (comGaleria) console.log(`    ${leiloeiro} (veículos): galeria capturada em ${Object.keys(galeria).length} oferta(s)${erroGaleria ? ` · parou: ${erroGaleria}` : ''}`);
 
@@ -2046,7 +2055,10 @@ async function scraperPortalZukVeiculos(browser) {
 // lote, não visitado aqui) — por segurança o pátio fica 'indefinido' por padrão, nunca
 // 'confirmado' sem sinal explícito, então nenhum entra na tela (que só mostra confirmado)
 // e a exclusão crítica do dono continua garantida (só filtra 'excluido', nunca promove).
-const REGEX_LJUD_CIDADE_UF = /([A-ZÀ-Ÿ][a-zà-ÿ'-]+(?:[\s-][A-ZÀ-Ÿ][a-zà-ÿ'-]+)*)\/([A-Z]{2})\b/g;
+// Conectivos minúsculos (do/da/dos/de/e) e "D'Oeste" fazem parte do nome: sem eles, "Santa Cruz do
+// Sul/RS" virava "Sul" e "Primavera do Leste/MT" virava "Leste" (29/09: ~25 veículos). Prefixo que
+// não é cidade ("Cinza Alvorada") o gatilho `cidade_pelo_ibge` do banco corta pelo sufixo IBGE.
+const REGEX_LJUD_CIDADE_UF = /([A-ZÀ-Ÿ](?:'[A-ZÀ-Ÿ])?[a-zà-ÿ'-]+(?:(?:[\s-]|\s(?:d[aeo]s?|e)\s)[A-ZÀ-Ÿ](?:'[A-ZÀ-Ÿ])?[a-zà-ÿ'-]+)*)\/([A-Z]{2})\b/g;
 const REGEX_LJUD_ANO_PAR = /\b(\d{2})\/(\d{2})\b/;
 // Ano isolado de 4 dígitos (ex.: "GWM Haval - 2024 - Cinza") — cobre o caso sem par
 // fabricação/modelo, distinto do REGEX_ANO existente (que exige o par no formato XXXX/XXXX).

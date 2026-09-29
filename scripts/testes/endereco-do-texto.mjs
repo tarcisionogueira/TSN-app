@@ -39,5 +39,10 @@ eq('Terreno na Avenida São Paulo, 88', 'Barbosa Ferraz', 'endereco', 'Avenida S
 eq('Terreno às margens da Rodovia SC-157 Inscrição imobiliária 123', 'São Lourenço do Oeste', 'endereco', 'Rodovia SC-157');
 eq('Imóvel rural na Estrada do Po', 'Umbaúba', 'motivo', 'sem_logradouro');
 
+// revisão 29/09: CEP só com hífen ou rótulo — 8 dígitos soltos são matrícula
+{ const c1 = enderecoDoTexto('Terreno na Rua das Flores, 10, matrícula 12345678', 'Maringá')?.cep ?? null;
+  const c2 = enderecoDoTexto('Terreno na Rua das Flores, 10, CEP 87010-100', 'Maringá')?.cep ?? null;
+  console.log(c1 === null && c2 === '87010100' ? '  ✓ CEP exige hífen/rótulo' : `  ✗ CEP: ${c1} / ${c2}`); if (!(c1 === null && c2 === '87010100')) falhas++; }
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

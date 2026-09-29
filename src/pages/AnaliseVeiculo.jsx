@@ -53,7 +53,7 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
     linha('Local (pátio)', e([v.cidade, v.estado].filter(Boolean).join('/') || 'não informado')),
     linha('Data do leilão', e(dt(v.data_leilao))),
     linha('Modalidade', e(v.modalidade || 'não identificada')),
-    linha('Página do lote', v.link_lote ? `<a href="${e(v.link_lote)}">${e(v.link_lote)}</a>` : 'não informada'),
+    linha('Página do lote', v.link_lote ? (/^https?:\/\//i.test(v.link_lote) ? `<a href="${e(v.link_lote)}">${e(v.link_lote)}</a>` : e(v.link_lote)) : 'não informada'),
     linha('Identificador BidPro', e(v.id)),
   ].join('');
   const fipe = result.fipeValor > 0

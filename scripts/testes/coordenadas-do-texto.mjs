@@ -22,6 +22,7 @@ ok(coordenadasDoTexto('E=345.678,90 m e N=7.654.321,00 m (UTM 23S)') === null, '
 ok(Math.abs(distanciaKm({ lat: -23.55, lng: -46.63 }, { lat: -22.90, lng: -47.06 }) - 84.6) < 0.5, 'distância SP–Campinas ≈ 84,6 km');
 
 ok(coordenadasDoTexto(`segue no rumo 25°59'37 até o marco, deflete 50°30'12 à direita`) === null, 'rumo de perímetro com vértice único e sem rótulo → null');
+ok(coordenadasDoTexto(`rumo 21°10'00 e 45°20'00, depois 21°11'00 e 46°00'00, depois 21°12'00 e 47°00'00`) === null, 'revisão 29/09: vários rumos sem rótulo → null');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

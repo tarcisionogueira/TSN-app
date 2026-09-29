@@ -23,7 +23,10 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const FROM         = process.env.APP_ALERTS_FROM || process.env.EMAIL_FROM || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
 const EQUIPE       = process.env.ADMIN_ALERT_EMAIL || null;
-const MARCOS       = [5, 1, -1];
+// Marco = JANELA, não dia exato: se o envio do dia 5 falhar, o de 4, 3 ou 2 ainda cai no mesmo marco
+// e tenta de novo (a trava é por marco — sai UM aviso por janela). Com dia exato, "liberar a trava
+// para tentar amanhã" não adiantava nada: amanhã já não era marco (revisão 29/09).
+const marcoDe = (dias) => (dias >= 2 && dias <= 5 ? 5 : dias >= 0 && dias <= 1 ? 1 : dias <= -1 && dias >= -7 ? -1 : null);
 
 const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
 const sb  = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...hdr, ...(opts.headers || {}) } });
@@ -92,27 +95,34 @@ async function handler(req) {
   const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // dia em Brasília
   const res = { arremates: lista.length, no_marco: 0, enviados: 0, ja_avisados: 0, sem_email: 0, falhas: 0, seco };
   for (const a of lista) {
-    const prox = proximaPendente(cronograma(a.parcelamento, { valor: a.valor_arrematacao, dataArrematacao: a.data_arrematacao }), hoje);
-    if (!prox || !MARCOS.includes(prox.dias)) continue;
+    // Uma linha com jsonb ruim (data inválida → RangeError) não pode derrubar o aviso dos outros.
+    let prox;
+    try { prox = proximaPendente(cronograma(a.parcelamento, { valor: a.valor_arrematacao, dataArrematacao: a.data_arrematacao }), hoje); }
+    catch (e) { res.falhas++; console.error(`[parcelas-arremate] cronograma ilegível ${a.id}:`, e?.message); continue; }
+    const marco = prox ? marcoDe(prox.dias) : null;
+    if (marco === null) continue;
     res.no_marco++;
     if (seco) continue;
-    const chave = `${a.id}|${prox.idx}|${prox.venc}|${prox.dias}`;
+    const chave = `${a.id}|${prox.idx}|${prox.venc}|${marco}`;
     if (!(await travar(chave))) { res.ja_avisados++; continue; }
     const email = await emailDoUsuario(a.user_id);
     if (!email) { res.sem_email++; await liberar(chave); continue; }
     try {
-      await enviarEmail({
+      // enviarEmail NÃO lança: falha do Resend, suprimido e sem_resend voltam como { ok:false }.
+      const env = await enviarEmail({
         from: FROM, to: email, cc: EQUIPE && EQUIPE !== email ? EQUIPE : undefined,
         subject: `${prox.dias < 0 ? 'Parcela em atraso' : 'Lembrete de parcela'}: ${prox.rotulo} — ${dataBR(prox.venc)}`,
         html: corpo({ titulo: a.titulo || 'Imóvel arrematado', prox, penalidade: avisoPenalidade(fonte[a.imovel_id]?.modalidade || a.imovel?.modalidade), processo: fonte[a.imovel_id]?.numero_processo || a.imovel?.numero_processo, link: `${BASE}/arrematados` }),
         meta: { userId: a.user_id, tipo: 'parcela_arremate' },
         idempotencyKey: `parcela_arremate:${chave}`,
       });
-      res.enviados++;
+      if (env?.ok) res.enviados++;
+      else if (env?.enfileirado) res.enfileirados = (res.enfileirados || 0) + 1; // a fila entrega depois
+      else throw new Error(env?.error || 'envio sem confirmação');
     } catch (e) {
       res.falhas++;
       console.error(`[parcelas-arremate] envio falhou ${chave}:`, e?.message);
-      await liberar(chave); // tenta de novo amanhã, ainda dentro do marco seguinte
+      await liberar(chave); // tenta de novo amanhã — o marco é uma janela, amanhã ainda vale
     }
   }
   console.log('[parcelas-arremate]', JSON.stringify(res));

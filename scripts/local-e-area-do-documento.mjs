@@ -252,7 +252,7 @@ function blocosComValor(texto, valores) {
   return n;
 }
 async function editaisCdn() {
-  const fonte = process.env.DOC_FONTE || 'BIASI';
+  const fonte = encodeURIComponent(process.env.DOC_FONTE || 'BIASI');
   const alvo = (await todas(`imoveis_leilao?ativo=eq.true&fonte=eq.${fonte}&or=(area_m2.is.null,area_m2.eq.0)&select=id,fonte,tipo,titulo,valor_minimo,valor_avaliacao,anexos&order=id`)).slice(0, LIMITE);
   const motivos = {}; let achou = 0, gravou = 0; const diag = new Set();
   const conta = (m) => { motivos[m] = (motivos[m] || 0) + 1; };
@@ -303,7 +303,7 @@ async function editaisCdn() {
 // inteira nunca aceita m² solto, ver api/_texto-imovel.js).
 async function paginaLote() {
   const { extrairAreaM2, decodificarEntidades } = await import('../api/_texto-imovel.js');
-  const fonte = process.env.DOC_FONTE || 'BIASI';
+  const fonte = encodeURIComponent(process.env.DOC_FONTE || 'BIASI');
   const alvo = (await todas(`imoveis_leilao?ativo=eq.true&fonte=eq.${fonte}&or=(area_m2.is.null,area_m2.eq.0)&url_lote=not.is.null&select=id,tipo,titulo,url_lote&order=id`)).slice(0, LIMITE);
   const motivos = {}; let achou = 0, gravou = 0, bloqueiosSeguidos = 0;
   const conta = (m) => { motivos[m] = (motivos[m] || 0) + 1; };

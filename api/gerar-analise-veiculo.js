@@ -57,7 +57,7 @@ async function upsertAnaliseVeiculo(row) {
 // busca web da IA (anúncios PÚBLICOS indexados), com PROVA de que pesquisou (_busca-com-prova:
 // resposta sem busca é falha, nunca "mercado vazio"). A conta dos 5 mais baratos é feita aqui,
 // no código (revendaPorAnuncios), nunca pela IA. Devolve { revenda, motivo } — nunca lança.
-async function buscarRevendaMercado(v, prazoMs, userId) {
+async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
   const alvo = [v.marca, v.modelo, v.titulo].filter(Boolean).join(' · ').slice(0, 200);
   const ano = v.ano_modelo || v.ano_fabricacao || '';
   if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };
@@ -71,7 +71,7 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
       const { texto, buscas } = await buscarComProva({
         degrau, chave: CLAUDE_KEY, webUses: 4, timeoutMs: prazoMs, maxTokens: 4000,
         system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
-        aoCusto: (c) => { try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
+        aoCusto: (c) => { gasto.micro += Number(c) || 0; try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
       });
       if (!buscas) { motivo = 'a IA não pesquisou (resposta sem busca na web)'; return null; }
       const j = parseJSON(texto);
@@ -256,7 +256,10 @@ export default async function handler(req, res) {
     const faixa = faixaFipe(percentualFipe);
 
     // Em paralelo com a análise: não soma tempo ao relatório (prazo próprio, dentro do teto).
-    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id);
+    // `gastoBusca` soma o custo da busca de anúncios para entrar no débito do crédito (revisão 29/09:
+    // o débito cobrava só a análise principal e a busca saía de graça para quem paga por crédito).
+    const gastoBusca = { micro: 0 };
+    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id, gastoBusca);
     const blocosDoc = await anexosParaBlocos(v.anexos, T0 + Math.min(45000, HARD_MS - 30000));
     const semDocumentos = blocosDoc.length === 0 && !String(v.descricao || '').trim();
 
@@ -317,7 +320,7 @@ export default async function handler(req, res) {
     if (cobrarCredito) {
       try {
         await sb('rpc/debitar_credito', { method: 'POST', body: JSON.stringify({
-          p_user_id: user.id, p_func: 'veiculo', p_custo_micro: Math.round(custoRespostaClaude(MODEL, data?.usage)),
+          p_user_id: user.id, p_func: 'veiculo', p_custo_micro: Math.round(custoRespostaClaude(MODEL, data?.usage) + gastoBusca.micro),
           p_justificativa: 'Análise de veículo (cota mensal esgotada)', p_referencia: veiculoId,
         }) });
       } catch { /* best-effort — nunca desfaz um relatório já entregue */ }

@@ -169,6 +169,38 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
+### 🛡️ 29/09 (fim do dia) — Revisão de eficiência e segurança de tudo que entrou no dia
+Duas revisões em paralelo (API/front/migrações · coletores/gravadores) + checagens de banco
+(`auditoria_seguranca` 0/0, `auditoria_regras_negocio` 0/0, `cliente_travou` vazio). Corrigido e conferido:
+- **Lembrete de parcela contava e-mail que não saiu** (`api/parcelas-arremate-cron.js`): `enviarEmail` NÃO
+  lança — devolve `{ok:false}` (forma 1/2). Agora confere `ok`/`enfileirado`; o marco virou JANELA
+  (5 = 2..5 dias · 1 = 0..1 · −1 = 1..7 de atraso) e a trava é por marco, então "tenta amanhã" funciona.
+  `try` por arremate: um jsonb ruim não derruba os outros.
+- **`salvar_parcelamento_arremate`** valida datas AAAA-MM-DD (e o cast), parcelas 1–60, entrada 0–100,
+  `pagas` 0–60, teto de 8 KB (`20260929_endurecimento_revisao.sql`, aplicada). `sem_acento` com search_path fixo.
+- **Gatilho geo em todo upsert** (~4,7 ms/linha): dividido INSERT × UPDATE com WHEN — só recalcula se
+  lat/lng/nível/UF mudou (conferido nos dois sentidos). ⚠️ Recarregou camada de restrição/área urbana?
+  recalcule com `update ... set restricoes_geo = public.restricoes_geo(...)` — o gatilho não pega linha parada.
+  `situacao_geo`/`restricoes_geo` fora de PUBLIC/anon (`20260929_revisao_gatilhos.sql`, aplicada).
+- **Cidade de veículo fora do IBGE (87)**: regex do LJUD cortava no conectivo ("Santa Cruz do **Sul**" → "Sul",
+  "Primavera do **Leste**") — corrigido no coletor; `trg_veiculo_local` ganhou a regra "termina com o
+  município" ("Cinza Alvorada" → Alvorada, "Veículo - Bauru" → Bauru; seco 6/6, aplicado) e parou de
+  trocar `cidade_origem` em update só de UF. Os ~60 "Sul/Leste/Oeste" somem na próxima coleta do LJUD.
+- **Globo**: grava em blocos de 100 durante o laço (antes só no fim — o 1º run com ~400 detalhes podia
+  estourar os 55 min e não gravar nada, todo dia); lembra do 403 e vai direto pelo banco; leitura de
+  "já tem foto" paginada.
+- **Superbid veículos**: a 2ª passada da galeria saiu do evaluate da listagem (1 evaluate por página, timeout
+  por fetch) — estourar o `protocolTimeout` (180 s) devolvia [] e perdia os ~7 mil veículos do dia.
+- **Motor (`fetch-fonte.mjs`)**: disjuntor por host — banco falhou 2× → pula o banco; banco serviu → pula o
+  direto. Fonte Cloudflare pagava ~50 s por página antes do Bright Data.
+- **"Site declara vazio"** só lê texto VISÍVEL (sem script/template) e não vale com preço na página.
+- **CEP do texto** exige hífen ou rótulo; **coordenada do texto** exige rótulo sempre (rumo virava longitude).
+- Crédito do relatório de veículo passa a incluir o custo da busca de anúncios; link do lote no PDF só http(s);
+  `DOC_FONTE` codificado; workflow de contatos avisa quando falha.
+- **Ficou de fora (baixo, anotado):** `pagina_pedir` aceita domínio público que resolve p/ IP interno
+  (ex. `*.nip.io`) — contido (só https + só service_role); `editais_leilao.texto_integral` sem índice
+  trigram (busca semanal de contatos faz varredura — ok no volume atual).
+
 ### ✅ 29/09 — HASTA e JOAOEMILIO: o alarme `zerou` era ruído, não regressão
 - **HASTA ≠ HASTAPUBLICA** (Hasta Leilões/BA × Hasta Pública/Valland). HASTA seguia acusando
   `zerou` (mediana 579) há 30 dias com o site dizendo "NENHUM LOTE ENCONTRADO NO MOMENTO" em

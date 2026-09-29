@@ -33,3 +33,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CONTATO_APLICAR: ${{ github.event_name == 'schedule' && '1' || inputs.aplicar }}
         run: node scripts/capturar-contatos-leiloeiros.mjs
+      - name: Notify on failure
+        # Revisão 29/09: a rodada semanal falhava calada. `cancelled()` junto — timeout não é failure().
+        if: ${{ github.event_name == 'schedule' && (failure() || cancelled()) }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Contatos de leiloeiros","etapa":"'"$JOB_STATUS"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true

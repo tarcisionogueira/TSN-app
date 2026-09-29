@@ -64,7 +64,10 @@ export function enderecoDoTexto(texto, cidade) {
   // Município citado no texto tem de ser o do lote (senão é o fórum/cartório/outro imóvel).
   const mun = (t.match(/\bmunic[íi]pio\s+(?:e\s+comarca\s+)?de\s+([A-ZÀ-Ú][A-Za-zÀ-ú'’\- ]{2,40}?)(?=\s*[,;./-]|\s+comarca|$)/i) || [])[1];
   if (mun && cidade && norm(mun) !== norm(cidade)) return { motivo: 'outro_municipio' };
-  const ceps = [...new Set([...t.matchAll(/\b(\d{5})-?(\d{3})\b/g)].map((m) => `${m[1]}${m[2]}`))];
+  // CEP só com HÍFEN ou RÓTULO (revisão 29/09): 8 dígitos soltos são matrícula/inscrição com a mesma
+  // cara, e um CEP errado manda o geocodificador para outro bairro.
+  const ceps = [...new Set([...t.matchAll(/\bCEP\s*[:.]?\s*(\d{2}\.?\d{3})-?(\d{3})\b|\b(\d{2}\.?\d{3})-(\d{3})\b/gi)]
+    .map((m) => `${m[1] || m[3]}${m[2] || m[4]}`.replace('.', '')))];
   const melhor = achados.find((a) => /\d/.test(a.endereco)) || achados[0];
   return { endereco: melhor.endereco, cep: ceps.length === 1 ? ceps[0] : null };
 }
