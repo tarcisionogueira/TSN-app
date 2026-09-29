@@ -35,6 +35,8 @@ const COLUNAS = [
   // Resultado REAL do leilão (21/09) — apurado por api/apurar-resultado-leilao-cron.js
   // revisitando a página de cada lote. Substitui a antiga inferência por data ("negativo").
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
+  // Motor declarado pelo leiloeiro (29/09) — ver supabase/migrations/20260929_veiculo_motor_status.sql
+  'motor_status',
 ].join(',');
 
 // RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
@@ -43,6 +45,17 @@ const COLUNAS = [
 // com sem lance") — nenhum dos dois tem sinal de venda; a distinção honesta fica só na tela do
 // veículo, que reapura contra o leiloeiro ao abrir e resolve o indeterminado quando dá. Já
 // 'nao_apurado' aqui é só NULL (nunca tentado).
+// MOTOR (29/09, pedido do dono): o que o LEILOEIRO declarou — "motor: funcionando" no bloco de
+// vistoria, "motor: danificado", "veículo não funciona". Só ~7% dos lotes dizem alguma coisa
+// (LJUD nunca), então "Não informado" é opção de primeira classe e o padrão continua "Qualquer":
+// escolher "Funcionando" esconde os 93% desconhecidos, e o rótulo deixa claro que é declaração
+// do edital, não garantia nossa.
+const MOTOR_OPTS = [
+  ['funciona', 'Funcionando (declarado)', 'O leiloeiro declarou o motor funcionando. É informação do edital, não garantia.'],
+  ['nao_funciona', 'Não funciona / avariado', 'O leiloeiro declarou motor avariado, danificado, sem funcionar ou sem motor.'],
+  ['nao_informado', 'Não informado', 'O leiloeiro não diz nada sobre o motor — a maioria dos lotes.'],
+];
+
 const RESULTADO_OPTS = [
   ['vendido', 'Com lance', 'O leilão recebeu lance — arrematado, ou lance abaixo da reserva aguardando o comitente.'],
   ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
@@ -252,7 +265,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: '', cidade: '', tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', ordenacao: 'atualizado_desc',
+    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -293,11 +306,14 @@ function aplicarFiltros(q, f, ign = new Set()) {
   else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
   else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
+  if (ign.has('motor') || !f.motor) { /* sem filtro */ }
+  else if (f.motor === 'nao_informado') q = q.is('motor_status', null);
+  else q = q.eq('motor_status', f.motor);
   return q;
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 export default function BuscaVeiculos() {
@@ -544,6 +560,13 @@ export default function BuscaVeiculos() {
             </select>
           </div>
           <div>
+            <label style={lbl}>Motor</label>
+            <select style={inp} value={filtros.motor || ''} onChange={e => setFiltros(f => ({ ...f, motor: e.target.value }))}>
+              <option value="">Qualquer</option>
+              {MOTOR_OPTS.map(([val, label, desc]) => <option key={val} value={val} title={desc}>{label}</option>)}
+            </select>
+          </div>
+          <div>
             <label style={lbl}>Ordenar por</label>
             <select style={inp} value={filtros.ordenacao} onChange={e => setFiltros(f => ({ ...f, ordenacao: e.target.value }))}>
               <option value="atualizado_desc">Mais recentes</option>
@@ -646,7 +669,10 @@ export default function BuscaVeiculos() {
                     {v.is_sucata && (
                       <span title="Vendido sem ATPV-E — só certificado de baixa; a transferência não é a padrão" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Sucata</span>
                     )}
-                    {v.motor_alerta && (
+                    {v.motor_status === 'funciona' && (
+                      <span title="O leiloeiro declarou o motor funcionando — informação do edital, não garantia" style={{ fontSize: 9, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 8 }}>🔧 Motor funcionando</span>
+                    )}
+                    {(v.motor_alerta || v.motor_status === 'nao_funciona') && (
                       <span title="Menção de dano no motor na descrição do leiloeiro" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Motor</span>
                     )}
                     {v.financiavel === false && (
