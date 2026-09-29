@@ -16,6 +16,7 @@
  * JRF de 28/09). E portais públicos (CEF, VENDASGOV, EDITAL_DJEN), que não recebem proposta por e-mail.
  * EM SECO por padrão; CONTATO_APLICAR=1 grava.
  */
+import puppeteer from 'puppeteer';
 import { buscarEmailDoSite } from './_contato-leiloeiro.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
@@ -39,6 +40,31 @@ async function todas(path) {
   }
 }
 
+// 403 DE DATACENTER (29/09, 1ª rodada em seco): 30 das 57 homes respondem 403 a `fetch` saído do
+// runner do GitHub (proteção anti-robô por IP) e 200 ao Chrome — que é como os coletores entram
+// nesses mesmos sites todo dia. Então: fetch primeiro (barato); se não passar, Chrome.
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+let navegador = null;
+async function htmlNoChrome(url) {
+  navegador ??= await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+  const page = await navegador.newPage();
+  try {
+    await page.setUserAgent(UA);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await new Promise((r) => setTimeout(r, 2500)); // desafio anti-robô / rodapé montado por JS
+    if (res && res.status() >= 400 && res.status() !== 403) throw new Error(`HTTP ${res.status()} no Chrome`);
+    return await page.content();
+  } finally { await page.close().catch(() => {}); } // padrao-ok: fechar aba best-effort
+}
+async function obterHtml(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+    if (r.ok) return await r.text();
+  } catch { /* cai para o Chrome logo abaixo — o motivo final vem de lá */ }
+  return htmlNoChrome(url);
+}
+
 // Uma URL real por fonte — só a ORIGEM importa (a home do site do leiloeiro).
 const origemPorFonte = new Map();
 const guardar = (fonte, url) => {
@@ -56,7 +82,7 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
   const multi = await sb('rpc/fonte_multi_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte }) });
   if (multi === true) { resultado.multi.push(fonte); console.log(`  ⤷ ${fonte.padEnd(20)} multi-tenant — contato é por leiloeiro do lote`); continue; }
 
-  const { achado, url, motivo } = await buscarEmailDoSite(origem);
+  const { achado, url, motivo } = await buscarEmailDoSite(origem, { obterHtml });
   if (!achado) { resultado.sem.push({ fonte, motivo }); console.log(`  ✗ ${fonte.padEnd(20)} ${origem} — ${motivo}`); continue; }
 
   const sup = await sb(`emails_supressao?destinatario=eq.${encodeURIComponent(achado.email)}&select=suprimido`);
@@ -78,3 +104,4 @@ console.log(`\n${APLICAR ? 'GRAVADO' : 'EM SECO'} — fontes: ${origemPorFonte.s
 const porMotivo = {};
 for (const s of resultado.sem) { const k = s.motivo.replace(/\(.*\)/, '').trim(); porMotivo[k] = (porMotivo[k] || 0) + 1; }
 for (const [k, n] of Object.entries(porMotivo).sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(3)} × ${k}`);
+await navegador?.close();

@@ -18,6 +18,7 @@ const je = '<span data-cfemail="ff8b96d1959a939a9693909a8cbf97908b929e9693d19c90
 ok(extrairEmailDeHtml(je, 'https://jeleiloes.com.br') === null, 'hotmail em texto solto na HOME não vale');
 ok(extrairEmailDeHtml(je, 'https://jeleiloes.com.br', { paginaContato: true })?.email === 'ti.jeleiloes@hotmail.com', 'hotmail na página de CONTATO do próprio site vale');
 
+ok(extrairEmailDeHtml('<a href="mailto:lgpd@kleiloes.com.br">x</a>', 'https://kleiloes.com.br') === null, 'canal de LGPD não é contato de proposta');
 ok(motivoRecusaEmail('contato@alfaleiloes.com', 'https://www.alfaleiloes.com.br', true) === null, 'mesma marca em outro TLD (alfaleiloes .com × .com.br) é aceita');
 ok(motivoRecusaEmail('contato@leiloes.com', 'https://www.leiloes.com.br', false) !== null, 'rótulo genérico não casa por TLD');
 ok(motivoRecusaEmail('contato@jrfleiloes.com.br', 'https://www.superbid.net', true) !== null, 'e-mail de terceiro continua recusado (caso JRF)');

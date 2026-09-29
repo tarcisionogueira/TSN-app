@@ -20,7 +20,9 @@
  */
 
 // Endereços de sistema — nunca são "o contato do leiloeiro", mesmo sendo o único achado.
-const BLOQUEADOS = /^(noreply|no-reply|naoresponda|nao-responda|donotreply|webmaster|postmaster|abuse|privacy|dpo|unsubscribe|newsletter|mailer-daemon)@/i;
+// lgpd/privacidade/encarregado (29/09): canal de PROTEÇÃO DE DADOS não recebe proposta — o 1º
+// varredor pegou lgpd@kleiloes.com.br como "contato do leiloeiro".
+const BLOQUEADOS = /^(noreply|no-reply|naoresponda|nao-responda|donotreply|webmaster|postmaster|abuse|privacy|privacidade|lgpd|dpo|encarregado|unsubscribe|newsletter|mailer-daemon)@/i;
 // Padrões que sinalizam "isto é o contato de atendimento" — preferidos quando há mais de um.
 const PREFERIDOS = /^(contato|atendimento|sac|faleconosco|fale-conosco|comercial|leiloes|leilao|central|info|contact|suporte)@/i;
 
