@@ -130,6 +130,8 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
   "parecer": "markdown curto (max ~350 palavras): condição do veículo (avarias, procedência, débitos/multas se constarem), o que o documento CONFIRMA ou CONTRADIZ da descrição, e o veredito final considerando o percentual da FIPE",
   "riscos": ["cada risco concreto encontrado — sinistro, sucata, IPVA em aberto, débito/multa nos documentos, financiamento restrito, etc. Vazio se nenhum."],
   "condicoesResumo": "uma frase objetiva sobre o estado geral do veículo",
+  "comissaoLeiloeiroPct": número (ex.: 5) SÓ se o edital/descrição informar a comissão do leiloeiro; senão null,
+  "custos": [{"item": "descrição curta", "valor": número em reais, "origem": "declarado" | "estimado"}] — "declarado": taxa/débito que o edital ou a descrição diz ficar com o ARREMATANTE (taxa administrativa, pátio/estadia, IPVA/multas/licenciamento em aberto, remoção), com o valor informado; "estimado": reparo NECESSÁRIO pela condição DECLARADA (ex.: "pneus ruins" → troca dos pneus; "bateria fraca" → bateria), com valor médio de mercado conservador para este modelo. NUNCA inclua honorários, nem reparo que o texto não aponte. Lista vazia se nada constar.,
   "recomendacao": "comprar" | "avaliar_com_cautela" | "evitar"
 }
 NUNCA presuma que o veículo está em bom estado por AUSÊNCIA de menção — ausência de informação é "não informado", não é sinal positivo.`;
@@ -221,7 +223,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL, max_tokens: 1400,
+        model: MODEL, max_tokens: 1800,
         system: 'Você é um avaliador de veículos de leilão. Responda SOMENTE JSON válido, sem markdown ao redor.',
         messages: [{ role: 'user', content }],
       }),
@@ -249,6 +251,13 @@ export default async function handler(req, res) {
       riscos: Array.isArray(parsed.riscos) ? parsed.riscos.filter((r) => typeof r === 'string' && r.trim()) : [],
       condicoesResumo: typeof parsed.condicoesResumo === 'string' ? parsed.condicoesResumo : '',
       recomendacao: ['comprar', 'avaliar_com_cautela', 'evitar'].includes(parsed.recomendacao) ? parsed.recomendacao : null,
+      // Custos para o teto de lance (29/09). Valida o que vem da IA: número positivo, menor que a
+      // FIPE (item maior que o próprio carro é leitura errada), origem conhecida, no máximo 12.
+      comissaoLeiloeiroPct: Number(parsed.comissaoLeiloeiroPct) > 0 && Number(parsed.comissaoLeiloeiroPct) <= 20 ? Number(parsed.comissaoLeiloeiroPct) : null,
+      custos: (Array.isArray(parsed.custos) ? parsed.custos : [])
+        .map((c) => ({ item: String(c?.item || '').slice(0, 120), valor: Math.round(Number(c?.valor) * 100) / 100, origem: c?.origem === 'declarado' ? 'declarado' : 'estimado' }))
+        .filter((c) => c.item && c.valor > 0 && (!(v.valor_fipe > 0) || c.valor < Number(v.valor_fipe)))
+        .slice(0, 12),
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
       semDocumentos,
