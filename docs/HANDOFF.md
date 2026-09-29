@@ -100,6 +100,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    ('terreno','rural') and geocod_nivel='endereco' and pontos_proximos is null group by 1;`
    **Falta:** polígono do SIGEF pelo código SNCR/CCIR (78 lotes citam o código) — depende do WFS do
    acervo fundiário do INCRA; UTM (precisa do fuso) e endereço da matrícula/edital.
+7b. ✅ **Cidade inválida → geocodificação 'falhou' (29/09).** Dos 148 terrenos/rurais em 'falhou', 129 eram
+   KLEILOES com cidade = "Twittar Imóvel Em Maceio" (botão de compartilhar lido quando o slug é só /lote).
+   No acervo: 280 ativos com (cidade, UF) fora do IBGE; **163 corrigidos** pelo maior município que é o
+   final do texto ("E Imóveis E Anexos Da Comarca De Itapira" → Itapira) e devolvidos ao geocodificador
+   ('refazer'). Trigger `cidade_pelo_ibge` (migração `20260929_cidade_pelo_ibge.sql`) aplica a mesma regra
+   em TODO insert/troca de cidade, de qualquer coletor — testado (Maceió, S. J. do Rio Preto, Ceilândia
+   intacta). Restam 117 sem candidato (grafia variante: Poxoréo, Assu; regiões do DF) — não se inventa.
 8. **Motor de veículos — cobertura** (proposto): só ~7% dos lotes declaram; ler os laudos de
    vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
