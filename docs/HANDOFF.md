@@ -111,6 +111,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    **Conferir na próxima rodada do runner residencial:** log `📧 SUPERBID veículos: N loja(s) lidas
    no payload completo, M com e-mail` e `select count(*) from leiloeiro_contato_tenant;`. Se M = 0,
    o e-mail não está no `store` nem completo — próximo passo é o edital do lote.
+   **2) MEGA ✅ (29/09):** `proposta@megaleiloes.com.br` (manual) — é o canal que o PRÓPRIO edital
+   manda usar para proposta (Art. 895 CPC), lido na página do lote; a home só tem e-mail da agência.
+   **4) DANIELGARCIA ✅:** `contato@dgleiloes.com.br` (manual, confirmado pelo dono).
+   **Lição para o 3):** a página do LOTE/edital traz o canal de proposta mesmo quando a home não traz
+   nada — é o próximo lugar a ler para os 14 sem e-mail.
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
