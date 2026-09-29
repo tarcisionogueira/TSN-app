@@ -19,7 +19,7 @@ const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitig
 // dá 403 ao runner do GitHub e ao PC do dono, e 200 ao banco (14 leilões na home, medido). Dois
 // passos porque o pg_net só dispara depois do commit (supabase/migrations/20260929_pagina_pelo_banco.sql).
 // Desliga com MOTOR_VIA_BANCO=0. Devolve { html } ou { html: null, motivo } — nunca lança.
-async function viaBanco(url) {
+export async function viaBanco(url) {
   const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
   if (process.env.MOTOR_VIA_BANCO === '0') return { html: null, motivo: 'desligada' };

@@ -35,7 +35,7 @@ on:
       - 'scripts/lib/albertomacedo-parse.mjs'
       - 'scripts/lib/francoleiloes-parse.mjs'
       - 'scripts/lib/simon-parse.mjs'
-      - 'scripts/lib/globo-parse.mjs'
+      - 'scripts/lib/globo-json.mjs'
       - 'scripts/lib/leje-parse.mjs'
       - 'scripts/lib/dom-parse-util.mjs'
       - 'scripts/scraper-alfa.mjs'

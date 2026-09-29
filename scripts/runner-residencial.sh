@@ -228,6 +228,8 @@ rodar VENDASGOV env SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs
 # dado real em produção nesta sessão (1 imóvel real, Votorantim/SP). Excluído do `schedule`
 # de scraper-dom.yml de propósito (roda só no push, como sinalizador) — este runner é o
 # caminho de produção enquanto o site continuar atrás do Cloudflare.
+# 29/09: REESCRITO para ler o JSON `data-page` (lib/globo-json.mjs) — o `dom` achava 0 lote. O
+# banco (pg_net) e a CI recebem 200 hoje; se a CI levar 403, o coletor cai sozinho na via banco.
 rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 
 # LEJE (27/09) — 403 ao IP de datacenter desde 24/09; proxy ISP não resolve (home passa, detalhe
