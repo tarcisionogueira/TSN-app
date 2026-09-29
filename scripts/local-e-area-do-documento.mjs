@@ -22,6 +22,7 @@
  */
 import { createHash } from 'node:crypto';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
+import { isolarBlocoDoLote } from '../api/_edital-extrato.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -233,6 +234,68 @@ async function imoveis() {
   console.log(`[imóveis] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área com matrícula/edital no bucket · ${achou} com área única rotulada · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
 }
 
+// ───────────── IMÓVEIS: área no BLOCO DO LOTE do edital do CDN (29/09) ─────────────
+// BIASI: 290 lotes sem área, 19 editais distintos (um deles com 185 lotes). A leitura acima
+// recusa edital de vários bens — com razão, a área única dele é de UM bem. Aqui o edital é
+// fatiado por "Lote N" e só o bloco que contém o VALOR deste lote (avaliação ou lance mínimo,
+// `isolarBlocoDoLote`) é lido. Guarda extra: se o valor aparece em MAIS DE UM bloco, não sabe
+// qual é → não grava. DOC_FONTE (padrão BIASI) limita a fonte.
+const fmtBr = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function blocosComValor(texto, valores) {
+  const marcas = [...texto.matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
+  const alvo = valores.map(Number).filter((v) => v > 0).map(fmtBr);
+  let n = 0;
+  for (let i = 0; i < marcas.length; i++) {
+    const bloco = texto.slice(marcas[i].index, i + 1 < marcas.length ? marcas[i + 1].index : texto.length);
+    if (alvo.some((v) => bloco.includes(v))) n++;
+  }
+  return n;
+}
+async function editaisCdn() {
+  const fonte = process.env.DOC_FONTE || 'BIASI';
+  const alvo = (await todas(`imoveis_leilao?ativo=eq.true&fonte=eq.${fonte}&or=(area_m2.is.null,area_m2.eq.0)&select=id,fonte,tipo,titulo,valor_minimo,valor_avaliacao,anexos&order=id`)).slice(0, LIMITE);
+  const motivos = {}; let achou = 0, gravou = 0; const diag = new Set();
+  const conta = (m) => { motivos[m] = (motivos[m] || 0) + 1; };
+  for (const im of alvo) {
+    const eds = (Array.isArray(im.anexos) ? im.anexos : []).filter((a) => a?.tipo === 'edital' && /^https?:\/\/.+\.pdf(\?|$)/i.test(a?.url || ''));
+    if (!eds.length) { conta('sem_edital_pdf'); continue; }
+    let res = null, ultimo = 'nao_lido';
+    for (const d of eds.slice(0, 2)) {
+      const r = await textoDe({ chave: d.url, url: d.url });
+      if (r.erro) { ultimo = `nao_lido_${r.erro}`; continue; }
+      if (!APLICAR && !diag.has(d.url) && diag.size < 3) {
+        diag.add(d.url);
+        const marcas = [...r.texto.matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)].length;
+        const i = r.texto.search(/\bLote\s*(?:n[ºo°.]?)?\s*:?\s*0*1\b/i);
+        console.log(`  [diag] ${d.url} · ${r.texto.length} chars · ${marcas} marcas de lote\n         «${r.texto.slice(Math.max(0, i), Math.max(0, i) + 700)}»`);
+      }
+      const valores = [im.valor_avaliacao, im.valor_minimo];
+      const bloco = isolarBlocoDoLote(r.texto, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+      if (!bloco) {
+        // Edital de UM lote só (loteanexo): sem marcas repetidas, o documento inteiro é do bem.
+        const marcas = [...r.texto.matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)].length;
+        if (marcas >= 2) { ultimo = 'bloco_nao_isolado'; continue; }
+        const a = areaDoDocumento(r.texto, im.tipo, true);
+        if (a.area) { res = { ...a, doc: 'edital_unico' }; break; }
+        ultimo = a.motivo; continue;
+      }
+      if (blocosComValor(r.texto, valores) > 1) { ultimo = 'valor_em_varios_blocos'; continue; }
+      const a = areaDoDocumento(bloco, im.tipo, false);
+      if (a.area) { res = { ...a, doc: 'bloco_do_lote' }; break; }
+      ultimo = a.motivo;
+    }
+    if (res && /\b(apartamento|apto|sala|kitnet|flat)\b/i.test(im.titulo || '') && res.area > 1000) { res = null; ultimo = 'apto_area_condominio'; }
+    if (!res) { conta(ultimo); continue; }
+    achou++;
+    if (!APLICAR) { if (achou <= 40) console.log(`  [seco] ${im.tipo} ${res.area} m² (${res.rotulo}, ${res.doc}) — ${String(im.titulo).slice(0, 60)}  «${res.trecho.replace(/\s+/g, ' ')}»`); continue; }
+    const up = await sb(`imoveis_leilao?id=eq.${im.id}&or=(area_m2.is.null,area_m2.eq.0)`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ area_m2: res.area }) })
+      .catch((e) => { console.error(`  falhou ${im.id}: ${e.message}`); return null; });
+    if (Array.isArray(up) && up.length === 1) gravou++;
+  }
+  console.log(`[editais_cdn ${fonte}] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área · ${cacheTexto.size} documentos lidos · ${achou} com área no bloco do lote · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
+}
+
+if (ALVO === 'editais_cdn') { await editaisCdn(); process.exit(0); }
 if (ALVO !== 'imoveis') {
   const ibge = new Set((await todas('cidade_socio?nivel=eq.cidade&select=cidade_norm,uf&order=cidade_norm')).map((c) => `${c.cidade_norm}|${c.uf}`));
   if (ibge.size < 5000) { console.error(`lista do IBGE incompleta (${ibge.size}) — sem ela a guarda de cidade não vale`); process.exit(2); }

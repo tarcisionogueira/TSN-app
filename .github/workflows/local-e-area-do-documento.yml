@@ -9,8 +9,11 @@ on:
         description: '1 = grava; 0 = só mostra'
         default: '0'
       alvo:
-        description: 'veiculos | imoveis | ambos'
+        description: 'veiculos | imoveis | ambos | editais_cdn'
         default: 'ambos'
+      fonte:
+        description: 'fonte para editais_cdn (padrão BIASI)'
+        default: 'BIASI'
 
 jobs:
   documento:
@@ -28,4 +31,5 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DOC_APLICAR: ${{ inputs.aplicar }}
           DOC_ALVO: ${{ inputs.alvo }}
+          DOC_FONTE: ${{ inputs.fonte }}
         run: node scripts/local-e-area-do-documento.mjs
