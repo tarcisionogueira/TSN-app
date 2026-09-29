@@ -334,7 +334,9 @@ function aplicarFiltros(q, f, ign = new Set()) {
 const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
-export default function BuscaVeiculos() {
+// `embutido` (29/09, pedido do dono): a aba Veículos do Admin mostra lotes e filtros direto, sem
+// navegar para esta página — mesmo componente, sem título e sem margens de página.
+export default function BuscaVeiculos({ embutido = false } = {}) {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { role } = useAuth();
@@ -494,9 +496,9 @@ export default function BuscaVeiculos() {
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '12px' : '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
+    <div style={{ maxWidth: embutido ? 'none' : 1280, margin: embutido ? 0 : '0 auto', padding: embutido ? 0 : (isMobile ? '12px' : '20px'), display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: embutido ? 'flex-end' : 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, display: embutido ? 'none' : 'block' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Car size={22} color="#0D63DB" />
             <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111111', margin: 0 }}>Leilão de Veículos</h1>

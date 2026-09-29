@@ -17,6 +17,7 @@ import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { setItemSeguro } from '../utils/storageSeguro.js';
+const BuscaVeiculosEmbutida = React.lazy(() => import('./BuscaVeiculos.jsx'));
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -5098,7 +5099,6 @@ function ScrapersMonitor() {
 // não Dashboard/Início: colocar aqui de propósito, com botão de disparo, pra não repetir o
 // achado de 11/09 ("não localizei o botão").
 function VeiculosPilotoMonitor() {
-  const navVeic = useNavigate();
   const [linhas, setLinhas] = useState([]);
   const [contagem, setContagem] = useState({ confirmado: 0, indefinido: 0, excluido: 0 });
   const [loading, setLoading] = useState(true);
@@ -5143,7 +5143,7 @@ function VeiculosPilotoMonitor() {
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Só bens já em pátio (sinistro/perda total de seguradora) — nunca em posse do executado</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => navVeic('/admin/veiculos-leilao')}
+          <button onClick={() => document.getElementById('veiculos-lotes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             style={{ padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
             🔍 Ver lotes
           </button>
@@ -5183,7 +5183,7 @@ function VeiculosPilotoMonitor() {
                 <a key={v.id} href={`#/admin/veiculos-leilao/${v.id}`} style={{ padding: '8px 10px', background: v.status_patio === 'confirmado' ? '#f0fdf4' : '#f8fafc', borderRadius: 8, fontSize: 12.5, color: '#111111', textDecoration: 'none', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span>
                     {v.titulo}{v.ano_modelo ? ` (${v.ano_fabricacao}/${v.ano_modelo})` : ''}{v.placa ? ` · ${v.placa}` : ''}
-                    {' — '}{v.cidade || '?'}/{v.estado || '?'}
+                    {' — '}{v.cidade ? `${v.cidade}/${v.estado || '?'}` : 'local não informado'}
                   </span>
                   <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{v.valor_minimo ? `R$ ${Number(v.valor_minimo).toLocaleString('pt-BR')}` : '—'}</span>
                 </a>
@@ -5206,6 +5206,13 @@ function VeiculosTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <VeiculosPilotoMonitor />
+      {/* Lotes + filtros direto na aba (29/09, pedido do dono) — a mesma busca de /admin/veiculos-leilao. */}
+      <div id="veiculos-lotes" style={S.card}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 10 }}>🔍 Lotes de veículos</div>
+        <React.Suspense fallback={<p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando lotes…</p>}>
+          <BuscaVeiculosEmbutida embutido />
+        </React.Suspense>
+      </div>
       <div style={S.card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ minWidth: 0 }}>
