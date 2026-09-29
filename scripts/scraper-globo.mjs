@@ -93,14 +93,20 @@ async function main() {
   const { lotes, completa, motivo } = await enumerar();
   console.log(`  enumerados ${lotes.length} (${completa ? 'lista completa' : `PARCIAL — ${motivo}`}) · via ${viaUsada}`);
 
-  const prontos = []; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0;
+  // Detalhe (fotos/PDFs/CEP) só de lote NOVO ou ainda sem foto: isso quase não muda, e ler os ~500
+  // detalhes toda rodada custava ~20 min pela via banco (dry-run 29/09). Leitura falha → lê todos.
+  const { data: jaTem, error: eJa } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE).not('link_foto', 'is', null);
+  const comFoto = new Set(eJa ? [] : (jaTem || []).map((r) => r.fonte_id));
+  if (eJa) console.log(`  aviso: não li quem já tem foto (${eJa.message}) — lê o detalhe de todos`);
+  const prontos = []; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
   for (const l of lotes) {
     const previa = montarRowGlobo(l);
     if (ehFracaoIdeal(previa)) { fracao++; continue; }
     if (!previa.valor_minimo) { semPraca++; continue; }
     if (!previa.cidade || !previa.estado) { semLocal++; continue; }
     let det = null;
-    if (!l.url && detalhes < MAX_DETALHE) {
+    if (!l.url && comFoto.has(previa.fonte_id)) pulados++;
+    else if (!l.url && detalhes < MAX_DETALHE) {
       try { det = lerDetalhe(await baixar(previa.url_lote)); detalhes++; await sleep(250); }
       catch (e) { semDetalhe++; if (semDetalhe <= 3) console.log(`  ${previa.fonte_id}: detalhe não lido (${String(e.message).slice(0, 60)})`); }
     }
@@ -108,7 +114,7 @@ async function main() {
   }
   const porLeiloeiro = prontos.reduce((m, r) => ({ ...m, [r.leiloeiro]: (m[r.leiloeiro] || 0) + 1 }), {});
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
-  console.log(`  ${prontos.length} prontos · ${fracao} fração ideal (fora) · ${semPraca} sem praça vigente · ${semLocal} sem cidade/UF · detalhe lido em ${detalhes} (${semDetalhe} falhas)`);
+  console.log(`  ${prontos.length} prontos · ${fracao} fração ideal (fora) · ${semPraca} sem praça vigente · ${semLocal} sem cidade/UF · detalhe lido em ${detalhes} (${semDetalhe} falhas, ${pulados} já com foto)`);
   console.log(`  por leiloeiro: ${JSON.stringify(porLeiloeiro)} · foto ${pct((r) => r.link_foto)}% · área ${pct((r) => r.area_m2 > 0)}% · anexos ${pct((r) => r.anexos?.length)}%`);
 
   if (DRYRUN) {

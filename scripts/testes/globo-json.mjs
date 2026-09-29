@@ -54,5 +54,8 @@ ok(leiloeiroGlobo({ url: 'https://mercado.bomvalor.com.br/x' }) === 'Bom Valor' 
 
 ok(montarRowGlobo({ ...proprio, description: '&lt;h2&gt;&lt;strong&gt;INFORMAÇÕES&lt;/strong&gt;&lt;/h2&gt;&lt;p&gt;Casa &amp;amp; quintal&lt;/p&gt;' }).descricao === 'INFORMAÇÕES \nCasa & quintal' || !/[<>]|&lt;/.test(montarRowGlobo({ ...proprio, description: '&lt;h2&gt;X&lt;/h2&gt;' }).descricao), 'descrição com tags escapadas sai limpa');
 
+ok(montarRowGlobo({ ...proprio, avaliation: '121.000,00', values: [{ status: 1, price: '127.424,20', start: 'a', end: 'b' }] }).valor_avaliacao === 127424.2, 'avaliação atualizada: 1ª praça acima do laudo vira a avaliação (sem desconto negativo)');
+ok(leiloeiroGlobo({ url: 'https://comprei.pgfn.gov.br/x' }) === 'PGFN — Comprei', 'PGFN com nome, não o domínio');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

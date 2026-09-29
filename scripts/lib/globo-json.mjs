@@ -74,7 +74,7 @@ export function pracaAtual(lot) {
   return v.find((x) => Number(x.status) === 1) || v.filter((x) => Number(x.status) === 0).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0] || null;
 }
 
-const LEILOEIROS = { 'balbinoleiloes.com.br': 'Balbino Leilões', 'bomvalor.com.br': 'Bom Valor' };
+const LEILOEIROS = { 'balbinoleiloes.com.br': 'Balbino Leilões', 'bomvalor.com.br': 'Bom Valor', 'comprei.pgfn.gov.br': 'PGFN — Comprei' };
 export function leiloeiroGlobo(lot) {
   if (!lot?.url) return 'Globo Leilões';
   let host = '';
@@ -97,7 +97,11 @@ export function montarRowGlobo(lot, det = null) {
     modalidade: extrajudicial ? 'extrajudicial' : 'judicial',
     cidade: lot.city || null, estado: /^[A-Z]{2}$/.test(String(lot.uf || '')) ? lot.uf : null,
     bairro: lot.neighborhood || '', endereco: det?.endereco || '',
-    valor_avaliacao: brl(lot.avaliation), valor_minimo: praca ? brl(praca.price) : 0,
+    // Avaliação ATUALIZADA: na 1ª praça judicial o lance mínimo é a avaliação corrigida, e `avaliation`
+    // é o laudo original (dry-run 29/09: laudo R$ 121.000, 1ª praça R$ 127.424). Sem isto o catálogo
+    // mostraria "desconto" negativo. Vale a maior entre o laudo e as praças.
+    valor_avaliacao: Math.max(brl(lot.avaliation), ...(Array.isArray(lot.values) ? lot.values.map((x) => brl(x.price)) : [0])),
+    valor_minimo: praca ? brl(praca.price) : 0,
     area_m2: extrairAreaM2(titulo) || extrairAreaM2(descricao) || 0,
     descricao,
     url_lote: lot.url || `${BASE}/leiloes/${lot.slug}/${lot.id}`,

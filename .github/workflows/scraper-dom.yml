@@ -76,7 +76,9 @@ on:
 jobs:
   scraper-dom:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 40 → 55 (29/09): a rodada agendada já levava ~36 min e a GLOBO (JSON, ~5–7 min/dia) entrou no
+    # RODA_TUDO. Estourar o teto CORTA as fontes seguintes (incidente de 10–12/08) — folga de propósito.
+    timeout-minutes: 55
     env:
       # Nome pelo EFEITO no _DRYRUN de cada fonte (1=dry-run, 0=grava) — não pelo gatilho.
       # (achado 07/09, revisão externa: "GRAVA" antes chamava 1 de "grava", exatamente o
@@ -202,12 +204,15 @@ jobs:
         run: node scripts/scraper-lgcorretor.mjs
 
       - name: Globo
-        # NÃO entra em env.RODA_TUDO (17/09, retestado 20/09 com proxy ISP — não resolveu,
+        # [HISTÓRICO, superado em 29/09 — ver abaixo] Não entrava em env.RODA_TUDO (17/09, retestado 20/09 com proxy ISP — não resolveu,
         # ver globo.mjs): site atrás de Cloudflare que reage a mais que reputação de IP. A
         # produção de verdade é scripts/runner-residencial.sh (IP residencial, mesmo remédio
         # de RJ/GESTAO/PECINI). Continua rodando no PUSH como sinalizador — se o Cloudflare
         # cair um dia, o push mostra lotes de novo e vale reconsiderar entrar no RODA_TUDO.
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'globo')) }}
+        # 29/09: coletor reescrito para o JSON `data-page` (lib/globo-json.mjs). Dry-run (run
+        # 36606384912): 747 enumerados, 715 prontos, detalhe 400/400 — tudo pela via banco (a CI leva
+        # 403 no fetch direto; o banco recebe 200). DE VOLTA AO RODA_TUDO.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'globo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
