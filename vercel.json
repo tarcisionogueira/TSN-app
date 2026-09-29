@@ -168,6 +168,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/parcelas-arremate-cron",
+      "schedule": "45 11 * * *"
+    },
+    {
       "path": "/api/ativar-assinatura-bonus-cron",
       "schedule": "0 11 * * *"
     },

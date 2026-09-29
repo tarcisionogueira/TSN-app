@@ -7,6 +7,7 @@ import { useAnalises } from '../contexts/AnalisesContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
+import PagamentoArremate from '../components/PagamentoArremate';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS = {
@@ -330,6 +331,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
         <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
         <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
       </div>
+
+      {/* PAGAMENTO (29/09, pedido do dono): data da arrematação + cronograma + lembrete de vencimento. */}
+      <PagamentoArremate arr={arr} podeEditar={ehEquipe || !soLeitura}
+        cardStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: 18 }} />
 
       {/* ANDAMENTO DO PROCESSO (24/09, pedido do dono): equipe consulta o CNJ (leilão judicial) e
           registra etapas com comentário; o assessorado dono deste arremate acompanha em leitura. */}

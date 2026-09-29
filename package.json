@@ -24,6 +24,7 @@
     "testar:area-hectares": "node scripts/testes/area-em-hectares.mjs",
     "testar:bairro-fazenda-publica": "node scripts/testes/bairro-nao-e-fazenda-publica.mjs",
     "testar:endereco-do-texto": "node scripts/testes/endereco-do-texto.mjs",
+    "testar:parcelamento-arremate": "node scripts/testes/parcelamento-arremate.mjs",
     "testar:cortesia-vencendo": "node scripts/testes/cortesia-vencendo-avisa-na-janela-certa.mjs",
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:superbid": "node scripts/testes/superbid-resultado.mjs",
