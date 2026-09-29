@@ -103,6 +103,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    THAISTEIXEIRA, CASAMARTILLO, DILSONMOREIRA, JMF, KRON, TOTALLEILOES; bloqueados também no pg_net:
    BAYIT, PECINI, LEJE, MILAN, VIP. As 10 multi-tenant (SUPERBID, SUPORTE, VLANCE, PESTANA…) são por
    leiloeiro do lote (`leiloeiro_contato_tenant`, ainda vazio) — frente própria.
+   **Prioridades (dono pediu 1 de cada vez):** 1) multi-tenant (≈9.700 lotes) → 2) MEGA → 3) 14 sem e-mail
+   (ler do edital) → 4) DANIELGARCIA (confirmar dgleiloes) → 5) bloqueados → 6) LGCORRETOR.
+   **1) em andamento (29/09):** a tabela por leiloeiro estava vazia porque o `store` que a 1ª passada
+   da Superbid pede (com fieldList) não traz o `ticker` com o e-mail. A 2ª passada (galeria, payload
+   completo, grátis) agora guarda o `store` cheio de cada loja e alimenta `gravarContatosTenant`.
+   **Conferir na próxima rodada do runner residencial:** log `📧 SUPERBID veículos: N loja(s) lidas
+   no payload completo, M com e-mail` e `select count(*) from leiloeiro_contato_tenant;`. Se M = 0,
+   o e-mail não está no `store` nem completo — próximo passo é o edital do lote.
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
