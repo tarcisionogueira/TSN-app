@@ -121,6 +121,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    (mesmo domínio do site, o mais citado). **Aguardando o dono:** KRON publica @kronbergleiloes.com.br
    (site kronleiloes — Kronberg?) e CASAMARTILLO `falecom@cmartillo.com.br` (site casamartillo).
    **Sem e-mail em lugar nenhum:** BIASI, INFINITY, TOTALLEILOES, FRAZAO (só formulário/telefone).
+   **5) parcial ✅:** a rodada em seco com o DJEN achou BAYIT `dico@portalbayit.com.br` e LEJE
+   `judiciario@leje.com.br` (gravados). Seguem sem e-mail: MILAN, PECINI, VIP. **Total: 42 fontes com
+   contato (eram 5 às 10h de 29/09).**
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
