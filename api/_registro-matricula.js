@@ -49,7 +49,10 @@ export function extrairEnderecoMatricula(txt) {
   let m = t.match(new RegExp(`\\b(?:na|no|à|situad[oa]s?\\s+(?:\\S+\\s+)?|localizad[oa]s?\\s+(?:\\S+\\s+)?)((?:${tipos})\\s+[A-Za-zÀ-ú0-9'’.ºª\\- ]{2,55}?)(?=\\s*[,;.]|\\s+n[º°o]\\b|\\s+medindo|\\s+bairro|\\s+fazenda|\\s+lote\\b|\\s+quadra\\b|\\s+nesta|\\s+s/?n\\b|$)`, 'i'));
   if (m) f.logradouro = limpar(m[1]);
   m = t.match(/\bbairro\s+([A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,40}?)(?=\s*[,;.]|\s+medindo|\s+lote\b|\s+quadra\b|\s+munic|\s+cidade|$)/i)
-    || t.match(/\b(fazenda\s+[A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,30}?)(?=\s*[,;.]|\s+nesta|$)/i);
+    // "Fazenda X" é nome de imóvel RURAL — mas "Vara da Fazenda Pública", "Fazenda Nacional" é o
+    // ESTADO como parte do processo (29/09: 29 lotes em 6 fontes com bairro "Fazenda Pública",
+    // e o mercadológico de São Carlos procurou comparáveis nesse "bairro" e voltou vazio).
+    || t.match(/(?<!\b(?:vara|ju[íi]zo|procuradoria)\s+da\s+)\b(fazenda\s+(?!(?:p[úu]blica|nacional|estadual|municipal|federal|do\s+estado|do\s+munic[íi]pio)\b)[A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,30}?)(?=\s*[,;.]|\s+nesta|$)/i);
   if (m) f.bairro = limpar(m[1]);
   // "loteamento denominado 'X'" também não casava (a palavra "denominado" entre o gatilho e o
   // nome quebrava o casamento antigo) — achado no mesmo texto real. Aceita "denominado" opcional

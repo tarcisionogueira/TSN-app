@@ -89,6 +89,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   GRUPOLANCE: lote já inativo. Obs.: o acervo de Araraquara tem `data_leilao` 24/09 (site: 28/09)
   — irrelevante agora (1ª praça passou), mas o coletor WEBLEILOES leu a 1ª praça errada.
 
+### ✅ 29/09 — Bairro "Fazenda Pública" (mercadológico vazio em São Carlos)
+Print do dono: relatório de São Carlos sem mercado, "sem amostras de CASAS no bairro Fazenda
+Pública". O bairro real está no título ("Jardim Social Antenor Garcia"). `extrairEnderecoMatricula`
+(api/_registro-matricula.js) aceita "fazenda X" como bairro (imóvel rural) e "Comitente: VARA DA
+FAZENDA PÚBLICA" / "Fazenda Nacional" casavam — e o trigger `preservar_e_derivar_endereco` impede
+apagar bairro, então o erro ficava para sempre. 29 lotes em 6 fontes: 12 corrigidos com prova
+(título/descrição), 17 apagados (sem prova; triggers desligados só naquela transação). Teste
+`testar:bairro-fazenda-publica`. O self-heal do relatório refaz em até 48 h com o bairro certo.
+
+### 🔶 29/09 — Filtro "Venda Direta" + Financiado vazio em SP: é a regra de 03/09, não bug de consulta
+Em SP só há 45 lotes `venda_direta` (nenhum da Caixa, nenhum financiado). A Caixa tem 5.242 lotes
+ativos cujo texto diz "Venda Direta Online" e 9.566 "Venda Online" — o normalizador põe os dois em
+`venda_online` DE PROPÓSITO (teste `venda-direta-nao-e-venda-online.mjs`, caso Rua Morisot de
+03/09). Quem marca "Venda Online" acha os financiados (99 em SP com desconto ≥ 40%).
+**Decisão do dono pendente:** "Venda Direta Online" da Caixa deve aparecer como Venda Direta?
+
 ### ✅ 29/09 — Régua de e-mails: o envio fazia o cliente parecer "ativo"
 Pedido do dono: confirmar que a cadência (`api/_cadencia.js`, `app_config.cadencia_email`) está em
 efeito. No rastro: desde 25/09 nenhum `oportunidades` saiu com < 6 dias de intervalo — está. Mas

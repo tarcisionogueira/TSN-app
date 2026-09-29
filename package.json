@@ -22,6 +22,7 @@
     "testar:zero-declarado": "node scripts/testes/zero-declarado-pelo-site.mjs",
     "testar:zuk-local-veiculo": "node scripts/testes/zuk-local-veiculo.mjs",
     "testar:area-hectares": "node scripts/testes/area-em-hectares.mjs",
+    "testar:bairro-fazenda-publica": "node scripts/testes/bairro-nao-e-fazenda-publica.mjs",
     "testar:cortesia-vencendo": "node scripts/testes/cortesia-vencendo-avisa-na-janela-certa.mjs",
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:superbid": "node scripts/testes/superbid-resultado.mjs",
