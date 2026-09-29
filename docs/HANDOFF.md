@@ -77,6 +77,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   é proposital (pode virar venda direta) e expira sozinha até meados de outubro.
 - Conferir: `select fonte, motivo from public.fonte_regressao_suspeita();` sem HASTA/JOAOEMILIO.
 
+### ✅ 29/09 — Invariantes `resultado_leilao_atrasado` e `data_edital_recuou_prazo`
+- **resultado_leilao_atrasado (3, crítico)**: 3 veículos SUPERBID em 5 de 6 tentativas do
+  `apurar-superbid-residencial.mjs`, resultado nulo. Os ramos `erro` e `em_andamento` sem fim
+  futuro só contavam a tentativa; na 6ª o lote saía da fila com `null` PARA SEMPRE (ativo, fora da
+  retenção de 10 dias). Agora a última tentativa sem resultado grava `indeterminado`. Zera na
+  próxima rodada do runner residencial (PC do dono) — conferir o invariante depois dela.
+- **data_edital_recuou_prazo (3)**: as 3 anomalias eram acervo CERTO, resolvidas com a verificação
+  no `detalhe`. Araraquara (WEBLEILOES, conferido via pg_net): site diz 1º leilão 28/09, 2º 21/10,
+  aberto — o 28/09 do edital é a 1ª praça. Embu (LEILAOBRASIL 449): republicado para 09/10.
+  GRUPOLANCE: lote já inativo. Obs.: o acervo de Araraquara tem `data_leilao` 24/09 (site: 28/09)
+  — irrelevante agora (1ª praça passou), mas o coletor WEBLEILOES leu a 1ª praça errada.
+
 ### ✅ 29/09 — ZUK veículos: cidade/UF vinham da MARCA
 O 1º "X/YY" do card do PortalZuk é a marca/modelo: "Honda/CB 300R" gravava cidade "Honda" UF "CB",
 "VW/Fusca" → "Carro"/"VW". O local certo está no título (" - Francisco Morato/SP - Tribunal…").

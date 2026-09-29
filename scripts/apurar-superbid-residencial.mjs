@@ -137,6 +137,16 @@ for (let i = 0; i < alvos.length; i += PARALELO) {
 // isso é bloqueio do IP, não defeito da oferta (e o exit 3 lá embaixo avisa).
 const apiRespondeu = [...respostas.values()].some(q => q.ok);
 
+// ÚLTIMA TENTATIVA SEM RESULTADO (29/09). `erro` e `em_andamento` sem fim futuro só contavam a
+// tentativa; na 6ª o lote saía da fila (filtro `lt.6`) com `resultado_leilao = null` PARA SEMPRE —
+// ativo, fora da retenção de 10 dias de desativar_leiloes_encerrados() e acusando o invariante
+// crítico resultado_leilao_atrasado (3 veículos em 5/6 no dia). Esgotar as tentativas É "não
+// consegui apurar", que é o significado de `indeterminado` — e aí a retenção normal cuida dele.
+function esgotouSemResultado(patch) {
+  if (!patch.resultado_leilao && patch.resultado_apuracao_tentativas >= MAX_TENTATIVAS) patch.resultado_leilao = 'indeterminado';
+  return patch;
+}
+
 for (const a of alvos) {
   const q = respostas.get(a);
   if (q.ok && process.env.SBID_IDS) {
@@ -157,7 +167,7 @@ for (const a of alvos) {
   if (APLICAR && a.id && res === 'erro' && apiRespondeu) {
     try {
       const rp = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: (a.resultado_apuracao_tentativas || 0) + 1 }) });
+        body: JSON.stringify(esgotouSemResultado({ resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: (a.resultado_apuracao_tentativas || 0) + 1 })) });
       if (!(Array.isArray(rp) && rp.length)) { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
     } catch (e) { falhasGravacao++; console.log(`    ⚠️ ${e.message}`); }
   }
@@ -200,6 +210,7 @@ for (const a of alvos) {
       patch.ativo = true;
       if (a.tabela === 'imoveis_leilao') patch.suprimido_motivo = null;
     }
+    esgotouSemResultado(patch);
     try {
       const rp = await sb(`${a.tabela}?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
       if (Array.isArray(rp) && rp.length) gravados++; else { falhasGravacao++; console.log(`    ⚠️ PATCH não alcançou ${a.tabela}#${a.id}`); }
