@@ -32,7 +32,7 @@ export function desagioFipe(v, anoAtual = new Date().getFullYear()) {
   return { pct, fatores };
 }
 
-export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas = [], desagioPct = 0 }) {
+export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas = [], desagioPct = 0, revendaMercado = null }) {
   const F = Number(fipe) || 0;
   const L = Number(lanceMinimo) || 0;
   if (!(F > 0) || !(L > 0)) return null;
@@ -43,13 +43,14 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
   const tetoAquisicao = r2(F * TETO_FIPE);
   const tetoLance = r2(Math.max(0, (tetoAquisicao - despesasTotal) / (1 + c)));
   const investimentoNoMinimo = r2(L * (1 + c) + despesasTotal);
-  const fipeRealista = r2(F * (1 - desagioPct / 100));
+  // Revenda: anúncios reais (média dos 5 mais baratos − 10%) quando houver; senão a régua sobre a FIPE.
+  const fipeRealista = Number(revendaMercado) > 0 ? r2(Number(revendaMercado)) : r2(F * (1 - desagioPct / 100));
   return {
     comissaoPct: c * 100, comissaoPresumida: !(Number(comissaoPct) > 0),
     despesas: itens, despesasTotal: r2(despesasTotal),
     tetoAquisicao, tetoLance, investimentoNoMinimo,
     investimentoNoTeto: tetoAquisicao,
-    fipeRealista, desagioPct,
+    fipeRealista, desagioPct, revendaPorMercado: Number(revendaMercado) > 0,
     lucroNoMinimo: r2(fipeRealista - investimentoNoMinimo),
     lucroNoTeto: r2(fipeRealista - tetoAquisicao),
     fechaNaRegra: L <= tetoLance,
@@ -72,5 +73,34 @@ export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaP
     entradaLance, comissao: r2(L * c), despesas: r2(despesasTotal),
     sinal: r2(entradaLance + L * c + (Number(despesasTotal) || 0)),
     saldo: r2(L - entradaLance), parcelas: n, valorParcela: r2((L - entradaLance) / n),
+  };
+}
+
+// REVENDA PELO MERCADO (29/09, pedido do dono): "média dos 5 anúncios mais em conta da Webmotors,
+// 10% abaixo, como valor sugerido". Substitui a régua de deságio sobre a FIPE quando há anúncios
+// suficientes; a régua continua como reserva (e o relatório diz qual das duas valeu).
+// Sanidade: preço fora de 30%–200% da FIPE é outro veículo (peça, sucata, versão de outra faixa) e
+// sai da conta ANTES de escolher os 5 — senão o "mais barato" seria sempre o anúncio errado.
+export const REVENDA_DESCONTO_PCT = 10;
+export const REVENDA_MIN_ANUNCIOS = 3;
+export function revendaPorAnuncios(anuncios, fipe) {
+  const F = Number(fipe) || 0;
+  const validos = (Array.isArray(anuncios) ? anuncios : [])
+    // Link vem da resposta da IA e vira href: só http(s) (um "javascript:" ali seria XSS).
+    .map((a) => ({
+      preco: Math.round(Number(a?.preco) || 0),
+      titulo: String(a?.titulo || '').slice(0, 120), ano: Number(a?.ano) || null, km: Number(a?.km) || null,
+      local: String(a?.local || '').slice(0, 60), portal: String(a?.portal || '').slice(0, 20).toLowerCase(),
+      url: /^https?:\/\//i.test(String(a?.url || '')) ? String(a.url).slice(0, 500) : null,
+    }))
+    .filter((a) => a.preco > 0 && (!(F > 0) || (a.preco >= F * 0.3 && a.preco <= F * 2)));
+  const unicos = [...new Map(validos.map((a) => [a.url || `${a.preco}|${a.titulo}`, a])).values()];
+  if (unicos.length < REVENDA_MIN_ANUNCIOS) return null;
+  const cinco = unicos.sort((a, b) => a.preco - b.preco).slice(0, 5);
+  const media = cinco.reduce((s, a) => s + a.preco, 0) / cinco.length;
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return {
+    media: r2(media), valor: r2(media * (1 - REVENDA_DESCONTO_PCT / 100)), descontoPct: REVENDA_DESCONTO_PCT,
+    anuncios: cinco, descartados: (Array.isArray(anuncios) ? anuncios.length : 0) - validos.length,
   };
 }

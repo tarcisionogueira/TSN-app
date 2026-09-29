@@ -16,6 +16,9 @@ import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
+import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
+import { comCascataBusca } from './_busca-modelo.js';
+import { revendaPorAnuncios } from '../src/utils/viabilidadeVeiculo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -46,6 +49,42 @@ async function upsertAnaliseVeiculo(row) {
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
+}
+
+// REVENDA PELA WEBMOTORS (29/09, pedido do dono): média dos 5 anúncios mais baratos − 10%.
+// A API/listagem da Webmotors bloqueia robô (PerimeterX) e o robots.txt proíbe a busca
+// automatizada — a Bright Data recusou "em respeito ao robots.txt". O caminho legítimo é a
+// busca web da IA (anúncios PÚBLICOS indexados), com PROVA de que pesquisou (_busca-com-prova:
+// resposta sem busca é falha, nunca "mercado vazio"). A conta dos 5 mais baratos é feita aqui,
+// no código (revendaPorAnuncios), nunca pela IA. Devolve { revenda, motivo } — nunca lança.
+async function buscarRevendaMercado(v, prazoMs, userId) {
+  const alvo = [v.marca, v.modelo, v.titulo].filter(Boolean).join(' · ').slice(0, 200);
+  const ano = v.ano_modelo || v.ano_fabricacao || '';
+  if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };
+  const prompt = `Pesquise anúncios À VENDA do veículo: ${alvo}, ano modelo ${ano}.
+Priorize a Webmotors (webmotors.com.br) ordenando pelos de MENOR preço; se lá houver menos de 5 anúncios da mesma versão e ano, complete com OLX, iCarros ou Mobiauto.
+Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), mesma versão/motorização e ano modelo ${ano}.
+Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 10 anúncios, os mais baratos que encontrar.`;
+  let motivo = null;
+  try {
+    const anuncios = await comCascataBusca(async (degrau) => {
+      const { texto, buscas } = await buscarComProva({
+        degrau, chave: CLAUDE_KEY, webUses: 4, timeoutMs: prazoMs, maxTokens: 4000,
+        system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
+        aoCusto: (c) => { try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
+      });
+      if (!buscas) { motivo = 'a IA não pesquisou (resposta sem busca na web)'; return null; }
+      const j = parseJSON(texto);
+      if (!j) { motivo = 'resposta da busca sem JSON'; return null; }
+      return Array.isArray(j.anuncios) ? j.anuncios : [];
+    });
+    if (!anuncios) return { revenda: null, motivo };
+    const revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
+    if (!revenda) return { revenda: null, motivo: `só ${anuncios.length} anúncio(s) comparável(is) encontrados (mínimo 3)` };
+    return { revenda, motivo: null };
+  } catch (e) {
+    return { revenda: null, motivo: `busca de anúncios falhou: ${String(e?.message || e).slice(0, 80)}` };
+  }
 }
 
 function parseJSON(text) {
@@ -216,6 +255,8 @@ export default async function handler(req, res) {
       : null;
     const faixa = faixaFipe(percentualFipe);
 
+    // Em paralelo com a análise: não soma tempo ao relatório (prazo próprio, dentro do teto).
+    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id);
     const blocosDoc = await anexosParaBlocos(v.anexos, T0 + Math.min(45000, HARD_MS - 30000));
     const semDocumentos = blocosDoc.length === 0 && !String(v.descricao || '').trim();
 
@@ -267,6 +308,8 @@ export default async function handler(req, res) {
       })(),
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
+      // Revenda sugerida pelo mercado (média dos 5 anúncios mais baratos − 10%) ou o motivo de não ter.
+      ...(await revendaP.then(({ revenda, motivo }) => ({ revendaMercado: revenda, revendaMercadoMotivo: motivo }))),
       semDocumentos,
     };
     await upsertAnaliseVeiculo({ ...base, status: 'concluida', erro: null, result });

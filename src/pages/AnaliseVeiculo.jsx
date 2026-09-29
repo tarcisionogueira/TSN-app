@@ -72,13 +72,15 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
       ${linha('Teto de aquisição (65% da FIPE)', brl(viab.tetoAquisicao))}
       ${linha('TETO DE LANCE (até este valor ainda é boa compra)', `<b style="color:${viab.fechaNaRegra ? '#15803d' : '#b91c1c'}">${brl(viab.tetoLance)}</b>`)}
       ${parc ? [['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => linha(`Parcelado ${rot} (${parc.entradaPct}% + ${parc.parcelas}x${parc.correcao ? `, ${e(parc.correcao)}` : ''})`, `sinal ${brl(p.sinal)} (entrada ${brl(p.entradaLance)} + comissão ${brl(p.comissao)} + débitos ${brl(p.despesas)}) e ${p.parcelas}× ${brl(p.valorParcela)}`)).join('') : ''}
-      ${linha(`Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
+      ${linha(result.revendaMercado ? `Revenda sugerida (média dos ${result.revendaMercado.anuncios.length} anúncios mais baratos ${brl(result.revendaMercado.media)} − ${result.revendaMercado.descontoPct}%)` : `Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
       ${linha('Lucro estimado no lance mínimo', brl(viab.lucroNoMinimo))}
       ${linha('Lucro estimado no teto de lance', brl(viab.lucroNoTeto))}
     </table>
     <p class="n">${viab.fechaNaRegra ? `Lance até ${brl(viab.tetoLance)} mantém arrematação + comissão + despesas em até 65% da FIPE.` : 'O lance mínimo já ultrapassa o teto de 65% da FIPE considerando comissão e despesas.'}</p>
     <h3>Custos considerados</h3><table>${custos}</table>
-    <h3>Deságio aplicado à FIPE</h3><ul>${desagio.fatores.map((f) => `<li>${e(f.motivo)}: −${f.pct}%</li>`).join('')}</ul>` : '';
+    ${result.revendaMercado
+      ? `<h3>Anúncios usados na revenda sugerida</h3><ul>${result.revendaMercado.anuncios.map((a) => `<li>${brl(a.preco)} · ${e(a.titulo || 'anúncio')}${a.ano ? ` · ${e(a.ano)}` : ''}${a.km ? ` · ${e(Number(a.km).toLocaleString('pt-BR'))} km` : ''}${a.local ? ` · ${e(a.local)}` : ''} · ${a.url ? `<a href="${e(a.url)}">${e(a.portal || 'anúncio')}</a>` : e(a.portal || '')}</li>`).join('')}</ul>`
+      : `<h3>Deságio aplicado à FIPE</h3><ul>${desagio.fatores.map((f) => `<li>${e(f.motivo)}: −${f.pct}%</li>`).join('')}</ul>`}` : '';
   const riscos = result.riscos?.length ? `<h2>Riscos identificados</h2><ul>${result.riscos.map((r) => `<li>${e(r)}</li>`).join('')}</ul>` : '';
   const fotos = fotosDoVeiculo(v);
   const nf = String(fotos.length).padStart(2, '0');
@@ -225,7 +227,8 @@ export default function AnaliseVeiculo() {
   const result = analise?.status === 'concluida' ? analise.result : null;
   // Cenário realista + teto de lance (29/09, pedido do dono) — regra em utils/viabilidadeVeiculo.js.
   const desagio = desagioFipe(v);
-  const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct }) : null;
+  const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct, revendaMercado: result.revendaMercado?.valor }) : null;
+  const rm = result?.revendaMercado || null;
   const semCustosNoRelatorio = result && !Array.isArray(result.custos);
   // Parcelado (29/09): plano no lance mínimo e no teto, quando o edital permite.
   const parc = result?.parcelamento && viab ? {
@@ -345,7 +348,7 @@ export default function AnaliseVeiculo() {
                 {[
                   ['Teto de lance', fmtBRL(viab.tetoLance), viab.fechaNaRegra ? '#15803d' : '#b91c1c'],
                   ['Investimento no lance mínimo', fmtBRL(viab.investimentoNoMinimo), '#111111'],
-                  ['Revenda realista', fmtBRL(viab.fipeRealista), '#0369a1'],
+                  [viab.revendaPorMercado ? 'Revenda sugerida (mercado)' : 'Revenda realista', fmtBRL(viab.fipeRealista), '#0369a1'],
                   ['Lucro estimado (lance mínimo)', fmtBRL(viab.lucroNoMinimo), viab.lucroNoMinimo >= 0 ? '#15803d' : '#b91c1c'],
                 ].map(([rot, val, cor]) => (
                   <div key={rot} style={{ minWidth: 0 }}>
@@ -366,12 +369,27 @@ export default function AnaliseVeiculo() {
                     <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>{d.item} <span style={{ color: '#94a3b8', fontSize: 11 }}>({d.origem})</span></td><td style={{ textAlign: 'right' }}>{fmtBRL(d.valor)}</td></tr>
                   ))}
                   <tr style={{ borderTop: '1px solid #e2e8f0', fontWeight: 800 }}><td style={{ padding: '5px 0' }}>Despesas assumidas (sem honorários)</td><td style={{ textAlign: 'right' }}>{fmtBRL(viab.despesasTotal)}</td></tr>
-                  <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Deságio sobre a FIPE para revenda</td><td style={{ textAlign: 'right' }}>{desagio.pct}%</td></tr>
+                  {rm ? (
+                    <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Revenda sugerida: média dos {rm.anuncios.length} anúncios mais baratos ({fmtBRL(rm.media)}) − {rm.descontoPct}%</td><td style={{ textAlign: 'right' }}>{fmtBRL(rm.valor)}</td></tr>
+                  ) : (
+                    <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Deságio sobre a FIPE para revenda</td><td style={{ textAlign: 'right' }}>{desagio.pct}%</td></tr>
+                  )}
                 </tbody>
               </table>
-              <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 11.5, color: '#64748b' }}>
-                {desagio.fatores.map((f, i) => <li key={i}>{f.motivo}: −{f.pct}%</li>)}
-              </ul>
+              {rm ? (
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 11.5, color: '#64748b' }}>
+                  {rm.anuncios.map((a, i) => (
+                    <li key={i}>{fmtBRL(a.preco)} · {a.titulo || 'anúncio'}{a.ano ? ` · ${a.ano}` : ''}{a.km ? ` · ${Number(a.km).toLocaleString('pt-BR')} km` : ''}{a.local ? ` · ${a.local}` : ''} · {a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}>{a.portal || 'ver anúncio'}</a> : (a.portal || '')}</li>
+                  ))}
+                </ul>
+              ) : (
+                <>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 11.5, color: '#64748b' }}>
+                    {desagio.fatores.map((f, i) => <li key={i}>{f.motivo}: −{f.pct}%</li>)}
+                  </ul>
+                  {result.revendaMercadoMotivo && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Sem anúncios suficientes para a revenda pelo mercado ({result.revendaMercadoMotivo}) — usada a régua sobre a FIPE.</div>}
+                </>
+              )}
               {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir as despesas declaradas e os reparos estimados.</div>}
             </div>
           )}
