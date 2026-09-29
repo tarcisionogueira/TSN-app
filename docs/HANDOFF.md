@@ -31,6 +31,19 @@ Três camadas, todas em produção e vigiadas por `qa_invariantes()` (verde = 0)
    anúncio se a razão estiver entre 0,7 e 1,43; fora disso mantém o anúncio e grava anomalia
    `area_matricula_incompativel` em `relatorio_anomalias`. PESTANA: tipo cai para a descrição quando o
    subtipo do site é genérico.
+4. **O agente de aprendizado não via contradição** (pergunta do dono, 29/09): os dois relatórios
+   errados foram gravados em `agente_aprendizado` com TODOS os sinais `false` — ele só perguntava
+   "faltou dado?". Agora grava também `lance_acima_avaliacao`, `mercado_incoerente_avaliacao` (mercado
+   × área fora de 0,25–4× a avaliação) e `tipo_contradiz_titulo`; cada um vira anomalia
+   `aprendizado_*` em `relatorio_anomalias` (ritual 1b), soma no item "Relatórios — qualidade da
+   emissão" do health-check, e relatório com qualquer um deles SAI do `corpusDaRegiao` (o erro não
+   vira referência dos próximos). Dry-run no histórico: 19 de 143 em 30 dias (13%), a maioria um
+   mesmo lote real incoerente ("Galpão em ruína", 17×). NÃO entram em `VICIOS_REGEN`: regerar com o
+   mesmo dado repete o erro e gasta IA — a correção é de dado.
+5. **Leitor de laudo desfazia a avaliação certa** — `lerLaudoAvaliacao` trocou os R$ 66.650,75
+   (atualizada, lote inteiro) de Embu pelos R$ 11.700 do laudo de 2005 de UM dos terrenos. Agora não
+   sobrescreve quando o laudo fica abaixo do lance mínimo ou a descrição traz avaliação atualizada
+   maior; grava anomalia `laudo_desatualizado`.
 ⚠️ Lição (forma #10 em mim mesmo): o 1º dry-run do invariante usou `\b` — em regex do Postgres é
 BACKSPACE, não fronteira de palavra (lá é `\m`/`\M`). Deu 0 e parecia verde; a função real deu 6.
 

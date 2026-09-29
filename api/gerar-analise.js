@@ -28,7 +28,8 @@ import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculo
 import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { somaAreasMultiBem } from './_texto-imovel.js';
+import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
+import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -303,7 +304,7 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe, jaResolv
 // exclusão do relatório (tabela separada de analises_*). Guarda só dado POISON-RESISTENTE:
 // valores do imóvel (scraper) e da pesquisa (servidor) — nunca derivados de input do
 // usuário (ex.: valorMercado depende de areaM2 do cliente), p/ não envenenar o coletivo.
-async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal) {
+async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal, areaUsada) {
   try {
     // Usa os valores VALIDADOS do imóvel (avalDb/vminImovel: lidos de imoveis_leilao após
     // garantirValores, já com as travas de sentinela/implausível) quando o chamador os passa.
@@ -342,7 +343,13 @@ async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal)
       minimo_ausente: !(min > 0),
       mercado_vazio: !(precoM2 > 0) && nAmostras === 0,
       sem_parecer: !temParecer,
+      ...incoerenciasDaEmissao(imovel, precoM2, aval, min, areaUsada),
     };
+    // Incoerência vira ANOMALIA (entra no ritual 1b) — senão a lição fica gravada e ninguém lê.
+    for (const [k, detalhe] of Object.entries(qualidade._detalhe || {})) {
+      try { await registrarAnomalia(`aprendizado_${k}`, imovel?.fonte || '', String(imovel?.id || ''), k, detalhe); } catch { /* best-effort */ }
+    }
+    delete qualidade._detalhe;
     await sb('agente_aprendizado', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
@@ -355,16 +362,48 @@ async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal)
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
 }
 
+// O QUE O AGENTE NÃO SABIA VER (28/09): os relatórios de Embu-Guaçu e Araraquara saíram com
+// preço errado e foram gravados aqui com TODOS os sinais de qualidade `false` — o agente só
+// perguntava "faltou dado?", nunca "os dados se contradizem?". As três contradições abaixo
+// estavam na cara nos dois: lance mínimo 285% da avaliação (Embu), mercado 195× a avaliação
+// (Araraquara) e tipo gravado ≠ tipo que o título diz. Custo zero (sem IA).
+// Relatório com qualquer uma delas NÃO entra no corpus da região (corpusDaRegiao), para o erro
+// não virar referência dos próximos.
+export const VICIOS_INCOERENCIA = ['lance_acima_avaliacao', 'mercado_incoerente_avaliacao', 'tipo_contradiz_titulo'];
+function incoerenciasDaEmissao(imovel, precoM2, aval, min, areaUsada) {
+  const out = { _detalhe: {} };
+  if (aval > 0 && min > aval * 1.05) {
+    out.lance_acima_avaliacao = true;
+    out._detalhe.lance_acima_avaliacao = `Lance mínimo R$${Math.round(min)} acima da avaliação R$${Math.round(aval)} (${Math.round(min / aval * 100)}%) — avaliação velha, parcial ou de outro bem.`;
+  }
+  const area = Number(areaUsada) || Number(imovel?.area_m2) || Number(imovel?.areaM2) || 0;
+  if (aval > 0 && precoM2 > 0 && area > 0) {
+    const r = (precoM2 * area) / aval;
+    if (r > 4 || r < 0.25) {
+      out.mercado_incoerente_avaliacao = true;
+      out._detalhe.mercado_incoerente_avaliacao = `Mercado R$${Math.round(precoM2)}/m² × ${area} m² = ${r.toFixed(1)}× a avaliação R$${Math.round(aval)} — tipo, área ou avaliação provavelmente errados.`;
+    }
+  }
+  const TIPOS = ['casa', 'apartamento', 'terreno', 'comercial', 'rural'];
+  const doTitulo = normalizarTipo(imovel?.titulo || imovel?.title || '');
+  if (TIPOS.includes(doTitulo) && TIPOS.includes(imovel?.tipo) && doTitulo !== imovel.tipo) {
+    out.tipo_contradiz_titulo = true;
+    out._detalhe.tipo_contradiz_titulo = `Relatório como "${imovel.tipo}", título diz "${doTitulo}" — comparáveis do tipo errado.`;
+  }
+  return out;
+}
+
 // Corpus coletivo (emissões anteriores) da MESMA região/tipo, como referência
 // observacional no prompt. Só valores poison-resistentes (pesquisa/scraper). Custo: 1 SELECT.
 async function corpusDaRegiao(uf, tipo) {
   try {
     if (!uf || !tipo) return '';
-    const rows = await (await sb(`agente_aprendizado?agente=eq.mercadologico&uf=eq.${encodeURIComponent(uf)}&tipo=eq.${encodeURIComponent(tipo)}&select=corpus&order=criado_em.desc&limit=40`)).json();
+    const rows = await (await sb(`agente_aprendizado?agente=eq.mercadologico&uf=eq.${encodeURIComponent(uf)}&tipo=eq.${encodeURIComponent(tipo)}&select=corpus,qualidade&order=criado_em.desc&limit=40`)).json();
     if (!Array.isArray(rows)) return '';
-    const m2 = rows.map(r => Number(r?.corpus?.preco_medio_m2)).filter(v => v > 0);
+    const limpos = rows.filter((r) => !VICIOS_INCOERENCIA.some((k) => r?.qualidade?.[k]));
+    const m2 = limpos.map(r => Number(r?.corpus?.preco_medio_m2)).filter(v => v > 0);
     if (m2.length < 3) return '';
-    const desc = rows.map(r => Number(r?.corpus?.desconto_pct)).filter(v => v >= 0);
+    const desc = limpos.map(r => Number(r?.corpus?.desconto_pct)).filter(v => v >= 0);
     const med = Math.round(m2.reduce((a, b) => a + b, 0) / m2.length);
     const descMed = desc.length ? Math.round(desc.reduce((a, b) => a + b, 0) / desc.length) : null;
     return `\n\nCORPUS DA REGIÃO (${tipo} em ${uf}, ${m2.length} análises recentes, referência OBSERVACIONAL): preço médio observado ~R$ ${med}/m²${descMed != null ? `, desconto médio ~${descMed}%` : ''}. Use como sanity-check, nunca como verdade absoluta.`;
@@ -1053,7 +1092,7 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
   if (Date.now() > deadline - 12000) return sai('sem_orcamento');
   let im = null;
   try {
-    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo,numero_matricula,link_matricula,link_edital&limit=1`)).json();
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,anexos,valor_avaliacao,valor_minimo,numero_matricula,link_matricula,link_edital,descricao&limit=1`)).json();
     im = Array.isArray(rows) ? rows[0] : null;
   } catch { return sai('erro_leitura_imovel'); } // padrao-ok: `sai()` já registra o motivo via console.log — ver comentário da função
   if (!im || !Array.isArray(im.anexos)) return sai('sem_anexos');
@@ -1102,7 +1141,20 @@ async function lerLaudoAvaliacao(imovelId, deadline) {
   // desta base usa antes de sobrescrever um valor (ver `avaliacao_incoerente` acima).
   const faltava = avalLaudo >= 1000 && avalCard <= 0;
   const divergiu = avalLaudo >= 1000 && avalCard > 0 && Math.abs(avalLaudo - avalCard) / avalCard > 0.15;
-  if (faltava || divergiu) {
+  // LAUDO VELHO OU DE UM BEM SÓ (28/09, Embu-Guaçu): o PDF anexado era o laudo de 2005 do 1º dos
+  // dois terrenos (R$ 11.700); o card tinha a avaliação ATUALIZADA do lote inteiro (R$ 66.650,75,
+  // escrita na descrição). A "correção" trocou o certo pelo velho — e deixou o lance mínimo
+  // (R$ 33.325) em 285% da avaliação, o que praça nenhuma aceita. Duas provas de que o laudo não
+  // é o valor vigente: ele fica ABAIXO do mínimo, ou a descrição traz avaliação atualizada maior.
+  const atualizadaTexto = avaliacaoAtualizadaDoTexto(im.descricao || '') || 0;
+  const laudoVencido = avalLaudo > 0 && ((vmin > 0 && avalLaudo < vmin) || (atualizadaTexto > avalLaudo * 1.15));
+  if (divergiu && laudoVencido) {
+    try {
+      await registrarAnomalia('laudo_desatualizado', im.fonte, imovelId, 'valor_avaliacao',
+        `${nomeDoc} anexado (${laudo.url}) diz R$${Math.round(avalLaudo)}, card R$${Math.round(avalCard)}, mínimo R$${Math.round(vmin)}${atualizadaTexto ? `, descrição traz atualizada R$${Math.round(atualizadaTexto)}` : ''}. MANTIDO o card — o documento é anterior ou cobre só parte do lote.`);
+    } catch { /* best-effort */ }
+  }
+  if (faltava || (divergiu && !laudoVencido)) {
     const patch = { valor_avaliacao: avalLaudo };
     if (vmin > 0 && avalLaudo >= vmin) {
       patch.desconto_percentual = Math.round((1 - vmin / avalLaudo) * 100);
@@ -3878,7 +3930,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os
     // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").
-    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer, avalDb, vminImovel);
+    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer, avalDb, vminImovel, mercadoInputs?.areaM2);
 
     // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): o relatório é
     // salvo e mostrado como "não estimado", mas NÃO cobramos a cota — o cliente gera de novo
