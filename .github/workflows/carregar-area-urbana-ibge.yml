@@ -1,0 +1,36 @@
+name: Carregar área urbana (IBGE setores 2022)
+
+# Área urbana de cada município (setores censitários do IBGE) → area_urbana_municipio, para
+# classificar imóvel urbano × rural pela LOCALIZAÇÃO (situacao_geo). Carga única — refazer só
+# quando o IBGE publicar malha nova. Custo zero (arquivo público, sem IA, sem Bright Data).
+# SEMPRE rodar primeiro em `seco`: ele confere pontos conhecidos antes de qualquer gravação.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'seco (só imprime) ou gravar'
+        required: true
+        default: 'seco'
+      ufs:
+        description: 'UFs separadas por vírgula (vazio = todas)'
+        required: false
+        default: ''
+
+jobs:
+  carregar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: pip install --quiet geopandas pyogrio shapely
+      - name: Carregar
+        env:
+          MODO: ${{ inputs.modo }}
+          UFS: ${{ inputs.ufs }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/carregar-area-urbana-ibge.py
