@@ -305,13 +305,23 @@ async function paginaLote() {
   const { extrairAreaM2, decodificarEntidades } = await import('../api/_texto-imovel.js');
   const fonte = process.env.DOC_FONTE || 'BIASI';
   const alvo = (await todas(`imoveis_leilao?ativo=eq.true&fonte=eq.${fonte}&or=(area_m2.is.null,area_m2.eq.0)&url_lote=not.is.null&select=id,tipo,titulo,url_lote&order=id`)).slice(0, LIMITE);
-  const motivos = {}; let achou = 0, gravou = 0;
+  const motivos = {}; let achou = 0, gravou = 0, bloqueiosSeguidos = 0;
   const conta = (m) => { motivos[m] = (motivos[m] || 0) + 1; };
+  const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+  // 1º seco (29/09): sem pausa, a BIASI devolveu 403 a partir do ~50º acesso (240 de 290). Pausa
+  // SEMPRE (seco também), uma retentativa após 20 s no 403, e para se o bloqueio persistir.
+  const baixar = () => fetch(im_url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124', 'Accept-Language': 'pt-BR' }, signal: AbortSignal.timeout(25000) });
+  let im_url = '';
   for (const im of alvo) {
+    if (bloqueiosSeguidos >= 5) { conta('parou_bloqueio'); continue; }
     let html = '';
+    im_url = im.url_lote;
+    await espera(1500);
     try {
-      const r = await fetch(im.url_lote, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124', 'Accept-Language': 'pt-BR' }, signal: AbortSignal.timeout(25000) });
-      if (!r.ok) { conta(`http_${r.status}`); continue; }
+      let r = await baixar();
+      if (r.status === 403 || r.status === 429) { await espera(20000); r = await baixar(); }
+      if (!r.ok) { conta(`http_${r.status}`); if (r.status === 403 || r.status === 429) bloqueiosSeguidos++; continue; }
+      bloqueiosSeguidos = 0;
       html = await r.text();
     } catch (e) { conta(`rede:${String(e?.message || e).slice(0, 30)}`); continue; }
     const texto = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
@@ -327,7 +337,6 @@ async function paginaLote() {
     const up = await sb(`imoveis_leilao?id=eq.${im.id}&or=(area_m2.is.null,area_m2.eq.0)`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ area_m2: area }) })
       .catch((e) => { console.error(`  falhou ${im.id}: ${e.message}`); return null; });
     if (Array.isArray(up) && up.length === 1) gravou++;
-    await new Promise((r) => setTimeout(r, 300)); // gentileza com o site
   }
   console.log(`[pagina_lote ${fonte}] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área · ${achou} com área rotulada na página · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
 }
