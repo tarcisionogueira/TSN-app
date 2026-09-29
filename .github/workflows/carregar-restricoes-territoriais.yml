@@ -1,0 +1,35 @@
+name: Carregar restrições territoriais (UC + mananciais)
+
+# Unidades de Conservação (CNUC/MMA) e áreas de proteção de mananciais (DataGEO/SP) →
+# restricao_territorial. Carga manual; refazer quando as fontes publicarem versão nova.
+# Custo zero. SEMPRE rodar primeiro em `seco` (confere pontos conhecidos).
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'seco (só imprime) ou gravar'
+        required: true
+        default: 'seco'
+      camadas:
+        description: 'uc, manancial ou ambas (separadas por vírgula)'
+        required: false
+        default: 'uc,manancial'
+
+jobs:
+  carregar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: pip install --quiet geopandas pyogrio shapely
+      - name: Carregar
+        env:
+          MODO: ${{ inputs.modo }}
+          CAMADAS: ${{ inputs.camadas }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/carregar-restricoes-territoriais.py

@@ -1338,7 +1338,7 @@ async function anthropic(payload, useSearch, fetchOpts) {
   return j;
 }
 
-export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas }) {
+export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas, restricoes }) {
   // Bairro e lista de imobiliárias já conhecidas alimentam o bloco FONTES (ordem local→portal).
   // `fontesConhecidas` chega pronta do chamador (RPC `fontes_locais_frescas`); antes ela era
   // COLADA NO FIM do prompt, longe da seção de fontes — a instrução mais específica que temos
@@ -1349,6 +1349,11 @@ export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, no
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
 ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
+${restricoes ? `- RESTRIÇÃO TERRITORIAL (mapa oficial): ${restricoes}
+  Os comparáveis têm que estar SUJEITOS À MESMA RESTRIÇÃO (dentro da mesma área de proteção /
+  manancial / unidade de conservação). Anúncio de fora dela superestima o preço, porque não
+  carrega as limitações de lote mínimo e ocupação. Sem 3 amostras de dentro, diga isso
+  EXPLICITAMENTE e alargue a faixa para baixo.` : ''}
 
 REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
 Descarte qualquer amostra de tipo diferente. Compare sempre ${tipoImovel} com ${tipoImovel}.
@@ -1528,7 +1533,7 @@ Retorne APENAS este JSON (sem markdown):
 //     PRÓPRIOS e curtos; se falhar/estourar, o relatório entrega assim mesmo com a Etapa A.
 // Assim um contexto lento nunca mais derruba (ou esvazia) o relatório inteiro.
 // ─────────────────────────────────────────────────────────────────────────────
-export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas }) {
+export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas, restricoes }) {
   // Bairro e lista de imobiliárias já conhecidas alimentam o bloco FONTES (ordem local→portal).
   // `fontesConhecidas` chega pronta do chamador (RPC `fontes_locais_frescas`); antes ela era
   // COLADA NO FIM do prompt, longe da seção de fontes — a instrução mais específica que temos
@@ -1539,6 +1544,11 @@ export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
 ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
+${restricoes ? `- RESTRIÇÃO TERRITORIAL (mapa oficial): ${restricoes}
+  Os comparáveis têm que estar SUJEITOS À MESMA RESTRIÇÃO (dentro da mesma área de proteção /
+  manancial / unidade de conservação). Anúncio de fora dela superestima o preço, porque não
+  carrega as limitações de lote mínimo e ocupação. Sem 3 amostras de dentro, diga isso
+  EXPLICITAMENTE e alargue a faixa para baixo.` : ''}
 
 FOCO DESTA ETAPA: SÓ comparáveis de venda e locação + o valor consolidado. NÃO gaste buscas com
 FipeZAP, zoneamento, segurança ou perfil da região (isso é pedido numa etapa separada).
@@ -1828,6 +1838,7 @@ pois são CUSTO da operação e impactam a viabilidade — apenas no aspecto fin
 IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/${inp.estado || ''}
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
+${inp.restricoesGeo ? `RESTRIÇÃO TERRITORIAL (mapa oficial — cite e explique o efeito no preço e no uso): ${inp.restricoesGeo}` : ''}
 ${inp._laudo && (inp._laudo.debitos || inp._laudo.condicaoImovel || inp._laudo.formaPagamento) ? `
 ${(inp._laudo.nomeDoc || 'laudo de avaliação').toUpperCase()} ANEXADO AO LOTE (leitura automática — cite como informação do PRÓPRIO documento, nunca como premissa sua; use o nome exato "${inp._laudo.nomeDoc || 'laudo de avaliação'}" ao citar, não invente outro tipo de documento):
 ${inp._laudo.condicaoImovel ? `- Condição/ocupação do imóvel conforme o documento: ${inp._laudo.condicaoImovel}` : ''}
@@ -2058,7 +2069,7 @@ export default async function handler(req, res) {
   let divergenciaLocalizacao = null;
   let descricaoImovel = null; // usada adiante pela soma de áreas de lote com vários bens
   try {
-    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo&limit=1`)).json();
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo&limit=1`)).json();
     descricaoImovel = imA?.descricao || null;
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
@@ -2165,6 +2176,15 @@ export default async function handler(req, res) {
       // matrícula — terreno "rural" no papel dentro do perímetro urbano vende como lote urbano, e
       // vice-versa. `situacao_geo` vem da área urbana do IBGE (migração 20260929_area_urbana_ibge)
       // e só é 'urbana'/'rural' com pino preciso e longe da divisa; 'indeterminada' não mexe.
+      // RESTRIÇÃO TERRITORIAL (29/09): manancial / unidade de conservação que o ponto toca
+      // (restricao_territorial, migração 20260929_restricao_territorial). Embu-Guaçu: APRM
+      // Guarapiranga — anúncios de fora dela davam R$ 450/m² contra avaliação de ~R$ 27/m².
+      // Ausência NÃO vira "sem restrição" no relatório: só se afirma o que o mapa mostrou.
+      const itensRestr = Array.isArray(imA.restricoes_geo?.itens) ? imA.restricoes_geo.itens : [];
+      if (itensRestr.length) {
+        mercadoInputs.restricoes = itensRestr.slice(0, 4)
+          .map((r) => `${r.nome}${r.categoria ? ` (${r.categoria})` : ''}${r.subarea ? `, ${r.subarea}` : ''}`).join('; ');
+      }
       const tipoAntes = String(mercadoInputs.tipoImovel || '');
       const tipoGeo = imA.situacao_geo === 'urbana' && tipoAntes === 'rural' ? 'terreno'
         : imA.situacao_geo === 'rural' && tipoAntes === 'terreno' ? 'rural' : null;
@@ -3518,6 +3538,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           ...parecerInputs.d,
           endereco: String(parecerInputs.d?.endereco || '').trim() || mercadoInputs?.endereco || '',
           nomeCondominio: parecerInputs.d?.nomeCondominio || mercadoInputs?.nomeCondominio || '',
+          restricoesGeo: mercadoInputs?.restricoes || '',
           // Mesma lógica do endereço: `parecerInputs.d.valorAvaliacao` é o que o CLIENTE mandou
           // (snapshot da tela); se o laudo divergiu/preencheu, o parecer tem que citar o valor
           // JÁ CORRIGIDO, não o número antigo do card.
