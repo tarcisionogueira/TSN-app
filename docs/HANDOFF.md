@@ -110,8 +110,10 @@ maiores são `area_truncada_no_milhar`, `anexo_de_espelho_purgado`, `leilao_venc
 
 ### 🔶 29/09 — `lote_sem_area_nem_matricula` (566 vs 400)
 - **Hectare**: `extrairAreaM2` só entendia m² — rural em "133,42 HECTARES" ficava sem área. Agora
-  converte hectare (e ha.a.ca "2.00.10"), como último recurso; alqueire NÃO (varia por região).
-  Teste `testar:area-hectares`. Backfill: workflow `area-da-descricao.yml` (seco → aplicar).
+  converte hectare (e ha.a.ca "2.00.10"), antes do m² solto e depois do m² rotulado; alqueire NÃO
+  (varia por região); inteiro de 5+ dígitos sem separador ("21769 Ha") é recusado por ambiguidade.
+  Teste `testar:area-hectares`. Backfill `area-da-descricao.yml`: 2 secos (o 1º achou 2 leituras
+  erradas, corrigidas) e aplicado — 277 lotes ganharam área; invariante 566 → 485.
 - **BIASI**: 193 dos 566 (53% do acervo dela), apto/casa sem área no texto; anexos são edital +
   minutas de escritura, matrícula só em parte. Área só sai lendo o edital (custo de leitura) —
   decisão pendente.
