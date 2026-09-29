@@ -53,7 +53,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    Não dá para testar sem cliente (exige login e debita crédito — não contornar).
 5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. Toda pesquisa de mercado está no Haiku de
    reserva; terreno em cidade média sai vazio com mais frequência.
-6. 🔶 **Uberlândia Leilões** — só roda pelo PC do dono (403 no CI). Conferir `fonte_saude`.
+6. ✅ **Uberlândia Leilões (29/09)** — dava 403 também do PC (fonte zerada desde 28/09). O banco
+   (pg_net, AWS) recebe 200 → motor ganhou a via **"banco"** entre o fetch direto e a Bright Data
+   (`pagina_pedir`/`pagina_ler`, só service_role, migração `20260929_pagina_pelo_banco.sql`, segurança
+   0/0). Dry-run: 16 enumerados, 13 prontos, foto 85%. Voltou ao agendado do `scraper-dom.yml`.
+   Vale para qualquer fonte do motor barrada por IP (FREITAS não: certificado SSL do site é inválido).
+   **Visto no mesmo dry-run:** GLOBOLEILOES caiu de 3 para 0 lotes (HTML em recon_dump, motor-vazio).
+2b. ⏸️ **Item 2 (Embu) depende do 5 (Gemini):** health-check 29/09 06h = "Pesquisa de mercado PARADA";
+   São Carlos (casa 150 m², teste do dono) saiu vazio 2× no Haiku. Regerar antes da recarga gasta IA
+   para repetir o vazio. Araraquara (item 3): regeração automática trouxe 4 comparáveis, mas a
+   avaliação do lote (R$ 2.863 para 200 m²) é a incoerente — edital diz R$ 1.436; revisar a fonte.
 7. 🔶 **Passo 3 do plano de localização — 1ª parte FEITA 29/09 (aprovado pelo dono).** 1.753
    terrenos/rurais com pino no centro da cidade; 375 tinham o logradouro no texto e endereço vazio
    (o trigger só deriva do título). `scripts/endereco-da-descricao.mjs` + workflow homônimo (seco
