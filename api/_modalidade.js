@@ -24,8 +24,11 @@ export function normalizarModalidade(m) {
   if (!m) return null; // desconhecido: não inventa natureza (fica visível, só não filtra)
   const s = String(m).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-  if (s.includes('venda') && s.includes('online')) return 'venda_online';
+  // "Venda DIRETA Online" (Caixa) é venda direta: compra pela 1ª proposta que atinge o mínimo,
+  // sem disputa nem prazo; "Venda Online" é disputa com data de encerramento. Testar "online"
+  // primeiro jogava 5.242 lotes da Caixa em venda_online e o filtro Venda Direta vinha vazio (29/09).
   if (s.includes('venda') && s.includes('direta')) return 'venda_direta';
+  if (s.includes('venda') && s.includes('online')) return 'venda_online';
   if (s.includes('licitac')) return 'licitacao_aberta';
   // "extrajudicial"/"extra-judicial"/"leilão extrajudicial" — checa ANTES de 'judicial'
   // (senão o substring 'judicial' de "extrajudicial" classificaria errado).

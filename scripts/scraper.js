@@ -231,8 +231,11 @@ function formaPagamentoCEF(descricao, modalidade, financiamento) {
 // (nenhuma das duas tem edital de leilão — ver `ehVendaSemPraca` abaixo).
 export function normalizarModalidadeCEF(modalidade) {
   const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (m.includes('venda') && m.includes('online')) return 'venda_online';
+  // "Venda DIRETA Online" (Caixa) é venda direta: compra pela 1ª proposta que atinge o mínimo,
+  // sem disputa nem prazo; "Venda Online" é disputa com data de encerramento. Testar "online"
+  // primeiro jogava 5.242 lotes da Caixa em venda_online e o filtro Venda Direta vinha vazio (29/09).
   if (m.includes('venda') && m.includes('direta')) return 'venda_direta';
+  if (m.includes('venda') && m.includes('online')) return 'venda_online';
   if (m.includes('licitac')) return 'licitacao_aberta';
   if (m.includes('unica') && m.includes('praca')) return 'praca_unica';
   if (/(^|[^\d])1.{0,3}(leil|praca)/.test(m) || m.includes('primeiro')) return 'primeiro_leilao';

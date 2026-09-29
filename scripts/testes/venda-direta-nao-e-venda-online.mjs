@@ -36,7 +36,7 @@ const eq = (raw, esperado, rotulo) => {
 
 console.log('\nVENDA DIRETA ≠ VENDA ONLINE — o caso exato do print (Rua Morisot, Tambore)');
 eq('Venda Direta', 'venda_direta', '"Venda Direta" pura');
-eq('Venda Direta Online', 'venda_online', '"Venda Direta Online" (rótulo real do CSV) é venda online, não direta');
+eq('Venda Direta Online', 'venda_direta', '"Venda Direta Online" (rótulo real do CSV) é venda DIRETA — 1ª proposta que atinge o mínimo, sem prazo (29/09)');
 eq('Venda Online', 'venda_online', '"Venda Online" pura');
 eq('VENDA ONLINE', 'venda_online', 'maiúsculas não mudam o resultado');
 eq('venda direta', 'venda_direta', 'minúsculas — venda direta sem "online" continua venda_direta');
