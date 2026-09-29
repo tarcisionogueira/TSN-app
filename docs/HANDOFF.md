@@ -29,16 +29,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    Soleon com varredura de sumidos; Índice blindado (`_busca-com-prova.js`).
 
 **PENDÊNCIAS — em ordem de prioridade:**
-1. 🔶 **Carga das restrições territoriais.** 3º seco disparado 29/09 01:08 (commit 850bbdf) depois de
-   2 falhas SEM gravar (CNUC 2026 é link do SharePoint → usa o ZIP 2025_08 do portal; shapefile com
-   UTF-8 cortado no .dbf → conserto byte a byte). **Conferir:** último run de
-   `carregar-restricoes-territoriais.yml` — pontos: Embu → Guarapiranga, Sé → nenhum, Canastra → UC.
-   Se o seco passou e ninguém gravou: disparar `modo=gravar`. Depois:
-   `select restricoes_geo from imoveis_leilao where id='d21e2df4-255b-4216-8be8-b9b5e64d3321';`
-   e `select count(*) from imoveis_leilao where ativo and jsonb_array_length(restricoes_geo->'itens')>0;`
-   A camada de mananciais do DataGEO ainda não foi vista rodar (o seco parou antes, no CNUC): se o
-   GetCapabilities não listar camadas, a causa estará no log.
-2. 🔶 **Embu-Guaçu (5ce900e4…)** — regerado com 2.503 m² e avaliação R$ 66.650,75 (certo), mas
+1. ✅ **Carga das restrições territoriais — CONCLUÍDA 29/09 01:46 UTC.** `restricao_territorial`:
+   **3.121 UCs** (CNUC 2025_08) + **32 polígonos de manancial** (APRM Guarapiranga, Billings, Alto
+   Tietê Cabeceiras, Alto Juquery; por subárea). **1.058 imóveis ativos** com restrição; 20.235 com
+   pino verificável. Embu (leilaobrasil_449) → **APRM-G, subárea SUC**. Auditoria de segurança 0/0.
+   Foram 5 secos até passar, cada um com causa própria (nada gravado antes): versão 2026 do CNUC é
+   link do SharePoint → usa o ZIP 2025_08 do portal; .dbf com UTF-8 cortado no limite de 254 bytes →
+   conserto byte a byte; UC sem polígono → pulada e contada; pandas novo guarda texto como
+   StringDtype (conserto não aplicava) ; catálogo global do DataGEO sem mananciais → consulta também
+   o do workspace + APRM-G por endereço fixo. **Antes de gravar** tirou-se a grade de folhas
+   "Articulação EMPLASA 1:10.000" (não é restrição — entraria no relatório de Embu).
+   ⚠️ Ao auditar: `nome ilike '%articula%'` casa as 1.233 RPPN ("Reserva **Particula**r") — não é a grade.
+2. 🔶 **Embu-Guaçu (5ce900e4…) — PRÓXIMO PASSO, a APRM já está carregada.** Regerado com 2.503 m² e avaliação R$ 66.650,75 (certo), mas
    mercado R$ 450/m² = 17× a avaliação (anomalia `aprendizado_mercado_incoerente_avaliacao`).
    Com a APRM carregada, **regerar** (`regerar-relatorios.yml`, ids=5ce900e4-628a-4d72-83ad-87dc3597c406)
    para a busca pedir comparáveis dentro do manancial. Decisão do dono se souber a restrição real.
