@@ -98,12 +98,15 @@ apagar bairro, então o erro ficava para sempre. 29 lotes em 6 fontes: 12 corrig
 (título/descrição), 17 apagados (sem prova; triggers desligados só naquela transação). Teste
 `testar:bairro-fazenda-publica`. O self-heal do relatório refaz em até 48 h com o bairro certo.
 
-### 🔶 29/09 — Filtro "Venda Direta" + Financiado vazio em SP: é a regra de 03/09, não bug de consulta
-Em SP só há 45 lotes `venda_direta` (nenhum da Caixa, nenhum financiado). A Caixa tem 5.242 lotes
-ativos cujo texto diz "Venda Direta Online" e 9.566 "Venda Online" — o normalizador põe os dois em
-`venda_online` DE PROPÓSITO (teste `venda-direta-nao-e-venda-online.mjs`, caso Rua Morisot de
-03/09). Quem marca "Venda Online" acha os financiados (99 em SP com desconto ≥ 40%).
-**Decisão do dono pendente:** "Venda Direta Online" da Caixa deve aparecer como Venda Direta?
+### ✅ 29/09 — Caixa: "Venda Direta Online" passa a ser Venda Direta (decisão do dono)
+Print do dono: Venda Direta + SP + desconto ≥ 40% + Financiado/Hipotecado → nada. O normalizador
+(`scripts/scraper.js` e `api/_modalidade.js`) testava "online" antes de "direta": o rótulo da Caixa
+"Venda Direta Online" caía em `venda_online`. Conferido no site da Caixa (workflow
+`recon-cef-edital.yml` — o runner do GitHub é atendido; pg_net toma 403): a página estática dos dois
+tipos é igual ("Regras da Venda Online", "Fazer uma proposta", sem contador no HTML) — quem separa é
+o RÓTULO da Caixa, e a regra de 03/09 é seguir o rótulo exato. Agora "direta" vem primeiro; lote que a
+Caixa chama só de "Venda Online" (caso Morisot) segue `venda_online`. Teste `testar:modalidade-cef`
+atualizado. Dados: 8.635 reclassificados (5.242 ativos, 80 em SP). O filtro do print: 0 → 43.
 
 ### ✅ 29/09 — Régua de e-mails: o envio fazia o cliente parecer "ativo"
 Pedido do dono: confirmar que a cadência (`api/_cadencia.js`, `app_config.cadencia_email`) está em
