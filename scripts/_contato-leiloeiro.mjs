@@ -173,6 +173,11 @@ export async function buscarEmailDoSite(origin, { obterHtml = htmlDe } = {}) {
   try { htmlHome = await obterHtml(origin); } catch (e) { return { achado: null, motivo: `home inacessível (${String(e?.message || e).slice(0, 60)})` }; }
   let achado = extrairEmailDeHtml(htmlHome, origin);
   if (achado) return { achado, url: origin, htmlHome };
+  // Página de DESAFIO anti-robô não é "site sem e-mail" (29/09: o Chrome do runner recebe só o
+  // "Just a moment…" em ~20 sites; os mesmos abrem normalmente pelo banco — pg_net).
+  if (/just a moment|cf-challenge|challenge-platform|cf_chl_|attention required/i.test(htmlHome) && htmlHome.length < 60000) {
+    return { achado: null, motivo: 'bloqueado por desafio anti-robô (IP de datacenter) — capturar pelo pg_net', htmlHome: null };
+  }
   const recusados = candidatosEmail(htmlHome).map(c => c.email).filter(e => !BLOQUEADOS.test(e));
   for (const url of linksDeContato(htmlHome, origin)) {
     let html;

@@ -39,5 +39,8 @@ ok(!r2.achado && /inacess.*403/.test(r2.motivo), `bloqueio vira MOTIVO, não sil
 const r3 = await buscarEmailDoSite('https://y.com.br', { obterHtml: async () => '<p>contato@othis.com.br</p>' });
 ok(!r3.achado && /outro domínio/.test(r3.motivo), `só e-mail de terceiro vira motivo → "${r3.motivo}"`);
 
+const r4 = await buscarEmailDoSite('https://z.com.br', { obterHtml: async () => '<title>Just a moment...</title><div id="cf-challenge"></div>' });
+ok(!r4.achado && /desafio anti-robô/.test(r4.motivo), 'desafio anti-robô vira motivo próprio, não "sem e-mail"');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

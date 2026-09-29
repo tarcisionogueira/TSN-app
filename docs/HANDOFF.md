@@ -88,6 +88,24 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    `salvarVeiculos` não deixa a galeria ENCOLHER quando o lote não foi relido. Conferir:
    `select fonte, count(*) filter (where jsonb_array_length(coalesce(fotos,'[]'))>1) galeria, count(*)
    from veiculos_leilao where ativo and fonte in ('LJUD','SUPORTE','ZUK','MEGA') group by 1;`
+11. ✅/🔶 **E-mail dos leiloeiros (29/09): 5 → 30 fontes com contato.** Causas medidas (homes via pg_net +
+   2 rodadas em seco no GitHub): (a) 25 sites escondem o e-mail com Cloudflare (`data-cfemail`, sem "@"
+   no HTML); (b) 17 só o mostram em /contato; (c) ~30 dão 403 ao fetch do runner e ~20 entregam ao
+   Chrome do runner só o desafio anti-robô — pelo banco (pg_net) abrem normalmente; (d) mesma marca em
+   outro TLD era recusada (alfaleiloes .com × .com.br); (e) fontes fora do scraper-puppeteer nunca
+   tentavam; (f) nada disso deixava rastro. `_contato-leiloeiro.mjs` agora decodifica o Cloudflare,
+   segue a página de contato, recusa lgpd@/privacidade@ e devolve o MOTIVO; varredor semanal
+   `capturar-contatos-leiloeiros.yml` (seg 09:17 UTC, grava; manual = seco). Os 25 foram gravados
+   com a mesma função sobre o HTML do pg_net. **Pendências:** DANIELGARCIA publica
+   `contato@dgleiloes.com.br` (outro domínio — provavelmente o mesmo leiloeiro; confirmar e gravar
+   manual); MEGA só tem e-mail da agência; LGCORRETOR só `@creci.org.br`; sem e-mail publicado
+   (só formulário): BIASI, CALIL, INFINITY, ROCHA, WEBLEILOES, RIGOLON, FRAZAO, GIORDANO,
+   THAISTEIXEIRA, CASAMARTILLO, DILSONMOREIRA, JMF, KRON, TOTALLEILOES; bloqueados também no pg_net:
+   BAYIT, PECINI, LEJE, MILAN, VIP. As 10 multi-tenant (SUPERBID, SUPORTE, VLANCE, PESTANA…) são por
+   leiloeiro do lote (`leiloeiro_contato_tenant`, ainda vazio) — frente própria.
+12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
+   galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
+   pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
 ### ✅ 29/09 — HASTA e JOAOEMILIO: o alarme `zerou` era ruído, não regressão
 - **HASTA ≠ HASTAPUBLICA** (Hasta Leilões/BA × Hasta Pública/Valland). HASTA seguia acusando
