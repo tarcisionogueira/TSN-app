@@ -1,0 +1,29 @@
+name: E-mail dos leiloeiros sem contato (custo zero)
+
+# scripts/capturar-contatos-leiloeiros.mjs — varre TODAS as fontes com lote ativo e sem e-mail
+# (de qualquer coletor), lê home + página de contato (inclusive e-mail protegido pelo Cloudflare)
+# e diz o motivo de cada fonte que ficar sem. Semanal, gravando; manual roda EM SECO por padrão.
+on:
+  schedule:
+    - cron: '17 9 * * 1'   # segundas, 09:17 UTC
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = grava; 0 = só mostra'
+        default: '0'
+
+jobs:
+  contatos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capturar contatos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CONTATO_APLICAR: ${{ github.event_name == 'schedule' && '1' || inputs.aplicar }}
+        run: node scripts/capturar-contatos-leiloeiros.mjs

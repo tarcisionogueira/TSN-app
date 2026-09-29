@@ -10,7 +10,9 @@
 // nome do documento. Rede de segurança por tempo caso afterprint não dispare.
 import { registrarEvento } from '../utils/tracker.js';
 
-export function imprimirHtml(html, nomeArquivoBruto) {
+// `esperaImagensMs`: teto de espera pelas imagens. 4 s basta para documento com 1 anexo; o relatório
+// de veículo traz a galeria inteira (até 30 fotos de CDN de leiloeiro) e pede mais.
+export function imprimirHtml(html, nomeArquivoBruto, { esperaImagensMs = 4000 } = {}) {
   const nomeArquivo = String(nomeArquivoBruto || 'Documento').replace(/[\\/:*?"<>|]+/g, ' ').trim();
   // Único choke point da geração de PDF do produto (mercadológico/documental/laudo/índice/
   // contrato/combinado) — a ENTREGA precisa aparecer no Cliente 360, não só o clique.
@@ -50,7 +52,7 @@ export function imprimirHtml(html, nomeArquivoBruto) {
       }
     };
     // Espera o conteúdo/CSS assentar E as imagens carregarem (ex.: documento anexo em imagem
-    // embutido) antes de imprimir — senão o print dispara com a imagem ainda em branco. Teto 4s.
+    // embutido) antes de imprimir — senão o print dispara com a imagem ainda em branco. Teto `esperaImagensMs`.
     const imgs = Array.from(doc.images || []);
     const pend = imgs.filter((im) => !im.complete);
     if (!pend.length) { setTimeout(imprimir, 500); }
@@ -61,7 +63,7 @@ export function imprimirHtml(html, nomeArquivoBruto) {
         const done = () => { if (--restantes <= 0) go(); };
         im.addEventListener('load', done); im.addEventListener('error', done);
       });
-      setTimeout(go, 4000);
+      setTimeout(go, esperaImagensMs);
     }
   } catch {
     restaurar();

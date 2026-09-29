@@ -24,10 +24,31 @@ const BLOQUEADOS = /^(noreply|no-reply|naoresponda|nao-responda|donotreply|webma
 // Padrões que sinalizam "isto é o contato de atendimento" — preferidos quando há mais de um.
 const PREFERIDOS = /^(contato|atendimento|sac|faleconosco|fale-conosco|comercial|leiloes|leilao|central|info|contact|suporte)@/i;
 
+// E-MAIL PROTEGIDO PELO CLOUDFLARE (29/09). Medido nas homes das 57 fontes sem contato: 25 servem
+// o e-mail só como `data-cfemail="<hex>"` / `/cdn-cgi/l/email-protection#<hex>` (o navegador
+// decodifica com JS; o HTML cru não tem "@" nenhum). Era a MAIOR causa de "leiloeiro sem e-mail":
+// o coletor via a página, não achava "@" e seguia calado. Formato: 1º byte é a chave, os demais
+// XOR com ela — decodificar não é contornar nada, é o mesmo que o navegador faz para exibir.
+export function decodificarCfEmail(hex) {
+  const h = String(hex || '');
+  if (!/^[0-9a-f]{6,}$/i.test(h) || h.length % 2) return null;
+  const k = parseInt(h.slice(0, 2), 16);
+  let out = '';
+  for (let i = 2; i < h.length; i += 2) out += String.fromCharCode(parseInt(h.slice(i, i + 2), 16) ^ k);
+  return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(out) ? out.toLowerCase() : null;
+}
+
 function candidatosEmail(html) {
   if (!html) return [];
   const vistos = new Set();
   const out = [];
+  // Cloudflare: o link protegido equivale a um mailto (forte); o texto protegido, a texto solto.
+  for (const [re, forte] of [[/\/cdn-cgi\/l\/email-protection#([0-9a-f]+)/gi, true], [/data-cfemail="([0-9a-f]+)"/gi, false]]) {
+    for (const m of html.matchAll(re)) {
+      const e = decodificarCfEmail(m[1]);
+      if (e && !vistos.has(e)) { vistos.add(e); out.push({ email: e, forte, pos: m.index }); }
+    }
+  }
   // mailto: primeiro — é o sinal mais forte de "este é o contato clicável da página", não
   // apenas um e-mail que apareceu solto em algum texto (ex.: e-mail de exemplo, de terceiro).
   // Exclui `\` do que pode compor o e-mail (achado 11/09, dado real: LJUD capturou
@@ -47,8 +68,10 @@ function candidatosEmail(html) {
 }
 
 /** Exportado para poder testar isoladamente (ver scripts/lib scraper-core não se aplica aqui — HTML puro). */
-export function extrairEmailDeHtml(html, origemSite = null) {
-  const cands = candidatosEmail(html).filter(c => !BLOQUEADOS.test(c.email)
+export function extrairEmailDeHtml(html, origemSite = null, { paginaContato = false } = {}) {
+  // Na página de CONTATO do próprio site, e-mail exibido é o contato por definição — vale como
+  // mailto (é o que libera o gmail/hotmail do leiloeiro pequeno, ex.: JE Leilões).
+  const cands = candidatosEmail(html).map(c => (paginaContato ? { ...c, forte: true } : c)).filter(c => !BLOQUEADOS.test(c.email)
     && (!origemSite || motivoRecusaEmail(c.email, origemSite, c.forte) === null));
   if (!cands.length) return null;
   const escolhido = cands.find(c => PREFERIDOS.test(c.email)) || cands.find(c => c.forte) || cands[0];
@@ -84,6 +107,10 @@ export function motivoRecusaEmail(email, origemSite, forte) {
   let host = '';
   try { host = new URL(origemSite).hostname; } catch { return 'site sem URL válida'; }
   if (dominioBase(dom) === dominioBase(host)) return null;
+  // Mesma marca em outro TLD (29/09): alfaleiloes.com.br publica contato@alfaleiloes.com. O
+  // rótulo precisa ser específico (≥ 6 letras e não genérico), senão "leiloes.com" casaria tudo.
+  const rotulo = (d) => dominioBase(d).split('.')[0];
+  if (rotulo(dom) === rotulo(host) && rotulo(dom).length >= 6 && !/^(leiloes?|leilao|imoveis|contato)$/.test(rotulo(dom))) return null;
   if (GRATUITOS.test(dom)) return forte ? null : 'provedor gratuito fora de mailto:';
   return `domínio de terceiro (${dom} ≠ ${dominioBase(host)})`;
 }
@@ -108,6 +135,54 @@ export function detectarSegmentoVeiculos(html) {
     if (HREF_VEICULO.test(href)) return { url: href, texto: textoTag.slice(0, 80) || '(achado pela URL do link, sem texto claro)' };
   }
   return null;
+}
+
+// Links da home que levam à página de contato do MESMO site (29/09): 17 das fontes sem contato
+// não têm e-mail na home, só em /contato, /fale-conosco, /atendimento etc.
+export function linksDeContato(html, origin) {
+  const out = [];
+  let host;
+  try { host = new URL(origin).hostname; } catch { return out; }
+  for (const m of String(html || '').matchAll(/href=["']([^"'#]+)["']/gi)) {
+    const href = m[1];
+    if (/^(mailto:|tel:|javascript:)/i.test(href) || !/(contato|fale-?conosco|atendimento|contact)/i.test(href)) continue;
+    let u;
+    try { u = new URL(href, origin); } catch { continue; }
+    if (dominioBase(u.hostname) !== dominioBase(host) || /indique|como-vender|comprovante|privacidade|cookies|termos/i.test(u.pathname)) continue;
+    if (!out.includes(u.href)) out.push(u.href);
+  }
+  return out.sort((a, b) => a.length - b.length).slice(0, 2);
+}
+
+const UA_NAVEGADOR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+async function htmlDe(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': UA_NAVEGADOR, 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+/**
+ * Procura o e-mail do leiloeiro na home e, se não houver, na página de contato. Nunca lança:
+ * devolve `{ achado, url, motivo, htmlHome }` — `motivo` diz POR QUE não achou (bloqueado, sem
+ * e-mail, só e-mail de terceiro), porque "não achei" calado foi o que escondeu o buraco.
+ */
+export async function buscarEmailDoSite(origin, { obterHtml = htmlDe } = {}) {
+  let htmlHome;
+  try { htmlHome = await obterHtml(origin); } catch (e) { return { achado: null, motivo: `home inacessível (${String(e?.message || e).slice(0, 60)})` }; }
+  let achado = extrairEmailDeHtml(htmlHome, origin);
+  if (achado) return { achado, url: origin, htmlHome };
+  const recusados = candidatosEmail(htmlHome).map(c => c.email).filter(e => !BLOQUEADOS.test(e));
+  for (const url of linksDeContato(htmlHome, origin)) {
+    let html;
+    try { html = await obterHtml(url); } catch { continue; } // padrao-ok: página de contato é 2ª tentativa; o motivo final sai abaixo
+    achado = extrairEmailDeHtml(html, origin, { paginaContato: true });
+    if (achado) return { achado, url, htmlHome };
+    recusados.push(...candidatosEmail(html).map(c => c.email).filter(e => !BLOQUEADOS.test(e)));
+  }
+  const motivo = recusados.length
+    ? `só e-mail de outro domínio (${[...new Set(recusados)].slice(0, 3).join(', ')})`
+    : `nenhum e-mail na home${linksDeContato(htmlHome, origin).length ? ' nem na página de contato' : ' (sem link de contato)'}`;
+  return { achado: null, motivo, htmlHome };
 }
 
 /**
@@ -139,12 +214,13 @@ export async function capturarContatoSeAusente(supabase, fonte, urlAmostra) {
     const segmentoEmDia = !erroSeg && seg?.atualizado_em && (Date.now() - new Date(seg.atualizado_em).getTime()) < TRINTA_DIAS_MS;
     if (emailEmDia && segmentoEmDia) return; // nada a atualizar — não busca a página à toa
 
-    const res = await fetch(origin, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasilBot/1.0)' } }).catch(() => null);
-    if (!res?.ok) return;
-    const html = await res.text();
+    const busca = await buscarEmailDoSite(origin);
+    const html = busca.htmlHome;
+    if (!html) { console.log(`    📧 ${fonte}: ${busca.motivo}`); return; }
 
     if (!emailEmDia) {
-      const achado = extrairEmailDeHtml(html, origin);
+      const achado = busca.achado;
+      if (!achado) console.log(`    📧 ${fonte}: sem contato — ${busca.motivo}`);
       // Endereço já suprimido (bounce permanente / reclamação) não volta pela porta dos fundos:
       // o gatilho do banco o tirou daqui, e recapturá-lo desfaria a contramedida.
       let suprimido = false;

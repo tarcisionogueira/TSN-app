@@ -28,6 +28,11 @@ const FAIXA_INFO = {
   alta:     { label: 'Acima da FIPE', cor: '#991b1b', bg: '#fecaca', Icon: XCircle },
   sem_fipe: { label: 'FIPE não disponível', cor: '#64748b', bg: '#f1f5f9', Icon: HelpCircle },
 };
+// REGISTRO FOTOGRÁFICO (29/09, pedido do dono: "todas as fotos, como num laudo cautelar"). A galeria
+// vem do scraper (scripts/lib/galeria-veiculo.mjs); "sem imagem" do site do leiloeiro não é foto.
+export const fotosDoVeiculo = (v) => [...new Set((Array.isArray(v?.fotos) ? v.fotos : [])
+  .filter((u) => typeof u === 'string' && /^https?:\/\//.test(u) && !/no-image|nao-?disp|sem-?foto|placeholder/i.test(u)))];
+
 const RECOMENDACAO_LABEL = { comprar: 'Comprar', avaliar_com_cautela: 'Avaliar com cautela', evitar: 'Evitar' };
 
 // PDF DO RELATÓRIO (29/09, pedido do dono): identificação completa do lote e da BidPro, cenário
@@ -74,6 +79,13 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio }) {
     <h3>Custos considerados</h3><table>${custos}</table>
     <h3>Deságio aplicado à FIPE</h3><ul>${desagio.fatores.map((f) => `<li>${e(f.motivo)}: −${f.pct}%</li>`).join('')}</ul>` : '';
   const riscos = result.riscos?.length ? `<h2>Riscos identificados</h2><ul>${result.riscos.map((r) => `<li>${e(r)}</li>`).join('')}</ul>` : '';
+  const fotos = fotosDoVeiculo(v);
+  const nf = String(fotos.length).padStart(2, '0');
+  const registro = fotos.length ? `
+  <div class="fotos"><h2>Registro fotográfico — ${fotos.length} foto${fotos.length > 1 ? 's' : ''}</h2>
+    <p class="sub">Imagens publicadas pelo leiloeiro na página do lote${v.link_lote ? ` (${e(v.link_lote)})` : ''}. A BidPro não vistoriou o veículo: confira na visitação.</p>
+    <div class="grade">${fotos.map((u, i) => `<figure><img src="${e(u)}" alt="Foto ${i + 1}"><figcaption>Foto ${String(i + 1).padStart(2, '0')}/${nf}</figcaption></figure>`).join('')}</div>
+  </div>` : `<h2>Registro fotográfico</h2><p class="sub">O leiloeiro não publicou fotos deste lote.</p>`;
   const rec = result.recomendacao ? `<p class="v">Veredito: <b>${e(RECOMENDACAO_LABEL[result.recomendacao])}</b></p>` : '';
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório BidPro — ${e(titulo)}</title>
 <style>
@@ -86,6 +98,11 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio }) {
   table { width:100%; border-collapse: collapse; } td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
   td.r { color:#475569; width: 44%; } tr.t td { font-weight: 800; border-top: 2px solid #cbd5e1; }
   .n { font-weight: 700; } .v { font-size: 13px; margin-top: 10px; } ul { margin: 4px 0; padding-left: 18px; } p { margin: 4px 0; }
+  .fotos { page-break-before: always; }
+  .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  figure { margin: 0; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px; page-break-inside: avoid; break-inside: avoid; }
+  figure img { width: 100%; height: 62mm; object-fit: contain; background: #f8fafc; display: block; }
+  figcaption { font-size: 9.5px; color: #475569; text-align: center; margin-top: 3px; font-weight: 700; }
   .rod { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 8px; color:#64748b; font-size: 9.5px; }
 </style></head><body>
   <div class="topo"><div><div class="marca">BidPro Brasil</div><div class="sub">bidprobrasil.com.br · Relatório de análise de veículo de leilão</div></div>
@@ -101,6 +118,7 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio }) {
   ${rec}
   <h2>Parecer</h2>${mdSimplesParaHtml(result.parecer)}
   ${riscos}
+  ${registro}
   <div class="rod">Análise gerada com base nas informações e documentos disponibilizados pelo leiloeiro. Custos marcados como "estimado" são médias de mercado para a condição declarada; confirme no edital, na vistoria e junto ao Detran antes de ofertar. O deságio sobre a FIPE é uma régua de mercado da BidPro, não uma avaliação individual. Honorários não estão incluídos no investimento.</div>
 </body></html>`;
 }
@@ -208,7 +226,8 @@ export default function AnaliseVeiculo() {
   const desagio = desagioFipe(v);
   const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct }) : null;
   const semCustosNoRelatorio = result && !Array.isArray(result.custos);
-  const baixarPdf = () => imprimirHtml(htmlRelatorioVeiculo({ v, titulo, result, viab, desagio }), `BidPro - Relatório ${titulo} ${[v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('-')}`);
+  const baixarPdf = () => imprimirHtml(htmlRelatorioVeiculo({ v, titulo, result, viab, desagio }), `BidPro - Relatório ${titulo} ${[v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('-')}`, { esperaImagensMs: 15000 });
+  const fotos = fotosDoVeiculo(v);
   const emGeracao = gerando || analise?.status === 'gerando';
   const faixa = result?.faixaFipe ? FAIXA_INFO[result.faixaFipe] || FAIXA_INFO.sem_fipe : null;
 
@@ -345,6 +364,27 @@ export default function AnaliseVeiculo() {
               </ul>
             </div>
           )}
+
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
+              Registro fotográfico {fotos.length ? `— ${fotos.length} foto${fotos.length > 1 ? 's' : ''}` : ''}
+            </div>
+            {fotos.length ? (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 8 }}>
+                {fotos.map((u, i) => (
+                  <a key={u} href={u} target="_blank" rel="noopener noreferrer" style={{ display: 'block', minWidth: 0, textDecoration: 'none' }}>
+                    <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: '#f1f5f9' }}>
+                      <img src={u} alt={`Foto ${i + 1}`} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#64748b', textAlign: 'center', marginTop: 3, fontWeight: 700 }}>Foto {String(i + 1).padStart(2, '0')}/{String(fotos.length).padStart(2, '0')}</div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: '#64748b' }}>O leiloeiro não publicou fotos deste lote.</div>
+            )}
+            <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>Todas as fotos entram no PDF, numeradas, como num laudo cautelar.</div>
+          </div>
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={baixarPdf} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>

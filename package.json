@@ -98,7 +98,8 @@
     "testar:busca-com-prova": "node scripts/testes/busca-com-prova.mjs",
     "testar:area-multi-bem": "node scripts/testes/area-multi-bem-e-tipo-residencial.mjs",
     "testar:filtros-veiculos": "node scripts/testes/filtros-veiculos-combinados.mjs",
-    "testar:galeria-veiculo": "node scripts/testes/galeria-veiculo.mjs"
+    "testar:galeria-veiculo": "node scripts/testes/galeria-veiculo.mjs",
+    "testar:contato-leiloeiro": "node scripts/testes/contato-leiloeiro.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",
