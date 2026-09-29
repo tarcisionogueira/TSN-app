@@ -160,13 +160,16 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
     new RegExp(`área\\s+(?:constru[íi]da|privativa|edificada|útil)[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+total[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+do\\s+terreno[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
-    ...(permitirSolta ? [new RegExp(`${NUM}\\s*${UNI}`, 'i')] : []), // solta, último recurso (só em texto recortado)
   ];
   for (const re of tentativas) {
     const v = plausivel(paraNumero((t.match(re) || [])[1]));
     if (v) return v;
   }
-  return permitirSolta ? areaEmHectares(t) : 0;
+  if (!permitirSolta) return 0;
+  // Hectare ANTES do m² solto: em rural, "Fazenda c/ 304 ha. e 290 m²" — o m² solto é a sede.
+  const ha = areaEmHectares(t);
+  if (ha) return ha;
+  return plausivel(paraNumero((t.match(new RegExp(`${NUM}\\s*${UNI}`, 'i')) || [])[1])); // solta, último recurso
 }
 
 // HECTARES (29/09). O extrator só entendia m², e rural se anuncia em hectare ("FAZENDA DE 133,42
@@ -180,9 +183,12 @@ function areaEmHectares(t) {
   const HA = '(?:ha|hectares?)\\b';
   const haACa = t.match(new RegExp(`(?<![\\d.,])(\\d{1,5})\\.(\\d{2})\\.(\\d{2})\\s*${HA}`, 'i'));
   if (haACa) return Number(haACa[1]) * 10000 + Number(haACa[2]) * 100 + Number(haACa[3]);
-  const m = t.match(new RegExp(`(?<![\\d.,])(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,6})?|\\d+(?:[.,]\\d{1,6})?)\\s*${HA}`, 'i'));
+  const m = t.match(new RegExp(`(?<![\\d.,])(\\d{1,3}(?:\\.\\d{3})+(?:,\\d+)?|\\d+(?:[.,]\\d+)?)\\s*${HA}`, 'i'));
   if (!m) return 0;
   const s = m[1];
+  // "Area Com 21769 Ha" (ALBERTOMACEDO): o site comeu o separador — 21,769? 217,69? 21.769?
+  // Inteiro de 5+ dígitos sem ponto nem vírgula é ambíguo: não chuta.
+  if (/^\d{5,}$/.test(s)) return 0;
   // "1.234 ha" (grupo de milhar exato, sem vírgula) é milhar; "1.5 ha" é decimal.
   const ha = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.'))
     : /^\d{1,3}(?:\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, '')) : Number(s);

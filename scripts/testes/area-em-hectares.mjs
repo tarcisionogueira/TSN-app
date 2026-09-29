@@ -24,6 +24,11 @@ eq('Sítio de 58 alqueires em Palmital/PR', 0);                        // alquei
 eq('Sítio com 16,94 hectares; sede com 120,00 m² de área construída', 120); // m² rotulado vence
 eq('Página inteira: Fazenda 10 ha', 0, { permitirSolta: false });    // página inteira não aceita solta
 eq('Terreno com 360,00m²', 360);                                       // m² segue igual
+eq('IMÓVEL RURAL COM ÁREA TOTAL DE 5,3285450 HA - FREI ROGERIO/SC … reserva 1,01 ha', 53285.45);
+eq('Area Com 21769 Ha Bonfinopolisgo', 0);                             // separador perdido: ambíguo
+eq('Fazenda c/ 304 ha. e 290ms2 - Caracol/MS', 3040000);               // m² solto é a sede
+eq('Direito de Posse - Sítio 26.08.27ha - Bocaiúva/MG', 260827);       // ha.a.ca
+eq('Fazenda São Bento c/ 16.040 hectares - Alto Parnaíba/MA', 160400000);
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');
