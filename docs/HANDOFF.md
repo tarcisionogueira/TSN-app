@@ -124,6 +124,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    **5) parcial ✅:** a rodada em seco com o DJEN achou BAYIT `dico@portalbayit.com.br` e LEJE
    `judiciario@leje.com.br` (gravados). Seguem sem e-mail: MILAN, PECINI, VIP. **Total: 42 fontes com
    contato (eram 5 às 10h de 29/09).**
+   KRON (`contato@kronbergleiloes.com.br`) e CASAMARTILLO (`falecom@cmartillo.com.br`) confirmados
+   pelo dono (prints dos sites) → manual. **44 fontes com contato.** Restam: VIP (editais DJEN citam
+   `judicial@vipleiloes.com.br` ×5 — domínio ≠ leilaovip, aguarda dono), LGCORRETOR
+   (`lucianogrizzo@creci.org.br`, aguarda dono), MILAN (só WhatsApp/formulário — conferido no HTML
+   do recon_dump), PECINI, BIASI, INFINITY, TOTALLEILOES, FRAZAO (nenhum e-mail em site, lote ou DJEN).
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
