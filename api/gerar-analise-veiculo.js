@@ -131,7 +131,8 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
   "riscos": ["cada risco concreto encontrado — sinistro, sucata, IPVA em aberto, débito/multa nos documentos, financiamento restrito, etc. Vazio se nenhum."],
   "condicoesResumo": "uma frase objetiva sobre o estado geral do veículo",
   "comissaoLeiloeiroPct": número (ex.: 5) SÓ se o edital/descrição informar a comissão do leiloeiro; senão null,
-  "custos": [{"item": "descrição curta", "valor": número em reais, "origem": "declarado" | "estimado"}] — "declarado": taxa/débito que o edital ou a descrição diz ficar com o ARREMATANTE (taxa administrativa, pátio/estadia, IPVA/multas/licenciamento em aberto, remoção), com o valor informado; "estimado": reparo NECESSÁRIO pela condição DECLARADA (ex.: "pneus ruins" → troca dos pneus; "bateria fraca" → bateria), com valor médio de mercado conservador para este modelo. NUNCA inclua honorários, nem reparo que o texto não aponte. Lista vazia se nada constar.,
+  "custos": [{"item": "descrição curta", "valor": número em reais, "origem": "declarado" | "estimado"}] — "declarado": taxa/débito que o edital ou a descrição diz ficar com o ARREMATANTE (taxa administrativa, pátio/estadia, IPVA/multas/licenciamento em aberto, remoção), com o valor informado; "estimado": reparo NECESSÁRIO pela condição DECLARADA (ex.: "pneus ruins" → troca dos pneus; "bateria fraca" → bateria), com valor médio de mercado conservador para este modelo. NUNCA inclua honorários de assessoria nem a comissão do leiloeiro (ela vai em comissaoLeiloeiroPct), nem reparo que o texto não aponte. Lista vazia se nada constar.,
+  "parcelamento": {"entradaPct": número (ex.: 25 = sinal de 25% do lance), "parcelas": número de parcelas do saldo, "correcao": "índice/juros do saldo, se informado"} SÓ se o edital/descrição PERMITIR expressamente pagar em parcelas; senão null,
   "recomendacao": "comprar" | "avaliar_com_cautela" | "evitar"
 }
 NUNCA presuma que o veículo está em bom estado por AUSÊNCIA de menção — ausência de informação é "não informado", não é sinal positivo.`;
@@ -258,6 +259,12 @@ export default async function handler(req, res) {
         .map((c) => ({ item: String(c?.item || '').slice(0, 120), valor: Math.round(Number(c?.valor) * 100) / 100, origem: c?.origem === 'declarado' ? 'declarado' : 'estimado' }))
         .filter((c) => c.item && c.valor > 0 && (!(v.valor_fipe > 0) || c.valor < Number(v.valor_fipe)))
         .slice(0, 12),
+      // Parcelamento (29/09): só com sinal e nº de parcelas plausíveis — valor fora disso é leitura errada.
+      parcelamento: (() => {
+        const p = parsed.parcelamento;
+        const e = Number(p?.entradaPct), n = Math.round(Number(p?.parcelas));
+        return p && e >= 5 && e < 100 && n >= 2 && n <= 60 ? { entradaPct: e, parcelas: n, correcao: typeof p.correcao === 'string' ? p.correcao.slice(0, 120) : null } : null;
+      })(),
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
       semDocumentos,

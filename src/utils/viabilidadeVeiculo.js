@@ -56,3 +56,21 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
     pctInvestimentoFipe: (investimentoNoMinimo / F) * 100,
   };
 }
+
+// AQUISIÇÃO PARCELADA (29/09, pedido do dono): "considerar o sinal e informar quantas parcelas e o
+// valor a suportar". Sinal = entrada sobre o lance + comissão do leiloeiro + débitos assumidos (é o
+// que sai do bolso no ato — a comissão e os débitos não se parcelam no leilão). O saldo do lance
+// divide-se nas parcelas SEM correção: o índice (quando o edital informa) vai escrito ao lado.
+// O teto de 65% da FIPE não muda por ser parcelado — é sobre o custo total da aquisição.
+export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaPct, parcelas }) {
+  const L = Number(lance) || 0, e = Number(entradaPct) / 100, n = Math.round(Number(parcelas));
+  if (!(L > 0) || !(e > 0 && e < 1) || !(n >= 2)) return null;
+  const c = (Number(comissaoPct) > 0 ? Number(comissaoPct) : COMISSAO_PADRAO_PCT) / 100;
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const entradaLance = r2(L * e);
+  return {
+    entradaLance, comissao: r2(L * c), despesas: r2(despesasTotal),
+    sinal: r2(entradaLance + L * c + (Number(despesasTotal) || 0)),
+    saldo: r2(L - entradaLance), parcelas: n, valorParcela: r2((L - entradaLance) / n),
+  };
+}
