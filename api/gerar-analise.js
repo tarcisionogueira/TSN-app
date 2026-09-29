@@ -2058,7 +2058,7 @@ export default async function handler(req, res) {
   let divergenciaLocalizacao = null;
   let descricaoImovel = null; // usada adiante pela soma de áreas de lote com vários bens
   try {
-    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte&limit=1`)).json();
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo&limit=1`)).json();
     descricaoImovel = imA?.descricao || null;
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
@@ -2161,6 +2161,21 @@ export default async function handler(req, res) {
       const partes = [rua, bairro, cidFinal].filter(Boolean);
       if (rua || bairro) mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
       if (!mercadoInputs.nomeCondominio && imA.nomecondominio) mercadoInputs.nomeCondominio = imA.nomecondominio;
+      // URBANO × RURAL PELA LOCALIZAÇÃO (29/09, dono): o mercado comparável é o do lugar, não o da
+      // matrícula — terreno "rural" no papel dentro do perímetro urbano vende como lote urbano, e
+      // vice-versa. `situacao_geo` vem da área urbana do IBGE (migração 20260929_area_urbana_ibge)
+      // e só é 'urbana'/'rural' com pino preciso e longe da divisa; 'indeterminada' não mexe.
+      const tipoAntes = String(mercadoInputs.tipoImovel || '');
+      const tipoGeo = imA.situacao_geo === 'urbana' && tipoAntes === 'rural' ? 'terreno'
+        : imA.situacao_geo === 'rural' && tipoAntes === 'terreno' ? 'rural' : null;
+      if (tipoGeo) {
+        mercadoInputs.tipoImovel = tipoGeo;
+        mercadoInputs.situacaoGeo = imA.situacao_geo;
+        try {
+          await registrarAnomalia('tipo_pela_localizacao', imA.fonte || null, String(imovelId), 'tipo',
+            `Cadastro "${tipoAntes}", localização (área urbana IBGE) diz "${imA.situacao_geo}" — comparáveis de ${tipoGeo}.`, true);
+        } catch { /* best-effort */ }
+      }
       // Ainda genérico (sem rua E sem bairro no card/título/matrícula)? LÊ o edital/matrícula
       // (via PDF) para achar o endereço completo — o erro de não puxar o endereço estando no
       // documento não pode repetir.
