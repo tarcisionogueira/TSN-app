@@ -61,8 +61,32 @@ def ler_geo(conteudo, nome_hint=''):
                 or next((n for n in nomes if n.lower().endswith(('.geojson', '.json'))), None)
             if not alvo:
                 raise SystemExit(f'{nome_hint}: zip sem camada geográfica ({nomes[:8]})')
-            return gpd.read_file(f'zip://{caminho}!{alvo}')
+            try:
+                return gpd.read_file(f'zip://{caminho}!{alvo}')
+            except UnicodeDecodeError as e:
+                # Shapefile do CNUC 2025_08 (29/09): campo de texto CORTADO no meio de um caractere
+                # UTF-8 (limite de 254 bytes do .dbf) — o leitor recusa o arquivo inteiro. Lê como
+                # bytes (latin1 é 1:1) e conserta valor a valor.
+                print(f'   {nome_hint}: texto com UTF-8 cortado ({e.reason}) — relendo byte a byte')
+                df = gpd.read_file(f'zip://{caminho}!{alvo}', encoding='latin1')
+                for c in df.columns:
+                    if c != 'geometry' and df[c].dtype == object:
+                        df[c] = df[c].map(consertar_texto)
+                return df
     return gpd.read_file(io.BytesIO(conteudo))
+
+
+def consertar_texto(v):
+    """UTF-8 válido → como é; UTF-8 cortado no fim → perde só o caractere incompleto; latin1 → mantém."""
+    if not isinstance(v, str):
+        return v
+    b = v.encode('latin1', errors='replace')
+    try:
+        return b.decode('utf-8')
+    except UnicodeDecodeError as e:
+        if e.reason == 'unexpected end of data':
+            return b[:e.start].decode('utf-8', errors='replace')
+        return v
 
 
 def simplificar(g):
