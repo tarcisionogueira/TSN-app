@@ -31,6 +31,7 @@ import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib
 import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
 import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './_contato-leiloeiro.mjs';
 import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
+import { galeriaDoHtml, montarFotos, fotosPreservadas } from './lib/galeria-veiculo.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -823,7 +824,7 @@ function mapearMegaVeiculo(c, detalhe = null) {
     cidade: toTitleCase(cidade),
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: c.href,
-    fotos: c.foto ? [c.foto] : [],
+    fotos: montarFotos(c.foto, detalhe?.fotos),
     anexos: detalhe?.anexos,
     forma_pagamento: 'a_vista',
     data_leilao: c.dataLeilao,
@@ -871,6 +872,7 @@ async function scraperMegaVeiculos(browser) {
   const cards = [...cardsPorId.values()];
   const detalhePorId = await visitarTextoDetalhe(browser, cards, {
     getUrl: (c) => c.href, getId: (c) => c.id, max: 60, label: 'Mega veículos',
+    galeria: (html, c) => galeriaDoHtml('MEGA', html, { capa: c.foto, idLote: c.id }),
   });
   const veiculos = cards.map((c) => mapearMegaVeiculo(c, detalhePorId.get(c.id))).filter(Boolean);
   console.log(`  Mega Leilões (veículos): ${veiculos.length} coletados`);
@@ -1954,6 +1956,7 @@ async function scraperPortalZukVeiculos(browser) {
     // a fatia visitada pelo dia do ano quando o acervo cresce além de 60.
     const detalhePorId = await visitarTextoDetalhe(browser, cards, {
       getUrl: (c) => c.href, getId: (c) => idCardZuk(c.href), max: 60, label: 'PortalZuk veículos',
+      galeria: (html) => galeriaDoHtml('ZUK', html),
     });
     const seen = new Set();
     const veiculos = cards.map(c => {
@@ -1992,7 +1995,7 @@ async function scraperPortalZukVeiculos(browser) {
         cidade: local.cidade ? toTitleCase(local.cidade) : null,
         estado: local.estado,
         link_lote: c.href,
-        fotos: c.img ? [c.img] : [],
+        fotos: montarFotos(c.img, detalhe?.fotos),
         anexos: detalhe?.anexos,
         forma_pagamento: 'a_vista',
         data_leilao: null,
@@ -2041,6 +2044,48 @@ function expandeAno2Digitos(yy) {
 // ID do lote a partir do href do card ("/lote/<leilaoId>/<loteId>") — usado pra
 // deduplicar e casar com o texto de detalhe visitado (visitarTextoDetalhe).
 const idLoteLJUD = (href) => (String(href || '').match(/\/lote\/(\d+)\/(\d+)/) || [])[2] || href;
+
+// GALERIA DO LJUD PELA API (29/09). A página do lote é montada por JS — o HTML servido não tem
+// foto nenhuma (medido: 1,2 MB de página, zero `fotos/veiculos`) —, então a leitura do detalhe
+// não serve aqui. A API que o coletor de imóveis já usa (get-lotes) devolve, com `tipo=1`, os
+// ~2.250 lotes de veículo do portal com o array `fotos` inteiro (medido: 4 a 8 fotos por lote).
+// ~47 páginas de 48, grátis, fetch dentro da página (mesmo TLS de Chrome do coletor de imóveis).
+// Best-effort: se a API falhar, o lote fica com a capa do card, como antes — e o motivo é logado.
+async function galeriaLJUDVeiculosApi(browser) {
+  const mapa = new Map();
+  const page = await browser.newPage();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    const commons = 'tipo=1&categoria=0&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+    let totalPages = 60;
+    for (let pg = 1; pg <= totalPages; pg++) {
+      const url = `https://api.leiloesjudiciais.com.br/core/api/get-lotes?pg=${pg}&qtd_por_pagina=48&${commons}`;
+      const data = await page.evaluate(async (u) => {
+        try {
+          const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+          if (!r.ok) return { __status: r.status };
+          return await r.json();
+        } catch (e) { return { __err: String((e && e.message) || e) }; }
+      }, url);
+      if (data?.__status || data?.__err) { console.log(`    LJUD galeria (API) p${pg}: ${data.__status || data.__err} — parando`); break; }
+      const items = Array.isArray(data?.items) ? data.items : [];
+      if (pg === 1) totalPages = Math.min(60, Number(data?.totalPages) || 60);
+      if (!items.length) break;
+      for (const it of items) {
+        const fotos = (Array.isArray(it.fotos) ? it.fotos : [])
+          .map((f) => f?.nm_path_completo ? String(f.nm_path_completo).replace('/196x146/', '/640x480/') : null)
+          .filter(Boolean);
+        if (it.lote_id && fotos.length) mapa.set(String(it.lote_id), fotos);
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  } catch (e) {
+    console.log(`    LJUD galeria (API): ${String(e?.message || e).slice(0, 80)} — segue com a capa do card`);
+  } finally { await page.close().catch(() => {}); } // padrao-ok: fechar página best-effort
+  console.log(`    LJUD galeria (API): ${mapa.size} lotes com fotos`);
+  return mapa;
+}
 
 async function scraperLJUDVeiculos(browser) {
   // CORREÇÃO 13/09 (HANDOFF pendência #8): a página NÃO usa scroll infinito — é 100%
@@ -2129,6 +2174,7 @@ async function scraperLJUDVeiculos(browser) {
       getUrl: (c) => c.href, getId: (c) => idLoteLJUD(c.href), max: 120, label: 'LJUD veículos',
     });
     for (const [k, v] of rodizio) detalhePorId.set(k, v);
+    const galeriaApiLJUD = await galeriaLJUDVeiculosApi(browser);
     const seen = new Set();
     const veiculos = cards.map((c) => {
       const id = idLoteLJUD(c.href);
@@ -2173,7 +2219,7 @@ async function scraperLJUDVeiculos(browser) {
         cidade: loc ? toTitleCase(loc[1].trim()) : null,
         estado: loc ? loc[2].toUpperCase() : null,
         link_lote: c.href,
-        fotos: c.img ? [c.img] : [],
+        fotos: montarFotos(c.img, galeriaApiLJUD.get(id)),
         anexos: detalhe?.anexos,
         forma_pagamento: 'a_vista',
         data_leilao: null,
@@ -2788,7 +2834,7 @@ async function salvarVeiculos(registros, rotulo) {
     let leituraOk = true;
     for (let i = 0; i < aptos.length; i += 200) {
       const ids = aptos.slice(i, i + 200).map(r => r.fonte_id).filter(Boolean);
-      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado').eq('fonte', fonteV).in('fonte_id', ids);
+      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado, fotos').eq('fonte', fonteV).in('fonte_id', ids);
       if (error) { leituraOk = false; console.log(`  ⚠️ ${nome}: não li o pátio anterior (${String(error.message).slice(0, 80)}) — status do dia vale sozinho`); break; }
       for (const d of data || []) anteriores.set(d.fonte_id, d);
     }
@@ -2799,6 +2845,9 @@ async function salvarVeiculos(registros, rotulo) {
       // cidade vem do EDITAL (scripts/local-e-area-do-documento.mjs). Sem isto, a rodada seguinte
       // gravava cidade=null por cima do que o documento provou.
       if (!r.cidade && prev?.cidade) { r.cidade = prev.cidade; if (!r.estado && prev.estado) r.estado = prev.estado; }
+      // GALERIA NÃO ENCOLHE (29/09): lote não relido hoje chega só com a capa — não apaga a
+      // galeria que a leitura do detalhe provou numa rodada anterior. Ver lib/galeria-veiculo.mjs.
+      if (Array.isArray(r.fotos)) r.fotos = fotosPreservadas(r.fotos, prev?.fotos);
       // Só preserva o que foi LIDO no lote (sinal textual/regra da fonte). Herança de leilão
       // ('leilão de pátio: …') é recalculada na rodada — preservá-la a congelaria.
       if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado' && !String(prev.status_patio_motivo || '').startsWith('leilão de pátio')) {
@@ -4908,7 +4957,7 @@ async function scraperSuporte(browser) {
 // sempre guardado e marca/modelo/placa/km saem por REGEX, que não depende de
 // seletor nenhum). OPT-IN só (SUPORTE_VEICULOS), mesmo motivo da Sodré: piloto
 // aguardando validação de dado real antes de entrar na rodada diária.
-function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetalhe = '', anexosDetalhe = undefined) {
+function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetalhe = '', anexosDetalhe = undefined, galeriaDetalhe = undefined) {
   if (!l || !l.id) return null;
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   if (RE_SUPORTE_TESTE.test(`${titulo} ${l.href || ''}`)) return null;
@@ -4978,7 +5027,7 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
     cidade: cidade ? toTitleCase(cidade) : null,
     estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
     link_lote: link,
-    fotos: (l.foto && /^https?:\/\//.test(l.foto)) ? [l.foto] : [],
+    fotos: montarFotos(l.foto, galeriaDetalhe),
     anexos: anexosDetalhe,
     forma_pagamento: 'a_vista',
     data_leilao: null,
@@ -5077,7 +5126,7 @@ function janelaRotativaPorDia(itens, max) {
   return offset ? [...itens.slice(offset), ...itens.slice(0, offset)] : itens;
 }
 
-async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, label = '' }) {
+async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, label = '', galeria = null }) {
   const mapa = new Map();
   if (!itens.length) return mapa;
   const janela = janelaRotativaPorDia(itens, max);
@@ -5094,7 +5143,8 @@ async function visitarTextoDetalhe(browser, itens, { getUrl, getId, max = 60, la
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         const html = await page.content();
-        mapa.set(id, { texto: htmlParaTextoPlano(html), anexos: extrairAnexosPdfDeHtml(html) });
+        // `galeria` (29/09): fotos do lote lidas da MESMA página — ver scripts/lib/galeria-veiculo.mjs.
+        mapa.set(id, { texto: htmlParaTextoPlano(html), anexos: extrairAnexosPdfDeHtml(html), fotos: galeria ? galeria(html, item) : undefined });
         visitados++;
         await new Promise(r => setTimeout(r, 250));
       } catch (e) {
@@ -5148,6 +5198,8 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   const textoDetalhePorLote = new Map();
   // Anexos PDF (edital/laudo), da mesma visita (13/09, pedido do dono) — custo zero extra.
   const anexosPorLote = new Map();
+  // Galeria do bem, da mesma visita (29/09) — ver scripts/lib/galeria-veiculo.mjs.
+  const fotosPorLote = new Map();
   if (bens.size) {
     const paginaLote = await browser.newPage();
     await paginaLote.setUserAgent(USER_AGENT);
@@ -5163,6 +5215,7 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
           const txt = htmlParaTextoPlano(html);
           textoDetalhePorLote.set(l.id, txt);
           anexosPorLote.set(l.id, extrairAnexosPdfDeHtml(html));
+          fotosPorLote.set(l.id, galeriaDoHtml('SUPORTE', html, { capa: l.foto }));
           const mod = modalidadeSuporteVeiculo(txt);
           if (mod) { modalidadePorLote.set(l.id, mod); comModalidade++; }
           visitados++;
@@ -5179,7 +5232,7 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   const veiculos = [];
   const seen = new Set();
   for (const l of bens.values()) {
-    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null, textoDetalhePorLote.get(l.id) || '', anexosPorLote.get(l.id));
+    const row = mapLoteSuporteVeiculo(l, tenant, modalidadePorLote.get(l.id) || null, textoDetalhePorLote.get(l.id) || '', anexosPorLote.get(l.id), fotosPorLote.get(l.id));
     if (!row || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);
     veiculos.push(row);

@@ -1,0 +1,75 @@
+// GALERIA COMPLETA DO VEÍCULO (29/09, pedido do dono: "confirme porque não está trazendo todas
+// as fotos"). Até aqui MEGA, ZUK, LJUD e SUPORTE gravavam SÓ a foto do card da listagem — 1 foto
+// por veículo, enquanto a página do lote tem a galeria inteira. A página do lote já é visitada
+// (pátio + anexos, `visitarTextoDetalhe`), então ler a galeria dali custa zero requisição a mais.
+//
+// Regras por fonte, medidas no HTML real de um lote de cada (pg_net, 29/09). O cuidado é o mesmo
+// nas três: a página do lote também mostra fotos de OUTROS lotes ("veja também"), e pegar toda
+// imagem da página penduraria carro alheio na galeria. Cada regra ancora no lote:
+//   MEGA    cdn1.megaleiloes.com.br/batches/<id do lote>/<hash>_<tamanho>.jpg — os outros lotes
+//           aparecem com OUTRO id de batch. Mesma foto vem em 3 tamanhos: fica a maior.
+//   ZUK     imagens.portalzuk.com.br/detalhe/… é a galeria; /mini/… são os cards de outros lotes.
+//   SUPORTE static.suporteleiloes.com.br/<tenant>/bens/<id do bem>/arquivos/… — o id do bem vem
+//           da foto de capa (a listagem já usa essa pasta); sem capa, a pasta mais frequente.
+// LJUD não entra aqui: a página do lote é montada por JS e o HTML não tem foto nenhuma — a
+// galeria vem da API (get-lotes, tipo=1), que já devolve `fotos` por lote.
+
+const MAX_FOTOS = 30;
+
+// "Sem imagem" do próprio site não é foto: MEGA grava card-no-image, ZUK ImgNaoDisp*.
+export const ehFotoPlaceholder = (u) => /no-image|nao-?disp|sem-?foto|placeholder/i.test(String(u || ''));
+
+const urlsDoHtml = (html) => [...new Set((String(html || '').replace(/\\\//g, '/')
+  .match(/https?:\/\/[^"'\s<>()\\]+?\.(?:jpe?g|png|webp)/gi) || []))];
+
+const TAM_MEGA = { '1024x768': 3, '670x380': 2, '320x240': 1 };
+
+export function galeriaDoHtml(fonte, html, { capa = null, idLote = null } = {}) {
+  const urls = urlsDoHtml(html).filter((u) => !ehFotoPlaceholder(u));
+  let out = [];
+  if (fonte === 'MEGA') {
+    const lote = String(capa || '').match(/\/batches\/(\d+)\//)?.[1] || (String(idLote || '').match(/(\d+)/) || [])[1];
+    if (!lote) return [];
+    const porHash = new Map();
+    for (const u of urls) {
+      const m = u.match(/\/batches\/(\d+)\/([0-9a-f]+)_(\d+x\d+)\.\w+$/i);
+      if (!m || m[1] !== lote) continue;
+      const nota = TAM_MEGA[m[3]] || 0;
+      if (!porHash.has(m[2]) || porHash.get(m[2]).nota < nota) porHash.set(m[2], { u, nota });
+    }
+    out = [...porHash.values()].map((x) => x.u);
+  } else if (fonte === 'ZUK') {
+    out = urls.filter((u) => /^https?:\/\/imagens\.portalzuk\.com\.br\/detalhe\//i.test(u));
+  } else if (fonte === 'SUPORTE') {
+    const pasta = (u) => u.match(/^(https?:\/\/static\.suporteleiloes\.com\.br\/[^/]+\/bens\/\d+\/arquivos\/)/i)?.[1] || null;
+    let alvo = pasta(String(capa || ''));
+    if (!alvo) {
+      const cont = new Map();
+      for (const u of urls) { const p = pasta(u); if (p) cont.set(p, (cont.get(p) || 0) + 1); }
+      alvo = [...cont.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    }
+    out = alvo ? urls.filter((u) => u.startsWith(alvo)) : [];
+  }
+  return out.slice(0, MAX_FOTOS);
+}
+
+// Galeria final do lote: a do detalhe, com a capa da listagem na frente quando ela é foto de
+// verdade (a capa é o que a busca mostra — mantê-la em 1º evita trocar a miniatura do card).
+export function montarFotos(capa, galeria = []) {
+  const c = capa && /^https?:\/\//.test(capa) && !ehFotoPlaceholder(capa) ? capa : null;
+  const g = (galeria || []).filter((u) => u && !ehFotoPlaceholder(u));
+  if (!g.length) return c ? [c] : [];
+  // A capa costuma ser a mesma foto da galeria em outro tamanho: não duplica.
+  const chave = (u) => String(u).replace(/_(\d+x\d+)(?=\.\w+$)/, '').replace(/\/(mini|detalhe|640x480|196x146)\//, '/').replace(/\.\w+$/, '');
+  const lista = c && !g.some((u) => chave(u) === chave(c)) ? [c, ...g] : g;
+  return [...new Set(lista)].slice(0, MAX_FOTOS);
+}
+
+// GALERIA NÃO ENCOLHE (mesmo princípio do "pátio não esquece" em salvarVeiculos): a leitura do
+// detalhe é em rodízio (~60-120 lotes/rodada). Lote não relido hoje chega só com a capa; sem
+// isto, a rodada gravaria 1 foto por cima da galeria provada ontem.
+export function fotosPreservadas(novas, anteriores) {
+  const n = Array.isArray(novas) ? novas.filter((u) => !ehFotoPlaceholder(u)) : [];
+  const a = Array.isArray(anteriores) ? anteriores.filter((u) => !ehFotoPlaceholder(u)) : [];
+  return n.length <= 1 && a.length > n.length ? a : n;
+}

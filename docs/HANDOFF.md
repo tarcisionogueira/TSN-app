@@ -78,6 +78,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
    Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
+10. 🔶 **Galeria de fotos dos veículos — LJUD/SUPORTE/ZUK/MEGA (29/09, código no ar, conferir após o
+   próximo scrape).** Todos gravavam só a capa do card (1 foto; MEGA/ZUK às vezes o placeholder "sem
+   imagem"). Regras medidas no HTML real de um lote de cada (pg_net), lib `scripts/lib/galeria-veiculo.mjs`,
+   teste `testar:galeria-veiculo`: MEGA `batches/<id do lote>/` na maior resolução; ZUK `/detalhe/`
+   (as `/mini/` são de outros lotes); SUPORTE `bens/<id do bem>/arquivos/`. LJUD: a página é JS, sem
+   foto no HTML — a galeria vem da API `get-lotes` com `tipo=1` (2.247 veículos, `fotos[]` por lote).
+   MEGA/ZUK/SUPORTE leem na visita de detalhe que já existia (rodízio de 60/rodada, custo zero) e
+   `salvarVeiculos` não deixa a galeria ENCOLHER quando o lote não foi relido. Conferir:
+   `select fonte, count(*) filter (where jsonb_array_length(coalesce(fotos,'[]'))>1) galeria, count(*)
+   from veiculos_leilao where ativo and fonte in ('LJUD','SUPORTE','ZUK','MEGA') group by 1;`
 
 ### ✅ 29/09 — HASTA e JOAOEMILIO: o alarme `zerou` era ruído, não regressão
 - **HASTA ≠ HASTAPUBLICA** (Hasta Leilões/BA × Hasta Pública/Valland). HASTA seguia acusando
