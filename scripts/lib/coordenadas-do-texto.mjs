@@ -29,7 +29,12 @@ export function coordenadasDoTexto(texto) {
     if (a >= -34 && a <= 5.5 && b >= -74 && b <= -34) { lats.push(a); lngs.push(b); }
   }
   if (!lats.length || !lngs.length) return null;
-  return { lat: Math.round(mediana(lats) * 1e6) / 1e6, lng: Math.round(mediana(lngs) * 1e6) / 1e6, vertices: Math.min(lats.length, lngs.length) };
+  // Rumo/azimute de perímetro ("rumo 21°12'…") tem o MESMO formato: no 1º seco (29/09) 29 caíram a
+  // 600–5.700 km do município. Com vértice ÚNICO, exige rótulo de coordenada ou hemisfério.
+  const rotulado = /latitud|longitud|coordenad|geogr[áa]fic|°[^°]{0,14}["”″']\s*[NSWO]\b/i.test(t);
+  const vertices = Math.min(lats.length, lngs.length);
+  if (vertices === 1 && !rotulado) return null;
+  return { lat: Math.round(mediana(lats) * 1e6) / 1e6, lng: Math.round(mediana(lngs) * 1e6) / 1e6, vertices };
 }
 
 // Distância em km (haversine) — para conferir que o ponto cai perto do município do lote.
