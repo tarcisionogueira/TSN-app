@@ -1,0 +1,27 @@
+name: Coordenada do imóvel pelos vértices no texto (custo zero)
+
+# scripts/coordenadas-do-texto.mjs — rurais/terrenos com pino no centro da cidade cujo texto traz
+# os vértices do georreferenciamento. Rodar EM SECO primeiro.
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = grava; 0 = só mostra'
+        default: '0'
+
+jobs:
+  coordenadas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Coordenadas do texto
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          COORD_APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/coordenadas-do-texto.mjs
