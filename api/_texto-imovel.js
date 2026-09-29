@@ -166,7 +166,28 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
     const v = plausivel(paraNumero((t.match(re) || [])[1]));
     if (v) return v;
   }
-  return 0;
+  return permitirSolta ? areaEmHectares(t) : 0;
+}
+
+// HECTARES (29/09). O extrator só entendia m², e rural se anuncia em hectare ("FAZENDA DE 133,42
+// HECTARES", "Chácara 41,61ha"): ~40 lotes rurais ativos ficavam sem área com a área escrita no
+// título. Último recurso, depois de todo padrão de m². Três cuidados que o acervo real exigiu:
+// (a) o número não pode começar no meio de outro — sem o lookbehind, "10,088463 ha" casava
+// "088463 ha" e "2.00.10 HECTARES" casava "00.10"; (b) ha.a.ca ("2.00.10" = 2 ha 00 a 10 ca) é a
+// notação de agrimensura e vira 20.010 m²; (c) alqueire fica de fora: vale 24.200 m² em SP,
+// 48.400 m² em MG e 27.225 m² no Norte — converter sem saber a região inventa área.
+function areaEmHectares(t) {
+  const HA = '(?:ha|hectares?)\\b';
+  const haACa = t.match(new RegExp(`(?<![\\d.,])(\\d{1,5})\\.(\\d{2})\\.(\\d{2})\\s*${HA}`, 'i'));
+  if (haACa) return Number(haACa[1]) * 10000 + Number(haACa[2]) * 100 + Number(haACa[3]);
+  const m = t.match(new RegExp(`(?<![\\d.,])(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,6})?|\\d+(?:[.,]\\d{1,6})?)\\s*${HA}`, 'i'));
+  if (!m) return 0;
+  const s = m[1];
+  // "1.234 ha" (grupo de milhar exato, sem vírgula) é milhar; "1.5 ha" é decimal.
+  const ha = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.'))
+    : /^\d{1,3}(?:\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, '')) : Number(s);
+  const v = ha * 10000;
+  return Number.isFinite(v) && v >= 1000 && v <= 5e9 ? Math.round(v * 100) / 100 : 0;
 }
 
 /**

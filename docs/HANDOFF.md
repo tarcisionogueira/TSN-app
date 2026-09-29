@@ -89,6 +89,33 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   GRUPOLANCE: lote já inativo. Obs.: o acervo de Araraquara tem `data_leilao` 24/09 (site: 28/09)
   — irrelevante agora (1ª praça passou), mas o coletor WEBLEILOES leu a 1ª praça errada.
 
+### ✅ 29/09 — Régua de e-mails: o envio fazia o cliente parecer "ativo"
+Pedido do dono: confirmar que a cadência (`api/_cadencia.js`, `app_config.cadencia_email`) está em
+efeito. No rastro: desde 25/09 nenhum `oportunidades` saiu com < 6 dias de intervalo — está. Mas
+`alertas_sinais_lote()` media "última atividade" em TODO `eventos_atividade`, e ali entram eventos
+do SERVIDOR (`lancamento_email` = e-mail que nós mandamos; `meta_lead` = conversão do cadastro).
+Mandar e-mail tornava a pessoa "ativa" (quinzenal em vez de mensal) — o envio alimentava a própria
+frequência (forma nº 10). Caso-motivo: conta órfã do Fabrício, nunca logou, recebendo como ativa.
+Conserto: só conta evento com `rota` (vindo do navegador). 12 de 80 gratuitos "ativos" eram só
+sistema. Migração `20260929_sinais_cadencia_so_atividade_do_usuario.sql`. Dono: não desativar a
+conta órfã — a régua já a leva a mensal e depois à pausa (7 sem abrir).
+
+### ✅ 29/09 — Painel de invariantes: 10,6 s → ~4 s (`qa_invariantes_lenta`)
+Medido item a item (varredor PL/pgSQL sobre o corpo de `qa_invariantes()`, 99 itens):
+`qa_invariante_caso_sem_analise_iniciada` levava 8,1 s — join `i.id::text = c.imovel_id` impedia o
+índice e cada caso varria o acervo; `qa_invariante_praca_fim_sem_produtor` contava a tabela inteira
+para saber se havia > 1 linha (agora `limit 2`). Mesmo resultado nos dois, conferido em seco.
+Migração `20260929_qa_invariantes_painel_lento.sql`. Margem ainda curta (4 s vs 5 s): próximos
+maiores são `area_truncada_no_milhar`, `anexo_de_espelho_purgado`, `leilao_vencido_ativo` (~0,3–0,4 s).
+
+### 🔶 29/09 — `lote_sem_area_nem_matricula` (566 vs 400)
+- **Hectare**: `extrairAreaM2` só entendia m² — rural em "133,42 HECTARES" ficava sem área. Agora
+  converte hectare (e ha.a.ca "2.00.10"), como último recurso; alqueire NÃO (varia por região).
+  Teste `testar:area-hectares`. Backfill: workflow `area-da-descricao.yml` (seco → aplicar).
+- **BIASI**: 193 dos 566 (53% do acervo dela), apto/casa sem área no texto; anexos são edital +
+  minutas de escritura, matrícula só em parte. Área só sai lendo o edital (custo de leitura) —
+  decisão pendente.
+
 ### 🔶 29/09 — `estado_fora_do_padrao` 5 → 2 e `cadastro_duplicado` (1)
 - **Corrigidos com prova (3):** SUPERBID aec7cc99 → São Paulo/SP (título "Vila Andrade/SP"; o pino
   estava em RECIFE — zerado com `geocod_nivel='refazer'`). LEILOTECH/VM Leilões 1d45b897 e 2d2face0
