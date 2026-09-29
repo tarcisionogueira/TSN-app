@@ -9,6 +9,62 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 28–29/09 — o que evoluiu, o que falta, o que conferir primeiro
+
+**Evolução do dia (detalhe em cada bloco abaixo):**
+1. **Mercadológico com preço errado (Embu-Guaçu / Araraquara)** — tipo "Residencial"→casa, lote com
+   2 bens, área da matrícula; regerados sob demanda (`regerar-relatorios.yml`).
+2. **Medidas para não repetir** — trigger `trg_tipo_construido_pelo_titulo` (142 lotes corrigidos),
+   `ehDocMultiLote` (27 matrículas de outro lote limpas), trava de razão da área, 3 invariantes novos.
+3. **Agente de aprendizado passa a ver CONTRADIÇÃO** (lance > avaliação, mercado × avaliação fora de
+   0,25–4×, tipo ≠ título) → anomalias `aprendizado_*` + health-check + fora do corpus da região.
+   Leitor de laudo não desfaz mais avaliação atualizada (`laudo_desatualizado`).
+4. **Urbano × rural pela localização** — área urbana IBGE (27 UFs, 5.570 municípios) no PostGIS,
+   `situacao_geo` por trigger; troca terreno↔rural no relatório só quando o imóvel concorda.
+5. **Restrição territorial** (UC + mananciais) — estrutura, trigger e relatório NO AR; **carga dos
+   dados ainda NÃO concluída** (ver pendência 1).
+6. **Veículos** — filtro Motor, cidade do pátio normalizada pelo IBGE, estado/cidade em múltipla
+   escolha, filtros combinados validados ao vivo (8/8) + teste permanente.
+7. **Catálogo** — HASTAPUBLICA (fotos/leiloeiro/PDFs via proxy com Referer), LGCORRETOR (novo),
+   Soleon com varredura de sumidos; Índice blindado (`_busca-com-prova.js`).
+
+**PENDÊNCIAS — em ordem de prioridade:**
+1. 🔶 **Carga das restrições territoriais.** 3º seco disparado 29/09 01:08 (commit 850bbdf) depois de
+   2 falhas SEM gravar (CNUC 2026 é link do SharePoint → usa o ZIP 2025_08 do portal; shapefile com
+   UTF-8 cortado no .dbf → conserto byte a byte). **Conferir:** último run de
+   `carregar-restricoes-territoriais.yml` — pontos: Embu → Guarapiranga, Sé → nenhum, Canastra → UC.
+   Se o seco passou e ninguém gravou: disparar `modo=gravar`. Depois:
+   `select restricoes_geo from imoveis_leilao where id='d21e2df4-255b-4216-8be8-b9b5e64d3321';`
+   e `select count(*) from imoveis_leilao where ativo and jsonb_array_length(restricoes_geo->'itens')>0;`
+   A camada de mananciais do DataGEO ainda não foi vista rodar (o seco parou antes, no CNUC): se o
+   GetCapabilities não listar camadas, a causa estará no log.
+2. 🔶 **Embu-Guaçu (5ce900e4…)** — regerado com 2.503 m² e avaliação R$ 66.650,75 (certo), mas
+   mercado R$ 450/m² = 17× a avaliação (anomalia `aprendizado_mercado_incoerente_avaliacao`).
+   Com a APRM carregada, **regerar** (`regerar-relatorios.yml`, ids=5ce900e4-628a-4d72-83ad-87dc3597c406)
+   para a busca pedir comparáveis dentro do manancial. Decisão do dono se souber a restrição real.
+3. 🔶 **Araraquara (2d862426…)** — regerado como terreno 200 m², mas **mercado vazio** (9 buscas,
+   0 terreno aceito); não cobrou cota; self-heal refaz em até 48 h. `imovel.tipo` do relatório corrigido
+   para terreno. Conferir se o self-heal trouxe amostra.
+4. 🔶 **Índice** — conserto (prova de busca + `valorTotal`) sem tentativa real desde 28/09 21:34.
+   Check-in agendado 29/09 12:00 UTC (trig_01Hc9CbAmXQN2T6ofY6krU39):
+   `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
+   Não dá para testar sem cliente (exige login e debita crédito — não contornar).
+5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. Toda pesquisa de mercado está no Haiku de
+   reserva; terreno em cidade média sai vazio com mais frequência.
+6. 🔶 **Uberlândia Leilões** — só roda pelo PC do dono (403 no CI). Conferir `fonte_saude`.
+7. **Passo 3 do plano de localização (proposto, não aprovado):** melhorar o pino dos ~1.740
+   terrenos/rurais que estão só no CENTRO DA CIDADE (61% ficam "indeterminada") — endereço da
+   matrícula/edital e, para rural, polígono do SIGEF/INCRA pelo código do imóvel.
+8. **Motor de veículos — cobertura** (proposto): só ~7% dos lotes declaram; ler os laudos de
+   vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
+9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
+   Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
+
+**Checar ao abrir a próxima sessão (custo zero):**
+`select chave, valor, limite, status from public.qa_invariantes() where chave in ('tipo_casa_titulo_lote','tipo_terreno_com_construcao','matricula_area_de_outro_lote','veiculo_cidade_fora_do_ibge');`
+e `select tipo, count(*) from relatorio_anomalias where not resolvido and tipo like 'aprendizado_%' group by 1;`
+— são os sinais novos de hoje; subir = a camada correspondente deixou de funcionar ou fonte nova com formato novo.
+
 ### ✅ 29/09 — Veículos: filtro Motor, cidade do pátio, estado/cidade em múltipla escolha
 - **Motor** (`veiculos_leilao.motor_status`, trigger `trg_veiculo_motor_status`): o que o leiloeiro
   DECLARA — campo de vistoria "motor: funcionando/danificado" vence frase livre; "sem garantia de
