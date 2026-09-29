@@ -89,6 +89,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   GRUPOLANCE: lote já inativo. Obs.: o acervo de Araraquara tem `data_leilao` 24/09 (site: 28/09)
   — irrelevante agora (1ª praça passou), mas o coletor WEBLEILOES leu a 1ª praça errada.
 
+### 🔶 29/09 — `estado_fora_do_padrao` 5 → 2 e `cadastro_duplicado` (1)
+- **Corrigidos com prova (3):** SUPERBID aec7cc99 → São Paulo/SP (título "Vila Andrade/SP"; o pino
+  estava em RECIFE — zerado com `geocod_nivel='refazer'`). LEILOTECH/VM Leilões 1d45b897 e 2d2face0
+  → Curitiba/PR (páginas lidas via pg_net: "Alto da XV, Rua Expedicionário João Maria Batista" —
+  bate com o pino — e "Sítio Cercado, Rua Tenente José Mendes Magno"; o 2º foi para regeocodificar).
+  A VM Leilões não publica cidade na página ("Local: www.vmleiloes.com") — lote dela sem bairro
+  conhecido vai continuar sem UF.
+- **Sem prova, ficam (2):** LEILAOBRASIL c0735f6b ("Loteamento Riviera de Santa Cristina XII" —
+  página montada no navegador; edital é .doc binário) e LEILOTECH/AM Leiloeiro d3200ab3 (403;
+  edital e matrícula em PDF no CDN leilotech). NÃO chutar a cidade (as Rivieras de Santa Cristina
+  ficam em mais de um município). Resolve quando a captura de documentos ler o edital.
+- **cadastro_duplicado (Fabrício, 30/08):** o e-mail de acesso da live FOI entregue (15:31:29, nunca
+  aberto) — o fluxo funcionou; ele refez pela home. Não é bug. Efeito colateral: a conta órfã
+  (27abb025, nunca logou, 0 análises) segue recebendo nossos e-mails em dobro. Desativar/fundir é
+  decisão do dono. Sai da janela do invariante em 30/09.
+
 ### ✅ 29/09 — ZUK veículos: cidade/UF vinham da MARCA
 O 1º "X/YY" do card do PortalZuk é a marca/modelo: "Honda/CB 300R" gravava cidade "Honda" UF "CB",
 "VW/Fusca" → "Carro"/"VW". O local certo está no título (" - Francisco Morato/SP - Tribunal…").
