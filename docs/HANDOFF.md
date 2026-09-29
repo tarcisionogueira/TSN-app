@@ -54,9 +54,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. Toda pesquisa de mercado está no Haiku de
    reserva; terreno em cidade média sai vazio com mais frequência.
 6. 🔶 **Uberlândia Leilões** — só roda pelo PC do dono (403 no CI). Conferir `fonte_saude`.
-7. **Passo 3 do plano de localização (proposto, não aprovado):** melhorar o pino dos ~1.740
-   terrenos/rurais que estão só no CENTRO DA CIDADE (61% ficam "indeterminada") — endereço da
-   matrícula/edital e, para rural, polígono do SIGEF/INCRA pelo código do imóvel.
+7. 🔶 **Passo 3 do plano de localização — 1ª parte FEITA 29/09 (aprovado pelo dono).** 1.753
+   terrenos/rurais com pino no centro da cidade; 375 tinham o logradouro no texto e endereço vazio
+   (o trigger só deriva do título). `scripts/endereco-da-descricao.mjs` + workflow homônimo (seco
+   por padrão; extrator próprio de anúncio em `scripts/lib/endereco-do-texto.mjs`, teste
+   `testar:endereco-do-texto`): 3 secos até limpar (cauda "em trecho plano…", "avenida com
+   pavimentação", "Rua Dr", metragem virando nº) → 375 gravados (142 com número, 24 com CEP),
+   `geocod_nivel='refazer'`. **Conferir amanhã** se o cron do geocodificador (03–07 UTC) os tirou de
+   'cidade': `select geocod_nivel, count(*) from imoveis_leilao where ativo and tipo in
+   ('terreno','rural') and geocod_nivel in ('refazer','cidade','rua','endereco','bairro') group by 1;`
+   Ressalva: "Rodovia BR-470" sem km põe o pino em algum ponto da rodovia no município. Recusados:
+   205 com mais de um logradouro, 1.028 sem logradouro no texto. **Falta a 2ª parte**: rural pelo
+   polígono do SIGEF/INCRA (122 citam código/CAR no texto) e endereço da matrícula/edital.
 8. **Motor de veículos — cobertura** (proposto): só ~7% dos lotes declaram; ler os laudos de
    vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
