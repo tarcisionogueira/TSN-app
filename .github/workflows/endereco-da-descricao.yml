@@ -1,0 +1,27 @@
+name: Endereço a partir do texto (terrenos/rurais com pino na cidade — custo zero)
+
+# scripts/endereco-da-descricao.mjs — relê título+descrição, grava endereco/cep vazios e marca
+# geocod_nivel='refazer' (o cron do geocodificador faz o resto). Rodar EM SECO primeiro.
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = grava; 0 = só mostra'
+        default: '0'
+
+jobs:
+  endereco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Endereço do texto
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          END_APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/endereco-da-descricao.mjs
