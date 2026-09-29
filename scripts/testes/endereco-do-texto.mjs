@@ -34,5 +34,10 @@ eq('TERRENO NA RUA EDSON DE LIMA, 230 - CENTRO', 'Borda da Mata', 'endereco', 'R
 eq('Terreno na Rua Itaquaquecetuba, 900, confrontando pelos fundos com a Rua Vicente Leporace', 'Ferraz de Vasconcelos', 'endereco', 'Rua Itaquaquecetuba, 900');
 eq('Terreno com 300 m² na Avenida Brasil 300 m² de frente', 'Maringá', 'endereco', 'Avenida Brasil');
 
+// 2º seco (29/09):
+eq('Terreno na Avenida São Paulo, 88', 'Barbosa Ferraz', 'endereco', 'Avenida São Paulo, 88');
+eq('Terreno às margens da Rodovia SC-157 Inscrição imobiliária 123', 'São Lourenço do Oeste', 'endereco', 'Rodovia SC-157');
+eq('Imóvel rural na Estrada do Po', 'Umbaúba', 'motivo', 'sem_logradouro');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

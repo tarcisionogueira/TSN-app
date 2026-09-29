@@ -11,6 +11,8 @@ const CONECTIVO = /^(de|da|do|das|dos|e|d'|del)$/i;
 const ABREV = /^(dr|dra|prof|profa|cel|cap|ten|sgt|gen|mal|pe|sen|dep|des|eng|gov|pres|min|vig|sta|sto|s|são|n\.?\s*s(ra)?)\.?$/i;
 const GENERICO = /^(?:(?:projetada|sem\s+(?:nome|denomina)|geral|particular|principal|interna|vicinal)\b|[A-Za-z](?:\s+[A-Za-z0-9]{1,2})?$)/i; // "Rua A", "Rua B 2" = sem nome
 const CONFRONTACAO = /(confront|divis|fundos|lateral|lado\s+(direito|esquerdo)|esquina|limit|faz\s+frente\s+para\s+a?\s*$)/i;
+// Palavra Capitalizada que NÃO é nome de rua: encerra o nome ("Rodovia SC-157 Inscrição…").
+const PARADA = /^(inscri[çc][ãa]o|matr[íi]cula|lote|quadra|cep|bairro|setor|[áa]rea|terreno|im[óo]vel|cidade|munic[íi]pio|comarca|cart[óo]rio|registro|zona|loteamento|condom[íi]nio|residencial|jardim|vila|centro)$/i;
 const RE_TIPO = new RegExp(`\\b(${TIPO})\\s+`, 'gi');
 
 const norm = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -28,14 +30,17 @@ function nomeApos(t, pos) {
     // Conectivo pode abrir o nome ("Rua das Flores") ou ligar palavras ("Rua Edson de Lima").
     if (CONECTIVO.test(limpa)) { palavras.push(limpa); continue; }
     if (!maiuscula) break;
+    if (PARADA.test(limpa) && palavras.some((p) => !CONECTIVO.test(p))) { re.lastIndex -= m[0].length; break; }
     // Número puro encerra o nome ("Avenida Brasil 300 m²", "Rua X 120"), salvo quando É o nome
     // ("Rua 15", "Rua 7 de Setembro").
     if (/^\d+$/.test(limpa) && palavras.some((p) => !CONECTIVO.test(p)) && !/^\s+de\s/i.test(t.slice(re.lastIndex, re.lastIndex + 5))) { re.lastIndex -= m[0].length; break; }
-    palavras.push(ABREV.test(limpa) ? `${limpa}.` : limpa);
+    palavras.push(w.endsWith('.') && ABREV.test(limpa) ? `${limpa}.` : limpa);
     // "." fora de abreviação encerra a frase; "," encerra o nome.
     if (w.endsWith('.') && !ABREV.test(limpa)) break;
     if (t[re.lastIndex] === ',' || t[re.lastIndex] === ';') break;
   }
+  // Texto truncado ("Estrada do Po…"): última palavra de 1–2 letras não é nome.
+  if (palavras.length > 1 && /^[A-Za-zÀ-ú]{1,2}$/.test(palavras[palavras.length - 1]) && !CONECTIVO.test(palavras[palavras.length - 1])) palavras.pop();
   while (palavras.length && CONECTIVO.test(palavras[palavras.length - 1])) palavras.pop();
   while (palavras.length && CONECTIVO.test(palavras[0]) && palavras.length === 1) palavras.pop();
   return { nome: palavras.join(' '), fim: re.lastIndex };
@@ -49,7 +54,7 @@ export function enderecoDoTexto(texto, cidade) {
     if (CONFRONTACAO.test(antes)) continue;                                   // rua vizinha, não a do lote
     if (/leiloeir|escrit[óo]rio|audit[óo]rio|\bsede\b/i.test(t.slice(Math.max(0, m.index - 120), m.index + 60))) return { motivo: 'endereco_do_leiloeiro' };
     const { nome, fim } = nomeApos(t, m.index + m[0].length);
-    if (!nome || nome.replace(/[^A-Za-zÀ-ú]/g, '').length < 3 || GENERICO.test(nome)) continue;
+    if (!nome || (nome.replace(/[^A-Za-zÀ-ú]/g, '').length < 3 && !/\d/.test(nome)) || GENERICO.test(nome)) continue;
     const tipo = m[1].replace(/^av\.$/i, 'Avenida');
     const num = (t.slice(fim, fim + 20).match(/^\s*,?\s*(?:n[º°o.]*\s*)?(\d{1,5})\b(?!\s*(?:m[²2]|ha|metros|%|\/))/i) || [])[1];
     achados.push({ endereco: `${tipo[0].toUpperCase()}${tipo.slice(1).toLowerCase()} ${nome}${num ? `, ${num}` : ''}`, chave: norm(nome) });
