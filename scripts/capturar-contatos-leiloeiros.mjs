@@ -17,7 +17,7 @@
  * EM SECO por padrão; CONTATO_APLICAR=1 grava.
  */
 import puppeteer from 'puppeteer';
-import { buscarEmailDoSite } from './_contato-leiloeiro.mjs';
+import { buscarEmailDoSite, dominioBase } from './_contato-leiloeiro.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -82,7 +82,24 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
   const multi = await sb('rpc/fonte_multi_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte }) });
   if (multi === true) { resultado.multi.push(fonte); console.log(`  ⤷ ${fonte.padEnd(20)} multi-tenant — contato é por leiloeiro do lote`); continue; }
 
-  const { achado, url, motivo } = await buscarEmailDoSite(origem, { obterHtml });
+  let { achado, url, motivo } = await buscarEmailDoSite(origem, { obterHtml });
+  // 2ª FONTE: EDITAIS DO DJEN (29/09). O leiloeiro assina o edital publicado no Diário da Justiça
+  // e quase sempre põe o e-mail ali — 7 das 14 fontes "sem e-mail no site" tinham o endereço em
+  // `editais_leilao.texto_integral`. Só vale e-mail do MESMO domínio do site (o edital também
+  // cita a vara, o tribunal e o cartório), e o mais citado ganha.
+  if (!achado) {
+    const dom = dominioBase(new URL(origem).hostname);
+    const rotulo = dom.split('.')[0];
+    const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(rotulo)}*&select=texto_integral&limit=60`).catch((e) => { console.log(`  ⚠ ${fonte}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
+    const cont = new Map();
+    for (const e of editais || []) for (const m of String(e.texto_integral || '').matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)) {
+      const em = m[0].toLowerCase().replace(/\.$/, '');
+      if (dominioBase(em.split('@')[1]) === dom && !/^(lgpd|privacidade|dpo|noreply|no-reply)@/.test(em)) cont.set(em, (cont.get(em) || 0) + 1);
+    }
+    const [melhor] = [...cont.entries()].sort((a, b) => b[1] - a[1]);
+    if (melhor) { achado = { email: melhor[0], contexto: `citado em ${melhor[1]} edital(is) do DJEN` }; url = 'editais_leilao (DJEN)'; }
+    else motivo += ` · e nenhum edital do DJEN com e-mail @${dom}`;
+  }
   if (!achado) { resultado.sem.push({ fonte, motivo }); console.log(`  ✗ ${fonte.padEnd(20)} ${origem} — ${motivo}`); continue; }
 
   const sup = await sb(`emails_supressao?destinatario=eq.${encodeURIComponent(achado.email)}&select=suprimido`);

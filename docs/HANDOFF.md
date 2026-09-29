@@ -116,6 +116,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    **4) DANIELGARCIA ✅:** `contato@dgleiloes.com.br` (manual, confirmado pelo dono).
    **Lição para o 3):** a página do LOTE/edital traz o canal de proposta mesmo quando a home não traz
    nada — é o próximo lugar a ler para os 14 sem e-mail.
+   **3) ✅ 8 de 14 (29/09):** 7 pelo texto dos editais do DJEN (`editais_leilao.texto_integral` — o
+   leiloeiro assina e põe o e-mail) + ROCHA pela página do lote. Varredor semanal ganhou essa 2ª fonte
+   (mesmo domínio do site, o mais citado). **Aguardando o dono:** KRON publica @kronbergleiloes.com.br
+   (site kronleiloes — Kronberg?) e CASAMARTILLO `falecom@cmartillo.com.br` (site casamartillo).
+   **Sem e-mail em lugar nenhum:** BIASI, INFINITY, TOTALLEILOES, FRAZAO (só formulário/telefone).
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
