@@ -15,6 +15,33 @@ const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitig
 
 // Cria um motor de fetch ligado a um `proposito` (a chave de cota do Bright Data). Devolve a
 // função de busca + um `estado` observável (semCota) que o runner lê para a saúde da fonte.
+// VIA BANCO (29/09): a página buscada pelo SERVIDOR DO BANCO (pg_net, AWS) — grátis. UBERLANDIALEILOES
+// dá 403 ao runner do GitHub e ao PC do dono, e 200 ao banco (14 leilões na home, medido). Dois
+// passos porque o pg_net só dispara depois do commit (supabase/migrations/20260929_pagina_pelo_banco.sql).
+// Desliga com MOTOR_VIA_BANCO=0. Devolve { html } ou { html: null, motivo } — nunca lança.
+async function viaBanco(url) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (process.env.MOTOR_VIA_BANCO === '0') return { html: null, motivo: 'desligada' };
+  if (!SB || !KEY) return { html: null, motivo: 'sem credencial do banco' };
+  const rpc = async (fn, body) => {
+    const r = await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: 'POST', signal: AbortSignal.timeout(15000), headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${fn} HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 80)}`);
+    return r.json();
+  };
+  try {
+    const id = await rpc('pagina_pedir', { p_url: url });
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const [row] = await rpc('pagina_ler', { p_id: id });
+      if (!row?.pronto) continue;
+      if (row.status >= 200 && row.status < 300 && row.conteudo && !ehChallenge(row.conteudo)) return { html: row.conteudo };
+      return { html: null, motivo: row.erro ? String(row.erro).slice(0, 60) : (row.status >= 200 && row.status < 300 ? 'challenge' : `HTTP ${row.status}`) };
+    }
+    return { html: null, motivo: 'sem resposta em 30s' };
+  } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 80) }; }
+}
+
 export function criarMotorFetch(proposito) {
   const estado = { semCota: false };
 
@@ -35,6 +62,11 @@ export function criarMotorFetch(proposito) {
         porQueGratis = html ? 'challenge' : 'corpo vazio';
       } else porQueGratis = `HTTP ${r.status}`;
     } catch (e) { porQueGratis = `rede: ${String(e?.name === 'AbortError' ? 'timeout 20s' : e?.cause?.code || e?.message || e).slice(0, 60)}`; }
+
+    // 1b) VIA BANCO — grátis, outro IP (AWS). Antes de gastar Bright Data.
+    const banco = await viaBanco(url);
+    if (banco.html) return { html: banco.html, via: 'banco' };
+    porQueGratis = `${porQueGratis} · banco: ${banco.motivo}`;
 
     if (semBD) return { html: null, via: `sem-bd (grátis: ${porQueGratis})` };
 
