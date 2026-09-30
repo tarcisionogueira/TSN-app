@@ -69,6 +69,35 @@ Ao gerar um contrato você SEMPRE:
 11. Deixa campos para preenchimento — [NOME COMPLETO], [CPF/CNPJ], [ENDEREÇO], [DATA], [VALOR] — APENAS para o que NÃO foi informado. Dado que veio na descrição ou em documento anexado entra TRANSCRITO no contrato; deixar em colchetes algo que o operador já forneceu é ERRO, obriga a redigitar e é a principal queixa de quem usa esta tela.
 12. Rodapé: "Assinatura eletrônica qualificada/avançada válida nos termos da MP 2.200-2/2001 e da Lei 14.063/2020, com registro de IP, data/hora e hash de integridade do documento."`;
 
+// TRANSCRIÇÃO DAS IMAGENS ANTES DA REDAÇÃO (30/09, dono: "leu o endereço, mas não os dados do
+// fiador que teve CNH anexada; também não leu o arquivo que descrevia o imóvel"). A foto ia junto
+// com a tarefa longa de redigir 10 mil tokens de contrato, e o modelo deixava o dado da imagem em
+// [NOME COMPLETO DO FIADOR]. Agora cada imagem passa ANTES por uma leitura curta e dedicada
+// ("transcreva campo a campo"), em paralelo, e a ficha entra no prompt como texto — o mesmo
+// caminho que já funcionava para PDF com texto. Falha de uma leitura é DITA ao redator (e ao
+// operador), nunca vira "o documento não tinha nada".
+const MODELO_TRANSCRICAO = process.env.CONTRATO_IA_MODELO_LEITURA || 'claude-sonnet-4-6';
+async function transcreverImagem(img, apiKey) {
+  const r = await anthropicFetch({
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODELO_TRANSCRICAO,
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } },
+        { type: 'text', text: 'Transcreva FIELMENTE todos os dados legíveis deste documento, um por linha no formato "campo: valor". Primeiro diga o tipo do documento (ex.: CNH, RG, comprovante de residência, certidão do imóvel, matrícula, IPTU, contrato). Para pessoa: nome completo, CPF, RG e órgão emissor/UF, nº de registro da CNH, data de nascimento, filiação, nacionalidade, naturalidade, estado civil, profissão, endereço. Para imóvel: endereço completo, lote/quadra, matrícula e cartório, inscrição imobiliária, áreas (terreno, construída), uso/classificação, confrontações, emissor, datas e códigos de verificação. Copie números exatamente como aparecem. Não invente nem complete: campo ilegível = "ilegível"; campo ausente = não liste. Sem comentários.' },
+      ] }],
+    }),
+  }, { retries: 0, timeoutMs: 40000 });
+  const bruto = await r.text();
+  let data; try { data = JSON.parse(bruto); } catch { data = null; }
+  if (!r.ok || !data) throw new Error(data?.error?.message || `HTTP ${r.status}`);
+  const texto = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  if (!texto) throw new Error('leitura vazia');
+  return texto;
+}
+
 // SEM `export default` — de propósito. No runtime Node da Vercel o default export é tratado
 // como assinatura Express `(req, res)`: o `Response` devolvido é DESCARTADO, a função nunca
 // sinaliza fim e fica pendurada até o maxDuration (aqui, 300s de spinner na tela e depois 504).
@@ -136,13 +165,29 @@ async function handler(req) {
     .filter(i => i && typeof i.base64 === 'string' && i.base64.length > 0 && i.base64.length < 8_000_000 && MEDIA_TYPES_IMAGEM.has(i.mediaType))
     .slice(0, 10);
 
+  // Leitura dedicada de cada imagem, em paralelo (ver transcreverImagem). Até 40 s; o que ela
+  // gastar sai do prazo da redação abaixo (maxDuration 300 s).
+  const t0Leitura = Date.now();
+  const transcricoes = await Promise.all(imagensValidas.map(async (img) => {
+    const nome = sanitizeText(img.nome, 150) || 'arquivo';
+    try { return { nome, texto: await transcreverImagem(img, CLAUDE_KEY) }; }
+    catch (e) { console.error('[gerar-contrato-ia] transcrição falhou', nome, e?.message); return { nome, erro: String(e?.message || e).slice(0, 120) }; }
+  }));
+  const fichas = transcricoes.map((t) => t.texto
+    ? `=== TRANSCRIÇÃO DA IMAGEM "${t.nome}" ===\n${t.texto.slice(0, 6000)}`
+    : `=== IMAGEM "${t.nome}": a leitura FALHOU (${t.erro}) — use a própria imagem acima; se não der, deixe o campo em colchetes ===`).join('\n\n');
+  const naoLidas = transcricoes.filter((t) => !t.texto).map((t) => t.nome);
+
   const userMessage = `Gere um contrato de ${tipoFinal || 'prestação de serviços'} com base na seguinte descrição em texto livre:
 
 ${descricao.slice(0, 4000)}
 
 ${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${(docsTexto || imagensValidas.length) ? `${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
 ${docsTexto}
-` : ''}${imagensValidas.length ? `\nO OPERADOR TAMBÉM ANEXOU ${imagensValidas.length} IMAGEM(NS) (fotos, ex.: CNH, comprovante) — cada uma aparece logo ANTES desta mensagem, identificada pelo nome do arquivo. Leia o conteúdo de cada imagem como faria com um documento.\n` : ''}
+` : ''}${imagensValidas.length ? `\nO OPERADOR TAMBÉM ANEXOU ${imagensValidas.length} IMAGEM(NS) (fotos, ex.: CNH, comprovante) — cada uma aparece logo ANTES desta mensagem, identificada pelo nome do arquivo, e foi TRANSCRITA campo a campo abaixo. Use a transcrição (e confira na imagem):
+${fichas}
+
+QUEM É QUEM: associe cada documento pessoal à parte que a descrição indica (ex.: "fiador Caio" + CNH em nome de CAIO … = qualificação completa do FIADOR com nome, CPF, RG/órgão e demais dados da CNH). Documento de imóvel (certidão, matrícula, IPTU, descrição) alimenta a cláusula do OBJETO: endereço, lote, matrícula, inscrição, áreas, confrontações.\n` : ''}
 COMO USAR OS ANEXOS (documentos E imagens) — regra que vale mais que o hábito de deixar campo em branco:
 - Todo dado que estiver nos anexos deve ser TRANSCRITO no contrato novo: nomes completos,
   CPF/CNPJ, endereços, estado civil, profissão, valores, prazos, objeto. NÃO deixe
@@ -192,7 +237,7 @@ Gere o contrato completo e pronto para uso.`;
         system: SYSTEM_PROMPT + aprendizado,
         messages: [{ role: 'user', content }],
       }),
-    }, { retries: 0, timeoutMs: 270000 });
+    }, { retries: 0, timeoutMs: Math.max(120000, 270000 - (Date.now() - t0Leitura)) });
 
     // Erro do Claude vem em JSON, mas um 5xx de borda/proxy pode vir em HTML/texto: ler direto
     // com .json() esconderia a causa atrás de um SyntaxError. Lê o corpo UMA vez e decide.
@@ -210,9 +255,9 @@ Gere o contrato completo e pronto para uso.`;
     // vem cortado) e ficaria silencioso pro operador também sem este aviso.
     const documentosTruncados = !!documentos && String(documentos).length > DOCS_MAX;
 
-    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, comImagens: imagensValidas.length, truncado, documentosTruncados }, sucesso: true });
+    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, comImagens: imagensValidas.length, imagensTranscritas: transcricoes.length - naoLidas.length, imagensNaoLidas: naoLidas.length, anexosNaoLidosNoNavegador: Array.isArray(body.naoLidos) ? body.naoLidos.length : undefined, truncado, documentosTruncados }, sucesso: true });
 
-    return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados }), {
+    return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados, imagensNaoLidas: naoLidas }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

@@ -192,6 +192,7 @@ export default function CriarContrato() {
       // modelo nunca viu o documento. A rota já aceitava `documentos`; faltava preencher.
       let documentos = '';
       let imagens = [];
+      let naoLidos = [];
       if (arquivosRef.length) {
         setLendoDocs(true);
         const r0 = await extrairTextoDeVarios(arquivosRef);
@@ -208,6 +209,7 @@ export default function CriarContrato() {
         // Confirmação POSITIVA do que entrou. O dono não tinha como saber se o anexo tinha
         // sido usado — e não estava sendo. Agora a tela de revisão diz, por nome.
         setDocsUsados(r0.lidos);
+        naoLidos = r0.ignorados;
       }
 
       // /api/gerar-contrato-ia devolve { ok, contrato } (o /api/gerar-contrato
@@ -219,7 +221,7 @@ export default function CriarContrato() {
       // até o maxDuration. A geração real leva ~30-60s, então 3 min é folgado sem ser eterno.
       const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
-        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos, imagens }),
+        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos, imagens, naoLidos }),
         signal: AbortSignal.timeout(180000),
       });
       // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
@@ -237,6 +239,9 @@ export default function CriarContrato() {
       // o operador manda assinar um documento que termina no meio de uma cláusula.
       if (data.truncado) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}O texto atingiu o tamanho máximo e pode ter ficado incompleto no fim — role até o final e confira antes de enviar.`);
+      }
+      if (data.imagensNaoLidas?.length) {
+        setAvisoDocs(av => `${av ? av + ' ' : ''}A leitura dedicada falhou em: ${data.imagensNaoLidas.join(', ')} — confira os dados dessas partes no texto.`);
       }
       if (data.documentosTruncados) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}Os documentos anexados juntos passaram do tamanho que a IA consegue ler de uma vez — o(s) último(s) anexo(s) pode(m) não ter sido totalmente considerado(s).`);
