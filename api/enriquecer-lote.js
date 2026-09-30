@@ -218,7 +218,15 @@ export function roteiarDatasPraca(datas, im = {}) {
  * 2º leilão de um apartamento de Barueri virou a 2ª praça do lote aberto). Só corta num marcador
  * que venha DEPOIS da 1ª data ancorada — marcador no menu/topo não apaga as datas do lote.
  */
+// Cabeçalho INEQUÍVOCO de vitrine (30/09, GRUPOLANCE Osasco 28149): "Veja também Lotes que
+// podem te interessar". A regra acima só corta DEPOIS da 1ª data ancorada — e nesta página o
+// lote não publica data nenhuma, então nada era cortado e o 1º vizinho virou o prazo do lote
+// (praça 1 "20/10", leilão "09/11"). Com o cabeçalho explícito, corta sempre.
+const RE_OUTROS_LOTES_FORTE = /\b(?:veja tamb[ée]m\s+)?(?:lotes|im[óo]veis|bens) que (?:podem|pode) (?:te|lhe) interessar\b/i;
+
 export function cortarOutrosLotes(txt, ancora = CTX_ANCORA) {
+  const forte = txt.search(RE_OUTROS_LOTES_FORTE);
+  if (forte > 0) txt = txt.slice(0, forte);
   RE_DATA_LOTE.lastIndex = 0;
   let x, primeira = -1;
   while ((x = RE_DATA_LOTE.exec(txt))) {

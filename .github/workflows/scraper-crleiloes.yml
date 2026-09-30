@@ -13,7 +13,8 @@ on:
   # sem medição). Produção é o runner residencial (grátis); este cron semanal é a REDE DE
   # SEGURANÇA e só gasta Bright Data se a casa não coletou em 7 dias (passo "Freio").
   schedule:
-    - cron: '20 14 * * 4'   # quinta, 14h20 UTC
+    # 30/09: a via BANCO (grátis) entra antes do Bright Data — dá para medir 2×/semana.
+    - cron: '20 14 * * 1,4'   # segunda e quinta, 14h20 UTC
   workflow_dispatch:
     inputs:
       dryrun:
@@ -42,12 +43,12 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm ci
-      - name: Freio residencial (pula se coletado de casa há < 7 dias)
+      - name: Freio residencial (pula se coletado há < 3 dias)
         id: freio
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/coleta-recente.mjs CRLEILOES 7 >> "$GITHUB_OUTPUT"
+        run: node scripts/coleta-recente.mjs CRLEILOES 3 >> "$GITHUB_OUTPUT"
       - name: Rodar scraper CRLEILOES
         if: github.event.inputs.forcar == '1' || steps.freio.outputs.pular != '1'
         env:

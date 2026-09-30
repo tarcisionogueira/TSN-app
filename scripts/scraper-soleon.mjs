@@ -491,7 +491,13 @@ async function coletarTenant(tenant) {
       .order('atualizado_em', { ascending: false }).limit(1);
     const ultima = recentes?.[0]?.atualizado_em ? Date.parse(recentes[0].atualizado_em) : 0;
     const idadeDias = ultima ? (Date.now() - ultima) / 86400000 : Infinity;
-    if (idadeDias < TORRES3_FRESCOR_DIAS) {
+    // 30/09: o freio existe porque TORRES3 só saía PAGO (Bright Data). A via banco (grátis) passa
+    // nele (medido: /lotes/imovel 200, 127 KB) — com o banco respondendo, coleta como os demais;
+    // o freio só vale quando o banco falha e a coleta cairia no pago. Sem isto a fonte ficava
+    // 12+ dias sem medição e o monitor acusava `medicao_velha` por decisão, não por defeito.
+    const bancoOk = idadeDias < TORRES3_FRESCOR_DIAS ? !!(await viaBanco(`${tenant.base}/lotes/imovel`)).html : false;
+    if (bancoOk) console.log(`  [TORRES3] via banco respondeu — coleta grátis, freio de ${TORRES3_FRESCOR_DIAS}d não se aplica.`);
+    if (idadeDias < TORRES3_FRESCOR_DIAS && !bancoOk) {
       console.log(`  [TORRES3] acervo com ${idadeDias.toFixed(1)}d — abaixo do piso de ${TORRES3_FRESCOR_DIAS}d (freio próprio, é o único tenant pago do cluster). Pulando.`);
       // Marca como SEM_COTA (mesmo Set que o freio de orçamento real usa) — não é o teto
       // semanal do Bright Data negando, mas é a MESMA classe de decisão ("não gastei de

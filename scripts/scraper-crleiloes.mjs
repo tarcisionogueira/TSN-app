@@ -45,6 +45,7 @@ import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../ap
 import { extrairGenerico, checarQualidade } from './lib/scraper-core.mjs';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { registrarSaude } from './_saude-fonte.mjs';
+import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 
 const BASE = 'https://www.crleiloes.com.br';
 const MAX_LOTES = Number(process.env.CRLEILOES_MAX_LOTES || 30);
@@ -69,6 +70,7 @@ class FalhaDeAcesso extends Error {
   }
 }
 
+let bancoFalhas = 0;
 async function bd(url, { timeoutMs = 60000 } = {}) {
   // CRLEILOES_NO_BD=1 (27/09): fetch direto — o Cloudflare daqui barra por reputação de IP de
   // DATACENTER; do IP residencial (runner do dono) passa de graça. 403/challenge vira FalhaDeAcesso
@@ -85,6 +87,15 @@ async function bd(url, { timeoutMs = 60000 } = {}) {
     if (/just a moment|challenge-platform|cf-chl/i.test(body.slice(0, 4000))) throw new FalhaDeAcesso('challenge', `Cloudflare em ${url} (via direta)`);
     return body;
   }
+  // VIA BANCO primeiro (30/09): o IP do Supabase passa no Cloudflare (medido: home 200, 75 links
+  // de lote, sem challenge) e custa ZERO. Bright Data só depois de 2 falhas seguidas do banco.
+  if (bancoFalhas < 2) {
+    const b = await viaBanco(url);
+    if (b.html) { bancoFalhas = 0; return b.html; }
+    bancoFalhas++;
+    console.warn(`  [banco] ${url}: ${b.motivo} — ${bancoFalhas < 2 ? 'tenta Bright Data nesta' : 'desligando a via banco nesta execução'}`);
+  }
+  if (!brightDataDisponivel()) throw new FalhaDeAcesso('sem_config', `via banco falhou e não há Bright Data configurado (${url})`);
   let r;
   try {
     r = await buscarViaBrightData(url, { proposito: 'crleiloes', timeoutMs, exigirOk: false });
@@ -228,8 +239,9 @@ function montarVeiculo(c, base, textoDetalhe) {
 async function main() {
   // No PC (CRLEILOES_NO_BD=1) a via é o fetch direto: exigir credencial do Bright Data aqui fez a
   // 1ª rodada residencial (27/09) sair com `sem_config` sem nem tentar o site.
-  if (process.env.CRLEILOES_NO_BD !== '1' && !brightDataDisponivel()) {
-    throw new FalhaDeAcesso('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes — crleiloes é 100% Cloudflare (IP de datacenter), só acessível via Web Unlocker');
+  // Sem banco E sem Bright Data não há por onde entrar (o fetch direto do datacenter toma challenge).
+  if (process.env.CRLEILOES_NO_BD !== '1' && !brightDataDisponivel() && !(process.env.SUPABASE_SERVICE_KEY && (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL))) {
+    throw new FalhaDeAcesso('sem_config', 'nem via banco (credencial do Supabase) nem Bright Data configurados — crleiloes é Cloudflare para IP de datacenter');
   }
   console.log(`CRLEILOES ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);
 

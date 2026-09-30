@@ -21,4 +21,13 @@ const r2 = extrairDatasLeilao(menu);
 assert.equal(r2.inicio, `${ano}-11-10`);
 assert.ok(r2.praca2 || r2.fim, 'a 2ª praça do PRÓPRIO lote tem de continuar sendo lida');
 console.log('ok  marcador no menu não apaga as datas do lote', JSON.stringify(r2));
+// GRUPOLANCE (30/09, Osasco 28149): o lote NÃO publica data e a vitrine tem cabeçalho explícito.
+// A regra "só corta depois da 1ª data do lote" não cortava nada, e o vizinho virou o prazo.
+const gl = `Imóvel Comercial, AC 15.658,00m², Jardim Maurilópolis, Osasco/SP Localização Av. Manoel Pedro Pimentel, 50
+  Veja também Lotes que podem te interessar Casa, 228m², Osasco/SP 28061 - LOTE 1 Faça seu lance P. Única
+  Abertura 20/07/${ano} às 00:00 Encerramento 20/10/${ano} às 15:05 Veículo C4 Em breve Leilão 09/11/${ano} às 00:00`;
+const r3 = extrairDatasLeilao(gl);
+assert.equal(r3.inicio, null, `início veio do vizinho: ${r3.inicio}`);
+assert.equal(r3.encerramento, null, `encerramento veio do vizinho: ${r3.encerramento}`);
+console.log('ok  cabeçalho "Lotes que podem te interessar" corta mesmo sem data do lote', JSON.stringify(r3));
 console.log('datas-do-lote-nao-vem-dos-vizinhos: todos os casos passaram');

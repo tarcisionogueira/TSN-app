@@ -9,6 +9,23 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🛠️ 30/09 (noite, 2ª parte) — fontes paradas pela via banco + datas de vizinho
+- **CRLEILOES** (zerado: `challenge`/`sem_config`): o IP do banco passa no Cloudflare (home 200, 75 links de lote).
+  `scraper-crleiloes.mjs` agora tenta `viaBanco` antes do Bright Data (disjuntor em 2 falhas); cron 2×/semana
+  (seg/qui) com freio de 3 dias. Sem banco E sem BD → `sem_config` (antes exigia BD mesmo com o banco disponível).
+- **TORRES3** (`medicao_velha` 302 h): o freio de 14 dias existia porque só saía PAGO. Pelo banco responde 200 →
+  com o banco vivo coleta grátis como os demais; o freio só vale se o banco falhar.
+- **GRUPOLANCE** (`praca_fim_antes_do_inicio`): a página de Osasco 28149 não publica data e a vitrine "Veja também
+  Lotes que podem te interessar" vinha antes de qualquer data do lote — o corte não acontecia e o vizinho virou o
+  prazo (praça 20/10, leilão 09/11). `cortarOutrosLotes` corta sempre nesse cabeçalho explícito (teste em
+  `datas-do-lote-nao-vem-dos-vizinhos.mjs`). Linha corrigida (datas nulas; o gatilho `preservar_data_leilao` exige
+  `session_replication_role=replica` para limpar). Não há contaminação em massa (nenhuma data repetida em 3+ lotes).
+- **ZUK Largo General Osório** (`data_edital_recuou_prazo`): página confirma o acervo (2º leilão 06/10 11h30); o
+  edital leu a 1ª praça como 2ª. Anomalia 307 resolvida.
+- **Não resolvível daqui:** LEJE e FREITAS dão 403 também ao runner RESIDENCIAL (a cada 4 h desde ~24/09) e ao banco
+  → IP de casa provavelmente bloqueado. BAYIT: banco devolve 400 (IIS "Invalid Header"); a fonte é semanal (qui),
+  então `medicao_velha` > 108 h é cadência, não defeito. 8 lotes sem UF: páginas montadas em JS, sem cidade no HTML.
+
 ### ✉️ 30/09 (noite) — proposta de veículo acha o ORGANIZADOR do evento · revisão ortográfica · DPO
 - 🔴→✅ **Proposta ao leiloeiro nunca resolvia contato desde 28/09**: `sb(path)` em `propor-veiculo-leiloeiro.js` e
   `pedir-documento-leiloeiro.js` ignorava o 2º argumento — o POST ao `rpc/contato_leiloeiro_resolver` saía como GET.
@@ -50,6 +67,7 @@ de cliente parado; segurança 0/0.
 1. 🔴 Bright Data: remover 68.211.146.0/24 da lista negra da zona web_unlocker1 (ver passo a passo na conversa de 30/09).
 2. 🔴 Cobrar as assinaturas: Marcos (termo + procuração), Rafael (2 termos), Matheus (1 termo) — prazo 30/10.
 3. ✅ LGPD: encarregado nomeado na Política (Tarcisio de Souza Nogueira de Araujo) e prazo corrigido para "até 15 dias" (art. 19, II) — 30/09 noite. Resta ao dono: responder os chamados `[LGPD — responder até …]` no prazo.
+4. 🟠 LEJE/FREITAS: abrir leje.com.br e o site da Freitas no navegador do PC do runner — se der "Acesso Negado", o IP de casa foi bloqueado (reduzir a frequência da rodada parcial de 4 h ou pedir liberação ao leiloeiro).
 5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
 6. 🟠 Revenda de veículo: a busca web não tira preço da Webmotors — escolher fonte (iCarros/Mobiauto/OLX ou API paga).
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
