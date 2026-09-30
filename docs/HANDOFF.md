@@ -123,7 +123,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    checklist, som "em funcionamento"). Por isso o documento só entra via
    `motor_nao_funciona_do_documento()`; e "sem motor DE ARRANQUE" parou de casar. Ganho do PDF é
    pequeno (~30 lotes/800) — o grosso veio da regra. 730 PDFs dão 403 ao runner (SUPERBID, docs de
-   evento): marcados como tentados, seguem "não informado". Aplicado com `aplicar=1`. De passagem: rótulos de anexo do MEGA vinham deslocados (laudo como
+   evento): marcados como tentados, seguem "não informado". Aplicado (30/09 00h41): 959 lotes lidos, **+27
+   pelo documento → 1.312 veículos com motor informado** (de 662 no início do dia). De passagem: rótulos de anexo do MEGA vinham deslocados (laudo como
    "Edital") e URL com `<br>` na Superbid — corrigidos no coletor (valem no próximo scrape).
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
    Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
