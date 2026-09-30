@@ -83,7 +83,13 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   const r = await sb(
     `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null),geocod_nivel.eq.refazer)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
-  if (!r.ok) return null;
+  // Falha ao LER a fila não é "fila vazia" (forma 2 do CLAUDE.md, 30/09): ~650 imóveis ficaram parados
+  // com o cron respondendo 200 de hora em hora — e a rota, chamada à mão, processava normalmente.
+  if (!r.ok) {
+    const det = await r.text().catch(() => '');
+    console.error(`[geocodificar] leitura da fila falhou: HTTP ${r.status} ${det.slice(0, 200)}`);
+    return { erro: `leitura da fila HTTP ${r.status}` };
+  }
   const imoveis = await r.json();
 
   // BACKLOG "PRESO NO CENTROIDE" (07/08). A fila acima não enxerga o lote que JÁ foi
@@ -208,7 +214,7 @@ export default async function handler(req, resp) {
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
   if (modoManual) {
     const res = await processarLote(estadosFilter, 50, Date.now() + 240_000);
-    if (!res) return resp.status(500).json({ error: 'Supabase error' });
+    if (!res || res.erro) return resp.status(500).json({ error: res?.erro || 'Supabase error' });
     if (!res.processados) return resp.status(200).json({ processados: 0, msg: 'Nenhum imóvel pendente' });
     return resp.status(200).json(res);
   }
@@ -221,8 +227,16 @@ export default async function handler(req, resp) {
   const deadline = inicio + LIMITE_MS;
   const total = { processados: 0, endereco: 0, rua: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
+  let erroLeitura = null, tentativasLeitura = 0;
   while (Date.now() < deadline) {
     const res = await processarLote(estadosFilter, 50, deadline);
+    if (res?.erro) {
+      // Leitura falhou: tenta de novo (até 3×, com espera) antes de desistir da rodada.
+      erroLeitura = res.erro;
+      if (++tentativasLeitura > 3) break;
+      await sleep(2000 * tentativasLeitura);
+      continue;
+    }
     if (!res || res.processados === 0) break; // sem mais pendentes
     total.processados += res.processados;
     total.endereco    += res.endereco;
@@ -236,5 +250,8 @@ export default async function handler(req, resp) {
     if (res.processados < 50) break; // último lote (menos de 50 pendentes)
   }
 
+  console.log('[geocodificar] cron', JSON.stringify({ ...total, erro_leitura: erroLeitura }));
+  // Rodada que não processou NADA porque não conseguiu ler a fila é FALHA, não "nada a fazer".
+  if (erroLeitura && total.processados === 0) return resp.status(500).json({ ...total, erro: erroLeitura });
   return resp.status(200).json(total);
 }
