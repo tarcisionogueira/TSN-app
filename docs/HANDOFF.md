@@ -197,7 +197,13 @@ não aparecem em `mp_pagamentos`). **Boleto MP: R$ 3,49 fixo** (não é grátis,
 **Limites da NOSSA conta** (API `/v1/payment_methods` com a chave pública, 30/09): boleto R$ 4 a
 **R$ 100.000** por boleto · Pix até R$ 9.999.999 · cartão até R$ 60.000. O servidor (`mp-checkout`) já
 devolve `boletoUrl`, mas a TELA de pagamento só oferece Pix e cartão — boleto exige CPF + endereço do
-pagador no payload. Asaas: tabela pública — Pix R$ 1,99 fixo
+pagador no payload. **TESTADO de verdade (30/09, `mp-boleto-teste.yml` → `api/mp-boleto-teste.js`, emite e
+cancela na mesma chamada):** R$ 200.000 → recusado `Invalid transaction_amount` (4037); **R$ 100.000 →
+emitido e cancelado** (payment 181544892058). Teto real via API = **R$ 100 mil por boleto**; o limite de
+R$ 10 mil é só da ferramenta "Cobrar" do APP do MP. Honorário acima de 100 mil = 2 boletos.
+⚠️ Achado ao disparar: `APP_BASE_URL` está VAZIO nos secrets do GitHub e o domínio sem www redireciona —
+o `curl -s -X POST` sem `-L` de 9 workflows recebia "Redirecting..." e o aviso de falha (`notify-scraper`)
+morria calado. Corrigido com `-L --post301 --post302 --post303`. Asaas: tabela pública — Pix R$ 1,99 fixo
 (R$ 0,99 nos 3 primeiros meses), boleto R$ 3,49, cartão 2,99% + R$ 0,49. Inter (busca, não conferido na
 página — o proxy barra inter.co): Pix por chave grátis e ilimitado; **API Pix Cobrança 0,9% com teto de
 R$ 1,50** (com vencimento 0,99%, teto R$ 1,99); boleto grátis 30/60/100 por mês conforme a conta.
