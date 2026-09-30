@@ -12786,6 +12786,32 @@ function RegistrosTab() {
   );
 }
 
+// Markdown mínimo das respostas do chat (30/09: a tela mostrava "## ⚠️ **Status**" cru). Só elementos
+// React — nada de innerHTML — e link só http(s), porque o texto vem de IA alimentada por fontes externas.
+function mdInline(txt, chave) {
+  const partes = [];
+  const re = /\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/g;
+  let ultimo = 0, m, k = 0;
+  while ((m = re.exec(txt))) {
+    if (m.index > ultimo) partes.push(txt.slice(ultimo, m.index));
+    if (m[1]) partes.push(<strong key={`${chave}-${k++}`}>{m[1]}</strong>);
+    else partes.push(<a key={`${chave}-${k++}`} href={m[3] || m[4]} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', wordBreak: 'break-all' }}>{m[2] || m[4]}</a>);
+    ultimo = re.lastIndex;
+  }
+  if (ultimo < txt.length) partes.push(txt.slice(ultimo));
+  return partes;
+}
+function MdSimples({ texto }) {
+  return String(texto || '').split('\n').map((linha, i) => {
+    if (/^\s*(-{3,}|\*{3,})\s*$/.test(linha)) return <hr key={i} style={{ border: 0, borderTop: '1px solid #e2e8f0', margin: '8px 0' }} />;
+    const h = linha.match(/^\s*#{1,6}\s+(.*)$/);
+    if (h) return <div key={i} style={{ fontWeight: 700, fontSize: 15, margin: '6px 0 2px' }}>{mdInline(h[1].replace(/\*\*/g, ''), i)}</div>;
+    const li = linha.match(/^(\s*)[-*•]\s+(.*)$/);
+    if (li) return <div key={i} style={{ paddingLeft: 12 + li[1].length * 6, textIndent: -10 }}>• {mdInline(li[2], i)}</div>;
+    return <div key={i} style={{ minHeight: linha.trim() ? undefined : 8 }}>{mdInline(linha, i)}</div>;
+  });
+}
+
 function CnjTab() {
   // Conversa sobrevive ao recarregar (conveniência deste navegador); o APRENDIZADO fica no servidor
   // (admin_chat_memoria), não aqui.
@@ -13049,7 +13075,7 @@ function CnjTab() {
           {chat.map((m, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
               <div style={{ maxWidth: '80%', padding: '12px 16px', borderRadius: 14, background: m.role === 'user' ? '#0D63DB' : m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#f0fdf4' : '#f8fafc', color: m.role === 'user' ? 'white' : '#111111', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : `1px solid ${m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#bbf7d0' : '#e2e8f0'}` }}>
-                {m.content}
+                {m.role === 'assistant' ? <MdSimples texto={m.content} /> : m.content}
                 {m.role === 'assistant' && m.memoriaId && (
                   <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#94a3b8' }}>
                     {m.casos > 0 && <span title="Perguntas parecidas já feitas que orientaram esta busca">📚 {m.casos} caso(s) parecido(s)</span>}
