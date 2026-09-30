@@ -14,4 +14,11 @@ assert.equal(areaEmAlqueires('casa na Vila Valqueire', 'RJ'), 0);
 assert.equal(areaEmAlqueires('Sítio c/ 15 alqueires - Jacareí/SP', undefined), 0, 'sem UF: não chuta');
 // Hectare continua na frente ("9,68,00 ha., ou seja, quatro alqueires").
 assert.equal(extrairAreaM2('Sítio c/ 15 alqueires - Jacareí/SP', { uf: 'SP' }), 363000);
+// Milhar sem vírgula (30/09): "58.255m²" é 58.255 m², não 58,255.
+assert.equal(extrairAreaM2('Chácara c/ 58.255m², contendo casa sede'), 58255);
+assert.equal(extrairAreaM2('Gleba - 13.584m² INFORMAÇÕES'), 13584);
+assert.equal(extrairAreaM2('área privativa de 49,545 m²'), 49.545, '3 casas decimais não viram 545');
+assert.equal(extrairAreaM2('áreas: privativa de 124,8930m²; comum de 49,2263m²'), 124.893);
+assert.equal(extrairAreaM2('Casa de 72 m²'), 72);
+assert.equal(extrairAreaM2('sala com 45.5 m2'), 45.5);
 console.log('area-em-alqueires: todos os casos passaram');

@@ -165,11 +165,17 @@ export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   const t = decodificarEntidades(texto).replace(/\s+/g, ' ');
   if (!t) return 0;
   const UNI = '(?:m²|m2|mts²|metros?\\s+quadrados?)';
-  const NUM = '(\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)';
+  // Até 4 casas decimais (30/09): "49,545 m²" e "124,8930m²" existem em matrícula; com o teto de 2,
+  // o número não fechava e o último recurso lia só "545 m²".
+  const NUM = '(\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,4})?|\\d+(?:[.,]\\d{1,4})?)';
   const paraNumero = (s) => {
     if (!s) return 0;
     // "1.234,56" (pt-BR) vs "1234.56": só trata o ponto como milhar quando há vírgula decimal.
-    const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s);
+    // 30/09: "58.255m²" / "13.584m²" (grupo de milhar EXATO, sem vírgula) é milhar — lido como
+    // decimal, 18 lotes ativos tinham área mil vezes menor (Gleba 13.584 m² gravada 13,584 m²).
+    // "1.5 m²" (1 ou 2 casas depois do ponto) continua decimal.
+    const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.'))
+      : /^\d{1,3}(?:\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, '')) : Number(s);
     return Number.isFinite(n) ? n : 0;
   };
   const plausivel = (v) => (v >= 8 && v <= 1_000_000 ? v : 0);
