@@ -82,6 +82,26 @@ export default async function handler(req, res) {
     return;
   }
 
+  // VEÍCULO sob demanda (30/09, dono: "gere novamente esses relatórios"): ids de analises_veiculo.
+  // Só REGERA análise que já existe, para o MESMO dono — o gerador confere isso e não cobra cota.
+  const idsVeic = String(req.query?.veiculo || '').split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+  if (idsVeic.length) {
+    const r = await sb(`analises_veiculo?id=in.(${idsVeic.join(',')})&select=id,user_id,veiculo_id,regen_tentativas`);
+    if (!r.ok) { res.status(502).json({ ok: false, motivo: 'leitura_falhou', status: r.status }); return; }
+    const rows = await r.json();
+    const disparados = [];
+    for (const row of rows) {
+      const g = await fetch(`${BASE}/api/gerar-analise-veiculo`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+        body: JSON.stringify({ veiculoId: row.veiculo_id, paraUserId: row.user_id }),
+        signal: AbortSignal.timeout(9000),
+      }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`); // a geração segue na própria função
+      disparados.push({ id: row.id, gerar: g });
+    }
+    res.status(200).json({ ok: true, veiculos: disparados, naoEncontrados: idsVeic.filter((i) => !rows.some((x) => x.id === i)) });
+    return;
+  }
+
   const agora = Date.now();
   const settle = new Date(agora - SETTLE_H * 3600 * 1000).toISOString();
   const janela = new Date(agora - JANELA_H * 3600 * 1000).toISOString();

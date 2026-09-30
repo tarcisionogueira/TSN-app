@@ -12,7 +12,7 @@
 // está cacheado" usado no resto do app). Uma chamada de IA só; sem CNJ, sem QSA, sem geocode.
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
-import { getUser } from './_auth.js';
+import { getUser, isCronAuthorized } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
@@ -262,7 +262,11 @@ const ORIGEM_PROMPT = {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const user = await getUser(req);
+  // Regeração pelo servidor (30/09, `regenerar-relatorios-cron?veiculo=`): CRON_SECRET + dono da
+  // análise. Só REGERA o que já existe para esse dono (conferido abaixo) e nunca mexe em cota.
+  const paraUserId = String(req.body?.paraUserId || '');
+  const viaCron = isCronAuthorized(req) && /^[0-9a-f-]{36}$/i.test(paraUserId);
+  const user = viaCron ? { id: paraUserId } : await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
@@ -283,10 +287,16 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (viaCron) {
+    const rExiste = await sb(`analises_veiculo?user_id=eq.${user.id}&veiculo_id=eq.${encodeURIComponent(veiculoId)}&select=id&limit=1`);
+    const existe = rExiste.ok ? await rExiste.json() : null;
+    if (!Array.isArray(existe) || !existe.length) { res.status(rExiste.ok ? 404 : 502).json({ error: rExiste.ok ? 'Sem análise anterior deste veículo para esse usuário — regeração não cria análise nova.' : 'Não consegui conferir a análise anterior.' }); return; }
+  }
+
   // ── Cota no servidor (mesmo padrão de consumir_analise_por) ──
   let cota = null;
   let cobrarCredito = false;
-  try {
+  if (!viaCron) try {
     const jaConcluida = await (await sb(`analises_veiculo?user_id=eq.${user.id}&veiculo_id=eq.${encodeURIComponent(veiculoId)}&status=eq.concluida&select=veiculo_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
     if (isNovo) {

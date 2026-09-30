@@ -8,7 +8,12 @@ on:
     inputs:
       ids:
         description: 'ids de analises_mercado separados por vírgula (máx. 10)'
-        required: true
+        required: false
+        default: ''
+      veiculos:
+        description: 'ids de analises_veiculo separados por vírgula (máx. 10) — só regera análise existente'
+        required: false
+        default: ''
       base_url:
         description: 'Base URL de produção'
         required: false
@@ -23,10 +28,16 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           IDS: ${{ github.event.inputs.ids }}
+          VEIC: ${{ github.event.inputs.veiculos }}
           BASE: ${{ github.event.inputs.base_url }}
         run: |
           if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio"; exit 1; fi
           IDS_LIMPOS=$(echo "$IDS" | tr -d ' ')
-          HTTP=$(curl -sS --max-time 120 "$BASE/api/regenerar-relatorios-cron?mercado=$IDS_LIMPOS" -H "x-cron-secret: $CRON_SECRET" -o resp.json -w "%{http_code}")
-          cat resp.json; echo
-          if [ "$HTTP" != "200" ]; then echo "::error::HTTP $HTTP"; exit 1; fi
+          VEIC_LIMPOS=$(echo "$VEIC" | tr -d ' ')
+          if [ -z "$IDS_LIMPOS" ] && [ -z "$VEIC_LIMPOS" ]; then echo "::error::informe ids e/ou veiculos"; exit 1; fi
+          for par in "mercado=$IDS_LIMPOS" "veiculo=$VEIC_LIMPOS"; do
+            [ "${par#*=}" = "" ] && continue
+            HTTP=$(curl -sS --max-time 120 "$BASE/api/regenerar-relatorios-cron?$par" -H "x-cron-secret: $CRON_SECRET" -o resp.json -w "%{http_code}")
+            cat resp.json; echo
+            if [ "$HTTP" != "200" ]; then echo "::error::HTTP $HTTP ($par)"; exit 1; fi
+          done
