@@ -12787,7 +12787,25 @@ function RegistrosTab() {
 }
 
 function CnjTab() {
-  const [chat, setChat] = React.useState([]);
+  // Conversa sobrevive ao recarregar (conveniência deste navegador); o APRENDIZADO fica no servidor
+  // (admin_chat_memoria), não aqui.
+  const [chat, setChat] = React.useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('tsn:cnj-chat') || '[]'); return Array.isArray(s) ? s.slice(-40) : []; }
+    catch (e) { console.warn('[cnj-chat] histórico local ilegível:', e?.message); return []; }
+  });
+  const sessaoRef = React.useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const [avaliado, setAvaliado] = React.useState({});
+  React.useEffect(() => {
+    try { localStorage.setItem('tsn:cnj-chat', JSON.stringify(chat.slice(-40))); }
+    catch (e) { console.warn('[cnj-chat] não salvou o histórico local:', e?.message); }
+  }, [chat]);
+  async function avaliar(memoriaId, util) {
+    setAvaliado(p => ({ ...p, [memoriaId]: 'enviando' }));
+    try {
+      const r = await apiCall('/api/admin-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feedback: { id: memoriaId, util } }) });
+      setAvaliado(p => ({ ...p, [memoriaId]: r.ok ? (util ? 'bom' : 'ruim') : 'erro' }));
+    } catch (e) { console.warn('[cnj-chat] avaliação não enviada:', e?.message); setAvaliado(p => ({ ...p, [memoriaId]: 'erro' })); }
+  }
   const [pergunta, setPergunta] = React.useState('');
   const [perguntando, setPerguntando] = React.useState(false);
   const [gerarRelatorio, setGerarRelatorio] = React.useState(false);
@@ -12866,13 +12884,14 @@ function CnjTab() {
           contexto_cnj: cnj || undefined,
           filtro_chamados: contextoConv || undefined,
           gerar_relatorio: gerarRelatorio,
+          sessao: sessaoRef.current,
         }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Erro');
       setChat(prev => {
         const sem = prev.filter(m => !m.content.startsWith('🔍') && !m.content.startsWith('📋'));
-        return [...sem, { role: 'user', content: texto }, { role: 'assistant', content: data.resposta }];
+        return [...sem, { role: 'user', content: texto }, { role: 'assistant', content: data.resposta, memoriaId: data.memoria_id || null, casos: data.casos_usados || 0 }];
       });
       if (gerarRelatorio) setGerarRelatorio(false);
     } catch (e) {
@@ -12975,6 +12994,18 @@ function CnjTab() {
             <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
               <div style={{ maxWidth: '80%', padding: '12px 16px', borderRadius: 14, background: m.role === 'user' ? '#0D63DB' : m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#f0fdf4' : '#f8fafc', color: m.role === 'user' ? 'white' : '#111111', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : `1px solid ${m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#bbf7d0' : '#e2e8f0'}` }}>
                 {m.content}
+                {m.role === 'assistant' && m.memoriaId && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#94a3b8' }}>
+                    {m.casos > 0 && <span title="Perguntas parecidas já feitas que orientaram esta busca">📚 {m.casos} caso(s) parecido(s)</span>}
+                    {avaliado[m.memoriaId] === 'bom' ? <span style={{ color: '#15803d' }}>👍 guardado como exemplo</span>
+                      : avaliado[m.memoriaId] === 'ruim' ? <span style={{ color: '#b91c1c' }}>👎 não será reaproveitado</span>
+                      : <>
+                          <button onClick={() => avaliar(m.memoriaId, true)} disabled={avaliado[m.memoriaId] === 'enviando'} title="Resposta boa — usar como exemplo" style={{ border: '1px solid #e2e8f0', background: 'white', borderRadius: 6, cursor: 'pointer', padding: '1px 6px' }}>👍</button>
+                          <button onClick={() => avaliar(m.memoriaId, false)} disabled={avaliado[m.memoriaId] === 'enviando'} title="Resposta ruim — não reaproveitar" style={{ border: '1px solid #e2e8f0', background: 'white', borderRadius: 6, cursor: 'pointer', padding: '1px 6px' }}>👎</button>
+                          {avaliado[m.memoriaId] === 'erro' && <span style={{ color: '#b91c1c' }}>não salvou — tente de novo</span>}
+                        </>}
+                  </div>
+                )}
               </div>
             </div>
           ))}

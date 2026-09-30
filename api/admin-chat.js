@@ -13,6 +13,41 @@ async function sbGet(path) {
   return r.json();
 }
 
+// MEMÓRIA OPERACIONAL (30/09, dono: "um agente que aprenda com as perguntas — em operações de leilão
+// elas são similares"). Cada troca vai para `admin_chat_memoria` com o RASTRO de ferramentas; a próxima
+// pergunta parecida recebe esses casos no prompt e já sabe por onde começar. Nada disso pode derrubar
+// o chat: falha na memória é registrada no log e a conversa segue sem ela.
+async function sbRpc(nome, args) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nome}`, {
+    method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  if (!r.ok) throw new Error(`${nome} HTTP ${r.status}`);
+  return r.json();
+}
+async function sbGravar(tabela, corpo, filtro = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}${filtro}`, {
+    method: filtro ? 'PATCH' : 'POST',
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(corpo),
+  });
+  if (!r.ok) throw new Error(`${tabela} HTTP ${r.status}`);
+  return r.json(); // linhas afetadas — vazio = não alcançou nada (forma nº 3)
+}
+export function blocoDeCasos(casos) {
+  if (!Array.isArray(casos) || !casos.length) return '';
+  const linhas = casos.map((c, i) => {
+    const caminho = (Array.isArray(c.ferramentas) ? c.ferramentas : [])
+      .map((f) => `${f.nome}(${String(f.entrada || '').slice(0, 120)})${f.ok === false ? ' ✗' : ''}`).join(' → ') || 'respondido sem ferramenta';
+    return `${i + 1}. ${c.util ? '[👍 aprovado pelo admin] ' : ''}Pergunta: "${String(c.pergunta).slice(0, 300)}"\n   Caminho: ${caminho}\n   Resposta dada (resumo): ${String(c.resposta || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+  });
+  return `## Aprendizado — perguntas parecidas já feitas nesta operação
+Use o CAMINHO que funcionou como ponto de partida (mesmas ferramentas, na mesma ordem), adaptando
+nomes/números à pergunta atual. Os dados das respostas antigas podem estar DESATUALIZADOS — nunca os
+repita como fato sem consultar de novo; o que vale aprender é por onde buscar.
+${linhas.join('\n')}`;
+}
+
 // Minimização de PII: mascara CPF e telefone no texto livre das conversas antes de
 // mandar para a IA (o admin ainda vê nome/status pelos campos estruturados).
 const redigirPII = (t) => String(t || '')
@@ -35,6 +70,21 @@ export default async function handler(req) {
     reqBody = await req.json();
   } catch {
     return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  // 👍/👎 numa resposta: 👍 vira exemplo prioritário, 👎 nunca é reaproveitado.
+  if (reqBody.feedback) {
+    const { id, util } = reqBody.feedback;
+    if (!/^[0-9a-f-]{36}$/i.test(String(id || '')) || typeof util !== 'boolean') {
+      return new Response(JSON.stringify({ error: 'feedback inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    try {
+      const linhas = await sbGravar('admin_chat_memoria', { util }, `?id=eq.${id}`);
+      if (!linhas.length) return new Response(JSON.stringify({ error: 'conversa não encontrada' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {
+      console.error('[admin-chat] feedback não gravado:', e?.message || e);
+      return new Response(JSON.stringify({ error: 'não consegui gravar a avaliação agora' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+    }
   }
   const reqBodyMensagem = String(reqBody.mensagem || '').slice(0, 4000); // limite anti-abuso/prompt-injection
   const mensagem = reqBodyMensagem;
@@ -79,6 +129,11 @@ export default async function handler(req) {
 
   const contextoStr = contextoBlocos.join('\n\n');
 
+  let casos = [];
+  try { casos = await sbRpc('admin_chat_casos_parecidos', { p_texto: mensagem, p_limite: 4 }); }
+  catch (e) { console.error('[admin-chat] memória indisponível (segue sem ela):', e?.message || e); }
+  const aprendizado = blocoDeCasos(casos);
+
   const system = `Você é o assistente de inteligência administrativa da BidPro Brasil, plataforma de análise de imóveis em leilão.
 
 Você tem acesso privilegiado a:
@@ -113,7 +168,8 @@ explícita numa mensagem anterior do admin.
 
 ${gerar_relatorio ? 'O administrador solicitou um RELATÓRIO FORMAL. Estruture a resposta com: título, data, sumário executivo, dados detalhados, conclusões e recomendações.' : ''}
 
-Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não estejam no contexto.`;
+Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não estejam no contexto.
+${aprendizado ? `\n${aprendizado}` : ''}`;
 
   const messages = [
     // Whitelist de role + content string truncado (evita injeção via histórico forjado).
@@ -127,6 +183,7 @@ Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não e
   // já verificar se tem cliente com arremate) antes da resposta final em texto. Teto de 6
   // rodadas — suficiente para qualquer combinação das ferramentas atuais, evita loop sem fim
   // se o modelo insistir em chamar ferramenta depois de já ter o que precisa.
+  const rastro = contexto_cnj ? [{ nome: 'cnj_datajud (busca automática da tela)', entrada: 'número/parte citados na pergunta', ok: true, resumo: `${contexto_cnj?.processos?.length || 0} processo(s)` }] : [];
   for (let rodada = 0; rodada < 6; rodada++) {
     const r = await anthropicFetch({
       method: 'POST',
@@ -138,16 +195,25 @@ Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não e
 
     if (data.stop_reason !== 'tool_use') {
       const texto = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-      return new Response(JSON.stringify({ resposta: texto }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      let memoriaId = null;
+      try {
+        const [linha] = await sbGravar('admin_chat_memoria', {
+          user_id: user.id, sessao: String(reqBody.sessao || '').slice(0, 64) || null,
+          pergunta: mensagem, resposta: texto.slice(0, 8000), ferramentas: rastro,
+        });
+        memoriaId = linha?.id || null;
+      } catch (e) { console.error('[admin-chat] conversa não gravada na memória:', e?.message || e); }
+      return new Response(JSON.stringify({ resposta: texto, memoria_id: memoriaId, casos_usados: casos.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     messages.push({ role: 'assistant', content: data.content });
     const usos = data.content.filter(b => b.type === 'tool_use');
-    const resultados = await Promise.all(usos.map(async (uso) => ({
-      type: 'tool_result',
-      tool_use_id: uso.id,
-      content: JSON.stringify(await executarFerramentaAdmin(uso.name, uso.input, { adminUser: user })),
-    })));
+    const resultados = await Promise.all(usos.map(async (uso) => {
+      const saida = await executarFerramentaAdmin(uso.name, uso.input, { adminUser: user });
+      const conteudo = JSON.stringify(saida);
+      rastro.push({ nome: uso.name, entrada: JSON.stringify(uso.input || {}).slice(0, 300), ok: !(saida && (saida.erro || saida.error)), resumo: redigirPII(conteudo).slice(0, 300) });
+      return { type: 'tool_result', tool_use_id: uso.id, content: conteudo };
+    }));
     messages.push({ role: 'user', content: resultados });
   }
 
