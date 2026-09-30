@@ -204,8 +204,13 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
 }
 
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
-  const { urls, fetchOk, via, eventosCount, vazioDeclarado } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
-  console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
+  const enumerado = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
+  const { fetchOk, via, eventosCount, vazioDeclarado } = enumerado;
+  // FILTRO OPCIONAL POR URL (30/09, NORDESTE): quando a URL já diz que o lote não é imóvel, ele sai
+  // ANTES de gastar uma das `maxLotes` leituras de detalhe. Sem o gancho, nada muda.
+  const urls = cfg.parse.urlCandidata ? enumerado.urls.filter(cfg.parse.urlCandidata) : enumerado.urls;
+  const foraPelaUrl = enumerado.urls.length - urls.length;
+  console.log(`[${tenant.fonte}] enumerados ${enumerado.urls.length} lote(s)${via ? ` (via ${via})` : ''}${foraPelaUrl ? ` · ${foraPelaUrl} fora pela URL (não é imóvel) · ${urls.length} candidatos` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
   const naoImovelIds = [];
   if (urls.length) {
@@ -290,7 +295,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, vazioDeclarado, enumerados: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
+  // `fonteVazia`/`enumerados` medem o que o SITE listou, não o que sobrou do filtro por URL — senão
+  // um acervo 100% não-imóvel viraria "site vazio" e calaria o alarme (forma 10).
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:

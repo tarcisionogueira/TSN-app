@@ -34,6 +34,17 @@ export function extrairUrlsDeLote(html, base) {
 }
 export const idDaUrl = url => (String(url).match(/\/lotes\/(\d+-\d+)/) || [])[1] || null;
 
+// Sinal de imóvel no SLUG — a mesma regra que parseDetalhe usa (lista de PERMITIDAS, ver lá).
+const RE_IMOVEL_SLUG = /imov|casa|apartamento|terreno|lote|galp[ãa]o|ch[áa]cara|s[íi]tio|fazenda|pr[ée]dio|sobrado|kitnet|cobertura|comercial|residencial|\d+\s*x\s*\d+\s*m?\b/i;
+// FILTRO ANTES DE LER O DETALHE (30/09). O acervo (varas federais/criminais) cresceu de 17 para 398
+// lotes, quase todos veículo/sucata/máquina; o motor lê só `maxLotes` (40) detalhes por rodada, na
+// ordem da página — e desde 16/09 os 40 primeiros não eram imóvel: "0 prontos" todo dia, com imóvel
+// mais à frente na lista. O slug já diz se é imóvel; área no slug também conta.
+export function urlCandidata(url) {
+  const slug = (String(url).match(/\/lotes\/([a-z0-9-]+)/i) || [])[1] || '';
+  return RE_IMOVEL_SLUG.test(slug.replace(/^\d+-\d+-/, '')) || /com-[\d.,]+-?(m2|metros|hectares?|ha)\b/i.test(slug);
+}
+
 const MES = { jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5, jul: 6, ago: 7, set: 8, out: 9, nov: 10, dez: 11 };
 function datasPorExtenso(txt) {
   const ds = [];
@@ -95,7 +106,7 @@ export function parseDetalhe(html, url) {
   // gambá: sempre falta a próxima categoria (aconteceu 2x seguidas aqui). Trocado por
   // uma lista de palavras PERMITIDAS — só passa quem tem sinal de imóvel de verdade no
   // slug (tipo ou medida de área/terreno), critério mais estreito e mais estável.
-  const ehImovel = area > 0 || /imov|casa|apartamento|terreno|lote|galp[ãa]o|ch[áa]cara|s[íi]tio|fazenda|pr[ée]dio|sobrado|kitnet|cobertura|comercial|residencial|\d+\s*x\s*\d+\s*m?\b/i.test(slug);
+  const ehImovel = area > 0 || RE_IMOVEL_SLUG.test(slug);
   if (!ehImovel) { avaliacao = 0; minimo = 0; }
   const datas = datasPorExtenso(txt).sort((a, b) => a - b);
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);

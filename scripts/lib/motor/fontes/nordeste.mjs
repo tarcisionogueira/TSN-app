@@ -5,7 +5,7 @@
  * grátis no runner. Parser puro em lib/nordeste-parse.mjs.
  */
 import {
-  TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, urlCandidata,
 } from '../../nordeste-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
@@ -19,7 +19,7 @@ export default {
   maxPages: 1,
   maxEventos: 15,
   tenants: Object.values(TENANTS),
-  parse: { extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  parse: { extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, urlCandidata },
   conhecimento: {
     plataforma: 'Next.js App Router (RSC; sem API de lote)', acesso: 'dom-puppeteer',
     custo: 'gratis', anti_bot: 'nenhum', enumeracao: '/ → /leiloes/<evento> (2 níveis, renderizado)',
