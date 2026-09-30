@@ -21,11 +21,20 @@ de cliente parado; segurança 0/0.
 **Restam em alerta (conhecidos):** `qa_invariantes_lenta` (cache frio), `sem_foto` 1.780 (GLOBO sem detalhe),
 `estado_fora_do_padrao` 8 (4 páginas montadas em JS sem cidade), GRUPOLANCE com praça trocada (recon).
 
+**Atualização 30/09 (fim da tarde) — os 4 críticos:**
+- ✅ Termo de contratação e PROCURAÇÃO agora são DOIS documentos (`api/_termo-assessoria.js`: gerarTermoAssessoria /
+  gerarProcuracao; `/api/termo-atribuido?doc=termo|procuracao`). Gerados e aguardando assinatura (bloqueio até 30/10):
+  Marcos — termo ISENTO + procuração da arrematação (o documento combinado anterior foi cancelado); Rafael — 2 termos
+  "R$ 5.000 à vista, já quitado" (um no caso arrematado 41b7c517, outro `<user>:2` da 2ª assessoria em busca);
+  Matheus — termo "R$ 5.000 à vista, já quitado". Rafael e Matheus JÁ tinham procuração assinada em 29–30/07.
+- ✅ E-mails: teste 30/09 14h20 — suporte@, privacidade@ e contato@ RECEBEM (Resend inbound, caixa e chamado). A nota
+  "MX pendente" do PENDENCIAS_DONO estava desatualizada. Chamado para privacidade@ nasce "[LGPD — responder até dd/mm]".
+- 🔶 Bright Data: faixa 68.211.146.0/24 — direção dada ao dono (remover da lista negra; não usar lista branca).
+
 **DEPENDE DO DONO — por prioridade:**
-1. 🔴 Bright Data pôs na lista negra 68.211.146.0/24 (runner do GitHub) — desbloquear no painel.
-2. 🔴 Marcos assinar o termo (link em contratos_link; bloqueio até 30/10).
-3. 🔴 Rafael e Matheus (assessorados) sem termo nenhum — autorizar gerar o termo atribuído (e a taxa de cada).
-4. 🔴 MX do domínio → inbound do Resend: suporte@ e privacidade@ publicados e sem receber (LGPD art. 18).
+1. 🔴 Bright Data: remover 68.211.146.0/24 da lista negra da zona web_unlocker1 (ver passo a passo na conversa de 30/09).
+2. 🔴 Cobrar as assinaturas: Marcos (termo + procuração), Rafael (2 termos), Matheus (1 termo) — prazo 30/10.
+3. 🟠 LGPD: nomear o encarregado (DPO) na Política de Privacidade e responder pedidos de titular em até 15 dias.
 5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
 6. 🟠 Revenda de veículo: a busca web não tira preço da Webmotors — escolher fonte (iCarros/Mobiauto/OLX ou API paga).
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
