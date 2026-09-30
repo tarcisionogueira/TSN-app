@@ -9,6 +9,26 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⚖️ 30/09 (noite, 11ª parte) — auditoria da consulta jurídica (CNJ/DJEN) e correções
+- **Fato medido:** o DataJud PÚBLICO não devolve `partes` — toda busca por nome ali voltava vazia (documental dizia
+  "nenhum processo… sem falhas" p/ executado e sócios). Busca por parte agora é `buscarProcessosPorParte` (DJEN
+  `nomeParte`, todos os tribunais, 1 chamada); número vai SÓ ao tribunal do número (+ superior); número sem tribunal
+  deduzível pede UF — nunca varredura nacional com número (regra do dono).
+- **DJEN recusa IP fora do Brasil (403)** e responde 500 "muito ocupado" sob rajada: funções CNJ/DJEN em **gru1**
+  (vercel.json: admin-chat, cnj-datajud, cnj-monitor-cron, gerar-documental, processar-analise, caso-andamento,
+  laudo-retry, radar-editais, cnj-retomada) + uma ida pelo banco (pg_net) em 403/500.
+- **Corrigido (auditoria, 20 itens):** alerta "não localizado" com processo achado/consulta falha; falha da busca por
+  nome como "nada consta"; CPF/CNPJ no campo nome dava VERDE (CNPJ→razão social; CPF pede nome); busca por nome sem
+  resultado = AMARELO (janela 12 meses); riscos só da classe/tipo, homônimo fora do score/parecer; procFontes nunca da
+  busca por nome; prazos (nome e sócios com orçamento); triagem registra falha; `_laudo-fontes` sem Bright Data pago;
+  juridico-retry só em falha real; monitor 4 a 4 com erro no snapshot; retomada por credor declarada indisponível;
+  chat sem pré-busca duplicada; edital do radar prova existência do processo. Teste `djen-busca-por-parte.mjs`.
+- **Regerados** os 14 documentais afetados (`regerar-relatorios.yml` input `documentais`, novo).
+- **Pendente (melhorias):** cache de consulta CNJ/DJEN (mesmo nº consultado por triagem, documental, andamento, chat e
+  monitor); publicações DJEN dentro do parecer da IA; e-mail "consulta concluída" do juridico-retry dispara quando o
+  regen_motivo muda por outro motivo. Testes antigos `edital-desatualizado-nao-vira-manchete` e
+  `venda-direta-nao-e-venda-online` já falhavam antes (não relacionados).
+
 ### 🧠 30/09 (noite, 10ª parte) — revenda de veículo por OLX + Mobiauto · chat CNJ com memória e histórico
 - **Revenda (dono: L200 Triton 2021 saiu "0 anúncios"):** o Mobiauto só tem 2021 em `l200-triton-sport` (chutávamos
   `l200-triton`) e havia um portal só. Agora `anunciosDoMobiauto` descobre o slug pela página da MARCA/ANO quando o
