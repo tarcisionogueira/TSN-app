@@ -9,6 +9,39 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🚗 30/09 (manhã) — Relatório de veículo: comissão REAL, débitos declarados, reparo sem valor, revenda = média Webmotors − 10%
+Print do dono (Fiat Cronos 2020, SUPERBID, id 4e61ea2b…): comissão "5% presumida", "débitos —" e revenda pela
+régua (FIPE − 15%). Causa: relatório de 29/09 14h28, ANTERIOR aos custos/revenda — mas a descrição trazia
+"DÉBITOS: R$ 7.473,15" e o gerador lia só 4.000 caracteres e 5 anexos. Pedido do dono e o que mudou:
+- **Ler tudo do veículo:** descrição até 12 mil caracteres (com conserto de acento "ComissÃ£o" da SODRÉ),
+  **texto da página do lote** (`link_lote`, até 12 mil), taxas da plataforma (`raw.lot_rate_information`),
+  leiloeiro/comitente/pátio/opcionais/trecho do motor.
+- **Comissão, por ordem:** campo da plataforma na página (`auctioneerCommissionPercent`, SUPERBID) → texto do
+  lote (`extrairComissaoPct`) → IA (edital/anexos, com `comissaoTrecho`) → outros lotes do MESMO evento que
+  concordem → só então 5% presumida. `result.comissaoFonte` aparece na tela e no PDF.
+  ⚠️ No Cronos nenhuma fonte pública informa: a SUPERBID mostra a comissão **só logado** ("Para visualizar os
+  encargos e comissões, acesse sua conta") e o campo vem `null`; 0 de 23 lotes do evento 790744 citam.
+  Continua "presumida", agora dizendo por quê.
+- **Débitos:** só valor DECLARADO entra no teto (IA + `extrairDebitosDeclarados` sobre descrição/taxas; exige
+  "rótulo: valor" — medido no acervo: sem isso casavam "multa de R$ 200 por atraso" e "débitos até R$ 350";
+  mesmo valor citado 2× conta 1×). Sem valor → `debitosSemValor` (lista).
+- **Reparos (pneus, bateria…):** citados em `reparos`, SEM valor e fora do cálculo; relatórios antigos com
+  `origem: 'estimado'` têm o valor ignorado pelo `calcularViabilidade`.
+- **Revenda:** média de TODOS os anúncios comparáveis da **Webmotors** − 10% (antes: 5 mais baratos); outros
+  portais só se Webmotors < 3 (`base: 'misto'`); tira quem fica fora de 60–160% da mediana.
+- Teste `testar:viabilidade-veiculo` 32/32 (frases reais do acervo). Cronos regerado deve ir a teto
+  ≈ R$ 30.365 (65% FIPE − 7.473,15, ÷ 1,05) em vez de R$ 37.482. **Conferir no 1º relatório regerado:**
+  `select result->>'comissaoFonte', result->'custos', result->'revendaMercado'->>'base', result->>'paginaLote'
+  from analises_veiculo order by updated_at desc limit 3;`
+
+**Do e-mail (30/09):** (1) **Bright Data pôs na lista negra o bloco 68.211.146.0/24** da zona `web_unlocker1`
+(29/09 17h23, "IP desconhecido"). É faixa Microsoft/Azure — provável runner do GitHub Actions. Se for nosso,
+as coletas que usam a Web Unlocker a partir do CI passam a ser recusadas; **decisão do dono** no painel (tirar
+da lista negra ou, se não reconhecer, trocar a senha da zona). (2) Workflow **Enriquecer Localização OSM**
+falhou 30/09 10h54 com `curl: (47) Maximum (50) redirects` após dias verdes — conferir a rodada de 01/10 antes
+de mexer. (3) Health-check 29/09 22h: Índice "PARADO" (6 falhas até 28/09 21h34, antes do conserto) — segue
+pendência 6 abaixo; 5 tabelas com RLS sem escrita do usuário (aviso).
+
 ### 📌 FECHAMENTO 30/09 — o que evoluiu, o que falta, o que conferir primeiro
 
 **Evolução do dia (detalhe nos blocos "30/09" abaixo):**

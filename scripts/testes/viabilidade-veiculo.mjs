@@ -3,7 +3,7 @@
  * ≤ 65% da FIPE) e deságio realista da FIPE. Caso real do print: Fiat Cronos 2020, 264 mil km,
  * frota pública, FIPE R$ 60.549, lance mínimo R$ 22.000.
  */
-import { desagioFipe, calcularViabilidade, planoParcelado, revendaPorAnuncios } from '../../src/utils/viabilidadeVeiculo.js';
+import { desagioFipe, calcularViabilidade, planoParcelado, revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados } from '../../src/utils/viabilidadeVeiculo.js';
 import { mdSimplesParaHtml } from '../../src/utils/mdSimples.js';
 
 let falhas = 0;
@@ -33,13 +33,35 @@ const anuncios = [
   { preco: 85500, url: 'https://www.webmotors.com.br/a5' }, { preco: 124900, url: 'https://www.webmotors.com.br/a6' },
   { preco: 9000, titulo: 'para-choque', url: 'https://x.com/peca' }, { preco: 84500, url: 'javascript:alert(1)' },
 ];
+// 30/09 (dono): MÉDIA de todos os anúncios da Webmotors − 10% (não mais só os 5 mais baratos).
 const rv = revendaPorAnuncios(anuncios, 84032);
-ok(rv && rv.anuncios.length === 5 && rv.anuncios[0].preco === 83900, `5 mais baratos, a peça de R$ 9 mil fora (abaixo de 30% da FIPE)`);
-ok(rv.media === 85178 && rv.valor === 76660.2, `média ${rv.media} − 10% = ${rv.valor}`);
-ok(rv.anuncios.every((a) => a.url === null || /^https?:/.test(a.url)) && rv.anuncios.some((a) => a.preco === 84500 && a.url === null), 'link "javascript:" da IA é descartado (vira null)');
+ok(rv && rv.base === 'webmotors' && rv.anuncios.length === 6, `usa os 6 da Webmotors (URL webmotors.com.br vale como portal), a peça de R$ 9 mil fora e o "javascript:" (sem portal) fora — veio ${rv?.anuncios.length}`);
+ok(rv.media === 93011.17 && rv.valor === 83710.05, `média de todos ${rv.media} − 10% = ${rv.valor}`);
+ok(rv.anuncios.every((a) => a.url === null || /^https?:/.test(a.url)), 'link "javascript:" da IA nunca vira href');
+const misto = revendaPorAnuncios([{ preco: 80000, portal: 'webmotors' }, { preco: 82000, portal: 'olx' }, { preco: 84000, portal: 'icarros' }], 84032);
+ok(misto && misto.base === 'misto' && misto.media === 82000, 'Webmotors com menos de 3 → completa com outros portais e diz que é misto');
+const fora = revendaPorAnuncios([80000, 81000, 82000, 83000, 160000].map((preco) => ({ preco, portal: 'webmotors' })), 84032);
+ok(fora && fora.anuncios.length === 4 && fora.media === 81500, `anúncio a 1,9× da mediana (versão errada) sai antes da média — média ${fora?.media}`);
 ok(revendaPorAnuncios([{ preco: 80000 }, { preco: 81000 }], 84032) === null, 'menos de 3 anúncios → sem revenda de mercado (usa a régua)');
-const vm = calcularViabilidade({ fipe: 84032, lanceMinimo: 47000, despesas: [{ item: 'x', valor: 7900 }], desagioPct: 10, revendaMercado: rv.valor });
-ok(vm.fipeRealista === 76660.2 && vm.revendaPorMercado && vm.lucroNoMinimo === Math.round((76660.2 - (47000 * 1.05 + 7900)) * 100) / 100, `lucro usa a revenda de mercado: ${vm.lucroNoMinimo}`);
+const vm = calcularViabilidade({ fipe: 84032, lanceMinimo: 47000, despesas: [{ item: 'x', valor: 7900, origem: 'declarado' }], desagioPct: 10, revendaMercado: rv.valor });
+ok(vm.fipeRealista === 83710.05 && vm.revendaPorMercado && vm.lucroNoMinimo === Math.round((83710.05 - (47000 * 1.05 + 7900)) * 100) / 100, `lucro usa a revenda de mercado: ${vm.lucroNoMinimo}`);
+const semReparo = calcularViabilidade({ fipe: 60549, lanceMinimo: 22000, despesas: [{ item: 'Débitos', valor: 7473.15, origem: 'declarado' }, { item: '4 pneus', valor: 1600, origem: 'estimado' }] });
+ok(semReparo.despesasTotal === 7473.15, `reparo estimado (pneus) é citado mas NÃO entra no teto — despesas ${semReparo.despesasTotal}`);
+
+console.log('\ncomissão e débitos lidos do texto (frases reais do acervo, 30/09)');
+ok(extrairComissaoPct('ComissÃ£o: 5.00% do valor do lance, Sedex: Valores') === 5, 'SODRÉ com acento corrompido → 5');
+ok(extrairComissaoPct('Comissão do Leiloeiro de 5% (cinco por cento) sobre o preço') === 5, 'SUPERBID "Comissão do Leiloeiro de 5%" → 5');
+ok(extrairComissaoPct('- 5% referente à comissão do leiloeiro, acrescido ao valor') === 5, '"5% referente à comissão" → 5');
+ok(extrairComissaoPct('sinal de 20% e comissão de 7,5% sobre o lance') === 7.5, 'comissão diferente de 5% é lida (7,5)');
+ok(extrairComissaoPct('apresentar à Comissão de Alienação o comprovante de 20% (vinte por cento)') === null, '"Comissão de Alienação" (colegiado) não é taxa');
+ok(extrairComissaoPct('Além das comissões, o comprador deverá pagar encargos') === null, 'comissão sem percentual → null (a tela presume e diz)');
+const deb = (t) => extrairDebitosDeclarados(t).map((d) => d.valor);
+ok(deb('DÉBITOS: R$ 7.473,15 E TAXAS DE LICENCIAMENTO')[0] === 7473.15, 'Cronos do print: débitos R$ 7.473,15 entram');
+ok(deb('DÉBITOS: R$ 7.473,15 E TAXAS ... Débitos em aberto: R$ 7.473,15 e taxas de licenciamento').length === 1, 'o mesmo débito citado duas vezes (topo e rodapé do Cronos) conta UMA vez');
+ok(deb('Débitos em aberto: R$3502,98 Sujeito')[0] === 3502.98 && deb('Débitos em aberto: R$544,30Sujeito')[0] === 544.3, 'valor sem milhar e colado no texto');
+ok(deb('DÉBITOS EM ABERTO: R$ 0,00 SUJEITO').length === 0 && deb('Débitos em aberto: NADA CONSTA').length === 0, 'zero / nada consta não viram débito');
+ok(deb('será aplicada multa de R$ 200,00 (duzentos reais)').length === 0 && deb('Eventuais débitos até o valor de R$ 350,00').length === 0, 'multa por atraso e teto condicional NÃO são dívida do lote');
+ok(deb('ComissÃ£o: 5.00% do valor do lance, DepÃ³sito de Bens: R$ 550,00, LogÃ­stica e/ou Despachante: 350,00, Outros DÃ©bitos: 123,00').join() === '550,350,123', 'taxas da SODRÉ (depósito, despachante, outros débitos)');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

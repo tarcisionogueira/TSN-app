@@ -37,7 +37,10 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
   const L = Number(lanceMinimo) || 0;
   if (!(F > 0) || !(L > 0)) return null;
   const c = (Number(comissaoPct) > 0 ? Number(comissaoPct) : COMISSAO_PADRAO_PCT) / 100;
-  const itens = (despesas || []).filter((d) => Number(d?.valor) > 0);
+  // Só entra na conta o que o leiloeiro DECLARA (débitos, taxas). Reparo estimado pela condição
+  // (pneus, bateria, funilaria) é citado no relatório mas não tem valor (regra do dono, 30/09) —
+  // relatórios antigos ainda trazem `origem: 'estimado'` com valor, e eles ficam fora do teto.
+  const itens = (despesas || []).filter((d) => Number(d?.valor) > 0 && d?.origem !== 'estimado');
   const despesasTotal = itens.reduce((s, d) => s + Number(d.valor), 0);
   const r2 = (x) => Math.round(x * 100) / 100;
   const tetoAquisicao = r2(F * TETO_FIPE);
@@ -76,31 +79,87 @@ export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaP
   };
 }
 
-// REVENDA PELO MERCADO (29/09, pedido do dono): "média dos 5 anúncios mais em conta da Webmotors,
-// 10% abaixo, como valor sugerido". Substitui a régua de deságio sobre a FIPE quando há anúncios
-// suficientes; a régua continua como reserva (e o relatório diz qual das duas valeu).
-// Sanidade: preço fora de 30%–200% da FIPE é outro veículo (peça, sucata, versão de outra faixa) e
-// sai da conta ANTES de escolher os 5 — senão o "mais barato" seria sempre o anúncio errado.
+// REVENDA PELO MERCADO. 29/09: "média dos 5 anúncios mais em conta da Webmotors, 10% abaixo".
+// 30/09 (dono): "pegar a MÉDIA dos anúncios da Webmotors [...] 10% abaixo dessa média" — a média é
+// de TODOS os anúncios comparáveis da Webmotors, não só dos mais baratos. Outros portais só entram
+// quando a Webmotors tem menos de 3 (e o relatório diz qual base valeu). Substitui a régua de
+// deságio sobre a FIPE quando há anúncios suficientes; a régua continua como reserva.
+// Sanidade, ANTES da média: preço fora de 30%–200% da FIPE é outro veículo (peça, sucata, versão
+// de outra faixa); e, com 4+ anúncios, o que fica fora de 60%–160% da mediana do conjunto é versão
+// errada que a busca trouxe — um único anúncio desses puxa a média inteira.
 export const REVENDA_DESCONTO_PCT = 10;
 export const REVENDA_MIN_ANUNCIOS = 3;
 export function revendaPorAnuncios(anuncios, fipe) {
   const F = Number(fipe) || 0;
-  const validos = (Array.isArray(anuncios) ? anuncios : [])
+  const lista = Array.isArray(anuncios) ? anuncios : [];
+  const validos = lista
     // Link vem da resposta da IA e vira href: só http(s) (um "javascript:" ali seria XSS).
-    .map((a) => ({
-      preco: Math.round(Number(a?.preco) || 0),
-      titulo: String(a?.titulo || '').slice(0, 120), ano: Number(a?.ano) || null, km: Number(a?.km) || null,
-      local: String(a?.local || '').slice(0, 60), portal: String(a?.portal || '').slice(0, 20).toLowerCase(),
-      url: /^https?:\/\//i.test(String(a?.url || '')) ? String(a.url).slice(0, 500) : null,
-    }))
+    .map((a) => {
+      const url = /^https?:\/\//i.test(String(a?.url || '')) ? String(a.url).slice(0, 500) : null;
+      const portal = String(a?.portal || '').slice(0, 20).toLowerCase();
+      return {
+        preco: Math.round(Number(a?.preco) || 0),
+        titulo: String(a?.titulo || '').slice(0, 120), ano: Number(a?.ano) || null, km: Number(a?.km) || null,
+        local: String(a?.local || '').slice(0, 60),
+        portal: /webmotors\.com\.br/i.test(url || '') ? 'webmotors' : portal,
+        url,
+      };
+    })
     .filter((a) => a.preco > 0 && (!(F > 0) || (a.preco >= F * 0.3 && a.preco <= F * 2)));
   const unicos = [...new Map(validos.map((a) => [a.url || `${a.preco}|${a.titulo}`, a])).values()];
-  if (unicos.length < REVENDA_MIN_ANUNCIOS) return null;
-  const cinco = unicos.sort((a, b) => a.preco - b.preco).slice(0, 5);
-  const media = cinco.reduce((s, a) => s + a.preco, 0) / cinco.length;
+  const wm = unicos.filter((a) => a.portal === 'webmotors');
+  const base = wm.length >= REVENDA_MIN_ANUNCIOS ? wm : unicos;
+  const ord = [...base].sort((a, b) => a.preco - b.preco);
+  const mediana = ord.length ? ord[Math.floor((ord.length - 1) / 2)].preco : 0;
+  const usados = ord.length >= 4 ? ord.filter((a) => a.preco >= mediana * 0.6 && a.preco <= mediana * 1.6) : ord;
+  if (usados.length < REVENDA_MIN_ANUNCIOS) return null;
+  const media = usados.reduce((s, a) => s + a.preco, 0) / usados.length;
   const r2 = (x) => Math.round(x * 100) / 100;
   return {
     media: r2(media), valor: r2(media * (1 - REVENDA_DESCONTO_PCT / 100)), descontoPct: REVENDA_DESCONTO_PCT,
-    anuncios: cinco, descartados: (Array.isArray(anuncios) ? anuncios.length : 0) - validos.length,
+    base: base === wm ? 'webmotors' : 'misto',
+    anuncios: usados, descartados: lista.length - usados.length,
   };
+}
+
+// COMISSÃO DO LEILOEIRO lida do TEXTO (30/09, dono: "nem sempre é cinco por cento"). Determinística,
+// antes da IA: "Comissão: 5.00% do valor do lance" (SODRÉ), "comissão do leiloeiro de 10%",
+// "5% (cinco por cento) de comissão". Ignora "Comissão de Alienação/Licitação" (é um colegiado, não
+// taxa) e percentuais de sinal/entrada. Devolve o número (0 < x ≤ 20) ou null — nunca presume.
+export function extrairComissaoPct(texto) {
+  const t = consertarAcentos(texto).replace(/\s+/g, ' ');
+  const num = (s) => { const n = Number(String(s).replace(',', '.')); return n > 0 && n <= 20 ? n : null; };
+  const padroes = [
+    /comiss(?:[aã]o|[oõ]es)(?! de (?:alien|licit|avalia))(?:[^%.;]{0,60}?)(?:leiloeir[oa]|leil[aã]o)?[^%.;\d]{0,40}?(\d{1,2}(?:[.,]\d{1,2})?) ?%/i,
+    /(\d{1,2}(?:[.,]\d{1,2})?) ?%(?: ?\([^)]{0,30}\))?[^.;%]{0,25}?(?:de |a t[ií]tulo de )?comiss[aã]o/i,
+  ];
+  for (const re of padroes) { const m = t.match(re); if (m && num(m[1]) != null) return num(m[1]); }
+  return null;
+}
+
+// DÉBITOS COM VALOR declarados ("DÉBITOS: R$ 7.473,15 E TAXAS DE LICENCIAMENTO" — SUPERBID, o
+// Cronos do print de 30/09, que saiu com "débitos —"; "Débitos em aberto: R$1.070,20"; na SODRÉ,
+// "Depósito de Bens: R$ 2.350,00, Outros Débitos: 123,00"). Rede de segurança sob a IA.
+// Exige DOIS-PONTOS antes do valor, medido no acervo em 30/09: sem isso casavam "multa de R$ 200,00"
+// (penalidade por atraso na retirada) e "débitos até o valor de R$ 350,00" (teto condicional) — nenhum
+// dos dois é dívida do lote. "R$ 0,00"/"R$00,00" e "NADA CONSTA" não entram.
+export function extrairDebitosDeclarados(texto) {
+  const t = consertarAcentos(texto).replace(/\s+/g, ' ');
+  const out = [];
+  const re = /(d[ée]bitos?(?: em aberto| pendentes| do ve[ií]culo)?|outros d[ée]bitos|ipva(?: em aberto)?|multas?(?: em aberto)?|taxa administrativa|taxa de p[áa]tio|estadia|di[áa]rias? de p[áa]tio|dep[óo]sito de bens|log[íi]stica e\/ou despachante|despachante|remo[çc][ãa]o) ?: ?(?:R\$ ?)?(\d+(?:\.\d{3})*(?:,\d{2})?)(?![\d%])/gi;
+  for (const m of t.matchAll(re)) {
+    const valor = Number(m[2].replace(/\./g, '').replace(',', '.'));
+    if (valor > 0) out.push({ item: `${m[1].toLowerCase().replace(/^./, (c) => c.toUpperCase())} (declarado pelo leiloeiro)`, valor, origem: 'declarado' });
+  }
+  // Mesmo valor = mesmo débito citado duas vezes (o Cronos traz "DÉBITOS: R$ 7.473,15" no topo e
+  // "Débitos em aberto: R$ 7.473,15" no rodapé) — somar os dois dobraria o custo.
+  return [...new Map(out.map((d) => [d.valor, d])).values()];
+}
+
+// UTF-8 lido como Latin-1 ("ComissÃ£o", "DepÃ³sito" — raw da SODRÉ): refaz a decodificação. Só age
+// quando o texto tem a assinatura do defeito e todo caractere cabe em 1 byte; senão devolve igual.
+export function consertarAcentos(texto) {
+  const s = String(texto || '');
+  if (!/Ã[\u0080-\u00BF]/.test(s) || [...s].some((c) => c.charCodeAt(0) > 0xFF)) return s;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(s, (c) => c.charCodeAt(0))); } catch { return s; } // bytes que não formam UTF-8: o texto não era o defeito — fica como veio
 }

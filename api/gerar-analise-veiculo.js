@@ -18,7 +18,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { revendaPorAnuncios } from '../src/utils/viabilidadeVeiculo.js';
+import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos } from '../src/utils/viabilidadeVeiculo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -61,15 +61,17 @@ async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
   const alvo = [v.marca, v.modelo, v.titulo].filter(Boolean).join(' · ').slice(0, 200);
   const ano = v.ano_modelo || v.ano_fabricacao || '';
   if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };
+  // 30/09 (dono): a revenda é a MÉDIA dos anúncios da Webmotors − 10% — pede TODOS os comparáveis,
+  // não "os mais baratos" (isso enviesava a média para baixo). Outros portais só completam.
   const prompt = `Pesquise anúncios À VENDA do veículo: ${alvo}, ano modelo ${ano}.
-Priorize a Webmotors (webmotors.com.br) ordenando pelos de MENOR preço; se lá houver menos de 5 anúncios da mesma versão e ano, complete com OLX, iCarros ou Mobiauto.
-Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), mesma versão/motorização e ano modelo ${ano}.
-Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 10 anúncios, os mais baratos que encontrar.`;
+Pesquise na Webmotors (webmotors.com.br) e traga TODOS os anúncios que encontrar da mesma versão/motorização e ano — sem escolher só os mais baratos nem só os mais caros. Só se a Webmotors tiver menos de 3, complete com OLX, iCarros ou Mobiauto.
+Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), ano modelo ${ano}.
+Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 12 anúncios.`;
   let motivo = null;
   try {
     const anuncios = await comCascataBusca(async (degrau) => {
       const { texto, buscas } = await buscarComProva({
-        degrau, chave: CLAUDE_KEY, webUses: 4, timeoutMs: prazoMs, maxTokens: 4000,
+        degrau, chave: CLAUDE_KEY, webUses: 5, timeoutMs: prazoMs, maxTokens: 4000,
         system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
         aoCusto: (c) => { gasto.micro += Number(c) || 0; try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
       });
@@ -134,7 +136,45 @@ async function anexosParaBlocos(anexos, deadline) {
   return blocos;
 }
 
-function promptVeiculo(v, percentualFipe, faixa) {
+// PÁGINA DO LOTE (30/09, dono: "a IA leia TUDO que tiver sobre o veículo" — a comissão e os débitos
+// nem sempre estão na descrição gravada). Texto visível + o campo estruturado de comissão quando a
+// plataforma publica (SUPERBID: commercialCondition.auctioneerCommissionPercent). Nunca lança: sem
+// página, o relatório segue com o resto — e o motivo fica em `paginaLote` do resultado.
+async function lerPaginaDoLote(url, deadline) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, motivo: 'sem link do lote' };
+  try {
+    const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }, signal: AbortSignal.timeout(Math.max(3000, Math.min(12000, deadline - Date.now()))) });
+    if (!r.ok) return { texto: '', comissaoPct: null, motivo: `página do lote respondeu HTTP ${r.status}` };
+    const html = (await r.text()).slice(0, 3_000_000);
+    const m = html.match(/"auctioneerCommissionPercent"\s*:\s*(\d+(?:\.\d+)?)/);
+    const texto = consertarAcentos(html
+      .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replace(/\s+/g, ' ')).trim().slice(0, 12000);
+    const pct = m ? Number(m[1]) : null;
+    return { texto, comissaoPct: pct > 0 && pct <= 20 ? pct : null, motivo: texto ? null : 'página do lote sem texto legível' };
+  } catch (e) {
+    return { texto: '', comissaoPct: null, motivo: `página do lote indisponível: ${String(e?.message || e).slice(0, 60)}` };
+  }
+}
+
+// Comissão declarada em OUTROS lotes do MESMO leilão (mesmo evento da plataforma). No SUPERBID o
+// percentual costuma estar só nas "Condições de venda" do evento, escrito na descrição de alguns
+// lotes e não de outros. Só o mesmo evento — leiloeiro igual em outro evento pode cobrar outra taxa.
+async function comissaoDoMesmoLeilao(v) {
+  const evento = v?.raw?.auction?.id;
+  if (!evento || !v.fonte) return null;
+  try {
+    const r = await sb(`veiculos_leilao?fonte=eq.${encodeURIComponent(v.fonte)}&raw->auction->>id=eq.${encodeURIComponent(String(evento))}&id=neq.${encodeURIComponent(v.id)}&descricao=ilike.*comiss*&select=descricao&limit=15`);
+    if (!r.ok) { console.warn('[veiculo] comissão do mesmo leilão: HTTP', r.status); return null; }
+    const pcts = (await r.json()).map((x) => extrairComissaoPct(x.descricao)).filter((n) => n != null);
+    // Só vale quando os lotes concordam — percentuais diferentes no mesmo evento = não dá para escolher.
+    return pcts.length && pcts.every((n) => n === pcts[0]) ? pcts[0] : null;
+  } catch (e) { console.warn('[veiculo] comissão do mesmo leilão:', e?.message || e); return null; }
+}
+
+function promptVeiculo(v, percentualFipe, faixa, extra = {}) {
   const sinais = [
     v.sinistro && `Sinistro (classificação do leiloeiro): ${v.sinistro}`,
     v.is_sucata && 'Vendido como SUCATA — só certificado de baixa, SEM ATPV-e (transferência não é a padrão)',
@@ -158,23 +198,56 @@ DADOS DO LOTE (do sistema, não do documento — confie neles):
 - Origem da venda: ${ORIGEM_PROMPT[v.origem_venda] || 'não identificada (o leiloeiro não informa quem vende)'}
 - Forma de pagamento: ${v.forma_pagamento || 'não informada'}
 - Lance mínimo: R$ ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: R$ ${brl(v.valor_avaliacao)}` : ''}
-${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
+- Leiloeiro/plataforma: ${[v.leiloeiro, v.fonte].filter(Boolean).join(' · ') || 'não informado'}${v.comitente_edital ? ` · Comitente: ${v.comitente_edital}` : ''}
+- Pátio: ${[v.patio, v.cidade, v.estado].filter(Boolean).join(' · ') || 'não informado'}${v.opcionais ? `\n- Opcionais: ${String(v.opcionais).slice(0, 300)}` : ''}${v.motor_doc_texto ? `\n- Trecho de documento sobre o motor: ${String(v.motor_doc_texto).slice(0, 400)}` : ''}
+${extra.taxasPlataforma ? `- Taxas publicadas pela plataforma para este lote: ${extra.taxasPlataforma}\n` : ''}${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
 ${fipeTexto}
 
 DESCRIÇÃO DO LEILOEIRO:
-${v.descricao ? v.descricao.slice(0, 4000) : '(nenhuma descrição textual — use só os documentos anexos, se houver)'}
-
+${v.descricao ? consertarAcentos(v.descricao).slice(0, 12000) : '(nenhuma descrição textual — use só os documentos anexos, se houver)'}
+${extra.paginaTexto ? `\nTEXTO DA PÁGINA DO LOTE NO SITE DO LEILOEIRO (condições de venda, taxas, débitos — leia inteiro):\n${extra.paginaTexto}\n` : ''}
 TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/laudo/matrícula do veículo), responda SOMENTE JSON válido, sem markdown, neste formato:
 {
   "parecer": "markdown curto (max ~350 palavras): condição do veículo (avarias, procedência, débitos/multas se constarem), o que o documento CONFIRMA ou CONTRADIZ da descrição, e o veredito final considerando o percentual da FIPE",
   "riscos": ["cada risco concreto encontrado — sinistro, sucata, IPVA em aberto, débito/multa nos documentos, financiamento restrito, etc. Vazio se nenhum."],
   "condicoesResumo": "uma frase objetiva sobre o estado geral do veículo",
-  "comissaoLeiloeiroPct": número (ex.: 5) SÓ se o edital/descrição informar a comissão do leiloeiro; senão null,
-  "custos": [{"item": "descrição curta", "valor": número em reais, "origem": "declarado" | "estimado"}] — "declarado": taxa/débito que o edital ou a descrição diz ficar com o ARREMATANTE (taxa administrativa, pátio/estadia, IPVA/multas/licenciamento em aberto, remoção), com o valor informado; "estimado": reparo NECESSÁRIO pela condição DECLARADA (ex.: "pneus ruins" → troca dos pneus; "bateria fraca" → bateria), com valor médio de mercado conservador para este modelo. NUNCA inclua honorários de assessoria nem a comissão do leiloeiro (ela vai em comissaoLeiloeiroPct), nem reparo que o texto não aponte. Lista vazia se nada constar.,
+  "comissaoLeiloeiroPct": número (ex.: 5, 7.5, 10) — a comissão do leiloeiro EXATAMENTE como o edital, os anexos, a página do lote ou a descrição informam (NÃO presuma 5%: varia por leiloeiro e por leilão); null se nenhum deles informar,
+  "comissaoTrecho": "o trecho literal (até 160 caracteres) onde a comissão aparece, ou null",
+  "custos": [{"item": "descrição curta", "valor": número em reais}] — SOMENTE débitos e taxas que o edital, a página ou a descrição dizem ficar com o ARREMATANTE e trazem VALOR: débitos em aberto (IPVA, multas, licenciamento, DPVAT), taxa administrativa/encargos de administração, pátio/estadia/depósito, remoção, despachante. Some nada, copie cada valor como está. NUNCA inclua reparos, honorários de assessoria nem a comissão do leiloeiro. Lista vazia se nada constar,
+  "debitosSemValor": ["débito/encargo que fica com o arrematante mas SEM valor informado — ex.: 'multas e IPVA anteriores ao leilão, valor não informado', 'encargos de administração conforme condições de venda'. Vazio se nada."],
+  "reparos": ["reparo/atenção apontado pela condição DECLARADA (ex.: 'pneus ruins — troca', 'bateria fraca', 'volante desgastado', 'pequenos amassados'), SEM valor. Vazio se nada."],
   "parcelamento": {"entradaPct": número (ex.: 25 = sinal de 25% do lance), "parcelas": número de parcelas do saldo, "correcao": "índice/juros do saldo, se informado"} SÓ se o edital/descrição PERMITIR expressamente pagar em parcelas; senão null,
   "recomendacao": "comprar" | "avaliar_com_cautela" | "evitar"
 }
+Leia TUDO acima (dados, descrição, página do lote e documentos) antes de preencher comissão e débitos — é o que define o custo real da compra.
 NUNCA presuma que o veículo está em bom estado por AUSÊNCIA de menção — ausência de informação é "não informado", não é sinal positivo.`;
+}
+
+function listaDeTextos(x) {
+  return (Array.isArray(x) ? x : []).filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim().slice(0, 160)).slice(0, 12);
+}
+
+const pctValido = (n) => (Number(n) > 0 && Number(n) <= 20 ? Number(n) : null);
+function comissaoComFonte({ pagina, textoDoLote, ia, iaTrecho, irmaos }) {
+  const doTexto = extrairComissaoPct(textoDoLote);
+  if (pagina.comissaoPct != null) return { comissaoLeiloeiroPct: pagina.comissaoPct, comissaoFonte: 'página do lote (campo da plataforma)' };
+  if (doTexto != null) return { comissaoLeiloeiroPct: doTexto, comissaoFonte: 'descrição/condições do lote' };
+  if (pctValido(ia) != null) return { comissaoLeiloeiroPct: pctValido(ia), comissaoFonte: 'edital/documentos do lote', comissaoTrecho: typeof iaTrecho === 'string' ? iaTrecho.slice(0, 160) : null };
+  if (irmaos != null) return { comissaoLeiloeiroPct: irmaos, comissaoFonte: 'outros lotes do mesmo leilão' };
+  return { comissaoLeiloeiroPct: null, comissaoFonte: null };
+}
+
+// IA + leitura determinística, sem contar duas vezes o mesmo débito (mesmo valor = mesmo item).
+function juntarDebitos(daIa, doTexto, fipe) {
+  const F = Number(fipe) || 0;
+  const ia = (Array.isArray(daIa) ? daIa : [])
+    .map((c) => ({ item: String(c?.item || '').slice(0, 120), valor: Math.round(Number(c?.valor) * 100) / 100, origem: 'declarado' }))
+    .filter((c) => c.item && c.valor > 0);
+  const mesmos = new Set(ia.map((c) => c.valor));
+  return [...ia, ...doTexto.filter((d) => !mesmos.has(d.valor))]
+    // item maior que o próprio carro é leitura errada
+    .filter((c) => !(F > 0) || c.valor < F)
+    .slice(0, 12);
 }
 
 // Origem da venda (25/09 — public.classificar_origem_veiculo): muda o que a análise deve checar.
@@ -260,15 +333,24 @@ export default async function handler(req, res) {
     // o débito cobrava só a análise principal e a busca saía de graça para quem paga por crédito).
     const gastoBusca = { micro: 0 };
     const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id, gastoBusca);
-    const blocosDoc = await anexosParaBlocos(v.anexos, T0 + Math.min(45000, HARD_MS - 30000));
-    const semDocumentos = blocosDoc.length === 0 && !String(v.descricao || '').trim();
+    const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
+    const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
+      anexosParaBlocos(v.anexos, prazoDocs),
+      lerPaginaDoLote(v.link_lote, prazoDocs),
+      comissaoDoMesmoLeilao(v),
+    ]);
+    const semDocumentos = blocosDoc.length === 0 && !String(v.descricao || '').trim() && !pagina.texto;
+    // Taxas que a plataforma publica em campo próprio (SODRÉ: "Comissão: 5.00% do valor do lance,
+    // Depósito de Bens: R$ 550,00, ..."). Vão para a IA e para a leitura determinística abaixo.
+    const taxasPlataforma = consertarAcentos(v?.raw?.lot_rate_information || '').slice(0, 600);
+    const textoDoLote = [v.descricao, taxasPlataforma, pagina.texto].filter(Boolean).join(' \n ');
 
-    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa) }];
+    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma }) }];
     const r = await anthropicFetch({
       method: 'POST',
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL, max_tokens: 1800,
+        model: MODEL, max_tokens: 2600,
         system: 'Você é um avaliador de veículos de leilão. Responda SOMENTE JSON válido, sem markdown ao redor.',
         messages: [{ role: 'user', content }],
       }),
@@ -298,11 +380,17 @@ export default async function handler(req, res) {
       recomendacao: ['comprar', 'avaliar_com_cautela', 'evitar'].includes(parsed.recomendacao) ? parsed.recomendacao : null,
       // Custos para o teto de lance (29/09). Valida o que vem da IA: número positivo, menor que a
       // FIPE (item maior que o próprio carro é leitura errada), origem conhecida, no máximo 12.
-      comissaoLeiloeiroPct: Number(parsed.comissaoLeiloeiroPct) > 0 && Number(parsed.comissaoLeiloeiroPct) <= 20 ? Number(parsed.comissaoLeiloeiroPct) : null,
-      custos: (Array.isArray(parsed.custos) ? parsed.custos : [])
-        .map((c) => ({ item: String(c?.item || '').slice(0, 120), valor: Math.round(Number(c?.valor) * 100) / 100, origem: c?.origem === 'declarado' ? 'declarado' : 'estimado' }))
-        .filter((c) => c.item && c.valor > 0 && (!(v.valor_fipe > 0) || c.valor < Number(v.valor_fipe)))
-        .slice(0, 12),
+      // Comissão (30/09): o que o LOTE declara vence; depois a IA (que leu anexos e página); depois
+      // outro lote do mesmo evento; só então a tela presume 5% — e diz de onde veio cada uma.
+      ...comissaoComFonte({ pagina, textoDoLote, ia: parsed.comissaoLeiloeiroPct, iaTrecho: parsed.comissaoTrecho, irmaos: comissaoIrmaos }),
+      // Débitos/taxas COM valor declarado. Reparo nunca tem valor aqui (dono, 30/09: "citar, sem
+      // valores") — vai em `reparos`. A leitura determinística cobre o que a IA deixar passar.
+      // Só descrição + taxas da plataforma: a página pode listar OUTROS lotes ("veja também") e o valor
+      // de outro carro entraria aqui — a página inteira vai só para a IA, que lê o contexto.
+      custos: juntarDebitos(parsed.custos, extrairDebitosDeclarados([v.descricao, taxasPlataforma].filter(Boolean).join(' \n ')), v.valor_fipe),
+      debitosSemValor: listaDeTextos(parsed.debitosSemValor),
+      reparos: listaDeTextos(parsed.reparos),
+      paginaLote: pagina.motivo || 'lida',
       // Parcelamento (29/09): só com sinal e nº de parcelas plausíveis — valor fora disso é leitura errada.
       parcelamento: (() => {
         const p = parsed.parcelamento;

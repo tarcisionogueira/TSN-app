@@ -37,7 +37,25 @@ const RECOMENDACAO_LABEL = { comprar: 'Comprar', avaliar_com_cautela: 'Avaliar c
 
 // PDF DO RELATÓRIO (29/09, pedido do dono): identificação completa do lote e da BidPro, cenário
 // realista e teto de lance. Mesmo mecanismo dos relatórios de imóvel (components/pdfImprimir.js).
+// Relatórios de 29/09 traziam reparo como custo COM valor (`origem: 'estimado'`); desde 30/09 o
+// reparo é só citado (regra do dono) e o cálculo ignora esses valores — aqui eles viram texto.
+function extrasDoRelatorio(result) {
+  const antigos = (Array.isArray(result?.custos) ? result.custos : []).filter((c) => c?.origem === 'estimado').map((c) => c.item);
+  return {
+    reparos: [...(Array.isArray(result?.reparos) ? result.reparos : []), ...antigos],
+    debitosSemValor: Array.isArray(result?.debitosSemValor) ? result.debitosSemValor : [],
+  };
+}
+function rotuloComissao(result, viab) {
+  if (viab.comissaoPresumida) return 'presumida — o lote não informa; confirme no edital';
+  return result?.comissaoFonte ? `fonte: ${result.comissaoFonte}` : 'informada no lote';
+}
+function rotuloRevenda(rm) {
+  return `média de ${rm.anuncios.length} anúncio${rm.anuncios.length > 1 ? 's' : ''} ${rm.base === 'webmotors' ? 'da Webmotors' : rm.base === 'misto' ? '(Webmotors + outros portais)' : 'mais baratos'}`;
+}
+
 function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
+  const extras = extrasDoRelatorio(result);
   const e = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const brl = (x) => fmtBRL(x);
   const dt = (s) => (s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'não informada');
@@ -60,8 +78,8 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
     ? `${brl(result.fipeValor)}${v.fipe_codigo ? ` · código ${e(v.fipe_codigo)}` : ''}${result.fipeMesReferencia ? ` · ${e(result.fipeMesReferencia)}` : ''}${result.fipeStatus === 'aproximado' ? ' · valor aproximado (mais de uma versão bateu com o ano)' : ''}`
     : 'não disponível';
   const custos = viab ? [
-    linha(`Comissão (honorário) do leiloeiro — ${viab.comissaoPct}%${viab.comissaoPresumida ? ', presumida' : ''}`, 'sobre o lance'),
-    ...viab.despesas.map((d) => linha(`${d.item} (${d.origem})`, brl(d.valor))),
+    linha(`Comissão (honorário) do leiloeiro — ${viab.comissaoPct}% (${e(rotuloComissao(result, viab))})`, 'sobre o lance'),
+    ...viab.despesas.map((d) => linha(d.item, brl(d.valor))),
     `<tr class="t"><td class="r">Despesas assumidas (sem honorários)</td><td>${brl(viab.despesasTotal)}</td></tr>`,
   ].join('') : '';
   const cenario = viab ? `
@@ -72,14 +90,16 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
       ${linha('Teto de aquisição (65% da FIPE)', brl(viab.tetoAquisicao))}
       ${linha('TETO DE LANCE (até este valor ainda é boa compra)', `<b style="color:${viab.fechaNaRegra ? '#15803d' : '#b91c1c'}">${brl(viab.tetoLance)}</b>`)}
       ${parc ? [['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => linha(`Parcelado ${rot} (${parc.entradaPct}% + ${parc.parcelas}x${parc.correcao ? `, ${e(parc.correcao)}` : ''})`, `sinal ${brl(p.sinal)} (entrada ${brl(p.entradaLance)} + comissão ${brl(p.comissao)} + débitos ${brl(p.despesas)}) e ${p.parcelas}× ${brl(p.valorParcela)}`)).join('') : ''}
-      ${linha(result.revendaMercado ? `Revenda sugerida (média dos ${result.revendaMercado.anuncios.length} anúncios mais baratos ${brl(result.revendaMercado.media)} − ${result.revendaMercado.descontoPct}%)` : `Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
+      ${linha(result.revendaMercado ? `Revenda sugerida (${e(rotuloRevenda(result.revendaMercado))} ${brl(result.revendaMercado.media)} − ${result.revendaMercado.descontoPct}%)` : `Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
       ${linha('Lucro estimado no lance mínimo', brl(viab.lucroNoMinimo))}
       ${linha('Lucro estimado no teto de lance', brl(viab.lucroNoTeto))}
     </table>
     <p class="n">${viab.fechaNaRegra ? `Lance até ${brl(viab.tetoLance)} mantém arrematação + comissão + despesas em até 65% da FIPE.` : 'O lance mínimo já ultrapassa o teto de 65% da FIPE considerando comissão e despesas.'}</p>
     <h3>Custos considerados</h3><table>${custos}</table>
+    ${extras.debitosSemValor.length ? `<h3>Débitos do arrematante sem valor informado</h3><ul>${extras.debitosSemValor.map((t) => `<li>${e(t)}</li>`).join('')}</ul>` : ''}
+    ${extras.reparos.length ? `<h3>Reparos apontados na descrição (citados, não entram no cálculo)</h3><ul>${extras.reparos.map((t) => `<li>${e(t)}</li>`).join('')}</ul>` : ''}
     ${result.revendaMercado
-      ? `<h3>Anúncios usados na revenda sugerida</h3><ul>${result.revendaMercado.anuncios.map((a) => `<li>${brl(a.preco)} · ${e(a.titulo || 'anúncio')}${a.ano ? ` · ${e(a.ano)}` : ''}${a.km ? ` · ${e(Number(a.km).toLocaleString('pt-BR'))} km` : ''}${a.local ? ` · ${e(a.local)}` : ''} · ${a.url ? `<a href="${e(a.url)}">${e(a.portal || 'anúncio')}</a>` : e(a.portal || '')}</li>`).join('')}</ul>`
+      ? `<h3>Anúncios usados na revenda sugerida (${e(rotuloRevenda(result.revendaMercado))})</h3><ul>${result.revendaMercado.anuncios.map((a) => `<li>${brl(a.preco)} · ${e(a.titulo || 'anúncio')}${a.ano ? ` · ${e(a.ano)}` : ''}${a.km ? ` · ${e(Number(a.km).toLocaleString('pt-BR'))} km` : ''}${a.local ? ` · ${e(a.local)}` : ''} · ${a.url ? `<a href="${e(a.url)}">${e(a.portal || 'anúncio')}</a>` : e(a.portal || '')}</li>`).join('')}</ul>`
       : `<h3>Deságio aplicado à FIPE</h3><ul>${desagio.fatores.map((f) => `<li>${e(f.motivo)}: −${f.pct}%</li>`).join('')}</ul>`}` : '';
   const riscos = result.riscos?.length ? `<h2>Riscos identificados</h2><ul>${result.riscos.map((r) => `<li>${e(r)}</li>`).join('')}</ul>` : '';
   const fotos = fotosDoVeiculo(v);
@@ -229,7 +249,9 @@ export default function AnaliseVeiculo() {
   const desagio = desagioFipe(v);
   const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct, revendaMercado: result.revendaMercado?.valor }) : null;
   const rm = result?.revendaMercado || null;
-  const semCustosNoRelatorio = result && !Array.isArray(result.custos);
+  // Anterior a 30/09 (sem `reparos`): comissão, débitos e revenda seguiam a regra antiga — oferece regerar.
+  const semCustosNoRelatorio = result && (!Array.isArray(result.custos) || !Array.isArray(result.reparos));
+  const extras = extrasDoRelatorio(result);
   // Parcelado (29/09): plano no lance mínimo e no teto, quando o edital permite.
   const parc = result?.parcelamento && viab ? {
     ...result.parcelamento,
@@ -325,7 +347,7 @@ export default function AnaliseVeiculo() {
                   {viab.fechaNaRegra ? `Até ${fmtBRL(viab.tetoLance)} de lance ainda é uma boa compra.` : 'Nem o lance mínimo cabe no teto — não é boa compra pela regra da casa.'}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
-                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : ''}) + débitos e despesas assumidos ({fmtBRL(viab.despesasTotal)}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
+                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : ''}) + débitos e despesas assumidos ({viab.despesasTotal > 0 ? fmtBRL(viab.despesasTotal) : 'nenhum com valor declarado'}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
                   {' '}No lance mínimo, o investimento total é {fmtBRL(viab.investimentoNoMinimo)}.
                 </div>
                 {parc && (
@@ -364,13 +386,13 @@ export default function AnaliseVeiculo() {
               </div>
               <table style={{ width: '100%', marginTop: 10, borderCollapse: 'collapse', fontSize: 12.5 }}>
                 <tbody>
-                  <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Comissão do leiloeiro</td><td style={{ textAlign: 'right' }}>{viab.comissaoPct}%{viab.comissaoPresumida ? ' (presumida — confirme no edital)' : ''}</td></tr>
+                  <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Comissão do leiloeiro</td><td style={{ textAlign: 'right' }}>{viab.comissaoPct}% <span style={{ color: '#94a3b8', fontSize: 11 }}>({rotuloComissao(result, viab)})</span></td></tr>
                   {viab.despesas.map((d, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>{d.item} <span style={{ color: '#94a3b8', fontSize: 11 }}>({d.origem})</span></td><td style={{ textAlign: 'right' }}>{fmtBRL(d.valor)}</td></tr>
+                    <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>{d.item}</td><td style={{ textAlign: 'right' }}>{fmtBRL(d.valor)}</td></tr>
                   ))}
                   <tr style={{ borderTop: '1px solid #e2e8f0', fontWeight: 800 }}><td style={{ padding: '5px 0' }}>Despesas assumidas (sem honorários)</td><td style={{ textAlign: 'right' }}>{fmtBRL(viab.despesasTotal)}</td></tr>
                   {rm ? (
-                    <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Revenda sugerida: média dos {rm.anuncios.length} anúncios mais baratos ({fmtBRL(rm.media)}) − {rm.descontoPct}%</td><td style={{ textAlign: 'right' }}>{fmtBRL(rm.valor)}</td></tr>
+                    <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Revenda sugerida: {rotuloRevenda(rm)} ({fmtBRL(rm.media)}) − {rm.descontoPct}%</td><td style={{ textAlign: 'right' }}>{fmtBRL(rm.valor)}</td></tr>
                   ) : (
                     <tr style={{ borderTop: '1px solid #f1f5f9' }}><td style={{ padding: '5px 0' }}>Deságio sobre a FIPE para revenda</td><td style={{ textAlign: 'right' }}>{desagio.pct}%</td></tr>
                   )}
@@ -390,7 +412,19 @@ export default function AnaliseVeiculo() {
                   {result.revendaMercadoMotivo && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Sem anúncios suficientes para a revenda pelo mercado ({result.revendaMercadoMotivo}) — usada a régua sobre a FIPE.</div>}
                 </>
               )}
-              {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir as despesas declaradas e os reparos estimados.</div>}
+              {extras.debitosSemValor.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 12, color: '#92400e' }}>
+                  <b>Débitos do arrematante sem valor informado:</b>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{extras.debitosSemValor.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                </div>
+              )}
+              {extras.reparos.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 12, color: '#475569' }}>
+                  <b>Reparos apontados na descrição</b> <span style={{ color: '#94a3b8' }}>(citados — não entram no cálculo)</span>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{extras.reparos.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                </div>
+              )}
+              {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir a comissão e os débitos declarados pelo leiloeiro e a revenda pelos anúncios da Webmotors.</div>}
             </div>
           )}
 
