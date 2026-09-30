@@ -202,6 +202,9 @@ pagador no payload. **TESTADO de verdade (30/09, `mp-boleto-teste.yml` → `api/
 cancela na mesma chamada):** R$ 200.000 → recusado `Invalid transaction_amount` (4037); **R$ 100.000 →
 emitido e cancelado** (payment 181544892058). Teto real via API = **R$ 100 mil por boleto**; o limite de
 R$ 10 mil é só da ferramenta "Cobrar" do APP do MP. Honorário acima de 100 mil = 2 boletos.
+**Asaas (mesmo teste, `gateway=asaas`, produção):** boleto de **R$ 500.000 EMITIDO** (pay_jcw6yrgfl5mjhg44)
+e apagado, cliente de teste apagado — aceita o teto da doc (conta PJ). Tarifa pública: R$ 3,49 por
+boleto pago. Para honorário alto, o Asaas cobre num boleto só o que no MP pediria 2+.
 ⚠️ Achado ao disparar: `APP_BASE_URL` está VAZIO nos secrets do GitHub e o domínio sem www redireciona —
 o `curl -s -X POST` sem `-L` de 9 workflows recebia "Redirecting..." e o aviso de falha (`notify-scraper`)
 morria calado. Corrigido com `-L --post301 --post302 --post303`. Asaas: tabela pública — Pix R$ 1,99 fixo
