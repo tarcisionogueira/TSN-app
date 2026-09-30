@@ -4,7 +4,7 @@ import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { sanitizeName, sanitizeEmail } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
-import { termoAssessoria } from './_termo-assessoria.js';
+import { termoAssessoria, precosAssessoria } from './_termo-assessoria.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -123,7 +123,15 @@ export default async function handler(req, res) {
     ? 'Contrato de Assessoria para Aquisição de Imóvel em Leilão'
     : 'Contrato de Adesão ao Clube de Negócios BidPro Brasil';
 
-  const conteudo = (planoKey === 'assessorado' ? termoAssessoria() : TEMPLATE_CLUBE)
+  // Preço do termo = preço cobrado (planos_config/config_honorarios). Sem conseguir ler, não gera:
+  // contrato com valor diferente do cobrado é pior que contrato nenhum (e o checkout avisa a falha).
+  let precos = null;
+  if (planoKey === 'assessorado') {
+    const sbRest = (path) => fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } });
+    precos = await precosAssessoria(sbRest).catch((e) => { console.error('[auto-contrato] preços:', e?.message || e); return null; });
+    if (!precos) return res.status(502).json({ error: 'nao_foi_possivel_ler_precos_assessoria' });
+  }
+  const conteudo = (planoKey === 'assessorado' ? termoAssessoria(precos) : TEMPLATE_CLUBE)
     .replace(/\[NOME DO SIGNATÁRIO\]/gi, nomeContrato)
     .replace(/\[NOME\]/gi, nomeContrato);
 

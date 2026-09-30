@@ -1,5 +1,5 @@
 /**
- * POST /api/termo-atribuido?arrematacao=<uuid>  (ou body { arrematacao_id })
+ * POST /api/termo-atribuido?arrematacao=<uuid>&taxa=isento|parcelado|vista  (ou ?caso=<uuid>; ou body)
  *
  * Gera o TERMO DE ASSESSORIA + PROCURAÇÃO de uma arrematação atribuída que ficou sem termo — o
  * caso das atribuições anteriores a 30/09 (Marcos Araujo: êxito pago em 17/09, nada assinado).
@@ -9,7 +9,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, getUserRoleById, isCronAuthorized } from './_auth.js';
-import { gerarTermoAtribuido } from './_termo-assessoria.js';
+import { gerarTermoAtribuido, TAXAS_INICIAIS } from './_termo-assessoria.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -39,9 +39,14 @@ export default async function handler(req) {
 
   let body = {};
   try { body = await req.json(); } catch { /* corpo vazio (cron-manual manda {}) — vale a query */ }
-  const id = String(new URL(req.url).searchParams.get('arrematacao') || body?.arrematacao_id || '').trim();
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: 'arrematacao (uuid) obrigatório' }, 400);
+  const q = new URL(req.url).searchParams;
+  const uuid = (x) => (/^[0-9a-f-]{36}$/i.test(String(x || '').trim()) ? String(x).trim() : null);
+  const arrematacaoId = uuid(q.get('arrematacao') || body?.arrematacao_id);
+  const casoId = uuid(q.get('caso') || body?.caso_id);
+  if (!arrematacaoId && !casoId) return json({ error: 'arrematacao ou caso (uuid) obrigatório' }, 400);
+  const taxaInicial = String(q.get('taxa') || body?.taxa_inicial || 'isento');
+  if (!TAXAS_INICIAIS.includes(taxaInicial)) return json({ error: `taxa deve ser ${TAXAS_INICIAIS.join(' | ')}` }, 400);
 
-  const r = await gerarTermoAtribuido(sb, { arrematacaoId: id, criadoPor });
+  const r = await gerarTermoAtribuido(sb, { arrematacaoId, casoId, taxaInicial, criadoPor });
   return json(r, r.ok ? 200 : 502);
 }

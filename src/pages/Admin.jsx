@@ -1388,7 +1388,7 @@ function UsuariosTab() {
   const [assinLoad, setAssinLoad] = useState(false);
   // `promover` (29/08): a atribuição volta a poder promover, mas por ESCOLHA — ver a regra
   // `atribuicao.promove_assessorado` em regra_negocio. Padrão false = regra de 30/07 mantida.
-  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false });
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false, taxa: '' });
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
@@ -1805,11 +1805,14 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
   // promove a Assessorado. Sem a marcação vale a regra de 30/07 (nada de role/cotas).
   async function atribuirArremate() {
     if (!atribUser) return;
+    // Contratou de fato → a taxa inicial é decisão EXPLÍCITA (isento/parcelado/à vista): sem padrão,
+    // para ninguém isentar ou cobrar por não ter olhado o campo.
+    if (atribForm.promover && !atribForm.taxa) { alert('Escolha a taxa inicial da assessoria: isento, parcelado ou à vista.'); return; }
     setAtribLoad(true);
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null, promover_assessorado: !!atribForm.promover }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null, promover_assessorado: !!atribForm.promover, taxa_inicial: atribForm.promover ? atribForm.taxa : undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
@@ -1869,8 +1872,13 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
       // link (é só a URL do BidPro); "gerar os 3 relatórios" continua disponível nele.
       if (data.arrematacao_id && Number(data.honorarios_valor) > 0) {
         setLinkHonorarioAtribCopiado(false);
-        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor, termo_url: data.termo_url || null, aviso: data.aviso || null });
+        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor, termo_url: data.termo_url || null, cobranca_inicial_url: data.cobranca_inicial_url || null, aviso: data.aviso || null });
         return;
+      }
+      // Contratou de fato SEM valor de arremate ainda (arrematação a realizar): não há honorário a
+      // cobrar, mas o termo + procuração já existem e precisam chegar ao cliente.
+      if (data.termo_url || data.aviso) {
+        window.prompt(`${data.aviso ? `ATENÇÃO: ${data.aviso}\n\n` : ''}Termo de assessoria + procuração — envie ao cliente para assinar${data.cobranca_inicial_url ? ` (e a cobrança da taxa inicial: ${data.cobranca_inicial_url})` : ''}:`, data.termo_url || '');
       }
       // A atribuição de ESTUDO (sem "contratou de fato") não exige contrato. A que cobra êxito
       // exige desde 30/09 — o termo sai no painel acima, junto com o link do honorário. Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
@@ -1995,7 +2003,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               {u.role !== 'assessorado' && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
-                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false, taxa: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
                                   title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
                                 </button>
@@ -2076,15 +2084,29 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 a promoção foi removida em 30/07 e o texto ficou. Foi essa promessa que fez o
                 dono esperar um cliente assessorado que continuava explorador. Agora quem decide
                 é a caixa, e o botão diz o que vai acontecer. */}
-            {atribUser?.role === 'explorador' && (
+            {/* 30/09: a caixa aparecia só para EXPLORADOR — cliente Pro/assessorado que contratou de
+                fato ficava sem honorário, sem termo e sem procuração. Agora vale para todo cliente. */}
+            {['explorador', 'top2', 'assessorado', 'clube'].includes(atribUser?.role) && (
               <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 16, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!atribForm.promover} onChange={e => setAtribForm(p => ({ ...p, promover: e.target.checked }))} style={{ marginTop: 2 }} />
                 <span style={{ fontSize: 12, color: '#78350f', lineHeight: 1.45 }}>
-                  <b>Promover para Assessorado</b> — marque quando o cliente <b>contratou de fato</b>.
-                  Deixe desmarcado na atribuição de <b>estudo</b> (alimentar a IA com uma arrematação
-                  real): promover dá as cotas do plano sem cobrança.
+                  <b>Contratou de fato</b>{atribUser?.role === 'explorador' ? ' (promove para Assessorado)' : ''} — gera o honorário de êxito
+                  (se houver valor), o <b>termo de assessoria com procuração</b> e bloqueia a plataforma até a assinatura.
+                  Deixe desmarcado na atribuição de <b>estudo</b> (alimentar a IA com uma arrematação real).
                 </span>
               </label>
+            )}
+            {atribForm.promover && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>Taxa inicial da assessoria</div>
+                <select value={atribForm.taxa} onChange={e => setAtribForm(p => ({ ...p, taxa: e.target.value }))} style={{ ...S.input, width: '100%' }}>
+                  <option value="">— escolha —</option>
+                  <option value="isento">Isento (só honorário de êxito)</option>
+                  <option value="parcelado">Parcelado — R$ 6.000 em até 12x no cartão</option>
+                  <option value="vista">À vista — R$ 5.000</option>
+                </select>
+                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Valores lidos da configuração do plano na hora de gerar o termo; fora de isento, sai também o link de cobrança.</div>
+              </div>
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
@@ -2118,6 +2140,12 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
               <input readOnly value={linkHonorarioAtrib.termo_url} onFocus={e => { e.target.select(); navigator.clipboard?.writeText(e.target.value).catch(() => {}); }} style={{ ...S.input, width: '100%', marginTop: 6, fontSize: 11, color: '#475569' }} />
             ) : (
               <div style={{ marginTop: 6, fontSize: 11.5, color: '#b91c1c' }}>{linkHonorarioAtrib.aviso || 'O termo não foi gerado — gere pela página do caso ou avise o suporte.'}</div>
+            )}
+            {linkHonorarioAtrib.cobranca_inicial_url && (
+              <>
+                <div style={{ marginTop: 12, fontSize: 12.5, color: '#334155', fontWeight: 700 }}>Cobrança da taxa inicial da assessoria</div>
+                <input readOnly value={linkHonorarioAtrib.cobranca_inicial_url} onFocus={e => { e.target.select(); navigator.clipboard?.writeText(e.target.value).catch(() => {}); }} style={{ ...S.input, width: '100%', marginTop: 6, fontSize: 11, color: '#475569' }} />
+              </>
             )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>

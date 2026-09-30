@@ -59,7 +59,7 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
   const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo, valor_avaliacao,
-          promover_assessorado } = body || {};
+          promover_assessorado, taxa_inicial } = body || {};
   if (!user_id) return json({ error: 'user_id obrigatório' }, 400);
   const numProc = (String(numero_processo || '').trim()) || null;
   const avaliacao = Number(String(valor_avaliacao ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
@@ -238,12 +238,15 @@ export default async function handler(req) {
   // 5) TERMO DE ASSESSORIA + PROCURAÇÃO (30/09, dono). Arrematação que COBRA êxito sem ter passado
   //    pelo checkout não tinha termo nenhum (caso Marcos). Gera o termo da arrematação atribuída
   //    (sem os R$ 6.000, só êxito, com procuração particular) e o bloqueio até a assinatura.
+  //    Vale também para a arrematação A REALIZAR (sem valor ainda): o termo é por CASO e a
+  //    procuração cobre habilitação e lances dentro do limite autorizado pelo cliente.
+  //    `taxa_inicial` (dono, 30/09): 'isento' | 'parcelado' | 'vista' — a equipe decide na tela.
   let termo = null;
-  if (arrematacao_id) {
-    termo = await gerarTermoAtribuido(sb, { arrematacaoId: arrematacao_id, criadoPor: user.id });
+  if (promover_assessorado === true && caso?.id) {
+    termo = await gerarTermoAtribuido(sb, { casoId: caso.id, arrematacaoId: arrematacao_id, taxaInicial: taxa_inicial, criadoPor: user.id });
     if (!termo.ok) console.error('[atribuir-arremate] termo:', termo.motivo);
   }
 
   return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor,
-    termo_url: termo?.ok ? termo.url : null, ...(termo && !termo.ok ? { aviso: `arremate atribuído, mas o termo de assessoria NÃO foi gerado (${termo.motivo}) — gere pela rota /api/termo-atribuido` } : {}) });
+    termo_url: termo?.ok ? termo.url : null, cobranca_inicial_url: termo?.cobrancaUrl || null, ...(termo && !termo.ok ? { aviso: `arremate atribuído, mas o termo de assessoria NÃO foi gerado (${termo.motivo}) — gere pela rota /api/termo-atribuido` } : {}) });
 }
