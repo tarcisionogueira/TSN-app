@@ -9,6 +9,19 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📐 30/09 (noite, 4ª parte) — alqueire, área mil vezes menor, itens do HANDOFF que já estavam feitos
+- **Alqueire:** tipo escrito converte exato; "alqueire" solto só em SP/PR/MS (24.200) e MG/GO/DF/TO (48.400).
+  Teste `scripts/testes/area-em-alqueires.mjs`.
+- **Achado no seco:** "58.255m²" era gravado 58,255 m² (milhar sem vírgula lido como decimal) e "49,545 m²"
+  virava 545 m² (só 2 casas decimais). Corrigido em `extrairAreaM2`. **18 lotes ativos** com área mil vezes
+  menor corrigidos por SQL (só os comprovados: o número aparece com ponto antes de "m²" no texto) + LEILOTECH
+  "13.806M²75DM²". Backfill `area-da-descricao.yml` aplicado: **65 lotes ganharam área**, 0 falhas.
+- **Já estavam feitos (HANDOFF desatualizado):** Resend opened/clicked (webhook + domínio ativos; 7 d: 148
+  enviados, 43 abertos, 10 cliques); SUBLIME (fix da 3ª praça fantasma no ar desde 28/09 — 34 ativos, 0 com
+  lance < 20% da avaliação, 0 sem UF).
+- **Revenda Mobiauto:** Cronos (14 anúncios mesma versão, média R$ 63.589), Oroch (7, R$ 95.197), Saveiro (24,
+  R$ 64.111). Strada: IA do relatório voltou vazia 2× → teto de saída 2600→4000 + motivo gravado no erro.
+
 ### 🔎 30/09 (noite, 3ª parte) — LEJE/FREITAS/BAYIT abrem no navegador do dono
 - **As falhas de LEJE/FREITAS vinham de DOIS lugares:** 4 de 6 em 30/09 eram o `scraper-dom.yml` rodando no PUSH
   (IP Azure) — cada commit batia nos dois sites. Agora LEJE e FREITAS só rodam no CI por dispatch explícito.
@@ -96,8 +109,8 @@ de cliente parado; segurança 0/0.
 10. 🟠 Teto semanal do Bright Data (subir ou aceitar dias sem coleta paga).
 11. 🟠 Testar compra avulsa (ebook) ponta a ponta; nomear um analista.
 12. 🟠 Jurídico: sujeição à Lei 9.613/COAF; liberar a correção de `extrairIdentidadeTexto` (endereço do leiloeiro).
-13. 🟡 Instagram (verificação Meta); Windsor (14 contas); CREPALDI (integrar ou remover); PECINI dry-run;
-    e-mails de 6 leiloeiros; retenção de e-mails. ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
+13. 🟡 Instagram (verificação Meta); Windsor (14 contas); CREPALDI (integrar ou remover);
+    e-mails de 7 leiloeiros sem e-mail publicado; retenção de e-mails. ✅ PECINI/SUBLIME já resolvido (28/09). ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
     7 d: 148 enviados, 43 abertos, 10 cliques). ✅ Alqueire: regra por tipo escrito ou UF de convenção firme.
 
 ### 📌 30/09 (manhã, 2ª parte) — datas da Superbid, FIPE, SOLEON pelo banco, termo + procuração, contrato do checkout
