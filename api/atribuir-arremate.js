@@ -32,7 +32,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, getUserRoleById } from './_auth.js';
-import { gerarTermoAtribuido } from './_termo-assessoria.js';
+import { gerarTermoAssessoria, gerarProcuracao } from './_termo-assessoria.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -241,12 +241,19 @@ export default async function handler(req) {
   //    Vale também para a arrematação A REALIZAR (sem valor ainda): o termo é por CASO e a
   //    procuração cobre habilitação e lances dentro do limite autorizado pelo cliente.
   //    `taxa_inicial` (dono, 30/09): 'isento' | 'parcelado' | 'vista' — a equipe decide na tela.
-  let termo = null;
+  //    DOIS documentos (dono, 30/09): o TERMO da contratação e a PROCURAÇÃO da arrematação.
+  let termo = null, procuracao = null;
   if (promover_assessorado === true && caso?.id) {
-    termo = await gerarTermoAtribuido(sb, { casoId: caso.id, arrematacaoId: arrematacao_id, taxaInicial: taxa_inicial, criadoPor: user.id });
+    [termo, procuracao] = await Promise.all([
+      gerarTermoAssessoria(sb, { casoId: caso.id, arrematacaoId: arrematacao_id, taxaInicial: taxa_inicial, criadoPor: user.id }),
+      gerarProcuracao(sb, { casoId: caso.id, arrematacaoId: arrematacao_id, criadoPor: user.id }),
+    ]);
     if (!termo.ok) console.error('[atribuir-arremate] termo:', termo.motivo);
+    if (!procuracao.ok) console.error('[atribuir-arremate] procuração:', procuracao.motivo);
   }
+  const avisos = [termo && !termo.ok && `termo NÃO gerado (${termo.motivo})`, procuracao && !procuracao.ok && `procuração NÃO gerada (${procuracao.motivo})`].filter(Boolean);
 
   return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor,
-    termo_url: termo?.ok ? termo.url : null, cobranca_inicial_url: termo?.cobrancaUrl || null, ...(termo && !termo.ok ? { aviso: `arremate atribuído, mas o termo de assessoria NÃO foi gerado (${termo.motivo}) — gere pela rota /api/termo-atribuido` } : {}) });
+    termo_url: termo?.ok ? termo.url : null, procuracao_url: procuracao?.ok ? procuracao.url : null, cobranca_inicial_url: termo?.cobrancaUrl || null,
+    ...(avisos.length ? { aviso: `arremate atribuído, mas ${avisos.join(' e ')} — gere pela rota /api/termo-atribuido` } : {}) });
 }

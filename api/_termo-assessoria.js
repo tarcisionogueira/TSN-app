@@ -6,8 +6,9 @@
 // Marcos Araujo (assessorado desde 12/09) pagou R$ 54.835,52 de êxito em 17/09 e não havia nada
 // assinado no sistema quando a equipe precisou dos dados dele para seguir com a arrematação.
 //
-// Regra do dono: todo termo de assessoria vem com PROCURAÇÃO PARTICULAR (sem registro em cartório)
-// autorizando a CONTRATADA a resolver a arrematação contratada; na atribuída, o termo diz que os
+// Regra do dono (30/09, refinada no mesmo dia): SÃO DOIS DOCUMENTOS. O TERMO de contratação da
+// assessoria (por contratação: valor pago, a cobrar ou isento) e a PROCURAÇÃO PARTICULAR (por
+// arrematação: autoriza a CONTRATADA a resolver as demandas daquela arrematação). Nunca juntos; na atribuída, o termo diz que os
 // R$ 6.000 iniciais não são cobrados e a remuneração é só o êxito. Um texto só para os dois fluxos —
 // o checkout importa daqui, para as duas versões não divergirem.
 //
@@ -67,8 +68,6 @@ CLÁUSULA SÉTIMA — DA CONFIDENCIALIDADE, PROPRIEDADE INTELECTUAL E LGPD
 CLÁUSULA OITAVA — DO FORO
 8.1. As Partes elegem o foro da Comarca de Feira de Santana/BA para dirimir controvérsias, renunciando a qualquer outro por mais privilegiado que seja.
 
-[[PROCURACAO]]
-
 E, por estarem justas e contratadas, as partes assinam o presente instrumento digitalmente, com apontamento de testemunha. Assinatura eletrônica válida nos termos da MP 2.200-2/2001 e Lei 14.063/2020.
 
 CONTRATADA: NOGUEIRA EMPREENDIMENTOS LTDA — CNPJ 02.311.492/0001-61
@@ -76,6 +75,8 @@ CONTRATADA: NOGUEIRA EMPREENDIMENTOS LTDA — CNPJ 02.311.492/0001-61
 CONTRATANTE: [NOME DO SIGNATÁRIO] — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
 
 const brl = (v) => (Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null);
+const dataBR = (d) => new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+const ORIGIN = () => process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
 
 // Valores do termo lidos do banco (planos_config 'assessorado' + config_honorarios). `sb` = fetch
 // REST com service key. Falha de leitura NÃO vira preço inventado: devolve null e quem chama recusa.
@@ -90,155 +91,203 @@ export async function precosAssessoria(sb) {
   return { parcelado: Number(p.preco), vista: Number(p.preco_vista) || null, pct: Number(h?.total_pct) || 10, minimo: Number(h?.honorario_minimo) || null };
 }
 
-// Procuração particular (30/09, dono: "servir também como procurador responsável para resolver a
-// arrematação a ser realizada contratada") — cobre a arrematação A REALIZAR (habilitação e lances,
-// sempre dentro do limite que o cliente autorizar por escrito) e a já realizada (auto/carta,
-// registro, posse). Nunca dispor do bem nem receber dinheiro do cliente.
-function procuracao(imovel) {
-  const objeto = imovel
-    ? `à arrematação, realizada ou a realizar, do imóvel ${imovel.descricao}${imovel.processo ? `, processo nº ${imovel.processo}` : ''}${imovel.leiloeiro ? `, leiloeiro(a) ${imovel.leiloeiro}` : ''}${imovel.valor ? `, arrematado por ${imovel.valor}` : ''}`
-    : 'à(s) arrematação(ões) contratada(s) neste instrumento, a realizar ou já realizada(s)';
-  return `CLÁUSULA NONA — DA PROCURAÇÃO PARTICULAR
-9.1. Pelo presente instrumento, e na mesma assinatura eletrônica deste contrato, a CONTRATANTE (OUTORGANTE), qualificada no preâmbulo, nomeia e constitui sua bastante procuradora e responsável pela condução da arrematação a CONTRATADA (OUTORGADA), NOGUEIRA EMPREENDIMENTOS LTDA, CNPJ nº 02.311.492/0001-61, neste ato representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, CPF nº 042.293.535-29, especificamente quanto ${objeto}.
-9.2. ANTES DO ARREMATE, a OUTORGADA poderá: cadastrar e habilitar a OUTORGANTE junto ao leiloeiro e à plataforma do leilão, enviando os documentos por ela fornecidos; participar do leilão e ofertar lances em nome da OUTORGANTE, SEMPRE dentro do valor máximo que a OUTORGANTE autorizar por escrito (mensagem ou e-mail registrado) para cada lote — lance acima desse limite não é autorizado por esta procuração.
-9.3. DEPOIS DO ARREMATE, a OUTORGADA poderá representá-la perante o leiloeiro, o comitente vendedor, o juízo e a secretaria do processo (nos atos que não sejam privativos de advogado), cartórios de registro de imóveis e de notas, prefeituras, secretarias de fazenda, concessionárias de serviço público, condomínio e demais órgãos públicos e privados, podendo: requerer, retirar e protocolar certidões, guias (inclusive de ITBI), requerimentos e documentos; acompanhar a expedição do auto/carta de arrematação e o respectivo registro; prestar e obter informações; acompanhar as diligências de imissão na posse; e praticar os demais atos necessários à conclusão da arrematação.
-9.4. São VEDADOS à OUTORGADA: receber ou dar quitação de valores em nome da OUTORGANTE, pagar lance, comissão ou tributos com recursos próprios em nome dela, alienar, onerar ou prometer o bem, e substabelecer sem anuência expressa da OUTORGANTE. Atos privativos de advocacia serão praticados por advogado constituído.
-9.5. Procuração particular, sem registro ou reconhecimento de firma em cartório, válida pela assinatura eletrônica (MP 2.200-2/2001 e Lei 14.063/2020), vigente até a conclusão da arrematação e do registro do bem, no máximo pelo prazo deste contrato. Se algum órgão exigir firma reconhecida ou instrumento público para ato específico, a OUTORGANTE se obriga a providenciá-lo em até 5 (cinco) dias úteis da solicitação.`;
-}
-
-export const TAXAS_INICIAIS = ['isento', 'parcelado', 'vista'];
+// isento · a cobrar (parcelado/vista → cobrança avulsa) · já pago (parcelado_pago/vista_pago → só registra)
+export const TAXAS_INICIAIS = ['isento', 'parcelado', 'vista', 'parcelado_pago', 'vista_pago'];
 
 /**
- * Texto do termo. `precos` (de precosAssessoria) é OBRIGATÓRIO — sem ele não há termo (um contrato
- * com preço diferente do cobrado é pior que nenhum). `atribuido` = arrematação atribuída pela equipe:
- * { imovel: {descricao, processo, leiloeiro, valor} | null, honorarios: {valor, pagoEm}, taxaInicial }.
+ * TERMO DE CONTRATAÇÃO DA ASSESSORIA. Sem `atribuido` = texto do CHECKOUT. Com `atribuido`
+ * ({ taxaInicial, pagoEm?, imovel?: {descricao, processo, valor}, honorarios?: {valor, pagoEm} }) =
+ * contratação registrada pela equipe. `precos` é OBRIGATÓRIO (contrato com preço diferente do
+ * cobrado é pior que nenhum).
  */
 export function termoAssessoria(precos, atribuido = null) {
   if (!precos?.parcelado) throw new Error('termoAssessoria: preços da configuração ausentes');
   const parcela = brl(precos.parcelado / 12);
   const opcaoVista = precos.vista ? `; ou (b) ${brl(precos.vista)} em pagamento único à vista` : '';
-  let t = BASE.replace('[[PROCURACAO]]', procuracao(atribuido?.imovel || null))
+  let t = BASE
     .replace(/^3\.1\. [^\n]*$/m, `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA, conforme a modalidade escolhida no ato da contratação: (a) ${brl(precos.parcelado)} parcelados em 12 (doze) parcelas mensais de ${parcela}${opcaoVista}. O pagamento é feito pelos meios da Plataforma BidPro Brasil, em favor da NOGUEIRA EMPREENDIMENTOS LTDA.`)
     .replace(/^3\.2\. A título de honorários de êxito na arrematação, a CONTRATANTE pagará o percentual fixo de 10% \(dez por cento\)/m, `3.2. A título de honorários de êxito na arrematação, a CONTRATANTE pagará o percentual fixo de ${precos.pct}%`)
     .replace(/^3\.3\. [^\n]*$/m, precos.minimo ? `3.3. Fica estipulado o valor mínimo de ${brl(precos.minimo)} a título de honorários de êxito, caso o percentual resulte em montante inferior.` : '$&');
   if (!atribuido) return t;
 
-  const hon = atribuido.honorarios || {};
   const taxa = TAXAS_INICIAIS.includes(atribuido.taxaInicial) ? atribuido.taxaInicial : 'isento';
-  const situacao = hon.pagoEm
-    ? `, já quitados em ${new Date(hon.pagoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
-    : ', a serem pagos pela Plataforma nos termos da Cláusula 3.4';
-  const exito = brl(hon.valor) ? ` O honorário de êxito desta arrematação soma ${brl(hon.valor)}${situacao}.` : '';
-  const c31 = taxa === 'isento'
-    ? `3.1. Por decisão da CONTRATADA nesta contratação, a CONTRATANTE fica ISENTA dos serviços iniciais de assessoria (${brl(precos.parcelado)} parcelados${precos.vista ? ` ou ${brl(precos.vista)} à vista` : ''}). A remuneração da CONTRATADA é exclusivamente o honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`
-    : `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA ${taxa === 'vista' ? `${brl(precos.vista)} em pagamento único à vista` : `${brl(precos.parcelado)}, podendo parcelar em até 12 (doze) vezes de ${parcela} no cartão`}, pelo link de pagamento da Plataforma BidPro Brasil, além do honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`;
+  const hon = atribuido.honorarios || {};
+  const exito = brl(hon.valor) ? ` O honorário de êxito da arrematação vinculada soma ${brl(hon.valor)}${hon.pagoEm ? `, já quitados em ${dataBR(hon.pagoEm)}` : ', a serem pagos pela Plataforma nos termos da Cláusula 3.4'}.` : '';
+  const quitado = atribuido.pagoEm ? `, valor já QUITADO em ${dataBR(atribuido.pagoEm)}` : ', valor já QUITADO pela CONTRATANTE';
+  const c31 = {
+    isento: `3.1. Por decisão da CONTRATADA nesta contratação, a CONTRATANTE fica ISENTA dos serviços iniciais de assessoria (${brl(precos.parcelado)} parcelados${precos.vista ? ` ou ${brl(precos.vista)} à vista` : ''}). A remuneração da CONTRATADA é exclusivamente o honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`,
+    parcelado: `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA ${brl(precos.parcelado)}, podendo parcelar em até 12 (doze) vezes de ${parcela} no cartão, pelo link de pagamento da Plataforma BidPro Brasil, além do honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`,
+    vista: `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA ${brl(precos.vista)} em pagamento único à vista, pelo link de pagamento da Plataforma BidPro Brasil, além do honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`,
+    parcelado_pago: `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagou à CONTRATADA ${brl(precos.parcelado)} na modalidade parcelada${quitado}, além do honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`,
+    vista_pago: `3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagou à CONTRATADA ${brl(atribuido.valorPago || precos.vista)} em pagamento único à vista${quitado}, além do honorário de êxito das Cláusulas 3.2 e 3.3.${exito}`,
+  }[taxa];
   const im = atribuido.imovel;
   return t
-    .replace(/^1\.1\. /m, im ? `1.0. Este instrumento formaliza a assessoria na arrematação ATRIBUÍDA à CONTRATANTE: ${im.descricao}${im.processo ? `, processo nº ${im.processo}` : ''}${im.valor ? `, valor da arrematação ${im.valor}` : ''}.\n1.1. ` : '1.1. ')
+    .replace(/^1\.1\. /m, im ? `1.0. Esta contratação refere-se ao imóvel ${im.descricao}${im.processo ? `, processo nº ${im.processo}` : ''}${im.valor ? `, arrematado por ${im.valor}` : ''}.\n1.1. ` : '1.1. ')
     .replace(/^3\.1\. [^\n]*$/m, c31)
-    .replace(/^4\.2\. [^\n]*$/m, '4.2. A CONTRATANTE deverá assinar este instrumento em até 30 (trinta) dias a contar do envio do link de assinatura; até a assinatura, o acompanhamento da arrematação pela Plataforma fica suspenso.');
+    .replace(/^4\.2\. [^\n]*$/m, '4.2. A CONTRATANTE deverá assinar este instrumento em até 30 (trinta) dias a contar do envio do link de assinatura; até a assinatura, o acompanhamento pela Plataforma fica suspenso.');
 }
 
 /**
- * Gera (idempotente POR CASO) o termo da arrematação ATRIBUÍDA e o contrato pendente que bloqueia a
- * plataforma até a assinatura (ContratoObrigatorio). Serve para a arrematação JÁ REALIZADA (com linha
- * em `arrematacoes`) e para a A REALIZAR (só o caso). Quando `taxaInicial` não é isento, cria a
- * cobrança avulsa do valor (link /#/cobranca/<id>). Devolve { ok, url?, cobrancaUrl?, motivo? } — nunca lança.
+ * PROCURAÇÃO PARTICULAR — documento PRÓPRIO, por arrematação (dono, 30/09: "a procuração autoriza
+ * resolver as demandas da arrematação em questão"). Cobre a arrematação a realizar (habilitação e
+ * lances só até o limite autorizado por escrito) e a realizada (auto/carta, registro, posse). Nunca
+ * dispor do bem nem receber dinheiro do cliente.
  */
-export async function gerarTermoAtribuido(sb, { casoId = null, arrematacaoId = null, taxaInicial = 'isento', criadoPor = null }) {
+export function procuracaoArrematacao(nome, imovel) {
+  const objeto = `à arrematação, realizada ou a realizar, do imóvel ${imovel.descricao}${imovel.processo ? `, processo nº ${imovel.processo}` : ''}${imovel.leiloeiro ? `, leiloeiro(a) ${imovel.leiloeiro}` : ''}${imovel.valor ? `, arrematado por ${imovel.valor}` : ''}`;
+  return `PROCURAÇÃO PARTICULAR
+
+OUTORGANTE: ${nome || '[NOME DO SIGNATÁRIO]'}, inscrito(a) no CPF/CNPJ nº [CPF/CNPJ DO SIGNATÁRIO], residente e domiciliado(a) em [ENDEREÇO DO SIGNATÁRIO].
+
+OUTORGADA: NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-61, com sede em Feira de Santana/BA, neste ato representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, CPF nº 042.293.535-29.
+
+1. OBJETO. Pelo presente instrumento particular, a OUTORGANTE nomeia e constitui a OUTORGADA sua bastante procuradora e responsável pela condução das demandas relativas, especificamente, ${objeto}.
+
+2. ANTES DO ARREMATE, a OUTORGADA poderá: cadastrar e habilitar a OUTORGANTE junto ao leiloeiro e à plataforma do leilão, enviando os documentos por ela fornecidos; participar do leilão e ofertar lances em nome da OUTORGANTE, SEMPRE dentro do valor máximo que a OUTORGANTE autorizar por escrito (mensagem ou e-mail registrado) — lance acima desse limite não é autorizado por esta procuração.
+
+3. DEPOIS DO ARREMATE, a OUTORGADA poderá representá-la perante o leiloeiro, o comitente vendedor, o juízo e a secretaria do processo (nos atos que não sejam privativos de advogado), cartórios de registro de imóveis e de notas, prefeituras, secretarias de fazenda, concessionárias de serviço público, condomínio e demais órgãos públicos e privados, podendo: requerer, retirar e protocolar certidões, guias (inclusive de ITBI), requerimentos e documentos; acompanhar a expedição do auto/carta de arrematação e o respectivo registro; prestar e obter informações; acompanhar as diligências de imissão na posse; e praticar os demais atos necessários à conclusão da arrematação.
+
+4. VEDAÇÕES. São VEDADOS à OUTORGADA: receber ou dar quitação de valores em nome da OUTORGANTE, pagar lance, comissão ou tributos com recursos próprios em nome dela, alienar, onerar ou prometer o bem, e substabelecer sem anuência expressa da OUTORGANTE. Atos privativos de advocacia serão praticados por advogado constituído.
+
+5. FORMA E VIGÊNCIA. Procuração particular, sem registro ou reconhecimento de firma em cartório, válida pela assinatura eletrônica (MP 2.200-2/2001 e Lei 14.063/2020), vigente até a conclusão da arrematação e do registro do bem, ou até revogação expressa da OUTORGANTE. Se algum órgão exigir firma reconhecida ou instrumento público para ato específico, a OUTORGANTE se obriga a providenciá-lo em até 5 (cinco) dias úteis da solicitação.
+
+OUTORGANTE: [NOME DO SIGNATÁRIO] — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
+}
+
+// ── Leitura de apoio comum ────────────────────────────────────────────────────────────────
+async function dadosDoCaso(sb, { casoId, arrematacaoId }) {
+  let a = null;
+  if (arrematacaoId) {
+    const rA = await sb(`arrematacoes?id=eq.${encodeURIComponent(arrematacaoId)}&select=id,cliente_id,imovel_id,caso_id,valor_arrematado,honorarios_valor,honorarios_pago_em,numero_processo,leiloeiro&limit=1`);
+    if (!rA.ok) throw new Error(`leitura da arrematação HTTP ${rA.status}`);
+    [a] = await rA.json();
+    if (!a) throw new Error('arrematação não encontrada');
+    casoId = casoId || a.caso_id;
+  }
+  if (!casoId) return { caso: null, a, im: null };
+  const rC = await sb(`casos?id=eq.${encodeURIComponent(casoId)}&select=id,cliente_id,imovel_id,imovel_endereco&limit=1`);
+  if (!rC.ok) throw new Error(`leitura do caso HTTP ${rC.status}`);
+  const [caso] = await rC.json();
+  if (!caso) throw new Error('caso não encontrado');
+  if (!a) {
+    const rA2 = await sb(`arrematacoes?caso_id=eq.${caso.id}&select=id,cliente_id,imovel_id,caso_id,valor_arrematado,honorarios_valor,honorarios_pago_em,numero_processo,leiloeiro&limit=1`);
+    if (rA2.ok) [a] = await rA2.json();
+  }
+  const imovelId = a?.imovel_id || caso.imovel_id;
+  let im = null;
+  if (imovelId) {
+    const rI = await sb(`imoveis_leilao?id=eq.${imovelId}&select=id,titulo,endereco,cidade,estado,numero_processo,leiloeiro&limit=1`);
+    if (!rI.ok) throw new Error(`leitura do imóvel HTTP ${rI.status}`);
+    [im] = await rI.json();
+  }
+  return { caso, a, im };
+}
+
+function descricaoImovel(caso, a, im) {
+  const endereco = [im?.endereco, im?.cidade && `${im.cidade}${im.estado ? `/${im.estado}` : ''}`].filter(Boolean).join(', ');
+  const titulo = im?.titulo || caso?.imovel_endereco;
+  if (!titulo) return null;
+  return {
+    descricao: `"${titulo}"${endereco ? ` (${endereco})` : ''}`,
+    processo: a?.numero_processo || im?.numero_processo || null,
+    leiloeiro: a?.leiloeiro || im?.leiloeiro || null,
+    valor: brl(a?.valor_arrematado),
+  };
+}
+
+async function nomeDo(sb, userId) {
+  const r = await sb(`perfis?id=eq.${userId}&select=nome&limit=1`);
+  if (!r.ok) throw new Error(`leitura do perfil HTTP ${r.status}`);
+  const [p] = await r.json();
+  return p?.nome || null;
+}
+
+// Cria o link de assinatura + o contrato pendente (bloqueio até assinar). Idempotente por
+// (produto_tipo, produto_id) entre os que estão aguardando ou assinados.
+async function criarDocumento(sb, { userId, titulo, conteudo, produtoTipo, produtoId, planoKey, imovelId, criadoPor }) {
+  const rJa = await sb(`contratos_link?produto_tipo=eq.${produtoTipo}&produto_id=eq.${encodeURIComponent(produtoId)}&arremate_user_id=eq.${userId}&status=in.(aguardando_assinatura,assinado)&select=token,status&limit=1`);
+  if (!rJa.ok) return { ok: false, motivo: `conferência de documento existente HTTP ${rJa.status}` };
+  const [ja] = await rJa.json();
+  if (ja) return { ok: true, jaExistia: true, status: ja.status, url: `${ORIGIN()}#/c/${ja.token}` };
+  const rL = await sb('contratos_link', {
+    method: 'POST', headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      titulo, conteudo, tipo_contrato: 'servico', status: 'aguardando_assinatura', requer_assinatura: true,
+      criado_por: criadoPor, plano_key: planoKey || null, produto_tipo: produtoTipo, produto_id: String(produtoId),
+      arremate_imovel_id: imovelId || null, arremate_user_id: userId,
+      // KYC do termo do checkout: selfie + foto do documento compõem a prova de autoria
+      kyc_incluido: true, verificacao_identidade: 'selfie', docs_extras_exigidos: ['foto_doc'],
+    }),
+  });
+  if (!rL.ok) return { ok: false, motivo: `criação do documento HTTP ${rL.status}: ${(await rL.text().catch(() => '')).slice(0, 120)}` };
+  const [link] = await rL.json();
+  if (!link?.id) return { ok: false, motivo: 'documento não voltou do banco' };
+  const rPend = await sb('contratos_pendentes', {
+    method: 'POST', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ user_id: userId, produto_tipo: produtoTipo, produto_id: String(produtoId), contrato_link_id: link.id,
+      status: 'aguardando', expira_em: new Date(Date.now() + 30 * 86400000).toISOString() }),
+  });
+  return { ok: true, url: `${ORIGIN()}#/c/${link.token}`, ...(rPend.ok ? {} : { aviso: `documento criado, mas o bloqueio até a assinatura falhou (HTTP ${rPend.status})` }) };
+}
+
+/**
+ * TERMO DE CONTRATAÇÃO da assessoria registrado pela equipe. Uma contratação = um termo: o cliente
+ * com duas assessorias tem dois (`referencia` distingue: id do caso, ou um rótulo como "2"). Quando a
+ * taxa é a cobrar, cria a cobrança avulsa (preço do servidor). Nunca lança.
+ */
+export async function gerarTermoAssessoria(sb, { userId = null, casoId = null, arrematacaoId = null, referencia = null, taxaInicial = 'isento', pagoEm = null, valorPago = null, criadoPor = null }) {
   try {
-    const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
-    let a = null;
-    if (arrematacaoId) {
-      const rA = await sb(`arrematacoes?id=eq.${encodeURIComponent(arrematacaoId)}&select=id,cliente_id,imovel_id,caso_id,valor_arrematado,honorarios_valor,honorarios_pago_em,numero_processo,leiloeiro&limit=1`);
-      if (!rA.ok) return { ok: false, motivo: `leitura da arrematação HTTP ${rA.status}` };
-      [a] = await rA.json();
-      if (!a) return { ok: false, motivo: 'arrematação não encontrada' };
-      casoId = casoId || a.caso_id;
-    }
-    if (!casoId) return { ok: false, motivo: 'caso não informado' };
-    const rC = await sb(`casos?id=eq.${encodeURIComponent(casoId)}&select=id,cliente_id,imovel_id,imovel_endereco&limit=1`);
-    if (!rC.ok) return { ok: false, motivo: `leitura do caso HTTP ${rC.status}` };
-    const [caso] = await rC.json();
-    if (!caso?.cliente_id) return { ok: false, motivo: 'caso não encontrado' };
-    if (!a) { // sem arrematacaoId: pega a do caso, se já existir
-      const rA2 = await sb(`arrematacoes?caso_id=eq.${caso.id}&select=id,cliente_id,imovel_id,caso_id,valor_arrematado,honorarios_valor,honorarios_pago_em,numero_processo,leiloeiro&limit=1`);
-      if (rA2.ok) [a] = await rA2.json();
-    }
-
-    // Idempotência: um termo por caso (aguardando OU assinado).
-    const rJa = await sb(`contratos_link?produto_tipo=eq.arrematacao&produto_id=eq.${caso.id}&status=in.(aguardando_assinatura,assinado)&select=token,status&limit=1`);
-    if (!rJa.ok) return { ok: false, motivo: `conferência de termo existente HTTP ${rJa.status}` };
-    const [ja] = await rJa.json();
-    if (ja) return { ok: true, jaExistia: true, status: ja.status, url: `${origin}#/c/${ja.token}` };
-
+    const { caso, a, im } = await dadosDoCaso(sb, { casoId, arrematacaoId });
+    const uid = userId || caso?.cliente_id;
+    if (!uid) return { ok: false, motivo: 'cliente não informado' };
     const precos = await precosAssessoria(sb);
     if (!precos) return { ok: false, motivo: 'não consegui ler os preços da assessoria (planos_config/config_honorarios)' };
-    const taxa = TAXAS_INICIAIS.includes(taxaInicial) ? taxaInicial : 'isento';
+    const taxa = TAXAS_INICIAIS.includes(taxaInicial) ? taxaInicial : null;
+    if (!taxa) return { ok: false, motivo: `taxa inicial deve ser ${TAXAS_INICIAIS.join(' | ')}` };
     if (taxa === 'vista' && !precos.vista) return { ok: false, motivo: 'planos_config sem preco_vista para a assessoria' };
-
-    const imovelId = a?.imovel_id || caso.imovel_id;
-    const [rP, rI] = await Promise.all([
-      sb(`perfis?id=eq.${caso.cliente_id}&select=nome&limit=1`),
-      imovelId ? sb(`imoveis_leilao?id=eq.${imovelId}&select=titulo,endereco,cidade,estado,numero_processo,leiloeiro&limit=1`) : null,
-    ]);
-    for (const r of [rP, rI]) if (r && !r.ok) return { ok: false, motivo: `leitura de apoio HTTP ${r.status}` };
-    const [perfil] = await rP.json();
-    const [im] = rI ? await rI.json() : [];
-
-    const endereco = [im?.endereco, im?.cidade && `${im.cidade}${im.estado ? `/${im.estado}` : ''}`].filter(Boolean).join(', ');
-    const titulo = im?.titulo || caso.imovel_endereco || null;
+    const nome = await nomeDo(sb, uid);
     const conteudo = termoAssessoria(precos, {
-      imovel: titulo ? {
-        descricao: `"${titulo}"${endereco ? ` (${endereco})` : ''}`,
-        processo: a?.numero_processo || im?.numero_processo || null,
-        leiloeiro: a?.leiloeiro || im?.leiloeiro || null,
-        valor: brl(a?.valor_arrematado),
-      } : null,
-      honorarios: { valor: a?.honorarios_valor, pagoEm: a?.honorarios_pago_em },
-      taxaInicial: taxa,
-    }).replace(/\[NOME DO SIGNATÁRIO\]/gi, perfil?.nome || '[NOME DO SIGNATÁRIO]').replace(/\[NOME\]/gi, perfil?.nome || '[NOME]');
+      taxaInicial: taxa, pagoEm, valorPago,
+      imovel: descricaoImovel(caso, a, im),
+      honorarios: a ? { valor: a.honorarios_valor, pagoEm: a.honorarios_pago_em } : {},
+    }).replace(/\[NOME DO SIGNATÁRIO\]/gi, nome || '[NOME DO SIGNATÁRIO]').replace(/\[NOME\]/gi, nome || '[NOME]');
 
-    // Cobrança da taxa inicial (quando não isento): avulsa com preço gravado no servidor — o
-    // checkout lê o valor da tabela, nunca do pagador. Antes do termo, para o termo poder citá-la.
     let cobrancaUrl = null;
-    if (taxa !== 'isento') {
-      const valor = taxa === 'vista' ? precos.vista : precos.parcelado;
+    if (taxa === 'parcelado' || taxa === 'vista') {
       const rCob = await sb('cobrancas_avulsas', {
         method: 'POST', headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
-          descricao: `Assessoria BidPro — serviços iniciais (${taxa === 'vista' ? 'à vista' : 'até 12x no cartão'}) · ${perfil?.nome || 'cliente'}`.slice(0, 500),
-          valor, destinatario_nome: perfil?.nome || null, criado_por: criadoPor,
+          descricao: `Assessoria BidPro — serviços iniciais (${taxa === 'vista' ? 'à vista' : 'até 12x no cartão'}) · ${nome || 'cliente'}`.slice(0, 500),
+          valor: taxa === 'vista' ? precos.vista : precos.parcelado, destinatario_nome: nome, criado_por: criadoPor,
         }),
       });
       if (!rCob.ok) return { ok: false, motivo: `cobrança da taxa inicial não foi criada (HTTP ${rCob.status}) — termo NÃO gerado para não citar cobrança inexistente` };
       const [cob] = await rCob.json();
-      cobrancaUrl = cob?.id ? `${origin}/#/cobranca/${cob.id}` : null;
+      cobrancaUrl = cob?.id ? `${ORIGIN()}/#/cobranca/${cob.id}` : null;
     }
-
-    const rL = await sb('contratos_link', {
-      method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({
-        titulo: 'Termo de Assessoria e Procuração — Arrematação Atribuída',
-        conteudo, tipo_contrato: 'servico', status: 'aguardando_assinatura', requer_assinatura: true,
-        criado_por: criadoPor, plano_key: 'assessorado', produto_tipo: 'arrematacao', produto_id: caso.id,
-        arremate_imovel_id: imovelId || null, arremate_user_id: caso.cliente_id,
-        // mesmo KYC do termo do checkout: selfie + foto do documento compõem a prova de autoria
-        kyc_incluido: true, verificacao_identidade: 'selfie', docs_extras_exigidos: ['foto_doc'],
-      }),
+    const r = await criarDocumento(sb, {
+      userId: uid, titulo: 'Termo de Contratação da Assessoria', conteudo, produtoTipo: 'assessoria',
+      produtoId: caso?.id || `${uid}:${referencia || '1'}`, planoKey: 'assessorado', imovelId: im?.id || null, criadoPor,
     });
-    if (!rL.ok) return { ok: false, motivo: `criação do termo HTTP ${rL.status}: ${(await rL.text().catch(() => '')).slice(0, 120)}`, cobrancaUrl };
-    const [link] = await rL.json();
-    if (!link?.id) return { ok: false, motivo: 'termo não voltou do banco', cobrancaUrl };
+    return { ...r, cobrancaUrl };
+  } catch (e) {
+    return { ok: false, motivo: String(e?.message || e).slice(0, 160) };
+  }
+}
 
-    // Contrato pendente = a plataforma bloqueia até a assinatura (30 dias de aviso, depois tela cheia).
-    const rPend = await sb('contratos_pendentes', {
-      method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: caso.cliente_id, produto_tipo: 'arrematacao', produto_id: caso.id, contrato_link_id: link.id,
-        status: 'aguardando', expira_em: new Date(Date.now() + 30 * 86400000).toISOString() }),
+/** PROCURAÇÃO PARTICULAR de uma arrematação (caso). Sem plano_key: não mexe em papel nem assinatura. Nunca lança. */
+export async function gerarProcuracao(sb, { casoId = null, arrematacaoId = null, criadoPor = null }) {
+  try {
+    const { caso, a, im } = await dadosDoCaso(sb, { casoId, arrematacaoId });
+    if (!caso) return { ok: false, motivo: 'procuração exige o caso/arrematação' };
+    const imovel = descricaoImovel(caso, a, im);
+    if (!imovel) return { ok: false, motivo: 'caso sem imóvel identificado — a procuração precisa dizer qual arrematação' };
+    const nome = await nomeDo(sb, caso.cliente_id);
+    return await criarDocumento(sb, {
+      userId: caso.cliente_id, titulo: 'Procuração Particular — Arrematação', conteudo: procuracaoArrematacao(nome, imovel),
+      produtoTipo: 'arrematacao', produtoId: caso.id, planoKey: null, imovelId: im?.id || null, criadoPor,
     });
-    return { ok: true, url: `${origin}#/c/${link.token}`, cobrancaUrl, taxaInicial: taxa,
-      ...(rPend.ok ? {} : { aviso: `termo criado, mas o bloqueio até a assinatura falhou (HTTP ${rPend.status})` }) };
   } catch (e) {
     return { ok: false, motivo: String(e?.message || e).slice(0, 160) };
   }

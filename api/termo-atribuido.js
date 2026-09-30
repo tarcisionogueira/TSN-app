@@ -1,5 +1,9 @@
 /**
- * POST /api/termo-atribuido?arrematacao=<uuid>&taxa=isento|parcelado|vista  (ou ?caso=<uuid>; ou body)
+ * POST /api/termo-atribuido?doc=termo|procuracao&caso=<uuid>|arrematacao=<uuid>|user=<uuid>&ref=2
+ *      &taxa=isento|parcelado|vista|parcelado_pago|vista_pago&pago_em=AAAA-MM-DD  (ou os mesmos campos no body)
+ * DOIS documentos distintos (dono, 30/09): termo = contratação da assessoria (por contratação;
+ * `user`+`ref` quando ainda não há caso — ex.: 2ª assessoria do mesmo cliente em busca de imóvel);
+ * procuração = autoriza resolver a arrematação (exige caso/arrematação).
  *
  * Gera o TERMO DE ASSESSORIA + PROCURAÇÃO de uma arrematação atribuída que ficou sem termo — o
  * caso das atribuições anteriores a 30/09 (Marcos Araujo: êxito pago em 17/09, nada assinado).
@@ -9,7 +13,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, getUserRoleById, isCronAuthorized } from './_auth.js';
-import { gerarTermoAtribuido, TAXAS_INICIAIS } from './_termo-assessoria.js';
+import { gerarTermoAssessoria, gerarProcuracao, TAXAS_INICIAIS } from './_termo-assessoria.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -43,10 +47,21 @@ export default async function handler(req) {
   const uuid = (x) => (/^[0-9a-f-]{36}$/i.test(String(x || '').trim()) ? String(x).trim() : null);
   const arrematacaoId = uuid(q.get('arrematacao') || body?.arrematacao_id);
   const casoId = uuid(q.get('caso') || body?.caso_id);
-  if (!arrematacaoId && !casoId) return json({ error: 'arrematacao ou caso (uuid) obrigatório' }, 400);
-  const taxaInicial = String(q.get('taxa') || body?.taxa_inicial || 'isento');
+  const userId = uuid(q.get('user') || body?.user_id);
+  const doc = String(q.get('doc') || body?.doc || 'termo');
+  if (doc === 'procuracao') {
+    if (!arrematacaoId && !casoId) return json({ error: 'procuração exige caso ou arrematacao (uuid)' }, 400);
+    const r = await gerarProcuracao(sb, { arrematacaoId, casoId, criadoPor });
+    return json(r, r.ok ? 200 : 502);
+  }
+  if (doc !== 'termo') return json({ error: 'doc deve ser termo ou procuracao' }, 400);
+  if (!arrematacaoId && !casoId && !userId) return json({ error: 'termo exige caso, arrematacao ou user (uuid)' }, 400);
+  const taxaInicial = String(q.get('taxa') || body?.taxa_inicial || '');
   if (!TAXAS_INICIAIS.includes(taxaInicial)) return json({ error: `taxa deve ser ${TAXAS_INICIAIS.join(' | ')}` }, 400);
+  const pagoEm = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('pago_em') || body?.pago_em || '')) ? String(q.get('pago_em') || body?.pago_em) : null;
+  const valorPago = Number(q.get('valor_pago') || body?.valor_pago) || null;
+  const referencia = String(q.get('ref') || body?.referencia || '').replace(/[^\w-]/g, '').slice(0, 20) || null;
 
-  const r = await gerarTermoAtribuido(sb, { arrematacaoId, casoId, taxaInicial, criadoPor });
+  const r = await gerarTermoAssessoria(sb, { userId, arrematacaoId, casoId, referencia, taxaInicial, pagoEm, valorPago, criadoPor });
   return json(r, r.ok ? 200 : 502);
 }

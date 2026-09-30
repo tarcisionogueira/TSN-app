@@ -307,7 +307,7 @@ export default async function handler(req) {
               p_user_id: uid, p_plano_key: tierAss, p_forma_pagamento: 'contrato',
               // Termo de ARREMATAÇÃO ATRIBUÍDA (30/09): não há os R$ 6.000 iniciais — sem isto a
               // assinatura herdaria o preço do plano e o Admin mostraria uma mensalidade que não existe.
-              ...(contrato.produto_tipo === 'arrematacao' ? { p_valor_mensal: 0, p_valor_total: 0 } : {}),
+              ...(['arrematacao', 'assessoria'].includes(contrato.produto_tipo) ? { p_valor_mensal: 0 } : {}),
               // O imóvel vem do próprio contrato quando ele traz um: é o vínculo que o dono pediu
               // ("poder vincular um imóvel"), e vindo daqui ninguém precisa digitá-lo de novo.
               p_imovel_id: contrato.arremate_imovel_id || null,

@@ -1872,13 +1872,13 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
       // link (é só a URL do BidPro); "gerar os 3 relatórios" continua disponível nele.
       if (data.arrematacao_id && Number(data.honorarios_valor) > 0) {
         setLinkHonorarioAtribCopiado(false);
-        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor, termo_url: data.termo_url || null, cobranca_inicial_url: data.cobranca_inicial_url || null, aviso: data.aviso || null });
+        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor, termo_url: data.termo_url || null, procuracao_url: data.procuracao_url || null, cobranca_inicial_url: data.cobranca_inicial_url || null, aviso: data.aviso || null });
         return;
       }
       // Contratou de fato SEM valor de arremate ainda (arrematação a realizar): não há honorário a
       // cobrar, mas o termo + procuração já existem e precisam chegar ao cliente.
       if (data.termo_url || data.aviso) {
-        window.prompt(`${data.aviso ? `ATENÇÃO: ${data.aviso}\n\n` : ''}Termo de assessoria + procuração — envie ao cliente para assinar${data.cobranca_inicial_url ? ` (e a cobrança da taxa inicial: ${data.cobranca_inicial_url})` : ''}:`, data.termo_url || '');
+        window.prompt(`${data.aviso ? `ATENÇÃO: ${data.aviso}\n\n` : ''}Envie ao cliente para assinar — termo da assessoria${data.procuracao_url ? ` e procuração (${data.procuracao_url})` : ''}${data.cobranca_inicial_url ? `; cobrança da taxa inicial: ${data.cobranca_inicial_url}` : ''}. Termo:`, data.termo_url || '');
       }
       // A atribuição de ESTUDO (sem "contratou de fato") não exige contrato. A que cobra êxito
       // exige desde 30/09 — o termo sai no painel acima, junto com o link do honorário. Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
@@ -2102,8 +2102,10 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 <select value={atribForm.taxa} onChange={e => setAtribForm(p => ({ ...p, taxa: e.target.value }))} style={{ ...S.input, width: '100%' }}>
                   <option value="">— escolha —</option>
                   <option value="isento">Isento (só honorário de êxito)</option>
-                  <option value="parcelado">Parcelado — R$ 6.000 em até 12x no cartão</option>
-                  <option value="vista">À vista — R$ 5.000</option>
+                  <option value="parcelado">Parcelado — R$ 6.000 em até 12x no cartão (gera cobrança)</option>
+                  <option value="vista">À vista — R$ 5.000 (gera cobrança)</option>
+                  <option value="vista_pago">À vista — já pago</option>
+                  <option value="parcelado_pago">Parcelado — já pago</option>
                 </select>
                 <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Valores lidos da configuração do plano na hora de gerar o termo; fora de isento, sai também o link de cobrança.</div>
               </div>
@@ -2135,11 +2137,17 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
 
             {/* TERMO + PROCURAÇÃO (30/09): sem a assinatura dele a equipe fica sem autorização para
                 resolver a arrematação — o link sai junto com o da cobrança, não depois. */}
-            <div style={{ marginTop: 14, fontSize: 12.5, color: '#334155', fontWeight: 700 }}>Termo de assessoria + procuração (assinatura do arrematante)</div>
+            <div style={{ marginTop: 14, fontSize: 12.5, color: '#334155', fontWeight: 700 }}>Termo de contratação da assessoria (assinatura do cliente)</div>
             {linkHonorarioAtrib.termo_url ? (
               <input readOnly value={linkHonorarioAtrib.termo_url} onFocus={e => { e.target.select(); navigator.clipboard?.writeText(e.target.value).catch(() => {}); }} style={{ ...S.input, width: '100%', marginTop: 6, fontSize: 11, color: '#475569' }} />
             ) : (
               <div style={{ marginTop: 6, fontSize: 11.5, color: '#b91c1c' }}>{linkHonorarioAtrib.aviso || 'O termo não foi gerado — gere pela página do caso ou avise o suporte.'}</div>
+            )}
+            {linkHonorarioAtrib.procuracao_url && (
+              <>
+                <div style={{ marginTop: 12, fontSize: 12.5, color: '#334155', fontWeight: 700 }}>Procuração particular da arrematação</div>
+                <input readOnly value={linkHonorarioAtrib.procuracao_url} onFocus={e => { e.target.select(); navigator.clipboard?.writeText(e.target.value).catch(() => {}); }} style={{ ...S.input, width: '100%', marginTop: 6, fontSize: 11, color: '#475569' }} />
+              </>
             )}
             {linkHonorarioAtrib.cobranca_inicial_url && (
               <>
