@@ -117,13 +117,21 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    (pdf-parse) no alvo `motor` de `local-e-area-do-documento.yml` — grava só o TRECHO em
    `motor_doc_texto`; o veredito é do gatilho (mesma função). Guardas: doc de vários lotes só pelo
    bloco do lote; 2+ placas → não usa; "Sucatas… com motor inservível" (definição do edital) ignorada.
-   Daqui do container os CDNs dão 403 (proxy) — **o seco roda no GitHub**; conferir as amostras e
-   aplicar (`aplicar=1`). De passagem: rótulos de anexo do MEGA vinham deslocados (laudo como
+   **Seco no GitHub (800 lotes, 489 PDFs, 34 vereditos revistos um a um):** "não funciona" por frase
+   forte (motor inservível/queimado, sem motor, sem funcionamento há…, parado sem funcionar) = todos
+   certos; "funciona" de DOCUMENTO = não confiável (metodologia do avaliador, "O MOTOR FUNCIONA?" de
+   checklist, som "em funcionamento"). Por isso o documento só entra via
+   `motor_nao_funciona_do_documento()`; e "sem motor DE ARRANQUE" parou de casar. Ganho do PDF é
+   pequeno (~30 lotes/800) — o grosso veio da regra. 730 PDFs dão 403 ao runner (SUPERBID, docs de
+   evento): marcados como tentados, seguem "não informado". Aplicado com `aplicar=1`. De passagem: rótulos de anexo do MEGA vinham deslocados (laudo como
    "Edital") e URL com `<br>` na Superbid — corrigidos no coletor (valem no próximo scrape).
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
    Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
-10. 🔶 **Galeria de fotos dos veículos — LJUD/SUPORTE/ZUK/MEGA (29/09, código no ar, conferir após o
-   próximo scrape).** Todos gravavam só a capa do card (1 foto; MEGA/ZUK às vezes o placeholder "sem
+10. ✅ **Galeria de fotos dos veículos — LJUD/SUPORTE/ZUK/MEGA (29/09; conferido 30/09 na rodada das
+   17h45 de 29/09).** SUPORTE 85/85 com galeria, LJUD 1.867 lotes com fotos pela API. "Sem foto" que
+   apareceu (ZUK 34, MEGA 17, LJUD 173) é VERDADE: conferido na página real (via banco) — a origem só
+   tem o placeholder (`ImgNaoDispAuto.jpg`, `nao-disponivel.jpg`), que antes era gravado como capa.
+   SUPERBID: a galeria só roda no runner residencial (semanal) — conferir depois de 05/10. Todos gravavam só a capa do card (1 foto; MEGA/ZUK às vezes o placeholder "sem
    imagem"). Regras medidas no HTML real de um lote de cada (pg_net), lib `scripts/lib/galeria-veiculo.mjs`,
    teste `testar:galeria-veiculo`: MEGA `batches/<id do lote>/` na maior resolução; ZUK `/detalhe/`
    (as `/mini/` são de outros lotes); SUPORTE `bens/<id do bem>/arquivos/`. LJUD: a página é JS, sem
@@ -179,6 +187,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
+
+### 💳 30/09 — Taxas de cobrança do honorário de êxito (antes de integrar o Inter)
+Medido nos pagamentos aprovados do Mercado Pago (`mp_pagamentos.dados_mp.fee_details`, só
+`fee_payer=collector`): **Pix 1,00%** · **cartão à vista 2,48%** · saldo MP 1,10%. Nenhum honorário de
+êxito foi pago ainda. Asaas: nunca recebeu (é backup), sem taxa medida — tabela pública: Pix R$ 1,99 fixo
+(R$ 0,99 nos 3 primeiros meses), boleto R$ 3,49, cartão 2,99% + R$ 0,49. Inter (busca, não conferido na
+página — o proxy barra inter.co): Pix por chave grátis e ilimitado; **API Pix Cobrança 0,9% com teto de
+R$ 1,50** (com vencimento 0,99%, teto R$ 1,99); boleto grátis 30/60/100 por mês conforme a conta.
+**Isento hoje só existe fora de gateway:** Pix direto na chave da conta PJ, confirmado à mão em
+`api/honorario-recebimento.js` (`pix_externo`) — sem baixa automática. Honorário mínimo R$ 7.000 →
+MP Pix ≈ R$ 69 por honorário; Inter ≈ R$ 1,50; Asaas ≈ R$ 1,99 (já integrado).
 
 ### 🛡️ 29/09 (fim do dia) — Revisão de eficiência e segurança de tudo que entrou no dia
 Duas revisões em paralelo (API/front/migrações · coletores/gravadores) + checagens de banco

@@ -28,7 +28,7 @@ const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const APLICAR = process.env.DOC_APLICAR === '1';
 const ALVO = process.env.DOC_ALVO || 'ambos';
-const LIMITE = Number(process.env.DOC_LIMITE || 800);
+const LIMITE = Number(process.env.DOC_LIMITE || 800) || 800;
 const MAX_BYTES = 15 * 1024 * 1024;
 if (!SB_URL || !SB_KEY) { console.error('defina VITE_SUPABASE_URL e SUPABASE_SERVICE_KEY'); process.exit(1); }
 
@@ -343,7 +343,7 @@ async function paginaLote() {
 
 // ───────────────────────── VEÍCULOS: motor pelo documento (30/09, item 8) ─────────────────────────
 // Guarda SÓ o trecho que fala do motor em `motor_doc_texto`; quem decide funciona/não funciona é a
-// MESMA `motor_status_do_texto` do banco (gatilho) — uma regra só, evidência auditável.
+// função do BANCO (`motor_nao_funciona_do_documento`, no gatilho) — uma regra só, evidência auditável.
 // Documento de VÁRIOS lotes (usado por 2+ veículos, ou com 2+ marcas "Lote N") só vale pelo BLOCO
 // deste lote (isolarBlocoDoLote, casado pelo valor); sem bloco, não usa — "motor queimado" pode ser
 // do vizinho. Lê cada lote UMA vez (`motor_doc_em`); nada lido (HTTP/escaneado) = tenta de novo depois.
@@ -369,10 +369,10 @@ async function motor() {
   for (const v of rows) {
     const docs = (Array.isArray(v.anexos) ? v.anexos : []).filter((a) => /^https?:\/\/[^<>\s]+\.pdf(\?|$)/i.test(a?.url || '')).slice(0, 4);
     if (!docs.length) { conta('sem_pdf'); continue; }
-    const pedacos = []; let lidos = 0;
+    const pedacos = []; let lidos = 0, barrados = 0;
     for (const d of docs) {
       const r = await textoDe({ chave: d.url, url: d.url });
-      if (r.erro) { conta(`doc_${r.erro.split(':')[0]}`); continue; }
+      if (r.erro) { conta(`doc_${r.erro.split(':')[0]}`); if (/^http_4/.test(r.erro)) barrados++; continue; }
       lidos++;
       const variosLotes = (usos.get(d.url) || 0) > 1 || (r.texto.match(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi) || []).length >= 2;
       const base = variosLotes ? isolarBlocoDoLote(r.texto, { valorMinimo: v.valor_minimo, valorAvaliacao: v.valor_avaliacao }) : r.texto;
@@ -384,14 +384,19 @@ async function motor() {
       const t = trechosDoMotor(base);
       if (t) pedacos.push(t);
     }
-    if (!lidos) continue; // nada lido: não marca, tenta na próxima rodada
+    // Nada lido: erro transitório (rede, 5xx) tenta de novo; se TODOS os docs deram 4xx (CDN que
+    // barra o runner — 730 no 1º seco, quase todos SUPERBID), marca como tentado sem trecho: o lote
+    // segue "não informado" (verdade) e para de ocupar a fila de toda rodada à frente dos outros.
+    if (!lidos && barrados < docs.length) continue;
     const trecho = pedacos.join(' … ').slice(0, 2000) || null;
     const pf = (porFonte[v.fonte] ??= { lidos: 0, com_trecho: 0, funciona: 0, nao_funciona: 0 }); pf.lidos++;
     if (trecho) {
       comTrecho++; pf.com_trecho++;
       if (!APLICAR) {
         // Seco: o veredito vem do PRÓPRIO banco (mesma função do gatilho), não de uma cópia aqui.
-        const st = await sb('rpc/motor_status_do_texto', { method: 'POST', body: JSON.stringify({ p: trecho }) }).catch(() => null);
+        // Do documento só vale NÃO FUNCIONA por frase forte (seco 30/09: "funciona" em laudo era
+        // metodologia do avaliador, checklist sem resposta, som do veículo em funcionamento…).
+        const st = await sb('rpc/motor_nao_funciona_do_documento', { method: 'POST', body: JSON.stringify({ p: trecho }) }).catch(() => null);
         if (st) pf[st]++;
         if (st && amostras++ < 40) console.log(`  [seco] ${v.fonte} ${st} — ${String(v.titulo).slice(0, 50)}  «${trecho.slice(0, 220)}»`);
       }

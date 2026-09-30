@@ -14,6 +14,9 @@ on:
       fonte:
         description: 'fonte para editais_cdn (padrão BIASI)'
         default: 'BIASI'
+      limite:
+        description: 'máximo de lotes por rodada'
+        default: '800'
 
 jobs:
   documento:
@@ -32,4 +35,5 @@ jobs:
           DOC_APLICAR: ${{ inputs.aplicar }}
           DOC_ALVO: ${{ inputs.alvo }}
           DOC_FONTE: ${{ inputs.fonte }}
+          DOC_LIMITE: ${{ inputs.limite }}
         run: node scripts/local-e-area-do-documento.mjs
