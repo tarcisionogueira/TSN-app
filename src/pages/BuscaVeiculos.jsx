@@ -45,6 +45,9 @@ const COLUNAS = [
 const MOTOR_OPTS = [
   ['funciona', 'Funcionando (declarado)', 'O leiloeiro declarou o motor funcionando. É informação do edital, não garantia.'],
   ['nao_funciona', 'Não funciona / avariado', 'O leiloeiro declarou motor avariado, danificado, sem funcionar ou sem motor.'],
+  // 30/09: duas declarações que caíam em "não informado" (migração 20260930_motor_nao_testado_servivel).
+  ['nao_testado', 'Não testado (declarado)', 'O leiloeiro declarou que o motor não foi testado — o funcionamento é incerto.'],
+  ['servivel', 'Sucata — motor servível', 'Classificação DETRAN/PRF: sucata com motor aproveitável como peça. Não quer dizer que o veículo funciona.'],
   ['nao_informado', 'Não informado', 'O leiloeiro não diz nada sobre o motor — a maioria dos lotes.'],
 ];
 
@@ -666,6 +669,12 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     )}
                     {(v.motor_alerta || v.motor_status === 'nao_funciona') && (
                       <span title="Menção de dano no motor na descrição do leiloeiro" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Motor</span>
+                    )}
+                    {v.motor_status === 'nao_testado' && !v.motor_alerta && (
+                      <span title="O leiloeiro declarou que o motor não foi testado" style={{ fontSize: 9, fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 8 }}>❔ Motor não testado</span>
+                    )}
+                    {v.motor_status === 'servivel' && (
+                      <span title="Sucata com motor servível (aproveitável como peça) — não quer dizer que funciona" style={{ fontSize: 9, fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 8 }}>🔩 Motor servível</span>
                     )}
                     {v.financiavel === false && (
                       <span title="Não financiável — só à vista, conforme o leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 8 }}>À vista</span>

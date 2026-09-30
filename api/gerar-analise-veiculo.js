@@ -87,13 +87,16 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
     return Array.isArray(j.anuncios) ? j.anuncios : [];
   };
   try {
-    let anuncios = await comCascataBusca((degrau) => tentar(degrau, prazoMs)) || [];
+    // Haiku com teto de 35 s (30/09): sem teto ele comia o prazo inteiro e o Sonnet abortava com
+    // < 25 s. Falha/abort do Haiku não encerra a busca — a 2ª tentativa roda do mesmo jeito.
+    let anuncios = await comCascataBusca((degrau) => tentar(degrau, Math.min(prazoMs, 35000)))
+      .catch((e) => { motivo = `1ª busca falhou: ${String(e?.message || e).slice(0, 60)}`; return null; }) || [];
     let revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
     // SEGUNDA TENTATIVA COM O SONNET (30/09): na 1ª regeração o Haiku (busca básica) devolveu lista
     // VAZIA nos 4 veículos — o trecho indexado da Webmotors raramente traz preço. O Sonnet usa a busca
     // com filtragem dinâmica (lê melhor a página). Só roda quando o barato não bastou e ainda há prazo.
     const resta = prazoMs - (Date.now() - t0);
-    if (!revenda && resta > 25000) {
+    if (!revenda && resta > 30000) {
       const sonnet = { model: 'claude-sonnet-4-6', ferramenta: (n) => ferramentaBusca('claude-sonnet-4-6', n) };
       const mais = await tentar(sonnet, resta - 3000).catch((e) => { motivo = `2ª busca (Sonnet) falhou: ${String(e?.message || e).slice(0, 60)}`; return null; });
       if (mais?.length) { anuncios = [...anuncios, ...mais]; revenda = revendaPorAnuncios(anuncios, v.valor_fipe); }
@@ -226,6 +229,8 @@ function promptVeiculo(v, percentualFipe, faixa, extra = {}) {
     v.sinistro && `Sinistro (classificação do leiloeiro): ${v.sinistro}`,
     v.is_sucata && 'Vendido como SUCATA — só certificado de baixa, SEM ATPV-e (transferência não é a padrão)',
     v.motor_alerta && 'Leiloeiro menciona dano no MOTOR na descrição',
+    // Estado do motor como o leiloeiro DECLARA (motor_status_do_texto, 30/09) — a IA confirma no texto.
+    ({ funciona: 'Motor declarado FUNCIONANDO pelo leiloeiro', nao_funciona: 'Motor declarado SEM FUNCIONAR/avariado pelo leiloeiro', nao_testado: 'Motor declarado NÃO TESTADO pelo leiloeiro — funcionamento incerto', servivel: 'Sucata com motor SERVÍVEL (aproveitável como peça) — não significa que funciona' })[v.motor_status],
     v.financiavel === false && 'NÃO aceita financiamento — só à vista',
     v.financiavel === true && 'Aceita financiamento',
     v.ipva_situacao && `IPVA: ${v.ipva_situacao}`,
