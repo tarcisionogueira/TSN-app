@@ -9,6 +9,34 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🩺 30/09 (tarde) — VARREDURA DE SAÚDE + LISTA CONSOLIDADA DO DONO
+**Resolvido e em produção (e6d5fe8 + dados):** regeração em paralelo (o workflow dava 504 com 4 veículos);
+"Failed to fetch (analytics.google.com)" filtrado de erros_cliente (bloqueador do visitante — era o único erro
+aberto); 24 lotes "Lote, Residencial…" deixaram de ser "casa" (gatilho `trg_tipo_lote_sem_construcao` +
+SOLEON); veículos com cidade fora do IBGE 82 → 14; 2 anexos religados ao PDF original (espelho purgado); área
+truncada (APICE) e UF (Superbid) corrigidas; `auditoria_uso` com 5 tabelas só-servidor na allowlist (aviso
+diário falso); OSM com espelho openstreetmap.fr; arrematação do Marcos judicial (TRT5), não extrajudicial;
+Araraquara regerado com avaliação/lance corretos. Sentry sem issue aberta em 7 dias; backup ok; 0 chamado
+de cliente parado; segurança 0/0.
+**Restam em alerta (conhecidos):** `qa_invariantes_lenta` (cache frio), `sem_foto` 1.780 (GLOBO sem detalhe),
+`estado_fora_do_padrao` 8 (4 páginas montadas em JS sem cidade), GRUPOLANCE com praça trocada (recon).
+
+**DEPENDE DO DONO — por prioridade:**
+1. 🔴 Bright Data pôs na lista negra 68.211.146.0/24 (runner do GitHub) — desbloquear no painel.
+2. 🔴 Marcos assinar o termo (link em contratos_link; bloqueio até 30/10).
+3. 🔴 Rafael e Matheus (assessorados) sem termo nenhum — autorizar gerar o termo atribuído (e a taxa de cada).
+4. 🔴 MX do domínio → inbound do Resend: suporte@ e privacidade@ publicados e sem receber (LGPD art. 18).
+5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
+6. 🟠 Revenda de veículo: a busca web não tira preço da Webmotors — escolher fonte (iCarros/Mobiauto/OLX ou API paga).
+7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
+8. 🟠 Google Ads: publicar app OAuth (token de 7 dias); projeto "BidPro métricas diárias" (custo?).
+9. 🟠 Embu-Guaçu: decisão sobre o relatório (mercado R$ 655 mil × avaliação R$ 66,6 mil).
+10. 🟠 Teto semanal do Bright Data (subir ou aceitar dias sem coleta paga).
+11. 🟠 Testar compra avulsa (ebook) ponta a ponta; nomear um analista.
+12. 🟠 Jurídico: sujeição à Lei 9.613/COAF; liberar a correção de `extrairIdentidadeTexto` (endereço do leiloeiro).
+13. 🟡 Resend: eventos opened/clicked no webhook; Instagram (verificação Meta); Windsor (14 contas);
+    CREPALDI (integrar ou remover); PECINI dry-run; e-mails de 6 leiloeiros; alqueire; retenção de e-mails.
+
 ### 📌 30/09 (manhã, 2ª parte) — datas da Superbid, FIPE, SOLEON pelo banco, termo + procuração, contrato do checkout
 1. **Data do leilão da Superbid 3 h adiantada** (print: lote fechava 12h04, BidPro dizia "encerrado" às 09h42).
    `endDate` vem em hora de Brasília sem fuso e ia para timestamptz como UTC. Coletor usa `endDateTime`
