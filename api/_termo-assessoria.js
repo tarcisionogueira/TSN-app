@@ -223,8 +223,10 @@ async function criarDocumento(sb, { userId, titulo, conteudo, produtoTipo, produ
   if (!rL.ok) return { ok: false, motivo: `criação do documento HTTP ${rL.status}: ${(await rL.text().catch(() => '')).slice(0, 120)}` };
   const [link] = await rL.json();
   if (!link?.id) return { ok: false, motivo: 'documento não voltou do banco' };
-  const rPend = await sb('contratos_pendentes', {
-    method: 'POST', headers: { Prefer: 'return=minimal' },
+  // UPSERT: um documento refeito (o anterior cancelado) cairia na chave única (user, tipo, produto)
+  // e o novo ficava SEM bloqueio — visto no Marcos em 30/09. O registro passa a apontar o novo link.
+  const rPend = await sb('contratos_pendentes?on_conflict=user_id,produto_tipo,produto_id', {
+    method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ user_id: userId, produto_tipo: produtoTipo, produto_id: String(produtoId), contrato_link_id: link.id,
       status: 'aguardando', expira_em: new Date(Date.now() + 30 * 86400000).toISOString() }),
   });
