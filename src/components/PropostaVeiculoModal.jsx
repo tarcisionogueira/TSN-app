@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, Mail, Send, X } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { garantirRelatorioVeiculo } from '../utils/relatorioProposta';
 import RevisarTexto from './RevisarTexto';
 
 // PROPOSTA DE COMPRA DIRETA AO LEILOEIRO — saiu do card da busca para a página do veículo (30/09,
@@ -45,6 +46,19 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
     } finally { setPropostaEnviando(false); }
   };
 
+  // RELATÓRIO AUTOMÁTICO (30/09, pedido do dono: "ao enviar uma proposta a um leiloeiro, garanta
+  // que o relatório seja gerado automaticamente caso não tenha sido gerado"). Ao abrir a proposta,
+  // se quem propõe não tem relatório CONCLUÍDO deste veículo, dispara a geração em segundo plano
+  // (roda no servidor ~1 min, enquanto o texto é revisado). A equipe passa pelo gate de leilão
+  // encerrado (ehEquipe em api/_leilao-encerrado.js) — é justamente o lote pós-leilão.
+  const [relatorio, setRelatorio] = useState(null); // null | 'pronto' | 'gerando' | { erro }
+  useEffect(() => {
+    if (!veiculo?.id) return;
+    let vivo = true;
+    garantirRelatorioVeiculo(veiculo.id, (fim) => { if (vivo) setRelatorio(fim); }).then((st) => { if (vivo) setRelatorio(st); });
+    return () => { vivo = false; };
+  }, [veiculo?.id]);
+
   const fecharProposta = () => onFechar?.();
   useEffect(() => { if (veiculo) abrirProposta(veiculo); }, [veiculo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -59,6 +73,13 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
               </div>
               <button onClick={fecharProposta} style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
             </div>
+            {relatorio && (
+              <div style={{ fontSize: 11.5, margin: '2px 0 6px', color: relatorio === 'pronto' ? '#15803d' : relatorio === 'gerando' ? '#0369a1' : '#b91c1c' }}>
+                {relatorio === 'pronto' ? <>✓ Relatório do veículo pronto — <a href={`/analise-veiculo?veiculo=${encodeURIComponent(propondoVeiculo.id)}`} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 700 }}>abrir</a></>
+                  : relatorio === 'gerando' ? <><Loader2 size={11} className="animate-spin" style={{ verticalAlign: -1 }} /> Gerando o relatório do veículo automaticamente (≈1 min)…</>
+                  : `Relatório do veículo não foi gerado: ${relatorio.erro}`}
+              </div>
+            )}
             <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 14px' }}>
               {[propondoVeiculo.marca, propondoVeiculo.modelo, propondoVeiculo.ano_fabricacao].filter(Boolean).join(' ') || propondoVeiculo.titulo} — leilão já ocorrido, sem sinal de comprador.
             </p>

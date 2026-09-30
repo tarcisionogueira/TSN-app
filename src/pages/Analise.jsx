@@ -472,10 +472,13 @@ export default function Analise() {
   // Sem isto, abrir uma análise antiga mostrava os três cards como "não gerado" — e gerar de
   // novo reprocessava a IA de um relatório que já existia.
   const [falhouCarregar, setFalhouCarregar] = useState(false);
+  // A AUTO-SEQUÊNCIA espera isto (30/09): antes da conferência, "sem mercadológico" pode ser só
+  // "ainda não li" — e gerar por cima reprocessaria IA paga de um relatório que já existia.
+  const [conferiuRelatorios, setConferiuRelatorios] = useState(false);
   useEffect(() => {
     let vivo = true;
-    if (!analiseImovelId) return undefined;
-    Promise.resolve(garantirCarregado(analiseImovelId)).then(ok => { if (vivo) setFalhouCarregar(!ok); });
+    if (!analiseImovelId) { setConferiuRelatorios(true); return undefined; } // sem id não há o que conferir (comportamento de antes)
+    Promise.resolve(garantirCarregado(analiseImovelId)).then(ok => { if (vivo) { setFalhouCarregar(!ok); setConferiuRelatorios(!!ok); } });
     return () => { vivo = false; };
   }, [analiseImovelId, garantirCarregado]);
   // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
@@ -1553,12 +1556,17 @@ export default function Analise() {
   // Cada etapa dispara a seguinte quando a anterior CONCLUI (máquina de estados por ref).
   const autoSeqRef = React.useRef({ etapa: 0 });
   useEffect(() => {
-    if (!autoGerar) return;
+    if (!autoGerar || !conferiuRelatorios) return;
     const s = autoSeqRef.current;
+    // Etapa JÁ FEITA é pulada (30/09): com o mercadológico pronto, a sequência ficava parada na
+    // etapa 0 e nunca pedia documental/laudo — só funcionava do zero. A proposta ao leiloeiro
+    // reusa esta sequência justamente quando falta PARTE dos relatórios.
+    if (s.etapa === 0 && relMercadoGerado) s.etapa = 1;
+    if (s.etapa === 1 && relDocumentalGerado) s.etapa = 2;
     if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; gerarRelMercado(); return; }
     if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
     if (s.etapa === 2 && ambosRelatorios && LAUDO_NOVO_ATIVO && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
-  }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoGerar, conferiuRelatorios, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // AUTO-HEAL do parecer vazio (caso Marcelo): ao abrir um relatório concluído com o parecer em
   // branco, dispara UMA regeração — sem custo (isNovo=false) e sem loop (ref por imóvel). Fecha a

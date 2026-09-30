@@ -7,7 +7,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser, isCronAuthorized } from './_auth.js';
 import { aplicarRestricaoNasAmostras } from './_restricao-amostras.js';
 import { logAtividade } from './_atividade.js';
-import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
+import { leilaoEncerrado, respostaLeilaoEncerrado, ehEquipe } from './_leilao-encerrado.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
@@ -1979,7 +1979,7 @@ export default async function handler(req, res) {
   // como reforço); sem data confiável, deixa passar — ver api/_leilao-encerrado.js.
   {
     const lz = await leilaoEncerrado(sb, imovelId, rawData);
-    if (lz.encerrado) {
+    if (lz.encerrado && !(await ehEquipe(sb, user.id))) { // equipe gera p/ proposta pós-leilão (ehEquipe)
       res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
       return;
     }

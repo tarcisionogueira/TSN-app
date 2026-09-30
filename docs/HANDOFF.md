@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📎 30/09 (noite, 7ª parte) — proposta ao leiloeiro garante os relatórios
+- **Pedido do dono:** ao propor ao leiloeiro, gerar o relatório (veículo) ou os relatórios (imóvel) que faltarem.
+- `src/utils/relatorioProposta.js`: `garantirRelatorioVeiculo` (dispara `/api/gerar-analise-veiculo` em 2º plano se
+  quem propõe não tem relatório concluído) e `relatoriosImovelFaltando` (mercado + documental — o parecer final está
+  DESLIGADO, `LAUDO_NOVO_ATIVO=false`, `analises_laudo` vazia). Usado no modal "Propor compra direta" (ao abrir) e no
+  "Enviar e-mail → leiloeiro" (após enviar: veículo gera em 2º plano; imóvel abre `/analise` com `autoGerar`).
+- **Gate de leilão encerrado:** a EQUIPE passa (`ehEquipe` em `api/_leilao-encerrado.js`, aplicado em gerar-analise,
+  gerar-documental e gerar-analise-veiculo) — a compra direta é pós-leilão; cliente continua barrado. VeiculoDetalhe
+  mostra o botão de relatório quando o lote é "sem lance" (podeProporVeiculo).
+- **Auto-sequência corrigida (Analise.jsx):** pulava nada — com o mercadológico pronto ficava parada na etapa 0 e nunca
+  pedia o documental; e podia disparar ANTES de `garantirCarregado` terminar (regerando IA paga de relatório existente).
+  Agora pula etapa já feita e espera a conferência (`conferiuRelatorios`).
+- Relatório gerado pós-leilão sobrevive ≥ 15 dias (limpar_analises_orfas conta da CRIAÇÃO).
+
 ### 🧭 30/09 (noite, 6ª parte) — alerta avaliação × mercado e identidade do edital (liberados pelo dono)
 - **Alerta:** `src/utils/alertaAvaliacao.js` — mercado > 4× ou < 0,25× a avaliação (mesma régua do
   `mercado_incoerente_avaliacao` do aprendizado, que só marcava internamente) → caixa vermelha na capa do

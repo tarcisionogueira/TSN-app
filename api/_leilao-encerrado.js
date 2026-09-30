@@ -106,3 +106,19 @@ export function respostaLeilaoEncerrado(ultimaData) {
     ultima_data: ultimaData || null,
   };
 }
+
+// EXCEÇÃO DA EQUIPE (30/09, pedido do dono: "ao enviar uma proposta a um leiloeiro, garanta que o
+// relatório seja gerado automaticamente"). A proposta de COMPRA DIRETA existe justamente para o
+// lote cujo leilão JÁ passou sem lance — e o gate acima recusava exatamente esse lote. A regra
+// do dono de 07/08 protege a COTA DO CLIENTE ("não vale, já passou a data de arrematar"); a equipe
+// gera para negociar pós-leilão, e esse relatório tem uso. Cliente continua barrado.
+export const ROLES_EQUIPE_RELATORIO = ['admin', 'analista', 'advogado', 'suporte', 'consultor'];
+export async function ehEquipe(sb, userId) {
+  if (!userId) return false;
+  try {
+    const r = await sb(`perfis?id=eq.${encodeURIComponent(userId)}&select=role&limit=1`);
+    if (!r.ok) return false; // padrao-ok: sem conseguir ler o papel, vale a regra geral (bloqueia) — nunca libera por falha
+    const [p] = await r.json();
+    return ROLES_EQUIPE_RELATORIO.includes(p?.role);
+  } catch { return false; } // padrao-ok: idem — falha de leitura mantém o gate
+}

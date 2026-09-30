@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { garantirRelatorioVeiculo, relatoriosImovelFaltando } from '../utils/relatorioProposta';
 import { apiCall } from '../utils/apiCall';
 import CampoEmails from './CampoEmails';
 import RevisarTexto from './RevisarTexto';
@@ -24,7 +26,8 @@ import { htmlLaudo } from './LaudoPDF';
  */
 const btnLocal = (color = '#0D63DB') => ({ padding: '10px 20px', background: color, color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' });
 
-export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardStyle }) {
+export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imovel, cardStyle }) {
+  const nav = useNavigate();
   const [emailPreview, setEmailPreview] = useState(null); // { destino, texto, destinatarioEmail, contatoDisponivel, ... }
   const [enviando, setEnviando] = useState(false);
   const [carregando, setCarregando] = useState(null); // 'juridico'|'leiloeiro'|null
@@ -77,8 +80,23 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
       if (d.semContato) { setMsg('Informe um e-mail válido — não há contato cadastrado para este destino ainda.'); return; }
-      setMsg(`📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}`);
+      const base = `📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}`;
+      setMsg(base);
+      const eraLeiloeiro = emailPreview.destino === 'leiloeiro';
       setEmailPreview(null);
+      // PROPOSTA AO LEILOEIRO → relatório(s) garantidos (30/09, pedido do dono). Veículo: gera em
+      // segundo plano. Imóvel: o que faltar vai pela AUTO-SEQUÊNCIA da tela de análise
+      // (mercadológico → documental → parecer final), a mesma do arremate atribuído.
+      if (eraLeiloeiro && veiculoId) {
+        const st = await garantirRelatorioVeiculo(veiculoId, (fim) => setMsg(`${base} ${fim === 'pronto' ? '✓ Relatório do veículo pronto.' : `Relatório do veículo não foi gerado: ${fim?.erro}`}`));
+        if (st === 'gerando') setMsg(`${base} Gerando o relatório do veículo automaticamente (≈1 min).`);
+      } else if (eraLeiloeiro && imovelId) {
+        const faltam = await relatoriosImovelFaltando(imovelId);
+        if (faltam?.length) {
+          setMsg(`${base} Abrindo a geração automática dos relatórios que faltam (${faltam.join(', ')})…`);
+          setTimeout(() => nav(`/analise?imovel=${encodeURIComponent(imovelId)}`, { state: { ...(imovel ? { imovel } : {}), autoGerar: true } }), 1500);
+        }
+      }
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {

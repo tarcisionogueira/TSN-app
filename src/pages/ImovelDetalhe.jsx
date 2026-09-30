@@ -2216,7 +2216,7 @@ export default function ImovelDetalhe() {
                 (o mesmo lote pode ter vários casos, de clientes diferentes) — só os anexos
                 do lote, sem documentos pessoais. Mesmo componente de Caso.jsx. */}
             {['admin', 'analista', 'advogado', 'consultor'].includes(role) && (
-              <EnviarEmailCasoLote imovelId={imovel.id} cardStyle={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px' }} />
+              <EnviarEmailCasoLote imovelId={imovel.id} imovel={imovel} cardStyle={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px' }} />
             )}
 
             {/* Info rápida */}

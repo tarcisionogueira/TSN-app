@@ -11,7 +11,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { createHash } from 'node:crypto';
 import { getUser, isCronAuthorized } from './_auth.js';
 import { logAtividade } from './_atividade.js';
-import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
+import { leilaoEncerrado, respostaLeilaoEncerrado, ehEquipe } from './_leilao-encerrado.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
@@ -716,7 +716,7 @@ export default async function handler(req, res) {
   // bloquear só num dos dois deixaria a porta aberta. Antes da cota, de propósito.
   {
     const lz = await leilaoEncerrado(sb, imovelId, body?.dataLeilao || null);
-    if (lz.encerrado) {
+    if (lz.encerrado && !(await ehEquipe(sb, user.id))) { // equipe gera p/ proposta pós-leilão (ehEquipe)
       res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
       return;
     }

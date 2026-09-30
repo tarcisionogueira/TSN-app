@@ -319,7 +319,8 @@ export default function VeiculoDetalhe() {
               veículo + FIPE + veredito, num relatório só (ver api/gerar-analise-veiculo.js).
               Sem ramo de cliente/visitante aqui: a rota (App.jsx) já é exclusiva
               admin/analista — quem chegou nesta tela sempre pode gerar. */}
-          {leilaoEncerrado ? (
+          {/* Encerrado SEM LANCE (proposta de compra direta) → equipe gera o relatório para negociar (30/09). */}
+          {leilaoEncerrado && !podeProporVeiculo(v, role) ? (
             <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
               <strong>Leilão encerrado.</strong> Como não é mais possível dar lance, o relatório não é gerado para este veículo.
             </div>

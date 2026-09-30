@@ -13,6 +13,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { getUser, isCronAuthorized } from './_auth.js';
+import { ehEquipe } from './_leilao-encerrado.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
@@ -343,7 +344,8 @@ export default async function handler(req, res) {
   if (!v) { res.status(404).json({ error: 'Veículo não encontrado' }); return; }
 
   // Leilão já ocorrido → não gera e não cobra (mesma regra do imóvel, api/_leilao-encerrado.js).
-  if (v.data_leilao && new Date(v.data_leilao).getTime() < Date.now()) {
+  // Equipe passa (proposta de compra direta pós-leilão — ver ehEquipe em api/_leilao-encerrado.js).
+  if (v.data_leilao && new Date(v.data_leilao).getTime() < Date.now() && !(viaCron || await ehEquipe(sb, user.id))) {
     res.status(422).json({ error: 'Leilão já encerrado — não é possível gerar o relatório para este veículo.', leilaoEncerrado: true });
     return;
   }
