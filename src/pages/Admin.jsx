@@ -1869,11 +1869,11 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
       // link (é só a URL do BidPro); "gerar os 3 relatórios" continua disponível nele.
       if (data.arrematacao_id && Number(data.honorarios_valor) > 0) {
         setLinkHonorarioAtribCopiado(false);
-        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor });
+        setLinkHonorarioAtrib({ ...proximo, arrematacao_id: data.arrematacao_id, honorarios_valor: data.honorarios_valor, termo_url: data.termo_url || null, aviso: data.aviso || null });
         return;
       }
-      // A atribuição NÃO exige contrato (só planos/produtos/serviços com contrato
-      // atribuído exigem). Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
+      // A atribuição de ESTUDO (sem "contratou de fato") não exige contrato. A que cobra êxito
+      // exige desde 30/09 — o termo sai no painel acima, junto com o link do honorário. Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
       // ÂNCORA) para gerar os 3 relatórios EM NOME DO cliente — o material real
       // alimenta o aprendizado da IA.
       if ((imovelId || casoId) && window.confirm('Arremate atribuído' + (data.role_alterado ? ' e usuário promovido a Assessorado' : '') + '.\n\nAbrir a análise e GERAR OS 3 RELATÓRIOS automaticamente (mercadológico → documental → laudo), lendo os anexos?')) {
@@ -2110,6 +2110,15 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 {linkHonorarioAtribCopiado ? '✓ Copiado' : 'Copiar'}
               </button>
             </div>
+
+            {/* TERMO + PROCURAÇÃO (30/09): sem a assinatura dele a equipe fica sem autorização para
+                resolver a arrematação — o link sai junto com o da cobrança, não depois. */}
+            <div style={{ marginTop: 14, fontSize: 12.5, color: '#334155', fontWeight: 700 }}>Termo de assessoria + procuração (assinatura do arrematante)</div>
+            {linkHonorarioAtrib.termo_url ? (
+              <input readOnly value={linkHonorarioAtrib.termo_url} onFocus={e => { e.target.select(); navigator.clipboard?.writeText(e.target.value).catch(() => {}); }} style={{ ...S.input, width: '100%', marginTop: 6, fontSize: 11, color: '#475569' }} />
+            ) : (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: '#b91c1c' }}>{linkHonorarioAtrib.aviso || 'O termo não foi gerado — gere pela página do caso ou avise o suporte.'}</div>
+            )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button onClick={() => setLinkHonorarioAtrib(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>

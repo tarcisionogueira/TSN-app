@@ -83,7 +83,7 @@ export default async function handler(req) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 
   // Carrega o contrato pelo token (service key — ignora RLS)
-  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id,verificacao_identidade,docs_extras_exigidos,plano_key`);
+  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id,verificacao_identidade,docs_extras_exigidos,plano_key,produto_tipo,arremate_imovel_id`);
   const rows = await r.json().catch(() => []);
   const contrato = Array.isArray(rows) ? rows[0] : null;
   if (!contrato) return new Response(JSON.stringify({ error: 'Contrato não encontrado' }), { status: 404, headers });
@@ -305,6 +305,9 @@ export default async function handler(req) {
             method: 'POST',
             body: JSON.stringify({
               p_user_id: uid, p_plano_key: tierAss, p_forma_pagamento: 'contrato',
+              // Termo de ARREMATAÇÃO ATRIBUÍDA (30/09): não há os R$ 6.000 iniciais — sem isto a
+              // assinatura herdaria o preço do plano e o Admin mostraria uma mensalidade que não existe.
+              ...(contrato.produto_tipo === 'arrematacao' ? { p_valor_mensal: 0, p_valor_total: 0 } : {}),
               // O imóvel vem do próprio contrato quando ele traz um: é o vínculo que o dono pediu
               // ("poder vincular um imóvel"), e vindo daqui ninguém precisa digitá-lo de novo.
               p_imovel_id: contrato.arremate_imovel_id || null,

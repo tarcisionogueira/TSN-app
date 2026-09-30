@@ -32,6 +32,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, getUserRoleById } from './_auth.js';
+import { gerarTermoAtribuido } from './_termo-assessoria.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -234,5 +235,15 @@ export default async function handler(req) {
     } catch (e) { console.error('[atribuir-arremate] honorarios', e?.message || e); } // best-effort: a atribuição já foi feita: equipe pode registrar o arremate depois em Caso.jsx se isto falhar
   }
 
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor });
+  // 5) TERMO DE ASSESSORIA + PROCURAÇÃO (30/09, dono). Arrematação que COBRA êxito sem ter passado
+  //    pelo checkout não tinha termo nenhum (caso Marcos). Gera o termo da arrematação atribuída
+  //    (sem os R$ 6.000, só êxito, com procuração particular) e o bloqueio até a assinatura.
+  let termo = null;
+  if (arrematacao_id) {
+    termo = await gerarTermoAtribuido(sb, { arrematacaoId: arrematacao_id, criadoPor: user.id });
+    if (!termo.ok) console.error('[atribuir-arremate] termo:', termo.motivo);
+  }
+
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor,
+    termo_url: termo?.ok ? termo.url : null, ...(termo && !termo.ok ? { aviso: `arremate atribuído, mas o termo de assessoria NÃO foi gerado (${termo.motivo}) — gere pela rota /api/termo-atribuido` } : {}) });
 }
