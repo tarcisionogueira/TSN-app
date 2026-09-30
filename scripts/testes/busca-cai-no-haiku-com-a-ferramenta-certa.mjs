@@ -113,7 +113,9 @@ for (const arq of ['api/gerar-analise.js', 'api/indice-mercado.js', 'api/indice-
   const src = readFileSync(new URL(`../../${arq}`, import.meta.url), 'utf8');
   checa(`${arq} importa a cascata`, /from '\.\/_busca-modelo\.js'/.test(src));
   checa(`${arq} não declara web_search_ à mão`, !/type: 'web_search_20\d{6}'/.test(src));
-  checa(`${arq} monta a ferramenta pelo degrau`, /degrau\.ferramenta\(/.test(src));
+  // Direto (`degrau.ferramenta(`) OU entregando o degrau a `buscarComProva`, que monta por ele
+  // (api/_busca-com-prova.js) — os dois do Índice migraram para a 2ª forma e o teste ficou para trás.
+  checa(`${arq} monta a ferramenta pelo degrau`, /degrau\.ferramenta\(/.test(src) || /buscarComProva\(\{[\s\S]{0,200}?\bdegrau\b/.test(src));
 }
 
 console.log('\nO PREÇO DO HAIKU ESTÁ NA TABELA DE CUSTO (senão a economia não aparece no painel)');
