@@ -203,7 +203,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `honorarios_recebimentos` (novo método `boleto_asaas`, migração `20260930_honorario_boleto_asaas.sql`,
   aplicada); a justificativa registra a taxa paga pelo cliente. extRef antigo (`honorario|<id>`) segue lido.
 - ⚠️ Ainda sem pagamento real por este caminho — o 1º boleto/cartão pago confirma a baixa ponta a ponta
-  (`select metodo, valor, justificativa from honorarios_recebimentos order by created_at desc limit 3`).
+  (`select metodo, valor, justificativa from honorarios_recebimentos order by criado_em desc limit 3`).
 
 ### 💳 30/09 — Taxas de cobrança do honorário de êxito (antes de integrar o Inter)
 Medido nos pagamentos aprovados do Mercado Pago (`mp_pagamentos.dados_mp.fee_details`, só
