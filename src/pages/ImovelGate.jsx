@@ -57,7 +57,7 @@ export default function ImovelGate() {
     );
   }
 
-  const cands = im.id ? fotoCandidatos({ foto: im.link_foto, fonte: im.fonte, fonteId: im.fonte_id }) : [];
+  const cands = im.id ? fotoCandidatos({ foto: im.link_foto, fonte: im.fonte, fonteId: im.fonte_id, largura: 800 }) : [];
   const foto = cands[imgIdx] || null;
   const desc = Number(im.desconto_percentual) || 0;
   const local = [im.cidade, im.estado].filter(Boolean).join('/');

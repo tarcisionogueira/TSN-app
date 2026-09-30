@@ -34,6 +34,8 @@ function tipoPelaAssinatura(buf) {
   return null;
 }
 
+const LARGURAS = new Set([240, 480, 800]);
+
 export const GET = handler;
 async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -97,11 +99,32 @@ async function handler(req) {
       if (!contentType) return new Response('Not an image', { status: 415 });
     }
 
-    return new Response(body, {
+    // MINIATURA (30/09): `?w=` (só larguras fixas, para o cache da CDN não fragmentar) reduz a foto
+    // para a largura pedida em WebP. Medido: Suporte Leilões ~300 KB (até 1 MB), Alberto Macedo
+    // ~1,4 MB, Leilotech ~290 KB — num quadro de card de ~400 px. PDF/GIF passam intactos. Se o
+    // sharp falhar, entrega o original (foto grande > sem foto) e deixa o motivo no log.
+    let saida = body;
+    const largura = LARGURAS.has(Number(searchParams.get('w'))) ? Number(searchParams.get('w')) : 0;
+    if (largura && /^image\/(jpeg|png|webp)$/i.test(contentType)) {
+      try {
+        const sharp = (await import('sharp')).default;
+        saida = await sharp(Buffer.from(body), { failOn: 'none' }).rotate()
+          .resize({ width: largura, withoutEnlargement: true }).webp({ quality: 70 }).toBuffer();
+        contentType = 'image/webp';
+      } catch (e) {
+        console.error(`[img-proxy] miniatura falhou (${targetUrl.hostname}): ${String(e?.message || e).slice(0, 120)}`);
+        saida = body;
+      }
+    }
+
+    return new Response(saida, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
+        // `s-maxage` (30/09): só `max-age` fazia o NAVEGADOR guardar — a CDN da Vercel não, e cada
+        // visitante novo rodava a função e rebaixava a foto do leiloeiro. Com isto a CDN serve a
+        // mesma foto por 7 dias (e mais 1 dia enquanto revalida) sem chamar a função.
+        'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400',
         'Access-Control-Allow-Origin': '*',
       },
     });

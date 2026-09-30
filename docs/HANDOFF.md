@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🖼️ 30/09 (noite, 5ª parte) — fotos mais leves na busca
+- **Medido (amostra de 81 fotos, 27 CDNs):** 71% das capas (17.780) já são nossas (Caixa, 55 KB). Leves: Zuk/Mega/
+  Biasi/Frazão 11–17 KB. Médias: Superbid/GoCache/CloudFront 130–160 KB. **Pesadas:** Suporte Leilões ~300 KB (até
+  1 MB), Leilotech ~290 KB, Alberto Macedo ~1,4 MB — num card de ~400 px.
+- **img-proxy:** `Cache-Control` só tinha `max-age` → a CDN da Vercel NÃO guardava e cada visitante rodava a função.
+  Agora `s-maxage=604800, stale-while-revalidate=86400`. E `?w=240|480|800` reduz para WebP q70 com `sharp`
+  (3 MB → 28 KB no teste); falhou o sharp → original, com log.
+- **`fotoCandidatos` (src/utils/foto.js):** CDN pesada → miniatura pelo proxy primeiro, original de reserva; hotlink
+  protegido (Hasta `cdnhp`) → nunca tenta direto (sempre 403). ImovelGate usa 800 px. Teste `foto-miniatura.mjs`.
+- ⚠️ O 400 de Pestana/Pecini/Sublime no banco é o cabeçalho do pg_net (mesmo do BAYIT), não prova que o navegador
+  falhe — não mexi nesses. Para ampliar a lista de pesadas: medir `content-length` via `pagina_pedir` + `net._http_response`.
+
 ### 📐 30/09 (noite, 4ª parte) — alqueire, área mil vezes menor, itens do HANDOFF que já estavam feitos
 - **Alqueire:** tipo escrito converte exato; "alqueire" solto só em SP/PR/MS (24.200) e MG/GO/DF/TO (48.400).
   Teste `scripts/testes/area-em-alqueires.mjs`.
