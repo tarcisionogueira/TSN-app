@@ -190,8 +190,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 ### 💳 30/09 — Taxas de cobrança do honorário de êxito (antes de integrar o Inter)
 Medido nos pagamentos aprovados do Mercado Pago (`mp_pagamentos.dados_mp.fee_details`, só
-`fee_payer=collector`): **Pix 1,00%** · **cartão à vista 2,48%** · saldo MP 1,10%. Nenhum honorário de
-êxito foi pago ainda. Asaas: nunca recebeu (é backup), sem taxa medida — tabela pública: Pix R$ 1,99 fixo
+`fee_payer=collector`): **Pix 1,00%** · **cartão à vista 2,48%** · saldo MP 1,10%. ⚠️ CORREÇÃO: o honorário
+de R$ 54.835,52 (arremate de R$ 548 mil) JÁ foi pago — Pix direto R$ 2.163 + 3 cheques R$ 19.671 +
+**cartão Asaas R$ 33.001** (≈ R$ 987 de taxa), registrados à mão em `honorarios_recebimentos` (por isso
+não aparecem em `mp_pagamentos`). **Boleto MP: R$ 3,49 fixo** (não é grátis, mas ≈ 0,006% em R$ 55 mil).
+**Limites da NOSSA conta** (API `/v1/payment_methods` com a chave pública, 30/09): boleto R$ 4 a
+**R$ 100.000** por boleto · Pix até R$ 9.999.999 · cartão até R$ 60.000. O servidor (`mp-checkout`) já
+devolve `boletoUrl`, mas a TELA de pagamento só oferece Pix e cartão — boleto exige CPF + endereço do
+pagador no payload. Asaas: tabela pública — Pix R$ 1,99 fixo
 (R$ 0,99 nos 3 primeiros meses), boleto R$ 3,49, cartão 2,99% + R$ 0,49. Inter (busca, não conferido na
 página — o proxy barra inter.co): Pix por chave grátis e ilimitado; **API Pix Cobrança 0,9% com teto de
 R$ 1,50** (com vencimento 0,99%, teto R$ 1,99); boleto grátis 30/60/100 por mês conforme a conta.
