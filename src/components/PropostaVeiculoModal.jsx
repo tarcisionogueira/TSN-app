@@ -75,7 +75,7 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
                 {propostaInfo?.contato && (
                   <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#4c1d95', marginBottom: 10, lineHeight: 1.5 }}>
                     <div><b>Responsável:</b> {propostaInfo.contato.organizador || 'leiloeiro do lote'}</div>
-                    {propostaInfo.contato.email && <div><b>E-mail:</b> {propostaInfo.contato.email}</div>}
+                    {propostaInfo.contato.email && <div><b>E-mail:</b> {propostaInfo.contato.email}{propostaInfo.contato.cc ? <> (cópia: {propostaInfo.contato.cc})</> : null}</div>}
                     {propostaInfo.contato.telefone && <div><b>Telefone:</b> {propostaInfo.contato.telefone}{propostaInfo.contato.whatsapp && propostaInfo.contato.whatsapp !== propostaInfo.contato.telefone ? ` · WhatsApp ${propostaInfo.contato.whatsapp}` : ''}</div>}
                     {propostaInfo.contato.caminho && <div style={{ color: '#6d28d9' }}><b>Onde achar:</b> {propostaInfo.contato.caminho}</div>}
                   </div>

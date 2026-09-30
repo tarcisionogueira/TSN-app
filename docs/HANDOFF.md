@@ -89,6 +89,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   NÃO cai no cadastro genérico (foi assim que a proposta de 24/09, lote da AZ LEILÕES, saiu para outro leiloeiro). O modal
   mostra Responsável · e-mail · telefone · "Onde achar" (página do lote → Dúvidas e contato → Sobre o evento).
   Teste: `scripts/testes/contato-lote-superbid.mjs`. `paginaViaBanco` agora mora lá (gerar-analise-veiculo importa).
+- **Canal comercial Superbid** (30/09, informado pelo chat da própria Superbid ao dono): `contato.comercial@sbwebservices.net`.
+  Organizador do evento achado → vai para ele com CÓPIA para o comercial; não achado → vai para o comercial.
 - **Revisão ortográfica sugerida** (`api/revisar-texto.js` + `src/components/RevisarTexto.jsx`): botão "Revisar
   ortografia" na Caixa de e-mail, e-mail do caso ao leiloeiro, "Pedir ao leiloeiro" (Analise) e proposta de veículo.
   Mostra as mudanças e só troca com "Aplicar". Trava na saída: número/e-mail/link alterado ou tamanho ±25% → descarta.
