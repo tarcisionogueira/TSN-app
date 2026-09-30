@@ -10,6 +10,12 @@ Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme re
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 ### 🛠️ 30/09 (noite, 2ª parte) — fontes paradas pela via banco + datas de vizinho
+- **Revenda de veículo pelo MOBIAUTO** (item 6 do dono): a Webmotors dá 403 ao banco e à Vercel; o Mobiauto abre
+  pela via banco (grátis) em `/comprar/carros/brasil/<marca>/<modelo>/ano-<AAAA>` com os anúncios em JSON-LD.
+  Medido: Montana 2015 → 22 anúncios (média ≈ R$ 48,6 mil), Cronos 2022 → 24. `revendaMobiauto` roda ANTES da busca
+  web paga (que virou reserva); prefere a mesma versão/motor quando há 3+; o rótulo diz "do Mobiauto" — nunca
+  "Webmotors" sobre anúncio de outro portal. Teste: `scripts/testes/revenda-mobiauto.mjs`.
+
 - **CRLEILOES** (zerado: `challenge`/`sem_config`): o IP do banco passa no Cloudflare (home 200, 75 links de lote).
   `scraper-crleiloes.mjs` agora tenta `viaBanco` antes do Bright Data (disjuntor em 2 falhas); cron 2×/semana
   (seg/qui) com freio de 3 dias. Sem banco E sem BD → `sem_config` (antes exigia BD mesmo com o banco disponível).
@@ -69,7 +75,7 @@ de cliente parado; segurança 0/0.
 3. ✅ LGPD: encarregado nomeado na Política (Tarcisio de Souza Nogueira de Araujo) e prazo corrigido para "até 15 dias" (art. 19, II) — 30/09 noite. Resta ao dono: responder os chamados `[LGPD — responder até …]` no prazo.
 4. 🟠 LEJE/FREITAS: abrir leje.com.br e o site da Freitas no navegador do PC do runner — se der "Acesso Negado", o IP de casa foi bloqueado (reduzir a frequência da rodada parcial de 4 h ou pedir liberação ao leiloeiro).
 5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
-6. 🟠 Revenda de veículo: a busca web não tira preço da Webmotors — escolher fonte (iCarros/Mobiauto/OLX ou API paga).
+6. ✅ Revenda de veículo: Mobiauto (grátis, via banco) como 1ª fonte desde 30/09 — a Webmotors bloqueia robô. Se preferir outra fonte, avisar.
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
 8. 🟠 Google Ads: publicar app OAuth (token de 7 dias); projeto "BidPro métricas diárias" (custo?).
 9. 🟠 Embu-Guaçu: decisão sobre o relatório (mercado R$ 655 mil × avaliação R$ 66,6 mil).

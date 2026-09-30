@@ -18,7 +18,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos } from '../src/utils/viabilidadeVeiculo.js';
+import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao } from '../src/utils/viabilidadeVeiculo.js';
 import { paginaViaBanco } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -58,7 +58,38 @@ async function upsertAnaliseVeiculo(row) {
 // busca web da IA (anúncios PÚBLICOS indexados), com PROVA de que pesquisou (_busca-com-prova:
 // resposta sem busca é falha, nunca "mercado vazio"). A conta dos 5 mais baratos é feita aqui,
 // no código (revendaPorAnuncios), nunca pela IA. Devolve { revenda, motivo } — nunca lança.
+// REVENDA PELO MOBIAUTO (30/09) — 1ª opção, GRÁTIS e determinística: listagem por modelo/ano lida
+// via banco (a Webmotors dá 403 ao banco e à Vercel). Só cai na busca web paga se não houver 3
+// comparáveis. Nunca lança; { revenda } ou { revenda: null, motivo }.
+async function revendaMobiauto(v, deadline) {
+  const marca = marcaMobiauto(v.marca);
+  const ano = Number(v.ano_modelo || v.ano_fabricacao) || null;
+  const modelos = modelosMobiauto(v.modelo);
+  if (!marca || !ano || !modelos.length) return { revenda: null, motivo: 'Mobiauto: sem marca/modelo/ano' };
+  const motivos = [];
+  for (const modelo of modelos) {
+    if (Date.now() > deadline - 3000) { motivos.push('sem tempo'); break; }
+    const url = `https://www.mobiauto.com.br/comprar/carros/brasil/${marca}/${modelo}/ano-${ano}`;
+    const b = await paginaViaBanco(url, deadline);
+    if (!b.html) { motivos.push(`${modelo}: ${b.motivo}`); continue; }
+    const anuncios = anunciosMobiauto(b.html, { marca, modelo, ano });
+    if (!anuncios.length) { motivos.push(`${modelo}: 0 anúncios`); continue; }
+    const f = filtrarVersao(anuncios, v.modelo);
+    const revenda = revendaPorAnuncios(f.lista, v.valor_fipe);
+    if (revenda) return { revenda: { ...revenda, mesmaVersao: f.versao, listagem: url } };
+    motivos.push(`${modelo}: ${anuncios.length} anúncio(s), menos de 3 na faixa de 30–200% da FIPE`);
+  }
+  return { revenda: null, motivo: `Mobiauto: ${motivos.join('; ')}` };
+}
+
 async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
+  const mob = await revendaMobiauto(v, Date.now() + Math.min(prazoMs, 25000));
+  if (mob.revenda) return { revenda: mob.revenda, motivo: null };
+  const r = await buscarRevendaWeb(v, prazoMs, userId, gasto);
+  return r.revenda ? r : { revenda: null, motivo: [mob.motivo, r.motivo].filter(Boolean).join(' · ') };
+}
+
+async function buscarRevendaWeb(v, prazoMs, userId, gasto = { micro: 0 }) {
   const alvo = [v.marca, v.modelo, v.titulo].filter(Boolean).join(' · ').slice(0, 200);
   const ano = v.ano_modelo || v.ano_fabricacao || '';
   if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };

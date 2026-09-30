@@ -51,7 +51,9 @@ function rotuloComissao(result, viab) {
   return result?.comissaoFonte ? `fonte: ${result.comissaoFonte}` : 'informada no lote';
 }
 function rotuloRevenda(rm) {
-  return `média de ${rm.anuncios.length} anúncio${rm.anuncios.length > 1 ? 's' : ''} ${rm.base === 'webmotors' ? 'da Webmotors' : rm.base === 'misto' ? '(Webmotors + outros portais)' : 'mais baratos'}`;
+  // O rótulo diz o portal de ONDE a média veio (30/09: Mobiauto entrou como 1ª fonte).
+  const portal = { webmotors: 'da Webmotors', mobiauto: 'do Mobiauto', olx: 'da OLX', icarros: 'do iCarros' }[rm.base] || 'de vários portais';
+  return `média de ${rm.anuncios.length} anúncio${rm.anuncios.length > 1 ? 's' : ''} ${portal}${rm.mesmaVersao ? ' (mesma versão)' : ''}`;
 }
 
 function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
@@ -424,7 +426,7 @@ export default function AnaliseVeiculo() {
                   <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{extras.reparos.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 </div>
               )}
-              {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir a comissão e os débitos declarados pelo leiloeiro e a revenda pelos anúncios da Webmotors.</div>}
+              {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir a comissão e os débitos declarados pelo leiloeiro e a revenda pelos anúncios de mercado.</div>}
             </div>
           )}
 

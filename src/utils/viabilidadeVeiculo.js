@@ -109,6 +109,9 @@ export function revendaPorAnuncios(anuncios, fipe) {
   const unicos = [...new Map(validos.map((a) => [a.url || `${a.preco}|${a.titulo}`, a])).values()];
   const wm = unicos.filter((a) => a.portal === 'webmotors');
   const base = wm.length >= REVENDA_MIN_ANUNCIOS ? wm : unicos;
+  // Rótulo = de ONDE os anúncios vieram de fato (30/09: com o Mobiauto, "misto" diria "Webmotors +
+  // outros portais" sobre uma média sem nenhum anúncio da Webmotors — forma nº 10).
+  const portais = [...new Set(base.map((a) => a.portal).filter(Boolean))];
   const ord = [...base].sort((a, b) => a.preco - b.preco);
   const mediana = ord.length ? ord[Math.floor((ord.length - 1) / 2)].preco : 0;
   const usados = ord.length >= 4 ? ord.filter((a) => a.preco >= mediana * 0.6 && a.preco <= mediana * 1.6) : ord;
@@ -117,7 +120,7 @@ export function revendaPorAnuncios(anuncios, fipe) {
   const r2 = (x) => Math.round(x * 100) / 100;
   return {
     media: r2(media), valor: r2(media * (1 - REVENDA_DESCONTO_PCT / 100)), descontoPct: REVENDA_DESCONTO_PCT,
-    base: base === wm ? 'webmotors' : 'misto',
+    base: base === wm ? 'webmotors' : portais.length === 1 ? portais[0] : 'misto',
     anuncios: usados, descartados: lista.length - usados.length,
   };
 }
@@ -162,4 +165,57 @@ export function consertarAcentos(texto) {
   const s = String(texto || '');
   if (!/Ã[\u0080-\u00BF]/.test(s) || [...s].some((c) => c.charCodeAt(0) > 0xFF)) return s;
   try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(s, (c) => c.charCodeAt(0))); } catch { return s; } // bytes que não formam UTF-8: o texto não era o defeito — fica como veio
+}
+
+// ─── MOBIAUTO (30/09) ─────────────────────────────────────────────────────────────────────────
+// A Webmotors recusa robô (403/PerimeterX, e a busca web da IA não traz o preço). O Mobiauto abre
+// pela via banco (grátis) e publica a listagem por modelo E ano em URL estável
+// (/comprar/carros/brasil/<marca>/<modelo>/ano-<AAAA>), com cada anúncio em JSON-LD
+// ("url": ".../<local>/<marca>/<modelo>/<ano>/<versão>/detalhes/<id>", "price": N). Medido: Montana
+// 2015 → 22 anúncios, Cronos 2022 → 24, todos do modelo/ano pedidos.
+const MARCAS_MOBIAUTO = { vw: 'volkswagen', gm: 'chevrolet', 'gm-chevrolet': 'chevrolet', 'vw-volkswagen': 'volkswagen',
+  mercedes: 'mercedes-benz', 'm-benz': 'mercedes-benz', mb: 'mercedes-benz', mmc: 'mitsubishi', 'land-rover': 'land-rover' };
+export function slugMobiauto(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+export function marcaMobiauto(marca) {
+  const bruta = String(marca || '').replace(/^i\s*\//i, '');
+  const sl = slugMobiauto(bruta);
+  if (!sl) return null;
+  if (MARCAS_MOBIAUTO[sl]) return MARCAS_MOBIAUTO[sl];
+  const ultima = slugMobiauto(bruta.split(/\s+-\s+|\//).pop());
+  return MARCAS_MOBIAUTO[ultima] || ultima || null;
+}
+// Candidatos de slug do MODELO, do mais específico ao mais genérico ("c3 aircross" antes de "c3").
+export function modelosMobiauto(modelo) {
+  const toks = String(modelo || '').trim().split(/\s+/).filter(Boolean);
+  if (!toks.length) return [];
+  const um = slugMobiauto(toks[0]);
+  const dois = toks[1] && /^[a-z]{3,}$/i.test(toks[1]) ? slugMobiauto(`${toks[0]} ${toks[1]}`) : null;
+  return [...new Set([dois, um].filter(Boolean))];
+}
+// Puro: anúncios do JSON-LD da listagem, SÓ do modelo/ano pedidos (a página traz vitrines de outros).
+export function anunciosMobiauto(html, { marca, modelo, ano }) {
+  const re = /"url"\s*:\s*"(https:\/\/www\.mobiauto\.com\.br\/comprar\/carros\/([^/"]+)\/([^/"]+)\/([^/"]+)\/(\d{4})\/([^/"]+)\/detalhes\/\d+)[^"]*"\s*,\s*"price"\s*:\s*(\d+(?:\.\d+)?)/g;
+  const out = [];
+  for (const m of String(html || '').matchAll(re)) {
+    const [, url, local, mc, md, a, versao, preco] = m;
+    if (mc !== marca || md !== modelo || Number(a) !== Number(ano)) continue;
+    out.push({ preco: Math.round(Number(preco)), titulo: `${md} ${versao}`.replace(/-/g, ' '), ano: Number(a), km: null,
+      local: local.replace(/^([a-z]{2})-(.*)$/, (_, uf, c) => `${c.replace(/-/g, ' ')}/${uf.toUpperCase()}`), portal: 'mobiauto', url });
+  }
+  return [...new Map(out.map((x) => [x.url, x])).values()];
+}
+// Mesma versão/motor primeiro: "MONTANA LS 1.4" prefere anúncios "ls-1-4-flex". Se a versão não
+// tiver 3 comparáveis, fica o modelo/ano inteiro (a média diz isso no rótulo, não esconde).
+export function filtrarVersao(anuncios, modelo) {
+  const toks = String(modelo || '').toLowerCase().replace(/(\d)[.,](\d)/g, '$1-$2').split(/\s+/).slice(1)
+    .map((t) => t.replace(/[^a-z0-9-]/g, '')).filter((t) => t.length >= 2);
+  if (!toks.length) return { lista: anuncios, versao: false };
+  // Casa por segmento inteiro ("-ls-" em "-ls-1-4-flex-"), nunca substring solta ("at" em "flat").
+  const pont = anuncios.map((a) => { const v = `-${a.url.split('/')[9] || ''}-`; return { a, n: toks.filter((t) => v.includes(`-${t}-`)).length }; });
+  const max = Math.max(0, ...pont.map((p) => p.n));
+  const melhores = pont.filter((p) => max > 0 && p.n === max).map((p) => p.a);
+  return melhores.length >= REVENDA_MIN_ANUNCIOS ? { lista: melhores, versao: true } : { lista: anuncios, versao: false };
 }
