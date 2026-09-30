@@ -72,7 +72,12 @@ pendência 6 abaixo; 5 tabelas com RLS sem escrita do usuário (aviso).
 2. **Telas logadas no navegador** — a varredura de estouro (Chromium 375/1366 px) cobriu 13 telas
    públicas; as logadas estão cobertas pela correção na raiz, mas não foram vistas no navegador.
 3. **Teste pré-existente** `busca-cai-no-haiku-com-a-ferramenta-certa.mjs` com 2 falhas (Índice).
-4. Check-ins já agendados: SUPERBID contatos por leiloeiro (`leiloeiro_contato_tenant`), BAYIT
+4. **SUPERBID contatos por leiloeiro — conferido 30/09 13h UTC:** `leiloeiro_contato_tenant` segue VAZIA,
+   mas ainda não é o "M = 0": a coleta de veículos da SUPERBID só roda no runner RESIDENCIAL (semanal) e a
+   última terminou em 28/09 18:06 UTC — ANTES do conserto de 29/09 (o GitHub pula: "residencial concluiu
+   há < 7 dias"). Conferir de novo após a próxima rodada residencial (~05/10) o log
+   `📧 SUPERBID veículos: N loja(s) lidas…`; só com M = 0 lá é que se parte para o edital do lote.
+   Demais check-ins: BAYIT
    (queda 78 → 5, rodada semanal 01/10), galeria SUPERBID depois de 05/10.
 5. Captura: parser de estado (8 lotes), LEJE/CRLEILOES sem headless, 397 veículos da NORDESTE.
 6. Índice: primeira geração real depois do conserto (depende de cliente).
