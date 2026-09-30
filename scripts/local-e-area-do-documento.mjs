@@ -341,6 +341,72 @@ async function paginaLote() {
   console.log(`[pagina_lote ${fonte}] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${alvo.length} sem área · ${achou} com área rotulada na página · gravados ${gravou} · recusas ${JSON.stringify(motivos)}`);
 }
 
+// ───────────────────────── VEÍCULOS: motor pelo documento (30/09, item 8) ─────────────────────────
+// Guarda SÓ o trecho que fala do motor em `motor_doc_texto`; quem decide funciona/não funciona é a
+// MESMA `motor_status_do_texto` do banco (gatilho) — uma regra só, evidência auditável.
+// Documento de VÁRIOS lotes (usado por 2+ veículos, ou com 2+ marcas "Lote N") só vale pelo BLOCO
+// deste lote (isolarBlocoDoLote, casado pelo valor); sem bloco, não usa — "motor queimado" pode ser
+// do vizinho. Lê cada lote UMA vez (`motor_doc_em`); nada lido (HTTP/escaneado) = tenta de novo depois.
+const RE_MOTOR_JANELA = /motor|funcionament|n[ãa]o\s+(?:liga|pega|d[áa]\s+partida)|liga\s+e\s+anda|anda\s+e\s+liga/gi;
+function trechosDoMotor(texto) {
+  const faixas = [];
+  for (const m of texto.matchAll(RE_MOTOR_JANELA)) {
+    // Definição de CATEGORIA no edital do DETRAN ("Sucatas aproveitáveis com motor inservível —
+    // diferem das…") casaria "não funciona" em qualquer lote: plural genérico antes = não é o bem.
+    if (/sucatas\b/i.test(texto.slice(Math.max(0, m.index - 60), m.index))) continue;
+    const ini = Math.max(0, m.index - 120), fim = Math.min(texto.length, m.index + 160);
+    if (faixas.length && ini <= faixas[faixas.length - 1][1]) faixas[faixas.length - 1][1] = fim; else faixas.push([ini, fim]);
+  }
+  return faixas.map(([a, b]) => texto.slice(a, b)).join(' … ').slice(0, 1500);
+}
+async function motor() {
+  const ativos = await todas('veiculos_leilao?ativo=eq.true&anexos=not.is.null&select=id,fonte,titulo,anexos,valor_minimo,valor_avaliacao,motor_status,motor_doc_em&order=id');
+  const usos = new Map();
+  for (const v of ativos) for (const a of Array.isArray(v.anexos) ? v.anexos : []) if (a?.url) usos.set(a.url, (usos.get(a.url) || 0) + 1);
+  const rows = ativos.filter((v) => !v.motor_status && !v.motor_doc_em).slice(0, LIMITE);
+  const motivos = {}; const conta = (k) => { motivos[k] = (motivos[k] || 0) + 1; };
+  const porFonte = {}; let gravou = 0, comTrecho = 0, amostras = 0;
+  for (const v of rows) {
+    const docs = (Array.isArray(v.anexos) ? v.anexos : []).filter((a) => /^https?:\/\/[^<>\s]+\.pdf(\?|$)/i.test(a?.url || '')).slice(0, 4);
+    if (!docs.length) { conta('sem_pdf'); continue; }
+    const pedacos = []; let lidos = 0;
+    for (const d of docs) {
+      const r = await textoDe({ chave: d.url, url: d.url });
+      if (r.erro) { conta(`doc_${r.erro.split(':')[0]}`); continue; }
+      lidos++;
+      const variosLotes = (usos.get(d.url) || 0) > 1 || (r.texto.match(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi) || []).length >= 2;
+      const base = variosLotes ? isolarBlocoDoLote(r.texto, { valorMinimo: v.valor_minimo, valorAvaliacao: v.valor_avaliacao }) : r.texto;
+      if (!base) { conta('doc_de_varios_lotes_sem_bloco'); continue; }
+      // Laudo de penhora com 2+ veículos e sem marca "Lote N" (seco 30/09: Fiesta + outro no mesmo
+      // auto): mais de UMA placa no texto usado = não dá para saber de qual é a frase.
+      const placas = new Set([...base.matchAll(/\b([A-Z]{3})[\s-]?(\d[A-Z0-9]\d{2})\b/g)].map((x) => x[1] + x[2]));
+      if (placas.size > 1) { conta('doc_de_varios_veiculos'); continue; }
+      const t = trechosDoMotor(base);
+      if (t) pedacos.push(t);
+    }
+    if (!lidos) continue; // nada lido: não marca, tenta na próxima rodada
+    const trecho = pedacos.join(' … ').slice(0, 2000) || null;
+    const pf = (porFonte[v.fonte] ??= { lidos: 0, com_trecho: 0, funciona: 0, nao_funciona: 0 }); pf.lidos++;
+    if (trecho) {
+      comTrecho++; pf.com_trecho++;
+      if (!APLICAR) {
+        // Seco: o veredito vem do PRÓPRIO banco (mesma função do gatilho), não de uma cópia aqui.
+        const st = await sb('rpc/motor_status_do_texto', { method: 'POST', body: JSON.stringify({ p: trecho }) }).catch(() => null);
+        if (st) pf[st]++;
+        if (st && amostras++ < 40) console.log(`  [seco] ${v.fonte} ${st} — ${String(v.titulo).slice(0, 50)}  «${trecho.slice(0, 220)}»`);
+      }
+    }
+    if (!APLICAR) continue;
+    const up = await sb(`veiculos_leilao?id=eq.${v.id}&motor_doc_em=is.null`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ motor_doc_texto: trecho, motor_doc_em: new Date().toISOString() }) })
+      .catch((e) => { console.error(`  falhou ${v.id}: ${e.message}`); return null; });
+    if (Array.isArray(up) && up.length === 1) { gravou++; if (up[0].motor_status) pf[up[0].motor_status]++; }
+  }
+  console.log(`[motor] ${APLICAR ? 'GRAVANDO' : 'EM SECO'} · ${rows.length} sem motor e não lidos · ${comTrecho} com trecho de motor no doc · gravados ${gravou}`);
+  console.log(`  por fonte: ${JSON.stringify(porFonte)}`);
+  console.log(`  recusas/erros: ${JSON.stringify(motivos)} · ${cacheTexto.size} documentos distintos lidos`);
+}
+
+if (ALVO === 'motor') { await motor(); process.exit(0); }
 if (ALVO === 'pagina_lote') { await paginaLote(); process.exit(0); }
 if (ALVO === 'editais_cdn') { await editaisCdn(); process.exit(0); }
 if (ALVO !== 'imoveis') {

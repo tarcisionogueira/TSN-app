@@ -5097,7 +5097,8 @@ function extrairAnexosPdfDeObjeto(obj) {
     const out = [], vis = new Set(), objSeen = new Set();
     const add = (url, label) => {
       if (!url || typeof url !== 'string') return;
-      const u = url.startsWith('//') ? `https:${url}` : url;
+      // `<br>` DENTRO da URL vem assim do payload (autoarremate via Superbid, 30/09) — link quebrado.
+      const u = (url.startsWith('//') ? `https:${url}` : url).replace(/<br\s*\/?>|\s+/gi, '');
       if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u) || !ehDocumento(u, label || '', '')) return; // mesmo portão central (_doc-scan.js) de todo anexo
       vis.add(u);
       const t = `${label || ''} ${u}`.toLowerCase();
@@ -5131,9 +5132,14 @@ function extrairAnexosPdfDeHtml(html) {
       const url = m[0];
       if (vis.has(url)) continue;
       vis.add(url);
+      // O NOME DO ARQUIVO decide primeiro (30/09): o texto ANTES do link termina no rótulo do link
+      // ANTERIOR — no MEGA, `megaleiloes_laudo_*.pdf` saía "Edital" e `megaleiloes_edital_*` saía
+      // "Outro" (um deslocado do outro). Só sem pista no nome é que o contexto conta.
+      const nomeArq = url.split('?')[0].split('/').pop().toLowerCase();
       const contexto = html.slice(Math.max(0, m.index - 120), m.index).toLowerCase();
-      const tipo = /matr[ií]cul/.test(contexto) ? 'matricula' : /(laudo|avalia)/.test(contexto) ? 'laudo'
-                 : /(edital|regulament|condi[çc])/.test(contexto) ? 'edital' : 'outro';
+      const classe = (t) => /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia|vistoria)/.test(t) ? 'laudo'
+                 : /(edital|regulament|condi[çc])/.test(t) ? 'edital' : null;
+      const tipo = classe(nomeArq) || classe(contexto) || 'outro';
       out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url, tipo });
       if (out.length >= 12) break;
     }

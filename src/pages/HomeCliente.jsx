@@ -46,7 +46,16 @@ const STATUS_CASO = {
 // cards da grade não dependem de rede e já nascem prontos. O curso de onboarding é config
 // global do admin — não muda por navegação nem por usuário — então cachear fora do state faz
 // o card nascer instantâneo a partir da 2ª visita da sessão (só a 1ª ainda mostra o esqueleto).
-let cacheCursoBoasVindas; // undefined = ainda não buscado nesta sessão de página
+//
+// 30/09 — o atraso VOLTOU porque o cache acima tinha dois furos: (1) o state nascia `undefined` e
+// só lia o cache no useEffect → o esqueleto pintava 1 quadro e o card entrava depois, EM TODA
+// visita; (2) cache só em memória some a cada recarga/login. Agora o state NASCE do cache, que
+// também fica no localStorage (id/título de curso — config pública, nada pessoal), e a rede só
+// REVALIDA em segundo plano (se o admin trocar o curso, a próxima visita já pega o novo).
+const CHAVE_CACHE_BV = 'bidpro_curso_boas_vindas_v1';
+let cacheCursoBoasVindas = (() => {
+  try { const s = localStorage.getItem(CHAVE_CACHE_BV); return s ? JSON.parse(s) : undefined; } catch { return undefined; }
+})(); // undefined = ainda não buscado · null = sem curso · obj = achado
 
 export default function HomeCliente() {
   const nav = useNavigate();
@@ -58,7 +67,7 @@ export default function HomeCliente() {
   const [cotaMercado, setCotaMercado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
-  const [cursoBoasVindas, setCursoBoasVindas] = useState(undefined); // undefined=carregando · null=sem curso · obj=achado
+  const [cursoBoasVindas, setCursoBoasVindas] = useState(() => cacheCursoBoasVindas); // undefined=carregando · null=sem curso · obj=achado
   const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
   const [refCodigo, setRefCodigo] = useState(''); // código curto de indicação (link enxuto)
   const [showTermo, setShowTermo] = useState(false);
@@ -92,13 +101,15 @@ export default function HomeCliente() {
   // no próximo acesso" e o "concluiu, some para sempre" continuam intactos).
   useEffect(() => {
     if (!effectiveUserId) { setCursoBoasVindas(null); return; }
-    if (cacheCursoBoasVindas !== undefined) { setCursoBoasVindas(cacheCursoBoasVindas); return; }
     let vivo = true;
     supabase.from('cursos_admin').select('id, titulo')
       .eq('onboarding', true).eq('ativo', true).order('ordem').limit(1).maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        // Erro de leitura NÃO é "sem curso" (forma 2): mantém o que já se sabia.
+        if (error) { if (vivo && cacheCursoBoasVindas === undefined) setCursoBoasVindas(null); return; }
         const v = data || null;
         cacheCursoBoasVindas = v;
+        try { localStorage.setItem(CHAVE_CACHE_BV, JSON.stringify(v)); } catch { /* armazenamento bloqueado — segue com a memória */ }
         if (vivo) setCursoBoasVindas(v);
       });
     return () => { vivo = false; };

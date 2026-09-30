@@ -107,8 +107,19 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    ('refazer'). Trigger `cidade_pelo_ibge` (migração `20260929_cidade_pelo_ibge.sql`) aplica a mesma regra
    em TODO insert/troca de cidade, de qualquer coletor — testado (Maceió, S. J. do Rio Preto, Ceilândia
    intacta). Restam 117 sem candidato (grafia variante: Poxoréo, Assu; regiões do DF) — não se inventa.
-8. **Motor de veículos — cobertura** (proposto): só ~7% dos lotes declaram; ler os laudos de
-   vistoria em PDF (Sodré/Superbid) aumentaria — custo de leitura; levantar quantos lotes têm PDF antes.
+8. 🔶 **Motor de veículos — cobertura (30/09, em curso).** Medido: 662 de ~9.570 (7%) declaravam.
+   (a) **Regra melhorada, sem ler PDF: 662 → 1.242 (13%)** — "sucata — motor inservível" (classificação
+   DETRAN/PRF, 574 SUPERBID/SUPORTE/SODRÉ), "motor: queimado", "bom estado de conservação e
+   funcionamento"; contextos conferidos um a um (`20260930_motor_pelo_documento.sql`).
+   (b) **PDF:** 895 lotes sem motor têm PDF, mas o que é o PDF importa: SUPERBID = doc do EVENTO (310
+   lotes → 26 URLs, pouco útil); LJUD "Laudo" = avaliação JUDICIAL (12 de 12 lidos, nenhum cita
+   motor); por lote de verdade: SUPORTE `sl-bem-*`, MEGA `megaleiloes_laudo_*`, ZUK. Leitura grátis
+   (pdf-parse) no alvo `motor` de `local-e-area-do-documento.yml` — grava só o TRECHO em
+   `motor_doc_texto`; o veredito é do gatilho (mesma função). Guardas: doc de vários lotes só pelo
+   bloco do lote; 2+ placas → não usa; "Sucatas… com motor inservível" (definição do edital) ignorada.
+   Daqui do container os CDNs dão 403 (proxy) — **o seco roda no GitHub**; conferir as amostras e
+   aplicar (`aplicar=1`). De passagem: rótulos de anexo do MEGA vinham deslocados (laudo como
+   "Edital") e URL com `<br>` na Superbid — corrigidos no coletor (valem no próximo scrape).
 9. **Limitação conhecida:** 31 apartamentos "rurais" pelo mapa (pino errado ou condomínio posterior ao
    Censo 2022). Não afeta relatório (a troca exige concordância do imóvel), mas é sinal de pino ruim.
 10. 🔶 **Galeria de fotos dos veículos — LJUD/SUPORTE/ZUK/MEGA (29/09, código no ar, conferir após o
