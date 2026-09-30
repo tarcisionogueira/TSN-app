@@ -110,7 +110,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
         </div>
 
         {/* Sumário */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:0, borderBottom:'1px solid #e2e8f0' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap:0, borderBottom:'1px solid #e2e8f0' }}>
           {[
             ['Entradas',totalEntradas,'#10b981','#f0fdf4'],
             ['Saídas',totalSaidas,'#ef4444','#fef2f2'],
@@ -551,7 +551,7 @@ export default function Painel() {
                   { l:'Capital investido (realizadas)', v:`R$ ${fmt(investido,0)}`, c:'#7c3aed', bg:'#faf5ff' },
                 ];
                 return (
-                  <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:10, padding:'16px 18px', borderBottom:'1px solid #e2e8f0' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap:10, padding:'16px 18px', borderBottom:'1px solid #e2e8f0' }}>
                     {cards.map(k => (
                       <div key={k.l} style={{ background:k.bg, borderRadius:10, padding:'12px 14px' }}>
                         <div style={{ fontSize:18, fontWeight:900, color:k.c }}>{k.v}</div>
@@ -899,7 +899,7 @@ export default function Painel() {
           {/* Formulário novo lançamento */}
           <div style={{ padding:'16px 20px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
             <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>Novo Lançamento</div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '130px 1fr 1fr 1fr 120px auto', gap:8, alignItems:'flex-end' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : '130px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 120px auto', gap:8, alignItems:'flex-end' }}>
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:4 }}>DATA</div>
                 <input type="date" value={novoLanc.data} onChange={e=>setNovoLanc(p=>({...p,data:e.target.value}))} style={{ ...inp2, width:'100%' }}/>

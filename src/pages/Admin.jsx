@@ -3927,7 +3927,7 @@ function ContratosTab() {
             <input type="checkbox" checked={kycSelfieSegurando} onChange={e => setKycSelfieSegurando(e.target.checked)} style={{ width:15, height:15, accentColor:'#0D63DB' }} />
             Incluir também “selfie segurando o documento”
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(kycKeys.length, 3)}, 1fr)`, gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(kycKeys.length, 3)}, minmax(0, 1fr))`, gap: 10 }}>
             {kycKeys.map(slotKyc)}
           </div>
         </>
@@ -4254,7 +4254,7 @@ function ContratosTab() {
                   <button onClick={() => setStep(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
                 </div>
                 <p style={{ fontSize:13, color:'#64748b', marginBottom:18 }}>Como você quer criar este contrato? Emitido pela <strong>Nogueira Empreendimentos</strong>, com foro de Feira de Santana/BA e cláusulas de LGPD e anticorrupção.</p>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:12 }}>
                   {[
                     { id:'ia', emoji:'✨', cor:'#6366f1', titulo:'Criar com IA', desc:'Você escreve em texto livre o que o contrato deve conter (e pode anexar documentos para a IA extrair as informações). A IA redige com máximo resguardo jurídico.' },
                     { id:'assinar', emoji:'📄', cor:'#0D63DB', titulo:'Assinar documento pronto', desc:'Você já tem o documento. Carregue o arquivo (PDF/Word/imagem) e gere o link de assinatura, sem editar o conteúdo.' },
@@ -5277,7 +5277,7 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   return (
     <div>
       <div style={{ fontSize: 14, fontWeight: 700, color: '#111111', marginBottom: 12 }}>{LABEL[planoKey]}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Total', value: usuarios.length, cor: '#0D63DB' },
           { label: 'Ativos', value: usuarios.length - inadimplentes, cor: '#10b981' },
@@ -6597,7 +6597,7 @@ function DashboardTab({ irParaTab }) {
       {/* Auditoria técnica do sistema pelo Claude (só leitura; correções via PR) */}
       <PainelAuditoriaSistema />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16 }}>
 
         {/* Coluna esquerda: Usuários por plano */}
         <div>
@@ -6745,7 +6745,7 @@ function DashboardTab({ irParaTab }) {
               </p>
             ) : asaasDados ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
                     { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
                     { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#0D63DB' },
@@ -6917,7 +6917,7 @@ function DashboardTab({ irParaTab }) {
                       {storageCustoBRL < 0.01 ? 'R$ 0' : `~R$ ${storageCustoBRL.toFixed(2)}`}/mês
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginBottom: 8 }}>
                     {[
                       { label: 'Imóveis ativos', val: fmtN(fotoStats.total), cor: '#0D63DB' },
                       { label: 'Fotos no Storage', val: `${fmtN(fotoStats.noStorage)} (${pctFotos}%)`, cor: pctFotos > 80 ? '#10b981' : pctFotos > 30 ? '#d97706' : '#dc2626' },
@@ -6929,7 +6929,7 @@ function DashboardTab({ irParaTab }) {
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
                     {[
                       { nome: 'GitHub Actions (scrapers)', custo: 'Grátis', desc: 'Repo público — ilimitado', cor: '#10b981' },
                       { nome: 'Nominatim / OSM (geocod)', custo: 'Grátis', desc: '1 req/s · uso moderado', cor: '#10b981' },
@@ -7257,7 +7257,7 @@ function SystemStatusCard() {
         );
       })()}
       {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Verificando…</div> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
           {Object.entries(GRUPOS).map(([key, grupo]) => {
             const itens = grupo.items.map(k => status?.[k]).filter(Boolean);
             const obrig = itens.filter(i => !i.opcional);
@@ -7861,7 +7861,7 @@ function ScrapersTab() {
   return (
     <div style={{ maxWidth: 860 }}>
       {/* ── KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginBottom: 20 }}>
         {[
           { label: 'Imóveis ativos',     valor: (status?.ativos ?? status?.total)?.toLocaleString('pt-BR') || '—',                                     icon: '🏠', cor: '#0D63DB' },
           { label: 'Geocodificados',      valor: `${geoStats.com.toLocaleString('pt-BR')} (${geoPct}%)`,                                               icon: '📍', cor: geoPct > 80 ? '#059669' : geoPct > 50 ? '#d97706' : '#dc2626' },
@@ -7932,7 +7932,7 @@ function ScrapersTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Grade unificada de todas as fontes */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
 
             {/* ── Caixa Econômica Federal ── */}
             {(() => {
@@ -8020,7 +8020,7 @@ function ScrapersTab() {
                     </button>
                   </div>
                   {estadosExpandidos.caixa && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5, marginTop: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginTop: 10 }}>
                       {AGENDA_SCRAPER.map(({ uf, hora }) => {
                         const r = scraperRegiao[uf] || {};
                         return (
@@ -8199,7 +8199,7 @@ function ScrapersTab() {
           )}
 
           {/* Resumo por nível */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
             {[
               { label: 'Com coordenadas', valor: geoStats.com.toLocaleString('pt-BR'), cor: '#059669', bg: '#f0fdf4' },
               { label: 'Sem coordenadas', valor: geoStats.sem.toLocaleString('pt-BR'), cor: '#d97706', bg: '#fefce8' },
@@ -8237,7 +8237,7 @@ function ScrapersTab() {
           </div>
 
           {estadosExpandidos.geocod && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
               {UFS_GEOCOD_ORDEM.map(uf => {
                 const r = geocRegiao[uf] || {};
                 const pendentes = geocPendentes[uf];
@@ -8309,7 +8309,7 @@ function ScrapersTab() {
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
             Volume estimado ao integrar todas as fontes: <b style={{ color: '#0D63DB' }}>~50.000–80.000 imóveis</b> no banco.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             {scrapersPlanjados.map(s => (
               <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px dashed #cbd5e1' }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: '#334155' }}>{s.nome}</div>
@@ -8851,7 +8851,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
           {sol.tipo === 'processual' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>⏰ Prazo judicial</span>}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 32 }}>
           {/* LEFT — Info */}
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: '#111111', marginBottom: 16 }}>Informações do Imóvel</div>
@@ -9280,7 +9280,7 @@ function EquipeTab() {
     <div>
       {/* ── SECTION A ─────────────────────────────────────────────────────────── */}
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 14, marginBottom: 24 }}>
         {[
           ['Total Equipe', membros.length, '#111111'],
           ['Analistas', membros.filter(m=>m.role==='analista').length, '#0D63DB'],
@@ -12542,7 +12542,7 @@ function AgendaTab() {
       </div>
 
       {loading ? <div style={{ color: '#94a3b8' }}>Carregando...</div> : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 24 }}>
           {/* Disponibilidade semanal */}
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Disponibilidade semanal</div>

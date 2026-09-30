@@ -286,7 +286,7 @@ export default function Planos() {
         })()}
 
         {/* ── 2 Planos principais: Explorador + Investidor Pro ── */}
-        <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
+        <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
 
           {/* Explorador */}
           <div id="plano-explorador" style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
@@ -401,7 +401,7 @@ export default function Planos() {
             </p>
           </div>
         ) : (
-          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 880, margin: '0 auto' }}>
+          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20, maxWidth: 880, margin: '0 auto' }}>
 
             {/* Assessoria */}
             {ativoPlano('assessorado') && (
@@ -485,7 +485,7 @@ export default function Planos() {
         )}
 
         {/* ── Garantias ── */}
-        <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, maxWidth: 820, margin: '56px auto 0' }}>
+        <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, maxWidth: 820, margin: '56px auto 0' }}>
           {[
             { icon: '🔒', titulo: 'Pagamento 100% seguro', sub: 'Crédito, débito e PIX com ambiente certificado' },
             { icon: '✅', titulo: 'Cancele quando quiser', sub: 'No mensal, sem fidelidade. No anual, cancele a renovação automática, sem estorno do período já contratado' },

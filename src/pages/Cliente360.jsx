@@ -1042,7 +1042,7 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                 {verInteresses ? 'Ocultar' : '↓ Gerar'} interesses do cliente · {(dados.interesses || []).length} ✔ / {(dados.sem_interesse || []).length} ✕
               </button>
               {verInteresses && (
-                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
                   <div>
                     <div style={{ ...label, marginBottom: 4, color: '#059669' }}>✔ Demonstrou interesse</div>
                     {(dados.interesses || []).length === 0 ? <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhum registrado.</div> :

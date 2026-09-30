@@ -129,6 +129,24 @@ const REGRAS = [
     testar: (linha) => /aspectRatio\s*:/.test(linha) && /objectFit\s*:/.test(linha),
   },
   {
+    id: 'grid-fr-sem-minmax',
+    titulo: "Coluna de grade em 'fr' puro — conteúdo largo alarga a coluna e estoura a tela",
+    // `1fr` é `minmax(auto, 1fr)`: a coluna se RECUSA a ficar menor que o conteúdo. Uma fileira
+    // de miniaturas com rolagem (`overflowX: auto`) mede a SOMA das fotos — a coluna crescia até
+    // caber todas e a página do veículo estourava à direita no computador (30/09, print do dono;
+    // o `#root { overflow-x: clip }` só escondia a barra, a foto saía cortada). Nesse dia as 143
+    // colunas do app viraram `minmax(0, Nfr)`; a trava impede a próxima. PDFs (HTML de impressão,
+    // largura fixa) ficam fora.
+    testar: (linha, rel) => /^src\/.*\.jsx?$/.test(rel || '') && !/PDF\.jsx$/.test(rel || '')
+      && /gridTemplateColumns/.test(linha)
+      && (() => {
+        let l = linha, antes;
+        do { antes = l; l = l.replace(/\b(?:minmax|min|max|clamp)\([^()]*\)/g, 'M'); } while (l !== antes);
+        l = l.replace(/repeat\(\s*auto-(?:fill|fit)[^)]*\)/g, 'M');
+        return /['"`][^'"`]*(?:^|[\s'"`,])\d*\.?\d+fr\b/.test(l);
+      })(),
+  },
+  {
     id: 'json-inline-sem-resposta',
     titulo: 'await (await f()).json() — impossível checar .ok antes de usar o corpo',
     testar: (linha) => /await\s*\(\s*await\s+[^)]*\)\s*\)?\s*\.json\(\)/.test(linha),

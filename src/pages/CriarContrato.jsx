@@ -362,7 +362,7 @@ export default function CriarContrato() {
 
       {/* ── PASSO 1: Modo ── */}
       {passo === 'modo' && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
           {[
             { id: 'assinar', icon: FileText, cor: '#0D63DB', titulo: 'Assinar documento pronto', desc: 'Já tem o documento? Envie o PDF/Word/imagem, informe as partes e envie para assinar (com ou sem foto).' },
             { id: 'gerar',   icon: Sparkles, cor: '#6366f1', titulo: 'Criar documento com IA', desc: 'A IA cria o contrato; você pode anexar documentos para ela extrair as informações (com ou sem foto).' },
@@ -385,7 +385,7 @@ export default function CriarContrato() {
           <div style={S.card}>
             <p style={S.secTitle}>{modo === 'gerar' ? 'Descreva o contrato para a IA' : 'Documento para assinatura'}</p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={S.label}>Título do contrato *</label>
                 <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Contrato de Assessoria Imobiliária" />

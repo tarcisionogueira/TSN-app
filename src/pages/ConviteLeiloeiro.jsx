@@ -302,7 +302,7 @@ Content-Type: application/json
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: 16 }}>
             <div style={{ fontWeight: 800, fontSize: 14, color: '#111111', marginBottom: 16 }}>Identificação</div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
               <div style={{ gridColumn: '1 / -1' }}>
                 {lbl('CNPJ')}
                 <div style={{ position: 'relative' }}>
@@ -342,7 +342,7 @@ Content-Type: application/json
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: 20 }}>
             <div style={{ fontWeight: 800, fontSize: 14, color: '#111111', marginBottom: 16 }}>Endereço</div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
               <div>
                 {lbl('CEP')}
                 <div style={{ position: 'relative' }}>

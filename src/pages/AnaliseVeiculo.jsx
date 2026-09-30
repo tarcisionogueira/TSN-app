@@ -344,7 +344,7 @@ export default function AnaliseVeiculo() {
           {viab && (
             <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18 }}>
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Cenário realista e teto de lance</div>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
                 {[
                   ['Teto de lance', fmtBRL(viab.tetoLance), viab.fechaNaRegra ? '#15803d' : '#b91c1c'],
                   ['Investimento no lance mínimo', fmtBRL(viab.investimentoNoMinimo), '#111111'],
@@ -425,7 +425,7 @@ export default function AnaliseVeiculo() {
               Registro fotográfico {fotos.length ? `— ${fotos.length} foto${fotos.length > 1 ? 's' : ''}` : ''}
             </div>
             {fotos.length ? (
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
                 {fotos.map((u, i) => (
                   <a key={u} href={u} target="_blank" rel="noopener noreferrer" style={{ display: 'block', minWidth: 0, textDecoration: 'none' }}>
                     <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: '#f1f5f9' }}>

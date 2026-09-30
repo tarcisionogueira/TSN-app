@@ -277,7 +277,7 @@ export default function Curso() {
   const proximaLicao = licaoIdx < todasLicoes.length - 1 ? todasLicoes[licaoIdx + 1] : null;
 
   return (
-    <div className="curso-grid" style={{ maxWidth:1280, margin:'0 auto', padding:'20px', display:'grid', gridTemplateColumns:'360px 1fr', gap:20, alignItems:'start' }}>
+    <div className="curso-grid" style={{ maxWidth:1280, margin:'0 auto', padding:'20px', display:'grid', gridTemplateColumns:'360px minmax(0, 1fr)', gap:20, alignItems:'start' }}>
       {/* NO CELULAR O PLAYER SUMIA (relato do dono, 11/08). A grade era `360px 1fr` FIXO, sem
           media query: numa tela de ~390px a barra lateral sozinha consumia 360, e a coluna do
           vídeo era empurrada para fora da viewport. O vídeo estava lá — só que fora da tela.

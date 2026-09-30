@@ -204,7 +204,7 @@ export default function Creditos() {
                   <>
                     <div style={{ fontSize: 17, fontWeight: 900, color: '#111', marginBottom: 4 }}>Adicionar créditos</div>
                     <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>O saldo é usado quando a cota mensal e os bônus acabam — cada relatório desconta só o custo real.</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginBottom: 12 }}>
                       {[50, 100, 250, 500].map(v => (
                         <button key={v} onClick={() => setValorRecarga(v)} style={{ padding: '16px 10px', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: 12, fontWeight: 900, fontSize: 17, color: '#0f172a', cursor: 'pointer' }}>
                           {BRL(v)}

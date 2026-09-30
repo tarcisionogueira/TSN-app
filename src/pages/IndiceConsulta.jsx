@@ -384,7 +384,7 @@ export default function IndiceConsulta() {
               <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{form.cidade}/{form.uf}{reg.bairro_norm ? ` · ${form.bairro}` : ''}</span>
               <span style={{ fontSize: 11, color: '#64748b' }}>nível {nivelLabel} · {reg.n_amostras || 0} amostras</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700, flexWrap: 'wrap' }}><Home size={13} /> VENDA{reg.projetado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJETADO</span> : null}
                   {/* BASE FRACA (07/08): a locação já declarava a procedência; a venda mostrava
@@ -432,7 +432,7 @@ export default function IndiceConsulta() {
             {reg.bandas && (Number(reg.bandas.popular) > 0 || Number(reg.bandas.alto) > 0) && (
               <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>PADRÃO — R$/m² de venda por faixa</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Popular</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.popular) > 0 ? brl(reg.bandas.popular) : '—'}</div></div>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Médio</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.medio) > 0 ? brl(reg.bandas.medio) : '—'}</div></div>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Alto padrão</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.alto) > 0 ? brl(reg.bandas.alto) : '—'}</div></div>

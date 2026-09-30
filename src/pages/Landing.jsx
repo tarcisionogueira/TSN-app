@@ -228,7 +228,7 @@ export default function Landing() {
       {/* ── BID SCORE (assinatura) ───────────────────────────────────── */}
       <section style={{ padding: '80px 20px', background: 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 56, alignItems: 'center' }}>
             <div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '6px 16px', fontSize: 11, color: '#34d399', fontWeight: 800, marginBottom: 18, textTransform: 'uppercase', letterSpacing: 1 }}>
                 <Sparkles size={12} /> Bid Score
@@ -324,7 +324,7 @@ export default function Landing() {
       {/* ── RECURSOS ─────────────────────────────────────────────────── */}
       <section style={{ padding: '80px 20px', background: 'white' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 64, alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>O que a plataforma faz</div>
               <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 18px', lineHeight: 1.2 }}>Análise completa em minutos, não em semanas</h2>
@@ -367,7 +367,7 @@ export default function Landing() {
                   <span style={{ color: '#34d399', fontWeight: 900, fontSize: 18 }}>Arrematar</span>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
                 {[
                   { l: 'Riscos jurídicos', v: '0 identificados', c: '#10b981', bg: '#f0fdf4' },
                   { l: 'Ônus na matrícula', v: 'Penhora baixada', c: '#f59e0b', bg: '#fffbeb' },
@@ -411,7 +411,7 @@ export default function Landing() {
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Mais duas formas de decidir melhor</div>
             <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>O preço do m² na sua região e a BidPro no bolso</h2>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20 }}>
 
             {/* Índice BidPro — m² para VENDA e LOCAÇÃO */}
             <div style={{ borderRadius: 20, border: '1px solid #e2e8f0', padding: '32px 28px', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>

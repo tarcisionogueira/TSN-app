@@ -2332,7 +2332,7 @@ export default function Busca() {
 
         {/* Resultados em cards */}
         {vista === 'lista' && !loading && resultadosFiltrados.length>0 && (
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap:12 }}>
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };

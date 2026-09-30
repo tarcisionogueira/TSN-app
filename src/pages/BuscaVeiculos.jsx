@@ -515,7 +515,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       </div>
 
       {mostrarFiltros && (
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, alignItems: 'end' }}>
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={lbl}>Estado</label>
             <MultiEscolha valores={filtros.estado} opcoes={ESTADOS.map(uf => [uf, uf])} vazio="Todos" busca
@@ -664,7 +664,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       )}
 
       {!loading && !erro && resultados.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
           {resultados.map(v => {
             const desc = desconto(v);
             const fotos = fotosArray(v);

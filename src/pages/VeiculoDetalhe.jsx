@@ -196,7 +196,7 @@ export default function VeiculoDetalhe() {
         <ArrowLeft size={16} /> Voltar à busca
       </button>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 0.9fr)', gap: 20 }}>
         {/* Galeria */}
         <div>
           <div style={{ width: '100%', aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

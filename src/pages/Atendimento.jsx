@@ -298,7 +298,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '310px 1fr', gap: estreito ? 14 : 20, maxWidth: 1200, margin: '0 auto', padding: estreito ? '16px 12px' : '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start', alignContent: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '310px minmax(0, 1fr)', gap: estreito ? 14 : 20, maxWidth: 1200, margin: '0 auto', padding: estreito ? '16px 12px' : '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start', alignContent: 'start' }}>
 
       {seletorModo && <div style={{ gridColumn: '1 / -1' }}>{seletorModo}</div>}
 
@@ -325,7 +325,7 @@ export default function Atendimento() {
           </div>
 
           {/* Resumo por status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', borderBottom: '1px solid #f1f5f9' }}>
             {[['aberto', 'Abertos', '#10b981'], ['em_atendimento', 'Em at.', '#0D63DB'], ['finalizado', 'Final.', '#94a3b8']].map(([s, l, c]) => (
               <div key={s} style={{ padding: '10px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
                 <div style={{ fontSize: 20, fontWeight: 900, color: c }}>{cont(s)}</div>

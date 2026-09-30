@@ -66,6 +66,38 @@ function bloqueadoNaSimulacao(input, init) {
   } catch { return null; }
 }
 
+// ─── SESSÃO VENCIDA: renovar AQUI, uma vez, para TODAS as telas (30/09) ──────────────────────
+// O dono abriu o Admin e leu "JWT expired. Os números NÃO estão em zero". O conserto de 10/09
+// (src/lib/sessao-expirada.js) renova e repete a leitura — mas só nas telas que o chamam
+// (/analise, /analises, perfil, apiCall); o Admin e as demais ficavam de fora, e a lista
+// envelheceria de novo na próxima tela. Aqui é o gargalo por onde passa todo pedido ao banco:
+// resposta 401 de sessão em /rest ou /storage → renova (UMA renovação compartilhada entre os
+// pedidos simultâneos) e repete o pedido UMA vez com o token novo. O SDK já renova antes de
+// vencer; o que escapa é aba suspensa em segundo plano e relógio do computador adiantado/atrasado
+// (o cliente acha o token válido e o servidor não). Falhou a renovação → devolve o 401 original.
+let _renovando = null;
+async function repetirComSessaoNova(input, init, res) {
+  try {
+    const url = typeof input === 'string' ? input : (input?.url || '');
+    if (!/\/(rest|storage)\/v1\//.test(url)) return null;
+    const corpo = await res.clone().text().catch(() => '');
+    const { ehErroDeSessao, renovarSessao } = await import('../lib/sessao-expirada.js');
+    if (!ehErroDeSessao({ status: 401, message: corpo })) return null;
+    _renovando = _renovando || renovarSessao(supabase).finally(() => { setTimeout(() => { _renovando = null; }, 5000); });
+    const { ok, motivo } = await _renovando;
+    if (!ok) { console.warn('[sessao] 401 e a renovação falhou:', motivo); return null; }
+    const { data, error } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (error || !token) { console.warn('[sessao] renovou mas não leu a sessão:', error?.message || 'sem token'); return null; }
+    const headers = new Headers(init?.headers || (typeof input === 'object' ? input.headers : undefined));
+    headers.set('Authorization', `Bearer ${token}`);
+    return await fetch(input, { ...init, headers });
+  } catch (e) {
+    console.warn('[sessao] repetição após 401 falhou:', e?.message || e);
+    return null;
+  }
+}
+
 async function fetchComRelato(input, init) {
   // Bloqueio ANTES da rede: nada sai da máquina. Devolve 200 com corpo vazio — a forma que o
   // postgrest-js entende como "não há linhas", que é o estado correto de uma conta nova. E
@@ -75,7 +107,8 @@ async function fetchComRelato(input, init) {
     console.warn('[simulação] escrita BLOQUEADA (modo só-visualização):', alvoBloqueado);
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
-  const res = await fetch(input, init);
+  let res = await fetch(input, init);
+  if (res.status === 401) res = (await repetirComSessaoNova(input, init, res)) || res;
   try {
     if (!res.ok && !STATUS_IGNORADOS.has(res.status)) {
       const url = typeof input === 'string' ? input : (input?.url || '');

@@ -391,7 +391,7 @@ export default function Calculadora() {
               </div>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
             <Campo label="Valor de arrematação" value={arrematacao} onChange={setArrematacao} prefix="R$" placeholder="0" />
             <Campo label="Valor de avaliação" value={avaliacao} onChange={setAvaliacao} prefix="R$" placeholder="0" />
             <Campo label="Valor de mercado" value={mercado} onChange={setMercado} prefix="R$" placeholder="0" />
@@ -408,7 +408,7 @@ export default function Calculadora() {
           </div>
 
           {isAluguel && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
               <div>
                 <Campo label="Aluguel mensal esperado" value={aluguel} onChange={(v) => { setAluguel(v); setAluguelEditado(true); }} prefix="R$" placeholder="0" />
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
@@ -436,7 +436,7 @@ export default function Calculadora() {
                   ))}
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
                 <Campo
                   label={origem === 'judicial' ? 'Entrada (mín. 25%)' : 'Entrada / sinal'}
                   value={sinal} onChange={setSinal} suffix="%" />

@@ -5,6 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser, isCronAuthorized } from './_auth.js';
+import { aplicarRestricaoNasAmostras } from './_restricao-amostras.js';
 import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
@@ -1548,7 +1549,10 @@ ${restricoes ? `- RESTRIÇÃO TERRITORIAL (mapa oficial): ${restricoes}
   Os comparáveis têm que estar SUJEITOS À MESMA RESTRIÇÃO (dentro da mesma área de proteção /
   manancial / unidade de conservação). Anúncio de fora dela superestima o preço, porque não
   carrega as limitações de lote mínimo e ocupação. Sem 3 amostras de dentro, diga isso
-  EXPLICITAMENTE e alargue a faixa para baixo.` : ''}
+  EXPLICITAMENTE e alargue a faixa para baixo.
+  Em CADA venda, inclua "dentroRestricao": true só quando o anúncio (endereço/bairro/texto) mostrar
+  que o imóvel está dentro da MESMA área; false quando estiver fora; omita se não der para saber.
+  O valor final é calculado SÓ com as marcadas true.` : ''}
 
 FOCO DESTA ETAPA: SÓ comparáveis de venda e locação + o valor consolidado. NÃO gaste buscas com
 FipeZAP, zoneamento, segurança ou perfil da região (isso é pedido numa etapa separada).
@@ -3115,6 +3119,15 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // esse número. Só caímos no m²×área quando a IA não o forneceu E a base é por m² construído/
     // privativo (residencial/comercial/industrial); terreno/rural sem estimativa ficam sem valor
     // (o front pede o dado) em vez de multiplicar a régua errada.
+    // RESTRIÇÃO TERRITORIAL (30/09, decisão do dono — opção 3): com 3+ comparáveis DENTRO da
+    // mesma APRM/UC, só eles contam; com menos, o valor fica com alerta explícito. Antes da conta
+    // ponderada abaixo, para ela também só enxergar as amostras de dentro. Ver _restricao-amostras.js.
+    if (mercado && mercadoInputs?.restricoes) {
+      try {
+        aplicarRestricaoNasAmostras(mercado, { restricoes: mercadoInputs.restricoes,
+          areaM2: Number(mercadoInputs.areaTerrenoM2) || Number(areaM2) || 0 });
+      } catch (e) { console.error('[gerar-analise] restrição nas amostras:', e?.message || e); }
+    }
     const baseTipo = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
 
     // ─── R$/m² PONDERADO POR PROXIMIDADE — a conta passa a ser CÓDIGO (13/08) ──────────────
@@ -3547,7 +3560,9 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           ...parecerInputs.d,
           endereco: String(parecerInputs.d?.endereco || '').trim() || mercadoInputs?.endereco || '',
           nomeCondominio: parecerInputs.d?.nomeCondominio || mercadoInputs?.nomeCondominio || '',
-          restricoesGeo: mercadoInputs?.restricoes || '',
+          restricoesGeo: mercadoInputs?.restricoes
+            ? `${mercadoInputs.restricoes}${mercado?.restricaoAmostras?.alerta ? ` — ${mercado.restricaoAmostras.alerta}` : (mercado?.restricaoAmostras?.aplicada ? ` — valor de mercado calculado só com ${mercado.restricaoAmostras.dentro} anúncios de DENTRO da restrição` : '')}`
+            : '',
           // Mesma lógica do endereço: `parecerInputs.d.valorAvaliacao` é o que o CLIENTE mandou
           // (snapshot da tela); se o laudo divergiu/preencheu, o parecer tem que citar o valor
           // JÁ CORRIGIDO, não o número antigo do card.

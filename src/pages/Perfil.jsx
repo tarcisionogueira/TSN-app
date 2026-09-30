@@ -161,7 +161,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
         É o que direciona a recomendação de imóveis que você recebe por e-mail. Ajuste sempre que sua intenção mudar.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
         <Campo label="Objetivo principal" campo="perfil_investidor" opts={INV_OBJETIVOS} />
         <Campo label="Faixa de capital" campo="faixa_capital" opts={INV_FAIXAS} />
         <Campo label="Forma de pagamento" campo="forma_pagamento" opts={INV_PAGAMENTO} />
@@ -174,7 +174,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
         <MapPin size={15} color="#0D63DB" />
         <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Cidade/região de interesse</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
         <div>
           <CidadeAutocomplete value={f.cidade} placeholder="Digite e selecione sua cidade…"
             onSelect={({ cidade, uf }) => setF(p => ({ ...p, cidade, uf }))} />

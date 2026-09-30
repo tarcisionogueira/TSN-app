@@ -401,7 +401,7 @@ export default function Promo() {
         <h2 style={{ color: 'white', fontSize: 22, fontWeight: 800, textAlign: 'center', marginBottom: 24 }}>
           O que está incluído no {plano.nome}
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="promo-recursos">
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }} className="promo-recursos">
           {plano.recursos.map((r, i) => {
             const ativo = r.startsWith('✅');
             const texto = r.replace(/^[✅❌]\s*/, '');

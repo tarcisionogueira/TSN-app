@@ -95,7 +95,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
         Honorário {fmtBRL(previsto.honorario)} + taxa do boleto {fmtBRL(previsto.taxa)} = <strong>{fmtBRL(previsto.total)}</strong>
       </div>
       <div style={{ fontSize: 11.5, color: '#64748b' }}>Boleto em nome de <strong>{nome}</strong> ({documento?.length === 14 ? 'CNPJ' : 'CPF'} {documento}). Endereço de quem paga:</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 8 }}>
         <div>
           <label style={lbl}>CEP {buscandoCep && <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />}</label>
           <input value={end.cep} onChange={e => { setEnd(p => ({ ...p, cep: e.target.value })); buscarCep(e.target.value); }} inputMode="numeric" placeholder="00000-000" style={inp} />
@@ -105,7 +105,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
           <input value={end.logradouro} onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))} style={inp} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 8 }}>
         <div>
           <label style={lbl}>Número</label>
           <input value={end.numero} onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))} style={inp} />
@@ -115,7 +115,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
           <input value={end.complemento} onChange={e => setEnd(p => ({ ...p, complemento: e.target.value }))} style={inp} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr)', gap: 8 }}>
         <div>
           <label style={lbl}>Bairro</label>
           <input value={end.bairro} onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))} style={inp} />

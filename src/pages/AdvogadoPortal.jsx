@@ -203,7 +203,7 @@ function SecaoEscritorio() {
   );
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16 }}>
       {/* Dados da empresa */}
       <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 20 }}>
         <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 8 }}><Building2 size={16} /> Dados do escritório</h3>

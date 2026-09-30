@@ -775,7 +775,7 @@ export default function Login() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                 <div>
                   <label style={lbl}>CPF</label>
                   <input value={form.cpf} inputMode="numeric"

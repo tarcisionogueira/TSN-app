@@ -103,7 +103,8 @@
     "testar:globo-json": "node scripts/testes/globo-json.mjs",
     "testar:taxa-honorario": "node scripts/testes/taxa-honorario.mjs",
     "testar:ia-reserva": "node scripts/testes/uma-ia-cai-a-outra-assume.mjs",
-    "testar:nordeste-payload": "node scripts/testes/nordeste-le-o-lote-do-payload.mjs"
+    "testar:nordeste-payload": "node scripts/testes/nordeste-le-o-lote-do-payload.mjs",
+    "testar:restricao-amostras": "node scripts/testes/comparaveis-dentro-da-restricao.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

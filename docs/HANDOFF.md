@@ -40,7 +40,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    o do workspace + APRM-G por endereço fixo. **Antes de gravar** tirou-se a grade de folhas
    "Articulação EMPLASA 1:10.000" (não é restrição — entraria no relatório de Embu).
    ⚠️ Ao auditar: `nome ilike '%articula%'` casa as 1.233 RPPN ("Reserva **Particula**r") — não é a grade.
-2. 🔶 **Embu-Guaçu (5ce900e4…) — PRÓXIMO PASSO, a APRM já está carregada.** Regerado com 2.503 m² e avaliação R$ 66.650,75 (certo), mas
+2. 🔶 **Embu-Guaçu (5ce900e4…) — 30/09: dono escolheu a OPÇÃO 3 (implementada, ver bloco "30/09 (tarde)"); regerado em seguida.** Regerado com 2.503 m² e avaliação R$ 66.650,75 (certo), mas
    mercado R$ 450/m² = 17× a avaliação (anomalia `aprendizado_mercado_incoerente_avaliacao`).
    Com a APRM carregada, **regerar** (`regerar-relatorios.yml`, ids=5ce900e4-628a-4d72-83ad-87dc3597c406)
    para a busca pedir comparáveis dentro do manancial. Decisão do dono se souber a restrição real.
@@ -207,6 +207,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 12. **Relatório de veículo — registro fotográfico (29/09):** tela e PDF trazem TODAS as fotos da
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
+
+### ✅ 30/09 (tarde) — Admin "JWT expired", estouro de tela e APRM (opção 3 do dono)
+- **"JWT expired" no Admin** (print do dono): a renovação de sessão de 10/09 só valia nas telas que
+  chamavam `lerComRenovacao`. Agora mora no `fetch` do cliente (`src/utils/supabase.js`,
+  `repetirComSessaoNova`): 401 de sessão em /rest ou /storage → UMA renovação compartilhada → repete o
+  pedido com o token novo. Vale para toda tela, inclusive as que ainda vão nascer. Causa típica: aba em
+  segundo plano (timer suspenso) ou relógio do PC fora de hora.
+- **Estouro à direita na página do veículo** (print do dono): grade `1.1fr 0.9fr` + fileira de miniaturas
+  com rolagem — `fr` puro é `minmax(auto, fr)`, a coluna crescia até caber TODAS as fotos; o
+  `#root { overflow-x: clip }` só escondia a barra (a foto saía cortada). As **143 colunas `fr`** de 37
+  arquivos viraram `minmax(0, Nfr)` (PDFs de impressão fora) + trava nova `grid-fr-sem-minmax` no
+  `verificar:padroes`. Varredura no Chromium (375 px e 1366 px) de 13 telas públicas: 0 elementos além da
+  borda. Telas logadas não foram varridas no navegador (exigem sessão) — cobertas pela correção na raiz.
+- **APRM — opção 3** (`api/_restricao-amostras.js`, teste `testar:restricao-amostras`): a IA marca cada
+  venda com `dentroRestricao`; com 3+ de DENTRO só elas ficam e o valor é a mediana delas × área; com menos,
+  o valor fica e o relatório abre com ALERTA ("trate como teto"). O parecer recebe o mesmo aviso.
 
 ### ✅ 30/09 — NORDESTE: o lote vem do PAYLOAD do site, não do slug nem do texto solto
 O único imóvel ativo (50% de apto em Salvador) estava com título sem o "50%", avaliação R$ 190 mil

@@ -652,7 +652,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         <input style={inp} placeholder="COMO ESTÁ NO CARTÃO" name="nome"
           value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value.toUpperCase() }))} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
         <div>
           <label style={lbl}>Validade</label>
           <div id={cartao.ids.validade} style={{ ...inp, height: 42, padding: '0 12px' }} />

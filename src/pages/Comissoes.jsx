@@ -232,7 +232,7 @@ export default function Comissoes() {
         </div>
 
         {/* Cards de resumo */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 24 }}>
           {[
             { icon: Clock, label: 'A receber', valor: fmt(totalPendente), cor: '#d97706', bg: '#fffbeb' },
             { icon: CheckCircle, label: 'Já recebido', valor: fmt(totalPago), cor: '#16a34a', bg: '#f0fdf4' },

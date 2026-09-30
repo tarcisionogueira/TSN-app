@@ -1959,7 +1959,7 @@ export default function Analise() {
       )}
 
       {/* ===== 2 COLUNAS: barra lateral (status/ações) + central (etapas) ===== */}
-      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap:16, alignItems:'start' }}>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '260px minmax(0, 1fr)', gap:16, alignItems:'start' }}>
 
         {/* ── BARRA LATERAL ── */}
         {!isMobile && (
@@ -2294,7 +2294,7 @@ export default function Analise() {
                   <strong>Leilão encerrado{loteEncerrado.ultimaData ? ` em ${dataBR(loteEncerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, novos relatórios não são gerados para este lote — e nenhuma cota é consumida. Relatórios já gerados continuam disponíveis para consulta.
                 </div>
               )}
-              <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr)':'minmax(0, 1fr) minmax(0, 1fr)', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado && !relMercadoIncompleto, gerando:gerandoMercado || relMercadoIncompleto, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1, entry: analiseEntry },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2, entry: docEntry },
@@ -3004,7 +3004,7 @@ export default function Analise() {
             </div>
 
             {/* Formulário de busca */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
               <div>
                 <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Número do Processo (CNJ)</label>
                 <input value={cnjNumero} onChange={e => setCnjNumero(e.target.value)}
@@ -3109,7 +3109,7 @@ export default function Analise() {
                     <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                       {/* KPIs do processo */}
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
                         {[
                           ['Órgão Julgador', proc.orgao],
                           ['Ajuizado em', proc.data_ajuizamento],
@@ -3218,7 +3218,7 @@ export default function Analise() {
                     </div>
                     <div style={{ fontSize: 12, color: cor }}>{certResultados.parecer?.texto}</div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                     {/* Receita Federal */}
                     {certResultados.receita_federal && (
                       <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
@@ -3278,7 +3278,7 @@ export default function Analise() {
           {/* Identificação */}
           <div>
             <div style={{ fontSize:11, fontWeight:800, color:'#0D63DB', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #eff6ff' }}>Identificação</div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap:12 }}>
               <div style={{ gridColumn:'span 2' }}>
                 <Field label="Nome / Referência" name="nome" value={d.nome||''} onChange={upN} ph="Ex: Apt 302 Torre Norte, Rua das Flores"/>
               </div>
@@ -3288,12 +3288,12 @@ export default function Analise() {
                 <Field label="Endereço Completo" name="endereco" value={d.endereco||''} onChange={upN} type="textarea" rows={2} ph="Rua, número, complemento, bairro"/>
               </div>
               <Field label="Nome do Condomínio (se houver)" name="nomeCondominio" value={d.nomeCondominio||''} onChange={upN} ph="Ex: Residencial Park View"/>
-              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 2fr) minmax(0, 1fr)', gap:10 }}>
                 <Field label="Cidade" name="cidade" value={d.cidade||''} onChange={upN}/>
                 <Field label="UF" name="estado" value={d.estado||''} onChange={upN} ph="SP"/>
               </div>
               <Field label="Objetivo da Compra" name="objetivoCompra" value={d.objetivoCompra} onChange={upN} type="select" opts={[['investimento','Investimento'],['uso_proprio','Uso Próprio']]}/>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10 }}>
                 <Field label="Leiloeiro" name="leiloeiro" value={d.leiloeiro||''} onChange={upN}/>
                 <Field label="Data do Leilão" name="dataLeilao" value={d.dataLeilao||''} onChange={upN} type="date"/>
               </div>
@@ -3303,7 +3303,7 @@ export default function Analise() {
           {/* Valores */}
           <div>
             <div style={{ fontSize:11, fontWeight:800, color:'#10b981', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #f0fdf4' }}>Valores do Leilão</div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(3, minmax(0, 1fr))', gap:12 }}>
               <Field label="Avaliação do Edital (R$)" name="valorAvaliacao" value={d.valorAvaliacao||0} onChange={upN} type="number" prefix="R$"/>
               <Field label="Lance / Arrematação (R$)" name="valorArrematacao" value={d.valorArrematacao||0} onChange={upN} type="number" prefix="R$"/>
               <div style={{ background:'#fef3c7', borderRadius:10, padding:'10px 12px' }}>
@@ -3320,7 +3320,7 @@ export default function Analise() {
           {/* Custos */}
           <div>
             <div style={{ fontSize:11, fontWeight:800, color:'#8b5cf6', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #ede9fe' }}>Custos e Encargos</div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(3, minmax(0, 1fr))', gap:12 }}>
               {/* `??`, não `||`: em venda direta/licitação a comissão é legitimamente 0 (linha
                   ~231) e o `||` mostrava 5% no campo enquanto a conta usava 0 — o cliente lia
                   uma premissa e o relatório aplicava outra. O ITBI caía para 3 aqui e nascia 5
@@ -3353,7 +3353,7 @@ export default function Analise() {
           {/* Financiamento */}
           <div>
             <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #fef3c7' }}>Financiamento</div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap:12 }}>
               <div style={{ gridColumn: isMobile ? 'span 2' : 'span 4', background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
                 <span style={{ fontSize:12, fontWeight:700, color:'#c2410c' }}>Condição de Pagamento</span>
                 <select value={d.somenteAVista?'sim':'nao'} onChange={e=>up('somenteAVista',e.target.value==='sim')}
@@ -3433,7 +3433,7 @@ export default function Analise() {
           return (
             <div style={{ background:'linear-gradient(135deg,#0B48A6,#0D63DB)', borderRadius:16, padding: isMobile?'16px':'18px 22px', color:'white' }}>
               <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85, marginBottom:10 }}>Valores de referência</div>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr)':'repeat(3, minmax(0, 1fr))', gap:12 }}>
                 <div style={card}>
                   <div style={rot}>Avaliação do leilão</div>
                   <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : 'Não informada'}</div>
@@ -3658,7 +3658,7 @@ export default function Analise() {
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize:14, fontWeight:900, color:'#111', marginBottom:4 }}>Indicadores de retorno</div>
           <div style={{ fontSize:11, color:'#94a3b8', marginBottom:14 }}>Régua (TMA): consideramos que o dinheiro deveria render ao menos <strong>{fmtPct(indicadores.tma,0)} ao ano</strong>. Os números abaixo já descontam essa régua.</div>
-          <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr 1fr':'repeat(4,1fr)', gap:10 }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr) minmax(0, 1fr)':'repeat(4, minmax(0, 1fr))', gap:10 }}>
             {[
               ['VPL (revenda)', `R$ ${fmt(indicadores.vpl,0)}`, indicadores.vpl>=0?'#10b981':'#ef4444', 'Ganho hoje além da régua'],
               ['TIR (revenda)', indicadores.tir!=null?fmtPct(indicadores.tir)+' a.a.':'—', '#7c3aed', 'Rentabilidade anual'],
@@ -3784,7 +3784,7 @@ export default function Analise() {
                 return (
                   <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 16px' }}>
                     <div style={{ fontSize:11, fontWeight:800, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Indicado para</div>
-                    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${chips.length},1fr)`, gap:8 }}>
+                    <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : `repeat(${chips.length}, minmax(0, 1fr))`, gap:8 }}>
                       {chips.map(([label, motivo, cor, bg]) => (
                         <div key={label} style={{ background:bg, border:`1px solid ${cor}30`, borderRadius:10, padding:'10px 12px' }}>
                           <div style={{ fontSize:13, fontWeight:800, color:cor }}>{label}</div>
@@ -3808,7 +3808,7 @@ export default function Analise() {
                   número — o lote de Cotia saiu com "aluguel médio R$ 3.000,00/mês" (preço de
                   casa) —, e mesmo zerados diriam "rentabilidade 0,00%", que é outra afirmação
                   falsa: o retorno de um lote é revenda, não aluguel. */}
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : (mercado.locacaoNaoSeAplica ? '1fr' : 'repeat(4,1fr)'), gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : (mercado.locacaoNaoSeAplica ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))'), gap:10 }}>
                 {[
                   [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(mercado.precoMedioM2), '#0D63DB','#eff6ff'],
                   ...(mercado.locacaoNaoSeAplica ? [] : [
@@ -3894,7 +3894,7 @@ export default function Analise() {
                         {alinhado ? '✓ Média alinhada' : `⚠ ${div > 0 ? '+' : ''}${div}% vs FipeZAP`}
                       </span>
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:12 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap:8, fontSize:12 }}>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>ANÚNCIOS R$/m²</div><div style={{ fontWeight:800, color:'#0D63DB' }}>R$ {fmt(anuncios)}</div></div>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>FipeZAP R$/m²</div><div style={{ fontWeight:800, color:'#111' }}>R$ {fmt(fipe)}</div></div>
                       {/* Valorização NEGATIVA é dado legítimo (mercado em queda), então aqui
@@ -3922,7 +3922,7 @@ export default function Analise() {
                       <span style={{ fontSize:10.5, color:'#64748b' }}>{nivelLabel} · {ib.n_amostras || 0} amostras</span>
                       <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'#e0e7ff', color:'#3730a3' }}>{ib.fonte === 'relatorio' ? 'consolidado dos relatórios' : 'base do acervo'}</span>
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:12 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap:8, fontSize:12 }}>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>VENDA R$/m²</div><div style={{ fontWeight:800, color:'#4f46e5' }}>{Number(ib.venda_m2) > 0 ? `R$ ${fmt(ib.venda_m2)}` : '—'}</div></div>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>LOCAÇÃO R$/m²/mês</div><div style={{ fontWeight:800, color:'#7c3aed' }}>{Number(ib.aluguel_m2) > 0 ? `R$ ${fmt(ib.aluguel_m2)}` : 'em formação'}</div></div>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>YIELD ÍNDICE</div><div style={{ fontWeight:800, color:'#059669' }}>{yieldIdx > 0 ? fmtPct(yieldIdx)+' a.a.' : '—'}</div></div>
@@ -4103,7 +4103,7 @@ export default function Analise() {
                       {tierLabel && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 999, background: '#fff', border: `1px solid ${tierColor}`, color: tierColor }}>{tierLabel}</span>}
                     </div>
                     {pr.motivos && <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6, marginBottom: (atr.length || fra.length) ? 8 : 0 }}>{pr.motivos}</div>}
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                       {atr.length > 0 && <div><div style={{ fontSize: 10, fontWeight: 800, color: '#059669', textTransform: 'uppercase', marginBottom: 4 }}>Atratividades</div><ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#334155', lineHeight: 1.6 }}>{atr.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
                       {fra.length > 0 && <div><div style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', marginBottom: 4 }}>Fragilidades</div><ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#334155', lineHeight: 1.6 }}>{fra.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
                     </div>
@@ -4228,11 +4228,11 @@ export default function Analise() {
                 {mercado.nivel1?.descricao && (
                   <div style={{ padding:'11px 16px', background:'#eff6ff', borderBottom:'1px solid #dbeafe', fontSize:12, color:'#334155', lineHeight:1.65 }}>{mercado.nivel1.descricao}</div>
                 )}
-                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
+                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap:14 }}>
                   {mercado.nivel1?.vendas?.length > 0 && (
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel1.vendas.length} imóveis</div>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:8 }}>
                         {[['Mín R$/m²',moedaOuTraco(mercado.nivel1.precoMinM2,{prefixo:''}),'#ef4444'],['Médio R$/m²',moedaOuTraco(mercado.nivel1.precoMedioM2,{prefixo:''}),'#0D63DB'],['Máx R$/m²',moedaOuTraco(mercado.nivel1.precoMaxM2,{prefixo:''}),'#10b981']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f8fafc', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l}</div>
@@ -4288,11 +4288,11 @@ export default function Analise() {
                 {mercado.nivel2?.descricao && (
                   <div style={{ padding:'11px 16px', background:'#f0fdf4', borderBottom:'1px solid #bbf7d0', fontSize:12, color:'#334155', lineHeight:1.65 }}>{mercado.nivel2.descricao}</div>
                 )}
-                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
+                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap:14 }}>
                   {mercado.nivel2?.vendas?.length > 0 && (
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'#10b981', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel2.vendas.length} imóveis</div>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:8 }}>
                         {[['Mín',moedaOuTraco(mercado.nivel2.precoMinM2,{prefixo:''}),'#ef4444'],['Médio',moedaOuTraco(mercado.nivel2.precoMedioM2,{prefixo:''}),'#10b981'],['Máx',moedaOuTraco(mercado.nivel2.precoMaxM2,{prefixo:''}),'#0D63DB']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f0fdf4', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l} R$/m²</div>
@@ -4465,7 +4465,7 @@ export default function Analise() {
                   <span style={{ fontSize:13, fontWeight:800, color:'white' }}>Cenários de Disputa</span>
                   <span style={{ fontSize:11, fontWeight:700, color:'white', background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'2px 10px' }}>Melhor condição: {cd.condLabel}</span>
                 </div>
-                <div style={{ padding:14, display:'grid', gridTemplateColumns: (isMobile || cards.length === 1) ? '1fr' : '1fr 1fr', gap:12 }}>
+                <div style={{ padding:14, display:'grid', gridTemplateColumns: (isMobile || cards.length === 1) ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap:12 }}>
                   {cards.map(c => (
                     <div key={c.tag} style={{ border:`2px solid ${c.cor}`, borderRadius:12, overflow:'hidden' }}>
                       <div style={{ background:c.bg, padding:'8px 14px', fontSize:11, fontWeight:800, color:c.cor, letterSpacing:0.5 }}>{c.tag}</div>
@@ -4500,7 +4500,7 @@ export default function Analise() {
           })()}
 
           {/* KPIs grandes */}
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap:12 }}>
             <KpiCard large label="Capital Aportado" value={`R$ ${fmt(metricas.capitalMobilizado)}`} sub="Total mobilizado" color="#ef4444" bg="#fef2f2" icon={DollarSign}/>
             <KpiCard large label={isUsoProprio?'Economia Real':'Lucro Líquido'} value={`R$ ${fmt(metricas.lucro)}`} sub={`${fmtPct(metricas.roi)} ${isAVista?'ROI':'ROE'}`} color={metricas.roi>=META?'#10b981':'#ef4444'} bg={metricas.roi>=META?'#d1fae5':'#fef2f2'} icon={TrendingUp}/>
             <KpiCard large label="Rentabilidade do Aluguel" value={fmtPct(metricas.yieldMensal)+'/mês'} sub={fmtPct(metricas.yieldAnual)+' a.a.'} color="#8b5cf6" bg="#ede9fe" icon={BarChart3}/>
@@ -4531,7 +4531,7 @@ export default function Analise() {
           </div>
 
           {/* Resumo de caixa: quanto ter AO ARREMATAR × quanto suportar POR MÊS × despesas NA VENDA */}
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : (isUsoProprio ? 'repeat(2,1fr)' : 'repeat(3,1fr)'), gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : (isUsoProprio ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))'), gap:12 }}>
             <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:14, padding:'16px 18px' }}>
               <div style={{ fontSize:11, fontWeight:800, color:'#c2410c', textTransform:'uppercase', letterSpacing:0.5 }}>1 · Disponível ao arrematar</div>
               <div style={{ fontSize:23, fontWeight:900, color:'#9a3412', margin:'6px 0 4px' }}>R$ {fmt(metricas.desembolsoInicial)}</div>
@@ -4562,7 +4562,7 @@ export default function Analise() {
             return (
               <div style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:14, padding:'16px 20px' }}>
                 <div style={{ fontSize:11, fontWeight:800, color:'#6d28d9', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Cenário alternativo · Locação (segurar e alugar, sem vender)</div>
-                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap:12 }}>
                   <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Aluguel mensal</div><div style={{ fontSize:18, fontWeight:900, color:'#5b21b6' }}>R$ {fmt(metricas.aluguelMensal)}</div></div>
                   <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Cobre do custo mensal</div><div style={{ fontSize:18, fontWeight:900, color: cobertura>=100?'#059669':'#5b21b6' }}>{fmtPct(cobertura,0)}</div></div>
                   <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Resultado mensal</div><div style={{ fontSize:18, fontWeight:900, color: liquidoMensal>=0?'#059669':'#dc2626' }}>{liquidoMensal>=0?'+ ':'- '}R$ {fmt(Math.abs(liquidoMensal))}</div></div>
@@ -4650,7 +4650,7 @@ export default function Analise() {
         badge={`${d.prazoVendaMeses||12} meses`}>
         <div style={{ display:'flex', flexDirection:'column', gap:16, paddingTop:14 }}>
           {/* Sumário */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:12 }}>
             {[
               ['Total de Saídas',`R$ ${fmt(fluxo.totalSaidas)}`,'#ef4444','#fef2f2'],
               ['Receita Final',`R$ ${fmt(fluxo.totalEntradas)}`,'#10b981','#f0fdf4'],

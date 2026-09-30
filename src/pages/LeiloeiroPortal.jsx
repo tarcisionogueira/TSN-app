@@ -127,7 +127,7 @@ export default function LeiloeiroPortal() {
       )}
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, marginBottom: 32 }}>
         {[
           { icon: Gavel,    label: 'Imóveis na plataforma', value: stats.imoveis,       cor: '#ea580c' },
           { icon: BarChart3,label: 'Visualizações',         value: stats.visualizacoes,  cor: '#0D63DB' },

@@ -412,7 +412,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                   <button onClick={() => setNovo(n => ({ ...n, tipo: 'entrada' }))} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${novo.tipo === 'entrada' ? '#059669' : '#e2e8f0'}`, background: novo.tipo === 'entrada' ? '#ecfdf5' : 'white', color: novo.tipo === 'entrada' ? '#059669' : '#64748b', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Entrada</button>
                   <button onClick={() => setNovo(n => ({ ...n, tipo: 'saida' }))} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${novo.tipo === 'saida' ? '#dc2626' : '#e2e8f0'}`, background: novo.tipo === 'saida' ? '#fef2f2' : 'white', color: novo.tipo === 'saida' ? '#dc2626' : '#64748b', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Saída</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginBottom: 8 }}>
                   <select value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))} style={inp}>
                     {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -710,15 +710,15 @@ function NovoArrematado({ onClose, onCriar, sugestoes, inicial }) {
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input placeholder="Título do imóvel *" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} style={inp} />
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 8 }}>
             <input placeholder="Cidade" value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))} style={inp} />
             <input placeholder="UF" maxLength={2} value={form.estado} onChange={e => setForm(f => ({ ...f, estado: e.target.value.toUpperCase() }))} style={inp} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
             <input placeholder="Valor arrematado (R$)" inputMode="decimal" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} style={inp} />
             <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} style={inp} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
             <select value={form.modalidade} onChange={e => setForm(f => ({ ...f, modalidade: e.target.value }))} style={inp}>
               <option value="extrajudicial">Extrajudicial</option>
               <option value="judicial">Judicial</option>

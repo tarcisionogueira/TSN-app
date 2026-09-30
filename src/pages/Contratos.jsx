@@ -465,7 +465,7 @@ export default function Contratos() {
                     </label>
                     {usaTestemunha && (
                       <div style={{ marginTop: 14, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 12 }}>
                           <div><label style={S.label}>Nome da testemunha</label><input style={S.input} value={nomeTest} onChange={e => setNomeTest(e.target.value)} placeholder="Nome completo" /></div>
                           <div><label style={S.label}>CPF da testemunha</label><input style={S.input} value={cpfTest} onChange={e => setCpfTest(e.target.value)} placeholder="000.000.000-00" maxLength={14} /></div>
                         </div>

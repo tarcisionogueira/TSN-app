@@ -207,7 +207,7 @@ export default function HomeCliente() {
   const mostraConviteParceiro = info.indica && effectiveRole !== 'admin' && !aceite;
 
   return (
-    <div className="home-grid" style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: mostraConviteParceiro ? 'minmax(0,1fr) 320px' : '1fr', gap: 20, alignItems: 'start' }}>
+    <div className="home-grid" style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: mostraConviteParceiro ? 'minmax(0,1fr) 320px' : 'minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
       {/* No celular a coluna lateral (Indique e Ganhe) empilha embaixo do conteúdo. */}
       <style>{`@media (max-width: 820px){ .home-grid{ grid-template-columns: 1fr !important; } }`}</style>
       {/* Triagem de perfil, modal one-time no 1º acesso do cliente */}

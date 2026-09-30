@@ -419,7 +419,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
             <ScorePill label="SCORE FINANCEIRO" valor={scoreF}/>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10, marginBottom:12 }}>
             {executadoNome && <div><span style={lbl}>Executado</span><div style={{ fontSize:13, fontWeight:700 }}>{executadoNome}{executadoDoc ? ` · ${executadoDoc}` : ''}</div></div>}
             {numeroProcesso && <div><span style={lbl}>Processo</span><div style={{ fontSize:13, fontWeight:700 }}>{numeroProcesso}</div></div>}
             {sancoesN != null && <div><span style={lbl}>Sanções CEIS/CNEP</span><div style={{ fontSize:13, fontWeight:700, color: sancoesN>0 ? '#ef4444':'#10b981' }}>{sancoesN}</div></div>}
@@ -1554,7 +1554,7 @@ export default function Caso() {
         >
           {reuniao1 ? (
             <div style={{ paddingTop:14 }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10 }}>
                 <div><span style={lbl}>Data e Hora</span><div style={{ fontSize:14, fontWeight:700 }}>{fmtDate(reuniao1.data_hora)}</div></div>
                 <div><span style={lbl}>Status</span><Badge label={reuniao1.status} color={reuniao1.status==='realizada'?'#10b981':'#7c3aed'} bg={reuniao1.status==='realizada'?'#ecfdf5':'#f5f3ff'}/></div>
               </div>
@@ -1806,7 +1806,7 @@ export default function Caso() {
             badge={reuniao2.status === 'realizada' ? 'Realizada' : `Agendada: ${fmtDate(reuniao2.data_hora)}`}
           >
             <div style={{ paddingTop:14 }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10 }}>
                 <div><span style={lbl}>Data e Hora</span><div style={{ fontSize:14, fontWeight:700 }}>{fmtDate(reuniao2.data_hora)}</div></div>
                 <div><span style={lbl}>Status</span><Badge label={reuniao2.status} color="#0891b2" bg="#ecfeff"/></div>
               </div>
@@ -1850,7 +1850,7 @@ export default function Caso() {
         >
           {arrematacao ? (
             <div style={{ paddingTop:14 }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10, marginBottom:14 }}>
                 <div><span style={lbl}>Valor Arrematado</span><div style={{ fontSize:18, fontWeight:900, color:'#059669' }}>{fmt(arrematacao.valor_arrematado)}</div></div>
                 <div>
                   <span style={lbl}>Honorários ({Number(honorariosConfig.total_pct).toFixed(2)}%)</span>
@@ -1931,7 +1931,7 @@ export default function Caso() {
                       {role === 'admin' && recebimentos.saldo_restante > 0 && (
                         <form onSubmit={registrarRecebimentoManual} style={{ borderTop:'1px solid #e2e8f0', paddingTop:10, display:'flex', flexDirection:'column', gap:8 }}>
                           <div style={{ fontSize:11.5, fontWeight:700, color:'#334155' }}>Registrar recebimento manual (Pix externo, cheque...)</div>
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                          <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:8 }}>
                             <select value={novoReceb.metodo} onChange={e=>setNovoReceb(p=>({...p,metodo:e.target.value}))} style={{ ...inp, fontSize:12 }}>
                               <option value="pix_externo">Pix (recebido fora do sistema)</option>
                               <option value="cheque">Cheque</option>
@@ -1941,7 +1941,7 @@ export default function Caso() {
                             <input value={novoReceb.valor} onChange={e=>setNovoReceb(p=>({...p,valor:maskMoedaDigitando(e.target.value)}))} style={{ ...inp, fontSize:12 }} placeholder="Valor (R$)"/>
                           </div>
                           {novoReceb.metodo === 'cheque' && (
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:8 }}>
                               <input value={novoReceb.banco} onChange={e=>setNovoReceb(p=>({...p,banco:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Banco (ex.: SICOOB, Banco do Brasil)"/>
                               <input value={novoReceb.numero_cheque} onChange={e=>setNovoReceb(p=>({...p,numero_cheque:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Número do cheque"/>
                             </div>
@@ -2221,7 +2221,7 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
       {/* Seção 5: débitos e hierarquia */}
       <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px', marginBottom:10 }}>
         <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase' }}>Seção 5, Débitos e Hierarquia</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:10, marginBottom:10 }}>
           <div><label style={lbl}>Débitos IPTU (R$)</label><input value={form.debitos_iptu_valor} onChange={e=>f('debitos_iptu_valor',e.target.value)} style={inp2} placeholder="0.00"/></div>
           <div><label style={lbl}>Débitos Condomínio (R$)</label><input value={form.debitos_cond_valor} onChange={e=>f('debitos_cond_valor',e.target.value)} style={inp2} placeholder="0.00"/></div>
         </div>

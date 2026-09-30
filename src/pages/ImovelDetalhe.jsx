@@ -1400,7 +1400,7 @@ export default function ImovelDetalhe() {
       </div>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }} className="detalhe-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 24, alignItems: 'start' }} className="detalhe-grid">
 
           {/* Coluna esquerda */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

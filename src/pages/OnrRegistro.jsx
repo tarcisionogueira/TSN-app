@@ -258,7 +258,7 @@ export default function OnrRegistro() {
             Após preencher os dados e enviar os documentos, você protocola presencialmente ou via <strong>SREI (registradores.org.br)</strong> se o cartório aceitar protocolo eletrônico.
           </InfoBox>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
             <Campo label="Cidade do imóvel / cartório" erro={erros.cartorio_cidade} required>
               <input value={form.cartorio_cidade} onChange={e => setVal('cartorio_cidade', e.target.value)}
                 placeholder="Ex: Feira de Santana" style={S.input} />
@@ -276,7 +276,7 @@ export default function OnrRegistro() {
               placeholder="Ex: 1° Cartório de Registro de Imóveis" style={S.input} />
           </Campo>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
             <Campo label="Valor arrematado (R$)" erro={erros.valor_arrematacao} required>
               <input type="number" value={form.valor_arrematacao} onChange={e => setVal('valor_arrematacao', e.target.value)}
                 placeholder="Ex: 150000" style={S.input} />
@@ -305,7 +305,7 @@ export default function OnrRegistro() {
             </div>
 
             {form.tipo_pessoa === 'pf' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
                 <Campo label="Nome completo" erro={erros.nome_arrematante} required>
                   <input value={form.nome_arrematante} onChange={e => setVal('nome_arrematante', e.target.value)} style={S.input} />
                 </Campo>
@@ -314,7 +314,7 @@ export default function OnrRegistro() {
                 </Campo>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
                 <Campo label="Razão social" required>
                   <input value={form.razao_social} onChange={e => setVal('razao_social', e.target.value)} style={S.input} />
                 </Campo>
@@ -412,7 +412,7 @@ export default function OnrRegistro() {
           {/* Registro do protocolo */}
           <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px' }}>
             <div style={{ fontWeight: 800, fontSize: 14, color: '#111111', marginBottom: 14 }}>Registrar número do protocolo</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
               <Campo label="Número do protocolo" erro={erros.protocolo} required>
                 <input value={protocoloNum} onChange={e => setProtocoloNum(e.target.value)}
                   placeholder="Ex: 2024-001234" style={S.input} />

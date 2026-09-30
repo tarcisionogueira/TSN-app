@@ -74,7 +74,7 @@ export default function CobrancaAvulsaAdmin() {
             <label style={lbl}>Motivo / descrição</label>
             <input value={form.descricao} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} style={inp} placeholder="Ex.: Saldo do honorário de êxito no cartão" maxLength={500} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
             <div>
               <label style={lbl}>Valor (R$)</label>
               <input value={form.valor} onChange={e => setForm(p => ({ ...p, valor: maskMoedaDigitando(e.target.value) }))} style={inp} placeholder="0,00" />

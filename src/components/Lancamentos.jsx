@@ -24,7 +24,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Resumo */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
         {[
           { label: 'Saídas', value: totais.saidas, color: '#dc2626', bg: '#fef2f2' },
           { label: 'Entradas', value: totais.entradas, color: '#10b981', bg: '#d1fae5' },
@@ -40,7 +40,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
       {/* Formulário */}
       <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Novo Lançamento</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
           <input type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
             style={{ padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12 }} />
           <select value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))}

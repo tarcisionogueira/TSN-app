@@ -807,7 +807,7 @@ export default function MinhaRede() {
       )}
 
       {/* Números */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
         <Stat n={diretos} label="Indicados diretos" cor="#0D63DB" />
         <Stat n={rede.length} label="Rede total" cor="#084BA6" />
         <Stat n={parceirosRede} label="Viraram parceiros" cor="#059669" />

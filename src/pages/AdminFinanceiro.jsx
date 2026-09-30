@@ -285,7 +285,7 @@ export function FinanceiroCaixa() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }} className="fin-caixa-grid">
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start' }} className="fin-caixa-grid">
         <style>{`@media (max-width: 780px){ .fin-caixa-grid{ grid-template-columns: 1fr !important; } }`}</style>
 
         {/* Extrato */}
