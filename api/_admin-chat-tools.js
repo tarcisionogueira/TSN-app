@@ -15,7 +15,7 @@
  */
 import { enviarWebPush } from './_webpush.js';
 import { auditLog } from './_audit.js';
-import { buscarDjen } from './_cnj.js';
+import { buscarDjen, buscarProcessosCNJ } from './_cnj.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -90,8 +90,29 @@ export const ADMIN_CHAT_TOOLS = [
       required: ['destino_tipo', 'titulo', 'mensagem', 'confirmar'],
     },
   },
+  {
+    name: 'buscar_edital_processo',
+    description: 'Busca no RADAR DE EDITAIS da própria plataforma (editais de leilão publicados no DJEN, ~2 mil, base nossa e grátis) pelo número do processo: datas da 1ª e 2ª praça, leiloeiro e site do leilão, avaliação, lance mínimo, endereço e matrícula do imóvel, cartório, débitos e ocupação declarados no edital. Use SEMPRE que a pergunta envolver leilão/praça/edital/avaliação de um processo — responde o que o DataJud não tem.',
+    input_schema: { type: 'object', properties: { numero_processo: { type: 'string', description: 'Número CNJ (com ou sem pontuação)' } }, required: ['numero_processo'] },
+  },
+  {
+    name: 'consultar_datajud',
+    description: 'Consulta o DataJud (CNJ) por número de processo OU nome da parte, em todos os tribunais: classe, assuntos, órgão, partes e últimos movimentos, com parecer de risco (penhora, suspensão, recurso). Use quando precisar da situação/andamento do processo ou de processos de uma pessoa — inclusive em perguntas de acompanhamento, sem depender do admin colar o número.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        numero_processo: { type: 'string', description: 'Número CNJ do processo' },
+        nome_parte: { type: 'string', description: 'Nome da parte (quando não houver número)' },
+        uf: { type: 'string', description: 'UF para restringir a busca por nome (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'consultar_cnpj',
+    description: 'Dados abertos da Receita Federal de uma EMPRESA (parte do processo: executada, credora, construtora, banco): razão social, situação cadastral e data, endereço, atividade principal, capital social e sócios (QSA). Fonte gratuita (BrasilAPI; reserva minhareceita.org). NÃO serve para CPF.',
+    input_schema: { type: 'object', properties: { cnpj: { type: 'string', description: 'CNPJ com ou sem pontuação' } }, required: ['cnpj'] },
+  },
 ];
-
 // ─── Executores ───────────────────────────────────────────────────────────
 
 async function verificarArremateProcesso({ numero_processo }) {
@@ -291,11 +312,65 @@ async function emitirAlerta(input, { adminUser }) {
   return { enviados, total: subs.length, enviado_de_verdade: true };
 }
 
+// ─── Fontes complementares (30/09) ────────────────────────────────────────
+async function buscarEditalProcesso({ numero_processo }) {
+  const num = String(numero_processo || '').replace(/\D/g, '');
+  if (num.length < 15) return { erro: 'número de processo incompleto' };
+  const r = await sb('rpc/edital_por_processo', { method: 'POST', body: JSON.stringify({ p_numero: num }) });
+  if (!r.ok) return { erro: `consulta ao radar de editais falhou (${r.status})` };
+  const editais = await r.json();
+  return editais.length
+    ? { encontrado: true, editais }
+    : { encontrado: false, observacao: 'Nenhum edital deste processo no radar (o radar cobre editais de leilão publicados no DJEN desde a sua criação).' };
+}
+
+async function consultarDatajud({ numero_processo, nome_parte, uf }) {
+  if (!numero_processo && !nome_parte) return { erro: 'informe numero_processo ou nome_parte' };
+  const r = await buscarProcessosCNJ({ numero_processo, nome_parte, uf: uf || undefined, nacional: true });
+  const processos = (r.processos || []).slice(0, 8).map((p) => {
+    const txt = JSON.stringify(p);
+    return txt.length > 1800 ? { ...Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v !== 'object')), movimentos: (p.movimentos || []).slice(0, 8) } : p;
+  });
+  return { total: r.total || 0, processos, parecer: r.parecer?.texto || r.parecer || null, erros: r.erros || undefined, tribunais_consultados: (r.tribunais_consultados || []).length };
+}
+
+async function consultarCnpj({ cnpj }) {
+  const d = String(cnpj || '').replace(/\D/g, '');
+  if (d.length !== 14) return { erro: 'CNPJ deve ter 14 dígitos (CPF não é consultável em fonte aberta)' };
+  const ler = async (url) => {
+    try {
+      const r = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+      if (r.status === 404) return { naoExiste: true };
+      if (!r.ok) return { falha: `HTTP ${r.status}` };
+      return { dado: await r.json() };
+    } catch (e) { return { falha: String(e?.message || e).slice(0, 60) }; }
+  };
+  let r = await ler(`https://brasilapi.com.br/api/cnpj/v1/${d}`);
+  let fonte = 'brasilapi';
+  if (!r.dado && !r.naoExiste) { r = await ler(`https://minhareceita.org/${d}`); fonte = 'minhareceita'; }
+  if (r.naoExiste) return { encontrado: false, observacao: 'CNPJ não encontrado na base da Receita.' };
+  if (!r.dado) return { erro: `fontes da Receita indisponíveis agora (${r.falha}) — não significa que o CNPJ não existe` };
+  const x = r.dado;
+  return {
+    encontrado: true, fonte,
+    razao_social: x.razao_social || null, nome_fantasia: x.nome_fantasia || null,
+    situacao: x.descricao_situacao_cadastral || null, data_situacao: x.data_situacao_cadastral || null,
+    motivo_situacao: x.descricao_motivo_situacao_cadastral || null,
+    abertura: x.data_inicio_atividade || null, natureza: x.natureza_juridica || null, porte: x.porte || x.descricao_porte || null,
+    capital_social: x.capital_social ?? null, atividade: x.cnae_fiscal_descricao || null,
+    endereco: [x.logradouro, x.numero, x.bairro, x.municipio, x.uf].filter(Boolean).join(', ') || null,
+    socios: (x.qsa || []).slice(0, 12).map((q) => ({ nome: q.nome_socio || q.nome || '', qualificacao: q.qualificacao_socio || q.codigo_qualificacao_socio || null, desde: q.data_entrada_sociedade || null })),
+  };
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────
 export async function executarFerramentaAdmin(nome, input, ctx) {
   try {
     switch (nome) {
       case 'buscar_djen': return await buscarDjen(input);
+      case 'buscar_edital_processo': return await buscarEditalProcesso(input);
+      case 'consultar_datajud': return await consultarDatajud(input);
+      case 'consultar_cnpj': return await consultarCnpj(input);
       case 'verificar_arremate_processo': return await verificarArremateProcesso(input);
       case 'buscar_arremates_cliente': return await buscarArrematesCliente(input);
       case 'checar_mensalidades_atrasadas': return await checarMensalidadesAtrasadas();

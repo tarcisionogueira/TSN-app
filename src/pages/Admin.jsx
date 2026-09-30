@@ -12793,7 +12793,43 @@ function CnjTab() {
     try { const s = JSON.parse(localStorage.getItem('tsn:cnj-chat') || '[]'); return Array.isArray(s) ? s.slice(-40) : []; }
     catch (e) { console.warn('[cnj-chat] histórico local ilegível:', e?.message); return []; }
   });
-  const sessaoRef = React.useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const novaSessao = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+  // A sessão também sobrevive ao recarregar: continuar a conversa grava na MESMA sessão do histórico.
+  const sessaoRef = React.useRef((() => {
+    try { return localStorage.getItem('tsn:cnj-sessao') || novaSessao(); }
+    catch (e) { console.warn('[cnj-chat] sessão local indisponível:', e?.message); return novaSessao(); }
+  })());
+  const fixarSessao = (id) => {
+    sessaoRef.current = id;
+    try { localStorage.setItem('tsn:cnj-sessao', id); } catch (e) { console.warn('[cnj-chat] não salvou a sessão:', e?.message); }
+  };
+  React.useEffect(() => { fixarSessao(sessaoRef.current); }, []);
+  const [historico, setHistorico] = React.useState(null); // null = fechado; { carregando } | { lista } | { erro }
+  async function abrirHistorico() {
+    setHistorico({ carregando: true });
+    try {
+      const r = await apiCall('/api/admin-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'sessoes' }) });
+      const d = await r.json();
+      setHistorico(r.ok ? { lista: d.dados || [] } : { erro: d.error || 'erro ao carregar' });
+    } catch (e) { console.warn('[cnj-chat] histórico:', e?.message); setHistorico({ erro: 'sem conexão — tente de novo' }); }
+  }
+  async function retomar(sessao) {
+    setHistorico({ carregando: true });
+    try {
+      const r = await apiCall('/api/admin-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'sessao', sessao }) });
+      const d = await r.json();
+      if (!r.ok) { setHistorico({ erro: d.error || 'erro ao abrir a conversa' }); return; }
+      setChat((d.dados || []).flatMap(m => [
+        { role: 'user', content: m.pergunta },
+        { role: 'assistant', content: m.resposta || '(sem resposta registrada)', memoriaId: m.id },
+      ]));
+      setAvaliado(Object.fromEntries((d.dados || []).filter(m => m.util !== null).map(m => [m.id, m.util ? 'bom' : 'ruim'])));
+      setResultadoCnj(null);
+      fixarSessao(sessao);
+      setHistorico(null);
+    } catch (e) { console.warn('[cnj-chat] retomar:', e?.message); setHistorico({ erro: 'sem conexão — tente de novo' }); }
+  }
+  function novaConversa() { setChat([]); setResultadoCnj(null); setAvaliado({}); fixarSessao(novaSessao()); }
   const [avaliado, setAvaliado] = React.useState({});
   React.useEffect(() => {
     try { localStorage.setItem('tsn:cnj-chat', JSON.stringify(chat.slice(-40))); }
@@ -12926,9 +12962,27 @@ function CnjTab() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {chat.length > 0 && <button onClick={imprimirRelatorio} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>📄 Exportar</button>}
-            {chat.length > 0 && <button onClick={() => { setChat([]); setResultadoCnj(null); }} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>Limpar</button>}
+            <button onClick={() => historico ? setHistorico(null) : abrirHistorico()} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>🕘 Conversas anteriores</button>
+            {chat.length > 0 && <button onClick={novaConversa} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>＋ Nova conversa</button>}
           </div>
         </div>
+
+        {historico && (
+          <div style={{ padding: '10px 20px', borderBottom: '1px solid #f1f5f9', maxHeight: 260, overflowY: 'auto', flexShrink: 0, background: '#fbfdff' }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>Guardadas por 12 meses (conversas com 👍 ficam 24). Clique para retomar de onde parou.</div>
+            {historico.carregando && <div style={{ fontSize: 12, color: '#94a3b8' }}>Carregando…</div>}
+            {historico.erro && <div style={{ fontSize: 12, color: '#b91c1c' }}>{historico.erro}</div>}
+            {historico.lista && !historico.lista.length && <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhuma conversa gravada ainda.</div>}
+            {historico.lista?.map(h => (
+              <button key={h.sessao} onClick={() => retomar(h.sessao)}
+                style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'baseline', textAlign: 'left', background: h.sessao === sessaoRef.current ? '#eff6ff' : 'white', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 10px', marginBottom: 4, cursor: 'pointer', fontSize: 12 }}>
+                <span style={{ color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(h.fim).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                <span style={{ flex: 1, minWidth: 0, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.primeira_pergunta}</span>
+                <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{h.trocas} pergunta{h.trocas > 1 ? 's' : ''}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Chips de contexto + carregar conversas */}
         <div style={{ padding: '10px 20px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid #f8fafc', alignItems: 'center' }}>

@@ -165,8 +165,16 @@ async function handler(req) {
     if (espelho?.erro && espelho.erro !== 'rodada sem progresso') console.error('[limpar-documentos] espelho:', espelho.erro);
   }
 
+  // Histórico do chat operacional (30/09): 12 meses; conversa com 👍 (exemplo que ensina o chat) 24.
+  let chatExpirado = null;
+  try {
+    const rc = await sb('rpc/admin_chat_memoria_expirar', { method: 'POST', body: '{}' });
+    chatExpirado = rc.ok ? await rc.json() : `HTTP ${rc.status}`;
+    if (!rc.ok) console.error('[limpar-documentos] retenção do chat falhou:', chatExpirado);
+  } catch (e) { chatExpirado = String(e?.message || e).slice(0, 80); console.error('[limpar-documentos] retenção do chat:', chatExpirado); }
+
   return new Response(JSON.stringify({
-    espelho,
+    espelho, chat_expirado: chatExpirado,
     removidos, removidos_avisados: removidosAvisados, iteracoes, links_matricula_zerados: linksZerados,
     drenado: !ultimoErro && removidos >= 0, erro: ultimoErro || undefined,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });

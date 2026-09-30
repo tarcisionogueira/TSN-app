@@ -71,6 +71,19 @@ export default async function handler(req) {
   } catch {
     return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
+  // HISTÓRICO (30/09, dono: "manter um histórico por um período para retomar uma conversa"): lista as
+  // conversas do próprio admin (12 meses; 👍 fica 24) e devolve uma inteira para continuar.
+  if (reqBody.acao === 'sessoes' || reqBody.acao === 'sessao') {
+    try {
+      const dados = reqBody.acao === 'sessoes'
+        ? await sbRpc('admin_chat_sessoes', { p_user: user.id, p_dias: 365 })
+        : await sbRpc('admin_chat_sessao', { p_user: user.id, p_sessao: String(reqBody.sessao || '').slice(0, 64) });
+      return new Response(JSON.stringify({ ok: true, dados }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {
+      console.error('[admin-chat] histórico indisponível:', e?.message || e);
+      return new Response(JSON.stringify({ error: 'não consegui carregar o histórico agora' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
   // 👍/👎 numa resposta: 👍 vira exemplo prioritário, 👎 nunca é reaproveitado.
   if (reqBody.feedback) {
     const { id, util } = reqBody.feedback;
@@ -142,6 +155,10 @@ Você tem acesso privilegiado a:
   em andamento naquele processo, mensalidades com cobrança em atraso e movimentação recente de
   processos de clientes do plano assessorado — use-as proativamente sempre que a pergunta do admin
   se beneficiar, sem precisar que ele peça a consulta por extenso.
+- RADAR DE EDITAIS (buscar_edital_processo): editais de leilão do DJEN com praças, leiloeiro, avaliação,
+  lance, matrícula, cartório, débitos e ocupação — consulte SEMPRE que a pergunta tocar em leilão/praça/edital
+- DataJud como ferramenta (consultar_datajud), também por nome da parte, e dados de EMPRESA na Receita
+  (consultar_cnpj: situação, endereço, sócios) para partes pessoa jurídica
 - Histórico de atendimentos e conversas de todos os usuários da plataforma
 - Dados das integrações (PGFN, Receita Federal, etc.) quando disponíveis
 
