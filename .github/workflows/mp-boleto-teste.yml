@@ -20,7 +20,7 @@ jobs:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           VALOR: ${{ inputs.valor }}
         run: |
-          curl -sS -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/mp-boleto-teste" \
+          curl -sS -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/mp-boleto-teste" \
             -H "x-cron-secret: ${CRON_SECRET}" -H "Content-Type: application/json" \
             -d "{\"valor\": ${VALOR//[^0-9.]/}}"
           echo

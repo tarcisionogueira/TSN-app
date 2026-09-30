@@ -73,7 +73,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento no job de veiculos (Sodre/Suporte).' || 'Erro na execucao do job de veiculos.' }}"
         run: |
-          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+          curl -s -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json" \
             -d '{"tipo":"Scraper Veiculos","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
