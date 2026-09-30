@@ -135,7 +135,7 @@ de cliente parado; segurança 0/0.
 11. 🟠 Testar compra avulsa (ebook) ponta a ponta; nomear um analista.
 12. 🟠 Jurídico: sujeição à Lei 9.613/COAF. ✅ 30/09: correção de `extrairIdentidadeTexto` liberada e aplicada.
 13. 🟡 Instagram (verificação Meta); Windsor (14 contas); CREPALDI (integrar ou remover);
-    e-mails de 7 leiloeiros sem e-mail publicado; retenção de e-mails. ✅ PECINI/SUBLIME já resolvido (28/09). ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
+    e-mails de 7 leiloeiros sem e-mail publicado; ✅ PECINI/SUBLIME já resolvido (28/09). ✅ Retenção de e-mails: piso de 24 meses (30/09). ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
     7 d: 148 enviados, 43 abertos, 10 cliques). ✅ Alqueire: regra por tipo escrito ou UF de convenção firme.
 
 ### 📌 30/09 (manhã, 2ª parte) — datas da Superbid, FIPE, SOLEON pelo banco, termo + procuração, contrato do checkout
@@ -1214,6 +1214,8 @@ roda só a lista (fontes e passos RADAR/TRIAGEM/MILAN/APURACAO_SUPERBID/APURACAO
 Pendente: investigar por que o caminho ISP do HASTA enumera 0 (estrutura mudou ou bloqueio).
 
 **🗂️ RETENÇÃO DA CAIXA PELA OPERAÇÃO (27/09, dono: "o principal são os documentos expedidos").**
+> ⚠️ **30/09 (dono): piso de 24 MESES** — avulso, negociação sem resposta e sem acordo passam a 24 meses
+> (`20260930_email_retencao_24_meses.sql`). Spam 30 d e operação/jurídico 10 anos seguem iguais.
 Caixa é de OPERAÇÃO de leilão; e-mail de oportunidade ao cliente não é guardado (só metadado em
 `emails_log`). Prazo por CONVERSA (mesma chave da tela: contraparte + assunto sem Re:/Enc:,
 coluna gerada `email_caixa.conversa_chave`), regra única em `_email_caixa_prazos()`:

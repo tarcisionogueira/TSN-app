@@ -114,6 +114,10 @@ const REGRAS_GUARDA = {
   operacao_concluida_10a: 'Operação concluída — 10 anos da conclusão',
   juridico_10a: 'Jurídico — 10 anos',
   spam_30d: 'Spam — 30 dias',
+  // 30/09: piso de 24 meses (decisão do dono). Chaves antigas mantidas para linha já calculada.
+  avulso_24m: 'Avulso — 24 meses',
+  sem_resposta_24m: 'Negociação sem resposta — 24 meses',
+  com_resposta_24m: 'Negociação sem acordo — 24 meses',
   avulso_90d: 'Avulso — 90 dias',
   sem_resposta_180d: 'Negociação sem resposta — 180 dias',
   com_resposta_365d: 'Negociação sem acordo — 1 ano',
