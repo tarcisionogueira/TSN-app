@@ -118,6 +118,15 @@ export function loteDoPayload(html, slug) {
 
 const dataISO = v => (v && !isNaN(new Date(v)) ? new Date(v).toISOString().slice(0, 10) : null);
 
+// Texto da DESCRIÇÃO deste lote: o payload guarda uma referência ("$27") ao bloco de texto dele.
+// Ler o texto solto da página traria a descrição de OUTROS lotes do evento (ver loteDoPayload).
+export function descricaoDoLote(html, lote) {
+  const ref = (String(lote?.description || '').match(/^\$([0-9a-f]+)$/i) || [])[1];
+  if (!ref) return typeof lote?.description === 'string' && !lote.description.startsWith('$') ? textoDe(lote.description) : '';
+  const ib = String(html).indexOf(`"${ref}:T`);
+  return ib >= 0 ? textoDe(String(html).slice(ib, ib + 12000).split('self.__next_f.push')[1] || '') : '';
+}
+
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const slug = (String(url).match(/\/lotes\/([a-z0-9-]+)/i) || [])[1] || '';

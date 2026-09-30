@@ -29,6 +29,8 @@ on:
       - 'scripts/lib/alfa-parse.mjs'
       - 'scripts/lib/hasta-parse.mjs'
       - 'scripts/lib/nordeste-parse.mjs'
+      - 'scripts/lib/nordeste-veiculo.mjs'
+      - 'scripts/scraper-nordeste-veiculos.mjs'
       - 'scripts/lib/jeleiloes-parse.mjs'
       - 'scripts/lib/leilaoindex-parse.mjs'
       - 'scripts/lib/rocha-parse.mjs'
@@ -61,7 +63,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor'
+        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -128,6 +130,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NORDESTE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-nordeste.mjs
+
+      - name: Nordeste veículos
+        # 30/09 (dono: "só os veículos inteiros da NORDESTE"): os ~400 lotes de bem móvel que o passo
+        # acima descarta pela URL — só veículo inteiro (sem sucata/peça), em veiculos_leilao.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'nordeste_veiculos')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NORDESTE_VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-nordeste-veiculos.mjs
 
       - name: Jeleiloes
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'jeleiloes')) }}
