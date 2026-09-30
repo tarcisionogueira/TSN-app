@@ -34,6 +34,7 @@ import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
 // Segue valendo o resto: coleta com zero lote sai com código 1 e grava 'falhou', e o gate
 // só carimba "coletei" com linha no acervo.
 import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
@@ -142,6 +143,7 @@ const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitig
 
 // Fetch "grátis primeiro": tenta direto (egress do Actions); se barrado/challenge/erro,
 // cai no Web Unlocker (pago, com teto). Retorna { html, via } ou { html:null }.
+const BANCO_FALHAS = new Map();
 async function fetchTenant(url, { timeoutMs = 45000 } = {}) {
   try {
     const c = new AbortController();
@@ -152,7 +154,18 @@ async function fetchTenant(url, { timeoutMs = 45000 } = {}) {
       const html = await r.text().catch(() => '');
       if (html && !ehChallenge(html)) return { html, via: 'gratis' };
     }
-  } catch { /* cai p/ Bright Data */ }
+  } catch { /* direto falhou — tenta a via banco e depois o Bright Data */ }
+  // VIA BANCO (30/09): o pg_net do Supabase (AWS) recebe 200 onde o IP do Actions é barrado —
+  // medido na JOAOEMILIO, que ficou 3 dias "zerou" sem ninguém conseguir medir: o direto falhava,
+  // o Bright Data estava sem cota e o residencial parado. Grátis; mesmo helper do motor DOM
+  // (Uberlândia, GLOBO). Disjuntor por host: 2 falhas no banco → não tenta mais nesta execução.
+  const host = (() => { try { return new URL(url).host; } catch { return ''; } })();
+  if ((BANCO_FALHAS.get(host) || 0) < 2) {
+    const b = await viaBanco(url);
+    if (b.html) return { html: b.html, via: 'banco' };
+    BANCO_FALHAS.set(host, (BANCO_FALHAS.get(host) || 0) + 1);
+    console.log(`  ⚠️ via banco falhou em ${host}: ${b.motivo}`);
+  }
   // Runner RESIDENCIAL (SOLEON_NO_BD=1): o fetch direto já funciona do IP residencial (o SOLEON
   // bloqueia só datacenter, não tem Cloudflare) → NUNCA cair no Bright Data. Pula a página se
   // por acaso o direto falhar (evita gasto surpresa de BD numa coleta que deveria ser grátis).
@@ -366,7 +379,7 @@ const ENUMERADOS = new Map();
 // marca a fonte cuja LISTAGEM foi recusada: aqui é a coleta que começou, andou e foi cortada
 // no meio — o caso que passava despercebido até 27/08 (ver o bloco em `coletarTenant`).
 const COTA_NEGADA = new Map();
-// `via` da ENUMERAÇÃO por tenant (10/09) — 'gratis'/'brightdata' quando a listagem respondeu
+// `via` da ENUMERAÇÃO por tenant (10/09) — 'gratis'/'banco'/'brightdata' quando a listagem respondeu
 // de verdade (mesmo que com 0 lote: leiloeiro pequeno pode legitimamente ficar sem nada por um
 // tempo), `null` quando NENHUMA página chegou a devolver HTML. `coletarTenant` já calculava
 // isso e só usava para um `console.log` — descartava o sinal antes de `registrarSaude` decidir

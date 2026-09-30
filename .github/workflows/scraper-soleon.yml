@@ -57,7 +57,7 @@ on:
 jobs:
   scraper-soleon:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50  # via banco (30/09) é grátis mas ~2-3 s por página
     steps:
       - name: Checkout
         uses: actions/checkout@v4
