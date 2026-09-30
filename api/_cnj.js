@@ -99,7 +99,9 @@ async function buscarTribunal(tribunal, query) {
       method: 'POST',
       headers: { 'Authorization': `APIKey ${CNJ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ size: 10, query }),
-      signal: AbortSignal.timeout(12000),
+      // 20 s (era 12): medido 30/09 do Brasil (gru1 e pg_net), o DataJud levou 5–15 s por tribunal e
+      // abortou TJSP/STJ aos 12 s numa leva de 7 relatórios. Com número são só 1–2 tribunais.
+      signal: AbortSignal.timeout(20000),
     });
     let res = await pedir();
     // 24/09 — HTTP 429 `es_rejected_execution_exception` = a fila de busca do DataJud está cheia
