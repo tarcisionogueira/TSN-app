@@ -423,7 +423,9 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL, max_tokens: 2600,
+        // 2600 → 4000 (30/09): com reparos, débitos e a página inteira do lote na entrada, a Strada
+        // 2025 voltou 2× "Resposta vazia" — JSON cortado no teto de saída não parseia.
+        model: MODEL, max_tokens: 4000,
         system: 'Você é um avaliador de veículos de leilão. Responda SOMENTE JSON válido, sem markdown ao redor.',
         messages: [{ role: 'user', content }],
       }),
@@ -441,7 +443,12 @@ export default async function handler(req, res) {
       // Sem parecer = falha, não "veículo sem informação" — estorna, nunca cobra o vazio
       // (mesma regra de "resposta de erro não é conteúdo válido" do CLAUDE.md).
       await estornar();
-      await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: 'Resposta vazia da IA' });
+      // O MOTIVO vai junto (30/09): "vazia" sozinho não separava JSON cortado no teto de saída
+      // (stop_reason=max_tokens) de recusa ou de formato inesperado.
+      const bruto = extractText(data);
+      const motivoVazio = `stop=${data?.stop_reason || '?'}, ${bruto.length} chars${bruto ? `: ${bruto.slice(0, 120)}` : ''}`;
+      console.error(`[veiculo] resposta sem parecer (${veiculoId}): ${motivoVazio}`);
+      await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: `Resposta vazia da IA (${motivoVazio})`.slice(0, 300) });
       res.status(502).json({ error: 'Não foi possível gerar o relatório agora. Tente novamente.' });
       return;
     }
