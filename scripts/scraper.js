@@ -528,7 +528,7 @@ async function scraperSuperbid(pageNumber = 1) {
       // Extrai estado da cidade (ex: "Campinas - SP" → "SP")
       const cidadeCompleta = loc.city || '';
       const estadoMatch = cidadeCompleta.match(/[-–]\s*([A-Z]{2})$/);
-      const estadoUF = estadoMatch ? estadoMatch[1] : (loc.state || '');
+      const estadoUF = estadoMatch ? estadoMatch[1] : (loc.state || ufDoTitulo(p.shortDesc));
       const cidadeNome = cidadeCompleta.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim();
 
       return {
@@ -766,7 +766,7 @@ async function scraperSuperbidAlt(pageNumber = 1) {
         titulo: p.shortDesc || p.description || `Imóvel Superbid`,
         tipo: normalizarTipo(p.subCategory?.description || of.categoryDesc),
         modalidade: 'extrajudicial',
-        estado: loc.state || '',
+        estado: loc.state || ufDoTitulo(p.shortDesc || p.description),
         cidade: (loc.city || '').replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim(),
         bairro: loc.neighborhood || '',
         endereco: loc.street || '',
@@ -1539,6 +1539,14 @@ function toTitleCase(str) {
 // apartamento | casa | terreno | comercial | rural | imovel. 'rural' e 'comercial'
 // (que abrange indústria/galpão) precisam existir aqui senão fazenda/galpão
 // caem em 'imovel' e o filtro de tipo da Busca não os isola.
+// UF pelo título quando a localização estruturada vem vazia (30/09: "Apto. 196m² … ¿ Vila Andrade/SP"
+// entrou sem estado e sumiu de /leiloes). Só aceita sigla de UF real no FIM do título.
+const UFS_BR = new Set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' '));
+export function ufDoTitulo(titulo) {
+  const m = String(titulo || '').match(/\/\s*([A-Z]{2})\s*$/);
+  return m && UFS_BR.has(m[1]) ? m[1] : '';
+}
+
 function normalizarTipo(tipo) {
   if (!tipo) return 'imovel';
   const t = String(tipo).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

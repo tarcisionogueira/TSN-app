@@ -9,6 +9,22 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧹 30/09 (noite, 9ª parte) — invariantes de dado zerados (exceto os conhecidos)
+- **UF vazia (10 → 5):** 5 corrigidos com prova (bairro/CEP/título: 3 São Paulo, 2 Curitiba). Causa na Superbid: com a
+  localização estruturada vazia a UF ficava vazia mesmo com "…Vila Andrade/SP" no título — `ufDoTitulo` em
+  `scripts/scraper.js` (só sigla real no fim). Os 5 restantes (2 ALBERTOMACEDO Jd. Bethânia/Jd. Marajó, AMLEILOEIRO,
+  WEBLEILOES, LEILAOBRASIL Riviera de Santa Cristina XII) não trazem cidade nem na página do leiloeiro — deixados.
+- **Área truncada:** apice_17141 ("Casa de 480,00m² em Terreno de 1.201.00m²" — typo do site) 201 → 480.
+- **Foto repetida:** NORDESTE servia o MESMO PNG (nome em hash) num sítio na BA e em 2 terrenos em Tietê. Nova trava no
+  motor: `anularFotoRepetida` (dom-parse-util, runner) — mesma URL em 3+ lotes distintos da rodada não é foto do lote.
+  Teste `scripts/testes/foto-repetida-nao-e-foto-do-lote.mjs`.
+- **Anexo de espelho purgado (2): falso positivo** — arquivo PRESENTE; a linha `purgado` era do gêmeo expirado com o
+  mesmo caminho. Invariante agora exige o objeto ausente no bucket (migração
+  `20260930_invariante_espelho_purgado_exige_arquivo_ausente.sql`, aplicada).
+- **Lote vencido ativo (3):** ljud com praça hoje 16h — a limpeza horária pega; transitório.
+- Seguem conhecidos: `sem_foto` (GLOBO), `qa_invariantes_lenta` (cache frio). Monitor: LEJE zerou (depende do dono),
+  BAYIT medição velha (rodada de quinta 01/10).
+
 ### 🚗 30/09 (noite, 8ª parte) — NORDESTE: veículos inteiros em `veiculos_leilao`
 - **Pedido do dono:** "só os veículos inteiros da NORDESTE". `scripts/scraper-nordeste-veiculos.mjs` +
   `scripts/lib/nordeste-veiculo.mjs` (teste `scripts/testes/nordeste-veiculo.mjs`); passo "Nordeste veículos" no

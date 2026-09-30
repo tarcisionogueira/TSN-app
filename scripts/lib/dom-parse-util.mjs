@@ -342,3 +342,27 @@ export function naoEhImovel(texto) {
   const t = String(texto || '');
   return (RE_BEM_MOVEL_PALAVRA.test(t) || RE_MARCA_MODELO.test(t) || RE_MARCA_ANO.test(t)) && !RE_IMOVEL.test(t);
 }
+
+// Puro (testável): a MESMA foto em 3+ lotes DIFERENTES da mesma rodada não é foto do lote — é
+// imagem genérica do evento/leiloeiro servida com nome em hash, que nenhuma regex de nome pega.
+// 30/09: NORDESTE gravou o mesmo PNG num sítio na BA e em dois terrenos em Tietê/SP (invariante
+// `foto_repetida_como_lote`). Anula link_foto e tira a URL de `fotos`; devolve quantos mexeu.
+export function anularFotoRepetida(rows, minimo = 3) {
+  const uso = new Map();
+  for (const r of rows) {
+    if (!r?.link_foto) continue;
+    const s = uso.get(r.link_foto) || new Set();
+    s.add(String(r.titulo || r.fonte_id || ''));
+    uso.set(r.link_foto, s);
+  }
+  const genericas = new Set([...uso].filter(([, t]) => t.size >= minimo).map(([u]) => u));
+  let n = 0;
+  for (const r of rows) {
+    if (Array.isArray(r?.fotos)) {
+      const f = r.fotos.filter((u) => !genericas.has(u));
+      if (f.length !== r.fotos.length) r.fotos = f.length ? f : null;
+    }
+    if (r?.link_foto && genericas.has(r.link_foto)) { r.link_foto = (Array.isArray(r.fotos) && r.fotos[0]) || null; n++; }
+  }
+  return n;
+}

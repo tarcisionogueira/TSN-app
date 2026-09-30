@@ -19,7 +19,7 @@ import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
-import { naoEhImovel } from '../dom-parse-util.mjs';
+import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -381,6 +381,8 @@ export async function rodarFonte(cfg, opts) {
       ufRecuperadas++;
     }
     if (ufRecuperadas) console.log(`[${tenant.fonte}] UF recuperada em ${ufRecuperadas} lote(s) (texto/cidade conferidos no IBGE).`);
+    const fotosGenericas = anularFotoRepetida(prontos);
+    if (fotosGenericas) console.log(`[${tenant.fonte}] ${fotosGenericas} lote(s) com a MESMA foto de outros 2+ lotes — imagem genérica, não gravada como foto.`);
 
     if (dryrun) {
       console.log(`[${tenant.fonte}] DRY-RUN amostra:`);
