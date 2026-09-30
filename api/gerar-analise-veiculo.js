@@ -17,7 +17,7 @@ import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
-import { comCascataBusca } from './_busca-modelo.js';
+import { comCascataBusca, ferramentaBusca } from './_busca-modelo.js';
 import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos } from '../src/utils/viabilidadeVeiculo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -74,27 +74,35 @@ Vale o preço que aparece no título ou no trecho do resultado da busca (ex.: "F
 Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), ano modelo ${ano}.
 Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 12 anúncios.`;
   let motivo = null;
-  try {
-    const anuncios = await comCascataBusca(async (degrau) => {
-      const { texto, buscas } = await buscarComProva({
-        degrau, chave: CLAUDE_KEY, webUses: 6, timeoutMs: prazoMs, maxTokens: 4000,
-        system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
-        aoCusto: (c) => { gasto.micro += Number(c) || 0; try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
-      });
-      if (!buscas) { motivo = 'a IA não pesquisou (resposta sem busca na web)'; return null; }
-      const j = parseJSON(texto);
-      if (!j) { motivo = 'resposta da busca sem JSON'; return null; }
-      return Array.isArray(j.anuncios) ? j.anuncios : [];
+  const t0 = Date.now();
+  const tentar = async (degrau, timeoutMs) => {
+    const { texto, buscas } = await buscarComProva({
+      degrau, chave: CLAUDE_KEY, webUses: 6, timeoutMs, maxTokens: 4000,
+      system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
+      aoCusto: (c) => { gasto.micro += Number(c) || 0; try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
     });
-    if (!anuncios) return { revenda: null, motivo };
-    const revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
+    if (!buscas) { motivo = 'a IA não pesquisou (resposta sem busca na web)'; return null; }
+    const j = parseJSON(texto);
+    if (!j) { motivo = 'resposta da busca sem JSON'; return null; }
+    return Array.isArray(j.anuncios) ? j.anuncios : [];
+  };
+  try {
+    let anuncios = await comCascataBusca((degrau) => tentar(degrau, prazoMs)) || [];
+    let revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
+    // SEGUNDA TENTATIVA COM O SONNET (30/09): na 1ª regeração o Haiku (busca básica) devolveu lista
+    // VAZIA nos 4 veículos — o trecho indexado da Webmotors raramente traz preço. O Sonnet usa a busca
+    // com filtragem dinâmica (lê melhor a página). Só roda quando o barato não bastou e ainda há prazo.
+    const resta = prazoMs - (Date.now() - t0);
+    if (!revenda && resta > 25000) {
+      const sonnet = { model: 'claude-sonnet-4-6', ferramenta: (n) => ferramentaBusca('claude-sonnet-4-6', n) };
+      const mais = await tentar(sonnet, resta - 3000).catch((e) => { motivo = `2ª busca (Sonnet) falhou: ${String(e?.message || e).slice(0, 60)}`; return null; });
+      if (mais?.length) { anuncios = [...anuncios, ...mais]; revenda = revendaPorAnuncios(anuncios, v.valor_fipe); }
+    }
+    if (revenda) return { revenda, motivo: null };
     // Diz QUANTOS vieram e quantos caíram no filtro — "0 comparáveis" sozinho não separa "a busca
     // não achou" de "achou e o filtro descartou" (a forma #10 do CLAUDE.md).
-    if (!revenda) {
-      const validos = anuncios.filter((a) => Number(a?.preco) > 0).length;
-      return { revenda: null, motivo: `a busca trouxe ${anuncios.length} anúncio(s), ${validos} com preço — menos de 3 comparáveis depois do filtro de preço (30–200% da FIPE)` };
-    }
-    return { revenda, motivo: null };
+    const validos = anuncios.filter((a) => Number(a?.preco) > 0).length;
+    return { revenda: null, motivo: motivo && !anuncios.length ? motivo : `a busca trouxe ${anuncios.length} anúncio(s), ${validos} com preço — menos de 3 comparáveis depois do filtro de preço (30–200% da FIPE)` };
   } catch (e) {
     return { revenda: null, motivo: `busca de anúncios falhou: ${String(e?.message || e).slice(0, 80)}` };
   }
