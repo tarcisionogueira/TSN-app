@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🚗 30/09 (noite, 8ª parte) — NORDESTE: veículos inteiros em `veiculos_leilao`
+- **Pedido do dono:** "só os veículos inteiros da NORDESTE". `scripts/scraper-nordeste-veiculos.mjs` +
+  `scripts/lib/nordeste-veiculo.mjs` (teste `scripts/testes/nordeste-veiculo.mjs`); passo "Nordeste veículos" no
+  `scraper-dom.yml` (roda no cron diário com o resto; dispatch `fontes=nordeste_veiculos`). Motor dom, grátis.
+- **1ª gravação (18:43 UTC):** 59 veículos ativos · 43 motos · 57 com marca (2 marcas chinesas obscuras sem) ·
+  100% com cidade/UF e data · **só 3 com placa** (lote de pátio "conservado" não publica placa — é do site, não do
+  parser). Saúde `NORDESTE_VEICULOS` = degradado só porque 1 evento deu 502 no site nessa rodada.
+- **Teto 60 detalhes/rodada, acervo ~100:** a fila põe os ainda não gravados na frente, depois os mais antigos —
+  o cron diário completa o resto em 1–2 dias.
+- **Consertos que o seco pegou (valem também para os IMÓVEIS da NORDESTE):** valor do payload é número de máquina
+  ("41194.8") — `numPayload` em `dom-parse-util`; área vem do TÍTULO (o slug perde a vírgula: "800,00 M2" virava
+  80.000 m²; "18ha 52a e 51ca" entendido) — 4 áreas ativas corrigidas no banco (uma estava com 1,85 bi m²);
+  motos de pátio pela marca/modelo. Bom Jesus da Lapa com avaliação R$ 1,592 mi **é o valor que o site publica**.
+
 ### 📎 30/09 (noite, 7ª parte) — proposta ao leiloeiro garante os relatórios
 - **Pedido do dono:** ao propor ao leiloeiro, gerar o relatório (veículo) ou os relatórios (imóvel) que faltarem.
 - `src/utils/relatorioProposta.js`: `garantirRelatorioVeiculo` (dispara `/api/gerar-analise-veiculo` em 2º plano se
