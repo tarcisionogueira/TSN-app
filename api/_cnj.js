@@ -393,6 +393,47 @@ export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
  * também pelo andamento do caso (api/caso-andamento-cnj.js) — uma cópia só da regra.
  * Devolve { total, publicacoes[] } ou { erro } — nunca lista vazia no lugar de falha.
  */
+// Via banco (pagina_pedir/pagina_ler, só service_role) — mesmo par de RPCs do motor de coleta.
+// Devolve o resultado já no formato de buscarDjen, ou null quando também não veio.
+async function djenViaBanco(url) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SB || !KEY) return null;
+  const rpc = async (fn, body) => {
+    const r = await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: 'POST', signal: AbortSignal.timeout(8000), headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${fn} HTTP ${r.status}`);
+    return r.json();
+  };
+  const id = await rpc('pagina_pedir', { p_url: url });
+  for (let i = 0; i < 15; i++) {
+    await new Promise((ok) => setTimeout(ok, 1000));
+    const [row] = await rpc('pagina_ler', { p_id: id });
+    if (!row?.pronto) continue;
+    if (!(row.status >= 200 && row.status < 300) || !row.conteudo) { console.warn('[djen] via banco:', row.erro || `HTTP ${row.status}`); return null; }
+    return JSON.parse(row.conteudo);
+  }
+  console.warn('[djen] via banco: sem resposta em 15 s');
+  return null;
+}
+
+function formatarDjen(data, maxTexto) {
+  const items = data?.items || data?.content || data?.comunicacoes || [];
+  if (!items.length) return { total: 0, publicacoes: [], observacao: 'Nenhuma publicação encontrada no DJEN para este processo (a base cobre a partir de 2022).' };
+  // A mesma intimação sai uma vez por destinatário (16/09 veio duas vezes, idêntica): uma só basta.
+  const vistos = new Set();
+  const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); });
+  return {
+    total: unicos.length,
+    publicacoes: unicos.slice(0, 15).map((it) => ({
+      data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null,
+      tribunal: it.siglaTribunal || it.sigla_tribunal || null,
+      orgao: it.nomeOrgao || it.nome_orgao || null,
+      tipo_documento: it.tipoDocumento || it.tipo_documento || null,
+      texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxTexto),
+    })),
+  };
+}
+
 export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   const num = String(numero_processo || '').replace(/\D/g, '');
   if (!/^\d{15,25}$/.test(num)) return { erro: 'número de processo inválido — precisa do padrão CNJ (20 dígitos)' };
@@ -402,23 +443,13 @@ export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
     if (!r.ok) return { erro: `DJEN respondeu ${r.status}` };
-    const data = await r.json();
-    const items = data?.items || data?.content || data?.comunicacoes || [];
-    if (!items.length) return { total: 0, publicacoes: [], observacao: 'Nenhuma publicação encontrada no DJEN para este processo (a base cobre a partir de 2022).' };
-    // A mesma intimação sai uma vez por destinatário (16/09 veio duas vezes, idêntica): uma só basta.
-    const vistos = new Set();
-    const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); });
-    return {
-      total: unicos.length,
-      publicacoes: unicos.slice(0, 15).map((it) => ({
-        data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null,
-        tribunal: it.siglaTribunal || it.sigla_tribunal || null,
-        orgao: it.nomeOrgao || it.nome_orgao || null,
-        tipo_documento: it.tipoDocumento || it.tipo_documento || null,
-        texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxTexto),
-      })),
-    };
+    return formatarDjen(await r.json(), maxTexto);
   } catch (e) {
+    // 30/09 (print do dono, caso Marcos): o DJEN abortou aos 15 s vindo da Vercel e, um minuto
+    // depois, respondeu 200 na hora pelo pg_net do banco. Antes de desistir, tenta pelo banco
+    // (grátis, GET público); se também falhar, o erro original segue para a tela.
+    const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
+    if (b) return formatarDjen(b, maxTexto);
     return { erro: `falha ao consultar DJEN: ${e.message}` };
   } finally {
     clearTimeout(t);
