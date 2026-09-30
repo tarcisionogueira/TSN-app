@@ -47,6 +47,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 3. 🔶 **Araraquara (2d862426…)** — regerado como terreno 200 m², mas **mercado vazio** (9 buscas,
    0 terreno aceito); não cobrou cota; self-heal refaz em até 48 h. `imovel.tipo` do relatório corrigido
    para terreno. Conferir se o self-heal trouxe amostra.
+   **30/09:** ✅ self-heal trouxe amostra (29/09 06h: 4 vendas, R$ 635/m² → mercado R$ 127 mil). MAS o lote
+   (WEBLEILOES) estava com avaliação R$ 2.863 / lance R$ 1.431 — o dobro: a rodada diária de 29/09
+   **começou 16h24, ANTES do conserto do WEBLEILOES (17h29)**, e às 18h00 regravou com a conta antiga os
+   lotes corrigidos. 41 lotes de leilão WEBLEILOES revertidos no banco (avaliação = lance gravado; lance =
+   avaliação × (1 − % inteiro do card)) — Araraquara = 1.431,38 / 715,69, igual ao site. O relatório ainda
+   mostra a avaliação antiga e NÃO cita os ônus do edital: alienação fiduciária R$ 137.750,31 + "débitos da
+   ação" R$ 500.037,65 — regenerar quando o Gemini voltar.
 4. 🔶 **Índice** — conserto (prova de busca + `valorTotal`) sem tentativa real desde 28/09 21:34.
    Check-in agendado 29/09 12:00 UTC (trig_01Hc9CbAmXQN2T6ofY6krU39):
    `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
@@ -98,6 +105,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    no seco, 29 caíam a 600–5.700 km). **32 gravados** com `geocod_nivel='endereco'` (proximidades
    zeradas). Conferir: `select situacao_geo, count(*) from imoveis_leilao where ativo and tipo in
    ('terreno','rural') and geocod_nivel='endereco' and pontos_proximos is null group by 1;`
+   **30/09 — a fila do geocodificador estava PARADA:** 648 lotes (225 da GLOBO sem coordenada desde 29/09
+   18h; 'refazer' desde 01/09) com o cron `/api/geocodificar` respondendo 200 de hora em hora. Chamada à
+   mão (workflow novo `cron-manual.yml`, GET e POST) a mesma rota processou e a fila caiu 648 → 587; a
+   cascata resolve (diagnóstico: Botucatu via CEP, nível rua). O laço tratava falha na LEITURA da fila como
+   "sem pendentes" → 200 sem fazer nada (forma 2). Corrigido: registra, tenta 3×, responde 500, e cada
+   rodada agendada loga `[geocodificar] cron {...}` — conferir o das 02h UTC (check-in agendado).
    **Falta:** polígono do SIGEF pelo código SNCR/CCIR (78 lotes citam o código) — depende do WFS do
    acervo fundiário do INCRA; UTM (precisa do fuso) e endereço da matrícula/edital.
 7b. ✅ **Cidade inválida → geocodificação 'falhou' (29/09).** Dos 148 terrenos/rurais em 'falhou', 129 eram
