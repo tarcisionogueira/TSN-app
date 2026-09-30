@@ -1,7 +1,7 @@
 // Revenda pelo MOBIAUTO (30/09): só anúncios do MESMO modelo/ano; mesma versão/motor quando há 3+;
 // rótulo diz o portal de onde a média veio (nunca "Webmotors" sobre anúncio do Mobiauto).
 import assert from 'node:assert/strict';
-import { modeloDoTitulo, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, revendaPorAnuncios } from '../../src/utils/viabilidadeVeiculo.js';
+import { modeloDoTitulo, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, revendaPorAnuncios, slugMobiauto } from '../../src/utils/viabilidadeVeiculo.js';
 
 assert.equal(marcaMobiauto('GM - CHEVROLET'), 'chevrolet');
 assert.equal(marcaMobiauto('VW'), 'volkswagen');
@@ -63,4 +63,20 @@ console.log('revenda-mobiauto: todos os casos passaram');
     .map((m) => `<a href="/comprar/carros/brasil/mitsubishi/${m}">`).join('') + '<a href="/comprar/carros/brasil/fiat/l200-triton-x">';
   assert.deepEqual(slugsModeloMobiauto(marcaAno, 'mitsubishi', ['l200-triton', 'l200']), ['l200-triton-outdoor', 'l200-triton-sport']);
   console.log('revenda-olx: todos os casos passaram');
+}
+
+// Mobiauto + OLX juntos (30/09): "triton" é nome do MODELO — no Mobiauto fica fora do trecho de versão,
+// na OLX está no título. Sem `ignorar`, o filtro chamava de "mesma versão" só os da OLX.
+{
+  const { anunciosOlx } = await import('../../src/utils/viabilidadeVeiculo.js');
+  const mob = [1, 2, 3].map((i) => ({ preco: 150000 + i, portal: 'mobiauto', url: `https://www.mobiauto.com.br/comprar/carros/mt-cuiaba/mitsubishi/l200-triton-sport/2021/hpe-s-2-4-cd-diesel-aut/detalhes/${i}` }));
+  const olx = ['Mitsubishi L200 Triton Sport GLS 2.4 CD Diesel Aut. 2021', 'Mitsubishi L200 Triton Sport HPE 2.4 CD Diesel Aut. 2021', 'Mitsubishi L200 Triton Sport HPE-S 2.4 CD Dies. AUT 2021']
+    .map((t, i) => ({ preco: 140000 + i, portal: 'olx', url: `https://x/${i}`, versao: slugMobiauto(t) }));
+  assert.ok(anunciosOlx);
+  const semIgnorar = filtrarVersao([...mob, ...olx], 'L200 TRITON SPO GL 2.5');
+  assert.equal(semIgnorar.versao, true, 'o defeito: sem ignorar, "triton" separava OLX de Mobiauto');
+  const certo = filtrarVersao([...mob, ...olx], 'L200 TRITON SPO GL 2.5', ['l200-triton', 'l200', 'l200-triton-sport']);
+  assert.equal(certo.versao, false, 'GL 2.5 não existe em nenhum anúncio: modelo/ano inteiro');
+  assert.equal(certo.lista.length, 6);
+  console.log('revenda-mistura: todos os casos passaram');
 }

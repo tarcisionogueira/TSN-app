@@ -118,7 +118,9 @@ async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
   const todos = [...mob.anuncios, ...olx.anuncios];
   const modeloTxt = v.modelo || modeloDoTitulo(v.titulo, v.marca);
   if (todos.length) {
-    const f = filtrarVersao(todos, modeloTxt);
+    // Palavras do nome do modelo (candidatos + slug que o Mobiauto de fato usou) não são versão.
+    const nomesModelo = [...modelosMobiauto(modeloTxt), ...mob.anuncios.map((a) => String(a.url || '').split('/')[7] || '')];
+    const f = filtrarVersao(todos, modeloTxt, nomesModelo);
     const revenda = revendaPorAnuncios(f.lista, v.valor_fipe);
     if (revenda) return { revenda: { ...revenda, mesmaVersao: f.versao }, motivo: null };
   }

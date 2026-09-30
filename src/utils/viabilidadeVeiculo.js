@@ -210,9 +210,13 @@ export function anunciosMobiauto(html, { marca, modelo, ano }) {
 }
 // Mesma versão/motor primeiro: "MONTANA LS 1.4" prefere anúncios "ls-1-4-flex". Se a versão não
 // tiver 3 comparáveis, fica o modelo/ano inteiro (a média diz isso no rótulo, não esconde).
-export function filtrarVersao(anuncios, modelo) {
+// `ignorar`: palavras do NOME DO MODELO (l200, triton, sport…) — nunca contam como versão (30/09: com
+// Mobiauto + OLX juntos, "triton" casava com os títulos da OLX e não com o trecho de versão do Mobiauto,
+// e o filtro chamava de "mesma versão" os 46 anúncios da OLX de um lote GL 2.5 que não tinha nenhum).
+export function filtrarVersao(anuncios, modelo, ignorar = []) {
+  const fora = new Set((ignorar || []).flatMap((w) => String(w || '').toLowerCase().split(/[^a-z0-9]+/)).filter(Boolean));
   const toks = String(modelo || '').toLowerCase().replace(/(\d)[.,](\d)/g, '$1-$2').split(/\s+/).slice(1)
-    .map((t) => t.replace(/[^a-z0-9-]/g, '')).filter((t) => t.length >= 2);
+    .map((t) => t.replace(/[^a-z0-9-]/g, '')).filter((t) => t.length >= 2 && !fora.has(t));
   if (!toks.length) return { lista: anuncios, versao: false };
   // Casa por segmento inteiro ("-ls-" em "-ls-1-4-flex-"), nunca substring solta ("at" em "flat").
   // Palavra de 4+ letras também casa por PREFIXO do segmento: o título abrevia ("ENDURAN" → "endurance").
