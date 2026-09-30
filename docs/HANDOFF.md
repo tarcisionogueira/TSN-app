@@ -208,6 +208,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
+### ✅ 30/09 — NORDESTE: o lote vem do PAYLOAD do site, não do slug nem do texto solto
+O único imóvel ativo (50% de apto em Salvador) estava com título sem o "50%", avaliação R$ 190 mil
+contra lance R$ 300 mil (desconto −58%), área 0 e só a 1ª praça. Causa: o parser lia o SLUG (o
+`^[\d-]+` comia o "50-") e o TEXTO SOLTO da página — que traz as descrições dos OUTROS lotes do evento, e
+a quota-parte citada na descrição. A página (Next.js/RSC) tem o objeto do lote: `title`, `avaliation`,
+`initialBid` (praça vigente), endereço, bairro, CEP, processo, `status` e as praças do evento.
+`loteDoPayload()` em `scripts/lib/nordeste-parse.mjs` (acha o objeto pelo slug, fica o mais rico); área da
+descrição DESTE lote (referência `$27`); sem payload, segue o caminho antigo. Teste
+`testar:nordeste-payload`. Linha corrigida no banco (avaliação 380 mil — bem indivisível, vai inteiro —,
+lance 300 mil, 82,01 m², praças 21/09 e 28/09, endereço/CEP, `geocod_nivel='refazer'`). O lote já
+encerrou (28/09); fica ativo até a apuração do resultado, pela regra de `desativar_leiloes_encerrados`.
+
 ### ✅ 30/09 — Uma IA cai, a outra assume (Gemini ↔ Claude, nos dois sentidos) — pedido do dono
 - **Claude → Gemini** (`api/_claude.js` `anthropicFetch`): a reserva agora dispara também em falha do
   PROVEDOR (401/402/403/404 e o 400 "credit balance is too low"), não só em 429/5xx/rede. O

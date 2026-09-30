@@ -83,6 +83,41 @@ function doSlug(slug) {
   return { estado, area, cidade };
 }
 
+// O LOTE COMO O SITE O GUARDA (30/09). A página é Next.js/RSC e traz o objeto do lote no payload
+// (`self.__next_f`): title, avaliation, initialBid (lance da praça vigente), endereço, CEP, processo,
+// closing e status. Antes o parser lia o SLUG e o TEXTO SOLTO da página — e o texto solto traz as
+// descrições dos OUTROS lotes do evento: "50% do apartamento… Salvador" saiu com título sem o 50%
+// (o `^[\d-]+` do slug comeu o "50-"), avaliação R$ 190 mil (a quota-parte, citada no texto) contra
+// lance R$ 300 mil (desconto −58%), área 0 e data da 1ª praça depois de ela passar. O objeto diz
+// avaliação 380 mil (o bem é indivisível, vai inteiro), lance 300 mil, 2ª praça 28/09, endereço e CEP.
+// Achar o objeto PELO SLUG: o payload repete o lote (resumo no evento + detalhe) — fica o mais rico.
+export function loteDoPayload(html, slug) {
+  if (!slug) return null;
+  const h = String(html || '').replace(/\\"/g, '"');
+  const alvo = `"slug":"${slug}"`;
+  let melhor = null;
+  for (let i = h.indexOf(alvo); i >= 0; i = h.indexOf(alvo, i + 1)) {
+    const ini = h.lastIndexOf('{"id":', i);
+    if (ini < 0) continue;
+    let prof = 0, fim = -1, emStr = false;
+    for (let k = ini; k < h.length; k++) {
+      const c = h[k];
+      if (emStr) { if (c === '\\') k++; else if (c === '"') emStr = false; continue; }
+      if (c === '"') emStr = true;
+      else if (c === '{') prof++;
+      else if (c === '}') { if (--prof === 0) { fim = k; break; } }
+    }
+    if (fim < 0) continue;
+    let o;
+    try { o = JSON.parse(h.slice(ini, fim + 1)); } catch { continue; } // padrao-ok: trecho do payload que não é JSON puro — tenta a próxima ocorrência
+    if (o?.slug !== slug || !o.title) continue;
+    if (!melhor || Object.keys(o).length > Object.keys(melhor).length) melhor = o;
+  }
+  return melhor;
+}
+
+const dataISO = v => (v && !isNaN(new Date(v)) ? new Date(v).toISOString().slice(0, 10) : null);
+
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const slug = (String(url).match(/\/lotes\/([a-z0-9-]+)/i) || [])[1] || '';
@@ -114,17 +149,52 @@ export function parseDetalhe(html, url) {
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{4,})/i) || [])[1] || null;
   const docs = anexosDeHtml(html, url);
 
+  const lote = loteDoPayload(html, slug);
+  if (lote && ehImovel) {
+    const av = plaus(num(lote.avaliation)), lance = plaus(num(lote.initialBid)) || plaus(num(lote.minimunSale));
+    if (av) avaliacao = av;
+    if (lance) minimo = lance;
+    if (minimo && !avaliacao) avaliacao = minimo;
+  }
+  const pracas = (lote?.auction?.squares || [])
+    .filter(q => !q.hidden).sort((a, b) => (a.type?.square || 0) - (b.type?.square || 0)).map(q => dataISO(q.closing)).filter(Boolean);
+  const hojeISO = hoje.toISOString().slice(0, 10);
+  const numeroEnd = String(lote?.number || '').trim();
+  const cep = String(lote?.postalCode || '').replace(/\D/g, '');
+  // Área só da descrição DESTE lote (a referência "$27" aponta o bloco de texto dele no payload).
+  let areaDesc = 0;
+  const ref = (String(lote?.description || '').match(/^\$([0-9a-f]+)$/i) || [])[1];
+  if (ref) {
+    const ib = String(html).indexOf(`"${ref}:T`);
+    const bloco = ib >= 0 ? textoDe(String(html).slice(ib, ib + 8000).split('self.__next_f.push')[1] || '') : '';
+    const ma = bloco.match(/[áa]rea\s+(?:privativa\s+|[úu]til\s+|constru[íi]da\s+|total\s+)?(?:de\s+)?([\d.]+,\d{1,2})\s*m(?:²|2)/i);
+    if (ma) areaDesc = num(ma[1]);
+  }
+
   return {
-    titulo: tituloDeSlug(slug), cidade, estado,
+    titulo: lote?.title ? String(lote.title).slice(0, 180) : tituloDeSlug(slug),
+    cidade: lote?.city || cidade, estado: (lote?.state && /^[A-Z]{2}$/.test(lote.state)) ? lote.state : estado,
+    bairro: lote?.district || null,
+    endereco: lote?.address ? [lote.address, numeroEnd].filter(Boolean).join(', ').slice(0, 200) : null,
+    cep: cep.length === 8 ? cep : null,
+    numero_processo: (String(lote?.process || '').match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [])[0] || null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade: 'judicial',   // acervo é 100% varas federais/TRT (recon 20-21/08)
-    area_m2: area,
+    area_m2: area || areaDesc,
     descricao: null,
-    data_leilao: fut ? fut.toISOString().slice(0, 10) : null,
+    data_leilao: pracas[0] || (fut ? fut.toISOString().slice(0, 10) : null),
+    data_leilao_2: pracas[1] || null,
     numero_matricula: mat, ...docs,
-    encerrado: datas.length > 0 && !datas.some(d => d >= hoje),
+    encerrado: lote
+      ? (lote.status?.code === 'CLOSED' || (pracas.length > 0 && !pracas.some(d => d >= hojeISO)))
+      : (datas.length > 0 && !datas.some(d => d >= hoje)),
   };
 }
 
-export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);
+// Endereço/bairro/CEP/processo do payload vão na linha (montarRowDom não os conhece); nulos quando
+// o payload não os traz — o geocodificador usa o que houver.
+export const montarRow = (url, det, tenant) => ({
+  ...montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo),
+  endereco: det.endereco || null, bairro: det.bairro || null, cep: det.cep || null, numero_processo: det.numero_processo || null,
+});
 export { checarQualidade };

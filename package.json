@@ -102,7 +102,8 @@
     "testar:contato-leiloeiro": "node scripts/testes/contato-leiloeiro.mjs",
     "testar:globo-json": "node scripts/testes/globo-json.mjs",
     "testar:taxa-honorario": "node scripts/testes/taxa-honorario.mjs",
-    "testar:ia-reserva": "node scripts/testes/uma-ia-cai-a-outra-assume.mjs"
+    "testar:ia-reserva": "node scripts/testes/uma-ia-cai-a-outra-assume.mjs",
+    "testar:nordeste-payload": "node scripts/testes/nordeste-le-o-lote-do-payload.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",
