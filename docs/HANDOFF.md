@@ -9,6 +9,35 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 30/09 — o que evoluiu, o que falta, o que conferir primeiro
+
+**Evolução do dia (detalhe nos blocos "30/09" abaixo):**
+1. **Honorário de êxito** — boleto Asaas (até R$ 500 mil; o do MP para em R$ 100 mil) + cartão MP, sem
+   Pix, taxa do meio repassada ao cliente (`src/utils/taxaHonorario.js`), CPF **ou CNPJ** de quem paga
+   (pode não ser o assessorado), uma cobrança válida por vez (pendente igual reaproveitada, outras
+   canceladas). Boleto de R$ 200 mil testado em produção e cancelado.
+2. **Uma IA cai, a outra assume** — Claude↔Gemini nos dois sentidos, inclusive documentos (PDF/imagem)
+   e busca na web; aprendizado vai no `system` para as duas; reserva respeita o prazo do chamador.
+   Gemini voltou (pré-pagamento configurado).
+3. **Sessão vencida resolvida na raiz** — renovação no `fetch` do cliente Supabase (fim do "JWT expired").
+4. **Estouro de tela** — 143 colunas `fr` → `minmax(0, fr)` + trava `grid-fr-sem-minmax`.
+5. **Busca de veículos só visualiza** — FIPE, leiloeiro e proposta só na página do veículo.
+6. **APRM (opção 3 do dono)** — comparáveis de DENTRO da restrição decidem o valor; < 3 → alerta.
+7. **Captura/dados** — geocodificador voltou a processar (648 → 458), NORDESTE lê o payload do site,
+   motor de veículos 662 → 1.312 com informação, WEBLEILOES revertido (41 lotes), vídeo de boas-vindas
+   sem atraso, e-mail do MP com HTML quando o texto é só link.
+8. **Revisão independente dos 26 commits** — 5 defeitos achados e corrigidos no mesmo dia.
+
+**PENDÊNCIAS para a próxima sessão:**
+1. **Embu-Guaçu** — conferir o relatório regerado com a opção 3 (ver resultado no bloco "30/09 (noite)").
+2. **Telas logadas no navegador** — a varredura de estouro (Chromium 375/1366 px) cobriu 13 telas
+   públicas; as logadas estão cobertas pela correção na raiz, mas não foram vistas no navegador.
+3. **Teste pré-existente** `busca-cai-no-haiku-com-a-ferramenta-certa.mjs` com 2 falhas (Índice).
+4. Check-ins já agendados: SUPERBID contatos por leiloeiro (`leiloeiro_contato_tenant`), BAYIT
+   (queda 78 → 5, rodada semanal 01/10), galeria SUPERBID depois de 05/10.
+5. Captura: parser de estado (8 lotes), LEJE/CRLEILOES sem headless, 397 veículos da NORDESTE.
+6. Índice: primeira geração real depois do conserto (depende de cliente).
+
 ### 📌 FECHAMENTO 28–29/09 — o que evoluiu, o que falta, o que conferir primeiro
 
 **Evolução do dia (detalhe em cada bloco abaixo):**
