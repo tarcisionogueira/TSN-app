@@ -1,4 +1,4 @@
-name: Teste de limite do boleto (Mercado Pago)
+name: Teste de limite do boleto (Mercado Pago / Asaas)
 
 # api/mp-boleto-teste.js — emite UM boleto do valor pedido e cancela na mesma chamada.
 # Só manual. Mostra no log o que o MP respondeu (emitiu ou recusou, e por quê).
@@ -8,6 +8,9 @@ on:
       valor:
         description: 'valor do boleto em reais (ex.: 200000)'
         default: '200000'
+      gateway:
+        description: 'mp | asaas'
+        default: 'mp'
 
 jobs:
   teste:
@@ -19,8 +22,9 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           VALOR: ${{ inputs.valor }}
+          GATEWAY: ${{ inputs.gateway }}
         run: |
           curl -sS -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/mp-boleto-teste" \
             -H "x-cron-secret: ${CRON_SECRET}" -H "Content-Type: application/json" \
-            -d "{\"valor\": ${VALOR//[^0-9.]/}}"
+            -d "{\"valor\": ${VALOR//[^0-9.]/}, \"gateway\": \"${GATEWAY//[^a-z]/}\"}"
           echo
