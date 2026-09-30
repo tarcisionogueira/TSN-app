@@ -17,7 +17,7 @@ import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
-import { comCascataBusca, ferramentaBusca } from './_busca-modelo.js';
+import { comCascataBusca } from './_busca-modelo.js';
 import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos } from '../src/utils/viabilidadeVeiculo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -74,7 +74,6 @@ Vale o preço que aparece no título ou no trecho do resultado da busca (ex.: "F
 Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), ano modelo ${ano}.
 Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 12 anúncios.`;
   let motivo = null;
-  const t0 = Date.now();
   const tentar = async (degrau, timeoutMs) => {
     const { texto, buscas } = await buscarComProva({
       degrau, chave: CLAUDE_KEY, webUses: 6, timeoutMs, maxTokens: 4000,
@@ -87,20 +86,12 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
     return Array.isArray(j.anuncios) ? j.anuncios : [];
   };
   try {
-    // Haiku com teto de 35 s (30/09): sem teto ele comia o prazo inteiro e o Sonnet abortava com
-    // < 25 s. Falha/abort do Haiku não encerra a busca — a 2ª tentativa roda do mesmo jeito.
-    let anuncios = await comCascataBusca((degrau) => tentar(degrau, Math.min(prazoMs, 35000)))
+    const anuncios = await comCascataBusca((degrau) => tentar(degrau, Math.min(prazoMs, 70000)))
       .catch((e) => { motivo = `1ª busca falhou: ${String(e?.message || e).slice(0, 60)}`; return null; }) || [];
-    let revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
-    // SEGUNDA TENTATIVA COM O SONNET (30/09): na 1ª regeração o Haiku (busca básica) devolveu lista
-    // VAZIA nos 4 veículos — o trecho indexado da Webmotors raramente traz preço. O Sonnet usa a busca
-    // com filtragem dinâmica (lê melhor a página). Só roda quando o barato não bastou e ainda há prazo.
-    const resta = prazoMs - (Date.now() - t0);
-    if (!revenda && resta > 30000) {
-      const sonnet = { model: 'claude-sonnet-4-6', ferramenta: (n) => ferramentaBusca('claude-sonnet-4-6', n) };
-      const mais = await tentar(sonnet, resta - 3000).catch((e) => { motivo = `2ª busca (Sonnet) falhou: ${String(e?.message || e).slice(0, 60)}`; return null; });
-      if (mais?.length) { anuncios = [...anuncios, ...mais]; revenda = revendaPorAnuncios(anuncios, v.valor_fipe); }
-    }
+    const revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
+    // 30/09: uma 2ª tentativa com o Sonnet (busca dinâmica) foi testada 3× no Cronos e ABORTOU nas 3,
+    // mesmo com ~55 s — retirada: só alongava o relatório. A busca web não extrai preço da Webmotors
+    // (página JS, robots.txt proíbe robô); a revenda cai na régua sobre a FIPE e o motivo aparece.
     if (revenda) return { revenda, motivo: null };
     // Diz QUANTOS vieram e quantos caíram no filtro — "0 comparáveis" sozinho não separa "a busca
     // não achou" de "achou e o filtro descartou" (a forma #10 do CLAUDE.md).
@@ -396,7 +387,7 @@ export default async function handler(req, res) {
     const gastoBusca = { micro: 0 };
     // Prazo da busca 70 → 93 s (30/09): a 2ª tentativa (Sonnet, busca dinâmica) abortava com ~45 s
     // sobrando nos 4 veículos regerados. A análise principal corre em paralelo e termina antes.
-    const revendaP = buscarRevendaMercado(v, HARD_MS - 12000, user.id, gastoBusca);
+    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id, gastoBusca);
     const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
     const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
       anexosParaBlocos(v.anexos, prazoDocs),
