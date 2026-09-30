@@ -10,9 +10,8 @@ const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFrac
 // servidor (api/asaas.js, `criar_cobranca_fallback` com meio='boleto'), nunca aceito daqui — a tela
 // só mostra a mesma conta (src/utils/taxaHonorario.js). A baixa é automática quando o boleto
 // compensa (api/asaas-webhook.js), registrando o honorário sem a taxa.
-export default function BoletoHonorario({ arrematacaoId, email, previsto, onGerado }) {
-  const [cpf, setCpf] = useState('');
-  const [nome, setNome] = useState('');
+// nome/documento = QUEM PAGA (CPF ou CNPJ), pedidos uma vez em PagarHonorario — pode não ser o assessorado.
+export default function BoletoHonorario({ arrematacaoId, email, nome, documento, previsto, onGerado }) {
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -35,14 +34,13 @@ export default function BoletoHonorario({ arrematacaoId, email, previsto, onGera
   const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
 
   const gerar = async () => {
-    const cpfLimpo = cpf.replace(/\D/g, '');
-    if (cpfLimpo.length !== 11) { setErro('Informe um CPF válido.'); return; }
+    if (![11, 14].includes(String(documento || '').length)) { setErro('Informe o CPF ou CNPJ de quem paga, lá em cima.'); return; }
     if (!enderecoOk) { setErro('Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF).'); return; }
     setEnviando(true); setErro('');
     try {
       const res = await apiCall('/api/asaas', {
         method: 'POST',
-        body: JSON.stringify({ action: 'criar_cobranca_fallback', proposito: 'honorario_exito', meio: 'boleto', arrematacao_id: arrematacaoId, nome: nome || email, email, cpf: cpfLimpo, endereco: end }),
+        body: JSON.stringify({ action: 'criar_cobranca_fallback', proposito: 'honorario_exito', meio: 'boleto', arrematacao_id: arrematacaoId, nome: nome || email, email, documento, endereco: end }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.linkPagamento) throw new Error(data?.mensagem || data?.error || 'Não foi possível gerar o boleto agora.');
@@ -96,14 +94,7 @@ export default function BoletoHonorario({ arrematacaoId, email, previsto, onGera
       <div style={{ fontSize: 12.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', lineHeight: 1.6 }}>
         Honorário {fmtBRL(previsto.honorario)} + taxa do boleto {fmtBRL(previsto.taxa)} = <strong>{fmtBRL(previsto.total)}</strong>
       </div>
-      <div>
-        <label style={lbl}>Nome de quem paga</label>
-        <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome completo" style={inp} />
-      </div>
-      <div>
-        <label style={lbl}>CPF</label>
-        <input value={cpf} onChange={e => setCpf(e.target.value)} inputMode="numeric" placeholder="000.000.000-00" style={inp} />
-      </div>
+      <div style={{ fontSize: 11.5, color: '#64748b' }}>Boleto em nome de <strong>{nome}</strong> ({documento?.length === 14 ? 'CNPJ' : 'CPF'} {documento}). Endereço de quem paga:</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
         <div>
           <label style={lbl}>CEP {buscandoCep && <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />}</label>

@@ -202,6 +202,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - Baixa: `mp-webhook` e `asaas-webhook` descontam a taxa e gravam o honorário LÍQUIDO em
   `honorarios_recebimentos` (novo método `boleto_asaas`, migração `20260930_honorario_boleto_asaas.sql`,
   aplicada); a justificativa registra a taxa paga pelo cliente. extRef antigo (`honorario|<id>`) segue lido.
+- **Quem paga ≠ assessorado (30/09, pedido do dono):** a tela pede nome/razão social + **CPF ou CNPJ de quem
+  paga** (validados por dígito, `validarDocumento` em `api/_cpf.js`). Boleto sai em nome de quem paga
+  (cliente do Asaas buscado pelo DOCUMENTO, não pelo e-mail); no cartão vai como `payer.identification` do MP.
+  Antes o CPF do CADASTRO do assessorado vencia o digitado — terceiro pagando geraria boleto no nome errado —
+  e o endereço do terceiro ia para o cadastro do assessorado. Agora o cadastro só é atualizado quando o
+  documento de quem paga é o do próprio assessorado.
 - ⚠️ Ainda sem pagamento real por este caminho — o 1º boleto/cartão pago confirma a baixa ponta a ponta
   (`select metodo, valor, justificativa from honorarios_recebimentos order by criado_em desc limit 3`).
 

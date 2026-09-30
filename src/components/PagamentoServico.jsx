@@ -388,7 +388,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   // (achado real, 17/09: cliente recusado 4x, escalado até o dono).
   const propositoFallback = extra.arrematacao_id ? 'honorario_exito' : extra.cobranca_id ? 'cobranca_avulsa' : null;
   const [mostrarAsaas, setMostrarAsaas] = useState(false);
-  const [cpfAsaas, setCpfAsaas] = useState('');
+  const [cpfAsaas, setCpfAsaas] = useState(extra.pagador_doc || ''); // honorário: já vem o CPF/CNPJ de quem paga (30/09)
   // Endereço completo — exigido pelo Asaas pra emissão de NF (18/09, pedido do dono). Mesmos
   // campos/formato de src/pages/Checkout.jsx (salvarDadosFaturamento), pra cair no mesmo
   // padrão de perfis.endereco_* quando o backend atualiza o cadastro.
@@ -412,7 +412,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 
   const pagarViaAsaas = async () => {
     const cpfLimpo = cpfAsaas.replace(/\D/g, '');
-    if (cpfLimpo.length !== 11) { setErro('Informe um CPF válido para continuar pelo Asaas.'); return; }
+    if (![11, 14].includes(cpfLimpo.length)) { setErro('Informe um CPF ou CNPJ válido para continuar pelo Asaas.'); return; }
     if (!enderecoAsaasOk) { setErro('Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) — necessário para emissão de nota fiscal.'); return; }
     setEnviandoAsaas(true);
     setErro('');
@@ -680,7 +680,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           <div style={{ fontSize: 12.5, color: '#1e40af' }}>
             O Mercado Pago não aprovou. Você pode tentar pelo <strong>Asaas</strong> (backup seguro) — precisamos do CPF e do endereço completo (exigidos para gerar a cobrança e a nota fiscal). Fica salvo no seu cadastro, não precisa preencher de novo da próxima vez.
           </div>
-          <input style={inp} placeholder="CPF (000.000.000-00)" value={cpfAsaas}
+          <input style={inp} placeholder="CPF ou CNPJ de quem paga" value={cpfAsaas}
             onChange={e => setCpfAsaas(e.target.value.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2'))} />
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={{ ...inp, flex: 1 }} placeholder="CEP" value={endAsaas.cep}

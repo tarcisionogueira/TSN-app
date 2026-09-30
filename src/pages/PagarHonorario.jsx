@@ -9,6 +9,22 @@ import BoletoHonorario from '../components/BoletoHonorario';
 import { honorarioComTaxa, TAXA_CARTAO_MP_PCT } from '../utils/taxaHonorario';
 import { AZUL, VERDE } from '../utils/marca';
 
+// CPF ou CNPJ pelo dígito verificador — só para avisar na hora; o servidor revalida (api/_cpf.js).
+function docValido(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length === 11) {
+    if (/^(\d)\1{10}$/.test(d)) return false;
+    const dv = (f) => { let s = 0; for (let i = 0; i < f - 1; i++) s += Number(d[i]) * (f - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+    return dv(10) === Number(d[9]) && dv(11) === Number(d[10]);
+  }
+  if (d.length === 14) {
+    if (/^(\d)\1{13}$/.test(d)) return false;
+    const dv = (n) => { const p = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; const r = p.reduce((s, x, i) => s + Number(d[i]) * x, 0) % 11; return r < 2 ? 0 : 11 - r; };
+    return dv(12) === Number(d[12]) && dv(13) === Number(d[13]);
+  }
+  return false;
+}
+
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Checkout dos honorários de êxito de uma arrematação — nossa própria página (Transparente),
@@ -30,6 +46,10 @@ export default function PagarHonorario() {
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
   const [meio, setMeio] = useState(null); // 'boleto' | 'cartao' — Pix saiu dos honorários (30/09)
+  // QUEM PAGA (30/09): nem sempre é o assessorado — pode ser outra pessoa ou uma empresa. O documento
+  // vai no boleto (Asaas) e como pagador do cartão (MP); o servidor revalida.
+  const [pagadorNome, setPagadorNome] = useState('');
+  const [pagadorDoc, setPagadorDoc] = useState('');
 
   useEffect(() => {
     if (user?.email) setEmail(e => e || user.email);
@@ -175,6 +195,27 @@ export default function PagarHonorario() {
             style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
         </div>
 
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5 }}>
+            Quem vai pagar? Pode ser você, outra pessoa ou uma empresa — o boleto/recibo sai em nome de quem paga.
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Nome ou razão social de quem paga
+            </label>
+            <input value={pagadorNome} onChange={e => setPagadorNome(e.target.value)} placeholder="Nome completo ou razão social"
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              CPF ou CNPJ de quem paga
+            </label>
+            <input value={pagadorDoc} onChange={e => setPagadorDoc(e.target.value)} inputMode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              style={{ width: '100%', padding: '10px 12px', border: `1px solid ${pagadorDoc && !docValido(pagadorDoc) ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+            {pagadorDoc && !docValido(pagadorDoc) && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>Documento inválido — confira os números.</div>}
+          </div>
+        </div>
+
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop: 2 }} />
           <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
@@ -188,9 +229,9 @@ export default function PagarHonorario() {
           </span>
         </label>
 
-        {!aceite || !/\S+@\S+\.\S+/.test(email) ? (
+        {!aceite || !/\S+@\S+\.\S+/.test(email) || !docValido(pagadorDoc) || pagadorNome.trim().length < 3 ? (
           <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>
-            {!aceite ? 'Aceite os termos acima' : 'Informe um e-mail válido'} para continuar com o pagamento.
+            {!aceite ? 'Aceite os termos acima' : !/\S+@\S+\.\S+/.test(email) ? 'Informe um e-mail válido' : pagadorNome.trim().length < 3 ? 'Informe o nome de quem vai pagar' : 'Informe um CPF ou CNPJ válido de quem vai pagar'} para continuar com o pagamento.
           </div>
         ) : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
@@ -218,7 +259,7 @@ export default function PagarHonorario() {
               </button>
             )}
             {meio === 'boleto' && (
-              <BoletoHonorario arrematacaoId={arr.id} email={email} previsto={viaBoleto} onGerado={() => registrarAceite('asaas')} />
+              <BoletoHonorario arrematacaoId={arr.id} email={email} nome={pagadorNome.trim()} documento={pagadorDoc.replace(/\D/g, '')} previsto={viaBoleto} onGerado={() => registrarAceite('asaas')} />
             )}
             {meio === 'cartao' && (
               <>
@@ -227,7 +268,7 @@ export default function PagarHonorario() {
                 </div>
                 <PagamentoServico
                   servico={{ nome: 'Honorários de êxito', valor: viaCartao.total, proposito: 'honorario_exito' }}
-                  extra={{ arrematacao_id: arr.id }}
+                  extra={{ arrematacao_id: arr.id, pagador_doc: pagadorDoc.replace(/\D/g, ''), pagador_nome: pagadorNome.trim() }}
                   email={email}
                   parcelasSemJuros={1}
                   soCartao

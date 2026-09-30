@@ -71,6 +71,27 @@ export function validarCPF(cpf) {
   return dv(10) === Number(d[9]) && dv(11) === Number(d[10]);
 }
 
+// CNPJ pelo dígito verificador (Receita Federal). Honorário pode ser pago por EMPRESA (30/09).
+export function validarCNPJ(cnpj) {
+  const d = soDigitos(cnpj);
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+  const dv = (n) => {
+    const pesos = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const soma = pesos.reduce((s, p, i) => s + Number(d[i]) * p, 0);
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return dv(12) === Number(d[12]) && dv(13) === Number(d[13]);
+}
+
+// Documento de QUEM PAGA (CPF ou CNPJ) — não necessariamente o titular da cobrança. null se inválido.
+export function validarDocumento(doc) {
+  const d = soDigitos(doc);
+  if (d.length === 11 && validarCPF(d)) return { tipo: 'CPF', numero: d };
+  if (d.length === 14 && validarCNPJ(d)) return { tipo: 'CNPJ', numero: d };
+  return null;
+}
+
 // Máscara para exibição (não revela o CPF cheio).
 export function maskCpf(cpf) {
   const d = soDigitos(cpf);

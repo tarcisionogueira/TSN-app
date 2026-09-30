@@ -11,7 +11,7 @@ import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
-import { cpfDoRegistro, validarCPF } from './_cpf.js';
+import { cpfDoRegistro, validarCPF, validarDocumento } from './_cpf.js';
 import { mpSdk } from './_mp-sdk.js';
 
 // 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
@@ -351,6 +351,7 @@ export default async function handler(req, res) {
         const partes = String(pf.nome || '').trim().split(/\s+/).filter(Boolean);
         const tel = String(pf.telefone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
         payerExtra = {
+          _cpfPerfil: cpf || null,
           ...(cpf && validarCPF(cpf) ? { identification: { type: 'CPF', number: cpf } } : {}),
           ...(partes.length ? { first_name: partes[0], last_name: partes.slice(1).join(' ') || partes[0] } : {}),
         };
@@ -363,6 +364,23 @@ export default async function handler(req, res) {
       }
     } catch (e) { console.error('[mp-checkout] enriquecer pagador falhou (segue sem):', e?.message || e); }
   }
+  // HONORÁRIO PAGO POR TERCEIRO/EMPRESA (30/09): a tela pede o documento e o nome de QUEM PAGA; quando
+  // vêm válidos, substituem os do perfil do assessorado (senão o MP receberia o CPF do assessorado com
+  // o cartão de outra pessoa — dado trocado para o antifraude). Sem documento, fica como estava.
+  if (honorarioCtx) {
+    const docPag = validarDocumento(req.body?.pagador_doc);
+    if (docPag) {
+      const partesPag = String(req.body?.pagador_nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
+      payerExtra = {
+        ...payerExtra,
+        identification: { type: docPag.tipo, number: docPag.numero },
+        ...(partesPag.length ? { first_name: partesPag[0].slice(0, 60), last_name: (partesPag.slice(1).join(' ') || partesPag[0]).slice(0, 120) } : {}),
+      };
+      // endereço/telefone do perfil são do ASSESSORADO — não valem para terceiro
+      if (docPag.numero !== payerExtra._cpfPerfil) delete payerExtra._info;
+    }
+  }
+  delete payerExtra._cpfPerfil;
   const { _info: payerInfo, ...payerCampos } = payerExtra;
 
   try {

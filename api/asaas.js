@@ -1,7 +1,7 @@
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
-import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF } from './_cpf.js';
+import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF, validarDocumento } from './_cpf.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { logAtividade } from './_atividade.js';
@@ -183,7 +183,7 @@ export default async function handler(req, res) {
     // honorarios_recebimentos/cobrancas_avulsas automaticamente (mesma lógica de
     // api/mp-webhook.js), sem depender de alguém dar baixa manual.
     if (action === 'criar_cobranca_fallback') {
-      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody, endereco, meio: meioBody } = body;
+      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody, documento: docBody, endereco, meio: meioBody } = body;
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
       // 18/09, pedido do dono: pagamento exige endereço completo (dados pra emissão de NF),
       // não só CPF. Mesma checagem de completude do Checkout.jsx (enderecoOk).
@@ -246,16 +246,23 @@ export default async function handler(req, res) {
       // (quando há um, ex.: honorário); a tela também pode enviar o CPF direto — cliente sem
       // verificação de identidade não tem CPF cadastrado, e sem este fallback o link nunca
       // conseguiria cobrar dele (achado real, 17/09).
+      // QUEM PAGA MANDA (30/09, pedido do dono): o honorário pode ser pago por outra pessoa ou por
+      // uma EMPRESA — o documento digitado (CPF ou CNPJ) vence o cadastro do assessorado. Antes o
+      // CPF do cadastro tinha prioridade: um terceiro pagando geraria o boleto no nome do assessorado.
+      // O cadastro só entra quando a tela não mandou documento nenhum.
       const cpfCadastro = arrematanteId ? await cpfAutenticado(arrematanteId, null) : null;
-      const cpf = cpfCadastro || String(cpfBody || '').replace(/\D/g, '');
-      if (!cpf || !validarCPF(cpf)) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF válido — o Asaas exige pra gerar a cobrança.' });
+      const docPagador = validarDocumento(docBody || cpfBody) || (cpfCadastro && validarCPF(cpfCadastro) ? { tipo: 'CPF', numero: cpfCadastro } : null);
+      if (!docPagador) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF ou CNPJ válido de quem vai pagar — o Asaas exige pra gerar a cobrança.' });
+      const cpf = docPagador.numero; // CPF ou CNPJ — o Asaas aceita os dois em cpfCnpj
+      const pagadorEhTitular = !!cpfCadastro && cpf === cpfCadastro;
 
       // 18/09, pedido do dono: quem paga tem o cadastro atualizado com o que digitou aqui,
       // pra não precisar redigitar em cobranças futuras. `honorario_exito` já sabe o
       // arrematante_id; `cobranca_avulsa` não tem esse vínculo na tabela (é uma cobrança
       // por e-mail, pode nem ter conta) — tenta achar a conta pelo e-mail, best-effort.
-      let perfilAlvoId = arrematanteId;
-      if (!perfilAlvoId) {
+      // Terceiro pagando o honorário: NÃO grava o endereço/documento dele no cadastro do assessorado.
+      let perfilAlvoId = arrematanteId ? (pagadorEhTitular ? arrematanteId : null) : null;
+      if (!perfilAlvoId && !arrematanteId && docPagador.tipo === 'CPF') {
         try {
           const adminRes = await fetch(`${SB}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
             headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(8000),
@@ -301,7 +308,9 @@ export default async function handler(req, res) {
         complement: end.complemento || undefined,
         province: end.bairro || undefined,
       };
-      const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
+      // Cliente do Asaas pelo DOCUMENTO de quem paga (30/09), não pelo e-mail: o mesmo e-mail pode ser
+      // de quem repassou o link, e o boleto sairia em nome da pessoa errada.
+      const searchRes = await fetch(`${ASAAS_URL}/customers?cpfCnpj=${encodeURIComponent(cpf)}`, { headers: { 'access_token': API_KEY } });
       if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
       const searchData = await searchRes.json();
       const existente = searchData.data?.[0];
