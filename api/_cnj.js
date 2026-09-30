@@ -314,7 +314,13 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   // No modo nacional TODOS_TRIBUNAIS já cobre trf1..trf6 e trt1..trt24.
   const trfLegado = ufUp === 'MG' ? 'trf1' : null;
   const trtsUf = TRT_MAP[ufUp] || [];
-  const tribunais = exatos.length ? [...exatos] : nacional ? [...TODOS_TRIBUNAIS]
+  // 30/09: com NÚMERO válido, o próprio número diz o tribunal (segmentos J.TR) — varrer os ~90 do
+  // modo nacional só gastava tempo (o chat operacional estourava o prazo da função e a tela dizia
+  // "não conseguimos falar com o servidor"). Tribunal de origem + superior da mesma Justiça.
+  const doNumero = numero_processo && !exatos.length ? tribunalDoNumeroCnj(numero_processo) : null;
+  const tribunais = exatos.length ? [...exatos]
+    : doNumero ? [doNumero, /^trt/.test(doNumero) ? 'tst' : 'stj']
+    : nacional ? [...TODOS_TRIBUNAIS]
     : [estadual, trf, trfLegado, ...trtsUf, trtsUf.length ? 'tst' : null, 'stj'].filter(Boolean);
   // Quando o NÚMERO do processo está disponível, o próprio número já diz a Justiça
   // (segmento J) e a região (segmento TR) — mais confiável que inferir pela UF do

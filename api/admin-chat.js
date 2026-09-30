@@ -1,4 +1,7 @@
-export const config = { runtime: 'edge' };
+// Node, não Edge (30/09): a Edge corta a função que não começa a responder em ~25 s, e o chat encadeia
+// DataJud + DJEN + radar + várias rodadas de IA — a tela recebia "não conseguimos falar com o servidor"
+// sem nenhum 5xx no log. No Node a resposta precisa sair do export nomeado POST (default é ignorado).
+export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { ADMIN_CHAT_TOOLS, executarFerramentaAdmin } from './_admin-chat-tools.js';
@@ -54,7 +57,7 @@ const redigirPII = (t) => String(t || '')
   .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF]')
   .replace(/\b(?:\+?55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g, '[TEL]');
 
-export default async function handler(req) {
+export async function POST(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const user = await getUser(req);
@@ -162,6 +165,13 @@ Você tem acesso privilegiado a:
 - Histórico de atendimentos e conversas de todos os usuários da plataforma
 - Dados das integrações (PGFN, Receita Federal, etc.) quando disponíveis
 
+REGRA DE OURO — NUNCA peça ao admin para consultar, confirmar ou "contatar o cartório" sobre algo que
+suas ferramentas alcançam (DataJud, DJEN, radar de editais, CNPJ, arremates). Consulte você mesmo e
+responda com o resultado. Quando o admin disser que "consultou o CNJ aqui pela plataforma", REPITA a
+consulta (consultar_datajud e buscar_djen) — não presuma o que ele viu. Diga de qual fonte veio cada
+afirmação (ex.: "DJEN, 16/09: …", "DataJud, último movimento: …"). Se uma fonte falhar ou não trouxer
+nada, diga isso com todas as letras — ausência na fonte não é prova de que o ato não existiu.
+
 IMPORTANTE — quando o admin mencionar um cliente PELO NOME (ex.: "o Marcos arrematou, verifica o
 processo dele") em vez de dar o número do processo direto, NUNCA peça o número do processo antes
 de tentar achar sozinho: chame primeiro buscar_arremates_cliente com o nome. Ela devolve o(s) lote(s)
@@ -201,12 +211,18 @@ ${aprendizado ? `\n${aprendizado}` : ''}`;
   // rodadas — suficiente para qualquer combinação das ferramentas atuais, evita loop sem fim
   // se o modelo insistir em chamar ferramenta depois de já ter o que precisa.
   const rastro = contexto_cnj ? [{ nome: 'cnj_datajud (busca automática da tela)', entrada: 'número/parte citados na pergunta', ok: true, resumo: `${contexto_cnj?.processos?.length || 0} processo(s)` }] : [];
+  const inicio = Date.now();
   for (let rodada = 0; rodada < 6; rodada++) {
+    // Prazo interno (a função tem 120 s): passados 80 s, a próxima rodada vem SEM ferramentas e a IA
+    // responde com o que já apurou — melhor que a conexão cair sem resposta nenhuma.
+    const semTempo = Date.now() - inicio > 80000 || rodada === 5;
     const r = await anthropicFetch({
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, system, messages, tools: ADMIN_CHAT_TOOLS }),
-    });
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages,
+        system: semTempo ? `${system}\n\nO TEMPO ACABOU: responda AGORA só com o que as consultas já trouxeram e diga o que ficou sem verificar.` : system,
+        tools: ADMIN_CHAT_TOOLS, ...(semTempo ? { tool_choice: { type: 'none' } } : {}) }),
+    }, { timeoutMs: 30000, retries: 1 });
     const data = await r.json();
     if (!r.ok) return new Response(JSON.stringify({ error: data.error?.message || 'Erro' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 
