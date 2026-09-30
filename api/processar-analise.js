@@ -22,6 +22,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { aprenderDaConsulta } from './_aprendizado-processual.js';
 import { getUser } from './_auth.js';
 import { urlDocumento } from './_storage.js';
 import { buscarProcessosCNJ } from './_cnj.js';
@@ -244,6 +245,10 @@ export default async function handler(req, res) {
       processosCNJ = todos.filter((p, i, a) => a.findIndex(x => x.numero === p.numero) === i);
       // buscarProcessosCNJ não lança: a falha vem em `erros` e antes sumia (auditoria 30/09, item 8).
       if (resCNJ.some(r => r?.erros?.length && !r?.total)) secoesFaltando.push('cnj_datajud');
+      // A leitura por NÚMERO ensina o agente documental/processual (api/_aprendizado-processual.js).
+      const doLote = numeroProcesso ? (resCNJ[0]?.processos || []).find(p => String(p.numero || '').replace(/\D/g, '') === String(numeroProcesso).replace(/\D/g, '')) : null;
+      if (doLote?.movimentos?.length) await aprenderDaConsulta({ numero: numeroProcesso, origem: 'triagem', imovelId: caso.imovel_id || null,
+        processo: { numero: doLote.numero, tribunal: doLote.tribunal, classe: doLote.classe, movimentos: doLote.movimentos } }).catch(e => console.warn('[processar-analise] aprendizado:', e?.message || e));
       // 'nao_verificado' primeiro (antes virava NaN na ordenação e o verde de outra busca vencia).
       const peso = { nao_verificado: -1, vermelho: 0, amarelo: 1, verde: 2 };
       parecerCNJ = resCNJ.map(r => r?.parecer).filter(Boolean).sort((a, b) => (peso[a.nivel] ?? 1) - (peso[b.nivel] ?? 1))[0] || null;

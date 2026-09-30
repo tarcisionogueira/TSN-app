@@ -18,6 +18,7 @@ import { auditLog } from './_audit.js';
 import { buscarDjen, buscarProcessosCNJ, buscarProcessosPorParte } from './_cnj.js';
 import { preverAndamento, estatisticaFluxo, justicaDoNumero } from './_previsao-processo.js';
 import { buscarJurisprudencia } from './_jurisprudencia.js';
+import { aprenderDaConsulta } from './_aprendizado-processual.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -399,6 +400,8 @@ async function consultarDatajud({ numero_processo }) {
       const hist = await sbJson(`processo_movimentos?numero_processo=in.(${dig},${encodeURIComponent(numero_processo)})&select=data,codigo,descricao&order=data.desc&limit=200`);
       if (Array.isArray(hist)) movs = hist;
     }
+    // A leitura ensina o agente documental/processual (série, desfecho do arremate, lição).
+    if (alvo?.movimentos?.length) await aprenderDaConsulta({ numero: numero_processo, origem: 'chat_operacional', processo: { numero: alvo.numero, tribunal: alvo.tribunal, classe: alvo.classe, movimentos: alvo.movimentos } }).catch((e) => console.warn('[admin-chat-tools] aprendizado:', e?.message || e));
     const est = await estatisticaFluxo(justicaDoNumero(numero_processo));
     const pv = preverAndamento({ movimentos: movs, estat: est.linhas, justica: est.justica });
     if (pv.disponivel) previsao = { resumo: pv.resumo, status: pv.status, proximo_despacho: pv.proximo_despacho, proxima_janela: pv.proxima_janela, entre_despachos: pv.entre_despachos, fluxo_provavel: pv.fluxo_provavel, etapa_arrematacao: pv.etapa_arrematacao, aviso: pv.aviso };
@@ -439,7 +442,11 @@ async function consultarCnpj({ cnpj }) {
 export async function executarFerramentaAdmin(nome, input, ctx) {
   try {
     switch (nome) {
-      case 'buscar_djen': return await buscarDjen(input);
+      case 'buscar_djen': {
+        const r = await buscarDjen(input);
+        if (!r?.erro && r?.publicacoes?.length) await aprenderDaConsulta({ numero: input?.numero_processo, origem: 'chat_operacional', publicacoes: r.publicacoes }).catch((e) => console.warn('[admin-chat-tools] aprendizado DJEN:', e?.message || e));
+        return r;
+      }
       case 'buscar_edital_processo': return await buscarEditalProcesso(input);
       case 'consultar_datajud': return await consultarDatajud(input);
       case 'buscar_processos_por_parte': return await buscarPorParte(input);

@@ -25,6 +25,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { preverAndamento, estatisticaFluxo, justicaDoNumero } from './_previsao-processo.js';
 import { buscarJurisprudencia } from './_jurisprudencia.js';
+import { aprenderDaConsulta } from './_aprendizado-processual.js';
 import { createHash } from 'node:crypto';
 import { getUser } from './_auth.js';
 import { buscarProcessosCNJ, buscarDjen, tribunalDoNumeroCnj } from './_cnj.js';
@@ -274,16 +275,12 @@ export default async function handler(req, res) {
   // PREVISÃO do próximo andamento (30/09): ritmo do processo + base real da plataforma + prazo
   // legal da etapa. Determinística (sem IA); se a estatística falhar, sai só com o ritmo próprio.
   let previsao = null;
-  // Cada consulta alimenta a série que calibra a previsão (mesma tabela/conflito do cnj-monitor-cron).
-  if (movimentos.length) {
-    try {
-      const rs = await fetch(`${SUPABASE_URL}/rest/v1/processo_movimentos?on_conflict=numero_processo,data,codigo,descricao`, {
-        method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
-        body: JSON.stringify(movimentos.filter((m) => m.data).map((m) => ({ numero_processo: processo?.numero || numero, data: String(m.data).slice(0, 10), codigo: m.codigo ?? null, descricao: String(m.descricao || '').slice(0, 300), risco: null }))),
-      });
-      if (!rs.ok) console.warn('[caso-andamento-cnj] série não gravada HTTP', rs.status);
-    } catch (e) { console.warn('[caso-andamento-cnj] série não gravada:', e?.message || e); }
-  }
+  // APRENDIZADO (30/09, dono): a leitura do processo feita aqui ensina o agente documental/processual —
+  // série de movimentos, desfecho do arremate e lição 'processual' (api/_aprendizado-processual.js).
+  const aprendizado = await aprenderDaConsulta({
+    numero, origem: 'tela_caso', publicacoes, imovelId: UUID.test(String(registro.imovel_id || '')) ? registro.imovel_id : null,
+    processo: processo ? { numero: processo.numero, tribunal: processo.tribunal, classe: processo.classe, movimentos } : null,
+  }).catch((e) => { console.warn('[caso-andamento-cnj] aprendizado:', e?.message || e); return null; });
   try {
     const est = await estatisticaFluxo(justicaDoNumero(numero));
     // DataJud fora: usa a série JÁ gravada deste processo (monitor/consultas anteriores), dita no retorno.
@@ -302,6 +299,7 @@ export default async function handler(req, res) {
     origem_numero: origemNumero,
     resumo,
     previsao,
+    aprendizado,
     datajud: {
       ok: !!processo || !(cnj.erros || []).length,
       erro: erroCnj,

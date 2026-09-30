@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧠 30/09 (noite, 13ª parte) — consultas processuais ensinam o agente documental
+- `api/_aprendizado-processual.js` (teste `aprendizado-processual.mjs`). **Entrada** `aprenderDaConsulta()` — chamada
+  pela tela do caso (`caso-andamento-cnj`), pelo chat (`consultar_datajud`, `buscar_djen`) e pela triagem
+  (`processar-analise`): grava a série (`processo_movimentos`, sempre 20 dígitos), o desfecho do arremate
+  (`arremate_aprendizado.realizado.juridico`, se o lote é arremate) e uma lição do agente **`processual`** em
+  `agente_aprendizado` (etapa, marco, ritmo, origem). **Saída** `contextoProcessualParaDocumental()` — injetada no
+  prompt do documental: a leitura já feita do processo do lote (previsão/etapa), o ritmo real da Justiça dele e a
+  jurisprudência já pesquisada (cite só se pertinente). Custo zero; nunca bloqueia quem chama.
+- Ver o que foi aprendido: `select criado_em, corpus from agente_aprendizado where agente='processual' order by 1 desc;`
+
 ### ⏱️ 30/09 (noite, 12ª parte) — previsão do próximo despacho, fluxo provável e jurisprudência
 - `processo_fluxo_estatistica(p_justica)` (SQL) sobre `processo_movimentos` classificada por código TPU
   (`movimento_classe`): transições com probabilidade e P25/mediana/P75, por Justiça (cai para "todas" com amostra

@@ -28,6 +28,7 @@ import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
+import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1256,6 +1257,10 @@ export default async function handler(req, res) {
     // gerar-analise.js já injeta o lado mercadológico deste mesmo corpus; aqui faltava
     // o lado jurídico. No-op enquanto não há arremates reais com desfecho registrado.
     try { aprendizados += await resumoAprendizadoTexto(im.modalidade || row?.modalidade || null); } catch { /* best-effort */ }
+    // APRENDIZADO DAS CONSULTAS (30/09, dono): o que a tela do caso, o chat e o monitor já leram deste
+    // processo (etapa, ritmo, previsão), o ritmo real da Justiça dele e a jurisprudência já pesquisada.
+    try { aprendizados += await contextoProcessualParaDocumental({ numeroProcesso: procNum || '' }); }
+    catch (e) { console.warn('[documental] contexto processual:', e?.message || e); }
 
     // A chamada principal NUNCA pode derrubar o laudo. Em leilão JUDICIAL lemos até
     // 8 anexos grandes → a chamada pode estourar o timeout e o AbortError ("This
