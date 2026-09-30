@@ -63,15 +63,21 @@ async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
   if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };
   // 30/09 (dono): a revenda é a MÉDIA dos anúncios da Webmotors − 10% — pede TODOS os comparáveis,
   // não "os mais baratos" (isso enviesava a média para baixo). Outros portais só completam.
-  const prompt = `Pesquise anúncios À VENDA do veículo: ${alvo}, ano modelo ${ano}.
-Pesquise na Webmotors (webmotors.com.br) e traga TODOS os anúncios que encontrar da mesma versão/motorização e ano — sem escolher só os mais baratos nem só os mais caros. Só se a Webmotors tiver menos de 3, complete com OLX, iCarros ou Mobiauto.
+  // 30/09 (1ª regeração): os 4 relatórios voltaram com lista VAZIA — a página da Webmotors é JS e o
+  // trecho indexado raramente traz o preço. Consultas concretas por portal + preço lido no próprio
+  // resultado da busca (título/trecho com "R$") valem como anúncio.
+  const fipeRef = Number(v.valor_fipe) > 0 ? ` (FIPE de referência: R$ ${Math.round(Number(v.valor_fipe)).toLocaleString('pt-BR')} — use só para conferir que é o mesmo veículo)` : '';
+  const prompt = `Pesquise anúncios À VENDA do veículo: ${alvo}, ano modelo ${ano}${fipeRef}.
+Faça estas buscas, nesta ordem: "${[v.marca, v.modelo || v.titulo].filter(Boolean).join(' ').slice(0, 80)} ${ano} webmotors"; depois o mesmo com "olx", "icarros" e "mobiauto".
+Traga TODOS os anúncios que encontrar da Webmotors com a mesma motorização e o mesmo ano — sem escolher só os mais baratos nem só os mais caros. Só se a Webmotors tiver menos de 3, complete com OLX, iCarros ou Mobiauto.
+Vale o preço que aparece no título ou no trecho do resultado da busca (ex.: "Fiat Cronos Drive 1.3 2020 — R$ 62.900"), desde que seja de UM anúncio de venda e não uma faixa "a partir de".
 Só anúncios reais de venda (nada de leilão, peças, sucata, "consórcio" ou "repasse de financiamento"), ano modelo ${ano}.
 Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "versão como anunciada", "ano": número, "km": número ou null, "local": "cidade/UF", "portal": "webmotors|olx|icarros|mobiauto", "url": "link do anúncio"}]} — até 12 anúncios.`;
   let motivo = null;
   try {
     const anuncios = await comCascataBusca(async (degrau) => {
       const { texto, buscas } = await buscarComProva({
-        degrau, chave: CLAUDE_KEY, webUses: 5, timeoutMs: prazoMs, maxTokens: 4000,
+        degrau, chave: CLAUDE_KEY, webUses: 6, timeoutMs: prazoMs, maxTokens: 4000,
         system: `Pesquisador de preços de veículos usados. ${EXIGE_BUSCA}`, prompt,
         aoCusto: (c) => { gasto.micro += Number(c) || 0; try { registrarCustoGeracao('veiculo_mercado', { userId, custoMicro: c, ok: true, meta: { veiculoId: v.id, modelo: degrau.model } }); } catch { /* medição não bloqueia */ } },
       });
@@ -82,7 +88,12 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
     });
     if (!anuncios) return { revenda: null, motivo };
     const revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
-    if (!revenda) return { revenda: null, motivo: `só ${anuncios.length} anúncio(s) comparável(is) encontrados (mínimo 3)` };
+    // Diz QUANTOS vieram e quantos caíram no filtro — "0 comparáveis" sozinho não separa "a busca
+    // não achou" de "achou e o filtro descartou" (a forma #10 do CLAUDE.md).
+    if (!revenda) {
+      const validos = anuncios.filter((a) => Number(a?.preco) > 0).length;
+      return { revenda: null, motivo: `a busca trouxe ${anuncios.length} anúncio(s), ${validos} com preço — menos de 3 comparáveis depois do filtro de preço (30–200% da FIPE)` };
+    }
     return { revenda, motivo: null };
   } catch (e) {
     return { revenda: null, motivo: `busca de anúncios falhou: ${String(e?.message || e).slice(0, 80)}` };
@@ -140,12 +151,40 @@ async function anexosParaBlocos(anexos, deadline) {
 // nem sempre estão na descrição gravada). Texto visível + o campo estruturado de comissão quando a
 // plataforma publica (SUPERBID: commercialCondition.auctioneerCommissionPercent). Nunca lança: sem
 // página, o relatório segue com o resto — e o motivo fica em `paginaLote` do resultado.
+// Via banco (pg_net do Supabase): a Superbid devolve 403 à Vercel e 200 ao banco (medido em 30/09,
+// 1ª regeração — os 4 relatórios saíram "página do lote respondeu HTTP 403"). Mesmo par de RPCs
+// do motor de coleta (pagina_pedir/pagina_ler, só service_role). Nunca lança; null = não veio.
+async function paginaViaBanco(url, deadline) {
+  try {
+    const rp = await sb('rpc/pagina_pedir', { method: 'POST', body: JSON.stringify({ p_url: url }) });
+    if (!rp.ok) return { html: null, motivo: `pagina_pedir HTTP ${rp.status}` };
+    const id = await rp.json();
+    while (Date.now() < deadline - 1000) {
+      await new Promise((ok) => setTimeout(ok, 1000));
+      const rl = await sb('rpc/pagina_ler', { method: 'POST', body: JSON.stringify({ p_id: id }) });
+      if (!rl.ok) return { html: null, motivo: `pagina_ler HTTP ${rl.status}` };
+      const [row] = await rl.json();
+      if (!row?.pronto) continue;
+      return row.status >= 200 && row.status < 300 && row.conteudo ? { html: row.conteudo } : { html: null, motivo: row.erro || `HTTP ${row.status}` };
+    }
+    return { html: null, motivo: 'sem resposta no prazo' };
+  } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 60) }; }
+}
+
 async function lerPaginaDoLote(url, deadline) {
   if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, motivo: 'sem link do lote' };
   try {
-    const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }, signal: AbortSignal.timeout(Math.max(3000, Math.min(12000, deadline - Date.now()))) });
-    if (!r.ok) return { texto: '', comissaoPct: null, motivo: `página do lote respondeu HTTP ${r.status}` };
-    const html = (await r.text()).slice(0, 3_000_000);
+    let html = null, motivoDireto = null;
+    try {
+      const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }, signal: AbortSignal.timeout(Math.max(3000, Math.min(10000, deadline - Date.now()))) });
+      if (r.ok) html = (await r.text()).slice(0, 3_000_000);
+      else motivoDireto = `HTTP ${r.status}`;
+    } catch (e) { motivoDireto = String(e?.message || e).slice(0, 60); }
+    if (!html) {
+      const b = await paginaViaBanco(url, deadline);
+      if (!b.html) return { texto: '', comissaoPct: null, motivo: `página do lote indisponível (direto: ${motivoDireto}; banco: ${b.motivo})` };
+      html = b.html.slice(0, 3_000_000);
+    }
     const m = html.match(/"auctioneerCommissionPercent"\s*:\s*(\d+(?:\.\d+)?)/);
     const texto = consertarAcentos(html
       .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
@@ -155,7 +194,7 @@ async function lerPaginaDoLote(url, deadline) {
     const pct = m ? Number(m[1]) : null;
     return { texto, comissaoPct: pct > 0 && pct <= 20 ? pct : null, motivo: texto ? null : 'página do lote sem texto legível' };
   } catch (e) {
-    return { texto: '', comissaoPct: null, motivo: `página do lote indisponível: ${String(e?.message || e).slice(0, 60)}` };
+    return { texto: '', comissaoPct: null, motivo: `página do lote ilegível: ${String(e?.message || e).slice(0, 60)}` };
   }
 }
 
