@@ -14,7 +14,7 @@ export default function Privacidade() {
           <ArrowLeft size={16} /> Voltar
         </button>
         <h1 style={{ fontSize: 32, fontWeight: 900, color: '#111111', margin: '0 0 6px' }}>Política de Privacidade (LGPD)</h1>
-        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: agosto de 2026</p>
+        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: setembro de 2026</p>
 
         <p style={{ marginTop: 20 }}>Esta política descreve como a BidPro Brasil (Nogueira Empreendimentos LTDA) coleta, usa e protege os dados pessoais dos seus usuários, em conformidade com a Lei nº 13.709/2018 (LGPD).</p>
 
@@ -51,12 +51,12 @@ export default function Privacidade() {
         <p>Em conformidade com o Art. 18 da LGPD, você tem os seguintes direitos em relação aos seus dados pessoais, exercíveis a qualquer momento:</p>
         <ul style={{ paddingLeft: 20, marginTop: 8 }}>
           <li style={{ marginBottom: 8 }}><strong>Acesso e portabilidade:</strong> Você pode baixar uma cópia completa de todos os seus dados pessoais diretamente na página <strong>Meu Perfil</strong>, clicando em "Baixar meus dados". O arquivo é gerado instantaneamente no formato JSON.</li>
-          <li style={{ marginBottom: 8 }}><strong>Retificação:</strong> Você pode corrigir seu nome a qualquer momento na página Meu Perfil. Para alteração de e-mail, entre em contato com o DPO.</li>
+          <li style={{ marginBottom: 8 }}><strong>Retificação:</strong> Você pode corrigir seu nome a qualquer momento na página Meu Perfil. Para alteração de e-mail, entre em contato com o Encarregado (DPO) pelo e-mail privacidade@bidprobrasil.com.br.</li>
           <li style={{ marginBottom: 8 }}><strong>Exclusão (direito ao esquecimento):</strong> Você pode solicitar a exclusão da sua conta diretamente na página <strong>Meu Perfil</strong>, na seção "Seus Dados (LGPD)". Seus dados pessoais (nome, CPF, telefone) serão anonimizados imediatamente. Registros financeiros são mantidos pelo prazo legal (veja seção 6). Sua sessão será encerrada automaticamente.</li>
           <li style={{ marginBottom: 8 }}><strong>Revogação do consentimento:</strong> Você pode revogar o consentimento a qualquer momento, o que implicará na impossibilidade de uso dos serviços que dele dependem.</li>
           <li style={{ marginBottom: 8 }}><strong>Oposição:</strong> Você pode se opor ao tratamento de dados realizado com fundamento em legítimo interesse.</li>
         </ul>
-        <p style={{ marginTop: 12 }}>Respondemos a solicitações de direitos no prazo de <strong>até 15 dias úteis</strong>, conforme previsto no Art. 18 da LGPD.</p>
+        <p style={{ marginTop: 12 }}>Respondemos a solicitações de direitos no prazo de <strong>até 15 dias</strong>, contados da data do requerimento, conforme o Art. 19, II, da LGPD. A confirmação de existência de tratamento e o acesso em formato simplificado são fornecidos de imediato (Art. 19, I).</p>
 
         <h2 style={h2}>6. Segurança e retenção de dados</h2>
         <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou destruição, incluindo criptografia em trânsito (TLS), autenticação segura e <strong>cópia de segurança em região distinta da principal</strong> (ver seção 3), para que uma falha de infraestrutura não implique perda definitiva dos seus documentos.</p>
@@ -77,8 +77,9 @@ export default function Privacidade() {
         <h2 style={h2}>8. Encarregado pelo Tratamento de Dados (DPO)</h2>
         <p>Em cumprimento ao Art. 41 da LGPD, designamos um Encarregado pelo Tratamento de Dados Pessoais (Data Protection Officer — DPO). Para exercer seus direitos, esclarecer dúvidas sobre privacidade ou registrar reclamações, entre em contato:</p>
         <p style={{ marginTop: 10 }}>
+          <strong>Encarregado (DPO):</strong> Tarcisio de Souza Nogueira de Araujo<br />
           <strong>E-mail:</strong> <a href="mailto:privacidade@bidprobrasil.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>privacidade@bidprobrasil.com.br</a><br />
-          <strong>Prazo de resposta:</strong> até 15 dias úteis (LGPD Art. 18, §5º)
+          <strong>Prazo de resposta:</strong> até 15 dias, contados do requerimento (LGPD, Art. 19, II)
         </p>
       </div>
     </div>

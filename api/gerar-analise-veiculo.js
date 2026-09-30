@@ -19,6 +19,7 @@ import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos } from '../src/utils/viabilidadeVeiculo.js';
+import { paginaViaBanco } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -156,22 +157,7 @@ async function anexosParaBlocos(anexos, deadline) {
 // Via banco (pg_net do Supabase): a Superbid devolve 403 à Vercel e 200 ao banco (medido em 30/09,
 // 1ª regeração — os 4 relatórios saíram "página do lote respondeu HTTP 403"). Mesmo par de RPCs
 // do motor de coleta (pagina_pedir/pagina_ler, só service_role). Nunca lança; null = não veio.
-async function paginaViaBanco(url, deadline) {
-  try {
-    const rp = await sb('rpc/pagina_pedir', { method: 'POST', body: JSON.stringify({ p_url: url }) });
-    if (!rp.ok) return { html: null, motivo: `pagina_pedir HTTP ${rp.status}` };
-    const id = await rp.json();
-    while (Date.now() < deadline - 1000) {
-      await new Promise((ok) => setTimeout(ok, 1000));
-      const rl = await sb('rpc/pagina_ler', { method: 'POST', body: JSON.stringify({ p_id: id }) });
-      if (!rl.ok) return { html: null, motivo: `pagina_ler HTTP ${rl.status}` };
-      const [row] = await rl.json();
-      if (!row?.pronto) continue;
-      return row.status >= 200 && row.status < 300 && row.conteudo ? { html: row.conteudo } : { html: null, motivo: row.erro || `HTTP ${row.status}` };
-    }
-    return { html: null, motivo: 'sem resposta no prazo' };
-  } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 60) }; }
-}
+// (o helper mora em api/_contato-lote.js desde 30/09 — a proposta ao leiloeiro usa o mesmo)
 
 async function lerPaginaDoLote(url, deadline) {
   if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, motivo: 'sem link do lote' };

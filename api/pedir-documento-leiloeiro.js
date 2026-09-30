@@ -49,9 +49,12 @@ const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte'];
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
 }
-function sb(path) {
+// `opts` repassado (30/09): a versão antiga ignorava o 2º argumento, e a chamada POST ao
+// `rpc/contato_leiloeiro_resolver` saía como GET — o contato NUNCA resolvia desde 28/09.
+function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    ...opts,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
 async function auditar(row) {

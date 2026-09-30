@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import EmailHtml from './EmailHtml';
 import CampoEmails, { separarEmails } from './CampoEmails';
+import RevisarTexto from './RevisarTexto';
 
 // ─── CAIXA DE E-MAIL DA EQUIPE (23/09, pedido do dono) ────────────────────────────────────
 // Tudo que chega em suporte@/contato@/privacidade@ (via webhook do Resend → `email_caixa`) e
@@ -684,8 +685,10 @@ export default function CaixaEmail({ soPessoal = false }) {
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
             <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={12}
+              spellCheck lang="pt-BR"
               placeholder="Escreva sua mensagem… (sua assinatura entra automaticamente)"
               style={{ ...campo, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+            <RevisarTexto texto={compor.texto} onAplicar={t => setCompor(c => ({ ...c, texto: t }))} style={{ marginTop: 6 }} />
             {compor.responder_a && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!compor.citar} onChange={e => setCompor({ ...compor, citar: e.target.checked })} />

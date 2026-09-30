@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, Mail, Send, X } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import RevisarTexto from './RevisarTexto';
 
 // PROPOSTA DE COMPRA DIRETA AO LEILOEIRO — saiu do card da busca para a página do veículo (30/09,
 // dono: "na busca só visualizar; leiloeiro, FIPE e proposta na página do veículo"). Abre já
@@ -24,7 +25,7 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
       const r = await apiCall('/api/propor-veiculo-leiloeiro', { method: 'POST', body: JSON.stringify({ veiculo_id: v.id, action: 'preview' }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.error) { setPropostaMsgTipo('error'); setPropostaMsg(j?.error || 'Não foi possível preparar a proposta agora.'); return; }
-      setPropostaTexto(j.texto || ''); setPropostaInfo({ linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, redator: j.redator || null, textoPadrao: j.textoPadrao || '' });
+      setPropostaTexto(j.texto || ''); setPropostaInfo({ linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, contato: j.contato || null, contatoMotivo: j.contatoMotivo || null, redator: j.redator || null, textoPadrao: j.textoPadrao || '' });
     } catch {
       setPropostaMsgTipo('error'); setPropostaMsg('Não foi possível preparar a proposta agora.');
     } finally { setPropostaCarregando(false); }
@@ -36,9 +37,9 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
     try {
       const r = await apiCall('/api/propor-veiculo-leiloeiro', { method: 'POST', body: JSON.stringify({ veiculo_id: propondoVeiculo.id, action: 'enviar', texto: propostaTexto }) });
       const j = await r.json().catch(() => ({}));
-      if (j?.semContato) { setPropostaInfo(i => ({ ...i, contatoDisponivel: false })); setPropostaMsgTipo('error'); setPropostaMsg('Este leiloeiro ainda não tem e-mail de contato cadastrado — copie o texto acima e envie manualmente.'); return; }
+      if (j?.semContato) { setPropostaInfo(i => ({ ...i, contatoDisponivel: false, contato: j.contato || i?.contato || null, contatoMotivo: j.contatoMotivo || i?.contatoMotivo || null })); setPropostaMsgTipo('error'); setPropostaMsg('Não encontrei o e-mail do responsável por este lote — copie o texto acima e envie manualmente.'); return; }
       if (!r.ok || j?.error) { setPropostaMsgTipo('error'); setPropostaMsg(j?.error || 'Não foi possível enviar a proposta agora.'); return; }
-      setPropostaMsgTipo('success'); setPropostaMsg(`Proposta enviada ao leiloeiro (${j.destinatario}). A resposta cai direto no seu e-mail.`);
+      setPropostaMsgTipo('success'); setPropostaMsg(`Proposta enviada${j.organizador ? ` a ${j.organizador}` : ' ao leiloeiro'} (${j.destinatario}). A resposta cai direto no seu e-mail.`);
     } catch {
       setPropostaMsgTipo('error'); setPropostaMsg('Não foi possível enviar a proposta agora.');
     } finally { setPropostaEnviando(false); }
@@ -68,10 +69,21 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
               </div>
             ) : (
               <>
+                {/* QUEM recebe e DE ONDE veio o contato (30/09): em plataforma multi-tenant o
+                    responsável é o organizador do evento, não a plataforma — a equipe confere
+                    antes de enviar, e sabe onde procurar se precisar achar na mão. */}
+                {propostaInfo?.contato && (
+                  <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#4c1d95', marginBottom: 10, lineHeight: 1.5 }}>
+                    <div><b>Responsável:</b> {propostaInfo.contato.organizador || 'leiloeiro do lote'}</div>
+                    {propostaInfo.contato.email && <div><b>E-mail:</b> {propostaInfo.contato.email}</div>}
+                    {propostaInfo.contato.telefone && <div><b>Telefone:</b> {propostaInfo.contato.telefone}{propostaInfo.contato.whatsapp && propostaInfo.contato.whatsapp !== propostaInfo.contato.telefone ? ` · WhatsApp ${propostaInfo.contato.whatsapp}` : ''}</div>}
+                    {propostaInfo.contato.caminho && <div style={{ color: '#6d28d9' }}><b>Onde achar:</b> {propostaInfo.contato.caminho}</div>}
+                  </div>
+                )}
                 {propostaInfo?.contatoDisponivel === false && (
                   <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#92400e', marginBottom: 10 }}>
-                    Este leiloeiro ainda não tem e-mail de contato cadastrado. Copie o texto abaixo e envie manualmente
-                    {propostaInfo.linkLote ? <> (a página do lote fica <a href={propostaInfo.linkLote} target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', fontWeight: 700 }}>aqui</a>)</> : null}.
+                    Não encontrei o e-mail do responsável por este lote{propostaInfo.contatoMotivo ? ` (${propostaInfo.contatoMotivo})` : ''}. Copie o texto abaixo e envie manualmente
+                    {propostaInfo.linkLote ? <> — na <a href={propostaInfo.linkLote} target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', fontWeight: 700 }}>página do lote</a>, procure "Dúvidas e contato" → "Sobre o evento"</> : null}.
                   </div>
                 )}
                 {propostaInfo?.redator && (
@@ -85,8 +97,9 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
                     )}
                   </div>
                 )}
-                <textarea value={propostaTexto} onChange={e => setPropostaTexto(e.target.value)} rows={10}
+                <textarea value={propostaTexto} onChange={e => setPropostaTexto(e.target.value)} rows={10} spellCheck lang="pt-BR"
                   style={{ width: '100%', padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5, fontFamily: 'inherit', color: '#111111', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 }} />
+                <RevisarTexto texto={propostaTexto} onAplicar={setPropostaTexto} style={{ marginTop: 6 }} />
                 {propostaMsg && (
                   <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: propostaMsgTipo === 'success' ? '#15803d' : '#b91c1c' }}>{propostaMsg}</div>
                 )}

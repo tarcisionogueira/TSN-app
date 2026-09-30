@@ -31,6 +31,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { redigirProposta } from './_redator-proposta.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { contatoDaPaginaDoLote, fonteComContatoNaPagina } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -42,9 +43,12 @@ const MAX_TEXTO_EDITADO = 4000;
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
 }
-function sb(path) {
+// `opts` repassado (30/09): a versão antiga ignorava o 2º argumento, e a chamada POST ao
+// `rpc/contato_leiloeiro_resolver` saía como GET — o contato NUNCA resolvia desde 28/09.
+function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    ...opts,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
 async function auditar(row) {
@@ -94,7 +98,7 @@ export default async function handler(req) {
     }
   }
 
-  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao,teve_lance`)).json();
+  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao,teve_lance,auction_id:raw->auction->>id`)).json();
   if (!veiculo) return json({ error: 'Veículo não encontrado' }, 404);
 
   // SÓ resultado REAL "sem lance" — não mais inferência por data (21/09). Um leilão que ainda
@@ -119,10 +123,24 @@ export default async function handler(req) {
   ].filter(Boolean).join('\n');
   const corpoTextoPuro = `Prezados,\n\nNotamos que o leilão do veículo abaixo já foi encerrado sem arrematação:\n\n${detalhes}\n\nTemos interesse em negociar a compra direta deste bem, fora do processo de leilão. Poderiam nos informar se há essa possibilidade e, em caso positivo, as condições?\n\nAgradecemos desde já a atenção.\n\n${nomeCliente}`;
 
-  // Contato do LEILOEIRO do lote (28/09) — ver api/pedir-documento-leiloeiro.js.
-  const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: veiculo.fonte || '', p_leiloeiro: veiculo.leiloeiro || null }) });
-  if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
-  const [contato] = await rContato.json();
+  // Contato do RESPONSÁVEL pelo lote. Superbid (30/09): o contato é POR EVENTO, na própria
+  // página ("Dúvidas e contato → Sobre o evento") — o cadastro genérico da fonte seria o
+  // destinatário errado (em 24/09 uma proposta de lote da AZ LEILÕES saiu para outro leiloeiro),
+  // então lá NÃO há queda para o cadastro: sem o organizador, fica "copie e envie manualmente",
+  // com o motivo. Demais fontes: cadastro (contato_leiloeiro_resolver, 28/09). Roda em paralelo
+  // com o redator no preview — os dois são I/O e a Edge tem 25 s para começar a responder.
+  const resolverContato = async () => {
+    if (fonteComContatoNaPagina(veiculo.fonte)) {
+      const r = await contatoDaPaginaDoLote({ fonte: veiculo.fonte, linkLote: veiculo.link_lote, auctionId: veiculo.auction_id }, Date.now() + 12000);
+      return { contato: r.contato, motivo: r.motivo };
+    }
+    const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: veiculo.fonte || '', p_leiloeiro: veiculo.leiloeiro || null }) });
+    if (!rContato.ok) return { erro: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` };
+    const [c] = await rContato.json();
+    return { contato: c?.email ? { email: c.email, organizador: veiculo.leiloeiro || veiculo.fonte || null, caminho: 'cadastro de contatos de leiloeiros' } : null,
+      motivo: c?.email ? null : 'leiloeiro sem e-mail no cadastro' };
+  };
+  const contatoP = resolverContato().catch((e) => ({ erro: `Não consegui consultar o contato do leiloeiro agora (${String(e?.message || e).slice(0, 60)}). Tente de novo.` }));
 
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit.
   if (acao === 'preview') {
@@ -130,23 +148,29 @@ export default async function handler(req) {
     // envios reais de quem propõe viram o modelo. Sem exemplo/IA → texto padrão, com o motivo.
     const rEx = await sb(`email_caixa?enviado_por=eq.${user.id}&pasta=eq.enviados&direcao=eq.saida&assunto=like.Contato*&select=assunto,texto&order=criado_em.desc&limit=15`);
     const exemplos = rEx.ok ? await rEx.json().catch(() => []) : [];
-    const redator = await redigirProposta({
+    const redatorP = redigirProposta({
       nome: nomeCliente, exemplos,
       lote: { tipo: 'Veículo', rotulo: veiculoLabel, leiloeiro: veiculo.leiloeiro || veiculo.fonte, link: veiculo.link_lote || null,
         cidade: veiculo.cidade, estado: veiculo.estado, valorMinimo: veiculo.valor_minimo, valorAvaliacao: veiculo.valor_avaliacao,
         resultado: veiculo.resultado_leilao, dataLeilao: veiculo.data_leilao ? String(veiculo.data_leilao).slice(0, 10) : null, temDocumentos: false },
     }).catch((e) => ({ texto: null, motivo: `redator falhou: ${String(e?.message || e).slice(0, 80)}`, exemplos: 0 }));
+    const [redator, rc] = await Promise.all([redatorP, contatoP]);
+    if (rc.erro) return json({ error: rc.erro }, 502);
     return json({ ok: true, texto: redator.texto || corpoTextoPuro, textoPadrao: corpoTextoPuro,
       redator: { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos },
-      linkLote: veiculo.link_lote || null, contatoDisponivel: !!contato?.email });
+      linkLote: veiculo.link_lote || null, contatoDisponivel: !!rc.contato?.email,
+      contato: rc.contato || null, contatoMotivo: rc.motivo || null });
   }
 
   // PASSO 2 — ENVIAR: o corpo é o que o CHAMADOR mandou (o editado, se editou).
   const textoFinal = String(body?.texto || '').trim().slice(0, MAX_TEXTO_EDITADO) || corpoTextoPuro;
 
+  const rc = await contatoP;
+  if (rc.erro) return json({ error: rc.erro }, 502);
+  const contato = rc.contato;
   if (!contato?.email) {
     await auditar({ veiculo_id: veiculoId, user_id: user.id, fonte: veiculo.fonte || null, destinatario_email: null, texto_enviado: null, status: 'sem_contato' });
-    return json({ ok: false, semContato: true, texto: textoFinal, linkLote: veiculo.link_lote || null });
+    return json({ ok: false, semContato: true, contato: contato || null, contatoMotivo: rc.motivo || null, texto: textoFinal, linkLote: veiculo.link_lote || null });
   }
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;white-space:pre-wrap;line-height:1.6">${esc(textoFinal)}
@@ -170,5 +194,5 @@ export default async function handler(req) {
 
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal, linkLote: veiculo.link_lote || null }, 502);
 
-  return json({ ok: true, destinatario: contato.email });
+  return json({ ok: true, destinatario: contato.email, organizador: contato.organizador || null });
 }

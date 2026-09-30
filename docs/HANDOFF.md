@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✉️ 30/09 (noite) — proposta de veículo acha o ORGANIZADOR do evento · revisão ortográfica · DPO
+- 🔴→✅ **Proposta ao leiloeiro nunca resolvia contato desde 28/09**: `sb(path)` em `propor-veiculo-leiloeiro.js` e
+  `pedir-documento-leiloeiro.js` ignorava o 2º argumento — o POST ao `rpc/contato_leiloeiro_resolver` saía como GET.
+  Corrigido nos dois (eram os únicos com a chamada).
+- **Superbid = contato POR EVENTO** (`api/_contato-lote.js`): lê a página do lote VIA BANCO (Vercel toma 403) e tira do
+  `__NEXT_DATA__` o evento `raw.auction.id` → `managerName` + `ticker` (tel :: e-mail) e, se houver, `internalParameters`
+  de oferta do MESMO evento. Montana 4995864 → SOLD MAISATIVO, atendimento.infraenergia@superbid.net. Sem o organizador
+  NÃO cai no cadastro genérico (foi assim que a proposta de 24/09, lote da AZ LEILÕES, saiu para outro leiloeiro). O modal
+  mostra Responsável · e-mail · telefone · "Onde achar" (página do lote → Dúvidas e contato → Sobre o evento).
+  Teste: `scripts/testes/contato-lote-superbid.mjs`. `paginaViaBanco` agora mora lá (gerar-analise-veiculo importa).
+- **Revisão ortográfica sugerida** (`api/revisar-texto.js` + `src/components/RevisarTexto.jsx`): botão "Revisar
+  ortografia" na Caixa de e-mail, e-mail do caso ao leiloeiro, "Pedir ao leiloeiro" (Analise) e proposta de veículo.
+  Mostra as mudanças e só troca com "Aplicar". Trava na saída: número/e-mail/link alterado ou tamanho ±25% → descarta.
+  Textareas com `spellCheck lang="pt-BR"`. Teste: `scripts/testes/revisao-ortografica-nao-muda-valor.mjs`.
+
 ### 🩺 30/09 (tarde) — VARREDURA DE SAÚDE + LISTA CONSOLIDADA DO DONO
 **Resolvido e em produção (e6d5fe8 + dados):** regeração em paralelo (o workflow dava 504 com 4 veículos);
 "Failed to fetch (analytics.google.com)" filtrado de erros_cliente (bloqueador do visitante — era o único erro
@@ -34,7 +49,7 @@ de cliente parado; segurança 0/0.
 **DEPENDE DO DONO — por prioridade:**
 1. 🔴 Bright Data: remover 68.211.146.0/24 da lista negra da zona web_unlocker1 (ver passo a passo na conversa de 30/09).
 2. 🔴 Cobrar as assinaturas: Marcos (termo + procuração), Rafael (2 termos), Matheus (1 termo) — prazo 30/10.
-3. 🟠 LGPD: nomear o encarregado (DPO) na Política de Privacidade e responder pedidos de titular em até 15 dias.
+3. ✅ LGPD: encarregado nomeado na Política (Tarcisio de Souza Nogueira de Araujo) e prazo corrigido para "até 15 dias" (art. 19, II) — 30/09 noite. Resta ao dono: responder os chamados `[LGPD — responder até …]` no prazo.
 5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
 6. 🟠 Revenda de veículo: a busca web não tira preço da Webmotors — escolher fonte (iCarros/Mobiauto/OLX ou API paga).
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).

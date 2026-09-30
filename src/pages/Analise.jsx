@@ -31,6 +31,7 @@ import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
+import RevisarTexto from '../components/RevisarTexto';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
@@ -978,8 +979,9 @@ export default function Analise() {
                     ? 'Revise o texto abaixo — complemente com o que achar pertinente antes de enviar.'
                     : 'Ainda não temos o e-mail deste leiloeiro cadastrado — ajuste o texto se quiser e copie para enviar pelo canal de contato dele.'}
                 </div>
-                <textarea value={textoLeiloeiro} onChange={e => setTextoLeiloeiro(e.target.value)} rows={8}
+                <textarea value={textoLeiloeiro} onChange={e => setTextoLeiloeiro(e.target.value)} rows={8} spellCheck lang="pt-BR"
                   style={{ width:'100%', boxSizing:'border-box', fontSize:12, fontFamily:'inherit', border:'1px solid #fed7aa', borderRadius:8, padding:8, color:'#1e293b', resize:'vertical' }} />
+                <RevisarTexto texto={textoLeiloeiro} onAplicar={setTextoLeiloeiro} />
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                   {pedidoLeiloeiroTexto.contatoDisponivel ? (
                     <button onClick={() => pedirAoLeiloeiro('enviar')} disabled={pedindoLeiloeiro || !textoLeiloeiro.trim()}

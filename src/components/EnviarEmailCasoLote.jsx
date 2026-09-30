@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiCall } from '../utils/apiCall';
 import CampoEmails from './CampoEmails';
+import RevisarTexto from './RevisarTexto';
 import { htmlDocumental } from './DocumentalPDF';
 import { htmlLaudo } from './LaudoPDF';
 
@@ -131,7 +132,8 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, cardS
             </div>
           )}
           <textarea value={emailPreview.texto} onChange={e => setEmailPreview(p => ({ ...p, texto: e.target.value }))}
-            rows={7} style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
+            spellCheck lang="pt-BR" rows={7} style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
+          <RevisarTexto texto={emailPreview.texto} onAplicar={t => setEmailPreview(p => ({ ...p, texto: t }))} style={{ marginTop: 6 }} />
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
             Anexos do lote ({emailPreview.anexosLote?.length || 0}): {emailPreview.anexosLote?.length ? emailPreview.anexosLote.join(', ') : '— nenhum documento do lote ainda —'}
           </div>
