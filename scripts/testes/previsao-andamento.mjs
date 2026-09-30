@@ -72,3 +72,16 @@ console.log('previsao-andamento: todos os casos passaram');
   assert.equal(chaveTema('Imissão na POSSE!', 'TRT5'), chaveTema('imissao na posse', 'trt5'));
   console.log('jurisprudencia-filtros: todos os casos passaram');
 }
+
+// CNJ fora (30/09 à noite: DataJud TRT5 com timeout de 30 s e DJEN 500 ao mesmo tempo): sem
+// movimentação, o card mostra a REFERÊNCIA da base, dita como tal — em vez de sumir.
+{
+  const { preverAndamento: prev } = await import('../../api/_previsao-processo.js');
+  const ref = prev({ movimentos: [], estat: [{ de: 'decisao', para: 'decisao_seguinte', n: 254, p25: 17, mediana: 33, p75: 93 }], justica: 'trabalho' });
+  assert.equal(ref.disponivel, true);
+  assert.equal(ref.so_referencia, true);
+  assert.equal(ref.status, null, 'sem dado do processo não há selo de andamento');
+  assert.match(ref.resumo, /Não consegui ler as movimentações deste processo agora/);
+  assert.match(ref.aviso, /não do seu processo/);
+  console.log('previsao-sem-fonte: todos os casos passaram');
+}

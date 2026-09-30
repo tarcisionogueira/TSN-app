@@ -78,7 +78,20 @@ export function preverAndamento({ movimentos = [], publicacoes = [], estat = [],
   const pubs = (publicacoes || []).filter((p) => p?.data_disponibilizacao)
     .map((p) => ({ data: soData(p.data_disponibilizacao), descricao: `Publicação${p.tipo_documento ? ` (${p.tipo_documento})` : ''}`, classe: 'publicacao' }));
   const eventos = [...movs, ...pubs].sort((a, b) => b.data.localeCompare(a.data));
-  if (!eventos.length) return { disponivel: false, motivo: 'sem movimentações com data para calcular' };
+  if (!eventos.length) {
+    // Fontes fora (DataJud/DJEN instáveis, 30/09 à noite) ou processo sem movimentação lida: ainda dá
+    // para mostrar a REFERÊNCIA da base — dita como tal — em vez de sumir com o card.
+    const eb = (estat || []).find((x) => x.de === 'decisao' && x.para === 'decisao_seguinte' && Number(x.n) >= 5);
+    const cb = (estat || []).find((x) => x.de === 'conclusao' && x.para === 'decisao_seguinte' && Number(x.n) >= 5);
+    if (!eb && !cb) return { disponivel: false, motivo: 'sem movimentações com data para calcular' };
+    return {
+      disponivel: true, so_referencia: true, justica, status: null,
+      entre_despachos: eb ? { n: eb.n, p25: eb.p25, mediana: eb.mediana, p75: eb.p75, fonte: 'base da plataforma' } : null,
+      proximo_despacho: null, proxima_janela: null, fluxo_provavel: [], etapa_arrematacao: null, ultimo_ato: null,
+      resumo: `Não consegui ler as movimentações deste processo agora. Referência da base da plataforma${justica ? ` (Justiça ${justica})` : ''}: ${eb ? `o juiz despacha em média a cada ${eb.mediana} dias (metade entre ${eb.p25} e ${eb.p75})` : ''}${eb && cb ? '; ' : ''}${cb ? `com os autos conclusos, a decisão sai em ~${cb.mediana} dias` : ''}.`,
+      aviso: 'Referência geral, não do seu processo — consulte de novo quando o CNJ responder para a previsão deste processo.',
+    };
+  }
 
   const ultimo = eventos.find((e) => e.classe !== 'outro') || eventos[0];
   const diasDesde = Math.max(0, Math.round((Date.parse(hoje) - Date.parse(eventos[0].data)) / DIA));

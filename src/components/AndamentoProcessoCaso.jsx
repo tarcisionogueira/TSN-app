@@ -230,8 +230,9 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
             <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#334155', letterSpacing: 0.3, minWidth: 0 }}>⏱️ PREVISÃO DO PRÓXIMO ANDAMENTO</div>
-                <span style={{ fontSize: 11, fontWeight: 800, color: cor, background: `${cor}14`, borderRadius: 999, padding: '2px 8px' }}>{p.status === 'andando' ? 'Andando' : p.status === 'lento' ? 'Mais lento que o normal' : 'Parado'}</span>
+                {p.status && <span style={{ fontSize: 11, fontWeight: 800, color: cor, background: `${cor}14`, borderRadius: 999, padding: '2px 8px' }}>{p.status === 'andando' ? 'Andando' : p.status === 'lento' ? 'Mais lento que o normal' : 'Parado'}</span>}
               </div>
+              {p.so_referencia && <div style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px', marginBottom: 6 }}>{p.resumo}</div>}
               {p.proximo_despacho && (
                 <div style={{ fontSize: 14, color: '#0f172a', marginBottom: 6 }}>
                   🧑‍⚖️ {p.proximo_despacho.atrasado
@@ -249,9 +250,9 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
                 </div>
               )}
               {p.entre_despachos && !p.proximo_despacho && <div style={{ fontSize: 13, color: '#1e293b', marginBottom: 6 }}>🧑‍⚖️ Entre um despacho do juiz e o próximo: <strong>~{p.entre_despachos.mediana} dias</strong> (metade entre {p.entre_despachos.p25} e {p.entre_despachos.p75}) — {p.entre_despachos.fonte}.</div>}
-              <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>Último ato: {p.ultimo_ato.rotulo || p.ultimo_ato.descricao} em {fmt(p.ultimo_ato.data)} (há {p.dias_desde_ultimo} dias).</div>
+              {p.ultimo_ato && <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>Último ato: {p.ultimo_ato.rotulo || p.ultimo_ato.descricao} em {fmt(p.ultimo_ato.data)} (há {p.dias_desde_ultimo} dias).</div>}
               {p.fluxo_provavel?.length > 0 && <>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>O QUE COSTUMA VIR DEPOIS DE "{(p.ultimo_ato.rotulo || '').toUpperCase()}"</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>O QUE COSTUMA VIR DEPOIS DE "{(p.ultimo_ato?.rotulo || '').toUpperCase()}"</div>
                 {p.fluxo_provavel.map((f, i) => (
                   <div key={`f${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '3px 0' }}>
                     <div style={{ width: 90, height: 8, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}><div style={{ width: `${f.probabilidade}%`, height: '100%', background: '#0D63DB' }} /></div>

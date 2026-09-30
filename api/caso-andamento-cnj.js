@@ -286,7 +286,15 @@ export default async function handler(req, res) {
   }
   try {
     const est = await estatisticaFluxo(justicaDoNumero(numero));
-    previsao = preverAndamento({ movimentos, publicacoes, estat: est.linhas, justica: est.justica });
+    // DataJud fora: usa a série JÁ gravada deste processo (monitor/consultas anteriores), dita no retorno.
+    let movsPrev = movimentos, doHistorico = false;
+    if (!movsPrev.length) {
+      const dig = String(numero).replace(/\D/g, '');
+      const hist = await sbGet(`processo_movimentos?numero_processo=in.(${dig},${encodeURIComponent(numero)})&select=data,codigo,descricao&order=data.desc&limit=200`).catch((e) => { console.warn('[caso-andamento-cnj] série gravada ilegível:', e?.message || e); return []; });
+      if (Array.isArray(hist) && hist.length) { movsPrev = hist; doHistorico = true; }
+    }
+    previsao = preverAndamento({ movimentos: movsPrev, publicacoes, estat: est.linhas, justica: est.justica });
+    if (doHistorico && previsao?.disponivel) previsao.aviso = `${previsao.aviso} O CNJ não respondeu agora: calculada com as movimentações já gravadas deste processo.`;
   } catch (e) { console.warn('[caso-andamento-cnj] previsão indisponível:', e?.message || e); }
 
   return enviar({

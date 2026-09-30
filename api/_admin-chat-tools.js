@@ -391,9 +391,16 @@ async function consultarDatajud({ numero_processo }) {
   // Previsão do próximo andamento (30/09): ritmo do processo + base real da plataforma + etapa legal.
   let previsao = null;
   const alvo = (r.processos || [])[0];
-  if (alvo?.movimentos?.length) {
+  {
+    // DataJud fora: série já gravada do processo; sem ela, a referência da base (dita como tal).
+    let movs = alvo?.movimentos || [];
+    if (!movs.length) {
+      const dig = String(numero_processo).replace(/\D/g, '');
+      const hist = await sbJson(`processo_movimentos?numero_processo=in.(${dig},${encodeURIComponent(numero_processo)})&select=data,codigo,descricao&order=data.desc&limit=200`);
+      if (Array.isArray(hist)) movs = hist;
+    }
     const est = await estatisticaFluxo(justicaDoNumero(numero_processo));
-    const pv = preverAndamento({ movimentos: alvo.movimentos, estat: est.linhas, justica: est.justica });
+    const pv = preverAndamento({ movimentos: movs, estat: est.linhas, justica: est.justica });
     if (pv.disponivel) previsao = { resumo: pv.resumo, status: pv.status, proximo_despacho: pv.proximo_despacho, proxima_janela: pv.proxima_janela, entre_despachos: pv.entre_despachos, fluxo_provavel: pv.fluxo_provavel, etapa_arrematacao: pv.etapa_arrematacao, aviso: pv.aviso };
   }
   return { total: r.total || 0, processos, parecer: r.parecer?.texto || r.parecer || null, previsao, erros: r.erros || undefined, tribunais_consultados: (r.tribunais_consultados || []).length };
