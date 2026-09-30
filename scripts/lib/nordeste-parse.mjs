@@ -57,6 +57,17 @@ function datasPorExtenso(txt) {
 
 // Slug → cidade/UF/área. Estado vem POR EXTENSO no fim ("…-amargosa-bahia"); a cidade é o
 // trecho entre a área (ou o tipo) e o estado. Sem estado no slug → deixa nulo (qualidade decide).
+// Puro (testável): "TERRENO URBANO Nº 3 COM 800,00 M2" → 800 · "COM 196,62 HA" → 1.966.200.
+export function areaDoTitulo(titulo) {
+  // Medida agrária "18ha 52a e 51ca" (hectare · are · centiare) = 185.251 m².
+  const hac = String(titulo || '').match(/(\d+)\s*ha\s+(\d+)\s*a\b(?:\s*e)?\s*(?:(\d+)\s*ca\b)?/i);
+  if (hac) return Number(hac[1]) * 10_000 + Number(hac[2]) * 100 + Number(hac[3] || 0);
+  const m = String(titulo || '').match(/(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\s*(m²|m2|ha|hectares?)(?![a-z])/i);
+  if (!m) return 0;
+  const v = num(m[1]);
+  return v > 0 ? (/^h/i.test(m[2]) ? v * 10_000 : v) : 0;
+}
+
 function doSlug(slug) {
   let s = String(slug || '').replace(/^\d+-\d+-/, '');
   let estado = null, resto = s;
@@ -189,7 +200,9 @@ export function parseDetalhe(html, url) {
     numero_processo: (String(lote?.process || '').match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [])[0] || null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade: 'judicial',   // acervo é 100% varas federais/TRT (recon 20-21/08)
-    area_m2: area || areaDesc,
+    // O slug PERDE a vírgula ("800,00 M2" vira "…-80000-m2", "196,62 ha" vira "19662-ha" — medido
+    // 30/09): a área do TÍTULO do payload vem primeiro; o slug só quando não há título.
+    area_m2: areaDoTitulo(lote?.title) || areaDesc || area,
     descricao: null,
     data_leilao: pracas[0] || (fut ? fut.toISOString().slice(0, 10) : null),
     data_leilao_2: pracas[1] || null,

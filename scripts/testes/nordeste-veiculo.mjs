@@ -22,6 +22,21 @@ assert.equal(marcaModeloAno('MOTOCICLETA HONDA/CG 160 FAN, ANO 2018/2018').marca
 assert.equal(tipoVeiculo('MOTOCICLETA HONDA/CG 160 FAN'), 'moto');
 assert.equal(tipoVeiculo('ÔNIBUS M.BENZ/MPOLO SEN MIDI'), 'onibus');
 assert.equal(tipoVeiculo('AUTOMÓVEL CHEVROLET/S10'), 'carro');
+// Lote de pátio sem o tipo no título (seco de 30/09: saíam como "carro")
+assert.equal(tipoVeiculo('VEÍCULO CONSERVADO HONDA CG 125 CARGO - 2003/2003'), 'moto');
+assert.equal(tipoVeiculo('VEÍCULO CONSERVADO DAFRA SUPER 100 - 2010/2010'), 'moto');
+assert.equal(tipoVeiculo('VEÍCULO CONSERVADO HONDA CIVIC LXS - 2010/2010'), 'carro');
+assert.equal(tipoVeiculo('VEÍCULO CONSERVADO HONDA FIT - 2010/2010'), 'carro');
+{
+  const { areaDoTitulo } = await import('../lib/nordeste-parse.mjs');
+  assert.equal(areaDoTitulo('TERRENO URBANO Nº 3 COM 800,00 M2, TIETÊ/SP'), 800);
+  assert.equal(areaDoTitulo('LOTE URBANO COM 175 M², BOM JESUS DA LAPA/BA'), 175);
+  assert.equal(areaDoTitulo('IMÓVEL RURAL COM 196,62 HA'), 1966200);
+  assert.equal(areaDoTitulo('FAZENDA COM 1.200,5 HECTARES'), 12005000);
+  assert.equal(areaDoTitulo('Imóvel Rural Ladeira do Alto Com 18ha 52a e 51ca'), 185251);
+  assert.equal(areaDoTitulo('Sitio Pe de Serra Com 1ha 96a e 62ca'), 19662);
+  assert.equal(areaDoTitulo('POSSE QUALIFICADA APTA AO USUCAPIÃO'), 0);
+}
 // Valor do payload (seco de 30/09: S10 com lance R$ 411.948 em vez de R$ 41.194,80).
 assert.equal(numPayload(41194.8), 41194.8);
 assert.equal(numPayload('41194.8'), 41194.8);

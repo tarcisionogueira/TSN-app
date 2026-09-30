@@ -44,6 +44,21 @@ async function main() {
     const alvos = [...lotes.values()].filter(ehVeiculoInteiro);
     console.log(`  ${eventosLidos}/${eventos.length} eventos · ${lotes.size} lotes · ${alvos.length} veículos inteiros`);
 
+    // Teto de MAX detalhes por rodada e acervo maior que ele (100 no seco de 30/09): na ordem da
+    // página os mesmos MAX seriam lidos sempre e o resto NUNCA. Primeiro o que ainda não está no
+    // banco, depois o mais antigo. Sem conseguir ler o banco, a ordem da página (e o motivo no log).
+    const idDe = (url) => montarRowVeiculo(url, {}).fonte_id;
+    const { data: jaTem, error: eJa } = await supabase.from('veiculos_leilao')
+      .select('fonte_id, atualizado_em').eq('fonte', 'NORDESTE').in('fonte_id', alvos.map(idDe));
+    if (eJa) console.warn(`  sem a idade dos já gravados (${eJa.message}) — ordem da página`);
+    const idade = new Map((jaTem || []).map((r) => [r.fonte_id, r.atualizado_em || '']));
+    alvos.sort((a, b) => {
+      const ia = idade.has(idDe(a)) ? idade.get(idDe(a)) : null, ib = idade.has(idDe(b)) ? idade.get(idDe(b)) : null;
+      if (ia === null || ib === null) return (ia === null ? 0 : 1) - (ib === null ? 0 : 1);
+      return ia < ib ? -1 : ia > ib ? 1 : 0;
+    });
+    console.log(`  ${alvos.length - idade.size} novo(s) na frente · lendo ${Math.min(MAX, alvos.length)}`);
+
     const rows = [], contatos = new Map();
     let falhas = 0;
     for (const url of alvos.slice(0, MAX)) {

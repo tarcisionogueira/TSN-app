@@ -27,6 +27,9 @@ export function ehVeiculoInteiro(url) {
 export function tipoVeiculo(titulo) {
   const t = String(titulo || '').toLowerCase();
   if (/motocicleta|motoneta|ciclomotor|\bmoto\b/.test(t)) return 'moto';
+  // Lote de pátio ("VEÍCULO CONSERVADO HONDA CG 125 …") não diz o tipo: moto pela marca/modelo.
+  if (/\b(dafra|shineray|traxx|sundown|kasinski|haojue|jtz|garinni)\b/.test(t)
+    || /\b(honda|yamaha|suzuki)\b[\s/]*(cg|cb|cbx|biz|pop|titan|fan|bros|nxr|xre|nx|twister|lead|pcx|ybr|factor|fazer|crypton|xtz|lander|neo|yes|intruder|dt|xt)\b/.test(t)) return 'moto';
   if (/[ôo]nibus/.test(t)) return 'onibus';
   if (/caminh[ãa]o|cavalo mec/.test(t)) return 'caminhao';
   if (/reboque|carreta/.test(t)) return 'reboque';
