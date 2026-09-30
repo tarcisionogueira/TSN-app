@@ -9,6 +9,21 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⏱️ 30/09 (noite, 12ª parte) — previsão do próximo despacho, fluxo provável e jurisprudência
+- `processo_fluxo_estatistica(p_justica)` (SQL) sobre `processo_movimentos` classificada por código TPU
+  (`movimento_classe`): transições com probabilidade e P25/mediana/P75, por Justiça (cai para "todas" com amostra
+  pequena). Base de 30/09: entre despachos do juiz mediana 33 d; autos conclusos → decisão 17 d; publicação →
+  petição 9 d (56%).
+- `api/_previsao-processo.js` (teste `previsao-andamento.mjs`): próximo despacho (último ato do juiz + intervalo do
+  processo ou da base), janela de movimentação, status andando/lento/parado coerente, fluxo provável (n≥5), etapa da
+  arrematação com artigo do CPC. Sem IA, sem custo.
+- `api/_jurisprudencia.js`: web search do Claude restrito a jus.br/conjur/migalhas, prova de busca, link obrigatório,
+  cache 30 d (`jurisprudencia_cache`), custo em `registrarCustoGeracao('jurisprudencia')`. **Não testado ao vivo**
+  (exige login) — conferir o 1º uso no chat/tela.
+- Tela "Andamento do processo" (equipe): card de previsão + "Registrar previsão no andamento" (cliente vê) +
+  "Jurisprudência desta etapa"; cada consulta grava na série. Chat: `consultar_datajud` traz `previsao`;
+  ferramenta `buscar_jurisprudencia`.
+
 ### ⚖️ 30/09 (noite, 11ª parte) — auditoria da consulta jurídica (CNJ/DJEN) e correções
 - **Fato medido:** o DataJud PÚBLICO não devolve `partes` — toda busca por nome ali voltava vazia (documental dizia
   "nenhum processo… sem falhas" p/ executado e sócios). Busca por parte agora é `buscarProcessosPorParte` (DJEN
