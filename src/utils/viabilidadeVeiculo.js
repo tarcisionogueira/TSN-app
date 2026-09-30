@@ -215,7 +215,9 @@ export function filtrarVersao(anuncios, modelo) {
     .map((t) => t.replace(/[^a-z0-9-]/g, '')).filter((t) => t.length >= 2);
   if (!toks.length) return { lista: anuncios, versao: false };
   // Casa por segmento inteiro ("-ls-" em "-ls-1-4-flex-"), nunca substring solta ("at" em "flat").
-  const pont = anuncios.map((a) => { const v = `-${a.url.split('/')[9] || ''}-`; return { a, n: toks.filter((t) => v.includes(`-${t}-`)).length }; });
+  // Palavra de 4+ letras também casa por PREFIXO do segmento: o título abrevia ("ENDURAN" → "endurance").
+  const casa = (v, t) => v.includes(`-${t}-`) || (/^[a-z]{4,}$/.test(t) && v.includes(`-${t}`));
+  const pont = anuncios.map((a) => { const v = `-${a.url.split('/')[9] || ''}-`; return { a, n: toks.filter((t) => casa(v, t)).length }; });
   const max = Math.max(0, ...pont.map((p) => p.n));
   const melhores = pont.filter((p) => max > 0 && p.n === max).map((p) => p.a);
   return melhores.length >= REVENDA_MIN_ANUNCIOS ? { lista: melhores, versao: true } : { lista: anuncios, versao: false };

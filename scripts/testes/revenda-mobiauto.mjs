@@ -28,4 +28,7 @@ assert.equal(modeloDoTitulo('FIAT CRONOS DRIVE 1.3 ANO: 2020/2020 PLACA FINAL 1 
 assert.equal(modeloDoTitulo('RENAULT OROCH PRO 16, 2024/2025, Placa FINAL 1 (SP),  (Ref.: MA)', 'RENAULT'), 'OROCH PRO 16');
 assert.equal(modeloDoTitulo('CHEVROLET MONTANA LS 2015/2015', 'CHEVROLET'), 'MONTANA LS');
 assert.deepEqual(modelosMobiauto(modeloDoTitulo('VOLKSWAGEN NOVA SAVEIRO RB MBVS, 2019/2019, Placa', 'VOLKSWAGEN')), ['saveiro']);
+const st = (v, p) => `"url":"https://www.mobiauto.com.br/comprar/carros/sp-sao-paulo/fiat/strada/2025/${v}/detalhes/${p}?page=detail","price":${p}`;
+const as = anunciosMobiauto([st('endurance-1-3-flex-8v-cs', 100000), st('endurance-1-3-flex-8v-cs', 101000), st('endurance-1-3-flex-8v-cs', 102000), st('ultra-1-0-turbo', 130000)].join(','), { marca: 'fiat', modelo: 'strada', ano: 2025 });
+assert.deepEqual(filtrarVersao(as, 'STRADA ENDURAN CS13').lista.map((x) => x.preco), [100000, 101000, 102000], 'abreviação do título casa por prefixo');
 console.log('revenda-mobiauto: todos os casos passaram');
