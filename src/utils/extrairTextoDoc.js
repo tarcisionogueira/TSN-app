@@ -47,10 +47,39 @@ function limparTexto(s) {
     .trim();
 }
 
-async function textoDePdf(file) {
+async function abrirPdf(file) {
   const pdfjs = await getPdfjs();
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  return pdfjs.getDocument({ data: buf }).promise;
+}
+
+// PDF DIGITALIZADO → IMAGEM (30/09, dono: "anexei 2 CNH e o sistema não reconheceu"). A CNH
+// digital e a certidão escaneada são PDF só com imagem, sem camada de texto: a tela dizia "não
+// consegui ler" e a IA gerava o contrato sem o fiador. O pdf.js já desenha a página em canvas —
+// cada página vira um JPEG para a visão da Claude, como uma foto anexada. Até 3 páginas por
+// arquivo (CNH e certidão cabem em 1-2; mais que isso estouraria o teto de corpo da Vercel).
+const MAX_PAGINAS_IMAGEM = 3;
+async function paginasComoImagem(pdf) {
+  const imagens = [];
+  for (let n = 1; n <= Math.min(pdf.numPages, MAX_PAGINAS_IMAGEM); n++) {
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const escala = MAX_IMG_DIM / Math.max(base.width, base.height);
+    const vp = page.getViewport({ scale: escala });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(vp.width);
+    canvas.height = Math.round(vp.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const base64 = (canvas.toDataURL('image/jpeg', IMG_QUALIDADE).split(',')[1]) || '';
+    if (base64) imagens.push({ base64, mediaType: 'image/jpeg', pagina: n });
+  }
+  return { imagens, total: pdf.numPages };
+}
+
+async function textoDePdf(pdf) {
   const partes = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     const page = await pdf.getPage(n);
@@ -104,12 +133,19 @@ export async function extrairTextoDoc(file) {
   const ext = (nome.split('.').pop() || '').toLowerCase();
   try {
     if (ext === 'pdf') {
-      const texto = await textoDePdf(file);
-      // PDF DIGITALIZADO: o arquivo abre, tem páginas, e a camada de texto vem vazia.
-      // Sem isso o anexo passaria como "lido" contribuindo com nada — o mesmo silêncio
-      // que originou este bug. (Diferente de foto solta: a página vem como PDF, não dá
-      // pra virar imagem sem reescrever o parser — fica como limite documentado.)
+      const pdf = await abrirPdf(file);
+      const texto = await textoDePdf(pdf);
+      // PDF DIGITALIZADO: o arquivo abre, tem páginas, e a camada de texto vem vazia. Vira
+      // imagem (ver paginasComoImagem); só se nem isso der, o motivo é dito ao usuário.
       if (!texto || texto.length < 40) {
+        try {
+          const { imagens, total } = await paginasComoImagem(pdf);
+          if (imagens.length) {
+            return { texto: null, imagem: null, imagens, motivo: total > imagens.length ? `"${nome}" é digitalizado: li as ${imagens.length} primeiras de ${total} páginas` : null };
+          }
+        } catch (e) {
+          return { texto: null, imagem: null, motivo: `"${nome}" é um PDF digitalizado e não consegui convertê-lo em imagem: ${String(e?.message || e).slice(0, 120)}` };
+        }
         return { texto: null, imagem: null, motivo: `"${nome}" parece ser um PDF digitalizado (imagem), sem texto que dê para ler automaticamente` };
       }
       return { texto: texto.slice(0, MAX_CHARS_ARQUIVO), imagem: null, motivo: null };
@@ -142,24 +178,42 @@ export async function extrairTextoDoc(file) {
 /**
  * Extrai de vários arquivos: texto (PDF/txt) vira um bloco rotulado, imagem (JPG/PNG/WebP)
  * vira base64 pronto pro bloco de visão da Claude — os dois contam como "lido".
- * @returns {Promise<{ documentos: string, imagens: {nome:string, base64:string, mediaType:string}[], lidos: string[], ignorados: string[] }>}
+ * @returns {Promise<{ documentos: string, imagens: {nome:string, base64:string, mediaType:string}[], lidos: string[], ignorados: string[], avisos: string[] }>}
  */
+// Orçamento de imagens por geração: o corpo da função da Vercel tem teto de 4,5 MB e o servidor
+// aceita até 10 imagens (api/gerar-contrato-ia.js). Passou disso, a imagem fica de fora E é dita.
+const MAX_IMAGENS = 10;
+const MAX_BASE64_TOTAL = 3_600_000;
+
 export async function extrairTextoDeVarios(files) {
   const blocos = [];
   const imagens = [];
   const lidos = [];
   const ignorados = [];
+  const avisos = [];
+  let base64Total = 0;
+  const cabe = (b64) => imagens.length < MAX_IMAGENS && base64Total + b64.length <= MAX_BASE64_TOTAL;
+  const guardar = (nome, img) => {
+    if (!cabe(img.base64)) { ignorados.push(`"${nome}" (limite de ${MAX_IMAGENS} imagens / tamanho total por geração)`); return false; }
+    base64Total += img.base64.length;
+    imagens.push({ nome, base64: img.base64, mediaType: img.mediaType });
+    return true;
+  };
   for (const f of (files || [])) {
-    const { texto, imagem, motivo } = await extrairTextoDoc(f);
+    const { texto, imagem, imagens: paginas, motivo } = await extrairTextoDoc(f);
     if (texto) {
       blocos.push(`=== DOCUMENTO ANEXADO: ${f.name} ===\n${texto}`);
       lidos.push(f.name);
     } else if (imagem) {
-      imagens.push({ nome: f.name, ...imagem });
-      lidos.push(f.name);
+      if (guardar(f.name, imagem)) lidos.push(f.name);
+    } else if (paginas?.length) {
+      let algum = false;
+      for (const p of paginas) algum = guardar(paginas.length > 1 ? `${f.name} (página ${p.pagina})` : f.name, p) || algum;
+      if (algum) lidos.push(f.name);
+      if (motivo) avisos.push(motivo);
     } else if (motivo) {
       ignorados.push(motivo);
     }
   }
-  return { documentos: blocos.join('\n\n'), imagens, lidos, ignorados };
+  return { documentos: blocos.join('\n\n'), imagens, lidos, ignorados, avisos };
 }

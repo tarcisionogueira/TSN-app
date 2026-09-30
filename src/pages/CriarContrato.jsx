@@ -204,6 +204,7 @@ export default function CriarContrato() {
         // Arquivo que não deu para ler é DITO, nunca descartado em silêncio — silêncio aqui
         // é exatamente o que fez o dono achar que o anexo tinha sido usado.
         if (r0.ignorados.length) setAvisoDocs(`Não consegui ler: ${r0.ignorados.join(' · ')}. O contrato foi gerado SEM o conteúdo desse(s) arquivo(s).`);
+        if (r0.avisos?.length) setAvisoDocs(av => `${av ? av + ' ' : ''}Leitura parcial: ${r0.avisos.join(' · ')}.`);
         // Confirmação POSITIVA do que entrou. O dono não tinha como saber se o anexo tinha
         // sido usado — e não estava sendo. Agora a tela de revisão diz, por nome.
         setDocsUsados(r0.lidos);
