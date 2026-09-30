@@ -285,6 +285,121 @@ export function tribunalDoNumeroCnj(numero) {
   return null;
 }
 
+// ─── BUSCA POR PARTE — DJEN, TODOS OS TRIBUNAIS (30/09) ────────────────────────────────────
+// Medido 30/09 direto na API: o DataJud PÚBLICO não traz `partes` (os campos são classe, assuntos,
+// órgão, movimentos e datas). A busca por nome ali nunca achou nada — e o documental escrevia
+// "nenhum processo… consulta concluída, sem falhas" para executado e sócios (forma nº 10). O DJEN
+// (Comunica CNJ) aceita `nomeParte` e responde por TODOS os tribunais numa chamada: 1 ano de
+// "MARCOS FERREIRA PINTO" → 77 publicações, 15 processos (TJPE, TJRJ, TJSP, TRTs, TST).
+// Dono (30/09): varrer todos os tribunais SÓ quando o dado é CPF, CNPJ ou nome/razão social — com
+// número, vai direto ao tribunal do número. Limites honestos: o DJEN não busca por CPF/CNPJ (o
+// chamador resolve o nome antes) e o destinatário vem sem documento — homônimo é possível; com CPF
+// informado, marca `cpf_no_texto` quando o número aparece na publicação.
+const PALAVRAS_VAZIAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+export function normalizarNomeParte(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Destinatário casa quando contém TODAS as palavras relevantes do nome buscado (o DJEN devolve
+// também quem só compartilha um prenome — "MARCOS" trouxe 10 mil publicações).
+export function parteCasa(nomeBuscado, nomeDestinatario) {
+  const alvo = normalizarNomeParte(nomeBuscado).split(' ').filter((w) => w.length > 1 && !PALAVRAS_VAZIAS.has(w.toLowerCase()));
+  const dest = new Set(normalizarNomeParte(nomeDestinatario).split(' '));
+  return alvo.length > 0 && alvo.every((w) => dest.has(w));
+}
+// Puro: publicações do DJEN → processos no MESMO formato de formatarProcesso (os chamadores —
+// documental, triagem, chat, tela — não mudam).
+export function processosDasPublicacoes(items, { nome, documento } = {}) {
+  const doc = String(documento || '').replace(/\D/g, '');
+  const grupos = new Map();
+  for (const it of items || []) {
+    const dests = Array.isArray(it.destinatarios) ? it.destinatarios : [];
+    const achado = dests.find((d) => parteCasa(nome, d?.nome));
+    if (!achado) continue;
+    const numero = it.numeroprocessocommascara || it.numero_processo || '';
+    if (!numero) continue;
+    const g = grupos.get(numero) || { it, pubs: [], partes: new Map(), polo: achado.polo };
+    g.pubs.push(it);
+    for (const d of dests) if (d?.nome) g.partes.set(d.nome, d.polo);
+    grupos.set(numero, g);
+  }
+  return [...grupos.entries()].map(([numero, g]) => {
+    const pubs = g.pubs.sort((a, b) => String(b.data_disponibilizacao || '').localeCompare(String(a.data_disponibilizacao || '')));
+    const textos = pubs.map((p) => String(p.texto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '));
+    const classe = g.it.nomeClasse || '';
+    const riscos = [];
+    const tudo = `${classe} ${textos.join(' ')}`;
+    for (const regra of RISCOS_MAP) {
+      if (regra.regex.test(tudo) && !riscos.find((r) => r.categoria === regra.categoria)) riscos.push({ severidade: regra.severidade, categoria: regra.categoria, descricao: regra.descricao });
+    }
+    const faseAchada = Object.entries(FASES_RISCO).find(([f]) => classe.toLowerCase().includes(f.toLowerCase()));
+    const bloqueantes = riscos.filter((r) => r.severidade === 'bloqueante').length;
+    const alertas = riscos.filter((r) => r.severidade === 'alerta').length;
+    return {
+      id: `djen:${numero}`, fonte: 'djen', tribunal: String(g.it.siglaTribunal || '').toUpperCase(), numero,
+      classe, assuntos: '', orgao: g.it.nomeOrgao || '', grau: '',
+      fase: faseAchada ? faseAchada[0] : 'Não identificada', nivel_risco: faseAchada ? faseAchada[1] : 'desconhecido',
+      data_ajuizamento: '', ultima_atualizacao: String(pubs[0]?.data_disponibilizacao || '').slice(0, 10), valor_causa: null,
+      polo_da_parte: g.polo === 'A' ? 'ativo' : g.polo === 'P' ? 'passivo' : '',
+      partes: [...g.partes.entries()].map(([n, polo]) => ({ nome: n, tipo: polo === 'A' ? 'ativo' : polo === 'P' ? 'passivo' : '', documento: '', advogados: [] })),
+      movimentos: pubs.slice(0, 10).map((p, i) => ({ data: String(p.data_disponibilizacao || '').slice(0, 10), descricao: `${p.tipoComunicacao || 'Publicação'}: ${textos[i].trim().slice(0, 200)}`, codigo: null, risco: null })),
+      publicacoes: pubs.length,
+      cpf_no_texto: doc.length >= 11 ? textos.some((t) => t.replace(/\D/g, '').includes(doc)) : null,
+      riscos, score_risco: Math.min(100, bloqueantes * 35 + alertas * 15),
+      tem_penhora: riscos.some((r) => r.categoria === 'Penhora'), tem_arresto: riscos.some((r) => r.categoria === 'Arresto'),
+      tem_leilao: riscos.some((r) => r.categoria === 'Hasta Pública'), tem_bloqueante: bloqueantes > 0,
+      tem_suspensiva: riscos.some((r) => CATEGORIAS_SUSPENSIVAS.includes(r.categoria)),
+    };
+  }).sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? String(b.ultima_atualizacao).localeCompare(String(a.ultima_atualizacao)) : a.tem_bloqueante ? -1 : 1));
+}
+
+// Uma página do DJEN, com a MESMA resiliência do buscarDjen (direto; se falhar, via banco) e um
+// retry quando o DJEN diz "sistema muito ocupado" (500 de limite de frequência, medido 30/09).
+async function paginaDjen(url) {
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
+      if (r.ok) return { dados: await r.json() };
+      if (r.status === 403) {
+        const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
+        return b ? { dados: b } : { erro: 'DJEN recusou o acesso (403) e a via do banco também falhou' };
+      }
+      if (r.status !== 500 && r.status !== 429) return { erro: `DJEN respondeu ${r.status}` };
+    } catch (e) {
+      const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
+      if (b) return { dados: b };
+      if (tentativa) return { erro: `DJEN indisponível (${String(e?.message || e).slice(0, 60)})` };
+    }
+    await new Promise((ok) => setTimeout(ok, 3000));
+  }
+  return { erro: 'DJEN ocupado (limite de consultas) — tente de novo em instantes' };
+}
+
+export async function buscarProcessosPorParte({ nome, documento = null, dias = 365, maxPaginas = 3 }) {
+  const nomeLimpo = normalizarNomeParte(nome);
+  if (nomeLimpo.replace(/ /g, '').length < 6) return { processos: [], total: 0, tribunais_consultados: [], erros: ['nome curto demais para buscar por parte (use o nome completo ou a razão social)'] };
+  const fim = new Date();
+  const ini = new Date(fim.getTime() - Math.max(7, Math.min(dias, 1095)) * 86400000);
+  const d = (x) => x.toISOString().slice(0, 10);
+  const items = [];
+  const erros = [];
+  for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+    const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?nomeParte=${encodeURIComponent(nomeLimpo)}&itensPorPagina=100&pagina=${pagina}&dataDisponibilizacaoInicio=${d(ini)}&dataDisponibilizacaoFim=${d(fim)}`;
+    const r = await paginaDjen(url);
+    if (r.erro) { erros.push(r.erro); break; }
+    const lote = r.dados?.items || [];
+    items.push(...lote);
+    if (lote.length < 100) break;
+  }
+  const processos = processosDasPublicacoes(items, { nome: nomeLimpo, documento });
+  const janela = `publicações do DJEN de ${d(ini)} a ${d(fim)}`;
+  return {
+    processos, total: processos.length, fonte: 'djen', janela,
+    tribunais_consultados: [`todos os tribunais (DJEN, ${janela})`],
+    erros: erros.length ? erros : undefined,
+    aviso: processos.length ? 'Busca por NOME: pode haver homônimo — o DJEN não informa o CPF/CNPJ do destinatário.' : undefined,
+  };
+}
+
 export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null, tribunais: tribunaisExatos = null }) {
   if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([], { erros: ['CNJ_DATAJUD_KEY ausente'], numeroProcesso: numero_processo, modalidade }) };
   const ufUp = String(uf || '').toUpperCase();
@@ -294,6 +409,12 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   const exatos = Array.isArray(tribunaisExatos) ? tribunaisExatos.filter(Boolean) : [];
   if (!nacional && !estadual && !exatos.length) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
 
+  // Sem número e com nome: DJEN, todos os tribunais (ver buscarProcessosPorParte — o DataJud
+  // público não tem partes). O parecer usa os mesmos processos.
+  if (!numero_processo && nome_parte) {
+    const r = await buscarProcessosPorParte({ nome: nome_parte });
+    return { ...r, parecer: gerarParecerRisco(r.processos, { erros: r.erros || [], tribunais: r.tribunais_consultados, numeroProcesso: null, modalidade }) };
+  }
   let query;
   if (numero_processo) {
     const numLimpo = String(numero_processo).replace(/\D/g, '');
@@ -448,7 +569,13 @@ export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   const t = setTimeout(() => ctrl.abort(), 15000);
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
-    if (!r.ok) return { erro: `DJEN respondeu ${r.status}` };
+    if (!r.ok) {
+      // 403 = o DJEN recusa IP fora do Brasil (30/09, chat operacional rodando nos EUA); 500 = "muito
+      // ocupado". O banco (pg_net, Brasil) é a segunda via antes de devolver o erro.
+      const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
+      if (b) return formatarDjen(b, maxTexto);
+      return { erro: `DJEN respondeu ${r.status}${r.status === 403 ? ' (acesso recusado a esta origem)' : ''}` };
+    }
     return formatarDjen(await r.json(), maxTexto);
   } catch (e) {
     // 30/09 (print do dono, caso Marcos): o DJEN abortou aos 15 s vindo da Vercel e, um minuto

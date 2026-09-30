@@ -2,7 +2,12 @@
   "functions": {
     "api/caso-andamento-cnj.js": { "regions": ["gru1"], "maxDuration": 60 },
     "api/apurar-resultado-leilao-cron.js": { "regions": ["gru1"], "maxDuration": 280 },
-    "api/reapurar-resultado-leilao.js": { "regions": ["gru1"], "maxDuration": 30 }
+    "api/reapurar-resultado-leilao.js": { "regions": ["gru1"], "maxDuration": 30 },
+    "api/admin-chat.js": { "regions": ["gru1"], "maxDuration": 120 },
+    "api/cnj-datajud.js": { "regions": ["gru1"], "maxDuration": 60 },
+    "api/cnj-monitor-cron.js": { "regions": ["gru1"], "maxDuration": 300 },
+    "api/gerar-documental.js": { "regions": ["gru1"], "maxDuration": 300 },
+    "api/processar-analise.js": { "regions": ["gru1"], "maxDuration": 300 }
   },
   "redirects": [
     {

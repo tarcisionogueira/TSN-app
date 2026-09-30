@@ -1460,15 +1460,21 @@ export default async function handler(req, res) {
           .filter(n => n.length >= 6)
           .slice(0, 5);
         const achadosPorSocio = [];
+        // 30/09: sócio só conta como VERIFICADO se a consulta respondeu. Antes, qualquer nome da
+        // lista entrava em "verificados, sem processo" — e a busca por nome (DataJud) nunca achava
+        // nada. Agora é DJEN (todos os tribunais) e falha/sem tempo vira "não verificado".
+        const verificados = [], naoVerificados = [];
         for (const nomeSocio of nomesSocios) {
-          if (Date.now() >= hardDeadline) break;
+          if (Date.now() >= hardDeadline) { naoVerificados.push(nomeSocio); continue; }
           try {
             const porSocio = await buscarProcessosCNJ({ nome_parte: nomeSocio, uf: im.estado, modalidade: im.modalidade });
+            if (porSocio?.erros?.length && !porSocio?.processos?.length) { naoVerificados.push(nomeSocio); continue; }
+            verificados.push(nomeSocio);
             if (porSocio?.processos?.length) achadosPorSocio.push({ socio: nomeSocio, processos: porSocio.processos, tribunais: porSocio.tribunais_consultados });
-          } catch { /* CNJ por sócio é best-effort */ }
+          } catch (e) { naoVerificados.push(nomeSocio); console.warn('[documental] CNJ por sócio falhou:', e?.message || e); }
         }
         if (nomesSocios.length) {
-          cnjSocios = { verificados: nomesSocios, comProcesso: achadosPorSocio.map(a => a.socio) };
+          cnjSocios = { verificados, naoVerificados, comProcesso: achadosPorSocio.map(a => a.socio) };
         }
         if (achadosPorSocio.length) {
           const base = cnj || { processos: [], total: 0, tribunais_consultados: [] };
@@ -1674,9 +1680,9 @@ export default async function handler(req, res) {
       { label: 'Processo judicial (CNJ/DataJud)',
         status: (cnj && cnj.total) ? 'feito' : cnjConcluiuSemAchar ? 'feito' : (procFontes ? 'pendente' : 'na'),
         detalhe: (cnj && cnj.total)
-          ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}${cnjSocios ? ` · executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s)${cnjSocios.comProcesso.length ? `, com processo: ${cnjSocios.comProcesso.join(', ')}` : ''}` : ''}`
+          ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}${cnjSocios ? ` · executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s)${cnjSocios.comProcesso.length ? `, com processo: ${cnjSocios.comProcesso.join(', ')}` : ''}${cnjSocios.naoVerificados?.length ? ` · ${cnjSocios.naoVerificados.length} sócio(s) NÃO verificado(s) (fonte indisponível)` : ''}` : ''}${cnj.aviso ? ` · ${cnj.aviso}` : ''}`
           : cnjConcluiuSemAchar
-            ? `Nenhum processo localizado no CNJ${cnjViaNome ? ` para "${execNome}"` : ''} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.${cnjSocios ? ` Executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s), sem processo.` : ''}`
+            ? `Nenhum processo localizado${cnjViaNome ? ` para "${execNome}"` : ' no CNJ'} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.${cnjSocios ? ` Executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s), sem processo${cnjSocios.naoVerificados?.length ? `; ${cnjSocios.naoVerificados.length} NÃO verificado(s) (fonte indisponível)` : ''}.` : ''}`
             : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
               : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),

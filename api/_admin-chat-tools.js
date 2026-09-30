@@ -15,7 +15,7 @@
  */
 import { enviarWebPush } from './_webpush.js';
 import { auditLog } from './_audit.js';
-import { buscarDjen, buscarProcessosCNJ } from './_cnj.js';
+import { buscarDjen, buscarProcessosCNJ, buscarProcessosPorParte } from './_cnj.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -97,13 +97,23 @@ export const ADMIN_CHAT_TOOLS = [
   },
   {
     name: 'consultar_datajud',
-    description: 'Consulta o DataJud (CNJ) por número de processo OU nome da parte, em todos os tribunais: classe, assuntos, órgão, partes e últimos movimentos, com parecer de risco (penhora, suspensão, recurso). Use quando precisar da situação/andamento do processo ou de processos de uma pessoa — inclusive em perguntas de acompanhamento, sem depender do admin colar o número.',
+    description: 'Consulta o DataJud (CNJ) pelo NÚMERO do processo — vai direto ao tribunal indicado pelo número (+ superior): classe, assuntos, órgão e últimos movimentos, com parecer de risco. O DataJud público NÃO tem partes: para procurar processos de uma pessoa/empresa use buscar_processos_por_parte.',
+    input_schema: {
+      type: 'object',
+      properties: { numero_processo: { type: 'string', description: 'Número CNJ do processo' } },
+      required: ['numero_processo'],
+    },
+  },
+  {
+    name: 'buscar_processos_por_parte',
+    description: 'Varre TODOS os tribunais (DJEN/Comunica CNJ, uma chamada) atrás de processos em que a pessoa ou empresa aparece como parte — use quando o admin der NOME/RAZÃO SOCIAL, CPF ou CNPJ (nunca para número de processo). CNPJ: resolve a razão social na Receita e busca por ela. CPF: procura o nome na base da plataforma; se não achar, peça o nome (não há fonte aberta CPF→nome). Devolve processos com tribunal, classe, órgão, polo da parte, últimas publicações e riscos; avisa de homônimo (o DJEN não mostra documento).',
     input_schema: {
       type: 'object',
       properties: {
-        numero_processo: { type: 'string', description: 'Número CNJ do processo' },
-        nome_parte: { type: 'string', description: 'Nome da parte (quando não houver número)' },
-        uf: { type: 'string', description: 'UF para restringir a busca por nome (opcional)' },
+        nome: { type: 'string', description: 'Nome completo ou razão social' },
+        cpf: { type: 'string', description: 'CPF da parte' },
+        cnpj: { type: 'string', description: 'CNPJ da parte' },
+        meses: { type: 'number', description: 'Janela de publicações em meses (padrão 12, máx. 36)' },
       },
     },
   },
@@ -324,9 +334,42 @@ async function buscarEditalProcesso({ numero_processo }) {
     : { encontrado: false, observacao: 'Nenhum edital deste processo no radar (o radar cobre editais de leilão publicados no DJEN desde a sua criação).' };
 }
 
-async function consultarDatajud({ numero_processo, nome_parte, uf }) {
-  if (!numero_processo && !nome_parte) return { erro: 'informe numero_processo ou nome_parte' };
-  const r = await buscarProcessosCNJ({ numero_processo, nome_parte, uf: uf || undefined, nacional: true });
+async function buscarPorParte({ nome, cpf, cnpj, meses }) {
+  const dias = Math.round(Math.max(1, Math.min(Number(meses) || 12, 36)) * 30.5);
+  let alvo = String(nome || '').trim();
+  let documento = null;
+  let origemNome = alvo ? 'informado pelo admin' : null;
+  const dCnpj = String(cnpj || '').replace(/\D/g, '');
+  const dCpf = String(cpf || '').replace(/\D/g, '');
+  if (!alvo && dCnpj.length === 14) {
+    const c = await consultarCnpj({ cnpj: dCnpj });
+    if (!c.encontrado) return { erro: c.erro || 'CNPJ não encontrado na Receita — informe a razão social' };
+    alvo = c.razao_social; documento = dCnpj; origemNome = `razão social na Receita (${c.fonte})`;
+  } else if (!alvo && dCpf.length === 11) {
+    const fmt = `${dCpf.slice(0, 3)}.${dCpf.slice(3, 6)}.${dCpf.slice(6, 9)}-${dCpf.slice(9)}`;
+    const p = await sbJson(`perfis?or=(cpf.eq.${dCpf},cpf.eq.${encodeURIComponent(fmt)})&select=nome&limit=1`);
+    if (p?.erro) return p;
+    if (!p?.[0]?.nome) return { precisa_nome: true, observacao: 'Não há fonte aberta que converta CPF em nome e este CPF não está na base da plataforma. Peça o NOME COMPLETO da pessoa para varrer os tribunais.' };
+    alvo = p[0].nome; documento = dCpf; origemNome = 'cadastro da plataforma';
+  } else if (dCpf.length === 11 || dCnpj.length === 14) {
+    documento = dCpf || dCnpj;
+  }
+  if (!alvo) return { erro: 'informe nome/razão social, CPF ou CNPJ' };
+  const r = await buscarProcessosPorParte({ nome: alvo, documento, dias });
+  return {
+    buscado: alvo, origem_do_nome: origemNome, janela: r.janela, total: r.total,
+    processos: (r.processos || []).slice(0, 25).map((x) => ({
+      numero: x.numero, tribunal: x.tribunal, classe: x.classe, orgao: x.orgao, polo_da_parte: x.polo_da_parte,
+      ultima_publicacao: x.ultima_atualizacao, publicacoes: x.publicacoes, riscos: x.riscos.map((k) => k.categoria),
+      documento_confere_no_texto: x.cpf_no_texto, ultimas: x.movimentos.slice(0, 3),
+    })),
+    aviso: r.aviso, erros: r.erros,
+  };
+}
+
+async function consultarDatajud({ numero_processo }) {
+  if (!numero_processo) return { erro: 'informe numero_processo (para pessoa/empresa use buscar_processos_por_parte)' };
+  const r = await buscarProcessosCNJ({ numero_processo, nacional: true });
   const processos = (r.processos || []).slice(0, 8).map((p) => {
     const txt = JSON.stringify(p);
     return txt.length > 1800 ? { ...Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v !== 'object')), movimentos: (p.movimentos || []).slice(0, 8) } : p;
@@ -370,6 +413,7 @@ export async function executarFerramentaAdmin(nome, input, ctx) {
       case 'buscar_djen': return await buscarDjen(input);
       case 'buscar_edital_processo': return await buscarEditalProcesso(input);
       case 'consultar_datajud': return await consultarDatajud(input);
+      case 'buscar_processos_por_parte': return await buscarPorParte(input);
       case 'consultar_cnpj': return await consultarCnpj(input);
       case 'verificar_arremate_processo': return await verificarArremateProcesso(input);
       case 'buscar_arremates_cliente': return await buscarArrematesCliente(input);
