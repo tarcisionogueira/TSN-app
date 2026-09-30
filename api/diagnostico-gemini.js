@@ -14,24 +14,29 @@
 // o bastante para o dono conferir que o painel gravou a chave NOVA e não a antiga.
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
-import { getUser } from './_auth.js';
+import { getUser, isCronAuthorized } from './_auth.js';
 import { groundingGemini } from './_grounding.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
-  const user = await getUser(req);
-  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  // Também pelo CRON_SECRET (30/09): permite conferir pelo workflow `cron-manual.yml` depois de o
+  // dono recarregar o crédito — sem precisar de sessão admin no navegador. Não expõe a chave.
+  const viaCron = isCronAuthorized(req);
+  const user = viaCron ? null : await getUser(req);
+  if (!viaCron && !user) return res.status(401).json({ error: 'Não autenticado' });
 
   // `.ok` conferido antes de ler o corpo: falha de leitura do perfil não pode virar "não é
   // admin" — negar por erro e negar por identidade não são a mesma coisa.
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=role`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-  });
-  if (!r.ok) return res.status(502).json({ error: 'perfil_ilegivel' });
-  const [perfil] = await r.json().catch(() => []);
-  if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
+  if (!viaCron) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=role`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    });
+    if (!r.ok) return res.status(502).json({ error: 'perfil_ilegivel' });
+    const [perfil] = await r.json().catch(() => []);
+    if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
+  }
 
   const chave = (process.env.GEMINI_API_KEY || '').trim();
   const identidade = {
