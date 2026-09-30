@@ -31,7 +31,10 @@ export function aplicarRestricaoNasAmostras(mercado, { restricoes, areaM2 = 0 } 
   const fora = todas.filter(({ v }) => v?.dentroRestricao === false).length;
   const semInfo = todas.length - dentro.length - fora;
 
-  if (dentro.length >= MIN_DENTRO) {
+  // Área SÓ a que o chamador escolheu pelo tipo (m² de terreno / privativo). A `areaConsiderada` da
+  // IA pode vir em HECTARES (rural) ou unidades — multiplicar R$/m² por ela daria número absurdo.
+  const area = Number(areaM2) || 0;
+  if (dentro.length >= MIN_DENTRO && area > 0) {
     for (const k of NIVEIS) {
       if (!mercado[k]) continue;
       const vs = (mercado[k].vendas || []).filter((v) => v?.dentroRestricao === true && m2De(v) > 0);
@@ -40,19 +43,17 @@ export function aplicarRestricaoNasAmostras(mercado, { restricoes, areaM2 = 0 } 
         precoMedioM2: Math.round(mediana(m2s)), precoMinM2: Math.round(m2s.length ? Math.min(...m2s) : 0), precoMaxM2: Math.round(m2s.length ? Math.max(...m2s) : 0) };
     }
     const precoM2 = mediana(dentro.map(({ v }) => m2De(v)));
-    const area = Number(mercado.consolidado?.areaConsiderada) || Number(areaM2) || 0;
-    const valor = area > 0 ? Math.round(precoM2 * area) : 0;
+    const valor = Math.round(precoM2 * area);
     mercado.consolidado = {
       ...(mercado.consolidado || {}),
-      precoMedioM2: Math.round(precoM2),
-      ...(valor > 0 ? { valorEstimadoImovel: valor, areaConsiderada: area,
-        baseCalculo: `Mediana de ${dentro.length} anúncio(s) DENTRO da mesma restrição (${restricoes}): ${brl(precoM2)}/m² × ${area.toLocaleString('pt-BR')} m² = ${brl(valor)}. ${fora + semInfo} anúncio(s) de fora ou sem confirmação descartado(s).` } : {}),
+      precoMedioM2: Math.round(precoM2), valorEstimadoImovel: valor, areaConsiderada: area, unidadeValor: mercado.consolidado?.unidadeValor === 'm2_terreno' ? 'm2_terreno' : (mercado.consolidado?.unidadeValor || 'm2_privativo'),
+      baseCalculo: `Mediana de ${dentro.length} anúncio(s) DENTRO da mesma restrição (${restricoes}): ${brl(precoM2)}/m² × ${area.toLocaleString('pt-BR')} m² = ${brl(valor)}. ${fora + semInfo} anúncio(s) de fora ou sem confirmação descartado(s).`,
     };
     mercado.restricaoAmostras = { aplicada: true, dentro: dentro.length, fora, semInfo, restricoes };
     return mercado;
   }
 
-  const alerta = `ATENÇÃO — restrição territorial (${restricoes}): só ${dentro.length} anúncio(s) confirmadamente DENTRO da mesma área foram encontrados (mínimo ${MIN_DENTRO}). O valor de mercado abaixo usa anúncios de fora dela e tende a SUPERESTIMAR o preço — a restrição limita lote mínimo e ocupação. Trate como teto, não como referência.`;
+  const alerta = `ATENÇÃO — restrição territorial (${restricoes}): ${area > 0 ? `só ${dentro.length} anúncio(s) confirmadamente DENTRO da mesma área foram encontrados (mínimo ${MIN_DENTRO})` : 'a área do imóvel não é conhecida para refazer a conta só com os anúncios de dentro dela'}. O valor de mercado abaixo usa anúncios de fora dela e tende a SUPERESTIMAR o preço — a restrição limita lote mínimo e ocupação. Trate como teto, não como referência.`;
   mercado.restricaoAmostras = { aplicada: false, dentro: dentro.length, fora, semInfo, restricoes, alerta };
   mercado.comentario = [alerta, mercado.comentario].filter(Boolean).join(' ');
   return mercado;

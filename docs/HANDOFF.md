@@ -208,6 +208,23 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
+### ✅ 30/09 (noite) — Busca de veículos só visualiza + revisão do dia (5 achados corrigidos)
+- **Card da busca de veículos** (dono): sem FIPE, sem botão do leiloeiro e sem "Propor" — só "Ver
+  detalhes". FIPE (sob demanda), link do leiloeiro e proposta ficam em `VeiculoDetalhe`; a proposta virou
+  `components/PropostaVeiculoModal.jsx` (regra em `utils/propostaVeiculo.js`). A busca não lê mais
+  `valor_fipe`/`fipe_status`/`link_lote`.
+- **Revisão independente dos 26 commits do dia** — 5 defeitos, todos corrigidos:
+  1. (alta) reserva Gemini com piso de 20 s POR CIMA do prazo do chamador → estouraria documental,
+     mercadológico, veículo e o KYC no Edge (teto 25 s). Agora usa só o que SOBRA do orçamento
+     (timeoutMs × tentativas), pula com < 8 s, e o download de anexo conta no mesmo prazo.
+  2. (média) `iaGeminiPrimary` chamava o Gemini de novo como reserva do Claude → Claude ali é 'estrito'.
+  3. (média) cada "Gerar boleto" criava boleto novo no Asaas (dois pagos = um sem baixa). Pendente igual
+     é reaproveitada; outra pendente do mesmo honorário é cancelada antes de emitir; falha na busca trava.
+  4. (baixa) campo CPF do cartão Asaas cortava CNPJ em 11 dígitos e mostrava o total do MP → máscara
+     CPF/CNPJ e total pelo Asaas na tela.
+  5. (baixa) conta da APRM podia multiplicar R$/m² por hectare (`areaConsiderada` da IA) ou área errada →
+     área escolhida pelo tipo; sem área, não aplica e mostra o alerta.
+
 ### ✅ 30/09 (tarde) — Admin "JWT expired", estouro de tela e APRM (opção 3 do dono)
 - **"JWT expired" no Admin** (print do dono): a renovação de sessão de 10/09 só valia nas telas que
   chamavam `lerComRenovacao`. Agora mora no `fetch` do cliente (`src/utils/supabase.js`,

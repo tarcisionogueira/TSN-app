@@ -12,10 +12,19 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { honorarioComTaxa } from '../utils/taxaHonorario';
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import { QrCode, CreditCard, CheckCircle2, Loader2, Copy, AlertCircle, ChevronLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+
+const mascaraCpfCnpj = (v) => {
+  const d = String(v || '').replace(/\D/g, '').slice(0, 14);
+  return d.length <= 11
+    ? d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    : d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+};
+
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || '';
 
@@ -680,8 +689,16 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           <div style={{ fontSize: 12.5, color: '#1e40af' }}>
             O Mercado Pago não aprovou. Você pode tentar pelo <strong>Asaas</strong> (backup seguro) — precisamos do CPF e do endereço completo (exigidos para gerar a cobrança e a nota fiscal). Fica salvo no seu cadastro, não precisa preencher de novo da próxima vez.
           </div>
-          <input style={inp} placeholder="CPF ou CNPJ de quem paga" value={cpfAsaas}
-            onChange={e => setCpfAsaas(e.target.value.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2'))} />
+          {/* Taxa do cartão pelo Asaas é outra (2,99% + R$ 0,49) — o servidor cobra ESTE total, então a
+              tela mostra o mesmo número antes do clique (revisão 30/09: mostrava o total do MP). */}
+          {extra.honorario_saldo > 0 && (
+            <div style={{ fontSize: 12, color: '#1e3a8a' }}>
+              Total pelo Asaas: <strong>{fmtBRL(honorarioComTaxa(extra.honorario_saldo, 'cartao_asaas').total)}</strong> (honorário {fmtBRL(extra.honorario_saldo)} + taxa do cartão).
+            </div>
+          )}
+          {/* CPF (11) ou CNPJ (14): quem paga pode ser empresa (30/09) — a máscara cortava em 11. */}
+          <input style={inp} placeholder="CPF ou CNPJ de quem paga" value={cpfAsaas} inputMode="numeric"
+            onChange={e => setCpfAsaas(mascaraCpfCnpj(e.target.value))} />
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={{ ...inp, flex: 1 }} placeholder="CEP" value={endAsaas.cep}
               onChange={e => { const cep = e.target.value.replace(/\D/g, '').slice(0, 8); setEndAsaas(p => ({ ...p, cep })); if (cep.length === 8) buscarCepAsaas(cep); }} />

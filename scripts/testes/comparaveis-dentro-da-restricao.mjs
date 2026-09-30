@@ -21,11 +21,16 @@ assert.match(m.consolidado.baseCalculo, /DENTRO da mesma restrição/);
 
 // 2 de dentro → valor mantido + alerta no comentário
 const b2 = base(); b2.nivel2.vendas[0].dentroRestricao = false;
-const m2 = aplicarRestricaoNasAmostras(b2, { restricoes: R });
+const m2 = aplicarRestricaoNasAmostras(b2, { restricoes: R, areaM2: 2503 });
 assert.equal(m2.consolidado.valorEstimadoImovel, 582000, 'opção 1: mantém o valor');
 assert.equal(m2.restricaoAmostras.aplicada, false);
 assert.match(m2.comentario, /^ATENÇÃO — restrição territorial.*só 2 anúncio/);
 assert.equal(m2.nivel1.vendas.length, 3, 'não apaga amostra quando não aplica');
+
+// 3 de dentro mas área desconhecida → não aplica, alerta (nunca usa areaConsiderada da IA, que pode ser hectare)
+const m5 = aplicarRestricaoNasAmostras(base(), { restricoes: R, areaM2: 0 });
+assert.equal(m5.restricaoAmostras.aplicada, false); assert.equal(m5.consolidado.valorEstimadoImovel, 582000);
+assert.match(m5.comentario, /área do imóvel não é conhecida/);
 
 // sem restrição → intocado
 const b3 = base(); const antes = JSON.stringify(b3);

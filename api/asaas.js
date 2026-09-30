@@ -131,6 +131,12 @@ async function asaasPut(path, body) {
   return data;
 }
 
+async function asaasDelete(path) {
+  const res = await fetch(`${ASAAS_URL}${path}`, { method: 'DELETE', headers: { 'access_token': API_KEY } });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.errors?.[0]?.description || `Erro Asaas ${res.status}`); }
+  return true;
+}
+
 async function getAuthUserNode(req) {
   const auth = req.headers.authorization || req.headers['authorization'] || '';
   const token = auth.replace(/^Bearer\s+/i, '').trim();
@@ -191,7 +197,7 @@ export default async function handler(req, res) {
       const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
       if (!enderecoOk) return res.status(400).json({ error: 'endereco_necessario', mensagem: 'Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) para gerar a cobrança.' });
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
-      let saldo, descricao, externalReference, arrematanteId = null;
+      let saldo, descricao, externalReference, arrematanteId = null, refsIrmas = [];
       let billingType = 'UNDEFINED', valorCobrado = null, taxaHon = 0;
 
       if (propFallback === 'honorario_exito') {
@@ -222,6 +228,9 @@ export default async function handler(req, res) {
         taxaHon = cob.taxa;
         descricao = `Honorários de êxito — BidPro Brasil (honorário R$ ${saldo.toFixed(2)} + taxa ${meio === 'boleto_asaas' ? 'do boleto' : 'do cartão'} R$ ${cob.taxa.toFixed(2)})`;
         externalReference = `honorario|${arr.id}|taxa:${cob.taxa.toFixed(2)}`;
+        // As DUAS referências possíveis deste honorário (boleto e cartão), para achar cobrança
+        // pendente de clique anterior — ver "UMA COBRANÇA VÁLIDA" abaixo.
+        refsIrmas = ['boleto_asaas', 'cartao_asaas'].map((m) => `honorario|${arr.id}|taxa:${honorarioComTaxa(saldo, m).taxa.toFixed(2)}`);
         arrematanteId = arr.arrematante_id;
       } else if (propFallback === 'cobranca_avulsa') {
         if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
@@ -324,6 +333,34 @@ export default async function handler(req, res) {
         // atualizar, o Asaas segue recusando/desqualificando a cobrança pra sempre, mesmo
         // com os dados certos vindo agora.
         await asaasPut(`/customers/${customerId}`, { cpfCnpj: cpf, ...enderecoAsaas });
+      }
+      // UMA COBRANÇA VÁLIDA POR HONORÁRIO (revisão 30/09): cada clique em "Gerar boleto" criava um
+      // boleto NOVO; com dois pagos, o webhook ignora o segundo (`honorario_ja_pago`) e o dinheiro
+      // entra sem baixa nem alerta. Pendente idêntica (mesmo meio, pagador e valor) é REAPROVEITADA;
+      // qualquer outra pendente deste honorário (outro meio, outro pagador, saldo mudou) é CANCELADA
+      // antes de emitir a nova. Falha na busca TRAVA a emissão: "não consegui ver" ≠ "não existe".
+      if (refsIrmas.length) {
+        for (const ref of refsIrmas) {
+          const pend = await asaasGet(`/payments?externalReference=${encodeURIComponent(ref)}&status=PENDING&limit=20`);
+          for (const p of pend.data || []) {
+            const igual = ref === externalReference && p.customer === customerId && p.billingType === billingType
+              && Math.abs(Number(p.value) - Number(valorCobrado ?? saldo)) < 0.01;
+            if (igual) {
+              let linha = null;
+              if (billingType === 'BOLETO') {
+                try { linha = (await asaasGet(`/payments/${p.id}/identificationField`))?.identificationField || null; }
+                catch (e) { console.error('[asaas fallback] linha digitável (reuso):', e?.message || e); }
+              }
+              auditLog({ acao: 'asaas_cobranca_fallback_reuso', user_id: null, ip, detalhes: { proposito: propFallback, arrematacao_id, paymentId: p.id }, sucesso: true });
+              return res.status(200).json({
+                linkPagamento: billingType === 'BOLETO' ? (p.bankSlipUrl || p.invoiceUrl) : (p.invoiceUrl || p.bankSlipUrl),
+                paymentId: p.id, valor: Number(p.value), honorario: saldo, taxa: taxaHon, billingType, linhaDigitavel: linha, vencimento: p.dueDate || null, reaproveitado: true,
+              });
+            }
+            await asaasDelete(`/payments/${p.id}`);
+            auditLog({ acao: 'asaas_cobranca_fallback_cancelada', user_id: null, ip, detalhes: { arrematacao_id, paymentId: p.id, motivo: 'substituida' }, sucesso: true });
+          }
+        }
       }
       const cobranca = await asaasPost('/payments', {
         customer: customerId,

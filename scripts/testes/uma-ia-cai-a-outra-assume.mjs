@@ -60,6 +60,15 @@ assert.equal((await (await rodar({ claude: { status: 402 }, gemini: 'corta' })).
 // 6) ferramenta própria: não emula, devolve o Claude
 assert.equal((await rodar({ claude: { status: 402 } }, { tools: [{ name: 'consultar', input_schema: {} }] })).status, 402);
 
+// 7) reserva respeita o orçamento do chamador: com menos de 8 s sobrando, não chama o Gemini
+assert.equal((await rodar({ claude: { status: 402 } }, {}, { timeoutMs: 5000 })).status, 402, 'sem tempo → erro original');
+assert.ok(!chamadas.some((c) => c.ia === 'gemini'), 'orçamento curto não aciona reserva');
+
+// 8) Gemini primário que falhou não é chamado de novo como reserva do Claude
+cenario = { claude: { status: 402 }, gemini: 'fora' }; chamadas.length = 0;
+await iaTexto({ prompt: 'oi' });
+assert.equal(chamadas.filter((c) => c.ia === 'gemini').length, 1, 'Gemini uma vez só');
+
 // 5) iaTexto nos dois sentidos
 cenario = { claude: { status: 200, corpo: { content: [{ type: 'text', text: 'do claude' }] } }, gemini: 'fora' };
 assert.deepEqual(await iaTexto({ prompt: 'oi' }).then((r) => [r.texto, r.provedor]), ['do claude', 'claude'], 'Gemini fora → Claude');

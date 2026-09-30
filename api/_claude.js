@@ -21,12 +21,19 @@ async function provedorParou(res) {
   return /credit balance|billing|quota/i.test(corpo);
 }
 
-// Tempo da reserva: o do pedido original (documento longo precisa dele), com piso de 20 s e teto
-// de 60 s para caber no limite da função serverless depois das tentativas do Claude.
-const tempoReserva = (timeoutMs) => Math.max(20000, Math.min(timeoutMs, 60000));
-
-async function reservaGemini(options, timeoutMs, motivo) {
-  const fb = await geminiFetch(options, { timeoutMs: tempoReserva(timeoutMs) });
+// TEMPO DA RESERVA = o que SOBRA do orçamento que o chamador deu, nunca além (revisão 30/09). Muitos
+// chamadores passam em `timeoutMs` exatamente o tempo até o próprio prazo (documental, mercadológico,
+// KYC no Edge com teto de 25 s): dar à reserva um piso fixo por cima disso estourava a função e ela
+// morria sem gravar o erro. Orçamento = timeoutMs × tentativas; a reserva usa o restante (teto 60 s)
+// e é PULADA com menos de 8 s — falha rápida do provedor (402/401, ~1 s) deixa quase tudo para ela;
+// Claude que estourou o tempo não deixa nada, e aí o erro original volta ao chamador como antes.
+const RESERVA_MIN_MS = 8000;
+async function reservaGemini(options, restanteMs, motivo) {
+  if (!(restanteMs >= RESERVA_MIN_MS)) {
+    console.warn(`[ia] Claude indisponível (${motivo}) — sem tempo para a reserva (${Math.round(restanteMs || 0)} ms)`);
+    return null;
+  }
+  const fb = await geminiFetch(options, { timeoutMs: Math.min(restanteMs, 60000) });
   if (fb) console.warn(`[ia] Claude indisponível (${motivo}) — respondido pelo Gemini`);
   return fb;
 }
@@ -40,6 +47,8 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
   // `noFallback: 'estrito'` é a única exceção (teste A/B, que precisa medir o Claude puro);
   // o antigo `noFallback: true` passou a ser ignorado de propósito.
   const estrito = noFallback === 'estrito';
+  const fimOrcamento = Date.now() + timeoutMs * (retries + 1);
+  const restante = () => fimOrcamento - Date.now();
   let lastRes; // último Response retornável (falha retryável exaurida)
   for (let tent = 0; tent <= retries; tent++) {
     // Timeout por tentativa: sem ele, uma conexão pendurada trava a chamada para
@@ -52,7 +61,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
         if (res.ok) { medirClaude(options, res.clone()); return res; } // mede tokens/buscas sem consumir o corpo do caller
         if (!estrito && await provedorParou(res)) {
           console.error(`[ia] Claude HTTP ${res.status} (falha do provedor) — tentando o Gemini`);
-          return (await reservaGemini(options, timeoutMs, `HTTP ${res.status}`)) || res;
+          return (await reservaGemini(options, restante(), `HTTP ${res.status}`)) || res;
         }
         return res; // erro do PEDIDO (400 comum, 413…) → devolve direto; a outra IA erraria igual
       }
@@ -69,7 +78,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       registrarUso('claude', 'abortada', { requests: 1 }); // fire-and-forget: nunca atrasa o retry
       if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
         if (estrito) throw e;
-        const fb = await reservaGemini(options, timeoutMs, e?.name === 'AbortError' ? 'timeout' : 'rede');
+        const fb = await reservaGemini(options, restante(), e?.name === 'AbortError' ? 'timeout' : 'rede');
         if (fb) return fb;
         throw e;
       }
@@ -80,7 +89,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
   }
   // Chegou aqui = falha retryável do Anthropic esgotou os retries → fallback Gemini.
   if (estrito) return lastRes;
-  return (await reservaGemini(options, timeoutMs, `HTTP ${lastRes?.status} esgotado`)) || lastRes;
+  return (await reservaGemini(options, restante(), `HTTP ${lastRes?.status} esgotado`)) || lastRes;
 }
 
 // IA com GEMINI PRIMÁRIO e Claude como fallback — para funções NÃO-críticas
@@ -91,7 +100,8 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
 export async function iaGeminiPrimary(options, { timeoutMs = 20000, claude = {} } = {}) {
   const g = await geminiFetch(options, { timeoutMs });
   if (g) return g;
-  return anthropicFetch(options, claude);
+  // 'estrito': o Gemini acabou de falhar — a reserva do Claude seria o MESMO Gemini de novo.
+  return anthropicFetch(options, { ...claude, noFallback: 'estrito' });
 }
 
 // Atalho para prompt de TEXTO simples com Gemini primário e Claude de reserva (ou o contrário,

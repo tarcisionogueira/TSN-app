@@ -32,7 +32,7 @@ function paraBase64(bytes) {
   return btoa(bin);
 }
 
-async function blocoParaParte(b) {
+async function blocoParaParte(b, fim) {
   if (!b || typeof b !== 'object') return null;
   if (b.type === 'text' && typeof b.text === 'string') return { text: b.text };
   if (b.type === 'document' || b.type === 'image') {
@@ -40,7 +40,9 @@ async function blocoParaParte(b) {
     if (s.type === 'base64' && s.data) return { inline_data: { mime_type: s.media_type || (b.type === 'image' ? 'image/jpeg' : 'application/pdf'), data: s.data } };
     if (s.type === 'text' && typeof s.data === 'string') return { text: s.data };
     if (s.type === 'url' && /^https:\/\//i.test(s.url || '')) {
-      const r = await fetch(s.url, { signal: AbortSignal.timeout(20000) });
+      const resta = fim - Date.now();
+      if (resta < 2000) throw new Error('sem tempo para baixar o anexo');
+      const r = await fetch(s.url, { signal: AbortSignal.timeout(resta) }); // o download conta no MESMO prazo da reserva
       if (!r.ok) throw new Error(`anexo url HTTP ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer());
       if (bytes.length > LIMITE_INLINE_BYTES) throw new Error(`anexo url com ${(bytes.length / 1048576).toFixed(1)} MB`);
@@ -60,6 +62,7 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
   let payload;
   try { payload = JSON.parse(options?.body || '{}'); } catch { return null; }
 
+  const fim = Date.now() + timeoutMs; // prazo ÚNICO: download de anexo + chamada
   const { system, messages, max_tokens, tools } = payload;
   if (!Array.isArray(messages)) return null;
   // Só a busca na web tem equivalente; ferramenta própria (função) não dá para emular.
@@ -73,7 +76,7 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
     contents = [];
     for (const m of messages) {
       const blocos = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : (Array.isArray(m.content) ? m.content : []);
-      const parts = (await Promise.all(blocos.map(blocoParaParte))).filter(Boolean);
+      const parts = (await Promise.all(blocos.map((b) => blocoParaParte(b, fim)))).filter(Boolean);
       if (!parts.length) continue;
       const role = m.role === 'assistant' ? 'model' : 'user';
       // Gemini exige alternância de papéis: funde mensagens seguidas do mesmo papel.
@@ -97,8 +100,10 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
   gBody.generationConfig = { ...(max_tokens ? { maxOutputTokens: max_tokens } : {}), thinkingConfig: { thinkingBudget: 0 } };
   if (comBusca) gBody.tools = [{ google_search: {} }];
 
+  const resta = fim - Date.now();
+  if (resta < 2000) { console.error('[gemini] prazo consumido pelos anexos — reserva recusada'); return null; }
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const t = setTimeout(() => ctrl.abort(), resta);
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -126,7 +131,7 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
       { status: 200, headers: { 'content-type': 'application/json', 'x-ia-provedor': 'gemini' } },
     );
   } catch (e) {
-    console.error('[gemini] falhou:', e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || e));
+    console.error('[gemini] falhou:', e?.name === 'AbortError' ? `timeout ${resta}ms` : (e?.message || e));
     return null;
   } finally {
     clearTimeout(t);

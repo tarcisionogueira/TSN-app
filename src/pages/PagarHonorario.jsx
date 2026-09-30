@@ -268,7 +268,7 @@ export default function PagarHonorario() {
                 </div>
                 <PagamentoServico
                   servico={{ nome: 'Honorários de êxito', valor: viaCartao.total, proposito: 'honorario_exito' }}
-                  extra={{ arrematacao_id: arr.id, pagador_doc: pagadorDoc.replace(/\D/g, ''), pagador_nome: pagadorNome.trim() }}
+                  extra={{ arrematacao_id: arr.id, pagador_doc: pagadorDoc.replace(/\D/g, ''), pagador_nome: pagadorNome.trim(), honorario_saldo: saldoDevido }}
                   email={email}
                   parcelasSemJuros={1}
                   soCartao

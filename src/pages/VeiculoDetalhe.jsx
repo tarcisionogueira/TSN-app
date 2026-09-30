@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ORIGEM_VENDA } from '../utils/origemVeiculo';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText } from 'lucide-react';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -9,6 +9,8 @@ import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotaVeiculo } from '../utils/cotaAnalise';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import PropostaVeiculoModal from '../components/PropostaVeiculoModal';
+import { podeProporVeiculo } from '../utils/propostaVeiculo';
 import { localDoPatio } from '../utils/patioVeiculo';
 
 // Tela EXCLUSIVA do operacional (dono/equipe) — nunca do cliente (reafirmado 21/09; a rota
@@ -85,6 +87,7 @@ export default function VeiculoDetalhe() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [fotoAtiva, setFotoAtiva] = useState(0);
+  const [propondo, setPropondo] = useState(false);
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
   const [cota, setCota] = useState(null);
@@ -302,6 +305,15 @@ export default function VeiculoDetalhe() {
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 16px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', pointerEvents: v.link_lote ? 'auto' : 'none' }}>
             Ver no leiloeiro <ExternalLink size={14} />
           </a>
+
+          {/* Proposta de compra direta (veio do card da busca, 30/09) — só lote SEM LANCE apurado. */}
+          {podeProporVeiculo(v, role) && (
+            <button onClick={() => setPropondo(true)} title="Propor compra direta ao leiloeiro — leilão já ocorreu sem comprador"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 16px', background: '#6d28d9', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              <Mail size={14} /> Propor compra ao leiloeiro
+            </button>
+          )}
+          {propondo && <PropostaVeiculoModal veiculo={v} onFechar={() => setPropondo(false)} />}
 
           {/* Solicitar análise (21/09, pedido do dono: "assim como os imóveis") — condição do
               veículo + FIPE + veredito, num relatório só (ver api/gerar-analise-veiculo.js).

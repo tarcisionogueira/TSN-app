@@ -3119,16 +3119,19 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // esse número. Só caímos no m²×área quando a IA não o forneceu E a base é por m² construído/
     // privativo (residencial/comercial/industrial); terreno/rural sem estimativa ficam sem valor
     // (o front pede o dado) em vez de multiplicar a régua errada.
+    const baseTipo = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
+
     // RESTRIÇÃO TERRITORIAL (30/09, decisão do dono — opção 3): com 3+ comparáveis DENTRO da
     // mesma APRM/UC, só eles contam; com menos, o valor fica com alerta explícito. Antes da conta
     // ponderada abaixo, para ela também só enxergar as amostras de dentro. Ver _restricao-amostras.js.
     if (mercado && mercadoInputs?.restricoes) {
       try {
         aplicarRestricaoNasAmostras(mercado, { restricoes: mercadoInputs.restricoes,
-          areaM2: Number(mercadoInputs.areaTerrenoM2) || Number(areaM2) || 0 });
+          // m² de TERRENO para terreno/rural; m² privativo/construído para o resto; vaga (unidade) → 0 = alerta.
+          areaM2: ['terreno', 'rural'].includes(baseTipo) ? (Number(mercadoInputs.areaTerrenoM2) || Number(areaM2) || 0)
+            : baseTipo === 'unidade' ? 0 : (Number(areaM2) || 0) });
       } catch (e) { console.error('[gerar-analise] restrição nas amostras:', e?.message || e); }
     }
-    const baseTipo = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
 
     // ─── R$/m² PONDERADO POR PROXIMIDADE — a conta passa a ser CÓDIGO (13/08) ──────────────
     // Até aqui o número da capa era o que a IA escrevia em `valorEstimadoImovel`, seguindo uma

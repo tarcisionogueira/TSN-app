@@ -1,20 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ORIGEM_VENDA, ORIGENS_EXTRAJUDICIAIS } from '../utils/origemVeiculo';
 import { useNavigate } from 'react-router-dom';
-import { Car, Filter, Loader2, MapPin, ExternalLink, X, Mail, Send } from 'lucide-react';
+import { Car, Filter, Loader2, MapPin, X } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { parseDataLocal } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
-import { useAuth } from '../contexts/AuthContext';
-import { apiCall } from '../utils/apiCall';
 import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 
-// Proposta de compra direta ao leiloeiro (17/09, pedido do dono) — só para lote com resultado
-// REAL apurado "sem lance" (21/09; antes era inferência por data — ver api/apurar-resultado-
-// leilao-cron.js e o comentário de RESULTADO_BADGE acima). Restrito à equipe: espelha
-// ROLES_PROPOSTA_VEICULO em api/propor-veiculo-leiloeiro.js — a tela só evita mostrar um botão
-// que a API recusaria.
-const ROLES_PROPOSTA_VEICULO = ['admin', 'analista', 'suporte'];
+// Card da busca SÓ mostra o veículo e leva à página dele (30/09, dono): FIPE sob demanda, link do
+// leiloeiro e proposta de compra direta ficam em VeiculoDetalhe (components/PropostaVeiculoModal).
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const POR_PAGINA = 20;
@@ -23,15 +17,11 @@ const POR_PAGINA = 20;
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'link_lote', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
   // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
   'tipo_veiculo',
-  // Valor FIPE de referência (20/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_fipe.sql.
-  // Só mostra quando fipe_status é 'ok'/'aproximado' (ver renderização do card); 'sem_match'/'erro'
-  // não tem valor_fipe preenchido mesmo, então já ficam de fora sem precisar checar aqui.
-  'valor_fipe', 'fipe_status',
   // Resultado REAL do leilão (21/09) — apurado por api/apurar-resultado-leilao-cron.js
   // revisitando a página de cada lote. Substitui a antiga inferência por data ("negativo").
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
@@ -339,8 +329,6 @@ const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k
 export default function BuscaVeiculos({ embutido = false } = {}) {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { role } = useAuth();
-  const podePropor = ROLES_PROPOSTA_VEICULO.includes(role);
   // Filtros e página sobrevivem a abrir um veículo e voltar (pedido do dono, 24/09) — por aba,
   // em sessionStorage (ver utils/estadoLista.js). Mescla com o vazio para chave nova não faltar.
   const [filtros, setFiltros] = useState(() => {
@@ -373,46 +361,6 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
-  // Proposta de compra direta ao leiloeiro (17/09) — mesmo padrão de "Pedir ao leiloeiro"
-  // (Analise.jsx): PREVIEW monta o rascunho editável (não manda nada); ENVIAR manda o texto
-  // atual da caixa (editado ou não). `propondoVeiculo` guarda o veículo em edição; `null`
-  // fecha o modal.
-  const [propondoVeiculo, setPropondoVeiculo] = useState(null);
-  const [propostaTexto, setPropostaTexto] = useState('');
-  const [propostaInfo, setPropostaInfo] = useState(null); // { linkLote, contatoDisponivel } | null
-  const [propostaCarregando, setPropostaCarregando] = useState(false);
-  const [propostaEnviando, setPropostaEnviando] = useState(false);
-  const [propostaMsg, setPropostaMsg] = useState(''); // { texto, tipo: 'success'|'error' } via string+cor abaixo
-  const [propostaMsgTipo, setPropostaMsgTipo] = useState('error');
-
-  const abrirProposta = async (v) => {
-    setPropondoVeiculo(v);
-    setPropostaTexto(''); setPropostaInfo(null); setPropostaMsg(''); setPropostaCarregando(true);
-    try {
-      const r = await apiCall('/api/propor-veiculo-leiloeiro', { method: 'POST', body: JSON.stringify({ veiculo_id: v.id, action: 'preview' }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j?.error) { setPropostaMsgTipo('error'); setPropostaMsg(j?.error || 'Não foi possível preparar a proposta agora.'); return; }
-      setPropostaTexto(j.texto || ''); setPropostaInfo({ linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, redator: j.redator || null, textoPadrao: j.textoPadrao || '' });
-    } catch {
-      setPropostaMsgTipo('error'); setPropostaMsg('Não foi possível preparar a proposta agora.');
-    } finally { setPropostaCarregando(false); }
-  };
-
-  const enviarProposta = async () => {
-    if (!propondoVeiculo || propostaEnviando) return;
-    setPropostaEnviando(true); setPropostaMsg('');
-    try {
-      const r = await apiCall('/api/propor-veiculo-leiloeiro', { method: 'POST', body: JSON.stringify({ veiculo_id: propondoVeiculo.id, action: 'enviar', texto: propostaTexto }) });
-      const j = await r.json().catch(() => ({}));
-      if (j?.semContato) { setPropostaInfo(i => ({ ...i, contatoDisponivel: false })); setPropostaMsgTipo('error'); setPropostaMsg('Este leiloeiro ainda não tem e-mail de contato cadastrado — copie o texto acima e envie manualmente.'); return; }
-      if (!r.ok || j?.error) { setPropostaMsgTipo('error'); setPropostaMsg(j?.error || 'Não foi possível enviar a proposta agora.'); return; }
-      setPropostaMsgTipo('success'); setPropostaMsg(`Proposta enviada ao leiloeiro (${j.destinatario}). A resposta cai direto no seu e-mail.`);
-    } catch {
-      setPropostaMsgTipo('error'); setPropostaMsg('Não foi possível enviar a proposta agora.');
-    } finally { setPropostaEnviando(false); }
-  };
-
-  const fecharProposta = () => { setPropondoVeiculo(null); setPropostaTexto(''); setPropostaInfo(null); setPropostaMsg(''); };
 
   // RESULTADO VAZIO EXPLICADO (24/09, print do dono: carro + sem lance + ano + lance + avaliação +
   // monta → 0, sem dizer por quê). Tira UM filtro por vez e conta quantos voltariam — só roda quando
@@ -743,11 +691,6 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mín.</div>
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
-                    {v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado') && (
-                      <div style={{ fontSize: 10, color: '#0369a1' }} title={v.fipe_status === 'aproximado' ? 'Valor aproximado — mais de uma versão do modelo bateu com o ano informado' : 'Valor de referência da tabela FIPE'}>
-                        FIPE {v.fipe_status === 'aproximado' ? '≈ ' : ''}{fmtBRL(v.valor_fipe)}
-                      </div>
-                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
                     {/* Resultado REAL (21/09) — quando já apurado, é o sinal que importa;
@@ -767,20 +710,6 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     Ver detalhes
                   </button>
-                  <button onClick={e => { e.stopPropagation(); if (v.link_lote) window.open(v.link_lote, '_blank', 'noopener'); }} disabled={!v.link_lote} title="Abrir a página do lote no site do leiloeiro"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 10px', background: 'white', color: v.link_lote ? '#0D63DB' : '#94a3b8', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: v.link_lote ? 'pointer' : 'default' }}>
-                    Leiloeiro <ExternalLink size={12} />
-                  </button>
-                  {/* Gate de "Propor" trocado de inferência por data para resultado REAL
-                      apurado (21/09) — evita propor compra num lote que na verdade vendeu. */}
-                  {/* Proposta (dono, 24/09): só SEM LANCE CONFIRMADO. Venda condicional (lance abaixo da
-                      reserva, aguardando o comitente) não aceita proposta, e o indeterminado pode ser uma. */}
-                  {podePropor && v.resultado_leilao === 'sem_lance' && !v.teve_lance && (
-                    <button onClick={e => { e.stopPropagation(); abrirProposta(v); }} title="Propor compra direta ao leiloeiro — leilão já ocorreu sem comprador"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 10px', background: '#6d28d9', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                      <Mail size={12} /> Propor
-                    </button>
-                  )}
                 </div>
               </div>
             );
@@ -806,64 +735,6 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         ← Voltar para Veículos
       </button>
 
-      {propondoVeiculo && (
-        <div onClick={fecharProposta} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <Mail size={17} color="#6d28d9" />
-                <h2 style={{ fontSize: 15, fontWeight: 900, color: '#111111', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Propor compra direta</h2>
-              </div>
-              <button onClick={fecharProposta} style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
-            </div>
-            <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 14px' }}>
-              {[propondoVeiculo.marca, propondoVeiculo.modelo, propondoVeiculo.ano_fabricacao].filter(Boolean).join(' ') || propondoVeiculo.titulo} — leilão já ocorrido, sem sinal de comprador.
-            </p>
-
-            {propostaCarregando ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#64748b', fontSize: 13 }}>
-                <Loader2 size={16} className="animate-spin" /> Preparando rascunho…
-              </div>
-            ) : (
-              <>
-                {propostaInfo?.contatoDisponivel === false && (
-                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#92400e', marginBottom: 10 }}>
-                    Este leiloeiro ainda não tem e-mail de contato cadastrado. Copie o texto abaixo e envie manualmente
-                    {propostaInfo.linkLote ? <> (a página do lote fica <a href={propostaInfo.linkLote} target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', fontWeight: 700 }}>aqui</a>)</> : null}.
-                  </div>
-                )}
-                {propostaInfo?.redator && (
-                  <div style={{ fontSize: 11.5, marginBottom: 6, color: propostaInfo.redator.usado ? '#15803d' : '#92400e' }}>
-                    {propostaInfo.redator.usado
-                      ? `✍️ Rascunho no seu estilo, aprendido dos seus ${propostaInfo.redator.exemplos} último(s) e-mail(s) a leiloeiros — revise antes de enviar.`
-                      : `Texto padrão (o redator não usou: ${propostaInfo.redator.motivo}).`}
-                    {propostaInfo.redator.usado && propostaInfo.textoPadrao && (
-                      <button type="button" onClick={() => { setPropostaTexto(propostaInfo.textoPadrao); setPropostaInfo(i => ({ ...i, redator: { ...i.redator, usado: false, motivo: 'você voltou ao texto padrão' } })); }}
-                        style={{ marginLeft: 8, background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11.5 }}>usar texto padrão</button>
-                    )}
-                  </div>
-                )}
-                <textarea value={propostaTexto} onChange={e => setPropostaTexto(e.target.value)} rows={10}
-                  style={{ width: '100%', padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5, fontFamily: 'inherit', color: '#111111', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 }} />
-                {propostaMsg && (
-                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: propostaMsgTipo === 'success' ? '#15803d' : '#b91c1c' }}>{propostaMsg}</div>
-                )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button onClick={fecharProposta} style={{ padding: '9px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: '#64748b', cursor: 'pointer' }}>
-                    {propostaMsgTipo === 'success' ? 'Fechar' : 'Cancelar'}
-                  </button>
-                  {propostaMsgTipo !== 'success' && (
-                    <button onClick={enviarProposta} disabled={propostaEnviando || !propostaTexto.trim()}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 16px', background: propostaEnviando ? '#c4b5fd' : '#6d28d9', color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: propostaEnviando ? 'default' : 'pointer' }}>
-                      {propostaEnviando ? <><Loader2 size={14} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Enviar proposta</>}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
