@@ -282,6 +282,19 @@ Duas revisões em paralelo (API/front/migrações · coletores/gravadores) + che
   (ex. `*.nip.io`) — contido (só https + só service_role); `editais_leilao.texto_integral` sem índice
   trigram (busca semanal de contatos faz varredura — ok no volume atual).
 
+### 🔶 30/09 — Captura restante e pagantes sem relatório (decisão do dono)
+- **LEJE:** o robô RESIDENCIAL também leva 403 (tentou 30/09 00:02; `coleta_cliente.ultima_em` nulo desde
+  27/09) e o banco (AWS) leva a página "Acesso Negado" — não é só IP de datacenter; provável bloqueio de
+  navegador automatizado (HeadlessChrome). 7 lotes; exige outra abordagem (navegador não-headless no PC).
+- **CRLEILOES** (~10 lotes): challenge + sem_config desde 27/09, também no residencial. **BAYIT**: coleta
+  semanal (quinta 13h UTC, feed pago); caiu 78→31→5 até 24/09 — conferir a rodada de 01/10 antes de mexer
+  (o IIS deles recusa o pg_net com "Invalid Header", não dá para ver o feed de graça).
+- **Pagantes sem relatório em 14 dias (6):** Airton do Carmo Cezar (top2 desde 03/09, entra — último login
+  25/09 — e NUNCA gerou relatório), Alessandra de Jesus dos Santos (top2, 0 relatório, 9 chamados), Rafael
+  da Silva Pereira e Matheus Barros (assessorados, 0 relatório), Neuma Nogueira (1 relatório, 16/09),
+  Marcos Araujo (assessorado com arremate em andamento — não é churn). Nenhum travado por defeito
+  (`cliente_travou` vazio, e-mails confirmados). Contato comercial = decisão do dono.
+
 ### ✅ 30/09 — NORDESTE parada desde 16/09 e HASTA ainda acusando "regressão"
 - **NORDESTE:** "0 prontos" todo dia desde 16/09. O acervo (varas federais/criminais) passou de 17 para 398
   lotes — **397 veículos/sucatas** (eventos "veículos conservados"/"sucatas aproveitáveis") e **1 imóvel** —
