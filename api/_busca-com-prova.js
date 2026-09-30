@@ -19,7 +19,7 @@ import { extractText } from './_indice-core.js';
 const COBRANCA = 'Você respondeu sem pesquisar. Use AGORA a ferramenta web_search nos portais (ZAP, VivaReal, OLX, QuintoAndar, Imovelweb) e em imobiliárias locais, e responda SOMENTE com o JSON pedido, só com anúncios reais encontrados.';
 export const EXIGE_BUSCA = 'Use a ferramenta web_search para pesquisar os anúncios ANTES de responder — nunca responda de memória. Ao final, retorne apenas JSON válido.';
 
-export async function buscarComProva({ degrau, chave, system, prompt, webUses, timeoutMs, maxTokens = 12000, aoCusto = null }) {
+export async function buscarComProva({ degrau, chave, system, prompt, webUses, timeoutMs, maxTokens = 12000, aoCusto = null, cobranca = COBRANCA }) {
   const headers = { 'x-api-key': chave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   const prazo = Date.now() + timeoutMs;
   const messages = [{ role: 'user', content: prompt }];
@@ -43,7 +43,7 @@ export async function buscarComProva({ degrau, chave, system, prompt, webUses, t
     if (!buscas && !cobrou && Array.isArray(data?.content) && data.content.length) {
       cobrou = true;
       messages.push({ role: 'assistant', content: data.content });
-      messages.push({ role: 'user', content: COBRANCA });
+      messages.push({ role: 'user', content: cobranca });
       continue;
     }
     break;

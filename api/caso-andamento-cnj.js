@@ -23,6 +23,8 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
+import { preverAndamento, estatisticaFluxo, justicaDoNumero } from './_previsao-processo.js';
+import { buscarJurisprudencia } from './_jurisprudencia.js';
 import { createHash } from 'node:crypto';
 import { getUser } from './_auth.js';
 import { buscarProcessosCNJ, buscarDjen, tribunalDoNumeroCnj } from './_cnj.js';
@@ -175,6 +177,12 @@ export default async function handler(req, res) {
 
   let b = req.body;
   if (typeof b === 'string') { try { b = JSON.parse(b); } catch { return enviar({ error: 'JSON inválido' }, 400); } }
+  // JURISPRUDÊNCIA da etapa (30/09, dono): pesquisa sob demanda nos sites dos tribunais, com cache
+  // de 30 dias por tema (a mesma etapa em outro caso não paga de novo).
+  if (b?.acao === 'jurisprudencia') {
+    const r = await buscarJurisprudencia({ tema: String(b.tema || '').slice(0, 200), contexto: String(b.contexto || '').slice(0, 400), userId: user.id });
+    return enviar(r, r.erro ? 502 : 200);
+  }
   const casoId = String(b?.caso_id || '');
   const arrematadoId = String(b?.arrematado_id || '');
   const UUID = /^[0-9a-f-]{36}$/i;
@@ -263,10 +271,29 @@ export default async function handler(req, res) {
   const resumo = await resumirAndamento({ numero, contexto, jaRegistrado, movimentos, publicacoes })
     .catch(e => ({ ok: false, erro: String(e?.message || e) }));
 
+  // PREVISÃO do próximo andamento (30/09): ritmo do processo + base real da plataforma + prazo
+  // legal da etapa. Determinística (sem IA); se a estatística falhar, sai só com o ritmo próprio.
+  let previsao = null;
+  // Cada consulta alimenta a série que calibra a previsão (mesma tabela/conflito do cnj-monitor-cron).
+  if (movimentos.length) {
+    try {
+      const rs = await fetch(`${SUPABASE_URL}/rest/v1/processo_movimentos?on_conflict=numero_processo,data,codigo,descricao`, {
+        method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify(movimentos.filter((m) => m.data).map((m) => ({ numero_processo: processo?.numero || numero, data: String(m.data).slice(0, 10), codigo: m.codigo ?? null, descricao: String(m.descricao || '').slice(0, 300), risco: null }))),
+      });
+      if (!rs.ok) console.warn('[caso-andamento-cnj] série não gravada HTTP', rs.status);
+    } catch (e) { console.warn('[caso-andamento-cnj] série não gravada:', e?.message || e); }
+  }
+  try {
+    const est = await estatisticaFluxo(justicaDoNumero(numero));
+    previsao = preverAndamento({ movimentos, publicacoes, estat: est.linhas, justica: est.justica });
+  } catch (e) { console.warn('[caso-andamento-cnj] previsão indisponível:', e?.message || e); }
+
   return enviar({
     numero_processo: numero,
     origem_numero: origemNumero,
     resumo,
+    previsao,
     datajud: {
       ok: !!processo || !(cnj.erros || []).length,
       erro: erroCnj,

@@ -16,6 +16,8 @@
 import { enviarWebPush } from './_webpush.js';
 import { auditLog } from './_audit.js';
 import { buscarDjen, buscarProcessosCNJ, buscarProcessosPorParte } from './_cnj.js';
+import { preverAndamento, estatisticaFluxo, justicaDoNumero } from './_previsao-processo.js';
+import { buscarJurisprudencia } from './_jurisprudencia.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -121,6 +123,18 @@ export const ADMIN_CHAT_TOOLS = [
     name: 'consultar_cnpj',
     description: 'Dados abertos da Receita Federal de uma EMPRESA (parte do processo: executada, credora, construtora, banco): razão social, situação cadastral e data, endereço, atividade principal, capital social e sócios (QSA). Fonte gratuita (BrasilAPI; reserva minhareceita.org). NÃO serve para CPF.',
     input_schema: { type: 'object', properties: { cnpj: { type: 'string', description: 'CNPJ com ou sem pontuação' } }, required: ['cnpj'] },
+  },
+  {
+    name: 'buscar_jurisprudencia',
+    description: 'Pesquisa JURISPRUDÊNCIA (STJ, TST, TJs, TRTs, TRFs — sites .jus.br) sobre um tema jurídico e devolve até 5 decisões com tribunal, número, tese em linguagem simples e LINK verificável. Use quando o admin pedir jurisprudência, precedentes, "como os tribunais decidem", ou quando a resposta depender de entendimento dos tribunais (ex.: prazo de impugnação da arrematação, imissão na posse com ocupante, débitos de IPTU/condomínio do arrematante, preço vil). Custa uma pesquisa na web (cache de 30 dias por tema).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tema: { type: 'string', description: 'Tema jurídico objetivo, ex.: "responsabilidade do arrematante por débitos de condomínio anteriores à arrematação"' },
+        contexto: { type: 'string', description: 'Contexto opcional do caso (tribunal, fase, tipo de leilão)' },
+      },
+      required: ['tema'],
+    },
   },
 ];
 // ─── Executores ───────────────────────────────────────────────────────────
@@ -374,7 +388,15 @@ async function consultarDatajud({ numero_processo }) {
     const txt = JSON.stringify(p);
     return txt.length > 1800 ? { ...Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v !== 'object')), movimentos: (p.movimentos || []).slice(0, 8) } : p;
   });
-  return { total: r.total || 0, processos, parecer: r.parecer?.texto || r.parecer || null, erros: r.erros || undefined, tribunais_consultados: (r.tribunais_consultados || []).length };
+  // Previsão do próximo andamento (30/09): ritmo do processo + base real da plataforma + etapa legal.
+  let previsao = null;
+  const alvo = (r.processos || [])[0];
+  if (alvo?.movimentos?.length) {
+    const est = await estatisticaFluxo(justicaDoNumero(numero_processo));
+    const pv = preverAndamento({ movimentos: alvo.movimentos, estat: est.linhas, justica: est.justica });
+    if (pv.disponivel) previsao = { resumo: pv.resumo, status: pv.status, proximo_despacho: pv.proximo_despacho, proxima_janela: pv.proxima_janela, entre_despachos: pv.entre_despachos, fluxo_provavel: pv.fluxo_provavel, etapa_arrematacao: pv.etapa_arrematacao, aviso: pv.aviso };
+  }
+  return { total: r.total || 0, processos, parecer: r.parecer?.texto || r.parecer || null, previsao, erros: r.erros || undefined, tribunais_consultados: (r.tribunais_consultados || []).length };
 }
 
 async function consultarCnpj({ cnpj }) {
@@ -414,6 +436,7 @@ export async function executarFerramentaAdmin(nome, input, ctx) {
       case 'buscar_edital_processo': return await buscarEditalProcesso(input);
       case 'consultar_datajud': return await consultarDatajud(input);
       case 'buscar_processos_por_parte': return await buscarPorParte(input);
+      case 'buscar_jurisprudencia': return await buscarJurisprudencia({ tema: String(input?.tema || '').slice(0, 200), contexto: String(input?.contexto || '').slice(0, 400), userId: ctx?.adminUser?.id || null, prazoMs: 45000 });
       case 'consultar_cnpj': return await consultarCnpj(input);
       case 'verificar_arremate_processo': return await verificarArremateProcesso(input);
       case 'buscar_arremates_cliente': return await buscarArrematesCliente(input);

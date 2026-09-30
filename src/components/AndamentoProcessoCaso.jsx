@@ -64,6 +64,7 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
   const [visivel, setVisivel] = useState(true);
   const [extrajudicial, setExtrajudicial] = useState(false);
   const [mostrarCnj, setMostrarCnj] = useState(false);
+  const [juris, setJuris] = useState(null);           // null | { carregando } | resultado | { erro }
 
   const carregar = useCallback(async () => {
     const { data, error } = await supabase.from('caso_andamentos')
@@ -123,6 +124,22 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
       setConsultando(false);
     }
   };
+
+  // Jurisprudência da etapa (30/09): pesquisa nos sites dos tribunais, cache de 30 dias por tema.
+  const temaJuris = (p) => p?.etapa_arrematacao?.etapa
+    ? `${p.etapa_arrematacao.etapa} em leilão judicial: prazos, efeitos e riscos para o arrematante`
+    : 'arrematação em leilão judicial: impugnação, carta de arrematação e imissão na posse';
+  const pesquisarJuris = async () => {
+    setJuris({ carregando: true });
+    try {
+      const p = consulta?.previsao;
+      const r = await apiCall('/api/caso-andamento-cnj', { method: 'POST', body: JSON.stringify({ acao: 'jurisprudencia', tema: temaJuris(p),
+        contexto: [consulta?.datajud?.processo?.tribunal, consulta?.datajud?.processo?.classe].filter(Boolean).join(' · ') }) });
+      const d = await r.json().catch(() => ({}));
+      setJuris(r.ok ? d : { erro: d.erro || d.error || `HTTP ${r.status}` });
+    } catch (e) { setJuris({ erro: e.message }); }
+  };
+  const textoPrevisao = (p) => [p.resumo, p.etapa_arrematacao ? `Etapa: ${p.etapa_arrematacao.etapa}. Próximo passo: ${p.etapa_arrematacao.proximo} (${p.etapa_arrematacao.base_legal}).` : null, p.aviso].filter(Boolean).join('\n');
 
   const movs = consulta?.datajud?.processo?.movimentos || [];
   const pubs = consulta?.djen?.publicacoes || [];
@@ -206,6 +223,70 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
               </div>
             </div>
           )}
+          {consulta.previsao?.disponivel && (() => {
+            const p = consulta.previsao;
+            const cor = { andando: '#15803d', lento: '#b45309', parado: '#b91c1c' }[p.status] || '#334155';
+            return (
+            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#334155', letterSpacing: 0.3, minWidth: 0 }}>⏱️ PREVISÃO DO PRÓXIMO ANDAMENTO</div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: cor, background: `${cor}14`, borderRadius: 999, padding: '2px 8px' }}>{p.status === 'andando' ? 'Andando' : p.status === 'lento' ? 'Mais lento que o normal' : 'Parado'}</span>
+              </div>
+              {p.proximo_despacho && (
+                <div style={{ fontSize: 14, color: '#0f172a', marginBottom: 6 }}>
+                  🧑‍⚖️ {p.proximo_despacho.atrasado
+                    ? <>O juiz costuma despachar a cada <strong>~{p.entre_despachos.mediana} dias</strong>; o último foi em {fmt(p.proximo_despacho.ultimo)}, <strong>há {p.proximo_despacho.dias_desde} dias — acima do normal</strong>. Vale cobrar a secretaria.</>
+                    : <>Próximo despacho do juiz esperado entre <strong>{fmt(p.proximo_despacho.de)}</strong> e <strong>{fmt(p.proximo_despacho.ate)}</strong> (costuma despachar a cada ~{p.entre_despachos.mediana} dias).</>}
+                  <span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>Base: {p.proximo_despacho.fonte}. Metade dos intervalos entre despachos fica entre {p.entre_despachos.p25} e {p.entre_despachos.p75} dias.</span>
+                </div>
+              )}
+              {p.proxima_janela && !p.proximo_despacho && (
+                <div style={{ fontSize: 14, color: '#0f172a', marginBottom: 6 }}>
+                  {p.proxima_janela.atrasada
+                    ? <>Próxima movimentação <strong>já era esperada até {fmt(p.proxima_janela.ate)}</strong> — vale cobrar a secretaria.</>
+                    : <>Próxima movimentação provável entre <strong>{fmt(p.proxima_janela.de)}</strong> e <strong>{fmt(p.proxima_janela.ate)}</strong>.</>}
+                  <span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>Base: {p.proxima_janela.fonte}. Último ato: {p.ultimo_ato.rotulo || p.ultimo_ato.descricao} em {fmt(p.ultimo_ato.data)} (há {p.dias_desde_ultimo} dias).</span>
+                </div>
+              )}
+              {p.entre_despachos && !p.proximo_despacho && <div style={{ fontSize: 13, color: '#1e293b', marginBottom: 6 }}>🧑‍⚖️ Entre um despacho do juiz e o próximo: <strong>~{p.entre_despachos.mediana} dias</strong> (metade entre {p.entre_despachos.p25} e {p.entre_despachos.p75}) — {p.entre_despachos.fonte}.</div>}
+              <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>Último ato: {p.ultimo_ato.rotulo || p.ultimo_ato.descricao} em {fmt(p.ultimo_ato.data)} (há {p.dias_desde_ultimo} dias).</div>
+              {p.fluxo_provavel?.length > 0 && <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>O QUE COSTUMA VIR DEPOIS DE "{(p.ultimo_ato.rotulo || '').toUpperCase()}"</div>
+                {p.fluxo_provavel.map((f, i) => (
+                  <div key={`f${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '3px 0' }}>
+                    <div style={{ width: 90, height: 8, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}><div style={{ width: `${f.probabilidade}%`, height: '100%', background: '#0D63DB' }} /></div>
+                    <span style={{ minWidth: 36, fontWeight: 700 }}>{f.probabilidade}%</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{f.proximo}{f.mediana_dias > 0 ? ` · em ~${f.mediana_dias} dias` : ' · geralmente no mesmo dia'}</span>
+                  </div>
+                ))}
+                <div style={{ fontSize: 10.5, color: '#94a3b8' }}>Frequência real em processos acompanhados pela plataforma{p.justica ? ` (Justiça ${p.justica})` : ''}.</div>
+              </>}
+              {p.etapa_arrematacao && (
+                <div style={{ fontSize: 12.5, color: '#1e293b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 10px', marginTop: 8 }}>
+                  <strong>Etapa da arrematação: {p.etapa_arrematacao.etapa}.</strong> {p.etapa_arrematacao.proximo} <span style={{ color: '#64748b' }}>({p.etapa_arrematacao.base_legal})</span>
+                </div>
+              )}
+              <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>{p.aviso}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                <button style={btn('#15803d')} disabled={salvando} onClick={() => registrar({ etapaTxt: 'Previsão do próximo andamento', observacao: textoPrevisao(p), origem: 'cnj', dataEvento: new Date().toISOString().slice(0, 10), referencia: { previsao: true } })}>Registrar previsão no andamento</button>
+                <button style={btn('#475569')} disabled={juris?.carregando} onClick={pesquisarJuris}>{juris?.carregando ? 'Pesquisando nos tribunais… (até 1 min)' : '📚 Jurisprudência desta etapa'}</button>
+              </div>
+              {juris && !juris.carregando && (
+                <div style={{ marginTop: 8 }}>
+                  {juris.erro && <div style={{ fontSize: 12, color: '#92400e' }}>Não foi possível pesquisar agora: {juris.erro}</div>}
+                  {!juris.erro && !juris.itens?.length && <div style={{ fontSize: 12, color: '#64748b' }}>A pesquisa nos sites dos tribunais não trouxe decisão com link verificável para este tema.</div>}
+                  {juris.itens?.map((j, i) => (
+                    <div key={`j${i}`} style={{ fontSize: 12.5, padding: '6px 0', borderTop: '1px solid #f1f5f9' }}>
+                      <strong>{[j.tribunal, j.processo, j.data].filter(Boolean).join(' · ') || 'Decisão'}</strong> — {j.tese}{' '}
+                      <a href={j.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}>ver no tribunal</a>
+                    </div>
+                  ))}
+                  {juris.itens?.length > 0 && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{juris.aviso}{juris.do_cache ? ' (pesquisa recente reaproveitada)' : ''}</div>}
+                </div>
+              )}
+            </div>
+            );
+          })()}
           {resumo && !resumo.ok && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>{(consulta.datajud?.erro || consulta.djen?.erro) && !movs.length && !pubs.length ? 'O resumo simples sai quando o CNJ ou o Diário Oficial responderem — tente de novo em alguns minutos.' : `Não foi possível gerar o resumo simples agora (${resumo.erro}).`}</div>}
 
           {consulta.datajud?.erro && (
