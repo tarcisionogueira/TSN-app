@@ -62,9 +62,9 @@ export default async function handler(req, res) {
     const r = await sb(`analises_mercado?id=in.(${idsSob.join(',')})&select=id,user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`);
     if (!r.ok) { res.status(502).json({ ok: false, motivo: 'leitura_falhou', status: r.status }); return; }
     const rows = await r.json();
-    const disparados = [];
-    for (const row of rows) {
-      if (!row?.inputs?.mercadoInputs) { disparados.push({ id: row.id, pulado: 'sem inputs gravados' }); continue; }
+    // Em paralelo (30/09) — em sequência, 10 ids × 9 s passavam do maxDuration de 30 s.
+    const disparados = await Promise.all(rows.map(async (row) => {
+      if (!row?.inputs?.mercadoInputs) return { id: row.id, pulado: 'sem inputs gravados' };
       await sb(`analises_mercado?id=eq.${row.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ regen_tentativas: (row.regen_tentativas || 0) + 1, regen_em: new Date().toISOString()}) }).catch(() => {});
       const g = await fetch(`${BASE}/api/gerar-analise`, {
@@ -76,8 +76,8 @@ export default async function handler(req, res) {
           semCache: true }),
         signal: AbortSignal.timeout(9000),
       }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`); // a geração segue na própria função
-      disparados.push({ id: row.id, gerar: g });
-    }
+      return { id: row.id, gerar: g };
+    }));
     res.status(200).json({ ok: true, sobDemanda: disparados, naoEncontrados: idsSob.filter((i) => !rows.some((x) => x.id === i)) });
     return;
   }
@@ -89,15 +89,16 @@ export default async function handler(req, res) {
     const r = await sb(`analises_veiculo?id=in.(${idsVeic.join(',')})&select=id,user_id,veiculo_id,regen_tentativas`);
     if (!r.ok) { res.status(502).json({ ok: false, motivo: 'leitura_falhou', status: r.status }); return; }
     const rows = await r.json();
-    const disparados = [];
-    for (const row of rows) {
-      const g = await fetch(`${BASE}/api/gerar-analise-veiculo`, {
+    // EM PARALELO (30/09): em sequência, 4 veículos × 9 s estouraram o tempo desta função (504 no
+    // workflow) — as gerações rodaram, mas o disparo parecia falho. Cada geração segue sozinha.
+    const disparados = await Promise.all(rows.map(async (row) => ({
+      id: row.id,
+      gerar: await fetch(`${BASE}/api/gerar-analise-veiculo`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
         body: JSON.stringify({ veiculoId: row.veiculo_id, paraUserId: row.user_id }),
         signal: AbortSignal.timeout(9000),
-      }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`); // a geração segue na própria função
-      disparados.push({ id: row.id, gerar: g });
-    }
+      }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`), // a geração segue na própria função
+    })));
     res.status(200).json({ ok: true, veiculos: disparados, naoEncontrados: idsVeic.filter((i) => !rows.some((x) => x.id === i)) });
     return;
   }

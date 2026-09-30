@@ -34,7 +34,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
 
       - name: Baixar extrato OSM (Brasil)
-        run: curl -fSL --retry 3 -o brazil.osm.pbf https://download.geofabrik.de/south-america/brazil-latest.osm.pbf
+        # 30/09: a Geofabrik entrou em laço de redirecionamento (curl 47, 50 redirects) e o job caiu
+        # inteiro. Tenta a Geofabrik e, se falhar, o espelho do openstreetmap.fr (mesmo extrato Brasil).
+        run: |
+          curl -fSL --retry 3 --max-redirs 10 -o brazil.osm.pbf https://download.geofabrik.de/south-america/brazil-latest.osm.pbf \
+            || { echo "::warning::Geofabrik falhou — usando o espelho openstreetmap.fr"; \
+                 curl -fSL --retry 3 --max-redirs 10 -o brazil.osm.pbf https://download.openstreetmap.fr/extracts/south-america/brazil-latest.osm.pbf; }
 
       - name: Filtrar POIs de interesse
         run: |

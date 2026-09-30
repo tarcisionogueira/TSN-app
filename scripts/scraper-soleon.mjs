@@ -193,7 +193,11 @@ async function fetchTenant(url, { timeoutMs = 45000 } = {}) {
 function inferirTipo(titulo = '') {
   const t = titulo.toLowerCase();
   if (/apartament|apto|flat|kitnet|studio/.test(t)) return 'apartamento';
-  if (/casa|sobrado|residenc/.test(t)) return 'casa';
+  // "Lote, Residencial, Moreira Sales" (CALIL, 30/09): "Residencial" é o ZONEAMENTO do lote, não uma
+  // casa — 24 lotes vazios caíram como casa e o mercadológico comparava com casas. Título que começa
+  // com lote/terreno é terreno; "residência" (a casa) continua casa.
+  if (/^\s*(lote|terreno|gleba)\b/.test(t) && !/casa|sobrado|resid[êe]ncia\b|edifica|constru[íi]d/.test(t)) return 'terreno';
+  if (/casa|sobrado|resid[êe]ncia\b/.test(t)) return 'casa';
   if (/terreno|lote|gleba|[áa]rea/.test(t)) return 'terreno';
   if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio/.test(t)) return 'comercial';
   if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';

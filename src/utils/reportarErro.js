@@ -55,7 +55,7 @@ function ehRuido(msg = '') {
 // verba subindo — ruído que ocupa a vaga de um erro real na fila de investigação.
 const TERCEIROS = [
   'chrome-extension://', 'moz-extension://', 'safari-web-extension://',
-  'googletagmanager.com', 'google-analytics.com', 'connect.facebook.net', 'clarity.ms',
+  'googletagmanager.com', 'google-analytics.com', 'analytics.google.com', 'connect.facebook.net', 'clarity.ms',
   'iabjs://',
 ];
 function ehStackDeTerceiro(stack = '') {
@@ -84,9 +84,16 @@ export function ehProducao(href) {   // exportada para scripts/testes/erro-so-de
   catch { return false; }   // sem href confiável, não inventa erro de cliente
 }
 
+// Beacon de analytics/anúncio BLOQUEADO no navegador do visitante (30/09): chega como
+// "Failed to fetch (analytics.google.com)" — o domínio vem na própria mensagem, o stack é do nosso
+// wrapper de fetch, então `ehStackDeTerceiro` não pegava. Era o único erro aberto em erros_cliente
+// (12 linhas, health-check em aviso todo dia) e não há nada a corrigir: bloqueador de anúncio.
+const FETCH_DE_TERCEIRO = /failed to fetch \((?:[a-z0-9-]+\.)*(?:google-analytics\.com|analytics\.google\.com|googletagmanager\.com|doubleclick\.net|googleadservices\.com|facebook\.(?:com|net)|clarity\.ms)\)/i;
+export function ehFetchDeTerceiro(msg = '') { return FETCH_DE_TERCEIRO.test(String(msg)); }
+
 export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   try {
-    if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack)) return;
+    if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack) || ehFetchDeTerceiro(msg)) return;
     const href = url || (typeof location !== 'undefined' ? location.href : '');
     if (!ehProducao(href)) return;   // preview/localhost: não é erro que um cliente viu
     const rota = (href.split('#')[1] || (typeof location !== 'undefined' ? location.pathname : '')).split('?')[0];
