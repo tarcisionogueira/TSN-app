@@ -716,7 +716,7 @@ export default async function handler(req, res) {
   // bloquear só num dos dois deixaria a porta aberta. Antes da cota, de propósito.
   {
     const lz = await leilaoEncerrado(sb, imovelId, body?.dataLeilao || null);
-    if (lz.encerrado && !(await ehEquipe(sb, user.id))) { // equipe gera p/ proposta pós-leilão (ehEquipe)
+    if (lz.encerrado && !isCron && !(await ehEquipe(sb, user.id))) { // equipe (proposta pós-leilão) e regeração pelo cron passam
       res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
       return;
     }

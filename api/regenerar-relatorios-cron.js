@@ -82,6 +82,25 @@ export default async function handler(req, res) {
     return;
   }
 
+  // DOCUMENTAL sob demanda (30/09, dono: "pode regerar os documentais com busca por nome"): ids de
+  // analises_documental. Regera para o MESMO dono/imóvel via cron (sem cota, sem gate de encerrado).
+  const idsDoc = String(req.query?.documental || '').split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+  if (idsDoc.length) {
+    const r = await sb(`analises_documental?id=in.(${idsDoc.join(',')})&select=id,user_id,imovel_id,titulo,cidade,estado`);
+    if (!r.ok) { res.status(502).json({ ok: false, motivo: 'leitura_falhou', status: r.status }); return; }
+    const rows = await r.json();
+    const disparados = await Promise.all(rows.map(async (row) => ({
+      id: row.id,
+      gerar: await fetch(`${BASE}/api/gerar-documental`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+        body: JSON.stringify({ imovelId: row.imovel_id, paraUserId: row.user_id, titulo: row.titulo, cidade: row.cidade, estado: row.estado }),
+        signal: AbortSignal.timeout(9000),
+      }).then((x) => x.status).catch((e) => `disparado (${String(e?.name || e)})`),
+    })));
+    res.status(200).json({ ok: true, documentais: disparados, naoEncontrados: idsDoc.filter((i) => !rows.some((x) => x.id === i)) });
+    return;
+  }
+
   // VEÍCULO sob demanda (30/09, dono: "gere novamente esses relatórios"): ids de analises_veiculo.
   // Só REGERA análise que já existe, para o MESMO dono — o gerador confere isso e não cobra cota.
   const idsVeic = String(req.query?.veiculo || '').split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);

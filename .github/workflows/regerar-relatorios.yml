@@ -10,6 +10,10 @@ on:
         description: 'ids de analises_mercado separados por vírgula (máx. 10)'
         required: false
         default: ''
+      documentais:
+        description: 'ids de analises_documental separados por vírgula (máx. 10) — só regera análise existente'
+        required: false
+        default: ''
       veiculos:
         description: 'ids de analises_veiculo separados por vírgula (máx. 10) — só regera análise existente'
         required: false
@@ -29,13 +33,15 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           IDS: ${{ github.event.inputs.ids }}
           VEIC: ${{ github.event.inputs.veiculos }}
+          DOCS: ${{ github.event.inputs.documentais }}
           BASE: ${{ github.event.inputs.base_url }}
         run: |
           if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio"; exit 1; fi
           IDS_LIMPOS=$(echo "$IDS" | tr -d ' ')
           VEIC_LIMPOS=$(echo "$VEIC" | tr -d ' ')
-          if [ -z "$IDS_LIMPOS" ] && [ -z "$VEIC_LIMPOS" ]; then echo "::error::informe ids e/ou veiculos"; exit 1; fi
-          for par in "mercado=$IDS_LIMPOS" "veiculo=$VEIC_LIMPOS"; do
+          DOCS_LIMPOS=$(echo "$DOCS" | tr -d ' ')
+          if [ -z "$IDS_LIMPOS" ] && [ -z "$VEIC_LIMPOS" ] && [ -z "$DOCS_LIMPOS" ]; then echo "::error::informe ids, veiculos e/ou documentais"; exit 1; fi
+          for par in "mercado=$IDS_LIMPOS" "veiculo=$VEIC_LIMPOS" "documental=$DOCS_LIMPOS"; do
             [ "${par#*=}" = "" ] && continue
             HTTP=$(curl -sS --max-time 120 "$BASE/api/regenerar-relatorios-cron?$par" -H "x-cron-secret: $CRON_SECRET" -o resp.json -w "%{http_code}")
             cat resp.json; echo
