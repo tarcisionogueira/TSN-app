@@ -389,7 +389,9 @@ export default async function handler(req, res) {
     // `gastoBusca` soma o custo da busca de anúncios para entrar no débito do crédito (revisão 29/09:
     // o débito cobrava só a análise principal e a busca saía de graça para quem paga por crédito).
     const gastoBusca = { micro: 0 };
-    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id, gastoBusca);
+    // Prazo da busca 70 → 93 s (30/09): a 2ª tentativa (Sonnet, busca dinâmica) abortava com ~45 s
+    // sobrando nos 4 veículos regerados. A análise principal corre em paralelo e termina antes.
+    const revendaP = buscarRevendaMercado(v, HARD_MS - 12000, user.id, gastoBusca);
     const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
     const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
       anexosParaBlocos(v.anexos, prazoDocs),
