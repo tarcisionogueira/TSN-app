@@ -9,6 +9,17 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧭 30/09 (noite, 6ª parte) — alerta avaliação × mercado e identidade do edital (liberados pelo dono)
+- **Alerta:** `src/utils/alertaAvaliacao.js` — mercado > 4× ou < 0,25× a avaliação (mesma régua do
+  `mercado_incoerente_avaliacao` do aprendizado, que só marcava internamente) → caixa vermelha na capa do
+  relatório (Analise.jsx) e no quadro-resumo do PDF. Calculado na tela: 7 de 76 relatórios (Embu 9,8×).
+- **`extrairIdentidadeTexto` (achado de 17/09):** deixa de pegar o 1º "Rua/Condomínio/Bairro" do texto; cada
+  ocorrência recebe nota pela pista MAIS PRÓXIMA — leiloeiro/escritório/sede/telefone/e-mail/site/CNPJ/junta →
+  descarta; imóvel/localizado/situado/matrícula/apartamento/terreno → preferida; empate = a primeira (antigo).
+  "1ª Praça"/"Praça única" não é logradouro. Teste `identidade-nao-pega-escritorio-do-leiloeiro.mjs` (falha no
+  código antigo: devolvia "Rua Augusta", o escritório). Cache de edital por URL expira em 30 dias → as
+  identidades antigas se renovam sozinhas nas próximas leituras.
+
 ### 🖼️ 30/09 (noite, 5ª parte) — fotos mais leves na busca
 - **Medido (amostra de 81 fotos, 27 CDNs):** 71% das capas (17.780) já são nossas (Caixa, 55 KB). Leves: Zuk/Mega/
   Biasi/Frazão 11–17 KB. Médias: Superbid/GoCache/CloudFront 130–160 KB. **Pesadas:** Suporte Leilões ~300 KB (até
@@ -117,10 +128,10 @@ de cliente parado; segurança 0/0.
 6. ✅ Revenda de veículo: Mobiauto (grátis, via banco) como 1ª fonte desde 30/09 — a Webmotors bloqueia robô. Se preferir outra fonte, avisar.
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
 8. 🟠 Google Ads: publicar app OAuth (token de 7 dias); projeto "BidPro métricas diárias" (custo?).
-9. 🟠 Embu-Guaçu: decisão sobre o relatório (mercado R$ 655 mil × avaliação R$ 66,6 mil).
+9. ✅ Embu-Guaçu: alerta vermelho "avaliação muito abaixo do mercado" na capa e no PDF (vale p/ os 7 relatórios na faixa >4× ou <0,25×).
 10. 🟠 Teto semanal do Bright Data (subir ou aceitar dias sem coleta paga).
 11. 🟠 Testar compra avulsa (ebook) ponta a ponta; nomear um analista.
-12. 🟠 Jurídico: sujeição à Lei 9.613/COAF; liberar a correção de `extrairIdentidadeTexto` (endereço do leiloeiro).
+12. 🟠 Jurídico: sujeição à Lei 9.613/COAF. ✅ 30/09: correção de `extrairIdentidadeTexto` liberada e aplicada.
 13. 🟡 Instagram (verificação Meta); Windsor (14 contas); CREPALDI (integrar ou remover);
     e-mails de 7 leiloeiros sem e-mail publicado; retenção de e-mails. ✅ PECINI/SUBLIME já resolvido (28/09). ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
     7 d: 148 enviados, 43 abertos, 10 cliques). ✅ Alqueire: regra por tipo escrito ou UF de convenção firme.
@@ -2033,7 +2044,7 @@ Recon descartável (`scripts/recon-datas-gestao-pecini-ferreiraleil.mjs` +
 
 ---
 
-## 🔎 17/09 — ACHADO (NÃO CORRIGIDO, decisão do dono): `extrairIdentidadeTexto` pega endereço do LEILOEIRO/cabeçalho, não do imóvel
+## 🔎 17/09 — ACHADO (✅ CORRIGIDO 30/09, liberado pelo dono): `extrairIdentidadeTexto` pega endereço do LEILOEIRO/cabeçalho, não do imóvel
 
 Achado durante a auditoria retroativa da contaminação entre lotes (seção abaixo) — é um bug
 **diferente e maior**, não coberto pelo `isolarBlocoDoLote` que acabou de ser corrigido.

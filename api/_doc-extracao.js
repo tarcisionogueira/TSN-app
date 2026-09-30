@@ -376,28 +376,61 @@ export function extrairIdentidadeTexto(texto) {
     const cand = nome.join(' ').replace(/[.\s]+$/, '').slice(0, maxLen);
     return cand.length >= 3 && /[A-Za-zÀ-ÿ]{3}/.test(cand) ? cand : null;
   };
-  const primeiroNome = (ancoras, maxToks, maxLen) => {
+  // ESCOLHA POR CONTEXTO, não "o primeiro que aparece" (30/09, liberado pelo dono; achado de
+  // 17/09). O 1º "Rua…"/"Condomínio…"/"Bairro…" de um edital costuma ser o ESCRITÓRIO DO
+  // LEILOEIRO no cabeçalho/rodapé — e o nome do condomínio vira âncora da busca de comparáveis
+  // (`condAlvo`), então a pesquisa saía procurando o lugar errado. Cada ocorrência ganha nota
+  // pelo que está EM VOLTA dela: perto de leiloeiro/escritório/sede/telefone/e-mail/site/CNPJ/
+  // junta comercial → descarta; perto de imóvel/localizado/situado/matrícula/apartamento/casa/
+  // terreno → preferida. Empate fica com a primeira (o comportamento antigo, quando o texto não
+  // dá pista). "Praça" como praça do LEILÃO ("1ª Praça", "Praça única") não é logradouro.
+  const RE_CTX_LEILOEIRO = /leiloeir|escrit[óo]rio|\bsede\b|telefone|\bfones?\b|\btel\.|whatsapp|e-?mail|@|www\.|https?:|cnpj|jucesp|juce[a-z]{1,2}\b|junta comercial|atendimento|hor[áa]rio/i;
+  const RE_CTX_IMOVEL = /im[óo]ve(?:l|is)|localizad|situad|\bsito\b|matr[íi]cula|apartamento|\bcasa\b|terreno|unidade aut[ôo]noma|pr[ée]dio|sala comercial|\bloja\b|\bgaragem\b|descri[çc][ãa]o do bem|\bbem:/i;
+  // Vale a pista MAIS PRÓXIMA do endereço: "Fulano, Leiloeiro Oficial, … leva a leilão o imóvel
+  // situado na Rua B" tem "leiloeiro" antes da Rua B, mas "imóvel situado" está mais perto.
+  const ultimo = (re, txt) => { let p = -1; for (const m of txt.matchAll(new RegExp(re.source, 'gi'))) p = m.index; return p; };
+  const nota = (ini, fim) => {
+    const antes = t.slice(Math.max(0, ini - 160), ini), depois = t.slice(fim, fim + 100);
+    const pL = ultimo(RE_CTX_LEILOEIRO, antes), pI = ultimo(RE_CTX_IMOVEL, antes);
+    const dL = depois.search(RE_CTX_LEILOEIRO), dI = depois.search(RE_CTX_IMOVEL);
+    const leiloeiroDepois = dL >= 0 && (dI < 0 || dL < dI);
+    if (pI > pL) return leiloeiroDepois && dL < 25 ? -10 : 2;   // "imóvel situado na Rua X" (salvo "Rua X — Tel.")
+    if (pL >= 0 && antes.length - pL <= 110) return -10;        // "escritório na Rua X", "Leiloeiro … Rua X"
+    if (leiloeiroDepois) return -10;                            // "Rua X, 100 — fone/e-mail/www"
+    return dI >= 0 && dI < 40 ? 2 : 0;
+  };
+  const melhorNome = (ancoras, maxToks, maxLen) => {
+    let melhor = null;
     for (const [re, rotulo] of ancoras) {
       for (const m of t.matchAll(re)) {
+        if (rotulo === 'Praça' && (/(?:\d\s*[ºª°o]|primeira|segunda|terceira|[úu]nica)\s*$/i.test(t.slice(Math.max(0, m.index - 14), m.index))
+          || /^\s*(?:[úu]nica|p[úu]blica|do leil)/i.test(t.slice(m.index + m[0].length, m.index + m[0].length + 12)))) continue;
         const cand = nomeApos(m.index + m[0].length, maxToks, maxLen);
-        if (cand) return `${rotulo} ${cand}`;
+        if (!cand) continue;
+        const n = nota(m.index, m.index + m[0].length + cand.length);
+        if (n < 0) continue;
+        if (!melhor || n > melhor.n || (n === melhor.n && m.index < melhor.pos)) melhor = { v: `${rotulo} ${cand}`, n, pos: m.index };
       }
     }
-    return null;
+    return melhor ? melhor.v : null;
   };
-  const nomeCondominio = primeiroNome([
+  const nomeCondominio = melhorNome([
     [/condom[íi]nio/gi, 'Condomínio'], [/edif[íi]cio/gi, 'Edifício'],
     [/residencial/gi, 'Residencial'], [/empreendimento/gi, 'Empreendimento'],
   ], 5, 60);
-  const logradouro = primeiroNome([
+  const logradouro = melhorNome([
     [/\brua\b/gi, 'Rua'], [/\bavenida\b|\bav\./gi, 'Avenida'], [/\btravessa\b/gi, 'Travessa'],
     [/\balameda\b/gi, 'Alameda'], [/\brodovia\b/gi, 'Rodovia'], [/\bestrada\b/gi, 'Estrada'], [/\bpra[çc]a\b/gi, 'Praça'],
   ], 6, 70);
-  const bai = t.match(/bairro\s+(?:d[eoa]s?\s+)?([A-Za-zÀ-ÿ'’ -]{3,40}?)\s*(?:[,.;]|\bna\b|\bem\b|\bcidade\b|$)/i);
+  let bai = null;
+  for (const m of t.matchAll(/bairro\s+(?:d[eoa]s?\s+)?([A-Za-zÀ-ÿ'’ -]{3,40}?)\s*(?:[,.;]|\bna\b|\bem\b|\bcidade\b|$)/gi)) {
+    const n = nota(m.index, m.index + m[0].length);
+    if (n >= 0 && (!bai || n > bai.n)) bai = { v: m[1], n };
+  }
   const out = {
     nomeCondominio,
     logradouro,
-    bairro: bai ? bai[1].trim().replace(/\s+/g, ' ').slice(0, 60) : null,
+    bairro: bai ? bai.v.trim().replace(/\s+/g, ' ').slice(0, 60) : null,
   };
   return Object.values(out).some((v) => v) ? out : null;
 }
