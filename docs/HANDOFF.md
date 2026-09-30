@@ -282,6 +282,19 @@ Duas revisões em paralelo (API/front/migrações · coletores/gravadores) + che
   (ex. `*.nip.io`) — contido (só https + só service_role); `editais_leilao.texto_integral` sem índice
   trigram (busca semanal de contatos faz varredura — ok no volume atual).
 
+### ✅ 30/09 — NORDESTE parada desde 16/09 e HASTA ainda acusando "regressão"
+- **NORDESTE:** "0 prontos" todo dia desde 16/09. O acervo (varas federais/criminais) passou de 17 para 398
+  lotes — **397 veículos/sucatas** (eventos "veículos conservados"/"sucatas aproveitáveis") e **1 imóvel** —
+  e o motor lê só `maxLotes` (40) detalhes na ordem da página: gastava as 40 com veículo. Gancho novo e
+  opcional no runner, `parse.urlCandidata(url)`, filtra pelo SLUG antes de ler o detalhe (mesma regra de
+  imóvel do `parseDetalhe`). Seco (run 36656284973): 397 fora pela URL, 1 candidato, 1 pronto. `fonteVazia`
+  e `enumerados` seguem medindo o que o SITE listou (acervo 100% não-imóvel não vira "site vazio").
+  Pendência pequena: o lote 177-001 sai cidade "Lotes Itabaianha" e área 0 (slug "itabaianhase", "6x20m").
+  **Oportunidade:** os 397 veículos da NORDESTE não são coletados — possível fonte de veículos.
+- **HASTA:** o conserto de 29/09 tirou o vazio declarado só do ramo `zerou`; o mesmo zero caía em
+  `regressao` ("faltando 290"). Mesma cláusula nos dois ramos (`20260930_regressao_respeita_vazio_declarado.sql`,
+  aplicada) — HASTA saiu da lista.
+
 ### ✅ 29/09 — HASTA e JOAOEMILIO: o alarme `zerou` era ruído, não regressão
 - **HASTA ≠ HASTAPUBLICA** (Hasta Leilões/BA × Hasta Pública/Valland). HASTA seguia acusando
   `zerou` (mediana 579) há 30 dias com o site dizendo "NENHUM LOTE ENCONTRADO NO MOMENTO" em
