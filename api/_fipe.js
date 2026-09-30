@@ -118,6 +118,31 @@ export function acharCandidatosModelo(nossoModelo, modelos) {
   return melhor > 0 ? cands.filter(m => pontos(m) === melhor) : cands;
 }
 
+// SEGUNDA TENTATIVA, MAIS AMPLA (30/09, dono: "por que não traz a FIPE de determinados veículos").
+// Dois padrões medidos nos `sem_match` e que a busca por 1ª palavra não alcança:
+//  • o nome FIPE MUDOU com o ano: Renault Oroch 2021/22 é "DUSTER OROCH Dyna. 1.6…" e só de 2023
+//    em diante vira "OROCH Pro…". A 1ª palavra achava só os de 2023+ e o ano nunca batia.
+//  • o lote escreve o modelo COLADO: "416CDISPRINTERM" (Sprinter 416 CDI), "HB20S1.0".
+// Aqui: a palavra-chave do nosso modelo em QUALQUER posição do nome FIPE, ou uma 1ª palavra FIPE
+// (4+ letras) que aparece DENTRO de um token nosso; pontua pelos números/palavras em comum e devolve
+// no máximo `max` — é chamada só quando a 1ª tentativa não achou ano, para não gastar cota à toa.
+export function acharCandidatosModeloAmplo(nossoModelo, modelos, jaTentados = new Set(), max = 6) {
+  const norm = normalizar(nossoModelo);
+  if (!norm) return [];
+  // "416cdisprinterm" → também "416" e "cdisprinterm": números colados viram palavra própria
+  const toks = [...new Set(norm.split(' ').flatMap((t) => [t, ...t.split(/(?<=\d)(?=[a-z])|(?<=[a-z])(?=\d)/)]))].filter(Boolean);
+  const nomes = modelos.map((m) => ({ m, n: normalizar(m.name || m.nome || '') }));
+  const chaves = new Set(toks.filter((t) => /^[a-z]{3,}$/.test(t)));
+  for (const { n } of nomes) {
+    const p1 = n.split(' ')[0];
+    if (p1 && p1.length >= 4 && /^[a-z]+$/.test(p1) && toks.some((t) => t.length > p1.length && t.includes(p1))) chaves.add(p1);
+  }
+  if (!chaves.size) return [];
+  const cands = nomes.filter(({ m, n }) => !jaTentados.has(m.code ?? m.codigo) && n.split(' ').some((w) => chaves.has(w)));
+  const pontos = ({ n }) => { const ws = new Set(n.split(' ')); return toks.filter((t) => ws.has(t)).length; };
+  return cands.sort((a, b) => pontos(b) - pontos(a)).slice(0, max).map(({ m }) => m);
+}
+
 // ─── MARCA/MODELO PELO TÍTULO (24/09) ─────────────────────────────────────────────────────
 // 93% do acervo ativo vinha sem `modelo` (SUPERBID 6.688, LJUD 1.248) e o cron exigia
 // marca+modelo+ano — ou seja, só ~530 veículos podiam ter FIPE, nunca os outros 7 mil. O
@@ -253,18 +278,26 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
     if (!cache.has(chaveModelos)) cache.set(chaveModelos, await fipeGet(`/${categoria}/brands/${codigoMarca}/models`) || []);
     const modelos = cache.get(chaveModelos);
     const candidatosModelo = acharCandidatosModelo(modelo, modelos);
-    if (!candidatosModelo.length) return { status: 'sem_match' };
 
     // Pára de checar assim que achar 2 — só precisamos saber se é único; o valor final vem
     // sempre do PRIMEIRO que bateu, então checar um 3º/4º não muda o resultado.
     const bateram = [];
-    for (const cm of candidatosModelo) {
-      if (bateram.length >= 2) break;
-      const codigoModelo = cm.code ?? cm.codigo;
-      const anos = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${codigoModelo}/years`);
-      if (!Array.isArray(anos)) continue;
-      const anoOk = anos.find(a => anoBate(a.name || a.nome, anoFabricacao, anoModelo));
-      if (anoOk) bateram.push({ codigoModelo, codigoAno: anoOk.code ?? anoOk.codigo });
+    const conferirAnos = async (lista) => {
+      for (const cm of lista) {
+        if (bateram.length >= 2) break;
+        const codigoModelo = cm.code ?? cm.codigo;
+        const anos = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${codigoModelo}/years`);
+        if (!Array.isArray(anos)) continue;
+        const anoOk = anos.find(a => anoBate(a.name || a.nome, anoFabricacao, anoModelo));
+        if (anoOk) bateram.push({ codigoModelo, codigoAno: anoOk.code ?? anoOk.codigo });
+      }
+    };
+    await conferirAnos(candidatosModelo);
+    // Nenhum ano bateu (ou nenhum candidato): 2ª tentativa ampla — nome FIPE que mudou com o ano
+    // ("DUSTER OROCH" até 2022) e modelo colado no lote ("416CDISPRINTERM").
+    if (!bateram.length) {
+      const tentados = new Set(candidatosModelo.map((m) => m.code ?? m.codigo));
+      await conferirAnos(acharCandidatosModeloAmplo(modelo, modelos, tentados));
     }
     if (!bateram.length) return { status: 'sem_match' };
 

@@ -1314,6 +1314,19 @@ export function ehVeiculoSuperbid(tipoProduto, subCategoria) {
   return RE_TIPO_VEICULO_SBID.test(tipoProduto || '') && !RE_SUB_NAO_VEICULO_SBID.test(subCategoria || '');
 }
 
+// ENCERRAMENTO DA OFERTA SUPERBID (30/09, print do dono: lote que fechava 12h04 de Brasília
+// aparecia "Leilão encerrado" às 09h42). A consulta usa timeZoneId=America/Sao_Paulo, então
+// `endDate` ("2026-09-30 12:04:30") é hora de BRASÍLIA sem fuso — gravado numa coluna timestamptz,
+// o Postgres lê como UTC e o lote "encerra" 3 h antes: 7.623 de 7.644 veículos estavam assim.
+// `endDateTime` é epoch em ms (instante absoluto, sem ambiguidade) e vence; na falta dele, o texto
+// ganha o fuso de Brasília explícito (a consulta pediu esse fuso).
+export function dataFimSuperbid(of) {
+  const ms = Number(of?.endDateTime);
+  if (ms > 0) return new Date(ms).toISOString();
+  const t = String(of?.endDate || '').trim();
+  return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(t) ? `${t.replace(' ', 'T')}-03:00` : null;
+}
+
 async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leiloeiro, prefix, baseSite }) {
   console.log(`  ${leiloeiro} (veículos, piloto) — API offers (portal ${portalId})...`);
   const page = await browser.newPage();
@@ -1446,7 +1459,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
           // quando a API não trouxe nada.
           anexos: extrairAnexosPdfDeObjeto(of),
           forma_pagamento: 'a_vista',
-          data_leilao: of.endDate || of.endDateTime || null,
+          data_leilao: dataFimSuperbid(of),
           motor_alerta: REGEX_MOTOR_ALERTA.test(textoCompleto) || null,
           ipva_situacao: (textoCompleto.match(REGEX_IPVA)?.[1] || '').toUpperCase() || null,
           ativo: true,
