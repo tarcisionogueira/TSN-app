@@ -159,7 +159,10 @@ export default async function handler(req, res) {
   // externalReference que aquela ação grava; mesma lógica de crédito de
   // api/mp-webhook.js (idempotente por gateway_payment_id, valor não pode passar do saldo,
   // trigger do banco fecha o honorário quando a soma bate).
-  const mHonorario = extRef.match(/^honorario\|(.+)$/);
+  // `honorario|<id>` (legado) ou `honorario|<id>|taxa:<valor>` (30/09: taxa do meio repassada ao
+  // cliente — a baixa registra só o honorário, líquido da taxa).
+  const mHonorario = extRef.match(/^honorario\|([^|]+)(?:\|taxa:(\d+(?:\.\d{1,2})?))?$/);
+  const taxaHonorario = mHonorario?.[2] ? Number(mHonorario[2]) : 0;
   const mCobrancaAvulsa = extRef.match(/^cobranca_avulsa\|(.+)$/);
 
   try {
@@ -212,18 +215,20 @@ export default async function handler(req, res) {
         const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
         const total = Number(arr.honorarios_valor) || 0;
         const esperado = Math.max(0, Math.round((total - jaRecebido) * 100) / 100);
-        if (esperado <= 0 || valor <= 0 || valor > esperado + Math.max(1, esperado * 0.01)) {
-          console.error('[asaas-webhook] honorario valor incompatível', { arrId, valor, esperado, total, jaRecebido });
+        const valorHon = Math.round((valor - taxaHonorario) * 100) / 100; // o que é HONORÁRIO (sem a taxa repassada)
+        if (esperado <= 0 || valorHon <= 0 || valorHon > esperado + Math.max(1, esperado * 0.01)) {
+          console.error('[asaas-webhook] honorario valor incompatível', { arrId, valor, taxaHonorario, valorHon, esperado, total, jaRecebido });
           await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
           return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
         }
-        const metodoReal = pagReal.billingType === 'PIX' ? 'pix_asaas' : 'cartao_asaas';
+        const metodoReal = pagReal.billingType === 'PIX' ? 'pix_asaas' : pagReal.billingType === 'BOLETO' ? 'boleto_asaas' : 'cartao_asaas';
         const insRes = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos`, {
           method: 'POST',
           headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({
-            arrematacao_id: arrId, metodo: metodoReal, valor, status: 'confirmado',
-            justificativa: `Pago via ${pagReal.billingType || 'Asaas'} pelo link de honorários (fallback Asaas — MP recusado)`,
+            arrematacao_id: arrId, metodo: metodoReal, valor: valorHon, status: 'confirmado',
+            justificativa: `Pago via ${pagReal.billingType || 'Asaas'} pelo link de honorários (Asaas)`
+              + (taxaHonorario > 0 ? ` — taxa de R$ ${taxaHonorario.toFixed(2)} paga pelo cliente, fora do honorário` : ''),
             gateway_payment_id: String(pagReal.id),
           }),
         });
@@ -241,7 +246,7 @@ export default async function handler(req, res) {
             await enviarReciboHonorario(arrId);
           }
         } catch (e) { console.error('[asaas-webhook] recibo honorário falhou:', e?.message || e); }
-        return res.status(200).json({ ok: true, honorario: { arrematacao_id: arrId, recebido: valor, saldo_restante: Math.max(0, esperado - valor) } });
+        return res.status(200).json({ ok: true, honorario: { arrematacao_id: arrId, recebido: valorHon, taxa: taxaHonorario, saldo_restante: Math.max(0, esperado - valorHon) } });
       }
       if (mCobrancaAvulsa) {
         const cobId = mCobrancaAvulsa[1];

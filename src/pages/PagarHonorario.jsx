@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
+import BoletoHonorario from '../components/BoletoHonorario';
+import { honorarioComTaxa, TAXA_CARTAO_MP_PCT } from '../utils/taxaHonorario';
 import { AZUL, VERDE } from '../utils/marca';
 
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,6 +29,7 @@ export default function PagarHonorario() {
   const [aceite, setAceite] = useState(false);
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
+  const [meio, setMeio] = useState(null); // 'boleto' | 'cartao' — Pix saiu dos honorários (30/09)
 
   useEffect(() => {
     if (user?.email) setEmail(e => e || user.email);
@@ -54,13 +57,13 @@ export default function PagarHonorario() {
     return () => { cancel = true; };
   }, [arrematacaoId]);
 
-  const registrarAceite = async () => {
+  const registrarAceite = async (gateway = 'mercadopago') => {
     try {
       await apiCall('/api/registrar-aceite', {
         method: 'POST',
         body: JSON.stringify({
           plano_key: 'assessorado', valor: arr.honorarios_valor, arrematacao_id: arr.id,
-          termos_versao: versaoTermoProduto('assessorado'), gateway: 'mercadopago',
+          termos_versao: versaoTermoProduto('assessorado'), gateway,
         }),
       });
     } catch { /* padrao-ok: registro de aceite é best-effort — nunca bloqueia o pagamento já feito */ }
@@ -69,18 +72,6 @@ export default function PagarHonorario() {
   const handlePago = async () => {
     await registrarAceite();
     setPago(true);
-  };
-
-  // Pix + Cartão combinado (18/09): depois que a PARTE em Pix compensa, o cartão precisa
-  // cobrar o saldo ATUALIZADO — nunca calculado no front (o servidor é a fonte de verdade
-  // de quanto falta, evita corrida/arredondamento). Também atualiza `arr` para a lista de
-  // partes já recebidas (a barra verde "Já recebemos...") refletir o Pix recém-pago.
-  const recarregarSaldo = async () => {
-    const res = await fetch(`/api/honorario-info?id=${encodeURIComponent(arrematacaoId)}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.id) throw new Error('não foi possível atualizar o saldo');
-    setArr(data);
-    return Number(data.honorarios_saldo_restante) || 0;
   };
 
   const wrap = { minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 16px' };
@@ -125,6 +116,10 @@ export default function PagarHonorario() {
   }
 
   const termo = termoDoProduto('assessorado', { valorLabel: fmtBRL(arr.honorarios_valor), modelo: 'parcelado' });
+  // TAXA DO MEIO REPASSADA (30/09, decisão do dono) — mesma conta que o servidor cobra.
+  const saldoDevido = Number(arr.honorarios_saldo_restante ?? arr.honorarios_valor) || 0;
+  const viaBoleto = honorarioComTaxa(saldoDevido, 'boleto_asaas');
+  const viaCartao = honorarioComTaxa(saldoDevido, 'cartao_mp');
 
   return (
     <div style={wrap}>
@@ -153,7 +148,7 @@ export default function PagarHonorario() {
               {(arr.honorarios_partes || []).map((p, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, gap: 8 }}>
                   <span>
-                    {{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}
+                    {{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', cartao_asaas: 'Cartão', boleto_asaas: 'Boleto', pix_mp: 'Pix', pix_asaas: 'Pix', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}
                     {p.metodo === 'cheque' && (p.banco || p.numero_cheque) && (
                       <span style={{ color: '#4d7c0f', fontWeight: 400 }}> ({p.banco || '—'}{p.numero_cheque ? ` nº ${p.numero_cheque}` : ''})</span>
                     )}
@@ -167,8 +162,9 @@ export default function PagarHonorario() {
         )}
 
         <div style={{ textAlign: 'center', padding: '4px 0' }}>
-          <div style={{ fontSize: 12, color: '#64748b' }}>Valor a pagar</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(arr.honorarios_saldo_restante ?? arr.honorarios_valor)}</div>
+          <div style={{ fontSize: 12, color: '#64748b' }}>Honorário a pagar</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(saldoDevido)}</div>
+          <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>+ taxa do meio de pagamento escolhido, paga por quem paga</div>
         </div>
 
         <div>
@@ -199,21 +195,53 @@ export default function PagarHonorario() {
         ) : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Como você quer pagar?</div>
-            <PagamentoServico
-              servico={{ nome: 'Honorários de êxito', valor: arr.honorarios_saldo_restante ?? arr.honorarios_valor, proposito: 'honorario_exito' }}
-              extra={{ arrematacao_id: arr.id }}
-              email={email}
-              parcelasSemJuros={1}
-              embutido
-              onPago={handlePago}
-              permitirSplit
-              recarregarSaldo={recarregarSaldo}
-            />
+            {!meio && (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {[
+                  { k: 'boleto', t: 'Boleto bancário', d: `taxa do boleto ${fmtBRL(viaBoleto.taxa)} · compensa em 1 a 3 dias úteis`, v: viaBoleto.total },
+                  { k: 'cartao', t: 'Cartão de crédito', d: `taxa do cartão ${String(TAXA_CARTAO_MP_PCT).replace('.', ',')}% (${fmtBRL(viaCartao.taxa)}) · parcelamento com juros da operadora`, v: viaCartao.total },
+                ].map(o => (
+                  <button key={o.k} onClick={() => setMeio(o.k)}
+                    style={{ textAlign: 'left', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <span>
+                      <span style={{ display: 'block', fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{o.t}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: '#64748b', marginTop: 2 }}>{o.d}</span>
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: 15, color: AZUL, whiteSpace: 'nowrap' }}>{fmtBRL(o.v)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {meio && (
+              <button onClick={() => setMeio(null)} style={{ background: 'none', border: 'none', color: AZUL, fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: 10 }}>
+                ← trocar forma de pagamento
+              </button>
+            )}
+            {meio === 'boleto' && (
+              <BoletoHonorario arrematacaoId={arr.id} email={email} previsto={viaBoleto} onGerado={() => registrarAceite('asaas')} />
+            )}
+            {meio === 'cartao' && (
+              <>
+                <div style={{ fontSize: 12.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', lineHeight: 1.6, marginBottom: 10 }}>
+                  Honorário {fmtBRL(viaCartao.honorario)} + taxa do cartão {fmtBRL(viaCartao.taxa)} = <strong>{fmtBRL(viaCartao.total)}</strong>
+                </div>
+                <PagamentoServico
+                  servico={{ nome: 'Honorários de êxito', valor: viaCartao.total, proposito: 'honorario_exito' }}
+                  extra={{ arrematacao_id: arr.id }}
+                  email={email}
+                  parcelasSemJuros={1}
+                  soCartao
+                  embutido
+                  onPago={handlePago}
+                  onCancelar={() => setMeio(null)}
+                />
+              </>
+            )}
           </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>
-          <ShieldCheck size={12} /> Pagamento processado pelo Mercado Pago
+          <ShieldCheck size={12} /> Boleto processado pelo Asaas · cartão pelo Mercado Pago
         </div>
       </div>
     </div>

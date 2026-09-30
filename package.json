@@ -100,7 +100,8 @@
     "testar:filtros-veiculos": "node scripts/testes/filtros-veiculos-combinados.mjs",
     "testar:galeria-veiculo": "node scripts/testes/galeria-veiculo.mjs",
     "testar:contato-leiloeiro": "node scripts/testes/contato-leiloeiro.mjs",
-    "testar:globo-json": "node scripts/testes/globo-json.mjs"
+    "testar:globo-json": "node scripts/testes/globo-json.mjs",
+    "testar:taxa-honorario": "node scripts/testes/taxa-honorario.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

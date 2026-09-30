@@ -538,7 +538,11 @@ export async function processarEventoMp(req, res) {
         const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
         const total = Number(arr.honorarios_valor) || 0;
         const esperado = Math.max(0, Math.round((total - jaRecebido) * 100) / 100);
-        const pago = Number(pagamento.transaction_amount) || 0;
+        // TAXA REPASSADA (30/09): o cliente pagou saldo + taxa do cartão (metadata.taxa_repassada,
+        // gravada por api/mp-checkout.js). O que entra como HONORÁRIO é o líquido — senão o total
+        // passaria do saldo e a baixa seria recusada como "valor incompatível".
+        const taxaRepassada = Math.max(0, Number(pagamento.metadata?.taxa_repassada) || 0);
+        const pago = Math.round(((Number(pagamento.transaction_amount) || 0) - taxaRepassada) * 100) / 100;
         // PIX + CARTÃO COMBINADO (17/09): o pagamento pode ser uma PARTE do saldo (Pix
         // parcial escolhido pelo pagador em api/mp-checkout.js), não só o saldo inteiro —
         // então não é mais "bater exato", é "não pode passar do que falta". A trava real
@@ -559,7 +563,8 @@ export async function processarEventoMp(req, res) {
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({
             arrematacao_id: arrId, metodo: metodoReal, valor: pago, status: 'confirmado',
-            justificativa: metodoReal === 'pix_mp' ? 'Pago via Pix pelo link de honorários (Mercado Pago)' : 'Pago via cartão pelo link de honorários (Mercado Pago)',
+            justificativa: (metodoReal === 'pix_mp' ? 'Pago via Pix pelo link de honorários (Mercado Pago)' : 'Pago via cartão pelo link de honorários (Mercado Pago)')
+              + (taxaRepassada > 0 ? ` — taxa do cartão de R$ ${taxaRepassada.toFixed(2)} paga pelo cliente, fora do honorário` : ''),
             gateway_payment_id: String(pagamento.id),
           }),
         });

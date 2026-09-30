@@ -3,6 +3,7 @@ import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
 import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF } from './_cpf.js';
 import { podeContratarAssessoria } from './_assessoria.js';
+import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { logAtividade } from './_atividade.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
@@ -182,7 +183,7 @@ export default async function handler(req, res) {
     // honorarios_recebimentos/cobrancas_avulsas automaticamente (mesma lógica de
     // api/mp-webhook.js), sem depender de alguém dar baixa manual.
     if (action === 'criar_cobranca_fallback') {
-      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody, endereco } = body;
+      const { proposito: propFallback, arrematacao_id, cobranca_id, nome, email, cpf: cpfBody, endereco, meio: meioBody } = body;
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
       // 18/09, pedido do dono: pagamento exige endereço completo (dados pra emissão de NF),
       // não só CPF. Mesma checagem de completude do Checkout.jsx (enderecoOk).
@@ -191,6 +192,7 @@ export default async function handler(req, res) {
       if (!enderecoOk) return res.status(400).json({ error: 'endereco_necessario', mensagem: 'Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) para gerar a cobrança.' });
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
       let saldo, descricao, externalReference, arrematanteId = null;
+      let billingType = 'UNDEFINED', valorCobrado = null, taxaHon = 0;
 
       if (propFallback === 'honorario_exito') {
         if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
@@ -209,8 +211,17 @@ export default async function handler(req, res) {
         const jaRecebido = confirmados.reduce((s, x) => s + Number(x.valor || 0), 0);
         saldo = Math.round((total - jaRecebido) * 100) / 100;
         if (saldo <= 0) return res.status(409).json({ error: 'Os honorários desta arrematação já foram cobertos por outros recebimentos.' });
-        descricao = 'Honorários de êxito (saldo restante) — BidPro Brasil';
-        externalReference = `honorario|${arr.id}`;
+        // BOLETO (principal) ou CARTÃO (reserva quando o MP recusa) — sem Pix, e com a TAXA do meio
+        // repassada ao cliente por cima do saldo (30/09, decisão do dono; regra única em
+        // src/utils/taxaHonorario.js). A taxa viaja no externalReference para o webhook separar
+        // honorário (líquido) de taxa ao dar baixa.
+        const meio = meioBody === 'boleto' ? 'boleto_asaas' : 'cartao_asaas';
+        const cob = honorarioComTaxa(saldo, meio);
+        billingType = meio === 'boleto_asaas' ? 'BOLETO' : 'CREDIT_CARD';
+        valorCobrado = cob.total;
+        taxaHon = cob.taxa;
+        descricao = `Honorários de êxito — BidPro Brasil (honorário R$ ${saldo.toFixed(2)} + taxa ${meio === 'boleto_asaas' ? 'do boleto' : 'do cartão'} R$ ${cob.taxa.toFixed(2)})`;
+        externalReference = `honorario|${arr.id}|taxa:${cob.taxa.toFixed(2)}`;
         arrematanteId = arr.arrematante_id;
       } else if (propFallback === 'cobranca_avulsa') {
         if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
@@ -307,14 +318,28 @@ export default async function handler(req, res) {
       }
       const cobranca = await asaasPost('/payments', {
         customer: customerId,
-        billingType: 'UNDEFINED',
-        value: saldo,
-        dueDate: vencimentoAntecipavel(),
+        billingType,
+        value: valorCobrado ?? saldo,
+        // Boleto de honorário vence em 3 dias (a regra de 12 dias é da antecipação do CARTÃO).
+        dueDate: billingType === 'BOLETO' ? new Date(Date.now() + 3 * 86400e3).toISOString().slice(0, 10) : vencimentoAntecipavel(),
         description: descricao,
         externalReference,
       });
-      auditLog({ acao: 'asaas_cobranca_fallback', user_id: null, ip, detalhes: { proposito: propFallback, arrematacao_id, cobranca_id, saldo, customerId }, sucesso: true });
-      return res.status(200).json({ linkPagamento: cobranca.invoiceUrl || cobranca.bankSlipUrl, paymentId: cobranca.id, valor: saldo });
+      // Linha digitável do boleto, para a tela oferecer "copiar" além do PDF. Falha aqui não
+      // desfaz a cobrança (o PDF do boleto já tem a linha) — só não mostra o atalho.
+      let linhaDigitavel = null;
+      if (billingType === 'BOLETO') {
+        try {
+          const ld = await fetch(`${ASAAS_URL}/payments/${cobranca.id}/identificationField`, { headers: { access_token: API_KEY }, signal: AbortSignal.timeout(10000) });
+          if (ld.ok) linhaDigitavel = (await ld.json().catch(() => ({})))?.identificationField || null;
+          else console.error('[asaas fallback] linha digitável: HTTP', ld.status);
+        } catch (e) { console.error('[asaas fallback] linha digitável:', e?.message || e); }
+      }
+      auditLog({ acao: 'asaas_cobranca_fallback', user_id: null, ip, detalhes: { proposito: propFallback, arrematacao_id, cobranca_id, saldo, billingType, taxa: taxaHon, customerId }, sucesso: true });
+      return res.status(200).json({
+        linkPagamento: billingType === 'BOLETO' ? (cobranca.bankSlipUrl || cobranca.invoiceUrl) : (cobranca.invoiceUrl || cobranca.bankSlipUrl),
+        paymentId: cobranca.id, valor: valorCobrado ?? saldo, honorario: saldo, taxa: taxaHon, billingType, linhaDigitavel, vencimento: cobranca.dueDate || null,
+      });
     }
 
     const PLANOS = await getPlanosConfig();

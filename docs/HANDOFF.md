@@ -189,6 +189,22 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
+### ✅ 30/09 — Honorário de êxito: BOLETO Asaas + cartão MP, sem Pix, taxa repassada ao cliente (decisão do dono)
+- Tela `/pagar-honorario` (`PagarHonorario.jsx`): escolha **Boleto (Asaas)** ou **Cartão (MP)**, cada um com o
+  total já com a taxa ("honorário R$ X + taxa R$ Y = R$ Z"). Pix e "Pix + cartão" saíram desta tela
+  (continuam em outras cobranças). Componente novo `BoletoHonorario.jsx` (CPF + endereço, linha digitável, PDF).
+- **Regra única da taxa: `src/utils/taxaHonorario.js`** (tela e servidor usam a mesma): boleto Asaas +R$ 3,49
+  fixo; cartão MP gross-up de 2,48% (medido) — o LÍQUIDO após a taxa do gateway fecha o honorário (teste
+  `npm run testar:taxa-honorario`: nunca abaixo, sobra ≤ R$ 0,02); cartão Asaas (reserva) 2,99% + R$ 0,49.
+- Servidor: `mp-checkout` recusa Pix no honorário e cobra o total, com `metadata.taxa_repassada`;
+  `asaas.js criar_cobranca_fallback` aceita `meio: 'boleto'|'cartao'` (antes `UNDEFINED`, que deixava pagar
+  por Pix), boleto vence em 3 dias, `externalReference = honorario|<id>|taxa:<valor>`.
+- Baixa: `mp-webhook` e `asaas-webhook` descontam a taxa e gravam o honorário LÍQUIDO em
+  `honorarios_recebimentos` (novo método `boleto_asaas`, migração `20260930_honorario_boleto_asaas.sql`,
+  aplicada); a justificativa registra a taxa paga pelo cliente. extRef antigo (`honorario|<id>`) segue lido.
+- ⚠️ Ainda sem pagamento real por este caminho — o 1º boleto/cartão pago confirma a baixa ponta a ponta
+  (`select metodo, valor, justificativa from honorarios_recebimentos order by created_at desc limit 3`).
+
 ### 💳 30/09 — Taxas de cobrança do honorário de êxito (antes de integrar o Inter)
 Medido nos pagamentos aprovados do Mercado Pago (`mp_pagamentos.dados_mp.fee_details`, só
 `fee_payer=collector`): **Pix 1,00%** · **cartão à vista 2,48%** · saldo MP 1,10%. ⚠️ CORREÇÃO: o honorário

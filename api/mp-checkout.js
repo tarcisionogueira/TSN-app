@@ -7,6 +7,7 @@
  *   MP_ACCESS_TOKEN  — access_token da conta MP da plataforma (produção)
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
+import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -161,6 +162,8 @@ export default async function handler(req, res) {
   if (proposito === 'honorario_exito') {
     const { arrematacao_id } = req.body || {};
     if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
+    // Pix saiu dos honorários (30/09, decisão do dono): boleto pelo Asaas ou cartão aqui.
+    if (metodoPagamento !== 'credit_card') return res.status(400).json({ error: 'Honorários: pague por boleto ou cartão de crédito.' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
       const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
@@ -188,18 +191,13 @@ export default async function handler(req, res) {
       // diferença cobrada depois pelo cartão é sempre recalculada NA HORA (o card volta a
       // pedir o saldo cheio de novo), então o valor aqui é o único ponto de confiança:
       // limitado ao saldo devido e com piso mínimo pra não virar spam de Pix de centavos.
-      const pixParcial = metodoPagamento === 'pix' ? Number(req.body?.valor_pix_parcial) : null;
-      if (Number.isFinite(pixParcial) && pixParcial > 0) {
-        const PISO_PIX_PARCIAL = 5;
-        if (pixParcial < PISO_PIX_PARCIAL) return res.status(400).json({ error: `Valor mínimo para Pix parcial: R$ ${PISO_PIX_PARCIAL},00.` });
-        if (pixParcial > saldo + 0.01) return res.status(400).json({ error: 'O valor do Pix não pode ser maior que o saldo devido.' });
-        valor = Math.round(pixParcial * 100) / 100;
-      } else {
-        valor = saldo;
-      }
-      descricao = jaRecebido > 0 || (Number.isFinite(pixParcial) && pixParcial > 0 && pixParcial < saldo)
-        ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
-      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id };
+      // TAXA DO CARTÃO REPASSADA (30/09, decisão do dono): cobra o saldo + a taxa do MP por cima
+      // (src/utils/taxaHonorario.js, a MESMA conta que a tela mostra). A taxa vai no metadata
+      // para o webhook descontar ao dar baixa — o honorário registrado é o líquido, nunca o total.
+      const cob = honorarioComTaxa(saldo, 'cartao_mp');
+      valor = cob.total;
+      descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
+      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -401,7 +399,7 @@ export default async function handler(req, res) {
         : honorarioCtx
           // dono da cobrança vem do banco (honorarioCtx.arrematanteId), não de `user` — pode
           // não haver sessão nenhuma neste fluxo (ver comentário acima).
-          ? { user_id: honorarioCtx.arrematanteId, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: honorarioCtx.arrematanteId }
+          ? { user_id: honorarioCtx.arrematanteId, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: honorarioCtx.arrematanteId, taxa_repassada: honorarioCtx.taxa }
           : cobrancaCtx
             // idem: quem paga pode não ter sessão (link repassado a terceiro).
             ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId }
