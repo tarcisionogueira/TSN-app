@@ -96,8 +96,9 @@ de cliente parado; segurança 0/0.
 10. 🟠 Teto semanal do Bright Data (subir ou aceitar dias sem coleta paga).
 11. 🟠 Testar compra avulsa (ebook) ponta a ponta; nomear um analista.
 12. 🟠 Jurídico: sujeição à Lei 9.613/COAF; liberar a correção de `extrairIdentidadeTexto` (endereço do leiloeiro).
-13. 🟡 Resend: eventos opened/clicked no webhook; Instagram (verificação Meta); Windsor (14 contas);
-    CREPALDI (integrar ou remover); PECINI dry-run; e-mails de 6 leiloeiros; alqueire; retenção de e-mails.
+13. 🟡 Instagram (verificação Meta); Windsor (14 contas); CREPALDI (integrar ou remover); PECINI dry-run;
+    e-mails de 6 leiloeiros; retenção de e-mails. ✅ 30/09: Resend opened/clicked JÁ ativos (webhook + domínio;
+    7 d: 148 enviados, 43 abertos, 10 cliques). ✅ Alqueire: regra por tipo escrito ou UF de convenção firme.
 
 ### 📌 30/09 (manhã, 2ª parte) — datas da Superbid, FIPE, SOLEON pelo banco, termo + procuração, contrato do checkout
 1. **Data do leilão da Superbid 3 h adiantada** (print: lote fechava 12h04, BidPro dizia "encerrado" às 09h42).

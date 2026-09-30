@@ -133,7 +133,28 @@ export function avaliacaoAtualizadaDoTexto(texto) {
   return v > 0 ? v : 0;
 }
 
-export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
+// ALQUEIRE (30/09, pendência "decidir regra"). O tamanho muda por região, então a regra é:
+// (1) o texto DIZ o tipo ("alqueires paulistas", "alqueire mineiro/goiano/geométrico", "baiano",
+// "do norte") → conversão exata; (2) só "alqueire" → pela UF, e SÓ onde a convenção é firme:
+// paulista (24.200 m²) em SP/PR/MS; geométrico/goiano (48.400 m²) em MG/GO/DF/TO. (3) Qualquer
+// outra UF, ou sem UF → 0: converter ali inventaria área. Medido: 40 lotes ativos sem área citam
+// alqueire (PR 29, SP 9, GO 2).
+const ALQUEIRE_TIPO = [
+  [/^paulistas?\b/i, 24200], [/^(?:mineiros?|goianos?|geom[ée]tricos?)\b/i, 48400],
+  [/^baianos?\b/i, 96800], [/^(?:do\s+norte|nortistas?)\b/i, 27225],
+];
+const ALQUEIRE_UF = { SP: 24200, PR: 24200, MS: 24200, MG: 48400, GO: 48400, DF: 48400, TO: 48400 };
+export function areaEmAlqueires(t, uf) {
+  const m = String(t || '').match(/(?<![\d.,])(\d{1,4}(?:,\d+)?)(?:\s*\([^)]{1,25}\))?\s*alqueires?\b\s*(?:de\s+terras?\s+)?(.{0,20})/i);
+  if (!m) return 0;
+  const n = Number(m[1].replace(',', '.'));
+  const tipo = ALQUEIRE_TIPO.find(([re]) => re.test(m[2]));
+  const fator = tipo ? tipo[1] : ALQUEIRE_UF[String(uf || '').toUpperCase()] || 0;
+  const v = n * fator;
+  return fator && Number.isFinite(v) && v >= 1000 && v <= 5e9 ? Math.round(v * 100) / 100 : 0;
+}
+
+export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   // `permitirSolta=false` (22/08): quando o texto é a PÁGINA INTEIRA (e não uma descrição
   // recortada), o último recurso `NUM m²` casa "área de lazer 300 m²", a metragem de OUTRO lote
   // no rodapé ou um banner — foi assim que o BIASI gravou área inventada, que o trigger de
@@ -172,6 +193,8 @@ export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
   // Hectare ANTES do m² solto: em rural, "Fazenda c/ 304 ha. e 290 m²" — o m² solto é a sede.
   const ha = areaEmHectares(t);
   if (ha) return ha;
+  const alq = areaEmAlqueires(t, uf);
+  if (alq) return alq;
   return plausivel(paraNumero((t.match(new RegExp(`${NUM}\\s*${UNI}`, 'i')) || [])[1])); // solta, último recurso
 }
 

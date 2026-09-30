@@ -36,7 +36,7 @@ const FONTES_FORA = new Set(['EDITAL_DJEN']);
 function areaDe(r) {
   if (FONTES_FORA.has(r.fonte)) return { area: 0, motivo: 'fonte_fora' };
   const texto = `${r.titulo || ''}. ${r.descricao || ''}`;
-  const area = r.fonte === 'PESTANA' ? areaFichaCaixa(r.descricao, r.tipo) : extrairAreaM2(texto);
+  const area = r.fonte === 'PESTANA' ? areaFichaCaixa(r.descricao, r.tipo) : extrairAreaM2(texto, { uf: r.estado });
   if (!(area >= 10 && area <= 500_000_000)) return { area: 0, motivo: 'sem_area' };
   if (/alqueire|hectare|\d\s*ha\b/i.test(texto) && area < 10_000) return { area: 0, motivo: 'rural_area_pequena' };
   if (/\b(apartamento|apto|sala comercial|kitnet|flat)\b/i.test(`${r.titulo || ''} ${String(r.descricao || '').slice(0, 80)}`) && area > 1000) return { area: 0, motivo: 'apto_area_condominio' };
@@ -45,7 +45,7 @@ function areaDe(r) {
 
 const rows = [];
 for (let de = 0; rows.length < LIMITE; de += 500) {
-  const pag = await sb(`imoveis_leilao?ativo=eq.true&or=(area_m2.is.null,area_m2.eq.0)&descricao=not.is.null&select=id,fonte,tipo,titulo,descricao&order=id&limit=500&offset=${de}`);
+  const pag = await sb(`imoveis_leilao?ativo=eq.true&or=(area_m2.is.null,area_m2.eq.0)&descricao=not.is.null&select=id,fonte,tipo,estado,titulo,descricao&order=id&limit=500&offset=${de}`);
   rows.push(...pag);
   if (pag.length < 500) break;
 }
