@@ -459,11 +459,16 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
       return json({ ok: true, rate_limited: true, remetente_chamados_1h: recentes });
     }
     const token = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+    // PEDIDO DE TITULAR (LGPD art. 18/19, 30/09): o que chega em privacidade@ precisa ser visto
+    // como tal e ter PRAZO — 15 dias para a resposta completa. Antes virava um chamado comum,
+    // igual a qualquer dúvida. O título carrega a marca e a data-limite, visíveis na fila.
+    const ehLgpd = destinatarios(data, headers).some((d) => /(^|<|\s)privacidade@/i.test(String(d)));
+    const prazoLgpd = new Date(Date.now() + 15 * 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const r = await sb('chamados', {
       method: 'POST', prefer: 'return=representation',
       body: {
         user_id: null, user_email: endereco, user_nome: nome || endereco,
-        titulo: assunto, status: 'aberto', segmento: 'curioso', tipo: 'duvida',
+        titulo: ehLgpd ? `[LGPD — responder até ${prazoLgpd}] ${assunto || ''}`.slice(0, 250) : assunto, status: 'aberto', segmento: 'curioso', tipo: 'duvida',
         origem: 'email', canal: 'email', email_token: token,
       },
     });
