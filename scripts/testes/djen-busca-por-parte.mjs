@@ -26,8 +26,14 @@ assert.equal(p.tribunal, 'TJSP');
 assert.equal(p.publicacoes, 2);
 assert.equal(p.ultima_atualizacao, '2026-09-20');
 assert.equal(p.polo_da_parte, 'passivo');
-assert.equal(p.tem_penhora, true);
+assert.equal(p.tem_penhora, false, '"penhora" no TEXTO da intimação não é gravame (auditoria 30/09)');
 assert.equal(p.cpf_no_texto, true, 'CPF informado aparece na publicação');
+assert.equal(p.homonimo_possivel, false, 'CPF conferido: não é homônimo');
+// Sem CPF conferido: pode ser homônimo — riscos não pesam.
+const semDoc = processosDasPublicacoes([it('5000001-11.2024.4.03.6100', 'TRF3', '2026-09-01', 'x', [['MARCOS FERREIRA PINTO', 'P']], 'EMBARGOS À ARREMATAçãO')], { nome: 'Marcos Ferreira Pinto' });
+assert.equal(semDoc[0].homonimo_possivel, true);
+assert.deepEqual(semDoc[0].riscos, [], 'homônimo possível: riscos só indicados');
+assert.ok(semDoc[0].riscos_indicados.some((r) => r.categoria === 'Embargos' && r.severidade === 'alerta'), 'classe indica embargos, no máximo alerta');
 assert.equal(p.fase, 'Cumprimento de Sentença');
 assert.deepEqual(p.partes.map((x) => x.nome), ['MARCOS FERREIRA PINTO', 'BANCO X']);
 console.log('djen-busca-por-parte: todos os casos passaram');

@@ -1178,6 +1178,10 @@ export default async function handler(req, res) {
     // 'pendente' como o DEFAULT de etapa que ainda nem começou (linha ~92 abaixo) — reusar o
     // mesmo nome aqui faria toda etapa "ainda não iniciada" (mercadológico incluso, mesmo
     // componente de tela) piscar o ícone de alerta indevidamente.
+    // Auditoria 30/09 (itens 1 e 10): o que CONFIRMA o processo do lote é a consulta por NÚMERO; a
+    // busca por nome (DJEN) acha processos da parte, não prova este. E falha ≠ "não localizado".
+    let cnjConfirmaNumero = !!(procNum && cnj?.total);
+    let cnjNumeroFalhou = !!procNum && !cnj?.total && (!cnj || !!cnj.erros?.length);
     prog.processo = temBuscaCnj
       ? { status: (cnj && cnj.total) ? 'concluido' : 'indisponivel', n: (cnj?.total ?? null) }
       : { status: 'pulado', n: null };
@@ -1414,16 +1418,26 @@ export default async function handler(req, res) {
     // consulta CNJ por NÚMERO — a 1ª consulta (antes da IA) só via o nº do scraper.
     const numExtr = String(ex.numeroProcesso || '').replace(/\D/g, '');
     if ((!cnj || !cnj.total) && numExtr.length >= 15 && numExtr !== String(procNum || '').replace(/\D/g, '') && im.estado && Date.now() < hardDeadline) {
-      try { const porNum = await buscarProcessosCNJ({ numero_processo: ex.numeroProcesso, uf: im.estado, modalidade: im.modalidade }); if (porNum && porNum.total) cnj = porNum; }
-      catch { /* CNJ por número extraído é best-effort */ }
-    }
-    let cnjViaNome = false;
-    if ((!cnj || !cnj.total) && execNome.length >= 6 && im.estado) {
       try {
-        const porNome = await buscarProcessosCNJ({ nome_parte: execNome, uf: im.estado, modalidade: im.modalidade });
-        cnjViaNome = true;
-        if (porNome && porNome.total) cnj = porNome;
-      } catch { /* CNJ por nome é best-effort */ }
+        const porNum = await buscarProcessosCNJ({ numero_processo: ex.numeroProcesso, uf: im.estado, modalidade: im.modalidade });
+        if (porNum && porNum.total) { cnj = porNum; cnjConfirmaNumero = true; cnjNumeroFalhou = false; }
+        else if (!procNum) cnjNumeroFalhou = !porNum || !!porNum.erros?.length;
+      } catch (e) { if (!procNum) cnjNumeroFalhou = true; console.warn('[documental] CNJ por nº extraído falhou:', e?.message || e); }
+    }
+    let cnjViaNome = false, cnjNomeFalhou = false, cnjNome = null;
+    // Prazo (auditoria 30/09, item 7): a IA já foi paga a esta altura — a busca por nome só roda
+    // com folga e com orçamento próprio, senão o relatório inteiro estoura o maxDuration.
+    const folgaNome = hardDeadline - Date.now() - 20000;
+    if ((!cnj || !cnj.total) && execNome.length >= 6) {
+      if (folgaNome < 8000) { cnjViaNome = true; cnjNomeFalhou = true; }
+      else {
+        try {
+          cnjNome = await buscarProcessosCNJ({ nome_parte: execNome, documento: execDoc || null, modalidade: im.modalidade, deadlineMs: Math.min(40000, folgaNome) });
+          cnjViaNome = true;
+          cnjNomeFalhou = !!cnjNome?.erros?.length && !cnjNome?.total;
+          if (cnjNome && cnjNome.total) cnj = cnjNome;
+        } catch (e) { cnjViaNome = true; cnjNomeFalhou = true; console.warn('[documental] CNJ por nome falhou:', e?.message || e); }
+      }
     }
 
     // FALLBACK 3: docs → CNJ → CPF da PARTE. Se ainda não temos CPF válido mas o
@@ -1464,15 +1478,21 @@ export default async function handler(req, res) {
         // lista entrava em "verificados, sem processo" — e a busca por nome (DataJud) nunca achava
         // nada. Agora é DJEN (todos os tribunais) e falha/sem tempo vira "não verificado".
         const verificados = [], naoVerificados = [];
-        for (const nomeSocio of nomesSocios) {
-          if (Date.now() >= hardDeadline) { naoVerificados.push(nomeSocio); continue; }
+        // Dois de cada vez, com orçamento total (auditoria 30/09, item 7): em série, 5 sócios × DJEN
+        // lento passavam do tempo da função depois da IA já paga.
+        const orcamentoSocios = Date.now() + Math.min(40000, Math.max(0, hardDeadline - Date.now() - 20000));
+        const consultarSocio = async (nomeSocio) => {
+          if (orcamentoSocios - Date.now() < 6000) { naoVerificados.push(nomeSocio); return; }
           try {
-            const porSocio = await buscarProcessosCNJ({ nome_parte: nomeSocio, uf: im.estado, modalidade: im.modalidade });
-            if (porSocio?.erros?.length && !porSocio?.processos?.length) { naoVerificados.push(nomeSocio); continue; }
+            const porSocio = await buscarProcessosCNJ({ nome_parte: nomeSocio, modalidade: im.modalidade, deadlineMs: orcamentoSocios - Date.now() });
+            if (porSocio?.erros?.length && !porSocio?.processos?.length) { naoVerificados.push(nomeSocio); return; }
             verificados.push(nomeSocio);
-            if (porSocio?.processos?.length) achadosPorSocio.push({ socio: nomeSocio, processos: porSocio.processos, tribunais: porSocio.tribunais_consultados });
+            // Homônimo possível não entra no parecer: só processos com o documento conferido.
+            const confirmados = (porSocio?.processos || []).filter((p) => !p.homonimo_possivel);
+            if (confirmados.length) achadosPorSocio.push({ socio: nomeSocio, processos: confirmados, tribunais: porSocio.tribunais_consultados });
           } catch (e) { naoVerificados.push(nomeSocio); console.warn('[documental] CNJ por sócio falhou:', e?.message || e); }
-        }
+        };
+        for (let i = 0; i < nomesSocios.length; i += 2) await Promise.all(nomesSocios.slice(i, i + 2).map(consultarSocio));
         if (nomesSocios.length) {
           cnjSocios = { verificados, naoVerificados, comProcesso: achadosPorSocio.map(a => a.socio) };
         }
@@ -1505,7 +1525,9 @@ export default async function handler(req, res) {
     if (numConcretoCNJ.length >= 15 && !(cnj && cnj.total)) {
       registrarAnomalia('cnj_vazio', row?.fonte, imovelId, 'cnj', `CNJ sem retorno p/ processo ${numConcretoCNJ} (modalidade=${im.modalidade || '?'}).`).catch(() => {});
     }
-    const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
+    // Nunca o 1º processo da busca por NOME/sócio (auditoria 30/09, item 6): seria o processo de um
+    // homônimo ou do sócio tratado como "o processo do lote" no DJEN e no antifraude.
+    const procFontes = procNum || ex.numeroProcesso || null;
 
     // Fecha a verificação ANTIFRAUDE com o número mais completo (inclui o extraído pela
     // IA). Vira campo do result + riscos determinísticos que já entram na contagem de
@@ -1513,6 +1535,16 @@ export default async function handler(req, res) {
     const procAF = String(procFontes || '').replace(/\D/g, '');
     const temNumCNJ = procAF.length === 20;
     const dvOk = temNumCNJ ? cnjValido(procAF) : null;
+    // Radar de editais (DJEN, base nossa): edital publicado deste número também PROVA que o processo
+    // existe — evita o alerta "não localizado" quando o DataJud está atrasado (auditoria 30/09, 21).
+    let editalNoRadar = null;
+    if (temNumCNJ && dvOk && !cnjConfirmaNumero) {
+      try {
+        const re = await sb('rpc/edital_por_processo', { method: 'POST', body: JSON.stringify({ p_numero: procAF }) });
+        if (re.ok) { const eds = await re.json(); editalNoRadar = Array.isArray(eds) && eds.length ? eds[0] : null; }
+        else console.warn('[documental] radar de editais HTTP', re.status);
+      } catch (e) { console.warn('[documental] radar de editais:', e?.message || e); }
+    }
     const riscosAntifraude = [];
     // (0) FINANCIAMENTO A ASSUMIR EM LEILÃO JUDICIAL — ressalva máxima (pedido do dono, 13/08).
     // "Na avaliação documental, quando é leilão judicial e você tem que assumir um financiamento,
@@ -1554,7 +1586,9 @@ export default async function handler(req, res) {
     // (2) LEGITIMIDADE — JUDICIAL: existência do processo no CNJ (DV + DataJud).
     if (ehJudicial || temNumCNJ) {
       if (temNumCNJ && dvOk === false) riscosAntifraude.push({ categoria: 'Número do processo', severidade: 'alerta', descricao: `O número do processo informado (${procAF}) não passou na validação do dígito verificador do padrão CNJ. Pode estar digitado errado ou ser inválido: confirme o número real no tribunal antes de prosseguir.`, constaNaDoc: false });
-      else if (temNumCNJ && dvOk && cnj && !temProc) riscosAntifraude.push({ categoria: 'Existência do processo', severidade: 'alerta', descricao: `O processo tem número válido, mas não foi localizado no DataJud (CNJ). Pode ser defasagem do sistema, mas também é sinal de alerta: confirme a existência do processo no tribunal antes do lance.`, constaNaDoc: false });
+      else if (temNumCNJ && dvOk && !cnjConfirmaNumero && !editalNoRadar) riscosAntifraude.push(cnjNumeroFalhou
+        ? { categoria: 'Existência do processo', severidade: 'alerta', descricao: `A consulta ao DataJud (CNJ) não foi concluída agora (fonte indisponível) — a existência do processo ainda não foi verificada. Confirme no tribunal antes do lance.`, constaNaDoc: false }
+        : { categoria: 'Existência do processo', severidade: 'alerta', descricao: `O processo tem número válido, mas não foi localizado no DataJud (CNJ). Pode ser defasagem do sistema, mas também é sinal de alerta: confirme a existência do processo no tribunal antes do lance.`, constaNaDoc: false });
       else if (ehJudicial && !temNumCNJ) riscosAntifraude.push({ categoria: 'Processo judicial', severidade: 'alerta', descricao: `Leilão judicial sem número de processo no padrão CNJ nos documentos lidos. Confirme o processo no tribunal antes do lance.`, constaNaDoc: false });
     }
     // (2') LEGITIMIDADE — EXTRAJUDICIAL: não há processo; a checagem é no SITE do leiloeiro.
@@ -1566,7 +1600,8 @@ export default async function handler(req, res) {
       modalidade: ehJudicial ? 'judicial' : (ehExtrajudicial ? 'extrajudicial' : 'indefinida'),
       processoNumero: temNumCNJ ? procAF : null,
       processoDvCNJValido: dvOk,
-      processoConfirmadoDataJud: temNumCNJ ? temProc : null,
+      processoConfirmadoDataJud: temNumCNJ ? cnjConfirmaNumero : null,
+      processoConfirmadoEdital: temNumCNJ ? !!editalNoRadar : null,
       verificarNoSiteDoLeiloeiro: ehExtrajudicial ? (linkOficial || true) : false,
       recomendacao: 'Recomendamos reunião com um analista BidPro e o encaminhamento ao jurídico antes de qualquer lance.',
       alertas: riscosAntifraude.map(r => r.descricao),
@@ -1677,14 +1712,23 @@ export default async function handler(req, res) {
         detalhe: lidos.length
           ? `${lidos.length} documento(s) lido(s): ${lidos.map(l => l.rotulo).join(', ')}`
           : (urls.length ? 'Documentos localizados, mas a fonte não liberou a leitura agora — nova tentativa em breve.' : 'Nenhum documento vinculado ao lote.') },
+      // Auditoria 30/09 (item 2): falha da busca por nome era "Nenhum processo localizado"; e a busca
+      // por nome concluída sem achar dizia "sem falhas" citando os tribunais da busca por NÚMERO.
       { label: 'Processo judicial (CNJ/DataJud)',
-        status: (cnj && cnj.total) ? 'feito' : cnjConcluiuSemAchar ? 'feito' : (procFontes ? 'pendente' : 'na'),
+        status: (cnj && cnj.total) ? 'feito'
+          : cnjNomeFalhou ? 'pendente'
+          : (cnjViaNome && cnjNome && !cnjNome.total) || cnjConcluiuSemAchar ? 'feito'
+          : (procFontes ? 'pendente' : 'na'),
         detalhe: (cnj && cnj.total)
           ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}${cnjSocios ? ` · executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s)${cnjSocios.comProcesso.length ? `, com processo: ${cnjSocios.comProcesso.join(', ')}` : ''}${cnjSocios.naoVerificados?.length ? ` · ${cnjSocios.naoVerificados.length} sócio(s) NÃO verificado(s) (fonte indisponível)` : ''}` : ''}${cnj.aviso ? ` · ${cnj.aviso}` : ''}`
+          : cnjNomeFalhou
+            ? `Busca pelo nome "${execNome}" NÃO concluída (DJEN indisponível ou sem tempo) — isto não é "nada consta"; nova tentativa em breve.${cnjNumeroFalhou ? ' A consulta pelo número do processo também não foi concluída.' : ''}`
+          : (cnjViaNome && cnjNome && !cnjNome.total)
+            ? `Sem publicação no DJEN em nome de "${execNome}" (${cnjNome.janela || 'últimos 12 meses'}, todos os tribunais) — não equivale a certidão negativa.${procNum && !cnjNumeroFalhou ? ' O processo do lote também não apareceu no DataJud pelo número.' : ''}${cnjSocios ? ` Executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) verificado(s), sem processo${cnjSocios.naoVerificados?.length ? `; ${cnjSocios.naoVerificados.length} NÃO verificado(s) (fonte indisponível)` : ''}.` : ''}`
           : cnjConcluiuSemAchar
-            ? `Nenhum processo localizado${cnjViaNome ? ` para "${execNome}"` : ' no CNJ'} — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas.${cnjSocios ? ` Executado é CNPJ — ${cnjSocios.verificados.length} sócio(s) do quadro societário também verificado(s), sem processo${cnjSocios.naoVerificados?.length ? `; ${cnjSocios.naoVerificados.length} NÃO verificado(s) (fonte indisponível)` : ''}.` : ''}`
-            : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
-              : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
+            ? `Processo não localizado no DataJud — consulta concluída (${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}), sem falhas. A base do CNJ tem atraso: confirme no tribunal.`
+            : (procFontes ? 'Consulta ao DataJud não concluída agora (fonte indisponível) — nova tentativa em breve.'
+              : 'Sem nº de processo nem nome da parte nos documentos para consultar.') },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
       // CNDT / CNIB / CENPROT removidos do checklist automático (portal pago + captcha, não saem
       // sozinhos) — não faz sentido mostrar como consulta do sistema. Ficam a cargo do jurídico.
@@ -1983,7 +2027,9 @@ export default async function handler(req, res) {
     const qualDoc = {
       matricula_nao_lida: !da.matricula,
       edital_nao_lido: !da.edital,
-      cnj_nao_consultado: !!(procNum || procNome) && !temProc,
+      // Só FALHA de consulta dispara a re-tentativa (auditoria 30/09, item 10): "consultou e o DataJud
+      // não tem" é resposta, e re-gerar com IA a cada 6 h por ela não muda nada.
+      cnj_nao_consultado: !!(procNum || procNome) && !cnjConfirmaNumero && (cnjNumeroFalhou || (!procNum && cnjNomeFalhou)),
       modalidade_indefinida: !im.modalidade,
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });

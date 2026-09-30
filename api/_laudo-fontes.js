@@ -10,6 +10,7 @@
  * (protestos) têm captcha → tentativa via Bright Data (fingerprint de navegador);
  * se não passar, viram pendência de 48h (retry pelo cron).
  */
+import { buscarDjen } from './_cnj.js';
 import { fetchViaBrightData } from './_brightdata.js';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -20,33 +21,20 @@ const soDigitos = (s) => String(s || '').replace(/\D/g, '');
 // intimações, editais) do processo em todos os tribunais. Deixa o monitoramento
 // do processo (e datas de praça) vivo, sem captcha.
 export async function consultarComunicaDJEN(numeroProcesso) {
+  // 30/09 (auditoria, item 9): era uma CÓPIA da consulta ao DJEN que caía no Bright Data PAGO a
+  // qualquer não-OK (inclusive o 500 "ocupado"), e tratava JSON ilegível como "0 comunicações"
+  // (check verde). Agora delega a buscarDjen (_cnj.js): direto do Brasil (gru1) e, se falhar, pelo
+  // banco (grátis) — uma regra só, e falha nunca vira zero.
   const num = soDigitos(numeroProcesso);
   if (num.length < 15) return { ok: false, instavel: false, erro: 'sem número de processo' };
-  const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&pagina=1&itensPorPagina=50`;
-  try {
-    let j = null;
-    let r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }).catch(() => null);
-    // A API do DJEN passou a barrar o IP do servidor (HTTP 403). Fallback pelo Bright
-    // Data (IP residencial) para manter o monitoramento do processo funcionando.
-    if (!r || !r.ok) {
-      const bd = await fetchViaBrightData(url, { proposito: 'certidao', headers: { Accept: 'application/json', 'User-Agent': UA } });
-      if (bd && bd.ok) r = bd;
-      else if (!r) return { ok: false, instavel: true, erro: 'sem resposta' };
-      else return { ok: false, instavel: r.status >= 500 || r.status === 429 || r.status === 403, erro: `HTTP ${r.status}` };
-    }
-    j = await r.json().catch(() => null);
-    const itens = j?.items || j?.content || (Array.isArray(j) ? j : []) || [];
-    const coms = itens.map(c => ({
-      data: c.data_disponibilizacao || c.dataDisponibilizacao || c.data || null,
-      tipo: c.tipoComunicacao || c.tipo || c.tipoDocumento || null,
-      tribunal: c.siglaTribunal || c.tribunal || null,
-      orgao: c.nomeOrgao || c.orgao || null,
-      teor: String(c.texto || c.teor || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600) || null,
-    })).filter(c => c.data || c.teor);
-    return { ok: true, instavel: false, resumo: `${coms.length} comunicação(ões) no DJEN`, dados: { total: coms.length, comunicacoes: coms.slice(0, 25) } };
-  } catch (e) {
-    return { ok: false, instavel: true, erro: String(e.message).slice(0, 120) };
-  }
+  const r = await buscarDjen({ numero_processo: num, maxTexto: 600 });
+  if (r?.erro) return { ok: false, instavel: true, erro: String(r.erro).slice(0, 120) };
+  const coms = (r.publicacoes || []).map((c) => ({
+    data: c.data_disponibilizacao || null, tipo: c.tipo_documento || null, tribunal: c.tribunal || null,
+    orgao: c.orgao || null, teor: c.texto || null,
+  })).filter((c) => c.data || c.teor);
+  const naFonte = r.total_na_fonte ?? r.total ?? coms.length;
+  return { ok: true, instavel: false, resumo: `${naFonte} comunicação(ões) no DJEN`, dados: { total: naFonte, comunicacoes: coms.slice(0, 25) } };
 }
 
 // ── CNDT — Certidão Negativa de Débitos Trabalhistas (TST/BNDT) ────────────────

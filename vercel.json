@@ -7,7 +7,10 @@
     "api/cnj-datajud.js": { "regions": ["gru1"], "maxDuration": 60 },
     "api/cnj-monitor-cron.js": { "regions": ["gru1"], "maxDuration": 300 },
     "api/gerar-documental.js": { "regions": ["gru1"], "maxDuration": 300 },
-    "api/processar-analise.js": { "regions": ["gru1"], "maxDuration": 300 }
+    "api/processar-analise.js": { "regions": ["gru1"], "maxDuration": 300 },
+    "api/laudo-retry-cron.js": { "regions": ["gru1"], "maxDuration": 300 },
+    "api/radar-editais-cron.js": { "regions": ["gru1"], "maxDuration": 300 },
+    "api/cnj-retomada-veiculos.js": { "regions": ["gru1"] }
   },
   "redirects": [
     {

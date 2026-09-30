@@ -78,17 +78,25 @@ async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
   const monitores = await (await sb(`processos_monitorados?ativo=eq.true&select=*&order=ultima_checagem.asc.nullsfirst&limit=40`)).json();
-  let checados = 0, alertas = 0, movimentosGravados = 0;
-
-  for (const mon of (monitores || [])) {
+  let checados = 0, alertas = 0, movimentosGravados = 0, falhas = 0, semTempo = 0;
+  // Auditoria 30/09 (item 13): 40 processos em SÉRIE (até ~26 s cada) sem orçamento, e falha da
+  // consulta contava como "checado" sem rastro. Agora 4 de cada vez, prazo de 240 s (função: 300),
+  // e o erro fica no snapshot.
+  const PRAZO = Date.now() + 240000;
+  const checar = async (mon) => {
+    if (Date.now() > PRAZO) { semTempo++; return; }
     try {
       const r = await buscarProcessosCNJ({ numero_processo: mon.numero_processo, uf: mon.uf, nacional: !mon.uf });
-      const proc = (r.processos || []).find(p => p.numero?.replace(/\D/g, '') === mon.numero_processo.replace(/\D/g, '')) || (r.processos || [])[0];
-      checados++;
+      // Só o processo MONITORADO — o fallback "[0]" podia pegar outro processo da resposta.
+      const proc = (r.processos || []).find(p => p.numero?.replace(/\D/g, '') === mon.numero_processo.replace(/\D/g, ''));
       if (!proc) {
-        await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { ultima_checagem: new Date().toISOString() } });
-        continue;
+        const erro = (r.erros || []).join(' | ').slice(0, 300) || null;
+        if (erro) falhas++; else checados++;
+        await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
+          body: { ultima_checagem: new Date().toISOString(), snapshot: { ...(mon.snapshot || {}), ultimo_erro: erro, nao_localizado: !erro, checado_em: new Date().toISOString() } } });
+        return;
       }
+      checados++;
       const dataMov = ultimaData(proc);
       movimentosGravados += await gravarMovimentos(proc.numero || mon.numero_processo, proc.movimentos);
       const temSusp = !!proc.tem_suspensiva || !!proc.tem_bloqueante;
@@ -114,16 +122,21 @@ async function handler(req) {
         await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
           body: { ativo: false, ultima_data_mov: dataMov || mon.ultima_data_mov, ultima_checagem: new Date().toISOString(),
             snapshot: { total_mov: (proc.movimentos || []).length, ultima_data: dataMov, tem_suspensiva: temSusp, encerrado: true, marco: desfecho.marco } } });
-        continue;
+        return;
       }
 
       await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
         body: { ultima_data_mov: dataMov || mon.ultima_data_mov, ultima_checagem: new Date().toISOString(),
           snapshot: { total_mov: (proc.movimentos || []).length, ultima_data: dataMov, tem_suspensiva: temSusp } } });
-    } catch (_) {
-      await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { ultima_checagem: new Date().toISOString() } }).catch(() => {});
+    } catch (e) {
+      falhas++;
+      console.error('[cnj-monitor] falhou', mon.numero_processo, e?.message || e);
+      await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
+        body: { ultima_checagem: new Date().toISOString(), snapshot: { ...(mon.snapshot || {}), ultimo_erro: String(e?.message || e).slice(0, 300) } } }).catch((e2) => console.error('[cnj-monitor] snapshot não gravado', e2?.message || e2));
     }
-  }
+  };
+  const lista = Array.isArray(monitores) ? monitores : [];
+  for (let i = 0; i < lista.length; i += 4) await Promise.all(lista.slice(i, i + 4).map(checar));
 
-  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados, falhas, sem_tempo: semTempo }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

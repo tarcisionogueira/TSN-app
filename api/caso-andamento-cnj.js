@@ -227,9 +227,11 @@ export default async function handler(req, res) {
   const uf = exato ? null : ufDoNumeroCnj(numero);
   const consultarCnj = () => buscarProcessosCNJ({ numero_processo: numero, uf, nacional: !exato && !uf, tribunais: exato ? [exato] : null })
     .catch(e => ({ processos: [], erros: [String(e?.message || e)] }));
+  const t0 = Date.now();
   const [cnj, djen] = await Promise.all([
-    // Tribunal único que estourou o tempo: uma nova tentativa ainda cabe nos 60 s (12 s cada).
-    consultarCnj().then(r => (exato && !(r.processos || []).length && /timeout|abort/i.test((r.erros || []).join(' '))) ? consultarCnj() : r),
+    // Tribunal único que estourou o tempo: nova tentativa só com folga (auditoria 30/09, item 15 —
+    // ainda vem o resumo da IA depois, e a função tem 60 s).
+    consultarCnj().then(r => (exato && Date.now() - t0 < 20000 && !(r.processos || []).length && /timeout|abort/i.test((r.erros || []).join(' '))) ? consultarCnj() : r),
     buscarDjen({ numero_processo: numero, maxTexto: 3000 }).catch(e => ({ erro: String(e?.message || e) })),
   ]);
 

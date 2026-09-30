@@ -280,6 +280,7 @@ export function tribunalDoNumeroCnj(numero) {
   if (d.length !== 20) return null;
   const tr = parseInt(d.slice(14, 16), 10);
   if (d[13] === '8') return TRIBUNAL_ESTADUAL[UF_POR_TR_ESTADUAL[tr - 1]] || null;
+  if (d[13] === '3') return 'stj';
   if (d[13] === '5' && tr >= 1 && tr <= 24) return `trt${tr}`;
   if (d[13] === '4' && tr >= 1 && tr <= 6) return `trf${tr}`;
   return null;
@@ -326,11 +327,18 @@ export function processosDasPublicacoes(items, { nome, documento } = {}) {
     const pubs = g.pubs.sort((a, b) => String(b.data_disponibilizacao || '').localeCompare(String(a.data_disponibilizacao || '')));
     const textos = pubs.map((p) => String(p.texto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '));
     const classe = g.it.nomeClasse || '';
-    const riscos = [];
-    const tudo = `${classe} ${textos.join(' ')}`;
+    // Riscos só da CLASSE e do TIPO da comunicação, nunca do texto integral (auditoria 30/09: o texto
+    // padrão de intimação casou "liminar" em 19 de 77 publicações e "penhora" em 2 processos sem
+    // gravame nenhum) — e no máximo 'alerta': intimação não prova gravame. Sem o CPF conferido no
+    // texto, pode ser HOMÔNIMO: aí os riscos ficam só como indicação e não pesam no parecer.
+    const cpfNoTexto = doc.length >= 11 ? textos.some((t) => t.replace(/\D/g, '').includes(doc)) : null;
+    const homonimoPossivel = cpfNoTexto !== true;
+    const baseRisco = `${classe} ${pubs.map((p) => `${p.tipoComunicacao || ''} ${p.tipoDocumento || ''}`).join(' ')}`;
+    const indicados = [];
     for (const regra of RISCOS_MAP) {
-      if (regra.regex.test(tudo) && !riscos.find((r) => r.categoria === regra.categoria)) riscos.push({ severidade: regra.severidade, categoria: regra.categoria, descricao: regra.descricao });
+      if (regra.regex.test(baseRisco) && !indicados.find((r) => r.categoria === regra.categoria)) indicados.push({ severidade: 'alerta', categoria: regra.categoria, descricao: `${regra.descricao} (indicado pela classe/tipo da publicação — conferir nos autos)` });
     }
+    const riscos = homonimoPossivel ? [] : indicados;
     const faseAchada = Object.entries(FASES_RISCO).find(([f]) => classe.toLowerCase().includes(f.toLowerCase()));
     const bloqueantes = riscos.filter((r) => r.severidade === 'bloqueante').length;
     const alertas = riscos.filter((r) => r.severidade === 'alerta').length;
@@ -343,7 +351,7 @@ export function processosDasPublicacoes(items, { nome, documento } = {}) {
       partes: [...g.partes.entries()].map(([n, polo]) => ({ nome: n, tipo: polo === 'A' ? 'ativo' : polo === 'P' ? 'passivo' : '', documento: '', advogados: [] })),
       movimentos: pubs.slice(0, 10).map((p, i) => ({ data: String(p.data_disponibilizacao || '').slice(0, 10), descricao: `${p.tipoComunicacao || 'Publicação'}: ${textos[i].trim().slice(0, 200)}`, codigo: null, risco: null })),
       publicacoes: pubs.length,
-      cpf_no_texto: doc.length >= 11 ? textos.some((t) => t.replace(/\D/g, '').includes(doc)) : null,
+      cpf_no_texto: cpfNoTexto, homonimo_possivel: homonimoPossivel, riscos_indicados: indicados,
       riscos, score_risco: Math.min(100, bloqueantes * 35 + alertas * 15),
       tem_penhora: riscos.some((r) => r.categoria === 'Penhora'), tem_arresto: riscos.some((r) => r.categoria === 'Arresto'),
       tem_leilao: riscos.some((r) => r.categoria === 'Hasta Pública'), tem_bloqueante: bloqueantes > 0,
@@ -352,68 +360,105 @@ export function processosDasPublicacoes(items, { nome, documento } = {}) {
   }).sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? String(b.ultima_atualizacao).localeCompare(String(a.ultima_atualizacao)) : a.tem_bloqueante ? -1 : 1));
 }
 
-// Uma página do DJEN, com a MESMA resiliência do buscarDjen (direto; se falhar, via banco) e um
-// retry quando o DJEN diz "sistema muito ocupado" (500 de limite de frequência, medido 30/09).
-async function paginaDjen(url) {
-  for (let tentativa = 0; tentativa < 2; tentativa++) {
-    try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
-      if (r.ok) return { dados: await r.json() };
-      if (r.status === 403) {
-        const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
-        return b ? { dados: b } : { erro: 'DJEN recusou o acesso (403) e a via do banco também falhou' };
-      }
-      if (r.status !== 500 && r.status !== 429) return { erro: `DJEN respondeu ${r.status}` };
-    } catch (e) {
-      const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
-      if (b) return { dados: b };
-      if (tentativa) return { erro: `DJEN indisponível (${String(e?.message || e).slice(0, 60)})` };
-    }
-    await new Promise((ok) => setTimeout(ok, 3000));
+// Uma página do DJEN: direto (o DJEN recusa IP fora do Brasil — as funções que chamam estão em
+// gru1) e, se falhar, UMA ida pelo banco (pg_net, Brasil). Auditoria 30/09: a versão anterior fazia
+// fetch → banco → espera → fetch → banco (~60 s por nome) e estourava o tempo do documental.
+async function paginaDjen(url, deadline) {
+  const resta = () => deadline - Date.now();
+  let motivo = '';
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(Math.max(3000, Math.min(15000, resta() - 2000))), headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      try { return { dados: await r.json() }; } catch { motivo = 'resposta ilegível'; }
+    } else motivo = r.status === 403 ? 'acesso recusado (403)' : r.status === 500 || r.status === 429 ? 'DJEN ocupado (limite de consultas)' : `HTTP ${r.status}`;
+  } catch (e) { motivo = String(e?.name === 'TimeoutError' ? 'sem resposta no prazo' : e?.message || e).slice(0, 60); }
+  if (resta() > 6000) {
+    const b = await djenViaBanco(url, resta() - 1000).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
+    if (b) return { dados: b };
   }
-  return { erro: 'DJEN ocupado (limite de consultas) — tente de novo em instantes' };
+  return { erro: `DJEN indisponível agora (${motivo || 'via banco também falhou'})` };
 }
 
-export async function buscarProcessosPorParte({ nome, documento = null, dias = 365, maxPaginas = 3 }) {
+export async function buscarProcessosPorParte({ nome, documento = null, dias = 365, maxPaginas = 3, deadlineMs = 45000 }) {
   const nomeLimpo = normalizarNomeParte(nome);
+  // CPF/CNPJ no lugar do nome (o campo da tela aceitava): o DJEN não busca documento — virava
+  // "nomeParte=123 456 789 00", 0 resultado e selo VERDE (auditoria 30/09). Erro explícito.
+  if (/^[\d ]+$/.test(nomeLimpo)) return { processos: [], total: 0, tribunais_consultados: [], erros: ['o DJEN não busca por CPF/CNPJ — informe o nome completo ou a razão social (para CNPJ, a razão social está na Receita)'] };
   if (nomeLimpo.replace(/ /g, '').length < 6) return { processos: [], total: 0, tribunais_consultados: [], erros: ['nome curto demais para buscar por parte (use o nome completo ou a razão social)'] };
+  const deadline = Date.now() + deadlineMs;
   const fim = new Date();
   const ini = new Date(fim.getTime() - Math.max(7, Math.min(dias, 1095)) * 86400000);
   const d = (x) => x.toISOString().slice(0, 10);
   const items = [];
   const erros = [];
+  let totalFonte = null;
   for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+    if (pagina > 1) {
+      if (deadline - Date.now() < 8000) break;
+      await new Promise((ok) => setTimeout(ok, 1000)); // rajada provoca o "sistema muito ocupado"
+    }
     const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?nomeParte=${encodeURIComponent(nomeLimpo)}&itensPorPagina=100&pagina=${pagina}&dataDisponibilizacaoInicio=${d(ini)}&dataDisponibilizacaoFim=${d(fim)}`;
-    const r = await paginaDjen(url);
-    if (r.erro) { erros.push(r.erro); break; }
+    const r = await paginaDjen(url, deadline);
+    if (r.erro) { if (!items.length) erros.push(r.erro); break; } // página 2+ falhando: fica o que veio, marcado truncado
     const lote = r.dados?.items || [];
+    if (totalFonte === null && Number.isFinite(Number(r.dados?.count))) totalFonte = Number(r.dados.count);
     items.push(...lote);
     if (lote.length < 100) break;
   }
+  const truncado = totalFonte !== null && totalFonte > items.length;
   const processos = processosDasPublicacoes(items, { nome: nomeLimpo, documento });
   const janela = `publicações do DJEN de ${d(ini)} a ${d(fim)}`;
   return {
-    processos, total: processos.length, fonte: 'djen', janela,
+    processos, total: processos.length, fonte: 'djen', janela, publicacoes_lidas: items.length, publicacoes_na_fonte: totalFonte, truncado,
     tribunais_consultados: [`todos os tribunais (DJEN, ${janela})`],
     erros: erros.length ? erros : undefined,
-    aviso: processos.length ? 'Busca por NOME: pode haver homônimo — o DJEN não informa o CPF/CNPJ do destinatário.' : undefined,
+    aviso: [
+      processos.some((p) => p.homonimo_possivel) ? 'Busca por NOME: pode haver homônimo — o DJEN não informa o CPF/CNPJ do destinatário; riscos desses processos ficam só como indicação.' : null,
+      truncado ? `Lidas ${items.length} de ${totalFonte} publicações (as mais recentes) — nome muito comum; refine com o nome completo.` : null,
+    ].filter(Boolean).join(' ') || undefined,
   };
 }
 
-export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null, tribunais: tribunaisExatos = null }) {
+export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null, tribunais: tribunaisExatos = null, documento = null, deadlineMs }) {
+  // Sem número e com nome: DJEN, todos os tribunais (ver buscarProcessosPorParte — o DataJud público
+  // não tem partes). ANTES das travas de chave/UF, que são do DataJud (auditoria 30/09, item 14).
+  if (!numero_processo && nome_parte) {
+    const r = await buscarProcessosPorParte({ nome: nome_parte, documento, deadlineMs });
+    let parecer;
+    if (r.erros?.length) parecer = gerarParecerRisco([], { erros: r.erros, modalidade });
+    else if (!r.processos.length) {
+      // Nunca verde: o DJEN só vê processo com publicação na janela (auditoria 30/09, item 4).
+      parecer = { nivel: 'amarelo', motivo: 'sem_publicacao_djen',
+        texto: `Nenhuma publicação no DJEN em nome de "${nome_parte}" (${r.janela}, todos os tribunais). Processo sem publicação no período não aparece — isto não equivale a certidão negativa.`,
+        recomendacao: 'Para certeza, peça certidão de distribuição cível/trabalhista/federal na comarca do imóvel e do domicílio da parte.' };
+    } else {
+      const confirmados = r.processos.filter((p) => !p.homonimo_possivel);
+      parecer = confirmados.length
+        ? gerarParecerRisco(confirmados, { tribunais: r.tribunais_consultados, modalidade })
+        : { nivel: 'amarelo', motivo: 'homonimo_possivel',
+            texto: `${r.processos.length} processo(s) com publicação em nome igual/parecido a "${nome_parte}" — o DJEN não traz CPF/CNPJ, então pode ser HOMÔNIMO. Conferir se é a mesma pessoa antes de concluir.`,
+            recomendacao: 'Confirme a qualificação da parte nos autos (CPF/CNPJ) de cada processo listado.' };
+    }
+    return { ...r, parecer };
+  }
+  if (numero_processo && !(Array.isArray(tribunaisExatos) && tribunaisExatos.length) && String(numero_processo).replace(/\D/g, '').length !== 20) {
+    const erro = 'número de processo inválido — o padrão CNJ tem 20 dígitos (NNNNNNN-DD.AAAA.J.TR.OOOO)';
+    return { processos: [], total: 0, tribunais_consultados: [], erros: [erro], parecer: gerarParecerRisco([], { erros: [erro], numeroProcesso: numero_processo, modalidade }) };
+  }
   if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([], { erros: ['CNJ_DATAJUD_KEY ausente'], numeroProcesso: numero_processo, modalidade }) };
   const ufUp = String(uf || '').toUpperCase();
   const estadual = TRIBUNAL_ESTADUAL[ufUp];
   const trf = TRF_MAP[ufUp];
   // nacional = varre todos os TJs + TRFs + superiores; senão, foca na UF + STJ.
   const exatos = Array.isArray(tribunaisExatos) ? tribunaisExatos.filter(Boolean) : [];
-  if (!nacional && !estadual && !exatos.length) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
-
-  // Sem número e com nome: DJEN, todos os tribunais (ver buscarProcessosPorParte — o DataJud
-  // público não tem partes). O parecer usa os mesmos processos.
-  if (!numero_processo && nome_parte) {
-    const r = await buscarProcessosPorParte({ nome: nome_parte });
-    return { ...r, parecer: gerarParecerRisco(r.processos, { erros: r.erros || [], tribunais: r.tribunais_consultados, numeroProcesso: null, modalidade }) };
+  const doNumero = numero_processo && !exatos.length ? tribunalDoNumeroCnj(numero_processo) : null;
+  // UF só importa quando o número não diz o tribunal (antes recusava "UF inválida: TRT5" mesmo com
+  // o número apontando o TRT5 — auditoria 30/09, item 13).
+  if (!doNumero && !nacional && !estadual && !exatos.length) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
+  // Com NÚMERO nunca se varre o país (dono, 30/09): se o número não diz o tribunal, usa a UF; sem UF, erro.
+  if (numero_processo && !doNumero && !exatos.length && !estadual) {
+    const erro = 'não identifiquei o tribunal pelo número do processo — informe a UF';
+    return { processos: [], total: 0, tribunais_consultados: [], erros: [erro], parecer: gerarParecerRisco([], { erros: [erro], numeroProcesso: numero_processo, modalidade }) };
   }
   let query;
   if (numero_processo) {
@@ -438,10 +483,9 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   // 30/09: com NÚMERO válido, o próprio número diz o tribunal (segmentos J.TR) — varrer os ~90 do
   // modo nacional só gastava tempo (o chat operacional estourava o prazo da função e a tela dizia
   // "não conseguimos falar com o servidor"). Tribunal de origem + superior da mesma Justiça.
-  const doNumero = numero_processo && !exatos.length ? tribunalDoNumeroCnj(numero_processo) : null;
   const tribunais = exatos.length ? [...exatos]
-    : doNumero ? [doNumero, /^trt/.test(doNumero) ? 'tst' : 'stj']
-    : nacional ? [...TODOS_TRIBUNAIS]
+    : doNumero ? [doNumero, /^trt/.test(doNumero) ? 'tst' : doNumero === 'stj' ? null : 'stj'].filter(Boolean)
+    : (nacional && !numero_processo) ? [...TODOS_TRIBUNAIS]
     : [estadual, trf, trfLegado, ...trtsUf, trtsUf.length ? 'tst' : null, 'stj'].filter(Boolean);
   // Quando o NÚMERO do processo está disponível, o próprio número já diz a Justiça
   // (segmento J) e a região (segmento TR) — mais confiável que inferir pela UF do
@@ -475,6 +519,12 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
  * é o valor cobrado na ação, não necessariamente o saldo devedor atualizado.
  */
 export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
+  // 30/09 (auditoria, item 19): esta busca filtra por `partes.nome` no DataJud, e a API pública NÃO
+  // devolve partes — sempre deu 0, apresentado como resultado. Indisponível até haver fonte com
+  // partes; o erro diz isso em vez de uma lista vazia com cara de "nenhum processo".
+  if (banco !== '__forcar_datajud__') {
+    return { processos: [], total: 0, tribunais_consultados: [], erros: ['Busca por credor indisponível: a base pública do CNJ (DataJud) não informa as partes dos processos. Use o nº do processo ou a busca por nome no DJEN (chat operacional).'] };
+  }
   if (!CNJ_KEY) return { processos: [], total: 0, erros: ['CNJ_DATAJUD_KEY ausente'] };
   const bancoLimpo = String(banco || '').trim();
   if (!bancoLimpo) return { processos: [], total: 0, erros: ['informe o nome do banco/credor'] };
@@ -522,7 +572,7 @@ export async function buscarRetomadaVeiculos({ banco, uf, nacional = true }) {
  */
 // Via banco (pagina_pedir/pagina_ler, só service_role) — mesmo par de RPCs do motor de coleta.
 // Devolve o resultado já no formato de buscarDjen, ou null quando também não veio.
-async function djenViaBanco(url) {
+async function djenViaBanco(url, esperaMs = 25000) {
   const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
   if (!SB || !KEY) return null;
@@ -532,14 +582,17 @@ async function djenViaBanco(url) {
     return r.json();
   };
   const id = await rpc('pagina_pedir', { p_url: url });
-  for (let i = 0; i < 15; i++) {
+  // pagina_pedir espera até 25 s pela fonte (timeout_milliseconds do pg_net): ler só 15 s descartava
+  // resposta que chegava entre 15 e 25 s (auditoria 30/09, item 16).
+  const ate = Date.now() + Math.max(3000, Math.min(esperaMs, 26000));
+  while (Date.now() < ate) {
     await new Promise((ok) => setTimeout(ok, 1000));
     const [row] = await rpc('pagina_ler', { p_id: id });
     if (!row?.pronto) continue;
     if (!(row.status >= 200 && row.status < 300) || !row.conteudo) { console.warn('[djen] via banco:', row.erro || `HTTP ${row.status}`); return null; }
     return JSON.parse(row.conteudo);
   }
-  console.warn('[djen] via banco: sem resposta em 15 s');
+  console.warn('[djen] via banco: sem resposta no prazo');
   return null;
 }
 
@@ -549,8 +602,9 @@ function formatarDjen(data, maxTexto) {
   // A mesma intimação sai uma vez por destinatário (16/09 veio duas vezes, idêntica): uma só basta.
   const vistos = new Set();
   const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); });
+  const naFonte = Number.isFinite(Number(data?.count)) ? Number(data.count) : null;
   return {
-    total: unicos.length,
+    total: unicos.length, total_na_fonte: naFonte, truncado: naFonte !== null && naFonte > items.length,
     publicacoes: unicos.slice(0, 15).map((it) => ({
       data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null,
       tribunal: it.siglaTribunal || it.sigla_tribunal || null,

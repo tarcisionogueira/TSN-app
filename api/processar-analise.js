@@ -242,19 +242,26 @@ export default async function handler(req, res) {
       const resCNJ = await Promise.all(tarefasCNJ);
       const todos = resCNJ.flatMap(r => r?.processos || []);
       processosCNJ = todos.filter((p, i, a) => a.findIndex(x => x.numero === p.numero) === i);
-      parecerCNJ = resCNJ.map(r => r?.parecer).filter(Boolean).sort((a, b) =>
-        ({ vermelho: 0, amarelo: 1, verde: 2 }[a.nivel] - { vermelho: 0, amarelo: 1, verde: 2 }[b.nivel]))[0] || null;
+      // buscarProcessosCNJ não lança: a falha vem em `erros` e antes sumia (auditoria 30/09, item 8).
+      if (resCNJ.some(r => r?.erros?.length && !r?.total)) secoesFaltando.push('cnj_datajud');
+      // 'nao_verificado' primeiro (antes virava NaN na ordenação e o verde de outra busca vencia).
+      const peso = { nao_verificado: -1, vermelho: 0, amarelo: 1, verde: 2 };
+      parecerCNJ = resCNJ.map(r => r?.parecer).filter(Boolean).sort((a, b) => (peso[a.nivel] ?? 1) - (peso[b.nivel] ?? 1))[0] || null;
     } catch { secoesFaltando.push('cnj_datajud'); }
   } else if (ehExtrajudicial && !executadoNome) {
     secoesFaltando.push('cnj_devedor_nao_identificado');
   }
-  const riscoSuspensao = processosCNJ.some(p => p.tem_suspensiva);
+  // Homônimo possível (busca por nome no DJEN sem o CPF conferido) não pesa no score nem na
+  // suspensão (auditoria 30/09, item 5) — aparece no resumo marcado para conferência.
+  const processosConfirmados = processosCNJ.filter(p => !p.homonimo_possivel);
+  const riscoSuspensao = processosConfirmados.some(p => p.tem_suspensiva);
   // Resumo enxuto para o relatório/e-mail (evita JSON gigante)
   const processosResumo = processosCNJ.slice(0, 12).map(p => ({
     numero: p.numero, tribunal: p.tribunal, classe: p.classe, assuntos: p.assuntos,
     fase: p.fase, data_ajuizamento: p.data_ajuizamento, nivel_risco: p.nivel_risco,
     categorias_risco: [...new Set((p.riscos || []).map(r => r.categoria))],
     tem_suspensiva: p.tem_suspensiva, tem_bloqueante: p.tem_bloqueante,
+    ...(p.homonimo_possivel ? { homonimo_possivel: true, fonte: 'djen (busca por nome)' } : {}),
   }));
 
   // 4c. Fontes públicas complementares (gratuitas). Instabilidade → fila 48h
@@ -281,7 +288,7 @@ export default async function handler(req, res) {
   if (rProt?.ok) protestos = rProt.dados; else if (rProt?.instavel) { secoesFaltando.push('protestos'); await enfileirar48h('protestos', { doc: executadoDoc }, rProt.erro); }
 
   // 5. Scores
-  const scoreJuridico = calcularScoreJuridico({ riscos, sancoes, temProcesso: !!numeroProcesso, processosCNJ });
+  const scoreJuridico = calcularScoreJuridico({ riscos, sancoes, temProcesso: !!numeroProcesso, processosCNJ: processosConfirmados });
   const scoreFinanceiro = calcularScoreFinanceiro(imovel);
 
   // 6. Parecer consolidado

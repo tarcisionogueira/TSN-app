@@ -12857,8 +12857,8 @@ function CnjTab() {
     const ufMatch = texto.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
     // Busca nacional por padrão (cobre todos os TJs/TRFs + superiores).
     if (num) return { numero_processo: num[0], uf: ufMatch ? ufMatch[1].toUpperCase() : undefined, nacional: true };
-    const parteMatch = texto.match(/(?:nome(?:\s+da\s+parte)?|parte|devedor|propriet[aá]rio)[:\s]+([^,\n]+)/i);
-    if (parteMatch) return { nome_parte: parteMatch[1].trim(), uf: ufMatch ? ufMatch[1].toUpperCase() : undefined, nacional: true };
+    // Nome/CPF/CNPJ: quem busca é o próprio chat (buscar_processos_por_parte). A pré-busca aqui
+    // duplicava a consulta e disparava o DJEN com qualquer frase contendo "parte:" (auditoria 30/09).
     return null;
   }
 
@@ -12890,7 +12890,9 @@ function CnjTab() {
     setPergunta('');
     setPerguntando(true);
 
-    let cnj = resultadoCnj;
+    // Resultado de UMA pergunta não vai junto nas seguintes (reenviava contexto velho e sem relação).
+    let cnj = null;
+    setResultadoCnj(null);
 
     // Tenta busca automática no CNJ se a mensagem contiver número ou nome de parte
     const params = detectarCNJ(texto);

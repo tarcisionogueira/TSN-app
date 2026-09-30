@@ -417,7 +417,7 @@ export default function Analise() {
       const res = await apiCall('/api/cnj-datajud', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ numero_processo: cnjNumero.trim(), nome_parte: cnjNome.trim(), uf: d.estado }),
+        body: JSON.stringify({ numero_processo: cnjNumero.trim(), nome_parte: cnjNome.trim(), uf: d.estado, modalidade: d.origem || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na consulta');
@@ -3025,7 +3025,7 @@ export default function Analise() {
               <div>
                 <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome da Parte / Executado</label>
                 <input value={cnjNome} onChange={e => setCnjNome(e.target.value)}
-                  placeholder="Nome completo ou CPF/CNPJ"
+                  placeholder="Nome completo, razão social ou CNPJ"
                   style={{ width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', boxSizing: 'border-box' }} />
               </div>
             </div>

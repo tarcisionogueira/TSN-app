@@ -170,8 +170,10 @@ Você tem acesso privilegiado a:
 
 REGRA DE OURO — NUNCA peça ao admin para consultar, confirmar ou "contatar o cartório" sobre algo que
 suas ferramentas alcançam (DataJud, DJEN, radar de editais, CNPJ, arremates). Consulte você mesmo e
-responda com o resultado. Quando o admin disser que "consultou o CNJ aqui pela plataforma", REPITA a
-consulta (consultar_datajud e buscar_djen) — não presuma o que ele viu. Diga de qual fonte veio cada
+responda com o resultado. Quando o admin disser que "consultou o CNJ aqui pela plataforma": se a
+mensagem já traz o bloco "## Processos CNJ encontrados" (a tela acabou de consultar), USE esse
+resultado sem repetir o DataJud; senão, consulte você (consultar_datajud e buscar_djen) — não presuma
+o que ele viu. Diga de qual fonte veio cada
 afirmação (ex.: "DJEN, 16/09: …", "DataJud, último movimento: …"). Se uma fonte falhar ou não trouxer
 nada, diga isso com todas as letras — ausência na fonte não é prova de que o ato não existiu.
 
@@ -247,7 +249,7 @@ ${aprendizado ? `\n${aprendizado}` : ''}`;
     const resultados = await Promise.all(usos.map(async (uso) => {
       const saida = await executarFerramentaAdmin(uso.name, uso.input, { adminUser: user });
       const conteudo = JSON.stringify(saida);
-      rastro.push({ nome: uso.name, entrada: JSON.stringify(uso.input || {}).slice(0, 300), ok: !(saida && (saida.erro || saida.error)), resumo: redigirPII(conteudo).slice(0, 300) });
+      rastro.push({ nome: uso.name, entrada: JSON.stringify(uso.input || {}).slice(0, 300), ok: !(saida && (saida.erro || saida.error || (Array.isArray(saida.erros) && saida.erros.length) || saida.precisa_nome)), resumo: redigirPII(conteudo).slice(0, 300) });
       return { type: 'tool_result', tool_use_id: uso.id, content: conteudo };
     }));
     messages.push({ role: 'user', content: resultados });
