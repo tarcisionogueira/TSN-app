@@ -1,0 +1,26 @@
+name: Teste de limite do boleto (Mercado Pago)
+
+# api/mp-boleto-teste.js — emite UM boleto do valor pedido e cancela na mesma chamada.
+# Só manual. Mostra no log o que o MP respondeu (emitiu ou recusou, e por quê).
+on:
+  workflow_dispatch:
+    inputs:
+      valor:
+        description: 'valor do boleto em reais (ex.: 200000)'
+        default: '200000'
+
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Emitir e cancelar
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          VALOR: ${{ inputs.valor }}
+        run: |
+          curl -sS -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/mp-boleto-teste" \
+            -H "x-cron-secret: ${CRON_SECRET}" -H "Content-Type: application/json" \
+            -d "{\"valor\": ${VALOR//[^0-9.]/}}"
+          echo
