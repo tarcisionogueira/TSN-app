@@ -111,7 +111,8 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
 
   // processados conta o que de fato foi tratado: o lote pode ser interrompido antes do fim
   // se o orçamento de tempo (deadline) acabar — por isso não usamos imoveis.length aqui.
-  const res = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, interrompido: false };
+  // `rua` faltava (30/09): res['rua']++ virava NaN e o resumo escondia os acertos de nível rua.
+  const res = { processados: 0, endereco: 0, rua: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, interrompido: false };
 
   for (const im of imoveis) {
     // Cada item pode levar até ~27s (3 níveis de cascata × timeout de 8s do Nominatim).
@@ -218,13 +219,14 @@ export default async function handler(req, resp) {
   const LIMITE_MS = 240_000;
   const inicio = Date.now();
   const deadline = inicio + LIMITE_MS;
-  const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
+  const total = { processados: 0, endereco: 0, rua: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
   while (Date.now() < deadline) {
     const res = await processarLote(estadosFilter, 50, deadline);
     if (!res || res.processados === 0) break; // sem mais pendentes
     total.processados += res.processados;
     total.endereco    += res.endereco;
+    total.rua         += res.rua;
     total.bairro      += res.bairro;
     total.cidade      += res.cidade;
     total.falhas      += res.falhas;
