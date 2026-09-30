@@ -2,6 +2,7 @@
 // Renavam e local da DESCRIÇÃO do lote. Slugs e título reais do evento 213 (TRT-5).
 import assert from 'node:assert/strict';
 import { ehVeiculoInteiro, marcaModeloAno, tipoVeiculo } from '../lib/nordeste-veiculo.mjs';
+import { numPayload } from '../lib/dom-parse-util.mjs';
 
 const U = (s) => `https://www.nordesteleiloes.com.br/lotes/${s}`;
 assert.ok(ehVeiculoInteiro(U('213-065-automovel-chevrolets10-ltz-dd2-28-tdi-4x2-cd-dies-aut-ano-20122013')));
@@ -21,4 +22,12 @@ assert.equal(marcaModeloAno('MOTOCICLETA HONDA/CG 160 FAN, ANO 2018/2018').marca
 assert.equal(tipoVeiculo('MOTOCICLETA HONDA/CG 160 FAN'), 'moto');
 assert.equal(tipoVeiculo('ÔNIBUS M.BENZ/MPOLO SEN MIDI'), 'onibus');
 assert.equal(tipoVeiculo('AUTOMÓVEL CHEVROLET/S10'), 'carro');
+// Valor do payload (seco de 30/09: S10 com lance R$ 411.948 em vez de R$ 41.194,80).
+assert.equal(numPayload(41194.8), 41194.8);
+assert.equal(numPayload('41194.8'), 41194.8);
+assert.equal(numPayload('15920.00'), 15920);
+assert.equal(numPayload('41.194,80'), 41194.8);
+assert.equal(numPayload('380.000'), 380000, 'ponto de milhar pt-BR continua milhar');
+const gol = marcaModeloAno('VEÍCULO CONSERVADO VW GOL 1.0 - 2004/2005');
+assert.equal(gol.marca, 'VW'); assert.equal(gol.modelo, 'GOL 1.0'); assert.equal(gol.ano_modelo, 2005);
 console.log('nordeste-veiculo: todos os casos passaram');

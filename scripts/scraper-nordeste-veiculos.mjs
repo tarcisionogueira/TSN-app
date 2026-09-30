@@ -26,7 +26,8 @@ const FONTE_SAUDE = 'NORDESTE_VEICULOS';
 
 async function main() {
   const { base } = TENANTS.nordeste;
-  const motor = criarMotorDom({ esperaMs: 3500 });
+  // Páginas de evento de pátio têm centenas de lotes: 45 s estourou em 2 de 13 no seco de 30/09.
+  const motor = criarMotorDom({ esperaMs: 3500, timeoutMs: 90000 });
   console.log(`NORDESTE veículos ${DRYRUN ? '(SECO — não grava)' : '(GRAVANDO)'} · até ${MAX} detalhes`);
   try {
     const home = await motor.fetchFonte(`${base}/`);

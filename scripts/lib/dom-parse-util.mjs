@@ -9,6 +9,16 @@
  */
 
 export const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+// VALOR QUE VEIO DE PAYLOAD JSON (30/09): número JS ou string em formato de máquina ("41194.8").
+// `num` é para texto pt-BR ("41.194,80") e trata o ponto como milhar — no payload da NORDESTE o lance
+// de R$ 41.194,80 virou R$ 411.948 (e a avaliação de um lote, R$ 15.920,00 → R$ 1,59 mi). Só cai no
+// `num` quando o texto tem cara de pt-BR (vírgula decimal ou ponto de milhar seguido de 3 dígitos).
+export const numPayload = v => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const t = String(v ?? '').trim();
+  if (/^-?\d+(\.\d+)?$/.test(t) && !/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t);
+  return num(t);
+};
 export const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
 export const titleCase = s => String(s || '').toLowerCase().replace(/(^|\s|'|-)([a-zà-ú])/g, (_, a, b) => a + b.toUpperCase())
   .replace(/\b(De|Do|Da|Dos|Das|E|Em|No|Na)\b/g, m => m.toLowerCase()).replace(/^\w/, c => c.toUpperCase());

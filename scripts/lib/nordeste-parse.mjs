@@ -9,7 +9,7 @@
  * "25 ago de 2026 às 11h"; cards "1º Leilão"/"2º Leilão" com R$ ao lado.
  */
 import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, tituloDeSlug, titleCase, UF_POR_NOME, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
+import { num, numPayload, plaus, textoDe, tituloDeSlug, titleCase, UF_POR_NOME, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
 
 export const TENANTS = {
   nordeste: { fonte: 'NORDESTE', leiloeiro: 'Nordeste Leilões', base: 'https://www.nordesteleiloes.com.br' },
@@ -160,7 +160,7 @@ export function parseDetalhe(html, url) {
 
   const lote = loteDoPayload(html, slug);
   if (lote && ehImovel) {
-    const av = plaus(num(lote.avaliation)), lance = plaus(num(lote.initialBid)) || plaus(num(lote.minimunSale));
+    const av = plaus(numPayload(lote.avaliation)), lance = plaus(numPayload(lote.initialBid)) || plaus(numPayload(lote.minimunSale));
     if (av) avaliacao = av;
     if (lance) minimo = lance;
     if (minimo && !avaliacao) avaliacao = minimo;

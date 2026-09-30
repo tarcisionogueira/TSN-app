@@ -7,7 +7,10 @@
  * vêm da DESCRIÇÃO deste lote (nunca do texto solto da página, que traz os outros lotes).
  */
 import { loteDoPayload, descricaoDoLote } from './nordeste-parse.mjs';
-import { num, plaus } from './dom-parse-util.mjs';
+import { num, numPayload } from './dom-parse-util.mjs';
+// Veículo de pátio ("veículos conservados") vale R$ 400–1.500 de verdade: o piso de imóvel (R$ 1.000)
+// descartava 31 de 40 no seco de 30/09. Aqui o piso é R$ 100.
+const plausV = v => (v >= 100 && v <= 50_000_000 ? v : 0);
 
 // Slug começa pelo TIPO do bem: "213-065-automovel-chevrolets10-…", "213-001-motocicleta-…".
 const RE_TIPO_VEICULO = /^\d+-\d+-(?:\d+-)?(ve[íi]culo|automovel|motocicleta|motoneta|ciclomotor|moto|onibus|micro-?onibus|caminhao|caminhonete|camioneta|utilitario|van|furgao|reboque|semi-?reboque|carreta|cavalo-mecanico)(?:-|$)/i;
@@ -37,7 +40,11 @@ export function marcaModeloAno(titulo) {
   const t = String(titulo || '').replace(/\s+/g, ' ').trim();
   const semTipo = t.replace(/^(ve[íi]culo|autom[óo]vel|motocicleta|motoneta|ciclomotor|moto|[ôo]nibus|micro-?[ôo]nibus|caminh[ãa]o|caminhonete|camioneta|utilit[áa]rio|van|furg[ãa]o|reboque|semi-?reboque|carreta)\b\s*:?\s*/i, '');
   const ano = t.match(/\bano\s*:?\s*(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)/i) || t.match(/\b(19[5-9]\d|20[0-4]\d)\s*\/\s*(19[5-9]\d|20[0-4]\d)\b/);
-  const corpo = semTipo.split(/,?\s*\bano\b/i)[0].replace(/^i\s*\//i, '').replace(/^marca\s*\/?\s*modelo\s*:?\s*/i, '');
+  // "VEÍCULO CONSERVADO VW GOL 1.0 - 2004/2005": sai o "CONSERVADO" (é o lote de pátio, não a marca)
+  // e o "- AAAA/AAAA" do fim, que é o ano.
+  const corpo = semTipo.replace(/^conservad[oa]\s+/i, '').split(/,?\s*\bano\b/i)[0]
+    .replace(/\s*-?\s*(19|20)\d{2}\s*\/\s*(19|20)\d{2}\s*$/, '')
+    .replace(/^i\s*\//i, '').replace(/^marca\s*\/?\s*modelo\s*:?\s*/i, '');
   let [marcaBruta, ...resto] = corpo.split('/');
   // Sem barra ("I/TOYOTA HILUX" vira "TOYOTA HILUX"): 1ª palavra, se for marca conhecida.
   if (!resto.length) {
@@ -62,14 +69,14 @@ export function veiculoDoDetalhe(html, url) {
   if (!lote) return { motivo: 'payload do lote não encontrado na página' };
   const desc = descricaoDoLote(html, lote);
   const titulo = String(lote.title || '').slice(0, 180);
-  const avaliacao = plaus(num(lote.avaliation)) || plaus(num((desc.match(/Avalia[çc][ãa]o:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
-  const minimo = plaus(num(lote.initialBid)) || plaus(num(lote.minimunSale)) || plaus(num((desc.match(/Lance M[íi]nimo:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1])) || avaliacao;
+  const avaliacao = plausV(numPayload(lote.avaliation)) || plausV(num((desc.match(/Avalia[çc][ãa]o:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const minimo = plausV(numPayload(lote.initialBid)) || plausV(numPayload(lote.minimunSale)) || plausV(num((desc.match(/Lance M[íi]nimo:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1])) || avaliacao;
   const pracas = (lote.auction?.squares || []).filter(q => !q.hidden)
     .sort((a, b) => (a.type?.square || 0) - (b.type?.square || 0)).map(q => dataISO(q.closing)).filter(Boolean);
   const agora = new Date().toISOString();
   const proxima = pracas.find(d => d >= agora) || pracas[pracas.length - 1] || null;
   // "Localização do Bem: RUA …, CENTRO, PIRITIBA/BA."
-  const loc = desc.match(/Localiza[çc][ãa]o do Bem:[^.]*?([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40})\s*\/\s*([A-Z]{2})\b/);
+  const loc = desc.match(/Localiza[çc][ãa]o do Bem:[^.]*?([A-ZÀ-Ý][A-Za-zÀ-ÿ' -]{2,40})\s*\/\s*([A-Z]{2})\b/);
   const placa = (desc.match(/\bPLACA(?:\s+POLICIAL)?\s*:?\s*([A-Z]{3}-?\d[A-Z0-9]\d{2})\b/i) || [])[1] || null;
   const chassi = (desc.match(/\bCHASSI\s*:?\s*([A-HJ-NPR-Z0-9]{17})\b/i) || [])[1] || null;
   const renavam = (desc.match(/\bRENAVAM\s*:?\s*(\d{9,11})\b/i) || [])[1] || null;
