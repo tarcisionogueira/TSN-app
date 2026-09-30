@@ -9,6 +9,37 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 30/09 (manhã, 2ª parte) — datas da Superbid, FIPE, SOLEON pelo banco, termo + procuração, contrato do checkout
+1. **Data do leilão da Superbid 3 h adiantada** (print: lote fechava 12h04, BidPro dizia "encerrado" às 09h42).
+   `endDate` vem em hora de Brasília sem fuso e ia para timestamptz como UTC. Coletor usa `endDateTime`
+   (epoch, `dataFimSuperbid`). **9.440 linhas corrigidas** (7.623 ativas); nenhuma apuração rodou antes da hora.
+   ⚠️ Imóveis guardam `data_leilao` como TEXTO sem fuso — não foi mexido; a rota das lojas Superbid usa
+   `timeZoneId=UTC` e a do portal `America/Sao_Paulo` no mesmo campo: conferir antes de confiar.
+2. **FIPE:** 9.400 veículos ativos nunca consultados é DESENHO (sob demanda, decisão de 25/09). Os `sem_match`
+   tinham 2 causas: nome FIPE que muda com o ano ("DUSTER OROCH" até 2022) e modelo colado ("416CDISPRINTERM").
+   2ª tentativa ampla em `api/_fipe.js` (teste `testar:fipe`). 45 `sem_match` liberados para nova tentativa.
+3. **SOLEON pela via banco** (pg_net) antes do Bright Data: JOAOEMILIO "zerou" não era parser — o site não tem
+   imóvel publicado; ninguém media desde 27/09 (Actions barrado, BD sem cota, residencial parado). Seco: FERREIRALEIL
+   180 enumerados, ISAIAS 50, JOAOEMILIO 0 (site vazio). Coleta real disparada 30/09 ~13h. **Conferir** que
+   `fonte_regressao_suspeita()` parou de acusar JOAOEMILIO depois dela.
+4. **Relatório de veículo — regeração pelo servidor** (`regerar-relatorios.yml`, campo `veiculos` = ids de
+   `analises_veiculo`; só regera o que existe, sem cota). Página do lote pelo banco quando a Superbid barra a
+   Vercel (403). Busca de anúncios: Haiku voltou VAZIO nos 4; 2ª tentativa com Sonnet (prazo 93 s).
+   **Pendente:** confirmar que a revenda pela Webmotors sai (`result.revendaMercado.base`).
+5. **Termo de assessoria + procuração particular** (`api/_termo-assessoria.js`, texto ÚNICO p/ checkout e
+   atribuição). Atribuição "contratou de fato" (agora para todo cliente, não só explorador) exige escolher a
+   taxa inicial: isento / R$ 6.000 em até 12x / R$ 5.000 à vista (cobrança avulsa). Procuração cobre a
+   arrematação a realizar (habilitação e lances até o limite autorizado por escrito) e a realizada.
+   `/api/termo-atribuido?arrematacao=…&taxa=…` (admin ou CRON_SECRET via `cron-manual.yml`) para as antigas.
+   **Marcos (isento):** termo gerado, aguardando assinatura, bloqueio até 30/10 — link em `contratos_link`
+   (arremate_user_id do Marcos). Valores do termo agora vêm de planos_config/config_honorarios: o texto antigo
+   dizia R$ 4.800 à vista e mínimo de êxito R$ 5.000 (sistema cobra R$ 5.000 e R$ 7.000).
+6. 🔴 **Contrato do checkout NUNCA era criado:** `contratos_link.requer_assinatura` não existia (PGRST204 em todo
+   insert do `auto-contrato`). Coluna criada 30/09. Nenhum dos 4 assessorados tem contrato do checkout —
+   Rafael e Matheus (antigos) seguem sem termo: **decisão do dono** se gera o termo atribuído para eles.
+7. **DJEN:** falha da tela "Consultar andamento no CNJ" (10h11) foi instabilidade do lado deles (DataJud TRT5 e
+   DJEN abortados; DJEN respondeu 200 um minuto depois pelo banco). DJEN ganhou reserva pela via banco.
+
 ### 🚗 30/09 (manhã) — Relatório de veículo: comissão REAL, débitos declarados, reparo sem valor, revenda = média Webmotors − 10%
 Print do dono (Fiat Cronos 2020, SUPERBID, id 4e61ea2b…): comissão "5% presumida", "débitos —" e revenda pela
 régua (FIPE − 15%). Causa: relatório de 29/09 14h28, ANTERIOR aos custos/revenda — mas a descrição trazia
