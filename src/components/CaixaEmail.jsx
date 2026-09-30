@@ -173,6 +173,15 @@ function GuardaConversa({ conversa, onErro, onAviso, soLeitura }) {
   );
 }
 
+// Texto de e-mail dominado por URLs (a versão texto de e-mail transacional/marketing traz cada imagem
+// como "[https://…]"): mais caracteres de link do que de texto, e link suficiente para não ser um e-mail
+// comum com 1–2 endereços.
+function textoSoDeLinks(t) {
+  const links = (String(t).match(/https?:\/\/\S+/g) || []).join('').length;
+  const resto = String(t).replace(/\[?https?:\/\/\S+\]?/g, '').replace(/\s+/g, ' ').trim().length;
+  return links > 400 && links > resto;
+}
+
 export default function CaixaEmail({ soPessoal = false }) {
   const [pasta, setPasta] = useState('entrada');
   const [lista, setLista] = useState([]);
@@ -606,7 +615,11 @@ export default function CaixaEmail({ soPessoal = false }) {
               const linkBtn = { background: 'none', border: 'none', padding: 0, color: '#0D63DB', cursor: 'pointer', fontSize: 12, fontWeight: 700 };
               // Spam nunca renderiza HTML (nem no iframe isolado): imagem remota confirma ao
               // remetente que o endereço é lido — o que spammer mais quer saber.
-              const mostrarHtml = !spam && !!m.html && (v.html || !m.texto);
+              // Versão texto que é quase só LINK (30/09, print do dono: e-mail do Mercado Pago virou
+              // uma parede de "[https://…]" — cada imagem do HTML vira URL no texto). Nesse caso a
+              // versão formatada abre por padrão; o botão continua alternando. Spam segue só texto.
+              const padraoHtml = !!m.html && (!m.texto || textoSoDeLinks(m.texto));
+              const mostrarHtml = !spam && !!m.html && (v.html !== undefined ? v.html : padraoHtml);
               return (
                 <div key={m.id} ref={ultima ? ultimaRef : undefined}
                   style={{ borderTop: idx ? '1px solid #e2e8f0' : 'none', padding: '14px 0 14px 12px', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, marginBottom: 2, scrollMarginTop: 12 }}>
@@ -636,7 +649,7 @@ export default function CaixaEmail({ soPessoal = false }) {
                   {!spam && (
                     <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
                       {!mostrarHtml && citado && <button onClick={() => alternar('citado')} style={linkBtn}>{v.citado ? 'Ocultar histórico citado' : '··· Mostrar histórico citado'}</button>}
-                      {m.html && m.texto && <button onClick={() => alternar('html')} style={linkBtn}>{v.html ? 'Ver só o texto' : 'Ver formatado (original)'}</button>}
+                      {m.html && m.texto && <button onClick={() => setVerMais(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || {}), html: !mostrarHtml } }))} style={linkBtn}>{mostrarHtml ? 'Ver só o texto' : 'Ver formatado (original)'}</button>}
                     </div>
                   )}
                 </div>

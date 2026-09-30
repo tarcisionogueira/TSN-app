@@ -1,0 +1,31 @@
+name: Chamar rota de cron à mão (diagnóstico)
+
+# Chama UMA rota /api/... do app com o CRON_SECRET e mostra a resposta (status + corpo).
+# Para diagnosticar cron que "responde 200 e não faz nada" sem depender do log da Vercel.
+# Só quem tem escrita no repositório dispara workflow_dispatch.
+on:
+  workflow_dispatch:
+    inputs:
+      rota:
+        description: 'rota, ex.: /api/geocodificar'
+        required: true
+      metodo:
+        description: 'GET | POST'
+        default: 'GET'
+
+jobs:
+  chamar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Chamar
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ROTA: ${{ inputs.rota }}
+          METODO: ${{ inputs.metodo }}
+        run: |
+          [[ "$ROTA" =~ ^/api/[a-z0-9-]+(\?[a-zA-Z0-9=\&,_-]*)?$ ]] || { echo "::error::rota inválida"; exit 1; }
+          [[ "$METODO" == "GET" || "$METODO" == "POST" ]] || { echo "::error::método inválido"; exit 1; }
+          curl -sS -L --post301 --post302 --post303 --max-time 320 -X "$METODO" "https://bidprobrasil.com.br${ROTA}" \
+            -H "x-cron-secret: ${CRON_SECRET}" -H "Content-Type: application/json" \
+            $( [ "$METODO" = "POST" ] && echo "-d {}" ) -w "\nHTTP %{http_code} em %{time_total}s\n"
