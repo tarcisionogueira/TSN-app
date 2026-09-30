@@ -221,8 +221,11 @@ jobs:
 
       - name: Leje
         # 27/09: fora do RODA_TUDO — o site dá 403 ao IP do runner desde 24/09 e o proxy ISP não
-        # resolve (ver leje.mjs). Produção: scripts/runner-residencial.sh. Push = sinalizador.
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leje')) }}
+        # resolve (ver leje.mjs). Produção: scripts/runner-residencial.sh.
+        # 30/09: SÓ por dispatch. No push, cada commit batia no site a partir do Azure — a Cloudflare
+        # da LEJE responde "acesso temporariamente bloqueado" e o monitor enchia de `falhou` que não
+        # vinha da coleta de produção (4 das 6 falhas de 30/09 eram push).
+        if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'leje') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -234,7 +237,7 @@ jobs:
         # via grátis vazia) — produção é scripts/runner-residencial.sh, grátis. Aqui: push como
         # sinalizador; dispatch com `freitas_bd=1` passa pelo Bright Data (~13 req.) só para
         # validar parser de ponta a ponta sem depender do computador de casa.
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'freitas')) }}
+        if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'freitas') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

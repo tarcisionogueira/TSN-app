@@ -9,6 +9,17 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔎 30/09 (noite, 3ª parte) — LEJE/FREITAS/BAYIT abrem no navegador do dono
+- **As falhas de LEJE/FREITAS vinham de DOIS lugares:** 4 de 6 em 30/09 eram o `scraper-dom.yml` rodando no PUSH
+  (IP Azure) — cada commit batia nos dois sites. Agora LEJE e FREITAS só rodam no CI por dispatch explícito.
+- **FREITAS:** o site manda o certificado sem a cadeia intermediária — navegador completa, Node e banco recusam
+  (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Fonte passou para `fetch:'dom'` (Chromium). Validação: próxima rodada do
+  runner residencial (o site recusa IP do Azure, então o CI não prova). Conferir `fonte_saude` FREITAS.
+- **LEJE:** Cloudflare com regra anti-automação (o runner residencial em headless também toma 403; o navegador do
+  dono passa). Decisão: pedir liberação à LEJE, não evadir. Item 4 da lista do dono.
+- **BAYIT:** abre normal; a queda 31→5 de 24/09 fica para conferir na rodada de quinta (01/10).
+- **Bright Data:** dono achou o link do e-mail ("Allowlist suspicious IPs") — marcar 68.211.146.0/24 e liberar.
+
 ### 🛠️ 30/09 (noite, 2ª parte) — fontes paradas pela via banco + datas de vizinho
 - **Revenda de veículo pelo MOBIAUTO** (item 6 do dono): a Webmotors dá 403 ao banco e à Vercel; o Mobiauto abre
   pela via banco (grátis) em `/comprar/carros/brasil/<marca>/<modelo>/ano-<AAAA>` com os anúncios em JSON-LD.
@@ -73,7 +84,10 @@ de cliente parado; segurança 0/0.
 1. 🔴 Bright Data: remover 68.211.146.0/24 da lista negra da zona web_unlocker1 (ver passo a passo na conversa de 30/09).
 2. 🔴 Cobrar as assinaturas: Marcos (termo + procuração), Rafael (2 termos), Matheus (1 termo) — prazo 30/10.
 3. ✅ LGPD: encarregado nomeado na Política (Tarcisio de Souza Nogueira de Araujo) e prazo corrigido para "até 15 dias" (art. 19, II) — 30/09 noite. Resta ao dono: responder os chamados `[LGPD — responder até …]` no prazo.
-4. 🟠 LEJE/FREITAS: abrir leje.com.br e o site da Freitas no navegador do PC do runner — se der "Acesso Negado", o IP de casa foi bloqueado (reduzir a frequência da rodada parcial de 4 h ou pedir liberação ao leiloeiro).
+4. 🟠 LEJE: o dono abre o site normal do PC (30/09) — não é IP bloqueado; é a Cloudflare da LEJE barrando
+   AUTOMAÇÃO ("Acesso temporariamente bloqueado… monitorada", com challenge-platform). Contornar anti-robô de
+   propósito não é o caminho: pedir liberação/feed à LEJE (botão "Contatar Suporte" da própria tela) ou aceitar
+   a fonte fora (12 lotes). FREITAS e BAYIT também abrem normal — ver bloco de 30/09 noite (3ª parte).
 5. 🟠 Pagantes sem relatório em 14 dias (Airton, Alessandra, Rafael, Matheus, Neuma) — contato comercial.
 6. ✅ Revenda de veículo: Mobiauto (grátis, via banco) como 1ª fonte desde 30/09 — a Webmotors bloqueia robô. Se preferir outra fonte, avisar.
 7. 🟠 Conta de faturamento Google vencida (cartão do Workspace recusado em 01/09).
