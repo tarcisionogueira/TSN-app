@@ -9,6 +9,24 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧠 30/09 (noite, 10ª parte) — revenda de veículo por OLX + Mobiauto · chat CNJ com memória e histórico
+- **Revenda (dono: L200 Triton 2021 saiu "0 anúncios"):** o Mobiauto só tem 2021 em `l200-triton-sport` (chutávamos
+  `l200-triton`) e havia um portal só. Agora `anunciosDoMobiauto` descobre o slug pela página da MARCA/ANO quando o
+  candidato não tem o ano, e `anunciosDaOlx` lê a busca da OLX via banco (46 anúncios da L200 2021 no teste) — os dois
+  em paralelo, amostras SOMADAS, média − 10%. Mercado Livre devolve "tráfego suspeito" ao banco: fora. Busca paga por IA
+  só se o conjunto não tiver 3. `filtrarVersao` ignora token que casa com todos (dizia "mesma versão" sobre o modelo).
+  Parsers puros em `src/utils/viabilidadeVeiculo.js`; teste `scripts/testes/revenda-mobiauto.mjs` (inclui card REAL da OLX).
+- **Chat operacional → CNJ:** não gravava nada (a conversa sumia ao recarregar). Agora:
+  `admin_chat_memoria` (pergunta, resposta, RASTRO de ferramentas) + `admin_chat_casos_parecidos` (texto pt) → os casos
+  parecidos entram no prompt como "caminho que funcionou" (dados antigos nunca repetidos como fato). 👍 = exemplo
+  prioritário, 👎 nunca reaproveitado. "🕘 Conversas anteriores" retoma a conversa na mesma sessão; retenção 12 meses
+  (👍 24), apagada pelo `limpar-documentos-cron`.
+- **Fontes novas do chat (grátis):** `buscar_edital_processo` (radar DJEN, ~2 mil editais: praças, leiloeiro, avaliação,
+  matrícula, cartório, débitos, ocupação), `consultar_datajud` como ferramenta (número ou nome), `consultar_cnpj`
+  (BrasilAPI/minhareceita: situação, endereço, sócios). **Avaliadas e fora:** certidões Receita-CPF/PGFN/FGTS (captcha /
+  login gov.br — desligadas desde 31/08), CNIB e ONR (certificado/pago). Para ler o que o dono pergunta:
+  `select criado_em, pergunta, ferramentas, util from admin_chat_memoria order by criado_em desc limit 30;`
+
 ### 🧹 30/09 (noite, 9ª parte) — invariantes de dado zerados (exceto os conhecidos)
 - **UF vazia (10 → 5):** 5 corrigidos com prova (bairro/CEP/título: 3 São Paulo, 2 Curitiba). Causa na Superbid: com a
   localização estruturada vazia a UF ficava vazia mesmo com "…Vila Andrade/SP" no título — `ufDoTitulo` em
