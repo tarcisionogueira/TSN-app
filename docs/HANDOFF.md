@@ -29,7 +29,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 8. **Revisão independente dos 26 commits** — 5 defeitos achados e corrigidos no mesmo dia.
 
 **PENDÊNCIAS para a próxima sessão:**
-1. **Embu-Guaçu** — conferir o relatório regerado com a opção 3 (ver resultado no bloco "30/09 (noite)").
+1. **Embu-Guaçu** — regerado com a opção 3 (30/09 02h45 UTC): a regra APLICOU — 10 anúncios, todos
+   marcados DENTRO da APRM-G (subárea SUC), mediana R$ 262/m² × 2.503 m² = **R$ 655 mil**, contra
+   avaliação de R$ 66,6 mil (R$ 27/m²). A distância NÃO é mais anúncio de fora: Embu-Guaçu fica quase
+   inteira na APRM, e a SUC é a subárea de urbanização consolidada (a menos restritiva). Suspeita a
+   conferir: avaliação judicial antiga ou algo no lote que a matrícula/edital mostre (fração, servidão,
+   área non aedificandi). **Decisão do dono** ao ver o relatório; a anomalia
+   `aprendizado_mercado_incoerente_avaliacao` segue marcando o caso.
 2. **Telas logadas no navegador** — a varredura de estouro (Chromium 375/1366 px) cobriu 13 telas
    públicas; as logadas estão cobertas pela correção na raiz, mas não foram vistas no navegador.
 3. **Teste pré-existente** `busca-cai-no-haiku-com-a-ferramenta-certa.mjs` com 2 falhas (Índice).
