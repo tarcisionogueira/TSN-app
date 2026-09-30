@@ -781,11 +781,16 @@ export default async function handler(req, res) {
   // 403 da Caixa, URL assinada expirada) NÃO pode rebaixar um parecer BOM já emitido
   // para o estado "faltam documentos". Guardamos o anterior e, nos GATES de semDocs
   // abaixo, se já havia um relatório bom, ele é preservado em vez de sobrescrito.
-  let resultadoAnterior = null;
+  let resultadoAnterior = null, cnjPendenteAntes = false;
   try {
-    const [ant] = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result&limit=1`)).json();
+    const [ant] = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result,regen_motivo&limit=1`)).json();
     resultadoAnterior = ant?.result || null;
+    cnjPendenteAntes = /cnj_nao_consultado/.test(String(ant?.regen_motivo || ''));
   } catch { /* best-effort */ }
+  // Saída antecipada (sem ler documentos) NÃO consulta o CNJ: se a consulta estava pendente, a marca
+  // continua. Antes ela era sobrescrita e o juridico-retry-cron mandava ao cliente "consulta jurídica
+  // concluída" sem consulta nenhuma (pendência de 30/09).
+  const comCnjPendente = (motivo) => (cnjPendenteAntes ? [motivo, 'cnj_nao_consultado'].filter(Boolean).join(',') : motivo);
   const tinhaRelatorioBom = !!(resultadoAnterior && typeof resultadoAnterior === 'object'
     && !resultadoAnterior.precisaDocumentos && typeof resultadoAnterior.parecer === 'string'
     && resultadoAnterior.parecer.trim().length > 200);
@@ -798,7 +803,7 @@ export default async function handler(req, res) {
   // tentando (até o teto de `regen_tentativas` já existente, MAX_TENT=3 — sem risco de loop).
   const preservarSeBom = async (faltandoAgora) => {
     if (!tinhaRelatorioBom) return null;
-    await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: 'leitura_zero_transitoria' });
+    await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: comCnjPendente('leitura_zero_transitoria') });
     registrarAnomalia('documental_regen_leitura_zero', row?.fonte, imovelId, 'documentos',
       `Regeração leu 0 documentos (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
     // ESTORNO AQUI DENTRO, não nos chamadores (10/08). Os dois pontos que chamam
@@ -1134,7 +1139,7 @@ export default async function handler(req, res) {
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
       { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
-      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: comCnjPendente(emCaptura ? 'matricula_nao_lida' : null) });
       persistidoNestaRodada = semDocs;
       await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
@@ -1907,7 +1912,7 @@ export default async function handler(req, res) {
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
       { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
-      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: comCnjPendente(emCaptura ? 'matricula_nao_lida' : null) });
       persistidoNestaRodada = semDocs;
       await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):

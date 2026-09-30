@@ -9,6 +9,19 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 💬 30/09 (noite, 14ª parte) — chat CNJ conferido ao vivo (Marcos) · e-mail jurídico falso · WhatsApp
+- **Chat CNJ (conversa do dono sobre o Marcos, TRT5):** DataJud TRT5/TST em timeout do lado do CNJ (também pelo
+  pg_net). Corrigido: DJEN pedia 30/página e a fonte tinha 34 → 100, mais recentes primeiro, `historico_datas`
+  com todas as datas; `buscar_djen` no chat devolve `previsao` só pelas publicações; o prompt proíbe afirmar
+  "auto não expedido" com base no DJEN (só publica — ato interno não aparece); resposta do chat renderiza markdown.
+- **juridico-retry mandava "consulta jurídica concluída" sem consulta:** as saídas antecipadas do documental
+  (leitura zero / sem documentos) sobrescreviam `regen_motivo` e apagavam `cnj_nao_consultado`. Agora a marca é
+  mantida (`comCnjPendente`).
+- **JMFLEILOES "regressao":** um run às 20:18 trouxe 2 (três anteriores do dia, 17); acervo intacto. Conferir o próximo.
+- **WhatsApp oficial:** código pronto (webhook + respondedor + cron 5 min + tabelas). Faltam só as envs
+  `WA_VERIFY_TOKEN`, `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_BOT_ATIVO=1` e o webhook na Meta **com www** (ver
+  `docs/ENVS_VERCEL.md`).
+
 ### 🧠 30/09 (noite, 13ª parte) — consultas processuais ensinam o agente documental
 - `api/_aprendizado-processual.js` (teste `aprendizado-processual.mjs`). **Entrada** `aprenderDaConsulta()` — chamada
   pela tela do caso (`caso-andamento-cnj`), pelo chat (`consultar_datajud`, `buscar_djen`) e pela triagem

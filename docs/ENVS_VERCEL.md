@@ -184,7 +184,8 @@ env var nova só entra a partir do PRÓXIMO deploy, não retroage no que já est
 
 Todas marcadas em Production + Preview + Development. Nomes (valores só no painel):
 - `WA_VERIFY_TOKEN` — texto qualquer que você inventa; o mesmo vai no campo "Verify token" do
-  webhook no painel da Meta (URL: `https://bidprobrasil.com.br/api/whatsapp-webhook`, campos
+  webhook no painel da Meta (URL: `https://www.bidprobrasil.com.br/api/whatsapp-webhook` — **com www**: o
+  domínio sem www responde 308 e a Meta não segue redirecionamento, a verificação falha; campos
   `messages` e, se usar o mesmo número no app, `smb_message_echoes`).
 - `WA_APP_SECRET` — Chave secreta do app (Meta → Configurações → Básico). Se o app for o MESMO
   do Instagram, pode pular: `IG_APP_SECRET` já vale.
@@ -194,6 +195,9 @@ Todas marcadas em Production + Preview + Development. Nomes (valores só no pain
 - `WA_BOT_ATIVO=1` — liga a RESPOSTA da IA. Sem ele, o webhook escuta e grava, mas ninguém responde.
 
 **Como conferir, sem segredo nenhum:** `GET /api/whatsapp-webhook` devolve `{ escuta, responde, falta: [...] }`.
+30/09 (noite): `escuta:false, responde:false`, faltam `WA_VERIFY_TOKEN`, `WA_TOKEN`, `WA_PHONE_NUMBER_ID`
+(o segredo do app já vem do `IG_APP_SECRET`); `wa_conversas`/`wa_mensagens` existem e estão vazias; cron do
+respondedor (5 min) já agendado.
 
 ## FIPE (opcional, 25/09) — ainda NÃO configurado
 - `FIPE_TOKEN` — token grátis do fipe.parallelum.com.br (header `X-Subscription-Token`). Sem ele a
