@@ -208,6 +208,28 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    galeria, numeradas (Foto 01/NN), 2 por linha no PDF como laudo cautelar; impressão espera até 15 s
    pelas imagens (`imprimirHtml(..., { esperaImagensMs })`).
 
+### ✅ 30/09 — Uma IA cai, a outra assume (Gemini ↔ Claude, nos dois sentidos) — pedido do dono
+- **Claude → Gemini** (`api/_claude.js` `anthropicFetch`): a reserva agora dispara também em falha do
+  PROVEDOR (401/402/403/404 e o 400 "credit balance is too low"), não só em 429/5xx/rede. O
+  `noFallback: true` do núcleo (documental/mercadológico/laudo/edital/validação de anexos) passou a ser
+  IGNORADO de propósito: o conversor `api/_gemini.js` agora leva PDF/imagem (`inline_data`, teto 18 MB —
+  acima disso recusa em vez de ler parcial) e a busca na web (`google_search`, com a contagem de buscas
+  em `usage.server_tool_use` que `_busca-com-prova` exige). Única exceção: `noFallback: 'estrito'`
+  (só o A/B, que mede o Claude puro). Erro do PEDIDO (400 comum) não troca de IA. Ferramenta própria
+  (função) não é emulada → volta a resposta do Claude.
+- **Gemini → Claude**: as 4 funções que eram só-Gemini agora usam `iaTexto()` (Gemini primeiro, Claude
+  de reserva): `conciliacao` (diagnóstico financeiro), `indice-aprendizado-cron` (supervisor),
+  `daily-webhook` (lições da reunião) e `diagnostico-ia`. `moderador-cron` e `scripts/lib/scraper-core`
+  (Claude cru) passaram a `iaTexto({primario:'claude'})` com Gemini de reserva. Grounding do
+  mercadológico/Índice já caía no Claude.
+- **Aprendizado nas duas IAs**: os aprendizados entram no `system`, que vai inteiro para as duas
+  (`systemInstruction` no Gemini) — qualquer IA que responda recebe a mesma orientação; e a EXTRAÇÃO de
+  lições (daily-webhook) e o supervisor não param mais quando o Gemini cai.
+- Rastro: log `[ia] Claude indisponível (…) — respondido pelo Gemini`; header `x-ia-provedor: gemini`.
+  Teste: `npm run testar:ia-reserva` (fetch simulado, sem custo).
+- ⚠️ Pré-existente, não mexido: `busca-cai-no-haiku-com-a-ferramenta-certa.mjs` tem 2 falhas
+  (indice-mercado/indice-reforco "monta a ferramenta pelo degrau") — já falhava antes desta mudança.
+
 ### ✅ 30/09 — Honorário de êxito: BOLETO Asaas + cartão MP, sem Pix, taxa repassada ao cliente (decisão do dono)
 - Tela `/pagar-honorario` (`PagarHonorario.jsx`): escolha **Boleto (Asaas)** ou **Cartão (MP)**, cada um com o
   total já com a taxa ("honorário R$ X + taxa R$ Y = R$ Z"). Pix e "Pix + cartão" saíram desta tela

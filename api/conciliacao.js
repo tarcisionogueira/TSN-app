@@ -28,7 +28,7 @@ import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { escapeHtml } from './_sanitize.js';
-import { geminiFetch } from './_gemini.js';
+import { iaTexto } from './_claude.js';
 import { lerOFX } from './_ofx.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -476,13 +476,9 @@ REGRAS OBRIGATÓRIAS:
   (Investidor Pro), Clube de Negócios, assessoria e relatórios avulsos.
 - "Atenção": o risco mais concreto que os números mostram.
 - Direto, sem elogio e sem introdução.`;
-    try {
-      const r = await geminiFetch({ method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], max_tokens: 700 }) }, { timeoutMs: 25000 });
-      if (r?.ok) {
-        const j = await r.json().catch(() => null);
-        texto = j?.candidates?.[0]?.content?.parts?.[0]?.text || j?.content?.[0]?.text || null;
-      }
-    } catch (e) { console.error('[conciliacao] gemini', e?.message); }
+    // Gemini primeiro, Claude de reserva (iaTexto) — se uma IA parar, a outra responde.
+    const ia = await iaTexto({ prompt, maxTokens: 700, timeoutMs: 25000 });
+    texto = ia?.texto || null;
 
     res.status(200).json({
       ok: true, meses,
@@ -491,7 +487,7 @@ REGRAS OBRIGATÓRIAS:
       achados,
       diagnostico: texto,
       // A tela precisa saber a diferença entre "a IA não respondeu" e "a IA disse que está tudo bem".
-      fonte: texto ? 'gemini' : 'sem_ia',
+      fonte: ia?.provedor || 'sem_ia',
     });
     return;
   }

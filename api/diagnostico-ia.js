@@ -5,7 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
-import { medirGemini } from './_uso.js';
+import { iaTexto } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -107,24 +107,11 @@ Responda APENAS com este JSON (sem markdown):
   ]
 }`;
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 45000);
-  try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
-      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 }, temperature: 0.4 },
-        }) },
-    );
-    if (!r.ok) return null;
-    const data = await r.json();
-    medirGemini(GEMINI_MODEL, data, 'messages'); // mede o custo do próprio diagnóstico
-    const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
-    return parseJSON(text);
-  } catch { return null; }
-  finally { clearTimeout(t); }
+  // Gemini primeiro, Claude de reserva (iaTexto; a medição de custo fica dentro dos helpers).
+  const ia = await iaTexto({ prompt, maxTokens: 4000, timeoutMs: 45000 });
+  if (!ia) return null;
+  const diag = parseJSON(ia.texto);
+  return diag ? { ...diag, __provedor: ia.provedor } : null;
 }
 
 export default async function handler(req, res) {
@@ -147,9 +134,9 @@ export default async function handler(req, res) {
     if (idadeH < TTL_HORAS) { res.status(200).json({ ...cache, cacheado: true, idade_horas: Math.round(idadeH * 10) / 10 }); return; }
   }
 
-  if (!GEMINI_KEY) {
-    if (cache) { res.status(200).json({ ...cache, cacheado: true, aviso: 'Gemini indisponível; diagnóstico anterior.' }); return; }
-    res.status(200).json({ saude: null, resumo: 'Diagnóstico por IA indisponível (GEMINI_API_KEY ausente).', pontos: [] }); return;
+  if (!GEMINI_KEY && !(process.env.CLAUDE_KEY || '').trim()) {
+    if (cache) { res.status(200).json({ ...cache, cacheado: true, aviso: 'IA indisponível; diagnóstico anterior.' }); return; }
+    res.status(200).json({ saude: null, resumo: 'Diagnóstico por IA indisponível (sem GEMINI_API_KEY nem CLAUDE_KEY).', pontos: [] }); return;
   }
 
   const dados = await coletarSnapshot();
@@ -160,7 +147,7 @@ export default async function handler(req, res) {
   }
 
   const row = {
-    id: 1, gerado_em: new Date().toISOString(), modelo: GEMINI_MODEL,
+    id: 1, gerado_em: new Date().toISOString(), modelo: diag.__provedor === 'gemini' ? GEMINI_MODEL : 'claude-haiku-4-5-20251001',
     saude: diag.saude || null, resumo: diag.resumo || '',
     economia_potencial_brl: Number(diag.economia_potencial_brl) || 0,
     pontos: Array.isArray(diag.pontos) ? diag.pontos : [], snapshot: dados,

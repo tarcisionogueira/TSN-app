@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { iaTexto } from './_claude.js';
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -87,9 +88,8 @@ export default async function handler(req, res) {
 // Extrai lições da transcrição da reunião e grava nas tabelas de aprendizado dos
 // agentes. Cada lição é etiquetada com o agente-alvo. Roda no Gemini (custo baixo).
 async function extrairLicoes(transcricao) {
-  const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
   const texto = String(transcricao || '').trim();
-  if (!GEMINI_KEY || texto.length < 200) return; // sem chave ou transcrição irrelevante
+  if (texto.length < 200) return; // transcrição irrelevante
 
   const prompt = `Você analisa a TRANSCRIÇÃO de uma reunião entre analista e cliente sobre a arrematação de um imóvel em leilão. Extraia LIÇÕES OBJETIVAS que melhorem os relatórios automáticos da BidPro — o que o analista corrigiu, apontou que a análise errou, ou que o cliente perguntou e faltou no relatório. Cada lição é etiquetada com o agente que deve aprender: "mercadologico" (preço/mercado/viabilidade), "documental" (ônus/ocupação/jurídico) ou "defesa" (veredito/decisão). Se não houver lição clara, retorne listas vazias. NÃO invente.
 
@@ -99,21 +99,14 @@ ${texto.slice(0, 12000)}
 Retorne APENAS este JSON (sem markdown):
 { "licoes": [ { "agente": "mercadologico|documental|defesa", "campo": "", "valor_ia": "o que o sistema disse (se citado)", "valor_real": "a correção do analista", "observacao": "a lição em 1 frase" } ] }`;
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 30000);
+  // Gemini primeiro, Claude de reserva (iaTexto): a lição da reunião não se perde se uma IA cair.
+  const ia = await iaTexto({ prompt, maxTokens: 2000, timeoutMs: 30000 });
+  if (!ia) return;
   let parsed = null;
   try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL || 'gemini-2.5-flash')}:generateContent`,
-      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 }, temperature: 0.3 } }) },
-    );
-    if (!r.ok) return;
-    const data = await r.json();
-    const out = (data?.candidates?.[0]?.content?.parts || []).map(p => (p && typeof p.text === 'string' ? p.text : '')).join('');
-    const m = out.match(/\{[\s\S]*\}/);
+    const m = ia.texto.match(/\{[\s\S]*\}/);
     parsed = m ? JSON.parse(m[0]) : null;
-  } catch { return; } finally { clearTimeout(t); }
+  } catch (e) { console.error(`[daily-webhook] lições (${ia.provedor}) não são JSON:`, e?.message); return; }
 
   const licoes = Array.isArray(parsed?.licoes) ? parsed.licoes : [];
   const TABELA = { mercadologico: 'mercado_aprendizado', documental: 'juridico_aprendizado', defesa: 'laudo_aprendizado' };

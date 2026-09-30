@@ -8,6 +8,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
+import { iaTexto } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -21,22 +22,14 @@ const COR = { critico: '#dc2626', atencao: '#d97706', info: '#0D63DB' };
 // Camada LLM (economia: 1 chamada Haiku/semana, só se CLAUDE_KEY existir). Sintetiza
 // os insights determinísticos num parecer executivo + direcionamentos por especialista.
 async function sintetizarComIA(insights) {
-  if (!CLAUDE_KEY || !insights.length) return null;
+  if (!insights.length || !(CLAUDE_KEY || process.env.GEMINI_API_KEY)) return null;
   const prompt = `Você é o AGENTE MODERADOR de uma plataforma de leilões. Abaixo, insights determinísticos da semana (JSON). Escreva em PT-BR, curto e acionável:
 1) Um parecer executivo (2-3 frases) do estado da operação.
 2) Até 3 DIRECIONAMENTOS concretos no formato "→ [agente]: [ação]".
 Não invente dados além dos insights. Insights:\n${JSON.stringify(insights).slice(0, 6000)}`;
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return (d?.content?.[0]?.text || '').trim() || null;
-  } catch { return null; }
+  // Claude primeiro, Gemini de reserva (iaTexto) — o parecer sai mesmo com uma IA fora.
+  const ia = await iaTexto({ prompt, maxTokens: 500, timeoutMs: 25000, primario: 'claude' });
+  return ia?.texto.trim() || null;
 }
 
 async function enviarRelatorio(insights, sintese) {

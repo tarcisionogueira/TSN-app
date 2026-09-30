@@ -15,6 +15,7 @@
 // sob demanda (api/) também as usa. A direção scripts → api é a convenção do repo.
 import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from '../../api/_texto-imovel.js';
 import { nomeiaUmDocumento } from '../../api/_doc-scan.js';
+import { iaTexto } from '../../api/_claude.js';
 import { fotoDeHtml, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
@@ -192,7 +193,7 @@ export function extrairLinksListagem(html, urlBase) {
 // ── 3. FALLBACK COM IA (Claude) ─────────────────────────────────────────────
 /** Usa Claude para extrair campos quando a heurística falha. Custa ~US$ 0,005-0,012/página. */
 export async function extrairComIA(html, url) {
-  if (!CLAUDE_KEY || !html) return null;
+  if (!html || !(CLAUDE_KEY || process.env.GEMINI_API_KEY)) return null;
   // Reduz o HTML para baixar custo de tokens (remove script/style/svg)
   const limpo = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -209,18 +210,9 @@ URL base para resolver links relativos: ${url}
 HTML:\n${limpo}`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!r.ok) return null;
-    const data = await r.json();
-    const txt = data?.content?.[0]?.text || '';
+    // Claude primeiro, Gemini de reserva (iaTexto) — a extração não para se uma IA cair.
+    const ia = await iaTexto({ prompt, maxTokens: 600, timeoutMs: 60000, primario: 'claude' });
+    const txt = ia?.texto || '';
     const jm = txt.match(/\{[\s\S]*\}/);
     if (!jm) return null;
     const parsed = JSON.parse(jm[0]);
@@ -229,7 +221,7 @@ HTML:\n${limpo}`;
     if (parsed.link_matricula) parsed.link_matricula = _abs(parsed.link_matricula, url);
     if (parsed.data_leilao)    parsed.data_leilao = normalizarData(parsed.data_leilao);
     return parsed;
-  } catch { return null; }
+  } catch (e) { console.error("[scraper-core] extração por IA:", e?.message || e); return null; }
 }
 
 // ── 4. CHECAGEM DE QUALIDADE ────────────────────────────────────────────────

@@ -13,7 +13,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
-import { geminiFetch } from './_gemini.js';
+import { iaTexto } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -101,13 +101,10 @@ LEGENDA: ${JSON.stringify(legendaDosSinais)}`;
     // como o `JSON.parse` falhava, caíam no ramo `bruto`, que é o ramo de ERRO. Ou seja: as
     // quatro "sugestões" do histórico são, na verdade, quatro falhas de parse guardadas como
     // se fossem conteúdo.
-    const resp = await geminiFetch({ method: 'POST', body: JSON.stringify({
-      system: 'Responda só JSON válido, em português, sem markdown.',
-      messages: [{ role: 'user', content: prompt }], max_tokens: 6000,
-    }) }, { timeoutMs: 40000 });
-    if (!resp) return { rodou: false, motivo: 'gemini indisponível' };
-    const data = await resp.json().catch(() => null);
-    const texto = data?.content?.[0]?.text || '';
+    // Gemini primeiro, Claude de reserva: o supervisor não para mais quando o Gemini cai.
+    const ia = await iaTexto({ system: 'Responda só JSON válido, em português, sem markdown.', prompt, maxTokens: 6000, timeoutMs: 40000 });
+    if (!ia) return { rodou: false, motivo: 'Gemini e Claude indisponíveis' };
+    const texto = ia.texto;
     // Falha de parse não pode mais se disfarçar de sugestão. Grava com `__falhou` e o motivo,
     // para a tela do Admin distinguir "o supervisor propôs isto" de "o supervisor não
     // conseguiu responder" — que é a diferença entre revisar e perder tempo.

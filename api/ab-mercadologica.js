@@ -57,7 +57,7 @@ async function rodarClaude(inp) {
     // paralelo ia junto — pagava-se até 4× a pesquisa (Sonnet + 8 buscas) e não se gravava
     // nada. `retries: 0` + 150s: uma tentativa que CABE no orçamento da função e entrega.
     // Mesmo padrão de indice-reforco-cron e gerar-analise.
-    retries: 0, timeoutMs: 150000, noFallback: true,
+    retries: 0, timeoutMs: 150000, noFallback: 'estrito',
   });
   const data = await r.json();
   const mercado = parseJSON(extractText(data)) || {};
