@@ -217,10 +217,50 @@ export function filtrarVersao(anuncios, modelo) {
   // Casa por segmento inteiro ("-ls-" em "-ls-1-4-flex-"), nunca substring solta ("at" em "flat").
   // Palavra de 4+ letras também casa por PREFIXO do segmento: o título abrevia ("ENDURAN" → "endurance").
   const casa = (v, t) => v.includes(`-${t}-`) || (/^[a-z]{4,}$/.test(t) && v.includes(`-${t}`));
-  const pont = anuncios.map((a) => { const v = `-${a.url.split('/')[9] || ''}-`; return { a, n: toks.filter((t) => casa(v, t)).length }; });
+  // Chave da versão: o segmento da URL no Mobiauto; o título inteiro (em slug) nos demais portais.
+  const chave = (a) => `-${a.versao || String(a.url || '').split('/')[9] || ''}-`;
+  // Token que casa com TODOS os anúncios não distingue versão (30/09: na OLX o título traz o modelo —
+  // "triton" casava com os 46 e o filtro dizia "mesma versão" sobre o modelo inteiro).
+  const uteis = anuncios.length > 1 ? toks.filter((t) => !anuncios.every((a) => casa(chave(a), t))) : toks;
+  const pont = anuncios.map((a) => ({ a, n: uteis.filter((t) => casa(chave(a), t)).length }));
   const max = Math.max(0, ...pont.map((p) => p.n));
   const melhores = pont.filter((p) => max > 0 && p.n === max).map((p) => p.a);
   return melhores.length >= REVENDA_MIN_ANUNCIOS ? { lista: melhores, versao: true } : { lista: anuncios, versao: false };
+}
+
+// Slugs de MODELO que a página da marca/ano do Mobiauto lista começando por um dos candidatos
+// (30/09: "L200 TRITON" → o portal só tem 2021 em "l200-triton-sport"; chutar sufixo não escala).
+export function slugsModeloMobiauto(html, marca, candidatos) {
+  const achados = new Set();
+  for (const m of String(html || '').matchAll(/\/comprar\/carros\/[^/"]+\/([a-z0-9-]+)\/([a-z0-9-]+)/g)) {
+    if (m[1] !== marca || /^ano-\d{4}$/.test(m[2])) continue;
+    if ((candidatos || []).some((c) => m[2] === c || m[2].startsWith(`${c}-`))) achados.add(m[2]);
+  }
+  return [...achados];
+}
+
+// Puro: anúncios da busca da OLX (30/09, dono: "procurar anúncios na OLX, Mercado Livre e portais").
+// Lida VIA BANCO (a OLX responde 200 com os cards renderizados; o Mercado Livre devolve a página de
+// "tráfego suspeito" e fica fora). Só entra anúncio com o ANO pedido e o 1º termo do modelo no título.
+export function anunciosOlx(html, { ano, modelo }) {
+  const s = String(html || '');
+  const re = /href="(https:\/\/[a-z]{2}\.olx\.com\.br\/[^"]+)"[^>]*>\s*<h2[^>]*olx-adcard__title[^>]*>([^<]+)<\/h2>/g;
+  const cards = [...s.matchAll(re)];
+  const primeiro = slugMobiauto(String(modelo || '').split(/\s+/).find((t) => !/^nov[oa]$/i.test(t)) || '');
+  const out = [];
+  cards.forEach((m, i) => {
+    const bloco = s.slice(m.index, i + 1 < cards.length ? cards[i + 1].index : m.index + 20000);
+    const titulo = m[2].replace(/&amp;/g, '&').trim();
+    const slugT = slugMobiauto(titulo);
+    const preco = Number(((bloco.match(/olx-adcard__price[^>]*>\s*R\$\s*([\d.]+)/) || [])[1] || '').replace(/\./g, ''));
+    const anoT = Number((titulo.match(/\b(19[89]\d|20[0-4]\d)\b(?!.*\b(19[89]\d|20[0-4]\d)\b)/) || [])[1]) || null;
+    if (!preco || (ano && anoT !== Number(ano)) || (primeiro && !`-${slugT}-`.includes(`-${primeiro}-`))) return;
+    const km = Number((bloco.match(/aria-label="(\d+) quil[ôo]metros rodados"/) || [])[1]) || null;
+    const local = ((bloco.match(/olx-adcard__location"[^>]*>(?:\s*<svg[\s\S]*?<\/svg>)?(?:\s*<!--[\s\S]*?-->)*\s*([^<]{3,60})</) || [])[1] || '')
+      .trim().replace(/\s*-\s*([A-Z]{2})$/, '/$1');
+    out.push({ preco, titulo: titulo.slice(0, 120), ano: anoT, km, local, portal: 'olx', url: m[1].split('?')[0], versao: slugT });
+  });
+  return [...new Map(out.map((x) => [x.url, x])).values()];
 }
 
 // Modelo a partir do TÍTULO do lote quando `modelo` vem nulo (30/09: os 4 relatórios regerados eram
