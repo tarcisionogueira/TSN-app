@@ -58,7 +58,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    Check-in agendado 29/09 12:00 UTC (trig_01Hc9CbAmXQN2T6ofY6krU39):
    `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
    Não dá para testar sem cliente (exige login e debita crédito — não contornar).
-5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. **30/09 02h UTC:** diagnóstico (agora pelo
+5. ✅ **Gemini VOLTOU (30/09 02h07 UTC)** — o dono configurou o PRÉ-PAGAMENTO (R$ 100) na conta BidPro Brasil
+   (Default Gemini Project, chave …YL7A); diagnóstico `ok: true` em 1,9 s. A causa de 20/09 não resolver: a
+   conta estava no nível pago SEM método de pré-pagamento, que o Google passou a exigir. Antes: 402. **30/09 02h UTC:** diagnóstico (agora pelo
    `cron-manual.yml` → `/api/diagnostico-gemini`, aceita CRON_SECRET) confirma chave em uso terminada em
    **…YL7A**, modelo gemini-2.5-flash, `HTTP 402 prepayment credits are depleted`. Recarregar o projeto
    DESSA chave no AI Studio (em 20/09 a recarga foi para outro projeto). Depois: rodar o diagnóstico → `ok: true`. Toda pesquisa de mercado está no Haiku de
@@ -113,7 +115,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    mão (workflow novo `cron-manual.yml`, GET e POST) a mesma rota processou e a fila caiu 648 → 587; a
    cascata resolve (diagnóstico: Botucatu via CEP, nível rua). O laço tratava falha na LEITURA da fila como
    "sem pendentes" → 200 sem fazer nada (forma 2). Corrigido: registra, tenta 3×, responde 500, e cada
-   rodada agendada loga `[geocodificar] cron {...}` — conferir o das 02h UTC (check-in agendado).
+   rodada agendada loga `[geocodificar] cron {...}` — ✅ **conferido: o cron das 02h UTC processou (fila 587 →
+   458; GLOBO sem coordenada 225 → 35).**
    **Falta:** polígono do SIGEF pelo código SNCR/CCIR (78 lotes citam o código) — depende do WFS do
    acervo fundiário do INCRA; UTM (precisa do fuso) e endereço da matrícula/edital.
 7b. ✅ **Cidade inválida → geocodificação 'falhou' (29/09).** Dos 148 terrenos/rurais em 'falhou', 129 eram
