@@ -32,6 +32,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
 import RevisarTexto from '../components/RevisarTexto';
+import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
@@ -3617,6 +3618,15 @@ export default function Analise() {
               {isUsoProprio ? 'Aprovado para uso próprio' : (mercadoSemDados ? 'Mercado não estimado nesta análise' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente'))}
             </span>
           </div>
+          {(() => {
+            const al = alertaAvaliacaoMercado(d.valorMercado, d.valorAvaliacao);
+            return al ? (
+              <div style={{ fontSize:12.5, lineHeight:1.6, color:'#991b1b', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'10px 12px', marginBottom:14, display:'flex', gap:8 }}>
+                <AlertTriangle size={18} color="#dc2626" style={{ flexShrink:0, marginTop:2 }}/>
+                <div><strong>{al.titulo}.</strong> {al.texto}</div>
+              </div>
+            ) : null;
+          })()}
           {mercadoSemDados && (
             <div style={{ fontSize:12.5, lineHeight:1.6, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
               A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Não consumimos sua cota</strong> e o sistema vai <strong>tentar de novo automaticamente</strong> (a cada poucas horas, por até 48h) — quando preencher, aparece aqui sozinho. Se preferir na hora, <strong>gere novamente</strong> (grátis) ou informe o valor de mercado. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.

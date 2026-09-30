@@ -3,6 +3,7 @@ import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 import { notaMetodologicaTexto } from './NotaMetodologica';
 import { vendasDe, locacoesDe } from '../lib/niveis-mercado';
+import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 
 // Escape para o rodapé metodológico (texto montado dos dados da geração).
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -110,6 +111,10 @@ ${(() => {
   <div style="padding:7px 12px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:9.5px;color:#475569;">
     <b>Venda estimada no mercado:</b> R$ ${fmt(Number(d.valorMercado))} — o "valor pretendido de venda" acima já aplica 10% de desconto sobre este número (para vender mais rápido); é a premissa usada no lucro líquido.
   </div>`:''}
+  ${(() => { const al = alertaAvaliacaoMercado(d.valorMercado, d.valorAvaliacao); return al ? `
+  <div style="padding:8px 12px;border-top:1px solid #fecaca;background:#fef2f2;font-size:9.5px;color:#991b1b;line-height:1.5;">
+    <b>⚠ ${esc(al.titulo)}.</b> ${esc(al.texto)}
+  </div>` : ''; })()}
   <div style="background:${vBg};color:${vCor};padding:9px 12px;font-size:12px;font-weight:900;text-align:center;letter-spacing:0.5px;">
     ${isViavel?'✓':'✗'} VEREDITO: ${vereditoTxt}
   </div>
