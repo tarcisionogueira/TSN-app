@@ -23,7 +23,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   busca por nome; prazos (nome e sócios com orçamento); triagem registra falha; `_laudo-fontes` sem Bright Data pago;
   juridico-retry só em falha real; monitor 4 a 4 com erro no snapshot; retomada por credor declarada indisponível;
   chat sem pré-busca duplicada; edital do radar prova existência do processo. Teste `djen-busca-por-parte.mjs`.
-- **Regerados** os 14 documentais afetados (`regerar-relatorios.yml` input `documentais`, novo).
+- **Regerados** os 14 documentais afetados (`regerar-relatorios.yml` input `documentais`, novo) — **em grupos de 3**:
+  7 de uma vez derrubaram DataJud (timeout 12 s → agora 20 s) e DJEN ("ocupado"). Resultado: 7 acharam processo pelo
+  nome (1 a 6 cada, com aviso de homônimo), 2 sem publicação em 12 meses, 1 "busca não concluída" (e8ab7bda — o
+  juridico-retry refaz), e **5 de agosto não regeráveis** (documentos do lote já indisponíveis → o gerador mantém o
+  resultado antigo): o item "Processo judicial" deles foi corrigido NO BANCO para "Não verificado… não equivale a nada
+  consta". Executados "FULANO e BELTRANA" (casal) agora viram buscas separadas (`separarPartes`, não separa PJ).
 - **Pendente (melhorias):** cache de consulta CNJ/DJEN (mesmo nº consultado por triagem, documental, andamento, chat e
   monitor); publicações DJEN dentro do parecer da IA; e-mail "consulta concluída" do juridico-retry dispara quando o
   regen_motivo muda por outro motivo. Testes antigos `edital-desatualizado-nao-vira-manchete` e
