@@ -58,7 +58,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    Check-in agendado 29/09 12:00 UTC (trig_01Hc9CbAmXQN2T6ofY6krU39):
    `select criado_em, ok, meta from geracao_custos where funcao='indice' order by criado_em desc limit 3;`
    Não dá para testar sem cliente (exige login e debita crédito — não contornar).
-5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. Toda pesquisa de mercado está no Haiku de
+5. 🔶 **Gemini sem crédito (402)** — dono: recarregar. **30/09 02h UTC:** diagnóstico (agora pelo
+   `cron-manual.yml` → `/api/diagnostico-gemini`, aceita CRON_SECRET) confirma chave em uso terminada em
+   **…YL7A**, modelo gemini-2.5-flash, `HTTP 402 prepayment credits are depleted`. Recarregar o projeto
+   DESSA chave no AI Studio (em 20/09 a recarga foi para outro projeto). Depois: rodar o diagnóstico → `ok: true`. Toda pesquisa de mercado está no Haiku de
    reserva; terreno em cidade média sai vazio com mais frequência.
 6. ✅ **Uberlândia Leilões (29/09)** — dava 403 também do PC (fonte zerada desde 28/09). O banco
    (pg_net, AWS) recebe 200 → motor ganhou a via **"banco"** entre o fetch direto e a Bright Data
