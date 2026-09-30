@@ -290,7 +290,9 @@ export default async function handler(req, res) {
       const hist = await sbGet(`processo_movimentos?numero_processo=in.(${dig},${encodeURIComponent(numero)})&select=data,codigo,descricao&order=data.desc&limit=200`).catch((e) => { console.warn('[caso-andamento-cnj] série gravada ilegível:', e?.message || e); return []; });
       if (Array.isArray(hist) && hist.length) { movsPrev = hist; doHistorico = true; }
     }
-    previsao = preverAndamento({ movimentos: movsPrev, publicacoes, estat: est.linhas, justica: est.justica });
+    // Ritmo pelas datas de TODAS as publicações (o texto só vem nas 15 mais recentes).
+    const pubsPrev = (djen.historico_datas || []).length && !djen.erro ? djen.historico_datas.map((h, i) => publicacoes[i] || h) : publicacoes;
+    previsao = preverAndamento({ movimentos: movsPrev, publicacoes: pubsPrev, estat: est.linhas, justica: est.justica });
     if (doHistorico && previsao?.disponivel) previsao.aviso = `${previsao.aviso} O CNJ não respondeu agora: calculada com as movimentações já gravadas deste processo.`;
   } catch (e) { console.warn('[caso-andamento-cnj] previsão indisponível:', e?.message || e); }
 

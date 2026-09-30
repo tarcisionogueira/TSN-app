@@ -182,6 +182,11 @@ resultado sem repetir o DataJud; senão, consulte você (consultar_datajud e bus
 o que ele viu. Diga de qual fonte veio cada
 afirmação (ex.: "DJEN, 16/09: …", "DataJud, último movimento: …"). Se uma fonte falhar ou não trouxer
 nada, diga isso com todas as letras — ausência na fonte não é prova de que o ato não existiu.
+O DJEN só traz o que foi PUBLICADO (intimações/editais); assinatura do auto de arrematação, conclusão
+ao juiz, despacho interno e atos de secretaria muitas vezes NÃO são publicados. Então NUNCA escreva
+"o auto não foi expedido/assinado" ou "nenhum despacho" com base só no DJEN/DataJud: escreva "não
+aparece nas publicações do DJEN (fonte só de publicações)" e, se o admin afirmar que viu o ato no
+PJe, trate como fato e siga a partir dele (ex.: prazo de 10 dias de impugnação, carta de arrematação).
 
 IMPORTANTE — quando o admin mencionar um cliente PELO NOME (ex.: "o Marcos arrematou, verifica o
 processo dele") em vez de dar o número do processo direto, NUNCA peça o número do processo antes

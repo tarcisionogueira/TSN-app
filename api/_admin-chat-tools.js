@@ -444,8 +444,18 @@ export async function executarFerramentaAdmin(nome, input, ctx) {
     switch (nome) {
       case 'buscar_djen': {
         const r = await buscarDjen(input);
-        if (!r?.erro && r?.publicacoes?.length) await aprenderDaConsulta({ numero: input?.numero_processo, origem: 'chat_operacional', publicacoes: r.publicacoes }).catch((e) => console.warn('[admin-chat-tools] aprendizado DJEN:', e?.message || e));
-        return r;
+        if (r?.erro || !r?.publicacoes?.length) return r;
+        await aprenderDaConsulta({ numero: input?.numero_processo, origem: 'chat_operacional', publicacoes: r.publicacoes }).catch((e) => console.warn('[admin-chat-tools] aprendizado DJEN:', e?.message || e));
+        // 30/09 (caso Marcos): com o DataJud do TRT5 fora, o chat ficava sem previsão alguma. As
+        // publicações bastam para o ritmo do processo e a etapa da arrematação — dito como tal.
+        const { historico_datas: hist = [], ...resto } = r;
+        try {
+          const est = await estatisticaFluxo(justicaDoNumero(input?.numero_processo));
+          const pubs = hist.length ? hist.map((h, i) => r.publicacoes[i] || h) : r.publicacoes;
+          const pv = preverAndamento({ publicacoes: pubs, estat: est.linhas, justica: est.justica });
+          if (pv.disponivel) resto.previsao = { resumo: pv.resumo, status: pv.status, proxima_janela: pv.proxima_janela, entre_despachos: pv.entre_despachos, etapa_arrematacao: pv.etapa_arrematacao, aviso: 'Calculada só pelas PUBLICAÇÕES do DJEN (atos internos do juiz/secretaria não aparecem aqui).' };
+        } catch (e) { console.warn('[admin-chat-tools] previsão DJEN:', e?.message || e); }
+        return resto;
       }
       case 'buscar_edital_processo': return await buscarEditalProcesso(input);
       case 'consultar_datajud': return await consultarDatajud(input);

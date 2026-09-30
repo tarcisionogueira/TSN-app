@@ -641,7 +641,9 @@ function formatarDjen(data, maxTexto) {
   if (!items.length) return { total: 0, publicacoes: [], observacao: 'Nenhuma publicação encontrada no DJEN para este processo (a base cobre a partir de 2022).' };
   // A mesma intimação sai uma vez por destinatário (16/09 veio duas vezes, idêntica): uma só basta.
   const vistos = new Set();
-  const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); });
+  const unicos = items.filter((it) => { const k = `${it.data_disponibilizacao || it.dataDisponibilizacao}|${String(it.texto || '').slice(0, 2000)}`; return !vistos.has(k) && vistos.add(k); })
+    // Mais recentes primeiro: o corte em 15 não pode esconder justamente o último ato.
+    .sort((a, b) => String(b.data_disponibilizacao || b.dataDisponibilizacao || '').localeCompare(String(a.data_disponibilizacao || a.dataDisponibilizacao || '')));
   const naFonte = Number.isFinite(Number(data?.count)) ? Number(data.count) : null;
   return {
     total: unicos.length, total_na_fonte: naFonte, truncado: naFonte !== null && naFonte > items.length,
@@ -652,13 +654,15 @@ function formatarDjen(data, maxTexto) {
       tipo_documento: it.tipoDocumento || it.tipo_documento || null,
       texto: String(it.texto || it.texto_integral || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxTexto),
     })),
+    // Datas de TODAS as publicações (mesma ordem): o ritmo do processo sai daqui quando o DataJud cai.
+    historico_datas: unicos.map((it) => ({ data_disponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || null, tipo_documento: it.tipoDocumento || it.tipo_documento || null })),
   };
 }
 
 export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   const num = String(numero_processo || '').replace(/\D/g, '');
   if (!/^\d{15,25}$/.test(num)) return { erro: 'número de processo inválido — precisa do padrão CNJ (20 dígitos)' };
-  const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&itensPorPagina=30`;
+  const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&itensPorPagina=100`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
   try {
