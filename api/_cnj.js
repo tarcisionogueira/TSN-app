@@ -379,7 +379,45 @@ async function paginaDjen(url, deadline) {
   return { erro: `DJEN indisponível agora (${motivo || 'via banco também falhou'})` };
 }
 
-export async function buscarProcessosPorParte({ nome, documento = null, dias = 365, maxPaginas = 3, deadlineMs = 45000 }) {
+// Vários executados num campo só ("ITALO SOARES DE ANDRADE e INGRID RAYANA MARCELINO DE SOUSA",
+// casal na matrícula — regeração de 30/09): a busca exige TODAS as palavras num mesmo destinatário e
+// nunca casaria. Separa em pessoas (2+ palavras cada) e busca cada uma, somando os processos.
+const RE_PJ = /\b(LTDA|S\/?A|EIRELI|ME|EPP|MEI|CIA|COMPANHIA|IND[UÚ]STRIA|COM[EÉ]RCIO|EMPREENDIMENTOS?|INCORPORA[CÇ][AÃ]O|CONSTRU[CT]ORA|BANCO|COOPERATIVA|ASSOCIA[CÇ][AÃ]O|CONDOM[IÍ]NIO|SERVI[CÇ]OS|PARTICIPA[CÇ][OÕ]ES|HOLDING|IMOBILI[AÁ]RIA|AGROPECU[AÁ]RIA|TRANSPORTES?)\b/i;
+export function separarPartes(nome) {
+  if (RE_PJ.test(String(nome || ''))) return [String(nome || '').trim()];
+  const partes = String(nome || '').split(/\s+e\s+|\s*[,;/]\s*|\s+&\s+/i).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 2);
+  return partes.length > 1 ? partes.slice(0, 3) : [String(nome || '').trim()];
+}
+
+export async function buscarProcessosPorParte(opts) {
+  const nomes = separarPartes(opts?.nome);
+  if (nomes.length === 1) return buscarUmaParte(opts);
+  const fim = Date.now() + (opts.deadlineMs || 45000);
+  const res = [];
+  for (const n of nomes) {
+    const resta = fim - Date.now();
+    if (resta < 6000) { res.push({ processos: [], erros: [`sem tempo para buscar "${n}"`] }); continue; }
+    res.push(await buscarUmaParte({ ...opts, nome: n, deadlineMs: resta }));
+  }
+  const vistos = new Set();
+  const processos = res.flatMap((r) => r.processos || []).filter((p) => !vistos.has(p.numero) && vistos.add(p.numero));
+  const erros = res.flatMap((r, i) => (r.erros || []).map((e) => `${nomes[i]}: ${e}`));
+  const ok = res.find((r) => r.janela);
+  return {
+    processos, total: processos.length, fonte: 'djen', janela: ok?.janela, partes_buscadas: nomes,
+    tribunais_consultados: ok?.tribunais_consultados || [],
+    truncado: res.some((r) => r.truncado),
+    // Falha só conta como falha do conjunto se NENHUMA pessoa foi consultada.
+    erros: erros.length && !res.some((r) => !r.erros?.length) ? erros : undefined,
+    erros_parciais: erros.length && res.some((r) => !r.erros?.length) ? erros : undefined,
+    aviso: [...new Set([
+      ...res.map((r) => r.aviso),
+      erros.length && res.some((r) => !r.erros?.length) ? `Busca NÃO concluída para: ${erros.join('; ')}.` : null,
+    ].filter(Boolean))].join(' ') || undefined,
+  };
+}
+
+async function buscarUmaParte({ nome, documento = null, dias = 365, maxPaginas = 3, deadlineMs = 45000 }) {
   const nomeLimpo = normalizarNomeParte(nome);
   // CPF/CNPJ no lugar do nome (o campo da tela aceitava): o DJEN não busca documento — virava
   // "nomeParte=123 456 789 00", 0 resultado e selo VERDE (auditoria 30/09). Erro explícito.

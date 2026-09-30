@@ -2,7 +2,7 @@
 // tribunais por nome. Destinatário precisa ter TODAS as palavras do nome (o DJEN devolve quem só
 // compartilha o prenome); publicações do mesmo processo viram UM processo no formato de sempre.
 import assert from 'node:assert/strict';
-import { parteCasa, normalizarNomeParte, processosDasPublicacoes } from '../../api/_cnj.js';
+import { parteCasa, normalizarNomeParte, processosDasPublicacoes, separarPartes } from '../../api/_cnj.js';
 
 assert.equal(normalizarNomeParte('Marcos Ferreira Pintó'), 'MARCOS FERREIRA PINTO');
 assert.equal(parteCasa('Marcos Ferreira Pinto', 'MARCOS FERREIRA PINTO'), true);
@@ -36,4 +36,9 @@ assert.deepEqual(semDoc[0].riscos, [], 'homônimo possível: riscos só indicado
 assert.ok(semDoc[0].riscos_indicados.some((r) => r.categoria === 'Embargos' && r.severidade === 'alerta'), 'classe indica embargos, no máximo alerta');
 assert.equal(p.fase, 'Cumprimento de Sentença');
 assert.deepEqual(p.partes.map((x) => x.nome), ['MARCOS FERREIRA PINTO', 'BANCO X']);
+assert.deepEqual(separarPartes('ITALO SOARES DE ANDRADE e INGRID RAYANA MARCELINO DE SOUSA'), ['ITALO SOARES DE ANDRADE', 'INGRID RAYANA MARCELINO DE SOUSA']);
+assert.deepEqual(separarPartes('RAIMUNDO CARNEIRO DE OLIVEIRA e JOSEMILDE CARNEIRO DE OLIVEIRA'), ['RAIMUNDO CARNEIRO DE OLIVEIRA', 'JOSEMILDE CARNEIRO DE OLIVEIRA']);
+assert.deepEqual(separarPartes('TERMOPLAST INDUSTRIA E COMERCIO LTDA'), ['TERMOPLAST INDUSTRIA E COMERCIO LTDA'], 'empresa não é casal');
+assert.deepEqual(separarPartes('ADAO PEREIRA E SILVA'), ['ADAO PEREIRA E SILVA'], '"e" dentro do nome da pessoa');
+assert.deepEqual(separarPartes('MARIA SILVA, JOAO SOUZA'), ['MARIA SILVA', 'JOAO SOUZA']);
 console.log('djen-busca-por-parte: todos os casos passaram');
