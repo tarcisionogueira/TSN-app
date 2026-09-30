@@ -282,6 +282,19 @@ Duas revisões em paralelo (API/front/migrações · coletores/gravadores) + che
   (ex. `*.nip.io`) — contido (só https + só service_role); `editais_leilao.texto_integral` sem índice
   trigram (busca semanal de contatos faz varredura — ok no volume atual).
 
+### ✅/🔶 30/09 — Invariantes em alerta (retrato de 02h UTC)
+- `venda_direta_com_praca` 7 → **0**: CEF "Venda Direta Online" reclassificada em 29/09 manteve a data de
+  fim da oferta VENCIDA (o coletor da Caixa não manda data para venda direta); limpas.
+- `tipo_casa_titulo_lote` 2 → **0**: LJUD "Terreno com 408m²/351m²" gravados como casa → terreno.
+- `estado_fora_do_padrao` 9 → **8**: SUPERBID Vila Andrade → São Paulo/SP (inequívoco). Os 8 restantes
+  (ALBERTOMACEDO 3, LEILOTECH 3 — vmleiloes/amleiloeiro, LEILAOBRASIL 1, WEBLEILOES 1) não têm cidade/UF
+  nem na página (conferido via pg_net) — é parser por fonte; NÃO chutar pelo bairro.
+- `qa_invariantes_lenta` 8,3 s: NÃO mexer no horário do monitor — 24/09 já provou que o custo é CACHE
+  FRIO (1ª chamada ~10 s, as seguintes 2,5–3,3 s; medido agora 4,2 s já aquecido). O alerta existe para
+  deixar o custo visível; as asserções rodam (timeout próprio de 30 s).
+- Seguem esperados: `sem_foto` 1.740 (GLOBO novos sem detalhe ainda), `veiculo_cidade_fora_do_ibge` 82
+  (regex LJUD corrigido — cai na próxima coleta de veículos).
+
 ### 🔶 30/09 — Captura restante e pagantes sem relatório (decisão do dono)
 - **LEJE:** o robô RESIDENCIAL também leva 403 (tentou 30/09 00:02; `coleta_cliente.ultima_em` nulo desde
   27/09) e o banco (AWS) leva a página "Acesso Negado" — não é só IP de datacenter; provável bloqueio de
