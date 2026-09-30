@@ -189,7 +189,8 @@ export function marcaMobiauto(marca) {
 }
 // Candidatos de slug do MODELO, do mais específico ao mais genérico ("c3 aircross" antes de "c3").
 export function modelosMobiauto(modelo) {
-  const toks = String(modelo || '').trim().split(/\s+/).filter(Boolean);
+  // "NOVA SAVEIRO", "NOVO UNO": o portal usa o nome sem o prefixo de geração.
+  const toks = String(modelo || '').trim().split(/\s+/).filter(Boolean).filter((t, i) => !(i === 0 && /^nov[oa]$/i.test(t)));
   if (!toks.length) return [];
   const um = slugMobiauto(toks[0]);
   const dois = toks[1] && /^[a-z]{3,}$/i.test(toks[1]) ? slugMobiauto(`${toks[0]} ${toks[1]}`) : null;
@@ -218,4 +219,16 @@ export function filtrarVersao(anuncios, modelo) {
   const max = Math.max(0, ...pont.map((p) => p.n));
   const melhores = pont.filter((p) => max > 0 && p.n === max).map((p) => p.a);
   return melhores.length >= REVENDA_MIN_ANUNCIOS ? { lista: melhores, versao: true } : { lista: anuncios, versao: false };
+}
+
+// Modelo a partir do TÍTULO do lote quando `modelo` vem nulo (30/09: os 4 relatórios regerados eram
+// SUPERBID sem `modelo`): "FIAT CRONOS DRIVE 1.3 ANO: 2020/2020 …" → "CRONOS DRIVE 1.3";
+// "RENAULT OROCH PRO 16, 2024/2025, Placa …" → "OROCH PRO 16". Tira a marca e corta no 1º
+// separador (vírgula, "ANO", ano AAAA/AAAA, "PLACA").
+export function modeloDoTitulo(titulo, marca) {
+  let t = String(titulo || '').replace(/\s+/g, ' ').trim();
+  const mc = String(marca || '').trim();
+  if (mc) t = t.replace(new RegExp(`^(?:i\\s*/\\s*)?${mc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[\\s/-]*`, 'i'), '');
+  t = t.split(/,|\bano\b|\b(?:19|20)\d{2}\s*\/|\bplaca\b|\(/i)[0].trim();
+  return t || null;
 }

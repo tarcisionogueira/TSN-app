@@ -1,7 +1,7 @@
 // Revenda pelo MOBIAUTO (30/09): só anúncios do MESMO modelo/ano; mesma versão/motor quando há 3+;
 // rótulo diz o portal de onde a média veio (nunca "Webmotors" sobre anúncio do Mobiauto).
 import assert from 'node:assert/strict';
-import { marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, revendaPorAnuncios } from '../../src/utils/viabilidadeVeiculo.js';
+import { modeloDoTitulo, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, revendaPorAnuncios } from '../../src/utils/viabilidadeVeiculo.js';
 
 assert.equal(marcaMobiauto('GM - CHEVROLET'), 'chevrolet');
 assert.equal(marcaMobiauto('VW'), 'volkswagen');
@@ -24,4 +24,8 @@ const r = revendaPorAnuncios(f.lista, 55000);
 assert.equal(r.base, 'mobiauto');
 assert.equal(r.media, 50000);
 assert.equal(r.valor, 45000);
+assert.equal(modeloDoTitulo('FIAT CRONOS DRIVE 1.3 ANO: 2020/2020 PLACA FINAL 1 (PR)', 'FIAT'), 'CRONOS DRIVE 1.3');
+assert.equal(modeloDoTitulo('RENAULT OROCH PRO 16, 2024/2025, Placa FINAL 1 (SP),  (Ref.: MA)', 'RENAULT'), 'OROCH PRO 16');
+assert.equal(modeloDoTitulo('CHEVROLET MONTANA LS 2015/2015', 'CHEVROLET'), 'MONTANA LS');
+assert.deepEqual(modelosMobiauto(modeloDoTitulo('VOLKSWAGEN NOVA SAVEIRO RB MBVS, 2019/2019, Placa', 'VOLKSWAGEN')), ['saveiro']);
 console.log('revenda-mobiauto: todos os casos passaram');

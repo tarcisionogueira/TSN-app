@@ -18,7 +18,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao } from '../src/utils/viabilidadeVeiculo.js';
+import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo } from '../src/utils/viabilidadeVeiculo.js';
 import { paginaViaBanco } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -64,7 +64,8 @@ async function upsertAnaliseVeiculo(row) {
 async function revendaMobiauto(v, deadline) {
   const marca = marcaMobiauto(v.marca);
   const ano = Number(v.ano_modelo || v.ano_fabricacao) || null;
-  const modelos = modelosMobiauto(v.modelo);
+  const modeloTxt = v.modelo || modeloDoTitulo(v.titulo, v.marca);
+  const modelos = modelosMobiauto(modeloTxt);
   if (!marca || !ano || !modelos.length) return { revenda: null, motivo: 'Mobiauto: sem marca/modelo/ano' };
   const motivos = [];
   for (const modelo of modelos) {
@@ -74,7 +75,7 @@ async function revendaMobiauto(v, deadline) {
     if (!b.html) { motivos.push(`${modelo}: ${b.motivo}`); continue; }
     const anuncios = anunciosMobiauto(b.html, { marca, modelo, ano });
     if (!anuncios.length) { motivos.push(`${modelo}: 0 anúncios`); continue; }
-    const f = filtrarVersao(anuncios, v.modelo);
+    const f = filtrarVersao(anuncios, modeloTxt);
     const revenda = revendaPorAnuncios(f.lista, v.valor_fipe);
     if (revenda) return { revenda: { ...revenda, mesmaVersao: f.versao, listagem: url } };
     motivos.push(`${modelo}: ${anuncios.length} anúncio(s), menos de 3 na faixa de 30–200% da FIPE`);
