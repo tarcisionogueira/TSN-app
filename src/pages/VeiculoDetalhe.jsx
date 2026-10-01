@@ -9,6 +9,7 @@ import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotaVeiculo } from '../utils/cotaAnalise';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import FavoritoBotao from '../components/FavoritoBotao';
 import PropostaVeiculoModal from '../components/PropostaVeiculoModal';
 import { podeProporVeiculo } from '../utils/propostaVeiculo';
 import { localDoPatio } from '../utils/patioVeiculo';
@@ -221,9 +222,12 @@ export default function VeiculoDetalhe() {
 
         {/* Informações principais */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', margin: 0 }}>
-            {[v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', margin: 0 }}>
+              {[v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
+            </h1>
+            <FavoritoBotao tipo="veiculo" itemId={v.id || id} />
+          </div>
           <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {anoLabel && <span>{anoLabel}</span>}
             {v.km != null && <span>· {Number(v.km).toLocaleString('pt-BR')} km</span>}

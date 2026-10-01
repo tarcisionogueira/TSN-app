@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⭐ 01/10 (noite) — ACOMPANHAMENTO (favoritos) com lance corrente — pedido do dono
+- **Estrela** em `/imovel/:id`, `/admin/veiculos-leilao/:id` e nos cards de Minhas Análises (`FavoritoBotao.jsx`);
+  seção **Acompanhamento** no topo de Minhas Análises (`AcompanhamentoFavoritos.jsx` → RPC `meus_favoritos()`).
+- Banco (`20261001_favoritos_acompanhamento_lance.sql`, APLICADA): `favoritos` (RLS dono) e `favorito_lance`
+  (histórico; leitura só de quem favoritou, escrita service role). Status: `disputa` (lance subiu entre medições) ·
+  `com_lance` · `sem_lance` · `encerrado` · `nao_medido` (com motivo — nunca vira "sem lance").
+- Lance: **veículo Superbid** → gatilho `favorito_lance_veiculo` grava a cada coleta (custo zero); **imóveis e
+  demais veículos** → `api/favoritos-lance-cron.js` (3/3 h, `20 */3`) lê a página do lote, sem IA/Bright Data.
+- ⚠️ **A CONFERIR na 1ª rodada do cron:** o sandbox não alcança sites de leiloeiro, então a extração
+  (`api/_lance-pagina.js`, 8 casos em `npm run testar:lance-pagina`) não foi provada em página real. Rode
+  `select origem, estado, motivo, count(*) from favorito_lance group by 1,2,3;` — muito `nao_medido`
+  com "não expõe o lance"/HTTP 403 = leiloeiro que carrega lance por script; aí a rota é a API do site, por fonte.
+- Modo suporte: a estrela grava na conta REAL (auth.uid()) e por isso fica bloqueada para escrita.
+
 ### 📑 01/10 (noite) — documental: régua de risco/confiança + TRAVA DE LIBERAÇÃO (regra do dono)
 **Medição (14 relatórios pós-31/08, todos "amarelo · média"):** a IA declarava amarelo mesmo sem achado confirmado
 (3/14); 8 "achados" eram falha de verificação ("não localizado no DataJud", "erro no site", "anexo em branco"); a

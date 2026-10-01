@@ -140,6 +140,10 @@
   ],
   "crons": [
     {
+      "path": "/api/favoritos-lance-cron",
+      "schedule": "20 */3 * * *"
+    },
+    {
       "path": "/api/nps-alavancagem-cron",
       "schedule": "30 13 * * *"
     },

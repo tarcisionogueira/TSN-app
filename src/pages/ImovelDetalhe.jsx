@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import FavoritoBotao from '../components/FavoritoBotao';
 import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
@@ -1455,9 +1456,12 @@ export default function ImovelDetalhe() {
 
             {/* Título e localização */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-              <h1 style={{ fontSize: 'clamp(16px, 3vw, 22px)', fontWeight: 800, color: '#111111', margin: '0 0 12px', lineHeight: 1.3 }}>
-                {imovel.titulo || 'Imóvel em leilão'}
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <h1 style={{ fontSize: 'clamp(16px, 3vw, 22px)', fontWeight: 800, color: '#111111', margin: '0 0 12px', lineHeight: 1.3 }}>
+                  {imovel.titulo || 'Imóvel em leilão'}
+                </h1>
+                <FavoritoBotao tipo="imovel" itemId={imovel.id} />
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, color: '#64748b', fontSize: 14 }}>
                 {(imovel.endereco || imovel.cidade) && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

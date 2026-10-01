@@ -9,6 +9,8 @@ import { reportarErroCliente } from '../utils/reportarErro';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 import { lerComRenovacao } from '../lib/sessao-expirada';
+import AcompanhamentoFavoritos from '../components/AcompanhamentoFavoritos';
+import FavoritoBotao from '../components/FavoritoBotao';
 
 // Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
 const ETAPA_CURTA = {
@@ -34,6 +36,8 @@ export default function MinhasAnalises() {
   const { effectiveUserId, impersonate } = useAuth();
   const nav = useNavigate();
   const isMobile = useIsMobile();
+  // Estrela num card → a seção Acompanhamento relê (remonta pela chave).
+  const [favVersao, setFavVersao] = React.useState(0);
 
   // Acompanhamento assistido: se o imóvel analisado já virou um caso (fluxo /caso),
   // conectamos os dois no mesmo lugar — o cliente pula direto para o acompanhamento.
@@ -277,6 +281,8 @@ export default function MinhasAnalises() {
         {acao('Meus arrematados', Home, '#059669', () => nav('/arrematados'))}
       </div>
 
+      <AcompanhamentoFavoritos key={favVersao} />
+
       {erroLista ? (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 16, padding: '20px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: '#b91c1c' }}>
@@ -341,6 +347,7 @@ export default function MinhasAnalises() {
                     ))}
                   </div>
                 </div>
+                <FavoritoBotao tipo="imovel" itemId={a.imovelId} compacto onChange={() => setFavVersao(v => v + 1)} />
                 {caso ? (
                   <button onClick={(e) => { e.stopPropagation(); nav('/caso/' + caso.id); }}
                     title="Abrir acompanhamento com a equipe"
