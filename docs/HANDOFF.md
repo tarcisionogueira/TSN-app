@@ -46,8 +46,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `select count(*) filter (where geocod_em is not null) tentadas, count(lat) com_geo from indice_amostras where criado_em > '2026-09-11';`
 - **/analises com statement timeout (Marcos, pagante):** `minhas_analises_lista` fazia join `i.id::text = imovel_id` →
   SEQ SCAN em imoveis_leilao (83 mil linhas/291 MB, 1.673 ms medidos). Agora casa por uuid via PK: 0,3 ms; saída
-  idêntica (md5 igual em 6 usuários). Migração 20261001_minhas_analises_lista_join_por_uuid. Mesmo padrão (baixo,
-  só rotinas de fundo): `limpar_analises_orfas`, `atualizar_confiabilidade_leiloeiro`, `proximas_fotos_espelho`.
+  idêntica (md5 igual em 6 usuários). Migração 20261001_minhas_analises_lista_join_por_uuid. Mesmo padrão corrigido
+  nas 3 rotinas (`limpar_analises_orfas`, `atualizar_confiabilidade_leiloeiro` — roda a cada documental, agora 58 ms —,
+  `proximas_fotos_espelho`): migração 20261001_join_acervo_por_uuid_rotinas.
+- **juridico-retry e-mail falso CONFIRMADO e corrigido (603e2fb):** Z37342/Jorge Augusto recebeu "consulta concluída"
+  às 09:45 com `result.consultas.cnj` nulo. Agora exige status concluida + consulta CNJ gravada.
+- **Testes (7ffd0ef):** edital-desatualizado (guarda dataLeilao2), venda-direta (env no import) e aprendizado-processual
+  (datas relativas) verdes. 102/107 no node puro; os 5 restantes são de ambiente (3 Playwright, 2 vite-node — passam).
 - **Cancelamento mensal (Marcos, 01/10) — 2 defeitos, corrigidos (ffb313c):** (1) `mp-webhook` rebaixava NA HORA do
   cancelamento, contra a promessa da tela ("acesso até o fim do período pago") — agora mantém se há cobrança APROVADA
   < 1 mês (reconciliação rebaixa após `next_payment_date`); (2) 2º clique em cancelar gerava "⚠️ Cancelamento NÃO
