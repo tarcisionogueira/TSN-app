@@ -42,7 +42,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   1ª amostra nova desde 11/09. **Achado junto:** `indice-geocodificar-cron` passava `cidade_norm` SEM ESPAÇO
   ("santanadeparnaiba") ao Nominatim → 0 de 12 com coordenada (era 69–100% até 11/09) e a falha tirava a amostra da
   fila. Corrigido (5419efa + RPC `municipio_nome`, migração 20261001_municipio_nome_por_cidade_norm); 16 amostras
-  devolvidas à fila às 16:24. **Conferir após o cron das 16:50 UTC:**
+  devolvidas à fila às 16:24. **CONFERIDO 16:58 UTC: 16 de 16 geocodificadas (nível rua), 0 falhas, fila vazia.** Consulta:
   `select count(*) filter (where geocod_em is not null) tentadas, count(lat) com_geo from indice_amostras where criado_em > '2026-09-11';`
 - **/analises com statement timeout (Marcos, pagante):** `minhas_analises_lista` fazia join `i.id::text = imovel_id` →
   SEQ SCAN em imoveis_leilao (83 mil linhas/291 MB, 1.673 ms medidos). Agora casa por uuid via PK: 0,3 ms; saída
