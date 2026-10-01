@@ -104,12 +104,24 @@ export default async function handler(req, res) {
   // `or=` cobre tanto regen_motivo NULO (todos os vícios sumiram) quanto preenchido sem cnj.
   try {
     const resolvidos = await sbGet(
-      `analises_documental?juridico_avisar_email=eq.true` +
+      `analises_documental?juridico_avisar_email=eq.true&status=eq.concluida` +
       `&or=(regen_motivo.is.null,regen_motivo.not.ilike.*cnj_nao_consultado*)` +
-      `&select=user_id,imovel_id,titulo,cidade,estado&limit=30`
+      `&select=user_id,imovel_id,titulo,cidade,estado,cnj:result->consultas->cnj&limit=30`
     );
     for (const r of (Array.isArray(resolvidos) ? resolvidos : [])) {
       try {
+        // PROVA POSITIVA, não ausência de marca (01/10). "O regen_motivo não cita mais
+        // cnj_nao_consultado" também é verdade numa linha regerada por OUTRO motivo, ou sem
+        // processo a consultar — e o cliente recebia "consulta jurídica concluída" sem consulta.
+        // Só avisa se o resultado gravado traz a consulta CNJ feita; senão limpa a marca calado.
+        if (!r.cnj) {
+          console.warn('[juridico-retry-cron] marca limpa SEM e-mail (sem consulta CNJ no resultado)', r.imovel_id);
+          await sbPatch(
+            `analises_documental?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`,
+            { juridico_tentativas: 0, juridico_avisar_email: false }
+          );
+          continue;
+        }
         const destino = await emailDoUsuario(r.user_id);
         const endereco = r.titulo || [r.cidade, r.estado].filter(Boolean).join('/') || 'seu imóvel';
         const link = `${APP_URL}/#/analise?imovel=${encodeURIComponent(r.imovel_id)}`;
