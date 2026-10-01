@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📥 01/10 (tarde) — PDF do eBook estruturado · índice "parado" diagnosticado
+- **Baixar PDF do eBook estruturado** (`src/utils/ebookPdf.js`, botão em `EbookPage`): capa em sangria na 1ª página,
+  sumário, capítulos em página nova (A5, Literata, numerado). Montado no navegador com os capítulos da RPC de
+  entitlement → `imprimirHtml`. Custo zero, sem arquivo no Storage. Vale para "O Lance Que Muda Tudo" e "Lucre Antes
+  de Arrematar" (estruturado não busca `arquivo_url`, então o PDF antigo dele nunca aparecia).
+- **Índice "PARADO" (health-check ERRO) — rastro VELHO, não quebra nova:** as 6 falhas (10/09–28/09) são TODAS
+  anteriores ao deploy da busca-com-prova (commit e29edc0, 30/09 15:19); desde então **ninguém gerou índice**, então
+  não há prova nem a favor nem contra. Causa-raiz original: Gemini fora (403 em 08/09, 402 sem crédito) → Haiku
+  respondendo de memória. Reforço proativo segue OFF por decisão (`INDICE_REFORCO`). **Falta: 1 geração real**
+  (Índice → um tipo → Gerar) e conferir `geracao_custos` (`funcao='indice'`, `ok`, `meta.motor`, `meta.motivo`).
+- **Achado, decisão do dono:** o mercadológico NUNCA alimentou `indice_amostras` de forma contínua (`origem=
+  relatorio_mercado` só no backfill de 24/07). Religar exige cuidado: o mercadológico já CONSOME o índice
+  (`indiceBidPro`/`reaproveitado` → circular) e há locação "estimada" (não anúncio). Não feito.
+
 ### 🧾 01/10 — EVOLUÇÃO DO DIA (fechamento) + revisão geral de eficiência e segurança
 **Entregue e em produção (commits b7468e6 → fechamento):**
 1. **Chat CNJ (caso Marcos):** DJEN 100/página (fonte tinha 34, vinham 30), previsão pelas publicações quando o
