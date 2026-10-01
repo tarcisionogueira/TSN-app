@@ -55,6 +55,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   **Marcos devolvido a top2** (pago até ~12/10; reconciliação rebaixa depois). `perfis.mp_preapproval_id` é nulo em
   TODOS (só `ativarRoleInline`, código morto, gravava) — a fonte real é `mp_assinaturas`. Antonio Valbeni
   (explorador com mandato authorized) está CERTO: cobrança de 06/09 recusada, MP ainda tentando (próx. 06/10).
+- **Captura 01/10:** JMFLEILOES 17→2 = expiração legítima (10 lotes com leilão 30/09 17h). SBID21 41→1 = portal
+  secundário da Superbid listando menos; as linhas SBID21 estão inativas desde 16/09 porque os MESMOS lotes ficam
+  ativos sob SUPERBID (1.358, estável) — nada perdido. Nenhuma ação.
+- **Rotinas mensais (bug bounty leiloeiros, auditoria de segurança):** rodavam em sessão nova SEM repositório →
+  prompts reescritos (01/10) com PASSO 0 = `add_repo` + clone e "não verificado ≠ ok". A organização NÃO permite
+  conectores em rotina (`create_trigger` recusa `connectors`) — banco/deploy seguem só no ritual de abertura.
 - **Actions 30/09 (OSM, regerar mercadológicos):** já corrigidos em e6d5fe8 e passando nos runs seguintes.
 - **Marketing sem dados desde 14/09:** NÃO é falha de ingestão — Google Ads e Meta pausados em 14/09
   (`marketing_canal_pausa`), coincide com cartão do Google Ads recusado. Depende do dono religar.
