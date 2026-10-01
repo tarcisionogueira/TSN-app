@@ -9,6 +9,15 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ↩️ 01/10 (noite) — "Voltar" do contrato ia para o início · "2 contratos de assessoria" (dono, Marcos)
+- Ambos vinham de Meus Arrematados → contratos vinculados: a lista NÃO excluía `cancelado` (o termo combinado
+  antigo do Marcos, cancelado 30/09, aparecia "Aguardando assinatura" ao lado do termo novo) e abria o documento
+  em ABA NOVA (sem histórico → Voltar caía em "/"). Corrigido: `.neq('status','cancelado')` + `error` checado;
+  link na mesma aba; `ContratoLink.voltar` usa `location.key==='default'` → logado vai para /contratos.
+- Situação real: Marcos = Termo (aguardando) + Procuração Particular (aguardando) + "PROCURAÇÃO" (PDF anexado
+  pelo dono, ASSINADA 01/10 21:26). Rafael = 2 termos de propósito (2 assessorias contratadas, 30/09) + procuração
+  assinada em jul. Matheus = 1 termo + procuração assinada em jul.
+
 ### 📰 01/10 (noite) — teor do DJEN no parecer documental + LEJE
 - `gerar-documental.js`: com nº de processo, as 10 publicações mais recentes do DJEN (500 chars cada) entram no
   prompt ANTES da IA, com regra de citar suspensão/embargos/nulidade/acordo/remição. Antes só "N comunicações"

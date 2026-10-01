@@ -83,7 +83,6 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos, mesmo assinados).
   const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [docs, setDocs] = React.useState([]);
@@ -163,10 +162,14 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos — mesmo já assinados).
   const carregarContratos = React.useCallback(async () => {
     if (!arr.imovel_id || !arr.user_id) { setContratosVinc([]); return; }
-    const { data } = await supabase.from('contratos_link')
+    // Cancelado NÃO entra (01/10, dono): o termo combinado antigo do Marcos, cancelado em 30/09,
+    // aparecia como "Aguardando assinatura" ao lado do termo novo — "dois contratos de assessoria".
+    const { data, error } = await supabase.from('contratos_link')
       .select('id,titulo,status,token,contrato_grupo_id,assinado_em,criado_em')
       .eq('arremate_imovel_id', arr.imovel_id).eq('arremate_user_id', arr.user_id)
+      .neq('status', 'cancelado')
       .order('criado_em', { ascending: true });
+    if (error) { console.warn('[arrematados] contratos vinculados:', error.message); setContratosVinc([]); return; }
     const vistos = new Set(); const uniq = [];
     (Array.isArray(data) ? data : []).forEach(c => { const k = c.contrato_grupo_id || c.id; if (!vistos.has(k)) { vistos.add(k); uniq.push(c); } });
     setContratosVinc(uniq);
@@ -533,7 +536,8 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                             {c.status === 'assinado' ? `✓ Assinado${c.assinado_em ? ' em ' + new Date(c.assinado_em).toLocaleDateString('pt-BR') : ''}` : 'Aguardando assinatura'}
                           </span>
                         </div>
-                        <a href={`${origin}/#/c/${c.token}`} target="_blank" rel="noreferrer" title="Ver documento assinado" style={{ color: '#0D63DB', display: 'flex' }}><ExternalLink size={15} /></a>
+                        {/* Mesma aba (01/10): em aba nova o "Voltar" do documento não tinha para onde voltar. */}
+                        <a href={`#/c/${c.token}`} title={c.status === 'assinado' ? 'Ver documento assinado' : 'Abrir documento'} style={{ color: '#0D63DB', display: 'flex' }}><ExternalLink size={15} /></a>
                       </div>
                     ))}
                   </div>

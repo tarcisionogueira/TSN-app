@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink, Download, Clock, ChevronLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -233,7 +234,17 @@ export default function ContratoLink() {
   const isMobile = useIsMobile();
   // Sempre há como SAIR desta tela (o dono não conseguia voltar e tinha que fechar o app): volta
   // à tela anterior se houver histórico, senão vai para o início.
-  const voltar = () => { try { if (window.history.length > 1) nav(-1); else nav('/'); } catch { nav('/'); } };
+  //
+  // 01/10 (dono): aberto em ABA NOVA (link de Meus Arrematados, e-mail) não há tela anterior DENTRO
+  // do app — `history.length > 1` contava páginas de fora (ou a própria aba) e o Voltar caía no
+  // início. `location.key === 'default'` = esta é a primeira tela do app nesta aba: aí o destino útil
+  // para quem está logado é a lista de contratos, não a home.
+  const loc = useLocation();
+  const { isLoggedIn } = useAuth();
+  const voltar = () => {
+    try { if (loc.key && loc.key !== 'default') { nav(-1); return; } } catch { /* cai no destino fixo */ }
+    nav(isLoggedIn ? '/contratos' : '/');
+  };
   const BotaoVoltar = ({ fixed = false }) => (
     <button onClick={voltar} title="Voltar"
       style={{ ...(fixed ? { position: 'fixed', top: 'calc(12px + env(safe-area-inset-top,0px))', left: 12, zIndex: 50 } : {}), display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'rgba(30,41,59,0.92)', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
