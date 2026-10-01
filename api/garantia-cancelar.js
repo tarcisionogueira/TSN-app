@@ -127,7 +127,22 @@ export default async function handler(req, res) {
   // O usuário precisa saber quando NÓS não conseguimos cancelar no gateway: dizer
   // "cancelada" sem ter cancelado é o pior resultado possível (ele para de acompanhar e
   // segue sendo cobrado). `cancelados === 0` com gateway conhecido = falha real.
-  const falhouNoGateway = cancelados === 0 && gateway !== 'desconhecido';
+  // JÁ CANCELADO NÃO É FALHA (01/10, Marcos): o 2º clique em "cancelar" não acha mandato
+  // `authorized` (o 1º já cancelou), o PUT no mp_id dá 404 — `mp_id` é o PAYER id, não o da
+  // recorrência — e o admin recebia "⚠️ Cancelamento NÃO confirmado", com o cliente lendo que
+  // não deu certo. O espelho `mp_assinaturas` (gravado pelo webhook e pela reconciliação) diz
+  // a verdade: nenhum mandato authorized e ao menos um cancelled = a renovação já está parada.
+  let jaCancelado = false;
+  if (cancelados === 0 && gateway === 'mercadopago') {
+    const rEsp = await sb(`mp_assinaturas?user_id=eq.${user.id}&select=status`).catch(() => null);
+    const esp = rEsp?.ok ? await rEsp.json().catch(() => null) : null;
+    if (Array.isArray(esp)) {
+      jaCancelado = esp.some((a) => a.status === 'cancelled') && !esp.some((a) => a.status === 'authorized');
+    } else {
+      console.error('[garantia-cancelar] espelho mp_assinaturas ilegível', rEsp?.status, '— trato como falha');
+    }
+  }
+  const falhouNoGateway = cancelados === 0 && gateway !== 'desconhecido' && !jaCancelado;
 
   if (podeReembolso) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida). Limpa também a âncora de
@@ -216,7 +231,7 @@ export default async function handler(req, res) {
   }
   res.status(200).json({
     ok: true, reembolso: false, dentro7, garantiaJaUsada: jaUsouGarantia, cancelados,
-    renovacaoCancelada: cancelados > 0, falhouNoGateway,
+    renovacaoCancelada: cancelados > 0 || jaCancelado, jaCancelado, falhouNoGateway,
     msg: falhouNoGateway
       ? 'Registramos o seu pedido, mas NÃO conseguimos confirmar o cancelamento da cobrança no gateway. Nossa equipe foi avisada e vai concluir — se aparecer uma nova cobrança, fale com a gente.'
       : msgFim,

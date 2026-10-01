@@ -295,6 +295,30 @@ export async function processarEventoMp(req, res) {
         const temOutraAtiva = (outra?.results || []).some(p =>
           String(p.external_reference || '').split('|')[0] === userId && String(p.id) !== String(preapproval.id));
         if (temOutraAtiva) return res.status(200).json({ ok: true, ignorado: 'outro_mandato_ativo' });
+        // CANCELAMENTO NÃO TIRA O MÊS JÁ PAGO (01/10). A tela de cancelamento promete "seu acesso
+        // continua até o fim do período já pago", e a reconciliação diária já cumpria isso
+        // (só rebaixa mandato cancelado depois do `next_payment_date`) — mas ESTE ramo rebaixava
+        // no mesmo segundo do cancelamento: o Marcos pagou em 12/09, cancelou em 01/10 e perdeu
+        // 11 dias pagos. A régua é a última cobrança APROVADA + 1 mês: quem cancelou em dia
+        // segue com acesso até lá (a reconciliação rebaixa depois); quem teve o mandato
+        // cancelado por falta de pagamento não tem cobrança recente aprovada e cai na hora,
+        // como antes. Cobrança recusada e pausa não passam por aqui. Assessoria é contrato
+        // próprio (encerramento pela posse), também fora.
+        if (preapproval.status === 'cancelled' && !cobrancaRecusada && !/^assessorado/.test(planoKey || '')) {
+          const hist = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(preapproval.id)}&limit=50`);
+          const aprovadas = (hist?.results || [])
+            .filter((p) => p?.payment?.status === 'approved' && Number(p?.transaction_amount) > 0)
+            .map((p) => Date.parse(p.debit_date || p.date_created))
+            .filter(Number.isFinite);
+          if (aprovadas.length) {
+            const fim = new Date(Math.max(...aprovadas));
+            fim.setMonth(fim.getMonth() + 1);
+            if (fim.getTime() > Date.now()) {
+              console.log(`[mp-webhook] cancelamento de ${userId}: acesso mantido até ${fim.toISOString()} (período pago); a reconciliação rebaixa depois`);
+              return res.status(200).json({ ok: true, ignorado: 'periodo_pago_vigente', ate: fim.toISOString() });
+            }
+          }
+        }
         const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago' });
         if (result?.suspenso && preapproval.payer_email) {
           // 14/09, pedido do dono: cobrança RECUSADA e CANCELAMENTO de verdade são coisas
