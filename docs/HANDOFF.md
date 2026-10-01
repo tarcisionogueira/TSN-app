@@ -14,8 +14,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   antigo do Marcos, cancelado 30/09, aparecia "Aguardando assinatura" ao lado do termo novo) e abria o documento
   em ABA NOVA (sem histórico → Voltar caía em "/"). Corrigido: `.neq('status','cancelado')` + `error` checado;
   link na mesma aba; `ContratoLink.voltar` usa `location.key==='default'` → logado vai para /contratos.
-- Situação real: Marcos = Termo (aguardando) + Procuração Particular (aguardando) + "PROCURAÇÃO" (PDF anexado
-  pelo dono, ASSINADA 01/10 21:26). Rafael = 2 termos de propósito (2 assessorias contratadas, 30/09) + procuração
+- Situação real: Marcos = Termo (aguardando) + "PROCURAÇÃO" (PDF anexado pelo dono, ASSINADA 01/10 21:26).
+  A Procuração Particular gerada (04c9fcfe) foi CANCELADA a pedido do dono (01/10) e o bloqueio dela removido. Rafael = 2 termos de propósito (2 assessorias contratadas, 30/09) + procuração
   assinada em jul. Matheus = 1 termo + procuração assinada em jul.
 
 ### 📰 01/10 (noite) — teor do DJEN no parecer documental + LEJE
