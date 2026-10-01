@@ -5,10 +5,13 @@ import assert from 'node:assert/strict';
 process.env.VITE_SUPABASE_URL = 'https://sb.test';
 process.env.SUPABASE_SERVICE_KEY = 'k';
 const chamadas = [];
+// Datas RELATIVAS a hoje (01/10): a etapa só olha atos dos últimos 180 dias, então datas fixas
+// faziam o teste quebrar sozinho com o passar do tempo (~fev/2027). Offsets = os de 01/10/2026.
+const diasAtras = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const serie = [
-  { data: '2026-09-20', codigo: 51, descricao: 'Conclusão' }, { data: '2026-09-10', codigo: 11010, descricao: 'Mero expediente' },
-  { data: '2026-08-20', codigo: 12164, descricao: 'Outras Decisões — auto de arrematação' }, { data: '2026-08-01', codigo: 11010, descricao: 'Mero expediente' },
-  { data: '2026-07-10', codigo: 11010, descricao: 'Mero expediente' }, { data: '2026-06-20', codigo: 12164, descricao: 'Outras Decisões' },
+  { data: diasAtras(11), codigo: 51, descricao: 'Conclusão' }, { data: diasAtras(21), codigo: 11010, descricao: 'Mero expediente' },
+  { data: diasAtras(42), codigo: 12164, descricao: 'Outras Decisões — auto de arrematação' }, { data: diasAtras(61), codigo: 11010, descricao: 'Mero expediente' },
+  { data: diasAtras(83), codigo: 11010, descricao: 'Mero expediente' }, { data: diasAtras(103), codigo: 12164, descricao: 'Outras Decisões' },
 ];
 const estat = [{ de: 'decisao', para: 'decisao_seguinte', n: 254, p25: 17, mediana: 33, p75: 93 }, { de: 'conclusao', para: 'decisao_seguinte', n: 390, p25: 4, mediana: 17, p75: 56 }];
 globalThis.fetch = async (url, opts = {}) => {
@@ -47,8 +50,8 @@ console.log('aprendizado-processual: todos os casos passaram');
 // leilão, não pode marcar o arremate como encerrado — desfecho só pelos 20 movimentos recentes.
 {
   chamadas.length = 0;
-  const longa = [{ data: '2026-09-10', codigo: 85, descricao: 'Petição — Agravo de Petição' }];
-  for (let i = 0; i < 25; i++) longa.push({ data: `2025-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + i).padStart(2, '0')}`, codigo: 11010, descricao: 'Mero expediente' });
+  const longa = [{ data: diasAtras(21), codigo: 85, descricao: 'Petição — Agravo de Petição' }];
+  for (let i = 0; i < 25; i++) longa.push({ data: diasAtras(30 + i * 12), codigo: 11010, descricao: 'Mero expediente' });
   longa.push({ data: '2019-05-01', codigo: 848, descricao: 'Trânsito em julgado' });
   await aprenderDaConsulta({ numero: '0000199-97.2016.5.05.0195', origem: 'tela_caso', processo: { numero: '00001999720165050195', movimentos: longa } });
   const patch = chamadas.find((c) => c.u.includes('arremate_aprendizado?imovel_id=eq.lote-1') && c.m === 'PATCH');

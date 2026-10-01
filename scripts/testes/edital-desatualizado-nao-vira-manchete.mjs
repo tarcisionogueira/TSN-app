@@ -94,11 +94,16 @@ const casosReais = [
   ['Vila Andrade/SP',            1287073.40, 772244.03, 0.60],
 ];
 for (const [titulo, avalDb, valorMinimo, razao] of casosReais) {
-  const d = derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb, valorMinimo, valorMinimo2: null, p1: P1, p2: P2 });
+  const d = derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb, valorMinimo, valorMinimo2: null, dataLeilao2: P2.data, p1: P1, p2: P2 });
   checa(`${titulo}: praça 1 = avaliação atual (R$ ${avalDb})`,
     d[0].valor === avalDb && d[0].estimado === 'avaliacao_atual' && d[0].data === P1.data);
   checa(`${titulo}: praça 2 = lance mínimo atual (R$ ${valorMinimo}, razão ${razao * 100}% da avaliação)`,
     d[1].valor === valorMinimo && d[1].estimado === 'anuncio_atual' && Math.abs(valorMinimo / avalDb - razao) < 0.001);
+}
+
+function checaGuardaLjud() {
+  checa('acervo sem 2ª praça (data_leilao_2 nula) NÃO deriva, mesmo com p1+p2 no PDF (caso LJUD 12/09)',
+    derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 159590.70, valorMinimo2: null, dataLeilao2: null, p1: P1, p2: P2 }) === null);
 }
 
 console.log('\nESCOPO ESTREITO — não pode vazar para fora do que foi validado');
@@ -109,9 +114,11 @@ checa('sem avaliação atual confirmada (avalDb=0) — não deriva, nada para cr
 checa('edital com praça única (sem p2) — não inventa uma 2ª praça que o documento nunca mostrou',
   derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 159590.70, valorMinimo2: null, p1: P1, p2: null }) === null);
 checa('ainda na janela da 1ª praça (lance mínimo atual == avaliação, 2ª praça ainda não tem valor próprio) — praça 2 fica sem valor, não inventa',
-  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 265984.50, valorMinimo2: null, p1: P1, p2: P2 })[1].valor === null);
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 265984.50, valorMinimo2: null, dataLeilao2: P2.data, p1: P1, p2: P2 })[1].valor === null);
 checa('valor_minimo_2 já populado (o card do leiloeiro emparelhou as 2 praças) — usa ele direto, sem estimar',
-  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 600000, valorMinimo: 400000, valorMinimo2: 300000, p1: P1, p2: P2 })[1].valor === 300000);
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 600000, valorMinimo: 400000, valorMinimo2: 300000, dataLeilao2: P2.data, p1: P1, p2: P2 })[1].valor === 300000);
+// 12/09 (LJUD dfc5ab9b): edital de OUTRO imóvel com 2 praças, acervo ao vivo SEM 2ª praça → não fabrica a 2ª.
+checaGuardaLjud();
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
 if (ok + falhas < 25) {

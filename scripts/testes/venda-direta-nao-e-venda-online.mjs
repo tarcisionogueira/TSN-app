@@ -22,7 +22,11 @@
  * arquivos que decidem isso (api/enriquecer-lote.js, src/utils/leilaoEncerrado.js,
  * src/pages/Analise.jsx, src/pages/ImovelDetalhe.jsx, api/gerar-documental.js).
  */
-import { normalizarModalidadeCEF } from '../scraper.js';
+// scraper.js cria o cliente Supabase no topo do módulo e exige URL — o teste só usa a função pura
+// (o arquivo tem guarda de entrypoint: importar não roda o scraper). Valores fictícios, sem rede.
+process.env.VITE_SUPABASE_URL ||= 'http://localhost.invalid';
+process.env.SUPABASE_SERVICE_KEY ||= 'teste';
+const { normalizarModalidadeCEF } = await import('../scraper.js');
 
 let ok = 0, falhas = 0;
 const checa = (nome, cond, extra) => {

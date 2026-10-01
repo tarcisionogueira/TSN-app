@@ -13,6 +13,10 @@
  * `includes` — senão a trava contra ruído vira a porta.
  *
  * `ehProducao` precisa estar exportada de src/utils/reportarErro.js para este teste rodar.
+ *
+ * Roda com: VITE_SUPABASE_URL=http://localhost.invalid VITE_SUPABASE_ANON_KEY=teste npx vite-node scripts/testes/erro-so-de-producao.mjs
+ * (reportarErro.js importa src/utils/supabase.js, que lê `import.meta.env` e exige a chave —
+ *  node puro falha antes da 1ª asserção; os valores são fictícios, nada vai à rede.)
  */
 import { ehProducao } from '../../src/utils/reportarErro.js';
 const casos = [
