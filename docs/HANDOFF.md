@@ -48,6 +48,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   SEQ SCAN em imoveis_leilao (83 mil linhas/291 MB, 1.673 ms medidos). Agora casa por uuid via PK: 0,3 ms; saída
   idêntica (md5 igual em 6 usuários). Migração 20261001_minhas_analises_lista_join_por_uuid. Mesmo padrão (baixo,
   só rotinas de fundo): `limpar_analises_orfas`, `atualizar_confiabilidade_leiloeiro`, `proximas_fotos_espelho`.
+- **Cancelamento mensal (Marcos, 01/10) — 2 defeitos, corrigidos (ffb313c):** (1) `mp-webhook` rebaixava NA HORA do
+  cancelamento, contra a promessa da tela ("acesso até o fim do período pago") — agora mantém se há cobrança APROVADA
+  < 1 mês (reconciliação rebaixa após `next_payment_date`); (2) 2º clique em cancelar gerava "⚠️ Cancelamento NÃO
+  confirmado" (mp_id é PAYER id, não preapproval) — agora o espelho `mp_assinaturas` conta como já cancelado.
+  **Marcos devolvido a top2** (pago até ~12/10; reconciliação rebaixa depois). `perfis.mp_preapproval_id` é nulo em
+  TODOS (só `ativarRoleInline`, código morto, gravava) — a fonte real é `mp_assinaturas`. Antonio Valbeni
+  (explorador com mandato authorized) está CERTO: cobrança de 06/09 recusada, MP ainda tentando (próx. 06/10).
 - **Actions 30/09 (OSM, regerar mercadológicos):** já corrigidos em e6d5fe8 e passando nos runs seguintes.
 - **Marketing sem dados desde 14/09:** NÃO é falha de ingestão — Google Ads e Meta pausados em 14/09
   (`marketing_canal_pausa`), coincide com cartão do Google Ads recusado. Depende do dono religar.
