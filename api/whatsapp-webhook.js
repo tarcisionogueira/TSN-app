@@ -114,6 +114,13 @@ export function lerEntregaWa(corpo) {
         const c = conversas.get(tel) || { telefone: tel };
         if (nomes.get(tel)) c.nome = nomes.get(tel);
         if (!c.ultima_msg_deles_em || (quando || '') > c.ultima_msg_deles_em) c.ultima_msg_deles_em = quando || new Date().toISOString();
+        // Veio de anúncio "Clique para o WhatsApp" (01/10): a Meta manda `referral` SÓ na 1ª
+        // mensagem. Sem gravar aqui, gasto do anúncio e conversa nunca se encontram (wa_funil).
+        if (m.referral && typeof m.referral === 'object') {
+          const r = m.referral;
+          c.origem = { source_type: r.source_type || null, source_id: r.source_id || null, source_url: r.source_url || null, headline: r.headline ? String(r.headline).slice(0, 200) : null, ctwa_clid: r.ctwa_clid || null };
+          c.origem_em = quando || new Date().toISOString();
+        }
         conversas.set(tel, c);
         mensagens.push({ wamid: String(m.id), telefone: tel, direcao: 'recebida', autor: 'pessoa', tipo: m.type || 'text', texto, ocorrido_em: quando, resposta_status: 'pendente' });
       }

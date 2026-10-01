@@ -58,9 +58,20 @@ SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnico
 // WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
 const CANAL_HINT = {
   site: '',
-  whatsapp: '\n\n## Canal: WhatsApp\n- Respostas MAIS CURTAS, em tom de conversa de app (mensagem, não e-mail). Evite listas longas; prefira frases curtas. Nada de markdown pesado.'
-    + '\n- Muita gente que chega pelo WhatsApp AINDA NÃO é cliente (veja o histórico). Para quem não é: entenda o objetivo (investir, morar, revender), explique em poucas linhas como a plataforma e a ASSESSORIA ajudam, e convide a criar a conta grátis em bidprobrasil.com.br. Sem preço: direcione à página de Planos.'
-    + '\n- Se a pessoa quiser CONTRATAR a assessoria, fechar negócio, ou falar com um consultor, diga que um consultor vai chamar por aqui e encerre com [[ESCALAR]].',
+  // WhatsApp = atendimento E venda (01/10, dono: "agente de IA para atender e campanha perpétua para
+  // a IA vender e direcionar o cliente ao sistema"). Mesmo agente, mesmas regras de privacidade e de
+  // preço do SYSTEM; aqui só o ROTEIRO de quem ainda não é cliente e o LINK RASTREADO — é o
+  // utm_medium=ia que faz o cadastro aparecer em wa_funil() e em perfis.mkt_*.
+  whatsapp: '\n\n## Canal: WhatsApp'
+    + '\n- Mensagens CURTAS (2 a 4 frases), tom de conversa, UMA pergunta por vez. Nada de markdown, listas longas ou textão.'
+    + '\n- Se já é cliente (veja o histórico): atenda como suporte normal.'
+    + '\n\n## Quem ainda NÃO é cliente — conduza a venda em 4 passos, sem pular e sem pressionar:'
+    + '\n1. ACOLHER e entender: o que busca (investir para revender/alugar, comprar para morar, só aprender), em que cidade/região e se já participou de leilão. Se veio de anúncio, parta do assunto do anúncio.'
+    + '\n2. MOSTRAR o valor com o que existe de verdade: a plataforma reúne imóveis de leilão de centenas de leiloeiros num lugar só, e para cada imóvel gera relatório de mercado (quanto vale e quanto revende) e relatório jurídico (edital, matrícula, processo, riscos) — é isso que evita o erro caro de arrematar imóvel com dívida ou ocupação. A assessoria acompanha do edital até a posse. Ligue o benefício ao objetivo que a pessoa contou.'
+    + '\n3. LEVAR AO SISTEMA: convide a criar a conta grátis e ver os imóveis da região dela pelo link https://www.bidprobrasil.com.br/?utm_source=whatsapp&utm_medium=ia&utm_campaign=perpetuo (use EXATAMENTE este link, sem alterar). Diga o que fazer lá em 1 frase (ex.: "filtre pela sua cidade e abra a análise de um imóvel que te interessar").'
+    + '\n4. FECHAR o próximo passo: se ela quiser os relatórios completos, explique os planos sem preço (preço na página de Planos); se quiser assessoria, reunião com analista ou falar com consultor, diga que um consultor vai chamar por aqui e encerre com [[ESCALAR]].'
+    + '\n- Objeções comuns: "leilão é arriscado" → o risco está no que não se leu; os relatórios mostram dívidas, ocupação e o processo antes do lance. "Não tenho dinheiro à vista" → há leilões com parcelamento e financiamento, e o filtro mostra quais. "Já tentei e perdi" → a análise de mercado mostra até onde vale dar lance.'
+    + '\n- NUNCA prometa lucro, desconto garantido ou resultado; não cite imóvel, caso ou cliente específico; não invente preço. Se a pessoa disser que não quer mais mensagens, agradeça e pare.',
 };
 
 // NÚCLEO REUTILIZÁVEL do agente (site + futuro WhatsApp). Recebe a conversa e a

@@ -111,9 +111,12 @@ async function atender(tel, pendentes) {
       }
     }
   } catch (e) { console.warn('[wa-resp] perfil não resolvido (segue como contato novo):', e?.message || e); }
-  const memoria = perfil
+  const memoria = (perfil
     ? `Cliente cadastrado: ${perfil.nome || 'sem nome'} · plano atual: ${perfil.role || 'desconhecido'}.`
-    : `Contato ainda NÃO cadastrado na plataforma${conv.nome ? ` (nome no WhatsApp: ${conv.nome})` : ''} — provável cliente novo.`;
+    : `Contato ainda NÃO cadastrado na plataforma${conv.nome ? ` (nome no WhatsApp: ${conv.nome})` : ''} — provável cliente novo.`
+  // Anúncio de origem (Clique-para-WhatsApp): diz à IA o que a pessoa clicou, para continuar
+  // daquele assunto em vez de recomeçar do zero. Só o título do anúncio — nunca dado de terceiro.
+  ) + (conv.origem?.headline ? ` Chegou pelo anúncio: "${String(conv.origem.headline).slice(0, 160)}".` : (conv.origem ? ' Chegou por um anúncio de Clique-para-WhatsApp.' : ''));
 
   const hist = await sb('GET', `wa_mensagens?telefone=eq.${encodeURIComponent(tel)}&select=autor,texto&order=criado_em.desc&limit=20`) || [];
   const mensagens = hist.reverse().filter((m) => m.texto)

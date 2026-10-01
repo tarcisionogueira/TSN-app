@@ -41,3 +41,18 @@ assert.equal(await enviarTextoWa('5575999998888', 'oi', { token: 't', phoneId: '
 await assert.rejects(enviarTextoWa('5575999998888', 'oi', { token: 't', phoneId: '1', fetchImpl: fake(200, {}) }), /sem id/);
 await assert.rejects(enviarTextoWa('5575999998888', 'oi', { token: 't', phoneId: '1', fetchImpl: fake(400, { error: { message: 'Re-engagement message' } }) }), /Re-engagement/);
 console.log('✓ whatsapp: escuta, assinatura, telefone e envio conferidos');
+
+// 01/10 — anúncio Clique-para-WhatsApp: o `referral` da 1ª mensagem vira wa_conversas.origem.
+{
+  const { lerEntregaWa: ler } = await import('../../api/whatsapp-webhook.js');
+  const r = ler({ entry: [{ changes: [{ value: {
+    contacts: [{ wa_id: '5575999990000', profile: { name: 'Lead' } }],
+    messages: [{ from: '5575999990000', id: 'wamid.ref1', timestamp: '1790800000', type: 'text', text: { body: 'Vi o anúncio' },
+      referral: { source_type: 'ad', source_id: '120000', headline: 'Imóveis de leilão com relatório', ctwa_clid: 'abc' } }],
+  } }] }] });
+  const c = r.conversas[0];
+  if (c.origem?.source_id !== '120000' || c.origem?.ctwa_clid !== 'abc' || !c.origem_em) { console.error('FALHOU: referral não gravado', c); process.exit(1); }
+  const sem = ler({ entry: [{ changes: [{ value: { messages: [{ from: '5575999990000', id: 'wamid.x', timestamp: '1790800001', type: 'text', text: { body: 'oi' } }] } }] }] });
+  if ('origem' in sem.conversas[0]) { console.error('FALHOU: mensagem sem referral apagaria a origem'); process.exit(1); }
+  console.log('ok — referral do anúncio vira origem; mensagem sem referral não apaga');
+}
