@@ -16,11 +16,11 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
-import { classificarDocumento } from './_doc-leitura.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { buscarProcessosCNJ, gerarParecerRisco } from './_cnj.js';
 import { buscarQSA } from './_pj-socio.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
+import { normalizarDocumento } from './_doc-normalizar.js';
 import { consultarComunicaDJEN } from './_laudo-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { cacheGravar } from './_doc-extracao.js';
@@ -464,10 +464,14 @@ async function fetchAntiSSRF(url, opts, maxHops = 3) {
 
 // Lê um documento do lote: PDF → base64 (bloco document); HTML/texto → texto
 // limpo. Tenta fetch direto e cai no Bright Data quando o host bloqueia o servidor.
-async function lerDoc(url, deadline) {
+// `info` (01/10): quem chama recebe o MOTIVO da falha (`info.motivo`, `info.status`). Antes a
+// função só devolvia null, e o laço de leitura seguia como se o documento não existisse — o
+// relatório saía sem ele e ninguém sabia. Agora a falha vira pendência de liberação.
+async function lerDoc(url, deadline, info = {}) {
   // Anti-SSRF: URLs de documento vêm do banco E do body do cliente (urlMatricula/
   // urlEdital/urlRegras) — bloqueia destinos internos/metadados, permite CDN público.
-  if (!hostExternoSeguro(url) || Date.now() > deadline) return null;
+  if (!hostExternoSeguro(url)) { info.motivo = 'endereço do documento recusado (anti-SSRF)'; return null; }
+  if (Date.now() > deadline) { info.motivo = 'sem tempo para ler o documento nesta geração'; return null; }
   // CDN que só entrega com o Referer do próprio leiloeiro (HASTAPÚBLICA/cdnhp, 28/09): sem ele o
   // direto dava 403 e o Bright Data — PAGO — era chamado também sem ele, e dava 403 de novo.
   const ref = refererExigido(url);
@@ -478,21 +482,32 @@ async function lerDoc(url, deadline) {
   // PDF de verdade quando a URL é .pdf — assim o HTML de negação da Caixa (200) NÃO
   // vira "texto lixo" que faz a IA dizer que não leu nada.
   const extrair = async (resp) => {
-    if (!resp || !resp.ok) return null;
+    if (!resp) return null;
+    if (!resp.ok) { info.status = resp.status; info.motivo = `HTTP ${resp.status}`; return null; }
     const ct = resp.headers.get('content-type') || '';
     const buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0)));
-    if (!buf.length) return null;
+    if (!buf.length) { info.motivo = 'arquivo vazio'; return null; }
     // Classificação pelo CONTEÚDO (15/08, `_doc-leitura.js`). Antes, o que não fosse PDF
     // caía num `toString('utf8')` final: uma matrícula FOTOGRAFADA (JPEG/PNG) virava uma
     // tira de caracteres aleatórios, ia no prompt como "texto do documento", e a IA
     // respondia sobre nada enquanto o sistema registrava que tinha lido. Agora a imagem é
     // enviada como IMAGEM — a IA lê as duas — e o que não dá para ler para aqui.
-    const doc = classificarDocumento(buf, { url, contentType: ct }); // teto único: MAX_BYTES_VISAO (era 6,5 MB e recusava matrícula escaneada)
+    // 01/10: `normalizarDocumento` converte o que a IA não lê nativamente (DOCX, TIFF/BMP/HEIC,
+    // imagem ou PDF acima do teto) — "ler o arquivo do leiloeiro independente do formato".
+    const doc = await normalizarDocumento(buf, { url, contentType: ct });
+    if (doc.convertido) console.log(`[lerDoc] convertido (${doc.convertido}) ${url}`);
     if (doc.kind === 'pdf') return { kind: 'pdf', base64: doc.base64, url };
     if (doc.kind === 'imagem') return { kind: 'imagem', base64: doc.base64, mediaType: doc.mediaType, url };
-    if (ehPdfUrl) return null; // .pdf que não veio PDF = bloqueio/HTML → falha desta tentativa
-    if (doc.kind === 'texto') return { kind: 'text', text: doc.texto.slice(0, 12000), url };
-    console.log(`[lerDoc] formato não legível (${doc.motivo || 'desconhecido'}) ${url}`);
+    if (doc.kind === 'pacote') {
+      return { kind: 'pacote', url, falhas: doc.falhas || [], itens: doc.itens.map((it) => (it.kind === 'texto'
+        ? { kind: 'text', text: String(it.texto || '').slice(0, 60000), url, nome: it.nome }
+        : { kind: it.kind, base64: it.base64, mediaType: it.mediaType, url, nome: it.nome })) };
+    }
+    // .pdf que veio como TEXTO não convertido = página HTML de bloqueio/negação → falha desta tentativa.
+    if (ehPdfUrl && !doc.convertido) { info.motivo = 'link de PDF devolveu página (bloqueio/negação), não o arquivo'; return null; }
+    if (doc.kind === 'texto') return { kind: 'text', text: doc.texto.slice(0, doc.convertido ? 60000 : 12000), url };
+    info.motivo = doc.motivo || 'formato não legível';
+    console.log(`[lerDoc] formato não legível (${info.motivo}) ${url}`);
     return null;
   };
 
@@ -593,6 +608,7 @@ DOIS EIXOS SEPARADOS — LEIA ANTES DE CLASSIFICAR (regra de 31/08):
 - "confianca" responde a outra pergunta: **quanto do checklist eu consegui de fato verificar?** "alta" = documentos legíveis e processo confirmado; "media" = faltou confirmar itens relevantes; "baixa" = faltou documento essencial (matrícula/edital) ou o processo não pôde ser checado.
 - POR QUE ISSO IMPORTA: medido em 31/08, 55% dos riscos emitidos eram "não foi possível verificar" e não achado — e isso empurrava TODO relatório para "amarelo". Dezenove de dezenove saíram amarelos, o que impede o cliente de distinguir um lote limpo de um lote problemático. Diligência pendente é informação sobre A ANÁLISE, não sobre o IMÓVEL.
 - Um lote sem nenhum achado, mas com pouca coisa verificada, é "verde" com "confianca":"baixa" — NUNCA "amarelo". Dizer amarelo ali é atribuir ao imóvel um defeito que você não encontrou.
+- FALHA DE VERIFICAÇÃO NÃO É ACHADO (01/10): "processo não localizado no DataJud", "documento inacessível/com erro no site", "anexo em branco", "o edital não declara X", "não foi possível confirmar Y" descrevem o que a ANÁLISE não conseguiu — marque SEMPRE "constaNaDoc": false. "constaNaDoc": true é só para o que o documento AFIRMA (ex.: "a Av.3 registra penhora de R$ X"). O servidor recalcula o nível de risco a partir dos itens confirmados e devolve essas falhas para a confiança.
 - AUSÊNCIA DE INFORMAÇÃO NÃO É RISCO BLOQUEANTE. Quando um dado não consta nos documentos, é DILIGÊNCIA PENDENTE — severidade "informativo" (no máximo "alerta"), NUNCA "bloqueante". Falta de documento é "a confirmar", não "operação inviável".
 - ITENS COMUNS E ESPERADOS EM LEILÃO, que a LEI resolve e NÃO impedem a arrematação (classifique "informativo" ou "alerta", sempre com a nota legal — jamais "bloqueante"):
   • Penhora/execução que originou o leilão: é o que levou o bem à hasta; baixada com a arrematação.
@@ -614,6 +630,8 @@ OCUPAÇÃO POR PESSOA VULNERÁVEL (risco de desocupação — avaliar SEMPRE, em
 - NÃO é possível — nem lícito — confirmar isso remotamente por dados de saúde: o cadastro do SUS/CNS é DADO PESSOAL SENSÍVEL protegido pela LGPD (art. 11), de acesso restrito ao sistema de saúde. NÃO afirme ter consultado essa base, NÃO invente idade/condição do ocupante.
 - Em TODO imóvel, registre em "riscos" o item de possível vulnerabilidade na ocupação (severidade "alerta") e recomende as diligências LÍCITAS de verificação: (a) consulta processual pública — se for leilão JUDICIAL, checar no processo o marcador de PRIORIDADE DE TRAMITAÇÃO (idoso/PcD/doença grave), que é público; (b) visita ao imóvel e diligência de vizinhança (imprescindível — o status do edital não substitui); (c) leitura atenta do edital/auto de constatação, que às vezes descreve os ocupantes. Cite isso na seção OCUPAÇÃO E POSSE do parecer.
 
+MOVIMENTAÇÕES DA MATRÍCULA (OBRIGATÓRIO, 01/10): sempre que a matrícula estiver entre os documentos, preencha "extracao.movimentacoesMatricula" com TODOS os registros (R-) e averbações (Av-) legíveis, do mais recente ao mais antigo (no máximo 15). Este campo vem no COMEÇO da resposta de propósito: sem ele o relatório não é liberado.
+
 RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e do CNJ. Quando um item NÃO constar nos documentos, deixe vazio/zero — NÃO invente):
 1) CADEIA DOMINIAL: sequência de proprietários e atos da matrícula (registros "R-" e averbações "Av-"), com data e evento (compra e venda, doação, penhora, baixa de ônus...). Do mais recente ao mais antigo, no máximo 10.
 2) CERTIDÕES RECOMENDADAS: as que o arrematante deve obter antes do lance, com órgão e por quê (ônus reais atualizada no CRI; distribuidores cível/trabalhista/federal do executado p/ checar fraude à execução; CND de IPTU; declaração de débitos do condomínio). "online": true quando é emitida grátis pela internet.
@@ -625,7 +643,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", "parecer" e "riscos" são os mais importantes e vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0, "movimentacoesMatricula": [{"ato":"(R-1, Av-2…)","data":"AAAA-MM-DD","evento":"(compra e venda, penhora, hipoteca, indisponibilidade, consolidação, baixa…)","parte":""}] },
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. FORMATO CHECKLIST (obrigatório — o relatório é a RESPOSTA do checklist jurídico de arrematação, item a item, NÃO um texto corrido): em cada seção, responda CADA item do checklist iniciando a linha com o RÓTULO do item seguido de dois-pontos e a resposta objetiva, e DISCORRA em 1 a 3 frases o que aquilo significa e o impacto para o arrematante. Se o dado não constar nos documentos, responda 'não consta na documentação analisada' e diga ONDE confirmar (nunca invente). Use EXATAMENTE estas seções e rótulos: § SEÇÃO: 1. IDENTIFICAÇÃO BÁSICA (Nº do Processo: ...; Vara/Tribunal: ...; Partes (Exequente vs. Executado): ...; Nº da Matrícula: ...; Nº do Edital: ...); § SEÇÃO: 2. ANÁLISE DAS REGRAS (EDITAL) (Forma de Pagamento: à vista/parcelado, prazos e condições; Comissão do Leiloeiro: percentual e prazo; Estado de Ocupação (declarado no edital): ...; Venda Ad Corpus: sim/não e o que significa; Responsabilidade por Débitos: arrematante assume os propter rem OU são sub-rogados no preço, citando o texto do edital); § SEÇÃO: 3. ANÁLISE DA PROPRIEDADE (MATRÍCULA) (Titularidade: o executado é o proprietário atual da matrícula?; Penhoras Concorrentes: outras penhoras (trabalhista/fiscal) com preferência de crédito?; Hipotecas/Alienação Fiduciária: há credor fiduciário/hipotecário e ele foi intimado?; Gravames Sérios: indisponibilidade, inalienabilidade, usufruto, locação com cláusula de vigência?; Descrição do Imóvel: área/vagas conferem com laudo e edital?); § SEÇÃO: 4. ANÁLISE PROCESSUAL (RISCO DE ANULAÇÃO)${temProc ? ' (com base no CNJ consultado)' : ''} (Citação do Executado: válida?; Intimação sobre o Leilão: o executado foi intimado?; Intimação do Cônjuge: quando o regime de bens exigir; Recursos Pendentes: embargos/agravo/ação anulatória que afetem o leilão?; Efeito Suspensivo: há decisão suspendendo o leilão?; Atualização da Avaliação: risco de 'preço vil'?; Preço Mínimo: a 2ª praça respeita o mínimo legal, art. 891 CPC?; em leilão extrajudicial da Lei 9.514, informe se há AÇÃO do ex-mutuário contra o credor); § SEÇÃO: 5. ANÁLISE DE CUSTOS E RESPONSABILIDADES (Débitos de IPTU e Condomínio: valor e de quem é a responsabilidade após a arrematação; Hierarquia de Pagamento: em sub-rogação, o valor cobre o credor principal E os propter rem?; Custos e Prazo de Desocupação: se ocupado, estimativa de tempo/custo da imissão na posse); § SEÇÃO: 6. PARECER FINAL DO JURÍDICO (Pontos de Atenção (Red Flags): vícios que podem gerar nulidade; Nível de Risco da Operação: Baixo/Médio/Alto; Ações Pós-Arremate Requeridas: ex. baixa de penhoras, mandado de imissão na posse; Recomendação: RECOMENDO a arrematação / RECOMENDO com ressalvas / NÃO RECOMENDO, com a justificativa objetiva). As certidões recomendadas vão no campo 'raioX.certidoesRecomendadas' (renderizadas ao final do relatório), não repita a lista dentro do parecer.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -966,6 +984,11 @@ export default async function handler(req, res) {
     // PDF chega por duas URLs diferentes (a cópia em `imovel_anexos` e a URL montada da
     // fonte), que são strings distintas.
     const vistosConteudo = new Set();
+    // DOCUMENTOS FORNECIDOS QUE NÃO CONSEGUIMOS LER (01/10, regra do dono: "se não conseguiu ler o
+    // documento não pode liberar o relatório"). Cada falha entra aqui com o motivo; a trava de
+    // liberação, depois da IA, decide. 404/410 = o leiloeiro não tem mais o arquivo naquele link
+    // (não é falha nossa de leitura) — vai para diligência, não bloqueia.
+    const naoLidos = [];
     // Cap de leitura adaptativo: judicial lê mais peças (até 8) para o cruzamento
     // apurado exigido nesses casos; o deadline continua protegendo o tempo total.
     const capLeitura = ehJudicial ? 8 : 6;
@@ -974,8 +997,18 @@ export default async function handler(req, res) {
     // (ex.: o Zuk publica vários links de edital) empurram a matrícula para fora do cap.
     const prioTipo = { matricula_registrada: 0, matricula: 0, edital: 1, auto_arrematacao: 2, carta_arrematacao: 2, escritura: 2, contrato_banco: 2, regras_venda: 3, regras: 3, laudo: 4, proposta: 5, anexo: 6 };
     urls.sort((a, b) => (prioTipo[a.tipo] ?? 5) - (prioTipo[b.tipo] ?? 5));
-    for (const u of urls) {
-      if (blocos.length >= capLeitura || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
+    for (const [iu, u] of urls.entries()) {
+      if (blocos.length >= capLeitura || Date.now() > deadline) { // limita custo/payload (deadline protege o tempo)
+        // O que ficou de fora não pode sumir sem rastro: por TEMPO é falha de leitura (bloqueia,
+        // a regeração lê com orçamento novo); por LIMITE de quantidade fica registrado no relatório.
+        const porTempo = Date.now() > deadline;
+        for (const resto of urls.slice(iu)) {
+          naoLidos.push({ rotulo: resto.rotulo, url: resto.url, tipo: (resto.tipo && resto.tipo !== 'anexo') ? resto.tipo : (tipoDoRotulo(resto.rotulo) || 'anexo'),
+            motivo: porTempo ? 'sem tempo para ler nesta geração' : `fora do limite de ${capLeitura} documentos por análise`,
+            inexistente: false, porLimite: !porTempo });
+        }
+        break;
+      }
       // Prefere o TIPO do anexo (vindo do banco, confiável) para achar a cópia no
       // bucket; só cai no rótulo quando o tipo é genérico. Sem isto, um rótulo que
       // não inferia o tipo furava o cache e caía na URL (que expirava) → doc não lido.
@@ -987,56 +1020,73 @@ export default async function handler(req, res) {
         if (doc) deCache = true;
       }
       // 2) Senão, lê da fonte (fetch direto → Bright Data) e GUARDA para a próxima.
+      const infoLeitura = {};
       if (!doc) {
-        doc = await lerDoc(u.url, deadline);
+        doc = await lerDoc(u.url, deadline, infoLeitura);
         if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !cache[tipoDoc] && Date.now() < deadline) {
           cache[tipoDoc] = { tipo: tipoDoc }; // evita salvar 2× o mesmo tipo neste run
           await salvarDocBucket(String(imovelId), tipoDoc, u.rotulo, u.url, doc.base64, dataLeilao);
         }
       }
-      if (!doc) continue;
-      // DEDUP POR CONTEÚDO — a dedup por URL acima compara strings, e o MESMO documento
-      // chega por DUAS URLs distintas: a cópia registrada em `imovel_anexos` e a URL
-      // montada/raspada da fonte. Medido no lote de Cotia (07/08): 6 blocos enviados ao
-      // modelo para 3 documentos reais — matrícula, edital e regras, cada um DUPLICADO —
-      // ou seja, ~2× o custo da chamada mais cara do sistema (o documental sozinho é 93%
-      // do custo dos 3 relatórios). Além do dinheiro, a duplicata ocupava vaga do cap de
-      // leitura e expulsava anexo de verdade num lote judicial (auto de penhora, laudo).
-      // O hash é do conteúdo lido, então independe de rótulo, tipo ou origem da URL.
-      // O hash tem de sair do que o documento REALMENTE é: `doc.text` está vazio num bloco
-      // de imagem, então mandar imagem pelo ramo de texto daria o MESMO hash para todas —
-      // e da segunda em diante cada uma seria descartada como "duplicata".
-      const impressao = (doc.kind === 'pdf' || doc.kind === 'imagem')
-        ? `${doc.kind}:${createHash('sha1').update(doc.base64).digest('hex')}`
-        : `txt:${createHash('sha1').update(String(doc.text || '')).digest('hex')}`;
-      if (vistosConteudo.has(impressao)) {
-        console.log('[documental] duplicata ignorada', JSON.stringify({ rotulo: u.rotulo, tipo: tipoDoc || u.tipo || null }));
-        continue; // NÃO consome vaga do cap: sobra para um documento DIFERENTE
+      if (!doc) {
+        naoLidos.push({ rotulo: u.rotulo, url: u.url, tipo: tipoDoc || u.tipo || 'anexo',
+          motivo: infoLeitura.motivo || 'não foi possível baixar o arquivo',
+          inexistente: infoLeitura.status === 404 || infoLeitura.status === 410 });
+        continue;
       }
-      vistosConteudo.add(impressao);
-      // MEDE A CAMADA DE TEXTO do PDF (local, custo zero). Hoje TODO PDF vai como bloco
-      // `document` — leitura por VISÃO —, que é o que faz o documental custar ~6x o
-      // mercadológico e responder por 68% da cota cheia de um assinante. PDF que TEM camada
-      // de texto poderia ir como texto puro, ordens de grandeza mais barato. Antes de mexer
-      // no relatório JURÍDICO (onde a evidência importa), é preciso saber QUANTO do acervo
-      // é convertível — este número responde isso em poucos dias, sem mudar nada agora.
-      let charsTexto = null;
-      if (doc.kind === 'pdf' && doc.base64 && Date.now() < deadline - 20000) {
-        try {
-          const PDFParse = await carregarPDFParse();
-          const parser = new PDFParse({ data: Buffer.from(doc.base64, 'base64') });
-          try { charsTexto = String((await parser.getText())?.text || '').length; }
-          finally { await parser.destroy().catch(() => {}); }
-        } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
+      // PACOTE (ZIP do leiloeiro com vários arquivos, 01/10): cada arquivo interno é um documento;
+      // o que não abriu entra em `naoLidos` com o motivo, como qualquer outra falha.
+      if (doc.kind === 'pacote') {
+        for (const f of (doc.falhas || [])) naoLidos.push({ rotulo: `${u.rotulo} › ${String(f).split(':')[0]}`, url: u.url, tipo: tipoDoc || u.tipo || 'anexo', motivo: String(f), inexistente: false });
       }
-      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc, charsTexto });
-      // PDF vira bloco `document`, IMAGEM vira bloco `image` (matrícula fotografada ou
-      // digitalizada em JPEG/PNG — a IA lê as duas), e texto segue como texto. O `else`
-      // antigo mandava tudo que não fosse PDF como texto, o que transformava imagem em
-      // ruído no prompt. Ver `_doc-leitura.js`.
-      if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u.rotulo });
-      else if (doc.kind === 'imagem') blocos.push({ type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } });
-      else blocos.push({ type: 'text', text: `=== ${u.rotulo} (${u.url}) ===\n${doc.text}` });
+      const rotuloBase = u.rotulo;
+      const docsDoArquivo = doc.kind === 'pacote' ? doc.itens : [doc];
+      for (const docItem of docsDoArquivo) {
+      const doc = docItem; // eslint-disable-line no-shadow
+      const u2 = doc.nome ? { ...u, rotulo: `${rotuloBase} › ${doc.nome}` } : u;
+        // DEDUP POR CONTEÚDO — a dedup por URL acima compara strings, e o MESMO documento
+        // chega por DUAS URLs distintas: a cópia registrada em `imovel_anexos` e a URL
+        // montada/raspada da fonte. Medido no lote de Cotia (07/08): 6 blocos enviados ao
+        // modelo para 3 documentos reais — matrícula, edital e regras, cada um DUPLICADO —
+        // ou seja, ~2× o custo da chamada mais cara do sistema (o documental sozinho é 93%
+        // do custo dos 3 relatórios). Além do dinheiro, a duplicata ocupava vaga do cap de
+        // leitura e expulsava anexo de verdade num lote judicial (auto de penhora, laudo).
+        // O hash é do conteúdo lido, então independe de rótulo, tipo ou origem da URL.
+        // O hash tem de sair do que o documento REALMENTE é: `doc.text` está vazio num bloco
+        // de imagem, então mandar imagem pelo ramo de texto daria o MESMO hash para todas —
+        // e da segunda em diante cada uma seria descartada como "duplicata".
+        const impressao = (doc.kind === 'pdf' || doc.kind === 'imagem')
+          ? `${doc.kind}:${createHash('sha1').update(doc.base64).digest('hex')}`
+          : `txt:${createHash('sha1').update(String(doc.text || '')).digest('hex')}`;
+        if (vistosConteudo.has(impressao)) {
+          console.log('[documental] duplicata ignorada', JSON.stringify({ rotulo: u.rotulo, tipo: tipoDoc || u.tipo || null }));
+          continue; // NÃO consome vaga do cap: sobra para um documento DIFERENTE
+        }
+        vistosConteudo.add(impressao);
+        // MEDE A CAMADA DE TEXTO do PDF (local, custo zero). Hoje TODO PDF vai como bloco
+        // `document` — leitura por VISÃO —, que é o que faz o documental custar ~6x o
+        // mercadológico e responder por 68% da cota cheia de um assinante. PDF que TEM camada
+        // de texto poderia ir como texto puro, ordens de grandeza mais barato. Antes de mexer
+        // no relatório JURÍDICO (onde a evidência importa), é preciso saber QUANTO do acervo
+        // é convertível — este número responde isso em poucos dias, sem mudar nada agora.
+        let charsTexto = null;
+        if (doc.kind === 'pdf' && doc.base64 && Date.now() < deadline - 20000) {
+          try {
+            const PDFParse = await carregarPDFParse();
+            const parser = new PDFParse({ data: Buffer.from(doc.base64, 'base64') });
+            try { charsTexto = String((await parser.getText())?.text || '').length; }
+            finally { await parser.destroy().catch(() => {}); }
+          } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
+        }
+        lidos.push({ rotulo: u2.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc, charsTexto });
+        // PDF vira bloco `document`, IMAGEM vira bloco `image` (matrícula fotografada ou
+        // digitalizada em JPEG/PNG — a IA lê as duas), e texto segue como texto. O `else`
+        // antigo mandava tudo que não fosse PDF como texto, o que transformava imagem em
+        // ruído no prompt. Ver `_doc-leitura.js`.
+        if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u2.rotulo });
+        else if (doc.kind === 'imagem') blocos.push({ type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } });
+        else blocos.push({ type: 'text', text: `=== ${u2.rotulo} (${u.url}) ===\n${doc.text}` });
+      }
     }
     // Texto colado manualmente (inclusão manual / fallback).
     if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
@@ -1286,7 +1336,9 @@ export default async function handler(req, res) {
     let data = null;
     try {
       data = await anthropic({
-        model: MODEL, max_tokens: 7000,
+        // 7000→8500 (01/10): o raioX (último campo) vinha cortado em 6 de 14 relatórios, e as
+        // movimentações da matrícula passaram a ser obrigatórias no começo do JSON.
+        model: MODEL, max_tokens: 8500,
         system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
       }, { retries: 0, timeoutMs: orcamentoIA, noFallback: true });
@@ -1850,6 +1902,9 @@ export default async function handler(req, res) {
     // IA (documentosAnalisados) — que reconhece o doc mesmo quando o tipo do anexo
     // ficou 'outro' (URL opaca, ex.: SUPERBID) — combinada com o tipo já classificado.
     const da = parsed.documentosAnalisados || {};
+    // Processo citado (nº ou nome) e a consulta FALHOU — "consultou e não achou" é resposta, não
+    // pendência. Mesma regra do vício `cnj_nao_consultado` (auditoria 30/09, item 10).
+    const processoNaoVerificado = !!(procNum || procNome) && !cnjConfirmaNumero && (cnjNumeroFalhou || (!procNum && cnjNomeFalhou));
     const isVendaDiretaDoc = /venda_(direta|online)/i.test(String(row?.modalidade || ''));
     const ehCaixaFonteDoc = /caixa|cef/i.test(row?.fonte || '');
     const leuMatriculaFinal = !!da.matricula || leuMatricula;
@@ -1933,6 +1988,72 @@ export default async function handler(req, res) {
       return semDocs;
     }
 
+    // ── TRAVA DE LIBERAÇÃO (01/10, regra do dono) ────────────────────────────────────────────
+    // "Se não conseguiu ler o documento não pode liberar o relatório. Precisa sempre ler o arquivo
+    // que foi fornecido pelo leiloeiro independente de formato. Precisa ser identificado as
+    // características do imóvel, movimentações registradas na matrícula, verificado o processo."
+    // A trava acima só exigia matrícula + edital LIDOS; um anexo que falhava era descartado em
+    // silêncio, e a IA podia devolver a análise sem área, sem cadeia dominial ou com o processo
+    // sem consulta — e o relatório saía assim. Aqui as quatro condições são conferidas no
+    // RESULTADO; faltando qualquer uma, o cliente vê o que está pendente (não um relatório
+    // incompleto com cara de pronto) e as rotinas de regeração tentam de novo sozinhas.
+    const exL = parsed.extracao || {};
+    const tiposLidosSet = new Set(lidos.map(tipoLido));
+    // Exceção já existente e mantida: venda online da Caixa usa as REGRAS PADRONIZADAS (conteúdo
+    // conhecido do prompt); com a matrícula lida, a falha do PDF genérico não trava (ver acima).
+    const regrasCaixaPadrao = (n) => ehCaixaFonteDoc && leuMatriculaFinal && n.tipo === 'regras_venda';
+    const naoLidosBloqueiam = naoLidos.filter((n) => !n.inexistente && !n.porLimite && !regrasCaixaPadrao(n)
+      && !(n.tipo && n.tipo !== 'anexo' && tiposLidosSet.has(n.tipo)));
+    const areaIdentificada = [exL.areaPrivativaM2, exL.areaTotalM2, exL.areaTerrenoM2].some((v) => Number(v) > 0);
+    // As movimentações vêm de `extracao.movimentacoesMatricula` (emitido no COMEÇO do JSON) e, na
+    // falta, do `raioX.cadeiaDominial` — que é o ÚLTIMO campo da resposta e chegava cortado em 6 de
+    // 14 relatórios (raioX nulo), com o parecer citando os R-/Av- normalmente. Medir pelo raioX
+    // sozinho barraria por um corte de saída o que a IA de fato leu.
+    const movsExtracao = Array.isArray(exL.movimentacoesMatricula) ? exL.movimentacoesMatricula.filter((c) => c && (c.ato || c.evento)) : [];
+    const movsRaioX = Array.isArray(parsed.raioX?.cadeiaDominial) ? parsed.raioX.cadeiaDominial.filter((c) => c && (c.ato || c.evento)) : [];
+    const cadeiaMatricula = movsRaioX.length ? movsRaioX : movsExtracao;
+    if (!movsRaioX.length && movsExtracao.length) {
+      parsed.raioX = { ...(parsed.raioX && typeof parsed.raioX === 'object' ? parsed.raioX : {}), cadeiaDominial: movsExtracao };
+    }
+    const pendLib = [];
+    if (naoLidosBloqueiam.length) {
+      pendLib.push({ chave: 'documento_nao_lido', texto: `não conseguimos ler ${naoLidosBloqueiam.map((n) => `${n.rotulo} (${n.motivo})`).join('; ')}.` });
+    }
+    if (leuMatriculaFinal && !areaIdentificada) {
+      pendLib.push({ chave: 'caracteristicas_nao_identificadas', texto: 'a matrícula foi lida, mas as características do imóvel (área) não foram identificadas.' });
+    }
+    if (leuMatriculaFinal && !cadeiaMatricula.length) {
+      pendLib.push({ chave: 'movimentacoes_nao_identificadas', texto: 'a matrícula foi lida, mas as movimentações registradas (registros R- e averbações Av-) não foram identificadas.' });
+    }
+    if (processoNaoVerificado) {
+      pendLib.push({ chave: 'cnj_nao_consultado', texto: 'o processo judicial ainda não foi verificado no CNJ/DJEN (a fonte pública não respondeu).' });
+    }
+    if (pendLib.length) {
+      const docsParaAnexar = [...new Set(naoLidosBloqueiam.map((n) => n.tipo).filter((t) => ['matricula', 'edital', 'regras_venda'].includes(t)))];
+      const bloqueio = {
+        precisaDocumentos: true,
+        bloqueioLiberacao: true,
+        integrado: true,
+        emCaptura: false,
+        faltando: docsParaAnexar,
+        paginaLeiloeiro,
+        documentosLidos: lidos.map((l) => ({ rotulo: l.rotulo, tipo: tipoLido(l) })),
+        documentosNaoLidos: naoLidos.map(({ rotulo, tipo, motivo, inexistente, porLimite }) => ({ rotulo, tipo, motivo, inexistente, porLimite: !!porLimite })),
+        pendenciasLiberacao: pendLib,
+        motivo: `O relatório documental só é liberado completo: todos os arquivos do leiloeiro lidos, as características e as movimentações da matrícula identificadas e o processo verificado. Pendente: ${pendLib.map((p) => p.texto).join(' ')} Estamos tentando de novo automaticamente e avisamos quando sair.${docsParaAnexar.length ? ' Se você tiver o arquivo, anexe para liberar na hora.' : ''}`,
+      };
+      { const _pres = await preservarSeBom(docsParaAnexar.length ? docsParaAnexar : pendLib.map((p) => p.chave)); if (_pres) return _pres; }
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: bloqueio, regen_motivo: [...new Set(pendLib.map((p) => p.chave))].join(',') });
+      persistidoNestaRodada = bloqueio;
+      await logAtividade(ownerId, 'relatorio_documental_bloqueado', String(bloqueio.motivo).slice(0, 180), { imovel_id: String(imovelId), pendencias: pendLib.map((p) => p.chave) });
+      registrarAnomalia('documental_liberacao_bloqueada', row?.fonte, imovelId, 'liberacao',
+        pendLib.map((p) => p.chave).join(',') + (naoLidosBloqueiam.length ? ` · ${naoLidosBloqueiam.map((n) => `${n.tipo}: ${n.motivo}`).join(' | ')}` : '')).catch(() => {});
+      if (cota && cota.ok && cota.tipo) {
+        try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* padrao-ok: estorno best-effort, nunca derruba a resposta */ }
+      }
+      return bloqueio;
+    }
+
     // CNDT / CNIB / CENPROT NÃO são mais forçados na lista de "certidões a gerar antes do lance"
     // (decisão do dono: portal pago + captcha, o sistema não traz sozinho → fora da apresentação).
     // Se a IA julgar relevante para o caso, ela mesma pode recomendar em raioX.certidoesRecomendadas.
@@ -1965,7 +2086,29 @@ export default async function handler(req, res) {
     // Agora o risco diz o que foi ACHADO e a confiança diz quanto foi VERIFICADO. Um lote sem
     // achados e pouco verificado sai "verde · confiança baixa", que é honesto e acionável —
     // e distinguível do lote que tem problema de verdade.
-    const nivelRiscoFinal = nivelBruto;
+    // ── 01/10 (medição do dono: 14 de 14 relatórios "amarelo · confiança média") ──────────────
+    // (2) FALHA DE VERIFICAÇÃO NÃO É ACHADO. A IA marcava como "consta no documento" itens que
+    //     dizem o contrário — "processo não localizado no DataJud", "documento deu erro no site",
+    //     "Anexo I em branco", "edital não declara a ocupação" (8 casos nos 14). Isso é
+    //     diligência pendente: sai do eixo de RISCO e passa a pesar na CONFIANÇA.
+    const RE_FALHA_VERIF = /n[ãa]o (foi |ser[áa] )?(poss[ií]vel|localizad|encontrad|identificad|confirmad)|inacess[ií]vel|indispon[ií]vel|em branco|ileg[ií]vel|n[ãa]o (declara|informa|discrimina|menciona|traz|consta)|erro (no|ao) (site|acessar|baixar)|n[ãa]o est[áa] (mais )?dispon/i;
+    let demovidos = 0;
+    for (const r of (rlist || [])) {
+      if (r && r.constaNaDoc !== false && RE_FALHA_VERIF.test(`${r.descricao || ''}`)) {
+        r.constaNaDoc = false; r.diligencia = true; demovidos++;
+      }
+    }
+    // (1) O RISCO É CALCULADO PELO SERVIDOR a partir do que foi CONFIRMADO nos documentos. A regra
+    //     já estava no prompt ("nivelRisco considera APENAS achados com constaNaDoc=true") e a IA
+    //     não a seguia: 3 dos 14 relatórios sem nenhum achado confirmado saíram "amarelo".
+    //     bloqueante confirmado → vermelho; alerta confirmado → amarelo; nenhum → verde.
+    const confirmados = (rlist || []).filter((r) => r && r.constaNaDoc !== false);
+    const nivelRiscoFinal = confirmados.some((r) => r.severidade === 'bloqueante') ? 'vermelho'
+      : confirmados.some((r) => r.severidade === 'alerta') ? 'amarelo'
+      : 'verde';
+    if (nivelRiscoFinal !== nivelBruto || demovidos) {
+      console.log('[documental] régua de risco', JSON.stringify({ imovelId: String(imovelId), ia: nivelBruto, servidor: nivelRiscoFinal, demovidos }));
+    }
 
     // Confiança: a palavra do modelo é o ponto de partida, mas o SERVIDOR tem o desempate,
     // porque ele sabe coisas que o modelo não sabe (se o CNJ respondeu, quais documentos
@@ -1976,17 +2119,33 @@ export default async function handler(req, res) {
       || !(lidos || []).some(l => l.tipo === 'edital' || l.tipo === 'regras_venda');
     const ordemConf = { alta: 3, media: 2, baixa: 1 };
     const declarada = ['alta', 'media', 'baixa'].includes(parsed.confianca) ? parsed.confianca : 'media';
-    // Teto do servidor: falta documento essencial → no máximo 'baixa'; processo não confirmado
-    // ou maioria dos riscos sem lastro documental → no máximo 'media'.
-    const tetoServidor = faltaDocEssencial ? 'baixa'
-      : (processualNaoConfirmado || (totalRiscos > 0 && riscosNaoConfirmados / totalRiscos > 0.5)) ? 'media'
+    // (3) CONFIANÇA PELO QUE FICOU PENDENTE, NÃO PELA CONTAGEM (01/10). A regra "mais da metade
+    //     dos riscos sem lastro → no máximo média" limitava 8 dos 14 relatórios: a IA lista muitos
+    //     itens "a confirmar" em TODO relatório, então a razão passava de 50% quase sempre e não
+    //     separava nada. Agora pesa o QUE ficou pendente: ocupação, débitos que acompanham o imóvel
+    //     e processo. O alerta de vulnerabilidade na ocupação sai da conta — o prompt manda
+    //     registrá-lo em TODO imóvel (é diligência de campo universal), então não discrimina.
+    const RE_ESSENCIAL = /ocupa|desocupa|posse|d[ée]bito|condom[ií]nio|iptu|propter|processo|a[çc][ãa]o judicial|recurso|embargo|penhora|indisponib/i;
+    const RE_UNIVERSAL = /vulner|idoso|estatuto|pessoa com defici/i;
+    const pendenciasEssenciais = (rlist || []).filter((r) => r?.constaNaDoc === false
+      && RE_ESSENCIAL.test(`${r.categoria || ''} ${r.descricao || ''}`)
+      && !RE_UNIVERSAL.test(`${r.categoria || ''} ${r.descricao || ''}`));
+    const naoLidosNaoBloqueantes = (naoLidos || []).filter((n) => n.inexistente || n.porLimite);
+    // Graduado pela QUANTIDADE de pendências essenciais (medido nos 14 de 01/10: 1 a 5 por
+    // relatório): 0 → alta · 1–2 → média · 3+ → baixa. Documento essencial faltando e processo não
+    // verificado nem chegam aqui — a trava de liberação acima segura o relatório antes.
+    const tetoServidor = (faltaDocEssencial || pendenciasEssenciais.length >= 3) ? 'baixa'
+      : (processualNaoConfirmado || pendenciasEssenciais.length || naoLidosNaoBloqueantes.length) ? 'media'
       : 'alta';
-    const confiancaFinal = ordemConf[declarada] <= ordemConf[tetoServidor] ? declarada : tetoServidor;
-    const confiancaMotivoFinal = String(parsed.confiancaMotivo || '').trim()
-      || (faltaDocEssencial ? 'Faltou documento essencial (matrícula ou edital) para a análise completa.'
+    // O servidor decide pelo que SABE (documentos lidos, consulta feita, pendências). A palavra da
+    // IA só pesa para BAIXO quando ela declara "baixa" — sinal de que viu algo ilegível no conteúdo.
+    const confiancaFinal = declarada === 'baixa' && ordemConf[tetoServidor] > ordemConf.baixa ? 'baixa' : tetoServidor;
+    const confiancaMotivoFinal = confiancaFinal === 'alta' ? ''
+      : (faltaDocEssencial ? 'Faltou documento essencial (matrícula ou edital) para a análise completa.'
         : processualNaoConfirmado ? 'O processo não pôde ser confirmado no DataJud/CNJ.'
-        : riscosNaoConfirmados > 0 ? `${riscosNaoConfirmados} de ${totalRiscos} pontos dependem de diligência para confirmar.`
-        : '');
+        : pendenciasEssenciais.length ? `Ficaram a confirmar: ${pendenciasEssenciais.slice(0, 3).map((r) => String(r.categoria || r.descricao || '').slice(0, 60)).join('; ')}${pendenciasEssenciais.length > 3 ? ` e mais ${pendenciasEssenciais.length - 3}` : ''}.`
+        : naoLidosNaoBloqueantes.length ? `${naoLidosNaoBloqueantes.length} arquivo(s) do lote não foram lidos (link inexistente no leiloeiro ou limite por análise).`
+        : String(parsed.confiancaMotivo || '').trim());
 
     const result = {
       extracao: parsed.extracao || null,
@@ -2003,6 +2162,9 @@ export default async function handler(req, res) {
       // lance". Sem consulta processual confirmada, o teto é amarelo.
       nivelRisco: nivelRiscoFinal,
       confianca: confiancaFinal,
+      // Transparência (01/10): arquivos do lote que ficaram sem leitura e por quê (link inexistente
+      // no leiloeiro ou limite por análise — os demais casos travam a liberação acima).
+      documentosNaoLidos: (naoLidos || []).map(({ rotulo, tipo, motivo, inexistente, porLimite }) => ({ rotulo, tipo, motivo, inexistente, porLimite: !!porLimite })),
       confiancaMotivo: confiancaMotivoFinal,
       diligenciaPendente: !docOk,
       preliminar,
@@ -2043,7 +2205,7 @@ export default async function handler(req, res) {
       edital_nao_lido: !da.edital,
       // Só FALHA de consulta dispara a re-tentativa (auditoria 30/09, item 10): "consultou e o DataJud
       // não tem" é resposta, e re-gerar com IA a cada 6 h por ela não muda nada.
-      cnj_nao_consultado: !!(procNum || procNome) && !cnjConfirmaNumero && (cnjNumeroFalhou || (!procNum && cnjNomeFalhou)),
+      cnj_nao_consultado: processoNaoVerificado,
       modalidade_indefinida: !im.modalidade,
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });

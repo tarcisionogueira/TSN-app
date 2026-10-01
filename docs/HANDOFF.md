@@ -9,6 +9,29 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📑 01/10 (noite) — documental: régua de risco/confiança + TRAVA DE LIBERAÇÃO (regra do dono)
+**Medição (14 relatórios pós-31/08, todos "amarelo · média"):** a IA declarava amarelo mesmo sem achado confirmado
+(3/14); 8 "achados" eram falha de verificação ("não localizado no DataJud", "erro no site", "anexo em branco"); a
+confiança era travada pela regra ">50% dos riscos sem lastro" (8/14). ⚠️ `result.cnj` fica na RAIZ do result
+(`metodologia.consultas.cnj` é só resumo) — ler o campo errado me fez concluir "14/14 sem CNJ", errado.
+**Implementado (gerar-documental.js):**
+1. Risco calculado pelo SERVIDOR: bloqueante confirmado → vermelho; alerta confirmado → amarelo; nada → verde.
+2. Falha de verificação (regex `RE_FALHA_VERIF` + regra no prompt) vira `constaNaDoc:false` (diligência).
+3. Confiança pelo QUE ficou pendente (ocupação, débitos, processo; vulnerabilidade universal fora): 0 → alta ·
+   1–2 → média · 3+ → baixa. IA só rebaixa (se declarar baixa). Simulado nos 14: risco 4 verde/10 amarelo.
+4. **Regra do dono — não libera sem:** todos os arquivos do leiloeiro lidos (falha registrada em `naoLidos` com
+   motivo; 404/410 e "fora do limite de 6/8 por análise" não travam, só aparecem em `documentosNaoLidos` e
+   rebaixam a confiança; exceção mantida: regras padronizadas da Caixa com matrícula lida), características do
+   imóvel (área), movimentações da matrícula (agora `extracao.movimentacoesMatricula`, no COMEÇO do JSON — o raioX
+   vinha cortado em 6/14; max_tokens 7000→8500) e processo verificado. Bloqueado = `precisaDocumentos` +
+   `bloqueioLiberacao` + `pendenciasLiberacao`, anomalia `documental_liberacao_bloqueada`, estorno da cota,
+   regen pelo regenerar-relatorios-cron (ou juridico-retry quando só falta o processo).
+5. **Leitura independente de formato** (`api/_doc-normalizar.js`, teste `testar:doc-normalizar`): DOCX→texto,
+   TIFF/HEIC/imagem grande→JPEG, PDF >18 MB→texto, ZIP→pacote (cada arquivo lido). BMP não abre (sharp) → motivo.
+**Acompanhar:** `select * from public.documental_distribuicao();` e
+`select detalhe, count(*) from relatorio_anomalias where tipo='documental_liberacao_bloqueada' group by 1;`
+— se a trava segurar demais (ex.: anexo genérico quebrado), calibrar a lista `naoLidosBloqueiam`.
+
 ### 📥 01/10 (tarde) — PDF do eBook estruturado · índice "parado" diagnosticado
 - **Baixar PDF do eBook estruturado** (`src/utils/ebookPdf.js`, botão em `EbookPage`): capa em sangria na 1ª página,
   sumário, capítulos em página nova (A5, Literata, numerado). Montado no navegador com os capítulos da RPC de
