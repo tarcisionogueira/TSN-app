@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📰 01/10 (noite) — teor do DJEN no parecer documental + LEJE
+- `gerar-documental.js`: com nº de processo, as 10 publicações mais recentes do DJEN (500 chars cada) entram no
+  prompt ANTES da IA, com regra de citar suspensão/embargos/nulidade/acordo/remição. Antes só "N comunicações"
+  depois do parecer. Espera máx. 12 s; falha = bloco ausente (nunca "nada consta").
+- **LEJE `zerou`** (fonte_regressao_suspeita): 403 desde 21/09 no runner, no banco (testado 01/10, pagina_pedir
+  → 403) e no residencial — decisão de 30/09 mantida (pedir liberação à LEJE, item 4 do dono). 12 lotes seguem
+  `ativo` sem data e sem confirmação desde 08–20/09. ⚠️ Não há coluna "visto por último" em imoveis_leilao:
+  `atualizado_em` NÃO mede abandono (fonte sã com coleta hoje tem lote com atualizado_em antigo) — não usar
+  para desativar em massa.
+
 ### 🗄️ 01/10 (noite) — CACHE das consultas CNJ (DataJud) e DJEN
 - `api/_cnj.js`: `buscarTribunal` (DataJud) e `paginaDjen`/`buscarDjen` (DJEN) leem/gravam `cnj_consulta_cache`
   (migração 20261001_cnj_consulta_cache, APLICADA). Resposta BRUTA de sucesso, 3 h; falha/erro-em-200 nunca
@@ -242,7 +252,7 @@ prioridade sobre "auto de arrematação" na etapa; teste `aprendizado-processual
   juridico-retry refaz), e **5 de agosto não regeráveis** (documentos do lote já indisponíveis → o gerador mantém o
   resultado antigo): o item "Processo judicial" deles foi corrigido NO BANCO para "Não verificado… não equivale a nada
   consta". Executados "FULANO e BELTRANA" (casal) agora viram buscas separadas (`separarPartes`, não separa PJ).
-- **Pendente (melhorias):** ~~cache de consulta CNJ/DJEN~~ (feito 01/10); publicações DJEN dentro do parecer da IA; e-mail "consulta concluída" do juridico-retry dispara quando o
+- **Pendente (melhorias):** ~~cache de consulta CNJ/DJEN~~ (feito 01/10); ~~publicações DJEN dentro do parecer da IA~~ (feito 01/10: até 10 mais recentes no prompt do documental, espera máx. 12 s); e-mail "consulta concluída" do juridico-retry dispara quando o
   regen_motivo muda por outro motivo. Testes antigos `edital-desatualizado-nao-vira-manchete` e
   `venda-direta-nao-e-venda-online` já falhavam antes (não relacionados).
 
