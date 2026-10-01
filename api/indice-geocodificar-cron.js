@@ -38,6 +38,24 @@ async function marcar(id, coords) {
   return res.ok;
 }
 
+// NOME LEGÍVEL DA CIDADE (01/10). `cidade_norm` é gravado SEM ESPAÇO desde a convenção única
+// ("santanadeparnaiba"), e o Nominatim não reconhece essa forma: 0 de 12 amostras geocodificadas em
+// 01/10 contra 69–100% até 11/09 — e como a falha grava geocod_em, a amostra saía da fila para
+// sempre. `undefined` = não consegui ler o nome (RPC falhou): quem chama PULA a amostra sem marcar,
+// em vez de queimar a única tentativa com o nome colado. `null` = município não achado: segue com o
+// próprio cidade_norm (não há nada melhor).
+const nomes = new Map();
+async function nomeCidade(cidadeNorm, uf) {
+  const k = `${cidadeNorm}|${uf}`;
+  if (nomes.has(k)) return nomes.get(k);
+  const r = await sb('rpc/municipio_nome', { method: 'POST', body: JSON.stringify({ p_cidade_norm: cidadeNorm, p_uf: uf }) }).catch(() => null);
+  if (!r?.ok) { console.error('[indice-geocodificar] municipio_nome falhou', r?.status); return undefined; }
+  const nome = await r.json().catch(() => undefined);
+  if (nome === undefined) return undefined;
+  nomes.set(k, nome || null);
+  return nome || null;
+}
+
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) { res.status(500).json({ error: 'Config ausente' }); return; }
@@ -56,7 +74,7 @@ export default async function handler(req, res) {
 
   // Cache por endereço (CEP|endereço|bairro|cidade|uf): amostras iguais não re-chamam o Nominatim.
   const cache = new Map();
-  const out = { processadas: 0, geocodificadas: 0, cache_hits: 0, falhas: 0, interrompido: false };
+  const out = { processadas: 0, geocodificadas: 0, cache_hits: 0, falhas: 0, sem_nome_cidade: 0, interrompido: false };
 
   for (const a of amostras) {
     if (Date.now() > deadline) { out.interrompido = true; break; }
@@ -64,8 +82,10 @@ export default async function handler(req, res) {
     let coords = null;
     if (cache.has(key)) { coords = cache.get(key); out.cache_hits++; }
     else {
+      const nome = await nomeCidade(a.cidade_norm || '', a.uf || '');
+      if (nome === undefined) { out.sem_nome_cidade++; continue; } // fica na fila para a próxima rodada
       coords = await geocodificarCascata(
-        { endereco: a.endereco || '', condominio: a.condominio || '', bairro: a.bairro_norm || '', cidade: a.cidade_norm || '', estado: a.uf || '', cep: a.cep || '' },
+        { endereco: a.endereco || '', condominio: a.condominio || '', bairro: a.bairro_norm || '', cidade: nome || a.cidade_norm || '', estado: a.uf || '', cep: a.cep || '' },
         { permitirPago: false, sleepMs: 1100, deadline },
       ).catch(() => null);
       cache.set(key, coords);
