@@ -39,6 +39,52 @@ function comp(result) {
   };
 }
 
+
+// PLACES API (NEW) — motor primário desde 01/10. A "Places API" antiga (place/autocomplete/json)
+// não pode mais ser ATIVADA em projeto novo do Google Cloud; a chave antiga ficou num projeto da
+// conta pessoal cujo faturamento foi encerrado, e a org reimob.com.br (secure-by-default) não deixa
+// vincular projeto de @gmail. A chave nova nasce num projeto da empresa — só com a API nova.
+// A antiga segue como RESERVA abaixo: se a chave em uso só tiver a antiga, nada quebra.
+// Erro aqui vem em HTTP não-2xx com `{ error: { status, message } }` — devolvido com o motivo.
+async function novoAutocomplete(q, st) {
+  const r = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': KEY },
+    body: JSON.stringify({ input: q, includedRegionCodes: ['br'], languageCode: 'pt-BR', ...(st ? { sessionToken: st } : {}) }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, status: d?.error?.status || `HTTP ${r.status}`, erro: String(d?.error?.message || '').slice(0, 160) };
+  const sugestoes = (d.suggestions || []).map((x) => x.placePrediction).filter(Boolean).map((p) => ({
+    id: p.placeId,
+    texto: p.text?.text || '',
+    principal: p.structuredFormat?.mainText?.text || p.text?.text || '',
+    secundario: p.structuredFormat?.secondaryText?.text || '',
+  })).filter((x) => x.id);
+  return { ok: true, sugestoes };
+}
+
+async function novoDetalhe(placeId, st) {
+  const u = new URL(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`);
+  u.searchParams.set('languageCode', 'pt-BR');
+  if (st) u.searchParams.set('sessionToken', st);
+  const r = await fetch(u.toString(), {
+    headers: { 'X-Goog-Api-Key': KEY, 'X-Goog-FieldMask': 'addressComponents,location,formattedAddress,displayName,types' },
+    signal: AbortSignal.timeout(8000),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, status: d?.error?.status || `HTTP ${r.status}`, erro: String(d?.error?.message || '').slice(0, 160) };
+  // Mesmo formato do legado para reaproveitar `comp()` — uma regra de extração só.
+  const legado = {
+    address_components: (d.addressComponents || []).map((c) => ({ long_name: c.longText, short_name: c.shortText, types: c.types || [] })),
+    geometry: { location: { lat: d.location?.latitude ?? null, lng: d.location?.longitude ?? null } },
+    formatted_address: d.formattedAddress || '',
+    name: d.displayName?.text || '',
+    types: d.types || [],
+  };
+  return { ok: true, endereco: comp(legado) };
+}
+
 export default async function handler(req) {
   const cors = { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' };
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
@@ -64,6 +110,18 @@ export default async function handler(req) {
   const placeId = String(body.place_id || '').trim();
   const st = String(body.sessiontoken || '').trim();
 
+  // API nova primeiro; a antiga só se a nova falhar (motivo das duas vai junto se ambas falharem).
+  let falhaNova = null;
+  try {
+    const n = placeId ? await novoDetalhe(placeId, st) : (q.length >= 3 ? await novoAutocomplete(q, st) : { ok: true, sugestoes: [] });
+    if (n.ok) return new Response(JSON.stringify(n), { status: 200, headers });
+    falhaNova = `${n.status}${n.erro ? `: ${n.erro}` : ''}`;
+    console.error('[endereco-autocomplete] Places (New) falhou — tentando a API antiga:', falhaNova);
+  } catch (e) {
+    falhaNova = `exceção: ${String(e?.message || e).slice(0, 120)}`;
+    console.error('[endereco-autocomplete] Places (New) exceção — tentando a API antiga:', falhaNova);
+  }
+
   try {
     if (placeId) {
       const u = new URL('https://maps.googleapis.com/maps/api/place/details/json');
@@ -76,7 +134,7 @@ export default async function handler(req) {
       const d = await r.json();
       if (d.status !== 'OK') {
         console.error('[endereco-autocomplete] details', d.status, String(d.error_message || '').slice(0, 200));
-        return new Response(JSON.stringify({ ok: false, status: d.status, erro: String(d.error_message || '').slice(0, 160) || undefined }), { status: 200, headers });
+        return new Response(JSON.stringify({ ok: false, status: d.status, erro: [String(d.error_message || '').slice(0, 160), falhaNova && `API nova: ${falhaNova}`].filter(Boolean).join(' | ') || undefined }), { status: 200, headers });
       }
       return new Response(JSON.stringify({ ok: true, endereco: comp(d.result) }), { status: 200, headers });
     }
@@ -92,7 +150,7 @@ export default async function handler(req) {
     if (d.status !== 'OK' && d.status !== 'ZERO_RESULTS') {
       // `error_message` é o que diz POR QUE (API não ativada, faturamento, restrição da chave).
       console.error('[endereco-autocomplete] autocomplete', d.status, String(d.error_message || '').slice(0, 200));
-      return new Response(JSON.stringify({ ok: false, status: d.status, erro: String(d.error_message || '').slice(0, 160) || undefined, sugestoes: [] }), { status: 200, headers });
+      return new Response(JSON.stringify({ ok: false, status: d.status, erro: [String(d.error_message || '').slice(0, 160), falhaNova && `API nova: ${falhaNova}`].filter(Boolean).join(' | ') || undefined, sugestoes: [] }), { status: 200, headers });
     }
     const sugestoes = (d.predictions || []).map((p) => ({
       id: p.place_id,
