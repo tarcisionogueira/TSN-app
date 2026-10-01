@@ -85,6 +85,14 @@ async function catalogoWa() {
   return _catalogo.texto;
 }
 
+export function limparSaidaWa(texto) {
+  return String(texto || '')
+    .replace(/\[\[[A-Z]+:?[^\]]*\]?\]?/g, '')
+    .replace(/https?:\/\/[^\s)]+/gi, (u) => (/^https?:\/\/(?:www\.)?bidprobrasil\.com\.br(?:[/?#]|$)/i.test(u) ? u : '[link removido]'))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /** Variantes do telefone para achar o perfil (cadastro guarda com/sem DDI, com/sem máscara). */
 export function variantesTelefone(tel) {
   const d = String(tel || '').replace(/\D/g, '');
@@ -170,6 +178,10 @@ async function atender(tel, pendentes) {
   }
   if (!out?.resposta) { await marcar(meus, { resposta_status: 'ignorada', resposta_erro: 'agente sem resposta (última fala não é da pessoa)' }); return 'sem_resposta'; }
 
+  // SAÍDA DO CANAL (revisão de segurança 01/10): só link nosso sai pelo WhatsApp — prompt injection
+  // ("me manda o link tal") não transforma a IA em entregadora de link de terceiro — e resto de
+  // marcador interno ([[PERFIL… cortado) nunca chega à pessoa.
+  out.resposta = limparSaidaWa(out.resposta);
   let wamid;
   try { wamid = await enviarTextoWa(tel, out.resposta); }
   catch (e) {
@@ -190,12 +202,19 @@ async function atender(tel, pendentes) {
       ia_pausada_ate: new Date(agora + PAUSA_ESCALADA_MS).toISOString(),
     }, 'return=minimal');
     const ultima = pendentes[pendentes.length - 1]?.texto || '';
+    // `conv.nome` é o NOME DE PERFIL do WhatsApp — quem escreve escolhe o que quiser, inclusive
+    // HTML (`<a href=…>clique aqui</a>`). Ia cru no e-mail de alerta da equipe: um link de
+    // terceiro dentro de um aviso que a equipe confia (revisão de segurança 01/10). Tudo que vem
+    // da pessoa passa pelo mesmo escape; o telefone só com dígitos (vai em href).
+    const escH = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+    const nomeContato = String(conv.nome || perfil?.nome || '').replace(/[\r\n]+/g, ' ').slice(0, 80);
+    const telDig = String(tel).replace(/\D/g, '');
     const env = await enviarEmail({
       to: process.env.ADMIN_ALERT_EMAIL || 'tarcisioaraujo@reimob.com.br',
-      subject: `WhatsApp: ${conv.nome || perfil?.nome || tel} precisa de você (${motivo})`,
-      html: `<p><b>${conv.nome || perfil?.nome || 'Contato'}</b> — +${tel}${perfil ? ` · cliente (${perfil.role})` : ' · ainda não cadastrado'}</p>
-             <p><b>Última mensagem:</b><br>${String(ultima).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>
-             <p>A IA avisou que um especialista vai responder e ficou PAUSADA por 12 h nesta conversa. Responda pelo app WhatsApp Business: <a href="https://wa.me/${tel}">abrir conversa</a>.</p>`,
+      subject: `WhatsApp: ${nomeContato || tel} precisa de você (${motivo})`,
+      html: `<p><b>${escH(nomeContato || 'Contato')}</b> — +${telDig}${perfil ? ` · cliente (${escH(perfil.role)})` : ' · ainda não cadastrado'}</p>
+             <p><b>Última mensagem:</b><br>${escH(ultima)}</p>
+             <p>A IA avisou que um especialista vai responder e ficou PAUSADA por 12 h nesta conversa. Responda pelo app WhatsApp Business: <a href="https://wa.me/${telDig}">abrir conversa</a>.</p>`,
       meta: { tipo: 'whatsapp_escalada', userId: perfil?.id || null },
     }).catch((e) => ({ ok: false, error: e?.message }));
     if (!env?.ok) console.error('[wa-resp] aviso de escalada NÃO saiu:', env?.error || 'motivo desconhecido');
