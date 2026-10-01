@@ -15,7 +15,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   em ABA NOVA (sem histórico → Voltar caía em "/"). Corrigido: `.neq('status','cancelado')` + `error` checado;
   link na mesma aba; `ContratoLink.voltar` usa `location.key==='default'` → logado vai para /contratos.
 - Situação real: Marcos = Termo (aguardando) + "PROCURAÇÃO" (PDF anexado pelo dono, ASSINADA 01/10 21:26).
-  A Procuração Particular gerada (04c9fcfe) foi CANCELADA a pedido do dono (01/10) e o bloqueio dela removido. Rafael = 2 termos de propósito (2 assessorias contratadas, 30/09) + procuração
+  A Procuração Particular gerada (04c9fcfe) foi CANCELADA a pedido do dono (01/10) e o bloqueio dela removido.
+  A "PROCURAÇÃO" assinada é a do JURÍDICO (ad judicia). A de representação foi refeita (dono): outorgada NOGUEIRA
+  "por seus sócios, prepostos e associados", todos os órgãos + cláusula JURÍDICO (articula com o advogado, sem ato
+  privativo), sem a cláusula de lances quando a arrematação já ocorreu. Marcos: `da81a2cb` aguardando assinatura
+  (CPF/endereço preenchidos), bloqueio de 30 dias recriado. Rafael = 2 termos de propósito (2 assessorias contratadas, 30/09) + procuração
   assinada em jul. Matheus = 1 termo + procuração assinada em jul.
 
 ### 📰 01/10 (noite) — teor do DJEN no parecer documental + LEJE

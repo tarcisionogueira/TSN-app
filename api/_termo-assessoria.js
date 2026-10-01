@@ -132,27 +132,35 @@ export function termoAssessoria(precos, atribuido = null) {
 
 /**
  * PROCURAÇÃO PARTICULAR — documento PRÓPRIO, por arrematação (dono, 30/09: "a procuração autoriza
- * resolver as demandas da arrematação em questão"). Cobre a arrematação a realizar (habilitação e
- * lances só até o limite autorizado por escrito) e a realizada (auto/carta, registro, posse). Nunca
- * dispor do bem nem receber dinheiro do cliente.
+ * resolver as demandas da arrematação em questão"). 01/10 (dono): outorga à NOGUEIRA EMPREENDIMENTOS
+ * "e associados" para representar o cliente e resolver as questões DESTA arrematação junto a TODOS os
+ * órgãos e instituições envolvidos, "inclusive o jurídico" — a procuração do ADVOGADO é outro
+ * instrumento (ad judicia, assinado à parte); esta não pratica ato privativo de advocacia, mas
+ * articula com o advogado constituído. Arrematação já REALIZADA não leva a cláusula de lances.
+ * Nunca dispor do bem nem receber dinheiro do cliente.
  */
 export function procuracaoArrematacao(nome, imovel) {
-  const objeto = `à arrematação, realizada ou a realizar, do imóvel ${imovel.descricao}${imovel.processo ? `, processo nº ${imovel.processo}` : ''}${imovel.leiloeiro ? `, leiloeiro(a) ${imovel.leiloeiro}` : ''}${imovel.valor ? `, arrematado por ${imovel.valor}` : ''}`;
+  const realizada = !!imovel.valor;
+  const objeto = `à arrematação${realizada ? '' : ', realizada ou a realizar,'} do imóvel ${imovel.descricao}${imovel.processo ? `, processo nº ${imovel.processo}` : ''}${imovel.leiloeiro ? `, leiloeiro(a) ${imovel.leiloeiro}` : ''}${imovel.valor ? `, arrematado por ${imovel.valor}` : ''}`;
+  const antes = realizada ? '' : `
+2. ANTES DO ARREMATE, a OUTORGADA poderá: cadastrar e habilitar a OUTORGANTE junto ao leiloeiro e à plataforma do leilão, enviando os documentos por ela fornecidos; participar do leilão e ofertar lances em nome da OUTORGANTE, SEMPRE dentro do valor máximo que a OUTORGANTE autorizar por escrito (mensagem ou e-mail registrado) — lance acima desse limite não é autorizado por esta procuração.
+`;
+  const c = (() => { let k = realizada ? 2 : 3; return () => k++; })();
   return `PROCURAÇÃO PARTICULAR
 
 OUTORGANTE: ${nome || '[NOME DO SIGNATÁRIO]'}, inscrito(a) no CPF/CNPJ nº [CPF/CNPJ DO SIGNATÁRIO], residente e domiciliado(a) em [ENDEREÇO DO SIGNATÁRIO].
 
-OUTORGADA: NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-61, com sede em Feira de Santana/BA, neste ato representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, CPF nº 042.293.535-29.
+OUTORGADA: NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-61, com sede em Feira de Santana/BA, neste ato representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, CPF nº 042.293.535-29, que poderá agir por seus sócios, prepostos e associados por ela indicados, sob sua responsabilidade.
 
-1. OBJETO. Pelo presente instrumento particular, a OUTORGANTE nomeia e constitui a OUTORGADA sua bastante procuradora e responsável pela condução das demandas relativas, especificamente, ${objeto}.
+1. OBJETO. Pelo presente instrumento particular, a OUTORGANTE nomeia e constitui a OUTORGADA sua bastante procuradora para representá-la e resolver todas as questões e demandas relativas, especificamente, ${objeto}.
+${antes}
+${c()}. REPRESENTAÇÃO PERANTE ÓRGÃOS E INSTITUIÇÕES. A OUTORGADA poderá representar a OUTORGANTE perante todos os órgãos e instituições competentes envolvidos nesta arrematação, públicos ou privados, entre eles: o leiloeiro e o comitente vendedor; o juízo, a secretaria e o cartório judicial do processo (nos atos que não sejam privativos de advogado); cartórios de registro de imóveis, de notas, de protesto e de títulos e documentos; prefeituras e secretarias municipais e estaduais (inclusive de fazenda, para ITBI, IPTU e taxas); Receita Federal; concessionárias de água, energia e gás; condomínio e administradora; instituições financeiras, apenas para obter informações e documentos; e demais repartições necessárias. Para isso poderá requerer, retirar, protocolar e assinar requerimentos, certidões, guias, declarações e documentos; acompanhar a expedição do auto e da carta de arrematação e o respectivo registro; prestar e obter informações; agendar e acompanhar vistorias e as diligências de imissão na posse; e praticar os demais atos necessários à conclusão da arrematação e à regularização do bem em nome da OUTORGANTE.
 
-2. ANTES DO ARREMATE, a OUTORGADA poderá: cadastrar e habilitar a OUTORGANTE junto ao leiloeiro e à plataforma do leilão, enviando os documentos por ela fornecidos; participar do leilão e ofertar lances em nome da OUTORGANTE, SEMPRE dentro do valor máximo que a OUTORGANTE autorizar por escrito (mensagem ou e-mail registrado) — lance acima desse limite não é autorizado por esta procuração.
+${c()}. JURÍDICO. A OUTORGADA poderá atuar junto ao(s) advogado(s) constituído(s) pela OUTORGANTE em instrumento próprio — entregar e receber documentos, prestar e obter informações sobre o processo, acompanhar prazos, petições e decisões e coordenar as providências decorrentes — sem praticar ato privativo de advocacia, que continua a cargo do advogado constituído.
 
-3. DEPOIS DO ARREMATE, a OUTORGADA poderá representá-la perante o leiloeiro, o comitente vendedor, o juízo e a secretaria do processo (nos atos que não sejam privativos de advogado), cartórios de registro de imóveis e de notas, prefeituras, secretarias de fazenda, concessionárias de serviço público, condomínio e demais órgãos públicos e privados, podendo: requerer, retirar e protocolar certidões, guias (inclusive de ITBI), requerimentos e documentos; acompanhar a expedição do auto/carta de arrematação e o respectivo registro; prestar e obter informações; acompanhar as diligências de imissão na posse; e praticar os demais atos necessários à conclusão da arrematação.
+${c()}. VEDAÇÕES. São VEDADOS à OUTORGADA: receber ou dar quitação de valores em nome da OUTORGANTE, pagar lance, comissão ou tributos com recursos próprios em nome dela, alienar, onerar ou prometer o bem, e transferir estes poderes a terceiros estranhos à OUTORGADA sem anuência expressa da OUTORGANTE. Atos privativos de advocacia serão praticados por advogado constituído.
 
-4. VEDAÇÕES. São VEDADOS à OUTORGADA: receber ou dar quitação de valores em nome da OUTORGANTE, pagar lance, comissão ou tributos com recursos próprios em nome dela, alienar, onerar ou prometer o bem, e substabelecer sem anuência expressa da OUTORGANTE. Atos privativos de advocacia serão praticados por advogado constituído.
-
-5. FORMA E VIGÊNCIA. Procuração particular, sem registro ou reconhecimento de firma em cartório, válida pela assinatura eletrônica (MP 2.200-2/2001 e Lei 14.063/2020), vigente até a conclusão da arrematação e do registro do bem, ou até revogação expressa da OUTORGANTE. Se algum órgão exigir firma reconhecida ou instrumento público para ato específico, a OUTORGANTE se obriga a providenciá-lo em até 5 (cinco) dias úteis da solicitação.
+${c()}. FORMA E VIGÊNCIA. Procuração particular, sem registro ou reconhecimento de firma em cartório, válida pela assinatura eletrônica (MP 2.200-2/2001 e Lei 14.063/2020), vigente até a conclusão da arrematação, o registro do bem e a imissão na posse, ou até revogação expressa da OUTORGANTE. Se algum órgão exigir firma reconhecida ou instrumento público para ato específico, a OUTORGANTE se obriga a providenciá-lo em até 5 (cinco) dias úteis da solicitação.
 
 OUTORGANTE: ${nome || '[NOME DO SIGNATÁRIO]'} — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
 }
@@ -292,7 +300,7 @@ export async function gerarProcuracao(sb, { casoId = null, arrematacaoId = null,
     if (!imovel) return { ok: false, motivo: 'caso sem imóvel identificado — a procuração precisa dizer qual arrematação' };
     const nome = await nomeDo(sb, caso.cliente_id);
     return await criarDocumento(sb, {
-      userId: caso.cliente_id, titulo: 'Procuração Particular — Arrematação',
+      userId: caso.cliente_id, titulo: 'Procuração Particular — Representação na Arrematação',
       conteudo: preencherSignatario(procuracaoArrematacao(nome, imovel), await dadosConhecidosDoSignatario(sb, caso.cliente_id)),
       produtoTipo: 'arrematacao', produtoId: caso.id, planoKey: null, imovelId: im?.id || null, criadoPor,
     });
