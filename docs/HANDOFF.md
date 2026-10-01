@@ -9,6 +9,19 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 01/10 (madrugada) — onde paramos
+- **WhatsApp oficial (continua 02/10 com o dono):** código pronto — IA consultora (conexão → perfil → plano pago →
+  e-book; cursos só quando houver pago ativo), catálogo vivo do banco, perfil do lead em `wa_conversas.perfil_lead`,
+  origem do anúncio (referral) e `wa_funil(dias)`. Falta o dono: coexistência do número (QR no app Business), token
+  permanente, `WA_TOKEN`/`WA_PHONE_NUMBER_ID`/`WA_VERIFY_TOKEN` na Vercel, webhook **com www** + campos `messages` e
+  `smb_message_echoes`. Depois: testar com "oi", ligar `WA_BOT_ATIVO=1`, criar modelos de retomada (D+1/D+3).
+- **Contrato:** revisão completa (anexos, DOCX, PDF digitalizado → imagem, transcrição dedicada por imagem, rótulo
+  "De quem é?", aprendizado sem dado pessoal). As 8 lições de `contrato_aprendizado` foram reescritas como regra.
+- **CNJ:** série completa (`movimentos_serie`, não-enumerável), complementos do DataJud, etapa "agravo de petição".
+  Marcos: agravo de petição em 10/09/2026 depois da arrematação — dono confere no PJe.
+- **Relatório mercadológico com registro fotográfico** ao final (tela, PDF avulso e combinado — no combinado, no fim
+  do arquivo). `src/utils/fotosImovel.js` (fotos + link_foto, sem placeholder, até 24, URL pela regra da Busca).
+
 ### 💬 30/09 (noite, 14ª parte) — chat CNJ conferido ao vivo (Marcos) · e-mail jurídico falso · WhatsApp
 - **Chat CNJ (conversa do dono sobre o Marcos, TRT5):** DataJud TRT5/TST em timeout do lado do CNJ (também pelo
   pg_net). Corrigido: DJEN pedia 30/página e a fonte tinha 34 → 100, mais recentes primeiro, `historico_datas`

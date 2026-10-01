@@ -33,7 +33,22 @@ export const ESTILOS_MERCADOLOGICO = `
   .card{background:#f8fafc;border-radius:5px;padding:8px 10px;text-align:center;}
   .card-v{font-size:16px;font-weight:900;margin-top:2px;}
   .card-l{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;}
+  .rf{page-break-before:always;}
+  .rf-grade{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+  .rf figure{margin:0;border:1px solid #e2e8f0;border-radius:4px;padding:4px;page-break-inside:avoid;break-inside:avoid;}
+  .rf figure img{width:100%;height:62mm;object-fit:contain;background:#f8fafc;display:block;}
+  .rf figcaption{font-size:9.5px;color:#475569;text-align:center;margin-top:3px;font-weight:700;}
 ` + ESTILOS_CABECALHO;
+
+// REGISTRO FOTOGRÁFICO ao FINAL do relatório (01/10, pedido do dono — o mesmo do relatório de
+// veículo): as projeções primeiro, as fotos depois, numeradas, 2 por linha, como num laudo.
+export function registroFotograficoHtml(fotos = [], { linkLote = '' } = {}) {
+  if (!fotos.length) return `<div class="rf"><h2>Registro fotográfico</h2><p style="color:#64748b">O leiloeiro não publicou fotos deste imóvel.</p></div>`;
+  const nf = String(fotos.length).padStart(2, '0');
+  return `<div class="rf"><h2>Registro fotográfico — ${fotos.length} foto${fotos.length > 1 ? 's' : ''}</h2>
+  <p style="color:#64748b;font-size:11px;margin:0 0 4px;">Imagens publicadas pelo leiloeiro${linkLote ? ` (${esc(linkLote)})` : ''}. A BidPro não vistoriou o imóvel: confira na visitação, quando o edital permitir.</p>
+  <div class="rf-grade">${fotos.map((u, i) => `<figure><img src="${esc(u)}" alt="Foto ${i + 1}"><figcaption>Foto ${String(i + 1).padStart(2, '0')}/${nf}</figcaption></figure>`).join('')}</div></div>`;
+}
 
 // Corpo (conteúdo do <body>) do relatório mercadológico — exportado para o PDF
 // combinado. O gerador individual (gerarPDF) empacota isto num documento completo.
@@ -380,6 +395,7 @@ export function gerarPDF(props) {
 <meta charset="UTF-8">
 <title>Relatório BidPro Brasil, ${d.nome || d.endereco || ''}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-<style>${ESTILOS_MERCADOLOGICO}</style></head><body>${corpoMercadologico(props)}</body></html>`;
-  imprimirHtml(html, `Relatorio Mercadologico - ${(d.nome || d.endereco || 'Imovel')}`);
+<style>${ESTILOS_MERCADOLOGICO}</style></head><body>${corpoMercadologico(props)}${props?.fotos ? registroFotograficoHtml(props.fotos, { linkLote: props.linkLote }) : ''}</body></html>`;
+  // Com fotos, a impressão espera as imagens (CDN de leiloeiro) — mesmo teto do relatório de veículo.
+  imprimirHtml(html, `Relatorio Mercadologico - ${(d.nome || d.endereco || 'Imovel')}`, { esperaImagensMs: props?.fotos?.length ? 15000 : 4000 });
 }

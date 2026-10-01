@@ -31,6 +31,7 @@ import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
+import { fotosDoImovel } from '../utils/fotosImovel';
 import RevisarTexto from '../components/RevisarTexto';
 import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
@@ -363,10 +364,16 @@ export default function Analise() {
       // de propósito (o usuário pode ter editado valores).
       if (/^[0-9a-f-]{36}$/i.test(String(idImovel))) {
         const { data: fresco, error: eFresco } = await supabase
-          .from('imoveis_leilao').select('anexos').eq('id', idImovel).maybeSingle();
+          .from('imoveis_leilao').select('anexos, fotos, link_foto, fonte, fonte_id, url_lote').eq('id', idImovel).maybeSingle();
         // `error` conferido: leitura que falha NÃO pode virar "o lote não tem anexo" e apagar
         // da tela o que existe — sem isto, um 5xx transitório esconderia os documentos.
-        if (!cancel && !eFresco && fresco) setAnexosLote(Array.isArray(fresco.anexos) ? fresco.anexos : []);
+        if (!cancel && !eFresco && fresco) {
+          setAnexosLote(Array.isArray(fresco.anexos) ? fresco.anexos : []);
+          // Registro fotográfico do relatório (01/10): as fotos vêm do lote, relidas como os anexos.
+          setFotosLote({ lista: fotosDoImovel({ fotos: fresco.fotos, linkFoto: fresco.link_foto, fonte: fresco.fonte, fonteId: fresco.fonte_id, imovelId: idImovel }), linkLote: fresco.url_lote || '' });
+        } else if (!cancel && eFresco) {
+          console.warn('[analise] fotos/anexos do lote não relidos:', eFresco.message);
+        }
       }
     })();
     return () => { cancel = true; };
@@ -584,6 +591,8 @@ export default function Analise() {
   const [docsLeiloeiro, setDocsLeiloeiro] = useState([]); // anexos do imóvel (matrícula/edital/regras)
   // null = ainda não releu do banco → usa a foto que veio na navegação (comportamento anterior).
   const [anexosLote, setAnexosLote] = useState(null);
+  // null = não relido (lote fora da base ou leitura falhou) → o relatório sai sem a seção de fotos.
+  const [fotosLote, setFotosLote] = useState(null);
   const isStaffAnalise = ['analista','advogado','admin','consultor'].includes(role);
   // Cliente: analisar imóvel de leiloeiro ainda não integrado (fora da base)
   const [externoLink, setExternoLink] = useState('');
@@ -1771,7 +1780,7 @@ export default function Analise() {
     if (relSel === 'laudo' && relLaudoGerado && laudoEntry?.result) {
       return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result, cab: cabPDF });
     }
-    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, divergenciaArea: analiseEntry?.result?.divergenciaArea || null, cab: cabPDF });
+    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, divergenciaArea: analiseEntry?.result?.divergenciaArea || null, cab: cabPDF, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' });
   };
 
   // "Baixar os 3": só liberado quando os TRÊS relatórios estão prontos. Gera um
@@ -1783,7 +1792,7 @@ export default function Analise() {
 
   const imprimirTodosPDF = () => {
     gerarCombinadoPDF({
-      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF } : null,
+      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' } : null,
       documental: documentalProntoPDF ? { imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc, cab: cabPDF } : null,
       laudo: laudoProntoPDF ? { imovel: d, laudo: laudoEntry.result, cab: cabPDF } : null,
     });
@@ -4746,6 +4755,31 @@ export default function Analise() {
           geração (origem dos comparáveis, período, área que prevaleceu, documento lido), não
           de texto fixo: rodapé que repete a mesma frase em todo relatório não resguarda nada. */}
       <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} condicoesPagamento={{ somenteAVista: d.somenteAVista, sinalPercentual: d.sinalPercentual, prazoMeses: d.prazoMeses, origem: d.origemCondicoesPagamento }} />
+
+      {/* ── REGISTRO FOTOGRÁFICO (01/10, pedido do dono) — ao final, depois das projeções; o PDF
+          traz a mesma grade numerada. Só quando o lote foi relido do banco (fotosLote ≠ null). */}
+      {fotosLote && (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#111111', textTransform: 'uppercase', marginBottom: 8 }}>
+            Registro fotográfico {fotosLote.lista.length ? `— ${fotosLote.lista.length} foto${fotosLote.lista.length > 1 ? 's' : ''}` : ''}
+          </div>
+          {fotosLote.lista.length ? (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {fotosLote.lista.map((u, i) => (
+                <div key={u} style={{ minWidth: 0 }}>
+                  <div style={{ position: 'relative', paddingTop: '66%', background: '#f8fafc', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                    <img src={u} alt={`Foto ${i + 1}`} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#64748b', textAlign: 'center', marginTop: 3, fontWeight: 700 }}>Foto {String(i + 1).padStart(2, '0')}/{String(fotosLote.lista.length).padStart(2, '0')}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: '#64748b' }}>O leiloeiro não publicou fotos deste imóvel.</div>
+          )}
+          <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>As fotos entram no final do PDF, numeradas.</div>
+        </div>
+      )}
 
       {/* ── PRÓXIMO PASSO: A ANÁLISE DOCUMENTAL (28/08, pedido do dono) ──────────────────
           O mercadológico responde QUANTO vale e a que preço fecha a conta. Ele não responde

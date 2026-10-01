@@ -8,7 +8,7 @@
 // para nunca imprimir uma seção vazia.
 
 import { imprimirHtml } from './pdfImprimir';
-import { ESTILOS_MERCADOLOGICO, corpoMercadologico } from './RelatorioPDF';
+import { ESTILOS_MERCADOLOGICO, corpoMercadologico, registroFotograficoHtml } from './RelatorioPDF';
 import { ESTILOS_DOCUMENTAL, corpoDocumental } from './DocumentalPDF';
 import { ESTILOS_LAUDO, corpoLaudo } from './LaudoPDF';
 
@@ -31,6 +31,8 @@ export function gerarCombinadoPDF({ mercado = null, documental = null, laudo = n
   if (documental) secoes.push(corpoDocumental(documental));
   if (laudo) secoes.push(corpoLaudo(laudo));
   if (!secoes.length) { alert('Nenhum relatório pronto para exportar ainda.'); return; }
+  // Fotos no FIM do arquivo inteiro (depois do 3º relatório), não no meio do mercadológico.
+  if (mercado?.fotos) secoes.push(registroFotograficoHtml(mercado.fotos, { linkLote: mercado.linkLote }));
 
   // O primeiro relatório abre o documento; os seguintes começam em nova página.
   const corpo = secoes
@@ -47,5 +49,5 @@ export function gerarCombinadoPDF({ mercado = null, documental = null, laudo = n
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_COMBINADO}</style></head><body>${corpo}</body></html>`;
 
-  imprimirHtml(html, `Relatorios BidPro - ${nome}`);
+  imprimirHtml(html, `Relatorios BidPro - ${nome}`, { esperaImagensMs: mercado?.fotos?.length ? 15000 : 4000 });
 }
