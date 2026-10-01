@@ -12,6 +12,7 @@
 // está cacheado" usado no resto do app). Uma chamada de IA só; sem CNJ, sem QSA, sem geocode.
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
+import { sinalVendaRestrita } from './_venda-restrita.js';
 import { getUser, isCronAuthorized } from './_auth.js';
 import { ehEquipe } from './_leilao-encerrado.js';
 import { anthropicFetch } from './_claude.js';
@@ -495,7 +496,11 @@ export default async function handler(req, res) {
 
     const result = {
       parecer: parsed.parecer,
-      riscos: Array.isArray(parsed.riscos) ? parsed.riscos.filter((r) => typeof r === 'string' && r.trim()) : [],
+      // Venda restrita (01/10): ciência no topo dos riscos, determinística — a IA não vê esse sinal.
+      riscos: [
+        ...((() => { const sr = sinalVendaRestrita({ raw: v?.raw, descricao: v?.descricao, titulo: v?.titulo }); return sr ? [sr.aviso] : []; })()),
+        ...(Array.isArray(parsed.riscos) ? parsed.riscos.filter((r) => typeof r === 'string' && r.trim()) : []),
+      ],
       condicoesResumo: typeof parsed.condicoesResumo === 'string' ? parsed.condicoesResumo : '',
       recomendacao: ['comprar', 'avaliar_com_cautela', 'evitar'].includes(parsed.recomendacao) ? parsed.recomendacao : null,
       // Custos para o teto de lance (29/09). Valida o que vem da IA: número positivo, menor que a

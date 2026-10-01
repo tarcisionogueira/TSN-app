@@ -39,6 +39,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { sinalVendaRestrita, comPerguntaRestricao } from './_venda-restrita.js';
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { comExtensao, urlDiretaDoDocumento } from './_anexo-nome.js';
@@ -165,7 +166,7 @@ export default async function handler(req) {
   }
   let veiculo = null;
   if (!imovelId && veiculoIdDireto) {
-    const rVeiculo = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoIdDireto)}&select=id,fonte,titulo,marca,modelo,anexos,leiloeiro,link_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao,ano_fabricacao,ano_modelo&limit=1`);
+    const rVeiculo = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoIdDireto)}&select=id,fonte,titulo,marca,modelo,anexos,leiloeiro,link_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao,ano_fabricacao,ano_modelo,descricao,auction:raw->auction&limit=1`);
     if (rVeiculo.ok) [veiculo] = await rVeiculo.json();
   }
   // Unifica lote (imóvel OU veículo — nunca os dois) para o resto da função não precisar
@@ -290,9 +291,12 @@ export default async function handler(req) {
   const cadastrados = new Set(destinatarios);
 
   const rotuloTipo = veiculo ? 'Veículo' : 'Imóvel';
-  const corpoTextoPuro = destino === 'leiloeiro'
+  // Venda corporativa / restrita a funcionários: pergunta no e-mail, nunca bloqueio (ver _venda-restrita.js).
+  const restricao = destino === 'leiloeiro' && veiculo ? sinalVendaRestrita({ raw: { auction: veiculo.auction }, descricao: veiculo.descricao, titulo: veiculo.titulo }) : null;
+  const corpoTextoPuroBase = destino === 'leiloeiro'
     ? `Prezados,\n\nEstamos em acompanhamento do lote abaixo e gostaríamos de mais informações / esclarecimentos:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote que já temos em mãos.\n\nAgradecemos desde já a atenção.\n\n${nomeRemetente}`
     : `Prezados,\n\nSolicitamos análise/apoio jurídico referente ao caso abaixo:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote${ehAssessorado ? ' e os documentos pessoais do cliente' : ''}.\n\n${nomeRemetente}`;
+  const corpoTextoPuro = restricao ? comPerguntaRestricao(corpoTextoPuroBase) : corpoTextoPuroBase;
 
   // PASSO 1 — PREVIEW: mostra o rascunho e QUANTOS anexos sairiam, sem enviar nada. Sem
   // contato cadastrado, o chamador oferece um campo pra digitar (ver `emailManual` no envio).
@@ -336,8 +340,9 @@ export default async function handler(req) {
     return json({
       ok: true,
       relatorios,
-      texto: redator?.texto || corpoTextoPuro,
+      texto: redator?.texto ? (restricao ? comPerguntaRestricao(redator.texto) : redator.texto) : corpoTextoPuro,
       textoPadrao: corpoTextoPuro,
+      avisoRestricao: restricao?.aviso || null,
       redator: redator ? { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos } : null,
       destinatarios,
       destinatarioEmail: destinatarios[0] || null, // compat com a tela antiga
@@ -435,13 +440,17 @@ export default async function handler(req) {
     } catch (e) { console.error('[enviar-email-caso] registro na caixa falhou:', String(e?.message || e)); }
   }
 
+  // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
+  // bounce permanente/reclamação. A decisão está certa — reenviar não chegaria —, mas a mensagem
+  // precisa dizer o que fazer: trocar o endereço, não tentar de novo.
+  if (!r.ok && r.suprimido) return json({ error: 'Este e-mail do leiloeiro já devolveu mensagem antes (endereço inexistente ou caixa bloqueada), então não reenviamos para ele. Remova-o, confirme o contato correto no site/edital do leiloeiro e envie de novo.', motivo: 'destinatario_suprimido', texto: textoFinal }, 422);
+  if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);
+
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
   // errado (que o Resend recusou) não pode virar cadastro permanente.
   // Leiloeiro tem UM contato por fonte (upsert): só grava se não havia nenhum. Jurídico grava cada novo.
   const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : novos;
   for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, leiloeiro: lote?.leiloeiro || null, advogadoId: caso?.advogado_id, nomeRemetente });
-
-  if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);
 
   return json({ ok: true, destinatario: destinatarioEmail, anexos: attachments.length, contatoSalvo: aSalvar.length > 0, contatosSalvos: aSalvar.length });
 }

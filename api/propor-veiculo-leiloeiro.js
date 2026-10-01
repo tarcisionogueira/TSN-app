@@ -27,6 +27,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { sinalVendaRestrita, comPerguntaRestricao } from './_venda-restrita.js';
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { redigirProposta } from './_redator-proposta.js';
@@ -99,7 +100,7 @@ export default async function handler(req) {
     }
   }
 
-  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao,teve_lance,auction_id:raw->auction->>id`)).json();
+  const [veiculo] = await (await sb(`veiculos_leilao?id=eq.${encodeURIComponent(veiculoId)}&select=id,fonte,leiloeiro,titulo,marca,modelo,ano_fabricacao,placa,valor_minimo,valor_avaliacao,cidade,estado,link_lote,data_leilao,resultado_leilao,teve_lance,descricao,auction_id:raw->auction->>id,auction:raw->auction`)).json();
   if (!veiculo) return json({ error: 'Veículo não encontrado' }, 404);
 
   // SÓ resultado REAL "sem lance" — não mais inferência por data (21/09). Um leilão que ainda
@@ -122,7 +123,10 @@ export default async function handler(req) {
     veiculo.link_lote ? `Página do lote: ${veiculo.link_lote}` : null,
     fmtBRL(veiculo.valor_minimo) ? `Último lance mínimo: ${fmtBRL(veiculo.valor_minimo)}` : null,
   ].filter(Boolean).join('\n');
-  const corpoTextoPuro = `Prezados,\n\nNotamos que o leilão do veículo abaixo já foi encerrado sem arrematação:\n\n${detalhes}\n\nTemos interesse em negociar a compra direta deste bem, fora do processo de leilão. Poderiam nos informar se há essa possibilidade e, em caso positivo, as condições?\n\nAgradecemos desde já a atenção.\n\n${nomeCliente}`;
+  const restricao = sinalVendaRestrita({ raw: { auction: veiculo.auction }, descricao: veiculo.descricao, titulo: veiculo.titulo });
+  const corpoTextoPuroBase = `Prezados,\n\nNotamos que o leilão do veículo abaixo já foi encerrado sem arrematação:\n\n${detalhes}\n\nTemos interesse em negociar a compra direta deste bem, fora do processo de leilão. Poderiam nos informar se há essa possibilidade e, em caso positivo, as condições?\n\nAgradecemos desde já a atenção.\n\n${nomeCliente}`;
+  // Venda corporativa / restrita a funcionários: pergunta no e-mail, nunca bloqueio (ver _venda-restrita.js).
+  const corpoTextoPuro = restricao ? comPerguntaRestricao(corpoTextoPuroBase) : corpoTextoPuroBase;
 
   // Contato do RESPONSÁVEL pelo lote. Superbid (30/09): o contato é POR EVENTO, na própria
   // página ("Dúvidas e contato → Sobre o evento") — o cadastro genérico da fonte seria o
@@ -165,7 +169,7 @@ export default async function handler(req) {
     }).catch((e) => ({ texto: null, motivo: `redator falhou: ${String(e?.message || e).slice(0, 80)}`, exemplos: 0 }));
     const [redator, rc] = await Promise.all([redatorP, contatoP]);
     if (rc.erro) return json({ error: rc.erro }, 502);
-    return json({ ok: true, texto: redator.texto || corpoTextoPuro, textoPadrao: corpoTextoPuro,
+    return json({ ok: true, texto: redator.texto ? (restricao ? comPerguntaRestricao(redator.texto) : redator.texto) : corpoTextoPuro, textoPadrao: corpoTextoPuro, avisoRestricao: restricao?.aviso || null,
       redator: { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos },
       linkLote: veiculo.link_lote || null, contatoDisponivel: !!rc.contato?.email,
       contato: rc.contato || null, contatoMotivo: rc.motivo || null });
@@ -202,6 +206,10 @@ export default async function handler(req) {
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
   });
 
+  // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
+  // bounce permanente/reclamação. A decisão está certa — reenviar não chegaria —, mas a mensagem
+  // precisa dizer o que fazer: trocar o endereço, não tentar de novo.
+  if (!r.ok && r.suprimido) return json({ error: 'Este e-mail do leiloeiro já devolveu mensagem antes (endereço inexistente ou caixa bloqueada), então não reenviamos para ele. Remova-o, confirme o contato correto no site/edital do leiloeiro e envie de novo.', motivo: 'destinatario_suprimido', texto: textoFinal }, 422);
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal, linkLote: veiculo.link_lote || null }, 502);
 
   return json({ ok: true, destinatario: contato.email, organizador: contato.organizador || null });

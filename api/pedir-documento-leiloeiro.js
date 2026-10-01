@@ -182,6 +182,10 @@ export default async function handler(req) {
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
   });
 
+  // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
+  // bounce permanente/reclamação. A decisão está certa — reenviar não chegaria —, mas a mensagem
+  // precisa dizer o que fazer: trocar o endereço, não tentar de novo.
+  if (!r.ok && r.suprimido) return json({ error: 'Este e-mail do leiloeiro já devolveu mensagem antes (endereço inexistente ou caixa bloqueada), então não reenviamos para ele. Remova-o, confirme o contato correto no site/edital do leiloeiro e envie de novo.', motivo: 'destinatario_suprimido', texto: textoFinal }, 422);
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal, linkLote: linkLote || null }, 502);
 
   return json({ ok: true, destinatario: contato.email });

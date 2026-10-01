@@ -25,6 +25,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   **vigia aos ~243 s** que grava a falha com motivo. Causa exata NÃO confirmada (logs da Vercel deram timeout na
   consulta) — a próxima tentativa deixa linha em `geracao_custos` de qualquer jeito. `gerar-analise-veiculo` tem o
   mesmo padrão (70 s fixo por degrau, maxDuration maior) — não mexido.
+- **Autocomplete de endereço (Índice/checkout) parado — causa CONFIRMADA:** Google `REQUEST_DENIED — You must enable
+  Billing on the Google Cloud Project` (lido em erros_cliente após 033f9c3, que parou de engolir o erro). A mesma chave
+  geocodifica: `uso_integracoes` google_geocode caiu de 65–447/dia para 1 em 01/10. **Ação do dono: reativar o
+  faturamento no Google Cloud.** Até lá: "digitar cidade/UF manualmente".
+- **E-mail ao leiloeiro "suprimido":** `atendimento.infraenergia@superbid.net` deu bounce PERMANENTE em 30/09 → supressão
+  correta. Mensagem agora diz o que fazer (422 `destinatario_suprimido`). **Bug corrigido:** `enviar-email-caso` gravava o
+  contato digitado ANTES de checar `r.ok` (o comentário dizia o contrário) — e-mail que falhou virava cadastro.
+- **Venda restrita a funcionários (Oroch/SOLD/frota Alares, Superbid):** a restrição NÃO está nos dados; o sinal é
+  `raw.auction.subMarketplaces = Corporativo` (1.311 ativos). `api/_venda-restrita.js`: aviso de CIÊNCIA no topo dos riscos
+  da análise do veículo + pergunta educada no e-mail (enviar-email-caso e propor-veiculo-leiloeiro). Nunca bloqueia.
 - **OpenWA (zip do dono):** gateway NÃO oficial (whatsapp-web.js/Baileys, QR, servidor 24 h). Workflows são só CI
   dele. README do próprio projeto: nunca usar em número comercial. Decisão: NÃO usar no número da BidPro; seguir
   com a Cloud API oficial já pronta.
