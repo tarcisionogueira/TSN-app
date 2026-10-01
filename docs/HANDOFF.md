@@ -44,6 +44,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   fila. Corrigido (5419efa + RPC `municipio_nome`, migração 20261001_municipio_nome_por_cidade_norm); 16 amostras
   devolvidas à fila às 16:24. **Conferir após o cron das 16:50 UTC:**
   `select count(*) filter (where geocod_em is not null) tentadas, count(lat) com_geo from indice_amostras where criado_em > '2026-09-11';`
+- **/analises com statement timeout (Marcos, pagante):** `minhas_analises_lista` fazia join `i.id::text = imovel_id` →
+  SEQ SCAN em imoveis_leilao (83 mil linhas/291 MB, 1.673 ms medidos). Agora casa por uuid via PK: 0,3 ms; saída
+  idêntica (md5 igual em 6 usuários). Migração 20261001_minhas_analises_lista_join_por_uuid. Mesmo padrão (baixo,
+  só rotinas de fundo): `limpar_analises_orfas`, `atualizar_confiabilidade_leiloeiro`, `proximas_fotos_espelho`.
+- **Actions 30/09 (OSM, regerar mercadológicos):** já corrigidos em e6d5fe8 e passando nos runs seguintes.
+- **Marketing sem dados desde 14/09:** NÃO é falha de ingestão — Google Ads e Meta pausados em 14/09
+  (`marketing_canal_pausa`), coincide com cartão do Google Ads recusado. Depende do dono religar.
 - **E-mail ao leiloeiro "suprimido":** `atendimento.infraenergia@superbid.net` deu bounce PERMANENTE em 30/09 → supressão
   correta. Mensagem agora diz o que fazer (422 `destinatario_suprimido`). **Bug corrigido:** `enviar-email-caso` gravava o
   contato digitado ANTES de checar `r.ok` (o comentário dizia o contrário) — e-mail que falhou virava cadastro.
