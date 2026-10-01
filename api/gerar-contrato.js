@@ -8,6 +8,7 @@ import { alertarErro } from './_error-alert.js';
 import { enviarEmail } from './_email.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { randomUUID } from 'node:crypto';
+import { semDadosPessoais, trechosAlterados } from './_contrato-aprendizado.js';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -59,9 +60,24 @@ const PADROES = {
 async function extrairCorrecoesContrato(tipo, textoIA, textoFinal) {
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey || !textoIA || !textoFinal || textoIA === textoFinal) return [];
+  // SÓ O QUE MUDOU vai para o extrator (01/10) — antes eram os dois textos cortados em 12.000
+  // caracteres, e correção depois do começo do contrato nunca era vista (ver trechosAlterados).
+  const trechos = trechosAlterados(textoIA, textoFinal);
+  if (!trechos) return [];
   try {
-    const sys = `Você compara a MINUTA gerada por IA com o CONTRATO FINAL que o staff de fato enviou para assinatura, e extrai as correções reais que o staff fez. Responda SOMENTE com JSON válido: {"correcoes":[{"clausula":"nome curto da cláusula/trecho","texto_ia":"o que a IA escreveu (resumido)","texto_final":"o que ficou de fato (resumido)","motivo":"por que a mudança, na sua leitura"}]}. Ignore mudanças triviais (só formatação, só um placeholder preenchido com dado que a IA já deveria ter transcrito). Liste no máximo 5 correções, as mais substantivas. Se não houver correção de conteúdo real, responda {"correcoes":[]}.`;
-    const userMsg = `Tipo de contrato: ${tipo || 'não informado'}\n\n## MINUTA DA IA:\n${String(textoIA).slice(0, 12000)}\n\n## CONTRATO FINAL ENVIADO:\n${String(textoFinal).slice(0, 12000)}`;
+    // DUAS mudanças no prompt (01/10):
+    //  · "placeholder preenchido" deixou de ser ignorado. Era EXATAMENTE a correção que o dono
+    //    mais faz (fiador digitado à mão porque a IA não leu a CNH) — e é a lição mais útil:
+    //    "o dado estava no anexo, transcreva". Vira lição GENÉRICA, sem o valor.
+    //  · DADO PESSOAL PROIBIDO na lição: nome, CPF, RG, endereço daquele contrato eram gravados
+    //    e depois injetados como "aplique" nos contratos de OUTRAS pessoas.
+    const sys = `Você compara a MINUTA gerada por IA com o CONTRATO FINAL que o staff de fato enviou para assinatura, e extrai LIÇÕES REUTILIZÁVEIS para as próximas minutas do mesmo tipo. Você recebe só os trechos alterados ("MINUTA DA IA:" = linha que a IA escreveu, "ENVIADO:" = como ficou; linhas sem prefixo são contexto). Responda SOMENTE com JSON válido: {"correcoes":[{"clausula":"nome curto da cláusula/trecho","texto_ia":"o que a IA fez, em termos gerais","texto_final":"o que o staff fez, em termos gerais","motivo":"a regra a seguir da próxima vez"}]}.
+REGRAS:
+1. NUNCA escreva dado pessoal ou específico daquele negócio nos campos: nada de nomes de pessoas, CPF, CNPJ, RG, CNH, endereço, telefone, e-mail, matrícula, inscrição, metragem ou valor. Descreva o PADRÃO (ex.: texto_ia "deixou nome e CPF do fiador em colchetes", texto_final "qualificação completa do fiador preenchida", motivo "a CNH do fiador estava anexada — transcrever do documento anexado em vez de deixar colchete").
+2. Placeholder em colchetes que o staff preencheu É uma lição (a IA não usou um dado que provavelmente estava nos anexos ou na descrição) — registre-a de forma genérica como no exemplo.
+3. Ignore só mudança puramente de formatação (espaços, maiúsculas, numeração).
+4. No máximo 5 lições, as mais substantivas. Se não houver nenhuma, responda {"correcoes":[]}.`;
+    const userMsg = `Tipo de contrato: ${tipo || 'não informado'}\n\n## TRECHOS ALTERADOS:\n${trechos}`;
     const r = await anthropicFetch({
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
@@ -71,9 +87,19 @@ async function extrairCorrecoesContrato(tipo, textoIA, textoFinal) {
     const data = await r.json().catch(() => null);
     const txt = data?.content?.[0]?.text || '';
     const ini = txt.indexOf('{'), fim = txt.lastIndexOf('}');
-    if (ini < 0 || fim < 0) return [];
+    // Resposta ilegível NÃO é "nenhuma correção" — deixa rastro, senão o aprendizado para de
+    // aprender e o log diz "correcoes extraidas = 0" como se o staff não tivesse mexido em nada.
+    if (ini < 0 || fim < 0) { console.error('[gerar-contrato] extração de aprendizado: resposta sem JSON', String(txt || (data ? 'sem texto' : 'corpo não-JSON')).slice(0, 160)); return []; }
     const parsed = JSON.parse(txt.slice(ini, fim + 1));
-    return Array.isArray(parsed?.correcoes) ? parsed.correcoes.slice(0, 5) : [];
+    // Rede de segurança por FORMA (CPF, RG, e-mail…) caso o modelo desobedeça a regra 1.
+    return Array.isArray(parsed?.correcoes)
+      ? parsed.correcoes.slice(0, 5).map((c) => ({
+        clausula: c?.clausula ? semDadosPessoais(c.clausula).slice(0, 200) : null,
+        texto_ia: c?.texto_ia ? semDadosPessoais(c.texto_ia).slice(0, 1000) : null,
+        texto_final: c?.texto_final ? semDadosPessoais(c.texto_final).slice(0, 1000) : null,
+        motivo: c?.motivo ? semDadosPessoais(c.motivo).slice(0, 1000) : null,
+      }))
+      : [];
   } catch (e) { console.error('[gerar-contrato] extração de aprendizado erro', e?.message); return []; }
 }
 

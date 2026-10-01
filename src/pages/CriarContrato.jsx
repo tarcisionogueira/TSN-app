@@ -4,11 +4,14 @@ import { FileText, Sparkles, Upload, Camera, UserCheck, ChevronRight, X, CheckCi
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { extrairTextoDeVarios } from '../utils/extrairTextoDoc';
+import { extrairTextoDeVarios, chaveArquivo } from '../utils/extrairTextoDoc';
 import { nomeArquivoSeguro } from '../utils/arquivo';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
+// Corpo máximo que mandamos para /api/gerar-contrato-ia: a Vercel recusa acima de 4,5 MB (413,
+// teto de plataforma). Margem para cabeçalhos e o JSON em volta.
+const LIMITE_CORPO = 4_400_000;
 
 const S = {
   card: { background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '20px 22px', marginBottom: 16 },
@@ -119,6 +122,11 @@ export default function CriarContrato() {
 
   // Arquivos de referência adicionais
   const [arquivosRef, setArquivosRef] = useState([]);
+  // "De quem é / o que é" cada anexo (01/10): chaveArquivo(f) → texto livre ("CNH do fiador",
+  // "certidão do imóvel"). Sem isto a IA só tinha o NOME do arquivo para decidir quem é quem —
+  // e "WhatsApp Image 2026-09-30.jpeg" ou "CNH-e.pdf" não dizem se é do locatário ou do fiador.
+  // Quando a descrição não cita o nome da pessoa, era cara ou coroa.
+  const [papeisRef, setPapeisRef] = useState({});
 
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
@@ -168,11 +176,21 @@ export default function CriarContrato() {
   const MAX_ARQUIVOS_REF = 10;
   const handleArquivosRef = (e) => {
     const files = Array.from(e.target.files || []);
-    setArquivosRef(prev => {
-      const combinado = [...prev, ...files];
-      if (combinado.length > MAX_ARQUIVOS_REF) setErro(`Máximo de ${MAX_ARQUIVOS_REF} arquivos de referência — ${combinado.length - MAX_ARQUIVOS_REF} não foi(ram) incluído(s).`);
-      return combinado.slice(0, MAX_ARQUIVOS_REF);
-    });
+    // Zera o <input>: sem isto, remover um anexo e escolher O MESMO arquivo de novo não dispara
+    // `onChange` (o valor do input não mudou) — o operador clicava e nada acontecia.
+    e.target.value = '';
+    // Mesmo arquivo escolhido duas vezes entrava duas vezes: gastava em dobro o orçamento de
+    // imagens da IA e, no envio, as duas cópias subiam no mesmo milissegundo para a MESMA chave
+    // do Storage — a segunda falhava e o envio inteiro era barrado por "anexo não enviado".
+    const jaTem = new Set(arquivosRef.map(chaveArquivo));
+    const novos = files.filter(f => { const k = chaveArquivo(f); if (jaTem.has(k)) return false; jaTem.add(k); return true; });
+    const repetidos = files.length - novos.length;
+    const combinado = [...arquivosRef, ...novos];
+    const msgs = [];
+    if (repetidos) msgs.push(`${repetidos} arquivo(s) já estava(m) na lista e não foi(ram) repetido(s).`);
+    if (combinado.length > MAX_ARQUIVOS_REF) msgs.push(`Máximo de ${MAX_ARQUIVOS_REF} arquivos de referência — ${combinado.length - MAX_ARQUIVOS_REF} não foi(ram) incluído(s).`);
+    if (msgs.length) setErro(msgs.join(' '));
+    setArquivosRef(combinado.slice(0, MAX_ARQUIVOS_REF));
   };
 
   const toggleDocExtra = (id) => {
@@ -195,7 +213,7 @@ export default function CriarContrato() {
       let naoLidos = [];
       if (arquivosRef.length) {
         setLendoDocs(true);
-        const r0 = await extrairTextoDeVarios(arquivosRef);
+        const r0 = await extrairTextoDeVarios(arquivosRef, papeisRef);
         setLendoDocs(false);
         documentos = r0.documentos;
         // Imagem (JPG/PNG/WebP) vai como base64 pro bloco de visão da Claude (21/09, pedido
@@ -204,7 +222,9 @@ export default function CriarContrato() {
         imagens = r0.imagens.map(i => ({ nome: i.nome, base64: i.base64, mediaType: i.mediaType }));
         // Arquivo que não deu para ler é DITO, nunca descartado em silêncio — silêncio aqui
         // é exatamente o que fez o dono achar que o anexo tinha sido usado.
-        if (r0.ignorados.length) setAvisoDocs(`Não consegui ler: ${r0.ignorados.join(' · ')}. O contrato foi gerado SEM o conteúdo desse(s) arquivo(s).`);
+        // "foi gerado SEM" era dito ANTES de gerar — se a geração falhasse, a tela afirmava um
+        // contrato que não existia. O fato que se sabe aqui é que o arquivo ficou de fora.
+        if (r0.ignorados.length) setAvisoDocs(`Não consegui ler: ${r0.ignorados.join(' · ')}. Esse(s) arquivo(s) ficou(aram) FORA da geração — confira os dados correspondentes no texto.`);
         if (r0.avisos?.length) setAvisoDocs(av => `${av ? av + ' ' : ''}Leitura parcial: ${r0.avisos.join(' · ')}.`);
         // Confirmação POSITIVA do que entrou. O dono não tinha como saber se o anexo tinha
         // sido usado — e não estava sendo. Agora a tela de revisão diz, por nome.
@@ -219,10 +239,22 @@ export default function CriarContrato() {
       // TETO DE ESPERA (3 min): sem ele o botão fica em "Gerando contrato…" para sempre se o
       // servidor não responder — foi o que o dono viu em 04/08 quando a função ficou pendurada
       // até o maxDuration. A geração real leva ~30-60s, então 3 min é folgado sem ser eterno.
+      // 🔴 TETO DE CORPO DA VERCEL (4,5 MB, plataforma): estourar devolve 413 em TEXTO e a tela
+      // dizia "HTTP 413. Tente de novo" — tentar de novo dá o mesmo 413. O orçamento de
+      // extrairTextoDeVarios mantém imagens+texto abaixo disso; esta checagem é a rede para o
+      // caso que escapar (descrição gigante colada), com a frase que diz o que fazer.
+      const corpo = JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos, imagens, naoLidos });
+      if (new Blob([corpo]).size > LIMITE_CORPO) {
+        throw new Error(`Os anexos juntos passam do tamanho que dá para enviar de uma vez (${(new Blob([corpo]).size / 1048576).toFixed(1)} MB; limite ~4,3 MB). Remova uma ou duas fotos/PDFs escaneados e gere de novo.`);
+      }
+      // TETO DE ESPERA = o do servidor + folga (era 180 s). O servidor tem maxDuration 300 s e a
+      // redação sozinha pode levar ~230 s (medido: 139 tokens/s × 32.000) — mais a leitura das
+      // imagens (até 40 s). Com 180 s a tela desistia de um contrato longo que o servidor ainda
+      // ia entregar (e cobrar): "passou de 3 minutos" com a IA trabalhando.
       const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
-        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos, imagens, naoLidos }),
-        signal: AbortSignal.timeout(180000),
+        body: corpo,
+        signal: AbortSignal.timeout(310000),
       });
       // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
       // proxy responde, o corpo é TEXTO PURO — e o parse estourava um "Unexpected token 'A',
@@ -232,7 +264,11 @@ export default function CriarContrato() {
       if (!data) {
         throw new Error(r.ok
           ? 'A IA respondeu num formato inesperado. Tente de novo.'
-          : `O servidor falhou ao gerar o contrato (HTTP ${r.status}). Tente de novo; se persistir, avise o suporte.`);
+          : r.status === 413
+            ? 'Os anexos juntos passaram do tamanho que o servidor aceita de uma vez. Remova uma ou duas fotos/PDFs escaneados e gere de novo.'
+            : r.status === 504
+              ? 'O servidor passou do tempo máximo gerando o contrato. Tente de novo com uma descrição mais enxuta ou menos anexos; se repetir, avise o suporte.'
+              : `O servidor falhou ao gerar o contrato (HTTP ${r.status}). Tente de novo; se persistir, avise o suporte.`);
       }
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao gerar');
       // Contrato cortado no limite de tokens PARECE completo na caixa de revisão. Avisa, senão
@@ -242,6 +278,9 @@ export default function CriarContrato() {
       }
       if (data.imagensNaoLidas?.length) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}A leitura dedicada falhou em: ${data.imagensNaoLidas.join(', ')} — confira os dados dessas partes no texto.`);
+      }
+      if (data.entradaTruncada?.length) {
+        setAvisoDocs(av => `${av ? av + ' ' : ''}O texto digitado em ${data.entradaTruncada.join(' e ')} passou do limite e foi cortado no fim — confira se o que estava no final entrou no contrato.`);
       }
       if (data.documentosTruncados) {
         setAvisoDocs(av => `${av ? av + ' ' : ''}Os documentos anexados juntos passaram do tamanho que a IA consegue ler de uma vez — o(s) último(s) anexo(s) pode(m) não ter sido totalmente considerado(s).`);
@@ -254,7 +293,7 @@ export default function CriarContrato() {
       // AbortSignal.timeout dispara TimeoutError — a mensagem nativa ("signal timed out")
       // não diz nada ao usuário. Traduz para o que ele precisa saber e fazer.
       setErro(e?.name === 'TimeoutError'
-        ? 'A geração passou de 3 minutos sem resposta e foi interrompida. Tente de novo; se repetir, avise o suporte.'
+        ? 'A geração passou de 5 minutos sem resposta e foi interrompida. Tente de novo; se repetir, avise o suporte.'
         : e.message);
     }
     setLendoDocs(false);
@@ -283,8 +322,10 @@ export default function CriarContrato() {
       // linha continua sendo o ORIGINAL: quem lê a lista vê o nome de verdade.
       const refs = [];
       const refsFalhas = [];
-      for (const f of arquivosRef) {
-        const path = `contratos-ref/${user.id}/${Date.now()}-${nomeArquivoSeguro(f.name)}`;
+      for (const [i, f] of arquivosRef.entries()) {
+        // Índice na chave: dois anexos com o mesmo nome seguro no mesmo milissegundo colidiam
+        // ("already exists") e o envio inteiro era barrado.
+        const path = `contratos-ref/${user.id}/${Date.now()}-${i}-${nomeArquivoSeguro(f.name)}`;
         const { data: up, error: upErr } = await supabase.storage.from('documentos').upload(path, f, { upsert: false });
         if (upErr || !up?.path) { refsFalhas.push(f.name); continue; }
         const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(up.path, 60 * 60 * 24 * 365);
@@ -490,21 +531,27 @@ export default function CriarContrato() {
           <div style={S.card}>
             <p style={S.secTitle}>Documentos de referência adicionais (opcional)</p>
             <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px', lineHeight: 1.5 }}>
-              {modo === 'gerar' ? 'Anexe propostas, e-mails, documentos ou fotos (CNH, comprovantes) — a IA lê PDF e também enxerga imagem direto.' : 'Documentos que o signatário pode consultar ao ler e assinar.'}
+              {modo === 'gerar' ? 'Anexe propostas, contratos anteriores (PDF ou Word), documentos ou fotos (CNH, comprovantes) — a IA lê o texto e também enxerga imagem direto. Diga de quem é cada documento no campo ao lado dele.' : 'Documentos que o signatário pode consultar ao ler e assinar.'}
               {' '}Até {MAX_ARQUIVOS_REF} arquivos.
             </p>
-            <input ref={fileRefRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }} onChange={handleArquivosRef} />
+            <input ref={fileRefRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.heic,.heif" style={{ display: 'none' }} onChange={handleArquivosRef} />
             <button onClick={() => fileRefRef.current?.click()}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 9, fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
               <Upload size={14} /> Adicionar arquivos de referência
             </button>
             {arquivosRef.length > 0 && (
-              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {arquivosRef.map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#f1f5f9', borderRadius: 8, fontSize: 12 }}>
-                    <FileText size={12} color="#64748b" />
-                    <span style={{ color: '#334155', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                    <button onClick={() => setArquivosRef(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}><X size={12} /></button>
+                  <div key={chaveArquivo(f)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#f1f5f9', borderRadius: 8, fontSize: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                    <FileText size={12} color="#64748b" style={{ flexShrink: 0 }} />
+                    <span style={{ color: '#334155', flex: isMobile ? '1 1 70%' : '0 1 220px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                    {modo === 'gerar' && (
+                      <input value={papeisRef[chaveArquivo(f)] || ''} maxLength={80}
+                        onChange={e => { const k = chaveArquivo(f); const v = e.target.value; setPapeisRef(p => ({ ...p, [k]: v })); }}
+                        placeholder="De quem é? Ex.: CNH do fiador, certidão do imóvel"
+                        style={{ flex: '1 1 200px', minWidth: 0, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, background: 'white', color: '#111111' }} />
+                    )}
+                    <button onClick={() => setArquivosRef(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, flexShrink: 0 }}><X size={12} /></button>
                   </div>
                 ))}
               </div>
@@ -706,7 +753,13 @@ export default function CriarContrato() {
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => { setPasso('modo'); setModo(null); setTitulo(''); setSignatarios([{ nome: '', email: '' }]); setArquivoDoc(null); setArquivoUrl(''); setDescricaoIA(''); setContratoGerado(''); setArquivosRef([]); setVerificacao('nenhuma'); setDocsExtras([]); setRequerTestemunha(false); setProdutoSel(''); setLinksGerados([]); setErro(''); }} style={S.btn()}>
+            <button onClick={() => {
+              // Zera TUDO o que pertence ao contrato anterior. Ficavam: o rascunho original da IA
+              // (contratoGeradoOriginal), "A IA leu o conteúdo de: …" e os avisos de anexo do
+              // contrato anterior aparecendo na revisão do próximo, e os dados das partes. E a
+              // verificação voltava para 'nenhuma', contrariando o padrão da tela (selfie_doc).
+              setPasso('modo'); setModo(null); setTitulo(''); setSignatarios([{ nome: '', email: '' }]); setArquivoDoc(null); setArquivoUrl(''); setDescricaoIA(''); setPartesInfo(''); setContratoGerado(''); setContratoGeradoOriginal(''); setArquivosRef([]); setPapeisRef({}); setAvisoDocs(''); setDocsUsados([]); setVerificacao('selfie_doc'); setDocsExtras([]); setRequerTestemunha(false); setProdutoSel(''); setLinksGerados([]); setErro('');
+            }} style={S.btn()}>
               Criar outro contrato
             </button>
             <button onClick={() => nav('/contratos')} style={{ ...S.btn('#f1f5f9'), color: '#475569' }}>Ver contratos</button>

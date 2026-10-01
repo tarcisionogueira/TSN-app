@@ -23,6 +23,7 @@ import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { anthropicFetch } from './_claude.js';
 import { sanitizeText } from './_sanitize.js';
+import { semDadosPessoais } from './_contrato-aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -40,12 +41,18 @@ async function resumoAprendizadoContrato(tipo) {
     if (!r.ok) return '';
     const licoes = await r.json().catch(() => []);
     if (!Array.isArray(licoes) || !licoes.length) return '';
+    // 🔴 DADO PESSOAL DE OUTRO CONTRATO NÃO ENTRA NO PROMPT (01/10). A lição "Identificação do
+    // Fiador" gravada quando o dono preencheu o fiador à mão trazia em `texto_final` o NOME e o
+    // CPF daquele fiador — e era injetada como "aplique estas lições" em TODO contrato de
+    // Locação Comercial seguinte. Num contrato novo cujo fiador não foi lido, o modelo tinha
+    // à mão um CPF plausível… de outra pessoa. Pior que [CPF DO FIADOR]: errado com cara de
+    // certo. As linhas já gravadas continuam no banco; aqui o número sai antes de entrar.
     const linhas = licoes
       .filter(l => l && (l.clausula || l.motivo))
       .slice(0, 12)
-      .map(l => `- ${l.clausula ? l.clausula + ': ' : ''}a IA escreveu "${String(l.texto_ia || '—').slice(0, 140)}", o que de fato foi enviado foi "${String(l.texto_final || '—').slice(0, 140)}"${l.motivo ? ` — ${String(l.motivo).slice(0, 200)}` : ''}`);
+      .map(l => `- ${l.clausula ? semDadosPessoais(l.clausula) + ': ' : ''}a IA escreveu "${semDadosPessoais(String(l.texto_ia || '—')).slice(0, 140)}", o que de fato foi enviado foi "${semDadosPessoais(String(l.texto_final || '—')).slice(0, 140)}"${l.motivo ? ` — ${semDadosPessoais(String(l.motivo)).slice(0, 200)}` : ''}`);
     if (!linhas.length) return '';
-    return `\n\nAPRENDIZADOS COM CONTRATOS REAIS DESTE TIPO (correções que o staff já fez em minutas anteriores — aplique estas lições e não repita os mesmos ajustes):\n${linhas.join('\n')}`;
+    return `\n\nAPRENDIZADOS COM CONTRATOS REAIS DESTE TIPO (correções que o staff já fez em minutas anteriores — aplique o PADRÃO de cada lição e não repita o mesmo erro). ATENÇÃO: nomes, números, áreas, endereços e valores citados nestas lições são de OUTROS contratos — NUNCA os copie para este; os dados deste contrato vêm SÓ da descrição e dos anexos atuais (o que não estiver lá fica em colchetes):\n${linhas.join('\n')}`;
   } catch (e) { console.error('[gerar-contrato-ia] aprendizado nao lido', e?.message); return ''; }
 }
 
@@ -173,6 +180,18 @@ async function handler(req) {
     try { return { nome, texto: await transcreverImagem(img, CLAUDE_KEY) }; }
     catch (e) { console.error('[gerar-contrato-ia] transcrição falhou', nome, e?.message); return { nome, erro: String(e?.message || e).slice(0, 120) }; }
   }));
+  // TETOS DA ENTRADA DIGITADA (01/10). Eram 4.000 (descrição) e 800 (dados das partes), cortados
+  // CALADOS. 800 caracteres não cabem a qualificação de três pessoas (locador, locatário e
+  // fiador — nessa ordem, o fiador é o que sobra no fim e o que caía): o operador digitava o
+  // fiador e recebia [NOME COMPLETO DO FIADOR]. Agora o teto é folgado e, se ainda assim
+  // cortar, a resposta diz onde (`entradaTruncada`) e a tela avisa.
+  const DESCRICAO_MAX = 12000;
+  const PARTES_MAX = 6000;
+  const entradaTruncada = [
+    descricao.length > DESCRICAO_MAX ? 'a descrição' : null,
+    partesFinal && String(partesFinal).length > PARTES_MAX ? 'os dados das partes' : null,
+  ].filter(Boolean);
+
   const fichas = transcricoes.map((t) => t.texto
     ? `=== TRANSCRIÇÃO DA IMAGEM "${t.nome}" ===\n${t.texto.slice(0, 6000)}`
     : `=== IMAGEM "${t.nome}": a leitura FALHOU (${t.erro}) — use a própria imagem acima; se não der, deixe o campo em colchetes ===`).join('\n\n');
@@ -180,14 +199,15 @@ async function handler(req) {
 
   const userMessage = `Gere um contrato de ${tipoFinal || 'prestação de serviços'} com base na seguinte descrição em texto livre:
 
-${descricao.slice(0, 4000)}
+${descricao.slice(0, DESCRICAO_MAX)}
 
-${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${(docsTexto || imagensValidas.length) ? `${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
+${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, PARTES_MAX)}\n` : ''}${(docsTexto || imagensValidas.length) ? `${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
 ${docsTexto}
 ` : ''}${imagensValidas.length ? `\nO OPERADOR TAMBÉM ANEXOU ${imagensValidas.length} IMAGEM(NS) (fotos, ex.: CNH, comprovante) — cada uma aparece logo ANTES desta mensagem, identificada pelo nome do arquivo, e foi TRANSCRITA campo a campo abaixo. Use a transcrição (e confira na imagem):
 ${fichas}
+` : ''}
+QUEM É QUEM (vale para documento de TEXTO e para imagem): o nome de cada anexo pode trazer, depois de " — ", a indicação do operador de quem é aquele documento (ex.: "cnh.pdf — CNH do fiador"); essa indicação MANDA. Sem ela, associe cada documento pessoal à parte que a descrição indica (ex.: "fiador Caio" + CNH em nome de CAIO … = qualificação completa do FIADOR com nome, CPF, RG/órgão e demais dados da CNH). Documento de imóvel (certidão, matrícula, IPTU, descrição) alimenta a cláusula do OBJETO: endereço, lote, matrícula, inscrição, áreas, confrontações. Se houver documento de uma pessoa e você não souber a qual parte ele pertence, NÃO o descarte: use-o na parte mais provável e sinalize com "[CONFERIR: parte atribuída por dedução]" logo após a qualificação.
 
-QUEM É QUEM: associe cada documento pessoal à parte que a descrição indica (ex.: "fiador Caio" + CNH em nome de CAIO … = qualificação completa do FIADOR com nome, CPF, RG/órgão e demais dados da CNH). Documento de imóvel (certidão, matrícula, IPTU, descrição) alimenta a cláusula do OBJETO: endereço, lote, matrícula, inscrição, áreas, confrontações.\n` : ''}
 COMO USAR OS ANEXOS (documentos E imagens) — regra que vale mais que o hábito de deixar campo em branco:
 - Todo dado que estiver nos anexos deve ser TRANSCRITO no contrato novo: nomes completos,
   CPF/CNPJ, endereços, estado civil, profissão, valores, prazos, objeto. NÃO deixe
@@ -255,9 +275,9 @@ Gere o contrato completo e pronto para uso.`;
     // vem cortado) e ficaria silencioso pro operador também sem este aviso.
     const documentosTruncados = !!documentos && String(documentos).length > DOCS_MAX;
 
-    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, comImagens: imagensValidas.length, imagensTranscritas: transcricoes.length - naoLidas.length, imagensNaoLidas: naoLidas.length, anexosNaoLidosNoNavegador: Array.isArray(body.naoLidos) ? body.naoLidos.length : undefined, truncado, documentosTruncados }, sucesso: true });
+    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, comImagens: imagensValidas.length, imagensTranscritas: transcricoes.length - naoLidas.length, imagensNaoLidas: naoLidas.length, anexosNaoLidosNoNavegador: Array.isArray(body.naoLidos) ? body.naoLidos.length : undefined, truncado, documentosTruncados, entradaTruncada }, sucesso: true });
 
-    return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados, imagensNaoLidas: naoLidas }), {
+    return new Response(JSON.stringify({ ok: true, contrato, truncado, documentosTruncados, entradaTruncada, imagensNaoLidas: naoLidas }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
