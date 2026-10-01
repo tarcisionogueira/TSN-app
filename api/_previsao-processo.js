@@ -22,8 +22,10 @@ export function classeMovimento(codigo, descricao) {
   const c = Number(codigo) || null, d = String(descricao || '');
   if ([51, 15101].includes(c) || /^conclus/i.test(d)) return 'conclusao';
   if ([22, 848, 246].includes(c) || /baixa defini|tr[âa]nsito em julgado|arquivamento defini/i.test(d)) return 'encerramento';
-  if ([12164, 11010, 12185, 193, 12444, 219, 898, 12266, 220, 11009, 11021].includes(c)
-    || /decis[ãa]o|despacho|mero expediente|julgament|senten[çc]a|deferi|indeferi|homolog|proced[eê]n/i.test(d)) return 'decisao';
+  // 200 = "(Não-)Acolhimento de Embargos de Declaração" (01/10, processo real do TRT5): é decisão
+  // do juiz e caía em 'outro', sumindo da contagem de despachos.
+  if ([12164, 11010, 12185, 193, 12444, 219, 898, 12266, 220, 11009, 11021, 200].includes(c)
+    || /decis[ãa]o|despacho|mero expediente|julgament|senten[çc]a|deferi|indeferi|homolog|proced[eê]n|acolhimento/i.test(d)) return 'decisao';
   if ([92, 1061, 928].includes(c) || /publica[çc][ãa]o|disponibiliza[çc][ãa]o no di[áa]rio/i.test(d)) return 'publicacao';
   if (c === 1051 || /decurso de prazo/i.test(d)) return 'prazo';
   if ([85, 118].includes(c) || /peti[çc][ãa]o/i.test(d)) return 'peticao';
@@ -58,6 +60,9 @@ const ETAPAS = [
   { re: /imiss[ãa]o na posse|mandado de imiss|imitid[oa] na posse/i, etapa: 'imissão na posse', proximo: 'Cumprimento do mandado de imissão pelo oficial de justiça; com a posse, o arrematante assume o imóvel.', base: 'CPC, art. 901, §1º' },
   { re: /carta de arremata/i, etapa: 'carta de arrematação', proximo: 'Registrar a carta no Cartório de Registro de Imóveis (transfere a propriedade) e, se ocupado, pedir/cumprir a imissão na posse.', base: 'CPC, art. 901, §2º; Lei 6.015/73' },
   { re: /embargos?\s+(à|a)\s+arremata|impugna[çc][ãa]o\s+(à|a|da)\s+arremata|a[çc][ãa]o anulat[óo]ria/i, etapa: 'impugnação da arrematação', proximo: 'O juiz decide a impugnação; a carta só é expedida depois. Enquanto isso a arrematação segue válida, salvo decisão suspendendo.', base: 'CPC, art. 903, §§2º a 4º' },
+  // Agravo de petição (Justiça do Trabalho, 01/10 — processo do Marcos: protocolado 10/09, DEPOIS
+  // da arrematação). É o recurso da execução trabalhista; contra a arrematação, segura a carta.
+  { re: /agravo de peti[çc][ãa]o/i, etapa: 'recurso na execução (agravo de petição)', proximo: 'O juiz confere os requisitos (prazo, garantia, delimitação de matérias e valores) e intima a parte contrária para contraminuta em 8 dias; depois os autos sobem ao TRT. Se o agravo ataca a arrematação, a carta de arrematação e a imissão costumam aguardar o julgamento — acompanhe o recebimento do recurso.', base: 'CLT, art. 897, "a" e §§1º e 3º' },
   { re: /auto de arremata/i, etapa: 'auto de arrematação', proximo: 'Assinado o auto, a arrematação é perfeita e irretratável. Há 10 dias para eventual impugnação; depois, com o preço e a comissão pagos, expede-se a carta de arrematação e o mandado de imissão.', base: 'CPC, arts. 901 e 903, §2º' },
   { re: /arremata[çc][ãa]o|arrematad[oa]|lance vencedor|leil[ãa]o positivo/i, etapa: 'arrematação realizada', proximo: 'Lavratura e assinatura do auto de arrematação (juiz, leiloeiro e arrematante), após o depósito do lance/sinal.', base: 'CPC, arts. 901 e 903' },
 ];
@@ -132,7 +137,10 @@ export function preverAndamento({ movimentos = [], publicacoes = [], estat = [],
     .sort((a, b) => Number(b.prob) - Number(a.prob)).slice(0, 4)
     .map((x) => ({ proximo: ROTULO_CLASSE[x.para] || x.para, probabilidade: Math.round(Number(x.prob) * 100), mediana_dias: x.mediana, p25: x.p25, p75: x.p75, n: x.n }));
   const conclusoBase = linha('conclusao', 'decisao_seguinte');
-  const etapa = etapaDaArrematacao([...movs.map((m) => m.descricao), ...(publicacoes || []).map((p) => p.texto)]);
+  // Etapa só pelos atos RECENTES (180 dias): num processo antigo, um agravo de 2019 ou uma
+  // "carta" de outra fase passaria por etapa atual da arrematação.
+  const corte = somaDias(hoje, -180);
+  const etapa = etapaDaArrematacao([...movs.filter((m) => m.data >= corte).map((m) => m.descricao), ...(publicacoes || []).filter((p) => soData(p.data_disponibilizacao) >= corte).map((p) => p.texto)]);
 
   const frases = [];
   if (proximoDespacho) frases.push(proximoDespacho.atrasado

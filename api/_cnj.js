@@ -153,14 +153,18 @@ function formatarProcesso(hit, tribunal) {
   const s = hit._source || {};
   const riscos = analisarRiscos(s);
   const { fase, risco: nivelRisco } = detectarFase(s);
-  const movimentos = (s.movimentos || [])
-    .sort((a, b) => new Date(b.dataHora || 0) - new Date(a.dataHora || 0))
+  // O DataJud manda o detalhe em `complementosTabelados` (array), não em `complemento`: sem ler os
+  // dois, "Petição — Agravo de Petição" virava só "Petição" (01/10, processo real do TRT5).
+  const complementoDe = (m) => [m.complemento, ...(m.complementosTabelados || []).map((c) => c?.nome)].filter(Boolean).join(', ');
+  const ordenados = (s.movimentos || []).slice().sort((a, b) => new Date(b.dataHora || 0) - new Date(a.dataHora || 0));
+  const movimentos = ordenados
     .slice(0, 20)
     .map(m => ({
       data: m.dataHora?.split('T')[0] || '',
-      descricao: [m.nome, m.complemento].filter(Boolean).join(' — ').slice(0, 200),
+      descricao: [m.nome, complementoDe(m)].filter(Boolean).join(' — ').slice(0, 200),
       codigo: m.codigo,
-      risco: RISCOS_MAP.find(r => r.regex.test(`${m.nome || ''} ${m.complemento || ''}`))?.severidade || null,
+      nome_base: m.nome || '',
+      risco: RISCOS_MAP.find(r => r.regex.test(`${m.nome || ''} ${complementoDe(m)}`))?.severidade || null,
     }));
   const partes = (s.partes || []).map(p => ({
     nome: p.nome || '', tipo: p.polo || '', documento: p.cpf || p.cnpj || '',
@@ -169,7 +173,7 @@ function formatarProcesso(hit, tribunal) {
   const bloqueantes = riscos.filter(r => r.severidade === 'bloqueante').length;
   const alertas = riscos.filter(r => r.severidade === 'alerta').length;
   const scoreRisco = Math.min(100, bloqueantes * 35 + alertas * 15);
-  return {
+  const proc = {
     id: hit._id, tribunal: tribunal.toUpperCase(), numero: s.numeroProcesso || '',
     classe: s.classe?.nome || '', assuntos: (s.assuntos || []).map(a => a.nome).join('; '),
     orgao: s.orgaoJulgador?.nome || '', grau: s.grau || '', fase, nivel_risco: nivelRisco,
@@ -183,6 +187,17 @@ function formatarProcesso(hit, tribunal) {
     tem_bloqueante: bloqueantes > 0,
     tem_suspensiva: riscos.some(r => CATEGORIAS_SUSPENSIVAS.includes(r.categoria)),
   };
+  // SÉRIE COMPLETA para previsão e aprendizado (01/10). `movimentos` (20) é o que se MOSTRA; num
+  // processo do TRT5 com 642 movimentos, 20 cobriam só 6 semanas (7 "decurso de prazo" no mesmo
+  // dia), e o ritmo de despachos do juiz saía vazio. Não-enumerável de propósito: não entra em
+  // JSON (resposta da API, relatório gravado, prompt da IA) nem em spread — só quem pede lê.
+  // `nome_base` (só o nome do movimento) é o que vai para a chave da série gravada: com o
+  // complemento na descrição, o MESMO movimento já gravado viraria uma segunda linha.
+  Object.defineProperty(proc, 'movimentos_serie', {
+    enumerable: false,
+    value: ordenados.slice(0, 400).map(m => ({ data: m.dataHora?.split('T')[0] || '', codigo: m.codigo, nome_base: m.nome || '', descricao: [m.nome, complementoDe(m)].filter(Boolean).join(' — ').slice(0, 200) })),
+  });
+  return proc;
 }
 
 /**

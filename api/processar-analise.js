@@ -248,7 +248,7 @@ export default async function handler(req, res) {
       // A leitura por NÚMERO ensina o agente documental/processual (api/_aprendizado-processual.js).
       const doLote = numeroProcesso ? (resCNJ[0]?.processos || []).find(p => String(p.numero || '').replace(/\D/g, '') === String(numeroProcesso).replace(/\D/g, '')) : null;
       if (doLote?.movimentos?.length) await aprenderDaConsulta({ numero: numeroProcesso, origem: 'triagem', imovelId: caso.imovel_id || null,
-        processo: { numero: doLote.numero, tribunal: doLote.tribunal, classe: doLote.classe, movimentos: doLote.movimentos } }).catch(e => console.warn('[processar-analise] aprendizado:', e?.message || e));
+        processo: { numero: doLote.numero, tribunal: doLote.tribunal, classe: doLote.classe, movimentos: doLote.movimentos_serie?.length ? doLote.movimentos_serie : doLote.movimentos } }).catch(e => console.warn('[processar-analise] aprendizado:', e?.message || e));
       // 'nao_verificado' primeiro (antes virava NaN na ordenação e o verde de outra busca vencia).
       const peso = { nao_verificado: -1, vermelho: 0, amarelo: 1, verde: 2 };
       parecerCNJ = resCNJ.map(r => r?.parecer).filter(Boolean).sort((a, b) => (peso[a.nivel] ?? 1) - (peso[b.nivel] ?? 1))[0] || null;

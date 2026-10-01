@@ -57,7 +57,7 @@ export async function aprenderDaConsulta({ numero, processo = null, publicacoes 
     try {
       const r = await sb('processo_movimentos?on_conflict=numero_processo,data,codigo,descricao', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
-        body: JSON.stringify(movs.map((m) => ({ numero_processo: numeroSerie, data: String(m.data).slice(0, 10), codigo: m.codigo ?? null, descricao: String(m.descricao || '').slice(0, 300), risco: m.risco || null }))),
+        body: JSON.stringify(movs.map((m) => ({ numero_processo: numeroSerie, data: String(m.data).slice(0, 10), codigo: m.codigo ?? null, descricao: String(m.nome_base || m.descricao || '').slice(0, 300), risco: m.risco || null }))),
       });
       if (r.ok) out.movimentos_gravados = movs.length; else console.warn('[aprendizado-processual] série não gravada HTTP', r.status);
     } catch (e) { console.warn('[aprendizado-processual] série não gravada:', e?.message || e); }

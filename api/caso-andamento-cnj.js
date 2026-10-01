@@ -248,6 +248,8 @@ export default async function handler(req, res) {
   const processo = (cnj.processos || [])[0] || null;
   const erroCnj = !processo && (cnj.erros || []).length ? cnj.erros.join(' | ') : null;
   const movimentos = processo ? (processo.movimentos || []).map(m => ({ data: m.data, descricao: m.descricao, codigo: m.codigo })) : [];
+  // Série completa (até 400) para previsão e aprendizado; os 20 acima seguem para o resumo da IA.
+  const serie = processo?.movimentos_serie?.length ? processo.movimentos_serie : movimentos;
   const publicacoes = djen.erro ? [] : (djen.publicacoes || []);
 
   const contexto = dono.tabela === 'arrematados'
@@ -279,12 +281,12 @@ export default async function handler(req, res) {
   // série de movimentos, desfecho do arremate e lição 'processual' (api/_aprendizado-processual.js).
   const aprendizado = await aprenderDaConsulta({
     numero, origem: 'tela_caso', publicacoes, imovelId: UUID.test(String(registro.imovel_id || '')) ? registro.imovel_id : null,
-    processo: processo ? { numero: processo.numero, tribunal: processo.tribunal, classe: processo.classe, movimentos } : null,
+    processo: processo ? { numero: processo.numero, tribunal: processo.tribunal, classe: processo.classe, movimentos: serie } : null,
   }).catch((e) => { console.warn('[caso-andamento-cnj] aprendizado:', e?.message || e); return null; });
   try {
     const est = await estatisticaFluxo(justicaDoNumero(numero));
     // DataJud fora: usa a série JÁ gravada deste processo (monitor/consultas anteriores), dita no retorno.
-    let movsPrev = movimentos, doHistorico = false;
+    let movsPrev = serie, doHistorico = false;
     if (!movsPrev.length) {
       const dig = String(numero).replace(/\D/g, '');
       const hist = await sbGet(`processo_movimentos?numero_processo=in.(${dig},${encodeURIComponent(numero)})&select=data,codigo,descricao&order=data.desc&limit=200`).catch((e) => { console.warn('[caso-andamento-cnj] série gravada ilegível:', e?.message || e); return []; });

@@ -50,7 +50,7 @@ async function gravarMovimentos(numero, movimentos) {
   const linhas = (movimentos || [])
     .filter(m => m?.data)
     .map(m => ({ numero_processo: numero, data: m.data, codigo: m.codigo ?? null,
-                 descricao: String(m.descricao || '').slice(0, 300), risco: m.risco || null }));
+                 descricao: String(m.nome_base || m.descricao || '').slice(0, 300), risco: m.risco || null }));
   if (!linhas.length) return 0;
   const r = await sb('processo_movimentos?on_conflict=numero_processo,data,codigo,descricao', {
     method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal', body: linhas });
@@ -98,7 +98,7 @@ async function handler(req) {
       }
       checados++;
       const dataMov = ultimaData(proc);
-      movimentosGravados += await gravarMovimentos(proc.numero || mon.numero_processo, proc.movimentos);
+      movimentosGravados += await gravarMovimentos(proc.numero || mon.numero_processo, proc.movimentos_serie?.length ? proc.movimentos_serie : proc.movimentos);
       const temSusp = !!proc.tem_suspensiva || !!proc.tem_bloqueante;
       const ant = mon.snapshot || {};
       const mudou = dataMov && dataMov !== mon.ultima_data_mov;

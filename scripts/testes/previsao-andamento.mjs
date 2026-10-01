@@ -85,3 +85,20 @@ console.log('previsao-andamento: todos os casos passaram');
   assert.match(ref.aviso, /não do seu processo/);
   console.log('previsao-sem-fonte: todos os casos passaram');
 }
+
+// 01/10 — processo REAL do TRT5 (0000199-97.2016.5.05.0195): com os 20 últimos movimentos o ritmo de
+// despachos saía vazio; com a série completa, ~40 dias entre despachos. E o agravo de petição de
+// 10/09 (que só existe em complementosTabelados) é a etapa atual — o de 2025 fica fora (>180 dias).
+{
+  const { preverAndamento: pa, classeMovimento: cm } = await import('../../api/_previsao-processo.js');
+  const desp = ['2026-08-26','2026-07-06','2026-04-27','2026-03-18','2026-02-02','2025-12-09','2025-11-04','2025-09-30','2025-07-29','2025-07-28','2025-07-14','2025-02-20','2024-11-14','2024-10-07','2024-09-02','2024-08-06','2024-07-03'];
+  const movs = [{ data: '2026-09-10', codigo: 85, descricao: 'Petição — Agravo de Petição' }, { data: '2025-12-01', codigo: 85, descricao: 'Petição — Agravo de Petição' },
+    ...desp.map((d) => ({ data: d, codigo: 11010, descricao: 'Mero expediente' }))];
+  const pv = pa({ movimentos: movs, publicacoes: [], estat: [], justica: 'trabalho', hoje: '2026-10-01' });
+  if (!pv.proximo_despacho || pv.entre_despachos?.fonte !== 'este processo') { console.error('FALHOU: série completa deveria dar o ritmo de despachos', pv); process.exit(1); }
+  if (!/agravo de peti/.test(pv.etapa_arrematacao?.etapa || '')) { console.error('FALHOU: agravo de petição recente deveria ser a etapa', pv.etapa_arrematacao); process.exit(1); }
+  const velho = pa({ movimentos: [{ data: '2025-12-01', codigo: 85, descricao: 'Petição — Agravo de Petição' }, ...desp.map((d) => ({ data: d, codigo: 11010, descricao: 'Mero expediente' }))], estat: [], hoje: '2026-10-01' });
+  if (/agravo/.test(velho.etapa_arrematacao?.etapa || '')) { console.error('FALHOU: agravo de 10 meses atrás não é etapa atual'); process.exit(1); }
+  if (cm(200, 'Não-Acolhimento de Embargos de Declaração') !== 'decisao') { console.error('FALHOU: código 200 é decisão'); process.exit(1); }
+  console.log('✓ TRT5 real: ritmo de despachos com série completa, agravo de petição recente como etapa');
+}
