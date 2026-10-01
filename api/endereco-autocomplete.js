@@ -74,7 +74,10 @@ export default async function handler(req) {
       u.searchParams.set('key', KEY);
       const r = await fetch(u.toString(), { signal: AbortSignal.timeout(8000) });
       const d = await r.json();
-      if (d.status !== 'OK') return new Response(JSON.stringify({ ok: false, status: d.status }), { status: 200, headers });
+      if (d.status !== 'OK') {
+        console.error('[endereco-autocomplete] details', d.status, String(d.error_message || '').slice(0, 200));
+        return new Response(JSON.stringify({ ok: false, status: d.status, erro: String(d.error_message || '').slice(0, 160) || undefined }), { status: 200, headers });
+      }
       return new Response(JSON.stringify({ ok: true, endereco: comp(d.result) }), { status: 200, headers });
     }
     if (q.length < 3) return new Response(JSON.stringify({ ok: true, sugestoes: [] }), { status: 200, headers });
@@ -87,7 +90,9 @@ export default async function handler(req) {
     const r = await fetch(u.toString(), { signal: AbortSignal.timeout(8000) });
     const d = await r.json();
     if (d.status !== 'OK' && d.status !== 'ZERO_RESULTS') {
-      return new Response(JSON.stringify({ ok: false, status: d.status, sugestoes: [] }), { status: 200, headers });
+      // `error_message` é o que diz POR QUE (API não ativada, faturamento, restrição da chave).
+      console.error('[endereco-autocomplete] autocomplete', d.status, String(d.error_message || '').slice(0, 200));
+      return new Response(JSON.stringify({ ok: false, status: d.status, erro: String(d.error_message || '').slice(0, 160) || undefined, sugestoes: [] }), { status: 200, headers });
     }
     const sugestoes = (d.predictions || []).map((p) => ({
       id: p.place_id,
@@ -97,6 +102,7 @@ export default async function handler(req) {
     }));
     return new Response(JSON.stringify({ ok: true, sugestoes }), { status: 200, headers });
   } catch (e) {
+    console.error('[endereco-autocomplete] exceção', String(e?.message || e));
     return new Response(JSON.stringify({ ok: false, erro: String(e?.message || e), sugestoes: [] }), { status: 200, headers });
   }
 }

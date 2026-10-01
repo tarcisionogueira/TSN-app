@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin, Loader2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { reportarErroCliente } from '../utils/reportarErro';
 
 /**
  * Autocomplete de endereço estilo Google (o mesmo do Plans & Billing do Anthropic).
@@ -21,6 +22,7 @@ export default function EnderecoAutocomplete({ onSelect, onType, placeholder = '
   const [aberto, setAberto] = React.useState(false);
   const [carregando, setCarregando] = React.useState(false);
   const [indice, setIndice] = React.useState(-1);
+  const [falha, setFalha] = React.useState('');
   const tokenRef = React.useRef(null);
   const timerRef = React.useRef(null);
   const boxRef = React.useRef(null);
@@ -44,9 +46,20 @@ export default function EnderecoAutocomplete({ onSelect, onType, placeholder = '
       try {
         const r = await apiCall('/api/endereco-autocomplete', { method: 'POST', body: JSON.stringify({ q: texto, sessiontoken: tokenRef.current }) });
         const d = await r.json().catch(() => ({}));
-        setSugestoes(Array.isArray(d.sugestoes) ? d.sugestoes : []);
-        setAberto(true); setIndice(-1);
-      } catch { setSugestoes([]); }
+        // FALHA ≠ "NENHUM ENDEREÇO" (01/10, dono: "não está auto preenchendo"). O proxy devolve 200
+        // com `ok:false` + `status` do Google (REQUEST_DENIED, OVER_QUERY_LIMIT…) e aqui isso virava
+        // lista vazia, idêntica a "não achei". Agora o motivo aparece e vai para erros_cliente.
+        if (!r.ok || d.ok === false || d.disabled) {
+          const motivo = [d.status, d.erro].filter(Boolean).join(' — ') || (d.disabled ? 'sem chave do Google' : `HTTP ${r.status}`);
+          setFalha(motivo);
+          reportarErroCliente({ msg: `endereco-autocomplete indisponível: ${motivo}` }).catch(() => { /* o aviso na tela já cobre */ });
+          setSugestoes([]);
+        } else {
+          setFalha('');
+          setSugestoes(Array.isArray(d.sugestoes) ? d.sugestoes : []);
+          setAberto(true); setIndice(-1);
+        }
+      } catch (e) { setSugestoes([]); setFalha(String(e?.message || 'rede')); }
       setCarregando(false);
     }, 320);
   };
@@ -58,7 +71,8 @@ export default function EnderecoAutocomplete({ onSelect, onType, placeholder = '
       const r = await apiCall('/api/endereco-autocomplete', { method: 'POST', body: JSON.stringify({ place_id: s.id, sessiontoken: tokenRef.current }) });
       const d = await r.json().catch(() => ({}));
       if (d.ok && d.endereco) onSelect?.(d.endereco);
-    } catch { /* silencioso: usuário pode preencher manual */ }
+      else { const motivo = [d.status, d.erro].filter(Boolean).join(' — ') || `HTTP ${r.status}`; setFalha(motivo); reportarErroCliente({ msg: `endereco-autocomplete detalhe falhou: ${motivo}` }).catch(() => { /* aviso na tela */ }); }
+    } catch (e) { setFalha(String(e?.message || 'rede')); }
     setCarregando(false);
     tokenRef.current = null; // encerra a sessão de cobrança do Google
   };
@@ -85,6 +99,11 @@ export default function EnderecoAutocomplete({ onSelect, onType, placeholder = '
         />
         {carregando && <Loader2 size={16} color="#0D63DB" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', animation: 'spin 1s linear infinite' }} />}
       </div>
+      {falha && (
+        <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 4 }}>
+          Sugestões de endereço indisponíveis agora — digite cidade/UF manualmente.
+        </div>
+      )}
       {aberto && sugestoes.length > 0 && (
         <div style={{ position: 'absolute', zIndex: 40, top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', maxHeight: 280, overflowY: 'auto' }}>
           {sugestoes.map((s, i) => (
