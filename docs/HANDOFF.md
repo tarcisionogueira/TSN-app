@@ -19,6 +19,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   não há prova nem a favor nem contra. Causa-raiz original: Gemini fora (403 em 08/09, 402 sem crédito) → Haiku
   respondendo de memória. Reforço proativo segue OFF por decisão (`INDICE_REFORCO`). **Falta: 1 geração real**
   (Índice → um tipo → Gerar) e conferir `geracao_custos` (`funcao='indice'`, `ok`, `meta.motor`, `meta.motivo`).
+- **Timeout Barueri/apartamento (dono, 01/10 ~13h) — sem rastro no banco.** Furo achado: a cascata Haiku→Sonnet
+  repassava o `timeoutMs` INTEIRO a cada degrau (Haiku 4xx tardio + Sonnet 120 s + Gemini 80 s > 250 s → Vercel mata
+  antes do registro). Corrigido (ad1447f): prazo único + sobe só com 30 s de folga (indice-mercado e reforço) e
+  **vigia aos ~243 s** que grava a falha com motivo. Causa exata NÃO confirmada (logs da Vercel deram timeout na
+  consulta) — a próxima tentativa deixa linha em `geracao_custos` de qualquer jeito. `gerar-analise-veiculo` tem o
+  mesmo padrão (70 s fixo por degrau, maxDuration maior) — não mexido.
+- **OpenWA (zip do dono):** gateway NÃO oficial (whatsapp-web.js/Baileys, QR, servidor 24 h). Workflows são só CI
+  dele. README do próprio projeto: nunca usar em número comercial. Decisão: NÃO usar no número da BidPro; seguir
+  com a Cloud API oficial já pronta.
 - **Achado, decisão do dono:** o mercadológico NUNCA alimentou `indice_amostras` de forma contínua (`origem=
   relatorio_mercado` só no backfill de 24/07). Religar exige cuidado: o mercadológico já CONSOME o índice
   (`indiceBidPro`/`reaproveitado` → circular) e há locação "estimada" (não anúncio). Não feito.
