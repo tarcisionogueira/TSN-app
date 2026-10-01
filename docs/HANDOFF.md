@@ -49,8 +49,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   idêntica (md5 igual em 6 usuários). Migração 20261001_minhas_analises_lista_join_por_uuid. Mesmo padrão corrigido
   nas 3 rotinas (`limpar_analises_orfas`, `atualizar_confiabilidade_leiloeiro` — roda a cada documental, agora 58 ms —,
   `proximas_fotos_espelho`): migração 20261001_join_acervo_por_uuid_rotinas.
-- **juridico-retry e-mail falso CONFIRMADO e corrigido (603e2fb):** Z37342/Jorge Augusto recebeu "consulta concluída"
-  às 09:45 com `result.consultas.cnj` nulo. Agora exige status concluida + consulta CNJ gravada.
+- **juridico-retry — trava de prova (603e2fb → corrigida no commit seguinte):** "consulta concluída" só sai com status
+  concluida + `result.cnj` gravado (RAIZ do result; `metodologia.consultas.cnj` é só o resumo). ⚠️ Eu li o campo errado
+  (`result.consultas.cnj`, inexistente) e concluí que o e-mail do Z37342 (09:45) foi falso — **NÃO foi**: a linha do
+  admin tinha 6 publicações achadas pelo nome no DJEN. A 603e2fb ficou ~10 min apontando o campo errado; nenhuma marca
+  foi limpa nesse intervalo (as 3 marcadas seguem com cnj pendente).
 - **Testes (7ffd0ef):** edital-desatualizado (guarda dataLeilao2), venda-direta (env no import) e aprendizado-processual
   (datas relativas) verdes. 102/107 no node puro; os 5 restantes são de ambiente (3 Playwright, 2 vite-node — passam).
 - **Cancelamento mensal (Marcos, 01/10) — 2 defeitos, corrigidos (ffb313c):** (1) `mp-webhook` rebaixava NA HORA do

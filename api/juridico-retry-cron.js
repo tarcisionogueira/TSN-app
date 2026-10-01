@@ -106,14 +106,15 @@ export default async function handler(req, res) {
     const resolvidos = await sbGet(
       `analises_documental?juridico_avisar_email=eq.true&status=eq.concluida` +
       `&or=(regen_motivo.is.null,regen_motivo.not.ilike.*cnj_nao_consultado*)` +
-      `&select=user_id,imovel_id,titulo,cidade,estado,cnj:result->consultas->cnj&limit=30`
+      `&select=user_id,imovel_id,titulo,cidade,estado,cnj:result->cnj&limit=30`
     );
     for (const r of (Array.isArray(resolvidos) ? resolvidos : [])) {
       try {
         // PROVA POSITIVA, não ausência de marca (01/10). "O regen_motivo não cita mais
         // cnj_nao_consultado" também é verdade numa linha regerada por OUTRO motivo, ou sem
         // processo a consultar — e o cliente recebia "consulta jurídica concluída" sem consulta.
-        // Só avisa se o resultado gravado traz a consulta CNJ feita; senão limpa a marca calado.
+        // Só avisa se o resultado gravado traz a consulta CNJ feita (`result.cnj`, na RAIZ — o
+        // espelho em `metodologia.consultas.cnj` é só resumo); senão limpa a marca calado.
         if (!r.cnj) {
           console.warn('[juridico-retry-cron] marca limpa SEM e-mail (sem consulta CNJ no resultado)', r.imovel_id);
           await sbPatch(
