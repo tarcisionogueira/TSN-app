@@ -65,15 +65,17 @@ async function reforcarCidade(cidade, uf) {
   // mais pesa: ele varre CIDADE POR CIDADE, com 8 buscas cada, sem ninguém esperando na tela.
   // A busca PROVA que buscou (`_busca-com-prova.js`, 28/09): resposta sem nenhuma busca web não
   // semeia nada — seria semear o índice com o que o modelo "lembra", não com anúncio.
-  const buscar = async (webUses, timeoutMs) => comCascataBusca(async (degrau) => {
+  // Prazo único para a cascata (01/10): o degrau seguinte recebe o que SOBRA, não o timeout cheio
+  // de novo — senão Haiku recusado + Sonnet somam além do maxDuration (ver indice-mercado.js).
+  const buscar = async (webUses, timeoutMs) => { const fim = Date.now() + timeoutMs; return comCascataBusca(async (degrau) => {
     const { texto, buscas } = await buscarComProva({
-      degrau, chave: CLAUDE_KEY, webUses, timeoutMs, maxTokens: 16000,
+      degrau, chave: CLAUDE_KEY, webUses, timeoutMs: Math.max(10000, fim - Date.now()), maxTokens: 16000,
       system: `Perito avaliador. Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra. Só mercado livre (descarte leilão). ${EXIGE_BUSCA}`,
       prompt: promptIndice({ tipo: 'todos', cidade, uf }),
     });
     if (!buscas) return null;
     return parseJSON(texto); // null se truncou
-  });
+  }, { podeContinuar: () => fim - Date.now() > 30000 }); };
   try {
     // 1ª arrojada (8 buscas); se travar/truncar, 2ª ESTREITA (3) que conclui (igual ao gerador ao vivo).
     let mercado = null;

@@ -129,6 +129,15 @@ export default async function handler(req, res) {
   // ESTREITA (3 buscas) que costuma CONCLUIR — evita 502 e "0 amostras" numa pesquisa cara.
   const T0 = Date.now();
   let custoMicro = 0, mercado = null, motivoFalha = null, motorUsado = null;
+  // VIGIA DO TETO (01/10): se a função chegar a ~243 s ainda pesquisando, grava a falha ANTES de a
+  // Vercel matá-la aos 250 s. Sem isto o timeout não deixava rastro nenhum — nem linha em
+  // geracao_custos, nem motivo — e o health-check seguia lendo o problema antigo. Desarmado no
+  // primeiro registro normal (sucesso ou falha), então nunca grava em dobro.
+  let registrado = false;
+  const vigia = setTimeout(() => {
+    if (registrado) return; registrado = true;
+    registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: `teto da função (~243 s) ainda pesquisando — ${String(motivoFalha || 'sem falha anterior registrada').slice(0, 220)}` } }).catch(() => {});
+  }, 243000);
   // MOTOR PRIMÁRIO: Gemini grounding — o MESMO do mercadológico desde 30/07. O Índice tinha
   // ficado para trás no Claude web_search e a conta chegou em 06/08: a pesquisa de "casa" em
   // Santana de Parnaíba/Jardim Paula ABORTOU nas duas tentativas (200s) e o cliente recebeu
@@ -164,11 +173,17 @@ export default async function handler(req, res) {
   // Três travas: (1) o sistema manda buscar antes de responder; (2) se a volta vier sem busca,
   // UMA cobrança na mesma conversa; (3) resultado sem nenhuma busca nunca é aceito. `pause_turn`
   // é continuado como no mercadológico (a busca server-side pausa em pesquisas longas).
-  const buscar = async (webUses, timeoutMs, compacto = false) => comCascataBusca(async (degrau) => {
+  // PRAZO ÚNICO PARA A CASCATA (01/10, Barueri/apartamento morreu no teto sem gravar nada).
+  // `timeoutMs` era repassado INTEIRO a cada degrau: Haiku recusado com 4xx DEPOIS de buscar
+  // (contexto estourado pelos resultados — o caso que a cascata prevê) subia para o Sonnet com
+  // mais 120 s cheios, e Gemini 80 s + Haiku ~100 s + Sonnet 120 s passa dos 250 s. A Vercel mata a
+  // função antes do registro: sem linha em geracao_custos, sem motivo, e o cliente só vê "tempo
+  // limite". Agora o degrau seguinte recebe o que SOBRA e só sobe com folga real.
+  const buscar = async (webUses, timeoutMs, compacto = false) => { const fim = Date.now() + timeoutMs; return comCascataBusca(async (degrau) => {
     let res;
     try {
       res = await buscarComProva({
-        degrau, chave: CLAUDE_KEY, webUses, timeoutMs, maxTokens: 12000,
+        degrau, chave: CLAUDE_KEY, webUses, timeoutMs: Math.max(10000, fim - Date.now()), maxTokens: 12000,
         system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). ${EXIGE_BUSCA}`,
         prompt: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }),
         aoCusto: (c) => { custoMicro += c; },
@@ -189,7 +204,8 @@ export default async function handler(req, res) {
     // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — sem dizer se foi 429, timeout ou JSON cortado.
     if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${buscas}) texto="${trecho}"`;
     return json;
-  }, { aoFalhar: (degrau, e, subiu) => { motivoFalha = `${degrau.model}: ${motivoFalha || String(e?.message || e).slice(0, 80)}${subiu ? ' (subiu de degrau)' : ''}`; } });
+  }, { podeContinuar: () => fim - Date.now() > 30000,
+       aoFalhar: (degrau, e, subiu) => { motivoFalha = `${degrau.model}: ${motivoFalha || String(e?.message || e).slice(0, 80)}${subiu ? ' (subiu de degrau)' : ''}`; } }); };
   // ORÇAMENTO DE TEMPO (achado 06/08 — 504 "Task timed out after 250 seconds"): os timeouts
   // eram FIXOS (150s + 80s) e não conversavam com o maxDuration. Somados ao overhead já
   // raspavam o teto; com um retry interno passavam dele, e o cliente recebia a página de erro
@@ -228,7 +244,10 @@ export default async function handler(req, res) {
     console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, segundos: Math.round((Date.now() - T0) / 1000), motivo: motivoFalha });
     // Pesquisa que falhou GASTOU: registra como desperdício (ok:false) para a média por
     // geração distinguir o custo do produto do custo das tentativas perdidas.
-    await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: String(motivoFalha || '').slice(0, 300) } });
+    clearTimeout(vigia);
+    if (!registrado) { registrado = true;
+      await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: String(motivoFalha || '').slice(0, 300) } });
+    }
     res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: motivoFalha || 'busca instável' });
     return;
   }
@@ -267,6 +286,8 @@ export default async function handler(req, res) {
     return { n1v: itens[0].length, n1l: itens[1].length, n2v: itens[2].length, n2l: itens[3].length,
       chaves: primeiro ? Object.keys(primeiro).slice(0, 14) : [], exemplo: primeiro ? JSON.stringify(primeiro).slice(0, 220) : null };
   })();
+  clearTimeout(vigia);
+  if (!registrado) registrado = true; else console.warn('[indice-mercado] concluiu depois do vigia do teto');
   await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000), ...(diagVazio ? { diag: diagVazio } : {}) } });
 
   // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
