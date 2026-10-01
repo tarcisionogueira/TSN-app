@@ -29,6 +29,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   Billing on the Google Cloud Project` (lido em erros_cliente após 033f9c3, que parou de engolir o erro). A mesma chave
   geocodifica: `uso_integracoes` google_geocode caiu de 65–447/dia para 1 em 01/10. **Ação do dono: reativar o
   faturamento no Google Cloud.** Até lá: "digitar cidade/UF manualmente".
+  **RESOLVIDO 01/10 ~16h:** a chave antiga estava num projeto da conta PESSOAL (cisioaraujo@gmail — `conselheiro`
+  ou `fluid-shoreline-311613`, faturamento encerrado em 16/09) e a org reimob.com.br bloqueia @gmail na conta de
+  faturamento (`iam.allowedPolicyMemberDomains` — correto, não afrouxar). **Chave NOVA** em `wide-office-503301-h9`
+  ("My First Project", org reimob, conta de faturamento BidPro Brasil 0153DD — pós-paga, com crédito), restrita a
+  **Geocoding API + Places API (New)**, em `GOOGLE_MAPS_API_KEY` na Vercel. O proxy usa a Places API (New) primeiro
+  (608217d) e a legada só como reserva — a legada NÃO pode ser ativada em projeto novo. Conferido pelo dono na tela
+  (sugestões de "paisagem tambo") e sem recusa nova em erros_cliente depois de 15:42. "−R$ 399,96" no faturamento =
+  CRÉDITO (2 × R$ 200 pagos − R$ 0,04 de uso), não dívida. Gemini roda no AI Studio pré-pago (R$ 98,90, sem recarga
+  automática) — vigiar o saldo.
 - **E-mail ao leiloeiro "suprimido":** `atendimento.infraenergia@superbid.net` deu bounce PERMANENTE em 30/09 → supressão
   correta. Mensagem agora diz o que fazer (422 `destinatario_suprimido`). **Bug corrigido:** `enviar-email-caso` gravava o
   contato digitado ANTES de checar `r.ok` (o comentário dizia o contrário) — e-mail que falhou virava cadastro.
