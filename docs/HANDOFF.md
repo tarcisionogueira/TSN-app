@@ -38,6 +38,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   (sugestões de "paisagem tambo") e sem recusa nova em erros_cliente depois de 15:42. "−R$ 399,96" no faturamento =
   CRÉDITO (2 × R$ 200 pagos − R$ 0,04 de uso), não dívida. Gemini roda no AI Studio pré-pago (R$ 98,90, sem recarga
   automática) — vigiar o saldo.
+- **Índice voltou (01/10 16:21):** Paisagem Tamboré/apartamento — Gemini, 27 s, 33 amostras, 30 inseridas, US$ 0,05.
+  1ª amostra nova desde 11/09. **Achado junto:** `indice-geocodificar-cron` passava `cidade_norm` SEM ESPAÇO
+  ("santanadeparnaiba") ao Nominatim → 0 de 12 com coordenada (era 69–100% até 11/09) e a falha tirava a amostra da
+  fila. Corrigido (5419efa + RPC `municipio_nome`, migração 20261001_municipio_nome_por_cidade_norm); 16 amostras
+  devolvidas à fila às 16:24. **Conferir após o cron das 16:50 UTC:**
+  `select count(*) filter (where geocod_em is not null) tentadas, count(lat) com_geo from indice_amostras where criado_em > '2026-09-11';`
 - **E-mail ao leiloeiro "suprimido":** `atendimento.infraenergia@superbid.net` deu bounce PERMANENTE em 30/09 → supressão
   correta. Mensagem agora diz o que fazer (422 `destinatario_suprimido`). **Bug corrigido:** `enviar-email-caso` gravava o
   contato digitado ANTES de checar `r.ok` (o comentário dizia o contrário) — e-mail que falhou virava cadastro.
