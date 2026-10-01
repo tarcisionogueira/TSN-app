@@ -11,6 +11,7 @@ import { escapeHtml } from './_sanitize.js';
 // explorador→assessorado, pulando o Pro — a regra "absoluta" do dono só existia no autoatendimento).
 import { acessoAssessoria } from '../src/lib/assessoria-acesso.js';
 import { logAtividade } from './_atividade.js';
+import { preencherSignatario } from './_signatario.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -163,14 +164,20 @@ export default async function handler(req) {
   } catch { /* o match é reforço; falha técnica NÃO bloqueia a assinatura legítima */ }
 
   const assinado_em = new Date().toISOString();
+  // O texto ASSINADO não pode ter lacuna (01/10): marcador do signatário que sobrou é preenchido com o
+  // que ele próprio digitou no formulário de assinatura, ANTES do hash — o hash vincula o texto final.
+  const conteudoFinal = preencherSignatario(contrato.conteudo || '', {
+    nome: dados?.nome, documento: dados?.cpf || dados?.cnpj, endereco: typeof dados?.endereco === 'string' ? dados.endereco : null,
+  });
   // Hash inclui o CONTEÚDO do contrato → vincula a assinatura ao texto assinado
-  const hash = await sha256((contrato.conteudo || '') + JSON.stringify(dados) + assinatura + token + assinado_em);
+  const hash = await sha256(conteudoFinal + JSON.stringify(dados) + assinatura + token + assinado_em);
 
   const patch = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
       status: 'assinado',
+      ...(conteudoFinal !== (contrato.conteudo || '') ? { conteudo: conteudoFinal } : {}),
       tipo_pessoa: tipo_pessoa || null,
       dados_signatario: dados,
       assinatura,

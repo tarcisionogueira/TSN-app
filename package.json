@@ -21,6 +21,7 @@
     "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
     "testar:doc-normalizar": "node scripts/testes/doc-normalizar.mjs",
     "testar:lance-pagina": "node scripts/testes/lance-pagina.mjs",
+    "testar:signatario": "node scripts/testes/signatario-preenchido.mjs",
     "testar:zero-declarado": "node scripts/testes/zero-declarado-pelo-site.mjs",
     "testar:zuk-local-veiculo": "node scripts/testes/zuk-local-veiculo.mjs",
     "testar:area-hectares": "node scripts/testes/area-em-hectares.mjs",

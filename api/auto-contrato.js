@@ -5,6 +5,7 @@ import { auditLog } from './_audit.js';
 import { sanitizeName, sanitizeEmail } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
 import { termoAssessoria, precosAssessoria } from './_termo-assessoria.js';
+import { dadosConhecidosDoSignatario, preencherSignatario } from './_signatario.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -131,9 +132,14 @@ export default async function handler(req, res) {
     precos = await precosAssessoria(sbRest).catch((e) => { console.error('[auto-contrato] preços:', e?.message || e); return null; });
     if (!precos) return res.status(502).json({ error: 'nao_foi_possivel_ler_precos_assessoria' });
   }
-  const conteudo = (planoKey === 'assessorado' ? termoAssessoria(precos) : TEMPLATE_CLUBE)
+  let conteudo = (planoKey === 'assessorado' ? termoAssessoria(precos) : TEMPLATE_CLUBE)
     .replace(/\[NOME DO SIGNATÁRIO\]/gi, nomeContrato)
     .replace(/\[NOME\]/gi, nomeContrato);
+  // CPF e endereço do perfil (o checkout já os coletou) — antes o termo ia com os marcadores vazios.
+  if (userId) {
+    const sbRestSig = (path) => fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } });
+    conteudo = preencherSignatario(conteudo, await dadosConhecidosDoSignatario(sbRestSig, userId));
+  }
 
   const { data, error } = await supabase
     .from('contratos_link')

@@ -18,6 +18,8 @@
 //
 // Sem dependência de supabase-js: roda no Edge (atribuir-arremate) e no Node (auto-contrato).
 
+import { dadosConhecidosDoSignatario, preencherSignatario } from './_signatario.js';
+
 const BASE = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA PARA ARREMATAÇÃO EM LEILÕES
 
 CONTRATADA (ASSESSORIA): NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-61, com sede em Feira de Santana/BA, representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, brasileiro, empresário, inscrito no CPF nº 042.293.535-29.
@@ -152,7 +154,7 @@ OUTORGADA: NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-6
 
 5. FORMA E VIGÊNCIA. Procuração particular, sem registro ou reconhecimento de firma em cartório, válida pela assinatura eletrônica (MP 2.200-2/2001 e Lei 14.063/2020), vigente até a conclusão da arrematação e do registro do bem, ou até revogação expressa da OUTORGANTE. Se algum órgão exigir firma reconhecida ou instrumento público para ato específico, a OUTORGANTE se obriga a providenciá-lo em até 5 (cinco) dias úteis da solicitação.
 
-OUTORGANTE: [NOME DO SIGNATÁRIO] — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
+OUTORGANTE: ${nome || '[NOME DO SIGNATÁRIO]'} — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
 }
 
 // ── Leitura de apoio comum ────────────────────────────────────────────────────────────────
@@ -254,6 +256,9 @@ export async function gerarTermoAssessoria(sb, { userId = null, casoId = null, a
       imovel: descricaoImovel(caso, a, im),
       honorarios: a ? { valor: a.honorarios_valor, pagoEm: a.honorarios_pago_em } : {},
     }).replace(/\[NOME DO SIGNATÁRIO\]/gi, nome || '[NOME DO SIGNATÁRIO]').replace(/\[NOME\]/gi, nome || '[NOME]');
+    // CPF e endereço do que o sistema já sabe (perfil ou documento que o cliente já assinou) — antes
+    // o termo saía com "[CPF/CNPJ DO SIGNATÁRIO]" mesmo com os dados no banco.
+    const conteudoFinal = preencherSignatario(conteudo, await dadosConhecidosDoSignatario(sb, uid));
 
     let cobrancaUrl = null;
     if (taxa === 'parcelado' || taxa === 'vista') {
@@ -269,7 +274,7 @@ export async function gerarTermoAssessoria(sb, { userId = null, casoId = null, a
       cobrancaUrl = cob?.id ? `${ORIGIN()}/#/cobranca/${cob.id}` : null;
     }
     const r = await criarDocumento(sb, {
-      userId: uid, titulo: 'Termo de Contratação da Assessoria', conteudo, produtoTipo: 'assessoria',
+      userId: uid, titulo: 'Termo de Contratação da Assessoria', conteudo: conteudoFinal, produtoTipo: 'assessoria',
       produtoId: caso?.id || `${uid}:${referencia || '1'}`, planoKey: 'assessorado', imovelId: im?.id || null, criadoPor,
     });
     return { ...r, cobrancaUrl };
@@ -287,7 +292,8 @@ export async function gerarProcuracao(sb, { casoId = null, arrematacaoId = null,
     if (!imovel) return { ok: false, motivo: 'caso sem imóvel identificado — a procuração precisa dizer qual arrematação' };
     const nome = await nomeDo(sb, caso.cliente_id);
     return await criarDocumento(sb, {
-      userId: caso.cliente_id, titulo: 'Procuração Particular — Arrematação', conteudo: procuracaoArrematacao(nome, imovel),
+      userId: caso.cliente_id, titulo: 'Procuração Particular — Arrematação',
+      conteudo: preencherSignatario(procuracaoArrematacao(nome, imovel), await dadosConhecidosDoSignatario(sb, caso.cliente_id)),
       produtoTipo: 'arrematacao', produtoId: caso.id, planoKey: null, imovelId: im?.id || null, criadoPor,
     });
   } catch (e) {

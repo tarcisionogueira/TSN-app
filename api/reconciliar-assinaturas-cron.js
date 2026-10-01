@@ -14,6 +14,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
 import { createClient } from '@supabase/supabase-js';
+import { preencherDocumentosPendentes } from './_signatario.js';
 
 const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
 
@@ -59,6 +60,16 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500 });
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+  // DOCUMENTOS COM LACUNA DO SIGNATÁRIO (01/10): termo/procuração aguardando assinatura que ainda têm
+  // "[CPF/CNPJ DO SIGNATÁRIO]"/"[ENDEREÇO DO SIGNATÁRIO]" são preenchidos com o que o sistema sabe
+  // (perfil com CPF decifrado aqui, no servidor; ou o último documento que o cliente assinou).
+  let signatario = null;
+  try {
+    const sbRest = (path, opts = {}) => fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/${path}`, { ...opts,
+      headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+    signatario = await preencherDocumentosPendentes(sbRest);
+  } catch (e) { signatario = { erro: String(e?.message || e).slice(0, 120) }; }
 
   let verificados = 0, corrigidos = 0, rebaixados = 0;
   const mpGet = async (path) => {
@@ -268,5 +279,5 @@ async function handler(req) {
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
-  return new Response(JSON.stringify({ ok: true, verificados, corrigidos, rebaixados }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, verificados, corrigidos, rebaixados, signatario }), { headers: { 'Content-Type': 'application/json' } });
 }

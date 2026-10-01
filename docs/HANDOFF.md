@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✍️ 01/10 (noite) — termo/procuração saíam com "[CPF/CNPJ DO SIGNATÁRIO]" (achado do dono, Marcos)
+- **Causa:** `_termo-assessoria.js` só preenchia o NOME; nada (geração nem assinatura) preenchia CPF/endereço.
+  `perfis.endereco` dos assessorados é só "Cidade/UF" e o CPF do Marcos NÃO estava no perfil — estava no
+  `dados_signatario` da "PROCURAÇÃO" que ele assinou em 01/10 21:26.
+- **Corrigido:** `api/_signatario.js` (teste `testar:signatario`): perfil (CPF decifrado) → último documento
+  assinado; CPF/CNPJ só com DV válido; endereço só com rua/número. Usado no termo, na procuração, no checkout
+  (auto-contrato) e NA ASSINATURA (marcador que sobrou vira o que o cliente digitou, antes do hash).
+  `reconciliar-assinaturas-cron` (horário) preenche os pendentes (`signatario` na resposta).
+- **Feito no banco:** Marcos — termo e procuração completos. Matheus — CPF preenchido; endereço segue em
+  aberto (perfil só cidade, digitou 6 letras ao assinar, sem anexos). Rafael — CPF cifrado no perfil →
+  o cron preenche na próxima hora; endereço idem ao Matheus (sem dado com rua).
+
 ### ⭐ 01/10 (noite) — ACOMPANHAMENTO (favoritos) com lance corrente — pedido do dono
 - **Estrela** em `/imovel/:id`, `/admin/veiculos-leilao/:id` e nos cards de Minhas Análises (`FavoritoBotao.jsx`);
   seção **Acompanhamento** no topo de Minhas Análises (`AcompanhamentoFavoritos.jsx` → RPC `meus_favoritos()`).
