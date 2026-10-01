@@ -148,6 +148,19 @@ export async function extrairTextoDoc(file) {
         }
         return { texto: null, imagem: null, motivo: `"${nome}" parece ser um PDF digitalizado (imagem), sem texto que dê para ler automaticamente` };
       }
+      // DOCUMENTO CURTO TAMBÉM VAI COMO IMAGEM (01/10, dono: "leu o imóvel, mas não a CNH do
+      // fiador" — 2 imagens transcritas, nenhum anexo recusado). A CNH digital é PDF com texto SÓ
+      // nos rótulos ("NOME", "CPF", "DOC. IDENTIDADE"); os dados em si são desenho. Passava aqui
+      // como "lido" com 200 caracteres de rótulo e nunca virava imagem. PDF de até 3 páginas e
+      // pouco texto (identidade, certidão, IPTU) segue com o texto E as páginas.
+      if (pdf.numPages <= MAX_PAGINAS_IMAGEM && texto.length < 3000) {
+        try {
+          const { imagens } = await paginasComoImagem(pdf);
+          if (imagens.length) return { texto, imagem: null, imagens, motivo: null };
+        } catch (e) {
+          console.warn('[extrairTextoDoc] páginas de PDF curto como imagem:', e?.message || e);
+        }
+      }
       return { texto: texto.slice(0, MAX_CHARS_ARQUIVO), imagem: null, motivo: null };
     }
     if (ext === 'txt' || ext === 'md' || (file.type || '').startsWith('text/')) {
@@ -204,6 +217,7 @@ export async function extrairTextoDeVarios(files) {
     if (texto) {
       blocos.push(`=== DOCUMENTO ANEXADO: ${f.name} ===\n${texto}`);
       lidos.push(f.name);
+      for (const p of (paginas || [])) guardar(paginas.length > 1 ? `${f.name} (página ${p.pagina})` : f.name, p);
     } else if (imagem) {
       if (guardar(f.name, imagem)) lidos.push(f.name);
     } else if (paginas?.length) {
