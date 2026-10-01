@@ -7,6 +7,7 @@ import { driveImage, driveId, drivePreview, driveDownload } from '../utils/drive
 import PdfReader from '../components/PdfReader';
 import LeitorPaginado from '../components/LeitorPaginado';
 import LeitorEstruturado from '../components/LeitorEstruturado';
+import { baixarEbookPdf } from '../utils/ebookPdf';
 
 export default function EbookPage() {
   const { id } = useParams();
@@ -185,6 +186,14 @@ export default function EbookPage() {
                       style={{ flex:1, minWidth:140, padding:'13px 24px', background:'white', color:'#111111', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, textDecoration:'none' }}>
                       <Download size={18}/> Baixar
                     </a>
+                  )}
+                  {!pdfUrl && podeLeitorEstruturado && (
+                    // Estruturado não tem arquivo: o PDF (capa + sumário + capítulos) é montado aqui
+                    // com os capítulos que a RPC de entitlement já liberou.
+                    <button onClick={() => baixarEbookPdf({ titulo: ebook.titulo, capaUrl: ebook.capa_url, capitulos })}
+                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'white', color:'#111111', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                      <Download size={18}/> Baixar PDF
+                    </button>
                   )}
                 </div>
               ) : (
