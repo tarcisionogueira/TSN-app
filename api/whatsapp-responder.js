@@ -51,11 +51,14 @@ async function sb(method, path, body, prefer) {
 // IA nunca citar preço velho ou produto que não existe. Cursos só entram quando houver ativo.
 const SITE = 'https://www.bidprobrasil.com.br';
 const UTM = 'utm_source=whatsapp&utm_medium=ia&utm_campaign=perpetuo';
+// O app é HashRouter: `/planos` sem "#" cai na HOME (o rewrite manda tudo para o index.html). A
+// rota vai depois do "#" e a UTM antes — `capturarMarketing` lê a query de antes do "#". Os links
+// /p/ebook e /p/curso passam pelo og-share, que já redireciona para /#/p/... levando a query.
 const brl = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export function montarCatalogoWa({ planos = [], ebooks = [], cursos = [] } = {}) {
   const linhas = [];
   const pro = planos.find((p) => p.plano_key === 'top2' && p.ativo);
-  if (pro) linhas.push(`- PLANO ${pro.nome} (prioridade): ${brl(pro.preco)}/mês${pro.preco_anual ? ` ou ${brl(pro.preco_anual)}/ano` : ''} — relatórios de mercado e jurídico ilimitados por imóvel, filtros e calculadora. Link: ${SITE}/planos?${UTM}&utm_content=plano_pro`);
+  if (pro) linhas.push(`- PLANO ${pro.nome} (prioridade): ${brl(pro.preco)}/mês${pro.preco_anual ? ` ou ${brl(pro.preco_anual)}/ano` : ''} — relatórios de mercado e jurídico ilimitados por imóvel, filtros e calculadora. Link: ${SITE}/?${UTM}&utm_content=plano_pro#/planos`);
   const ass = planos.find((p) => p.plano_key === 'assessorado' && p.ativo);
   if (ass) linhas.push(`- ${ass.nome} (equipe faz a arrematação com o cliente, do edital à posse): ${brl(ass.preco)} parcelado${ass.preco_vista ? ` ou ${brl(ass.preco_vista)} à vista` : ''}${Number(ass.honorarios_exito_pct) > 0 ? ` + ${Number(ass.honorarios_exito_pct)}% de êxito sobre a arrematação` : ''}. Fechamento é com consultor: encerre com [[ESCALAR]] quando ela quiser.`);
   for (const e of ebooks.filter((x) => x.ativo && Number(x.preco) > 0).slice(0, 6)) {

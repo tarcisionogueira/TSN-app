@@ -13,6 +13,12 @@ export function fotosDoImovel({ fotos, linkFoto, fonte, fonteId, imovelId } = {}
   const brutas = [...(Array.isArray(fotos) ? fotos : []), linkFoto]
     .filter((u) => typeof u === 'string' && /^https?:\/\//.test(u) && !PLACEHOLDER.test(u));
   const unicas = [...new Set(brutas)].slice(0, MAX_FOTOS_RELATORIO);
+  // Caixa sem foto gravada (530 lotes em 01/10): a Busca tenta a URL padrão F<id>21.jpg — o
+  // relatório faz o mesmo em vez de afirmar que "o leiloeiro não publicou fotos".
+  if (!unicas.length && (fonte === 'CEF' || fonte === 'caixa') && fonteId) {
+    const c = fotoCandidatos({ foto: null, fonte, fonteId })[0];
+    return c ? [c] : [];
+  }
   // 1º candidato de cada foto, em largura de impressão (meia folha A4 ≈ 1000 px).
   return unicas.map((u) => fotoCandidatos({ foto: u, fonte, fonteId, imovelId, largura: 1000 })[0]).filter(Boolean);
 }

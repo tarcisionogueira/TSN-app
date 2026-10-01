@@ -12794,8 +12794,12 @@ function mdInline(txt, chave) {
   let ultimo = 0, m, k = 0;
   while ((m = re.exec(txt))) {
     if (m.index > ultimo) partes.push(txt.slice(ultimo, m.index));
+    // URL solta no fim da frase ("…em https://x.jus.br/y.") levava o ponto para o href: link 404.
+    const pontuacao = m[4] ? (m[4].match(/[.,;:!?]+$/) || [''])[0] : '';
+    const solta = m[4] ? m[4].slice(0, m[4].length - pontuacao.length) : '';
     if (m[1]) partes.push(<strong key={`${chave}-${k++}`}>{m[1]}</strong>);
-    else partes.push(<a key={`${chave}-${k++}`} href={m[3] || m[4]} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', wordBreak: 'break-all' }}>{m[2] || m[4]}</a>);
+    else partes.push(<a key={`${chave}-${k++}`} href={m[3] || solta} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', wordBreak: 'break-all' }}>{m[2] || solta}</a>);
+    if (pontuacao) partes.push(pontuacao);
     ultimo = re.lastIndex;
   }
   if (ultimo < txt.length) partes.push(txt.slice(ultimo));

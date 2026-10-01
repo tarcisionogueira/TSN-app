@@ -9,6 +9,36 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧾 01/10 — EVOLUÇÃO DO DIA (fechamento) + revisão geral de eficiência e segurança
+**Entregue e em produção (commits b7468e6 → fechamento):**
+1. **Chat CNJ (caso Marcos):** DJEN 100/página (fonte tinha 34, vinham 30), previsão pelas publicações quando o
+   DataJud cai, proibição de afirmar "auto não expedido" só pelo DJEN, markdown renderizado (só React, link http(s)).
+2. **CNJ série completa:** `movimentos_serie` (até 400, não-enumerável) para previsão/aprendizado/monitor; complementos
+   do DataJud (`complementosTabelados`); etapa "agravo de petição" (CLT 897 a), só atos de 180 dias; código 200 =
+   decisão (JS e `movimento_classe` SQL alinhados — migração `20261001_movimento_classe_acolhimento`).
+   **Marcos:** agravo de petição em 10/09/2026, após a arrematação; despacho a cada ~40 d, próximo 30/09–28/10.
+3. **Documental:** saída antecipada não apaga mais `cnj_nao_consultado` (e-mail falso de "consulta concluída"); a marca
+   sai sempre combinada (`faltam_documentos,cnj_nao_consultado` etc.) → cron com teto, nunca retry eterno.
+4. **Contrato:** PDF digitalizado/curto vira imagem, transcrição dedicada por imagem (Sonnet) antes da redação, DOCX
+   (mammoth), rótulo "De quem é?", tetos de entrada maiores e avisados, aprendizado SEM dado pessoal (8 lições
+   reescritas como regra), diff de linhas para o extrator. Pendência: imagens vão também na redação (custo 2×,
+   deliberado — reavaliar).
+5. **WhatsApp:** IA consultora (conexão → perfil → plano pago/assessoria → e-book; curso só pago ativo), catálogo vivo,
+   perfil do lead, origem do anúncio, `wa_funil(dias)`, escape no e-mail de escalada, saída só com link
+   bidprobrasil.com.br, link de Planos `/?utm…#/planos` (HashRouter). Falta só a parte do dono (ver bloco abaixo).
+6. **Relatório mercadológico com registro fotográfico** ao final (tela, PDF avulso e no FIM do combinado); Caixa sem
+   foto gravada usa a URL padrão F<id>21.jpg; fotos/anexos zerados ao trocar de imóvel.
+7. **Área "1.201.00m²"** (milhar e decimal com ponto) não vira mais 201; lote APICE corrigido.
+
+**Revisão geral (2 agentes, segurança + lógica) — corrigido:** e-mail de escalada com HTML do nome de perfil; links de
+terceiro na saída do WhatsApp; desfecho jurídico falso com a série completa (trânsito em julgado da fase de
+conhecimento marcava "encerrado" — desfecho volta a usar os 20 recentes, etapa usa o corte de 180 d); retry eterno do
+juridico-retry; link de Planos caindo na home; fotos de outro imóvel ao trocar sem desmontar; pontuação final no link
+do chat. Conferido íntegro: HMAC do webhook, `wa_funil` só service_role, RLS das tabelas wa_*, `MdSimples` sem XSS,
+escape das URLs de foto no PDF, img-proxy com anti-SSRF, nenhuma chave no repo. Segurança 0/0, regras 0.
+**Ficou para depois (baixo):** `[[PERFIL]]` por prompt injection só afeta a própria conversa; agravo de petição tem
+prioridade sobre "auto de arrematação" na etapa; teste `aprendizado-processual.mjs` usa data fixa (falha ~fev/2027).
+
 ### 📌 01/10 (madrugada) — onde paramos
 - **WhatsApp oficial (continua 02/10 com o dono):** código pronto — IA consultora (conexão → perfil → plano pago →
   e-book; cursos só quando houver pago ativo), catálogo vivo do banco, perfil do lead em `wa_conversas.perfil_lead`,

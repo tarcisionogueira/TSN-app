@@ -14,3 +14,12 @@ ok(t.includes('inclui 1 mês do Investidor Pro'), 'e-book com mês do sistema');
 ok(t.includes('nenhum disponível ainda') && !t.includes('Comece aqui'), 'curso grátis não é oferta');
 ok((t.match(/utm_medium=ia/g) || []).length === 3, 'todo link com UTM da IA');
 console.log('✓ catálogo do WhatsApp: preços do banco, curso grátis fora, links rastreados');
+
+// HashRouter: o link do plano precisa da rota DEPOIS do "#" (sem ele, /planos cai na home) e a UTM antes.
+{
+  const { montarCatalogoWa: m } = await import('../../api/whatsapp-responder.js');
+  const t = m({ planos: [{ plano_key: 'top2', nome: 'Investidor Pro', preco: '89.90', ativo: true }] });
+  const link = t.match(/https:\/\/\S+plano_pro\S*/)[0];
+  if (!/\/\?utm_source=whatsapp[^#]*#\/planos$/.test(link)) throw new Error(`link do plano não abre a tela de planos: ${link}`);
+  console.log('whatsapp-catalogo-venda: link do plano abre /#/planos com UTM');
+}

@@ -790,7 +790,11 @@ export default async function handler(req, res) {
   // Saída antecipada (sem ler documentos) NÃO consulta o CNJ: se a consulta estava pendente, a marca
   // continua. Antes ela era sobrescrita e o juridico-retry-cron mandava ao cliente "consulta jurídica
   // concluída" sem consulta nenhuma (pendência de 30/09).
-  const comCnjPendente = (motivo) => (cnjPendenteAntes ? [motivo, 'cnj_nao_consultado'].filter(Boolean).join(',') : motivo);
+  // Nunca devolve o `cnj_nao_consultado` PURO: esse é o filtro do juridico-retry-cron (sem teto, a
+  // cada 6 h), e a saída antecipada não consulta o CNJ — "faltam docs" sem captura em andamento
+  // (motivo null) viraria regeração eterna que nunca resolve. Com um vício próprio junto, a linha
+  // vai para o regenerar-relatorios-cron, que tem teto (MAX_TENT).
+  const comCnjPendente = (motivo) => (cnjPendenteAntes ? [motivo || 'faltam_documentos', 'cnj_nao_consultado'].join(',') : motivo);
   const tinhaRelatorioBom = !!(resultadoAnterior && typeof resultadoAnterior === 'object'
     && !resultadoAnterior.precisaDocumentos && typeof resultadoAnterior.parecer === 'string'
     && resultadoAnterior.parecer.trim().length > 200);

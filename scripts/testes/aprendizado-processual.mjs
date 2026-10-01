@@ -42,3 +42,16 @@ assert.match(ctx, /entre despachos do juiz, mediana 33 dias/);
 assert.match(ctx, /scon\.stj\.jus\.br/);
 assert.equal(await contextoProcessualParaDocumental({ numeroProcesso: '' }).then((x) => /JÁ FOI LIDO/.test(x)), false, 'sem número: sem leitura inventada');
 console.log('aprendizado-processual: todos os casos passaram');
+
+// Série completa (01/10, até 400): o "trânsito em julgado" da fase de CONHECIMENTO, anos antes do
+// leilão, não pode marcar o arremate como encerrado — desfecho só pelos 20 movimentos recentes.
+{
+  chamadas.length = 0;
+  const longa = [{ data: '2026-09-10', codigo: 85, descricao: 'Petição — Agravo de Petição' }];
+  for (let i = 0; i < 25; i++) longa.push({ data: `2025-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + i).padStart(2, '0')}`, codigo: 11010, descricao: 'Mero expediente' });
+  longa.push({ data: '2019-05-01', codigo: 848, descricao: 'Trânsito em julgado' });
+  await aprenderDaConsulta({ numero: '0000199-97.2016.5.05.0195', origem: 'tela_caso', processo: { numero: '00001999720165050195', movimentos: longa } });
+  const patch = chamadas.find((c) => c.u.includes('arremate_aprendizado?imovel_id=eq.lote-1') && c.m === 'PATCH');
+  assert.equal(patch.body.realizado.juridico.encerrado, false, 'trânsito de 2019 não encerra o arremate de 2026');
+  console.log('aprendizado-processual: série longa não fabrica desfecho');
+}

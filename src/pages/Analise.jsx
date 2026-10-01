@@ -342,6 +342,11 @@ export default function Analise() {
   // Carrega anexos (matrícula/edital/regras) e pré-preenche o processo p/ o CNJ.
   useEffect(() => {
     if (!imovelInicial) return;
+    // Trocou de imóvel sem desmontar a tela (mesma rota, outro `state`): o relido do lote ANTERIOR
+    // não pode sobreviver — sem isto, se a nova releitura falha (ou o id não é da base), o relatório
+    // deste imóvel saía com as fotos e os anexos do outro. null = "não relido" (ver os useState).
+    setFotosLote(null);
+    setAnexosLote(null);
     if (imovelInicial.numeroProcesso) setCnjNumero(imovelInicial.numeroProcesso);
     const idImovel = imovelInicial.id;
     if (!idImovel) return;

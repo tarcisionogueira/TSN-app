@@ -20,7 +20,7 @@
  */
 import { classificarDesfecho, registrarDesfechoJuridico } from './_arremate-aprendizado.js';
 import { aprenderNaEmissao } from './_aprendizado.js';
-import { preverAndamento, estatisticaFluxo, justicaDoNumero, etapaDaArrematacao } from './_previsao-processo.js';
+import { preverAndamento, estatisticaFluxo, justicaDoNumero } from './_previsao-processo.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -65,7 +65,11 @@ export async function aprenderDaConsulta({ numero, processo = null, publicacoes 
 
   // 2) desfecho do arremate (lotes do acervo com este número, ou o imóvel informado)
   const imoveis = imovelId ? [{ id: imovelId }] : await lotesDoProcesso(numero);
-  const textos = [...movs.map((m) => ({ data: m.data, descricao: m.descricao })), ...(publicacoes || []).map((p) => ({ data: p.data_disponibilizacao, descricao: String(p.texto || '').slice(0, 600) }))]
+  // Desfecho só pelos 20 movimentos MAIS RECENTES (o que `movimentos` sempre trouxe): com a série
+  // completa (01/10, até 400), o "trânsito em julgado" da fase de CONHECIMENTO — anos antes da
+  // execução e do leilão — marcava `encerrado` e o prompt passava a dizer "desembaraço concluído".
+  const recentes = [...movs].sort((a, b) => String(b.data || '').localeCompare(String(a.data || ''))).slice(0, 20);
+  const textos = [...recentes.map((m) => ({ data: m.data, descricao: m.descricao })), ...(publicacoes || []).map((p) => ({ data: p.data_disponibilizacao, descricao: String(p.texto || '').slice(0, 600) }))]
     .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
   const desfecho = classificarDesfecho(textos);
   for (const im of imoveis.slice(0, 3)) {
@@ -79,7 +83,8 @@ export async function aprenderDaConsulta({ numero, processo = null, publicacoes 
   try {
     const est = await estatisticaFluxo(justicaDoNumero(numero));
     const pv = preverAndamento({ movimentos: movs, publicacoes, estat: est.linhas, justica: est.justica });
-    const etapa = etapaDaArrematacao(textos.map((t) => t.descricao));
+    // Mesma etapa da previsão (corte de 180 dias): a série completa traria agravo/carta de outra fase.
+    const etapa = pv?.etapa_arrematacao || null;
     const lote = imoveis[0] || {};
     await aprenderNaEmissao(sb, {
       agente: 'processual',
@@ -115,7 +120,7 @@ export async function contextoProcessualParaDocumental({ numeroProcesso }) {
       if (!r.ok) console.warn('[aprendizado-processual] série do processo HTTP', r.status);
       if (Array.isArray(movs) && movs.length) {
         const pv = preverAndamento({ movimentos: movs, estat: est.linhas, justica: est.justica });
-        const etapa = etapaDaArrematacao(movs.map((m) => m.descricao));
+        const etapa = pv.etapa_arrematacao; // com o corte de 180 dias — a série gravada vai a 200 linhas
         partes.push(`- Este processo JÁ FOI LIDO pela plataforma (${movs.length} movimentações, última em ${String(movs[0].data).slice(0, 10)}): ${pv.resumo}${etapa ? ` Etapa detectada: ${etapa.etapa} (${etapa.base_legal}).` : ''}`);
       }
     }
