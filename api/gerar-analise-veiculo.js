@@ -114,7 +114,11 @@ async function anunciosDaOlx(v, deadline) {
 }
 
 async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
-  const deadline = Date.now() + Math.min(prazoMs, 30000);
+  // PRAZO ÚNICO (01/10): portais + busca web cabem em `prazoMs` SOMADOS. Antes a busca web recebia o
+  // prazo inteiro de novo, por degrau (portais 30 s + 70 s + 70 s > maxDuration 120 s): a Vercel
+  // matava a função e o relatório ficava "gerando" para sempre, sem estorno — o defeito do índice.
+  const fim = Date.now() + prazoMs;
+  const deadline = Math.min(fim, Date.now() + 30000);
   const [mob, olx] = await Promise.all([anunciosDoMobiauto(v, deadline), anunciosDaOlx(v, deadline)]);
   const todos = [...mob.anuncios, ...olx.anuncios];
   const modeloTxt = v.modelo || modeloDoTitulo(v.titulo, v.marca);
@@ -126,11 +130,12 @@ async function buscarRevendaMercado(v, prazoMs, userId, gasto = { micro: 0 }) {
     if (revenda) return { revenda: { ...revenda, mesmaVersao: f.versao }, motivo: null };
   }
   const motivoPortais = [mob.motivo, olx.motivo, todos.length ? `${todos.length} anúncio(s) nos portais, menos de 3 na faixa de 30–200% da FIPE` : null].filter(Boolean).join('; ');
-  const r = await buscarRevendaWeb(v, prazoMs, userId, gasto);
+  if (fim - Date.now() < 15000) return { revenda: null, motivo: [motivoPortais, 'sem tempo para a busca de anúncios na web'].filter(Boolean).join(' · ') };
+  const r = await buscarRevendaWeb(v, fim, userId, gasto);
   return r.revenda ? r : { revenda: null, motivo: [motivoPortais, r.motivo].filter(Boolean).join(' · ') };
 }
 
-async function buscarRevendaWeb(v, prazoMs, userId, gasto = { micro: 0 }) {
+async function buscarRevendaWeb(v, fim, userId, gasto = { micro: 0 }) {
   const alvo = [v.marca, v.modelo, v.titulo].filter(Boolean).join(' · ').slice(0, 200);
   const ano = v.ano_modelo || v.ano_fabricacao || '';
   if (!alvo || !ano) return { revenda: null, motivo: 'sem marca/modelo/ano para buscar anúncios' };
@@ -159,7 +164,9 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
     return Array.isArray(j.anuncios) ? j.anuncios : [];
   };
   try {
-    const anuncios = await comCascataBusca((degrau) => tentar(degrau, Math.min(prazoMs, 70000)))
+    // Cada degrau recebe só o que SOBRA do prazo; sobe de degrau só com 25 s de folga.
+    const anuncios = await comCascataBusca((degrau) => tentar(degrau, Math.max(10000, Math.min(fim - Date.now(), 70000))),
+      { podeContinuar: () => fim - Date.now() > 25000 })
       .catch((e) => { motivo = `1ª busca falhou: ${String(e?.message || e).slice(0, 60)}`; return null; }) || [];
     const revenda = revendaPorAnuncios(anuncios, v.valor_fipe);
     // 30/09: uma 2ª tentativa com o Sonnet (busca dinâmica) foi testada 3× no Cronos e ABORTOU nas 3,
@@ -444,9 +451,8 @@ export default async function handler(req, res) {
     // `gastoBusca` soma o custo da busca de anúncios para entrar no débito do crédito (revisão 29/09:
     // o débito cobrava só a análise principal e a busca saía de graça para quem paga por crédito).
     const gastoBusca = { micro: 0 };
-    // Prazo da busca 70 → 93 s (30/09): a 2ª tentativa (Sonnet, busca dinâmica) abortava com ~45 s
-    // sobrando nos 4 veículos regerados. A análise principal corre em paralelo e termina antes.
-    const revendaP = buscarRevendaMercado(v, Math.min(70000, HARD_MS - 25000), user.id, gastoBusca);
+    // Prazo TOTAL da busca (portais + web): 80 s, dentro do teto. A análise principal corre em paralelo.
+    const revendaP = buscarRevendaMercado(v, HARD_MS - 25000, user.id, gastoBusca);
     const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
     const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
       anexosParaBlocos(v.anexos, prazoDocs),
@@ -525,7 +531,12 @@ export default async function handler(req, res) {
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
       // Revenda sugerida pelo mercado (média dos 5 anúncios mais baratos − 10%) ou o motivo de não ter.
-      ...(await revendaP.then(({ revenda, motivo }) => ({ revendaMercado: revenda, revendaMercadoMotivo: motivo }))),
+      // Espera LIMITADA: se a busca ainda não voltou perto do teto, o relatório sai sem a revenda e
+      // diz por quê — melhor que a Vercel matar a função com o relatório pronto na memória.
+      ...(await Promise.race([
+        revendaP.catch((e) => ({ revenda: null, motivo: `busca de anúncios falhou: ${String(e?.message || e).slice(0, 80)}` })),
+        new Promise((ok) => setTimeout(() => ok({ revenda: null, motivo: 'busca de anúncios não terminou a tempo' }), Math.max(1000, HARD_MS - (Date.now() - T0)))),
+      ]).then(({ revenda, motivo }) => ({ revendaMercado: revenda, revendaMercadoMotivo: motivo }))),
       semDocumentos,
     };
     await upsertAnaliseVeiculo({ ...base, status: 'concluida', erro: null, result });

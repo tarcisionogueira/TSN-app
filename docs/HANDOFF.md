@@ -60,8 +60,9 @@ confiança era travada pela regra ">50% dos riscos sem lastro" (8/14). ⚠️ `r
   repassava o `timeoutMs` INTEIRO a cada degrau (Haiku 4xx tardio + Sonnet 120 s + Gemini 80 s > 250 s → Vercel mata
   antes do registro). Corrigido (ad1447f): prazo único + sobe só com 30 s de folga (indice-mercado e reforço) e
   **vigia aos ~243 s** que grava a falha com motivo. Causa exata NÃO confirmada (logs da Vercel deram timeout na
-  consulta) — a próxima tentativa deixa linha em `geracao_custos` de qualquer jeito. `gerar-analise-veiculo` tem o
-  mesmo padrão (70 s fixo por degrau, maxDuration maior) — não mexido.
+  consulta) — a próxima tentativa deixa linha em `geracao_custos` de qualquer jeito. `gerar-analise-veiculo` tinha o
+  mesmo padrão (portais 30 s + 70 s por degrau > 120 s) — **corrigido 01/10**: prazo único de 80 s para a busca de
+  revenda e espera limitada (relatório sai sem revenda, com motivo, em vez de ficar "gerando" sem estorno).
 - **Autocomplete de endereço (Índice/checkout) parado — causa CONFIRMADA:** Google `REQUEST_DENIED — You must enable
   Billing on the Google Cloud Project` (lido em erros_cliente após 033f9c3, que parou de engolir o erro). A mesma chave
   geocodifica: `uso_integracoes` google_geocode caiu de 65–447/dia para 1 em 01/10. **Ação do dono: reativar o
