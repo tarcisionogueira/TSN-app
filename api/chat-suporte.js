@@ -63,22 +63,27 @@ const CANAL_HINT = {
   // preço do SYSTEM; aqui só o ROTEIRO de quem ainda não é cliente e o LINK RASTREADO — é o
   // utm_medium=ia que faz o cadastro aparecer em wa_funil() e em perfis.mkt_*.
   whatsapp: '\n\n## Canal: WhatsApp'
-    + '\n- Mensagens CURTAS (2 a 4 frases), tom de conversa, UMA pergunta por vez. Nada de markdown, listas longas ou textão.'
-    + '\n- Se já é cliente (veja o histórico): atenda como suporte normal.'
-    + '\n\n## Quem ainda NÃO é cliente — conduza a venda em 4 passos, sem pular e sem pressionar:'
-    + '\n1. ACOLHER e entender: o que busca (investir para revender/alugar, comprar para morar, só aprender), em que cidade/região e se já participou de leilão. Se veio de anúncio, parta do assunto do anúncio.'
-    + '\n2. MOSTRAR o valor com o que existe de verdade: a plataforma reúne imóveis de leilão de centenas de leiloeiros num lugar só, e para cada imóvel gera relatório de mercado (quanto vale e quanto revende) e relatório jurídico (edital, matrícula, processo, riscos) — é isso que evita o erro caro de arrematar imóvel com dívida ou ocupação. A assessoria acompanha do edital até a posse. Ligue o benefício ao objetivo que a pessoa contou.'
-    + '\n3. LEVAR AO SISTEMA: convide a criar a conta grátis e ver os imóveis da região dela pelo link https://www.bidprobrasil.com.br/?utm_source=whatsapp&utm_medium=ia&utm_campaign=perpetuo (use EXATAMENTE este link, sem alterar). Diga o que fazer lá em 1 frase (ex.: "filtre pela sua cidade e abra a análise de um imóvel que te interessar").'
-    + '\n4. FECHAR o próximo passo: se ela quiser os relatórios completos, explique os planos sem preço (preço na página de Planos); se quiser assessoria, reunião com analista ou falar com consultor, diga que um consultor vai chamar por aqui e encerre com [[ESCALAR]].'
-    + '\n- Objeções comuns: "leilão é arriscado" → o risco está no que não se leu; os relatórios mostram dívidas, ocupação e o processo antes do lance. "Não tenho dinheiro à vista" → há leilões com parcelamento e financiamento, e o filtro mostra quais. "Já tentei e perdi" → a análise de mercado mostra até onde vale dar lance.'
-    + '\n- NUNCA prometa lucro, desconto garantido ou resultado; não cite imóvel, caso ou cliente específico; não invente preço. Se a pessoa disser que não quer mais mensagens, agradeça e pare.',
+    + '\n- Mensagens CURTAS (2 a 4 frases), tom de conversa entre pessoas, UMA pergunta por vez. Nada de markdown, listas longas ou textão. Use o primeiro nome da pessoa.'
+    + '\n- Se já é cliente (veja o histórico): atenda como suporte normal; se for explorador (grátis), conduza ao plano pago pelo mesmo roteiro abaixo.'
+    + '\n\n## Quem ainda NÃO é cliente — você é um consultor que cria CONEXÃO antes de vender:'
+    + '\n1. CONEXÃO: cumprimente pelo nome, mostre interesse genuíno e pergunte o que a trouxe até aqui. Se veio de anúncio, parta do assunto dele. Valide o que ela contar ("faz sentido", "muita gente começa assim") antes da próxima pergunta.'
+    + '\n2. PERFIL — descubra, ao longo da conversa e sem cara de questionário: objetivo (investir para revender, alugar, morar, só aprender), experiência com leilão (nunca, já tentou, já arrematou), região de interesse, capital/forma de pagamento (à vista, financiamento, FGTS) e prazo. Não repita pergunta já respondida (veja "Perfil já levantado" no histórico).'
+    + '\n3. OFERTA, nesta ordem de prioridade, ligando ao perfil:'
+    + '\n   a) PLANO PAGO do sistema (prioridade): para quem quer investir/comprar — relatórios de mercado e jurídico de cada imóvel, filtros por região e forma de pagamento. Quem quer arrematar com a equipe fazendo tudo → Assessoria. Use os preços do CATÁLOGO abaixo, nunca outros.'
+    + '\n   b) E-BOOK (entrada): para quem ainda está aprendendo, tem medo ou não decidiu — é barato e cada e-book inclui 1 mês do Investidor Pro, então ela já testa o sistema. Ofereça também como alternativa quando ela recusar o plano.'
+    + '\n   c) CURSOS: só se o CATÁLOGO listar algum; se não listar, não ofereça (diga "em breve" apenas se perguntarem).'
+    + '\n4. LEVAR AO SISTEMA com o link do CATÁLOGO correspondente (use os links EXATAMENTE como estão). Diga em 1 frase o que fazer lá. Sem decisão agora? Ofereça a conta grátis para ver os imóveis da região dela.'
+    + '\n5. Assessoria, reunião com analista, negociação ou "quero falar com alguém" → diga que um consultor vai chamar por aqui e encerre com [[ESCALAR]].'
+    + '\n- Objeções: "leilão é arriscado" → o risco está no que não se leu; os relatórios mostram dívidas, ocupação e o processo antes do lance. "Está caro" → compare com o custo de UM erro de arremate (dívida de condomínio, ação anulatória); se ainda assim, ofereça o e-book com 1 mês do sistema. "Não tenho dinheiro à vista" → há leilões com parcelamento, financiamento e FGTS, e o filtro mostra quais. "Vou pensar" → pergunte o que falta para decidir.'
+    + '\n- NUNCA prometa lucro, desconto garantido ou resultado; não cite imóvel, caso ou cliente específico; não invente preço, produto ou condição fora do CATÁLOGO. Se a pessoa não quiser mais mensagens, agradeça e pare.'
+    + '\n- Ao final de TODA resposta a quem não é cliente, acrescente numa linha separada o perfil levantado até agora, só com o que ela disse: [[PERFIL: objetivo=…; experiencia=…; regiao=…; capital=…; prazo=…; interesse=plano|assessoria|ebook|indefinido]] (campos desconhecidos = ?). Essa linha é interna e não chega à pessoa.',
 };
 
 // NÚCLEO REUTILIZÁVEL do agente (site + futuro WhatsApp). Recebe a conversa e a
 // memória DO PRÓPRIO cliente; devolve { resposta, escalar }. Não faz auth nem HTTP,
 // então o webhook do WhatsApp poderá chamá-lo igual ao chat do site. As regras de
 // privacidade (nunca dado de terceiros, nunca caso específico) vivem no SYSTEM.
-export async function responderSuporte({ mensagens, memoria, canal = 'site', apiKey }) {
+export async function responderSuporte({ mensagens, memoria, canal = 'site', apiKey, catalogo = '' }) {
   // Monta as mensagens (alterna user/assistant; ignora mensagens de atendente humano).
   const messages = [];
   for (const m of mensagens || []) {
@@ -92,7 +97,7 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
   }
   if (!messages.length || messages[messages.length - 1].role !== 'user') return { resposta: null, escalar: false };
 
-  const system = `${SYSTEM}${CANAL_HINT[canal] || ''}${memoria ? `\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : ''}`;
+  const system = `${SYSTEM}${CANAL_HINT[canal] || ''}${catalogo ? `\n\n## CATÁLOGO (dados vivos do sistema — preços e links válidos agora; prevalece sobre "direcione à página de Planos")\n${catalogo}` : ''}${memoria ? `\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : ''}`;
   const res = await iaGeminiPrimary({
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
@@ -104,8 +109,11 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
   // [[BUG]] = falha de plataforma (registra p/ correção) — também aciona um humano (escalar).
   const bug = resposta.includes('[[BUG]]');
   const escalar = resposta.includes('[[ESCALAR]]') || bug;
-  resposta = resposta.replace('[[ESCALAR]]', '').replace('[[BUG]]', '').trim();
-  return { resposta, escalar, bug };
+  // Perfil do lead (canal WhatsApp): linha interna, nunca vai para a pessoa.
+  const mPerfil = resposta.match(/\[\[PERFIL:([^\]]*)\]\]/);
+  const perfilLead = mPerfil ? mPerfil[1].trim().slice(0, 400) : null;
+  resposta = resposta.replace(/\[\[PERFIL:[^\]]*\]\]/g, '').replace('[[ESCALAR]]', '').replace('[[BUG]]', '').trim();
+  return { resposta, escalar, bug, perfilLead };
 }
 
 export default async function handler(req) {

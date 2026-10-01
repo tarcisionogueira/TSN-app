@@ -46,6 +46,45 @@ async function sb(method, path, body, prefer) {
   return r.status === 204 ? null : r.json().catch(() => null);
 }
 
+// CATÁLOGO VIVO para a IA vender (01/10, dono: "foco em venda do sistema pago, na sequência os
+// cursos (ainda não cadastrados) e e-books"). Lido do banco — planos_config e ebooks_admin — para a
+// IA nunca citar preço velho ou produto que não existe. Cursos só entram quando houver ativo.
+const SITE = 'https://www.bidprobrasil.com.br';
+const UTM = 'utm_source=whatsapp&utm_medium=ia&utm_campaign=perpetuo';
+const brl = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function montarCatalogoWa({ planos = [], ebooks = [], cursos = [] } = {}) {
+  const linhas = [];
+  const pro = planos.find((p) => p.plano_key === 'top2' && p.ativo);
+  if (pro) linhas.push(`- PLANO ${pro.nome} (prioridade): ${brl(pro.preco)}/mês${pro.preco_anual ? ` ou ${brl(pro.preco_anual)}/ano` : ''} — relatórios de mercado e jurídico ilimitados por imóvel, filtros e calculadora. Link: ${SITE}/planos?${UTM}&utm_content=plano_pro`);
+  const ass = planos.find((p) => p.plano_key === 'assessorado' && p.ativo);
+  if (ass) linhas.push(`- ${ass.nome} (equipe faz a arrematação com o cliente, do edital à posse): ${brl(ass.preco)} parcelado${ass.preco_vista ? ` ou ${brl(ass.preco_vista)} à vista` : ''}${Number(ass.honorarios_exito_pct) > 0 ? ` + ${Number(ass.honorarios_exito_pct)}% de êxito sobre a arrematação` : ''}. Fechamento é com consultor: encerre com [[ESCALAR]] quando ela quiser.`);
+  for (const e of ebooks.filter((x) => x.ativo && Number(x.preco) > 0).slice(0, 6)) {
+    linhas.push(`- E-BOOK "${e.titulo}": ${brl(e.preco)}${e.concede_plano === 'top2' && e.concede_meses ? ` (inclui ${e.concede_meses} mês do Investidor Pro)` : ''}. Link: ${SITE}/p/ebook/${e.id}?${UTM}&utm_content=ebook`);
+  }
+  // Curso PAGO e ativo (o "Comece aqui" gratuito de onboarding não é produto para vender).
+  const cs = cursos.filter((c) => c.ativo && Number(c.preco) > 0);
+  for (const c of cs.slice(0, 6)) linhas.push(`- CURSO "${c.titulo}"${Number(c.preco) > 0 ? `: ${brl(c.preco)}` : ''}. Link: ${SITE}/p/curso/${c.id}?${UTM}&utm_content=curso`);
+  if (!cs.length) linhas.push('- CURSOS: nenhum disponível ainda — não ofereça.');
+  linhas.push(`- CONTA GRÁTIS (só para ver os imóveis): ${SITE}/?${UTM}&utm_content=conta_gratis`);
+  return linhas.join('\n');
+}
+let _catalogo = { em: 0, texto: '' };
+async function catalogoWa() {
+  if (_catalogo.texto && Date.now() - _catalogo.em < 10 * 60_000) return _catalogo.texto;
+  try {
+    const [planos, ebooks, cursos] = await Promise.all([
+      sb('GET', 'planos_config?select=plano_key,nome,preco,preco_vista,preco_anual,honorarios_exito_pct,ativo&plano_key=in.(top2,assessorado)'),
+      sb('GET', 'ebooks_admin?select=id,titulo,preco,ativo,concede_plano,concede_meses&ativo=eq.true&order=criado_em.asc'),
+      sb('GET', 'cursos_admin?select=id,titulo,preco,ativo&ativo=eq.true'),
+    ]);
+    _catalogo = { em: Date.now(), texto: montarCatalogoWa({ planos: planos || [], ebooks: ebooks || [], cursos: cursos || [] }) };
+  } catch (e) {
+    // Sem catálogo a IA segue pelo SYSTEM (sem preço, direciona à página de Planos) — nunca inventa.
+    console.warn('[wa-resp] catálogo ilegível, IA segue sem preços:', e?.message || e);
+  }
+  return _catalogo.texto;
+}
+
 /** Variantes do telefone para achar o perfil (cadastro guarda com/sem DDI, com/sem máscara). */
 export function variantesTelefone(tel) {
   const d = String(tel || '').replace(/\D/g, '');
@@ -116,14 +155,15 @@ async function atender(tel, pendentes) {
     : `Contato ainda NÃO cadastrado na plataforma${conv.nome ? ` (nome no WhatsApp: ${conv.nome})` : ''} — provável cliente novo.`
   // Anúncio de origem (Clique-para-WhatsApp): diz à IA o que a pessoa clicou, para continuar
   // daquele assunto em vez de recomeçar do zero. Só o título do anúncio — nunca dado de terceiro.
-  ) + (conv.origem?.headline ? ` Chegou pelo anúncio: "${String(conv.origem.headline).slice(0, 160)}".` : (conv.origem ? ' Chegou por um anúncio de Clique-para-WhatsApp.' : ''));
+  ) + (conv.perfil_lead ? ` Perfil já levantado (não pergunte de novo): ${conv.perfil_lead}.` : '')
+    + (conv.origem?.headline ? ` Chegou pelo anúncio: "${String(conv.origem.headline).slice(0, 160)}".` : (conv.origem ? ' Chegou por um anúncio de Clique-para-WhatsApp.' : ''));
 
   const hist = await sb('GET', `wa_mensagens?telefone=eq.${encodeURIComponent(tel)}&select=autor,texto&order=criado_em.desc&limit=20`) || [];
   const mensagens = hist.reverse().filter((m) => m.texto)
     .map((m) => ({ autor_tipo: m.autor === 'pessoa' ? 'cliente' : m.autor === 'ia' ? 'ia' : 'equipe', conteudo: m.texto }));
 
   let out;
-  try { out = await responderSuporte({ mensagens, memoria, canal: 'whatsapp', apiKey: process.env.CLAUDE_KEY }); }
+  try { out = await responderSuporte({ mensagens, memoria, canal: 'whatsapp', apiKey: process.env.CLAUDE_KEY, catalogo: await catalogoWa() }); }
   catch (e) {
     await marcar(meus, { resposta_status: 'erro', resposta_erro: `IA: ${String(e?.message || e).slice(0, 150)}` });
     return 'erro_ia';
@@ -138,6 +178,10 @@ async function atender(tel, pendentes) {
   }
   await sb('POST', 'wa_mensagens?on_conflict=wamid', { wamid, telefone: tel, direcao: 'enviada', autor: 'ia', texto: out.resposta, ocorrido_em: new Date().toISOString() }, 'resolution=ignore-duplicates,return=minimal');
   await marcar(meus, { resposta_status: 'respondida', resposta_erro: null });
+  if (out.perfilLead && !perfil) {
+    await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { perfil_lead: out.perfilLead, perfil_em: new Date().toISOString() }, 'return=minimal')
+      .catch((e) => console.warn('[wa-resp] perfil do lead não gravado:', e?.message || e));
+  }
 
   if (out.escalar) {
     const motivo = out.bug ? 'falha relatada (BUG)' : 'pedido de atendimento humano';
