@@ -9,6 +9,12 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🗄️ 01/10 (noite) — CACHE das consultas CNJ (DataJud) e DJEN
+- `api/_cnj.js`: `buscarTribunal` (DataJud) e `paginaDjen`/`buscarDjen` (DJEN) leem/gravam `cnj_consulta_cache`
+  (migração 20261001_cnj_consulta_cache, APLICADA). Resposta BRUTA de sucesso, 3 h; falha/erro-em-200 nunca
+  entra; cache fora do ar = consulta direta. Limpeza (>1 dia) no `cnj-monitor-cron` (`cache_limpo`).
+  Teste `testar:cnj-cache`. Medir efeito: `select fonte, count(*) from cnj_consulta_cache group by 1;`
+
 ### ✍️ 01/10 (noite) — termo/procuração saíam com "[CPF/CNPJ DO SIGNATÁRIO]" (achado do dono, Marcos)
 - **Causa:** `_termo-assessoria.js` só preenchia o NOME; nada (geração nem assinatura) preenchia CPF/endereço.
   `perfis.endereco` dos assessorados é só "Cidade/UF" e o CPF do Marcos NÃO estava no perfil — estava no
@@ -236,8 +242,7 @@ prioridade sobre "auto de arrematação" na etapa; teste `aprendizado-processual
   juridico-retry refaz), e **5 de agosto não regeráveis** (documentos do lote já indisponíveis → o gerador mantém o
   resultado antigo): o item "Processo judicial" deles foi corrigido NO BANCO para "Não verificado… não equivale a nada
   consta". Executados "FULANO e BELTRANA" (casal) agora viram buscas separadas (`separarPartes`, não separa PJ).
-- **Pendente (melhorias):** cache de consulta CNJ/DJEN (mesmo nº consultado por triagem, documental, andamento, chat e
-  monitor); publicações DJEN dentro do parecer da IA; e-mail "consulta concluída" do juridico-retry dispara quando o
+- **Pendente (melhorias):** ~~cache de consulta CNJ/DJEN~~ (feito 01/10); publicações DJEN dentro do parecer da IA; e-mail "consulta concluída" do juridico-retry dispara quando o
   regen_motivo muda por outro motivo. Testes antigos `edital-desatualizado-nao-vira-manchete` e
   `venda-direta-nao-e-venda-online` já falhavam antes (não relacionados).
 

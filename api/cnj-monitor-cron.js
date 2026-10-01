@@ -138,5 +138,12 @@ async function handler(req) {
   const lista = Array.isArray(monitores) ? monitores : [];
   for (let i = 0; i < lista.length; i += 4) await Promise.all(lista.slice(i, i + 4).map(checar));
 
-  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados, falhas, sem_tempo: semTempo }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  // Limpeza do cache de consultas (api/_cnj.js): vale 3 h, então o que passou de 1 dia é só peso.
+  let cacheLimpo = null;
+  try {
+    const rL = await sb(`cnj_consulta_cache?criado_em=lt.${new Date(Date.now() - 86400000).toISOString()}`, { method: 'DELETE', prefer: 'return=minimal' });
+    cacheLimpo = rL.ok ? 'ok' : `HTTP ${rL.status}`;
+  } catch (e) { cacheLimpo = String(e?.message || e).slice(0, 80); }
+
+  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados, falhas, sem_tempo: semTempo, cache_limpo: cacheLimpo }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

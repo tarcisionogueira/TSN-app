@@ -22,6 +22,7 @@
     "testar:doc-normalizar": "node scripts/testes/doc-normalizar.mjs",
     "testar:lance-pagina": "node scripts/testes/lance-pagina.mjs",
     "testar:signatario": "node scripts/testes/signatario-preenchido.mjs",
+    "testar:cnj-cache": "node scripts/testes/cnj-cache.mjs",
     "testar:zero-declarado": "node scripts/testes/zero-declarado-pelo-site.mjs",
     "testar:zuk-local-veiculo": "node scripts/testes/zuk-local-veiculo.mjs",
     "testar:area-hectares": "node scripts/testes/area-em-hectares.mjs",

@@ -92,7 +92,48 @@ const FASES_RISCO = {
   'Conhecimento': 'medio', 'Recurso': 'medio', 'Liquidação': 'medio', 'Cautelar': 'baixo',
 };
 
+// ── CACHE DE CONSULTA (01/10) ──────────────────────────────────────────────────────────────────
+// O mesmo processo era consultado de novo pela triagem, pelo documental, pelo andamento, pelo chat e
+// pelo monitor — e a rajada é exatamente o que faz o DJEN responder "muito ocupado" (derrubou a
+// regeração de 30/09) e o DataJud devolver 429. Guarda a resposta BRUTA (o formato de saída segue
+// sendo montado aqui) por 3 h — a fonte atualiza no máximo 1×/dia. SÓ resposta de SUCESSO entra:
+// falha nunca é servida do cache como se fosse "nada consta" (forma nº 5 do CLAUDE.md). Cache fora
+// do ar = consulta direta, como antes; nunca bloqueia nem lança.
+const CACHE_VALIDADE_MS = 3 * 3600 * 1000;
+const CACHE_SB = () => ({ url: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_KEY });
+async function chaveCache(fonte, conteudo) {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${fonte}|${conteudo}`)));
+  return `${fonte}:${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+async function cacheLer(fonte, conteudo) {
+  const { url, key } = CACHE_SB();
+  if (!url || !key) return null;
+  try {
+    const chave = await chaveCache(fonte, conteudo);
+    const desde = new Date(Date.now() - CACHE_VALIDADE_MS).toISOString();
+    const r = await fetch(`${url}/rest/v1/cnj_consulta_cache?chave=eq.${chave}&criado_em=gt.${desde}&select=dados&limit=1`, {
+      signal: AbortSignal.timeout(3000), headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    if (!r.ok) { console.warn(`[cnj-cache] leitura HTTP ${r.status}`); return null; }
+    const [row] = await r.json();
+    return row?.dados ?? null;
+  } catch (e) { console.warn('[cnj-cache] leitura falhou:', e?.message || e); return null; }
+}
+function cacheGravar(fonte, conteudo, dados) {
+  const { url, key } = CACHE_SB();
+  if (!url || !key || dados == null) return;
+  // Sem await no chamador: gravar o cache nunca atrasa a resposta.
+  chaveCache(fonte, conteudo).then((chave) => fetch(`${url}/rest/v1/cnj_consulta_cache?on_conflict=chave`, {
+    method: 'POST', signal: AbortSignal.timeout(5000),
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ chave, fonte, dados, criado_em: new Date().toISOString() }),
+  })).then((r) => { if (!r.ok) console.warn(`[cnj-cache] gravação HTTP ${r.status}`); })
+    .catch((e) => console.warn('[cnj-cache] gravação falhou:', e?.message || e));
+}
+
 async function buscarTribunal(tribunal, query) {
+  const conteudoCache = `${tribunal}|${JSON.stringify(query)}`;
+  const doCache = await cacheLer('datajud', conteudoCache);
+  if (doCache) return { ...doCache, _tribunal: tribunal, _cache: true };
   try {
     const url = `${BASE_URL}/api_publica_${tribunal}/_search`;
     const pedir = () => fetch(url, {
@@ -119,6 +160,8 @@ async function buscarTribunal(tribunal, query) {
       return { hits: { hits: [], total: { value: 0 } }, _tribunal: tribunal, _erro: `HTTP ${res.status}${corpo ? ` — ${corpo.slice(0, 300)}` : ''}` };
     }
     const data = await res.json();
+    // Erro do Elasticsearch dentro de um 200 (forma nº 1) não entra no cache.
+    if (!data?.error && Array.isArray(data?.hits?.hits)) cacheGravar('datajud', conteudoCache, data);
     return { ...data, _tribunal: tribunal };
   } catch (err) {
     return { hits: { hits: [], total: { value: 0 } }, _tribunal: tribunal, _erro: err.message };
@@ -382,6 +425,15 @@ export function processosDasPublicacoes(items, { nome, documento } = {}) {
 // fetch → banco → espera → fetch → banco (~60 s por nome) e estourava o tempo do documental.
 async function paginaDjen(url, deadline) {
   const resta = () => deadline - Date.now();
+  const doCache = await cacheLer('djen', url);
+  if (doCache) return { dados: doCache };
+  const r0 = await paginaDjenDaFonte(url, deadline, resta);
+  if (r0.dados && djenValido(r0.dados)) cacheGravar('djen', url, r0.dados);
+  return r0;
+}
+// Resposta do DJEN que pode ir para o cache: tem a lista (vazia é resposta válida — "nenhuma publicação").
+const djenValido = (d) => d && typeof d === 'object' && Array.isArray(d.items || d.content || d.comunicacoes) && !d.error;
+async function paginaDjenDaFonte(url, deadline, resta) {
   let motivo = '';
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(Math.max(3000, Math.min(15000, resta() - 2000))), headers: { Accept: 'application/json' } });
@@ -678,6 +730,9 @@ export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
   const num = String(numero_processo || '').replace(/\D/g, '');
   if (!/^\d{15,25}$/.test(num)) return { erro: 'número de processo inválido — precisa do padrão CNJ (20 dígitos)' };
   const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&itensPorPagina=100`;
+  const doCache = await cacheLer('djen', url);
+  if (doCache) return formatarDjen(doCache, maxTexto);
+  const fmt = (d) => { if (djenValido(d)) cacheGravar('djen', url, d); return formatarDjen(d, maxTexto); };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
   try {
@@ -686,16 +741,16 @@ export async function buscarDjen({ numero_processo, maxTexto = 1200 }) {
       // 403 = o DJEN recusa IP fora do Brasil (30/09, chat operacional rodando nos EUA); 500 = "muito
       // ocupado". O banco (pg_net, Brasil) é a segunda via antes de devolver o erro.
       const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
-      if (b) return formatarDjen(b, maxTexto);
+      if (b) return fmt(b);
       return { erro: `DJEN respondeu ${r.status}${r.status === 403 ? ' (acesso recusado a esta origem)' : ''}` };
     }
-    return formatarDjen(await r.json(), maxTexto);
+    return fmt(await r.json());
   } catch (e) {
     // 30/09 (print do dono, caso Marcos): o DJEN abortou aos 15 s vindo da Vercel e, um minuto
     // depois, respondeu 200 na hora pelo pg_net do banco. Antes de desistir, tenta pelo banco
     // (grátis, GET público); se também falhar, o erro original segue para a tela.
     const b = await djenViaBanco(url).catch((e2) => { console.warn('[djen] via banco falhou:', e2?.message || e2); return null; });
-    if (b) return formatarDjen(b, maxTexto);
+    if (b) return fmt(b);
     return { erro: `falha ao consultar DJEN: ${e.message}` };
   } finally {
     clearTimeout(t);
