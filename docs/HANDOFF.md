@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🚗 02/10 — busca de veículo por marca: VW = VOLKSWAGEN (e os outros casos)
+- Medido: VW 822 × VOLKSWAGEN 327, GM 236 × CHEVROLET 447, MERCEDES × MERCEDES-BENZ, MMC, KIA MOTORS, CITROËN,
+  CAOACHERY/CAOA/CHERY, RE/ROYAL (Royal Enfield), 7YAMAHA — e 3.901 sem marca (estava no título).
+- Migração 20261002_marca_busca_canonica (APLICADA): tabela `marca_alias` (apelido → canônica; `eh_modelo` para
+  modelos inequívocos tipo Gol/Evoque), `marca_canonica()`, `marca_do_titulo()`, coluna `veiculos_leilao.marca_busca`
+  + gatilho. `marca` NÃO muda (regra de 24/09: inferido não se passa por dado da fonte). Acervo: 11.375 de 11.886
+  com marca; os 511 restantes são equipamento/peça.
+- Busca (BuscaVeiculos): filtra também `marca_busca` e expande apelidos (src/lib/marcas.js). "volk": 335 → 1.703;
+  "chevrolet": 548 → 1.411. Card mostra a marca da fonte no nome canônico.
+- ⚠️ MCP do Supabase TRAVA em SQL com `drop`/`delete` (pede confirmação que a sessão não dá): aplicar em pedaços
+  sem `drop` (ou `alter policy`); a migração do repo pode manter o `drop … if exists`.
+
 ### 🩺 02/10 (madrugada) — rodada de saúde: health-check calado, fila de apuração, ALBERTOMACEDO mudou de plataforma
 - **health-check não rodou 22:00 de 01/10:** Edge exige resposta em 25 s → 504 sem gravar veredito (o monitor falhou
   calado). Agora Node, maxDuration 120 (GET/POST com Request/Response). Conferir `health_check_logs` às 06:00/22:00.

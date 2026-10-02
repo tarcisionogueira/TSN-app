@@ -1,3 +1,4 @@
+import { marcasDoTermo } from '../lib/marcas';
 import React, { useEffect, useRef, useState } from 'react';
 import { ORIGEM_VENDA, ORIGENS_EXTRAJUDICIAIS } from '../utils/origemVeiculo';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +17,7 @@ const POR_PAGINA = 20;
 // Mesma lição de `Busca.jsx` (imóveis): NUNCA `select('*')`. `raw` e `descricao` completa
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
 const COLUNAS = [
-  'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
+  'id', 'titulo', 'descricao', 'marca', 'marca_busca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
@@ -288,7 +289,16 @@ function aplicarFiltros(q, f, ign = new Set()) {
   if (!ign.has('tipoVeiculo') && f.tipoVeiculo) q = q.eq('tipo_veiculo', f.tipoVeiculo);
   // Marca: OR com o título (24/09) — 30% dos lotes vêm sem `marca` (SODRE/SUPERBID trazem só
   // "HONDA CG 160..." no título) e o ilike só na coluna os escondia, como o `modelo` acima.
-  if (!ign.has('marca') && f.marca.trim()) { const t = f.marca.trim(); q = q.or(`marca.ilike.%${t}%,titulo.ilike.%${t}%`); }
+  // 02/10 (dono: "não separar VW de Volkswagen"): `marca_busca` é a marca CANÔNICA (VW→VOLKSWAGEN,
+  // GM→CHEVROLET, M.BENZ→MERCEDES-BENZ…), ou a inferida do título quando a fonte não traz — ver
+  // migração 20261002_marca_busca_canonica. O que se digita expande pelos apelidos (src/lib/marcas.js):
+  // "vw" acha VOLKSWAGEN e "volk" acha os lotes gravados como VW.
+  if (!ign.has('marca') && f.marca.trim()) {
+    const t = f.marca.trim().replace(/[,()"]/g, ' ');
+    const canon = marcasDoTermo(t);
+    q = q.or([`marca_busca.ilike.%${t}%`, `marca.ilike.%${t}%`, `titulo.ilike.%${t}%`,
+      ...(canon.length ? [`marca_busca.in.(${canon.map((c) => `"${c}"`).join(',')})`] : [])].join(','));
+  }
   // Nome/modelo: OR com o título — SUPORTE ainda não separa marca/modelo (~117 de 237
   // linhas sem `modelo`), e o nome do carro vem só dentro do título nesses casos. Buscar
   // só em `modelo` esconderia esse leiloeiro inteiro do filtro.
@@ -642,7 +652,8 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                 </div>
                 <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <div style={{ fontWeight: 700, color: '#111111', fontSize: isMobile ? 14 : 12, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                    {[v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
+                    {/* Marca da fonte no nome canônico ("VW" → VOLKSWAGEN) — a inferida do título não vira rótulo. */}
+                    {[v.marca ? (v.marca_busca || v.marca) : null, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
                   </div>
                   <div style={{ fontSize: 10, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {anoLabel && <span>{anoLabel}</span>}
