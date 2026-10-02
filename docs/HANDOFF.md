@@ -9,6 +9,14 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✍️ 02/10 — documentos da assessoria: SÓ ASSINAR NA TELA (dono)
+- Marcos não conseguia assinar: anexou a CNH em PDF (a tela aceita `.pdf`) e o servidor só aceitava `data:image/` →
+  "exige o envio dos documentos". Corrigido em assinar-contrato (PDF conta; KYC de rosto só com imagem).
+- Decisão do dono: termo/procuração gerados pela equipe NÃO exigem selfie nem documento. Gerador
+  (`_termo-assessoria.js criarDocumento`) sem KYC; 5 pendentes atualizados no banco (Marcos 2, Rafael 2, Matheus 1).
+  `ContratoLink`: documento `assessoria`/`arrematacao` sem exigência e sem marcador abre DIRETO na assinatura,
+  com nome/CPF/endereço lidos do texto (`qualificacaoDoTexto`). Checkout (auto-contrato) mantém o KYC.
+
 ### 🔴 02/10 (madrugada) — Marcos não via a arrematação nem os documentos (cliente logado)
 - **Arrematação:** "Meus Arrematados" do cliente lê SÓ `arrematados`; a atribuição de 16/09 criava essa linha com o
   resultado DESCARTADO (forma 3) e ela nunca existiu. Criada `74fa22f6` (R$ 548.355,15, 16/09, + lançamento).

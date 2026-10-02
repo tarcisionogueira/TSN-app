@@ -226,8 +226,9 @@ async function criarDocumento(sb, { userId, titulo, conteudo, produtoTipo, produ
       titulo, conteudo, tipo_contrato: 'servico', status: 'aguardando_assinatura', requer_assinatura: true,
       criado_por: criadoPor, plano_key: planoKey || null, produto_tipo: produtoTipo, produto_id: String(produtoId),
       arremate_imovel_id: imovelId || null, arremate_user_id: userId,
-      // KYC do termo do checkout: selfie + foto do documento compõem a prova de autoria
-      kyc_incluido: true, verificacao_identidade: 'selfie', docs_extras_exigidos: ['foto_doc'],
+      // SÓ ASSINAR NA TELA (02/10, dono): documento gerado pela equipe já qualifica o cliente no texto —
+      // sem selfie nem foto do documento (exigir isso travou a assinatura do Marcos).
+      kyc_incluido: false, verificacao_identidade: 'nenhuma', docs_extras_exigidos: [],
     }),
   });
   if (!rL.ok) return { ok: false, motivo: `criação do documento HTTP ${rL.status}: ${(await rL.text().catch(() => '')).slice(0, 120)}` };

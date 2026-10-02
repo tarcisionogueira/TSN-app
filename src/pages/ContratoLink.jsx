@@ -228,6 +228,21 @@ function AssinaturaCanvas({ onChange }) {
   );
 }
 
+// Qualificação do cliente lida do texto de um documento gerado pela equipe (termo/procuração).
+// Só vale sem exigência de identidade e sem marcador "[... DO SIGNATÁRIO]" sobrando; senão, null
+// e o fluxo completo (tipo → dados → assinatura) segue como antes.
+function qualificacaoDoTexto(c) {
+  if (!c || !['assessoria', 'arrematacao'].includes(c.produto_tipo)) return null;
+  if ((c.verificacao_identidade || 'nenhuma') !== 'nenhuma' || (c.docs_extras_exigidos || []).length) return null;
+  const t = String(c.conteudo || '');
+  if (/DO SIGNATÁRIO\]/.test(t)) return null;
+  const nome = t.match(/(?:OUTORGANTE|CONTRATANTE \(CLIENTE\)):\s*([^,\n]+),\s*inscrit/)?.[1]?.trim();
+  const cpf = t.match(/CPF\/CNPJ nº\s*([\d./-]{14,18})/)?.[1];
+  const endereco = t.match(/domiciliado\(a\) em\s*([^\n]+?)\.\s*(?:\n|$)/)?.[1]?.trim();
+  if (!nome || !cpf) return null;
+  return { nome, cpf, ...(endereco ? { endereco } : {}) };
+}
+
 export default function ContratoLink() {
   const { token } = useParams();
   const nav = useNavigate();
@@ -303,7 +318,15 @@ export default function ContratoLink() {
         // checagem de expiração (contrato assinado é válido mesmo após a janela de assinatura).
         else if (c.status === 'assinado') { setContrato(c); setJaAssinado(true); }
         else if (c.status === 'expirado' || new Date(c.expira_em) < new Date()) setErro('Este link expirou.');
-        else { setContrato(c); rastrear('aberto'); } // funil: link de assinatura aberto
+        else {
+          setContrato(c); rastrear('aberto'); // funil: link de assinatura aberto
+          // SÓ ASSINAR NA TELA (02/10, dono): termo e procuração gerados pela equipe já trazem a
+          // qualificação do cliente no texto (api/_signatario.js) — pedir CPF/endereço de novo, mais
+          // selfie e documento, travou o Marcos. Sem exigência de identidade e com o texto completo,
+          // os dados vêm do próprio documento e a tela abre direto na assinatura.
+          const q = qualificacaoDoTexto(c);
+          if (q) { setTipoPessoa('pf'); setDocId(q.cpf); setDados(q); setEtapa('revisar'); }
+        }
         setLoading(false);
       });
   }, [token, rastrear]);
