@@ -116,7 +116,11 @@ export default async function handler(req) {
   // `docs_identidade` assinava sem nenhum documento, e o face match abaixo — que só roda quando
   // as fotos vêm — era pulado junto. Espelha exatamente a regra da tela.
   const docsEnviados = (docs_identidade && typeof docs_identidade === 'object') ? docs_identidade : {};
-  const temImagem = (k) => typeof docsEnviados[k] === 'string' && docsEnviados[k].startsWith('data:image/');
+  // PDF conta como documento enviado (02/10, Marcos): a tela aceita "image/*,.pdf" no campo do RG/CNH
+  // (CNH digital é PDF), mas aqui só valia `data:image/` — o cliente anexava a CNH, a tela mostrava o
+  // arquivo e a assinatura era recusada com "exige o envio dos documentos". A comparação de rosto
+  // (KYC) segue só com imagem; PDF sem par não trava, como já era para incerteza.
+  const temImagem = (k) => typeof docsEnviados[k] === 'string' && /^data:(image\/|application\/pdf)/.test(docsEnviados[k]);
   const verifExigida = String(contrato.verificacao_identidade || 'nenhuma');
   const obrigatorios = [
     ...(verifExigida !== 'nenhuma' && ['selfie', 'selfie_doc', 'foto_doc'].includes(verifExigida) ? [verifExigida] : []),
