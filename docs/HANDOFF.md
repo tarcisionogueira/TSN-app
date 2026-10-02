@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⏱️ 02/10 (18:20) — conferência do painel de invariantes: correção NÃO provada · cron das 18:10 não disparou
+- **A Vercel não disparou `monitor-fontes-cron` às 18:10 de 02/10** (sem log de invocação; 01/10 aparece às 18:10:25;
+  os demais crons do dia rodaram). Efeito: sem `fonte_metricas_hist` de 02/10, sem rodada em `qa_invariantes_execucao`,
+  sem e-mail de fontes. Conferir 03/10 18:10; se repetir, investigar o cron (74 declarados no vercel.json).
+- Medido à mão (`qa_invariantes_medido()`): **13,0 s frio · 5,1 s quente** (alvo < 5 s; ontem 7,2 s). Os índices
+  parciais de 02/10 não bastaram. `selo_documento_dessincronizado` isolado = 0,84 s → inline do `doc_arquivo()`
+  rende ~0,3–0,4 s, insuficiente. Próximo passo: perfilar as 90 invariantes (EXPLAIN ANALYZE por InitPlan) no frio
+  e atacar as 3–5 mais caras. Alertas atuais: sem_foto 1739, estado_fora_do_padrao 18, pino_generico 26,
+  resultado_leilao_atrasado 2, erro_na_tela 2.
+- Oportunidades no PWA do dono CONFIRMADO às 17:47: abriu o lote (`/imovel/23b4…`), clicou "Solicitar Análise";
+  360 do Rafael recebeu `equipe_oportunidades` e `equipe_abriu_oportunidade`.
+
 ### 📲 02/10 (tarde, 4) — o PWA do dono seguia no JS das 15:20: por que, e as duas redes
 - Prova: 15:37 o servidor novo gravou `equipe_oportunidades`, mas o clique no lote NÃO gerou o POST da tela nova
   (logs Vercel: 1 chamada só). O iPhone RETOMA o app do segundo plano; `swAtualizacao.js` só recarregava quando o
