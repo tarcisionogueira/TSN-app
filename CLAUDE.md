@@ -178,6 +178,11 @@ curto (5–8 linhas) antes de seguir:
    >   pode ocupar uma célula**. O número media "quantos relatórios existem" e reportava com o
    >   nome de "quanto a régua discrimina" — a **forma #10** cometida dentro do próprio
    >   instrumento de verificação.
+   > - **Só a régua VIGENTE entra no veredito (02/10).** A régua de 01/10 (risco pelo servidor +
+   >   trava de liberação) grava `reguaVersao: 2`. Relatório de 31/08–01/10 aparece como `REGUA 1`
+   >   e liberação bloqueada como `TRAVA`, ambos fora da conta. Antes disso a função contava a régua
+   >   de 31/08 como amostra da atual e imprimiu `SATURANDO` sobre ZERO relatórios da régua nova —
+   >   a forma nº 10 de novo. Ao trocar a régua outra vez: suba o `reguaVersao` e o filtro junto.
    > - **A linha `LEGADO` fica fora da conta de propósito.** Relatório anterior a 31/08 tem
    >   `confianca` nula; contá-lo inventaria uma distribuição que nunca existiu — e como os
    >   legados são todos "amarelo", enviesaria o veredito **na direção exata do defeito que se

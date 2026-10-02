@@ -2183,6 +2183,9 @@ export default async function handler(req, res) {
       // lance". Sem consulta processual confirmada, o teto é amarelo.
       nivelRisco: nivelRiscoFinal,
       confianca: confiancaFinal,
+      // Versão da régua (02/10): documental_distribuicao() só conta a régua vigente no veredito —
+      // sem a marca, relatório da régua de 31/08 era lido como amostra da de 01/10 (forma nº 10).
+      reguaVersao: 2,
       // Transparência (01/10): arquivos do lote que ficaram sem leitura e por quê (link inexistente
       // no leiloeiro ou limite por análise — os demais casos travam a liberação acima).
       documentosNaoLidos: (naoLidos || []).map(({ rotulo, tipo, motivo, inexistente, porLimite }) => ({ rotulo, tipo, motivo, inexistente, porLimite: !!porLimite })),

@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📑 02/10 (tarde) — "documental SATURANDO" era a régua ANTIGA medida com o nome da nova
+- `documental_distribuicao()` contava como amostra tudo com `confianca` preenchida — e esse campo existe desde 31/08.
+  Os 14 da amostra são TODOS da régua de 31/08; **a régua de 01/10 21:38 ainda não produziu nenhum relatório**. Os 3
+  com updated_at posterior são regerações que leram 0 documentos e PRESERVARAM o parecer antigo.
+- Corrigido: `reguaVersao: 2` gravado em gerar-documental; função separa régua 2 (veredito) · REGUA 1 · TRAVA · LEGADO
+  (migração 20261002_documental_distribuicao_so_regua_nova, APLICADA). Hoje: amostra 0 → "AMOSTRA INSUFICIENTE".
+- Os 9 documentais com `regen_motivo` estão todos com `regen_tentativas = 3` (teto) — regeração parou; 7 são de lote
+  INATIVO (leilão passado). Não vale gastar IA regerando. **Decisão do dono pendente:** recalcular o risco dos 14
+  antigos pela régua do servidor (sem IA, só sobre os riscos já gravados) ou esperar relatórios novos.
+
 ### ✉️ 02/10 (tarde) — References da caixa aninhava o fio · respostas a Leiloaria Smart e Sodré
 - **Defeito:** o Resend entrega `headers.references` como ARRAY; o inbound gravava em `email_caixa.referencias` (text)
   o JSON cru, e o `email-caixa` colava isso no References da resposta → o fio aninhava a cada volta (Smart: ~6
