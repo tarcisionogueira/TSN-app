@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip, User } from 'lucide-react';
+import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip, User, Target } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -895,6 +895,7 @@ export default function Arrematados() {
         {!soLeitura && acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
         {acaoBtn('Minhas análises', Search, '#0D63DB', () => nav('/analises'))}
         {ehStaff && uid && acaoBtn('Doc. pessoais', User, '#7c3aed', () => setVerDocsPessoais(true))}
+        {visaoEquipeDireta && acaoBtn('Oportunidades', Target, '#7c3aed', () => nav(`/assessorados/${clienteIdParam}/oportunidades?nome=${encodeURIComponent(nomeClienteParam || '')}`))}
       </div>
 
       {loading ? (

@@ -9,6 +9,14 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🎯 02/10 (tarde, 2) — Oportunidades viram tela própria · data mostrada é a PRÓXIMA praça
+- Tela `/assessorados/:clienteId/oportunidades?nome=` (src/pages/OportunidadesCliente.jsx; painel em
+  src/components/OportunidadesPerfil.jsx). Entradas: botão "Oportunidades" na seção Contratadas de /assessorados e
+  botão "Oportunidades" na tela de operações do cliente (/arrematados?cliente_id=…, visão da equipe). Rota só equipe;
+  acesso real decidido no servidor (admin ou designado).
+- Print do dono mostrava 01/10, 22/09, 29/09 — lotes em 2ª praça futura com a data da 1ª. `proximaPraca()` no endpoint
+  devolve a próxima praça (com rótulo "1ª/2ª praça"), ou o encerramento.
+
 ### 🎯 02/10 (tarde) — documentais recalculados pela régua 2 · "Oportunidades" na tela de Assessorados
 - **Recálculo (dono):** os 14 documentais da régua de 31/08 receberam a régua de 01/10 SEM IA (só sobre os riscos
   gravados): falha de verificação → diligência; risco pelo confirmado; confiança pelas pendências essenciais; score

@@ -57,6 +57,17 @@ async function rpc(fn, body) {
   return r.json();
 }
 
+// A data que importa para a equipe é a PRÓXIMA praça, não a 1ª (02/10, print do dono: lotes com
+// 1ª praça em 22/09 e 2ª ainda por vir apareciam como "22/09/2026" — parecia leilão passado).
+function proximaPraca(im) {
+  const agora = Date.now();
+  const pracas = [[im.data_leilao, '1ª praça'], [im.data_leilao_2, '2ª praça']]
+    .map(([d, rot]) => ({ t: Date.parse(d || ''), d, rot })).filter((x) => Number.isFinite(x.t));
+  const futura = pracas.filter((x) => x.t >= agora - 12 * 3600e3).sort((a, b) => a.t - b.t)[0];
+  if (futura) return { dataLeilao: futura.d, praca: pracas.length > 1 ? futura.rot : null };
+  return { dataLeilao: im.data_fim || null, praca: im.data_fim ? 'encerra' : null };
+}
+
 export const GET = handler;
 async function handler(req) {
   const user = await getUser(req);
@@ -148,7 +159,7 @@ async function handler(req) {
       return {
         id: im.id, titulo: im.titulo, cidade: im.cidade, estado: im.estado, tipo: im.tipo, modalidade: im.modalidade,
         valor: Number(im.valor_minimo_ref ?? im.valor_minimo) || null, avaliacao: Number(im.valor_avaliacao) || null,
-        desconto: Number(im.desconto_percentual) || null, dataLeilao: im.data_leilao || im.data_fim || null,
+        desconto: Number(im.desconto_percentual) || null, ...proximaPraca(im),
         foto: im.link_foto || null, ocupacao: im.ocupacao || null, pagamento: im.forma_pagamento || null,
         distanciaKm: dists[0] ? Math.round(dists[0].d) : null, pontos, motivos: motivos.slice(0, 3),
       };
