@@ -24,6 +24,7 @@
     "testar:signatario": "node scripts/testes/signatario-preenchido.mjs",
     "testar:cnj-cache": "node scripts/testes/cnj-cache.mjs",
     "testar:doc-blocos": "node scripts/testes/doc-blocos.mjs",
+    "testar:email-referencias": "node scripts/testes/email-referencias.mjs",
     "testar:fipe-triangulacao": "node scripts/testes/fipe-triangulacao.mjs",
     "testar:zero-declarado": "node scripts/testes/zero-declarado-pelo-site.mjs",
     "testar:zuk-local-veiculo": "node scripts/testes/zuk-local-veiculo.mjs",

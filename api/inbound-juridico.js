@@ -10,6 +10,7 @@
  */
 export const config = { runtime: 'edge' };
 import { anthropicFetch } from './_claude.js';
+import { referenciasNormalizadas } from './_email-referencias.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -374,7 +375,7 @@ async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', s
       assunto: String(data?.subject || '').slice(0, 500) || null,
       texto: String(data?.text || '').slice(0, 100000) || null,
       html: String(data?.html || '').slice(0, 300000) || null,
-      message_id: messageId, in_reply_to: headers['in-reply-to'] || null, referencias: headers['references'] || null,
+      message_id: messageId, in_reply_to: headers['in-reply-to'] || null, referencias: referenciasNormalizadas(headers['references']),
       resend_email_id: data?.email_id || null, anexos, autenticacao: aut, spam_motivo: spamMotivo,
       resposta_de: respostaDe,
     } });

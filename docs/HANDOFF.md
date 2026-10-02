@@ -9,6 +9,19 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✉️ 02/10 (tarde) — References da caixa aninhava o fio · respostas a Leiloaria Smart e Sodré
+- **Defeito:** o Resend entrega `headers.references` como ARRAY; o inbound gravava em `email_caixa.referencias` (text)
+  o JSON cru, e o `email-caixa` colava isso no References da resposta → o fio aninhava a cada volta (Smart: ~6
+  camadas, ids partidos) e a resposta podia cair fora da conversa do leiloeiro. Correção: `api/_email-referencias.js`
+  (`referenciasNormalizadas`) no gravar (inbound-juridico) e no responder (email-caixa, cura linha antiga na leitura);
+  14 linhas legadas limpas no banco (0 restantes). Teste `testar:email-referencias` (forma real do banco).
+- **Enviados pelo dono (via MCP Resend, assinatura "Tarcisio Nogueira"):** Smart — cliente ainda sem a documentação
+  de crédito (ficha + renda), prazo de 01/10 18h perdido, pedido para manter a proposta em análise (sem data nova).
+  Sodré — LGPD: o cliente fará o cadastro e falará pelo e-mail dele. Registrados em Enviados; `entrega_status` fica
+  nulo nesses dois porque não passaram pelo `enviarEmail` (Resend confirma: delivered / opened).
+- ⚠️ Pendente do dono: cobrar do cliente a ficha do arrematante + comprovante de renda (imóvel 1825, matrícula 17.961
+  — o dono chama de "condomínio Newville"; a Smart, de "Residencial Mirante das Pedras").
+
 ### 🏷️ 02/10 (manhã) — "fonte já explicada" no ritual (dono) · LEJE/SBID21/JMF sem novidade
 - Ritual de abertura passa a ler `fonte_regressao_pendente()` (migração 20261002_fonte_regressao_explicada, APLICADA):
   a suspeita menos o que tem diagnóstico em `fonte_regressao_explicada`. Trava: só o MESMO motivo, vence em ≤ 30 dias,

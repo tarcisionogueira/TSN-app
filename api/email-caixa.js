@@ -16,6 +16,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { referenciasNormalizadas } from './_email-referencias.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -213,7 +214,8 @@ export default async function handler(req) {
   const headers = {};
   if (original?.message_id) {
     headers['In-Reply-To'] = original.message_id;
-    headers['References'] = `${original.referencias || ''} ${original.message_id}`.trim().slice(0, 2000);
+    // Normaliza: linha antiga guarda o JSON do array (02/10) — colado cru, aninhava o fio.
+    headers['References'] = referenciasNormalizadas(original.referencias, original.message_id) || original.message_id;
   }
   // 25/09 (dono): a resposta leva SÓ o que foi digitado + assinatura. A conversa inteira fica na
   // tela para dar contexto a quem responde; citar o e-mail anterior virou opção (`citar: true`).
