@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🏷️ 02/10 (manhã) — "fonte já explicada" no ritual (dono) · LEJE/SBID21/JMF sem novidade
+- Ritual de abertura passa a ler `fonte_regressao_pendente()` (migração 20261002_fonte_regressao_explicada, APLICADA):
+  a suspeita menos o que tem diagnóstico em `fonte_regressao_explicada`. Trava: só o MESMO motivo, vence em ≤ 30 dias,
+  e o oculto vira a linha `(explicadas)`. Marcadas: LEJE zerou e SBID21 regressao até 16/10, JMFLEILOES até 09/10.
+- JMF: 15 lotes do leilão de 30/09 seguem `ativo` por desenho — `trg_desativa_leilao_encerrado` poupa `indeterminado`
+  apurado há < 15 dias (venda direta pós-leilão). Saem sozinhos até ~17/10.
+- Conector Resend: estava conectado no claude.ai, mas a sessão não tinha recebido a autorização; ela chegou no meio
+  da sessão (ferramentas `mcp__Resend__*` carregaram). Se faltar de novo: reconectar e abrir sessão nova.
+- `qa_invariantes_lenta`: conferência da rodada 18:10 UTC agendada (send_later 18:20 UTC).
+
 ### 🧾 02/10 — dois alarmes novos do painel: lance do edital era a PARCELA · anomalia que não pedia decisão
 - **`editais_avaliacao_perdida` (Cristina/MG, edital Thaís Teixeira):** a regex do radar não aceitava "LANCE MÍNIMO
   **NO** 2º LEILÃO" (só DO/DE) e seguia até "parcelas no valor mínimo de R$ 1.000,00 **(mil reais)** cada" — o

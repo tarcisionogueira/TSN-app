@@ -192,9 +192,18 @@ curto (5–8 linhas) antes de seguir:
    O `monitor-fontes-cron` faz isso todo dia (Seção C3) + grava o snapshot em `fonte_metricas_hist`.
    Cheque rápido no início:
    ```sql
-   select * from public.fonte_regressao_suspeita();
+   select * from public.fonte_regressao_pendente();
    ```
-   → vazio = íntegro. **Cada linha diz o `motivo` por extenso** — e os três pedem ações
+   > **`fonte_regressao_pendente()` (02/10) = a suspeita MENOS o que já tem diagnóstico.** Fonte
+   > com explicação gravada em `fonte_regressao_explicada` sai da lista e vira UMA linha
+   > `(explicadas)` com o porquê — só para o MESMO motivo e por no máx. 30 dias; mudou o motivo ou
+   > venceu, volta sozinha. Investigou e é conhecido? **Grave a explicação em vez de reinvestigar na
+   > próxima sessão**: `insert into fonte_regressao_explicada (fonte, motivo, explicacao, explicado_ate)
+   > values (...) on conflict (fonte) do update set motivo=excluded.motivo, explicacao=excluded.explicacao,
+   > explicado_em=now(), explicado_ate=excluded.explicado_ate;`. A verdade crua continua em
+   > `fonte_regressao_suspeita()`.
+
+   → só a linha `(explicadas)`, ou vazio = íntegro. **Cada linha diz o `motivo` por extenso** — e os três pedem ações
    diferentes, então leia o motivo antes de agir:
    - **`zerou`** — a fonte parou de trazer lote. Zero não é oscilação: é o achado mais duro
      da lista, mesmo em leiloeiro pequeno.
