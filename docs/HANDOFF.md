@@ -9,6 +9,15 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⚖️ 02/10 (noite) — chat CNJ "não consegue consultar os tribunais": DataJud FORA para todos · DJEN vira reserva
+- Conversa do dono 19:16 (Marcos, 0000199-97.2016.5.05.0195, TRT5): `consultar_datajud` falhou e o chat parou. Medido
+  pelo pg_net: TRT5, TST **e TJSP (controle)** = 30 s sem resposta com TCP/TLS ok → DataJud do CNJ fora/sobrecarregado
+  (o cache tem consulta boa até 12:00). Nosso código está certo.
+- O DJEN respondia (34 publicações, última 16/09) e o modelo não o chamou, apesar do prompt. Agora o despachante de
+  `consultar_datajud`, sem processo E com erro de tribunal, consulta o DJEN na MESMA chamada (`djen_reserva`).
+- Pergunta do dono (dívida "35 mil", correção): nenhuma das 34 publicações traz o valor da dívida — só o edital de
+  10/04 (avaliação R$ 1.076.710,30; mínimo R$ 538.355,15). O cálculo atualizado está nos autos (PJe).
+
 ### ⏱️ 02/10 (18:20) — conferência do painel de invariantes: correção NÃO provada · cron das 18:10 não disparou
 - **A Vercel não disparou `monitor-fontes-cron` às 18:10 de 02/10** (sem log de invocação; 01/10 aparece às 18:10:25;
   os demais crons do dia rodaram). Efeito: sem `fonte_metricas_hist` de 02/10, sem rodada em `qa_invariantes_execucao`,

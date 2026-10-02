@@ -458,7 +458,22 @@ export async function executarFerramentaAdmin(nome, input, ctx) {
         return resto;
       }
       case 'buscar_edital_processo': return await buscarEditalProcesso(input);
-      case 'consultar_datajud': return await consultarDatajud(input);
+      case 'consultar_datajud': {
+        const r = await consultarDatajud(input);
+        // DATAJUD FORA → DJEN NA MESMA CHAMADA (02/10, caso Marcos/TRT5 de novo). O prompt manda
+        // consultar as duas fontes, mas o modelo parava na falha e respondia "timeout, consulte você"
+        // — e o DataJud estava fora para TODOS os tribunais (TRT5, TST e TJSP: 30 s sem resposta,
+        // medido pelo pg_net). Não depende mais do modelo lembrar: sem processo E com erro de
+        // tribunal, as publicações do DJEN vêm junto, ditas como tal.
+        const falhou = !(r?.total > 0) && (r?.erros && (Array.isArray(r.erros) ? r.erros.length : Object.keys(r.erros).length));
+        if (falhou && input?.numero_processo) {
+          const dj = await buscarDjen({ numero_processo: input.numero_processo }).catch((e) => ({ erro: String(e?.message || e).slice(0, 120) }));
+          r.djen_reserva = dj?.publicacoes?.length
+            ? { fonte: 'DJEN (publicações) — o DataJud não respondeu', total: dj.total ?? dj.publicacoes.length, publicacoes: dj.publicacoes.slice(0, 10) }
+            : { fonte: 'DJEN', resultado: dj?.erro ? `DJEN também falhou: ${dj.erro}` : 'nenhuma publicação deste número no DJEN' };
+        }
+        return r;
+      }
       case 'buscar_processos_por_parte': return await buscarPorParte(input);
       case 'buscar_jurisprudencia': return await buscarJurisprudencia({ tema: String(input?.tema || '').slice(0, 200), contexto: String(input?.contexto || '').slice(0, 400), userId: ctx?.adminUser?.id || null, prazoMs: 45000 });
       case 'consultar_cnpj': return await consultarCnpj(input);
