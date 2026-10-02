@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ⏱️ 02/10 — `qa_invariantes_lenta`: painel 7,2 s → ~3,8 s (quente)
+- Medido com EXPLAIN ANALYZE no CORPO da função (cada InitPlan = uma invariante). O vilão era
+  `proximidades_vazio_falso` (3,2 s frio): lia o jsonb `pontos_proximos` (TOAST) dos 26,7 mil ativos para
+  descartar 26.641. Dois índices parciais `(cidade, estado)` → index-only, **15 ms**, mesmo resultado (49).
+- `area_truncada_no_milhar` (436 ms, regex compilado por linha): prefiltro `strpos` que é condição
+  necessária do mesmo regex → 104 ms. `veiculo_cidade_fora_do_ibge`: índice parcial.
+- Migração `20261002_qa_invariantes_lenta_indices_parciais.sql` (patch idempotente no corpo vigente).
+- **Conferir na rodada das 18:10 UTC** (`qa_invariantes_execucao.ms_servidor`): é cache FRIO, o número
+  real do alarme. Se ainda passar de 5 s, o próximo alvo é `doc_arquivo()` — `SET search_path` impede
+  inline e custa ~7 µs × 53 mil chamadas (~0,4 s) no `selo_documento_dessincronizado`; tirar o SET
+  resolve mas acende o lint `function_search_path_mutable` do Supabase (decisão consciente, não feita).
+
 ### 💲 02/10 — FIPE não pode faltar no relatório de veículo (dono: "conseguimos triangular")
 - Medido: 11.180 de 11.886 veículos ativos NUNCA tiveram FIPE consultada (FIPE é só sob demanda desde 25/09);
   658 com valor. Caso do dono: Saveiro "NOVA SAVEIRO RB MBVS 1.6" 2020/2021 → `sem_match`: as 43 Saveiros empatavam
