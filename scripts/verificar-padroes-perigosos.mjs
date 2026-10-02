@@ -129,6 +129,19 @@ const REGRAS = [
     testar: (linha) => /aspectRatio\s*:/.test(linha) && /objectFit\s*:/.test(linha),
   },
   {
+    id: 'link-interno-sem-hash',
+    titulo: 'href interno sem "#/" — o app usa HashRouter, e "/rota" abre a TELA INICIAL',
+    // O roteador lê a rota DEPOIS do "#". `<a href="/imovel/ID">` tem hash vazio → o HashRouter
+    // desenha "/" (a home), e o rastreador ainda registra "/imovel/ID" (lê o pathname), então o
+    // rastro parece certo. Aconteceu em 02/10: o dono clicou num lote de Oportunidades no iPhone
+    // e caiu na tela inicial — duas vezes; a mesma forma estava no "abrir" do relatório de
+    // veículo. Use `href="#/rota"` (padrão dos links de Termos) ou navegue com `nav('/rota')`.
+    // Fora da regra: /api/ (servidor), /i/ (link de compartilhar), /leiloes e /leilao/ (páginas
+    // públicas de SEO servidas pelo servidor — vercel.json) e arquivo estático (tem extensão).
+    testar: (linha, rel) => /^src\/.*\.jsx$/.test(rel || '')
+      && /href=\{?\s*[`"']\/(?!api\/|i\/|leiloes\b|leilao\/)[a-z][\w-]*(?![\w-]*\.[a-z0-9]{2,4}\b)/i.test(linha),
+  },
+  {
     id: 'grid-fr-sem-minmax',
     titulo: "Coluna de grade em 'fr' puro — conteúdo largo alarga a coluna e estoura a tela",
     // `1fr` é `minmax(auto, 1fr)`: a coluna se RECUSA a ficar menor que o conteúdo. Uma fileira

@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔗 02/10 (tarde, 3) — lote de Oportunidades abria a TELA INICIAL: o app é HashRouter
+- Rastro do dono (eventos_atividade): clique no lote → pageview `/imovel/ID` → clique num card da HOME com a rota
+  ainda `/imovel/ID`. O card tinha `href="/imovel/ID"` (sem `#`): HashRouter lê o hash vazio e desenha "/"; o tracker lê
+  o pathname e registra `/imovel/ID` — rastro "certo" sobre tela errada. Corrigido para `#/imovel/ID` + nav interno;
+  mesmo defeito no "abrir" do relatório de veículo (PropostaVeiculoModal). Trava nova `link-interno-sem-hash` no
+  verificar:padroes (fora: /api/, /i/, /leiloes, /leilao/ — rotas do servidor no vercel.json).
+- **Cliente 360:** a navegação da equipe já caía no 360 DA EQUIPE; no do cliente, nada. Agora
+  `api/oportunidades-cliente.js` grava em atividade_log do cliente `equipe_oportunidades` (critérios + top 5) a cada
+  busca e `equipe_abriu_oportunidade` (POST) a cada lote aberto, com `ator_id` = quem da equipe.
+
 ### 🎯 02/10 (tarde, 2) — Oportunidades viram tela própria · data mostrada é a PRÓXIMA praça
 - Tela `/assessorados/:clienteId/oportunidades?nome=` (src/pages/OportunidadesCliente.jsx; painel em
   src/components/OportunidadesPerfil.jsx). Entradas: botão "Oportunidades" na seção Contratadas de /assessorados e

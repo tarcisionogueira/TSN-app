@@ -42,7 +42,12 @@ export default function OportunidadesPerfil({ cliente }) {
         // Mesma aba, pela navegação do app (02/10): `target="_blank"` no app instalado do iPhone abre
         // FORA do app, sem a sessão — o dono clicou e caiu na tela inicial. `href` fica para o
         // clique do meio/Ctrl no computador; o clique normal navega por dentro e "Voltar" retorna.
-        <a key={o.id} href={`/imovel/${o.id}`} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); nav(`/imovel/${o.id}`); }} style={{
+        <a key={o.id} href={`#/imovel/${o.id}`} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault();
+          // Registro no Cliente 360 do cliente (best-effort: falha aqui nunca impede abrir o lote).
+          apiCall('/api/oportunidades-cliente', { method: 'POST', body: JSON.stringify({ cliente_id: cliente.id, imovel_id: o.id, titulo: o.titulo }) })
+            .then((r) => { if (!r.ok) console.warn('[oportunidades] abertura não registrada no 360', r.status); })
+            .catch((err) => console.warn('[oportunidades] abertura não registrada no 360', err?.message));
+          nav(`/imovel/${o.id}`); }} style={{
           display: 'flex', gap: 10, alignItems: 'center', textDecoration: 'none', color: 'inherit',
           background: 'white', border: '1px solid #e9d5ff', borderRadius: 10, padding: 8, marginBottom: 6,
         }}>

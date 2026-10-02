@@ -75,7 +75,7 @@ export default function PropostaVeiculoModal({ veiculo, onFechar }) {
             </div>
             {relatorio && (
               <div style={{ fontSize: 11.5, margin: '2px 0 6px', color: relatorio === 'pronto' ? '#15803d' : relatorio === 'gerando' ? '#0369a1' : '#b91c1c' }}>
-                {relatorio === 'pronto' ? <>✓ Relatório do veículo pronto — <a href={`/analise-veiculo?veiculo=${encodeURIComponent(propondoVeiculo.id)}`} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 700 }}>abrir</a></>
+                {relatorio === 'pronto' ? <>✓ Relatório do veículo pronto — <a href={`#/analise-veiculo?veiculo=${encodeURIComponent(propondoVeiculo.id)}`} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 700 }}>abrir</a></>
                   : relatorio === 'gerando' ? <><Loader2 size={11} className="animate-spin" style={{ verticalAlign: -1 }} /> Gerando o relatório do veículo automaticamente (≈1 min)…</>
                   : `Relatório do veículo não foi gerado: ${relatorio.erro}`}
               </div>

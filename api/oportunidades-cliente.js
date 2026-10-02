@@ -20,6 +20,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { logAtividade } from './_atividade.js';
 import MUNICIPIOS from './_municipios.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
@@ -68,21 +69,46 @@ function proximaPraca(im) {
   return { dataLeilao: im.data_fim || null, praca: im.data_fim ? 'encerra' : null };
 }
 
+// Mesma cerca para os dois métodos: admin, ou equipe DESIGNADA ao cliente.
+async function autorizar(req, clienteId) {
+  const user = await getUser(req);
+  if (!user) return { erro: unauthorized() };
+  const role = await getUserRoleById(user.id);
+  if (role !== 'admin' && !ROLES_EQUIPE.includes(role)) return { erro: forbidden('Sem permissão') };
+  if (!RE_UUID.test(clienteId || '')) return { erro: json({ error: 'cliente_id inválido' }, 400) };
+  if (role !== 'admin') {
+    const d = await sbGet(`assessorado_designacao?cliente_id=eq.${clienteId}&membro_id=eq.${user.id}&select=cliente_id&limit=1`);
+    if (!d.length) return { erro: forbidden('Este cliente não está designado a você') };
+  }
+  return { user };
+}
+
+// POST { cliente_id, imovel_id, titulo } — a equipe ABRIU um lote da lista: entra na linha do
+// tempo do cliente (Cliente 360), para se saber o que já foi olhado/oferecido a ele.
+export async function POST(req) {
+  let body = {};
+  try { body = await req.json(); } catch { return json({ error: 'corpo inválido' }, 400); }
+  try {
+    const a = await autorizar(req, body.cliente_id);
+    if (a.erro) return a.erro;
+    if (!RE_UUID.test(String(body.imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
+    await logAtividade(body.cliente_id, 'equipe_abriu_oportunidade',
+      `Equipe abriu oportunidade: ${String(body.titulo || body.imovel_id).slice(0, 140)}`,
+      { imovel_id: body.imovel_id }, a.user.id);
+    return json({ ok: true });
+  } catch (e) {
+    console.error('[oportunidades-cliente] registrar abertura', e.message);
+    return json({ error: 'não registrado' }, 502);
+  }
+}
+
 export const GET = handler;
 async function handler(req) {
-  const user = await getUser(req);
-  if (!user) return unauthorized();
-  const role = await getUserRoleById(user.id);
-  if (role !== 'admin' && !ROLES_EQUIPE.includes(role)) return forbidden('Sem permissão');
-
   const clienteId = new URL(req.url, 'http://localhost').searchParams.get('cliente_id') || '';
-  if (!RE_UUID.test(clienteId)) return json({ error: 'cliente_id inválido' }, 400);
-
   try {
-    if (role !== 'admin') {
-      const d = await sbGet(`assessorado_designacao?cliente_id=eq.${clienteId}&membro_id=eq.${user.id}&select=cliente_id&limit=1`);
-      if (!d.length) return forbidden('Este cliente não está designado a você');
-    }
+    const a = await autorizar(req, clienteId);
+    if (a.erro) return a.erro;
+    const user = a.user;
     const [perfil] = await sbGet(`perfis?id=eq.${clienteId}&select=id,nome,perfil_investidor,faixa_capital,forma_pagamento,endereco_cidade,endereco_uf,cidades_interesse,triagem_em&limit=1`);
     if (!perfil) return json({ error: 'Cliente não encontrado' }, 404);
 
@@ -164,6 +190,13 @@ async function handler(req) {
         distanciaKm: dists[0] ? Math.round(dists[0].d) : null, pontos, motivos: motivos.slice(0, 3),
       };
     }).sort((a, b) => b.pontos - a.pontos).slice(0, LIMITE_RESPOSTA);
+
+    // Cliente 360 (02/10, dono): a busca fica na linha do tempo DO CLIENTE, com a equipe como
+    // autora — a navegação de quem buscou já cai no 360 dela, mas no do cliente não aparecia nada.
+    await logAtividade(clienteId, 'equipe_oportunidades',
+      `Equipe buscou oportunidades no perfil: ${oportunidades.length} de ${achados.size} lote(s), até ${criterios.raioKm ?? '—'} km`,
+      { criterios, top: oportunidades.slice(0, 5).map((o) => ({ id: o.id, titulo: o.titulo, valor: o.valor, desconto: o.desconto })) },
+      user.id);
 
     return json({
       cliente: { id: perfil.id, nome: perfil.nome },
