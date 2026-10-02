@@ -560,6 +560,7 @@ export default function Caso() {
     } finally { setPosseLoad(false); }
   };
   const [arrFileNome, setArrFileNome] = useState('');
+  const [arrFile, setArrFile] = useState(null); // 02/10: o arquivo era ESCOLHIDO e nunca enviado
   const [salvandoArr, setSalvandoArr] = useState(false);
   const [linkHonorarioCopiado, setLinkHonorarioCopiado] = useState(false);
 
@@ -1056,7 +1057,34 @@ export default function Caso() {
       const { error: errEtapaArr } = await supabase.from('casos').update({ status_etapa:'arrematado' }).eq('id', caso.id);
       if (errEtapaArr) throw errEtapaArr;
       setArrematacao(arr);
-      setMsg(`Arrematação registrada! Honorários de ${fmt(honorariosValor)} serão cobrados (${Number(honorariosConfig.total_pct).toFixed(2)}%).`);
+
+      // DOCUMENTO DA ARREMATAÇÃO (02/10, dono): o campo só guardava o NOME do arquivo — nada subia.
+      // Agora vai pelo mesmo porteiro dos documentos do imóvel (api/upload-anexo: foto, PDF, Word,
+      // texto) como auto de arrematação (judicial) ou boleto da aquisição, e o caminho fica gravado
+      // na arrematação. Falha no envio NÃO desfaz o registro: a mensagem diz o que faltou.
+      let avisoDoc = '';
+      if (arrFile) {
+        if (!caso.imovel_id) avisoDoc = ' O documento NÃO foi anexado: esta arrematação não tem imóvel vinculado — anexe-o na tela do imóvel.';
+        else {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const fd = new FormData();
+            fd.append('file', arrFile);
+            fd.append('imovel_id', caso.imovel_id);
+            fd.append('tipo', arrForm.tipo_leilao === 'judicial' ? 'auto_arrematacao' : 'boleto_aquisicao');
+            const r = await fetch('/api/upload-anexo', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` }, body: fd });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+            const { data: upd, error: errDoc } = await supabase.from('arrematacoes').update({ documento_url: j.storage_path }).eq('id', arr.id).select('id');
+            if (errDoc || !upd?.length) throw new Error(errDoc?.message || 'documento enviado, mas não ficou vinculado à arrematação');
+            setArrFile(null);
+            avisoDoc = ' Documento anexado.';
+          } catch (eDoc) {
+            avisoDoc = ` O documento NÃO foi anexado (${eDoc.message}) — tente de novo pela tela do imóvel.`;
+          }
+        }
+      }
+      setMsg(`Arrematação registrada! Honorários de ${fmt(honorariosValor)} serão cobrados (${Number(honorariosConfig.total_pct).toFixed(2)}%).${avisoDoc}`);
       await carregarCaso();
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
@@ -2072,7 +2100,7 @@ export default function Caso() {
                 )}
                 <div>
                   <label style={lbl}>Anexar documento ({arrForm.tipo_leilao === 'judicial' ? 'Auto de Arrematação' : 'Boleto'})</label>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e=>setArrFileNome(e.target.files[0]?.name||'')} style={{ fontSize:12 }}/>
+                  <input type="file" accept={ACEITA_DOCUMENTO} onChange={e=>{ const f = e.target.files?.[0] || null; setArrFile(f); setArrFileNome(f?.name || ''); }} style={{ fontSize:12 }}/>
                   {arrFileNome && <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>{arrFileNome}</div>}
                 </div>
                 <button onClick={salvarArrematacao} disabled={salvandoArr} style={{ ...btn('#059669'), alignSelf:'flex-start', display:'flex', alignItems:'center', gap:6 }}>

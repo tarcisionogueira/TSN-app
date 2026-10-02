@@ -9,6 +9,14 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### ✉️ 02/10 — e-mail a leiloeiro bloqueado sugere quem responde · "Registrar arrematação" envia o arquivo
+- `atendimento.infraenergia@superbid.net` está suprimido CERTO (bounce permanente 30/09). O dono lembrava dele como o da
+  Oroch — não era: Oroch foi para `contato.comercial@sbwebservices.net` e respondeu `camilag.santana@superbid.net`.
+  `api/_contatos-alternativos.js`: no bloqueio, os 3 envios a leiloeiro sugerem endereços do MESMO domínio que já
+  responderam (email_caixa entrada) ou tiveram entrega confirmada, fora da supressão (`sugestoes` na resposta).
+- Caso → "Registrar arrematação": o campo de arquivo só guardava o nome. Agora sobe por upload-anexo
+  (`auto_arrematacao` judicial / `boleto_aquisicao`) e grava `arrematacoes.documento_url`; falha não desfaz o registro.
+
 ### 📎 02/10 — QUALQUER CAMPO DE DOCUMENTO aceita foto, PDF, Word e texto (dono, após a CNH em PDF do Marcos)
 - **Regra única:** tela `ACEITA_DOCUMENTO` (src/utils/arquivo.js) · servidor `detectarArquivoAceito` (api/_tipo-arquivo.js,
   tipo pelos BYTES, gravado com o tipo detectado; texto = text/plain; `.doc` antigo recusado com instrução).
@@ -19,8 +27,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - **Campos trocados (20):** chamados (3), Análise (4), Admin (atribuir, assinar, referências, material de curso),
   Arrematados (3), Caso (2), Comissões (NF), Criar Contrato, Imóvel (matrícula manual), ONR, Perfil (contrato social).
 - **Restritos de propósito:** selfie/KYC com câmera (só imagem), extrato OFX, editor de e-book (.docx), capa (imagem),
-  documento de identidade da assinatura do checkout (foto/PDF). `Caso.jsx` "Registrar arrematação" tem um input
-  MORTO (só guarda o nome) — não mexido. Teste: `testar:doc-blocos`.
+  documento de identidade da assinatura do checkout (foto/PDF). `Caso.jsx` "Registrar arrematação" agora envia (ver acima). Teste: `testar:doc-blocos`.
 
 ### ✍️ 02/10 — documentos da assessoria: SÓ ASSINAR NA TELA (dono)
 - Marcos não conseguia assinar: anexou a CNH em PDF (a tela aceita `.pdf`) e o servidor só aceitava `data:image/` →

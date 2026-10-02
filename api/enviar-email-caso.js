@@ -39,6 +39,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { contatosAlternativos, mensagemBloqueio } from './_contatos-alternativos.js';
 import { sinalVendaRestrita, comPerguntaRestricao } from './_venda-restrita.js';
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
@@ -443,7 +444,7 @@ export default async function handler(req) {
   // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
   // bounce permanente/reclamação. A decisão está certa — reenviar não chegaria —, mas a mensagem
   // precisa dizer o que fazer: trocar o endereço, não tentar de novo.
-  if (!r.ok && r.suprimido) return json({ error: 'Este e-mail do leiloeiro já devolveu mensagem antes (endereço inexistente ou caixa bloqueada), então não reenviamos para ele. Remova-o, confirme o contato correto no site/edital do leiloeiro e envie de novo.', motivo: 'destinatario_suprimido', texto: textoFinal }, 422);
+  if (!r.ok && r.suprimido) { const sugestoes = await contatosAlternativos(destinatarios); return json({ error: mensagemBloqueio(sugestoes), motivo: 'destinatario_suprimido', sugestoes, texto: textoFinal }, 422); }
   if (!r.ok) return json({ error: 'Não foi possível enviar o e-mail agora: ' + (r.error || 'falha desconhecida'), texto: textoFinal }, 502);
 
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
