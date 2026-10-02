@@ -20,6 +20,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { detectarArquivoAceito, FORMATOS_ACEITOS_TXT } from './_tipo-arquivo.js';
 import { getAuthUser } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -46,7 +47,6 @@ const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 
 // exato ponto que decide o fim de um serviço pago.
 const TIPOS_UNICOS = ['matricula', 'edital', 'carta_arrematacao', 'matricula_registrada'];
 const MAX_BYTES    = 20 * 1024 * 1024; // 20 MB
-const TIPOS_MIME   = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -123,26 +123,18 @@ export default async function handler(req) {
     }
   }
 
-  const contentType = file.type || 'application/octet-stream';
-  if (!TIPOS_MIME.includes(contentType)) return json({ error: 'Formato não suportado (use PDF, JPG ou PNG)' }, 415);
   if (file.size > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
 
   const buffer = await file.arrayBuffer();
   if (buffer.byteLength > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
 
-  // Confere a ASSINATURA REAL do arquivo (magic bytes) — o content-type é enviado
-  // pelo cliente e é forjável. Impede que um payload arbitrário (HTML/JS) seja
-  // aceito como matrícula/edital só por declarar application/pdf. Imóveis de leilão
-  // são um cache COMPARTILHADO; docs de não-staff já não sobrescrevem os da equipe.
-  const head = new Uint8Array(buffer.slice(0, 4));
-  const ehPDF = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46; // %PDF
-  const ehPNG = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47; // \x89PNG
-  const ehJPG = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;                     // JPEG SOI
-  if (!ehPDF && !ehPNG && !ehJPG) return json({ error: 'Conteúdo do arquivo não é um PDF/JPG/PNG válido' }, 415);
-
-  const ext = contentType.includes('pdf') ? 'pdf'
-    : contentType.includes('png') ? 'png'
-    : 'jpg';
+  // Tipo pelos BYTES (o content-type do cliente é forjável) — e é o tipo DETECTADO que vai para o
+  // Storage. 02/10: aceita foto (inclusive HEIC/WEBP/TIFF), PDF, Word .docx, texto e .zip; quem lê
+  // depois converte (api/_doc-blocos.js). Antes: só PDF/JPG/PNG, e a tela oferecia outros formatos.
+  const tipoArq = detectarArquivoAceito(buffer, file.name || '');
+  if (!tipoArq.ok) return json({ error: `Formato não aceito: ${tipoArq.motivo}. Envie ${FORMATOS_ACEITOS_TXT}.` }, 415);
+  const contentType = tipoArq.mime;
+  const ext = tipoArq.ext;
   const baseNome = (file.name || `${tipo}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `casos/${imovel_id}/${Date.now()}_${baseNome}`;
 

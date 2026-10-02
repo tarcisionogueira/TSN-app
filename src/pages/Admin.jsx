@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { AZUL } from '../utils/marca';
 import { apiCall } from '../utils/apiCall';
-import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
+import { extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 import { imprimirHtml } from '../components/pdfImprimir';
@@ -14,7 +14,7 @@ import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO } from '../components/TermoJuridico';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
-import { arquivoParaBase64 } from '../utils/arquivo';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { setItemSeguro } from '../utils/storageSeguro.js';
 const BuscaVeiculosEmbutida = React.lazy(() => import('./BuscaVeiculos.jsx'));
@@ -1418,9 +1418,10 @@ function UsuariosTab() {
   };
 
   const extrairArremateDocs = async (files) => {
-    // Aceita por MIME OU por extensão — alguns sistemas não marcam o type do PDF.
-    const lista = Array.from(files || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
-    if (!lista.length) { if ((files?.length || 0) > 0) alert('Envie os documentos em PDF.'); return; }
+    // 02/10: qualquer formato (PDF, foto, Word, texto) — extrairDadosDeArquivo decide pelo tipo e
+    // diz o motivo quando não lê. Antes só PDF; o servidor de anexo agora aceita os mesmos formatos.
+    const lista = Array.from(files || []);
+    if (!lista.length) return;
     setAtribExtraindo('lendo');
     atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
@@ -1432,8 +1433,7 @@ function UsuariosTab() {
       try {
         // Conversor único (utils/arquivo.js): o laço byte a byte que estava aqui não quebrava,
         // mas num PDF de vários MB são milhões de concatenações e a aba congelava por segundos.
-        const b64 = await arquivoParaBase64(file);
-        const ext = await extrairDadosDocumento('', b64);
+        const ext = await extrairDadosDeArquivo(file);
         if (!ext) throw new Error('sem dados');
         exts.push(ext);
         algum = true;
@@ -2056,7 +2056,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                   {atribExtraindo === 'lendo' ? '⏳ Lendo…' : (atribDocs.length ? '📎 Anexar mais' : '📎 Anexar documentos (PDF)')}
                   {/* Captura os arquivos ANTES de limpar o input (senão a FileList
                       esvazia e a lista some). */}
-                  <input type="file" accept="application/pdf,.pdf" multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />
+                  <input type="file" accept={ACEITA_DOCUMENTO} multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />
                 </label>
                 {atribDocs.length > 0 && (
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3649,12 +3649,15 @@ function ContratosTab() {
 
   async function lerArquivos(files) {
     const lidos = [];
+    // 02/10: PDF e Word iam SÓ PELO NOME ("só nome como referência") — a IA nunca lia o conteúdo.
+    // Agora o texto de PDF/Word/.txt é extraído no navegador (utils/claude → textoDeArquivo); foto
+    // sem texto segue como referência por nome, e o motivo aparece no lugar do conteúdo.
     for (const file of files) {
-      if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-        const texto = await file.text();
-        lidos.push({ nome: file.name, conteudo: texto.slice(0, 3000) });
-      } else {
-        lidos.push({ nome: file.name, conteudo: null }); // PDF/docx: só nome como referência
+      try {
+        const { texto, motivo } = await textoDeArquivo(file);
+        lidos.push({ nome: file.name, conteudo: texto ? texto.slice(0, 3000) : null, ...(texto ? {} : { motivo }) });
+      } catch (e) {
+        lidos.push({ nome: file.name, conteudo: null, motivo: String(e?.message || e).slice(0, 120) });
       }
     }
     setArquivos(prev => [...prev, ...lidos]);
@@ -4330,7 +4333,7 @@ function ContratosTab() {
 
                 <div style={{ marginBottom:16 }}>
                   <label style={S.label}>Arquivo do contrato (PDF, Word ou imagem) *</label>
-                  <input type="file" accept=".pdf,.doc,.docx,image/*"
+                  <input type="file" accept={ACEITA_DOCUMENTO}
                     style={{ fontSize:12, color:'#334155' }}
                     onChange={e => enviarDocumentoPronto(e.target.files?.[0])} />
                   {arquivoUploading && <div style={{ fontSize:12, color:'#0D63DB', marginTop:8 }}>⏳ Enviando documento…</div>}
@@ -4385,7 +4388,7 @@ function ContratosTab() {
                 <div style={{ marginBottom:16 }}>
                   <label style={S.label}>Anexar arquivos de referência (opcional)</label>
                   <div style={{ fontSize:11, color:'#94a3b8', marginBottom:6 }}>Documentos que embasam o contrato. Textos (.txt, .md) são lidos; PDFs ficam referenciados pelo nome.</div>
-                  <input type="file" multiple accept=".txt,.md,.pdf,.doc,.docx"
+                  <input type="file" multiple accept={ACEITA_DOCUMENTO}
                     style={{ fontSize:12, color:'#334155' }}
                     onChange={e => lerArquivos(Array.from(e.target.files))} />
                   {arquivos.length > 0 && (

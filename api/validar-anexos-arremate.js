@@ -1,6 +1,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser, getUserRoleById } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { blocosDoArquivo } from './_doc-blocos.js';
 
 // POST /api/validar-anexos-arremate { imovel_id }  → valida todos os anexos
 //      /api/validar-anexos-arremate { anexo_id }   → valida só um (ao anexar)
@@ -27,8 +28,11 @@ async function lerPdfBase64(storagePath) {
     const r = await fetch(`${SB}/storage/v1${signedURL}`);
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length > 6_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;
-    return buf.toString('base64');
+    if (buf.length > 6_000_000) return null;
+    // 02/10: qualquer formato aceito no upload (foto, PDF, Word, texto) — antes só PDF, e a foto do
+    // auto de arrematação ficava "indeterminado" sem nunca ter sido lida.
+    const { blocos } = await blocosDoArquivo(buf, { nome: storagePath.split('/').pop() || 'documento', contentType: r.headers.get('content-type') || '' });
+    return blocos.length ? blocos : null;
   } catch { return null; }
 }
 function extractText(data) {
@@ -86,8 +90,8 @@ export default async function handler(req, res) {
   const resultados = [];
   for (const a of anexos) {
     let out = { anexo_id: a.id, tipo: a.tipo, nome: a.nome, status: 'indeterminado', confianca: 0, motivo: 'Não foi possível ler o documento.' };
-    const b64 = await lerPdfBase64(a.storage_path);
-    if (b64) {
+    const blocosDoc = await lerPdfBase64(a.storage_path);
+    if (blocosDoc) {
       try {
         const refTxt = `OPERAÇÃO (referência):\n- Endereço: ${ref.endereco || 'n/d'}\n- Cidade/UF: ${[ref.cidade, ref.estado].filter(Boolean).join('/') || 'n/d'}\n- Nº do processo: ${ref.numero_processo || 'n/d'}\n- Valor: ${ref.valor != null ? 'R$ ' + ref.valor.toLocaleString('pt-BR') : 'n/d'}\n\nO documento anexado (tipo declarado: ${a.tipo || 'outro'}) é desta mesma arrematação?`;
         const r = await anthropicFetch({
@@ -96,7 +100,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             model: MODEL, max_tokens: 400, system: SYSTEM,
             messages: [{ role: 'user', content: [
-              { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 }, title: a.nome || 'documento' },
+              ...blocosDoc,
               { type: 'text', text: refTxt },
             ] }],
           }),

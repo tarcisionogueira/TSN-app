@@ -9,10 +9,10 @@ import {
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock, FileWarning,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
 } from 'lucide-react';
-import { arquivoParaBase64 } from '../utils/arquivo';
+import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
-import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { ehDocArquivo, hrefDoc } from '../utils/documento';
@@ -866,7 +866,7 @@ export default function Analise() {
     if (!file) return;
     const imovelId = imovelInicial?.id;
     if (!imovelId) { showMsg('Envio direto de arquivo é para imóveis da base. Aqui, cole o texto do documento.', 'error'); return; }
-    if (file.type !== 'application/pdf') { showMsg('Envie o documento em PDF.', 'error'); return; }
+    // Formato: o servidor (api/upload-anexo → _tipo-arquivo) decide pelos bytes e diz o motivo.
     if (file.size > 20 * 1024 * 1024) { showMsg('Arquivo acima de 20 MB.', 'error'); return; }
     setEnviandoAnexo(tipo);
     try {
@@ -948,7 +948,7 @@ export default function Analise() {
     const AnexoBtn = ({ tipo, cor, rotulo, ok }) => (
       <label style={{ padding:'11px 18px', background: ok ? '#f0fdf4' : cor, color: ok ? '#15803d' : 'white', border: ok ? '1px solid #86efac' : 'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: (enviandoAnexo && enviandoAnexo!==tipo) ? 0.6 : 1 }}>
         {enviandoAnexo===tipo ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : ok ? <>✓ {rotulo} anexado</> : <>📎 {rotulo}</>}
-        <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
+        <input type="file" accept={ACEITA_DOCUMENTO} disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
       </label>
     );
     const titulo = faltam.length === 1
@@ -961,7 +961,7 @@ export default function Analise() {
           <div style={{ fontSize: compact?15:16, fontWeight:900, color:'#9a3412' }}>{titulo}</div>
         </div>
         <p style={{ fontSize: compact?13:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
-          {motivo || `Para a análise ficar completa, anexe ${listaTxt} em PDF. Você encontra ${faltam.length>1?'os documentos':'o documento'} na página do lote, no site do leiloeiro.`}
+          {motivo || `Para a análise ficar completa, anexe ${listaTxt} (PDF, foto, Word ou texto). Você encontra ${faltam.length>1?'os documentos':'o documento'} na página do lote, no site do leiloeiro.`}
         </p>
         {paginaLeiloeiro && (
           <a href={paginaLeiloeiro} target="_blank" rel="noreferrer"
@@ -1045,17 +1045,18 @@ export default function Analise() {
     if (!file) return;
     if (file.type === 'text/plain') {
       setTextoDoc(await file.text());
-    } else if (file.type === 'application/pdf') {
-      // Extrai via IA diretamente do PDF — sem precisar de texto intermediário
+    } else {
+      // Extrai via IA de QUALQUER arquivo (02/10): PDF direto; Word, foto (inclusive HEIC no
+      // Safari) e texto pelo extrator do navegador (utils/claude.js → extrairDadosDeArquivo).
+      // Antes só PDF/.txt — o resto era recusado na tela.
       setLoadDoc(true);
       try {
         // Base64 em BLOCOS (utils/arquivo.js): espalhar um PDF de vários MB em
         // String.fromCharCode(...bytes) estoura a pilha. Dentro do try — fora dele a falha
         // era silenciosa: o loader nem começava e nenhum erro aparecia.
-        const b64 = await arquivoParaBase64(file);
-        const ext = await extrairDadosDocumento('', b64);
+        const ext = await extrairDadosDeArquivo(file);
         if (ext) {
-          setTextoDoc(`[PDF: ${file.name}]`);
+          setTextoDoc(`[Arquivo: ${file.name}]`);
           setD(p => ({
             ...p,
             nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo,
@@ -1108,12 +1109,10 @@ export default function Analise() {
             observacoes: ext.observacoes || p.observacoes,
           }));
           setOpenSec(p => ({ ...p, doc: false, dados: true, viabilidade: true }));
-          showMsg(`PDF lido pela IA: ${file.name}`);
-        }
-      } catch { showMsg('Erro ao processar PDF.', 'error'); }
+          showMsg(`Documento lido pela IA: ${file.name}`);
+        } else showMsg(`Não consegui extrair dados de "${file.name}".`, 'error');
+      } catch (err) { showMsg(err?.message ? `Não consegui ler o arquivo: ${err.message}` : 'Erro ao processar o arquivo.', 'error'); }
       setLoadDoc(false);
-    } else {
-      showMsg('Use arquivos .pdf ou .txt.', 'error');
     }
   };
 
@@ -1747,12 +1746,12 @@ export default function Analise() {
       }
       if (motivo === 'matricula_caixa') {
         return esgotado
-          ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A captura automática da matrícula da Caixa não concluiu nas tentativas realizadas. As tentativas automáticas pararam aqui — anexe a matrícula em PDF para concluir a análise.', bg: '#e0e7ff', c: '#3730a3' }
-          : { txt: 'ANÁLISE PRELIMINAR', sub: 'A matrícula da Caixa ainda está sendo capturada automaticamente. O sistema vai tentar de novo sozinho (a cada hora, por até 48h). Se preferir, anexe a matrícula em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+          ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A captura automática da matrícula da Caixa não concluiu nas tentativas realizadas. As tentativas automáticas pararam aqui — anexe a matrícula (PDF ou foto) para concluir a análise.', bg: '#e0e7ff', c: '#3730a3' }
+          : { txt: 'ANÁLISE PRELIMINAR', sub: 'A matrícula da Caixa ainda está sendo capturada automaticamente. O sistema vai tentar de novo sozinho (a cada hora, por até 48h). Se preferir, anexe a matrícula (PDF ou foto) para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
       }
       return esgotado
-        ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte seguiu indisponível nas tentativas realizadas e não deu para concluir a leitura. As tentativas automáticas pararam aqui — anexe a matrícula/edital em PDF para concluir, ou gere novamente para tentar de novo.', bg: '#e0e7ff', c: '#3730a3' }
-        : { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
+        ? { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte seguiu indisponível nas tentativas realizadas e não deu para concluir a leitura. As tentativas automáticas pararam aqui — anexe a matrícula/edital (PDF ou foto) para concluir, ou gere novamente para tentar de novo.', bg: '#e0e7ff', c: '#3730a3' }
+        : { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital (PDF ou foto) para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
     }
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
@@ -2282,7 +2281,7 @@ export default function Analise() {
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor:'pointer' }}>
                         <UploadCloud size={15}/> {textoDoc.trim() ? 'Edital anexado ✓' : 'Anexar edital/matrícula (PDF/TXT)'}
-                        <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
+                        <input type="file" accept={ACEITA_DOCUMENTO} onChange={handleFileUpload} style={{display:'none'}}/>
                       </label>
                       <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado}
                         style={{ flex:1, minWidth:180, padding:'10px 16px', background:(externoEnviando||analisesBloqueado)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(externoEnviando||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
@@ -2920,8 +2919,8 @@ export default function Analise() {
           <div style={{ display:'flex', gap:8 }}>
             <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #e2e8f0', borderRadius:10, color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', transition:'border-color 0.2s' }}
               onMouseEnter={e=>e.currentTarget.style.borderColor='#0D63DB'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
-              <UploadCloud size={16}/> Upload PDF ou .TXT
-              <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
+              <UploadCloud size={16}/> Upload do documento (PDF, foto, Word ou texto)
+              <input type="file" accept={ACEITA_DOCUMENTO} onChange={handleFileUpload} style={{display:'none'}}/>
             </label>
             <button onClick={extrairDoc} disabled={loadDoc||analisesBloqueado||(!textoDoc.trim()&&!textoMatricula.trim())}
               style={{ flex:2, padding:'10px', background:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'#0D63DB':'#e2e8f0', color:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
@@ -2946,8 +2945,8 @@ export default function Analise() {
               placeholder="Cole aqui o texto da matrícula do imóvel (certidão de inteiro teor). A análise identificará automaticamente ônus reais, hipotecas, penhoras, usufrutos, alienação fiduciária e histórico de proprietários..."
               style={{ width:'100%', padding:'12px', border:'1px solid #c4b5fd', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
             <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #c4b5fd', borderRadius:10, color:'#7c3aed', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-              <UploadCloud size={16}/> Upload matrícula PDF ou .TXT
-              <input type="file" accept=".pdf,.txt" onChange={async e => {
+              <UploadCloud size={16}/> Upload da matrícula (PDF, foto, Word ou texto)
+              <input type="file" accept={ACEITA_DOCUMENTO} onChange={async e => {
                 const f = e.target.files[0]; if (!f) return;
                 // ERA AQUI o crash de 30/07: `String.fromCharCode(...new Uint8Array(buf))`
                 // espalhava cada byte do PDF como argumento e estourava a pilha ("Maximum call
@@ -2959,7 +2958,16 @@ export default function Analise() {
                     const ext = await extrairDadosDocumento('', b64).catch(() => null);
                     if (ext?.observacoes) setTextoMatricula(ext.observacoes);
                     else setTextoMatricula(`[PDF matrícula: ${f.name}]`);
-                  } else { setTextoMatricula(await f.text()); }
+                  } else {
+                    // 02/10: Word/foto eram lidos com `f.text()` e o campo enchia de lixo binário,
+                    // que ia para a IA como "texto da matrícula". Agora: texto real, ou a IA lê a foto.
+                    const { texto, temImagem, motivo } = await textoDeArquivo(f);
+                    if (texto) setTextoMatricula(texto);
+                    else if (temImagem) {
+                      const ext = await extrairDadosDeArquivo(f).catch(() => null);
+                      setTextoMatricula(ext?.observacoes || `[Matrícula: ${f.name}]`);
+                    } else throw new Error(motivo || 'formato não lido');
+                  }
                 } catch (err) {
                   showMsg('Não consegui ler esse arquivo de matrícula. Tente um PDF menor ou cole o texto.', 'error');
                   reportarErroCliente({ msg: `upload matrícula: ${err?.message || err}`, stack: err?.stack });

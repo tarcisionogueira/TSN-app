@@ -23,6 +23,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { detectarArquivoAceito, FORMATOS_ACEITOS_TXT } from './_tipo-arquivo.js';
 import { getAuthUser } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -31,7 +32,6 @@ const BUCKET        = 'documentos';
 const ROLES_STAFF   = ['admin', 'consultor', 'analista', 'advogado'];
 const MAX_BYTES     = 20 * 1024 * 1024;
 const TIPOS_OK = ['pessoal_rg_cnh', 'pessoal_cpf', 'pessoal_comprovante_residencia', 'pessoal_certidao', 'pessoal_procuracao', 'pessoal_outro'];
-const TIPO_MIME = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -100,20 +100,16 @@ export default async function handler(req) {
     if (!isUuid(targetUserId)) return json({ error: 'user_id inválido' }, 400);
     if (!TIPOS_OK.includes(tipo)) return json({ error: `tipo inválido (use: ${TIPOS_OK.join(', ')})` }, 400);
 
-    const contentType = file.type || 'application/octet-stream';
-    if (!TIPO_MIME.includes(contentType)) return json({ error: 'Formato não suportado (use PDF, JPG ou PNG)' }, 415);
     if (file.size > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
     const buffer = await file.arrayBuffer();
     if (buffer.byteLength > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
 
-    // Confere a assinatura real do arquivo — content-type é declarado pelo cliente e forjável.
-    const head = new Uint8Array(buffer.slice(0, 4));
-    const ehPDF = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
-    const ehPNG = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-    const ehJPG = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
-    if (!ehPDF && !ehPNG && !ehJPG) return json({ error: 'Conteúdo do arquivo não é um PDF/JPG/PNG válido' }, 415);
-
-    const ext = contentType.includes('pdf') ? 'pdf' : contentType.includes('png') ? 'png' : 'jpg';
+    // Tipo pelos BYTES e gravado com o tipo detectado (02/10: foto, PDF, Word .docx e texto —
+    // ver api/_tipo-arquivo.js). Antes só PDF/JPG/PNG.
+    const tipoArq = detectarArquivoAceito(buffer, file.name || '');
+    if (!tipoArq.ok) return json({ error: `Formato não aceito: ${tipoArq.motivo}. Envie ${FORMATOS_ACEITOS_TXT}.` }, 415);
+    const contentType = tipoArq.mime;
+    const ext = tipoArq.ext;
     const baseNome = (file.name || `${tipo}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `pessoais/${targetUserId}/${Date.now()}_${baseNome}`;
 

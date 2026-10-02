@@ -27,6 +27,7 @@ import { getUser } from './_auth.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { anthropicFetch } from './_claude.js';
 import { carregarPDFParse } from './_pdf-safe.js';
+import { blocosDoArquivo } from './_doc-blocos.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -104,14 +105,16 @@ Campo que você não encontrar no documento: string vazia (ou 0 para valor).
 verificacao_url = a URL de conferência/autenticidade impressa na nota, se houver.`;
 
 async function lerComIA({ texto, bytes, mime }) {
-  const conteudo = texto && texto.trim().length > 40
+  const porTexto = !!(texto && texto.trim().length > 40);
+  const conteudo = porTexto
     ? [{ type: 'text', text: `${PROMPT}\n\n--- CONTEÚDO DA NOTA ---\n${texto}` }]
     : [
         { type: 'text', text: PROMPT },
-        mime === 'application/pdf'
-          ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: bytes.toString('base64') } }
-          : { type: 'image', source: { type: 'base64', media_type: mime || 'image/jpeg', data: bytes.toString('base64') } },
+        // 02/10: formato pelos bytes (foto/HEIC/PDF/Word/texto) — antes todo não-PDF ia como imagem
+        // com o tipo declarado, e uma nota em .txt/.docx dava erro na IA.
+        ...(await blocosDoArquivo(bytes, { nome: 'nota-fiscal', contentType: mime })).blocos,
       ];
+  if (!porTexto && conteudo.length < 2) return null; // arquivo que nenhum leitor abriu: nada a mandar
 
   const res = await anthropicFetch({
     method: 'POST',

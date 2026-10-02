@@ -238,6 +238,42 @@ export async function extrairDadosDocumento(texto, pdfBase64 = null) {
   return parseJSON(extractText(data));
 }
 
+// QUALQUER ARQUIVO → dados do lote (02/10, dono: "em qualquer campo do sistema poder assimilar foto,
+// PDF ou arquivo de texto"). `extrairDadosDocumento` só sabe PDF (base64) ou texto; as telas que o
+// chamavam recusavam o resto — ou pior: liam Word/foto com `file.text()` e mandavam lixo binário
+// para a IA. Aqui: PDF segue igual; Word, texto e foto (inclusive HEIC no Safari) passam pelo mesmo
+// extrator do Criar Contrato (extrairTextoDoc). Arquivo que não abre LANÇA com o motivo, para a tela
+// dizer o que fazer — nunca "extraído vazio".
+export async function extrairDadosDeArquivo(file) {
+  const ehPdf = file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '');
+  if (ehPdf) {
+    const { arquivoParaBase64 } = await import('./arquivo');
+    return extrairDadosDocumento('', await arquivoParaBase64(file));
+  }
+  const { extrairTextoDoc } = await import('./extrairTextoDoc');
+  const r = await extrairTextoDoc(file);
+  if (r?.texto) return extrairDadosDocumento(r.texto);
+  const imagens = [r?.imagem, ...(r?.imagens || [])].filter((im) => im?.base64).slice(0, 4);
+  if (!imagens.length) throw new Error(r?.motivo || 'Não consegui ler este arquivo');
+  const data = await callAPI({
+    model: MODEL_FAST,
+    max_tokens: 2048,
+    messages: [{ role: 'user', content: [
+      ...imagens.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType || 'image/jpeg', data: im.base64 } })),
+      { type: 'text', text: getInstrucaoExtracao() },
+    ] }],
+    system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.',
+  });
+  return parseJSON(extractText(data));
+}
+
+/** Só o TEXTO de qualquer arquivo (PDF com texto, Word, .txt) — para campos de texto livre. */
+export async function textoDeArquivo(file) {
+  const { extrairTextoDoc } = await import('./extrairTextoDoc');
+  const r = await extrairTextoDoc(file);
+  return { texto: r?.texto || '', motivo: r?.texto ? null : (r?.motivo || null), temImagem: !!(r?.imagem || r?.imagens?.length) };
+}
+
 // Consolida a extração de VÁRIOS documentos: lê e CLASSIFICA todos (matrícula/edital/laudo/
 // comprovante/boleto) e escolhe, POR CAMPO, o valor do documento mais AUTORITATIVO — matrícula
 // manda no endereço/área, laudo/edital na avaliação, edital no lance/praças. NUNCA usa

@@ -28,6 +28,7 @@ import { urlDocumento } from './_storage.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { anthropicFetch } from './_claude.js';
+import { blocosDoArquivo } from './_doc-blocos.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -84,11 +85,12 @@ async function extrairDoc(anexo) {
   try {
     const r = await fetch(anexo.url);
     if (!r.ok) throw new Error(`download ${r.status}`);
-    const b64 = Buffer.from(await r.arrayBuffer()).toString('base64');
-    content = [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-      { type: 'text', text: INSTRUCAO },
-    ];
+    // 02/10: o anexo era mandado SEMPRE como PDF — matrícula/edital enviados como FOTO subiam e
+    // chegavam à IA rotulados de PDF (leitura falha). Agora o formato vem dos bytes (foto, PDF,
+    // Word, texto — api/_doc-blocos.js) e o que não abre é registrado, não "lido vazio".
+    const { blocos, falhas } = await blocosDoArquivo(Buffer.from(await r.arrayBuffer()), { nome: anexo.tipo || 'documento', contentType: r.headers.get('content-type') || '' });
+    if (!blocos.length) { console.warn('[processar-analise] anexo ilegível:', falhas.join(' | ')); return {}; }
+    content = [...blocos, { type: 'text', text: INSTRUCAO }];
   } catch {
     // fallback: envia a URL diretamente ao modelo
     content = [
