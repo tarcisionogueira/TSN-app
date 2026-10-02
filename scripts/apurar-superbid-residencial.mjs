@@ -67,8 +67,16 @@ if (process.env.SBID_IDS) {
     // lance NUNCA apurado (26/09: 221 veículos ativos, 0 tentativas, fora da fila para sempre).
     sb(`veiculos_leilao?fonte=eq.SUPERBID&data_leilao=lt.${hoje}&and=(or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado),or(resultado_leilao.is.null,teve_lance.not.is.true))&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=${ordem},data_leilao.desc&limit=${LIMITE - meio}`),
   ]);
+  // ATRASADOS PRIMEIRO (02/10): a fila justa ordena por tentativas, e com ~1.700 veículos na fila
+  // mais os novos de cada dia, quem já tinha 3 tentativas ficava sempre atrás — 3 veículos ATIVOS,
+  // à vista do cliente, sem resultado 3 dias após o leilão (invariante crítico
+  // resultado_leilao_atrasado). Vagas reservadas para eles no topo; o rodízio segue com o resto.
+  const doisDias = new Date(Date.now() - 2 * 864e5).toISOString();
+  const atrasados = await sb(`veiculos_leilao?fonte=eq.SUPERBID&ativo=eq.true&resultado_leilao=is.null&data_leilao=lt.${doisDias}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&select=id,link_lote,resultado_apuracao_tentativas,data_leilao&order=data_leilao.asc&limit=40`);
+  const vistos = new Set();
+  for (const r of atrasados) { const o = idDaUrl(r.link_lote); if (o && !vistos.has(r.id)) { vistos.add(r.id); alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); } }
   for (const r of imo) { const o = idDaUrl(r.url_lote); if (o) alvos.push({ tabela: 'imoveis_leilao', ...r, ofertaId: o }); }
-  for (const r of vei) { const o = idDaUrl(r.link_lote); if (o) alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); }
+  for (const r of vei) { const o = idDaUrl(r.link_lote); if (o && !vistos.has(r.id)) { vistos.add(r.id); alvos.push({ tabela: 'veiculos_leilao', ...r, ofertaId: o }); } }
 }
 console.log(`[apurar-superbid] ${APLICAR ? 'APLICANDO' : 'EM SECO'} · ${alvos.length} oferta(s)`);
 if (!alvos.length) process.exit(0);

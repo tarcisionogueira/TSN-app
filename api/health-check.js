@@ -1,4 +1,8 @@
-export const config = { runtime: 'edge' };
+// Node com 120 s (02/10): no Edge a função tem de responder em 25 s — a rodada das 22:00 de 01/10
+// passou disso (504) e NÃO gravou veredito nenhum: o monitor que avisa de falha falhou calado.
+// Formato GET/POST com Request/Response (como reconciliar-assinaturas-cron): no Node, `export
+// default` vira assinatura Express e o Response retornado seria ignorado.
+export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -85,7 +89,9 @@ async function check(nome, fn) {
   }
 }
 
-export default async function handler(req) {
+export const GET = handler;
+export const POST = handler;
+async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   // Cron Vercel usa Authorization: Bearer <CRON_SECRET>; chamada manual exige autenticação admin

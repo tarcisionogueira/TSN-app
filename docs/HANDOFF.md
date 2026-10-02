@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🩺 02/10 (madrugada) — rodada de saúde: health-check calado, fila de apuração, ALBERTOMACEDO mudou de plataforma
+- **health-check não rodou 22:00 de 01/10:** Edge exige resposta em 25 s → 504 sem gravar veredito (o monitor falhou
+  calado). Agora Node, maxDuration 120 (GET/POST com Request/Response). Conferir `health_check_logs` às 06:00/22:00.
+- **resultado_leilao_atrasado (3 veículos SUPERBID):** apuração residencial ordena por tentativas — com ~1.700 na fila,
+  quem tinha 3 ficava sempre atrás. `apurar-superbid-residencial.mjs` reserva até 40 vagas no topo para ATIVOS sem
+  resultado vencidos há 2+ dias (o que o invariante acusa).
+- **estado_fora_do_padrao (20):** 12 do **ALBERTOMACEDOLEILOES** = o site virou SPA ("Ares Plataforma de Leilões",
+  `<div id=root>`, 3,8 KB sem texto) desde ~29/09 — o voto de cidade pelo texto da página ficou sem texto. Precisa
+  RECON com navegador (rotina mensal "Bug bounty dos leiloeiros" ou runner): achar a API da plataforma Ares.
+  SUPERBID (Vila Andrade/SP) e MILAN (Americana/SP) corrigidos à mão. Restam LEILOTECH 3, LEILAOBRASIL 1, WEBLEILOES 1.
+- erro_na_tela (2): os dois já corrigidos em 01/10 (supressão de e-mail; minhas_analises_lista timeout).
+
 ### ✉️ 02/10 — e-mail a leiloeiro bloqueado sugere quem responde · "Registrar arrematação" envia o arquivo
 - `atendimento.infraenergia@superbid.net` está suprimido CERTO (bounce permanente 30/09). O dono lembrava dele como o da
   Oroch — não era: Oroch foi para `contato.comercial@sbwebservices.net` e respondeu `camilag.santana@superbid.net`.
