@@ -53,3 +53,12 @@ export function nomeArquivoSeguro(nome, maxBase = 70) {
   const extLimpa = limpar(ext).toLowerCase().slice(0, 10);
   return extLimpa ? `${baseLimpa}.${extLimpa}` : baseLimpa;
 }
+
+// O QUE UM CAMPO DE DOCUMENTO ACEITA (02/10, dono: "em qualquer campo do sistema poder assimilar
+// foto, PDF ou arquivo de texto"). Caso que motivou: o Marcos anexou a CNH em PDF num campo cujo
+// `accept` dizia "image/*,.pdf" e o servidor só aceitava imagem — a tela mostrava o arquivo e a
+// assinatura era recusada. Cada campo tinha a SUA lista; agora existe uma só, e quem recebe o
+// arquivo tem de saber tratar tudo o que ela libera (ver docs/HANDOFF.md, 02/10).
+// Campos que continuam restritos DE PROPÓSITO: selfie/foto de perfil (só imagem), extrato OFX e o
+// editor de e-book (.docx).
+export const ACEITA_DOCUMENTO = 'image/*,.heic,.heif,.pdf,application/pdf,.txt,.md,text/plain,.doc,.docx';
