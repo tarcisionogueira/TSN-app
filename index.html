@@ -20,7 +20,17 @@
       (function () {
         try {
           var m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,16})\/?$/);
-          if (m) location.replace('/#/calculadora?ref=' + encodeURIComponent(m[1].toUpperCase()));
+          if (m) { location.replace('/#/calculadora?ref=' + encodeURIComponent(m[1].toUpperCase())); return; }
+          // CAMINHO SEM "#" (02/10). O app é HashRouter: "/imovel/ID" chega aqui (rewrite geral
+          // do vercel.json para este arquivo) com o hash VAZIO, e o roteador desenha a HOME — o
+          // dono clicou num lote de Oportunidades e caiu na tela inicial três vezes, porque o
+          // celular seguia numa versão com link sem "#". Converte para "/#/imovel/ID" antes do
+          // app subir. Rotas do servidor (/leiloes, /leilao, /i/, /api) nunca chegam a este
+          // arquivo; `replace` para não deixar o caminho cru no histórico.
+          var p = location.pathname;
+          if (p && p !== '/' && p !== '/index.html' && !location.hash) {
+            location.replace('/#' + p + location.search);
+          }
         } catch (e) { /* pathname exótico: segue para o app normalmente */ }
       })();
     </script>

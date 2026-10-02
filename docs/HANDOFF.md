@@ -9,6 +9,15 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📲 02/10 (tarde, 4) — o PWA do dono seguia no JS das 15:20: por que, e as duas redes
+- Prova: 15:37 o servidor novo gravou `equipe_oportunidades`, mas o clique no lote NÃO gerou o POST da tela nova
+  (logs Vercel: 1 chamada só). O iPhone RETOMA o app do segundo plano; `swAtualizacao.js` só recarregava quando o
+  /sw.js mudava — deploy só de telas nunca chegava. Duas correções:
+  1. `index.html`: caminho sem "#" (rewrite geral → este arquivo) vira `/#/caminho` antes do app subir — conserta
+     até o link velho que está no aparelho. Testado com navegador sobre o build. Hash CSP do script atualizado.
+  2. `swAtualizacao.js` `verificarVersaoNova()`: ao voltar a ficar visível, compara o bundle rodando com o do
+     index.html publicado (no-store); diferente → `recarregarComGuarda()` (anti-loop). Falha de rede = não decide.
+
 ### 🔗 02/10 (tarde, 3) — lote de Oportunidades abria a TELA INICIAL: o app é HashRouter
 - Rastro do dono (eventos_atividade): clique no lote → pageview `/imovel/ID` → clique num card da HOME com a rota
   ainda `/imovel/ID`. O card tinha `href="/imovel/ID"` (sem `#`): HashRouter lê o hash vazio e desenha "/"; o tracker lê

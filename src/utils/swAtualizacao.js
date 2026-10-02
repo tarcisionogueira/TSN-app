@@ -46,9 +46,40 @@ export function vigiarAtualizacaoDoApp(registration) {
     ultimaChecagem = agora;
     // `update()` rejeita quando está offline — é esperado e não é problema nosso.
     registration.update().catch(() => {});
+    verificarVersaoNova();
   };
 
   document.addEventListener('visibilitychange', checar);
   window.addEventListener('focus', checar);
   checar();
+}
+
+// VERSÃO NOVA SEM SERVICE WORKER NOVO (02/10). O `controllerchange` acima só dispara quando o
+// /sw.js MUDA — e um deploy comum (só telas) não muda o sw.js. Medido no celular do dono: o
+// servidor já estava na versão das 15:3x e o app instalado seguia no JavaScript das 15:20,
+// retomado do segundo plano a cada "fechei e abri"; duas correções nunca chegaram a ele.
+// Aqui: ao voltar a ficar visível, compara o bundle principal que ESTÁ RODANDO com o que o
+// index.html publicado referencia agora. Diferente → recarrega UMA vez (mesma guarda anti-loop).
+// Falha de rede = não sabe = não faz nada (nunca recarrega por não conseguir ler).
+const RE_BUNDLE = /\/assets\/index-[\w-]+\.js/;
+function bundleAtual() {
+  try {
+    const s = [...document.querySelectorAll('script[type="module"][src]')].map((el) => el.getAttribute('src')).find((x) => RE_BUNDLE.test(x || ''));
+    return s ? s.match(RE_BUNDLE)[0] : null;
+  } catch { return null; }
+}
+async function verificarVersaoNova() {
+  const atual = bundleAtual();
+  if (!atual) return;   // dev (vite) ou formato inesperado: não decide
+  try {
+    const r = await fetch('/index.html', { cache: 'no-store' });
+    if (!r.ok) return;
+    const publicado = (await r.text()).match(RE_BUNDLE)?.[0];
+    if (publicado && publicado !== atual) {
+      console.info('[atualizacao] versão nova publicada', { atual, publicado });
+      recarregarComGuarda();
+    }
+  } catch (e) {
+    console.warn('[atualizacao] não consegui verificar a versão publicada', e?.message);
+  }
 }
