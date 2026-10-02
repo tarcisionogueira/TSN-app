@@ -8,6 +8,7 @@ import EmailHtml from '../components/EmailHtml';
 import CaixaEmail from '../components/CaixaEmail';
 import { useIsMobile } from '../utils/useIsMobile';
 import { useLocation } from 'react-router-dom';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 const STATUS_CFG = {
   // 18/08: NÓS começarmos a conversa não abre chamado. Dois criadores caem aqui — a saudação
@@ -569,7 +570,7 @@ export default function Atendimento() {
                   style={{ background: '#111111', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
                   {enviando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
                 </button>
-                <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
+                <input ref={fileRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={handleFile} />
               </div>
             </div>
           ) : (

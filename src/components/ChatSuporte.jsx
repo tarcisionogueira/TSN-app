@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { chatDisponivelPara } from '../utils/chatDisponivel';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 // Inatividade: avisar após 2min, fechar após 30min (em ms)
 const AVISO_MS = 2 * 60 * 1000;
@@ -549,7 +550,7 @@ export default function ChatSuporte() {
                   {enviando ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />} Enviar
                 </button>
               </div>
-              <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
+              <input ref={fileRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={handleFile} />
               <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center', marginBottom: 0 }}>Ctrl+V para colar prints de tela</p>
               {/* Alternativa: falar no WhatsApp (aparece só quando o número existir) */}
               {WHATSAPP_NUMERO && (
@@ -682,7 +683,7 @@ export default function ChatSuporte() {
                     style={{ background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, padding: '9px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1, flexShrink: 0 }}>
                     {enviando ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
                   </button>
-                  <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
+                  <input ref={fileRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={handleFile} />
                 </div>
               )}
             </>

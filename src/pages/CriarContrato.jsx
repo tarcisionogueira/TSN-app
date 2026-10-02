@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairTextoDeVarios, chaveArquivo } from '../utils/extrairTextoDoc';
-import { nomeArquivoSeguro } from '../utils/arquivo';
+import { nomeArquivoSeguro, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
@@ -484,7 +484,7 @@ export default function CriarContrato() {
             {modo === 'assinar' && (
               <div>
                 <label style={S.label}>Arquivo do documento (PDF, Word, JPG, PNG) *</label>
-                <input ref={fileDocRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }}
+                <input ref={fileDocRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }}
                   onChange={e => handleDocUpload(e.target.files[0])} />
 
                 {!arquivoDoc ? (

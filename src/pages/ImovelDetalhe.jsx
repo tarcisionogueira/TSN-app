@@ -20,6 +20,7 @@ import { lerCotaMercado } from '../utils/cotaAnalise';
 import { CUSTO_AQUISICAO_PCT, ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, aluguelAlvoMensal, investidoTotal } from '../lib/rentabilidade';
 import { TIPOS_LIQUIDOS } from '../lib/intencao';
 import { carregarLeaflet } from '../utils/leafletSeguro';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 // As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
 // aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
@@ -1250,8 +1251,7 @@ export default function ImovelDetalhe() {
   // análise documental passa a ler ele; anti-poisoning: doc da equipe não é sobrescrito).
   const anexarMatricula = async (file) => {
     if (!file || !imovel?.id) return;
-    const tiposOk = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-    if (!tiposOk.includes(file.type)) { setMatModal(m => ({ ...(m || {}), erro: 'Envie a matrícula em PDF (ou foto JPG/PNG).' })); return; }
+    // Formato: o servidor decide pelos BYTES (foto, PDF, Word, texto — api/_tipo-arquivo.js, 02/10).
     if (file.size > 20 * 1024 * 1024) { setMatModal(m => ({ ...(m || {}), erro: 'Arquivo acima de 20 MB.' })); return; }
     setEnviandoMatricula(true);
     try {
@@ -1933,7 +1933,7 @@ export default function ImovelDetalhe() {
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                             <label style={{ flex: 1, minWidth: 180, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 16px', background: enviandoMatricula ? '#86efac' : '#15803d', color: 'white', borderRadius: 10, fontWeight: 800, fontSize: 13.5, cursor: enviandoMatricula ? 'default' : 'pointer' }}>
                               <Upload size={15} /> {enviandoMatricula ? 'Enviando…' : 'Anexar matrícula (PDF)'}
-                              <input type="file" accept="application/pdf,image/jpeg,image/png" disabled={enviandoMatricula}
+                              <input type="file" accept={ACEITA_DOCUMENTO} disabled={enviandoMatricula}
                                 onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; anexarMatricula(f); }} style={{ display: 'none' }} />
                             </label>
                             <button onClick={() => setMatModal(null)} style={{ padding: '11px 16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Agora não</button>

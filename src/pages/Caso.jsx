@@ -20,6 +20,7 @@ import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -188,7 +189,7 @@ function ScorePill({ label, valor }) {
 // Linha de upload de um documento (matrícula ou edital)
 function DocUploadRow({ tipo, label, anexo, enviando, onArquivo }) {
   const ref = useRef(null);
-  const aceitos = 'application/pdf,image/png,image/jpeg';
+  const aceitos = ACEITA_DOCUMENTO; // 02/10: lista única (servidor lê foto, PDF, Word e texto)
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
       <div style={{ width:30, height:30, borderRadius:8, background: anexo ? '#ecfdf5' : '#eef2f7', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -365,7 +366,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
           <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:4, padding:'6px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor: enviando?'default':'pointer', opacity: enviando==='outro'?0.6:1 }}>
             {enviando==='outro' ? <Loader2 size={13} style={{ animation:'spin 1s linear infinite' }}/> : <Upload size={13}/>}
             Anexar documento
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!enviando}
+            <input type="file" accept={ACEITA_DOCUMENTO} style={{ display:'none' }} disabled={!!enviando}
               onChange={e => { const f = e.target.files?.[0]; if (f) enviarArquivo('outro', f); e.target.value=''; }}/>
           </label>
         </div>

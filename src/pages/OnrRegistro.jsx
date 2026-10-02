@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { nomeArquivoSeguro } from '../utils/arquivo';
+import { nomeArquivoSeguro, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, FileText, CheckCircle2, Clock, AlertCircle, ExternalLink, Upload, Loader2, Info } from 'lucide-react';
 
@@ -359,7 +359,7 @@ export default function OnrRegistro() {
                     {status === 'uploading' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={13} />}
                     {uploadado ? 'Trocar' : 'Enviar'}
                   </div>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                  <input type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }}
                     onChange={e => handleDocUpload(doc.key, e.target.files[0])} />
                 </label>
               </div>

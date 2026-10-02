@@ -3,6 +3,7 @@ import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, ChevronLeft
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 const STATUS = {
   aberto: { label: 'Aberto', cor: '#10b981', bg: '#d1fae5' },
@@ -219,7 +220,7 @@ export default function MeusChamados() {
                   style={{ background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
                   {enviando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
                 </button>
-                <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
+                <input ref={fileRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={handleFile} />
               </div>
               )}
             </div>

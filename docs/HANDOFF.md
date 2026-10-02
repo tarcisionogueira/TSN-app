@@ -9,6 +9,19 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📎 02/10 — QUALQUER CAMPO DE DOCUMENTO aceita foto, PDF, Word e texto (dono, após a CNH em PDF do Marcos)
+- **Regra única:** tela `ACEITA_DOCUMENTO` (src/utils/arquivo.js) · servidor `detectarArquivoAceito` (api/_tipo-arquivo.js,
+  tipo pelos BYTES, gravado com o tipo detectado; texto = text/plain; `.doc` antigo recusado com instrução).
+- **Leitura:** `api/_doc-blocos.js` (blocosDoArquivo → reaproveita _doc-normalizar) em processar-analise (mandava FOTO
+  de matrícula como PDF — defeito vivo), validar-anexos-arremate, saque-nf. Navegador: `extrairDadosDeArquivo` /
+  `textoDeArquivo` (utils/claude.js) na Análise (upload do lote e matrícula) e no Admin (atribuir arremate; referências
+  do gerador de contrato agora têm o CONTEÚDO lido, antes só o nome).
+- **Campos trocados (20):** chamados (3), Análise (4), Admin (atribuir, assinar, referências, material de curso),
+  Arrematados (3), Caso (2), Comissões (NF), Criar Contrato, Imóvel (matrícula manual), ONR, Perfil (contrato social).
+- **Restritos de propósito:** selfie/KYC com câmera (só imagem), extrato OFX, editor de e-book (.docx), capa (imagem),
+  documento de identidade da assinatura do checkout (foto/PDF). `Caso.jsx` "Registrar arrematação" tem um input
+  MORTO (só guarda o nome) — não mexido. Teste: `testar:doc-blocos`.
+
 ### ✍️ 02/10 — documentos da assessoria: SÓ ASSINAR NA TELA (dono)
 - Marcos não conseguia assinar: anexou a CNH em PDF (a tela aceita `.pdf`) e o servidor só aceitava `data:image/` →
   "exige o envio dos documentos". Corrigido em assinar-contrato (PDF conta; KYC de rosto só com imagem).

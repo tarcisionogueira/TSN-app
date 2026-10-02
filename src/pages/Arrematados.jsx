@@ -8,6 +8,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 import PagamentoArremate from '../components/PagamentoArremate';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS = {
@@ -265,7 +266,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (file.type !== 'application/pdf') { alert('Envie o documento em PDF.'); return; }
+    // Formato: o servidor (upload-anexo → _tipo-arquivo) decide pelos BYTES e diz o motivo (02/10).
     if (file.size > 20 * 1024 * 1024) { alert('Arquivo acima de 20 MB.'); return; }
     setEnviando(true);
     try {
@@ -425,7 +426,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', border: '1.5px dashed #cbd5e1', borderRadius: 9, cursor: 'pointer', color: comprovanteFile ? '#059669' : '#64748b', fontWeight: 600, fontSize: 12.5 }}>
                     <Paperclip size={14} /> {comprovanteFile ? comprovanteFile.name : 'Comprovante (opcional)'}
-                    <input type="file" accept="application/pdf,image/*" onChange={e => setComprovanteFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+                    <input type="file" accept={ACEITA_DOCUMENTO} onChange={e => setComprovanteFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
                   </label>
                   {comprovanteFile && <button onClick={() => setComprovanteFile(null)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><X size={14} /></button>}
                 </div>
@@ -483,7 +484,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                     </select>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviando ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
                       {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF</>}
-                      <input type="file" accept="application/pdf,.pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
+                      <input type="file" accept={ACEITA_DOCUMENTO} onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
                     </label>
                   </div>
                   <input placeholder="Descrição (opcional) — ex.: comprovante do sinal, taxa do leiloeiro" value={docDescricao} onChange={e => setDocDescricao(e.target.value)} maxLength={300} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 14 }} />
@@ -636,7 +637,7 @@ function DocsPessoaisPainel({ uid, onClose }) {
           </select>
           <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviandoPessoal ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
             {enviandoPessoal ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF/foto</>}
-            <input type="file" accept="application/pdf,.pdf,image/png,image/jpeg" onChange={uploadDocPessoal} disabled={enviandoPessoal} style={{ display: 'none' }} />
+            <input type="file" accept={ACEITA_DOCUMENTO} onChange={uploadDocPessoal} disabled={enviandoPessoal} style={{ display: 'none' }} />
           </label>
         </div>
         <input placeholder="Descrição (opcional)" value={pessoalDescricao} onChange={e => setPessoalDescricao(e.target.value)} maxLength={300} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 14 }} />

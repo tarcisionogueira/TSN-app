@@ -139,7 +139,7 @@ function UploadMidia({ kind, onDone, small }) {
   const cfg = kind === 'pdf'
     ? { bucket: 'documentos', prefix: 'ebooks', accept: 'application/pdf', maxMB: 60, rot: 'Enviar PDF' }
     : kind === 'material'
-    ? { bucket: 'documentos', prefix: 'materiais', accept: '.pdf,.xls,.xlsx,.doc,.docx,.ppt,.pptx,.csv,.txt,application/pdf', maxMB: 40, rot: 'Anexar arquivo' }
+    ? { bucket: 'documentos', prefix: 'materiais', accept: `${ACEITA_DOCUMENTO},.xls,.xlsx,.ppt,.pptx,.csv`, maxMB: 40, rot: 'Anexar arquivo' }
     : { bucket: 'membros-capas', prefix: 'capas', accept: 'image/png,image/jpeg,image/webp', maxMB: 8, rot: 'Enviar imagem (PNG/JPG)' };
   async function enviar(file) {
     if (!file) return;
@@ -152,7 +152,7 @@ function UploadMidia({ kind, onDone, small }) {
     const ehDoc = ehPdf || /\.(xls|xlsx|doc|docx|ppt|pptx|csv|txt)$/.test(nome)
       || /(sheet|word|excel|officedocument|presentation|csv|text)/.test(file.type || '');
     if (kind === 'pdf' && !ehPdf) { setErro('Envie um arquivo PDF.'); return; }
-    if (kind === 'material' && !ehDoc) { setErro('Envie PDF, Excel, Word, PPT, CSV ou TXT.'); return; }
+    if (kind === 'material' && !ehDoc && !ehImagem) { setErro('Envie PDF, foto, Excel, Word, PPT, CSV ou TXT.'); return; }
     if (kind === 'capa' && !ehImagem) { setErro('A capa precisa ser uma IMAGEM (PNG, JPG ou WEBP) — não um PDF.'); return; }
     if (file.size > cfg.maxMB * 1024 * 1024) { setErro(`Arquivo grande demais (máx ${cfg.maxMB} MB).`); return; }
     setBusy(true);

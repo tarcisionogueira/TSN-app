@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import { DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 const ROLES_ELEGÍVEIS = ['admin', 'consultor', 'analista', 'advogado'];
 
@@ -326,7 +327,7 @@ export default function Comissoes() {
               </div>
               <label style={{ display: 'inline-block', marginTop: 9, padding: '8px 16px', background: nf.enviando ? '#94a3b8' : '#ea580c', color: 'white', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: nf.enviando ? 'default' : 'pointer' }}>
                 {nf.enviando ? 'Conferindo a nota…' : 'Anexar nota fiscal'}
-                <input type="file" accept="application/pdf,image/*" disabled={nf.enviando} style={{ display: 'none' }}
+                <input type="file" accept={ACEITA_DOCUMENTO} disabled={nf.enviando} style={{ display: 'none' }}
                   onChange={e => enviarNotaFiscal(e.target.files?.[0])} />
               </label>
               {nf.status && (

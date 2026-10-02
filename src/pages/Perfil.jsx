@@ -15,6 +15,7 @@ import CapturaCamera from '../components/CapturaCamera';
 import { usePlanos } from '../contexts/PlanosContext';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { emailVisivel } from '../utils/identidadeVisivel.js';
+import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 // Ordem hierárquica dos planos compráveis (para o quadro de upgrade/downgrade).
 const ORDEM_PLANOS = ['explorador', 'top2', 'assessorado', 'clube'];
@@ -1439,7 +1440,7 @@ export default function Perfil() {
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>3) Contrato social — só se a consulta automática não confirmar</div>
                     <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
                       📎 Anexar contrato social
-                      <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={e => uploadContratoSocial(e.target.files?.[0])} />
+                      <input type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={e => uploadContratoSocial(e.target.files?.[0])} />
                     </label>
                   </>
                 )}
