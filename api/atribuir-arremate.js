@@ -133,6 +133,7 @@ export default async function handler(req) {
   // 2.1) Semeia o corpus de aprendizado (previsto×realizado) deste arremate real.
   //      O realizado começa com o valor arrematado; o previsto e a assertividade são
   //      preenchidos por /api/arremate-recalibrar quando os relatórios/docs chegam.
+  const avisosArremate = [];
   if (imovelId) {
     try {
       await sb('arremate_aprendizado?on_conflict=imovel_id', {
@@ -148,8 +149,14 @@ export default async function handler(req) {
     // 2.2) Cria o ARREMATADO (portfólio do cliente) + o lançamento da arrematação —
     //      é o ledger onde revenda/aluguel serão registrados e de onde o corpus lê o
     //      realizado. Sem isto o join financeiro fica vazio.
+    // 01/10 (Marcos): este passo falhou em 16/09 SEM rastro — o resultado era descartado — e o
+    // cliente ficou sem a arrematação em "Meus Arrematados" por duas semanas (a tela dele lê SÓ
+    // `arrematados`). Agora é idempotente (não duplica se o cliente já registrou) e a falha vai
+    // para o log e para a resposta (`avisos`), em vez de sumir.
     try {
-      const arrRes = await sb('arrematados', {
+      const jaRes = await sb(`arrematados?select=id&user_id=eq.${user_id}&imovel_id=eq.${encodeURIComponent(imovelId)}&limit=1`);
+      const [ja] = jaRes.ok ? await jaRes.json().catch(() => []) : [];
+      const arrRes = ja ? null : await sb('arrematados', {
         method: 'POST', headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
           user_id, imovel_id: imovelId, titulo: imovel_endereco || 'Arremate atribuído',
@@ -157,14 +164,19 @@ export default async function handler(req) {
           valor_arrematacao: valor, data_arrematacao: agora.toISOString().slice(0, 10),
         }),
       });
-      const [arr] = arrRes.ok ? await arrRes.json().catch(() => []) : [];
+      if (arrRes && !arrRes.ok) {
+        const motivo = `arrematado do cliente NÃO criado (HTTP ${arrRes.status}): ${(await arrRes.text().catch(() => '')).slice(0, 160)}`;
+        console.error('[atribuir-arremate]', motivo);
+        avisosArremate.push(motivo);
+      }
+      const [arr] = arrRes?.ok ? await arrRes.json().catch(() => []) : [];
       if (arr?.id && valor) {
         await sb('arrematado_lancamentos', {
           method: 'POST', headers: { Prefer: 'return=minimal' },
           body: JSON.stringify({ arrematado_id: arr.id, user_id, tipo: 'saida', categoria: 'Arrematação', descricao: 'Valor da arrematação', valor, data: agora.toISOString().slice(0, 10) }),
         });
       }
-    } catch { /* ledger é best-effort */ }
+    } catch (e) { console.error('[atribuir-arremate] arrematado/ledger:', e?.message || e); avisosArremate.push(`arrematado do cliente: ${String(e?.message || e).slice(0, 120)}`); }
 
     // 2.3) Monitor CNJ: se há nº de processo (judicial sempre; extrajudicial só na
     //      imissão na posse), acompanha a evolução até a baixa/encerramento e aprende
@@ -199,7 +211,7 @@ export default async function handler(req) {
       roleFinal = (await r.json().catch(() => null)) || alvo.role;
       rolePromovido = roleFinal !== alvo.role;
     } else {
-      return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: alvo.role, role_alterado: false,
+      return json({ ok: true, avisos: avisosArremate.length ? avisosArremate : undefined, caso_id: caso?.id, imovel_id: imovelId, role: alvo.role, role_alterado: false,
         aviso: `caso criado, mas a promocao para assessorado FALHOU (HTTP ${r.status}) — promova pela tela de usuarios` }, 200);
     }
   }
@@ -253,7 +265,7 @@ export default async function handler(req) {
   }
   const avisos = [termo && !termo.ok && `termo NÃO gerado (${termo.motivo})`, procuracao && !procuracao.ok && `procuração NÃO gerada (${procuracao.motivo})`].filter(Boolean);
 
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor,
+  return json({ ok: true, avisos: avisosArremate.length ? avisosArremate : undefined, caso_id: caso?.id, imovel_id: imovelId, imovel_reaproveitado: reaproveitado, role: roleFinal, role_alterado: rolePromovido, arrematacao_id, honorarios_valor,
     termo_url: termo?.ok ? termo.url : null, procuracao_url: procuracao?.ok ? procuracao.url : null, cobranca_inicial_url: termo?.cobrancaUrl || null,
     ...(avisos.length ? { aviso: `arremate atribuído, mas ${avisos.join(' e ')} — gere pela rota /api/termo-atribuido` } : {}) });
 }

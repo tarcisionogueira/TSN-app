@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🔴 02/10 (madrugada) — Marcos não via a arrematação nem os documentos (cliente logado)
+- **Arrematação:** "Meus Arrematados" do cliente lê SÓ `arrematados`; a atribuição de 16/09 criava essa linha com o
+  resultado DESCARTADO (forma 3) e ela nunca existiu. Criada `74fa22f6` (R$ 548.355,15, 16/09, + lançamento).
+  `atribuir-arremate.js`: idempotente + falha vai para log e `avisos` da resposta. Era o único caso
+  (arrematacoes sem espelho em arrematados = 0 depois disso).
+- **Documentos:** a RLS de SELECT de `contratos_link` só liberava criado_por/equipe/assinante_email — documento
+  gerado pela equipe (cliente só em `arremate_user_id`) era INVISÍVEL ao cliente: o aviso "assine o contrato"
+  levava a /contratos vazia. Policy agora inclui `arremate_user_id = auth.uid()` (só leitura; migração
+  20261001_contratos_link_cliente_ve_os_seus, APLICADA). Conferido como Marcos: vê os 3. Segurança 0/0.
+- ⚠️ **Duplicata vazia** `cc2c4863` em `arrematados` (criada 23:59 pelo próprio Marcos ao não ver a dele; sem valor,
+  sem lançamento). DELETE pelo MCP não completa (pede confirmação) — remover pela lixeira da tela ou SQL Editor.
+
 ### ↩️ 01/10 (noite) — "Voltar" do contrato ia para o início · "2 contratos de assessoria" (dono, Marcos)
 - Ambos vinham de Meus Arrematados → contratos vinculados: a lista NÃO excluía `cancelado` (o termo combinado
   antigo do Marcos, cancelado 30/09, aparecia "Aguardando assinatura" ao lado do termo novo) e abria o documento
