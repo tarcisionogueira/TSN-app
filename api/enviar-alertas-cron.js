@@ -67,7 +67,7 @@ import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 import { segmentoCadencia, cedoDemais, podeRecorrenteHoje, cabeNoOrcamento, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
-import { TIPOS_POR_PERFIL, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
+import { TIPOS_POR_PERFIL, TETO_FAIXA, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
 // um espelho das constantes dela. A distinção custou caro: até 28/08 este arquivo importava
@@ -88,7 +88,6 @@ const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hi
 // deploy, mesmo padrão de divulgacao-cron.js — OK do dono em 24/09; a integração não tem
 // permissão de criar env na Vercel). A camada de pontuação roda sempre.
 const CURADORIA_IA_ENV = process.env.CURADORIA_IA === '1';
-const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
 

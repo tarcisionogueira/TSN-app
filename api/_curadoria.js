@@ -23,13 +23,17 @@ export const TIPOS_POR_PERFIL = {
   revenda: ['apartamento', 'casa', 'comercial', 'imovel'],
   incorporacao: ['terreno'],
 };
-const PERFIL_ROTULO = {
+// TETO DE CAPITAL por faixa da triagem (folga ~30% cobre entrada+financiamento; 'acima_1mi' =
+// 0 = sem teto). Mora aqui desde 02/10: o e-mail de oportunidades e a tela da equipe
+// (api/oportunidades-cliente.js) leem o MESMO teto — duas cópias divergiriam calado.
+export const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
+export const PERFIL_ROTULO = {
   uso_proprio: 'quer um imóvel para morar',
   locacao: 'compra para alugar',
   revenda: 'compra para revender com lucro',
   incorporacao: 'busca terreno para construir/incorporar',
 };
-const FAIXA_ROTULO = { ate_150k: 'até R$ 150 mil', '150_400k': 'R$ 150–400 mil', '400k_1mi': 'R$ 400 mil–1 mi', acima_1mi: 'acima de R$ 1 mi' };
+export const FAIXA_ROTULO = { ate_150k: 'até R$ 150 mil', '150_400k': 'R$ 150–400 mil', '400k_1mi': 'R$ 400 mil–1 mi', acima_1mi: 'acima de R$ 1 mi' };
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 const preco = (im) => num(im.valor_minimo_ref ?? im.valor_minimo) || 0;

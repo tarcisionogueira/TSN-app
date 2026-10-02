@@ -9,6 +9,20 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🎯 02/10 (tarde) — documentais recalculados pela régua 2 · "Oportunidades" na tela de Assessorados
+- **Recálculo (dono):** os 14 documentais da régua de 31/08 receberam a régua de 01/10 SEM IA (só sobre os riscos
+  gravados): falha de verificação → diligência; risco pelo confirmado; confiança pelas pendências essenciais; score
+  jurídico refeito (13 imóveis; 1 já saiu do acervo). `reguaAnterior` guarda o valor velho. Distribuição: amarelo·média
+  6 · amarelo·baixa 4 · verde·baixa 3 · verde·média 1 → `documental_distribuicao()` = **OK: discriminando**. Atenção:
+  0 vermelho e 0 confiança alta — 7 de 14 com 3+ pendências essenciais (ocupação/débitos/processo). Migração-registro
+  `20261002_documental_recalculo_regua2.sql` (idempotente). Trava de liberação NÃO aplicada retroativamente.
+- **Oportunidades pelo perfil (dono):** seção "Contratadas" de /assessorados ganhou botão **Oportunidades** →
+  `api/oportunidades-cliente.js` (admin ou equipe designada). Régua do e-mail, não uma nova: intenção →
+  `ajustarFiltrosPorIntencao`, teto → `TETO_FAIXA` (movido para `_curadoria.js`, o cron importa de lá), ordem e
+  motivos → `pontuarCandidato`; centros = cidades de interesse ou cidade do cadastro; raio 25→50→100→200 km até 40
+  candidatos; fora: arrematados, "sem interesse", praça encerrada. Vazio vem com `aviso` + critérios.
+  Seco com o Rafael (locação, até 150 mil, financiado, Arujá): 3 lotes em 25 km · 35 em 50 · 49 em 100 km.
+
 ### 📑 02/10 (tarde) — "documental SATURANDO" era a régua ANTIGA medida com o nome da nova
 - `documental_distribuicao()` contava como amostra tudo com `confianca` preenchida — e esse campo existe desde 31/08.
   Os 14 da amostra são TODOS da régua de 31/08; **a régua de 01/10 21:38 ainda não produziu nenhum relatório**. Os 3
