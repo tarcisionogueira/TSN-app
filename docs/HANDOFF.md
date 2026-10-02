@@ -9,6 +9,18 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 💲 02/10 — FIPE não pode faltar no relatório de veículo (dono: "conseguimos triangular")
+- Medido: 11.180 de 11.886 veículos ativos NUNCA tiveram FIPE consultada (FIPE é só sob demanda desde 25/09);
+  658 com valor. Caso do dono: Saveiro "NOVA SAVEIRO RB MBVS 1.6" 2020/2021 → `sem_match`: as 43 Saveiros empatavam
+  e as 6 primeiras (alfabéticas) não tinham 2021.
+- `api/_fipe.js` `triangularPorAno` (3ª tentativa): `/brands/{m}/years/{ano}-{comb}/models` (flex=5, gas=1, diesel=3)
+  → modelos que EXISTEM no ano; palavra-chave + pontos por palavras/abreviação de versão (RB=Robust…) + motorização
+  ("1.6" +3); empate → MEDIANA dos empatados (até 4) = `aproximado` com faixa. Saveiro → R$ 73.200 (70,1–76,3 mil).
+  Teste `testar:fipe-triangulacao`.
+- `api/_fipe-garantir.js` `garantirFipe(v, {forcar})` extraído de veiculo-fipe (tela) e chamado pela GERAÇÃO do
+  relatório (gerar-analise-veiculo, teto 25 s, força por cima do sem_match antigo). `RETENTAR_SEM_MATCH_DIAS` 90 → 3;
+  os 45 `sem_match` ativos liberados para nova tentativa. Cota: 450/dia (FIPE_TOKEN + FIPE_COTA_DIARIA sobem).
+
 ### 🚗 02/10 — busca de veículo por marca: VW = VOLKSWAGEN (e os outros casos)
 - Medido: VW 822 × VOLKSWAGEN 327, GM 236 × CHEVROLET 447, MERCEDES × MERCEDES-BENZ, MMC, KIA MOTORS, CITROËN,
   CAOACHERY/CAOA/CHERY, RE/ROYAL (Royal Enfield), 7YAMAHA — e 3.901 sem marca (estava no título).

@@ -12,6 +12,7 @@
 // está cacheado" usado no resto do app). Uma chamada de IA só; sem CNJ, sem QSA, sem geocode.
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
+import { garantirFipe } from './_fipe-garantir.js';
 import { sinalVendaRestrita } from './_venda-restrita.js';
 import { getUser, isCronAuthorized } from './_auth.js';
 import { ehEquipe } from './_leilao-encerrado.js';
@@ -435,6 +436,21 @@ export default async function handler(req, res) {
   };
   await upsertAnaliseVeiculo({ ...base, status: 'gerando', erro: null });
 
+  // FIPE NUNCA FALTA NO RELATÓRIO (02/10, dono: "temos marca, nome, ano e modelo — conseguimos
+  // triangular"). Sem valor válido, tenta AGORA — forçando por cima da espera de 90 dias de um
+  // `sem_match` antigo — com a mesma régua da tela (api/_fipe-garantir.js: ano pelo edital, cache,
+  // cota e triangulação por ano+combustível). Teto de 25 s: não pode comer o prazo da análise.
+  if (!(Number(v.valor_fipe) > 0 && ['ok', 'aproximado'].includes(v.fipe_status))) {
+    try {
+      const fipe = await Promise.race([
+        garantirFipe(v, { forcar: true }),
+        new Promise((ok) => setTimeout(() => ok(null), 25000)),
+      ]);
+      if (fipe?.valor_fipe > 0) Object.assign(v, { valor_fipe: fipe.valor_fipe, fipe_status: fipe.fipe_status, fipe_mes_referencia: fipe.fipe_mes_referencia, fipe_codigo: fipe.fipe_codigo });
+      else console.warn(`[veiculo] FIPE não obtida para ${veiculoId}: ${fipe ? `${fipe.fipe_status}${fipe.motivo ? ` — ${fipe.motivo}` : ''}${fipe.cota_esgotada ? ' (cota do dia esgotada)' : ''}` : 'sem resposta em 25 s'}`);
+    } catch (e) { console.warn(`[veiculo] FIPE falhou para ${veiculoId}:`, e?.message || e); }
+  }
+
   const estornar = async () => {
     if (cota?.ok && cota.tipo && !cobrarCredito) {
       try { await sb('rpc/estornar_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* best-effort */ }
@@ -452,7 +468,7 @@ export default async function handler(req, res) {
     // o débito cobrava só a análise principal e a busca saía de graça para quem paga por crédito).
     const gastoBusca = { micro: 0 };
     // Prazo TOTAL da busca (portais + web): 80 s, dentro do teto. A análise principal corre em paralelo.
-    const revendaP = buscarRevendaMercado(v, HARD_MS - 25000, user.id, gastoBusca);
+    const revendaP = buscarRevendaMercado(v, Math.max(20000, HARD_MS - 25000 - (Date.now() - T0)), user.id, gastoBusca);
     const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
     const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
       anexosParaBlocos(v.anexos, prazoDocs),

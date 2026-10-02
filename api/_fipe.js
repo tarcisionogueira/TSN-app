@@ -37,7 +37,9 @@ export const TETO_DIARIO_FIPE = COTA_DIARIA_FIPE - 50;
 export const TETO_CRON_FIPE = COTA_DIARIA_FIPE - 80;
 const FIPE_TOKEN = process.env.FIPE_TOKEN || '';
 
-export const RETENTAR_SEM_MATCH_DIAS = 90;
+// 90 → 3 (02/10): com a triangulação por ano, um `sem_match` deixou de ser definitivo — e a
+// referência FIPE não pode faltar (dono). As respostas da FIPE ficam em cache, o custo é baixo.
+export const RETENTAR_SEM_MATCH_DIAS = 3;
 export const RETENTAR_OK_DIAS = 25;
 
 export function fipeEstaVelho(fipeStatus, fipeAtualizadoEm) {
@@ -205,6 +207,66 @@ function ordemCategorias(tipoVeiculo) {
   return [preferida, ...CATEGORIAS.filter(c => c !== preferida)];
 }
 
+// ─── TRIANGULAÇÃO POR ANO (02/10, dono: "não podemos ficar sem uma referência FIPE ao avaliar um
+// veículo — temos marca, nome, ano e modelo; conseguimos triangular") ─────────────────────────────
+// As duas tentativas acima casam o NOME do modelo e só depois conferem o ano, num punhado de
+// candidatos. Caso real: "VOLKSWAGEN NOVA SAVEIRO RB MBVS 1.6, 2020/2021" — as 43 Saveiros da FIPE
+// empatavam, as 6 primeiras em ordem alfabética não tinham 2021, e saía `sem_match`.
+// Aqui a ordem é invertida: a FIPE devolve, numa chamada, os modelos da marca que EXISTEM naquele
+// ano+combustível (`/years/{ano}-{comb}/models`; flex = 5, gasolina = 1, diesel = 3, álcool = 2).
+// Sobre essa lista: palavra-chave do modelo (Saveiro), pontos por palavras do título e pela
+// MOTORIZAÇÃO ("1.6"); empate → mediana dos empatados (até 4) como `aproximado`, com a faixa.
+const NAO_CHAVE = new Set(['nova', 'novo', 'new', 'serie', 'ano', 'mod', 'modelo', 'cab', 'dupla', 'simples', 'flex']);
+const COMBUSTIVEIS = { cars: [5, 1, 3, 2], motorcycles: [1, 5], trucks: [3, 1, 5] };
+// Abreviações de VERSÃO comuns nos títulos de leilão ("SAVEIRO RB" = Robust).
+const ABREV_VERSAO = { rb: 'robust', tl: 'trendline', hl: 'highline', cl: 'comfortline', sl: 'startline', lt: 'lt', ltz: 'ltz' };
+
+export async function triangularPorAno(fipeGet, categoria, codigoMarca, veiculo, modelo) {
+  const anos = [...new Set([veiculo.ano_modelo, veiculo.ano_fabricacao].filter((a) => Number(a) > 1950))];
+  const titulo = String(veiculo.titulo || '');
+  const motor = (titulo.match(/(?<![\d.,])(\d)[.,](\d)(?![\d.,])/) || []).slice(1, 3).join('.') || null;
+  const toks = new Set(normalizar(`${modelo || ''} ${titulo}`).split(' ')
+    .filter((t) => t.length >= 2 && !NAO_MODELO.has(t) && !MARCA_ALIAS[t] && !/^(19|20)\d{2}$/.test(t))
+    .map((t) => ABREV_VERSAO[t] || t));
+  const chaves = normalizar(`${modelo || ''}`).split(' ')
+    .filter((t) => /^[a-z]{3,}$/.test(t) && !NAO_MODELO.has(t) && !MARCA_ALIAS[t] && !NAO_CHAVE.has(t));
+  if (!anos.length || !chaves.length) return null;
+  for (const ano of anos) {
+    for (const comb of COMBUSTIVEIS[categoria] || [5, 1, 3]) {
+      const lista = await fipeGet(`/${categoria}/brands/${codigoMarca}/years/${ano}-${comb}/models`);
+      if (!Array.isArray(lista) || !lista.length) continue;
+      const cands = lista.map((m) => ({ m, n: normalizar(m.name || m.nome || '') }))
+        .filter(({ n }) => { const ws = n.split(' '); return chaves.some((c) => ws.includes(c)); });
+      if (!cands.length) continue;
+      for (const c of cands) {
+        const ws = new Set(c.n.split(' '));
+        c.p = [...toks].filter((t) => ws.has(t)).length + (motor && String(c.m.name || c.m.nome || '').includes(motor) ? 3 : 0);
+      }
+      const melhor = Math.max(...cands.map((c) => c.p));
+      const top = cands.filter((c) => c.p === melhor).slice(0, 4);
+      const precos = [];
+      for (const { m } of top) {
+        const d = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${m.code ?? m.codigo}/years/${ano}-${comb}`);
+        const valor = parseValor(d?.price);
+        if (valor) precos.push({ valor, d });
+      }
+      if (!precos.length) continue;
+      precos.sort((a, b) => a.valor - b.valor);
+      const meio = precos.length >> 1;
+      const valor = precos.length % 2 ? precos[meio].valor : Math.round((precos[meio - 1].valor + precos[meio].valor) / 2);
+      const unico = precos.length === 1 && cands.filter((c) => c.p === melhor).length === 1;
+      return {
+        status: unico ? 'ok' : 'aproximado', valor,
+        codigoFipe: unico ? (precos[0].d.codeFipe || null) : null,
+        mesReferencia: precos[0].d.referenceMonth || null,
+        faixa: precos.length > 1 ? [precos[0].valor, precos[precos.length - 1].valor] : null,
+        metodo: 'por_ano', versoes: precos.length,
+      };
+    }
+  }
+  return null;
+}
+
 export class ErroFipeSemCota extends Error {
   constructor() { super('Cota diária da FIPE esgotada'); this.semCota = true; }
 }
@@ -299,7 +361,8 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
       const tentados = new Set(candidatosModelo.map((m) => m.code ?? m.codigo));
       await conferirAnos(acharCandidatosModeloAmplo(modelo, modelos, tentados));
     }
-    if (!bateram.length) return { status: 'sem_match' };
+    // 3ª: TRIANGULAÇÃO por ano+combustível (ver triangularPorAno) — antes de desistir.
+    if (!bateram.length) return (await triangularPorAno(fipeGet, categoria, codigoMarca, veiculo, modelo)) || { status: 'sem_match' };
 
     const escolhido = bateram[0];
     const detalhe = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${escolhido.codigoModelo}/years/${escolhido.codigoAno}`);
