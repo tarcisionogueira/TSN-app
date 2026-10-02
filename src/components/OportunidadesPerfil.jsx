@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
 
 // OPORTUNIDADES PELO PERFIL (02/10, pedido do dono): para quem contratou e ainda não arrematou,
@@ -8,6 +9,7 @@ import { apiCall } from '../utils/apiCall';
 // cabe) e os critérios usados, mostrados aqui para a equipe ajustar com o cliente.
 const brl = (v) => (v ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : '—');
 export default function OportunidadesPerfil({ cliente }) {
+  const nav = useNavigate();
   const [res, setRes] = useState(null);
   const [erro, setErro] = useState(null);
   useEffect(() => {
@@ -37,7 +39,10 @@ export default function OportunidadesPerfil({ cliente }) {
       </div>
       {res.aviso && <div style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>{res.aviso}</div>}
       {(res.oportunidades || []).map((o) => (
-        <a key={o.id} href={`/imovel/${o.id}`} target="_blank" rel="noreferrer" style={{
+        // Mesma aba, pela navegação do app (02/10): `target="_blank"` no app instalado do iPhone abre
+        // FORA do app, sem a sessão — o dono clicou e caiu na tela inicial. `href` fica para o
+        // clique do meio/Ctrl no computador; o clique normal navega por dentro e "Voltar" retorna.
+        <a key={o.id} href={`/imovel/${o.id}`} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); nav(`/imovel/${o.id}`); }} style={{
           display: 'flex', gap: 10, alignItems: 'center', textDecoration: 'none', color: 'inherit',
           background: 'white', border: '1px solid #e9d5ff', borderRadius: 10, padding: 8, marginBottom: 6,
         }}>
@@ -55,7 +60,7 @@ export default function OportunidadesPerfil({ cliente }) {
         </a>
       ))}
       {res.oportunidades?.length > 0 && (
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>{res.oportunidades.length} melhores de {res.totalCandidatos} lote(s) que cabem no perfil · abre em nova aba</div>
+        <div style={{ fontSize: 11, color: '#94a3b8' }}>{res.oportunidades.length} melhores de {res.totalCandidatos} lote(s) que cabem no perfil</div>
       )}
     </div>
   );
