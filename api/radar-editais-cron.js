@@ -270,7 +270,11 @@ function parseEdital(texto) {
   // Corrigido: (a) o gap agora atravessa "2º LEILÃO"/"1º PRAÇA" etc. sem quebrar por causa do
   // dígito do ordinal; (b) `(?!\s*cada)` nunca aceita a cláusula de parcelamento, mesmo se ela
   // vier ANTES do valor de verdade nalgum edital com ordem diferente.
-  const lance = pega(/(?:lance|valor)\s+m[íi]nimo(?:\s+(?:d[eo]\s+)?\d[ºªo°]\s*(?:leil[ãa]o|pra[çc]a))?[^\dR]{0,25}R\$\s*([\d.]+,\d{2})(?!\s*cada)/i);
+  // 02/10 (Cristina/MG, Thaís Teixeira): "LANCE MÍNIMO NO 2º LEILÃO: R$ 228.415,50" não casava
+  // (só aceitava "DO/DE 2º") e a busca seguia até "parcelas no valor mínimo de R$ 1.000,00 (mil
+  // reais) cada" — o extenso entre o valor e o "cada" furava a trava. Lance de R$ 1.000 contra
+  // avaliação de R$ 456 mil fez o gatilho anti-sentinela APAGAR a avaliação certa na promoção.
+  const lance = pega(/(?:lance|valor)\s+m[íi]nimo(?:\s+(?:(?:d|n)[eoa]s?\s+)?\d[ºªo°]\s*(?:leil[ãa]o|pra[çc]a))?[^\dR]{0,25}R\$\s*([\d.]+,\d{2})(?!\s*(?:\([^)]{0,120}\)\s*)?cada)/i);
   const praca1 = pega(/(?:1[ªa]?|primeir[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const praca2 = pega(/(?:2[ªa]?|segund[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const matricula = pega(/matr[íi]cula\s*(?:n[ºo.]?\s*)?([\d.\-]{3,15})/i);

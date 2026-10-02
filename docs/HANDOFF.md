@@ -9,6 +9,16 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 🧾 02/10 — dois alarmes novos do painel: lance do edital era a PARCELA · anomalia que não pedia decisão
+- **`editais_avaliacao_perdida` (Cristina/MG, edital Thaís Teixeira):** a regex do radar não aceitava "LANCE MÍNIMO
+  **NO** 2º LEILÃO" (só DO/DE) e seguia até "parcelas no valor mínimo de R$ 1.000,00 **(mil reais)** cada" — o
+  extenso furava a trava `(?!\s*cada)`. Lance R$ 1.000 × avaliação R$ 456.831 → `sanitiza_imovel_valores` (razão
+  > 20) APAGOU a avaliação certa na promoção. Regex corrigida (`api/radar-editais-cron.js`); 3 editais com a mesma
+  assinatura saneados no banco (Cristina: lance 228.415,50 + avaliação 456.831; Garça/SP e 1 de bem móvel: lance
+  nulo — o texto não traz lance, só a parcela).
+- **`data_divergente_edital` (FRANCO 9225):** edital com praça já encerrada × site com data futura — a regra de 02/09
+  manteve o site (certo), mas a anomalia nascia EM ABERTO. Agora nasce resolvida nesse caso (`api/gerar-analise.js`).
+
 ### ⏱️ 02/10 — `qa_invariantes_lenta`: painel 7,2 s → ~3,8 s (quente)
 - Medido com EXPLAIN ANALYZE no CORPO da função (cada InitPlan = uma invariante). O vilão era
   `proximidades_vazio_falso` (3,2 s frio): lia o jsonb `pontos_proximos` (TOAST) dos 26,7 mil ativos para

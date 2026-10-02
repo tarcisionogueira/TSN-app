@@ -3020,15 +3020,18 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
               `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? (pracaVencida ? 'MANTIDO o acervo (o edital aponta praça já encerrada; o leiloeiro publica data futura).' : 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).') : 'corrigido pelo documento.'}`,
               // corrigido = nada pendente; mantido = divergência de verdade, fica em aberto.
-              !recuaSemProva);
+              // EXCETO praça vencida (02/10, FRANCO 9225): documento estático × site vivo é a regra
+              // de 02/09 funcionando — não há o que decidir, e em aberto acendia o invariante à toa.
+              !recuaSemProva || pracaVencida);
           } catch { /* rastro best-effort */ }
           if (!recuaSemProva) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
         }
         if (p2?.data && imDb.data_leilao_2 && divergeDoAcervo(p2.data, imDb.data_leilao_2)) {
-          const recuaSemProva = (encurtaPrazo(p2.data, imDb.data_leilao_2) && !p2.fim) || (jaPassou(p2.data) && acervoNoFuturo(imDb.data_leilao_2));
+          const pracaVencida2 = jaPassou(p2.data) && acervoNoFuturo(imDb.data_leilao_2);
+          const recuaSemProva = (encurtaPrazo(p2.data, imDb.data_leilao_2) && !p2.fim) || pracaVencida2;
           if (!recuaSemProva) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
           else {
-            try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao_2', `Acervo dizia ${imDb.data_leilao_2}; edital diz ${p2.data} — MANTIDO o acervo (recuo sem encerramento declarado).`); } catch { /* rastro best-effort */ }
+            try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao_2', `Acervo dizia ${imDb.data_leilao_2}; edital diz ${p2.data} — MANTIDO o acervo (${pracaVencida2 ? 'o edital aponta praça já encerrada; o leiloeiro publica data futura' : 'recuo sem encerramento declarado'}).`, pracaVencida2); } catch { /* rastro best-effort */ }
           }
         }
         // Edital com PRAÇA ÚNICA e acervo carregando uma "2ª praça": ela não existe —
