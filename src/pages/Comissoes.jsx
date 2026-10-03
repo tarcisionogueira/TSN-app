@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -42,6 +42,10 @@ export default function Comissoes() {
   const [salvandoPix, setSalvandoPix] = useState(false);
   const [msgPix, setMsgPix] = useState(null);
   const [solicitandoSaque, setSolicitandoSaque] = useState(false);
+  // Trava SÍNCRONA contra duplo clique (03/10): o `disabled` vem de estado do React, que só
+  // vale no próximo render — dois toques no mesmo instante passavam e geravam DOIS pedidos de
+  // saque válidos (o servidor reavalia o saldo sob lock, então não estoura o saldo, mas duplica).
+  const saqueEmCursoRef = useRef(false);
   const [valorSaque, setValorSaque] = useState('');
   const [msgSaque, setMsgSaque] = useState(null);
   const [showSaqueForm, setShowSaqueForm] = useState(false);
@@ -137,6 +141,8 @@ export default function Comissoes() {
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', txt: 'Informe um valor válido.' }); return; }
     if (valor > totalDisponivel) { setMsgSaque({ tipo: 'erro', txt: 'Valor maior que o disponível.' }); return; }
 
+    if (saqueEmCursoRef.current) return;
+    saqueEmCursoRef.current = true;
     setSolicitandoSaque(true);
     setMsgSaque(null);
     try {
@@ -156,6 +162,8 @@ export default function Comissoes() {
       }
     } catch {
       setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' });
+    } finally {
+      saqueEmCursoRef.current = false;
     }
     setSolicitandoSaque(false);
     setTimeout(() => setMsgSaque(null), 8000);
