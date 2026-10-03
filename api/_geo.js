@@ -455,6 +455,13 @@ export async function cepConfereCidade(cep, cidade, timeoutMs = 6000) {
 export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepMs = 1100, permitirPago = true } = {}) {
   const im = sanearLocalizacao(imBruto);
   let { endereco, bairro, cidade, estado, cep, condominio } = im;
+  // SEM CIDADE E SEM UF VÁLIDA, NÃO HÁ O QUE GEOCODIFICAR (03/10). `coordValida` confere o
+  // resultado contra a UF e o centróide do município — sem os dois ela aceita qualquer ponto
+  // do planeta. 12 lotes de um pacote ALBERTOMACEDO (sem cidade na página) foram buscados só
+  // pelo título ("Apartamento Residencial Moema") e gravados como nível 'rua' no Pará e em
+  // Franca/SP: pino falso com rótulo de precisão. `null` → o cron marca 'falhou' e o lote
+  // fica fora do mapa até ter cidade — melhor que aparecer no lugar errado.
+  if (!String(cidade || '').trim() && !UFS[String(estado || '').trim().toUpperCase()]) return null;
   // CEP que não pertence à cidade do imóvel = contaminação → ignora (a rua/bairro decidem).
   if (cep && !(await cepConfereCidade(cep, cidade))) cep = null;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
