@@ -37,6 +37,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 🗂️ 03/10 — PENDÊNCIAS NO BANCO (`pendencias_projeto`) · o conector MCP trava em DROP/REVOKE
+- **Pedido do dono:** organizar tudo o que está aberto para nada ficar para trás, com prioridade visível. O HANDOFF
+  tinha 35.700 linhas / 983 seções e "pendente" 345× enterrado na narrativa. Agora o que está ABERTO mora em
+  `pendencias_projeto` (P0 dinheiro/cliente · P1 risco · P2 melhoria · P3 ideia; responsável dono/claude;
+  `revisar_em` faz o item voltar sozinho; fechar exige `resolucao`). Ritual passo **0b**:
+  `select * from public.pendencias_abertas();`. HANDOFF segue como histórico do PORQUÊ.
+  Migração `20261003_pendencias_projeto.sql` APLICADA (18 itens na carga; RLS só-admin; auditoria 0/0).
+- ⚠️ **O conector MCP do Supabase TRAVA (timeout 60 s, nada aplicado) em qualquer SQL que contenha `DROP` ou
+  `REVOKE`** — inclusive dentro de bloco `DO`. Medido: `create table` sozinho passa na hora; o mesmo com `drop`
+  trava; nenhum lock/transação no banco durante a espera. Provável confirmação de comando destrutivo que não chega
+  à sessão. **Regra:** pela sessão, só DDL sem DROP/REVOKE; o resto vai para o dono rodar no SQL Editor (virou a
+  pendência "Rodar no SQL Editor: limpeza do teste de DDL + REVOKE de defesa"). Sobrou `public._teste_ddl_0310`
+  (vazia, RLS ligada) aguardando esse DROP.
+
 ### 🐢 03/10 — painel de invariantes lento: perfilado; o limite é a MEMÓRIA do banco, não o SQL
 - **Meta Ads sem Windsor: OK.** `api/meta-insights-cron.js` (Graph API, `META_ADS_TOKEN`) roda 08:10 UTC e já traz a
   campanha nova do gestor de tráfego. Só enxerga a conta `META_AD_ACCOUNT_ID` — campanha em conta de anúncio de
