@@ -287,6 +287,13 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       await sleep(350);
     }
   }
+  // Enriquecimento pós-parse por fonte (03/10): dado que o HTML não traz e a fonte expõe por outra
+  // via (ALBERTOMACEDO: cidade/UF só pela API PostgREST do próprio site). Falha NÃO derruba a coleta —
+  // segue sem o enriquecimento, mas deixa o motivo no log (nunca catch mudo).
+  if (cfg.enriquecerProntos && prontos.length) {
+    try { const r = await cfg.enriquecerProntos(prontos, tenant); if (r) console.log(`[${tenant.fonte}] ${r}`); }
+    catch (e) { console.log(`⚠️ [${tenant.fonte}] enriquecimento falhou — segue sem ele: ${String(e?.message || e).slice(0, 160)}`); }
+  }
   // Cobertura de foto/descrição (10/09): visível em TODO run, dry-run incluso — sem isto, o
   // fix de `dom-parse-util.mjs` (fotoDeHtml/sintetizarDescricao) só seria confirmado lendo
   // `fonte_saude` depois de gravar. Mesmo princípio do "sinal de vida" já usado no laço acima.
