@@ -1,7 +1,20 @@
 # Triagem das pendências do HANDOFF — 03/10/2026
 
-**Para o dono revisar.** Responda com os números que devem ENTRAR na lista oficial (`pendencias_projeto`),
-os que pode DESCARTAR, ou "todos os P2 de captura" etc. Nada daqui está na lista ainda.
+**✅ Decidido em 03/10 (dono delegou: "da forma mais eficiente e segura").** Este documento agora é só o
+registro da triagem — a lista viva é `select * from public.pendencias_abertas();`.
+
+- **Fechados pela prova no banco/repo (16), NÃO entraram:** #20 reset de senha (0 erros) · #23 galeria SUPERBID
+  (6.219 de 9.216 com várias fotos) · #25 lotes vencidos (VEGAS 0, LEILOTECH 4/68, SBID21 sem ativos) · #28
+  desconto ≥90% (4 lotes, já vigiado pelo painel) · #29 LEILOTECH cidade/UF (0 faltando) · #37 avise-me (313
+  envios, último hoje) · #38 Vila Velha (invariantes 0) · #64 Instagram (121 eventos recebidos) · #67
+  proximidades (46 < 300) · #70 falhas de login (9 em 14 dias) · #86 lotes sem mínimo (só EDITAL_DJEN, por
+  natureza) · #87 PESTANA data (100%) · #91 Guarulhos (inativo) · #92 matrícula CEF (2 erros na fila) · #113
+  widget de convite (9 inscrições medidas) · #117 null.id (0).
+- **Duplicados fundidos (2):** #80 → #69 (modo suporte) · #24 → #98 (EMILIOMATOS/SATO).
+- **Entraram 84** em `pendencias_projeto` (P2 revisar em 17/10; P3 sem data). A `origem` de cada um diz
+  "conferido no banco/repo" (9 itens: #39 KYC de 12 parceiros, #45 saque sem trava de duplo clique, #47
+  nenhuma compra avulsa, #53 3 envs não documentadas, #55, #63 compareceu nunca gravado, #68 npm audit high,
+  #95, #100) ou "não reverificado — rodar como_verificar antes de agir" (o resto).
 
 ## Como foi feito
 
