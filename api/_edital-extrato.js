@@ -63,9 +63,15 @@ const parseValor = (s) => {
 // uma gleba de 29.273 m² com 255 m² (27 lotes ativos contaminados). Só conta como multi-lote a
 // ENUMERAÇÃO ("Lote 1)", "LOTE 02 –", "Lote 3:"), com 2+ números distintos — "confronta com o lote
 // 30," de uma matrícula de loteamento não é enumeração e não pode apagar os fatos de um lote único.
+// 2ª forma (03/10, ZUK leilão 37728 — 4 lotes em PE/PB/CE com a matrícula e o endereço do lote 001):
+// o anexo lista "LOTE 001⏎MATRÍCULA 7513…" — o número ocupa a LINHA SOZINHO, sem pontuação depois.
+// Linha inteira, não meio de frase: "Lote 23 Quadra 02" (endereço) e "confronta com o lote 30," seguem
+// fora. Números normalizados ("001" e "1" são o mesmo lote).
 export function ehDocMultiLote(texto) {
+  const t = String(texto || '');
   const nums = new Set();
-  for (const m of String(texto || '').matchAll(/(?:^|[\n.;]\s*|\s{2,})Lotes?\s*(?:n[ºo°.]?\s*)?0?(\d{1,3})\s*[)\-–:]/gi)) nums.add(m[1]);
+  for (const m of t.matchAll(/(?:^|[\n.;]\s*|\s{2,})Lotes?\s*(?:n[ºo°.]?\s*)?(\d{1,3})\s*[)\-–:]/gi)) nums.add(Number(m[1]));
+  for (const m of t.matchAll(/^[ \t]*Lotes?[ \t]*(?:n[ºo°.]?[ \t]*)?(\d{1,3})[ \t]*$/gim)) nums.add(Number(m[1]));
   return nums.size >= 2;
 }
 

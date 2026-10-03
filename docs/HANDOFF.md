@@ -37,6 +37,21 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 🧩 03/10 (noite) — invariantes de captura: edital ZUK multi-lote não reconhecido · fração "2/9 do imóvel" no acervo
+- **`matricula_area_de_outro_lote` 4 → 0.** Leilão ZUK 37728: o edital lista "LOTE 001⏎MATRÍCULA 7513" (número
+  sozinho na linha). `ehDocMultiLote` só aceitava "Lote 1)" / "LOTE 02 –" → disse "lote único" → matrícula e
+  ENDEREÇO do lote 001 (Ed. Britania, Jaboatão/PE) foram para uma casa em Campina Grande/PB e 2 imóveis em
+  Fortaleza. Diagnosticado com o texto REAL do PDF (workflow temporário, já removido). Conserto: 2ª forma de
+  enumeração (linha inteira; "Lote 23 Quadra 02" e "001"="1" cobertos no teste). Dados corrigidos (Campina com a
+  PRÓPRIA matrícula 10359; Fortaleza sem fatos). Nenhum relatório tinha sido gerado. Outros editais nesse formato
+  com 2 lotes ou na mesma cidade NÃO aparecem no invariante (3+ lotes, 2+ cidades) — a correção vale daqui pra
+  frente na próxima leitura de cada edital.
+- **`tipo_terreno_com_construcao` 1 → 0.** Era "(2/9 do imóvel) Galpão…" (SOLD), gravado antes do trigger de tipo
+  (28/09). O achado maior: **fração em número não era barrada** pela regra `acervo.fracao_ideal` (só as palavras
+  "parte/fração ideal"). Agora barra "N/M do imóvel|prédio|bem|casa|apartamento|lote" **no título** (descrição fica
+  de fora: "1/20 do terreno" é cota de condomínio). Medido antes: exatamente 3 lotes (2 SOLD + "1/6 do Prédio"
+  LJUD), desativados. JS (`RE_FRACAO_NUMERICA_TITULO`) e SQL (`fracao_ideal_barrada`) espelhados.
+
 ### 📍 03/10 (noite) — ALBERTOMACEDO: cidade dos itens de pacote pela API do site · lote que ganha cidade volta ao geocode
 - **Defeito:** item de pacote (`/lote/<n>-<slug>`) não traz "Cidade - UF" no HTML → lote sem cidade → o geocoder
   chutava pino genérico (bairros de SP no Pará). Corrigido em 2 camadas: `api/_geo.js` não geocodifica sem cidade e
