@@ -37,6 +37,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 📣 03/10 — invariante de marketing por canal · campanha do Meta aponta para aula FECHADA · 2 atrasados
+- **`mkt_clique_pago_sem_rastreio` era forma nº 10:** somava cliques de todos os canais × visitas com gclid. Com
+  100% da verba no Meta (desde 01/10) o alarme não desligava nunca. E `cliques` do Meta = `clicks` da Graph API
+  (qualquer clique): 01-03/10 = 138 "cliques", 78 `link_click`, 71 `landing_page_view`. Agora por canal — Google:
+  cliques × gclid/gbraid/wbraid; Meta: `landing_page_view` (de `conversoes_detalhe.por_tipo`) × fbclid. Migração
+  `20261003_qa_mkt_clique_por_canal.sql` (APLICADA; troca só o trecho do item, idempotente; 90 invariantes ok).
+- **O alarme continua — agora verdadeiro: 71 chegadas do Meta vistas pelo pixel × 4 visitas com fbclid.** Achado:
+  a campanha `[Leads][LP][Lucre Antes de Arrematar][01/10 a 15/10]` (R$ 145 em 3 dias) roda com o evento
+  `lucre-antes-de-arrematar` **`ativo=false`** e **0 inscrições** em `live_inscricoes` (nunca teve). `/aula/<slug>`
+  redireciona mesmo inativo, e a tela mostra "Esta aula não está com inscrições abertas". Nosso rastreador não viu
+  NENHUM pageview de `/live/lucre-antes-de-arrematar` desde 24/09. Mas o pixel contou 15 `fb_pixel_lead` (02-03/10)
+  — nosso código só dispara Lead após inscrição `.ok` ou criação de alerta → **a LP do anúncio provavelmente NÃO é o
+  nosso app** (ou o DNS do domínio, pendente do dono em 24/09, não aponta para a Vercel). **Dono: conferir a URL de
+  destino do anúncio e ativar o evento** (`eventos_live.ativo`) se a LP for a nossa.
+- **`resultado_leilao_atrasado = 2`:** 2 veículos SUPERBID (Ford Transit, ofertas 5003803/5007176, leilão 30/09).
+  SUPERBID é apurada só pelo runner residencial (`scripts/apurar-superbid-residencial.mjs`, ~1-3×/dia); estão com
+  5/6 tentativas sem resultado (oferta ainda aberta no site com fim já passado = `em_andamento` sem data nova). Na 6ª
+  tentativa `esgotouSemResultado` grava `indeterminado` e o invariante zera sozinho — nada a corrigir.
+
 ### ⚖️ 02/10 (noite) — chat CNJ "não consegue consultar os tribunais": DataJud FORA para todos · DJEN vira reserva
 - Conversa do dono 19:16 (Marcos, 0000199-97.2016.5.05.0195, TRT5): `consultar_datajud` falhou e o chat parou. Medido
   pelo pg_net: TRT5, TST **e TJSP (controle)** = 30 s sem resposta com TCP/TLS ok → DataJud do CNJ fora/sobrecarregado
