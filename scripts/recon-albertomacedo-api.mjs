@@ -13,17 +13,36 @@ const BASE = 'https://albertomacedoleiloes.com.br';
 const API = 'https://api.albertomacedoleiloes.com.br/rest/v1';
 const SLUG = process.env.RECON_SLUG || '5-apartamento-residencial-moema-1-dormitorios';
 
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-let apikey = null;
+let apikey = null, viaJs = false;
+const apiChamadas = [];
 try {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
+  await page.setUserAgent(UA);
   page.on('request', (req) => {
-    if (!apikey && req.url().startsWith(API)) apikey = req.headers()['apikey'] || null;
+    if (req.url().includes('api.albertomacedoleiloes.com.br')) {
+      const hd = req.headers();
+      if (apiChamadas.length < 3) apiChamadas.push(`${req.method()} ${req.url().slice(0, 90)} · headers: ${Object.keys(hd).join(',')}`);
+      if (!apikey) apikey = hd['apikey'] || (hd['authorization'] || '').replace(/^Bearer\s+/i, '') || null;
+    }
   });
-  await page.goto(`${BASE}/lote/${SLUG}`, { waitUntil: 'networkidle2', timeout: 45000 });
+  // Reserva: a chave anon do PostgREST/Supabase fica no bundle JS do site (JWT "eyJ...").
+  page.on('response', async (res) => {
+    try {
+      if (apikey || !/\.js(\?|$)/.test(res.url())) return;
+      const js = await res.text();
+      const m = js.match(/eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/);
+      if (m) { apikey = m[0]; viaJs = true; }
+    } catch { /* corpo indisponível (redirect/preflight) — segue */ }
+  });
+  const resp = await page.goto(`${BASE}/lote/${SLUG}`, { waitUntil: 'networkidle2', timeout: 60000 });
+  await new Promise(r => setTimeout(r, 6000));
+  console.log(`página: HTTP ${resp?.status()} · título "${(await page.title()).slice(0, 80)}" · ${apiChamadas.length} chamada(s) à API vistas`);
+  apiChamadas.forEach(c => console.log('  ' + c));
 } finally { await browser.close(); }
-console.log(`apikey capturada: ${apikey ? `sim (${apikey.length} chars, JWT=${/^eyJ/.test(apikey)})` : 'NÃO'}`);
+console.log(`apikey capturada: ${apikey ? `sim (${apikey.length} chars, JWT=${/^eyJ/.test(apikey)}, via ${viaJs ? 'bundle JS' : 'header da página'})` : 'NÃO'}`);
 if (!apikey) process.exit(1);
 
 const h = { apikey, Authorization: `Bearer ${apikey}`, Accept: 'application/json' };
