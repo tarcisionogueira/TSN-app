@@ -4,7 +4,7 @@
 // a receber e, para SACAR, cadastra a PJ que vai receber (B2B); (4) vê seus indicados — no NÍVEL 1
 // (venda direta dele) com contato; da rede abaixo (venda dos indicados dele) só nome e cidade (LGPD).
 // Tema: azul BidPro (#0D63DB / #084BA6). Números do nível vêm da RPC `meu_nivel` (auth.uid).
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { supabase } from '../utils/supabase';
@@ -167,6 +167,8 @@ export default function MinhaRede() {
   const [valorSaque, setValorSaque] = useState('');
   const [msgSaque, setMsgSaque] = useState(null);
   const [sacando, setSacando] = useState(false);
+  // Trava SÍNCRONA contra duplo clique (03/10) — `sacando` só vale no próximo render; ver Comissoes.jsx.
+  const saqueEmCursoRef = useRef(false);
 
   // Link GERAL do parceiro → tela de INÍCIO do site (o visitante entra, navega, vê os produtos e
   // vem a assinar). A indicação (?ref=) é capturada globalmente (AuthContext) e vincula quem
@@ -351,27 +353,35 @@ export default function MinhaRede() {
     const valor = Number(valorSaque);
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', txt: 'Informe um valor válido.' }); return; }
     if (valor > saldo) { setMsgSaque({ tipo: 'erro', txt: 'Valor maior que o disponível.' }); return; }
-    // TERMOS NO MOMENTO CERTO (15/08). O servidor JÁ exige a versão vigente
-    // (`regra_negocio.saque.exige_termos_vigentes`) — sem este gate o cliente só descobriria
-    // pela RECUSA, que é a pior hora: ele pede o dinheiro e leva um "não" que não sabe
-    // resolver. Aqui ele lê, aceita e o pedido segue no mesmo fluxo.
-    if (user?.id && await termosUsoPendente(user.id)) {
-      abrirTermosModal('saque');
-      setMsgSaque({ tipo: 'erro', txt: 'Antes do saque, confirme os termos atualizados na janela que abriu.' });
-      return;
-    }
-    setSacando(true); setMsgSaque(null);
+    // A trava entra ANTES do `await termosUsoPendente`: esse await já é uma janela em que o
+    // segundo clique passaria.
+    if (saqueEmCursoRef.current) return;
+    saqueEmCursoRef.current = true;
     try {
-      const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
-      const data = await res.json();
-      if (res.ok) {
-        const lib = fmtLib(proximaLib);
-        setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Pagamento ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
-        setValorSaque(''); carregarMeu();
-      } else setMsgSaque({ tipo: 'erro', txt: data.error || 'Não foi possível solicitar o saque.' });
-    } catch { setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' }); }
-    setSacando(false);
-    setTimeout(() => setMsgSaque(null), 6000);
+      // TERMOS NO MOMENTO CERTO (15/08). O servidor JÁ exige a versão vigente
+      // (`regra_negocio.saque.exige_termos_vigentes`) — sem este gate o cliente só descobriria
+      // pela RECUSA, que é a pior hora: ele pede o dinheiro e leva um "não" que não sabe
+      // resolver. Aqui ele lê, aceita e o pedido segue no mesmo fluxo.
+      if (user?.id && await termosUsoPendente(user.id)) {
+        abrirTermosModal('saque');
+        setMsgSaque({ tipo: 'erro', txt: 'Antes do saque, confirme os termos atualizados na janela que abriu.' });
+        return;
+      }
+      setSacando(true); setMsgSaque(null);
+      try {
+        const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
+        const data = await res.json();
+        if (res.ok) {
+          const lib = fmtLib(proximaLib);
+          setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Pagamento ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
+          setValorSaque(''); carregarMeu();
+        } else setMsgSaque({ tipo: 'erro', txt: data.error || 'Não foi possível solicitar o saque.' });
+      } catch { setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' }); }
+      setSacando(false);
+      setTimeout(() => setMsgSaque(null), 6000);
+    } finally {
+      saqueEmCursoRef.current = false;
+    }
   }
 
   const raiz = rows.find(r => r.nivel === 0);
