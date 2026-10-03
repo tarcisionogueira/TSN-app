@@ -9,6 +9,34 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 02/10 — o que evoluiu, o que falta, o que conferir primeiro
+**Evoluiu (tudo no `main`; detalhes nas entradas de 02/10 abaixo):**
+1. Ritual: `fonte_regressao_pendente()` + `fonte_regressao_explicada` (LEJE/SBID21 até 16/10, JMF até 09/10) — fonte
+   já diagnosticada vira linha `(explicadas)`; CLAUDE.md atualizado.
+2. Caixa de e-mail: `References` normalizado (`_email-referencias.js`), 14 linhas legadas limpas. Respostas enviadas
+   à Leiloaria Smart (documentação de crédito pendente do cliente) e à Sodré Santoro (LGPD), assinadas "Tarcisio Nogueira".
+3. Documental: `documental_distribuicao()` mede só a régua vigente (`reguaVersao: 2`); os 14 relatórios antigos
+   recalculados pela régua 2 sem IA (`reguaAnterior` guarda o valor velho) → "OK: discriminando".
+4. Assessorados: tela `/assessorados/:id/oportunidades` (botão em Contratadas e na tela de operações do cliente),
+   `api/oportunidades-cliente.js` com a régua do e-mail; busca e lote aberto entram no Cliente 360 DO CLIENTE.
+   Confirmado no iPhone do dono às 17:47.
+5. App: links internos com `#/` (trava `link-interno-sem-hash`); `index.html` converte caminho sem `#`; PWA percebe
+   versão nova ao voltar ao primeiro plano (`verificarVersaoNova`).
+6. Chat CNJ: com o DataJud fora, `consultar_datajud` traz o DJEN na mesma chamada (`djen_reserva`).
+
+**Falta / conferir primeiro na próxima sessão:**
+- [ ] `monitor-fontes-cron` NÃO disparou em 02/10 18:10 (Vercel). Conferir `qa_invariantes_execucao` e
+      `fonte_metricas_hist` de 03/10; se faltar de novo, investigar os crons (74 no vercel.json).
+- [ ] Painel de invariantes: 13,0 s frio / 5,1 s quente (alvo < 5 s). Perfilar as 90 invariantes no frio e atacar as
+      3–5 mais caras (o `doc_arquivo()` sozinho rende só ~0,3 s).
+- [ ] DataJud do CNJ fora em 02/10 à noite (TRT5/TST/TJSP 30 s sem resposta). Conferir se voltou:
+      `select fonte, max(criado_em) from cnj_consulta_cache group by 1;`
+- [ ] Dono: regularizar o pagamento do Google Workspace reimob.com.br (2 cartões recusados em 01/10).
+- [ ] Dono: cobrar do cliente da Leiloaria Smart a ficha do arrematante + comprovante de renda (imóvel 1825).
+- [ ] Dono: liberação da LEJE (403 Cloudflare) — marcação vence 16/10.
+- [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
+- [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
+
 ### ⚖️ 02/10 (noite) — chat CNJ "não consegue consultar os tribunais": DataJud FORA para todos · DJEN vira reserva
 - Conversa do dono 19:16 (Marcos, 0000199-97.2016.5.05.0195, TRT5): `consultar_datajud` falhou e o chat parou. Medido
   pelo pg_net: TRT5, TST **e TJSP (controle)** = 30 s sem resposta com TCP/TLS ok → DataJud do CNJ fora/sobrecarregado
