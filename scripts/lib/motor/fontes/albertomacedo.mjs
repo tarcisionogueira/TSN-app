@@ -19,6 +19,7 @@
 import {
   TENANTS, extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../albertomacedo-parse.mjs';
+import { enriquecerLocalizacao } from '../../albertomacedo-api.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
 
@@ -31,6 +32,9 @@ export default {
   maxPages: 1,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // Item de pacote (`/lote/`) não traz cidade no HTML; o site expõe city_id/state_id na própria API
+  // pública (03/10). Só preenche o que falta — nunca sobrescreve o que o parser leu.
+  enriquecerProntos: (rows) => enriquecerLocalizacao(rows),
   conhecimento: {
     plataforma: 'Própria', acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'cloudflare (por sessão, isolarSessao resolve)',
     enumeracao: '/ (home lista /leilao/<slug>; nível 2 abre cada um e acha /lote/<n>-<slug> quando é pacote)',
