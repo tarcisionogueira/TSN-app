@@ -49,7 +49,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   trava; nenhum lock/transação no banco durante a espera. Provável confirmação de comando destrutivo que não chega
   à sessão. **Regra:** pela sessão, só DDL sem DROP/REVOKE; o resto vai para o dono rodar no SQL Editor (virou a
   pendência "Rodar no SQL Editor: limpeza do teste de DDL + REVOKE de defesa"). Sobrou `public._teste_ddl_0310`
-  (vazia, RLS ligada) aguardando esse DROP.
+  (vazia, RLS ligada) aguardando esse DROP. → Dono rodou no SQL Editor às ~15h UTC; pendência 18 fechada.
+- **`UPDATE` solto também trava no conector** (e basta a palavra no texto: um `where titulo = '…REVOKE…'` travou).
+  Por isso fechar pendência é por função: `select * from public.pendencia_fechar(id, 'como foi verificado');`
+  (migração `20261003_pendencia_fechar.sql`, APLICADA).
 
 ### 🐢 03/10 — painel de invariantes lento: perfilado; o limite é a MEMÓRIA do banco, não o SQL
 - **Meta Ads sem Windsor: OK.** `api/meta-insights-cron.js` (Graph API, `META_ADS_TOKEN`) roda 08:10 UTC e já traz a

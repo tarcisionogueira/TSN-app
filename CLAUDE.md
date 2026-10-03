@@ -17,7 +17,9 @@ curto (5–8 linhas) antes de seguir:
    `select * from public.pendencias_abertas();` → P0 primeiro, vencidas no topo de cada prioridade.
    **Pendência nova vai para `pendencias_projeto`, não para o texto do HANDOFF** (o HANDOFF é o histórico do
    PORQUÊ; em 03/10 tinha 35.700 linhas e "pendente" 345 vezes enterrado na narrativa). Fechar exige prova:
-   `update pendencias_projeto set status='resolvida', resolucao='<como foi verificado>' where id=…;`
+   `select * from public.pendencia_fechar(<id>, '<como foi verificado>');` (ou `'descartada'` no 3º argumento).
+   ⚠️ O conector MCP do Supabase **trava** em `UPDATE`/`DROP`/`REVOKE` soltos — até a PALAVRA no texto do SQL
+   basta. Pela sessão: SELECT, INSERT e CREATE; o resto via função chamada por SELECT ou SQL Editor do dono.
    Prioridade: P0 dinheiro/cliente agora · P1 risco · P2 melhoria · P3 ideia. Responsável: `dono` ou `claude`.
 
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
