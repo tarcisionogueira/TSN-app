@@ -299,11 +299,17 @@ const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s
 
 // ESPELHA `public.fracao_ideal_barrada(text,text)` no banco (migration
 // fracao_ideal_clausula_condominio_v3.sql). Mudou a régua aqui, mude lá.
+// FRAÇÃO NUMÉRICA NO TÍTULO (03/10, achado real): "(2/9 do imóvel) Galpão…" (SOLD) e "1/6 do Prédio
+// Coml…" (LJUD) entravam porque a régua só conhecia as PALAVRAS "parte/fração ideal". Só no TÍTULO:
+// na descrição "1/20 do terreno" é a cota cartorial de um apartamento inteiro — por isso `terreno`
+// fica fora da lista. Espelhado em fracao_ideal_barrada() (migration 20261003_fracao_numerica_titulo.sql).
+export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(?:\([^)]{0,20}\)\s*)?(?:avos\s+)?(?:d[oa]s?|sobre\s+[oa])\s+(?:im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)(?![a-zà-ú])/i;
+
 export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';
   const txt = `${titulo} ${imovel?.descricao || ''}`;
   // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
-  if (RE_FRACAO_IDEAL.test(titulo)) return true;
+  if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo)) return true;
   if (!RE_FRACAO_IDEAL.test(txt)) return false;
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
   // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
