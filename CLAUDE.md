@@ -13,6 +13,13 @@ curto (5–8 linhas) antes de seguir:
 > não quebra nada (a data do último commit é a rede de segurança), mas numa sessão só
 > de diagnóstico, sem commit, é o ÚNICO sinal — e aí a auditoria gasta à toa.
 
+0b. **PENDÊNCIAS ABERTAS — a lista do que está aberto mora no BANCO (03/10):**
+   `select * from public.pendencias_abertas();` → P0 primeiro, vencidas no topo de cada prioridade.
+   **Pendência nova vai para `pendencias_projeto`, não para o texto do HANDOFF** (o HANDOFF é o histórico do
+   PORQUÊ; em 03/10 tinha 35.700 linhas e "pendente" 345 vezes enterrado na narrativa). Fechar exige prova:
+   `update pendencias_projeto set status='resolvida', resolucao='<como foi verificado>' where id=…;`
+   Prioridade: P0 dinheiro/cliente agora · P1 risco · P2 melhoria · P3 ideia. Responsável: `dono` ou `claude`.
+
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
    geocode, últimos deploys (`state=READY`?), crons com timeout recente.
 
