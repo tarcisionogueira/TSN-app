@@ -37,6 +37,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 📍 03/10 (noite) — ALBERTOMACEDO: cidade dos itens de pacote pela API do site · lote que ganha cidade volta ao geocode
+- **Defeito:** item de pacote (`/lote/<n>-<slug>`) não traz "Cidade - UF" no HTML → lote sem cidade → o geocoder
+  chutava pino genérico (bairros de SP no Pará). Corrigido em 2 camadas: `api/_geo.js` não geocodifica sem cidade e
+  sem UF (#389); e agora a cidade VEM (#390).
+- **Como:** o site é SPA sobre PostgREST (`api.albertomacedoleiloes.com.br/rest/v1`: `public_lots` → `cities`/`states`).
+  `scripts/lib/albertomacedo-api.mjs` captura a apikey PÚBLICA da própria página em tempo de execução (nunca
+  commitada) e preenche só o que falta. Gancho genérico novo no motor: `cfg.enriquecerProntos(rows, tenant)` em
+  `runner.mjs` (falha não derruba a coleta; deixa motivo no log). Prova em produção: run 37161246256 →
+  "localização pela API: 7/7".
+- **Segunda metade (banco):** lote 'falhou' que ganhava cidade depois NUNCA voltava à fila do geocoder (ela só pega
+  null/0-sem-nível/'refazer'). `preservar_e_derivar_endereco()` agora marca `refazer` quando o lote ganha cidade ou
+  UF válida — vale para TODA fonte. 13 lotes ALBERTOMACEDO reenfileirados à mão (migração
+  `20261003_regeocode_quando_ganha_cidade.sql`). Os 5 ainda sem cidade entram na próxima coleta (releitura rotativa).
+
 ### 🗂️ 03/10 — PENDÊNCIAS NO BANCO (`pendencias_projeto`) · o conector MCP trava em DROP/REVOKE
 - **Pedido do dono:** organizar tudo o que está aberto para nada ficar para trás, com prioridade visível. O HANDOFF
   tinha 35.700 linhas / 983 seções e "pendente" 345× enterrado na narrativa. Agora o que está ABERTO mora em
