@@ -27,8 +27,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 **Falta / conferir primeiro na próxima sessão:**
 - [ ] `monitor-fontes-cron` NÃO disparou em 02/10 18:10 (Vercel). Conferir `qa_invariantes_execucao` e
       `fonte_metricas_hist` de 03/10; se faltar de novo, investigar os crons (74 no vercel.json).
-- [ ] Painel de invariantes: 13,0 s frio / 5,1 s quente (alvo < 5 s). Perfilar as 90 invariantes no frio e atacar as
-      3–5 mais caras (o `doc_arquivo()` sozinho rende só ~0,3 s).
+- [x] Painel de invariantes PERFILADO em 03/10 (ver entrada 03/10 "painel lento"): o gargalo é memória, não SQL.
+      Decisão do dono pendente (compute maior ou enxugar `imoveis_leilao`).
 - [ ] DataJud do CNJ fora em 02/10 à noite (TRT5/TST/TJSP 30 s sem resposta). Conferir se voltou:
       `select fonte, max(criado_em) from cnj_consulta_cache group by 1;`
 - [ ] Dono: regularizar o pagamento do Google Workspace reimob.com.br (2 cartões recusados em 01/10).
@@ -36,6 +36,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Dono: liberação da LEJE (403 Cloudflare) — marcação vence 16/10.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
+
+### 🐢 03/10 — painel de invariantes lento: perfilado; o limite é a MEMÓRIA do banco, não o SQL
+- **Meta Ads sem Windsor: OK.** `api/meta-insights-cron.js` (Graph API, `META_ADS_TOKEN`) roda 08:10 UTC e já traz a
+  campanha nova do gestor de tráfego. Só enxerga a conta `META_AD_ACCOUNT_ID` — campanha em conta de anúncio de
+  terceiros não aparece. Google Ads sem dado desde 14/09 (campanha pausada; `mkt_ingestao_atrasada` verde).
+- **Perfil (EXPLAIN ANALYZE do corpo da função, quente): 4,2 s.** Mais caros: `selo_documento_dessincronizado`
+  760 ms · `fora_do_acervo_imovel_veiculo` (fontes listadas) 352 ms · `leilao_ja_encerrado` 349 ms ·
+  `fontes_com_limpeza_pulada` 220 ms · sem_foto % por fonte 175 ms · `ufs_cef_congeladas` 144 ms.
+  `imoveis_leilao` é lida 34× (≈330 mil leituras de página).
+- **Duas hipóteses testadas e DESCARTADAS (não refazer):**
+  1. Tirar `SET search_path` das funções chamadas por linha (para o planner embutir): 386 → 348 ms, ~10%.
+  2. Juntar as 16 contagens simples de lote numa passada (`count(*) filter`): **9,8 s** contra ~0,4 s hoje — os
+     índices parciais de 02/10 já respondem cada contagem pelo índice; numa passada, toda função roda em toda linha.
+- **Causa do frio (13 s):** `shared_buffers` = 256 MB; `imoveis_leilao` + 37 índices = 293 MB (heap 172 MB, 82 mil
+  linhas, só 25,8 mil ativas); banco 863 MB. A tabela não cabe no cache e os coletores a renovam o dia todo — a
+  rodada das 18:10 lê do disco. Saídas reais (decisão do dono): (a) compute maior no Supabase (custo mensal);
+  (b) mover lote inativo antigo (~56 mil linhas, 68% do heap) para tabela de arquivo — projeto maior, toca
+  retenção/apuração/relatórios. Ganho pontual barato restante: índice parcial com o predicado do item
+  `fora_do_acervo` (−~350 ms), não aplicado.
 
 ### 📣 03/10 — invariante de marketing por canal · campanha do Meta aponta para aula FECHADA · 2 atrasados
 - **`mkt_clique_pago_sem_rastreio` era forma nº 10:** somava cliques de todos os canais × visitas com gclid. Com
