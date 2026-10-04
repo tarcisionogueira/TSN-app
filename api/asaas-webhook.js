@@ -13,7 +13,9 @@ import {
   removerEventoProcessado,
   registrarConversaoAnuncio,
   registrarLiberacaoPagamento,
+  buscarCliente,
 } from './_webhook-core.js';
+import { cancelarOutrasRecorrencias } from './_recorrencia-unica.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -294,6 +296,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, cobranca_avulsa: { id: cobId, pago: completou, saldo_restante: completou ? 0 : Math.max(0, esperado - valor) } });
       }
       const result = await processarConfirmado(contexto);
+      // RECORRÊNCIA ÚNICA (04/10, pendência 123): pagamento de ASSINATURA confirmado e plano ativo →
+      // cancela as outras (MP e Asaas), mantendo esta. Substitui o cancelamento que o checkout fazia
+      // ANTES do pagamento. Nunca derruba a confirmação (o helper só alerta em falha).
+      if (pagReal.subscription && result?.plano && !contexto.servico) {
+        try {
+          const cli = await buscarCliente({ gatewayCustomerId: custId, email: custEmail, gateway: 'asaas' });
+          if (cli?.id) await cancelarOutrasRecorrencias({ userId: cli.id, email: custEmail, asaasCustomerId: custId, manterAsaasSubId: pagReal.subscription, origem: 'asaas-confirmado' });
+        } catch (e) { console.error('[asaas-webhook] recorrência única:', e?.message || e); }
+      }
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_OVERDUE') {

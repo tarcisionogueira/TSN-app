@@ -229,7 +229,6 @@ export default function Checkout() {
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
-  const cancelouAnterioresRef = React.useRef(false); // idempotência do cancelamento de assinaturas anteriores
   const iniciandoRef = React.useRef(false); // trava anti-duplo-clique no botão "Ir para pagamento"
 
   // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
@@ -893,26 +892,12 @@ export default function Checkout() {
     } catch (_) {}
   };
 
-  // Evita DUPLICIDADE de assinatura: antes de criar uma nova recorrência,
-  // cancela qualquer assinatura ativa do cliente nos dois gateways (idempotente).
-  // Só roda uma vez por sessão de checkout. (cancelouAnterioresRef é declarado no
-  // topo do componente para respeitar as rules-of-hooks.)
-  const cancelarAssinaturasAnteriores = async () => {
-    if (cancelouAnterioresRef.current || !user?.email) return;
-    cancelouAnterioresRef.current = true;
-    await Promise.allSettled([
-      apiCall('/api/mp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cancelar_assinatura', email: user.email }) }),
-      apiCall('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cancelar_assinatura', email: user.email }) }),
-    ]);
-  };
-
   // Tenta pagar via Asaas (backup) com dados já preenchidos
   const pagarAsaas = async () => {
     setLoading(true);
     setErro('');
     setOfertandoFallback(false);
     try {
-      if (['clube', 'top2', 'top2_anual'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -946,8 +931,10 @@ export default function Checkout() {
     setErro('');
     setOfertandoFallback(false);
 
-    // Anti-duplicidade: cancela assinaturas ativas antes de criar a nova recorrência
-    if (['clube', 'top2', 'top2_anual'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
+    // NÃO cancela mais a assinatura ativa aqui (04/10, pendência 123): cancelar ANTES de existir o
+    // pagamento novo deixava sem recorrência quem abandonava o upgrade (ou tinha MP e Asaas falhando).
+    // A recorrência antiga agora é cancelada pelos WEBHOOKS, só depois da nova confirmada, nos dois
+    // gateways — api/_recorrencia-unica.js.
 
     // Verifica se MP está ativo (admin pode desligar manualmente no painel)
     const { data: cfgRows } = await supabase.from('config_financeira').select('gateway,ativo');
@@ -976,11 +963,9 @@ export default function Checkout() {
         return;
       } catch (mpErr) {
         // MP falhou — fallback automático para Asaas sem mostrar erro ao cliente.
-        // ANTI-DUPLO-MANDATO (P0.2): se o MP CRIOU o preapproval e só o response falhou
-        // (timeout), o Asaas criaria uma 2ª recorrência (no anual, 2× R$449,90). Reseta o
-        // ref para o cancelarAssinaturasAnteriores do pagarAsaas RODAR DE NOVO e cancelar o
-        // mandato meio-criado no MP antes de criar o do Asaas. Fica UM só mandato ativo.
-        cancelouAnterioresRef.current = false;
+        // ANTI-DUPLO-MANDATO (P0.2): se o MP criou o preapproval e só o response falhou, ele fica
+        // PENDENTE (não cobra sem o cliente autorizar). Se um dia os dois forem autorizados, o
+        // webhook que confirmar por último cancela o outro (api/_recorrencia-unica.js, 04/10).
         console.warn('[checkout] MP falhou, tentando Asaas:', mpErr.message);
       }
     }

@@ -7,6 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
+import { cancelarOutrasRecorrencias, assinaturasAsaasAtivas } from './_recorrencia-unica.js';
 import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
@@ -295,6 +296,18 @@ export async function processarEventoMp(req, res) {
         const temOutraAtiva = (outra?.results || []).some(p =>
           String(p.external_reference || '').split('|')[0] === userId && String(p.id) !== String(preapproval.id));
         if (temOutraAtiva) return res.status(200).json({ ok: true, ignorado: 'outro_mandato_ativo' });
+        // E NO OUTRO GATEWAY (04/10, pendência 123): a troca para o Asaas cancela este mandato (ver
+        // _recorrencia-unica.js) — sem esta checagem o cliente que acabou de pagar no Asaas era
+        // rebaixado aqui e recebia o e-mail de "resgate". Erro de consulta = incerto → não rebaixa
+        // agora; a reconciliação diária (que já checa o Asaas) decide depois.
+        {
+          const { subs, erro } = await assinaturasAsaasAtivas({ userId });
+          if (subs.length) return res.status(200).json({ ok: true, ignorado: 'assinatura_asaas_ativa' });
+          if (erro) {
+            console.error('[mp-webhook] consulta Asaas falhou — rebaixamento adiado para a reconciliação:', erro);
+            return res.status(200).json({ ok: true, ignorado: 'asaas_incerto_reconciliacao_decide' });
+          }
+        }
         // CANCELAMENTO NÃO TIRA O MÊS JÁ PAGO (01/10). A tela de cancelamento promete "seu acesso
         // continua até o fim do período já pago", e a reconciliação diária já cumpria isso
         // (só rebaixa mandato cancelado depois do `next_payment_date`) — mas ESTE ramo rebaixava
@@ -351,15 +364,10 @@ export async function processarEventoMp(req, res) {
         // ficaria com 2 preapprovals authorized (ex.: mensal 49,90 + anual 449,90) cobrando
         // em paralelo. Ao ativar ESTE mandato, cancela os OUTROS authorized do mesmo userId.
         // Só no evento de AUTORIZAÇÃO (subscription_preapproval), não a cada cobrança recorrente.
+        // 04/10 (pendência 123): o backstop cobre os DOIS gateways — é ele, e não mais o checkout,
+        // quem cancela a recorrência antiga (MP e Asaas), e só DEPOIS da nova estar autorizada.
         if (tipo === 'subscription_preapproval') {
-          try {
-            const outros = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(preapproval.payer_email || '')}&status=authorized&limit=20`);
-            for (const o of (outros?.results || [])) {
-              if (String(o.id) === String(preapproval.id)) continue;
-              if (String(o.external_reference || '').split('|')[0] !== userId) continue;
-              await fetch(`${MP_BASE}/preapproval/${o.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) }).catch(() => {});
-            }
-          } catch { /* backstop best-effort; não bloqueia a ativação */ }
+          await cancelarOutrasRecorrencias({ userId, email: preapproval.payer_email || '', manterMpId: preapproval.id, origem: 'mp-autorizacao' });
         }
         // Comissão SÓ mediante pagamento recebido: uma cobrança recorrente PROCESSADA
         // (subscription_authorized_payment + ap.status='processed') é dinheiro que ENTROU →
