@@ -272,8 +272,14 @@ async function salvarImoveis(imoveis, fonte) {
         const kDe = (a) => chaveDocCanonica(a?.url) || a?.url || null;
         const vistos = new Set(novos.map(kDe).filter(Boolean));
         const merge = [...novos];
-        for (const a of antigos) { const k = kDe(a); if (k && !vistos.has(k)) { vistos.add(k); merge.push(a); } }
-        row.anexos = merge.slice(0, 25);
+        // 05/10 (pendência 78): o portão `ehDocumento` barra desde 20/09 o link de CATEGORIA da
+        // ZUK (".../recebendo-proposta?order=lancamento", tipo 'proposta'), mas a união aqui
+        // re-adicionava o anexo VELHO a cada rodada — 29 lotes ZUK ativos o carregavam em 04/10,
+        // todos atualizados hoje. Revalida só o tipo 'proposta' herdado (o "Modelo de Proposta"
+        // .pdf/.docx de MEGA/HASTAPUBLICA/LJUD passa no portão; medido em 04/10).
+        const propostaInvalida = (a) => a?.tipo === 'proposta' && !ehDocumento(a?.url, a?.nome || '', urlLote);
+        for (const a of antigos) { if (propostaInvalida(a)) continue; const k = kDe(a); if (k && !vistos.has(k)) { vistos.add(k); merge.push(a); } }
+        row.anexos = merge.length ? merge.slice(0, 25) : null;
       }
       // Preserva links de documento do backfill quando o scrape do dia não os traz.
       if (prev.link_matricula && !im.link_matricula) row.link_matricula = prev.link_matricula;
@@ -1070,11 +1076,31 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
           return { arr: d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []), motivo: null };
         } catch (e) { return { arr: null, motivo: `erro: ${String(e?.message || e).slice(0, 100)}` }; }
       };
+      // 05/10 (pendência 42): o 429 (rate-limit) já chegava no `motivo`, mas o retry só cobria
+      // `erro:` de rede — em dia ruim a offer-query devolvia 429 e a coleta saía parcial/zerada
+      // sem esperar nada. Espera crescente (2s, 5s, 12s; máx 3 novas tentativas) SÓ quando o
+      // motivo é 429; resposta OK sai na primeira chamada, sem pausa (caminho de sucesso intacto).
+      // Se o 429 persistir, o motivo diz isso por extenso (não vira "catálogo vazio").
+      // Orçamento TOTAL de espera de 60s neste evaluate: o protocolTimeout do puppeteer é 180s e,
+      // se o evaluate estourar, o catch devolve [] — perderia até as páginas já coletadas.
+      let orcamento429 = 60000;
+      const buscarCom429 = async (n, fields) => {
+        let r = await buscar(n, fields);
+        for (const espera of [2000, 5000, 12000]) {
+          if (r.motivo !== 'HTTP 429') return r;
+          if (espera > orcamento429) return { ...r, motivo: 'HTTP 429 (orçamento de espera de 60s esgotado)' };
+          orcamento429 -= espera;
+          await new Promise(res => setTimeout(res, espera));
+          r = await buscar(n, fields);
+        }
+        if (r.motivo === 'HTTP 429') r = { ...r, motivo: 'HTTP 429 (persistiu após esperas de 2s/5s/12s)' };
+        return r;
+      };
       const motivosPag1 = [];
       let fields = FIELDS_DOCS;
-      let r1 = await buscar(1, FIELDS_DOCS);
-      if (!r1.arr || !r1.arr.length) { if (r1.motivo) motivosPag1.push(`fieldList completo: ${r1.motivo}`); fields = FIELDS_BASE; r1 = await buscar(1, FIELDS_BASE); } // fallback seguro
-      if ((!r1.arr || !r1.arr.length) && lojas) { if (r1.motivo) motivosPag1.push(`fieldList base: ${r1.motivo}`); fields = ''; r1 = await buscar(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
+      let r1 = await buscarCom429(1, FIELDS_DOCS);
+      if (!r1.arr || !r1.arr.length) { if (r1.motivo) motivosPag1.push(`fieldList completo: ${r1.motivo}`); fields = FIELDS_BASE; r1 = await buscarCom429(1, FIELDS_BASE); } // fallback seguro
+      if ((!r1.arr || !r1.arr.length) && lojas) { if (r1.motivo) motivosPag1.push(`fieldList base: ${r1.motivo}`); fields = ''; r1 = await buscarCom429(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
       // 21/09 (achado do dono rodando de novo em produção): o "Failed to fetch" do SOLD/SBID9/
       // CREPALDI em 20-21/09 é erro de REDE (não HTTP), e as 3 tentativas acima acontecem em
       // sequência imediata — não dão tempo de um blip transitório de rede passar. Uma última
@@ -1082,7 +1108,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       // roda 1x/dia) e um blip de segundos que se resolveria sozinho.
       if ((!r1.arr || !r1.arr.length) && /^erro:/.test(r1.motivo || '')) {
         await new Promise(res => setTimeout(res, 4000));
-        const rRetry = await buscar(1, fields);
+        const rRetry = await buscarCom429(1, fields);
         if (rRetry.arr && rRetry.arr.length) { r1 = rRetry; motivosPag1.push('recuperado após pausa de 4s'); }
         else if (rRetry.motivo) motivosPag1.push(`após pausa de 4s: ${rRetry.motivo}`);
       }
@@ -1099,10 +1125,10 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       let paginaFalhou = null;
       if (first && first.length >= PS) {
         for (let n = 2; n <= 100; n++) {
-          let { arr, motivo } = await buscar(n, fields);
+          let { arr, motivo } = await buscarCom429(n, fields);
           if ((!arr || !arr.length) && /^erro:/.test(motivo || '')) {
             await new Promise(res => setTimeout(res, 4000));
-            const retry = await buscar(n, fields);
+            const retry = await buscarCom429(n, fields);
             if (retry.arr && retry.arr.length) { arr = retry.arr; motivo = null; }
             else if (retry.motivo) motivo = `após pausa de 4s: ${retry.motivo}`;
           }

@@ -477,6 +477,14 @@ export default function Atendimento() {
             </div>
           </div>
 
+          {/* Saque PJ do cliente em atendimento (05/10, pendência 114): o parceiro costuma abrir
+              chamado justamente sobre o saque travado em validação, e decidir exigia sair para o
+              Admin. A regra continua toda em api/saque.js (PATCH aprovar_pj/reprovar_pj) — aqui é
+              só outro botão para a MESMA chamada. Só admin/analista (o endpoint recusa os demais). */}
+          {(role === 'admin' || role === 'analista') && chamadoAtivo.user_id && (
+            <SaquesPJDoCliente key={chamadoAtivo.user_id} userId={chamadoAtivo.user_id} />
+          )}
+
           {/* Mensagens */}
           <div style={{ padding: '20px', flex: 1, overflowY: 'auto', minHeight: 320, maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
@@ -583,6 +591,85 @@ export default function Atendimento() {
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// Saques PJ "aguardando_pj" de UM cliente, com Aprovar/Reprovar (05/10, pendência 114).
+// Lê pelo GET ?ver_como=<uid> de /api/saque (admin/analista) — o mesmo endpoint e o mesmo
+// PATCH que o Admin usa (validarPJ). Falha de leitura vira aviso, nunca "nada pendente".
+function SaquesPJDoCliente({ userId }) {
+  const [estado, setEstado] = useState({ loading: true, erro: '', itens: [] });
+  const [processando, setProcessando] = useState('');
+  const [msg, setMsg] = useState(null);
+
+  async function carregar() {
+    try {
+      const r = await apiCall(`/api/saque?ver_como=${encodeURIComponent(userId)}`);
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || !Array.isArray(j.extrato)) {
+        setEstado({ loading: false, erro: j?.error || `HTTP ${r.status}`, itens: [] });
+        return;
+      }
+      const itens = j.extrato.filter((l) => l.tipo === 'saque' && l.status === 'aguardando_pj');
+      setEstado({ loading: false, erro: '', itens });
+    } catch (e) {
+      setEstado({ loading: false, erro: e.message || 'falha de rede', itens: [] });
+    }
+  }
+  useEffect(() => { carregar(); }, [userId]);
+
+  async function validar(id, tipo) {
+    let motivo = '';
+    if (tipo === 'reprovar_pj') {
+      motivo = window.prompt('Motivo da reprovação (será exibido ao parceiro):', 'Documentação insuficiente — reenviar contrato social legível');
+      if (motivo === null) return;
+    } else if (!window.confirm('Confirmar que a documentação foi conferida e o parceiro é sócio da empresa? Isto libera o saque para pagamento.')) {
+      return;
+    }
+    setProcessando(String(id)); setMsg(null);
+    try {
+      const res = await apiCall(`/api/saque?id=${id}`, { method: 'PATCH', body: JSON.stringify({ acao: tipo, motivo }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        setMsg({ ok: true, txt: tipo === 'aprovar_pj' ? 'PJ validada — saque liberado para pagamento.' : 'Saque reprovado e saldo devolvido.' });
+        await carregar();
+      } else setMsg({ ok: false, txt: data?.error || `Erro ao processar (HTTP ${res.status}).` });
+    } catch (e) { setMsg({ ok: false, txt: 'Erro ao processar: ' + (e.message || e) }); }
+    setProcessando('');
+  }
+
+  if (estado.loading) return null;
+  if (estado.erro) return (
+    <div style={{ padding: '8px 20px', fontSize: 12, color: '#b45309', background: '#fffbeb', borderBottom: '1px solid #fde68a' }}>
+      Não consegui verificar saques PJ deste cliente: {estado.erro}
+    </div>
+  );
+  if (!estado.itens.length && !msg) return null;
+  const fmtBRL = (v) => `R$ ${Math.abs(Number(v || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    <div style={{ padding: '10px 20px', background: '#fffbeb', borderBottom: '1px solid #fde68a' }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+        Saque PJ aguardando validação {estado.itens.length > 0 && `(${estado.itens.length})`} — confira o contrato social no Admin (Saques) antes de aprovar
+      </div>
+      {msg && <div style={{ fontSize: 12, color: msg.ok ? '#166534' : '#b91c1c', marginBottom: 6 }}>{msg.txt}</div>}
+      {estado.itens.map((l) => (
+        <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '4px 0' }}>
+          <span style={{ fontSize: 12.5, color: '#334155' }}>
+            {fmtBRL(l.valor)} · pedido {new Date(l.criado_em).toLocaleDateString('pt-BR')}
+          </span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => validar(l.id, 'aprovar_pj')} disabled={!!processando}
+              style={{ padding: '5px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: processando ? 'default' : 'pointer' }}>
+              {processando === String(l.id) ? '…' : 'Aprovar'}
+            </button>
+            <button onClick={() => validar(l.id, 'reprovar_pj')} disabled={!!processando}
+              style={{ padding: '5px 10px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: processando ? 'default' : 'pointer' }}>
+              Reprovar
+            </button>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

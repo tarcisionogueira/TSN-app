@@ -11752,7 +11752,7 @@ function LiveTab() {
     // PRÓXIMA aula". `p.edicao` vem pronta de `live_proxima` (mesma fonte da data), então não
     // se recalcula a fórmula da edição aqui — foi copiar essa conta que causou o defeito de 03/09.
     let qIns = supabase.from('live_inscricoes')
-      .select('id, nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000');
+      .select('id, nome, email, whatsapp, cidade, uf, origem, criado_em, compareceu').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000');
     if (p?.edicao) qIns = qIns.eq('edicao', p.edicao);
     const { data: ins, error: eIns } = await qIns.order('criado_em', { ascending: false });
     if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
@@ -11804,6 +11804,23 @@ function LiveTab() {
       setErro('Abri a conversa, mas não registrei o convite: ' + e.message);
     }
     setChamando('');
+  }
+
+  // PRESENÇA NA AULA (05/10, pendência 70): a sala é Google Meet, sem API de presença — então
+  // `compareceu` só existe se alguém marcar aqui (estava 0/17 preenchido). `.select('id')` prova
+  // que a linha foi alcançada: grava por /api/live-presenca (service key, só admin), que confere
+  // a linha devolvida — a tabela não abre edição para o front (guarda contato de inscritos).
+  const [marcandoPresenca, setMarcandoPresenca] = useState('');
+  async function marcarCompareceu(inscricao, valor) {
+    if (marcandoPresenca) return;
+    setMarcandoPresenca(inscricao.id); setErro('');
+    try {
+      const r = await apiCall('/api/live-presenca', { method: 'POST', body: JSON.stringify({ inscricao_id: inscricao.id, compareceu: valor }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) setErro('Presença não gravou: ' + (j.error || `HTTP ${r.status}`));
+      else setInscritos(prev => prev.map(x => (x.id === inscricao.id ? { ...x, compareceu: j.compareceu } : x)));
+    } catch (e) { setErro('Presença não gravou: ' + (e.message || 'falha de rede')); }
+    finally { setMarcandoPresenca(''); }
   }
 
   async function salvar(campos) {
@@ -12243,7 +12260,7 @@ function LiveTab() {
         <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:8 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
             <thead><tr style={{ background:'#f8fafc' }}>
-              {['Nome','E-mail','WhatsApp','Cidade','Origem','Quando','Grupo'].map(h =>
+              {['Nome','E-mail','WhatsApp','Cidade','Origem','Quando','Compareceu','Grupo'].map(h =>
                 <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, textTransform:'uppercase', color:'#64748b', letterSpacing:0.5 }}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -12256,6 +12273,13 @@ function LiveTab() {
                   <td style={{ padding:'9px 12px', color:'#64748b' }}>{i.origem || '—'}</td>
                   <td style={{ padding:'9px 12px', color:'#94a3b8', whiteSpace:'nowrap' }}>
                     {new Date(i.criado_em).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td style={{ padding:'9px 12px', textAlign:'center' }}>
+                    {/* checkbox mostra o que o BANCO devolveu — só muda depois do .select() confirmar */}
+                    <input type="checkbox" checked={i.compareceu === true}
+                      disabled={marcandoPresenca === i.id}
+                      title={i.compareceu == null ? 'não marcado' : (i.compareceu ? 'compareceu' : 'não compareceu')}
+                      onChange={(e) => marcarCompareceu(i, e.target.checked)} />
                   </td>
                   <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
                     {(() => {

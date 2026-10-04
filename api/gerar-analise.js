@@ -1401,6 +1401,9 @@ do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vend
 
 ═══ NÍVEL 2 — VIZINHANÇA (250m a ~1km) ═══
 Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. Meta: 15+ vendas e 8+ locações.
+UM NÍVEL SÓ POR COMPARÁVEL: cada imóvel comparável (mesmo anúncio/endereço/metragem) aparece em UM
+nível só — no mais próximo em que se encaixa. Não repita o mesmo imóvel em nível 1 e nível 2 (nem no 3):
+repetir infla a contagem e pesa o mesmo preço duas vezes na média. Nível vazio é melhor que repetir.
 
 ═══ TETO DE DISTÂNCIA (REGRA DURA — não negocie) ═══
 O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
@@ -1602,6 +1605,9 @@ do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vend
 
 ═══ NÍVEL 2 — VIZINHANÇA (250m a ~1km) ═══
 Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. Meta: 15+ vendas e 8+ locações.
+UM NÍVEL SÓ POR COMPARÁVEL: cada imóvel comparável (mesmo anúncio/endereço/metragem) aparece em UM
+nível só — no mais próximo em que se encaixa. Não repita o mesmo imóvel em nível 1 e nível 2 (nem no 3):
+repetir infla a contagem e pesa o mesmo preço duas vezes na média. Nível vazio é melhor que repetir.
 
 ═══ NÍVEL 3 — RAIO AMPLIADO (1km a 2km) — SÓ QUANDO FALTAR AMOSTRA ═══
 Abra este nível SOMENTE se os níveis 1 e 2, SOMADOS, tiverem MENOS de ${MIN_AMOSTRAS_ANTES_DO_NIVEL3}
