@@ -35994,3 +35994,21 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
 - 05/10: migração `20261004_retencao_aviso_mesmo_usuario.sql` APLICADA pela sessão (só os 2 `create or replace`;
   os `revoke` eram redundantes — ACL já era postgres+service_role e o replace preserva). Pendências 127 e 132
   fechadas; 85 descartada (duplicada da 135).
+
+### 05/10 — Triagem completa das pendências (96 → 82 abertas) e consertos
+Triagem com prova por 4 agentes só-leitura; depois consertos. **Achados que importam:**
+- **115 era brecha real (P3 → P0):** cliente baixava o próprio honorário pelo PostgREST. Trigger
+  `arrematacoes_protege_honorarios` agora calcula o valor no banco p/ não-staff (migração 20261005, testada em
+  transação desfeita: R$ 1 "pago" forjado → R$ 30.000 pendente).
+- **46 KYC:** 6/6 parceiros com doc+selfie presos porque a CNH-e em PDF ia para "revisão manual" que não tinha
+  fila. PDF agora entra no face match (document block) e Admin › Sistema tem "KYC aguardando conferência".
+  **Dono: clicar "Conferir de novo" nos 6.**
+- **118 causa raiz:** cache por bairro do `geocodificar.js` emprestava pino 'bairro' a lote sem bairro (90 lotes
+  num pino de SP, 287 no país). Cache corrigido; `regeocod-imprecisos` reenfileira 'bairro' sem bairro.
+- Pequenos: 106 split MP recusado · 117 duplo clique · 65 reatribuição jurídica desfeita sem e-mail · 81 evento
+  relatorio_stale · 77 CI de 93 testes (testes.yml) · 104 prompt · 70 presença (api/live-presenca) · 114 PJ no
+  Atendimento · 42 SUPERBID 429 · 78 anexo-fantasma ZUK · 107 env dos recon · 60 envs documentadas · 80 consolidação.
+- Fechadas por já resolvidas/duplicadas/obsoletas com prova: 10, 11, 16, 39, 40, 43, 47, 59, 62, 75, 76, 86, 94,
+  108, 121.
+- **SQL do dono:** `docs/SQL_DONO_2026-10-05.sql` (130 + 101), colar inteiro no SQL Editor; conferência no fim.
+- Restam 23 do Claude (quase todas projetos: 37, 38, 41, 49, 87, 88, 91, 92, 34, 74, 83, 116) e 59 do dono.
