@@ -2237,7 +2237,7 @@ export default async function handler(req, res) {
   // de correção lá embaixo continua valendo como rede de segurança.
   // As DUAS leituras (matrícula e edital) já rodam em paralelo desde o início; aqui só as
   // colhemos dentro de UM limite comum — esperar as duas em sequência dobraria a espera.
-  let matriculaPre = null, editalPre = null;
+  let matriculaPre = null, editalPre = null, areaDoEdital = 0;
   const areaAnunciada = Number(mercadoInputs?.areaM2) || 0;
   // ORÇAMENTO DA ESPERA — refeito em 15/08 (tarde), depois de a correção da manhã NÃO ter
   // efeito nenhum em produção. O `extratoMatricula` já recebia 45s de deadline e roda em
@@ -2320,6 +2320,21 @@ export default async function handler(req, res) {
         mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
         enderecoGenerico = false;
         usados.endereco = mercadoInputs.endereco;
+      }
+    }
+    // ÁREA DO EDITAL (04/10, Santo Amaro/LEILAOBRASIL): o edital lido trazia "área privativa de
+    // 49,42 m²", o anúncio vinha sem área e não havia matrícula publicada — e o relatório saiu
+    // SEM valor de mercado, com 11 comparáveis do MESMO condomínio na mão, porque só a área da
+    // matrícula era aproveitada aqui. Só PREENCHE o vazio: anúncio e matrícula, quando existem,
+    // continuam valendo (o `pertenceAoLote` acima já barra edital de outro lote).
+    if (!(Number(mercadoInputs.areaM2) > 0)) {
+      const ehTerr = /terreno|rural/.test(String(mercadoInputs.tipoImovel || ''));
+      const aEd = Number(ehTerr ? (idt.areaTerrenoM2 || idt.areaConstruidaM2) : idt.areaConstruidaM2) || 0;
+      if (aEd >= 5 && aEd <= 100000) {
+        mercadoInputs.areaM2 = aEd;
+        if (ehTerr && !(Number(mercadoInputs.areaTerrenoM2) > 0)) mercadoInputs.areaTerrenoM2 = aEd;
+        areaDoEdital = aEd;
+        usados.area = aEd;
       }
     }
     if (Object.keys(usados).length) console.log('[identidade-doc]', JSON.stringify({ imovel: String(imovelId), ...usados }));
@@ -2784,7 +2799,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // sobre a área do cliente. Sem documental ainda, usa a área informada e a coerência abaixo
     // protege o número. Também lemos avaliação/fonte para a checagem de coerência.
     let areaM2 = Number(mercadoInputs.areaM2) || 0;
-    let avalDb = 0, fonteDb = '', areaFonte = 'informada';
+    let avalDb = 0, fonteDb = '', areaFonte = areaDoEdital > 0 && areaM2 === areaDoEdital ? 'edital' : 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
       [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,titulo&limit=1`)).json();
@@ -2812,6 +2827,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // na matrícula — nunca um número mudo passando por medição própria.
       const aAcervo = Number(imDb?.area_m2) || 0;
       if (areaM2 <= 0 && aAcervo >= 5 && aAcervo <= 100000) { areaM2 = aAcervo; areaFonte = 'acervo'; }
+      // Acervo sem área e edital com área: grava no lote (card, busca e Índice também ganham).
+      if (areaFonte === 'edital' && !(aAcervo > 0)) {
+        try {
+          const rp = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ area_m2: areaDoEdital }) });
+          if (!rp.ok) console.warn('[area-edital] PATCH', rp.status);
+        } catch (e) { console.warn('[area-edital]', e?.message); }
+      }
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }

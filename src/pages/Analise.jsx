@@ -1294,6 +1294,9 @@ export default function Analise() {
     // recuperado — só voltava se o usuário reabrisse o imóvel pela Busca. Preenche apenas
     // quando o campo está vazio (nunca sobrescreve o que o usuário digitou).
     if (Number(r.valorAvaliacao) > 0) setD(p => (Number(p.valorAvaliacao) > 0 ? p : { ...p, valorAvaliacao: r.valorAvaliacao }));
+    // Mesma regra para a METRAGEM que o servidor usou (edital/acervo/matrícula) quando o card veio sem.
+    const aSrv = Number(r.mercado?.metodologia?.area?.valor) || 0;
+    if (aSrv > 0) setD(p => (Number(p.areaM2) > 0 ? p : { ...p, areaM2: aSrv }));
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
     // ── CUSTOS LIDOS NO EDITAL → PROJEÇÃO (pedido do dono, 06/08) ──────────────────
     // O servidor lê o edital ANTES de pesquisar e extrai o que muda a conta: comissão do
@@ -3566,7 +3569,7 @@ export default function Analise() {
                   comparáveis passam de 3x; abaixo disso o erro passava inteiramente calado. */}
               {!areaSuspeita && area > 0 && fonteArea !== 'matricula' && (
                 <div style={{ fontSize:10.5, opacity:0.75, marginTop:6, lineHeight:1.5 }}>
-                  Metragem de {fmt(area)} m² {fonteArea === 'cliente' ? 'informada por você' : 'conforme o anúncio do leiloeiro'} — <strong>não confirmada na matrícula</strong>. O valor de mercado é calculado sobre ela; o relatório documental lê a matrícula e confirma a área real.
+                  Metragem de {fmt(area)} m² {fonteArea === 'cliente' ? 'informada por você' : fonteArea === 'edital' ? 'lida no edital do leilão' : 'conforme o anúncio do leiloeiro'} — <strong>não confirmada na matrícula</strong>. O valor de mercado é calculado sobre ela; o relatório documental lê a matrícula e confirma a área real.
                 </div>
               )}
             </div>

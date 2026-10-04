@@ -71,6 +71,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 📐 04/10 — Relatório sem "venda estimada" com o edital LIDO: a área do edital não era usada
+- Caso: LEILAOBRASIL "Apartamento em Santo Amaro" (f8f87711…). Edital lido por visão às 12:42:54 (cache, 1 s ANTES da
+  geração) com `areaConstruidaM2: 49.42`; anúncio sem área (descrição diz "49,42m" sem "²" → `extrairAreaM2` não casa)
+  e sem matrícula publicada. A pesquisa achou 11 comparáveis do MESMO condomínio (~R$ 7.400/m²), mas
+  `valorMercado = precoM2 × área` não computou com área 0 → `mercadoVazio`, card "—".
+- Causa no código: do `editalPre` o gerador só aproveitava condomínio/endereço; a área só vinha da matrícula.
+- Conserto (`api/gerar-analise.js`): área do edital PREENCHE o vazio antes da busca (anúncio e matrícula continuam
+  vencendo; `pertenceAoLote` barra edital de outro lote); `areaFonte = 'edital'` declarado na tela ("lida no edital");
+  grava `area_m2` no acervo quando ele está em 0. Tela aplica `metodologia.area.valor` quando o card veio sem área.
+- Conferir após o deploy: regerar o relatório desse lote → venda estimada ≈ R$ 330 mil.
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF
