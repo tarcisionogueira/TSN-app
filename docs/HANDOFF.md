@@ -35978,3 +35978,16 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   LEILOTECH, GESTAOLEILOES) **não** recebem e-mail de plataforma.
 - Lotes sem destinatário: ~2.600 → **981**. Resíduo = pendência **135** (dono): PESTANA 308 + BIASI 272 não
   publicam e-mail; cadastrar à mão em `leiloeiro_contato` (origem manual) fecha 59%.
+
+### 04-05/10 — Telefone/WhatsApp do leiloeiro + pedido pelo WhatsApp Web (pedido do dono)
+- Tabela `leiloeiro_telefone` (leiloeiro_chave '' = fonte) + `telefone_leiloeiro_resolver(fonte, leiloeiro)`
+  (SECURITY INVOKER, RLS sem policy → só service key). Migração `20261005_leiloeiro_telefone.sql`.
+- Captura na 3ª etapa de `capturar-contatos-leiloeiros.mjs`: site (link wa.me > `tel:` > número formatado
+  junto de tel/fone/whatsapp), senão edital do DJEN a ≤400 caracteres do domínio; por leiloeiro de plataforma,
+  só perto do e-mail JÁ validado dele. Nunca sobrescreve; white-label fora. Ceruli e Isaias dividem o mesmo
+  número de escritório (confirmado no edital), não é erro.
+- Gravado: 36 por fonte + 7 por leiloeiro (29 com WhatsApp). Lotes ativos com telefone: 4.068 de 8.199;
+  dos 981 sem e-mail, 350 agora têm telefone → **631 sem contato nenhum** (PESTANA 308 segue sem nada —
+  cadastrar à mão pela tela Admin › Contato dos leiloeiros › 📱 Telefone; pendência 135).
+- Análise › pedido ao leiloeiro: botão verde "WhatsApp (DD) …" abre web.whatsapp.com/send (wa.me no celular)
+  com o texto revisado. Nada é enviado sem a pessoa apertar Enviar no WhatsApp; sem API oficial.
