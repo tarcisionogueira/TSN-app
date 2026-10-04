@@ -35991,3 +35991,6 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   cadastrar à mão pela tela Admin › Contato dos leiloeiros › 📱 Telefone; pendência 135).
 - Análise › pedido ao leiloeiro: botão verde "WhatsApp (DD) …" abre web.whatsapp.com/send (wa.me no celular)
   com o texto revisado. Nada é enviado sem a pessoa apertar Enviar no WhatsApp; sem API oficial.
+- 05/10: migração `20261004_retencao_aviso_mesmo_usuario.sql` APLICADA pela sessão (só os 2 `create or replace`;
+  os `revoke` eram redundantes — ACL já era postgres+service_role e o replace preserva). Pendências 127 e 132
+  fechadas; 85 descartada (duplicada da 135).
