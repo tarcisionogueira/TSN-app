@@ -37,6 +37,21 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 🗺️ 04/10 — `estado_fora_do_padrao` (12): scrape vazio não apaga mais cidade/UF conhecida
+- **Retrato:** 5 ALBERTOMACEDO (itens de pacote; enchem na coleta das 8h UTC pela API, #390) + 7 de 6 fontes, cada
+  uma com ≤3% do próprio acervo (SUPERBID 1/1422) — casos de borda, não parser quebrado. Consertar 6 parsers por 7
+  lotes não paga.
+- **Conserto genérico:** `preservar_e_derivar_endereco()` não deixa `cidade`/`estado` vazios sobrescreverem valor
+  conhecido (mesmo padrão de endereço/bairro). Sem isso, a cidade vinda da API do ALBERTOMACEDO, do IBGE ou de
+  correção manual era apagada no scrape seguinte — retrabalho diário. Provado no banco: preencher → simular scrape
+  vazio → continua "São Paulo/SP". Migração `20261004_preservar_cidade_uf.sql`.
+- **Preenchido só o inequívoco:** SUPERBID "Grand Panamby – Vila Andrade/SP" → São Paulo/SP.
+- **Ficam sem cidade, DE PROPÓSITO (inventar é pior):** LEILOTECH/vmleiloes 2 (bairros "Sítio Cercado"/"Alto da XV"
+  — o leiloeiro vende em várias cidades do PR; "Carta de Data" é de Ponta Grossa), MILAN/SATO/WEBLEILOES (cascas:
+  título "Imóvel"/"IMÓVEIS | GO"/"Apartamento", sem área nem descrição — SATO é página de leilão, não lote),
+  LEILAOBRASIL (descrição é CSS do Word). Já não aparecem em /leiloes. Se um desses parsers ganhar volume de casca,
+  aí sim vale a ofensiva de captura.
+
 ### ⏱️ 04/10 — `erro_na_tela_do_cliente` (2): timeout transitório em /analises → a leitura agora relê sozinha
 - Um só episódio (2 linhas): explorador abriu `/analises` em 01/10 02:38 UTC e `minhas_analises_lista` deu
   `statement timeout`. Medido hoje para o MESMO usuário: **47 ms** (6 relatórios) — a RPC é sã; foi pico de carga do
