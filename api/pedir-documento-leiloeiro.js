@@ -45,7 +45,7 @@ const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
 // Quem pode negociar documentação com o leiloeiro EM NOME do cliente — só a equipe interna
 // (decisão do dono, 12/09, revista em 17/09: o Assessorado tinha acesso e foi retirado —
 // essa comunicação com o leiloeiro passa a ser exclusiva da equipe).
-const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte'];
+const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado']; // 05/10: sem 'suporte' — só quem faz as análises (pedido do dono)
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
@@ -100,7 +100,7 @@ export default async function handler(req) {
   if (!resPerfil.ok) return json({ error: 'Não foi possível verificar seu acesso agora. Tente novamente.' }, 500);
   const [perfil] = await resPerfil.json();
   if (!ROLES_PEDIDO_LEILOEIRO.includes(perfil?.role)) {
-    return json({ error: 'Este recurso está disponível para a equipe e para o plano Assessorado.' }, 403);
+    return json({ error: 'Pedido ao leiloeiro (e-mail e WhatsApp) é exclusivo do administrador e da equipe de análise.' }, 403);
   }
 
   // Rate limit SÓ no envio de verdade — o preview (montar/reler o texto) não gasta cota.

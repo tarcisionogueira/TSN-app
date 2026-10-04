@@ -151,7 +151,7 @@ const ROLES_COM_CNJ   = ['top2','assessorado','clube','analista','advogado','adm
 // ser só da equipe interna, nunca do cliente). Espelha ROLES_PEDIDO_LEILOEIRO em
 // api/pedir-documento-leiloeiro.js — o servidor confere de novo (a tela só evita mostrar
 // um botão que a API recusaria).
-const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado', 'suporte'];
+const ROLES_PEDIDO_LEILOEIRO = ['admin', 'analista', 'advogado']; // 05/10: sem 'suporte' — só quem faz as análises (pedido do dono)
 
 export default function Analise() {
   const location = useLocation();
