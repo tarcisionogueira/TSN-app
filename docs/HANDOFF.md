@@ -136,6 +136,23 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - Por que não structured outputs/tool forçada: forçar ferramenta dá 400 nos modelos novos e um esquema rígido de todos os
   campos do relatório é mudança grande; fica como evolução se o JSON inválido voltar (logs `[veiculo] JSON inválido`).
 
+### 🐞 04/10 (noite) — Varredura multi-agente (ritual item 6): 4 camadas, ~20 achados confirmados
+- **Corrigido agora:**
+  - Minhas mudanças do dia (4): matrícula-mãe vencia quando também citava o cartório; área do edital só vinha pela
+    visão (caminho de TEXTO agora usa `extrairMatriculaTexto` — privativa/terreno rotulados); edital passava por cima
+    da área do acervo (`areaAcervoPre`); PATCH de `area_m2` saía antes da 2ª chance da matrícula (movido para depois).
+    `numeroMatriculaDoTexto` aceita "Matrícula: N".
+  - `api/live-inscrever.js`: inscrição na live descartava gbraid/wbraid/oppref/landing (2 de 2 perdidos) e o upsert
+    de `perfis` não era checado — 409 de telefone duplicado apagava indicação do parceiro, `senha_pendente`, cidade
+    e atribuição. Agora checa, e em 409 regrava sem telefone. (Telefone NÃO foi para o user_metadata: o trigger com
+    índice único derrubaria a criação da conta.)
+- **Abertos como pendência (ver `pendencias_abertas()`):** checkout cancela assinatura ATIVA antes do novo pagamento
+  (P0 — decisão do dono: mover para os webhooks dos dois gateways); webhooks MP/Asaas tratam leitura falha como
+  "não encontrado" (honorário, buscarCliente, estorno de comissão); cota sem estorno se a gravação de "gerando" falha;
+  laudo/veículo sem `r.ok`; e-mail de oportunidades ignora opt-out quando a leitura falha; aviso de retenção para o
+  usuário errado; limpeza de documentos sem conferir; telas (Arrematados, Minha Rede, Comissões, anexos) mostrando
+  vazio/zero em falha de leitura. Arquivo de lotes: recriar a função com `duplicata_suspeita_de` (dono, SQL Editor).
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF

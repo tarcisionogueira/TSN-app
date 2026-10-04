@@ -112,13 +112,16 @@ export function extrairDescricaoDoCorpo(html) {
 // que não seja a matrícula-mãe ("feito na matrícula" / "na matrícula nº … deste Serviço").
 export function numeroMatriculaDoTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
-  const achados = [...t.matchAll(/matr[íi]cula\s*(?:imobili[áa]ria\s*)?(?:n[ºo°.]*\s*)?(\d[\d.\-]*\d|\d)/gi)]
+  const achados = [...t.matchAll(/matr[íi]cula\s*(?:imobili[áa]ria\s*)?:?\s*(?:n[ºo°.]*\s*)?(\d[\d.\-]*\d|\d)/gi)]
     .map((m) => ({ num: m[1], antes: t.slice(Math.max(0, m.index - 25), m.index), depois: t.slice(m.index + m[0].length, m.index + m[0].length + 60) }));
   if (!achados.length) return null;
-  const doCartorio = achados.find((a) => /^\s*(?:,|-|–)?\s*(?:do|no|junto ao)\s+(?:\d+\s*[ºª°o]?\s*)?(?:cart[óo]rio|of[íi]cio|registro de im[óo]veis|cri\b|servi[çc]o)/i.test(a.depois));
+  // A matrícula-MÃE é descartada ANTES de olhar o cartório: "feito na matrícula nº 393.715 do 11º
+  // Cartório" também tem o cartório ao lado (varredura de 04/10).
+  const ehMae = (a) => /(?:feito|feita|registrad[oa]|averbad[oa])\s+na\s*$/i.test(a.antes) || /^\s*deste\s/i.test(a.depois);
+  const candidatas = achados.filter((a) => !ehMae(a));
+  const doCartorio = candidatas.find((a) => /^\s*(?:,|-|–)?\s*(?:do|no|junto ao)\s+(?:\d+\s*[ºª°o]?\s*)?(?:cart[óo]rio|of[íi]cio|registro de im[óo]veis|cri\b|servi[çc]o)/i.test(a.depois));
   if (doCartorio) return doCartorio.num;
-  const naoMae = achados.find((a) => !/(?:feito|feita|registrad[oa]|averbad[oa])\s+na\s*$/i.test(a.antes) && !/^\s*deste\s/i.test(a.depois));
-  return (naoMae || achados[0]).num;
+  return (candidatas[0] || achados[0]).num;
 }
 
 // VÁRIOS BENS NUM LOTE SÓ (28/09). "Lote 1) Terreno … com a área de 1.303,00 m² … Lote 2) Terreno

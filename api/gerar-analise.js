@@ -2072,9 +2072,11 @@ export default async function handler(req, res) {
   // de escolher às cegas — exposta ao parecer via `pInp._divergencia` mais abaixo.
   let divergenciaLocalizacao = null;
   let descricaoImovel = null; // usada adiante pela soma de áreas de lote com vários bens
+  let areaAcervoPre = 0; // área do anúncio no acervo — o edital só preenche quando ela também é 0
   try {
-    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo&limit=1`)).json();
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo,area_m2&limit=1`)).json();
     descricaoImovel = imA?.descricao || null;
+    areaAcervoPre = Number(imA?.area_m2) || 0;
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
       const ruaOk = (e) => { const s = String(e || '').trim(); return s.length >= 6 && /[a-zà-ú]{3}/i.test(s) && !lixo.test(s); };
@@ -2327,7 +2329,7 @@ export default async function handler(req, res) {
     // SEM valor de mercado, com 11 comparáveis do MESMO condomínio na mão, porque só a área da
     // matrícula era aproveitada aqui. Só PREENCHE o vazio: anúncio e matrícula, quando existem,
     // continuam valendo (o `pertenceAoLote` acima já barra edital de outro lote).
-    if (!(Number(mercadoInputs.areaM2) > 0)) {
+    if (!(Number(mercadoInputs.areaM2) > 0) && !(areaAcervoPre >= 5)) {
       const ehTerr = /terreno|rural/.test(String(mercadoInputs.tipoImovel || ''));
       const aEd = Number(ehTerr ? (idt.areaTerrenoM2 || idt.areaConstruidaM2) : idt.areaConstruidaM2) || 0;
       if (aEd >= 5 && aEd <= 100000) {
@@ -2827,13 +2829,6 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // na matrícula — nunca um número mudo passando por medição própria.
       const aAcervo = Number(imDb?.area_m2) || 0;
       if (areaM2 <= 0 && aAcervo >= 5 && aAcervo <= 100000) { areaM2 = aAcervo; areaFonte = 'acervo'; }
-      // Acervo sem área e edital com área: grava no lote (card, busca e Índice também ganham).
-      if (areaFonte === 'edital' && !(aAcervo > 0)) {
-        try {
-          const rp = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ area_m2: areaDoEdital }) });
-          if (!rp.ok) console.warn('[area-edital] PATCH', rp.status);
-        } catch (e) { console.warn('[area-edital]', e?.message); }
-      }
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }
@@ -2883,6 +2878,16 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ numero_matricula: String(mat.numeroMatricula).slice(0, 40) }) }); } catch { /* best-effort */ }
         }
       }
+    }
+
+    // Edital venceu até o fim (sem matrícula): grava no lote — card, busca e Índice também ganham.
+    // Só aqui, DEPOIS da 2ª chance da matrícula: antes, o acervo ficava com a área do edital mesmo
+    // quando o relatório acabava usando a da matrícula (achado da varredura de 04/10).
+    if (areaFonte === 'edital' && !(Number(imDb?.area_m2) > 0)) {
+      try {
+        const rp = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ area_m2: areaM2 }) });
+        if (!rp.ok) console.warn('[area-edital] PATCH', rp.status);
+      } catch (e) { console.warn('[area-edital]', e?.message); }
     }
 
     // ── ÁREA NÃO CONFIRMADA NÃO MORRE EM SILÊNCIO (18/08, caso gl_28430 Vila Velha) ────

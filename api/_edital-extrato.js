@@ -617,6 +617,15 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // outro lote (ver ehDocMultiLote). Condições/pagamento seguem: valem para o edital todo.
       const blocoConfiavel = !!blocoLote || !ehDocMultiLote(txt);
       identidade = blocoConfiavel ? extrairIdentidadeTexto(txtLote) : null;
+      // ÁREA no caminho de TEXTO (04/10, varredura): só a leitura por visão trazia
+      // `areaConstruidaM2`, então edital em PDF com texto (a maioria) nunca preenchia a área que o
+      // gerador agora usa quando anúncio e matrícula não têm. Régua estrita da matrícula (só área
+      // privativa/útil/construída e terreno rotulados — nunca área comum ou "total" do prédio).
+      if (identidade) {
+        const am = extrairMatriculaTexto(txtLote);
+        if (Number(am?.areaPrivativaM2) > 0) identidade.areaConstruidaM2 = Number(am.areaPrivativaM2);
+        if (Number(am?.areaTerrenoM2) > 0) identidade.areaTerrenoM2 = Number(am.areaTerrenoM2);
+      }
       // NÚMERO DO PROCESSO (CNJ) — grátis, no texto que já está em mãos. É a chave que abre a
       // consulta de movimentação e responde "este processo anda rápido?". Até 15/08 só a IA do
       // relatório documental o lia, e por isso 1.782 lotes judiciais tinham 3 números.

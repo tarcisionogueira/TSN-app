@@ -211,11 +211,12 @@ export default async function handler(req, res) {
       // Perfil com telefone e marketing de origem. Best-effort: sem isto a inscrição
       // continua válida, e o trigger de novo usuário já criou a linha básica.
       if (userId) {
-        try {
-          await sb('perfis?on_conflict=id', {
-            method: 'POST',
-            headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify({
+        // RESPOSTA CHECADA (04/10): `fetch` não lança em 4xx, então o antigo `catch` nunca via a falha.
+        // O caso que importa é o 409 do índice único `perfis_telefone_unico` (WhatsApp já usado por outra
+        // conta): o upsert inteiro caía e a conta ficava SEM indicação do parceiro, `senha_pendente`,
+        // cidade e atribuição — e no 1º login o upline padrão tomava a comissão. Em 409 regrava sem o
+        // telefone, para não perder o resto; qualquer outra falha fica no log com status e corpo.
+        const perfil = {
               id: userId, nome, telefone: whatsapp, role: 'explorador',
               // Conta nasce com senha ALEATÓRIA (a pessoa nunca digita uma aqui) — sem isto
               // marcado, ela só teria como definir senha própria lembrando de "Esqueci minha
@@ -239,10 +240,29 @@ export default async function handler(req, res) {
               // mas nao a PECA — e e a peca que decide qual criativo recebe verba.
               mkt_utm_content: utm.utm_content || null, mkt_utm_term: utm.utm_term || null,
               mkt_fbclid: utm.fbclid || null, mkt_referrer: utm.referrer || null,
-              mkt_landing: `/live/${slug}`, mkt_capturado_em: new Date().toISOString(),
-            }),
-          });
-        } catch { /* best-effort */ }
+              // gbraid/wbraid (clique pago no iOS) e oppref entraram em 04/10: o cliente já mandava, o upsert
+              // descartava — e como `mkt_capturado_em` sai preenchido aqui, o `registrar_marketing` do 1º
+              // login (que só completa quando é nulo) nunca recuperava. 2 de 2 inscrições com gbraid perdidas.
+              mkt_gbraid: String(utm.gbraid || '').slice(0, 200) || null,
+              mkt_wbraid: String(utm.wbraid || '').slice(0, 200) || null,
+              mkt_oppref: String(utm.oppref || '').slice(0, 200) || null,
+              mkt_landing: String(utm.landing || '').slice(0, 300) || `/live/${slug}`,
+              mkt_capturado_em: new Date().toISOString(),
+};
+        const gravarPerfil = (corpo) => sb('perfis?on_conflict=id', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(corpo),
+        });
+        try {
+          let rp = await gravarPerfil(perfil);
+          if (rp.status === 409) {
+            console.warn('[live-inscrever] telefone já usado por outra conta — perfil gravado sem telefone', userId);
+            const { telefone: _t, ...semTelefone } = perfil;
+            rp = await gravarPerfil(semTelefone);
+          }
+          if (!rp.ok) console.error('[live-inscrever] perfil não gravado', rp.status, (await rp.text().catch(() => '')).slice(0, 200));
+        } catch (e) { console.error('[live-inscrever] perfil não gravado', e?.message || e); }
       }
     }
   }

@@ -19,6 +19,9 @@
 --     delete (a função de 08/08 falharia inteira).
 --   • análise, visto por cliente, arremate, anexos no jsonb — os critérios de 08/08.
 --
+-- ⚠️ `insert ... select i.*` exige que imoveis_leilao_arquivo tenha AS MESMAS colunas: ao criar coluna nova em
+-- imoveis_leilao, crie a mesma no arquivo (senão a próxima rodada falha alto — sem perder dado).
+--
 -- SIMULA POR PADRÃO. O arquivo NÃO encolhe o arquivo da tabela sozinho: depois de arquivar é preciso
 -- `vacuum full public.imoveis_leilao;` (trava a tabela ~1 min) — fora do horário das coletas, no SQL
 -- Editor (VACUUM não roda dentro de função/transação).
@@ -80,7 +83,9 @@ begin
      where c.table_schema = 'public'
        and c.table_name not in ('imoveis_leilao', 'imoveis_leilao_arquivo')
        and (c.column_name in ('imovel_id', 'imovel_ref', 'arremate_imovel_id')
-            or (c.table_name = 'favoritos' and c.column_name = 'item_id'))
+            or (c.table_name = 'favoritos' and c.column_name = 'item_id')
+            -- FK sem cascata (varredura de 04/10): um lote citado aqui derrubaria o delete inteiro.
+            or (c.table_name = 'editais_leilao' and c.column_name = 'duplicata_suspeita_de'))
        and c.data_type in ('uuid', 'text', 'character varying')
   loop
     execute format('insert into _ref select distinct %I::text from public.%I where %I is not null on conflict do nothing',
