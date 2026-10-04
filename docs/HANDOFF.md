@@ -181,6 +181,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   Riscos residuais registrados: troca no MESMO dia com fila do Asaas atrasada (baixo); boleto pago no vencimento que
   compensa D+1/D+3 vs OVERDUE (perguntar ao Asaas); RECEIVED atrasado da mensal regrava `plano_ciclo` sobre o anual
   (`_webhook-core.js` ~607, defeito anterior).
+- **133 (resolvida):** `processarConfirmado` aplica ciclo/vencimento só na 1ª confirmação de cada pagamento (marca
+  `ciclo_aplicado`; desfeita se a gravação falhar) e não troca para mensal com anual vigente; `ativarPlanoDireto` (MP)
+  ganhou a mesma trava do anual. Também corrigia o vencimento anual empurrado ~30 dias pelo RECEIVED. 0 anuais vigentes
+  no banco em 04/10 — defeito latente, nada a reparar. Sem revisão ofensiva extra (mudança só restringe gravação).
 
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
