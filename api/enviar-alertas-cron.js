@@ -232,6 +232,10 @@ async function handler(req) {
   // Falha de consulta NÃO pode ser silenciosa: uma query malformada (400) devolvia [] igual a
   // "não há imóveis", e a etapa inteira sumia do e-mail sem deixar rastro. Continua devolvendo
   // [] (o envio não pode cair por causa de uma etapa), mas agora aparece no log da invocação.
+  // LEITURA OBRIGATÓRIA (04/10, varredura): opt-out e dedup NÃO podem cair em "lista vazia" —
+  // `[]` em alertas_email apagava o "cancelei" e a cadência; em alertas_enviados reenviava
+  // imóvel já mandado. Devolve null na falha, e o lote é abortado lá embaixo.
+  const sbGetObrig = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] GET obrigatório', r.status, path.slice(0, 200), (await r.text().catch(() => '')).slice(0, 300)); return null; } return await r.json(); } catch (e) { console.error('[alertas] GET obrigatório erro', path.slice(0, 200), e?.message); return null; } };
   const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] GET', r.status, path.slice(0, 300), (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] GET erro', path.slice(0, 200), e?.message); return []; } };
   const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] RPC', fn, r.status, (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] RPC erro', fn, e?.message); return []; } };
 
@@ -289,6 +293,10 @@ async function handler(req) {
   try {
     const mod = await import('./_email.js');
     const r = await mod.consultarSupressao([...emailMap.values()], 'oportunidades');
+    // `verificado:false` é "não consegui checar", não "está limpo" (04/10, varredura): seguir
+    // mandaria para endereço que deu bounce/reclamou. Lança → o catch abaixo zera o orçamento e o
+    // lote não envia (fail-closed); quem ficou de fora volta no próximo cron.
+    if (r.verificado === false) throw new Error('supressao_nao_verificada');
     suprimidosNoLote = r.suprimidos;
     // ─── ORÇAMENTO DIÁRIO DO RESEND (13/09, reserva atômica desde 14/09) ──────────────────
     // Este é o MAIOR volume de e-mail da casa — é ele quem mais rápido bate no teto de
@@ -303,7 +311,7 @@ async function handler(req) {
     // ATOMICAMENTE no banco (mesma RPC que `enviarEmail` usa) bem antes do fetch ao Resend.
     reservarOrcamentoEmail = mod.reservarOrcamentoEmail;
     restanteHoje = await mod.orcamentoRestanteHoje(); // falha de leitura = 0 (fail-closed, igual ao helper)
-  } catch { /* módulo não carregou: restanteHoje fica 0 e o lote não envia (fail-closed, como o helper) */ }
+  } catch (e) { console.error('[alertas] lote sem envio (fail-closed):', e?.message || e); restanteHoje = 0; } // módulo não carregou ou supressão não verificada
 
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
   // garante que a próxima já foi acionada — ela roda independente). Não encadeia em teste.
@@ -352,13 +360,13 @@ async function handler(req) {
   // (nenhum fica ativo tanto tempo) sem deixar a consulta crescer sem limite na escala.
   const janelaDedup = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
   const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr, engajamentoArr] = await Promise.all([
-    sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
+    sbGetObrig(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     // `arrematacoes` NÃO tem coluna user_id — o dono do arremate é `arrematante_id`. Com a
     // coluna errada o PostgREST devolvia 400, o sbGet caía em [] e a etapa "similares ao que
     // você arrematou" NUNCA rodou. `user_id` é criado no map abaixo para o resto seguir igual.
     sbGet(`arrematacoes?arrematante_id=in.${inList}&select=arrematante_id,imovel_id`),
-    sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${janelaDedup}&select=user_id,imovel_id`),
+    sbGetObrig(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${janelaDedup}&select=user_id,imovel_id`),
     // Aprendizado, os DOIS sinais: 'sem_interesse' exclui (widget); 'interesse' agora também
     // vem do CLIQUE no e-mail (api/clique.js, 10/09) e prioriza tipo semelhante — ver passo 2.
     sbGet(`feedback_imovel?user_id=in.${inList}&sinal=in.(sem_interesse,interesse)&select=user_id,imovel_id,sinal`),
@@ -366,6 +374,11 @@ async function handler(req) {
     // semanais passa a receber 1x/mês em vez de 1x/semana — ver o gate mais abaixo.
     rpc('alertas_engajamento_lote', { p_user_ids: ids }),
   ]);
+  if (alertasArr === null || enviadosArr === null) {
+    // Sem opt-out/dedup confiáveis não se envia NADA neste lote — e não encadeia: a próxima
+    // invocação bateria na mesma falha. Quem ficou de fora volta no cron do próximo dia útil.
+    return new Response(JSON.stringify({ ok: false, enviados: 0, motivo: 'leitura_optout_ou_dedup_falhou', lote: perfisRaw.length }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  }
   const alertaMap = {}; for (const a of alertasArr || []) alertaMap[a.user_id] = a;
   // TODOS os filtros salvos por usuário (mais recentes primeiro), até 6 — o e-mail
   // distribui 80% das vagas entre eles (assertividade por perfil/praça).
