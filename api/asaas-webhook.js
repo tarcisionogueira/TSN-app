@@ -197,7 +197,14 @@ export default async function handler(req, res) {
         const arrRes = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_valor,honorarios_status`, {
           headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
         });
-        const [arr] = arrRes.ok ? await arrRes.json() : [];
+        // Leitura FALHA não é "não encontrada" (04/10, varredura): o 200 encerrava a reentrega do
+        // Asaas e o honorário PAGO sumia. Falhou → desfaz a marca e devolve 5xx para reentregar.
+        if (!arrRes.ok) {
+          console.error('[asaas-webhook] honorário: leitura da arrematação falhou', arrRes.status, arrId);
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(500).json({ error: 'honorario_leitura_falhou' });
+        }
+        const [arr] = await arrRes.json();
         if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
         if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
           return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
@@ -253,7 +260,12 @@ export default async function handler(req, res) {
         const cobRes = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}&select=id,valor,valor_pago_pix,status,gateway_payment_id`, {
           headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
         });
-        const [cob] = cobRes.ok ? await cobRes.json() : [];
+        if (!cobRes.ok) { // mesmo caso do honorário acima (04/10)
+          console.error('[asaas-webhook] cobrança avulsa: leitura falhou', cobRes.status, cobId);
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(500).json({ error: 'cobranca_avulsa_leitura_falhou' });
+        }
+        const [cob] = await cobRes.json();
         if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
         if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
         if (String(cob.gateway_payment_id || '') === String(pagReal.id)) {

@@ -78,6 +78,123 @@ function storage(path, opts = {}) {
   });
 }
 
+// 04/10 — Antes o DELETE no Storage e o PATCH no banco não tinham o resultado conferido: se o
+// DELETE falhava, o arquivo ficava órfão para sempre (custo/LGPD) e o banco zerava o ponteiro
+// assim mesmo; se o PATCH falhava, sobrava ponteiro para arquivo apagado; e `removidos` contava
+// tudo como apagado (forma nº 10). Agora só zera o ponteiro do que o Storage CONFIRMOU ter
+// apagado (a remoção em lote devolve a lista dos objetos removidos) ou que comprovadamente já
+// não existe, e só conta o que foi apagado E teve o ponteiro zerado.
+const MAX_CHECAGENS_AUSENCIA = 50;
+
+// 04/10 — Objeto que já não existe não volta na lista de removidos; sem esta checagem a linha
+// ficaria para sempre elegível e travaria o lote. Devolve true (ausente), false (existe) ou
+// null (não deu para saber — aí NÃO zera o ponteiro).
+async function objetoAusente(path) {
+  const i = path.lastIndexOf('/');
+  const prefix = i >= 0 ? path.slice(0, i) : '';
+  const nome = i >= 0 ? path.slice(i + 1) : path;
+  try {
+    const r = await storage(`object/list/${BUCKET}`, {
+      method: 'POST', body: JSON.stringify({ prefix, search: nome, limit: 100 }),
+    });
+    if (!r.ok) { console.error('[limpar-documentos] checagem de ausência falhou', r.status, path); return null; }
+    const itens = await r.json();
+    return !(Array.isArray(itens) && itens.some((o) => o?.name === nome));
+  } catch (e) {
+    console.error('[limpar-documentos] checagem de ausência:', path, String(e?.message || e).slice(0, 120));
+    return null;
+  }
+}
+
+// Apaga um lote de anexos e devolve o que de fato aconteceu, com o motivo das falhas.
+async function apagarLote(anexos) {
+  const res = { apagados: 0, ja_ausentes: 0, sem_arquivo: 0, falhas: 0, motivos: [], pathsConfirmados: [] };
+  const comPath = anexos.filter((a) => a.storage_path);
+  const semPath = anexos.filter((a) => !a.storage_path);
+  const paths = comPath.map((a) => a.storage_path);
+
+  // 1) DELETE em lote — confirmado = nome devolvido na resposta.
+  const confirmados = new Set();
+  if (paths.length) {
+    try {
+      const r = await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
+      const corpo = await r.text();
+      if (!r.ok) {
+        console.error('[limpar-documentos] DELETE no Storage falhou', r.status, corpo.slice(0, 300));
+        res.motivos.push(`storage DELETE HTTP ${r.status}: ${corpo.slice(0, 120)}`);
+      } else {
+        let lista = null;
+        try { lista = JSON.parse(corpo); } catch (e) { res.motivos.push(`storage DELETE corpo ilegível: ${String(e?.message || e).slice(0, 80)}`); }
+        if (Array.isArray(lista)) for (const o of lista) if (o?.name) confirmados.add(o.name);
+      }
+    } catch (e) {
+      const m = String(e?.message || e).slice(0, 120);
+      console.error('[limpar-documentos] DELETE no Storage:', m);
+      res.motivos.push(`storage DELETE: ${m}`);
+    }
+  }
+
+  // 2) Não confirmados: só zera se o objeto comprovadamente não existe mais (com teto de checagens).
+  const ausentes = new Set();
+  const naoConfirmados = paths.filter((p) => !confirmados.has(p)).slice(0, MAX_CHECAGENS_AUSENCIA);
+  const checagens = await Promise.all(naoConfirmados.map(async (p) => [p, await objetoAusente(p)]));
+  for (const [p, ausente] of checagens) if (ausente === true) ausentes.add(p);
+
+  // 3) PATCH só nas linhas cujo arquivo sumiu (ou que nunca tiveram arquivo — só limpa a url).
+  const alvo = [
+    ...comPath.filter((a) => confirmados.has(a.storage_path) || ausentes.has(a.storage_path)),
+    ...semPath,
+  ];
+  let zerados = new Set();
+  if (alvo.length) {
+    try {
+      const r = await sb(`imovel_anexos?id=in.(${alvo.map((a) => a.id).join(',')})&select=id`, {
+        method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }),
+      });
+      if (!r.ok) {
+        const corpo = await r.text().catch((e) => `(corpo ilegível: ${e?.message || e})`);
+        console.error('[limpar-documentos] PATCH imovel_anexos falhou', r.status, corpo.slice(0, 300));
+        res.motivos.push(`PATCH imovel_anexos HTTP ${r.status}: ${corpo.slice(0, 120)}`);
+      } else {
+        const linhas = await r.json();
+        zerados = new Set((Array.isArray(linhas) ? linhas : []).map((l) => String(l.id)));
+      }
+    } catch (e) {
+      const m = String(e?.message || e).slice(0, 120);
+      console.error('[limpar-documentos] PATCH imovel_anexos:', m);
+      res.motivos.push(`PATCH imovel_anexos: ${m}`);
+    }
+  }
+
+  for (const a of comPath) {
+    const p = a.storage_path;
+    if (!zerados.has(String(a.id))) { res.falhas++; continue; }
+    if (confirmados.has(p)) { res.apagados++; res.pathsConfirmados.push(p); }
+    else if (ausentes.has(p)) { res.ja_ausentes++; res.pathsConfirmados.push(p); }
+  }
+  res.sem_arquivo = semPath.filter((a) => zerados.has(String(a.id))).length;
+  if (res.falhas && !res.motivos.length) res.motivos.push(`${res.falhas} arquivo(s) não confirmados pelo Storage nem comprovadamente ausentes`);
+  return res;
+}
+
+// Zera imoveis_leilao.link_matricula dos paths de matrícula realmente apagados (senão o botão
+// "Matrícula" fica 404). Deriva o imovel_id do path. 04/10: resultado conferido.
+async function zerarLinksMatricula(paths) {
+  const idsMatricula = [...new Set(paths
+    .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
+    .filter(Boolean))];
+  if (!idsMatricula.length) return 0;
+  try {
+    const r = await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null&select=id`, { method: 'PATCH', body: JSON.stringify({ link_matricula: null }) });
+    if (!r.ok) { console.error('[limpar-documentos] PATCH link_matricula falhou', r.status, (await r.text().catch(() => '')).slice(0, 300)); return 0; }
+    const linhas = await r.json();
+    return Array.isArray(linhas) ? linhas.length : 0;
+  } catch (e) {
+    console.error('[limpar-documentos] PATCH link_matricula:', String(e?.message || e).slice(0, 120));
+    return 0;
+  }
+}
+
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
@@ -89,6 +206,10 @@ async function handler(req) {
   // há mais elegíveis, no teto de tempo (~250s de 300s) ou de iterações. Idempotente.
   const DEADLINE = Date.now() + 250_000;
   let removidos = 0, linksZerados = 0, iteracoes = 0, ultimoErro = null;
+  // 04/10: o que NÃO foi apagado também aparece no retorno, com o porquê (forma nº 10).
+  let jaAusentes = 0, falhas = 0;
+  const motivosFalha = new Set();
+  const acumular = (l) => { jaAusentes += l.ja_ausentes; falhas += l.falhas; for (const m of l.motivos) if (motivosFalha.size < 10) motivosFalha.add(m); };
 
   while (Date.now() < DEADLINE && iteracoes < 40) {
     iteracoes++;
@@ -98,26 +219,15 @@ async function handler(req) {
     const anexos = await rpcRes.json().catch(() => []);
     if (!Array.isArray(anexos) || !anexos.length) break; // drenado
 
-    const paths = anexos.map(a => a.storage_path).filter(Boolean);
-    const ids   = anexos.map(a => a.id);
-
-    // Remove os arquivos do bucket em lote (best-effort) + zera storage_path/url no banco
-    // (mantém a linha para auditoria).
-    await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
-    await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
-    await marcarEspelhoPurgado(paths);
-
-    // Zera TAMBÉM o link denormalizado imoveis_leilao.link_matricula quando o ARQUIVO da
-    // matrícula é apagado (senão o botão "Matrícula" fica 404). Deriva o imovel_id do path.
-    const idsMatricula = [...new Set(paths
-      .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
-      .filter(Boolean))];
-    if (idsMatricula.length) {
-      await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, { method: 'PATCH', body: JSON.stringify({ link_matricula: null }) });
-      linksZerados += idsMatricula.length;
-    }
-
-    removidos += paths.length;
+    // Remove os arquivos do bucket + zera storage_path/url no banco (mantém a linha para
+    // auditoria) — 04/10: só do que o Storage confirmou (ver apagarLote).
+    const lote = await apagarLote(anexos);
+    await marcarEspelhoPurgado(lote.pathsConfirmados);
+    linksZerados += await zerarLinksMatricula(lote.pathsConfirmados);
+    removidos += lote.apagados;
+    acumular(lote);
+    // 04/10: lote sem nenhum progresso devolveria as MESMAS linhas na próxima volta — para.
+    if (!lote.apagados && !lote.ja_ausentes && !lote.sem_arquivo) break;
     if (anexos.length < 500) break; // último lote (menos que o teto)
   }
 
@@ -135,21 +245,12 @@ async function handler(req) {
     const anexos = await rpcRes.json().catch(() => []);
     if (!Array.isArray(anexos) || !anexos.length) break; // drenado (ou vazio em dry-run)
 
-    const paths = anexos.map(a => a.storage_path).filter(Boolean);
-    const ids   = anexos.map(a => a.id);
-    await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
-    await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
-    await marcarEspelhoPurgado(paths);
-
-    const idsMatricula = [...new Set(paths
-      .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
-      .filter(Boolean))];
-    if (idsMatricula.length) {
-      await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, { method: 'PATCH', body: JSON.stringify({ link_matricula: null }) });
-      linksZerados += idsMatricula.length;
-    }
-
-    removidosAvisados += paths.length;
+    const lote = await apagarLote(anexos);
+    await marcarEspelhoPurgado(lote.pathsConfirmados);
+    linksZerados += await zerarLinksMatricula(lote.pathsConfirmados);
+    removidosAvisados += lote.apagados;
+    acumular(lote);
+    if (!lote.apagados && !lote.ja_ausentes && !lote.sem_arquivo) break; // 04/10: sem progresso
     if (anexos.length < 500) break;
   }
 
@@ -173,9 +274,11 @@ async function handler(req) {
     if (!rc.ok) console.error('[limpar-documentos] retenção do chat falhou:', chatExpirado);
   } catch (e) { chatExpirado = String(e?.message || e).slice(0, 80); console.error('[limpar-documentos] retenção do chat:', chatExpirado); }
 
+  if (falhas) console.error('[limpar-documentos] anexos NÃO apagados:', falhas, [...motivosFalha]);
   return new Response(JSON.stringify({
     espelho, chat_expirado: chatExpirado,
     removidos, removidos_avisados: removidosAvisados, iteracoes, links_matricula_zerados: linksZerados,
-    drenado: !ultimoErro && removidos >= 0, erro: ultimoErro || undefined,
+    ja_ausentes_zerados: jaAusentes, falhas, motivos_falha: motivosFalha.size ? [...motivosFalha] : undefined,
+    drenado: !ultimoErro && !falhas, erro: ultimoErro || undefined, // 04/10: falha não é "drenado"
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

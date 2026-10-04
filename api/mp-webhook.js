@@ -537,7 +537,15 @@ export async function processarEventoMp(req, res) {
         const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_valor,honorarios_status`, {
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
         });
-        const [arr] = arrRes.ok ? await arrRes.json() : [];
+        // Leitura FALHA não é "não encontrada" (04/10, varredura): o 200 marcava o evento como
+        // processado e o honorário PAGO sumia sem recibo. Falhou → desfaz a marca e devolve 5xx,
+        // para o MP/fila reentregar. Só a lista vazia de verdade é "não encontrada".
+        if (!arrRes.ok) {
+          console.error('[mp-webhook] honorário: leitura da arrematação falhou', arrRes.status, arrId);
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(500).json({ error: 'honorario_leitura_falhou' });
+        }
+        const [arr] = await arrRes.json();
         if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
         if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
           return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
@@ -616,7 +624,12 @@ export async function processarEventoMp(req, res) {
         const cobRes = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}&select=id,valor,valor_pago_pix,status,gateway_payment_id`, {
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
         });
-        const [cob] = cobRes.ok ? await cobRes.json() : [];
+        if (!cobRes.ok) { // mesmo caso do honorário acima (04/10)
+          console.error('[mp-webhook] cobrança avulsa: leitura falhou', cobRes.status, cobId);
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(500).json({ error: 'cobranca_avulsa_leitura_falhou' });
+        }
+        const [cob] = await cobRes.json();
         if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
         if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
         // Dedup por payment_id: mesmo pagamento não pode incrementar valor_pago_pix 2x

@@ -102,7 +102,11 @@ async function handler(req) {
 
           // Vínculo: asaas_id (se já salvo) OU e-mail do customer no Asaas.
           const email = await emailDoCustomer(custId);
-          const cliente = await buscarCliente({ gatewayCustomerId: custId, email, gateway: 'asaas' });
+          // buscarCliente LANÇA em erro de leitura desde 04/10: aqui um erro pula só ESTE pagamento
+          // (a reconciliação de amanhã o pega), em vez de abortar a varredura inteira.
+          let cliente = null;
+          try { cliente = await buscarCliente({ gatewayCustomerId: custId, email, gateway: 'asaas' }); }
+          catch (e) { console.error('[reconciliar-asaas] perfil ilegível, pagamento pulado:', p.id, e?.message || e); continue; }
           if (!cliente) continue;
 
           // Órfão: pagou mas segue no Explorador (e não é suspensão por inadimplência).

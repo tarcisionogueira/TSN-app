@@ -129,23 +129,30 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
   // 1. Tenta por ID do gateway no campo correto do perfil
   if (gatewayCustomerId) {
     const campo = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
-    const { data } = await supabase
+    // LANÇA em erro de leitura (04/10, varredura): `{ data }` sem `error` fundia "perfil não
+    // existe" com "não consegui ler" — um PAYMENT_CONFIRMED durante instabilidade do banco virava
+    // `perfil_nao_encontrado` com 200, a marca de idempotência ficava e o plano PAGO nunca ativava.
+    // Lançando, o catch do webhook desfaz a marca e devolve 5xx para o gateway reentregar.
+    const { data, error } = await supabase
       .from('perfis')
       .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
       .eq(campo, gatewayCustomerId)
       .maybeSingle();
+    if (error) throw new Error(`buscarCliente(${campo}): ${error.message}`);
     if (data) return data;
   }
 
   // 2. Fallback por email
   if (email) {
-    const { data: userId } = await supabase.rpc('get_user_id_by_email', { p_email: email });
+    const { data: userId, error: eId } = await supabase.rpc('get_user_id_by_email', { p_email: email });
+    if (eId) throw new Error(`buscarCliente(email): ${eId.message}`);
     if (userId) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('perfis')
         .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
         .eq('id', userId)
         .maybeSingle();
+      if (error) throw new Error(`buscarCliente(id): ${error.message}`);
       if (data) return data;
     }
   }
@@ -496,32 +503,40 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
     // Comissão MULTINÍVEL + BÔNUS INFINITO: um pagamento gera N lançamentos (origem_id =
     // <pay>-n1..n5 da rede e <pay>-inf1..N da liderança). Reverte TODOS, cada um idempotente
     // por um origem_id de estorno próprio.
-    const { data: lancs } = await supabase.from('saldo_lancamentos')
+    // TODA leitura/escrita daqui é conferida (04/10, varredura): leitura falha virava
+    // `sem_comissao`, e insert/update falhos passavam calados — o chargeback era marcado como
+    // processado e o afiliado mantinha a comissão SACÁVEL. Lança; o webhook desfaz a marca e o
+    // gateway reentrega. É seguro repetir: cada estorno é idempotente pelo `estOid`.
+    const { data: lancs, error: eLancs } = await supabase.from('saldo_lancamentos')
       .select('id, user_id, valor, origem_id, origem_tipo')
       .in('tipo', ['comissao_rede', 'comissao_infinito']).like('origem_id', `${gatewayPaymentId}-%`);
+    if (eLancs) throw new Error(`leitura de comissões: ${eLancs.message}`);
     let estornado = 0;
     for (const l of (lancs || [])) {
       const estOid = `estorno-${l.origem_id}`;
-      const { data: ja } = await supabase.from('saldo_lancamentos')
+      const { data: ja, error: eJa } = await supabase.from('saldo_lancamentos')
         .select('id').eq('origem_id', estOid).eq('tipo', 'estorno_comissao').maybeSingle();
+      if (eJa) throw new Error(`leitura de estorno ${estOid}: ${eJa.message}`);
       if (!ja && Number(l.valor) > 0) {
-        await supabase.from('saldo_lancamentos').insert({
+        const { error: eIns } = await supabase.from('saldo_lancamentos').insert({
           user_id: l.user_id, tipo: 'estorno_comissao', valor: -Number(l.valor),
           origem_tipo: l.origem_tipo || 'assinatura', origem_id: estOid,
           descricao: `Estorno de comissão — ${motivoTxt.toUpperCase()}${clienteNome ? ` do cliente ${clienteNome}` : ''} (${gateway}); descontado do saldo/pagamento seguinte`, status: 'disponivel',
         });
+        if (eIns) throw new Error(`estorno ${estOid} não gravado: ${eIns.message}`);
         estornado += Number(l.valor);
       }
     }
     // Cancela as comissoes de rede deste pagamento e REGISTRA o motivo + o cliente no relatório.
-    await supabase.from('comissoes').update({ status: 'cancelado',
+    const { error: eCom } = await supabase.from('comissoes').update({ status: 'cancelado',
       referencia: `Cancelada por ${motivoTxt}${clienteNome ? ` do cliente ${clienteNome}` : ''}` })
       .eq('gateway_payment_id', gatewayPaymentId).eq('gateway', 'rede').neq('status', 'cancelado');
+    if (eCom) throw new Error(`cancelamento das comissões: ${eCom.message}`);
     if (!lancs || lancs.length === 0) return { skipped: 'sem_comissao' };
     return { ok: true, estornado };
   } catch (e) {
     console.error(`[${gateway}] estornarComissao:`, e.message);
-    return { erro: e.message };
+    throw e; // quem chama decide; nunca mais "deu certo" sem ter estornado
   }
 }
 
@@ -797,11 +812,15 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre — EXCETO
   // chargeback de SERVIÇO avulso, que não é a assinatura (22/08). O dossiê e o estorno de
   // comissão abaixo continuam valendo (são daquele pagamento); só a suspensão de acesso é pulada.
-  if (!servico) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) {} }
+  // As duas etapas abaixo eram `catch (_) {}` (04/10, varredura): falhavam caladas e o evento
+  // ficava marcado como processado. Agora as falhas são juntadas e, depois do alerta, LANÇAM —
+  // o webhook desfaz a marca e o gateway reentrega (dossiê é upsert; estorno é idempotente).
+  const falhas = [];
+  if (!servico) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); } }
 
   // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
   // não é mais devida). Evita "refund + comissão paga" (perda dupla).
-  try { await estornarComissao({ gatewayPaymentId, gateway, motivo: 'chargeback' }); } catch (_) {}
+  try { await estornarComissao({ gatewayPaymentId, gateway, motivo: 'chargeback' }); } catch (e) { falhas.push(`estorno de comissão: ${e?.message || e}`); }
 
   // Alerta a equipe
   // Assinatura correta ({rota,erro,extra}, síncrona). Antes: dois args posicionais + .catch()
@@ -811,8 +830,9 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   alertarErro({
     rota: `webhook/${gateway}/chargeback`,
     erro: `Chargeback recebido — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
-    extra: { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite },
+    extra: { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite, falhas },
   });
+  if (falhas.length) throw new Error(`chargeback incompleto — ${falhas.join(' | ')}`);
 
   return { ok: true, chargeback: true, defesa: aceite ? 'dossie_pronto' : 'sem_evidencia' };
 }
@@ -830,16 +850,20 @@ export async function processarReembolso({ valor, email, gatewayCustomerId, gate
   // pelo Asaas era rebaixado a explorador (inadimplente_desde, docs em prazo LGPD). O MP já
   // fecha isto; agora o núcleo fecha para os dois gateways.
   const suspendeAcesso = suspender && !servico;
+  // Mesma regra do chargeback (04/10): a suspensão não bloqueia o estorno, mas nenhuma das duas
+  // falha mais calada — juntadas e lançadas depois do alerta, para o gateway reentregar.
+  const falhas = [];
   if (suspendeAcesso) {
-    try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) { /* não bloqueia o estorno */ }
+    try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); }
   }
   let estorno = null;
-  try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { estorno = { erro: e?.message || String(e) }; }
+  try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { falhas.push(`estorno de comissão: ${e?.message || e}`); }
   alertarErro({
     rota: `webhook/${gateway}/reembolso`,
     erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspendeAcesso ? '; acesso suspenso' : (servico ? ' (serviço avulso — assinatura mantida)' : ' (reembolso parcial — acesso mantido)')}.`,
-    extra: { gatewayPaymentId },
+    extra: { gatewayPaymentId, falhas },
   });
+  if (falhas.length) throw new Error(`reembolso incompleto — ${falhas.join(' | ')}`);
   return { ok: true, reembolso: true, suspenso: suspendeAcesso, servico, estorno };
 }
 
