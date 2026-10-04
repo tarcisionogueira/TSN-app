@@ -15,7 +15,7 @@ import {
   registrarLiberacaoPagamento,
   buscarCliente,
 } from './_webhook-core.js';
-import { cancelarOutrasRecorrencias, assinaturaAsaasNuncaPaga, apagarAssinaturaAsaas } from './_recorrencia-unica.js';
+import { cancelarOutrasRecorrencias, assinaturaAsaasNuncaPaga, apagarAssinaturaAsaas, temOutraRecorrenciaAtiva } from './_recorrencia-unica.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -311,19 +311,38 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_OVERDUE') {
-      // ASSINATURA ABANDONADA NÃO REBAIXA QUEM PAGA (04/10, revisão da pendência 123): sem o
+      // TROCA ABANDONADA NÃO REBAIXA QUEM PAGA (04/10, pendência 123 + 2 revisões): sem o
       // cancelamento antecipado no checkout, uma troca abandonada pelo Asaas deixa uma subscription
-      // ACTIVE que nunca foi paga — e o vencimento dela rebaixaria quem segue pagando a antiga (e
-      // geraria fatura vencida todo mês). Nunca paga → apaga a subscription e NÃO rebaixa. Se não
-      // der para saber (consulta falhou), segue o comportamento de antes.
+      // ACTIVE nunca paga — e o vencimento dela rebaixaria quem segue pagando a ANTIGA (e geraria
+      // fatura vencida todo mês). Só vale quando o cliente TEM outra recorrência ativa: cliente novo
+      // que atrasou o boleto segue o fluxo de sempre (a cobrança dele não é apagada).
+      // Incerto (consulta falhou) ou apagar falhou → 500 para o Asaas reenviar; nunca rebaixa no escuro.
       if (pagReal.subscription) {
         const nuncaPaga = await assinaturaAsaasNuncaPaga(pagReal.subscription);
-        if (nuncaPaga === true) {
-          try {
-            await apagarAssinaturaAsaas(pagReal.subscription);
-            console.log('[asaas-webhook] subscription nunca paga removida no vencimento:', pagReal.subscription);
-            return res.status(200).json({ ok: true, ignorado: 'assinatura_nunca_paga_removida' });
-          } catch (e) { console.error('[asaas-webhook] não removi subscription nunca paga:', pagReal.subscription, e?.message || e); }
+        if (nuncaPaga !== false) {
+          // Perfil NÃO ENCONTRADO (null) não é incerteza: não há plano a proteger, segue o fluxo de
+          // sempre. Só ERRO de leitura (buscarCliente lança) vira reentrega — senão seria laço eterno.
+          let cliId = null, erroPerfil = null;
+          try { cliId = (await buscarCliente({ gatewayCustomerId: custId, email: custEmail, gateway: 'asaas' }))?.id || null; }
+          catch (e) { erroPerfil = e?.message || String(e); console.error('[asaas-webhook] overdue: perfil ilegível', erroPerfil); }
+          const outra = erroPerfil ? { tem: false, erro: `perfil: ${erroPerfil}` }
+            : cliId ? await temOutraRecorrenciaAtiva({ userId: cliId, asaasCustomerId: custId, excetoAsaasSubId: pagReal.subscription })
+            : { tem: false, erro: null };
+          if (nuncaPaga === null || outra.erro) {
+            console.error('[asaas-webhook] overdue de subscription: situação incerta — reentrega', pagReal.subscription, outra.erro || 'pagamentos ilegíveis');
+            await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+            return res.status(500).json({ error: 'overdue_incerto' });
+          }
+          if (outra.tem) {
+            try { await apagarAssinaturaAsaas(pagReal.subscription); }
+            catch (e) {
+              console.error('[asaas-webhook] não removi subscription abandonada:', pagReal.subscription, e?.message || e);
+              await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+              return res.status(500).json({ error: 'remocao_subscription_abandonada_falhou' });
+            }
+            console.log('[asaas-webhook] troca abandonada: subscription nunca paga removida, cliente mantido:', pagReal.subscription);
+            return res.status(200).json({ ok: true, ignorado: 'troca_abandonada_removida' });
+          }
         }
       }
       // Compra AVULSA de produto (curso/e-book) não é assinatura: boleto/pix não pago só deixa

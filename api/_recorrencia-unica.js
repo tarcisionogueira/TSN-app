@@ -91,6 +91,25 @@ export async function apagarAssinaturaAsaas(subId) {
   if (!r.ok) throw new Error(`asaas DELETE subscription ${r.status}`);
 }
 
+// O cliente tem OUTRA recorrência ativa além de `excetoAsaasSubId`? (MP authorized do userId ou
+// subscription ACTIVE do Asaas). Tri-estado: { tem, erro }. Usado no vencimento de subscription
+// nunca paga: só é "troca abandonada" quando existe outra recorrência que o cliente segue pagando.
+export async function temOutraRecorrenciaAtiva({ userId, asaasCustomerId, excetoAsaasSubId }) {
+  try {
+    const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
+    if (erro) return { tem: false, erro };
+    if (subs.some((x) => x.id !== String(excetoAsaasSubId || ''))) return { tem: true, erro: null };
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken || !userId) return { tem: false, erro: null };
+    const email = await emailDaConta(userId);
+    if (!email) return { tem: false, erro: 'sem e-mail da conta' };
+    const r = await fetch(`${MP_BASE}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${mpToken}` } });
+    if (!r.ok) return { tem: false, erro: `MP busca ${r.status}` };
+    const d = await r.json();
+    return { tem: (d?.results || []).some((x) => String(x.external_reference || '').split('|')[0] === String(userId)), erro: null };
+  } catch (e) { return { tem: false, erro: e?.message || String(e) }; }
+}
+
 export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterCriadaEm = null, origem }) {
   const out = { mpCancelados: [], asaasCancelados: [], erros: [], pulado: null };
   const alertar = () => {
@@ -149,6 +168,12 @@ export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerI
     for (const s of asaasOutros) {
       try { await apagarAssinaturaAsaas(s.id); out.asaasCancelados.push(s.id); }
       catch (e) { out.erros.push(`Asaas ${s.id}: ${e?.message || e}`); } // padrao-ok: motivo vai para out.erros, logado e alertado no fim
+    }
+    // Falhou algum cancelamento: libera a marca para o próximo evento desta recorrência tentar de
+    // novo (eventos atrasados da ANTIGA continuam barrados pelas travas de ativa/mais nova).
+    if (out.erros.length) {
+      const rm = await fetch(`${SB_URL}/rest/v1/webhook_eventos_processados?gateway=eq.recorrencia&gateway_payment_id=eq.${encodeURIComponent(chave)}&evento=eq.recorrencia_unica`, { method: 'DELETE', headers: sbHdr() });
+      if (!rm.ok) out.erros.push(`marca não liberada (${rm.status}) — retentativa manual`);
     }
   } catch (e) {
     out.erros.push(e?.message || String(e));

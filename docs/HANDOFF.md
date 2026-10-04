@@ -170,7 +170,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - **128:** Arrematados, Minha Rede, Comissões e docs do leiloeiro mostram erro em vez de vazio/zero.
 - **129:** `limpar-documentos-cron` só zera ponteiro do que o Storage confirmou apagar.
 - **127:** migração `20261004_retencao_aviso_mesmo_usuario.sql` PRONTA, NÃO aplicada (tem revoke → dono no SQL Editor;
-  0 casos hoje). Falta a 123 (checkout cancela assinatura antes do novo pagamento).
+  0 casos hoje).
+- **123 (checkout):** não cancela mais a assinatura ANTES do novo pagamento. `api/_recorrencia-unica.js` cancela as
+  outras recorrências (MP e Asaas) só DEPOIS da nova confirmada — MP na autorização do mandato (substitui o B1), Asaas no
+  1º pagamento da subscription. Travas (2 revisões ofensivas): e-mail da conta pelo userId (o Asaas não manda); uma vez
+  por recorrência mantida (marca `gateway='recorrencia'`); mantida tem que estar ACTIVE e ser a MAIS NOVA (senão alerta e
+  não cancela); falha libera a marca. Mandato MP cancelado não rebaixa quem tem Asaas ativo (antes: rebaixava + e-mail de
+  resgate). Vencimento de subscription NUNCA paga com outra recorrência ativa = troca abandonada → apaga e não rebaixa
+  (cliente novo segue o fluxo antigo; incerto → 500/reentrega).
+  Riscos residuais registrados: troca no MESMO dia com fila do Asaas atrasada (baixo); boleto pago no vencimento que
+  compensa D+1/D+3 vs OVERDUE (perguntar ao Asaas); RECEIVED atrasado da mensal regrava `plano_ciclo` sobre o anual
+  (`_webhook-core.js` ~607, defeito anterior).
 
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
