@@ -283,3 +283,77 @@ export async function gravarContatosTenant(supabase, fonte, itens) {
     return data;
   } catch (e) { console.log(`    📧 ${fonte}: contatos por leiloeiro falharam (${String(e?.message || e).slice(0, 120)})`); return 0; }
 }
+
+// ── TELEFONE / WHATSAPP (05/10, pedido do dono) ─────────────────────────────────────────────────
+// O pedido de documento sai também pelo WhatsApp Web do dono (link com o texto pronto). Força da
+// evidência, da maior para a menor: link de WhatsApp (wa.me / api.whatsapp.com) > `tel:` > número
+// escrito no texto ao lado de "tel/fone/whatsapp/celular" ou no formato "(DD) NNNN-NNNN".
+// Número solto sem esse formato fica de fora: CNPJ, CEP e processo têm dígitos de sobra.
+
+/** Normaliza para 55+DDD+número (12 ou 13 dígitos) ou devolve null se não for telefone BR válido. */
+export function normalizarTelefone(bruto) {
+  let d = String(bruto || '').replace(/\D/g, '');
+  if (d.startsWith('0') && !d.startsWith('0800') && !d.startsWith('0300')) d = d.replace(/^0+/, ''); // 0XX discagem
+  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2);
+  if (d.length !== 10 && d.length !== 11) return null;
+  if (!/^[1-9][1-9]/.test(d)) return null;                       // DDD 11–99
+  if (d.length === 11 && d[2] !== '9') return null;              // celular tem 9 na frente
+  if (d.length === 10 && !/[2-5]/.test(d[2])) return null;        // fixo começa com 2–5
+  if (/^(\d)\1+$/.test(d.slice(2))) return null;                  // 99999-9999 de placeholder
+  return `55${d}`;
+}
+const ehCelular = (t) => t.length === 13;
+
+/** Lista de telefones de um HTML, com força: 3 = link WhatsApp, 2 = tel:, 1 = texto. */
+export function extrairTelefonesDeHtml(html) {
+  const s = String(html || '');
+  const achados = new Map(); // telefone → { telefone, whatsapp, forca, n }
+  const somar = (bruto, forca, whatsapp) => {
+    const t = normalizarTelefone(bruto);
+    if (!t) return;
+    const a = achados.get(t) || { telefone: t, whatsapp: false, forca: 0, n: 0 };
+    a.n++; a.forca = Math.max(a.forca, forca); a.whatsapp = a.whatsapp || whatsapp;
+    achados.set(t, a);
+  };
+  for (const m of s.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\/?\?(?:[^"'\s]*&)?phone=|whatsapp:\/\/send\?(?:[^"'\s]*&)?phone=)\+?(\d{10,13})/gi)) somar(m[1], 3, true);
+  for (const m of s.matchAll(/href=["']tel:([^"']+)["']/gi)) somar(decodeURIComponent(m[1]), 2, false);
+  const texto = s.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+  for (const t of telefonesNoTexto(texto)) somar(t.bruto, 1, false);
+  // Celular é candidato a WhatsApp mesmo sem link: é o canal que o leiloeiro brasileiro usa.
+  return [...achados.values()].map((a) => ({ ...a, whatsapp: a.whatsapp || ehCelular(a.telefone) }));
+}
+
+/** Números no TEXTO corrido: "(DD) NNNN-NNNN", "+55 DD …", ou ao lado de tel/fone/whatsapp/celular. */
+export function telefonesNoTexto(texto) {
+  const out = [];
+  const re = /(\+?55[\s.-]?)?\(?\b([1-9][1-9])\)?[\s.-]{0,2}(9?\s?\d{4})[\s.-]?(\d{4})\b/g;
+  for (const m of String(texto || '').matchAll(re)) {
+    const antes = texto.slice(Math.max(0, m.index - 30), m.index);
+    const formatado = /\(\s*[1-9][1-9]\s*\)/.test(m[0]) || !!m[1];
+    if (!formatado && !/(tel|fone|whats|zap|celular|contato)/i.test(antes)) continue;
+    out.push({ bruto: m[0], pos: m.index });
+  }
+  return out;
+}
+
+/** O melhor da lista: mais forte, depois WhatsApp, depois o mais repetido. */
+export function escolherTelefone(lista) {
+  return [...(lista || [])].sort((a, b) => (b.forca - a.forca) || (Number(b.whatsapp) - Number(a.whatsapp)) || (b.n - a.n))[0] || null;
+}
+
+/** Home e, se não houver telefone, a página de contato. Nunca lança; `motivo` diz por que não achou. */
+export async function buscarTelefoneDoSite(origin, { obterHtml = htmlDe, htmlHome = null } = {}) {
+  try { htmlHome ??= await obterHtml(origin); } catch (e) { return { achado: null, motivo: `home inacessível (${String(e?.message || e).slice(0, 60)})` }; }
+  if (/just a moment|cf-challenge|challenge-platform|cf_chl_|attention required/i.test(htmlHome) && htmlHome.length < 60000) {
+    return { achado: null, motivo: 'bloqueado por desafio anti-robô (IP de datacenter)' };
+  }
+  let achado = escolherTelefone(extrairTelefonesDeHtml(htmlHome));
+  if (achado) return { achado, url: origin };
+  for (const url of linksDeContato(htmlHome, origin)) {
+    let html;
+    try { html = await obterHtml(url); } catch { continue; } // padrao-ok: página de contato é 2ª tentativa; o motivo final sai abaixo
+    achado = escolherTelefone(extrairTelefonesDeHtml(html));
+    if (achado) return { achado, url };
+  }
+  return { achado: null, motivo: 'nenhum telefone na home nem na página de contato' };
+}

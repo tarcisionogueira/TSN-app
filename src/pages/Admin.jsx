@@ -5183,12 +5183,13 @@ function LeiloeiroContatoManager() {
   };
   useEffect(carregar, []);
 
-  const salvar = async (fonte) => {
-    const email = valorEdicao.trim();
-    if (!email) return;
+  // `editando` = 'FONTE' (e-mail) ou 'FONTE|tel' (telefone/WhatsApp, 05/10).
+  const salvar = async (fonte, campo = 'email') => {
+    const valor = valorEdicao.trim();
+    if (!valor) return;
     setSalvando(true); setErro('');
     try {
-      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte, email }) });
+      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte, [campo]: valor }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || d?.error) throw new Error(d?.error || 'Falha ao salvar');
       setEditando(null); carregar();
@@ -5224,7 +5225,14 @@ function LeiloeiroContatoManager() {
           {exibir.map(l => (
             <div key={l.fonte} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: l.email ? '#fafafa' : '#fffbeb', borderRadius: 8, flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 700, fontSize: 12, color: '#111111', minWidth: 100 }}>{l.fonte}</span>
-              {editando === l.fonte ? (
+              {editando === `${l.fonte}|tel` ? (
+                <>
+                  <input autoFocus type="tel" value={valorEdicao} onChange={e => setValorEdicao(e.target.value)}
+                    placeholder="(11) 98765-4321" style={{ flex: 1, minWidth: 180, padding: '5px 8px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12 }} />
+                  <button onClick={() => salvar(l.fonte, 'telefone')} disabled={salvando} style={{ padding: '5px 10px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
+                  <button onClick={() => setEditando(null)} style={{ padding: '5px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                </>
+              ) : editando === l.fonte ? (
                 <>
                   <input autoFocus type="email" value={valorEdicao} onChange={e => setValorEdicao(e.target.value)}
                     placeholder="email@leiloeiro.com.br" style={{ flex: 1, minWidth: 180, padding: '5px 8px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12 }} />
@@ -5244,6 +5252,11 @@ function LeiloeiroContatoManager() {
                   <button onClick={() => { setEditando(l.fonte); setValorEdicao(l.email || ''); setErro(''); }}
                     style={{ padding: '5px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     {l.email ? 'Corrigir' : 'Cadastrar'}
+                  </button>
+                  <button onClick={() => { setEditando(`${l.fonte}|tel`); setValorEdicao(l.telefone ? l.telefone.replace(/^55/, '') : ''); setErro(''); }}
+                    title={l.telefone ? `${l.telefone_whatsapp ? 'WhatsApp' : 'fixo'} · ${l.telefone_origem || ''}` : 'Cadastrar telefone/WhatsApp'}
+                    style={{ padding: '5px 10px', background: l.telefone ? '#f0fdf4' : 'white', border: '1px solid #e2e8f0', color: l.telefone ? '#15803d' : '#374151', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    {l.telefone ? `📱 ${l.telefone.replace(/^55(\d{2})(\d+)(\d{4})$/, '($1) $2-$3')}` : '📱 Telefone'}
                   </button>
                   {l.email && l.origem === 'manual' && (
                     <button onClick={() => remover(l.fonte)} disabled={salvando} title="Remove a correção manual — a próxima coleta pode capturar de novo automaticamente"

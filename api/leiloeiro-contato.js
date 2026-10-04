@@ -7,6 +7,7 @@
  * origem='manual', e a captura automática nunca mais sobrescreve depois disso.
  *  GET    -> lista (fontes conhecidas cruzadas com o contato, quando existir)
  *  POST   -> upsert { fonte, email }  (sempre origem='manual')
+ *            ou { fonte, telefone } -> leiloeiro_telefone da fonte (origem='manual', 05/10)
  *  DELETE -> { fonte }  (volta a fonte para "sem contato" — a próxima coleta pode recapturar)
  */
 export const config = { runtime: 'edge' };
@@ -33,14 +34,16 @@ export default async function handler(req) {
   if (!perfil || !ROLES.includes(perfil.role)) return json({ error: 'Apenas admin/analista' }, 403);
 
   if (req.method === 'GET') {
-    const [rContatos, rFontes] = await Promise.all([
+    const [rContatos, rFontes, rTels] = await Promise.all([
       sb('leiloeiro_contato?select=*&order=fonte.asc'),
+      sb('leiloeiro_telefone?leiloeiro_chave=eq.&select=fonte,telefone,whatsapp,origem'),
       // Cruza com as fontes CONHECIDAS (mesmo cadastro que já existe hoje) para a tela mostrar
       // também quem ainda não tem contato nenhum — sem isso, "sem contato" seria invisível.
       sb('leiloeiro_conhecimento?select=fonte,plataforma&order=fonte.asc'),
     ]);
-    if (!rContatos.ok || !rFontes.ok) return json({ error: 'Falha ao ler contatos' }, 502);
-    const [contatos, fontes] = await Promise.all([rContatos.json(), rFontes.json()]);
+    if (!rContatos.ok || !rFontes.ok || !rTels.ok) return json({ error: 'Falha ao ler contatos' }, 502);
+    const [contatos, fontes, tels] = await Promise.all([rContatos.json(), rFontes.json(), rTels.json()]);
+    const telPorFonte = new Map((Array.isArray(tels) ? tels : []).map(t => [t.fonte, t]));
     const porFonte = new Map((Array.isArray(contatos) ? contatos : []).map(c => [c.fonte, c]));
     const lista = (Array.isArray(fontes) ? fontes : []).map(f => ({
       fonte: f.fonte, plataforma: f.plataforma || null,
@@ -54,6 +57,7 @@ export default async function handler(req) {
     for (const c of (Array.isArray(contatos) ? contatos : [])) {
       if (!lista.some(l => l.fonte === c.fonte)) lista.push({ fonte: c.fonte, plataforma: null, email: c.email, origem: c.origem, observacao: c.observacao, atualizado_em: c.atualizado_em });
     }
+    for (const l of lista) { const t = telPorFonte.get(l.fonte); l.telefone = t?.telefone || null; l.telefone_whatsapp = !!t?.whatsapp; l.telefone_origem = t?.origem || null; }
     lista.sort((a, b) => a.fonte.localeCompare(b.fonte));
     return json({ contatos: lista });
   }
@@ -63,6 +67,21 @@ export default async function handler(req) {
     const fonte = String(b?.fonte || '').trim().toUpperCase();
     const email = String(b?.email || '').trim().toLowerCase();
     if (!fonte) return json({ error: 'fonte obrigatória' }, 400);
+    // TELEFONE da fonte (05/10): `{ fonte, telefone }` sem e-mail — leiloeiro que não publica e-mail
+    // (PESTANA, BIASI) é exatamente o que mais precisa do WhatsApp. Celular (11 dígitos) = WhatsApp.
+    if (b?.telefone !== undefined) {
+      let d = String(b.telefone || '').replace(/\D/g, '');
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2);
+      if (!/^[1-9][1-9]\d{8,9}$/.test(d) || (d.length === 11 && d[2] !== '9')) return json({ error: 'Telefone inválido — use DDD + número, ex.: (11) 98765-4321' }, 400);
+      const rt = await sb('leiloeiro_telefone?on_conflict=fonte,leiloeiro_chave', {
+        method: 'POST', prefer: 'resolution=merge-duplicates,return=representation',
+        body: { fonte, leiloeiro_chave: '', telefone: `55${d}`, whatsapp: d.length === 11, origem: 'manual', observacao: `cadastrado manualmente por ${perfil.role} em ${new Date().toISOString().slice(0, 10)}`, atualizado_em: new Date().toISOString() },
+      });
+      if (!rt.ok) return json({ error: 'Falha ao salvar o telefone' }, 502);
+      const gravado = await rt.json().catch(() => []);
+      if (!gravado?.length) return json({ error: 'O banco não confirmou o telefone salvo' }, 502);
+      return json({ ok: true });
+    }
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'E-mail inválido' }, 400);
     const r = await sb('leiloeiro_contato?on_conflict=fonte', {
       method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',

@@ -929,10 +929,10 @@ export default function Analise() {
         body: JSON.stringify({ imovel_id: imovelInicial.id, action: acao, ...(acao === 'enviar' ? { texto: textoLeiloeiro } : {}) }),
       });
       const j = await r.json().catch(() => ({}));
-      if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: false }); setTextoLeiloeiro(j.texto); return; }
+      if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: false, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro }); setTextoLeiloeiro(j.texto); return; }
       if (!r.ok || j?.error) { showMsg(j?.error || 'Não foi possível preparar o pedido agora.', 'error'); return; }
       if (acao === 'preview') {
-        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel });
+        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro });
         setTextoLeiloeiro(j.texto);
         return;
       }
@@ -942,6 +942,7 @@ export default function Analise() {
       showMsg('Não foi possível concluir o pedido agora.', 'error');
     } finally { setPedindoLeiloeiro(false); }
   };
+  const formatarTelefoneBR = (t) => { const d = String(t || '').replace(/^55/, ''); return d.length === 11 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}` : `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`; };
   const cancelarPedidoLeiloeiro = () => { setPedidoLeiloeiroTexto(null); setTextoLeiloeiro(''); };
 
   // Tela DEDICADA de "documento faltante": pede SÓ o que falta (matrícula e/ou
@@ -1006,7 +1007,10 @@ export default function Analise() {
                 <div style={{ fontSize:12.5, color:'#7c2d12', fontWeight:700 }}>
                   {pedidoLeiloeiroTexto.contatoDisponivel
                     ? 'Revise o texto abaixo — complemente com o que achar pertinente antes de enviar.'
-                    : 'Ainda não temos o e-mail deste leiloeiro cadastrado — ajuste o texto se quiser e copie para enviar pelo canal de contato dele.'}
+                    : pedidoLeiloeiroTexto.telefone
+                      ? 'Ainda não temos o e-mail deste leiloeiro — ajuste o texto se quiser e mande pelo WhatsApp (ou copie).'
+                      : 'Ainda não temos o e-mail deste leiloeiro cadastrado — ajuste o texto se quiser e copie para enviar pelo canal de contato dele.'}
+                  {pedidoLeiloeiroTexto.telefoneErro && <span style={{ display:'block', fontWeight:500, color:'#b45309', marginTop:4 }}>Não consegui consultar o telefone do leiloeiro agora — o botão do WhatsApp volta quando você reabrir o pedido.</span>}
                 </div>
                 <textarea value={textoLeiloeiro} onChange={e => setTextoLeiloeiro(e.target.value)} rows={8} spellCheck lang="pt-BR"
                   style={{ width:'100%', boxSizing:'border-box', fontSize:12, fontFamily:'inherit', border:'1px solid #fed7aa', borderRadius:8, padding:8, color:'#1e293b', resize:'vertical' }} />
@@ -1022,6 +1026,17 @@ export default function Analise() {
                       style={{ padding:'8px 14px', background:'#c2410c', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12.5, cursor:'pointer' }}>
                       Copiar texto
                     </button>
+                  )}
+                  {/* WhatsApp (05/10, pedido do dono): abre o WhatsApp Web de QUEM CLICA, com o texto
+                      revisado acima já na caixa — nada é enviado sem a pessoa apertar Enviar lá.
+                      Sem API oficial. No celular, wa.me abre o aplicativo. */}
+                  {pedidoLeiloeiroTexto.telefone && (
+                    <a href={`${/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'https://wa.me/' + pedidoLeiloeiroTexto.telefone.numero + '?' : 'https://web.whatsapp.com/send?phone=' + pedidoLeiloeiroTexto.telefone.numero + '&'}text=${encodeURIComponent(textoLeiloeiro)}`}
+                      target="_blank" rel="noreferrer"
+                      title={pedidoLeiloeiroTexto.telefone.whatsapp ? 'Abre o WhatsApp com o texto pronto' : 'Número fixo — pode não ter WhatsApp'}
+                      style={{ padding:'8px 14px', background:'#16a34a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12.5, textDecoration:'none', opacity: textoLeiloeiro.trim() ? 1 : 0.6, pointerEvents: textoLeiloeiro.trim() ? 'auto' : 'none' }}>
+                      WhatsApp {formatarTelefoneBR(pedidoLeiloeiroTexto.telefone.numero)}{pedidoLeiloeiroTexto.telefone.whatsapp ? '' : ' (fixo)'}
+                    </a>
                   )}
                   {pedidoLeiloeiroTexto.linkLote && (
                     <a href={pedidoLeiloeiroTexto.linkLote} target="_blank" rel="noreferrer"

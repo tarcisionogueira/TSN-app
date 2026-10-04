@@ -17,7 +17,7 @@
  * EM SECO por padrão; CONTATO_APLICAR=1 grava.
  */
 import puppeteer from 'puppeteer';
-import { buscarEmailDoSite, dominioBase } from './_contato-leiloeiro.mjs';
+import { buscarEmailDoSite, buscarTelefoneDoSite, dominioBase, normalizarTelefone, telefonesNoTexto } from './_contato-leiloeiro.mjs';
 import { resolveMx } from 'node:dns/promises';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
@@ -58,7 +58,13 @@ async function htmlNoChrome(url) {
     return await page.content();
   } finally { await page.close().catch(() => {}); } // padrao-ok: fechar aba best-effort
 }
-async function obterHtml(url) {
+// A etapa de telefone relê as mesmas homes: memo por URL para não abrir cada site duas vezes.
+const cacheHtml = new Map();
+function obterHtml(url) {
+  if (!cacheHtml.has(url)) cacheHtml.set(url, obterHtmlSemCache(url));
+  return cacheHtml.get(url);
+}
+async function obterHtmlSemCache(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' } });
     if (r.ok) return await r.text();
@@ -172,7 +178,11 @@ for (const r of lotesTenant) {
   const k = `${r.fonte}|${r.leiloeiro}`;
   porTenant.set(k, (porTenant.get(k) || 0) + 1);
 }
-const jaTenant = new Set((await sb('leiloeiro_contato_tenant?select=fonte,leiloeiro_chave')).map((c) => `${c.fonte}|${c.leiloeiro_chave}`));
+const linhasTenant = await sb('leiloeiro_contato_tenant?select=fonte,leiloeiro_chave,leiloeiro,email');
+const jaTenant = new Set(linhasTenant.map((c) => `${c.fonte}|${c.leiloeiro_chave}`));
+// E-mail validado de cada leiloeiro de plataforma (os que já estavam + os achados nesta rodada):
+// é a âncora do telefone dele no edital (etapa 3).
+const emailTenant = new Map(linhasTenant.map((c) => [`${c.fonte}|${c.leiloeiro_chave}`, { fonte: c.fonte, chave: c.leiloeiro_chave, leiloeiro: c.leiloeiro, email: c.email }]));
 const RUIM = /(\.jus\.br|\.gov\.br|\.mp\.br|\.leg\.br)$/i;
 const LOCAL_RUIM = /^(lgpd|privacidade|dpo|encarregado|noreply|no-reply)|vara|civel|cartorio|forum|tribunal/i;
 for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
@@ -227,6 +237,7 @@ for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
   if (sup?.[0]?.suprimido) { resTenant.sem++; continue; }
   console.log(`  ✓ ${fonte.padEnd(14)} ${leiloeiro.slice(0, 34).padEnd(34)} ${melhor[0]}  (${melhor[1]} edital(is) do DJEN · ${nLotes} lotes)`);
   resTenant.achado.push(k);
+  emailTenant.set(`${fonte}|${chave}`, { fonte, chave, leiloeiro, email: melhor[0] });
   if (!APLICAR) continue;
   const g = await sb('leiloeiro_contato_tenant?on_conflict=fonte,leiloeiro_chave', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
@@ -235,6 +246,81 @@ for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
   if (g?.length) resTenant.gravado.push(k);
 }
 console.log(`\nLEILOEIROS DE PLATAFORMA — ${APLICAR ? `gravados: ${resTenant.gravado.length}` : `achados: ${resTenant.achado.length}`} · sem e-mail no DJEN: ${resTenant.sem}`);
+
+// ── 3ª ETAPA: TELEFONE / WHATSAPP (05/10, pedido do dono) ───────────────────────────────────────
+// O pedido de documento também sai pelo WhatsApp Web do dono, com o mesmo texto do e-mail. Grava em
+// `leiloeiro_telefone` (leiloeiro_chave '' = da fonte). Nunca sobrescreve: linha existente (inclusive
+// 'manual') é pulada e o insert ignora conflito.
+//  • FONTE: home/contato do site (link de WhatsApp > tel: > número formatado no texto). Plataforma
+//    white-label fica de fora pela mesma régua do e-mail. Sem nada no site, o edital do DJEN — só o
+//    número escrito a até 400 caracteres de uma citação do domínio do leiloeiro.
+//  • LEILOEIRO DE PLATAFORMA: só no edital, a até 400 caracteres do E-MAIL já validado dele — o
+//    e-mail com afinidade de domínio é o que prova que aquele bloco do texto é dele, e não da vara.
+const VIZINHO_RUIM = /(vara|cart[oó]rio|f[oó]rum|tribunal|secretaria|ju[ií]zo|cejusc|defensoria|oab)/i;
+function telefonesPerto(txt, posicoes, raio = 400) {
+  const out = [];
+  for (const t of telefonesNoTexto(txt)) {
+    if (!posicoes.some((p) => Math.abs(p - t.pos) <= raio)) continue;
+    if (VIZINHO_RUIM.test(txt.slice(Math.max(0, t.pos - 80), t.pos))) continue;
+    const tel = normalizarTelefone(t.bruto);
+    if (tel) out.push(tel);
+  }
+  return out;
+}
+function melhorDoEdital(contagem) { // celular primeiro (é o que abre no WhatsApp), depois o mais citado
+  return [...contagem].sort((a, b) => (Number(b[0].length === 13) - Number(a[0].length === 13)) || (b[1] - a[1]))[0] || null;
+}
+const jaTel = new Set((await sb('leiloeiro_telefone?select=fonte,leiloeiro_chave')).map((t) => `${t.fonte}|${t.leiloeiro_chave}`));
+const resTel = { fonte: [], tenant: [], sem: [] };
+async function gravarTelefone(row) {
+  if (!APLICAR) return true;
+  const g = await sb('leiloeiro_telefone?on_conflict=fonte,leiloeiro_chave', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ ...row, origem: 'auto', atualizado_em: new Date().toISOString() }),
+  });
+  return !!g?.length;
+}
+const fmtTel = (t) => (t.length === 13 ? `(${t.slice(2, 4)}) ${t.slice(4, 9)}-${t.slice(9)}` : `(${t.slice(2, 4)}) ${t.slice(4, 8)}-${t.slice(8)}`);
+
+for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
+  if (jaTel.has(`${fonte}|`)) continue;
+  const multi = (await sb('rpc/fonte_multi_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte }) })) === true;
+  if (multi && (fracaoDominante.get(fonte) || 0) < 0.95) continue; // white-label: só por leiloeiro
+  let { achado, url, motivo } = await buscarTelefoneDoSite(origem, { obterHtml });
+  if (!achado && !multi) {
+    const dom = dominioBase(new URL(origem).hostname);
+    const rotulo = dom.split('.')[0];
+    const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(rotulo)}*&select=texto_integral&limit=40`).catch((e) => { console.log(`  ⚠ ${fonte}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
+    const cont = new Map();
+    for (const e of editais || []) {
+      const txt = String(e.texto_integral || '');
+      const pos = [...txt.toLowerCase().matchAll(new RegExp(rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))].map((m) => m.index);
+      for (const t of new Set(telefonesPerto(txt, pos))) cont.set(t, (cont.get(t) || 0) + 1);
+    }
+    const m = melhorDoEdital(cont);
+    if (m) { achado = { telefone: m[0], whatsapp: m[0].length === 13, forca: 0, n: m[1] }; url = `editais_leilao (DJEN, ${m[1]} edital(is))`; }
+    else motivo += ' · nem no DJEN';
+  }
+  if (!achado) { resTel.sem.push(fonte); console.log(`  ✗ tel ${fonte.padEnd(18)} ${motivo}`); continue; }
+  console.log(`  ✓ tel ${fonte.padEnd(18)} ${fmtTel(achado.telefone)}${achado.whatsapp ? ' [WhatsApp]' : ''}  (${url === origem ? 'home' : url})${multi ? '  [PLATAFORMA]' : ''}`);
+  if (await gravarTelefone({ fonte, leiloeiro_chave: '', telefone: achado.telefone, whatsapp: !!achado.whatsapp, observacao: `${multi ? 'PLATAFORMA · ' : ''}achado em ${url}`.slice(0, 300) })) resTel.fonte.push(fonte);
+}
+
+for (const [k, t] of emailTenant) {
+  if (jaTel.has(k)) continue;
+  const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(t.email)}*&select=texto_integral&limit=20`).catch((e) => { console.log(`  ⚠ ${k}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
+  const cont = new Map();
+  for (const e of editais || []) {
+    const txt = String(e.texto_integral || '');
+    const pos = [...txt.toLowerCase().matchAll(new RegExp(t.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))].map((m) => m.index);
+    for (const tel of new Set(telefonesPerto(txt, pos))) cont.set(tel, (cont.get(tel) || 0) + 1);
+  }
+  const m = melhorDoEdital(cont);
+  if (!m) continue;
+  console.log(`  ✓ tel ${t.fonte.padEnd(14)} ${String(t.leiloeiro || t.chave).slice(0, 34).padEnd(34)} ${fmtTel(m[0])}${m[0].length === 13 ? ' [WhatsApp]' : ''}  (${m[1]} edital(is), perto de ${t.email})`);
+  if (await gravarTelefone({ fonte: t.fonte, leiloeiro_chave: t.chave, leiloeiro: t.leiloeiro, telefone: m[0], whatsapp: m[0].length === 13, observacao: `edital do DJEN, a até 400 caracteres de ${t.email} (${m[1]} edital(is))`.slice(0, 300) })) resTel.tenant.push(k);
+}
+console.log(`\nTELEFONES — ${APLICAR ? 'gravados' : 'achados'}: ${resTel.fonte.length} por fonte · ${resTel.tenant.length} por leiloeiro · fontes sem telefone: ${resTel.sem.length}`);
 
 console.log(`\n${APLICAR ? 'GRAVADO' : 'EM SECO'} — fontes: ${origemPorFonte.size} · já tinham: ${resultado.ja.length} · multi-tenant: ${resultado.multi.length} · ${APLICAR ? `gravados: ${resultado.gravado.length}` : `achados: ${resultado.achado.length}`} · sem e-mail: ${resultado.sem.length}`);
 const porMotivo = {};

@@ -149,14 +149,25 @@ export default async function handler(req) {
 
   // Contato do LEILOEIRO do lote, não da fonte (28/09): em plataforma multi-tenant a fonte são
   // dezenas de leiloeiros. Falha ao resolver é erro — nunca "sem contato" (forma #2).
-  const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null }) });
+  const argsContato = JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null });
+  const [rContato, rTel] = await Promise.all([
+    sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: argsContato }),
+    // TELEFONE (05/10): o pedido também sai pelo WhatsApp Web de quem pede, com o mesmo texto. A
+    // falha aqui não derruba o e-mail, mas também não vira "sem telefone": vai como `telefoneErro`.
+    sb('rpc/telefone_leiloeiro_resolver', { method: 'POST', body: argsContato }).catch((e) => ({ ok: false, status: String(e?.message || e).slice(0, 60) })),
+  ]);
   if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
   const [contato] = await rContato.json();
+  let telefone = null, telefoneErro = false;
+  if (rTel.ok) {
+    const [t] = await rTel.json().catch(() => [null]);
+    if (t?.telefone) telefone = { numero: t.telefone, whatsapp: !!t.whatsapp, escopo: t.escopo };
+  } else { telefoneErro = true; console.error('[pedir-documento-leiloeiro] telefone_leiloeiro_resolver falhou:', rTel.status); }
 
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit. O
   // front mostra num campo editável; quem usa complementa (ou não) antes de confirmar o envio.
   if (acao === 'preview') {
-    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email });
+    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email, telefone, telefoneErro });
   }
 
   // PASSO 2 — ENVIAR: o corpo é o que o CHAMADOR mandou (o editado, se editou) — nunca
@@ -166,7 +177,7 @@ export default async function handler(req) {
 
   if (!contato?.email) {
     await auditar({ imovel_id: imovelId, user_id: user.id, fonte: imovel.fonte || null, destinatario_email: null, itens_pedidos: itensTexto, texto_enviado: null, status: 'sem_contato' });
-    return json({ ok: false, semContato: true, texto: textoFinal, linkLote: linkLote || null });
+    return json({ ok: false, semContato: true, texto: textoFinal, linkLote: linkLote || null, telefone, telefoneErro });
   }
 
   // HTML a partir do texto LIVRE (editado): sem a tabela estruturada do rascunho original,
