@@ -22,14 +22,6 @@
  * segunda importação dobraria o mês.
  */
 
-// Tags de VALOR que no SGML podem vir sem fechamento.
-const TAGS_VALOR = [
-  'DTSERVER', 'LANGUAGE', 'ORG', 'FID', 'BANKID', 'BRANCHID', 'ACCTID', 'ACCTTYPE',
-  'DTSTART', 'DTEND', 'TRNTYPE', 'DTPOSTED', 'DTUSER', 'DTAVAIL', 'TRNAMT', 'FITID',
-  'CHECKNUM', 'REFNUM', 'MEMO', 'NAME', 'PAYEEID', 'BALAMT', 'DTASOF', 'CURDEF', 'CODE',
-  'SEVERITY', 'MARKETING', 'TRNUID', 'STATUS',
-];
-
 function decodificar(bytes) {
   const cabecalho = Buffer.from(bytes.slice(0, 512)).toString('latin1');
   const m = /CHARSET:\s*([^\s]+)/i.exec(cabecalho) || /encoding=["']([^"']+)["']/i.exec(cabecalho);
@@ -39,18 +31,13 @@ function decodificar(bytes) {
   return Buffer.from(bytes).toString(latin ? 'latin1' : 'utf8');
 }
 
-// Fecha as tags de valor do SGML para o texto virar algo previsível de varrer.
-function normalizar(txt) {
-  let s = String(txt).replace(/\r\n?/g, '\n');
-  for (const tag of TAGS_VALOR) {
-    const re = new RegExp(`<${tag}>([^<\\n]*)(?!</${tag}>)`, 'gi');
-    s = s.replace(re, (todo, valor) => `<${tag}>${valor}</${tag}>`);
-  }
-  return s;
-}
-
+// O valor de uma tag termina no próximo `<` ou na quebra de linha — vale igual para SGML
+// (1.x, `<MEMO>texto` sem fechamento) e XML (2.x, `<MEMO>texto</MEMO>`), sem normalizar nada.
+// CORREÇÃO 04/10: antes, um regex "fechava" as tags com lookahead negativo; em OFX 2.x ele
+// recuava um caractere e cortava o último de cada valor (DTPOSTED 20260105 → 2026010), e
+// TODO lançamento caía como "sem data válida" — o arquivo inteiro recusado, sem erro de verdade.
 const pegar = (bloco, tag) => {
-  const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i').exec(bloco);
+  const m = new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i').exec(bloco);
   return m ? m[1].trim() : '';
 };
 
@@ -82,7 +69,7 @@ export function lerOFX(conteudo, bancoRotulo) {
   if (!/<OFX>/i.test(bruto)) {
     return { ok: false, error: 'O arquivo não parece um OFX. Exporte o extrato no formato OFX (Money/Dinheiro) no internet banking.' };
   }
-  const txt = normalizar(bruto);
+  const txt = bruto;
 
   const bankId = pegar(txt, 'BANKID');
   const acctId = pegar(txt, 'ACCTID');
