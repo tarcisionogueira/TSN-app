@@ -115,17 +115,24 @@ export default async function handler(req) {
     }
   }
 
-  const [imovel] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,leiloeiro,titulo,endereco,cidade,estado,url_lote,link_edital,numero_processo`)).json();
+  const [imovel] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,leiloeiro,titulo,endereco,cidade,estado,url_lote,link_edital,numero_processo,link_matricula,tem_matricula_doc,tem_edital_doc`)).json();
   if (!imovel) return json({ error: 'Imóvel não encontrado' }, 404);
 
   // O parecer documental é lido do BANCO (resultado já gerado), nunca do que o client mandar —
   // um payload forjado no body não pode virar conteúdo de e-mail em nome do sistema.
   const [analise] = await (await sb(`analises_documental?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(imovelId)}&select=result&order=updated_at.desc&limit=1`)).json();
   const result = analise?.result || {};
-  const faltando = [...new Set(Array.isArray(result.faltando) ? result.faltando : [])].filter(t => DOC_FALTA_LABEL[t]);
+  // O ACERVO TAMBÉM SABE O QUE FALTA (04/10, pedido do dono: Leilão Brasil sem matrícula publicada).
+  // Antes, sem análise documental gerada o pedido era recusado — mesmo com o próprio lote dizendo
+  // que a matrícula não foi publicada. Os sinais `tem_*_doc` são os mesmos que a tela usa.
+  const faltaNoAcervo = [
+    !imovel.tem_matricula_doc && !imovel.link_matricula ? 'matricula' : null,
+    imovel.tem_edital_doc === false ? 'edital' : null,
+  ].filter(Boolean);
+  const faltando = [...new Set([...(Array.isArray(result.faltando) ? result.faltando : []), ...faltaNoAcervo])].filter(t => DOC_FALTA_LABEL[t]);
   const lacunas = (Array.isArray(result.lacunas) ? result.lacunas : []).filter(Boolean).slice(0, MAX_LACUNAS);
   if (!faltando.length && !lacunas.length) {
-    return json({ error: 'Não há pendência documental registrada para este imóvel — gere a análise documental primeiro.' }, 400);
+    return json({ error: 'Não há documento faltando neste lote (matrícula e edital publicados) nem pendência na análise documental.' }, 400);
   }
 
   const enderecoLabel = imovel.titulo || [imovel.endereco, imovel.cidade, imovel.estado].filter(Boolean).join(', ') || `Imóvel ${imovelId}`;
