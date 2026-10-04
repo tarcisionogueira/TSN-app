@@ -181,31 +181,45 @@ for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
   if (!chave || jaTenant.has(`${fonte}|${chave}`)) continue;
   // Nome sem o sufixo "- Leiloeira Oficial"/"LEILÕES" — o edital escreve o nome civil.
   const nome = String(leiloeiro).replace(/\s*[-–].*$/, '').replace(/\b(leil[õo]es|leiloeir[oa]s?( oficial)?)\b/gi, '').trim();
-  // Nome de UMA palavra ("NOGUEIRA", "Vasconcelos") casa com qualquer edital que a cite — dry-run de
-  // 04/10 deu NOGUEIRA LEILÕES → contato@saraivaleiloes (outra leiloeira, mesmo edital). Exige 2+ palavras.
-  if (nome.length < 8 || nome.split(/\s+/).filter((w) => w.length >= 3).length < 2) { resTenant.sem++; continue; }
+  if (nome.length < 6) continue;
   const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(nome)}*&select=texto_integral&limit=40`).catch((e) => { console.log(`  ⚠ ${fonte} / ${leiloeiro}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
-  const cont = new Map();
-  const nomeRe = new RegExp(nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi');
+  // Duas portas (dry-runs de 04/10). O edital cita vários leiloeiros, comitentes e plataformas, e
+  // "o mais citado no texto inteiro" deu NOGUEIRA LEILÕES → contato@saraivaleiloes (outra leiloeira).
+  //  • AFINIDADE: o domínio carrega o nome ou as iniciais do leiloeiro (marangonileiloes, jmleiloes) —
+  //    aceita como antes, o domínio já prova de quem é;
+  //  • SEM AFINIDADE: só com nome de 2+ palavras, e-mail a até 1.500 caracteres de uma citação do
+  //    nome, e isso em 2+ editais distintos — um edital só não separa o leiloeiro do vizinho.
+  const semAc = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const palavras = semAc(nome).toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+  const iniciais = [palavras.slice(0, 2), palavras].map((ws) => ws.map((w) => w[0]).join('')).filter((x) => x.length >= 2);
+  const afim = (dom) => {
+    const rotuloDom = dom.split('.')[0];
+    return palavras.some((w) => w.length >= 4 && rotuloDom.includes(w)) || iniciais.includes(rotuloDom.replace(/leil.*$/, ''));
+  };
+  const nomeRe = new RegExp(semAc(nome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi');
+  const total = new Map(); const perto = new Map();
   for (const e of editais || []) {
-    // O e-mail tem de estar PERTO do nome (até 1.500 caracteres): o edital cita vários leiloeiros,
-    // comitentes e a plataforma, e "o mais citado no texto inteiro" premiava o de outra pessoa.
     const txt = String(e.texto_integral || '');
-    const semAcento = txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const posNome = [...semAcento.matchAll(nomeRe)].map((m) => m.index);
-    if (!posNome.length) continue;
+    const posNome = [...semAc(txt).matchAll(nomeRe)].map((m) => m.index);
+    const vistosT = new Set(); const vistosP = new Set();
     for (const m of txt.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)) {
-      if (!posNome.some((p) => Math.abs(p - m.index) <= 1500)) continue;
       const em = m[0].toLowerCase().replace(/\.$/, '');
       const [local, dom] = em.split('@');
       if (!dom || RUIM.test(dom) || LOCAL_RUIM.test(local) || !/leil/i.test(dom)) continue;
-      cont.set(em, (cont.get(em) || 0) + 1);
+      vistosT.add(em);
+      if (posNome.some((p) => Math.abs(p - m.index) <= 1500)) vistosP.add(em);
     }
+    for (const em of vistosT) total.set(em, (total.get(em) || 0) + 1);
+    for (const em of vistosP) perto.set(em, (perto.get(em) || 0) + 1);
   }
+  const candidatos = [
+    ...[...total].filter(([em]) => afim(em.split('@')[1])).sort((x, y) => y[1] - x[1]),
+    ...(palavras.length >= 2 ? [...perto].filter(([em, n]) => n >= 2 && !afim(em.split('@')[1])).sort((x, y) => y[1] - x[1]) : []),
+  ];
   // Domínio sem MX não recebe e-mail: o edital da Hidirlene traz "leiloesjudiciaises" (erro de
-  // digitação). Fica com o mais citado cujo domínio responde MX; DNS fora do ar = não grava.
+  // digitação). Fica com o primeiro candidato cujo domínio responde MX; DNS incerto = não grava.
   let melhor = null;
-  for (const cand of [...cont.entries()].sort((a, b) => b[1] - a[1])) {
+  for (const cand of candidatos) {
     if (await temMx(cand[0].split('@')[1])) { melhor = cand; break; }
   }
   if (!melhor) { resTenant.sem++; continue; }
