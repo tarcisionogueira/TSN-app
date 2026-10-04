@@ -117,7 +117,7 @@ export default async function handler(req, res) {
     if (adm?.id) adminEmail = await emailDoUsuario(adm.id);
   }
   adminEmail = adminEmail ? norm(adminEmail) : null;
-  const casos = await sbGet(`casos?juridico_status=eq.em_revisao&juridico_enviado_em=not.is.null&select=id,imovel_id,imovel_endereco,tipo_leilao,advogado_id,juridico_enviado_em,prazo_juridico,juridico_token,juridico_lembretes,juridico_ultimo_lembrete,juridico_reatribuicoes,juridico_escalado_admin`);
+  const casos = await sbGet(`casos?juridico_status=eq.em_revisao&juridico_enviado_em=not.is.null&select=id,imovel_id,imovel_endereco,tipo_leilao,advogado_id,juridico_enviado_em,prazo_juridico,juridico_token,juridico_lembretes,juridico_ultimo_lembrete,juridico_reatribuicoes,juridico_escalado_admin,juridico_advogado_anterior`);
   // `juridico_escalado_admin` FALTAVA no select (achado da varredura de 05/08, corrigido em
   // 07/08): o guard `if (!caso.juridico_escalado_admin)` lia sempre `undefined`, então todo caso
   // que bateu o teto de reatribuições reescalava para o admin TODO dia útil, para sempre.
@@ -148,40 +148,59 @@ export default async function handler(req, res) {
         if (!novo) { resumo.sem_destino++; continue; } // ninguém para repassar
         const token = (globalThis.crypto?.randomUUID?.() || `${Date.now()}${Math.round(Math.random() * 1e6)}`).replace(/-/g, '').slice(0, 16);
         const novoPrazo = addDiasUteis(agora, PRAZO_DIAS);
-        await sbPatch(`casos?id=eq.${caso.id}`, {
+        // 05/10 (pendência 65): grava ANTES do e-mail (o token do replyTo precisa existir no
+        // banco quando o advogado responder — e-mail sem registro seria parecer órfão), mas
+        // DESFAZ se o envio falhar: antes a pasta trocava de dono, zerava o prazo e ninguém
+        // era avisado — o novo advogado nem sabia, e o próximo cron só reatribuía após +7 dias.
+        const patchReatrib = await sbPatch(`casos?id=eq.${caso.id}`, {
           advogado_id: novo.advogado_id, juridico_advogado_anterior: caso.advogado_id,
           juridico_reatribuicoes: (caso.juridico_reatribuicoes || 0) + 1,
           juridico_enviado_em: agora.toISOString(), prazo_juridico: novoPrazo.toISOString(),
           juridico_lembretes: 0, juridico_ultimo_lembrete: null, juridico_token: token,
         });
-        const anexos = await anexosDoImovel(caso.imovel_id);
-        const listaAnexos = anexos.length
-          ? `<ul style="margin:6px 0 0;padding-left:18px">${anexos.map(a => `<li>${esc(a.nome)} <span style="color:#94a3b8">(${esc(a.tipo)})</span></li>`).join('')}</ul>`
-          : '<p style="color:#b45309">⚠️ Sem documentos anexados ao imóvel.</p>';
-        const corpo = `
-          <p style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;color:#991b1b;font-weight:700">⚠️ URGENTE — pasta repassada por perda de prazo do parecer anterior.</p>
-          <p>Prezado(a) ${esc(novo.dest.nome || novo.nome || 'Doutor(a)')}, solicitamos análise <strong>com urgência</strong> da documentação para confirmação de viabilidade.</p>
-          <table style="border-collapse:collapse;margin:12px 0;font-size:14px">
-            <tr><td style="padding:3px 10px 3px 0;color:#64748b">Imóvel</td><td><strong>${esc(caso.imovel_endereco || caso.imovel_id)}</strong></td></tr>
-            <tr><td style="padding:3px 10px 3px 0;color:#64748b">Tipo de leilão</td><td>${esc(caso.tipo_leilao || '—')}</td></tr>
-            <tr><td style="padding:3px 10px 3px 0;color:#64748b">Novo prazo</td><td>${novoPrazo.toLocaleDateString('pt-BR')} (7 dias úteis)</td></tr>
-          </table>
-          <p style="font-weight:700;margin:14px 0 4px">Documentos do imóvel:</p>${listaAnexos}`;
-        // Admin entra em cópia para acompanhar a reatribuição (sem virar destinatário "Para").
-        const ccUrgente = [...new Set([...(novo.dest.cc || []), ...(adminEmail && !novo.dest.to.includes(adminEmail) ? [adminEmail] : [])])];
-        const r = await enviarEmail({
-          from: 'BidPro Brasil Jurídico <noreply@bidprobrasil.com.br>',
-          to: novo.dest.to, cc: ccUrgente,
-          replyTo: `juridico+${token}@${INBOUND_DOMAIN}`,
-          subject: `🔴 URGENTE — Análise jurídica reatribuída — Caso ${refCurto}`,
-          html: htmlBase('Análise jurídica — URGENTE (reatribuição)', corpo, refCurto),
-          attachments: anexos.map(a => ({ filename: a.nome || 'documento', path: a.url })),
-        });
-        if (r.ok) {
-          resumo.reatribuicoes++;
-          await sbPost('juridico_emails', { caso_id: caso.id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...novo.dest.to, ...ccUrgente.map(c => `cc:${c}`)].join(', '), assunto: `URGENTE reatribuição — Caso ${refCurto}` });
-          await chatInterno(caso, `🔴 Prazo do jurídico vencido. Pasta reatribuída por URGÊNCIA ao advogado de melhor eficiência (${esc(novo.nome || '—')}${novo.score != null ? ` · score ${novo.score}` : ''}). Novo prazo: ${novoPrazo.toLocaleDateString('pt-BR')}.`);
-        } else { resumo.erros++; }
+        if (!patchReatrib.ok) { console.error(`[juridico-cron] reatribuição não gravou caso=${caso.id} http=${patchReatrib.status}`); resumo.erros++; continue; }
+        const desfazReatrib = async (motivo) => {
+          const v = await sbPatch(`casos?id=eq.${caso.id}`, {
+            advogado_id: caso.advogado_id, juridico_advogado_anterior: caso.juridico_advogado_anterior ?? null,
+            juridico_reatribuicoes: caso.juridico_reatribuicoes || 0,
+            juridico_enviado_em: caso.juridico_enviado_em, prazo_juridico: caso.prazo_juridico,
+            juridico_lembretes: caso.juridico_lembretes || 0, juridico_ultimo_lembrete: caso.juridico_ultimo_lembrete,
+            juridico_token: caso.juridico_token,
+          });
+          console.error(`[juridico-cron] e-mail de reatribuição falhou caso=${caso.id} (${motivo}); desfeito=${v.ok}`);
+        };
+        let enviado = false; // depois do envio, falha de registro NÃO desfaz (o advogado já foi avisado)
+        try {
+          const anexos = await anexosDoImovel(caso.imovel_id);
+          const listaAnexos = anexos.length
+            ? `<ul style="margin:6px 0 0;padding-left:18px">${anexos.map(a => `<li>${esc(a.nome)} <span style="color:#94a3b8">(${esc(a.tipo)})</span></li>`).join('')}</ul>`
+            : '<p style="color:#b45309">⚠️ Sem documentos anexados ao imóvel.</p>';
+          const corpo = `
+            <p style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;color:#991b1b;font-weight:700">⚠️ URGENTE — pasta repassada por perda de prazo do parecer anterior.</p>
+            <p>Prezado(a) ${esc(novo.dest.nome || novo.nome || 'Doutor(a)')}, solicitamos análise <strong>com urgência</strong> da documentação para confirmação de viabilidade.</p>
+            <table style="border-collapse:collapse;margin:12px 0;font-size:14px">
+              <tr><td style="padding:3px 10px 3px 0;color:#64748b">Imóvel</td><td><strong>${esc(caso.imovel_endereco || caso.imovel_id)}</strong></td></tr>
+              <tr><td style="padding:3px 10px 3px 0;color:#64748b">Tipo de leilão</td><td>${esc(caso.tipo_leilao || '—')}</td></tr>
+              <tr><td style="padding:3px 10px 3px 0;color:#64748b">Novo prazo</td><td>${novoPrazo.toLocaleDateString('pt-BR')} (7 dias úteis)</td></tr>
+            </table>
+            <p style="font-weight:700;margin:14px 0 4px">Documentos do imóvel:</p>${listaAnexos}`;
+          // Admin entra em cópia para acompanhar a reatribuição (sem virar destinatário "Para").
+          const ccUrgente = [...new Set([...(novo.dest.cc || []), ...(adminEmail && !novo.dest.to.includes(adminEmail) ? [adminEmail] : [])])];
+          const r = await enviarEmail({
+            from: 'BidPro Brasil Jurídico <noreply@bidprobrasil.com.br>',
+            to: novo.dest.to, cc: ccUrgente,
+            replyTo: `juridico+${token}@${INBOUND_DOMAIN}`,
+            subject: `🔴 URGENTE — Análise jurídica reatribuída — Caso ${refCurto}`,
+            html: htmlBase('Análise jurídica — URGENTE (reatribuição)', corpo, refCurto),
+            attachments: anexos.map(a => ({ filename: a.nome || 'documento', path: a.url })),
+          });
+          if (r.ok) {
+            enviado = true;
+            resumo.reatribuicoes++;
+            await sbPost('juridico_emails', { caso_id: caso.id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...novo.dest.to, ...ccUrgente.map(c => `cc:${c}`)].join(', '), assunto: `URGENTE reatribuição — Caso ${refCurto}` });
+            await chatInterno(caso, `🔴 Prazo do jurídico vencido. Pasta reatribuída por URGÊNCIA ao advogado de melhor eficiência (${esc(novo.nome || '—')}${novo.score != null ? ` · score ${novo.score}` : ''}). Novo prazo: ${novoPrazo.toLocaleDateString('pt-BR')}.`);
+          } else { resumo.erros++; await desfazReatrib(r.error || 'envio recusado'); }
+        } catch (e) { resumo.erros++; if (!enviado) await desfazReatrib(e?.message || String(e)); else console.error(`[juridico-cron] pós-envio falhou caso=${caso.id}: ${e?.message || e}`); }
         continue;
       }
 

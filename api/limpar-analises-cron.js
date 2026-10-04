@@ -14,6 +14,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
+import { logAtividade } from './_atividade.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -39,6 +40,36 @@ export default async function handler(req, res) {
   // Após 15 min, marca como 'erro' para o usuário poder gerar de novo. Backstop do
   // banco — o app já se recupera sozinho na tela (STALE_GERANDO_MS no contexto).
   const corteGerando = new Date(Date.now() - 15 * 60000).toISOString();
+
+  // EVENTO 'relatorio_stale' (05/10, pendência 81): o rebaixamento na TELA (AnalisesContext,
+  // 9 min) não deixa rastro — relatório preso só existia no navegador de quem esperava. Aqui
+  // grava no atividade_log (Cliente 360) cada linha 'gerando' há > 9 min, ANTES do destrave
+  // abaixo mudar o status. Dedup por id: consulta o que já foi registrado; se a consulta
+  // falhar, NÃO registra (melhor faltar um evento hoje do que duplicar todo dia).
+  const corteStale = new Date(Date.now() - 9 * 60000).toISOString();
+  const stale = {};
+  for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
+    try {
+      const rs = await sb(`${tabela}?status=eq.gerando&updated_at=lt.${corteStale}&select=id,user_id,imovel_id,updated_at&limit=200`);
+      if (!rs.ok) { stale[tabela] = { erro: `leitura HTTP ${rs.status}` }; continue; }
+      const linhas = (await rs.json().catch(() => null));
+      if (!Array.isArray(linhas)) { stale[tabela] = { erro: 'leitura sem JSON' }; continue; }
+      if (!linhas.length) { stale[tabela] = { registrados: 0 }; continue; }
+      const ids = linhas.map(l => l.id).join(',');
+      const rd = await sb(`atividade_log?evento=eq.relatorio_stale&meta->>registro_id=in.(${ids})&select=rid:meta->>registro_id`);
+      if (!rd.ok) { stale[tabela] = { erro: `dedup HTTP ${rd.status}`, pendentes: linhas.length }; continue; }
+      const ja = new Set(((await rd.json().catch(() => [])) || []).map(x => x.rid));
+      let n = 0;
+      for (const l of linhas) {
+        if (ja.has(l.id) || !l.user_id) continue;
+        await logAtividade(l.user_id, 'relatorio_stale', `Relatório preso em "gerando" (${tabela})`,
+          { registro_id: l.id, tabela, imovel_id: l.imovel_id, gerando_desde: l.updated_at });
+        n++;
+      }
+      stale[tabela] = { registrados: n, ja_registrados: linhas.length - n };
+    } catch (e) { stale[tabela] = { erro: String(e?.message || e).slice(0, 120) }; }
+  }
+  out.stale = stale;
   for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
     try {
       const rg = await sb(`${tabela}?status=eq.gerando&updated_at=lt.${corteGerando}&select=id`, {

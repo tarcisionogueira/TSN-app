@@ -230,6 +230,9 @@ export default function Checkout() {
   const jaConfirmouRef = React.useRef(false);
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
   const iniciandoRef = React.useRef(false); // trava anti-duplo-clique no botão "Ir para pagamento"
+  // 05/10 (pendência 117): trava SÍNCRONA do "Criar conta grátis" — suLoading é estado e só
+  // vale no próximo render; dois cliques no mesmo tick criavam a conta duas vezes.
+  const criandoContaRef = React.useRef(false);
 
   // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
   useEffect(() => {
@@ -413,12 +416,14 @@ export default function Checkout() {
   // Explorador (grátis): mesma lógica do fluxo pago, sem a etapa de pagamento —
   // cria a conta já confirmada e libera o acesso direto.
   const criarContaGratis = async () => {
+    if (criandoContaRef.current) return;
     setSuErro('');
     const nome = normalizarNome(su.nome), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
     { const v = validarNome(nome); if (!v.ok) { setSuErro(v.erro); return; } }
     if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    criandoContaRef.current = true; // marca antes do 1º await
     setSuLoading(true);
     try {
       const res = await apiCall('/api/criar-conta-checkout', {
@@ -442,6 +447,7 @@ export default function Checkout() {
       }
       nav('/membros');
     } catch (e) { setSuErro(e.message || 'Erro ao criar a conta.'); }
+    finally { criandoContaRef.current = false; }
     setSuLoading(false);
   };
 

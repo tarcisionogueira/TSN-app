@@ -519,6 +519,12 @@ export default async function handler(req, res) {
   if (!body || typeof body !== 'object') return res.status(400).json({ error: 'Body inválido' });
 
   const { action, ...params } = body;
+  // SPLIT FECHADO (05/10, pendência 106): criarPreferencia aceitava `split` do body com
+  // `valor` livre por parte — o cliente escolhia quanto pagar. Nenhuma tela usa; recusa
+  // explícita em vez de ignorar calado, para quem chamar saber que não existe.
+  if (Object.prototype.hasOwnProperty.call(params, 'split')) {
+    return res.status(400).json({ error: 'split_nao_suportado', motivo: 'Pagamento dividido não é aceito por esta rota.' });
+  }
   // Segurança: o usuário do checkout é SEMPRE o autenticado (evita IDOR)
   params.userId = user.id;
   // CPF + role SEMPRE do perfil autenticado (decifra o cpf_enc; não confia no body).
