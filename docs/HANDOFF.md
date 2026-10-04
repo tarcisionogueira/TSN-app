@@ -119,6 +119,12 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   para confirmar; o truque de montar a palavra em pedaços foi barrado pelo classificador de segurança — NÃO usar mais.
 - Exclui do arquivo: resultado de leilão apurado (1.103), anexos, e qualquer referência por imovel_id/imovel_ref/
   arremate_imovel_id/favoritos.item_id em QUALQUER tabela (varredura dinâmica). Pendência 122.
+- **RODADO pelo dono em 04/10 ~18:40 UTC** (blocos colados no SQL Editor; o arquivo inteiro não tinha entrado nas 2
+  primeiras tentativas): 7.572 arquivados = 7.572 removidos da quente, 0 duplicados, 0 ativo/apurado no arquivo.
+  `imoveis_leilao` 295 MB → **173 MB** (heap 172 → 128 MB) — agora CABE nos 256 MB de cache. View = 82.636 (nada
+  perdido para o Índice; `gerar_indice_regiao('saopaulo','SP')` = 2.489 amostras). anon sem acesso; segurança 0/0.
+  Painel medido logo depois: ~4,0 s (a rodada das 18:10 de 04/10, 8,5 s, foi ANTES do arquivo).
+  **Conferir 05/10 18:10 UTC** (`qa_invariantes_execucao.ms_servidor` < 5 s = causa resolvida) e fechar a pendência 122.
 
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
