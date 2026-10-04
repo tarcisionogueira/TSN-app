@@ -1,0 +1,26 @@
+name: Testes (scripts/testes, sem credencial)
+
+# 05/10 (pendência 77): o repositório tinha 95 scripts `testar:*` e nenhum rodava no CI.
+# Este job roda os que não precisam de navegador nem de banco (ver scripts/rodar-testes.mjs).
+on:
+  push:
+    paths: ['api/**', 'src/**', 'scripts/**', 'package.json', '.github/workflows/testes.yml']
+  pull_request:
+    paths: ['api/**', 'src/**', 'scripts/**', 'package.json', '.github/workflows/testes.yml']
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+      - name: Rodar testes
+        run: node scripts/rodar-testes.mjs
