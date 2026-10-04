@@ -205,3 +205,11 @@ respondedor (5 min) já agendado.
 - `FIPE_COTA_DIARIA` — a cota diária do plano do token (padrão 500). Os tetos internos saem daqui
   (sob demanda = cota − 50; cron = cota − 80).
 Os dois também como **secret do GitHub** (o `enriquecer-fipe.yml` lê de lá).
+
+## As três que a pendência 60 cobrava (conferido em 05/10)
+- `GITHUB_ACTIONS_TOKEN` (Vercel) — **configurado**: `api/trigger-puppeteer.js` e `api/coleta-oportunista.js`
+  dispararam "Documentos — captura genérica" de 30/09 a 02/10, o que só acontece com o token válido.
+- `CONTABILIDADE_EMAIL` (Vercel) — **opcional**: `api/conciliacao.js` usa `body.email` primeiro; a env é só o
+  destino padrão quando a tela não manda um. Ausente = a tela pede o e-mail.
+- `AUDITORIA_EMAIL_DESTINO` — **não é da Vercel**, é **secret do GitHub** (`auditoria-claude.yml`). Conferir em
+  GitHub › Settings › Secrets and variables › Actions.
