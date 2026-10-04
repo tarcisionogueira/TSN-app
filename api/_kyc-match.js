@@ -54,7 +54,12 @@ export async function compararRostoDocumento({ selfieB64, selfieMedia, docB64, d
             { type: 'text', text: 'Imagem 1 (SELFIE):' },
             { type: 'image', source: { type: 'base64', media_type: selfieMedia || 'image/jpeg', data: selfieB64 } },
             { type: 'text', text: 'Imagem 2 (DOCUMENTO):' },
-            { type: 'image', source: { type: 'base64', media_type: docMedia || 'image/jpeg', data: docB64 } },
+            // CNH DIGITAL (05/10): o documento mais comum dos parceiros é o PDF da CNH-e, que o
+            // modelo lê como `document`. Antes todo PDF ia para "revisão manual" — e 6 de 6
+            // parceiros com documento + selfie estavam presos aí, sem fila que alguém olhasse.
+            docMedia === 'application/pdf'
+              ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: docB64 } }
+              : { type: 'image', source: { type: 'base64', media_type: docMedia || 'image/jpeg', data: docB64 } },
             { type: 'text', text: PROMPT_MATCH },
           ],
         }],

@@ -5168,6 +5168,52 @@ function VeiculosTab() {
 // E-mail de contato por leiloeiro (11/09) — a maioria nasce SOZINHA (captura automática no
 // scraper, scripts/_contato-leiloeiro.mjs), esta tela é só para corrigir quando vier errado.
 // Editar aqui grava origem='manual', que a captura automática nunca mais sobrescreve.
+// Fila de KYC pendente (05/10): quem caiu em "revisão manual" não aparecia em lugar nenhum — a tela
+// do parceiro dizia "a equipe confere" e o saque ficava travado sem ninguém saber. Aqui o admin
+// reroda o face match sobre a selfie e o documento já guardados (mesmo critério do titular).
+function KycPendenteManager() {
+  const [linhas, setLinhas] = useState(null);
+  const [erro, setErro] = useState('');
+  const [rodando, setRodando] = useState('');
+  const [resultado, setResultado] = useState({});
+  const carregar = async () => {
+    const { data, error } = await supabase.from('perfis').select('id, nome, created_at, parceiro_aceite_em')
+      .eq('identidade_pendente', true).neq('identidade_validada', true).order('created_at', { ascending: true });
+    if (error) { setErro('Não consegui ler a fila: ' + error.message); setLinhas([]); return; }
+    setErro(''); setLinhas(data || []);
+  };
+  useEffect(() => { carregar(); }, []);
+  const revalidar = async (id) => {
+    setRodando(id);
+    try {
+      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ revalidar_user_id: id }) });
+      const j = await r.json().catch(() => ({}));
+      setResultado(v => ({ ...v, [id]: j.ok ? '✓ validado' : (j.mensagem || `erro ${r.status}`) }));
+      if (j.ok) carregar();
+    } catch (e) { setResultado(v => ({ ...v, [id]: e.message || 'falha de rede' })); }
+    finally { setRodando(''); }
+  };
+  if (linhas && !linhas.length && !erro) return null;
+  return (
+    <div style={S.card}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🪪 KYC aguardando conferência {linhas ? `(${linhas.length})` : ''}</div>
+      <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0 10px' }}>Identidade validada é pré-requisito de saque. "Conferir de novo" reroda a comparação selfie × documento (inclusive CNH digital em PDF).</div>
+      {erro && <p style={{ fontSize: 11.5, color: '#dc2626' }}>⚠️ {erro}</p>}
+      {!linhas ? <p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando…</p> : linhas.map(l => (
+        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#fffbeb', borderRadius: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 12, flex: 1, minWidth: 140 }}>{l.nome || l.id.slice(0, 8)}</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>parceiro desde {l.parceiro_aceite_em ? new Date(l.parceiro_aceite_em).toLocaleDateString('pt-BR') : '—'}</span>
+          {resultado[l.id] && <span style={{ fontSize: 11, color: resultado[l.id].startsWith('✓') ? '#15803d' : '#b45309' }}>{resultado[l.id]}</span>}
+          <button onClick={() => revalidar(l.id)} disabled={!!rodando}
+            style={{ padding: '5px 10px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: rodando ? 'default' : 'pointer', opacity: rodando && rodando !== l.id ? 0.6 : 1 }}>
+            {rodando === l.id ? 'Conferindo…' : 'Conferir de novo'}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LeiloeiroContatoManager() {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -8222,6 +8268,7 @@ function ScrapersTab() {
             </div>
           )}
 
+          <KycPendenteManager />
           <LeiloeiroContatoManager />
         </div>
       )}

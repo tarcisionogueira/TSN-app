@@ -21,12 +21,15 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 async function marcarIdentidade(userId, campos) {
   if (!SUPABASE_URL || !SERVICE_KEY || !userId) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}`, {
       method: 'PATCH',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify(campos),
     });
-  } catch { /* não trava a resposta da verificação */ }
+    // PATCH que não alcança linha devolve 200 com [] (forma #3): sem log, "validado" sumia calado.
+    const linhas = r.ok ? await r.json().catch(() => []) : [];
+    if (!r.ok || !linhas.length) console.error('[validar-selfie] perfil NÃO atualizado', userId, r.status, Object.keys(campos).join(','));
+  } catch (e) { console.error('[validar-selfie] perfil NÃO atualizado (rede)', userId, e?.message); }
 }
 
 // Último documento de identidade do usuário no acervo (frente por foto ou arquivo da CNH).
@@ -82,7 +85,7 @@ async function assinarPathPrivado(path) {
 
 // Baixa uma imagem (URL assinada do bucket privado) → base64 p/ o Claude Vision. Cap de ~4MB
 // (limite prático do Vision e da memória do Edge). Retorna null se não for imagem/for grande demais.
-async function urlImagemParaBase64(url) {
+async function urlImagemParaBase64(url, { aceitaPdf = false } = {}) {
   let alvo = url;
   if (!ehUrlDoNossoStorage(alvo)) {
     const path = pathDoNossoBucket(alvo);
@@ -93,17 +96,18 @@ async function urlImagemParaBase64(url) {
   try {
     const r = await fetch(alvo, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
-    const ct = (r.headers.get('content-type') || '').toLowerCase();
-    if (!ct.startsWith('image/')) return null; // PDF (CNH digital) e outros não entram no match automático
+    let ct = (r.headers.get('content-type') || '').toLowerCase().split(';')[0];
+    // PDF só quando pedido (documento — CNH digital); selfie continua exigindo imagem.
+    if (aceitaPdf && (ct === 'application/pdf' || (ct === 'application/octet-stream' && /\.pdf(\?|$)/i.test(alvo)))) ct = 'application/pdf';
+    else if (!ct.startsWith('image/')) return null;
     const buf = new Uint8Array(await r.arrayBuffer());
     if (buf.length > 4 * 1024 * 1024) return null;
     let bin = '';
     for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-    return { base64: btoa(bin), mediaType: ct.split(';')[0] };
+    return { base64: btoa(bin), mediaType: ct };
   } catch { return null; }
 }
 
-const ehArquivoPdf = (doc) => /\.pdf(\?|$)/i.test(String(doc?.url || '')) || /\.pdf$/i.test(String(doc?.nome || ''));
 
 // Última SELFIE do usuário no acervo. Serve ao "continuar no celular": o telefone entrega a foto
 // (rota do QR, que só escreve) e o DESKTOP autenticado pede a validação sem ter os bytes em mãos.
@@ -143,12 +147,13 @@ async function validarRostoContraDocumento(user, selfieB64, selfieMedia, claudeK
     return jsonResp({ ok: false, pendente: true, mensagem: 'Selfie recebida. Sua identidade será confirmada pela equipe em breve.' });
   }
 
-  // 3) Documento em PDF (CNH digital) ou fora do nosso Storage → sem match automático: revisão manual.
-  //    (fora do Storage = linha forjada em usuario_docs; nunca aprova sozinha — ver ehUrlDoNossoStorage)
-  const docImg = ehArquivoPdf(doc) ? null : await urlImagemParaBase64(doc.url);
+  // 3) Documento fora do nosso Storage → sem match automático: revisão manual (linha forjada em
+  //    usuario_docs nunca aprova sozinha — ver ehUrlDoNossoStorage). PDF (CNH digital) ENTRA no match
+  //    desde 05/10: o modelo lê o PDF como documento.
+  const docImg = await urlImagemParaBase64(doc.url, { aceitaPdf: true });
   if (!docImg) {
     await marcarIdentidade(user.id, { identidade_pendente: true });
-    return jsonResp({ ok: false, pendente: true, mensagem: 'Selfie recebida. Como o documento foi enviado em arquivo/PDF, a conferência será feita pela equipe em breve.' });
+    return jsonResp({ ok: false, pendente: true, mensagem: 'Selfie recebida. Não consegui abrir o documento enviado; a conferência será feita pela equipe em breve.' });
   }
 
   // 4) Face match selfie × documento (motor compartilhado — 2 imagens, prompt do servidor).
@@ -203,6 +208,23 @@ export default async function handler(req) {
 
   const { imagem, tipo } = body;
   const claudeKeyEnv = process.env.CLAUDE_KEY;
+
+  // ── REVALIDAÇÃO PELO ADMIN (05/10): fila de KYC pendente ─────────────────────────────────────
+  // Quem ficou em "revisão manual" (PDF antes de 05/10, IA indisponível, dúvida) não tinha fila: a
+  // tela prometia "a equipe confere" e ninguém via. O admin reroda o MESMO face match sobre a selfie
+  // e o documento já guardados do titular — nunca aprova sem match; o critério é o do titular.
+  if (body.revalidar_user_id) {
+    const alvo = String(body.revalidar_user_id);
+    if (!/^[0-9a-f-]{36}$/i.test(alvo)) return new Response(JSON.stringify({ ok: false, mensagem: 'Usuário inválido.' }), { status: 400 });
+    const rp = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=role`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+    if (!rp.ok) return new Response(JSON.stringify({ ok: false, mensagem: 'Não consegui verificar seu acesso agora.' }), { status: 502 });
+    const [eu] = await rp.json().catch(() => []);
+    if (eu?.role !== 'admin') return new Response(JSON.stringify({ ok: false, mensagem: 'Apenas admin.' }), { status: 403 });
+    const selfie = await buscarSelfieUsuario(alvo);
+    const img = selfie ? await urlImagemParaBase64(selfie.url) : null;
+    if (!img) return new Response(JSON.stringify({ ok: false, mensagem: 'Selfie do titular não encontrada ou ilegível — ele precisa refazer a selfie.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return await validarRostoContraDocumento({ id: alvo }, img.base64, img.mediaType, claudeKeyEnv);
+  }
 
   // ── "Continuar no celular": a selfie já está no acervo, o desktop só pede a conferência ──
   // O telefone entrega a foto pela rota do QR (que apenas escreve). Quem dispara a validação é
