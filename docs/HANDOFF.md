@@ -37,6 +37,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### ⏱️ 04/10 — `erro_na_tela_do_cliente` (2): timeout transitório em /analises → a leitura agora relê sozinha
+- Um só episódio (2 linhas): explorador abriu `/analises` em 01/10 02:38 UTC e `minhas_analises_lista` deu
+  `statement timeout`. Medido hoje para o MESMO usuário: **47 ms** (6 relatórios) — a RPC é sã; foi pico de carga do
+  banco (mesma pressão de memória da pendência "painel frio", compute maior descartado pelo dono). Logs do banco de
+  3 dias atrás já não existem; não dá para apontar o job.
+- Conserto barato e central: `lerComRenovacao` (src/lib/sessao-expirada.js, usado por 9 leituras) relê UMA vez após
+  1,5 s quando o erro é timeout (57014). Persistiu → devolve o erro real (a tela segue dizendo "é a leitura que
+  falhou", nunca lista vazia). Teste em `testar:sessao`.
+- O invariante conta 7 dias de `eventos_atividade.erro_ui` e não tem "resolvido": as 2 linhas saem sozinhas em 08/10.
+
 ### 🧩 03/10 (noite) — invariantes de captura: edital ZUK multi-lote não reconhecido · fração "2/9 do imóvel" no acervo
 - **`matricula_area_de_outro_lote` 4 → 0.** Leilão ZUK 37728: o edital lista "LOTE 001⏎MATRÍCULA 7513" (número
   sozinho na linha). `ehDocMultiLote` só aceitava "Lote 1)" / "LOTE 02 –" → disse "lote único" → matrícula e
