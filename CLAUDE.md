@@ -217,6 +217,11 @@ curto (5–8 linhas) antes de seguir:
    > explicado_em=now(), explicado_ate=excluded.explicado_ate;`. A verdade crua continua em
    > `fonte_regressao_suspeita()`.
 
+   > **Mesmo desenho para os INVARIANTES de lote (04/10):** caso investigado e aceito de propósito (ex.: lote
+   > sem cidade porque inventar seria pior) vai para `qa_invariante_explicada (chave, imovel_id, explicacao,
+   > explicado_ate)` e sai da conta por 30 dias. Hoje só `estado_fora_do_padrao` lê a tabela; ao estender a
+   > outro invariante, ponha o mesmo `not exists` no corpo dele. Sem isso, piso fixo de casos aceitos esconde o novo.
+
    → só a linha `(explicadas)`, ou vazio = íntegro. **Cada linha diz o `motivo` por extenso** — e os três pedem ações
    diferentes, então leia o motivo antes de agir:
    - **`zerou`** — a fonte parou de trazer lote. Zero não é oscilação: é o achado mais duro

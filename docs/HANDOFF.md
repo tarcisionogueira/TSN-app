@@ -99,6 +99,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   comparáveis na mão (forma nº 10). Rótulo corrigido no 360 (`meta.comparaveis > 0` → "comparáveis achados, sem
   área do imóvel"; migração `20261004_360_motivo_mercado_vazio.sql`, já aplicada) e no texto do gerador.
 
+### 🗺️ 04/10 (tarde) — `estado_fora_do_padrao` 11 → 5 (→ 0 amanhã): piso fixo de casos aceitos acabou
+- 5 = ALBERTOMACEDO que saíram do site em 02/10 (pendência 118; a limpeza das 05:00 UTC de 05/10 os desativa).
+- 3 cascas desativadas (`suprimido_motivo='casca_sem_conteudo'`): MILAN "Imóvel", SATO "IMÓVEIS | GO", WEBLEILOES "Apartamento".
+- 3 sem cidade de propósito (LEILOTECH 2, LEILAOBRASIL 1) → `qa_invariante_explicada` (nova; 30 dias, depois voltam).
+  O invariante desconta os explicados vigentes. Migração `20261004_qa_invariante_explicada.sql` (já aplicada).
+  Segurança: 0/0 com a tabela nova (RLS sem política = só service role).
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF
