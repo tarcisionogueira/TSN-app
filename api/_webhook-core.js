@@ -80,13 +80,20 @@ export async function eventoJaProcessado({ gateway, gatewayPaymentId, evento }) 
 // deduplicado e o efeito (ativação/estorno) nunca completaria. Best-effort.
 export async function removerEventoProcessado({ gateway, gatewayPaymentId, evento }) {
   if (!gatewayPaymentId || !evento) return;
+  // Conferido (04/10, revisão de segurança): todo o "falhou → 5xx → gateway reentrega" depende
+  // desta exclusão. Se ela falha calada, a reentrega cai em `duplicado` e o efeito se perde sem
+  // rastro. Não lança (o chamador já está respondendo 5xx), mas ALERTA a equipe.
   try {
-    await supabase.from('webhook_eventos_processados')
+    const { error } = await supabase.from('webhook_eventos_processados')
       .delete()
       .eq('gateway', gateway)
       .eq('gateway_payment_id', String(gatewayPaymentId))
       .eq('evento', evento);
-  } catch (e) { console.error(`[${gateway}] remover idempotência:`, e?.message || e); }
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    console.error(`[${gateway}] remover idempotência:`, e?.message || e);
+    alertarErro({ rota: `webhook/${gateway}/idempotencia`, erro: `Marca de idempotência NÃO removida após falha — a reentrega será descartada como duplicada. Reprocessar à mão: ${gateway} ${gatewayPaymentId} (${evento}). Motivo: ${e?.message || e}`, extra: { gateway, gatewayPaymentId: String(gatewayPaymentId), evento } });
+  }
 }
 
 // ── Mapeamento valor → plano ──────────────────────────────────────────────────
@@ -523,7 +530,10 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
           origem_tipo: l.origem_tipo || 'assinatura', origem_id: estOid,
           descricao: `Estorno de comissão — ${motivoTxt.toUpperCase()}${clienteNome ? ` do cliente ${clienteNome}` : ''} (${gateway}); descontado do saldo/pagamento seguinte`, status: 'disponivel',
         });
-        if (eIns) throw new Error(`estorno ${estOid} não gravado: ${eIns.message}`);
+        // 23505 = outra entrega (chargeback × reembolso do mesmo pagamento, em paralelo) já gravou
+        // este estorno — índice único uq_saldo_estorno_comissao_origem (04/10). É "já feito".
+        if (eIns && eIns.code !== '23505') throw new Error(`estorno ${estOid} não gravado: ${eIns.message}`);
+        if (eIns) continue;
         estornado += Number(l.valor);
       }
     }
@@ -788,8 +798,11 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
     gerado_em: new Date().toISOString(),
   };
 
+  // Falhas juntadas e LANÇADAS no fim (04/10) — inclui o dossiê, que antes passava calado
+  // (`try/catch` não vê o `{error}` do postgrest-js).
+  const falhas = [];
   try {
-    await supabase.from('chargebacks').upsert({
+    const { error: eDossie } = await supabase.from('chargebacks').upsert({
       gateway,
       gateway_payment_id: gatewayPaymentId,
       gateway_subscription_id: gatewaySubscriptionId || null,
@@ -805,8 +818,10 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
       raw: raw || null,
       atualizado_em: new Date().toISOString(),
     }, { onConflict: 'gateway,gateway_payment_id' });
+    if (eDossie) throw new Error(eDossie.message);
   } catch (e) {
     console.error(`[${gateway}] insert chargeback:`, e.message);
+    falhas.push(`dossiê: ${e?.message || e}`);
   }
 
   // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre — EXCETO
@@ -815,7 +830,6 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   // As duas etapas abaixo eram `catch (_) {}` (04/10, varredura): falhavam caladas e o evento
   // ficava marcado como processado. Agora as falhas são juntadas e, depois do alerta, LANÇAM —
   // o webhook desfaz a marca e o gateway reentrega (dossiê é upsert; estorno é idempotente).
-  const falhas = [];
   if (!servico) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); } }
 
   // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
@@ -860,7 +874,7 @@ export async function processarReembolso({ valor, email, gatewayCustomerId, gate
   try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { falhas.push(`estorno de comissão: ${e?.message || e}`); }
   alertarErro({
     rota: `webhook/${gateway}/reembolso`,
-    erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspendeAcesso ? '; acesso suspenso' : (servico ? ' (serviço avulso — assinatura mantida)' : ' (reembolso parcial — acesso mantido)')}.`,
+    erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ${falhas.length ? `FALHOU (gateway vai reentregar): ${falhas.join(' | ')}` : 'Comissão de rede estornada'}${suspendeAcesso ? '; acesso suspenso' : (servico ? ' (serviço avulso — assinatura mantida)' : ' (reembolso parcial — acesso mantido)')}.`,
     extra: { gatewayPaymentId, falhas },
   });
   if (falhas.length) throw new Error(`reembolso incompleto — ${falhas.join(' | ')}`);

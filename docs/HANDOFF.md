@@ -153,6 +153,25 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   usuário errado; limpeza de documentos sem conferir; telas (Arrematados, Minha Rede, Comissões, anexos) mostrando
   vazio/zero em falha de leitura. Arquivo de lotes: recriar a função com `duplicata_suspeita_de` (dono, SQL Editor).
 
+### 🔧 04/10 (noite) — Pendências da varredura resolvidas (124–129) + contato do Leilão Brasil
+- **Leilão Brasil sem e-mail:** a plataforma é multi-tenant e o contato é por leiloeiro; só a Dagmar tinha (cadastro manual
+  do dono às 18:02). IRANI FLORES e MURILO ganharam `atendimento@leilaobrasil.com.br` (rodapé do site). Medido: ~2.600 lotes
+  ativos sem e-mail resolvível (SUPERBID 1.259, PESTANA 308, BIASI 272…) → pendência 131.
+- **Pedido ao leiloeiro** (`api/pedir-documento-leiloeiro.js`): matrícula/edital não publicados (`tem_*_doc`) entram como
+  itens faltantes mesmo SEM análise documental (antes recusava "gere a documental primeiro").
+- **125:** cota estornada se a gravação inicial de "gerando" falha (mercadológico/documental → 503 "nada foi cobrado");
+  `upsertLaudo`/`upsertAnaliseVeiculo` lançam em não-2xx; laudo preserva o anterior; estorno do veículo idempotente.
+- **126:** `enviar-alertas-cron` — opt-out, dedup e supressão viraram leitura obrigatória (falhou → lote não envia).
+- **124:** webhooks MP/Asaas — leitura falha (honorário, cobrança avulsa, `buscarCliente`) desfaz a marca e devolve 5xx;
+  `estornarComissao` confere tudo e lança; chargeback/reembolso juntam falhas (dossiê incluído) e lançam após o alerta;
+  `removerEventoProcessado` confere e ALERTA se não removeu. Revisão ofensiva feita: sem falha explorável; corrida de estorno
+  duplicado fechada com `uq_saldo_estorno_comissao_origem` (23505 = já feito). Ressalva aberta: reentrega de chargeback
+  regrava `status/defesa_status` do dossiê (comportamento anterior, não mudou).
+- **128:** Arrematados, Minha Rede, Comissões e docs do leiloeiro mostram erro em vez de vazio/zero.
+- **129:** `limpar-documentos-cron` só zera ponteiro do que o Storage confirmou apagar.
+- **127:** migração `20261004_retencao_aviso_mesmo_usuario.sql` PRONTA, NÃO aplicada (tem revoke → dono no SQL Editor;
+  0 casos hoje). Falta a 123 (checkout cancela assinatura antes do novo pagamento).
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF
