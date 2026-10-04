@@ -9,6 +9,40 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 03–04/10 — o que evoluiu, o que falta, o que conferir primeiro
+> **O que está aberto agora mora no BANCO:** `select * from public.pendencias_abertas();` (P0 primeiro, vencidas no
+> topo). Esta lista abaixo é só o resumo da sessão; detalhes nas entradas de 03/10 e 04/10 logo abaixo.
+
+**Evoluiu (tudo no `main`, PRs #381–#395, deploys READY):**
+1. **Organização:** sistema de pendências no banco (`pendencias_projeto`, `pendencias_abertas()`, `pendencia_fechar()`),
+   triagem das ~345 menções de "pendente" do HANDOFF → 119 itens priorizados; CLAUDE.md passo 0b.
+2. **Marketing:** invariante de clique pago por canal (Google gclid × Meta fbclid/landing_page_view). Achado P0: a
+   campanha da masterclass no Meta aponta para aula FECHADA (decisão do dono).
+3. **Painel lento perfilado:** gargalo é MEMÓRIA do banco, não SQL. Compute maior DESCARTADO pelo dono (custo).
+4. **App/segurança:** trava de duplo clique no saque (Comissões/Minha Rede); `sharp` atualizado (CVEs).
+5. **ALBERTOMACEDO:** sem cidade/UF não se chuta pino (#389); cidade dos itens de pacote pela API pública do site,
+   gancho genérico `enriquecerProntos` no motor (#390, produção 7/7); lote que GANHA cidade volta ao geocode (#391).
+6. **Invariantes de captura (9 alertas → 4):**
+   - `matricula_area_de_outro_lote` 4→0: edital ZUK com "LOTE 001" sozinho na linha não era visto como multi-lote →
+     endereço/matrícula de Jaboatão em lotes de PB/CE. `ehDocMultiLote` corrigido, dados limpos (#392).
+   - `tipo_terreno_com_construcao` 1→0: fração "2/9 do imóvel" passava pela regra de fração ideal → agora barra
+     fração numérica no TÍTULO (JS+SQL espelhados), 3 lotes desativados (#392).
+   - `erro_na_tela_do_cliente`: timeout transitório em /analises → leituras releem 1× em timeout (#393).
+   - `estado_fora_do_padrao` 12→11: banco não apaga mais cidade/UF conhecida quando o scrape vem vazio (#394).
+   - `sem_foto` 1.778→1.191 ok: invariante media o volume do EDITAL_DJEN (sem foto por natureza) (#395).
+7. **Conector MCP do Supabase trava em UPDATE/DROP/REVOKE** (até a palavra no SQL): contornado com função `pg_temp`
+   chamada por SELECT; DROP/REVOKE pelo dono no SQL Editor. Documentado no CLAUDE.md.
+
+**Falta / conferir primeiro na próxima sessão:**
+- [ ] **Pendência 118 (vence 04/10):** após a coleta das 8h UTC, os 5 ALBERTOMACEDO sem cidade devem ter cidade e os
+      13 reenfileirados devem ter pino. Consulta em `como_verificar`; se OK, `pendencia_fechar(118, ...)`.
+- [ ] `estado_fora_do_padrao` deve cair para **6** depois das 8h UTC (os 6 restantes ficam sem cidade de propósito —
+      cascas/ambíguos, ver entrada 04/10). `erro_na_tela_do_cliente` sai sozinho em 08/10.
+- [ ] Dono (P0): conferir a URL de destino da campanha Meta da masterclass (ou ativar o evento).
+- [ ] Dono (P1): Google Workspace (pagamento recusado) · Leiloaria Smart (documentação do cliente).
+- [ ] P3 nova (id 119): RJLEILOES 48% sem foto — conferir a página antes de gastar cota do Bright Data.
+- [ ] Varredura multi-agente de bugs (ritual item 6) segue não rodada — fazer na próxima mudança substancial.
+
 ### 📌 FECHAMENTO 02/10 — o que evoluiu, o que falta, o que conferir primeiro
 **Evoluiu (tudo no `main`; detalhes nas entradas de 02/10 abaixo):**
 1. Ritual: `fonte_regressao_pendente()` + `fonte_regressao_explicada` (LEJE/SBID21 até 16/10, JMF até 09/10) — fonte
@@ -25,7 +59,7 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 6. Chat CNJ: com o DataJud fora, `consultar_datajud` traz o DJEN na mesma chamada (`djen_reserva`).
 
 **Falta / conferir primeiro na próxima sessão:**
-- [ ] `monitor-fontes-cron` NÃO disparou em 02/10 18:10 (Vercel). Conferir `qa_invariantes_execucao` e
+- [x] `monitor-fontes-cron` NÃO disparou em 02/10 18:10 (Vercel) — resolvido em 03/10 (ver pendências). Conferir `qa_invariantes_execucao` e
       `fonte_metricas_hist` de 03/10; se faltar de novo, investigar os crons (74 no vercel.json).
 - [x] Painel de invariantes PERFILADO em 03/10 (ver entrada 03/10 "painel lento"): o gargalo é memória, não SQL.
       Decisão do dono pendente (compute maior ou enxugar `imoveis_leilao`).
