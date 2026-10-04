@@ -142,7 +142,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     // Lançando, o catch do webhook desfaz a marca e devolve 5xx para o gateway reentregar.
     const { data, error } = await supabase
       .from('perfis')
-      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
+      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento')
       .eq(campo, gatewayCustomerId)
       .maybeSingle();
     if (error) throw new Error(`buscarCliente(${campo}): ${error.message}`);
@@ -156,7 +156,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     if (userId) {
       const { data, error } = await supabase
         .from('perfis')
-        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
+        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento')
         .eq('id', userId)
         .maybeSingle();
       if (error) throw new Error(`buscarCliente(id): ${error.message}`);
@@ -215,7 +215,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, ciclo_agendado').eq('id', userId).maybeSingle();
+  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, plano_ciclo, ciclo_agendado').eq('id', userId).maybeSingle();
 
   // ── ACESSO SÓ COM DINHEIRO NA CONTA (decisão do dono, 16/08) ────────────────────
   // A trava mora AQUI, e não em cada chamador, porque o defeito já tinha aparecido em
@@ -257,7 +257,13 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   };
   // CICLO do plano (mensal/anual) derivado do planoKey — o recorrente MP não usa valor.
   const cicloKey = /_anual$/.test(planoKey) ? 'anual' : 'mensal';
-  upd.plano_ciclo = cicloKey;
+  // MENSAL NÃO PASSA POR CIMA DE ANUAL VIGENTE (04/10, pendência 133): cobrança de um mandato
+  // mensal ANTIGO (gerada antes do cancelamento e processada depois de o anual ativar) gravava
+  // 'mensal' sobre o anual e limpava o agendamento. O anual vale até plano_vencimento.
+  const anualVigente = /anual/i.test(atual?.plano_ciclo || '') && atual?.plano_vencimento
+    && new Date(atual.plano_vencimento).getTime() > Date.now();
+  if (!(cicloKey === 'mensal' && anualVigente)) upd.plano_ciclo = cicloKey;
+  else console.warn(`[${gateway}] ativação mensal de ${userId} com anual vigente — ciclo anual mantido`);
   if (cicloKey === 'anual' && (cobranca?.gatewayPaymentId || !atual?.plano_vencimento)) {
     // Reancora a vigência de 12m SÓ com COBRANÇA REAL (renovação — regra c) OU na 1ª
     // ativação (sem âncora ainda). A mera autorização do mandato / a reconciliação
@@ -266,7 +272,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
     upd.plano_vencimento = venc.toISOString();
   }
   // Confirmou a mensal após um agendamento anual→mensal → limpa a intenção (idempotente).
-  if (cicloKey === 'mensal' && atual?.ciclo_agendado) upd.ciclo_agendado = null;
+  if (cicloKey === 'mensal' && !anualVigente && atual?.ciclo_agendado) upd.ciclo_agendado = null;
   // DOWNGRADE AGENDADO cumprido (ou desfeito): qualquer ativação de plano encerra o
   // agendamento. Deixá-lo pendurado faria o cron seguir convidando para uma troca que já
   // aconteceu — e o cliente receberia e-mail pedindo para ativar o plano que ele já tem.
@@ -566,6 +572,7 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // inadimplência; NUNCA mapeia valor→plano (senão um serviço de R$500/5000/99,90
   // elevaria o plano do cliente "de graça"). mapeado=null pula toda a elevação.
   const mapeado = servico ? null : mapearPlano(valor, descricao);
+  let cicloMarcado = false; // marca 'ciclo_aplicado' gravada nesta chamada (desfeita se a gravação falhar)
 
   // Atualiza perfil. NÃO limpar inadimplência aqui: um pagamento de SERVIÇO (mapeado=null)
   // não restaura o plano — se limpasse a flag sem restaurar o role, deixaria role_anterior
@@ -605,7 +612,19 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
     // existia e a proteção anti-rebaixamento do anual (reconciliar-cron, marcar-posse) ficava
     // órfã. Para o ANUAL, também ancora a vigência de 12 meses (usada pela proteção e, no
     // futuro, pela renovação/troca de ciclo).
-    if (mapeado.ciclo) {
+    // CICLO UMA VEZ POR PAGAMENTO + MENSAL NÃO PASSA POR CIMA DE ANUAL VIGENTE (04/10, pend. 133).
+    // O Asaas manda CONFIRMED e, ~30 dias depois, RECEIVED do MESMO pagamento de cartão — os dois
+    // chegam aqui. Na troca mensal→anual, o RECEIVED atrasado da última mensal regravava
+    // plano_ciclo='mensal' sobre o anual e limpava o agendamento; no anual, cada RECEIVED
+    // empurrava o vencimento ~30 dias ("hoje + 12 meses" recalculado). Agora: (1) ciclo e
+    // vencimento só na 1ª aplicação de cada pagamento (marca atômica; desfeita se a gravação
+    // falhar, para a reentrega refazer); (2) pagamento MENSAL com anual vigente não troca o ciclo
+    // (renovação mensal antiga paga com atraso — outro pagamento, a trava 1 não pega).
+    const anualVigente = /anual/i.test(cliente.plano_ciclo || '') && cliente.plano_vencimento
+      && new Date(cliente.plano_vencimento).getTime() > Date.now();
+    if (mapeado.ciclo && !(mapeado.ciclo === 'mensal' && anualVigente)
+        && !(await eventoJaProcessado({ gateway, gatewayPaymentId, evento: 'ciclo_aplicado' }))) {
+      cicloMarcado = true;
       update.plano_ciclo = mapeado.ciclo;
       if (mapeado.ciclo === 'anual') {
         const venc = new Date(); venc.setMonth(venc.getMonth() + 12);
@@ -615,6 +634,8 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
         // aqui que a regra (b) se materializa quando o cliente re-assina no ciclo mensal.
         update.ciclo_agendado = null;
       }
+    } else if (mapeado.ciclo === 'mensal' && anualVigente) {
+      console.warn(`[${gateway}] pagamento mensal ${gatewayPaymentId} com anual vigente — ciclo mantido`);
     }
   }
 
@@ -624,7 +645,12 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   for (const k of Object.keys(update)) if (update[k] === undefined) delete update[k];
   if (Object.keys(update).length > 0) {
     const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
-    if (error) throw new Error(error.message);
+    if (error) {
+      // A marca de ciclo foi gravada nesta chamada, mas o ciclo não: desfaz, senão a reentrega
+      // pularia o ciclo para sempre (o webhook desfaz só a marca do EVENTO).
+      if (cicloMarcado) await removerEventoProcessado({ gateway, gatewayPaymentId, evento: 'ciclo_aplicado' });
+      throw new Error(error.message);
+    }
   }
 
   // LOG DE ATIVIDADE (Cliente 360) — cobre os dois gateways (MP e Asaas) num ponto só, já
