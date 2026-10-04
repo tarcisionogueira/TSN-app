@@ -17,20 +17,32 @@ jobs:
       - name: Recon (endpoints do bundle)
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          # cota semanal do Bright Data (scripts/lib/bd-ledger.mjs) precisa do banco — sem isto a reserva falha
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-emiliomatos.mjs
       - name: Validação da listagem (/busca/segmento/imoveis)
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          # cota semanal do Bright Data (scripts/lib/bd-ledger.mjs) precisa do banco — sem isto a reserva falha
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-emiliomatos-lotes.mjs
       - name: DRY-RUN do parser de produção (lib/emiliomatos-parse)
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          # cota semanal do Bright Data (scripts/lib/bd-ledger.mjs) precisa do banco — sem isto a reserva falha
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-emiliomatos-parse.mjs
       - name: Recon do filtro de leilões ABERTOS
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          # cota semanal do Bright Data (scripts/lib/bd-ledger.mjs) precisa do banco — sem isto a reserva falha
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-emiliomatos-filtro.mjs

@@ -13,5 +13,8 @@ jobs:
       - name: Recon comprei.pgfn
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          # cota semanal do Bright Data (scripts/lib/bd-ledger.mjs) precisa do banco — sem isto a reserva falha
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-comprei-pgfn.mjs
