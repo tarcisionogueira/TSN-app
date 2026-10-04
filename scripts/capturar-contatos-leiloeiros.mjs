@@ -82,6 +82,15 @@ const guardar = (fonte, url) => {
 for (const r of await todas('imoveis_leilao?ativo=eq.true&fonte=not.in.(CEF,caixa)&select=fonte,url_lote,link_edital&order=fonte')) guardar(r.fonte, r.url_lote || r.link_edital);
 for (const r of await todas('veiculos_leilao?ativo=eq.true&select=fonte,link_lote&order=fonte')) guardar(r.fonte, r.link_lote);
 const origemPorFonte = new Map([...contagemOrigem].map(([f, m]) => [f, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+// Fração dos lotes da fonte que estão na origem dominante. PORTAL de verdade (SUPERBID, SOLD,
+// LEILAOBRASIL) hospeda os lotes no próprio domínio (~100%); SOFTWARE white-label (LEILOTECH, VLANCE,
+// GESTAOLEILOES) põe cada leiloeiro no domínio DELE — ali a "origem dominante" é só o maior leiloeiro,
+// e o e-mail dele não pode virar o "da plataforma" para os outros (dry-run de 04/10: oleiloes,
+// hdleiloes e lancenoleilao saíram como "plataforma").
+const fracaoDominante = new Map([...contagemOrigem].map(([f, m]) => {
+  const tot = [...m.values()].reduce((a, b) => a + b, 0);
+  return [f, tot ? Math.max(...m.values()) / tot : 0];
+}));
 
 const contatos = new Map((await sb('leiloeiro_contato?select=fonte,email,origem')).map((c) => [c.fonte, c]));
 const resultado = { gravado: [], achado: [], sem: [], multi: [], ja: [] };
@@ -98,6 +107,11 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
   // O edital do DJEN fica de fora: lá o e-mail é do leiloeiro que assinou, não da plataforma.
   const multi = await sb('rpc/fonte_multi_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte }) });
   if (multi === true) resultado.multi.push(fonte);
+  if (multi === true && (fracaoDominante.get(fonte) || 0) < 0.95) { // 95%: GESTAOLEILOES tem 94% num leiloeiro e 2 lotes de outro
+    resultado.sem.push({ fonte, motivo: `plataforma white-label (${Math.round((fracaoDominante.get(fonte) || 0) * 100)}% dos lotes no domínio dominante) — só contato por leiloeiro` });
+    console.log(`  ⤷ ${fonte.padEnd(20)} white-label: cada leiloeiro no próprio domínio — sem e-mail de plataforma (contato por leiloeiro abaixo)`);
+    continue;
+  }
 
   let { achado, url, motivo } = await buscarEmailDoSite(origem, { obterHtml });
   // 2ª FONTE: EDITAIS DO DJEN (29/09). O leiloeiro assina o edital publicado no Diário da Justiça
