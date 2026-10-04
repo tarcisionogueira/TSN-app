@@ -90,6 +90,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   (c) `forma_pagamento = 'hipotecado'` NÃO é defeito: é o canônico de leilão JUDICIAL com parcelamento do art. 895 do
   CPC (o edital deste lote admite proposta parcelada) — ver `src/data/pagamento.js`.
 
+### 🧑‍💼 04/10 — Cliente 360: "1 cliente com erro" era erro velho que não travou ninguém; o pagante é que sumiu
+- `clientes_com_erro: 1` = assessorado Rafael da Silva Pereira, `vite:preloadError PRESO` em /buscar (25/09 13:44). Ele
+  seguiu usando o app por 16 min (8 telas, 26 cliques) — não travou. Fechado (e o anônimo de 02/09, mesma classe;
+  a recarga de versão nova entrou em 02/10). Painel: 0 clientes com erro.
+- O achado de verdade é comercial: **assessorado desde 06/07, 0 relatórios, sem acesso desde 25/09** → pendência 121 (dono, P1).
+- `relatorios_falha_24h: 1` era o relatório de Santo Amaro (gerado pelo admin) — rotulado "sem comparáveis" com 11
+  comparáveis na mão (forma nº 10). Rótulo corrigido no 360 (`meta.comparaveis > 0` → "comparáveis achados, sem
+  área do imóvel"; migração `20261004_360_motivo_mercado_vazio.sql`, já aplicada) e no texto do gerador.
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF

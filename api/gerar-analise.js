@@ -4060,7 +4060,9 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // `semParecer` agora vem de cima (também governa estorno/débito).
       const evento = mercadoVazio ? 'relatorio_mercado_vazio' : semParecer ? 'relatorio_parecer_vazio' : 'relatorio_mercado_ok';
       const detalhe = mercadoVazio
-        ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : ' (sem comparáveis ativos)'}`
+        // 04/10: "sem comparáveis" saía também quando a pesquisa ACHOU comparáveis e faltou a ÁREA do
+        // imóvel (Santo Amaro: 11 do mesmo condomínio) — o motivo apontava para a busca, que estava sã.
+        ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : nComp > 0 && !(Number(m.metodologia?.area?.valor) > 0) ? ` (${nComp} comparáveis, sem área do imóvel)` : ' (sem comparáveis ativos)'}`
         : semParecer
           ? `Entrega incompleta: mercado OK${valorMercado ? ` (R$ ${Math.round(valorMercado).toLocaleString('pt-BR')})` : ''} mas SEM parecer — motivo: ${dp?.erro || dp?.erroSetup || 'desconhecido'}${dp?.tentativas ? ` (${dp.tentativas} tentativa(s))` : ''}`
           : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`;
