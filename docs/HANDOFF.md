@@ -35965,3 +35965,16 @@ cron do WSL (`runner-se-atrasado.sh`, */30) dispara a rodada se estiver atrasada
   navegador do app mostra branco. `api/email-caixa.js` ganhou `proxy: true` (repassa o arquivo em
   streaming com o tipo pelo nome e `inline`); `CaixaEmail.jsx` abre a aba no clique e carrega o
   arquivo nela. `enviar-email-caso.js` passa a declarar `content_type` de cada anexo no envio.
+
+### 04/10 (noite) — Pendência 131 fechada: e-mail de leiloeiro por afinidade de domínio
+- `scripts/capturar-contatos-leiloeiros.mjs`, etapa por leiloeiro (plataformas multi-tenant, editais do DJEN):
+  o 1º dry-run atribuiu **NOGUEIRA LEILÕES → contato@saraivaleiloes** (outra leiloeira no mesmo edital) e
+  pegaria **hidirlene@leiloesjudiciaises** (erro de digitação do edital). Regra final:
+  - **afinidade**: domínio contém o nome ou as iniciais do leiloeiro (marangonileiloes, jmleiloes) → aceita;
+  - **sem afinidade**: nome com 2+ palavras, e-mail a ≤1.500 caracteres do nome, em 2+ editais;
+  - **MX obrigatório** (DNS incerto = não grava).
+- Gravado (run com aplicar=1): 4 e-mails por fonte (LEILAOBRASIL, LUTHERO, SUPERBID, FREITAS) + 8 por leiloeiro
+  em `leiloeiro_contato_tenant`. Plataformas white-label (<95% dos lotes no domínio dominante: VLANCE,
+  LEILOTECH, GESTAOLEILOES) **não** recebem e-mail de plataforma.
+- Lotes sem destinatário: ~2.600 → **981**. Resíduo = pendência **135** (dono): PESTANA 308 + BIASI 272 não
+  publicam e-mail; cadastrar à mão em `leiloeiro_contato` (origem manual) fecha 59%.
