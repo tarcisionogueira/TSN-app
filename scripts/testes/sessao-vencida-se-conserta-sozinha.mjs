@@ -80,6 +80,18 @@ console.log('\nRELER UMA VEZ — nem zero, nem em laço');
   checa('com o motivo da recusa junto, para o diagnóstico', /sem refresh token/.test(r.motivoRenovacao || ''), r.motivoRenovacao);
 }
 
+console.log('\nTIMEOUT DO BANCO (04/10): relê UMA vez, depois desiste com o erro real');
+{
+  const sb = { auth: { refreshSession: async () => ({ data: { session: { access_token: 'x' } }, error: null }) } };
+  const timeout = { code: '57014', message: 'canceling statement due to statement timeout' };
+  let n = 0;
+  let r = await lerComRenovacao(sb, async () => { n++; return n === 1 ? { data: null, error: timeout } : { data: [1], error: null }; }, { esperaTimeoutMs: 1 });
+  checa('timeout transitório → relê e entrega o dado', n === 2 && r.data?.[0] === 1 && r.releuPorTimeout === true, { n });
+  n = 0;
+  r = await lerComRenovacao(sb, async () => { n++; return { data: null, error: timeout }; }, { esperaTimeoutMs: 1 });
+  checa('timeout persistente → para em 2 e devolve o erro (não vira laço nem lista vazia)', n === 2 && r.error?.code === '57014', { n });
+}
+
 console.log('\nOS QUATRO PONTOS USAM A MESMA RÉGUA (era esse o vício)');
 for (const [arq, marca] of [
   ['src/contexts/AuthContext.jsx', /lerComRenovacao\(supabase, \(\) => supabase\s*\n?\s*\.from\('perfis'\)/],

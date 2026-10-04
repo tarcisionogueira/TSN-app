@@ -47,9 +47,24 @@ export async function renovarSessao(supabase) {
  * Roda `ler()` — que deve devolver `{ data, error }` no formato do postgrest-js — e, se o erro
  * for de sessão, renova e roda de novo. Devolve `{ data, error, renovou, motivoRenovacao }`.
  */
-export async function lerComRenovacao(supabase, ler) {
-  const r1 = await ler();
-  if (!ehErroDeSessao(r1?.error)) return { ...r1, renovou: false, motivoRenovacao: null };
+// TIMEOUT DO BANCO (04/10, invariante erro_na_tela_do_cliente): em 01/10 02:38 um cliente abriu
+// /analises e a RPC — que leva ~50 ms — estourou o statement_timeout num pico de carga do banco. Era
+// transitório e a tela mostrou erro de cara. Leitura é segura de repetir: espera um instante e relê
+// UMA vez (uma só, pelo mesmo motivo da renovação: falha em cadeia não pode virar laço).
+export function ehTimeoutDoBanco(erro) {
+  if (!erro) return false;
+  return /\b57014\b|statement timeout|canceling statement/i.test(`${erro.code ?? ''} ${erro.message ?? erro}`);
+}
+
+export async function lerComRenovacao(supabase, ler, { esperaTimeoutMs = 1500 } = {}) {
+  let r1 = await ler();
+  let releuPorTimeout = false;
+  if (ehTimeoutDoBanco(r1?.error)) {
+    await new Promise((ok) => setTimeout(ok, esperaTimeoutMs));
+    r1 = await ler();
+    releuPorTimeout = true;
+  }
+  if (!ehErroDeSessao(r1?.error)) return { ...r1, renovou: false, motivoRenovacao: null, releuPorTimeout };
   const { ok, motivo } = await renovarSessao(supabase);
   if (!ok) return { ...r1, renovou: false, motivoRenovacao: motivo };
   const r2 = await ler();
