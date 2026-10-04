@@ -183,14 +183,42 @@ Responda SOMENTE JSON: {"anuncios":[{"preco": número em reais, "titulo": "vers�
   }
 }
 
-function parseJSON(text) {
+// Quebra de linha/tabulação CRUA dentro de string JSON (03/10, Equinox EV: parecer completo,
+// stop=end_turn, 4.375 caracteres — e JSON.parse recusou). O parecer é markdown longo e o modelo às
+// vezes solta "\n" literal no meio da string; isso é JSON inválido, não resposta vazia. Escapa só o
+// que está DENTRO de string (fora dela, quebra de linha é espaço em branco legítimo).
+export function escaparControlesEmString(s) {
+  let out = '', dentro = false, esc = false;
+  for (const ch of s) {
+    if (dentro) {
+      if (esc) { esc = false; out += ch; continue; }
+      if (ch === '\\') { esc = true; out += ch; continue; }
+      if (ch === '"') { dentro = false; out += ch; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') dentro = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+
+export function parseJSON(text) {
   if (!text) return null;
   const clean = text.trim();
-  try { return JSON.parse(clean); } catch { /* tenta os formatos abaixo */ }
+  const tentar = (s) => { try { return JSON.parse(s); } catch { /* tenta a versão com controles escapados */ }
+    try { return JSON.parse(escaparControlesEmString(s)); } catch { return null; } };
+  const direto = tentar(clean);
+  if (direto) return direto;
+  // Do 1º "{" ao ÚLTIMO "}": cobre a cerca ```json``` e também um ``` DENTRO do parecer, que fazia o
+  // recorte não-guloso da cerca parar no meio do JSON.
+  const ini = clean.indexOf('{'), fimObj = clean.lastIndexOf('}');
+  if (ini >= 0 && fimObj > ini) { const j = tentar(clean.slice(ini, fimObj + 1)); if (j) return j; }
   const md = clean.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) { try { return JSON.parse(md[1].trim()); } catch { /* tenta o bruto abaixo */ } }
-  const obj = clean.match(/\{[\s\S]*\}/);
-  if (obj) { try { return JSON.parse(obj[0]); } catch { /* sem recuperação — devolve null */ } }
+  if (md) { const j = tentar(md[1].trim()); if (j) return j; }
   return null;
 }
 function extractText(data) {
@@ -482,25 +510,38 @@ export default async function handler(req, res) {
     const textoDoLote = [v.descricao, taxasPlataforma, pagina.texto].filter(Boolean).join(' \n ');
 
     const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma }) }];
-    const r = await anthropicFetch({
-      method: 'POST',
-      headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        // 2600 → 4000 (30/09): com reparos, débitos e a página inteira do lote na entrada, a Strada
-        // 2025 voltou 2× "Resposta vazia" — JSON cortado no teto de saída não parseia.
-        model: MODEL, max_tokens: 4000,
-        system: 'Você é um avaliador de veículos de leilão. Responda SOMENTE JSON válido, sem markdown ao redor.',
-        messages: [{ role: 'user', content }],
-      }),
-    }, { retries: 1, timeoutMs: Math.max(20000, HARD_MS - (Date.now() - T0) - 10000), noFallback: true });
-
-    if (!r.ok) {
-      let corpo = ''; try { corpo = await r.text(); } catch { /* sem corpo */ }
-      throw new Error(`anthropic_http_${r.status}: ${corpo.slice(0, 300)}`);
+    // UMA chamada ao modelo. Chamada de novo, uma vez, quando o JSON volta inválido (ver abaixo).
+    const chamarModelo = async () => {
+      const r = await anthropicFetch({
+        method: 'POST',
+        headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          // 2600 → 4000 (30/09): com reparos, débitos e a página inteira do lote na entrada, a Strada
+          // 2025 voltou 2× "Resposta vazia" — JSON cortado no teto de saída não parseia.
+          model: MODEL, max_tokens: 4000,
+          system: 'Você é um avaliador de veículos de leilão. Responda SOMENTE JSON válido, sem markdown ao redor.',
+          messages: [{ role: 'user', content }],
+        }),
+      }, { retries: 1, timeoutMs: Math.max(20000, HARD_MS - (Date.now() - T0) - 10000), noFallback: true });
+      if (!r.ok) {
+        let corpo = ''; try { corpo = await r.text(); } catch { /* sem corpo */ }
+        throw new Error(`anthropic_http_${r.status}: ${corpo.slice(0, 300)}`);
+      }
+      const d = await r.json();
+      try { registrarCustoGeracao('veiculo', { userId: user.id, custoMicro: custoRespostaClaude(MODEL, d?.usage), ok: true, meta: { veiculoId } }); } catch { /* medição não bloqueia */ }
+      return d;
+    };
+    let data = await chamarModelo();
+    let parsed = parseJSON(extractText(data)) || {};
+    // JSON INVÁLIDO NÃO É RESPOSTA VAZIA (03/10, Equinox EV): o parecer veio inteiro (stop=end_turn) e o
+    // parse falhou — o relatório caía e o admin teve de clicar de novo, quando a 2ª geração saiu em 30 s.
+    // Repete UMA vez, só se o texto veio (não é recusa/vazio) e ainda sobra prazo para outra chamada.
+    if (!String(parsed.parecer || '').trim() && extractText(data).trim() && data?.stop_reason === 'end_turn'
+        && HARD_MS - (Date.now() - T0) > 45000) {
+      console.warn(`[veiculo] JSON inválido na 1ª resposta (${veiculoId}) — repetindo uma vez`);
+      data = await chamarModelo();
+      parsed = parseJSON(extractText(data)) || {};
     }
-    const data = await r.json();
-    try { registrarCustoGeracao('veiculo', { userId: user.id, custoMicro: custoRespostaClaude(MODEL, data?.usage), ok: true, meta: { veiculoId } }); } catch { /* medição não bloqueia */ }
-    const parsed = parseJSON(extractText(data)) || {};
 
     if (!String(parsed.parecer || '').trim()) {
       // Sem parecer = falha, não "veículo sem informação" — estorna, nunca cobra o vazio
@@ -509,9 +550,9 @@ export default async function handler(req, res) {
       // O MOTIVO vai junto (30/09): "vazia" sozinho não separava JSON cortado no teto de saída
       // (stop_reason=max_tokens) de recusa ou de formato inesperado.
       const bruto = extractText(data);
-      const motivoVazio = `stop=${data?.stop_reason || '?'}, ${bruto.length} chars${bruto ? `: ${bruto.slice(0, 120)}` : ''}`;
+      const motivoVazio = `${bruto.trim() ? 'JSON inválido' : 'sem texto'}, stop=${data?.stop_reason || '?'}, ${bruto.length} chars${bruto ? `: ${bruto.slice(0, 120)}` : ''}`;
       console.error(`[veiculo] resposta sem parecer (${veiculoId}): ${motivoVazio}`);
-      await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: `Resposta vazia da IA (${motivoVazio})`.slice(0, 300) });
+      await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: `Resposta ${bruto.trim() ? 'inválida' : 'vazia'} da IA (${motivoVazio})`.slice(0, 300) });
       res.status(502).json({ error: 'Não foi possível gerar o relatório agora. Tente novamente.' });
       return;
     }

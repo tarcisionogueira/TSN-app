@@ -126,6 +126,16 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   Painel medido logo depois: ~4,0 s (a rodada das 18:10 de 04/10, 8,5 s, foi ANTES do arquivo).
   **Conferir 05/10 18:10 UTC** (`qa_invariantes_execucao.ms_servidor` < 5 s = causa resolvida) e fechar a pendência 122.
 
+### 🚗 04/10 — Análise de veículo: "resposta vazia" era JSON inválido com parecer completo
+- `erro_ui` de 03/10 19:38 (admin, Equinox EV 1b6f4bf3): a 1ª geração voltou 502 em 36 s. Log da Vercel: `stop=end_turn,
+  4375 chars` começando com o parecer — a IA RESPONDEU; foi `parseJSON` que recusou e o código gravou "Resposta vazia".
+  A 2ª tentativa (clique manual) saiu em 30 s. O motivo da 1ª se perdeu porque a linha é sobrescrita (upsert).
+- Conserto (`api/gerar-analise-veiculo.js`): `parseJSON` escapa quebra de linha/tab CRUA dentro de string e recorta do 1º
+  "{" ao último "}" (cerca ``` dentro do parecer quebrava o recorte); JSON inválido com `end_turn` → UMA nova chamada
+  se sobrarem 45 s; motivo gravado como "Resposta inválida (JSON inválido…)" em vez de "vazia" (forma nº 10).
+- Por que não structured outputs/tool forçada: forçar ferramenta dá 400 nos modelos novos e um esquema rígido de todos os
+  campos do relatório é mudança grande; fica como evolução se o JSON inválido voltar (logs `[veiculo] JSON inválido`).
+
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
   semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF
