@@ -134,6 +134,54 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
   else resultado.sem.push({ fonte, motivo: 'upsert não devolveu linha' });
 }
 
+// ── 2ª ETAPA: CONTATO POR LEILOEIRO nas plataformas multi-tenant (04/10, pendência 131) ──────────
+// O e-mail da plataforma é só reserva; o certo é o do LEILOEIRO do lote. O leiloeiro assina o edital
+// publicado no DJEN e quase sempre põe o e-mail ali (medido: JM Leilões, DH Leilões, Rodovalho…). O
+// edital também cita vara, tribunal e cartório, então só entra domínio com "leil" no nome, nunca
+// jus.br/gov.br/mp.br nem endereço de vara/LGPD — e o mais citado ganha. Grava em
+// leiloeiro_contato_tenant (origem 'auto'; um 'manual' nunca é sobrescrito: o insert ignora conflito).
+const resTenant = { achado: [], gravado: [], sem: 0 };
+const ehMulti = new Set(resultado.multi);
+const lotesTenant = await todas('imoveis_leilao?ativo=eq.true&leiloeiro=not.is.null&select=fonte,leiloeiro&order=fonte');
+const porTenant = new Map();
+for (const r of lotesTenant) {
+  if (!ehMulti.has(r.fonte) || String(r.leiloeiro).trim().length < 8) continue;
+  const k = `${r.fonte}|${r.leiloeiro}`;
+  porTenant.set(k, (porTenant.get(k) || 0) + 1);
+}
+const jaTenant = new Set((await sb('leiloeiro_contato_tenant?select=fonte,leiloeiro_chave')).map((c) => `${c.fonte}|${c.leiloeiro_chave}`));
+const RUIM = /(\.jus\.br|\.gov\.br|\.mp\.br|\.leg\.br)$/i;
+const LOCAL_RUIM = /^(lgpd|privacidade|dpo|encarregado|noreply|no-reply)|vara|civel|cartorio|forum|tribunal/i;
+for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
+  const [fonte, leiloeiro] = k.split('|');
+  const chave = await sb('rpc/leiloeiro_chave_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte, p_leiloeiro: leiloeiro }) });
+  if (!chave || jaTenant.has(`${fonte}|${chave}`)) continue;
+  // Nome sem o sufixo "- Leiloeira Oficial"/"LEILÕES" — o edital escreve o nome civil.
+  const nome = String(leiloeiro).replace(/\s*[-–].*$/, '').replace(/\b(leil[õo]es|leiloeir[oa]s?( oficial)?)\b/gi, '').trim();
+  if (nome.length < 8) continue;
+  const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(nome)}*&select=texto_integral&limit=40`).catch((e) => { console.log(`  ⚠ ${fonte} / ${leiloeiro}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
+  const cont = new Map();
+  for (const e of editais || []) for (const m of String(e.texto_integral || '').matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)) {
+    const em = m[0].toLowerCase().replace(/\.$/, '');
+    const [local, dom] = em.split('@');
+    if (!dom || RUIM.test(dom) || LOCAL_RUIM.test(local) || !/leil/i.test(dom)) continue;
+    cont.set(em, (cont.get(em) || 0) + 1);
+  }
+  const [melhor] = [...cont.entries()].sort((a, b) => b[1] - a[1]);
+  if (!melhor) { resTenant.sem++; continue; }
+  const sup = await sb(`emails_supressao?destinatario=eq.${encodeURIComponent(melhor[0])}&select=suprimido`);
+  if (sup?.[0]?.suprimido) { resTenant.sem++; continue; }
+  console.log(`  ✓ ${fonte.padEnd(14)} ${leiloeiro.slice(0, 34).padEnd(34)} ${melhor[0]}  (${melhor[1]} edital(is) do DJEN · ${nLotes} lotes)`);
+  resTenant.achado.push(k);
+  if (!APLICAR) continue;
+  const g = await sb('leiloeiro_contato_tenant?on_conflict=fonte,leiloeiro_chave', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ fonte, leiloeiro_chave: chave, leiloeiro, email: melhor[0], origem: 'auto', observacao: `citado em ${melhor[1]} edital(is) do DJEN com o nome "${nome}"`.slice(0, 300), atualizado_em: new Date().toISOString() }),
+  });
+  if (g?.length) resTenant.gravado.push(k);
+}
+console.log(`\nLEILOEIROS DE PLATAFORMA — ${APLICAR ? `gravados: ${resTenant.gravado.length}` : `achados: ${resTenant.achado.length}`} · sem e-mail no DJEN: ${resTenant.sem}`);
+
 console.log(`\n${APLICAR ? 'GRAVADO' : 'EM SECO'} — fontes: ${origemPorFonte.size} · já tinham: ${resultado.ja.length} · multi-tenant: ${resultado.multi.length} · ${APLICAR ? `gravados: ${resultado.gravado.length}` : `achados: ${resultado.achado.length}`} · sem e-mail: ${resultado.sem.length}`);
 const porMotivo = {};
 for (const s of resultado.sem) { const k = s.motivo.replace(/\(.*\)/, '').trim(); porMotivo[k] = (porMotivo[k] || 0) + 1; }
