@@ -57,9 +57,10 @@ export default async function handler(req, resp) {
   // custava ~9.500 chamadas por mês (a cota gratuita inteira do Google) para não mudar nada.
   // Três tentativas e o imóvel sai da fila.
   const sel = `imoveis_leilao?select=id&ativo=eq.true`
-    + `&geocod_nivel=in.(cidade,falhou)`
     + `&geocod_tentativas=lt.${MAX_TENTATIVAS}`
-    + `&or=(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte})`
+    // + 'bairro' SEM bairro na coluna (05/10): é o pino emprestado pelo cache contaminado do
+    // geocodificar.js (ver lá). Rótulo 'bairro' sem bairro não é pino OK — é o de outro lote.
+    + `&and=(or(geocod_nivel.in.(cidade,falhou),and(geocod_nivel.eq.bairro,bairro.is.null)),or(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte}))`
     + `&order=desconto_percentual.desc.nullslast&limit=${LIMITE}`;
   const r = await sb(sel);
   if (!r.ok) return resp.status(500).json({ error: 'select falhou', detalhe: (await r.text()).slice(0, 200) });

@@ -149,8 +149,13 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
       // nas rotas gratuitas. Ou seja, o pior caso continua sendo custo ~US$ 0.
       const temEnderecoCompleto = /\d/.test(String(im.endereco || '')) && String(im.endereco || '').trim().length > 8;
       coords = await geocodificarCascata(im, { deadline, permitirPago: temEnderecoCompleto });
-      // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro
-      if (coords && coords.nivel !== 'endereco' && !im.endereco?.trim()) coordCache[key] = coords;
+      // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro.
+      // SEM BAIRRO NA COLUNA, só o nível 'cidade' pode ser compartilhado (05/10, pendência 118): a
+      // chave vira "|são paulo|sp", mas a cascata acha o bairro no TÍTULO ("…Moema 1 Dormitorios") —
+      // o 1º lote resolvido como 'bairro' emprestava o pino dele, rotulado 'bairro', a todo lote da
+      // cidade sem bairro. Eram 90 lotes ativos num único pino de SP (LJUD, MEGA, SUBLIME…).
+      const podeCompartilhar = String(im.bairro || '').trim() || coords?.nivel === 'cidade';
+      if (coords && coords.nivel !== 'endereco' && !im.endereco?.trim() && podeCompartilhar) coordCache[key] = coords;
     }
 
     const salvo = await salvarCoords(im.id, coords);
