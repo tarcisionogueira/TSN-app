@@ -37,6 +37,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] Documental: 0 vermelho e 0 confiança alta nos 14; 7 com 3+ pendências essenciais — acervo documental fraco.
 - [ ] Conferir que o PWA recarregou sozinho após o próximo deploy (rastro: pageview logo após voltar ao app).
 
+### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
+- Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na
+  semana), LJUD 409 (fonte nova desde 20/09; medido em 28/09: 302 de 303 sem foto nem no site do leiloeiro), CEF
+  510 (3%, estável). GLOBOLEILOES 63 e LJUD não são regressão: a taxa é a mesma desde o 1º dia de cada fonte.
+- O alarme subia com o VOLUME do DJEN (forma nº 10). Invariante passa a excluir o DJEN; LJUD fica na conta (é fonte de
+  foto — regressão nela tem que aparecer). Migração `20261004_qa_sem_foto_fora_djen.sql` (já aplicada).
+- Aberta P3 (id 119): RJLEILOES 48% sem foto (fonte PAGA — conferir a página antes de gastar cota).
+
 ### 🗺️ 04/10 — `estado_fora_do_padrao` (12): scrape vazio não apaga mais cidade/UF conhecida
 - **Retrato:** 5 ALBERTOMACEDO (itens de pacote; enchem na coleta das 8h UTC pela API, #390) + 7 de 6 fontes, cada
   uma com ≤3% do próprio acervo (SUPERBID 1/1422) — casos de borda, não parser quebrado. Consertar 6 parsers por 7
