@@ -367,7 +367,7 @@ export async function processarEventoMp(req, res) {
         // 04/10 (pendência 123): o backstop cobre os DOIS gateways — é ele, e não mais o checkout,
         // quem cancela a recorrência antiga (MP e Asaas), e só DEPOIS da nova estar autorizada.
         if (tipo === 'subscription_preapproval') {
-          await cancelarOutrasRecorrencias({ userId, email: preapproval.payer_email || '', manterMpId: preapproval.id, origem: 'mp-autorizacao' });
+          await cancelarOutrasRecorrencias({ userId, email: preapproval.payer_email || '', manterMpId: preapproval.id, manterCriadaEm: preapproval.date_created || null, origem: 'mp-autorizacao' });
         }
         // Comissão SÓ mediante pagamento recebido: uma cobrança recorrente PROCESSADA
         // (subscription_authorized_payment + ap.status='processed') é dinheiro que ENTROU →

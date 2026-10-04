@@ -15,7 +15,7 @@ import {
   registrarLiberacaoPagamento,
   buscarCliente,
 } from './_webhook-core.js';
-import { cancelarOutrasRecorrencias } from './_recorrencia-unica.js';
+import { cancelarOutrasRecorrencias, assinaturaAsaasNuncaPaga, apagarAssinaturaAsaas } from './_recorrencia-unica.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -298,16 +298,34 @@ export default async function handler(req, res) {
       const result = await processarConfirmado(contexto);
       // RECORRÊNCIA ÚNICA (04/10, pendência 123): pagamento de ASSINATURA confirmado e plano ativo →
       // cancela as outras (MP e Asaas), mantendo esta. Substitui o cancelamento que o checkout fazia
-      // ANTES do pagamento. Nunca derruba a confirmação (o helper só alerta em falha).
+      // ANTES do pagamento. Roda UMA vez por subscription e só se ela for a mais recente (travas no
+      // helper — renovação ou evento atrasado da antiga não apaga a nova). Nunca derruba a confirmação.
       if (pagReal.subscription && result?.plano && !contexto.servico) {
         try {
           const cli = await buscarCliente({ gatewayCustomerId: custId, email: custEmail, gateway: 'asaas' });
+          // custEmail vem sempre nulo (o Asaas manda `customer` como string): o helper busca o e-mail
+          // da CONTA pelo userId — é o payer_email dos mandatos do MP.
           if (cli?.id) await cancelarOutrasRecorrencias({ userId: cli.id, email: custEmail, asaasCustomerId: custId, manterAsaasSubId: pagReal.subscription, origem: 'asaas-confirmado' });
         } catch (e) { console.error('[asaas-webhook] recorrência única:', e?.message || e); }
       }
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_OVERDUE') {
+      // ASSINATURA ABANDONADA NÃO REBAIXA QUEM PAGA (04/10, revisão da pendência 123): sem o
+      // cancelamento antecipado no checkout, uma troca abandonada pelo Asaas deixa uma subscription
+      // ACTIVE que nunca foi paga — e o vencimento dela rebaixaria quem segue pagando a antiga (e
+      // geraria fatura vencida todo mês). Nunca paga → apaga a subscription e NÃO rebaixa. Se não
+      // der para saber (consulta falhou), segue o comportamento de antes.
+      if (pagReal.subscription) {
+        const nuncaPaga = await assinaturaAsaasNuncaPaga(pagReal.subscription);
+        if (nuncaPaga === true) {
+          try {
+            await apagarAssinaturaAsaas(pagReal.subscription);
+            console.log('[asaas-webhook] subscription nunca paga removida no vencimento:', pagReal.subscription);
+            return res.status(200).json({ ok: true, ignorado: 'assinatura_nunca_paga_removida' });
+          } catch (e) { console.error('[asaas-webhook] não removi subscription nunca paga:', pagReal.subscription, e?.message || e); }
+        }
+      }
       // Compra AVULSA de produto (curso/e-book) não é assinatura: boleto/pix não pago só deixa
       // a compra pendente. Sem este guard, o assinante em dia que abandonava um boleto de
       // produto caía em processarVencido → role rebaixado p/ explorador, inadimplente_desde,

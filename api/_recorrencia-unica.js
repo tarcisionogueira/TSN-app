@@ -3,13 +3,21 @@
 // Antes, o checkout (src/pages/Checkout.jsx) cancelava as assinaturas ativas nos DOIS gateways
 // ANTES de criar a nova: upgrade ou troca de ciclo abandonado (ou com MP e Asaas falhando) deixava
 // o cliente pagante SEM recorrência — e o webhook do cancelamento ainda mandava o e-mail de
-// "resgate". O backstop B1 do mp-webhook só cancelava mandatos do próprio MP; assinatura nova pelo
-// Asaas deixava a antiga do MP cobrando em dobro se só tirássemos o cancelamento do front.
+// "resgate". O backstop B1 do mp-webhook só cancelava mandatos do próprio MP.
 //
-// Aqui: quando a NOVA recorrência é confirmada (MP: mandato `authorized`; Asaas: pagamento
+// Aqui: quando a NOVA recorrência é confirmada (MP: mandato `authorized`; Asaas: 1º pagamento
 // confirmado de uma subscription), cancela as OUTRAS, nos dois gateways, mantendo a nova.
-// Nunca lança: a ativação do plano não pode cair por causa da limpeza — mas qualquer falha
-// ALERTA a equipe (é risco de cobrança dupla, tem que ser visto).
+//
+// TRÊS TRAVAS (revisão ofensiva de 04/10 — a 1ª versão errava nos três pontos):
+//  1. UMA VEZ por recorrência mantida (marca em webhook_eventos_processados). Sem isto, a renovação
+//     mensal da ANTIGA, ou o PAYMENT_RECEIVED atrasado da 1ª fatura dela, rodava a limpeza "mantendo
+//     a antiga" e apagava a NOVA.
+//  2. Se existe recorrência ativa criada DEPOIS da mantida, não cancela nada e alerta — a mantida
+//     não é a mais recente, então "manter esta" seria apagar a que o cliente escolheu por último.
+//     (Comparação por DIA: o Asaas só informa a data de criação, sem hora.)
+//  3. Sem o e-mail da conta não dá para achar os mandatos do MP — busca pelo userId; faltando
+//     mesmo assim, ALERTA (antes pulava calado e a troca MP→Asaas seguia cobrando em dobro).
+// Nunca lança: a ativação do plano não pode cair por causa da limpeza — toda falha ALERTA.
 import { alertarErro } from './_error-alert.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
@@ -17,68 +25,138 @@ const asaasBase = () => (process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sand
 const asaasKey = () => (process.env.ASAAS_API_KEY || '').trim();
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+const sbHdr = () => ({ apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' });
+const dia = (v) => String(v || '').slice(0, 10); // 'YYYY-MM-DD' (MP traz ISO completo; Asaas só a data)
 
 async function asaasIdDoPerfil(userId) {
   if (!userId || !SB_URL || !SB_KEY) return null;
-  const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=asaas_id&limit=1`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
-  });
+  const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=asaas_id&limit=1`, { headers: sbHdr() });
   if (!r.ok) throw new Error(`perfis.asaas_id ${r.status}`);
   const [p] = await r.json();
   return p?.asaas_id || null;
 }
 
-// Assinaturas ACTIVE do cliente no Asaas. TRI-ESTADO como o `checarAsaasAtivo` da reconciliação:
-// erro de consulta NÃO é "sem assinatura" (devolve { erro }).
+// E-mail da CONTA (auth.users) — é o mesmo usado como payer_email ao criar o mandato (api/mp.js).
+async function emailDaConta(userId) {
+  if (!userId || !SB_URL || !SB_KEY) return null;
+  const r = await fetch(`${SB_URL}/auth/v1/admin/users/${encodeURIComponent(userId)}`, { headers: sbHdr() });
+  if (!r.ok) throw new Error(`auth admin ${r.status}`);
+  const u = await r.json();
+  return u?.email || u?.user?.email || null;
+}
+
+// Marca atômica "limpeza já feita para esta recorrência". true = primeira vez (pode seguir).
+async function marcarPrimeiraVez(chave) {
+  const r = await fetch(`${SB_URL}/rest/v1/webhook_eventos_processados`, {
+    method: 'POST', headers: { ...sbHdr(), Prefer: 'return=minimal' },
+    body: JSON.stringify({ gateway: 'recorrencia', gateway_payment_id: chave, evento: 'recorrencia_unica' }),
+  });
+  if (r.ok) return true;
+  if (r.status === 409) return false; // já feita
+  throw new Error(`marca recorrencia_unica ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}`);
+}
+
+async function asaasGet(path) {
+  const r = await fetch(`${asaasBase()}${path}`, { headers: { access_token: asaasKey() } });
+  if (!r.ok) throw new Error(`asaas ${path.split('?')[0]} ${r.status}`);
+  return r.json();
+}
+
+// Assinaturas ACTIVE do cliente no Asaas, com data de criação. TRI-ESTADO como o
+// `checarAsaasAtivo` da reconciliação: erro de consulta NÃO é "sem assinatura".
 export async function assinaturasAsaasAtivas({ asaasCustomerId, userId }) {
-  const key = asaasKey();
-  if (!key) return { subs: [], erro: null };
+  if (!asaasKey()) return { subs: [], erro: null };
   try {
     const cust = asaasCustomerId || await asaasIdDoPerfil(userId);
     if (!cust) return { subs: [], erro: null };
-    const r = await fetch(`${asaasBase()}/subscriptions?customer=${encodeURIComponent(cust)}&status=ACTIVE&limit=20`, { headers: { access_token: key } });
-    if (!r.ok) return { subs: [], erro: `asaas subscriptions ${r.status}` };
-    const d = await r.json();
-    return { subs: (d?.data || []).map((s) => s.id).filter(Boolean), erro: null };
+    const d = await asaasGet(`/subscriptions?customer=${encodeURIComponent(cust)}&status=ACTIVE&limit=20`);
+    return { subs: (d?.data || []).filter((s) => s?.id).map((s) => ({ id: String(s.id), criadaEm: dia(s.dateCreated) })), erro: null };
   } catch (e) { return { subs: [], erro: e?.message || String(e) }; }
 }
 
-export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, origem }) {
-  const out = { mpCancelados: [], asaasCancelados: [], erros: [] };
+// Subscription do Asaas que NUNCA teve pagamento confirmado/recebido. null = não sei (erro).
+export async function assinaturaAsaasNuncaPaga(subId) {
+  if (!subId || !asaasKey()) return null;
+  try {
+    for (const st of ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH']) {
+      const d = await asaasGet(`/payments?subscription=${encodeURIComponent(subId)}&status=${st}&limit=1`);
+      if ((d?.data || []).length) return false;
+    }
+    return true;
+  } catch (e) { console.error('[recorrencia-unica] consulta de pagamentos da subscription falhou:', subId, e?.message || e); return null; }
+}
+
+export async function apagarAssinaturaAsaas(subId) {
+  const r = await fetch(`${asaasBase()}/subscriptions/${encodeURIComponent(subId)}`, { method: 'DELETE', headers: { access_token: asaasKey() } });
+  if (!r.ok) throw new Error(`asaas DELETE subscription ${r.status}`);
+}
+
+export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterCriadaEm = null, origem }) {
+  const out = { mpCancelados: [], asaasCancelados: [], erros: [], pulado: null };
+  const alertar = () => {
+    if (!out.erros.length) return;
+    console.error(`[recorrencia-unica] ${origem}: falhas`, out.erros);
+    alertarErro({ rota: `recorrencia-unica/${origem}`, erro: `Recorrência antiga NÃO cancelada — RISCO DE COBRANÇA DUPLA para o usuário ${userId}. Conferir nos painéis do MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId, manterMpId, manterAsaasSubId } });
+  };
+  if (!userId) { out.erros.push('sem userId'); alertar(); return out; }
+  const chave = manterMpId ? `mp:${manterMpId}` : `asaas:${manterAsaasSubId}`;
   const mpToken = process.env.MP_ACCESS_TOKEN;
 
-  // Mercado Pago: mandatos authorized DESTE usuário (external_reference `${userId}|plano`).
-  if (mpToken && email && userId) {
-    try {
+  try {
+    // Recorrência mantida do Asaas: tem que estar ACTIVE (se já foi apagada, não há o que manter).
+    let refDia = dia(manterCriadaEm);
+    if (manterAsaasSubId) {
+      const s = await asaasGet(`/subscriptions/${encodeURIComponent(manterAsaasSubId)}`);
+      if (s?.status !== 'ACTIVE' || s?.deleted) { out.pulado = 'mantida_nao_ativa'; return out; }
+      refDia = dia(s.dateCreated) || refDia;
+    }
+
+    // Coleta as OUTRAS recorrências ativas dos dois gateways.
+    if (!email) { try { email = await emailDaConta(userId); } catch (e) { out.erros.push(`e-mail da conta: ${e?.message || e}`); } }
+    const mpOutros = [];
+    if (!mpToken) { /* MP não configurado neste ambiente — nada a conferir */ } else if (!email) out.erros.push('sem e-mail da conta — mandatos do MP não conferidos');
+    else {
       const r = await fetch(`${MP_BASE}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${mpToken}` } });
-      if (!r.ok) throw new Error(`busca ${r.status}`);
+      if (!r.ok) throw new Error(`MP busca ${r.status}`);
       const d = await r.json();
       for (const p of d?.results || []) {
         if (String(p.id) === String(manterMpId || '')) continue;
         if (String(p.external_reference || '').split('|')[0] !== String(userId)) continue;
-        const c = await fetch(`${MP_BASE}/preapproval/${p.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${mpToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
-        if (c.ok) out.mpCancelados.push(String(p.id)); else out.erros.push(`MP ${p.id}: ${c.status}`);
+        mpOutros.push({ id: String(p.id), criadaEm: dia(p.date_created) });
       }
-    } catch (e) { out.erros.push(`MP: ${e?.message || e}`); }
-  }
+    }
+    const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
+    if (erro) throw new Error(`Asaas (consulta): ${erro}`);
+    const asaasOutros = subs.filter((s) => s.id !== String(manterAsaasSubId || ''));
 
-  // Asaas: assinaturas ACTIVE do cliente, menos a nova.
-  const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
-  if (erro) out.erros.push(`Asaas (consulta): ${erro}`);
-  for (const id of subs) {
-    if (String(id) === String(manterAsaasSubId || '')) continue;
-    try {
-      const r = await fetch(`${asaasBase()}/subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { access_token: asaasKey() } });
-      if (r.ok) out.asaasCancelados.push(String(id)); else out.erros.push(`Asaas ${id}: ${r.status}`);
-    } catch (e) { out.erros.push(`Asaas ${id}: ${e?.message || e}`); } // padrao-ok: motivo vai para out.erros, logado e alertado no fim
+    // Trava 2: existe alguma MAIS NOVA que a mantida? Então esta não é a escolha final do cliente.
+    const maisNova = [...mpOutros, ...asaasOutros].find((o) => refDia && o.criadaEm && o.criadaEm > refDia);
+    if (maisNova) {
+      out.pulado = 'existe_recorrencia_mais_nova';
+      out.erros.push(`a recorrência mantida (${chave}, ${refDia}) é mais ANTIGA que ${maisNova.id} (${maisNova.criadaEm}) — nada cancelado, decidir à mão`);
+      alertar();
+      return out;
+    }
+    if (!mpOutros.length && !asaasOutros.length) return out; // nada a limpar — não gasta a marca
+
+    // Trava 1: uma vez por recorrência mantida.
+    if (!(await marcarPrimeiraVez(chave))) { out.pulado = 'ja_feito'; return out; }
+
+    for (const p of mpOutros) {
+      const c = await fetch(`${MP_BASE}/preapproval/${p.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${mpToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
+      if (c.ok) out.mpCancelados.push(p.id); else out.erros.push(`MP ${p.id}: ${c.status}`);
+    }
+    for (const s of asaasOutros) {
+      try { await apagarAssinaturaAsaas(s.id); out.asaasCancelados.push(s.id); }
+      catch (e) { out.erros.push(`Asaas ${s.id}: ${e?.message || e}`); } // padrao-ok: motivo vai para out.erros, logado e alertado no fim
+    }
+  } catch (e) {
+    out.erros.push(e?.message || String(e));
   }
 
   if (out.mpCancelados.length || out.asaasCancelados.length) {
-    console.log(`[recorrencia-unica] ${origem}: user=${userId} mp=${out.mpCancelados.join(',') || '-'} asaas=${out.asaasCancelados.join(',') || '-'}`);
+    console.log(`[recorrencia-unica] ${origem}: user=${userId} mantida=${chave} mp=${out.mpCancelados.join(',') || '-'} asaas=${out.asaasCancelados.join(',') || '-'}`);
   }
-  if (out.erros.length) {
-    console.error(`[recorrencia-unica] ${origem}: falhas`, out.erros);
-    alertarErro({ rota: `recorrencia-unica/${origem}`, erro: `Não consegui cancelar recorrência antiga — RISCO DE COBRANÇA DUPLA para o usuário ${userId}. Conferir nos painéis do MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId, manterMpId, manterAsaasSubId } });
-  }
+  alertar();
   return out;
 }
