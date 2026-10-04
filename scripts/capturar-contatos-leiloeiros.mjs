@@ -18,6 +18,7 @@
  */
 import puppeteer from 'puppeteer';
 import { buscarEmailDoSite, dominioBase } from './_contato-leiloeiro.mjs';
+import { resolveMx } from 'node:dns/promises';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -155,6 +156,14 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
 // jus.br/gov.br/mp.br nem endereço de vara/LGPD — e o mais citado ganha. Grava em
 // leiloeiro_contato_tenant (origem 'auto'; um 'manual' nunca é sobrescrito: o insert ignora conflito).
 const resTenant = { achado: [], gravado: [], sem: 0 };
+const cacheMx = new Map();
+async function temMx(dom) {
+  if (!cacheMx.has(dom)) cacheMx.set(dom, resolveMx(dom).then((r) => r.length > 0).catch((e) => {
+    if (!['ENOTFOUND', 'ENODATA'].includes(e.code)) console.log(`  ⚠ MX de ${dom} não verificado (${e.code}) — não grava`);
+    return false;
+  }));
+  return cacheMx.get(dom);
+}
 const ehMulti = new Set(resultado.multi);
 const lotesTenant = await todas('imoveis_leilao?ativo=eq.true&leiloeiro=not.is.null&select=fonte,leiloeiro&order=fonte');
 const porTenant = new Map();
@@ -172,16 +181,33 @@ for (const [k, nLotes] of [...porTenant].sort((a, b) => b[1] - a[1])) {
   if (!chave || jaTenant.has(`${fonte}|${chave}`)) continue;
   // Nome sem o sufixo "- Leiloeira Oficial"/"LEILÕES" — o edital escreve o nome civil.
   const nome = String(leiloeiro).replace(/\s*[-–].*$/, '').replace(/\b(leil[õo]es|leiloeir[oa]s?( oficial)?)\b/gi, '').trim();
-  if (nome.length < 8) continue;
+  // Nome de UMA palavra ("NOGUEIRA", "Vasconcelos") casa com qualquer edital que a cite — dry-run de
+  // 04/10 deu NOGUEIRA LEILÕES → contato@saraivaleiloes (outra leiloeira, mesmo edital). Exige 2+ palavras.
+  if (nome.length < 8 || nome.split(/\s+/).filter((w) => w.length >= 3).length < 2) { resTenant.sem++; continue; }
   const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(nome)}*&select=texto_integral&limit=40`).catch((e) => { console.log(`  ⚠ ${fonte} / ${leiloeiro}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
   const cont = new Map();
-  for (const e of editais || []) for (const m of String(e.texto_integral || '').matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)) {
-    const em = m[0].toLowerCase().replace(/\.$/, '');
-    const [local, dom] = em.split('@');
-    if (!dom || RUIM.test(dom) || LOCAL_RUIM.test(local) || !/leil/i.test(dom)) continue;
-    cont.set(em, (cont.get(em) || 0) + 1);
+  const nomeRe = new RegExp(nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi');
+  for (const e of editais || []) {
+    // O e-mail tem de estar PERTO do nome (até 1.500 caracteres): o edital cita vários leiloeiros,
+    // comitentes e a plataforma, e "o mais citado no texto inteiro" premiava o de outra pessoa.
+    const txt = String(e.texto_integral || '');
+    const semAcento = txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const posNome = [...semAcento.matchAll(nomeRe)].map((m) => m.index);
+    if (!posNome.length) continue;
+    for (const m of txt.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)) {
+      if (!posNome.some((p) => Math.abs(p - m.index) <= 1500)) continue;
+      const em = m[0].toLowerCase().replace(/\.$/, '');
+      const [local, dom] = em.split('@');
+      if (!dom || RUIM.test(dom) || LOCAL_RUIM.test(local) || !/leil/i.test(dom)) continue;
+      cont.set(em, (cont.get(em) || 0) + 1);
+    }
   }
-  const [melhor] = [...cont.entries()].sort((a, b) => b[1] - a[1]);
+  // Domínio sem MX não recebe e-mail: o edital da Hidirlene traz "leiloesjudiciaises" (erro de
+  // digitação). Fica com o mais citado cujo domínio responde MX; DNS fora do ar = não grava.
+  let melhor = null;
+  for (const cand of [...cont.entries()].sort((a, b) => b[1] - a[1])) {
+    if (await temMx(cand[0].split('@')[1])) { melhor = cand; break; }
+  }
   if (!melhor) { resTenant.sem++; continue; }
   const sup = await sb(`emails_supressao?destinatario=eq.${encodeURIComponent(melhor[0])}&select=suprimido`);
   if (sup?.[0]?.suprimido) { resTenant.sem++; continue; }
