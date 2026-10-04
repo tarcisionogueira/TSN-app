@@ -34,6 +34,7 @@ export default function Comissoes() {
   const [comissoes, setComissoes] = useState([]);
   const [saldoApi, setSaldoApi] = useState(0);
   const [erroSaldo, setErroSaldo] = useState(''); // leitura do saldo FALHOU (≠ saldo zero)
+  const [erroComissoes, setErroComissoes] = useState(''); // leitura das comissões FALHOU (≠ nenhuma)
   const [extrato, setExtrato] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState('resumo'); // resumo | analitico | saques
@@ -74,49 +75,68 @@ export default function Comissoes() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [{ data: c }, { data: p }, { data: cf }, saqueRes] = await Promise.all([
-      supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
-      supabase.from('perfis').select('chave_pix').eq('id', alvoId).maybeSingle(),
-      supabase.from('config_financeira').select('*'),
-      apiCall(suporte ? `/api/saque?ver_como=${encodeURIComponent(alvoId)}` : '/api/saque'),
-    ]);
-    supabase.rpc('admin_taxas_gateway', { p_dias: 90 }).then(({ data, error }) => {
-      if (error || !data?.gateways) return;   // sem permissão (parceiro comum) → coluna "—"
-      const m = {};
-      for (const g of data.gateways) m[g.gateway] = g.pct_efetivo == null ? null : Number(g.pct_efetivo);
-      setTaxaReal(m);
-    });
-    setComissoes(c || []);
-    // MODO SUPORTE (03/09): /api/saque agora aceita `?ver_como=<uid>` (admin/analista-only,
-    // só leitura) e devolve o saldo do PARCEIRO VISTO, não mais o do admin — antes disto o
-    // saldo escondia o painel inteiro para não misturar os dois ("evita Frankenstein"); agora
-    // o mesmo parser abaixo já resolve certo, sem precisar de um caminho separado.
+    // 04/10: try/finally — numa falha de REDE o `apiCall` relança, o Promise.all rejeitava e
+    // o `setLoading(false)` nunca rodava: "Carregando..." para sempre.
     try {
-      // Mesmo motivo do MinhaRede: `apiCall` não lança em erro HTTP, então sem checar `.ok` um
-      // 401/500 virava saldo R$ 0,00 e extrato vazio — a tela dizia, com toda a calma, que o
-      // parceiro não tem nada a receber.
-      if (!saqueRes.ok) throw new Error(`saque ${saqueRes.status}`);
-      const sq = await saqueRes.json();
-      setErroSaldo('');
-      setSaldoApi(Number(sq.saldo || 0));
-      setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
-      setProximaLiberacao(sq.proxima_liberacao || null);
-      setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
-      setNaoGanhaNovas(!!sq.nao_ganha_novas);
-      setTeto({ teto: sq.teto_sem_nf, ja: sq.ja_sacado_na_janela, disponivel: sq.disponivel_sem_nf });
-    } catch {
-      // NÃO zera: desconhecido não é zero.
-      setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
+      const [{ data: c, error: errC }, { data: p, error: errP }, { data: cf }, saqueRes] = await Promise.all([
+        supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
+        supabase.from('perfis').select('chave_pix').eq('id', alvoId).maybeSingle(),
+        supabase.from('config_financeira').select('*'),
+        // Rejeição de rede vira `null` aqui e cai no aviso de saldo abaixo, sem derrubar o resto.
+        apiCall(suporte ? `/api/saque?ver_como=${encodeURIComponent(alvoId)}` : '/api/saque').catch(e => { console.warn('[comissoes] /api/saque', e); return null; }),
+      ]);
+      supabase.rpc('admin_taxas_gateway', { p_dias: 90 }).then(({ data, error }) => {
+        if (error || !data?.gateways) return;   // sem permissão (parceiro comum) → coluna "—"
+        const m = {};
+        for (const g of data.gateways) m[g.gateway] = g.pct_efetivo == null ? null : Number(g.pct_efetivo);
+        setTaxaReal(m);
+      });
+      // 04/10: `error` conferido — sem isso, falha de leitura virava tabela vazia e totais R$ 0.
+      if (errC) {
+        setErroComissoes('Não foi possível carregar suas comissões — tente de novo.');
+        setComissoes([]);
+      } else {
+        setErroComissoes('');
+        setComissoes(c || []);
+      }
+      // MODO SUPORTE (03/09): /api/saque agora aceita `?ver_como=<uid>` (admin/analista-only,
+      // só leitura) e devolve o saldo do PARCEIRO VISTO, não mais o do admin — antes disto o
+      // saldo escondia o painel inteiro para não misturar os dois ("evita Frankenstein"); agora
+      // o mesmo parser abaixo já resolve certo, sem precisar de um caminho separado.
+      try {
+        // Mesmo motivo do MinhaRede: `apiCall` não lança em erro HTTP, então sem checar `.ok` um
+        // 401/500 virava saldo R$ 0,00 e extrato vazio — a tela dizia, com toda a calma, que o
+        // parceiro não tem nada a receber.
+        if (!saqueRes?.ok) throw new Error(`saque ${saqueRes?.status ?? 'rede'}`);
+        const sq = await saqueRes.json();
+        setErroSaldo('');
+        setSaldoApi(Number(sq.saldo || 0));
+        setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
+        setProximaLiberacao(sq.proxima_liberacao || null);
+        setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
+        setNaoGanhaNovas(!!sq.nao_ganha_novas);
+        setTeto({ teto: sq.teto_sem_nf, ja: sq.ja_sacado_na_janela, disponivel: sq.disponivel_sem_nf });
+      } catch {
+        // NÃO zera: desconhecido não é zero.
+        setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
+      }
+      // Perfil ilegível não é "sem chave PIX" — mantém o que já estava na tela.
+      if (!errP) {
+        const k = p?.chave_pix || '';
+        setPixKey(k);
+        setPixKeySalva(k);
+      }
+      if (cf) {
+        const m = {};
+        cf.forEach(r => { m[r.gateway] = r; });
+        setCfinConfig(m);
+      }
+    } catch (e) {
+      console.error('[comissoes] carregar', e);
+      setErroComissoes('Não foi possível carregar suas comissões — tente de novo.');
+    } finally {
+      setLoading(false);
     }
-    const k = p?.chave_pix || '';
-    setPixKey(k);
-    setPixKeySalva(k);
-    if (cf) {
-      const m = {};
-      cf.forEach(r => { m[r.gateway] = r; });
-      setCfinConfig(m);
-    }
-    setLoading(false);
   }, [alvoId]);
 
   useEffect(() => {
@@ -240,13 +260,21 @@ export default function Comissoes() {
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Acompanhe seus repasses e solicite saques</p>
         </div>
 
+        {erroComissoes && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#991b1b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {erroComissoes}
+            <button onClick={carregar} style={{ background: 'white', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 10px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Tentar de novo</button>
+          </div>
+        )}
+
         {/* Cards de resumo */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 24 }}>
           {[
-            { icon: Clock, label: 'A receber', valor: fmt(totalPendente), cor: '#d97706', bg: '#fffbeb' },
-            { icon: CheckCircle, label: 'Já recebido', valor: fmt(totalPago), cor: '#16a34a', bg: '#f0fdf4' },
-            { icon: DollarSign, label: 'Disponível p/ saque', valor: fmt(totalDisponivel), cor: '#0D63DB', bg: '#eff6ff' },
-            { icon: TrendingUp, label: 'Total de vendas', valor: comissoes.length, cor: '#7c3aed', bg: '#faf5ff' },
+            // 04/10: leitura falhou → "—", nunca R$ 0 com cara de apurado.
+            { icon: Clock, label: 'A receber', valor: erroComissoes ? '—' : fmt(totalPendente), cor: '#d97706', bg: '#fffbeb' },
+            { icon: CheckCircle, label: 'Já recebido', valor: erroComissoes ? '—' : fmt(totalPago), cor: '#16a34a', bg: '#f0fdf4' },
+            { icon: DollarSign, label: 'Disponível p/ saque', valor: erroSaldo ? '—' : fmt(totalDisponivel), cor: '#0D63DB', bg: '#eff6ff' },
+            { icon: TrendingUp, label: 'Total de vendas', valor: erroComissoes ? '—' : comissoes.length, cor: '#7c3aed', bg: '#faf5ff' },
           ].map(({ icon: Icon, label, valor, cor, bg }) => (
             <div key={label} style={{ background: bg, borderRadius: 12, padding: '14px 16px', border: `1px solid ${cor}22` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -397,7 +425,9 @@ export default function Comissoes() {
         {aba === 'resumo' && (
           <div style={cardStyle}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 14 }}>Por meio de pagamento</div>
-            {Object.keys(porGateway).length === 0 ? (
+            {erroComissoes ? (
+              <div style={{ color: '#991b1b', fontSize: 13, fontWeight: 600 }}>{erroComissoes}</div>
+            ) : Object.keys(porGateway).length === 0 ? (
               <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhuma comissão registrada ainda.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -419,7 +449,9 @@ export default function Comissoes() {
         {aba === 'analitico' && (
           <div style={cardStyle}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 14 }}>Comissões por venda</div>
-            {comissoes.length === 0 ? (
+            {erroComissoes ? (
+              <div style={{ color: '#991b1b', fontSize: 13, fontWeight: 600 }}>{erroComissoes}</div>
+            ) : comissoes.length === 0 ? (
               <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhuma comissão registrada ainda.</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>

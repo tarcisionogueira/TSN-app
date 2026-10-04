@@ -352,12 +352,22 @@ export default function Analise() {
     if (!idImovel) return;
     let cancel = false;
     (async () => {
-      const { data } = await supabase.from('imovel_anexos')
+      const { data, error: eAnexos } = await supabase.from('imovel_anexos')
         .select('id,tipo,nome,url,criado_em')
         .eq('imovel_id', idImovel)
         .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'outro']);
-      // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
-      if (!cancel) setDocsLeiloeiro(await assinarAnexos(data || []));
+      // 04/10: `error` conferido (mesmo padrão do bloco abaixo) — falha de leitura não pode
+      // virar "nenhum documento do leiloeiro". Zera a lista (não herda a do imóvel anterior)
+      // e a tela diz que não conseguiu ler.
+      if (eAnexos) {
+        console.warn('[analise] imovel_anexos não lidos:', eAnexos.message);
+        if (!cancel) { setDocsLeiloeiro([]); setErroDocsLeiloeiro(true); }
+      } else if (!cancel) {
+        setErroDocsLeiloeiro(false);
+        // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
+        const assinados = await assinarAnexos(data || []);
+        if (!cancel) setDocsLeiloeiro(assinados);
+      }
 
       // OS ANEXOS DO LOTE SÃO RELIDOS DO BANCO (09/09, achado do dono).
       // `imovelInicial` vem de `location.state`: é uma FOTO tirada quando o usuário navegou
@@ -594,6 +604,7 @@ export default function Analise() {
   const [reuniaoRealizada, setReuniaoRealizada] = useState(false);
   const [juridicoEnviado, setJuridicoEnviado] = useState(false);
   const [docsLeiloeiro, setDocsLeiloeiro] = useState([]); // anexos do imóvel (matrícula/edital/regras)
+  const [erroDocsLeiloeiro, setErroDocsLeiloeiro] = useState(false); // leitura FALHOU (≠ sem documento)
   // null = ainda não releu do banco → usa a foto que veio na navegação (comportamento anterior).
   const [anexosLote, setAnexosLote] = useState(null);
   // null = não relido (lote fora da base ou leitura falhou) → o relatório sai sem a seção de fotos.
@@ -2014,6 +2025,11 @@ export default function Analise() {
           {/* Documentos do leiloeiro */}
           <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
+            {erroDocsLeiloeiro && (
+              <div style={{ fontSize:12.5, color:'#991b1b', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'8px 11px', marginBottom:10, fontWeight:600 }}>
+                Não foi possível carregar os documentos guardados deste imóvel — tente de novo (recarregue a página).
+              </div>
+            )}
             {(() => {
               const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda online', laudo:'Laudo de Avaliação' };
               // Só os tópicos pertinentes à modalidade: venda direta/venda online têm

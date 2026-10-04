@@ -776,19 +776,33 @@ export default function Arrematados() {
   const [sel, setSel] = React.useState(null);
   const [novo, setNovo] = React.useState(false);
   const [verDocsPessoais, setVerDocsPessoais] = React.useState(false);
+  const [erroCarga, setErroCarga] = React.useState(''); // leitura FALHOU (≠ nenhum arremate / saldo zero)
 
   const carregar = React.useCallback(async () => {
     if (!uid) return;
     setLoading(true);
-    const { data } = await supabase.from('arrematados').select('*').eq('user_id', uid).order('updated_at', { ascending: false });
+    // 04/10: `error` conferido — o postgrest-js não lança, e `{ data }` sozinho fazia uma
+    // falha de leitura virar "Você ainda não fez nenhuma arrematação".
+    const { data, error: errLista } = await supabase.from('arrematados').select('*').eq('user_id', uid).order('updated_at', { ascending: false });
+    if (errLista) {
+      setErroCarga('Não foi possível carregar seus arrematados — tente de novo.');
+      setLoading(false);
+      return;
+    }
+    setErroCarga('');
     const lista = Array.isArray(data) ? data : [];
     setArrematados(lista);
     if (lista.length) {
-      // saldo por arrematado
-      const { data: ls } = await supabase.from('arrematado_lancamentos').select('arrematado_id,tipo,valor').in('arrematado_id', lista.map(a => a.id));
-      const acc = {};
-      (ls || []).forEach(l => { acc[l.arrematado_id] = (acc[l.arrematado_id] || 0) + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0); });
-      setSaldos(acc);
+      // saldo por arrematado. 04/10: em erro NÃO zera — saldo desconhecido não é R$ 0.
+      const { data: ls, error: errLs } = await supabase.from('arrematado_lancamentos').select('arrematado_id,tipo,valor').in('arrematado_id', lista.map(a => a.id));
+      if (errLs) {
+        setErroCarga('Não foi possível carregar os saldos dos arrematados — tente de novo.');
+        setSaldos(null);
+      } else {
+        const acc = {};
+        (ls || []).forEach(l => { acc[l.arrematado_id] = (acc[l.arrematado_id] || 0) + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0); });
+        setSaldos(acc);
+      }
       // números por imóvel: nº de documentos (imovel_anexos) + valor de mercado (relatório)
       // `filter(ehUuid)` e não `filter(Boolean)`: um único id local na lista fazia as três
       // consultas `.in(...)` abaixo falharem de uma vez, zerando docs e avaliações de TODOS
@@ -834,17 +848,23 @@ export default function Arrematados() {
 
   const criar = async (payload) => {
     const { data, error } = await supabase.from('arrematados').insert({ user_id: uid, status: 'arrematado', ...payload }).select().single();
-    if (!error && data) {
-      if (payload.valor_arrematacao) {
-        await supabase.from('arrematado_lancamentos').insert({ arrematado_id: data.id, user_id: uid, tipo: 'saida', categoria: 'Arrematação', valor: payload.valor_arrematacao, data: payload.data_arrematacao || null });
-      }
-      setNovo(false);
-      setPrefill(null);
-      await carregar();
-      // Abre a tela do arremate já nos Documentos — é onde anexa auto/carta,
-      // contrato do banco, escritura, matrícula registrada.
-      setSel({ ...data, _abaInicial: 'documentos' });
+    // 04/10: antes, uma falha aqui só devolvia ao formulário, sem dizer nada.
+    if (error || !data) {
+      alert(`Não foi possível registrar a arrematação — tente de novo.${error?.message ? `\n\n${error.message}` : ''}`);
+      return;
     }
+    if (payload.valor_arrematacao) {
+      // 04/10: resultado conferido. O arremate fica (já foi criado); só avisamos que o
+      // lançamento de "Arrematação" não entrou, para o saldo não sair errado em silêncio.
+      const { error: errLanc } = await supabase.from('arrematado_lancamentos').insert({ arrematado_id: data.id, user_id: uid, tipo: 'saida', categoria: 'Arrematação', valor: payload.valor_arrematacao, data: payload.data_arrematacao || null });
+      if (errLanc) alert('O arremate foi registrado, mas o lançamento do valor de arrematação não foi salvo. Adicione-o manualmente no Financeiro do arremate.');
+    }
+    setNovo(false);
+    setPrefill(null);
+    await carregar();
+    // Abre a tela do arremate já nos Documentos — é onde anexa auto/carta,
+    // contrato do banco, escritura, matrícula registrada.
+    setSel({ ...data, _abaInicial: 'documentos' });
   };
 
   const remover = async (id, e) => {
@@ -898,9 +918,15 @@ export default function Arrematados() {
         {visaoEquipeDireta && acaoBtn('Oportunidades', Target, '#7c3aed', () => nav(`/assessorados/${clienteIdParam}/oportunidades?nome=${encodeURIComponent(nomeClienteParam || '')}`))}
       </div>
 
+      {erroCarga && !loading && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: '#991b1b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          ⚠️ {erroCarga}
+          <button onClick={carregar} style={{ background: 'white', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 10px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Tentar de novo</button>
+        </div>
+      )}
       {loading ? (
         <div style={{ color: '#94a3b8', fontSize: 14, padding: 20 }}>Carregando…</div>
-      ) : arrematados.length === 0 ? (
+      ) : (erroCarga && arrematados.length === 0) ? null : arrematados.length === 0 ? (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '48px 24px', textAlign: 'center' }}>
           <Home size={40} color="#cbd5e1" />
           <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Você ainda não fez nenhuma arrematação</div>
@@ -924,7 +950,7 @@ export default function Arrematados() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {arrematados.map(a => {
             const st = STATUS[a.status] || STATUS.arrematado;
-            const saldo = saldos[a.id] || 0;
+            const saldo = saldos ? (saldos[a.id] || 0) : null; // null = leitura falhou (04/10), não R$ 0
             const docsCount = a.imovel_id ? (nDocs[a.imovel_id] || 0) : (Array.isArray(a.documentos) ? a.documentos.length : 0);
             const arrematacao = Number(a.valor_arrematacao) || null;
             const vMerc = a.imovel_id ? (mercado[a.imovel_id] ?? null) : null;
@@ -962,7 +988,7 @@ export default function Arrematados() {
                     {vMerc != null && <span style={{ color: '#0d9488', fontWeight: 700 }}>Mercado {brl(vMerc)}</span>}
                     {arrematacao != null && <span style={{ color: '#0D63DB', fontWeight: 700 }}>Arremat. {brl(arrematacao)}</span>}
                     {roe != null && <span style={{ color: roe >= 0 ? '#15803d' : '#dc2626', fontWeight: 700 }}>ROE {roe >= 0 ? '+' : ''}{brl(roe)}{roePct != null ? ` · ${roePct >= 0 ? '+' : ''}${roePct.toFixed(0)}%` : ''}</span>}
-                    <span style={{ fontWeight: 700, color: saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {brl(saldo)}</span>
+                    <span style={{ fontWeight: 700, color: saldo == null ? '#94a3b8' : saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {saldo == null ? 'indisponível' : brl(saldo)}</span>
                   </div>
                 </div>
                 {!soLeitura && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}

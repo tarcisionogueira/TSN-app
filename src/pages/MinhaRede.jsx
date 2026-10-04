@@ -128,6 +128,7 @@ export default function MinhaRede() {
   const emSuporte = !!impersonate;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [erroRede, setErroRede] = useState('');       // leitura da rede FALHOU (≠ sem indicados)
   const [codigo, setCodigo] = useState('');
   const [codigoPronto, setCodigoPronto] = useState(false); // evita o "pisca": só mostra o link quando o código curto carregou
   const [copiado, setCopiado] = useState(false);
@@ -157,6 +158,7 @@ export default function MinhaRede() {
   // Cadastro da PJ
   const [pj, setPj] = useState({ cnpj: '', razao_social: '', pj_chave_pix: '' });
   const [pjSalva, setPjSalva] = useState(false);
+  const [erroPerfil, setErroPerfil] = useState('');   // leitura do perfil/PJ FALHOU (≠ sem PJ)
   const [salvandoPj, setSalvandoPj] = useState(false);
   const [msgPj, setMsgPj] = useState(null);
   // AULA AO VIVO como material do parceiro (28/08). Carregada do banco, nunca fixa no código:
@@ -199,9 +201,17 @@ export default function MinhaRede() {
       // rootId (busca manual do admin nesta tela) tem prioridade; senão, em modo suporte, a
       // rede é a do parceiro visto (uid já é effectiveUserId — ver useAuth acima).
       const alvo = rootId || (emSuporte ? uid : null);
-      const { data } = await supabase.rpc('minha_rede', alvo ? { p_root: alvo } : {});
+      // 04/10: `error` conferido — o postgrest-js não lança, e `{ data }` sozinho fazia uma
+      // falha da RPC virar "Você ainda não tem indicados".
+      const { data, error } = await supabase.rpc('minha_rede', alvo ? { p_root: alvo } : {});
+      if (error) throw error;
+      setErroRede('');
       setRows(Array.isArray(data) ? data : []);
-    } catch { setRows([]); }
+    } catch (e) {
+      console.warn('[minha-rede] minha_rede', e?.message || e);
+      setRows([]);
+      setErroRede('Não foi possível carregar seus indicados — tente de novo.');
+    }
     setLoading(false);
   }, [rootId, emSuporte, uid]);
   useEffect(() => { carregar(); }, [carregar]);
@@ -235,7 +245,11 @@ export default function MinhaRede() {
       setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
     }
     try {
-      const { data: p } = await supabase.from('perfis').select('codigo_indicacao, cnpj, razao_social, pj_chave_pix').eq('id', uid).maybeSingle();
+      const { data: p, error: errP } = await supabase.from('perfis').select('codigo_indicacao, cnpj, razao_social, pj_chave_pix').eq('id', uid).maybeSingle();
+      // 04/10: leitura falhou ≠ "não tem PJ". Antes virava pjSalva=false e a tela pedia o CNPJ
+      // de novo (com campos vazios). Mesmo princípio do saldo acima: não sobrescreve o estado.
+      if (errP) throw errP;
+      setErroPerfil('');
       let cod = p?.codigo_indicacao;
       // Garante o código CURTO antes de exibir o link (senão o link mostrava o uid longo
       // e "piscava" para o código quando carregava). Gera se ainda não existir.
@@ -250,7 +264,10 @@ export default function MinhaRede() {
       const temPj = !!(p?.cnpj);
       setPj({ cnpj: p?.cnpj || '', razao_social: p?.razao_social || '', pj_chave_pix: p?.pj_chave_pix || '' });
       setPjSalva(temPj);
-    } catch { /* ignora */ }
+    } catch (e) {
+      console.warn('[minha-rede] perfil/PJ', e?.message || e);
+      setErroPerfil('Não foi possível carregar os dados da sua empresa — tente recarregar em instantes.');
+    }
     finally { setCodigoPronto(true); }
     // Proxima aula ao vivo (ativa e futura). `error` conferido: o postgrest-js NAO lanca em
     // nao-2xx, entao `const { data } = ...` funde "nao ha aula" com "nao consegui ler" — e o
@@ -673,7 +690,12 @@ export default function MinhaRede() {
           )}
 
           {/* Gate: para sacar, precisa cadastrar a PJ que vai receber (B2B) */}
-          {precisaEmpresa ? (
+          {/* 04/10: perfil ilegível → não pede o CNPJ de novo com campos vazios. */}
+          {precisaEmpresa && erroPerfil ? (
+            <div style={{ marginTop: 14, fontSize: 12.5, color: '#991b1b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontWeight: 600 }}>
+              {erroPerfil}
+            </div>
+          ) : precisaEmpresa ? (
             <div style={{ marginTop: 14, border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 800, color: '#92400e' }}>
                 <Building2 size={16} /> Cadastre sua empresa para sacar
@@ -835,6 +857,11 @@ export default function MinhaRede() {
         </div>
         {loading ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Carregando seus indicados…</div>
+        ) : erroRede ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#991b1b', fontSize: 13, fontWeight: 600 }}>
+            {erroRede}{' '}
+            <button onClick={carregar} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Tentar de novo</button>
+          </div>
         ) : !raiz || rede.length === 0 ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
             Você ainda não tem indicados. Compartilhe seu link acima para começar.
