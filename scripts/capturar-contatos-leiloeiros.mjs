@@ -11,9 +11,9 @@
  * mesma regra do coletor (e-mail do domínio do site; nunca endereço suprimido; nunca sobrescreve
  * 'manual'), e diz o MOTIVO de cada fonte que ficar sem.
  *
- * Fora de propósito: plataformas multi-tenant (SUPERBID, SUPORTE, V-Lance…) — ali o contato é por
- * LEILOEIRO do lote (`leiloeiro_contato_tenant`), e o e-mail da home seria o de um só deles (o caso
- * JRF de 28/09). E portais públicos (CEF, VENDASGOV, EDITAL_DJEN), que não recebem proposta por e-mail.
+ * Plataformas multi-tenant (SUPERBID, SUPORTE, V-Lance…): o contato principal é por LEILOEIRO do lote
+ * (`leiloeiro_contato_tenant`); desde 04/10 o varredor grava também o e-mail DA PLATAFORMA (mesmo
+ * domínio do site) como reserva — ver o comentário no laço. E portais públicos (CEF, VENDASGOV, EDITAL_DJEN), que não recebem proposta por e-mail.
  * EM SECO por padrão; CONTATO_APLICAR=1 grava.
  */
 import puppeteer from 'puppeteer';
@@ -65,29 +65,46 @@ async function obterHtml(url) {
   return htmlNoChrome(url);
 }
 
-// Uma URL real por fonte — só a ORIGEM importa (a home do site do leiloeiro).
-const origemPorFonte = new Map();
+// Uma ORIGEM por fonte — a MAIS FREQUENTE entre os lotes ativos (04/10). Era a do 1º lote lido: em
+// plataforma com loja white-label de leiloeiro, esse 1º lote podia estar no domínio de UM leiloeiro, e
+// o e-mail dele viraria o "da plataforma" para todos (o caso JRF). A maioria é o domínio da plataforma.
+const contagemOrigem = new Map(); // fonte → Map(origin → n)
 const guardar = (fonte, url) => {
-  if (!fonte || FORA.has(fonte) || origemPorFonte.has(fonte)) return;
-  try { const u = new URL(url); if (/^https?:$/.test(u.protocol)) origemPorFonte.set(fonte, u.origin); } catch { /* URL inválida: tenta a próxima linha da fonte */ }
+  if (!fonte || FORA.has(fonte)) return;
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return;
+    const m = contagemOrigem.get(fonte) || new Map();
+    m.set(u.origin, (m.get(u.origin) || 0) + 1);
+    contagemOrigem.set(fonte, m);
+  } catch { /* URL inválida: tenta a próxima linha da fonte */ }
 };
 for (const r of await todas('imoveis_leilao?ativo=eq.true&fonte=not.in.(CEF,caixa)&select=fonte,url_lote,link_edital&order=fonte')) guardar(r.fonte, r.url_lote || r.link_edital);
 for (const r of await todas('veiculos_leilao?ativo=eq.true&select=fonte,link_lote&order=fonte')) guardar(r.fonte, r.link_lote);
+const origemPorFonte = new Map([...contagemOrigem].map(([f, m]) => [f, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
 
 const contatos = new Map((await sb('leiloeiro_contato?select=fonte,email,origem')).map((c) => [c.fonte, c]));
 const resultado = { gravado: [], achado: [], sem: [], multi: [], ja: [] };
 
 for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
   if (contatos.get(fonte)?.email) { resultado.ja.push(fonte); continue; }
+  // PLATAFORMA MULTI-TENANT (04/10, pendência 131): o contato principal é por LEILOEIRO do lote
+  // (`leiloeiro_contato_tenant`), mas ~1.900 lotes ativos não tinham NENHUM e-mail resolvível porque
+  // estas fontes eram puladas inteiras. O resolvedor (`contato_leiloeiro_resolver`) já aceita um
+  // e-mail DA PLATAFORMA como reserva (escopo 'plataforma', só `origem='auto'`), usado apenas quando
+  // o leiloeiro do lote não tem o próprio — é o canal que a plataforma publica para atendimento.
+  // A mesma régua do site próprio vale aqui: só e-mail do domínio DA PLATAFORMA (nunca o de um
+  // leiloeiro citado na home — o caso JRF de 28/09 era exatamente um e-mail de outro domínio).
+  // O edital do DJEN fica de fora: lá o e-mail é do leiloeiro que assinou, não da plataforma.
   const multi = await sb('rpc/fonte_multi_tenant', { method: 'POST', body: JSON.stringify({ p_fonte: fonte }) });
-  if (multi === true) { resultado.multi.push(fonte); console.log(`  ⤷ ${fonte.padEnd(20)} multi-tenant — contato é por leiloeiro do lote`); continue; }
+  if (multi === true) resultado.multi.push(fonte);
 
   let { achado, url, motivo } = await buscarEmailDoSite(origem, { obterHtml });
   // 2ª FONTE: EDITAIS DO DJEN (29/09). O leiloeiro assina o edital publicado no Diário da Justiça
   // e quase sempre põe o e-mail ali — 7 das 14 fontes "sem e-mail no site" tinham o endereço em
   // `editais_leilao.texto_integral`. Só vale e-mail do MESMO domínio do site (o edital também
   // cita a vara, o tribunal e o cartório), e o mais citado ganha.
-  if (!achado) {
+  if (!achado && !multi) {
     const dom = dominioBase(new URL(origem).hostname);
     const rotulo = dom.split('.')[0];
     const editais = await sb(`editais_leilao?texto_integral=ilike.*${encodeURIComponent(rotulo)}*&select=texto_integral&limit=60`).catch((e) => { console.log(`  ⚠ ${fonte}: editais ilegíveis (${String(e.message).slice(0, 80)})`); return []; });
@@ -100,18 +117,18 @@ for (const [fonte, origem] of [...origemPorFonte.entries()].sort()) {
     if (melhor) { achado = { email: melhor[0], contexto: `citado em ${melhor[1]} edital(is) do DJEN` }; url = 'editais_leilao (DJEN)'; }
     else motivo += ` · e nenhum edital do DJEN com e-mail @${dom}`;
   }
-  if (!achado) { resultado.sem.push({ fonte, motivo }); console.log(`  ✗ ${fonte.padEnd(20)} ${origem} — ${motivo}`); continue; }
+  if (!achado) { resultado.sem.push({ fonte, motivo: multi ? `plataforma: ${motivo}` : motivo }); console.log(`  ✗ ${fonte.padEnd(20)} ${origem} — ${multi ? '(plataforma) ' : ''}${motivo}`); continue; }
 
   const sup = await sb(`emails_supressao?destinatario=eq.${encodeURIComponent(achado.email)}&select=suprimido`);
   if (sup?.[0]?.suprimido) { resultado.sem.push({ fonte, motivo: `${achado.email} está suprimido (bounce/reclamação)` }); console.log(`  ✗ ${fonte.padEnd(20)} ${achado.email} suprimido`); continue; }
 
-  console.log(`  ✓ ${fonte.padEnd(20)} ${achado.email}  (${url === origem ? 'home' : url})`);
+  console.log(`  ✓ ${fonte.padEnd(20)} ${achado.email}  (${url === origem ? 'home' : url})${multi ? '  [e-mail da PLATAFORMA — reserva quando o leiloeiro do lote não tem o próprio]' : ''}`);
   if (!APLICAR) { resultado.achado.push(fonte); continue; }
   // `origem=is.null` no filtro não existe para upsert; a proteção do 'manual' é o `continue` acima
   // (fonte com e-mail não chega aqui) — e 'manual' sem e-mail não existe (o POST exige e-mail).
   const gravou = await sb('leiloeiro_contato?on_conflict=fonte', {
     method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify({ fonte, email: achado.email, origem: 'auto', observacao: `${achado.contexto || ''} · achado em ${url}`.slice(0, 300), atualizado_em: new Date().toISOString() }),
+    body: JSON.stringify({ fonte, email: achado.email, origem: 'auto', observacao: `${multi ? 'PLATAFORMA (reserva) · ' : ''}${achado.contexto || ''} · achado em ${url}`.slice(0, 300), atualizado_em: new Date().toISOString() }),
   });
   if (gravou?.length) resultado.gravado.push(fonte);
   else resultado.sem.push({ fonte, motivo: 'upsert não devolveu linha' });
