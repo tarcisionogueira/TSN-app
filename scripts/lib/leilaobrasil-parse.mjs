@@ -51,7 +51,7 @@ import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs
 // endereço do ESCRITÓRIO do leiloeiro (que vive no rodapé/chrome da página, fora do `bem`) —
 // exatamente a armadilha documentada em 17/09 (extrairIdentidadeTexto).
 import { extrairEnderecoMatricula } from '../../api/_registro-matricula.js';
-import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from '../../api/_texto-imovel.js';
+import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto, numeroMatriculaDoTexto } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
   leilaobrasil: { fonte: 'LEILAOBRASIL', leiloeiro: 'Leilão Brasil', base: 'https://www.leilaobrasil.com.br' },
@@ -115,7 +115,7 @@ function parseDetalheFallback(html, url) {
   const estado = mCidUf ? mCidUf[2].toUpperCase() : null;
   const endereco = mCidUf ? mCidUf[3].trim() : null;
   const titulo = (html.match(/<h1[^>]*>([^<]+)<\/h1>/i) || [])[1]?.trim() || null;
-  const matricula = (txt.match(/Matr[íi]cula\s*n[ºo°]?\s*([\d.\-]+)/i) || [])[1] || null;
+  const matricula = numeroMatriculaDoTexto(txt);
   const avaliacao = plaus(num((txt.match(/Avalia[çc][ãa]o\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]?.replace(/\./g, '').replace(',', '.')));
   const mEdital = html.match(/href=["']([^"']*static\.suporteleiloes\.com\.br[^"']*\.(?:pdf|docx)[^"']*)["']/i);
   const tipoTxt = (txt.match(/Tipo\s*[:\n]?\s*([A-Za-zà-ú]+)/i) || [])[1] || '';
@@ -143,7 +143,8 @@ export function parseDetalhe(html, url) {
   const bem = lote.bem || {};
   const leilao = lote.leilao || {};
   const descTexto = stripHtml(bem.siteDescricao || bem.descricao || '');
-  const matricula = (descTexto.match(/Matr[íi]cula\s*n[ºo°]?\s*([\d.\-]+)/i) || [])[1] || null;
+  // A da UNIDADE, não a do prédio citada antes dela (04/10, Santo Amaro: 393.715 × 460.206).
+  const matricula = numeroMatriculaDoTexto(descTexto);
   const titulo = bem.siteTitulo || bem.descricao || leilao.titulo || null;
   // `bem.endereco`/`bem.numero` existem no schema mas vêm VAZIOS na maioria dos lotes reais
   // (medido 20/09: 0/209 ativos com endereço, apesar do campo existir na estrutura do JSON —

@@ -81,6 +81,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   vencendo; `pertenceAoLote` barra edital de outro lote); `areaFonte = 'edital'` declarado na tela ("lida no edital");
   grava `area_m2` no acervo quando ele está em 0. Tela aplica `metodologia.area.valor` quando o card veio sem área.
 - Conferir após o deploy: regerar o relatório desse lote → venda estimada ≈ R$ 330 mil.
+- **Mesmo lote, mais dois:** (a) `numero_matricula` = 393.715 era a matrícula-MÃE do condomínio ("registro nº 375
+  feito na matrícula nº 393.715 deste Serviço"); a da unidade é 460.206 ("Matrícula nº … do 11º Cartório"). Novo
+  `numeroMatriculaDoTexto()` em `_texto-imovel.js` (vence a citada com o cartório ao lado), usado no parser LEILAOBRASIL.
+  Medido: 12 de 127 LEILAOBRASIL ativos corrigidos no banco (5 tinham matrícula de terreno-mãe/vizinho de divisa, 7 nulos).
+  (b) `extrairAreaM2` ganhou "totalizando a área PRIVATIVA de N m" (aceita "m" sem "²" só nessa âncora). Restrito a
+  privativa porque "totalizando a área edificada/construída" soma a área COMUM (medido: SUPERBID, GRUPOLANCE, DJEN).
+  (c) `forma_pagamento = 'hipotecado'` NÃO é defeito: é o canônico de leilão JUDICIAL com parcelamento do art. 895 do
+  CPC (o edital deste lote admite proposta parcelada) — ver `src/data/pagamento.js`.
 
 ### 📷 04/10 — `sem_foto` (1.778 > 1.600) media o tamanho do DJEN, não foto perdida → agora 1.191 · ok
 - Decomposição: EDITAL_DJEN 587 (edital do Diário da Justiça, **sem foto por natureza** — 5 de 592 têm; +106 só na

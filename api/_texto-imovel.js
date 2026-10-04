@@ -105,6 +105,22 @@ export function extrairDescricaoDoCorpo(html) {
  * plausível. Terreno vem por último de propósito — quando existem as duas, a área da
  * EDIFICAÇÃO é a que baliza o R$/m² do relatório (ver `gerar-documental.js`).
  */
+// Nº DA MATRÍCULA DA UNIDADE (04/10). Descrição de apartamento cita DUAS: a do terreno/condomínio
+// ("submetida ao regime de condomínio conforme o registro nº 375 feito na matrícula nº 393.715") e
+// a da unidade ("Matrícula nº 460.206 do 11º Cartório de Registro de Imóveis"). Pegar a primeira
+// gravou a do prédio inteiro. Vence a que vem com o cartório ao lado; sem isso, a primeira citada
+// que não seja a matrícula-mãe ("feito na matrícula" / "na matrícula nº … deste Serviço").
+export function numeroMatriculaDoTexto(texto) {
+  const t = String(texto || '').replace(/\s+/g, ' ');
+  const achados = [...t.matchAll(/matr[íi]cula\s*(?:imobili[áa]ria\s*)?(?:n[ºo°.]*\s*)?(\d[\d.\-]*\d|\d)/gi)]
+    .map((m) => ({ num: m[1], antes: t.slice(Math.max(0, m.index - 25), m.index), depois: t.slice(m.index + m[0].length, m.index + m[0].length + 60) }));
+  if (!achados.length) return null;
+  const doCartorio = achados.find((a) => /^\s*(?:,|-|–)?\s*(?:do|no|junto ao)\s+(?:\d+\s*[ºª°o]?\s*)?(?:cart[óo]rio|of[íi]cio|registro de im[óo]veis|cri\b|servi[çc]o)/i.test(a.depois));
+  if (doCartorio) return doCartorio.num;
+  const naoMae = achados.find((a) => !/(?:feito|feita|registrad[oa]|averbad[oa])\s+na\s*$/i.test(a.antes) && !/^\s*deste\s/i.test(a.depois));
+  return (naoMae || achados[0]).num;
+}
+
 // VÁRIOS BENS NUM LOTE SÓ (28/09). "Lote 1) Terreno … com a área de 1.303,00 m² … Lote 2) Terreno
 // … com a área de 1.200,00 m² …" é UM lote de leilão com DOIS terrenos (Embu-Guaçu, LEILAOBRASIL):
 // o site grava a área do 1º bem, a matrícula lida é a de um só, e o relatório precificou 1.303 m²
@@ -184,6 +200,13 @@ export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   };
   const plausivel = (v) => (v >= 8 && v <= 1_000_000 ? v : 0);
   const tentativas = [
+    // "área privativa coberta de 41,64m e a área privativa (acessória) de 7,78m, TOTALIZANDO a área
+    // privativa de 49,42m" (LEILAOBRASIL, 04/10): o rótulo genérico abaixo casava a PARCELA
+    // acessória (7,78) e, sem "²", nada casava. O total declarado vence as parcelas, e só aqui o
+    // "m" sozinho é aceito — o "totalizando … área" ancora o bastante para não ser "10m de frente".
+    // SÓ "privativa": medido no acervo, "totalizando a área edificada/construída" quase sempre SOMA a
+    // área COMUM (SUPERBID 27,71 privativa → 35,47 total; GRUPOLANCE; DJEN) — não é o que baliza o R$/m².
+    new RegExp(`totaliz\\w*\\s+(?:a\\s+)?área\\s+(?:real\\s+)?privativa(?:\\s+total)?\\s+(?:de\\s+)?${NUM}\\s*(?:${UNI}|m(?![a-zà-ú\\d]))`, 'i'),
     // "46,57 M2 DE ÁREA PRIVATIVA, 81,42M2 DE ÁREA DO TERRENO" (ficha CAIXA/TORRES3): o número
     // vem ANTES do rótulo. Testar "rótulo → número" primeiro casava "ÁREA PRIVATIVA, 81,42M2" —
     // o número do rótulo SEGUINTE — e a casa saía com a área do terreno (seco de 24/09).
