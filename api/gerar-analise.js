@@ -2355,13 +2355,24 @@ export default async function handler(req, res) {
 
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
-  await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {
-    etapas: [
-      { key: 'comparaveis', label: PROG_LABELS.comparaveis, status: 'gerando', n: null },
-      { key: 'contexto', label: PROG_LABELS.contexto, status: 'pendente', n: null },
-      { key: 'parecer', label: PROG_LABELS.parecer, status: 'pendente', n: null },
-    ], atualizadoEm: new Date().toISOString(),
-  } });
+  // FORA do try principal, esta escrita derrubava a função sem estornar a cota já consumida
+  // (upsertAnalise lança em não-2xx desde 21/09) — varredura de 04/10. Falhou: estorna e responde.
+  try {
+    await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {
+      etapas: [
+        { key: 'comparaveis', label: PROG_LABELS.comparaveis, status: 'gerando', n: null },
+        { key: 'contexto', label: PROG_LABELS.contexto, status: 'pendente', n: null },
+        { key: 'parecer', label: PROG_LABELS.parecer, status: 'pendente', n: null },
+      ], atualizadoEm: new Date().toISOString(),
+    } });
+  } catch (e) {
+    console.error('[gerar-analise] gravação inicial falhou:', e?.message || e);
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[gerar-analise] estorno falhou:', e2?.message || e2); }
+    }
+    res.status(503).json({ error: 'Não consegui iniciar o relatório agora (banco indisponível). Nada foi cobrado — tente de novo em instantes.' });
+    return;
+  }
 
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), Math.max(20000, restante())));
 

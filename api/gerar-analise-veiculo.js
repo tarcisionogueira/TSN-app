@@ -47,12 +47,15 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// LANÇA em não-2xx (04/10, varredura): antes a gravação de 'concluida' podia falhar calada — cota
+// consumida, resposta 200 e a tela presa em "gerando". Mesmo contrato do mercadológico/documental.
 async function upsertAnaliseVeiculo(row) {
-  await sb('analises_veiculo?on_conflict=user_id,veiculo_id', {
+  const r = await sb('analises_veiculo?on_conflict=user_id,veiculo_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
+  if (!r.ok) throw new Error(`analises_veiculo ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
 }
 
 // REVENDA PELA WEBMOTORS (29/09, pedido do dono): média dos 5 anúncios mais baratos − 10%.
@@ -462,7 +465,16 @@ export default async function handler(req, res) {
     titulo: v.titulo || [v.marca, v.modelo].filter(Boolean).join(' ') || null,
     marca: v.marca || null, modelo: v.modelo || null, veiculo: v,
   };
-  await upsertAnaliseVeiculo({ ...base, status: 'gerando', erro: null });
+  try {
+    await upsertAnaliseVeiculo({ ...base, status: 'gerando', erro: null });
+  } catch (e) {
+    console.error('[veiculo] gravação inicial falhou:', e?.message || e);
+    if (cota?.ok && cota.tipo && !cobrarCredito) {
+      try { await sb('rpc/estornar_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[veiculo] estorno falhou:', e2?.message || e2); }
+    }
+    res.status(503).json({ error: 'Não consegui iniciar o relatório agora (banco indisponível). Nada foi cobrado — tente de novo em instantes.' });
+    return;
+  }
 
   // FIPE NUNCA FALTA NO RELATÓRIO (02/10, dono: "temos marca, nome, ano e modelo — conseguimos
   // triangular"). Sem valor válido, tenta AGORA — forçando por cima da espera de 90 dias de um
@@ -479,7 +491,10 @@ export default async function handler(req, res) {
     } catch (e) { console.warn(`[veiculo] FIPE falhou para ${veiculoId}:`, e?.message || e); }
   }
 
+  let estornado = false; // idempotente: o catch final também chama, e o estorno não pode sair 2×
   const estornar = async () => {
+    if (estornado) return;
+    estornado = true;
     if (cota?.ok && cota.tipo && !cobrarCredito) {
       try { await sb('rpc/estornar_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* best-effort */ }
     }
@@ -609,7 +624,8 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, status: 'concluida' });
   } catch (e) {
     await estornar();
-    await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: String(e?.message || e).slice(0, 500) });
-    res.status(500).json({ error: 'Falha ao gerar o relatório do veículo.' });
+    try { await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: String(e?.message || e).slice(0, 500) }); }
+    catch (e2) { console.error('[veiculo] registro do erro falhou:', e2?.message || e2); }
+    if (!res.headersSent) res.status(500).json({ error: 'Falha ao gerar o relatório do veículo.' });
   }
 }

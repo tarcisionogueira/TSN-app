@@ -31,12 +31,14 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// LANÇA em não-2xx (04/10, varredura) — mesmo contrato do mercadológico/documental.
 async function upsertLaudo(row) {
-  await sb('analises_laudo?on_conflict=user_id,imovel_id', {
+  const r = await sb('analises_laudo?on_conflict=user_id,imovel_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
+  if (!r.ok) throw new Error(`analises_laudo ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
 }
 function extractText(data) {
   if (!data?.content) return '';
@@ -307,8 +309,22 @@ export default async function handler(req, res) {
       });
     } catch { /* padrao-ok: progresso é best-effort; nunca bloqueia o laudo */ }
   };
-  await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: null,
-    progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } });
+  // REGERAÇÃO NÃO APAGA O LAUDO BOM (04/10, varredura): o 'gerando' gravava `result: null` e o catch
+  // gravava 'erro' sem restaurar — regerar um laudo pronto e falhar deixava o cliente sem nenhum.
+  // Mesmo desenho do mercadológico: guarda o anterior e o devolve se esta geração falhar.
+  let laudoAnterior = null;
+  try {
+    const rAnt = await sb(`analises_laudo?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result&limit=1`);
+    if (rAnt.ok) { const [ant] = await rAnt.json(); laudoAnterior = ant?.result || null; }
+  } catch (e) { console.warn('[laudo] leitura do anterior falhou:', e?.message || e); }
+  try {
+    await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: laudoAnterior,
+      progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } });
+  } catch (e) {
+    console.error('[laudo] gravação inicial falhou:', e?.message || e);
+    res.status(503).json({ error: 'Não consegui iniciar o laudo agora (banco indisponível). Tente de novo em instantes.' });
+    return;
+  }
 
   // DEADLINE interno < maxDuration (180s): garante gravar 'erro' antes de a Vercel
   // matar a função. Sem isto, se a chamada de IA travar/re-tentar além do limite, a
@@ -443,7 +459,10 @@ export default async function handler(req, res) {
     const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.'
       : vazio ? 'A redação do laudo voltou sem conteúdo. Tente gerar novamente: o sistema também re-tenta sozinho.'
       : String(e?.message || e);
-    await upsertLaudo({ ...baseRow, status: 'erro', erro: msg });
+    try {
+      if (laudoAnterior) await upsertLaudo({ ...baseRow, status: 'concluida', erro: `regeracao_falhou: ${msg.slice(0, 160)}`, result: laudoAnterior });
+      else await upsertLaudo({ ...baseRow, status: 'erro', erro: msg });
+    } catch (e2) { console.error('[laudo] registro do erro falhou:', e2?.message || e2); }
     await logAtividade(ownerId, 'relatorio_laudo_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, vazio, diag: e?.diag || diag });
     // Gasto sem entrega fica MEDIDO como desperdício (ok:false) — é o que torna visível
     // um agente que consome e não produz, em vez de sumir na média.

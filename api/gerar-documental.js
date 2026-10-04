@@ -845,10 +845,21 @@ export default async function handler(req, res) {
   // senão a tela abriria com etapas já verdes de um relatório que está sendo refeito.
   const prog = progInicial();
   const flush = () => marcarProgresso(imovelId, ownerId, prog);
-  await upsertDoc({ ...base, status: 'gerando', erro: null, result: resultadoAnterior, progresso: {
-    etapas: PROG_ORDEM.map(k => ({ key: k, label: PROG_LABELS[k], status: prog[k].status, n: null })),
-    atualizadoEm: new Date().toISOString(),
-  } });
+  // FORA de qualquer try, esta escrita derrubava a função sem estornar a cota já consumida
+  // (varredura de 04/10). Falhou: estorna e responde — o relatório anterior segue intacto.
+  try {
+    await upsertDoc({ ...base, status: 'gerando', erro: null, result: resultadoAnterior, progresso: {
+      etapas: PROG_ORDEM.map(k => ({ key: k, label: PROG_LABELS[k], status: prog[k].status, n: null })),
+      atualizadoEm: new Date().toISOString(),
+    } });
+  } catch (e) {
+    console.error('[gerar-documental] gravação inicial falhou:', e?.message || e);
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[gerar-documental] estorno falhou:', e2?.message || e2); }
+    }
+    res.status(503).json({ error: 'Não consegui iniciar o relatório agora (banco indisponível). Nada foi cobrado — tente de novo em instantes.' });
+    return;
+  }
 
   // Orçamento da fase de COLETA (leitura de docs + CNJ): capado em 165s para SOBRAR
   // tempo para a IA (extração) + consultas de fontes + gravação, tudo dentro do
