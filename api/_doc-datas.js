@@ -27,6 +27,8 @@
  */
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao, roteiarDatasPraca } from './enriquecer-lote.js';
+import { extrairSegundaPraca } from './_segunda-praca.js';
+import { ehDocMultiLote } from './_edital-extrato.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -200,6 +202,15 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     // INÍCIO da 2ª praça. Daí `praca1_fim`/`praca2_fim` estarem em 1 lote de 30.622.
     Object.assign(patch, roteiarDatasPraca(datas, atual));
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
+
+    // VALOR DA 2ª PRAÇA (05/10, #37): o edital publica a regra ("2º leilão: 50% da avaliação") que a
+    // maioria dos scrapers não traz. Só grava o que ACRESCENTA — onde o lance coletado já é o da 2ª
+    // praça, repetir o valor não informa nada. Medido em seco em 300 editais antes de ligar.
+    if (!(Number(atual.valor_minimo_2) > 0) && a.tipo === 'edital') {
+      const sp = extrairSegundaPraca(texto, { multiLote: ehDocMultiLote(texto), valorAvaliacao: atual.valor_avaliacao, valorMinimo: atual.valor_minimo });
+      const v1 = Number(atual.valor_minimo) || 0;
+      if (sp?.valor > 0 && (!v1 || sp.valor < v1 * 0.98)) patch.valor_minimo_2 = sp.valor;
+    }
 
     // ENDEREÇO ANCORADO — APROVADO PELA MEDIÇÃO (29/08) e agora gravado.
     //

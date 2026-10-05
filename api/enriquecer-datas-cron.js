@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     'and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))',
     `fonte=not.in.(${['CEF', 'caixa', ...doResidencial].join(',')})`,
     'modalidade=not.ilike.*venda*direta*',
-    'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2',
+    'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2,valor_minimo,valor_minimo_2,valor_avaliacao',
     // Ordem: primeiro quem não tem data NENHUMA (`data_leilao` nulo). É o lote em que o gate
     // de leilão encerrado fica cego — sem data ele falha aberto e o relatório segue oferecido.
     // Depois, quem nunca foi tentado. Antes a fila era só por `enriquecido_em`, e os ~1.000 lotes
