@@ -1,0 +1,16 @@
+name: Diagnóstico de edital multi-lote (só leitura)
+on:
+  workflow_dispatch:
+    inputs:
+      urls: { description: 'URLs de edital separadas por espaço', required: true }
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts
+      - env: { URLS: '${{ inputs.urls }}' }
+        run: node scripts/diag-edital-multilote.mjs
