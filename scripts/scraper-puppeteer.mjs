@@ -7,6 +7,7 @@
  */
 
 import { classificarPatio, patioPreservado } from './lib/patio-veiculo.mjs';
+import { marcaModeloAno } from './lib/nordeste-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
@@ -4573,11 +4574,11 @@ function dataVIP(txt) {
   return `${ano}-${mes}-${d}`;
 }
 
-async function scraperVIP(browser) {
-  console.log('  Leilão VIP — server-rendered (agenda → eventos → /evento/lotes)...');
-  const page = await browser.newPage();
+// Coleta comum da VIP (agenda → eventos → cards com scroll), usada por imóveis e veículos (05/10).
+async function colherAnunciosVIP(browser, { segmentoQuery, rotulo }) {
   const bens = new Map();
   const DEADLINE = Date.now() + 7 * 60 * 1000;
+  const page = await browser.newPage();
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
@@ -4585,7 +4586,7 @@ async function scraperVIP(browser) {
     // 1) Eventos de imóveis na agenda (server-rendered): /evento/detalhes/{id}
     let eventos = [];
     try {
-      await page.goto(`${VIP_BASE}/agenda?segmento=Im%C3%B3veis`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto(`${VIP_BASE}/agenda${segmentoQuery ? `?segmento=${segmentoQuery}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await new Promise(r => setTimeout(r, 2500));
       eventos = await page.evaluate(() => {
         const set = new Set();
@@ -4596,7 +4597,7 @@ async function scraperVIP(browser) {
         return [...set];
       });
     } catch (e) { console.log(`    VIP agenda: ${String(e.message).slice(0, 50)}`); }
-    console.log(`    VIP: ${eventos.length} eventos de imóveis na agenda`);
+    console.log(`    VIP: ${eventos.length} eventos (${rotulo}) na agenda`);
 
     // 2) Cada evento: abre /evento/detalhes/{id} e ROLA para o JS renderizar os
     //    cards (Cloudflare Rocket Loader monta os anúncios no cliente — buscar o
@@ -4616,6 +4617,8 @@ async function scraperVIP(browser) {
           try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
           await new Promise(r => setTimeout(r, 900));
         }
+        // Nome do evento (05/10): é ele que diz judicial × extrajudicial (banco/financeira/seguradora/frota).
+        const nomeEvento = await page.evaluate(() => (document.querySelector('h1')?.textContent || document.title || '').replace(/\s+/g, ' ').trim()).catch(() => '');
         const anuncios = await page.evaluate(() => {
           const out = [];
           document.querySelectorAll('.card-anuncio').forEach((c) => {
@@ -4645,12 +4648,18 @@ async function scraperVIP(browser) {
           });
           return out;
         }).catch(() => []);
-        for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, an); }
+        for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, { ...an, evento: nomeEvento, eventoId: ev }); }
       } catch { /* evento a evento; nunca derruba o scrape */ }
       await new Promise(r => setTimeout(r, 120));
     }
   } finally { await page.close().catch(() => {}); }
 
+  return bens;
+}
+
+async function scraperVIP(browser) {
+  console.log('  Leilão VIP — server-rendered (agenda → eventos → /evento/lotes)...');
+  const bens = await colherAnunciosVIP(browser, { segmentoQuery: 'Im%C3%B3veis', rotulo: 'imóveis' });
   const seen = new Set();
   const imoveis = [];
   for (const a of bens.values()) {
@@ -4661,6 +4670,68 @@ async function scraperVIP(browser) {
   }
   console.log(`    VIP: ${imoveis.length} imóveis mapeados (${bens.size} anúncios colhidos)`);
   return imoveis;
+}
+
+// ─── VIP — VEÍCULOS (05/10, pedido do dono: "VIP não está integrado") ──────────────────────────────
+// Imóveis da VIP já entravam (agenda?segmento=Imóveis); veículos nunca foram pedidos — e a VIP é sobretudo
+// casa de veículo. Mesma coleta (colherAnunciosVIP), segmentos de veículo achados na PRÓPRIA agenda.
+// PÁTIO: regra do dono para a rede Superbid (23/09) — venda EXTRAJUDICIAL (banco, financeira, seguradora,
+// frota) não tem executado → 'confirmado'. Evento JUDICIAL exige sinal textual (classificador único).
+const RE_EVENTO_JUDICIAL = /judicial|\bvara\b|processo|tribunal|\btj[a-z]{2}\b|\btrt\b|execu[çc][ãa]o/i;
+const RE_SEGMENTO_VEICULO = /ve[ií]cul|carro|moto|pesad|caminh|utilit|[ôo]nibus|reboque/i;
+
+function mapVeiculoVIP(a) {
+  const titulo = String(a.titulo || '').replace(/\s+/g, ' ').trim();
+  const local = String(a.local || '').replace(/local:?/i, '').replace(/\s+/g, ' ').trim();
+  const lm = local.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
+  const mm = marcaModeloAno(titulo);
+  const texto = `${titulo} ${a.tipo || ''} ${a.rotulo || ''}`;
+  const judicial = RE_EVENTO_JUDICIAL.test(a.evento || '');
+  const patio = judicial ? classificarPatio(texto)
+    : { status: 'confirmado', motivo: 'venda extrajudicial (banco/financeira/seguradora/frota) — não há executado' };
+  const valor = parseBRL(a.valor || '');
+  return {
+    fonte: 'VIP', fonte_id: `vip_veic_${a.id}`, leiloeiro: 'Leilão VIP',
+    titulo: (titulo || `Veículo Leilão VIP ${a.id}`).slice(0, 180), descricao: [titulo, a.rotulo, a.evento].filter(Boolean).join(' · ').slice(0, 500),
+    marca: mm.marca, modelo: mm.modelo, ano_fabricacao: mm.ano_fabricacao, ano_modelo: mm.ano_modelo,
+    tipo_veiculo: classificarTipoVeiculo(texto) || 'carro',
+    placa: titulo.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
+    valor_minimo: valor || null, valor_avaliacao: null, desconto_percentual: null,
+    modalidade: judicial ? 'judicial' : 'extrajudicial',
+    cidade: lm ? toTitleCase(lm[1].trim()) : (local ? toTitleCase(local) : null), estado: lm ? lm[2].toUpperCase() : null,
+    link_lote: a.href ? (a.href.startsWith('http') ? a.href : `${VIP_BASE}${a.href}`) : `${VIP_BASE}/agenda`,
+    fotos: a.foto && /^https?:\/\//.test(a.foto) ? [a.foto] : null,
+    data_leilao: dataVIP(a.data), forma_pagamento: 'a_vista',
+    status_patio: patio.status, status_patio_motivo: patio.motivo,
+    ativo: true, raw: { evento: a.evento || null, eventoId: a.eventoId || null, rotulo: a.rotulo || null, hora: a.hora || null },
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+async function scraperVIPVeiculos(browser) {
+  console.log('  Leilão VIP — VEÍCULOS (agenda → segmentos de veículo → eventos)...');
+  // Os segmentos vêm da PRÓPRIA agenda (o nome exato do segmento não é chutado).
+  let segmentos = [];
+  const page = await browser.newPage();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.goto(`${VIP_BASE}/agenda`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await new Promise((r) => setTimeout(r, 2500));
+    segmentos = await page.evaluate(() => [...new Set([...document.querySelectorAll('a[href*="segmento="]')]
+      .map((a) => (a.getAttribute('href') || '').match(/segmento=([^&#"]+)/)?.[1]).filter(Boolean))]).catch(() => []);
+  } catch (e) { console.log(`    VIP agenda (segmentos): ${String(e.message).slice(0, 60)}`); }
+  finally { await page.close().catch(() => {}); }
+  const deVeiculo = segmentos.filter((sg) => RE_SEGMENTO_VEICULO.test(decodeURIComponent(sg)));
+  console.log(`    VIP: segmentos na agenda: ${segmentos.map((x) => decodeURIComponent(x)).join(', ') || '(nenhum)'} → veículo: ${deVeiculo.map((x) => decodeURIComponent(x)).join(', ') || '(nenhum — tenta "Veículos")'}`);
+  const bens = new Map();
+  for (const sg of (deVeiculo.length ? deVeiculo : ['Ve%C3%ADculos'])) {
+    for (const [id, an] of await colherAnunciosVIP(browser, { segmentoQuery: sg, rotulo: decodeURIComponent(sg) })) if (!bens.has(id)) bens.set(id, an);
+  }
+  const veiculos = [...bens.values()].map(mapVeiculoVIP).filter((v) => v.valor_minimo);
+  const n = (f) => veiculos.filter(f).length;
+  console.log(`    VIP veículos: ${veiculos.length} mapeados (${bens.size} cards) · pátio confirmado ${n((v) => v.status_patio === 'confirmado')} · selo ${n((v) => v.status_patio === 'nao_confirmado')} · indefinido ${n((v) => v.status_patio === 'indefinido')} · excluído ${n((v) => v.status_patio === 'excluido')} · marca ${n((v) => v.marca)} · ano ${n((v) => v.ano_modelo)} · data ${n((v) => v.data_leilao)} · cidade ${n((v) => v.cidade)}`);
+  for (const v of veiculos.slice(0, 6)) console.log(`      · ${v.fonte_id} | ${v.tipo_veiculo} | ${v.marca || '?'} ${v.modelo || ''} ${v.ano_fabricacao || '?'}/${v.ano_modelo || '?'} | R$ ${v.valor_minimo} | ${v.cidade}/${v.estado} | ${v.data_leilao} | ${v.modalidade} · ${v.status_patio} | evento: ${String(v.raw.evento || '').slice(0, 60)}`);
+  return veiculos;
 }
 
 // ─── LEILOTECH (plataforma white-label GraphQL — vários leiloeiros) ───────────
@@ -6164,6 +6235,16 @@ async function main() {
     }
 
     // LJUD — VEÍCULOS (piloto, 13/09). Mesmo padrão de gate/workflow separado.
+    // VIP — VEÍCULOS (05/10). SECO por padrão até o dono ver o 1º resultado: VIP_VEIC_DRYRUN=0 grava.
+    if (ONLY.includes('VIP_VEICULOS')) {
+      console.log('\n📋 Leilão VIP (veículos)...');
+      try {
+        const veiculosVIP = await scraperVIPVeiculos(browser);
+        if (process.env.VIP_VEIC_DRYRUN === '0') await salvarVeiculos(veiculosVIP);
+        else console.log('    VIP veículos: SECO — nada gravado (VIP_VEIC_DRYRUN=0 grava).');
+      } catch (e) { console.log(`  ⚠️ VIP veículos falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`); }
+    }
+
     if (ONLY.includes('LJUD_VEICULOS')) {
       console.log('\n📋 LJUD (veículos, piloto)...');
       const veiculosLJUD = await scraperLJUDVeiculos(browser);

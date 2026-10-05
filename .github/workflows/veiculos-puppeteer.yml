@@ -23,6 +23,10 @@ on:
         description: '1 = roda a rede Superbid (SUPERBID/SOLD/veículos) pelo proxy ISP mesmo com o residencial em dia (teste da reserva)'
         required: false
         default: '0'
+      vip_gravar:
+        description: '1 = grava os veículos da VIP (sem isso, VIP_VEICULOS roda SECO e só mede)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-veiculos:
@@ -57,6 +61,9 @@ jobs:
           # e do disparo manual default. `ONLY.includes(...)` em scraper-puppeteer.mjs já trata
           # este valor como lista exclusiva, então nenhuma fonte de IMÓVEL roda neste job.
           SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS,SUPERBID_VEICULOS,MEGA_VEICULOS,WEBLEILOES_VEICULOS,ZUK_VEICULOS,LJUD_VEICULOS' }}
+          # VIP veículos (05/10): fora da lista diária até o 1º seco ser conferido — dispare com fontes=VIP_VEICULOS
+          # (mede, não grava) e com vip_gravar=1 para gravar. Depois de aprovado, entra na lista acima.
+          VIP_VEIC_DRYRUN: ${{ github.event.inputs.vip_gravar == '1' && '0' || '1' }}
           # Rede Superbid (23/09): coleta no runner residencial; aqui só roda se o residencial
           # ficou 7+ dias sem concluir, e sai pelo proxy ISP (ver navegadorRedeSuperbid).
           BRIGHTDATA_ISP_HOST: ${{ secrets.BRIGHTDATA_ISP_HOST }}
