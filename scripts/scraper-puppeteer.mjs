@@ -7,7 +7,7 @@
  */
 
 import { classificarPatio, patioPreservado } from './lib/patio-veiculo.mjs';
-import { marcaModeloAno } from './lib/nordeste-veiculo.mjs';
+import { marcaModeloAnoVIP } from './lib/vip-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
@@ -4684,7 +4684,7 @@ function mapVeiculoVIP(a) {
   const titulo = String(a.titulo || '').replace(/\s+/g, ' ').trim();
   const local = String(a.local || '').replace(/local:?/i, '').replace(/\s+/g, ' ').trim();
   const lm = local.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
-  const mm = marcaModeloAno(titulo);
+  const mm = marcaModeloAnoVIP(titulo);
   const texto = `${titulo} ${a.tipo || ''} ${a.rotulo || ''}`;
   const judicial = RE_EVENTO_JUDICIAL.test(a.evento || '');
   const patio = judicial ? classificarPatio(texto)

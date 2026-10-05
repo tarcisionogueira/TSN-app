@@ -36209,3 +36209,28 @@ no lance/praças). PDF escaneado: entra o resumo lido pela IA, e a tela diz que 
 leitura por arquivo); "Liberar" não re-extrai quando os arquivos já foram lidos (era IA paga em dobro).
 Servidor: o teto do "texto informado" subiu de 12.000 para 60.000 caracteres por campo — o MESMO dos documentos que
 o servidor baixa (um edital tem 30–60 mil; com 12 mil só o começo era lido).
+
+## 05/10 — Alphaville (lote 06 VIP): anexos lidos "em branco" + link recusado (print do dono)
+Avaliação "Não informada" e lance "—" com edital e matrícula anexados. Duas falhas silenciosas:
+1. o edital (PDF grande) ia em base64 para `/api/claude` e estourava o limite de 4,5 MB da Vercel → `callAPI`
+   não checava `r.ok` e devolvia extração VAZIA como se fosse leitura (forma nº 1). Agora `callAPI` lança
+   (413 vira "arquivo grande demais para leitura direta"), PDF > 3 MB (`PDF_MAX_DIRETO`) vai por extração de
+   texto, e o teto de texto em `extrairDadosDocumento` subiu de 6.000 para 40.000;
+2. `leilaovip.com.br` não estava em `api/_allowed-hosts.js` → o link era recusado e o `catch` engolia. Host
+   incluído; falha de link agora aparece na tela (`showMsg`). **Dono: gerar de novo a análise do Alphaville.**
+
+## 05/10 — Pátio "opção 2": veículo sem sinal de executado entra com selo "Pátio não confirmado"
+`scripts/lib/patio-veiculo.mjs` = classificador ÚNICO (puppeteer, Nordeste, Astavero, VIP). Novo estado
+`nao_confirmado` (constraint aplicada): local informado sem sinal de pátio nem de executado. `/veiculos`
+mostra `confirmado` + `nao_confirmado` (este com selo no card e aviso no detalhe); `indefinido`/`excluido`
+seguem fora. Executado ("com o executado", "em mãos do executado/devedor") = excluído. Teste com 13 trechos
+reais: `testar:classificador-patio`.
+
+## 05/10 — VIP Leilões: VEÍCULOS integrados (`VIP_VEICULOS`, workflow `veiculos-puppeteer.yml`)
+Só imóveis da VIP entravam. Agora `scraperVIPVeiculos` acha os segmentos de veículo na própria `/agenda`
+(hoje a agenda só lista "Imóveis" — cai no fallback "Veículos", que responde: 18 eventos, 21 lotes no seco).
+Venda extrajudicial (banco/financeira/frota) → pátio `confirmado` (regra da rede Superbid, 23/09); evento
+judicial passa pelo classificador. Seco: 21/21 com cidade, 20/21 com data, mas marca 10/21 e ano 2/21 —
+o título é texto livre ("Ford, Modelo Courier 1.6 Flex, Ano 2008", "FIAT PALIO FIRE - ANO 15/16"). Parser
+próprio `scripts/lib/vip-veiculo.mjs` (teste `testar:vip-veiculo-titulo` com os títulos reais; o padrão
+Detran segue pelo `marcaModeloAno` comum). Agendado GRAVA; disparo manual é seco salvo `vip_gravar=1`.

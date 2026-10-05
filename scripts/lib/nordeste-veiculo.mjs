@@ -63,7 +63,7 @@ export function marcaModeloAno(titulo) {
   };
 }
 
-const RE_MARCA = /^(honda|yamaha|fiat|ford|volkswagen|vw|chevrolet|gm|renault|toyota|hyundai|nissan|peugeot|citroen|jeep|mitsubishi|suzuki|kawasaki|bmw|iveco|scania|volvo|mercedes|m\.?benz|kia|chery|jac|audi|land|dafra|shineray|haojue|agrale|marcopolo|mpolo)$/i;
+export const RE_MARCA = /^(honda|yamaha|fiat|ford|volkswagen|vw|chevrolet|gm|renault|toyota|hyundai|nissan|peugeot|citroen|jeep|mitsubishi|suzuki|kawasaki|bmw|iveco|scania|volvo|mercedes|m\.?benz|kia|chery|jac|audi|land|dafra|shineray|haojue|agrale|marcopolo|mpolo)$/i;
 
 const dataISO = v => (v && !isNaN(new Date(v)) ? new Date(v).toISOString() : null);
 
