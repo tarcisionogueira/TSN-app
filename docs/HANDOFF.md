@@ -36074,3 +36074,24 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
 - Admin: card "📨 Documentos a pedir ao leiloeiro" (equipe_whatsapp/sem_contato/aguardando, some quando o doc
   chega). Política de SELECT para admin/analista/advogado em `documental_pedidos_leiloeiro` (aplicada).
 - Oportunidades do assessorado: sem o corte de 15 — mostra todos os lotes que cabem no perfil, por encaixe.
+
+### 05/10 (tarde 4) — P2 do Claude: #37, #44, #48, #50 + fila de documentos
+- **Fila de captura de documentos** (achado no caminho): 1.438 pendentes; o lote de um cliente esperando
+  entrava no fim (a tela prometia "~1 minuto"). `documentos_fila.solicitado_em` (gravado por gerar-documental
+  e gerar-analise) → prioridade 0 em `documentos_fila_proxima`; `DOCS_LOTE` 40 → 100.
+- **#37 2ª praça:** `api/_segunda-praca.js` lê do edital ("2º leilão… 50% da avaliação"; R$ só em lote único e
+  abaixo da 1ª). Medido em seco em 300 editais reais antes de gravar; recusa regra de veículo e só grava o que
+  ACRESCENTA (onde o lance coletado já é o da 2ª praça, não repete). Ligado em `_doc-datas` (lotes novos).
+  Acervo: `segunda-praca-do-edital.yml` (PRACA2_APLICAR).
+- **#50 edital de vários bens:** detector não via TRT ("1: processo") nem lista por matrícula (Caixa). Pior:
+  `doc_fatos.identidade` com o endereço do LEILOEIRO/de outro lote em 143 lotes (15 grupos — 3TORRES "Rua Alice
+  Além Saadi" em 15 cidades, ZUK "Rua Minas Gerais" em 23), exibido ao cliente como "Endereço na documentação".
+  Correções: 2 formas novas no detector; trava em `publicarDocFatos` (logradouro+bairro em 2+ outras cidades da
+  fonte não publica); cache anterior a 05/10 13h não republica identidade; "Praça JUDICIAL/APÓS…" não vira rua;
+  limpeza aplicada (`limpar-identidade-contaminada.yml`) → 0 grupos contaminados.
+- **#44 FRAZÃO:** 112/117 indeterminados — o lote seguia aberto ("Liberado para Lance", 2º leilão por vir) e o
+  cron gastava as 3 tentativas depois da 1ª praça. Leitor próprio em `_resultado-leilao.js` (aberto → grava
+  data da 2ª praça). 112 devolvidos à fila (`reabrir-apuracao-fonte.yml`). Restam ZUK 33, SUPERBID 403, VLANCE 43.
+- **#48** fechada (403 da Caixa não reaparece). Ferramenta `diag-edital-multilote.yml` (só leitura).
+- ⚠️ O commit ac3315f reprovou o prebuild (env `URLS` genérica) — produção ficou na versão anterior; corrigido.
+  Lição: rodar `verificar:padroes` também em commit "só de script".
