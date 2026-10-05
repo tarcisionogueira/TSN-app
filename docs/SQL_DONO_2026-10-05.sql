@@ -4,8 +4,8 @@
 --   1) Pendência 130 — arquivar_lotes_inativos passa a guardar duplicata_suspeita_de no arquivo.
 --   2) Pendência 101 — troca de role em perfis vira evento em atividade_log
 --      ('role_alterado_manual' com sessão; 'role_alterado_sistema' por webhook/cron/SQL).
---   3) Pendência 49 — recalcula o selo de edital dos lotes com edital em Word (152 ativos, 150 do
---      Leilão Brasil). A função já foi trocada; o gatilho só recalcula quando o link é regravado.
+--   3) Pendência 49 — recalcula os selos de documento: edital em Word (~152) e matrícula já copiada
+--      para o nosso Storage (~327). As funções já foram trocadas; o gatilho só recalcula ao regravar.
 -- Conferência depois (cole e rode): veja o select no fim do arquivo — as duas colunas devem dar true.
 -- ════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -131,10 +131,14 @@ begin
 end $$;
 
 -- ── 3) Pendência 49 ──
+-- Recalcula os selos de edital E de matrícula (Word + arquivo no nosso Storage): ~150 editais
+-- (Leilão Brasil) e ~327 matrículas (PESTANA 294, CALIL 26…). O gatilho só roda quando o link é regravado.
 update public.imoveis_leilao set link_edital = link_edital
- where ativo and not tem_edital_doc and public.calc_tem_edital_doc(id, link_edital, anexos);
+ where ativo and ((not tem_edital_doc and public.calc_tem_edital_doc(id, link_edital, anexos))
+   or (not tem_matricula_doc and public.calc_tem_matricula_doc(id, link_matricula, anexos, fonte, estado, fonte_id)));
 
 -- ── Conferência ──
 select position('duplicata_suspeita_de' in pg_get_functiondef('public.arquivar_lotes_inativos'::regproc::oid)) > 0 as p130_ok,
        exists (select 1 from pg_trigger where tgname = 'perfis_log_role_alterado') as p101_ok,
-       (select count(*) filter (where tem_edital_doc) from public.imoveis_leilao where ativo and fonte = 'LEILAOBRASIL') as p49_leilaobrasil_com_edital; -- esperado ~156 de 158
+       (select count(*) filter (where tem_edital_doc) from public.imoveis_leilao where ativo and fonte = 'LEILAOBRASIL') as p49_leilaobrasil_com_edital, -- esperado ~156 de 158
+       (select count(*) filter (where tem_matricula_doc) from public.imoveis_leilao where ativo and fonte = 'PESTANA') as p49_pestana_com_matricula; -- esperado ~294 de 308

@@ -76,11 +76,14 @@ curto (5–8 linhas) antes de seguir:
    > -- justamente porque a unica forma de saber era gastar por ela). Use ESTA para conferir:
    > select proposito, public.brightdata_decisao(450, proposito) as resposta
    >   from brightdata_reserva order by proposito;
-   > -- inventário de documentos por leiloeiro (0% = documental sem o que ler)
+   > -- inventário de documentos por leiloeiro (0% = documental sem o que ler). Usa os SELOS
+   > -- (tem_edital_doc/tem_matricula_doc = arquivo de verdade, PDF ou Word). Até 05/10 contava só
+   > -- link_matricula/anexos e ignorava o edital em link_edital: LUTHERO saía 0% com PDF em 33/36 e
+   > -- o LEILAOBRASIL 0% com edital Word em 151/158 (forma nº 10 — a régua media outra coisa).
    > select fonte, count(*) ativos,
-   >   round(100.0*count(*) filter (where link_matricula is not null
-   >     or jsonb_array_length(coalesce(anexos,'[]'::jsonb))>0)/count(*),0) as pct_com_doc
-   >   from imoveis_leilao where ativo and fonte not in ('CEF','caixa') group by 1 having count(*)>=20 order by 2 desc;
+   >   round(100.0*count(*) filter (where tem_edital_doc or tem_matricula_doc)/count(*),0) as pct_com_doc,
+   >   round(100.0*count(*) filter (where tem_matricula_doc)/count(*),0) as pct_matricula
+   >   from imoveis_leilao where ativo and fonte not in ('CEF','caixa') group by 1 having count(*)>=20 order by 3, 2 desc;
    > ```
    > **Duas checagens automáticas convivem, e elas NÃO são a mesma coisa:**
    > `/api/health-check` (2×/dia, **custo zero** — não usa IA; só manda e-mail quando há
