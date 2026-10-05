@@ -202,7 +202,7 @@ function montarRow(l) {
     area_m2: extrairArea(l.titulo || ''),
     descricao: [l.descricao, comitente ? `Comitente: ${comitente}` : null]
       .filter(Boolean).join(' · ').replace(/\s+/g, ' ').trim().slice(0, 500) || null,
-    link_edital: url, // API da home não expõe documentos — TODO(detalhe): edital real
+    link_edital: url, // trocado pelo PDF do edital quando a página do leilão o lista (main)
     url_lote: url,
     link_foto: linkFoto(l),
     anexos: [],
@@ -215,6 +215,41 @@ function montarRow(l) {
     desconto_percentual: va > 0 ? Math.round((1 - vm / va) * 100) : null,
     atualizado_em: new Date().toISOString(),
   };
+}
+
+// ─── DOCUMENTOS DO LEILÃO (05/10, pendência 49) ─────────────────────────────
+// A API da home não traz documentos, mas a página /leiloes/{id} embute o JSON do leilão com
+// `arquivos_do_leilao`: [{descricao:'Edital'|'Matricula 26.313'|'Avaliação'|'Termo de Penhora',
+// arquivo:{id, signedUrl, …}}]. Medido via pg_net no leilão 3112: `signedUrl` devolve o PDF
+// original (%PDF, cache 1 ano, assinatura estável = etag). Sem `.pdf` na URL, então o anexo leva
+// `#.pdf` no fim — o fragmento não vai ao servidor e é o que o selo/leitores reconhecem.
+function documentosDaPagina(html) {
+  const c = String(html || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const docs = [];
+  const re = /"descricao":"((?:[^"\\]|\\.){0,120})","arquivo":\{"id":"([0-9a-f-]{36})"/g;
+  for (const m of c.matchAll(re)) {
+    let nome;
+    try { nome = JSON.parse(`"${m[1]}"`); } catch { nome = m[1]; } // padrao-ok: descrição com escape inválido fica crua — o nome é só rótulo
+    const id = m[2];
+    const su = c.match(new RegExp(`"signedUrl":"(https:\\\\/\\\\/(?:www\\.)?satoleiloes\\.com\\.br\\\\/midia\\\\/${id}\\?assinatura=[^"]+)"`));
+    if (!su) continue;
+    const url = su[1].replace(/\\\//g, '/') + '#.pdf';
+    const tipo = /edital/i.test(nome) ? 'edital' : /matr[ií]cula/i.test(nome) ? 'matricula'
+      : /avalia/i.test(nome) ? 'laudo' : 'outro';
+    if (!docs.some((d) => d.url === url)) docs.push({ tipo, nome, url });
+  }
+  return docs;
+}
+
+async function documentosDoLeilao(id) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 20_000);
+  try {
+    const r = await fetch(`${BASE}/leiloes/${id}`, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+    if (!r.ok) return { docs: [], erro: `HTTP ${r.status}` };
+    return { docs: documentosDaPagina(await r.text()) };
+  } catch (e) { return { docs: [], erro: String(e?.message || e).slice(0, 80) }; }
+  finally { clearTimeout(t); }
 }
 
 // ─── COLETA ──────────────────────────────────────────────────────────────────
@@ -291,6 +326,23 @@ async function main() {
   console.log(`  prontos ${prontos.length} · não-imóvel ${naoImovel} · multi-lote (TODO detalhe) ${multiLote} · status terminal ${statusRuim} · sem valor ${semValor}`);
 
   if (!prontos.length) { console.log('nada a gravar.'); return; }
+
+  // Documentos: 1 página por lote nativo (externo = site do parceiro, fora daqui).
+  let comDoc = 0; const errosDoc = [];
+  for (const row of prontos) {
+    if (!row.url_lote.startsWith(`${BASE}/leiloes/`)) continue;
+    const { docs, erro } = await documentosDoLeilao(row.fonte_id.replace(/^sato_/, ''));
+    if (erro) { errosDoc.push(`${row.fonte_id}: ${erro}`); continue; }
+    if (!docs.length) continue;
+    row.anexos = docs;
+    const edital = docs.find((d) => d.tipo === 'edital');
+    const matricula = docs.find((d) => d.tipo === 'matricula');
+    if (edital) row.link_edital = edital.url;
+    if (matricula) row.link_matricula = matricula.url;
+    comDoc++;
+    await sleep(400);
+  }
+  console.log(`  documentos: ${comDoc}/${prontos.length} lotes com arquivos${errosDoc.length ? ` · ${errosDoc.length} página(s) falharam (${errosDoc.slice(0, 3).join('; ')})` : ''}`);
   if (DRYRUN) {
     console.log('DRY-RUN: não gravei. Amostra:');
     console.log(JSON.stringify(prontos.slice(0, 3), null, 2));
