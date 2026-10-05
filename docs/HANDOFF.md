@@ -36026,3 +36026,16 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
 - **Dono:** o bloco 3 de `docs/SQL_DONO_2026-10-05.sql` recalcula os selos (sem ele, só na próxima coleta).
 - Inventário do CLAUDE.md agora mede pelos selos. Resíduo real (fontes que não expõem arquivo) virou
   pendência nova.
+
+### 05/10 (manhã) — Documento classificado pelo CONTEÚDO (fecha #136)
+- `api/_doc-tipo.js` lê 2 páginas do PDF (sem IA) e diz edital/matrícula/laudo. Ordem importa: exclusões
+  pelo título (proposta, contrato, anexo de lotes, cálculo, croqui) → laudo/auto de avaliação → edital pelo
+  TÍTULO (todo edital cita a matrícula) → matrícula pelo cabeçalho do cartório (RI Digital, Assinador do RI,
+  ONR, "Ofício de Registro") — "Registro de Imóveis" solto não vale em peça judicial. 18 casos reais em teste.
+- `espelhar-docs-cron` classifica cada cópia nova; `marcar()` não engole mais 409 (cópia ficava 'pendente').
+- Acervo: `classificar-docs-espelho.yml` (manual, retoma de onde parou; indefinido fica marcado em `motivo`).
+  2.445 PDFs, 0 falhas: +635 editais, +315 matrículas, +131 laudos. Duas armadilhas pegas no caminho: teto
+  de 1.000 linhas do PostgREST (a 1ª rodada "completa" leu 584) e unique (imovel_id, tipo) em imovel_anexos.
+- Efeito após o SQL do dono (#137): PESTANA 4→99%, LEILAOBRASIL 4→99%, CALIL 40→90%. Resíduo: ALBERTOMACEDO e
+  PURCENA não publicam arquivo (pedido ao leiloeiro); FERREIRALEIL/JELEILOES têm PDF escaneado (relatório lê
+  por visão, selo não rotula).
