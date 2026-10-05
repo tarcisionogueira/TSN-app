@@ -126,7 +126,8 @@
     "testar:saude-metricas-veiculo": "node scripts/testes/saude-metricas-veiculo.mjs",
     "testar:vaga-garagem": "node scripts/testes/vaga-garagem.mjs",
     "testar:classificador-patio": "node scripts/testes/classificador-patio.mjs",
-    "testar:vip-veiculo-titulo": "node scripts/testes/vip-veiculo-titulo.mjs"
+    "testar:vip-veiculo-titulo": "node scripts/testes/vip-veiculo-titulo.mjs",
+    "testar:docs-manuais": "node scripts/testes/docs-manuais.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

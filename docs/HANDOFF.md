@@ -36243,3 +36243,15 @@ gravava `imovel = null` e os dados ficavam só em `inputs.parecerInputs.d`; (2) 
 área 0) e sem o card de anexos. Agora: geração grava `fotoLoteManual(d)` (`manual: true`); id `tsn_…` reabre lendo
 a foto da própria análise (ou remonta de `inputs.parecerInputs.d` nas antigas — conferido no Alphaville); o
 recuperado vence o state magro, re-semeia a ficha e reabre com o card de anexos (arquivos não ficam guardados).
+
+## 05/10 — Lote manual: anexos GUARDADOS com a análise + trava não barra edital entregue como texto
+"Apareceu, mas não leu os documentos e está abrindo para preenchimento manual." O documental do Alphaville
+travou com `documento_nao_lido` = "Edital (não foi possível baixar o arquivo)": o servidor tentou BAIXAR o
+link e a trava de liberação não contava o edital que chegou como TEXTO do anexo (o resto do código já
+contava — `temEditalPre`, `leuEdital`). E o texto não era guardado em lugar nenhum (`inputs` nulo), então
+nem a regeração automática nem a reabertura tinham o que ler.
+Agora (`api/_docs-manuais.js`, teste `testar:docs-manuais`): o texto lido de cada anexo (nunca o arquivo;
+teto 60 mil por doc, 12 docs) vai em `inputs.docsManuais` do mercado e do documental; o documental, sem
+texto no corpo (cron/reabertura), recompõe dele; a trava conta `textoEdital`/`textoMatricula` como lidos; a
+tela reabre o lote manual com os anexos restaurados e o card fechado — só abre o card se não houver nada
+guardado (análises anteriores a hoje). `analise-nao-depende-do-state-volatil` atualizado: o recuperado vence.

@@ -47,8 +47,9 @@ console.log('\nA TELA SE RECUPERA PELO ID');
 {
   const src = ler('src/pages/Analise.jsx');
   checa('lê o parâmetro `imovel` da URL', /useSearchParams/.test(src) && /params\.get\('imovel'\)/.test(src));
-  checa('o imóvel pode vir do state OU do recuperado',
-    /const imovelInicial = location\.state\?\.imovel \|\| imovelRecuperado;/.test(src));
+  // 05/10: o RECUPERADO vence — ele só existe quando o state não servia (magro, ou lote manual).
+  checa('o imóvel pode vir do recuperado OU do state (o recuperado vence)',
+    /const imovelInicial = imovelRecuperado \|\| location\.state\?\.imovel;/.test(src));
   checa('relê `imoveis_leilao` pelo id quando o state não serve',
     /from\('imoveis_leilao'\)[\s\S]{0,400}?\.eq\('id', idDaUrl\)/.test(src));
   checa('a releitura passa pela renovação de sessão (falha de leitura ≠ imóvel sem endereço)',

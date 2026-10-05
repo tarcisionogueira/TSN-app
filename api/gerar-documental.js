@@ -30,6 +30,7 @@ import { pedirDocumentosAoLeiloeiro, fraseDoPedido, fonteNaoPublicaMatricula } f
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
+import { ehLoteManual, docsManuaisSaneados, textosDosDocsManuais } from './_docs-manuais.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -708,6 +709,26 @@ export default async function handler(req, res) {
       const [p] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
       if (p && (p.role === 'admin' || p.role === 'analista')) { ownerId = String(body.paraUserId); onBehalf = true; }
     } catch { /* mantém o próprio */ }
+  }
+
+  // ── LOTE MANUAL: o texto dos anexos mora no `inputs` da análise (api/_docs-manuais.js) ──
+  // A tela manda `inputs.docsManuais` ao gerar; a REGERAÇÃO (cron, ou reabrir sem os arquivos em
+  // memória) chega sem texto nenhum — e lia só o link, que falhou, e travava o relatório com
+  // "documento não lido" num edital que o cliente ANEXOU (Alphaville, 05/10). Relê daqui.
+  let inputsAnteriores = null;
+  if (ehLoteManual(imovelId)) {
+    try {
+      const rIn = await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=inputs&limit=1`);
+      if (!rIn.ok) throw new Error(`HTTP ${rIn.status}`);
+      inputsAnteriores = (await rIn.json())?.[0]?.inputs || null;
+    } catch (e) { console.warn('[documental] inputs do lote manual não lidos:', e?.message); }
+    const docs = docsManuaisSaneados(body.inputs?.docsManuais || inputsAnteriores?.docsManuais);
+    body.inputs = docs.length ? { ...(inputsAnteriores || {}), ...(body.inputs || {}), docsManuais: docs } : (body.inputs || inputsAnteriores);
+    if (!body.textoEdital && !body.textoMatricula && docs.length) {
+      const t = textosDosDocsManuais(docs);
+      body.textoEdital = t.edital || undefined;
+      body.textoMatricula = t.matricula || undefined;
+    }
   }
 
   // ── GATE DE ORIGEM: documental NOVO exige mercadológico concluído ───────────
@@ -2066,6 +2087,10 @@ export default async function handler(req, res) {
     // incompleto com cara de pronto) e as rotinas de regeração tentam de novo sozinhas.
     const exL = parsed.extracao || {};
     const tiposLidosSet = new Set(lidos.map(tipoLido));
+    // Documento entregue como TEXTO (anexo do lote manual lido na tela) também é documento lido: sem
+    // isto, o link do mesmo edital que falhou ao baixar travava o relatório com o edital em mãos.
+    if (body?.textoEdital) tiposLidosSet.add('edital');
+    if (body?.textoMatricula) tiposLidosSet.add('matricula');
     // Exceção já existente e mantida: venda online da Caixa usa as REGRAS PADRONIZADAS (conteúdo
     // conhecido do prompt); com a matrícula lida, a falha do PDF genérico não trava (ver acima).
     const regrasCaixaPadrao = (n) => ehCaixaFonteDoc && leuMatriculaFinal && n.tipo === 'regras_venda';

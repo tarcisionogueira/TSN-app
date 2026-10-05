@@ -197,6 +197,8 @@ export default function Analise() {
   const [params] = useSearchParams();
   const idDaUrl = (params.get('imovel') || '').trim() || null;
   const [imovelRecuperado, setImovelRecuperado] = useState(null);
+  // Texto dos anexos de um lote MANUAL, relido da própria análise (ver api/_docs-manuais.js).
+  const [docsRecuperados, setDocsRecuperados] = useState(null);
   // O recuperado VENCE o state: o state que a lista passa é magro ({id, título, cidade}); quando a
   // recuperação roda é porque ele não servia (ver o efeito RECUPERAÇÃO).
   const imovelInicial = imovelRecuperado || location.state?.imovel;
@@ -215,9 +217,9 @@ export default function Analise() {
   // a resposta do banco (e ficava aberta de vez quando o state se perdia): foi o "campo de
   // inclusão manual expandido num imóvel que tem documentos anexados" relatado em 10/09.
   const semImovelBase = !imovelInicial && !idDaUrl;
-  // Lote manual reaberto pela lista: o card de anexos volta aberto — os arquivos não ficam guardados,
-  // e completar/regerar o documental exige anexá-los de novo.
-  const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase || ehIdManual(idDaUrl));
+  // Lote manual reaberto pela lista abre como qualquer análise: o texto dos anexos volta da própria
+  // análise. Só se não houver nada guardado (análise anterior a 05/10) o card de anexos abre.
+  const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase);
 
   const temCNJ = ROLES_COM_CNJ.includes(role);
   const semLimite = ROLES_SEM_LIMITE.includes(role);
@@ -334,8 +336,11 @@ export default function Analise() {
         const uid = effectiveUserId || user?.id;
         const ler = (tabela, cols) => lerComRenovacao(supabase, () => supabase.from(tabela).select(cols)
           .eq('user_id', uid).eq('imovel_id', idDaUrl).limit(1));
-        const [m, dc] = await Promise.all([ler('analises_mercado', 'imovel, inputs'), ler('analises_documental', 'imovel')]);
+        const [m, dc] = await Promise.all([ler('analises_mercado', 'imovel, inputs'), ler('analises_documental', 'imovel, inputs')]);
         if (!vivo) return;
+        const docs = dc.data?.[0]?.inputs?.docsManuais || m.data?.[0]?.inputs?.docsManuais;
+        if (Array.isArray(docs) && docs.length) setDocsRecuperados(docs);
+        else if (!m.error && !dc.error) setModoManual(true); // nada guardado: os anexos precisam vir de novo
         const foto = m.data?.[0]?.imovel || dc.data?.[0]?.imovel;
         const dIn = m.data?.[0]?.inputs?.parecerInputs?.d;
         const rec = foto?.manual ? foto : (dIn ? fotoLoteManual(dIn, idDaUrl) : null);
@@ -1172,6 +1177,10 @@ export default function Analise() {
   // (consolidarDocsImovel: matrícula manda no endereço/área, edital no lance/praças) — não do último a chegar.
   const tipoPeloNomeArquivo = (nome) => (/matr[ií]c/i.test(nome) ? 'matricula' : /edital|regras?\s*(de\s*)?venda/i.test(nome) ? 'edital' : null);
   const tipoPelaLeitura = (ext) => { const t = String(ext?.tipoDocumento || '').toLowerCase(); return /matric/.test(t) ? 'matricula' : /edital|regra/.test(t) ? 'edital' : null; };
+  // O que vai GRAVADO com a análise (lote manual): texto e dados lidos — nunca o arquivo.
+  const docsManuaisParaGravar = () => (ehIdManual(analiseImovelId)
+    ? docsManuais.filter((x) => !x.lendo && (x.texto || x.ext)).map(({ nome, tipo, texto, ext, aviso }) => ({ nome, tipo, texto, ext, aviso }))
+    : []);
   const recomporDocsManuais = (lista) => {
     const prontos = lista.filter((x) => !x.lendo);
     const bloco = (tipos, rot) => prontos.filter((x) => tipos.includes(x.tipo) && x.texto)
@@ -1351,7 +1360,7 @@ export default function Analise() {
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
       { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial && !ehIdManual(analiseImovelId) ? imovelInicial : fotoLoteManual(dSnap, analiseImovelId, urlEdital), paraUserId },
-      { mercadoInputs, parecerInputs }
+      { mercadoInputs, parecerInputs, ...(docsManuaisParaGravar().length ? { docsManuais: docsManuaisParaGravar() } : {}) }
     );
   };
 
@@ -1397,6 +1406,13 @@ export default function Analise() {
     setD((prev) => (prev.imovelIdAcervo === imovelRecuperado.id && (Number(prev.valorAvaliacao) || Number(prev.areaM2))
       ? prev : sementeDoImovel(imovelRecuperado)));
   }, [imovelRecuperado]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Os anexos guardados entram DEPOIS da re-semeadura acima (efeito declarado depois = roda depois):
+  // a recomposição deles aplica à ficha os dados lidos (avaliação, lance, área), e a semente não os apaga.
+  useEffect(() => {
+    if (!docsRecuperados) return;
+    setDocsManuais(docsRecuperados.map((x, i) => ({ ...x, id: `rec_${i}_${Date.now()}`, lendo: false, tipoDoNome: false })));
+    setDocsRecuperados(null);
+  }, [docsRecuperados]);
 
   // Conteúdo DERIVADO do imóvel anterior — some junto, pelo mesmo motivo. `aplicadoRef` volta a
   // null para que o resultado do imóvel novo seja aplicado: ele guarda o `updatedAt` já aplicado
@@ -1580,6 +1596,7 @@ export default function Analise() {
       textoMatricula: textoMatricula.trim() || undefined,
       processoNumero: cnjNumero.trim() || undefined,
       processoNome: cnjNome.trim() || undefined,
+      ...(docsManuaisParaGravar().length ? { inputs: { docsManuais: docsManuaisParaGravar() } } : {}),
     };
     showMsg('Análise documental iniciada no servidor, pode fechar a aba; acompanhe em "Análises" no topo.');
     iniciarDocumental(

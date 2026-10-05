@@ -32,6 +32,7 @@ import { comCascataBusca } from './_busca-modelo.js';
 import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
+import { ehLoteManual, docsManuaisSaneados } from './_docs-manuais.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1977,7 +1978,20 @@ export default async function handler(req, res) {
   // Data do leilão (para a regra de limpeza: 15 dias após o leilão sem arrematar).
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
   const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
-  const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
+  // LOTE MANUAL (05/10): o texto dos anexos fica guardado com a análise (api/_docs-manuais.js) — é dele
+  // que a tela reabre e o documental relê. A regeração pelo cron não manda os docs: preserva os gravados.
+  let docsManuais = [];
+  if (ehLoteManual(imovelId)) {
+    docsManuais = docsManuaisSaneados(body.docsManuais);
+    if (!docsManuais.length) {
+      try {
+        const rIn = await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=inputs&limit=1`);
+        if (!rIn.ok) throw new Error(`HTTP ${rIn.status}`);
+        docsManuais = docsManuaisSaneados((await rIn.json())?.[0]?.inputs?.docsManuais);
+      } catch (e) { console.warn('[mercado] docs do lote manual não lidos:', e?.message); }
+    }
+  }
+  const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs, ...(docsManuais.length ? { docsManuais } : {}) }, data_leilao: dataLeilao };
 
   // ── LEILÃO JÁ ENCERRADO → não gera e não cobra (regra do dono, 07/08) ───────
   // "não vale, pois já passou a data de arrematar". Checado ANTES da cota: o ponto do gate é
