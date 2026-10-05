@@ -36095,3 +36095,20 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
 - **#48** fechada (403 da Caixa não reaparece). Ferramenta `diag-edital-multilote.yml` (só leitura).
 - ⚠️ O commit ac3315f reprovou o prebuild (env `URLS` genérica) — produção ficou na versão anterior; corrigido.
   Lição: rodar `verificar:padroes` também em commit "só de script".
+
+### 05/10 (tarde 5) — #44 resultado pós-leilão (medido em páginas reais) e #74
+- **Leitor genérico errava valor:** "arrematante" (sujeito de cláusula) + o R$ mais perto em qualquer lado →
+  "vendido R$ 25.000" (débito de IPTU) num lote do MEGA com 1 lance de R$ 167.000. 81 vendidos com valor < 30% do
+  mínimo em 9 fontes (MEGA 72). Agora só "vendido/arrematado" com o R$ DEPOIS, na mesma frase. Suspeitos viram
+  `indeterminado` e voltam à fila (`reabrir-apuracao-fonte.yml`, suspeitos=1, fonte=*).
+- **Leitores próprios** (trechos reais em teste): FRAZÃO (aberto + data da 2ª praça), VIP ("Status: X" + "Atual :"
+  — o genérico dava o Incremento como lance), MEGA ("Leilão encerrado R$ X … Lances N").
+- **VIP órfão:** o runner residencial carimbava cobertura de TODAS as fontes se lesse qualquer página (05/10:
+  10 de 93) → cron pulava VIP: 536 vencidos, 0 tentados. Carimbo agora por fonte (`cobertas=`), e o runner
+  leva cookie entre redirects (`scripts/lib/fetch-com-cookies.mjs`) — VIP abre (testado pelo GitHub).
+- **Sem fonte pública de resultado (indeterminado é a resposta honesta):** ZUK retirado (redireciona p/ listagem),
+  VLANCE (API só devolve lote aberto), PESTANA (lote some da API; página por lote = captcha — não forçar).
+  SUPERBID: indeterminados = condicional/retirado, por desenho do apurador residencial.
+- **#74:** dívida zerada — a trava `user-id-cru-em-dado-de-cliente` tem 0 na linha de base (138 `effectiveUserId`
+  + exceções com motivo); escrita em modo suporte bloqueada. Agir EM NOME do cliente = feature (decisão do dono).
+- Ferramentas: `diag-pagina-resultado.yml` (abre lote com cookie e mostra o que o leitor concluiria).
