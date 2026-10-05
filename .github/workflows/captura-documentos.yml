@@ -39,7 +39,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           # 40/run (~13s por lote → ~9 min; teto seguro no timeout de 45 min). O */15
           # é throttled pelo GitHub p/ ~1-2h, então cada run precisa render mais.
-          DOCS_LOTE: '40'
+          DOCS_LOTE: '100'   # 05/10: 40/run deixou 1.438 pendentes (runs reais a cada 2-4 h); 100 ≈ 20-35 min < 45. Cliente esperando vem 1º (prioridade 0).
           # CAMINHO 3 (Bright Data Web Unlocker): desbloqueia leiloeiros anti-bot
           # (PECINI etc.) quando o Puppeteer é barrado. Sem estes segredos o caminho 3
           # simplesmente não roda (fallback seguro) — os caminhos 1/2 seguem normais.

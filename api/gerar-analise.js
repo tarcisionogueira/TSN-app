@@ -2919,7 +2919,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         if (/caixa|cef/i.test(String(imDb.fonte || ''))) {
           await sb('cef_matricula_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
         } else if (imDb.tem_matricula_doc) {
-          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
+          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente', solicitado_em: new Date().toISOString() }) });
         }
       } catch { /* fila é reforço, não caminho crítico da geração */ }
     }

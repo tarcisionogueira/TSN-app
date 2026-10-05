@@ -1170,7 +1170,8 @@ export default async function handler(req, res) {
         try {
           await sb('documentos_fila?on_conflict=imovel_id', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }),
+            // solicitado_em: prioridade 0 na fila — é um cliente esperando (05/10).
+            body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente', solicitado_em: new Date().toISOString() }),
           });
           enfileirado = true;
           await dispararCaptura('captura-documentos.yml'); // dispara agora
@@ -1983,7 +1984,7 @@ export default async function handler(req, res) {
       let enfileirado = matriculaFaltaCaixa;
       if (!ehCaixaFonte && temPaginaLote) {
         try {
-          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
+          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente', solicitado_em: new Date().toISOString() }) }); // cliente esperando: fura a fila
           enfileirado = true;
           await dispararCaptura('captura-documentos.yml');
         } catch { /* segue com a mensagem */ }

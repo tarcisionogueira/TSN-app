@@ -1,0 +1,28 @@
+name: 2ª praça lida do edital (em seco / aplicar)
+
+# #37 (05/10). Manual. Em seco por padrão: imprime o que gravaria. aplicar=1 grava valor_minimo_2
+# só onde está nulo. Lê os editais do nosso bucket (custo zero de Bright Data).
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: 'quantos editais', default: '200' }
+      fonte: { description: 'só esta fonte (opcional)', default: '' }
+      aplicar: { description: '1 = grava', default: '0' }
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts
+      - name: Extrair
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          N: ${{ inputs.n }}
+          FONTE: ${{ inputs.fonte }}
+          APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/segunda-praca-do-edital.mjs
