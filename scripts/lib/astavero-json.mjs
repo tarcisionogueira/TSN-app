@@ -128,7 +128,10 @@ export function veiculoDaDescricao(desc, nome = '') {
   const anos = t.match(/ano\s+(?:de\s+)?fabrica[çc][ãa]o\s*:?\s*((?:19|20)\d{2})[\s\S]{0,30}?ano\s+(?:de\s+)?modelo\s*:?\s*((?:19|20)\d{2})/i)
     || t.match(/ano\s*\/\s*modelo\s*:?\s*((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})/i)
     || t.match(/\bano\s+((?:19|20)\d{2})\s+e\s+modelo\s+((?:19|20)\d{2})/i)
-    || t.match(/\b((?:19[5-9]|20[0-4])\d)\s*\/\s*((?:19[5-9]|20[0-4])\d)\b/);
+    || t.match(/\b((?:19[5-9]|20[0-4])\d)\s*\/\s*((?:19[5-9]|20[0-4])\d)\b/)
+    || String(nome).match(/\b((?:19[5-9]|20[0-4])\d)\s*\/\s*((?:19[5-9]|20[0-4])\d)\b/);
+  // Um ano só ("Renault Megane GT Dyn 16 - 2013", "ano 2006"): é o ano-MODELO; fabricação fica sem — não inventa.
+  const anoUnico = anos ? null : (t.match(/\bano\s*:?\s*((?:19[5-9]|20[0-4])\d)\b/i) || String(nome).match(/(?:-\s*|\s)((?:19[5-9]|20[0-4])\d)\s*\.?\s*$/))?.[1];
   const placa = (t.match(/\bplacas?\s*:?\s*([A-Z]{3}-?\d[A-Z0-9]\d{2})\b/i) || [])[1];
   const chassi = (t.match(/\bchassi\s*:?\s*(?:n[º°.o]?\s*)?([A-HJ-NPR-Z0-9]{17})\b/i) || [])[1];
   const renavam = (t.match(/\brenavam\s*:?\s*(?:n[º°.o]?\s*)?(\d{9,11})\b/i) || [])[1];
@@ -140,8 +143,10 @@ export function veiculoDaDescricao(desc, nome = '') {
   const vistoria = (t.match(/(?:local\s+(?:para|de)\s+)?vistoria\s*:\s*([\s\S]{8,180}?)(?=\.\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|\.?\s*$)/i) || [])[1]?.trim() || null;
   return {
     marca: marca ? marcaCanon(marca) : null,
-    modelo: modelo ? modelo.replace(/\s+/g, ' ').trim().replace(/[,.;-]+$/, '').slice(0, 80) : null,
-    ano_fabricacao: anos ? Number(anos[1]) : null, ano_modelo: anos ? Number(anos[2]) : null,
+    // "207 PASSION XR 2010/2011." — o ano vazava para o modelo (dry-run 05/10, Saulo Júlio).
+    modelo: modelo ? modelo.replace(/\s+/g, ' ').trim().replace(/[,.;]+$/, '')
+      .replace(/[\s,-]*\b(?:19|20)\d{2}(?:\s*\/\s*(?:19|20)\d{2})?\s*\.?$/, '').replace(/[,.;-]+$/, '').trim().slice(0, 80) || null : null,
+    ano_fabricacao: anos ? Number(anos[1]) : null, ano_modelo: anos ? Number(anos[2]) : (anoUnico ? Number(anoUnico) : null),
     placa: placa ? placa.replace('-', '').toUpperCase() : null, chassi: chassi ? chassi.toUpperCase() : null, renavam: renavam || null,
     cor: cor ? cor.toLowerCase() : null, combustivel: comb, vistoria,
   };

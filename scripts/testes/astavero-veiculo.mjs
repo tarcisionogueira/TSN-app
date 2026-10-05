@@ -28,4 +28,10 @@ assert.deepEqual(row.fotos, ['https://x/foto.jpg']);
 assert.equal(row.raw.segunda_praca, 34500);
 const moto = montarRowVeiculoAstavero({ ...item, nome: 'CBX 250 TWISTER' }, { lote: { sucata: true, detalhada: 'HONDA/CBX 250 TWISTER(Nacional), ano/modelo 2008/2008' } }, tenant, { marcaModeloAno, tipoVeiculo });
 assert.deepEqual([moto.tipo_veiculo, moto.is_sucata], ['moto', true]);
+// Dry-run 05/10: ano vazando no modelo e ano único.
+const peugeot = veiculoDaDescricao('', 'PEUGEOT/207 PASSION XR 2010/2011.');
+assert.deepEqual([peugeot.marca, peugeot.modelo, peugeot.ano_fabricacao, peugeot.ano_modelo], ['PEUGEOT', '207 PASSION XR', 2010, 2011]);
+const megane = veiculoDaDescricao('', 'Renault Megane GT Dyn 16 - 2013');
+assert.deepEqual([megane.ano_fabricacao, megane.ano_modelo], [null, 2013]);
+assert.equal(veiculoDaDescricao('', 'Fluence 2.0 16V').ano_modelo, null);          // "16V" não é ano
 console.log('astavero-veiculo: todos os casos passaram');
