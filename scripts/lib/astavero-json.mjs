@@ -7,7 +7,9 @@
  *  - LISTAGEM  POST /app/lotes        {botao:'ABERTOS', categoria:'Imóveis', uf:'', cidade:'', …}
  *              → { lotes:[{id, leilao, lote, nome, local:'Cidade - UF', valor, avaliacao, praca,
  *                  data, status, vara, origem, image, url}], pag:{count}, categorias:[…] }
- *  - DETALHE   POST /app/pregao/init  {leilao, lote}
+ *  - LEILÃO    POST /app/pregao/init  {id: <leilão>, …} — SEM `id` nunca responde; o `lote` que vem junto é o 1º
+ *              do leilão, não o pedido (medido) — daqui só se usa `leilao` (datas d1/d2, anexos/edital).
+ *  - LOTE      POST /app/pregao/lote  {id: <lote>} — o lote certo.
  *              → { leilao:{datas:{d1,d2,…}, anexos:[{url, private, type}]}, lote:{v:{avaliacao,
  *                  primeira, segunda}, p:{processo, vara, tipo, falencia}, d:{cidade, uf, bairro,
  *                  endereco, cep}, nome, detalhada(HTML), status} }

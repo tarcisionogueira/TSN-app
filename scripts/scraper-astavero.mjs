@@ -3,7 +3,7 @@
  * JSON da própria plataforma (POST, sem login, sem Cloudflare — custo Bright Data ZERO). Parser puro em
  * lib/astavero-json.mjs. Pendência #41 (recon 05/10: 89 imóveis em aberto, nenhum no acervo).
  *
- * Por execução e por leiloeiro: 1 POST de listagem (categoria Imóveis) + 1 POST de detalhe por lote.
+ * Por execução e por leiloeiro: 1 POST de listagem (categoria Imóveis) + 1 `init` por leilão + 1 `lote` por lote.
  * Detalhe falhou → o lote entra com o que a listagem tem (cidade, valores, data, foto), sem inventar o resto.
  *
  * Env: ASTAVERO_DRYRUN (default '1') · ASTAVERO_TENANTS (csv de fontes, opcional) · VITE_SUPABASE_URL,
@@ -26,8 +26,9 @@ const FILTRO = (process.env.ASTAVERO_TENANTS || '').split(',').map((s) => s.trim
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// VIA BANCO para POST (05/10): o 1º dry-run ficou >6 min sem terminar — chamadas penduradas do runner do
-// GitHub (o banco, na AWS, recebia 200 no recon). Mesmo desenho do `viaBanco` do motor, com o gêmeo POST
+// VIA BANCO para POST (05/10). Medido: o 1º dry-run pendurou no DETALHE — e não era o IP do runner, era o
+// CORPO: sem `id` (= id do leilão) o servidor nunca responde, do runner ou do banco. Com `id` responde na
+// hora (recon). A via banco fica como reserva para quando o runner for barrado de verdade. Mesmo desenho do `viaBanco` do motor, com o gêmeo POST
 // `pagina_postar_json` (supabase/migrations/20261005_pagina_postar_json.sql); a resposta vem por `pagina_ler`.
 async function rpc(fn, body) {
   const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, { method: 'POST', signal: AbortSignal.timeout(15000),
@@ -114,12 +115,22 @@ async function coletar(tenant) {
   console.log(`[${tenant.fonte}] via ${vias.get(tenant.fonte) || '?'} · listagem: ${itens.length} imóvel(is)${Number.isFinite(declarado) ? ` de ${declarado} declarados` : ''}`);
 
   const prontos = []; let semDetalhe = 0, descartados = 0, naoImovel = 0, seguidas = 0;
+  const leiloes = new Map();   // id do leilão → objeto `leilao` do init (datas + edital), 1 chamada por leilão
   for (const item of itens) {
     let det = null;
     // DISJUNTOR: 3 detalhes seguidos falhando = o caminho está fora; o resto entra só com a listagem
     // (cidade, valores, data, foto) em vez de gastar 30 s × N lotes até estourar o teto do job.
     if (seguidas < 3) {
-      try { det = await postar(tenant, '/app/pregao/init', { leilao: item.leilao, lote: item.id }); seguidas = 0; }
+      // DOIS endpoints, medidos 05/10: `init` devolve o LEILÃO (datas d1/d2 + edital) mas o lote que vem nele
+      // é o 1º do leilão, NÃO o pedido — usá-lo copiaria a descrição do lote 01.1 em todos (forma nº 10).
+      // `lote` {id} devolve o lote certo. Então: `init` uma vez por leilão (cache) + `lote` por lote.
+      try {
+        if (!leiloes.has(item.leilao)) leiloes.set(item.leilao, (await postar(tenant, '/app/pregao/init', { id: item.leilao, leilao: item.leilao, lote: item.id }))?.leilao || null);
+        const l = await postar(tenant, '/app/pregao/lote', { id: item.id });
+        if (l?.lote?._id && l.lote._id !== item.id) throw new Error(`pedi ${item.id} e veio ${l.lote._id}`);
+        det = { leilao: leiloes.get(item.leilao), lote: l?.lote || null };
+        seguidas = 0;
+      }
       catch (e) { semDetalhe++; seguidas++; if (semDetalhe <= 3) console.log(`  [${tenant.fonte}] ${item.id}: detalhe não lido (${e.message})`); }
       await sleep(300);
     } else semDetalhe++;
@@ -149,7 +160,7 @@ async function coletar(tenant) {
   else console.log(`  [${tenant.fonte}] varredura PULADA — listagem parcial.`);
   await registrarSaude(supabase, tenant.fonte, prontos, 'astavero-api', { enumerados: itens.length });
   await registrarConhecimento(supabase, { fonte: tenant.fonte, plataforma: 'Astavero (Angular + API JSON)', acesso: 'fetch-post',
-    custo: 'gratis', anti_bot: 'nenhum', enumeracao: 'POST /app/lotes {categoria:"Imóveis"} + POST /app/pregao/init por lote',
+    custo: 'gratis', anti_bot: 'nenhum', enumeracao: 'POST /app/lotes {categoria:"Imóveis"} + /app/pregao/init por leilão + /app/pregao/lote {id} por lote',
     url_lote: '/pregao/<leilão>/<lote>', scraper: 'scraper-astavero.mjs', qualidade: qualidadeColeta(prontos) });
   return true;
 }
