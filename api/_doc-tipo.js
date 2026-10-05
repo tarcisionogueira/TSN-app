@@ -24,13 +24,14 @@ export function classificarTipoPorTexto(texto) {
 }
 
 /** Lê só as 2 primeiras páginas de um PDF (rápido e barato). PDF escaneado → null. Nunca lança. */
-export async function tipoPorConteudoPdf(buf) {
+export async function tipoPorConteudoPdf(buf, { comTexto = false } = {}) {
   try {
     const PDFParse = await carregarPDFParse();
     const parser = new PDFParse({ data: buf });
     try {
       const res = await parser.getText({ first: 2 });
-      return classificarTipoPorTexto(res?.text || '');
+      const tipo = classificarTipoPorTexto(res?.text || '');
+      return comTexto ? { tipo, cabeca: String(res?.text || '').replace(/\s+/g, ' ').trim().slice(0, 160) } : tipo;
     } finally { await parser.destroy().catch(() => {}); }
-  } catch (e) { console.error('[doc-tipo] leitura do PDF falhou:', String(e?.message || e).slice(0, 80)); return null; }
+  } catch (e) { console.error('[doc-tipo] leitura do PDF falhou:', String(e?.message || e).slice(0, 80)); return comTexto ? { tipo: null, cabeca: '(falha de leitura)' } : null; }
 }

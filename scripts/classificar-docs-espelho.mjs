@@ -21,7 +21,7 @@ async function sb(path, init = {}) {
 }
 
 // Candidatos: copiados genéricos, PDF, até o teto de bytes, de lote ATIVO (via RPC-less: filtro em 2 passos).
-const linhas = await sb(`documento_espelho?status=eq.copiado&tipo=in.(outro,anexo)&storage_path=ilike.*.pdf&bytes=lte.${MAX_BYTES}&select=id,storage_path,imovel_id,fonte,bytes&order=criado_em.desc&limit=${Math.max(LIMITE * 4, 400)}`);
+const linhas = await sb(`documento_espelho?status=eq.copiado&tipo=in.(outro,anexo)&storage_path=ilike.*.pdf&bytes=lte.${MAX_BYTES}&select=id,storage_path,imovel_id,fonte,bytes&order=id&limit=${Math.max(LIMITE * 4, 400)}`);
 const porPath = new Map();
 for (const l of linhas) if (!porPath.has(l.storage_path)) porPath.set(l.storage_path, l);
 const ids = [...new Set([...porPath.values()].map((l) => l.imovel_id))];
@@ -36,13 +36,13 @@ const res = { lidos: 0, falhas: 0, porTipo: {}, porFonte: {}, gravados: 0 };
 for (const a of alvos) {
   const r = await fetch(`${SB}/storage/v1/object/documentos/${a.storage_path}`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
   if (!r.ok) { res.falhas++; console.log(`  ✗ ${a.fonte} ${a.storage_path} HTTP ${r.status}`); continue; }
-  const tipo = await tipoPorConteudoPdf(Buffer.from(await r.arrayBuffer()));
+  const { tipo, cabeca } = await tipoPorConteudoPdf(Buffer.from(await r.arrayBuffer()), { comTexto: true });
   res.lidos++;
   const k = tipo || '(indefinido)';
   res.porTipo[k] = (res.porTipo[k] || 0) + 1;
   res.porFonte[a.fonte] ??= {}; res.porFonte[a.fonte][k] = (res.porFonte[a.fonte][k] || 0) + 1;
+  console.log(`  ${(tipo || '—').padEnd(9)} ${a.fonte.padEnd(16)} «${cabeca || '(sem texto: escaneado?)'}»`);
   if (!tipo) continue;
-  console.log(`  ${tipo.padEnd(9)} ${a.fonte.padEnd(16)} ${a.storage_path}`);
   if (!APLICAR) continue;
   await sb(`documento_espelho?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipo }) });
