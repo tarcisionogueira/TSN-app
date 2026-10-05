@@ -36139,3 +36139,21 @@ NÃO pode ir ao leiloeiro, solicitar análise nem ver anexos. Imóvel após logi
   pagamento, 2ª praça), descrição inteira sem links, e o bloco "Entre para ver o imóvel completo" (endereço/mapa,
   documentos, leiloeiro, análise). O link para `/leilao/:id` saiu — a tela já mostra mais do que ela.
 Auditoria de segurança 0/0 após a migração.
+
+## 05/10 — #41 integrado: NAKAKOGUE (60 imóveis) + plataforma ASTAVERO (5 leiloeiros, ~89 imóveis), custo zero
+**NAKAKOGUELEILOES** (Multiplix, PHP): `/lotes/consulta/1` = categoria imóveis de TODOS os leilões numa página; o card
+traz título, valores, edital e situação. A página do lote se preenche por JS via sessão PHP (`proximo_lote.php` sem
+parâmetro) — frágil, então o detalhe vem do CARD (gancho novo `parse.detalhesDoCatalogo` no runner do motor; fonte
+sem o gancho fica intacta). Home → data e nome do leilão (modalidade). Cidade: card ("…, Curitiba/PR") ou EDITAL
+quando DOMINA o texto (≥3 citações e ≥2× a 2ª — Itaipu = Foz do Iguaçu/PR; edital com várias cidades fica sem).
+Dry-run: 52 prontos, cidade pelo edital em 32, 5 sem cidade (honesto). 2 páginas + ≤7 PDFs por execução.
+**Achado no caminho (forma nº 10):** a 1ª versão do `fetch-fonte` redecodificava a página INTEIRA como windows-1252
+ao ver UM U+FFFD; a página da Nakakogue declara iso-8859-1 com dados em UTF-8 → "Imóveis" virou "ImÃ³veis" e
+60/60 caíram como encerrados. `decodificarHtml` agora escolhe o MENOR estrago (U+FFFD × mojibake).
+**ASTAVERO** (Saulo Júlio + Damiani, Mazzolli, FB, DBS): o recon de 13/09 dizia "API só responde dentro da SPA" —
+testava GET. O bundle mostra **POST com corpo JSON** (`/app/lotes` {botao:'ABERTOS', categoria:'Imóveis'}); detalhe
+em `/app/pregao/init` {leilao, lote} = 1ª/2ª praça, processo, cidade/UF, descrição HTML, edital. Sem login/Cloudflare.
+Saulo Júlio tem 0 imóveis hoje (1 carro, 1 compressor) — o volume está nos outros 4. Veículos (~50) ficaram fora
+(próximo passo, se o dono quiser: `veiculos_leilao` pela mesma API, `categoria:'Veículos'`).
+Ambos no `scraper-dom.yml` diário (passos Nakakogue e Astavero). Testes: `nakakogue-catalogo`, `astavero-json`.
+**Link de veículo:** contador de acessos medido em produção (1 acesso gravado após o `await`).
