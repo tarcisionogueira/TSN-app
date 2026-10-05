@@ -36012,3 +36012,17 @@ Triagem com prova por 4 agentes só-leitura; depois consertos. **Achados que imp
   108, 121.
 - **SQL do dono:** `docs/SQL_DONO_2026-10-05.sql` (130 + 101), colar inteiro no SQL Editor; conferência no fim.
 - Restam 23 do Claude (quase todas projetos: 37, 38, 41, 49, 87, 88, 91, 92, 34, 74, 83, 116) e 59 do dono.
+
+### 05/10 (madrugada) — Pendência 49 fechada: documentos que existiam e não contavam
+A medição "0% com documento" era a régua errada (forma nº 10): contava só link_matricula/anexos.
+- **Word:** Leilão Brasil tem edital em 151/158 lotes, em .doc/.docx. `doc_arquivo()` aceita Word;
+  `_doc-normalizar` lê .doc (word-extractor); `_edital-extrato` aceita Word como candidato. Teste com
+  4 arquivos reais: `testar-leitura-word.yml` (manual, rede).
+- **SATO:** 0% → 19/24 com edital. A página /leiloes/{id} embute `arquivos_do_leilao` com `signedUrl`
+  do PDF (cache de 1 ano); link leva `#.pdf` (fragmento) para o selo/leitores reconhecerem.
+- **Selo × espelho:** `imovel_anexos` do espelho tem storage_path e url NULA; os selos só viam url →
+  327 matrículas guardadas conosco sem selo (PESTANA 294, CALIL 26). Selos e o invariante
+  `selo_documento_dessincronizado` aceitam storage_path. Invariante = 477 até o recálculo.
+- **Dono:** o bloco 3 de `docs/SQL_DONO_2026-10-05.sql` recalcula os selos (sem ele, só na próxima coleta).
+- Inventário do CLAUDE.md agora mede pelos selos. Resíduo real (fontes que não expõem arquivo) virou
+  pendência nova.
