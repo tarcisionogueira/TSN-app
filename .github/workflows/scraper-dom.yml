@@ -61,11 +61,13 @@ on:
       - 'scripts/lib/lgcorretor-parse.mjs'
       - 'scripts/scraper-nakakogue.mjs'
       - 'scripts/lib/nakakogue-parse.mjs'
+      - 'scripts/scraper-astavero.mjs'
+      - 'scripts/lib/astavero-json.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue'
+        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -242,6 +244,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NAKAKOGUE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-nakakogue.mjs
+
+      # ASTAVERO (05/10, #41): 5 leiloeiros no mesmo backend (Damiani, Mazzolli, FB, DBS, Saulo Júlio) pela
+      # API JSON da plataforma (POST, sem login/Cloudflare) — custo zero. ~90 imóveis.
+      - name: Astavero
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'astavero')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ASTAVERO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-astavero.mjs
 
       - name: Leje
         # 27/09: fora do RODA_TUDO — o site dá 403 ao IP do runner desde 24/09 e o proxy ISP não

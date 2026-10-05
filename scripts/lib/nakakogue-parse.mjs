@@ -56,11 +56,12 @@ export function detalhesDoCatalogo(html, base) {
     const mat = (texto.match(/matr[íi]cula\s*(?:n[º°.o]?\s*)?([\d.]{3,})/i) || [])[1] || null;
     out.set(url, {
       categoria,
-      titulo: texto.length > 140 ? `${texto.slice(0, 137).replace(/\s+\S*$/, '')}…` : texto,
+      titulo: texto.length > 140 ? `${texto.slice(0, 137).replace(/\s+\S*$/, '').replace(/[\s,;.-]+$/, '')}…` : texto,
       descricao: texto,
       cidade, estado,
       valor_avaliacao: avaliado || minimo, valor_minimo: minimo || avaliado,
-      area_m2: extrairArea(texto, texto),
+      // Itaipu escreve a unidade ANTES do número ("Terreno (m2) 588,12, Casa (m2) 119,41"): vale o terreno.
+      area_m2: extrairArea(texto, texto) || num((texto.match(/Terreno\s*\(m[²2]\)\s*([\d.]+,\d+|\d+)/i) || [])[1]) || 0,
       // Modalidade provisória pelo card; `enriquecer` corrige pelo NOME do leilão (home).
       modalidade: /aliena[cç][aã]o\s+fiduci/i.test(texto) ? 'extrajudicial' : 'judicial',
       numero_matricula: mat ? mat.replace(/\./g, '') : null,

@@ -31,6 +31,7 @@ assert.equal(itaipu.numero_matricula, '41484');
 assert.equal(itaipu.cidade, null);                                   // card da Itaipu não nomeia a cidade
 assert.equal(itaipu.link_edital, `${base}/arquivos/L137566/20260925_47278.pdf`);
 assert.equal(itaipu.encerrado, false);
+assert.equal(itaipu.area_m2, 588.12);                              // "Terreno (m2) 588,12": unidade antes do número
 const loft = dets.get(`${base}/detalhe-lote/137580/1105`);
 assert.deepEqual([loft.cidade, loft.estado], ['São Paulo', 'SP']);
 assert.equal(loft.valor_minimo, 900000);                             // sem "Valor Minimo": usa a avaliação
