@@ -12,7 +12,7 @@ import {
 import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
-import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { ehDocArquivo, hrefDoc } from '../utils/documento';
@@ -614,6 +614,9 @@ export default function Analise() {
   const [externoLink, setExternoLink] = useState('');
   const [externoEnviando, setExternoEnviando] = useState(false);
   const [externoNotificado, setExternoNotificado] = useState(false);
+  // Inclusão manual com VÁRIOS documentos (05/10, dono: "só permitiu anexar um documento, o que não permite
+  // uma avaliação completa"). Cada item: { id, nome, tipo: 'edital'|'matricula'|'outro', texto, ext, lendo, aviso }.
+  const [docsManuais, setDocsManuais] = useState([]);
 
   // Controle de abertura por seção. Os formulários MANUAIS do documental (Edital,
   // Matrícula, CNJ) começam RECOLHIDOS: a análise é um clique (o servidor lê os
@@ -1066,6 +1069,127 @@ export default function Analise() {
     );
   };
 
+  // Mapeia o que a IA leu de UM arquivo (ou a fusão de vários) para os dados do imóvel. Era o corpo de
+  // handleFileUpload; virou função para a inclusão manual com VÁRIOS documentos usar a mesma regra (05/10).
+  const aplicarDadosDoArquivo = (ext) => {
+    setD(p => ({
+      ...p,
+      nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo,
+      endereco: ext.endereco || p.endereco, cidade: ext.cidade || p.cidade,
+      estado: ext.estado || p.estado, cep: ext.cep || p.cep,
+      valorAvaliacao: ext.valorAvaliacao || p.valorAvaliacao,
+      valorArrematacao: ext.valorArrematacao || p.valorArrematacao,
+      areaM2: ext.areaM2 || p.areaM2, areaTerrenoM2: ext.areaTerrenoM2 || p.areaTerrenoM2,
+      debitosAssumidos: ext.debitosAssumidos ?? p.debitosAssumidos,
+      iptuMensal: ext.iptuMensal ?? p.iptuMensal,
+      condominioMensal: ext.condominioMensal ?? p.condominioMensal,
+      laudemio: ext.laudemio ?? p.laudemio, foreiro: ext.foreiro ?? p.foreiro,
+      taxaLeiloeiroPercentual: ext.taxaLeiloeiroPercentual || p.taxaLeiloeiroPercentual,
+      // O EDITAL PODE DESTRAVAR O PARCELADO, NUNCA TRANCAR (31/08) — é a regra de 15/08
+      // ("o acervo deixa de ter a última palavra contra o que o próprio leiloeiro
+      // publicou") aplicada na direção certa. O leitor devolveu `aVista: true` para um
+      // lote judicial cujos PRÓPRIOS anexos incluem "Modelo de Proposta Parcelada" — e,
+      // com `??`, esse `true` trancava o cenário financiado por cima do acervo, que já
+      // dizia `hipotecado` (= parcelável, art. 895 CPC). Uma leitura de PDF que erra para
+      // "à vista" não pode remover uma opção que o leiloeiro oferece; errar para
+      // "parcelável" só mantém o cenário disponível, e quem decide é o cliente.
+      // Mesma hierarquia do `aplicarExtracao`: edital explícito manda nos dois sentidos,
+      // silêncio preserva o que o acervo/lei já dizia. Ver o bloco (2) daquele helper.
+      ...(ext.somenteAVista === true
+        ? { somenteAVista: true, origemCondicoesPagamento: 'edital_veda' }
+        : ext.parcelamento?.aceita === true
+          ? { somenteAVista: false, origemCondicoesPagamento: 'edital' }
+          : {}),
+      ...(Number(ext.parcelamento?.entradaPct) > 0 ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
+      ...(Number(ext.parcelamento?.parcelas) > 0 ? { prazoMeses: Number(ext.parcelamento.parcelas) } : {}),
+      origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
+      // A PRAÇA É UM PAR — data E lance andam juntos (31/08).
+      //
+      // Cada campo era fundido com `||` por conta própria, e isso PARTE a praça ao meio.
+      // Medido no apartamento do Itaim Bibi (print do dono): o leitor trouxe
+      // `dataLeilao` da 2ª praça (09/09) e NÃO trouxe o lance dela, então a data avançou
+      // e o valor ficou nos R$ 418.648,84 da 1ª praça — que já tinha passado. O relatório
+      // saiu "praça atual · 09/09/2026 · R$ 418.648,84 · 50% abaixo", enquanto o acervo
+      // dizia R$ 400.000 e 52%: R$ 18.648 a mais no preço de entrada, e o desconto
+      // subestimado. Nada disso dá erro — os dois números existem e são plausíveis, só
+      // pertencem a praças diferentes. É a forma #9 (cortes independentes cruzados
+      // depois) em cima de uma única entidade.
+      //
+      // Sem o lance da praça nova, a data NÃO avança: um par velho e coerente descreve um
+      // leilão que existiu; um par misto não descreve leilão nenhum.
+      ...(ext.dataLeilao && !ext.valorArrematacao && Number(p.valorArrematacao) > 0
+        ? {}
+        : { dataLeilao: ext.dataLeilao || p.dataLeilao }),
+      riscos: ext.riscos?.length ? ext.riscos.map(r => ({ id: Date.now()+Math.random(), texto: r, tipo: r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta' })) : p.riscos,
+      observacoes: ext.observacoes || p.observacoes,
+    }));
+  };
+
+  // ─── Inclusão manual: VÁRIOS documentos, cada um com seu tipo (05/10) ──────────────────────────
+  // Antes: um campo só, que (1) trocava o documento anterior pelo novo, (2) dizia "Edital anexado ✓" até
+  // para matrícula e (3) mandava ao documental o TEXTO "[Arquivo: x.pdf]" — o conteúdo nunca chegava ao
+  // servidor (o upload ao bucket exige imóvel da base, e lote manual não tem). Agora o texto INTEGRAL de
+  // cada arquivo vai como textoEdital/textoMatricula, e os dados do imóvel saem da FUSÃO por autoridade
+  // (consolidarDocsImovel: matrícula manda no endereço/área, edital no lance/praças) — não do último a chegar.
+  const tipoPeloNomeArquivo = (nome) => (/matr[ií]c/i.test(nome) ? 'matricula' : /edital|regras?\s*(de\s*)?venda/i.test(nome) ? 'edital' : null);
+  const tipoPelaLeitura = (ext) => { const t = String(ext?.tipoDocumento || '').toLowerCase(); return /matric/.test(t) ? 'matricula' : /edital|regra/.test(t) ? 'edital' : null; };
+  const recomporDocsManuais = (lista) => {
+    const prontos = lista.filter((x) => !x.lendo);
+    const bloco = (tipos, rot) => prontos.filter((x) => tipos.includes(x.tipo) && x.texto)
+      .map((x) => `=== ${rot}: ${x.nome} ===\n${x.texto}`).join('\n\n');
+    // Edital antes dos complementares: o servidor lê até 60 mil caracteres por campo; se cortar, corta o complementar.
+    setTextoDoc([bloco(['edital'], 'EDITAL'), bloco(['outro'], 'DOCUMENTO COMPLEMENTAR')].filter(Boolean).join('\n\n'));
+    setTextoMatricula(bloco(['matricula'], 'MATRÍCULA'));
+    const exts = prontos.filter((x) => x.ext).map((x) => ({ ...x.ext, tipoDocumento: x.tipo === 'outro' ? (x.ext.tipoDocumento || 'outro') : x.tipo }));
+    if (!exts.length) return;
+    // Campos sem regra de autoridade (custos, parcelamento, taxa): o EDITAL por último, então ele vence.
+    const peso = (e) => ({ matricula: 1, edital: 2 }[e.tipoDocumento] || 0);
+    const fundido = Object.assign({}, ...[...exts].sort((a, b) => peso(a) - peso(b)));
+    const autoridade = consolidarDocsImovel(exts);
+    for (const k of ['endereco', 'cidade', 'estado', 'cep', 'tipo', 'areaM2', 'areaTerrenoM2', 'valorAvaliacao', 'valorArrematacao', 'dataLeilao', 'leiloeiro', 'modalidade']) {
+      if (autoridade[k] != null && String(autoridade[k]).trim() !== '') fundido[k] = autoridade[k];
+    }
+    fundido.riscos = [...new Set(exts.flatMap((e) => (Array.isArray(e.riscos) ? e.riscos : [])))];
+    fundido.observacoes = exts.map((e) => e.observacoes).filter(Boolean).join('\n\n') || undefined;
+    aplicarDadosDoArquivo(fundido);
+  };
+  const anexarDocsManuais = async (files) => {
+    const novos = [...(files || [])].filter(Boolean);
+    if (!novos.length) return;
+    const grandes = novos.filter((f) => f.size > 20 * 1024 * 1024);
+    if (grandes.length) showMsg(`Acima de 20 MB, não lido: ${grandes.map((f) => f.name).join(', ')}`, 'error');
+    const itens = novos.filter((f) => f.size <= 20 * 1024 * 1024)
+      .map((f) => ({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, nome: f.name, tipo: tipoPeloNomeArquivo(f.name) || 'outro', tipoDoNome: !!tipoPeloNomeArquivo(f.name), lendo: true, texto: '', ext: null, aviso: null, file: f }));
+    if (!itens.length) return;
+    setDocsManuais((prev) => [...prev, ...itens]);
+    for (const it of itens) {
+      let texto = '', ext = null, aviso = null;
+      try {
+        // Texto integral (vai ao documental) e leitura estruturada pela IA (dados do imóvel) — as duas
+        // falhas são independentes: PDF escaneado não tem texto, mas a IA lê a imagem.
+        const [t, e] = await Promise.allSettled([textoDeArquivo(it.file), extrairDadosDeArquivo(it.file)]);
+        texto = t.status === 'fulfilled' ? (t.value?.texto || '') : '';
+        ext = e.status === 'fulfilled' ? (e.value || null) : null;
+        if (!texto && ext?.observacoes) { texto = `[Documento escaneado — resumo lido pela IA]\n${ext.observacoes}`; aviso = 'escaneado: o texto integral não é legível, foi usado o resumo da IA'; }
+        if (!texto && !ext) aviso = `não consegui ler (${(t.reason || e.reason)?.message || 'formato não suportado'})`;
+      } catch (err) { aviso = `não consegui ler (${err?.message || 'erro'})`; }
+      setDocsManuais((prev) => prev.map((x) => (x.id === it.id ? { ...x, lendo: false, texto, ext, aviso,
+        tipo: x.tipoDoNome ? x.tipo : (tipoPelaLeitura(ext) || x.tipo), file: undefined } : x)));
+    }
+    setOpenSec((p) => ({ ...p, doc: false, dados: true, viabilidade: true }));
+    showMsg(itens.length > 1 ? `${itens.length} documentos lidos.` : `Documento lido: ${itens[0].nome}`);
+  };
+  const mudarTipoDocManual = (id, tipo) => setDocsManuais((prev) => prev.map((x) => (x.id === id ? { ...x, tipo } : x)));
+  const removerDocManual = (id) => setDocsManuais((prev) => prev.filter((x) => x.id !== id));
+  // Recompõe textos e dados a cada mudança da lista. `usouDocsManuais`: sem ele, a lista vazia do 1º render
+  // apagaria o texto que a pessoa digitou/colou nos campos de edital e matrícula de outra seção da tela.
+  const usouDocsManuais = React.useRef(false);
+  useEffect(() => {
+    if (docsManuais.length) usouDocsManuais.current = true;
+    if (!usouDocsManuais.current) return;
+    recomporDocsManuais(docsManuais);
+  }, [docsManuais]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1083,57 +1207,7 @@ export default function Analise() {
         const ext = await extrairDadosDeArquivo(file);
         if (ext) {
           setTextoDoc(`[Arquivo: ${file.name}]`);
-          setD(p => ({
-            ...p,
-            nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo,
-            endereco: ext.endereco || p.endereco, cidade: ext.cidade || p.cidade,
-            estado: ext.estado || p.estado, cep: ext.cep || p.cep,
-            valorAvaliacao: ext.valorAvaliacao || p.valorAvaliacao,
-            valorArrematacao: ext.valorArrematacao || p.valorArrematacao,
-            areaM2: ext.areaM2 || p.areaM2, areaTerrenoM2: ext.areaTerrenoM2 || p.areaTerrenoM2,
-            debitosAssumidos: ext.debitosAssumidos ?? p.debitosAssumidos,
-            iptuMensal: ext.iptuMensal ?? p.iptuMensal,
-            condominioMensal: ext.condominioMensal ?? p.condominioMensal,
-            laudemio: ext.laudemio ?? p.laudemio, foreiro: ext.foreiro ?? p.foreiro,
-            taxaLeiloeiroPercentual: ext.taxaLeiloeiroPercentual || p.taxaLeiloeiroPercentual,
-            // O EDITAL PODE DESTRAVAR O PARCELADO, NUNCA TRANCAR (31/08) — é a regra de 15/08
-            // ("o acervo deixa de ter a última palavra contra o que o próprio leiloeiro
-            // publicou") aplicada na direção certa. O leitor devolveu `aVista: true` para um
-            // lote judicial cujos PRÓPRIOS anexos incluem "Modelo de Proposta Parcelada" — e,
-            // com `??`, esse `true` trancava o cenário financiado por cima do acervo, que já
-            // dizia `hipotecado` (= parcelável, art. 895 CPC). Uma leitura de PDF que erra para
-            // "à vista" não pode remover uma opção que o leiloeiro oferece; errar para
-            // "parcelável" só mantém o cenário disponível, e quem decide é o cliente.
-            // Mesma hierarquia do `aplicarExtracao`: edital explícito manda nos dois sentidos,
-            // silêncio preserva o que o acervo/lei já dizia. Ver o bloco (2) daquele helper.
-            ...(ext.somenteAVista === true
-              ? { somenteAVista: true, origemCondicoesPagamento: 'edital_veda' }
-              : ext.parcelamento?.aceita === true
-                ? { somenteAVista: false, origemCondicoesPagamento: 'edital' }
-                : {}),
-            ...(Number(ext.parcelamento?.entradaPct) > 0 ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
-            ...(Number(ext.parcelamento?.parcelas) > 0 ? { prazoMeses: Number(ext.parcelamento.parcelas) } : {}),
-            origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
-            // A PRAÇA É UM PAR — data E lance andam juntos (31/08).
-            //
-            // Cada campo era fundido com `||` por conta própria, e isso PARTE a praça ao meio.
-            // Medido no apartamento do Itaim Bibi (print do dono): o leitor trouxe
-            // `dataLeilao` da 2ª praça (09/09) e NÃO trouxe o lance dela, então a data avançou
-            // e o valor ficou nos R$ 418.648,84 da 1ª praça — que já tinha passado. O relatório
-            // saiu "praça atual · 09/09/2026 · R$ 418.648,84 · 50% abaixo", enquanto o acervo
-            // dizia R$ 400.000 e 52%: R$ 18.648 a mais no preço de entrada, e o desconto
-            // subestimado. Nada disso dá erro — os dois números existem e são plausíveis, só
-            // pertencem a praças diferentes. É a forma #9 (cortes independentes cruzados
-            // depois) em cima de uma única entidade.
-            //
-            // Sem o lance da praça nova, a data NÃO avança: um par velho e coerente descreve um
-            // leilão que existiu; um par misto não descreve leilão nenhum.
-            ...(ext.dataLeilao && !ext.valorArrematacao && Number(p.valorArrematacao) > 0
-              ? {}
-              : { dataLeilao: ext.dataLeilao || p.dataLeilao }),
-            riscos: ext.riscos?.length ? ext.riscos.map(r => ({ id: Date.now()+Math.random(), texto: r, tipo: r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta' })) : p.riscos,
-            observacoes: ext.observacoes || p.observacoes,
-          }));
+          aplicarDadosDoArquivo(ext);
           setOpenSec(p => ({ ...p, doc: false, dados: true, viabilidade: true }));
           showMsg(`Documento lido pela IA: ${file.name}`);
         } else showMsg(`Não consegui extrair dados de "${file.name}".`, 'error');
@@ -1161,7 +1235,8 @@ export default function Analise() {
         setUrlEdital(link);
         try { const ext = await extrairDadosDocumentoUrl(link); aplicarExtracao(ext); }
         catch { /* extração pode falhar; segue com anexos/dados manuais */ }
-      } else if (temDoc) {
+      } else if (temDoc && !docsManuais.length) {
+        // Com docsManuais os dados JÁ foram lidos arquivo a arquivo — extrair de novo seria IA paga à toa.
         await extrairDoc();
       }
       // 2) Avisa a equipe para avaliar integrar este leiloeiro (uma única vez).
@@ -1287,6 +1362,7 @@ export default function Analise() {
     setCustosEdital(null);
     setTextoDoc('');
     setTextoMatricula('');
+    setDocsManuais([]);
     setUrlEdital(imovelInicial?.linkEdital || '');
   }, [imovelInicial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Reidrata o aviso a partir do que o documental GRAVOU (analises_mercado.correcoes_sugeridas).
@@ -2302,11 +2378,48 @@ export default function Analise() {
                   <div style={{ fontSize:15, fontWeight:900, color:'#111' }}>{semImovelBase ? 'Incluir lote manualmente' : 'Imóvel de outro leiloeiro'}</div>
                 </div>
                 <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
-                  Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios abaixo. <strong>É uma análise fora da base</strong>, os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
+                  Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital e a matrícula</strong> (pode anexar vários arquivos) de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios abaixo. <strong>É uma análise fora da base</strong>, os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
                 </div>
+{/* Documentos da inclusão manual (05/10): vários, cada um com o seu tipo — o texto integral de cada
+                    um vai à análise documental. Continua disponível depois de liberar, para completar. */}
+                {docsManuais.length > 0 && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+                    {docsManuais.map(dm => (
+                      <div key={dm.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:'white', border:'1px solid #ede9fe', borderRadius:9, fontSize:12.5 }}>
+                        {dm.lendo ? <Loader2 size={14} color="#7c3aed" style={{ animation:'spin 1s linear infinite', flexShrink:0 }}/> : <FileText size={14} color={dm.aviso ? '#b45309' : '#7c3aed'} style={{ flexShrink:0 }}/>}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:700, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{dm.nome}</div>
+                          <div style={{ fontSize:11, color: dm.aviso ? '#b45309' : '#64748b' }}>{dm.lendo ? 'Lendo com a IA…' : (dm.aviso || (dm.texto ? 'lido — texto integral vai para a análise documental' : 'lido'))}</div>
+                        </div>
+                        <select value={dm.tipo} onChange={e => mudarTipoDocManual(dm.id, e.target.value)} disabled={dm.lendo} title="Tipo do documento"
+                          style={{ padding:'5px 6px', border:'1px solid #ddd6fe', borderRadius:7, fontSize:12, color:'#4c1d95', background:'#faf5ff', flexShrink:0 }}>
+                          <option value="edital">Edital</option>
+                          <option value="matricula">Matrícula</option>
+                          <option value="outro">Outro documento</option>
+                        </select>
+                        <button onClick={() => removerDocManual(dm.id)} disabled={dm.lendo} title="Remover"
+                          style={{ background:'none', border:'none', color:'#94a3b8', cursor: dm.lendo ? 'default' : 'pointer', fontSize:16, lineHeight:1, padding:'0 2px', flexShrink:0 }}>×</button>
+                      </div>
+                    ))}
+                    {!docsManuais.some(x => x.tipo === 'matricula') && !docsManuais.some(x => x.lendo) && (
+                      <div style={{ fontSize:11.5, color:'#b45309' }}>Falta a <strong>matrícula</strong> — sem ela a análise documental fica incompleta (ônus, proprietários, averbações).</div>
+                    )}
+                    {!docsManuais.some(x => x.tipo === 'edital') && !docsManuais.some(x => x.lendo) && (
+                      <div style={{ fontSize:11.5, color:'#b45309' }}>Falta o <strong>edital</strong> — sem ele não há regras do leilão (praças, débitos, comissão).</div>
+                    )}
+                  </div>
+                )}
                 {externoNotificado ? (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
-                    <CheckCircle2 size={15}/> Análise liberada, gere os relatórios abaixo. Equipe avisada.
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
+                      <CheckCircle2 size={15}/> Análise liberada, gere os relatórios abaixo. Equipe avisada.
+                    </div>
+                    <div style={{ display:'flex' }}>
+                      <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor: docsManuais.some(x => x.lendo) ? 'wait' : 'pointer', background:'white' }}>
+                        <UploadCloud size={15}/> {docsManuais.length ? 'Anexar mais documentos' : 'Anexar edital e matrícula (pode selecionar vários)'}
+                        <input type="file" multiple accept={ACEITA_DOCUMENTO} onChange={e => { anexarDocsManuais(e.target.files); e.target.value = ''; }} style={{display:'none'}}/>
+                      </label>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -2314,11 +2427,11 @@ export default function Analise() {
                       style={{ width:'100%', padding:'10px 12px', border:'1px solid #ddd6fe', borderRadius:9, fontSize:13, color:'#111', boxSizing:'border-box' }}
                       onKeyDown={e=>{ if(e.key==='Enter' && !externoEnviando) analisarLeiloeiroExterno(); }}/>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                      <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                        <UploadCloud size={15}/> {textoDoc.trim() ? 'Edital anexado ✓' : 'Anexar edital/matrícula (PDF/TXT)'}
-                        <input type="file" accept={ACEITA_DOCUMENTO} onChange={handleFileUpload} style={{display:'none'}}/>
+<label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor: docsManuais.some(x => x.lendo) ? 'wait' : 'pointer', background:'white' }}>
+                        <UploadCloud size={15}/> {docsManuais.length ? 'Anexar mais documentos' : 'Anexar edital e matrícula (pode selecionar vários)'}
+                        <input type="file" multiple accept={ACEITA_DOCUMENTO} onChange={e => { anexarDocsManuais(e.target.files); e.target.value = ''; }} style={{display:'none'}}/>
                       </label>
-                      <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado}
+                      <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado || docsManuais.some(x => x.lendo)}
                         style={{ flex:1, minWidth:180, padding:'10px 16px', background:(externoEnviando||analisesBloqueado)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(externoEnviando||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                         {externoEnviando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Liberando...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Liberar análise deste imóvel</>}
                       </button>

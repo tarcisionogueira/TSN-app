@@ -1100,9 +1100,12 @@ export default async function handler(req, res) {
         else blocos.push({ type: 'text', text: `=== ${u2.rotulo} (${u.url}) ===\n${doc.text}` });
       }
     }
-    // Texto colado manualmente (inclusão manual / fallback).
-    if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
-    if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 12000)}` });
+    // Texto colado manualmente (inclusão manual / fallback). Teto de 60.000 = o MESMO dos documentos que o
+    // servidor baixa e converte (lerDoc acima). Era 12.000: um edital tem 30–60 mil caracteres, e a inclusão
+    // manual — que desde 05/10 manda o texto INTEGRAL de cada arquivo anexado — teria só o começo lido,
+    // com cara de análise completa (forma nº 10).
+    if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 60000)}` });
+    if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 60000)}` });
 
     // FOTOS DO IMÓVEL (18/09, pedido do dono): até então o documental só lia DOCUMENTOS
     // (matrícula/edital/anexos) — nunca a foto do anúncio. Sem isso, uma edificação pronta

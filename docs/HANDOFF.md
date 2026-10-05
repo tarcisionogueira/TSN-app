@@ -36193,3 +36193,19 @@ descrição que abre com a unidade. "Chácara/sítio/fazenda" fora da guarda do 
 - ⚠️ Aplicação: a migração em uma transação esbarrou em lock da tabela (timeout 60 s, rollback total, 2×). Foi em passos
   com `set local lock_timeout = '8s'`. Trigger novo em `imoveis_leilao`: aplique assim (tabela sob escrita constante).
 - Reverter um lote específico: `suprimido_motivo='vaga_garagem'` marca todos (o trigger o barraria de novo na escrita).
+
+## 05/10 — Inclusão manual: vários documentos e texto INTEGRAL na análise documental (print do dono)
+"Só permitiu anexar um documento, o que não permite uma avaliação completa." Eram QUATRO defeitos no card
+"Incluir lote manualmente" (`Analise.jsx`):
+1. um campo de arquivo só — o 2º trocava o 1º, e o rótulo dizia "Edital anexado ✓" até para matrícula;
+2. o documental recebia como `textoEdital` o TEXTO "[Arquivo: x.pdf]" — o conteúdo nunca chegava ao servidor
+   (o upload ao bucket exige imóvel da base; lote manual não tem) → avaliação com cara de completa, sem documento;
+3. os dados do imóvel vinham do ÚLTIMO arquivo lido (`||` arquivo a arquivo), não do mais autoritativo;
+4. depois de "Liberar" o card fechava — sem como completar.
+Agora: vários arquivos (de uma vez ou em lotes), cada um com tipo Edital/Matrícula/Outro (pelo nome, pela leitura
+da IA, editável), remover, aviso do que falta; o texto integral de cada um vai como `textoEdital` (edital antes dos
+complementares) / `textoMatricula`; os dados saem de `consolidarDocsImovel` (matrícula manda no endereço/área, edital
+no lance/praças). PDF escaneado: entra o resumo lido pela IA, e a tela diz que é resumo. Custo de IA igual (1
+leitura por arquivo); "Liberar" não re-extrai quando os arquivos já foram lidos (era IA paga em dobro).
+Servidor: o teto do "texto informado" subiu de 12.000 para 60.000 caracteres por campo — o MESMO dos documentos que
+o servidor baixa (um edital tem 30–60 mil; com 12 mil só o começo era lido).
