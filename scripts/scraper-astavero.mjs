@@ -26,14 +26,49 @@ const FILTRO = (process.env.ASTAVERO_TENANTS || '').split(',').map((s) => s.trim
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// VIA BANCO para POST (05/10): o 1º dry-run ficou >6 min sem terminar — chamadas penduradas do runner do
+// GitHub (o banco, na AWS, recebia 200 no recon). Mesmo desenho do `viaBanco` do motor, com o gêmeo POST
+// `pagina_postar_json` (supabase/migrations/20261005_pagina_postar_json.sql); a resposta vem por `pagina_ler`.
+async function rpc(fn, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, { method: 'POST', signal: AbortSignal.timeout(15000),
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${fn} HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 80)}`);
+  return r.json();
+}
+async function postarViaBanco(url, corpo) {
+  const id = await rpc('pagina_postar_json', { p_url: url, p_corpo: corpo });
+  for (let i = 0; i < 30; i++) {
+    await sleep(1000);
+    const [row] = await rpc('pagina_ler', { p_id: id });
+    if (!row?.pronto) continue;
+    if (row.status >= 200 && row.status < 300 && row.conteudo) return row.conteudo;
+    throw new Error(row.erro ? String(row.erro).slice(0, 60) : `HTTP ${row.status}`);
+  }
+  throw new Error('banco: sem resposta em 30 s');
+}
+
+const diretoFalhou = new Map();   // fonte → nº de falhas do fetch direto; 2+ = vai direto pelo banco
+const vias = new Map();           // fonte → 'direto' | 'banco' (aparece no log e na saúde)
 async function postar(tenant, caminho, corpo) {
-  const r = await fetch(`${tenant.base}${caminho}`, {
-    method: 'POST', signal: AbortSignal.timeout(30000),
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/plain, */*', 'User-Agent': UA, Origin: tenant.base, Referer: `${tenant.base}/` },
-    body: JSON.stringify(corpo),
-  });
-  if (!r.ok) throw new Error(`${caminho} HTTP ${r.status}`);
-  const j = await r.json().catch(() => null);
+  const url = `${tenant.base}${caminho}`;
+  let corpoTxt = null, motivo = null;
+  if ((diretoFalhou.get(tenant.fonte) || 0) < 2) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST', signal: AbortSignal.timeout(15000),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/plain, */*', 'User-Agent': UA, Origin: tenant.base, Referer: `${tenant.base}/` },
+        body: JSON.stringify(corpo),
+      });
+      if (r.ok) { corpoTxt = await r.text(); vias.set(tenant.fonte, vias.get(tenant.fonte) || 'direto'); }
+      else motivo = `HTTP ${r.status}`;
+    } catch (e) { motivo = e?.name === 'TimeoutError' ? 'timeout 15 s' : String(e?.cause?.code || e?.message || e).slice(0, 60); }
+    if (corpoTxt == null) diretoFalhou.set(tenant.fonte, (diretoFalhou.get(tenant.fonte) || 0) + 1);
+  }
+  if (corpoTxt == null) {
+    try { corpoTxt = await postarViaBanco(url, corpo); vias.set(tenant.fonte, 'banco'); }
+    catch (e) { throw new Error(`${caminho}: direto ${motivo || 'pulado'} · banco ${String(e?.message || e).slice(0, 60)}`, { cause: e }); }
+  }
+  let j = null; try { j = JSON.parse(corpoTxt); } catch { j = null; } // padrao-ok: corpo não-JSON é tratado logo abaixo como erro com motivo
   // A API devolve `erro: true` dentro de um 200 quando recusa (forma nº 1 do CLAUDE.md).
   if (!j || j.erro) throw new Error(`${caminho}: ${j ? `erro da API (${String(j.msg || j.message || 'sem mensagem').slice(0, 80)})` : 'resposta não é JSON'}`);
   return j;
@@ -76,14 +111,18 @@ async function coletar(tenant) {
   const itens = Array.isArray(lista.lotes) ? lista.lotes : [];
   const declarado = Number(lista.pag?.count);
   const completa = !Number.isFinite(declarado) || itens.length >= declarado;
-  console.log(`[${tenant.fonte}] listagem: ${itens.length} imóvel(is)${Number.isFinite(declarado) ? ` de ${declarado} declarados` : ''}`);
+  console.log(`[${tenant.fonte}] via ${vias.get(tenant.fonte) || '?'} · listagem: ${itens.length} imóvel(is)${Number.isFinite(declarado) ? ` de ${declarado} declarados` : ''}`);
 
-  const prontos = []; let semDetalhe = 0, descartados = 0, naoImovel = 0;
+  const prontos = []; let semDetalhe = 0, descartados = 0, naoImovel = 0, seguidas = 0;
   for (const item of itens) {
     let det = null;
-    try { det = await postar(tenant, '/app/pregao/init', { leilao: item.leilao, lote: item.id }); }
-    catch (e) { semDetalhe++; if (semDetalhe <= 3) console.log(`  [${tenant.fonte}] ${item.id}: detalhe não lido (${e.message})`); }
-    await sleep(300);
+    // DISJUNTOR: 3 detalhes seguidos falhando = o caminho está fora; o resto entra só com a listagem
+    // (cidade, valores, data, foto) em vez de gastar 30 s × N lotes até estourar o teto do job.
+    if (seguidas < 3) {
+      try { det = await postar(tenant, '/app/pregao/init', { leilao: item.leilao, lote: item.id }); seguidas = 0; }
+      catch (e) { semDetalhe++; seguidas++; if (semDetalhe <= 3) console.log(`  [${tenant.fonte}] ${item.id}: detalhe não lido (${e.message})`); }
+      await sleep(300);
+    } else semDetalhe++;
     if (det?.lote?.status && det.lote.status !== 'Aberto') { descartados++; continue; }
     const row = montarRowAstavero(item, det, tenant);
     if (naoEhImovel(`${row.titulo} ${row.descricao.slice(0, 600)}`)) { naoImovel++; continue; }
