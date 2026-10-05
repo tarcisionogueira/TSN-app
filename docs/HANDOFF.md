@@ -36164,3 +36164,17 @@ FB 9 · DBS 4; Saulo Júlio 0), cidade/área 100%, edital 60–100%, 2ª praça 
 pedido — o lote certo é `/app/pregao/lote {id}` (o código confere o `_id`); (3) "área privativa de 59,74000m²" virava
 74000 m², e lote na 2ª praça gravava a data da 1ª (já passada — a limpeza por data o apagaria aberto). Fração
 "1/9 de um imóvel" passou a ser barrada nos dois espelhos (JS + `fracao_ideal_barrada`, hash conferido antes da troca).
+
+## 05/10 — #139: veículos da plataforma Astavero (50 gravados, 43 ativos)
+Mesma API dos imóveis, `categoria: 'Veículos'`, mesmo scraper (`scraper-astavero.mjs`, passo diário). O NOME varia
+muito por leiloeiro ("TIGUAN 2.0", "Um Automóvel, VW, Voyage…"); a DESCRIÇÃO do oficial traz marca/modelo/anos/placa/
+Renavam/chassi/cor/combustível e vence o nome (`veiculoDaDescricao`, com as formas "marca X, modelo Y", "MARCA/MODELO"
+e o importado "I/VW TIGUAN"). Reaproveita `marcaModeloAno`/`tipoVeiculo` da Nordeste. Decisões:
+- local de VISTORIA → `raw.lot_location_address` (a tela mostra), mas `status_patio='indefinido'` — vistoria não prova
+  "recolhido em pátio", que é o que 'confirmado' afirma na tela;
+- data vencida há >1 dia entra INATIVA (a plataforma mantém "Aberto" lote velho — visto nos imóveis);
+- `fotos`/`anexos` nulos não são enviados no upsert (apagariam o que existe);
+- saúde em `<FONTE>_VEICULOS` com os campos MAPEADOS: `metricasColeta` lê nomes de imóvel e mediria link/foto 0%
+  (forma nº 10). ⚠️ O `scraper-nordeste-veiculos.mjs` tem o MESMO defeito hoje (link/foto 0% sempre) — não corrigido aqui.
+- Ano único ("Megane … - 2013") = ano-MODELO; fabricação fica vazia (não inventa). FIPE: on-demand ao abrir, como o resto.
+Detalhe compartilhado (`criarLeitorDetalhe`: init por leilão + lote {id} + disjuntor) serve imóveis e veículos.
