@@ -105,6 +105,34 @@ function apurarSuporte(html, txt, hojeISO) {
   return null;
 }
 
+// ─── FRAZÃO (frazaoleiloes.com.br) — 05/10, #44, página real lida por pg_net ──────────────────
+// 112 de 117 lotes "indeterminado". Causa: o lote seguia ABERTO — "Liberado para Lance" com o 2º
+// leilão por vir ("2º Leilão: 05/10/2026 às 15h00") —, mas sem a data da 2ª praça no acervo o cron
+// apurava depois da 1ª, não achava resultado e gastava as 3 tentativas. O genérico não serve: o
+// modal "esse lote pertence a um leilão que já foi encerrado" está no HTML de TODA página (só
+// aparece quando é o caso) e "Maior lance atual: R$ 0,00" existe com o pregão aberto.
+function apurarFrazao(html, hojeISO) {
+  const h = String(html).replace(/&#186;/g, 'º').replace(/&#227;/g, 'ã').replace(/&#224;/g, 'à').replace(/&#233;/g, 'é');
+  const status = ((h.match(/auction-status"[^>]*>\s*([^<]{1,80})</) || [])[1] || '').trim().toLowerCase();
+  if (!status) return null;
+  const lance = h.match(/Maior lance atual:[\s\S]{0,160}?R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+  const valor = lance ? parseFloat(lance[1].replace(/\./g, '').replace(',', '.')) : 0;
+  if (/liberado|em breve|aberto|aguardando|andamento|lance/.test(status) && !/encerrad|finalizad|vendid|arrematad/.test(status)) {
+    const nova = {};
+    for (const m of h.matchAll(/(\d)º Leilão:\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s*às\s*(\d{2})h(\d{2}))?/g)) {
+      const dia = `${m[4]}-${m[3]}-${m[2]}`;
+      if (m[1] === '2' && dia >= hojeISO) nova.data_leilao_2 = `${dia}T${m[5] || '10'}:${m[6] || '00'}:00-03:00`;
+    }
+    return { resultado: null, aberto: true, novaData: Object.keys(nova).length ? nova : null };
+  }
+  if (/cancelad|suspens|retirad/.test(status)) return { resultado: 'cancelado', valor: null };
+  if (/vendid|arrematad|condicional/.test(status)) return { resultado: 'vendido', valor: valor >= 1000 ? valor : null };
+  if (/encerrad|finalizad|desert|sem licit|n[ãa]o vendid/.test(status)) {
+    return valor > 0 ? { resultado: 'vendido', valor: valor >= 1000 ? valor : null } : { resultado: 'sem_lance', valor: null };
+  }
+  return null;
+}
+
 // Extrai o resultado do TEXTO já limpo da página (tags removidas). Devolve
 // `{ resultado: 'vendido'|'sem_lance'|'cancelado', valor: number|null }`, `{ resultado: null, aberto: true,
 // novaData }` (pregão ainda aberto — Suporte Leilões) ou `null` (indeterminado/sem sinal).
@@ -113,6 +141,10 @@ export function apurarResultadoDoTexto(html, url = '') {
   if (!html) return null;
   const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   if (/portalzuk\.com\.br/i.test(String(url))) return apurarZuk(txt);
+  if (/frazaoleiloes\.com\.br/i.test(String(url))) {
+    const r = apurarFrazao(html, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
+    if (r) return r; // status não reconhecido → cai no genérico
+  }
   if (/\/oferta\/leilao\//i.test(String(url)) || /"statusString"\s*:/.test(String(html))) {
     const r = apurarSuporte(html, txt, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
     if (r) return r; // sem status reconhecível → cai no genérico abaixo

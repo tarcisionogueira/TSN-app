@@ -115,7 +115,8 @@
     "testar:geocod-sem-cidade": "node scripts/testes/geocod-sem-cidade-nao-chuta.mjs",
     "testar:albertomacedo-localizacao": "node scripts/testes/albertomacedo-localizacao-api.mjs",
     "testar:doc-tipo": "node scripts/testes/doc-tipo.mjs",
-    "testar:segunda-praca": "node scripts/testes/segunda-praca-do-edital.mjs"
+    "testar:segunda-praca": "node scripts/testes/segunda-praca-do-edital.mjs",
+    "testar:frazao-resultado": "node scripts/testes/frazao-resultado-do-leilao.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",
