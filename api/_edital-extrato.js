@@ -9,6 +9,7 @@
  */
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
+import { normalizarDocumento } from './_doc-normalizar.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
 import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto, extrairNumeroProcessoTexto } from './_doc-extracao.js';
 import { anthropicFetch } from './_claude.js';
@@ -195,7 +196,13 @@ export async function lerTexto(url, deadline) {
       } finally { await parser.destroy().catch(() => {}); }
     }
     if (doc.kind === 'texto') return doc.texto.slice(0, 120000);
-    return null; // imagem/desconhecido: quem resolve é a visão, não o parser de texto
+    // WORD (.doc/.docx) — 05/10, pendência 49: edital do Leilão Brasil é Word em 151 de 158 lotes.
+    // A mesma rota de conversão do documental (`_doc-normalizar.js`), para os dois lerem igual.
+    if (doc.kind === 'desconhecido') {
+      const conv = await normalizarDocumento(buf, { url, contentType: ct });
+      if (conv.kind === 'texto') return conv.texto.slice(0, 120000);
+    }
+    return null; // imagem/ilegível: quem resolve é a visão, não o parser de texto
   } catch { return null; }
 }
 
@@ -462,7 +469,9 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
   } catch { return null; }
   if (!im) return null;
   const anexos = Array.isArray(im.anexos) ? im.anexos : [];
-  const ehPdfUrl = (u) => /\.pdf(\?|#|$)/i.test(u || '');
+  // "PDF" aqui quer dizer ARQUIVO de documento: Word entra desde 05/10 (pendência 49) — antes o
+  // .doc do Leilão Brasil não virava candidato e ia para `pdfsNaPagina` como se fosse página HTML.
+  const ehPdfUrl = (u) => /\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(u || '');
   // Candidatos do mais provável ao menos: edital-PDF dos anexos → link_edital-arquivo →
   // regras-PDF → edital sem extensão. Página SPA do lote fica de fora (valor não está
   // no HTML cru — comprovado no garantirValores).

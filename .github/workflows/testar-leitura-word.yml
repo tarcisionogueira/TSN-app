@@ -1,0 +1,21 @@
+name: Testar leitura de edital Word (rede)
+
+# 05/10 (pendência 49): o sandbox de desenvolvimento não alcança o servidor dos editais do
+# Leilão Brasil; este job manual baixa .doc/.docx reais e confere a leitura.
+on:
+  workflow_dispatch:
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+      - run: node scripts/testes/leitura-word-real.mjs

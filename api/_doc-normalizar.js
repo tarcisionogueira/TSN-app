@@ -68,6 +68,15 @@ export async function normalizarDocumento(buf, { url = '', contentType = '', pro
       if (itens.length) return { kind: 'pacote', itens, falhas, convertido: `zip→${itens.length} arquivo(s)` };
       return { kind: 'ilegivel', motivo: `ZIP sem documento legível${falhas.length ? ` (${falhas.join('; ').slice(0, 160)})` : ''}` };
     }
+    // WORD ANTIGO (.doc, contêiner OLE2) — 05/10, pendência 49: 119 dos 158 editais do Leilão
+    // Brasil são .doc e caíam aqui como "formato não reconhecido". O mammoth só abre .docx.
+    if (buf.length > 8 && buf.readUInt32BE(0) === 0xD0CF11E0 && buf.readUInt32BE(4) === 0xA1B11AE1) {
+      const WordExtractor = (await import('word-extractor')).default;
+      const doc = await new WordExtractor().extract(buf);
+      const texto = String(doc.getBody() || '').replace(/\r/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      if (texto.length >= 80) return { kind: 'texto', mediaType: 'text/plain', texto: texto.slice(0, TEXTO_MAX), convertido: 'doc→texto' };
+      return { kind: 'ilegivel', motivo: 'DOC (Word antigo) sem texto extraível' };
+    }
     // Imagem que a IA não aceita (TIFF, BMP, HEIC…) ou grande demais → JPEG reduzido.
     if (String(base.mediaType || '').startsWith('image/') || ehHeic(buf)) {
       return await imagemParaJpeg(buf);
