@@ -411,6 +411,29 @@ export function ehForaDoAcervo(imovel) {
   return !RE_SINAL_IMOVEL.test(txt) && !RE_SINAL_VEICULO.test(txt);
 }
 
+// ─── VAGA/BOX DE GARAGEM NÃO ENTRA NO ACERVO (dono, 05/10) ─────────────────────────────────────
+// Só sai o lote que É a vaga; apartamento/sala/cobertura COM vaga continua. Espelho EXATO de
+// vaga_garagem_barrada() (supabase/migrations/20261005_vaga_garagem_barrada.sql), que o trigger
+// trg_imovel_vaga_garagem aplica a qualquer coletor — aqui é só para não gastar escrita. Mudou lá, mude aqui.
+const RE_VAGA_INICIO = /^((uma?|01|02|03|04|duas|tr[eê]s|\d{1,2})\s*(\([^)]*\)\s*)?)?(vagas?|box(es)?|garage(m|ns))(?![a-zà-ú])/;
+const RE_VAGA_PREFIXO = /^\s*(\(?\s*lote\s*\d+\s*\)?\s*[-:]?\s*|oportunidade\s*:\s*|im[oó]vel\s*:\s*|[-–:.\s]+|\d+\s*[-–.)]\s+)*/;
+const RE_VAGA_UNIDADE_TITULO = /(apartament|(?<![a-zà-ú])apto(?![a-zà-ú])|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])sala(?![a-zà-ú])|(?<![a-zà-ú])loja(?![a-zà-ú])|terreno|pr[eé]dio|galp[aã]o|cobertura|kitnet|(?<![a-zà-ú])studio(?![a-zà-ú])|(?<![a-zà-ú])flat(?![a-zà-ú])|conjunto\s+comercial)/i;
+const RE_VAGA_DESC_PREFIXO = /^\s*(matr[ií]cula\s*:?\s*|bem\s*:?\s*|im[oó]vel\s*:?\s*|descri[cç][aã]o\s*:?\s*|(os\s+)?direitos\s+(aquisitivos\s+)?(sobre|do|da|de)\s+(o|a)?\s*|\d+[.)]\s*|\(?\d+\)?\s*(um|uma)?\s*\)?\s*)*/;
+const RE_VAGA_DESC_UNIDADE = /^(o\s+|a\s+|um\s+|uma\s+)?(apartament|casa(?![a-zà-ú])|sobrado|sala(?![a-zà-ú])|loja(?![a-zà-ú])|terreno|pr[eé]dio|galp[aã]o|cobertura|unidade\s+aut[oô]noma\s+residencial)/;
+
+export function ehVagaGaragem(imovel) {
+  const tit = String(imovel?.titulo || '');
+  const t = tit.toLowerCase().replace(RE_VAGA_PREFIXO, '');
+  const seg = /^[A-Z]{2}\s+-\s/.test(tit) && tit.includes('|') ? tit.split('|')[1].trim().toLowerCase() : '';
+  if (!(RE_VAGA_INICIO.test(t) || RE_VAGA_INICIO.test(seg))) return false;
+  if (RE_VAGA_UNIDADE_TITULO.test(tit)) return false;
+  for (const m of tit.matchAll(/(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)\s*m(?:²|2)/gi)) {
+    if (Number(m[1].replace(/\./g, '').replace(',', '.')) >= 45) return false;   // vaga não tem 45 m² (SUBLIME: apto "2 Vagas | 166m²")
+  }
+  const d = String(imovel?.descricao || '').slice(0, 260).toLowerCase().replace(RE_VAGA_DESC_PREFIXO, '');
+  return !RE_VAGA_DESC_UNIDADE.test(d);
+}
+
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
   // Antes de qualquer checagem de completude: isto sequer deve virar lote. Um registro
@@ -418,6 +441,9 @@ export function checarQualidade(imovel, { estrito = true } = {}) {
   // resto — a qualidade dos campos nada diz sobre o bem ser vendável.
   if (ehFracaoIdeal(imovel)) {
     return { ok: false, faltando: ['fracao_ideal'], descartar: true, motivo: 'parte/fração ideal — fora do acervo por decisão de negócio' };
+  }
+  if (ehVagaGaragem(imovel)) {
+    return { ok: false, faltando: ['vaga_garagem'], descartar: true, motivo: 'vaga/box de garagem — fora do acervo por decisão de negócio' };
   }
   if (ehForaDoAcervo(imovel)) {
     return { ok: false, faltando: ['fora_do_acervo'], descartar: true, motivo: 'nem imóvel nem veículo — acervo é só dessas duas categorias' };

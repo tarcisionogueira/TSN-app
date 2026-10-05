@@ -36178,3 +36178,18 @@ e o importado "I/VW TIGUAN"). Reaproveita `marcaModeloAno`/`tipoVeiculo` da Nord
   (forma nº 10). ⚠️ O `scraper-nordeste-veiculos.mjs` tem o MESMO defeito hoje (link/foto 0% sempre) — não corrigido aqui.
 - Ano único ("Megane … - 2013") = ano-MODELO; fabricação fica vazia (não inventa). FIPE: on-demand ao abrir, como o resto.
 Detalhe compartilhado (`criarLeitorDetalhe`: init por leilão + lote {id} + disjuntor) serve imóveis e veículos.
+
+## 05/10 — Regra `acervo.vaga_garagem`: vaga/box de garagem fora do acervo (pedido do dono)
+"Vaga de garagem e box de garagem não são interessantes — remova da base e não traga mais." **86 lotes removidos**
+(`suprimido_motivo='vaga_garagem'`, 17 fontes). Só sai o lote que É a vaga: apartamento/sala/cobertura COM vaga fica
+(32 "apartamento … vaga de garagem" seguem ativos). Calibrada no acervo real antes de aplicar; 3 guardas nascidas de casos:
+título que nomeia unidade · área ≥ 45 m² (SUBLIME escreve "2 Vagas | Área privativa 166m²" para um APARTAMENTO) ·
+descrição que abre com a unidade. "Chácara/sítio/fazenda" fora da guarda do título (é bairro: "Box … Chácara das Pedras").
+- **Banco (autoridade):** `vaga_garagem_barrada()` + trigger `trg_imovel_vaga_garagem` (pega QUALQUER coletor, atual e
+  futuro) + linha em `regra_negocio` (auditoria de regras 0 crítico — ela exige que a função CITE a regra; a 1ª versão
+  não citava e foi acusada, com razão).
+- **Coletores (economia):** `ehVagaGaragem` em `scraper-core.mjs` no `checarQualidade` (descarte permanente no runner).
+  **Paridade JS × SQL medida em 431/431 lotes reais.** Teste `testar:vaga-garagem`.
+- ⚠️ Aplicação: a migração em uma transação esbarrou em lock da tabela (timeout 60 s, rollback total, 2×). Foi em passos
+  com `set local lock_timeout = '8s'`. Trigger novo em `imoveis_leilao`: aplique assim (tabela sob escrita constante).
+- Reverter um lote específico: `suprimido_motivo='vaga_garagem'` marca todos (o trigger o barraria de novo na escrita).

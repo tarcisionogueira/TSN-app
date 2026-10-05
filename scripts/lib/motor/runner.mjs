@@ -286,7 +286,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         reprov++;
         // Descarte por DECISÃO DE NEGÓCIO (fração ideal / fora do acervo) é permanente: o lote já
         // gravado sai junto, como o não-imóvel. Sem valor/data pode ser temporário — fica.
-        if (q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo')) naoImovelIds.push(row.fonte_id);
+        if (q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo') || q.faltando?.includes('vaga_garagem')) naoImovelIds.push(row.fonte_id);
         continue;
       }
       prontos.push(row);
