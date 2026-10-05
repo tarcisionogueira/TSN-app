@@ -67,9 +67,9 @@ export function detalhesDoCatalogo(html, base) {
       link_edital: linkEdital,
       anexos: linkEdital ? [{ tipo: 'edital', nome: 'Edital', url: linkEdital }] : [],
       data_leilao: null,
-      // Card fora de "À Venda" (vendido, suspenso, retirado…) não entra. Categoria diferente de imóvel
-      // também não — o catálogo 1 é só imóveis, mas a guarda não custa nada se a plataforma misturar.
-      encerrado: (situacao && !/venda/i.test(situacao)) || (categoria && !/im[óo]ve/i.test(categoria)),
+      // Card fora de "À Venda" (vendido, suspenso, retirado…) não entra. Categoria: só sai o que é
+      // NOMEADAMENTE outra coisa — exigir "Imóveis" por extenso é frágil a acento estragado.
+      encerrado: (situacao && !/venda/i.test(situacao)) || /ve[íi]cul|materia|sucata|semovent|m[áa]quina/i.test(categoria),
     });
   }
   return out;

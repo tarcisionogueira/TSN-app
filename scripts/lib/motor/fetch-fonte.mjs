@@ -42,16 +42,25 @@ export async function viaBanco(url) {
   } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 80) }; }
 }
 
-// CHARSET (05/10, NAKAKOGUE: `<meta charset=iso-8859-1>`). `r.text()` decodifica SEMPRE como UTF-8 —
-// site Latin-1 viraria "Im�veis" em silêncio (dado plausível e errado). Só redecodifica quando o UTF-8
-// QUEBROU (U+FFFD) e o site DECLARA Latin-1 — fonte que já vinha certa não muda um byte.
+// CHARSET (05/10, NAKAKOGUE: `<meta charset=iso-8859-1>` com os DADOS em UTF-8). `r.text()` decodifica
+// sempre como UTF-8 — site Latin-1 de verdade viraria "Im�veis" em silêncio. Mas página MISTA existe:
+// a 1ª versão redecodificava a página inteira ao ver UM U+FFFD e transformou "Imóveis" em "ImÃ³veis"
+// (60 de 60 lotes recusados no dry-run). Decide pelo MENOR estrago: U+FFFD no UTF-8 × mojibake
+// ("Ã³", "Ã§") no windows-1252. Fonte que já vinha certa (sem U+FFFD) não muda um byte.
+export function decodificarHtml(buf, contentType = '') {
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  const quebrasUtf8 = (utf8.match(/\uFFFD/g) || []).length;
+  if (!quebrasUtf8) return utf8;
+  const declarado = `${contentType} ${utf8.slice(0, 3000).match(/charset=["']?([\w-]+)/i)?.[1] || ''}`;
+  if (!/iso-?8859-?1|latin-?1|windows-1252/i.test(declarado)) return utf8;
+  const latin = new TextDecoder('windows-1252').decode(buf);
+  const mojibake = (latin.match(/[ÃÂ][\u0080-\u00BF]/g) || []).length;
+  return mojibake < quebrasUtf8 ? latin : utf8;
+}
 async function textoComCharset(r) {
   let buf;
   try { buf = await r.arrayBuffer(); } catch { return ''; } // padrao-ok: corpo ilegível = "corpo vazio", o chamador registra o motivo
-  const utf8 = new TextDecoder('utf-8').decode(buf);
-  if (!utf8.includes('\uFFFD')) return utf8;
-  const declarado = `${r.headers.get('content-type') || ''} ${utf8.slice(0, 3000).match(/charset=["']?([\w-]+)/i)?.[1] || ''}`;
-  return /iso-?8859-?1|latin-?1|windows-1252/i.test(declarado) ? new TextDecoder('windows-1252').decode(buf) : utf8;
+  return decodificarHtml(buf, r.headers.get('content-type') || '');
 }
 
 export function criarMotorFetch(proposito) {

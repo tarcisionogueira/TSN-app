@@ -18,6 +18,7 @@ import {
 } from '../../nakakogue-parse.mjs';
 import { votosDeCidade } from '../../albertomacedo-parse.mjs';
 import { carregarPDFParse } from '../../../../api/_pdf-safe.js';
+import { decodificarHtml } from '../fetch-fonte.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -26,9 +27,7 @@ async function baixar(url, { binario = false } = {}) {
   const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`HTTP ${r.status} em ${url}`);
   if (binario) return Buffer.from(await r.arrayBuffer());
-  const buf = await r.arrayBuffer();
-  const u = new TextDecoder('utf-8').decode(buf);
-  return u.includes('�') ? new TextDecoder('windows-1252').decode(buf) : u;
+  return decodificarHtml(await r.arrayBuffer(), r.headers.get('content-type') || '');
 }
 
 export function cidadeDominante(texto) {

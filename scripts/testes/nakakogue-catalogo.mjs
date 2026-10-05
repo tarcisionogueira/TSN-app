@@ -54,3 +54,13 @@ assert.deepEqual(cidadeDominante('imóveis em Foz do Iguaçu/PR … Foz do Igua�
 assert.equal(cidadeDominante('Curitiba/PR, Curitiba/PR, Curitiba/PR, São Paulo/SP, São Paulo/SP'), null);  // 3 × 2: ambíguo
 assert.equal(cidadeDominante('Foz do Iguaçu/PR'), null);                                                    // 1 citação não basta
 console.log('nakakogue-catalogo: todos os casos passaram');
+
+// CHARSET MISTO (dry-run 05/10: 60 de 60 recusados). Página declara iso-8859-1, dados em UTF-8 e UM byte
+// Latin-1 solto: tem de continuar UTF-8. Página Latin-1 de verdade: redecodifica.
+import { decodificarHtml } from '../lib/motor/fetch-fonte.mjs';
+const misto = Buffer.concat([Buffer.from('<meta charset="iso-8859-1"> Categoria: Imóveis · Situação À Venda · Imóveis ', 'utf8'), Buffer.from([0xe7]), Buffer.from(' fim', 'utf8')]);
+assert.match(decodificarHtml(misto), /Imóveis/);
+const latin = Buffer.from('<meta charset="iso-8859-1"> Categoria: Imóveis · Situação', 'latin1');
+assert.match(decodificarHtml(latin), /Imóveis · Situação/);
+assert.equal(decodificarHtml(Buffer.from('só UTF-8 limpo', 'utf8')), 'só UTF-8 limpo');
+console.log('nakakogue-catalogo: charset misto ok');
