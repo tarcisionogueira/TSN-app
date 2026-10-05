@@ -133,6 +133,25 @@ function apurarFrazao(html, hojeISO) {
   return null;
 }
 
+// ─── VIP (leilaovip.com.br) — 05/10, #44, páginas reais abertas pelo GitHub ───────────────────
+// O genérico ERRAVA aqui: "Vendido por Compre Já" é RÓTULO de botão em toda página, e o R$ mais
+// perto dele era o "Incremento: R$ 5.000,00" — lote vendido por R$ 109.340,02 saía "vendido R$
+// 5.000". E "Status: Sem ofertas" com "O leilão está encerrado" não era reconhecido (nulo).
+// Fonte da verdade: o campo "Status: X" e o "Atual : valor" do painel.
+function apurarVip(txt) {
+  const status = ((txt.match(/Status:\s*([A-Za-zÀ-ú ]{3,30}?)\s+Tipo de Leil/i) || [])[1] || '').trim().toLowerCase();
+  if (!status) return null;
+  const encerrado = /leil(?:ão|&#xe3;o|ao) est(?:á|&#xe1;|a) encerrado|Leil(?:ão|&#xe3;o|ao) Encerrado/i.test(txt);
+  const atual = txt.match(/Atual\s*:\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+  const valor = atual ? parseFloat(atual[1].replace(/\./g, '').replace(',', '.')) : null;
+  if (/cancelad|suspens|retirad/.test(status)) return { resultado: 'cancelado', valor: null };
+  if (/^vendid|arrematad/.test(status)) return { resultado: 'vendido', valor: valor >= 1000 ? valor : null };
+  if (/condicional/.test(status)) return null; // lance abaixo do mínimo, espera o comitente: não é resultado
+  if (encerrado && /sem ofert|sem lance|sem licit|desert/.test(status)) return { resultado: 'sem_lance', valor: null };
+  if (!encerrado) return { resultado: null, aberto: true, novaData: null };
+  return null;
+}
+
 // Extrai o resultado do TEXTO já limpo da página (tags removidas). Devolve
 // `{ resultado: 'vendido'|'sem_lance'|'cancelado', valor: number|null }`, `{ resultado: null, aberto: true,
 // novaData }` (pregão ainda aberto — Suporte Leilões) ou `null` (indeterminado/sem sinal).
@@ -141,6 +160,7 @@ export function apurarResultadoDoTexto(html, url = '') {
   if (!html) return null;
   const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   if (/portalzuk\.com\.br/i.test(String(url))) return apurarZuk(txt);
+  if (/leilaovip\.com\.br/i.test(String(url))) return apurarVip(txt);
   if (/frazaoleiloes\.com\.br/i.test(String(url))) {
     const r = apurarFrazao(html, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
     if (r) return r; // status não reconhecido → cai no genérico
