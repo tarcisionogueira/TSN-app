@@ -3,7 +3,8 @@
  * JSON da própria plataforma (POST, sem login, sem Cloudflare — custo Bright Data ZERO). Parser puro em
  * lib/astavero-json.mjs. Pendência #41 (recon 05/10: 89 imóveis em aberto, nenhum no acervo).
  *
- * Por execução e por leiloeiro: 1 POST de listagem (categoria Imóveis) + 1 `init` por leilão + 1 `lote` por lote.
+ * Por execução e por leiloeiro: listagem de Imóveis e de Veículos (#139) + 1 `init` por leilão + 1 `lote` por lote.
+ * Veículos vão para `veiculos_leilao` (fonte = a do leiloeiro; saúde em `<FONTE>_VEICULOS`).
  * Detalhe falhou → o lote entra com o que a listagem tem (cidade, valores, data, foto), sem inventar o resto.
  *
  * Env: ASTAVERO_DRYRUN (default '1') · ASTAVERO_TENANTS (csv de fontes, opcional) · VITE_SUPABASE_URL,
@@ -11,7 +12,8 @@
  */
 import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
-import { TENANTS, CORPO_LISTAGEM, montarRowAstavero } from './lib/astavero-json.mjs';
+import { TENANTS, CORPO_LISTAGEM, CORPO_LISTAGEM_VEICULOS, montarRowAstavero, montarRowVeiculoAstavero } from './lib/astavero-json.mjs';
+import { marcaModeloAno, tipoVeiculo } from './lib/nordeste-veiculo.mjs';
 import { checarQualidade } from './lib/scraper-core.mjs';
 import { naoEhImovel } from './lib/dom-parse-util.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -100,6 +102,31 @@ async function gravar(rows) {
   return n;
 }
 
+// Detalhe de um lote: `init` uma vez por leilão (cache) + `lote` {id} por lote. Medido 05/10: o `lote` que
+// vem no `init` é o 1º do leilão, NÃO o pedido — usá-lo copiaria a descrição do lote 01.1 em todos (forma
+// nº 10). DISJUNTOR: 3 falhas seguidas e o resto entra só com a listagem, em vez de gastar 30 s × N lotes.
+// Compartilhado por imóveis e veículos (mesmo leiloeiro, mesma API).
+function criarLeitorDetalhe(tenant) {
+  const leiloes = new Map();
+  let seguidas = 0, falhas = 0;
+  const ler = async (item) => {
+    if (seguidas >= 3) { falhas++; return null; }
+    try {
+      if (!leiloes.has(item.leilao)) leiloes.set(item.leilao, (await postar(tenant, '/app/pregao/init', { id: item.leilao, leilao: item.leilao, lote: item.id }))?.leilao || null);
+      const l = await postar(tenant, '/app/pregao/lote', { id: item.id });
+      if (l?.lote?._id && l.lote._id !== item.id) throw new Error(`pedi ${item.id} e veio ${l.lote._id}`);
+      seguidas = 0;
+      return { leilao: leiloes.get(item.leilao), lote: l?.lote || null };
+    } catch (e) {
+      falhas++; seguidas++;
+      if (falhas <= 3) console.log(`  [${tenant.fonte}] ${item.id}: detalhe não lido (${e.message})`);
+      return null;
+    } finally { await sleep(300); }
+  };
+  ler.falhas = () => falhas;
+  return ler;
+}
+
 async function coletar(tenant) {
   let lista;
   try { lista = await postar(tenant, '/app/lotes', CORPO_LISTAGEM); }
@@ -114,26 +141,10 @@ async function coletar(tenant) {
   const completa = !Number.isFinite(declarado) || itens.length >= declarado;
   console.log(`[${tenant.fonte}] via ${vias.get(tenant.fonte) || '?'} · listagem: ${itens.length} imóvel(is)${Number.isFinite(declarado) ? ` de ${declarado} declarados` : ''}`);
 
-  const prontos = []; let semDetalhe = 0, descartados = 0, naoImovel = 0, seguidas = 0;
-  const leiloes = new Map();   // id do leilão → objeto `leilao` do init (datas + edital), 1 chamada por leilão
+  const prontos = []; let descartados = 0, naoImovel = 0;
+  const lerDetalhe = criarLeitorDetalhe(tenant);
   for (const item of itens) {
-    let det = null;
-    // DISJUNTOR: 3 detalhes seguidos falhando = o caminho está fora; o resto entra só com a listagem
-    // (cidade, valores, data, foto) em vez de gastar 30 s × N lotes até estourar o teto do job.
-    if (seguidas < 3) {
-      // DOIS endpoints, medidos 05/10: `init` devolve o LEILÃO (datas d1/d2 + edital) mas o lote que vem nele
-      // é o 1º do leilão, NÃO o pedido — usá-lo copiaria a descrição do lote 01.1 em todos (forma nº 10).
-      // `lote` {id} devolve o lote certo. Então: `init` uma vez por leilão (cache) + `lote` por lote.
-      try {
-        if (!leiloes.has(item.leilao)) leiloes.set(item.leilao, (await postar(tenant, '/app/pregao/init', { id: item.leilao, leilao: item.leilao, lote: item.id }))?.leilao || null);
-        const l = await postar(tenant, '/app/pregao/lote', { id: item.id });
-        if (l?.lote?._id && l.lote._id !== item.id) throw new Error(`pedi ${item.id} e veio ${l.lote._id}`);
-        det = { leilao: leiloes.get(item.leilao), lote: l?.lote || null };
-        seguidas = 0;
-      }
-      catch (e) { semDetalhe++; seguidas++; if (semDetalhe <= 3) console.log(`  [${tenant.fonte}] ${item.id}: detalhe não lido (${e.message})`); }
-      await sleep(300);
-    } else semDetalhe++;
+    const det = await lerDetalhe(item);
     if (det?.lote?.status && det.lote.status !== 'Aberto') { descartados++; continue; }
     const row = montarRowAstavero(item, det, tenant);
     if (naoEhImovel(`${row.titulo} ${row.descricao.slice(0, 600)}`)) { naoImovel++; continue; }
@@ -141,7 +152,7 @@ async function coletar(tenant) {
     prontos.push(row);
   }
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${descartados} descartados · ${naoImovel} não-imóvel · ${semDetalhe} sem detalhe`
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${descartados} descartados · ${naoImovel} não-imóvel · ${lerDetalhe.falhas()} sem detalhe`
     + ` · cidade ${pct((r) => r.cidade && r.estado)}% · foto ${pct((r) => r.link_foto)}% · edital ${pct((r) => r.link_edital)}% · área ${pct((r) => r.area_m2 > 0)}% · 2ª praça ${pct((r) => r.valor_minimo_2)}%`);
 
   if (DRYRUN) {
@@ -165,13 +176,84 @@ async function coletar(tenant) {
   return true;
 }
 
+// ── VEÍCULOS (#139) ──────────────────────────────────────────────────────────────────────────────────
+async function coletarVeiculos(tenant) {
+  const fonteSaude = `${tenant.fonte}_VEICULOS`;
+  let lista;
+  try { lista = await postar(tenant, '/app/lotes', CORPO_LISTAGEM_VEICULOS); }
+  catch (e) {
+    console.error(`[${tenant.fonte}] veículos: listagem falhou: ${e.message}`);
+    if (!DRYRUN) await registrarSaude(supabase, fonteSaude, [], 'astavero-api', { ok: false, enumerados: 0, motivo: `listagem não abriu: ${e.message}` });
+    return false;
+  }
+  const itens = Array.isArray(lista.lotes) ? lista.lotes : [];
+  const declarado = Number(lista.pag?.count);
+  const completa = !Number.isFinite(declarado) || itens.length >= declarado;
+  const lerDetalhe = criarLeitorDetalhe(tenant);
+  const prontos = []; let fora = 0, vencidos = 0;
+  const limite = Date.now() - 86400000;
+  for (const item of itens) {
+    const det = await lerDetalhe(item);
+    if (det?.lote?.status && det.lote.status !== 'Aberto') { fora++; continue; }
+    const row = montarRowVeiculoAstavero(item, det, tenant, { marcaModeloAno, tipoVeiculo });
+    if (!row.valor_minimo) { fora++; continue; }
+    // A plataforma mantém "Aberto" lote de leilão vencido há meses (visto nos imóveis): entra inativo.
+    if (row.data_leilao && Date.parse(row.data_leilao) < limite) { row.ativo = false; vencidos++; }
+    for (const k of ['fotos', 'anexos']) if (row[k] == null) delete row[k];   // null apagaria o que já existe
+    prontos.push(row);
+  }
+  const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
+  console.log(`[${tenant.fonte}] veículos: ${itens.length} listados · ${prontos.length} prontos (${vencidos} vencidos → inativos) · ${fora} fora · ${lerDetalhe.falhas()} sem detalhe`
+    + ` · marca ${pct((r) => r.marca)}% · ano ${pct((r) => r.ano_modelo)}% · placa ${pct((r) => r.placa)}% · foto ${pct((r) => r.fotos)}% · cidade ${pct((r) => r.cidade && r.estado)}%`);
+  if (DRYRUN) {
+    for (const r of prontos.slice(0, 3)) console.log(`   · ${r.fonte_id} | ${r.tipo_veiculo} | ${r.marca || '?'} ${r.modelo || ''} ${r.ano_fabricacao || '?'}/${r.ano_modelo || '?'} | placa ${r.placa || '—'} | R$ ${r.valor_minimo} / aval ${r.valor_avaliacao} | ${r.cidade}/${r.estado} | ${r.data_leilao?.slice(0, 10)} | sucata=${r.is_sucata} ativo=${r.ativo}`);
+    return true;
+  }
+  if (prontos.length) {
+    const grupos = new Map();
+    for (const r of prontos) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+    let n = 0;
+    for (const g of grupos.values()) {
+      const { data, error } = await supabase.from('veiculos_leilao').upsert(g, { onConflict: 'fonte,fonte_id' }).select('id');
+      if (error) throw new Error(`upsert veículos: ${error.message}`);
+      n += data?.length || 0;
+    }
+    console.log(`✅ [${tenant.fonte}] ${n} veículos gravados/atualizados.`);
+  }
+  // Sumidos: só com listagem completa e ao menos metade do acervo ativo visto (mesma trava dos imóveis).
+  if (completa) {
+    const vistos = new Set(prontos.map((r) => r.fonte_id));
+    const { data: ativos, error } = await supabase.from('veiculos_leilao').select('fonte_id').eq('fonte', tenant.fonte).eq('ativo', true);
+    if (error) console.error(`  [${tenant.fonte}] veículos: varredura PULADA (${error.message})`);
+    else if (vistos.size < (ativos?.length || 0) * 0.5) console.error(`  [${tenant.fonte}] veículos: 🛑 varredura PULADA — ${vistos.size} vistos de ${ativos.length} ativos`);
+    else {
+      const sumidos = (ativos || []).map((r) => r.fonte_id).filter((id) => !vistos.has(id));
+      if (sumidos.length) {
+        const { data, error: e } = await supabase.from('veiculos_leilao').update({ ativo: false })
+          .eq('fonte', tenant.fonte).eq('ativo', true).in('fonte_id', sumidos).select('fonte_id');
+        if (e) console.error(`  [${tenant.fonte}] veículos: erro ao desativar sumidos: ${e.message}`);
+        else console.log(`  [${tenant.fonte}] veículos: ${sumidos.length} fora do site · ${data?.length || 0} desativados`);
+      }
+    }
+  }
+  // metricasColeta lê os nomes de IMÓVEL (url_lote/link_foto): sem o mapa, link e foto de veículo mediriam 0%
+  // sempre — número plausível sobre o campo errado (forma nº 10).
+  const paraSaude = prontos.filter((r) => r.ativo).map((r) => ({ estado: r.estado, valor_minimo: r.valor_minimo, url_lote: r.link_lote, link_foto: r.fotos?.[0] || null }));
+  await registrarSaude(supabase, fonteSaude, paraSaude, 'astavero-api', {
+    ok: true, vazio: !itens.length, enumerados: itens.length, motivo: itens.length ? '' : 'site sem veículo em aberto' });
+  return true;
+}
+
 async function main() {
   const alvos = TENANTS.filter((t) => !FILTRO.length || FILTRO.includes(t.fonte));
   console.log(`ASTAVERO ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · ${alvos.map((t) => t.fonte).join(', ')}`);
   let falhas = 0;
-  for (const t of alvos) if (!(await coletar(t))) falhas++;
+  for (const t of alvos) {
+    if (!(await coletar(t))) falhas++;
+    if (!(await coletarVeiculos(t))) falhas++;
+  }
   if (DRYRUN) console.log('\nPara gravar, rode com ASTAVERO_DRYRUN=0.');
-  if (falhas === alvos.length) process.exitCode = 1;   // nenhum leiloeiro abriu: falha de verdade, não "vazio"
+  if (falhas === alvos.length * 2) process.exitCode = 1;   // nenhum leiloeiro abriu: falha de verdade, não "vazio"
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
