@@ -4,6 +4,7 @@
 --   1) Pendência 130 — arquivar_lotes_inativos passa a guardar duplicata_suspeita_de no arquivo.
 --   2) Pendência 101 — troca de role em perfis vira evento em atividade_log
 --      ('role_alterado_manual' com sessão; 'role_alterado_sistema' por webhook/cron/SQL).
+--   4) Gatilho: o selo passa a se recalcular quando entra/muda um documento do lote (vem antes do 3).
 --   3) Pendência 49 — recalcula os selos de documento: edital em Word (~152) e matrícula já copiada
 --      para o nosso Storage (~327). As funções já foram trocadas; o gatilho só recalcula ao regravar.
 -- Conferência depois (cole e rode): veja o select no fim do arquivo — as duas colunas devem dar true.
@@ -129,6 +130,23 @@ begin
       execute function public.trg_log_role_alterado();
   end if;
 end $$;
+
+-- ── 4) Selo recalcula sozinho quando muda um documento do lote (rode ANTES do 3) ──
+-- 05/10 — o selo (tem_edital_doc/tem_matricula_doc) só era recalculado quando o LOTE era regravado
+-- (gatilho em imoveis_leilao). Documento que entra/muda em imovel_anexos — espelho, upload da equipe,
+-- reclassificação pelo conteúdo — ficava sem selo até a próxima coleta da fonte (e fonte parada,
+-- nunca). Este gatilho regrava o link do lote, o que dispara o recálculo existente.
+create or replace function public.trg_anexo_recalcula_selo()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+begin
+  update public.imoveis_leilao set link_edital = link_edital
+   where id = coalesce(new.imovel_id, old.imovel_id);
+  return null;
+end $$;
+
+create or replace trigger imovel_anexos_recalcula_selo
+after insert or delete or update of tipo, nome, url, storage_path on public.imovel_anexos
+for each row execute function public.trg_anexo_recalcula_selo();
 
 -- ── 3) Pendência 49 ──
 -- Recalcula os selos de edital E de matrícula (Word + arquivo no nosso Storage): ~150 editais
