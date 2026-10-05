@@ -30,7 +30,9 @@
 // com cláusula padrão de custas/condição do bem — aceita mesmo sem R$ por perto.
 const RE_VENDIDO_FORTE = /\b(encerrad[oa]\s+com\s+lance|leil[aã]o\s+conclu[íi]do\s+com\s+[êe]xito|hasta\s+p[uú]blica\s+conclu[íi]da)\b/gi;
 // Sinal FRACO: ambíguo por natureza (ver comentário do topo) — só confirma junto de um valor.
-const RE_VENDIDO_FRACO = /\b(vendid[oa]|arrematad[oa]|arrematante)\b/gi;
+// "arrematante" saiu (05/10, #44): é o SUJEITO das cláusulas ("Débitos de IPTU de aprox. R$ 25.000,00,
+// pagos pelo arrematante") — no MEGA, 72 de 319 "vendidos" tinham o valor do DÉBITO como lance.
+const RE_VENDIDO_FRACO = /\b(vendid[oa]|arrematad[oa])\b/gi;
 // A negação só vale dentro da MESMA frase — sem isso, "sem lance. Arrematado..." (frase nova)
 // contaminava o "Arrematado" seguinte como se fosse negado por um "sem" de outra oração.
 const RE_NEGACAO = /\b(n[aã]o|nunca|sem)\s+(?:foi\s+|houve\s+)?\S*\s*$/i;
@@ -43,12 +45,6 @@ function naoNegado(txt, idx) {
   const corte = antes.match(CORTA_FRASE); // negação não atravessa fim de frase
   if (corte) antes = corte[0].slice(1);
   return !RE_NEGACAO.test(antes);
-}
-function valorPerto(txt, idx) {
-  const janela = txt.slice(Math.max(0, idx - 150), idx + 150);
-  const mv = janela.match(RE_VALOR);
-  const valor = mv ? parseFloat(mv[1].replace(/\./g, '').replace(',', '.')) : null;
-  return valor && valor >= 1000 ? valor : null;
 }
 
 // ─── ZUK (portalzuk.com.br) — leitor próprio (24/09, recon de páginas reais) ───────────────
@@ -152,6 +148,17 @@ function apurarVip(txt) {
   return null;
 }
 
+// ─── MEGA (megaleiloes.com.br) — 05/10, #44, página real lida por pg_net ──────────────────────
+// O cabeçalho do lote encerrado diz tudo: "Leilão encerrado R$ 167.000,00 … Visitas 6.593
+// Habilitados 209 Lances 1". O genérico pegava o R$ de "Débitos de IPTU de aprox. R$ 25.000,00,
+// pagos pelo arrematante" (72 de 319 vendidos com o valor do débito).
+function apurarMega(txt) {
+  const m = txt.match(/Leil[ãa]o encerrado\s*R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})[\s\S]{0,400}?\bLances\s+(\d+)/i);
+  if (!m) return null;
+  const valor = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+  return Number(m[2]) > 0 ? { resultado: 'vendido', valor: valor >= 1000 ? valor : null } : { resultado: 'sem_lance', valor: null };
+}
+
 // Extrai o resultado do TEXTO já limpo da página (tags removidas). Devolve
 // `{ resultado: 'vendido'|'sem_lance'|'cancelado', valor: number|null }`, `{ resultado: null, aberto: true,
 // novaData }` (pregão ainda aberto — Suporte Leilões) ou `null` (indeterminado/sem sinal).
@@ -161,6 +168,10 @@ export function apurarResultadoDoTexto(html, url = '') {
   const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   if (/portalzuk\.com\.br/i.test(String(url))) return apurarZuk(txt);
   if (/leilaovip\.com\.br/i.test(String(url))) return apurarVip(txt);
+  if (/megaleiloes\.com\.br/i.test(String(url))) {
+    const r = apurarMega(txt);
+    if (r) return r; // sem o cabeçalho de encerrado → genérico (que agora exige o R$ DEPOIS da palavra)
+  }
   if (/frazaoleiloes\.com\.br/i.test(String(url))) {
     const r = apurarFrazao(html, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
     if (r) return r; // status não reconhecido → cai no genérico
@@ -187,8 +198,14 @@ export function apurarResultadoDoTexto(html, url = '') {
   RE_VENDIDO_FRACO.lastIndex = 0;
   while ((m = RE_VENDIDO_FRACO.exec(txt))) {
     if (!naoNegado(txt, m.index)) continue;
-    const valor = valorPerto(txt, m.index);
-    if (valor) return { resultado: 'vendido', valor };
+    // Resultado de verdade escreve o valor LOGO DEPOIS ("Arrematado por R$ 199.680,00", "Vendido
+    // R$ …"); cláusula não ("será vendido no estado…", "imóvel arrematado… R$" de outra frase).
+    // Por isso o R$ tem de vir DEPOIS, na mesma frase, a até 60 caracteres (05/10, #44).
+    const depois = txt.slice(m.index + m[0].length, m.index + m[0].length + 60).split(/[.;!?](?!\d)/)[0];
+    if (/^\s*(no estado|um a um|ad corpus|nas condi|conforme|em car[áa]ter)/i.test(depois)) continue;
+    const mv = depois.match(RE_VALOR);
+    const valor = mv ? parseFloat(mv[1].replace(/\./g, '').replace(',', '.')) : null;
+    if (valor && valor >= 1000) return { resultado: 'vendido', valor };
   }
 
   if (RE_SEM_LANCE.test(txt)) return { resultado: 'sem_lance', valor: null };

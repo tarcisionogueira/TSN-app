@@ -5,6 +5,7 @@ on:
       fonte: { description: 'fonte (ex.: FRAZAO)', required: true }
       aplicar: { description: '1 = grava (padrão: em seco)', default: '0' }
       resultados: { description: '1 = refaz também vendido/sem_lance do leitor antigo', default: '0' }
+      suspeitos: { description: '1 = só vendido com valor < 30% do mínimo (fonte * = todas)', default: '0' }
 jobs:
   reabrir:
     runs-on: ubuntu-latest
@@ -20,4 +21,5 @@ jobs:
           REABRIR_FONTE: ${{ inputs.fonte }}
           REABRIR_APLICAR: ${{ inputs.aplicar }}
           REABRIR_RESULTADOS: ${{ inputs.resultados }}
+          REABRIR_SUSPEITOS: ${{ inputs.suspeitos }}
         run: node scripts/reabrir-apuracao-fonte.mjs
