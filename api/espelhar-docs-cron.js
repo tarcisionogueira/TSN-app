@@ -31,6 +31,9 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { tipoPorConteudoPdf } from './_doc-tipo.js';
+const GENERICO = new Set(['outro', 'anexo']);
+
 import { isCronAuthorized } from './_auth.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
@@ -140,10 +143,12 @@ export default async function handler(req, res) {
     // aponta para a cópia que já existe. Seguro porque a retenção (`anexos_expirados` e a faxina
     // do espelho) não apaga arquivo que outro imóvel ativo ainda usa.
     try {
-      const rj = await sb(`documento_espelho?url_origem=eq.${encodeURIComponent(d.url_origem)}&status=eq.copiado&storage_path=not.is.null&select=storage_path,bytes&limit=1`);
+      const rj = await sb(`documento_espelho?url_origem=eq.${encodeURIComponent(d.url_origem)}&status=eq.copiado&storage_path=not.is.null&select=storage_path,bytes,tipo&limit=1`);
       const ja = rj.ok ? await rj.json().catch(() => []) : [];
       if (Array.isArray(ja) && ja[0]?.storage_path) {
-        await marcar(d.id, { status: 'copiado', storage_path: ja[0].storage_path, bytes: ja[0].bytes, motivo: 'reaproveitado (mesma url de origem)' });
+        // Herda o tipo já DESCOBERTO pelo conteúdo na 1ª cópia (05/10) quando este veio genérico.
+        const tipoHerdado = GENERICO.has(d.tipo) && !GENERICO.has(ja[0].tipo) ? { tipo: ja[0].tipo } : {};
+        await marcar(d.id, { status: 'copiado', storage_path: ja[0].storage_path, bytes: ja[0].bytes, motivo: 'reaproveitado (mesma url de origem)', ...tipoHerdado });
         return 'copiado';
       }
     } catch (e) { console.error('[espelhar-docs] reaproveitar', d.id, e?.message || e); } // segue e baixa normalmente
@@ -167,6 +172,13 @@ export default async function handler(req, res) {
     }
 
     const ext = /pdf/i.test(mime) ? 'pdf' : /jpe?g/i.test(mime) ? 'jpg' : /png/i.test(mime) ? 'png' : 'bin';
+    // TIPO PELO CONTEÚDO (05/10, pendência 49): leiloeiro que publica tudo como "Documento" chegava
+    // aqui 'outro' — matrícula e edital guardados sem ninguém saber o que eram. Lê 2 páginas.
+    let tipoDescoberto = null;
+    if (GENERICO.has(d.tipo) && ext === 'pdf') {
+      tipoDescoberto = await tipoPorConteudoPdf(bin);
+      if (tipoDescoberto) d = { ...d, tipo: tipoDescoberto };
+    }
     // Sufixo do id no nome: com os ANEXOS na fila (11/08) um mesmo imóvel passa a ter VÁRIOS
     // documentos do mesmo tipo — o rj_82634 tem 1ª, 2ª e 3ª publicação. Com o path antigo
     // (`${tipo}.${ext}`) o `x-upsert: true` faria o segundo sobrescrever o primeiro e as duas
@@ -182,7 +194,7 @@ export default async function handler(req, res) {
       await marcar(d.id, { status: 'pendente', tentativas: (d.tentativas || 0) + 1, motivo: `upload ${up.status}` });
       return 'falha';
     }
-    await marcar(d.id, { status: 'copiado', storage_path: path, bytes: bin.length, motivo: null });
+    await marcar(d.id, { status: 'copiado', storage_path: path, bytes: bin.length, motivo: null, ...(tipoDescoberto ? { tipo: tipoDescoberto } : {}) });
     return 'copiado';
   }
 

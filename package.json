@@ -113,7 +113,8 @@
     "testar:nordeste-payload": "node scripts/testes/nordeste-le-o-lote-do-payload.mjs",
     "testar:restricao-amostras": "node scripts/testes/comparaveis-dentro-da-restricao.mjs",
     "testar:geocod-sem-cidade": "node scripts/testes/geocod-sem-cidade-nao-chuta.mjs",
-    "testar:albertomacedo-localizacao": "node scripts/testes/albertomacedo-localizacao-api.mjs"
+    "testar:albertomacedo-localizacao": "node scripts/testes/albertomacedo-localizacao-api.mjs",
+    "testar:doc-tipo": "node scripts/testes/doc-tipo.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

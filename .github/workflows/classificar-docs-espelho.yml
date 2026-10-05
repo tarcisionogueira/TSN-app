@@ -1,0 +1,34 @@
+name: Classificar documentos do espelho pelo conteúdo
+
+# 05/10 (resíduo da pendência 49): PDFs que o espelho guardou como 'outro' viram matrícula/edital/laudo
+# pelo texto das 2 primeiras páginas. Manual: comece em seco (aplicar=0) e confira as linhas.
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: '1 = grava; 0 = só mostra'
+        default: '0'
+      limite:
+        description: 'quantos arquivos ler'
+        default: '80'
+
+jobs:
+  classificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+      - name: Classificar
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CLASSIFICAR_APLICAR: ${{ github.event.inputs.aplicar }}
+          CLASSIFICAR_LIMITE: ${{ github.event.inputs.limite }}
+        run: node scripts/classificar-docs-espelho.mjs
