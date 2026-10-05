@@ -20,4 +20,6 @@ assert.equal(c('CERTIDÃO Nº 26/012293 - PROTOCOLO 597789 Katia Marins 2º OFIC
 assert.equal(c('REPÚBLICA FEDERATIVA DO BRASIL ESTADO DE MINAS GERAIS SERVIÇO REGISTRAL IMOBILIÁRIO DA COMARCA DE TRÊS PONTAS - MG'), 'matricula');
 assert.equal(c('PODER JUDICIÁRIO 1ª VARA CÍVEL DA COMARCA DE CACHOEIRINHA ESTADO DO RIO GRANDE DO SUL EDITAL DE LEILÃO E INTIMAÇÃO Pelo presente, se faz saber' + pad), 'edital');
 assert.equal(c('CONTRATO DE ADESÃO DIGITAL Em vigor / última atualização: 28/01/2026 VEGAS LEILÕES' + pad), null);
-console.log('✓ doc-tipo: 16 casos');
+assert.equal(c('TRIBUNAL REGIONAL DO TRABALHO DA 13ª REGIÃO CENTRAL REGIONAL DE EFETIVIDADE ATOrd 0000236-94.2020.5.13.0023 AUTOR: MARCOS RÉU: QUEIROZ oficie-se ao Registro de Imóveis' + pad), null);
+assert.equal(c('Valide a certidão clicando no link a seguir: https://assinador-web.onr.org.br/docs/KA9VS-F45ZM Valide aqui a certidão.'), 'matricula');
+console.log('✓ doc-tipo: 18 casos');

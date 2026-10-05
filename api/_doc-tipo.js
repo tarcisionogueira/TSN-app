@@ -22,7 +22,11 @@ export function classificarTipoPorTexto(texto) {
     || (/\bEDITAL\b/i.test(cabeca.slice(0, 600)) && /\bleiloeir[oa]\b/i.test(cabeca))) return 'edital';
   // 4) MATRÍCULA emitida pelo CARTÓRIO: o cabeçalho é do registro de imóveis (certidão de inteiro teor,
   //    RI Digital, Assinador do RI). A 1ª página costuma ser imagem — só o cabeçalho vira texto.
-  if (/ASSINADOR\s+REGISTRO\s+DE\s+IM|RI\s*DIGITAL|RIDIGITAL|OF[ÍI]CIO\s+D[EO]\s+REGISTRO\s+DE\s+IM|SERVI[ÇC]O\s+REGISTRAL\s+IMOBILI|CART[ÓO]RIO\s+D[EO]\s+REGISTRO\s+DE\s+IM|\bREGISTRO\s+DE\s+IM[ÓO]VEIS\b/i.test(topo)) return 'matricula';
+  //    "Registro de Imóveis" solto só vale se o topo NÃO for de peça judicial (sentença/ata do TRT
+  //    citando o RI saiu matrícula na rodada de 05/10).
+  const judicial = /PODER\s+JUDICI[ÁA]RIO|TRIBUNAL|\bVARA\b|JU[ÍI]ZO|PROCESSO|AUTOR:|R[ÉE]U:|EXEQUENTE|EXECUTAD/i.test(topo);
+  if (/ASSINADOR\s+REGISTRO\s+DE\s+IM|ASSINADOR-WEB\.ONR|ONR\.ORG\.BR|RI\s*DIGITAL|RIDIGITAL|OF[ÍI]CIO\s+D[EO]\s+REGISTRO\s+DE\s+IM|SERVI[ÇC]O\s+REGISTRAL\s+IMOBILI|CART[ÓO]RIO\s+D[EO]\s+REGISTRO\s+DE\s+IM/i.test(topo)
+    || (!judicial && /\bREGISTRO\s+DE\s+IM[ÓO]VEIS\b/i.test(topo))) return 'matricula';
   const registro = /REGISTRO\s+DE\s+IM[ÓO]VEIS|OF[ÍI]CIO\s+DE\s+REGISTRO|\bCNM\s*[:\-]?\s*\d|LIVRO\s*(?:N[º°o.]?\s*)?2\b|REGISTRO\s+GERAL/i.test(cabeca);
   const matricula = /\bMATR[ÍI]CULA\s*(?:N[º°o.]*\s*)?[:\-–]?\s*\d{1,3}(?:\.?\d{3})*/i.test(cabeca);
   const atos = (t.match(/\b(?:R|AV)\s*[\.\-–]\s*\d{1,3}\s*[\/\-–\.]\s*\d/gi) || []).length;

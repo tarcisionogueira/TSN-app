@@ -21,7 +21,14 @@ async function sb(path, init = {}) {
 }
 
 // Candidatos: copiados genéricos, PDF, até o teto de bytes, de lote ATIVO (via RPC-less: filtro em 2 passos).
-const linhas = await sb(`documento_espelho?status=eq.copiado&tipo=in.(outro,anexo)&storage_path=ilike.*.pdf&bytes=lte.${MAX_BYTES}&select=id,storage_path,imovel_id,fonte,bytes&order=id&limit=${Math.max(LIMITE * 4, 400)}`);
+// PAGINADO (05/10): o PostgREST devolve no máx. 1.000 linhas por leitura — a 1ª rodada "completa"
+// leu 584 de ~2.900 achando que era tudo. Pula o que já foi lido e deu indefinido (motivo marcado).
+const linhas = [];
+for (let de = 0; ; de += 1000) {
+  const pag = await sb(`documento_espelho?status=eq.copiado&tipo=in.(outro,anexo)&storage_path=ilike.*.pdf&bytes=lte.${MAX_BYTES}&or=(motivo.is.null,motivo.not.like.conteudo:*)&select=id,storage_path,imovel_id,fonte,bytes&order=id&limit=1000&offset=${de}`);
+  linhas.push(...pag);
+  if (pag.length < 1000 || linhas.length >= LIMITE * 6) break;
+}
 const porPath = new Map();
 for (const l of linhas) if (!porPath.has(l.storage_path)) porPath.set(l.storage_path, l);
 const ids = [...new Set([...porPath.values()].map((l) => l.imovel_id))];
@@ -42,7 +49,12 @@ for (const a of alvos) {
   res.porTipo[k] = (res.porTipo[k] || 0) + 1;
   res.porFonte[a.fonte] ??= {}; res.porFonte[a.fonte][k] = (res.porFonte[a.fonte][k] || 0) + 1;
   console.log(`  ${(tipo || '—').padEnd(9)} ${a.fonte.padEnd(16)} «${cabeca || '(sem texto: escaneado?)'}»`);
-  if (!tipo) continue;
+  if (!tipo) {
+    // Marca para não baixar de novo na próxima rodada (escaneado/peça processual não muda sozinho).
+    if (APLICAR) await sb(`documento_espelho?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ motivo: 'conteudo: tipo indefinido (05/10)' }) });
+    continue;
+  }
   if (!APLICAR) continue;
   // Linha a linha: unique (imovel_id, tipo, url_origem) recusa a linha cujo gêmeo tipado já existe
   // (mesma url já guardada como 'edital'). Essa fica 'outro' — o documento já está tipado no gêmeo.
