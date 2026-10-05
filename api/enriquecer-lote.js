@@ -242,7 +242,7 @@ export function cortarOutrosLotes(txt, ancora = CTX_ANCORA) {
 // residencial). O genérico dava INÍCIO = HOJE nos 9 de 9 lotes (uma data do dia escondida no HTML)
 // e, no fim, pegava os "Ciclos" de venda posteriores ("2º Ciclo - 19/11/2026") no lugar do
 // "2º Encerramento - 20/10/2026". A página rotula as praças sem ambiguidade — lê só os rótulos.
-function datasLjud(txt) {
+export function datasLjud(txt) { // exportada (05/10, #98): os VEÍCULOS LJUD leem a data do detalhe pelo mesmo leitor
   const RE = /(?:(\d)\s*[º°ª]\s*)?Encerramento\s*-\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/gi;
   const pracas = [];
   for (const m of txt.matchAll(RE)) {

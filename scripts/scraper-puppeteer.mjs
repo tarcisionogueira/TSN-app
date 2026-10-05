@@ -23,7 +23,7 @@ import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
-import { cortarOutrosLotes } from '../api/enriquecer-lote.js';
+import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -2241,6 +2241,13 @@ async function scraperLJUDVeiculos(browser) {
     });
     for (const [k, v] of rodizio) detalhePorId.set(k, v);
     const galeriaApiLJUD = await galeriaLJUDVeiculosApi(browser);
+    // DATA DO LEILÃO (05/10, #98): era `data_leilao: null` FIXO — 1.887 veículos sem data, que por
+    // isso nunca eram apurados nem saíam da vitrine (a limpeza exige data). O detalhe traz
+    // "1º/2º Encerramento - dd/mm/aaaa hh:mm" (mesmo leitor exato dos imóveis LJUD). Os lotes de um
+    // leilão encerram juntos: o lote não lido hoje herda a data do representante do SEU leilão.
+    const dataDoDetalhe = (det) => { const d = det?.texto ? datasLjud(det.texto) : null; return d?.encerramento || null; };
+    const dataPorLeilao = new Map();
+    for (const c of representantes) { const d = dataDoDetalhe(detalhePorId.get(idLoteLJUD(c.href))); if (d) dataPorLeilao.set(leilaoLJUD(c.href), d); }
     const seen = new Set();
     const veiculos = cards.map((c) => {
       const id = idLoteLJUD(c.href);
@@ -2259,6 +2266,8 @@ async function scraperLJUDVeiculos(browser) {
       const valAval = avaliacaoMatch ? parseBRL(`R$ ${avaliacaoMatch[1]}`) : 0;
       const valMin = minimoMatch ? parseBRL(`R$ ${minimoMatch[1]}`) : 0;
       if (!valMin && !valAval) return null;
+      // Leilão de SIMULAÇÃO/TESTE da plataforma ("LEILÃO SIMULAÇÃO - TESTE TRANSMISSÃO", R$ 0,01).
+      if (/simula[çc][ãa]o|teste de transmiss|teste transmiss/i.test(c.textoCard)) return null;
       const numeroLote = c.textoCard.match(/#(\d+)/)?.[1];
       const titulo = (tituloBruto || `Veículo LJUD ${numeroLote || id}`).slice(0, 180);
       // Pátio recebe TAMBÉM o texto da página de detalhe (bounded, até 60/rodada) — o card
@@ -2288,7 +2297,7 @@ async function scraperLJUDVeiculos(browser) {
         fotos: montarFotos(c.img, galeriaApiLJUD.get(id)),
         anexos: detalhe?.anexos,
         forma_pagamento: 'a_vista',
-        data_leilao: null,
+        data_leilao: dataDoDetalhe(detalhe) || dataPorLeilao.get(leilaoLJUD(c.href)) || null,
         status_patio: statusPatio,
         status_patio_motivo: statusPatioMotivo,
         motor_alerta: REGEX_MOTOR_ALERTA.test(c.textoCard) || null,
@@ -2900,7 +2909,7 @@ async function salvarVeiculos(registros, rotulo) {
     let leituraOk = true;
     for (let i = 0; i < aptos.length; i += 200) {
       const ids = aptos.slice(i, i + 200).map(r => r.fonte_id).filter(Boolean);
-      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado, fotos').eq('fonte', fonteV).in('fonte_id', ids);
+      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado, fotos, data_leilao').eq('fonte', fonteV).in('fonte_id', ids);
       if (error) { leituraOk = false; console.log(`  ⚠️ ${nome}: não li o pátio anterior (${String(error.message).slice(0, 80)}) — status do dia vale sozinho`); break; }
       for (const d of data || []) anteriores.set(d.fonte_id, d);
     }
@@ -2911,6 +2920,9 @@ async function salvarVeiculos(registros, rotulo) {
       // cidade vem do EDITAL (scripts/local-e-area-do-documento.mjs). Sem isto, a rodada seguinte
       // gravava cidade=null por cima do que o documento provou.
       if (!r.cidade && prev?.cidade) { r.cidade = prev.cidade; if (!r.estado && prev.estado) r.estado = prev.estado; }
+      // DATA NÃO ESQUECE (05/10): a data sai do detalhe, lido em rodízio — lote não relido hoje não
+      // pode voltar a data_leilao=null (era o que deixava o veículo eterno na vitrine).
+      if (!r.data_leilao && prev?.data_leilao) r.data_leilao = prev.data_leilao;
       // GALERIA NÃO ENCOLHE (29/09): lote não relido hoje chega só com a capa — não apaga a
       // galeria que a leitura do detalhe provou numa rodada anterior. Ver lib/galeria-veiculo.mjs.
       if (Array.isArray(r.fotos)) r.fotos = fotosPreservadas(r.fotos, prev?.fotos);
@@ -2930,7 +2942,30 @@ async function salvarVeiculos(registros, rotulo) {
     salvos += lote.length;
   }
   console.log(`    ${nome}: ${salvos} salvos em veiculos_leilao`);
+  await desligarVeiculosSemDataSumidos(fonteV, aptos, salvos, nome);
   return salvos;
+}
+
+// VEÍCULO SEM DATA QUE SUMIU DA FONTE (05/10, #98). A limpeza por data (retencaoVeiculosVencidos e
+// desativar_leiloes_encerrados) exige `data_leilao` — e LJUD/SUPORTE/ZUK/WEBLEILOES/CRLEILOES não
+// tinham data nenhuma: 2.262 veículos que nunca saíam da vitrine, nem depois de o site os tirar do
+// ar (LJUD: só 840 de 1.887 vistos nos últimos 3 dias). Aqui só os SEM data — os com data seguem a
+// regra por data. Mesmas travas do sweep de imóveis: gravou tudo, > 50 lotes e ≥ metade do que
+// estava ativo (coleta parcial não aposenta ninguém).
+async function desligarVeiculosSemDataSumidos(fonte, aptos, salvos, nome) {
+  if (!fonte || salvos !== aptos.length || salvos <= 50) return;
+  try {
+    const { count: ativos, error: e1 } = await supabase.from('veiculos_leilao').select('id', { count: 'exact', head: true }).eq('fonte', fonte).eq('ativo', true);
+    if (e1 || !Number.isFinite(ativos)) { console.log(`  ⚠️ ${nome}: não contei o acervo ativo — sumidos não desligados`); return; }
+    if (salvos < ativos * 0.5) { console.log(`  🛑 ${nome}: gravou ${salvos} de ${ativos} ativos (< 50%) — sumidos não desligados`); return; }
+    const corte = aptos.map((r) => r.atualizado_em).filter(Boolean).sort()[0];
+    if (!corte) return;
+    const { count, error } = await supabase.from('veiculos_leilao')
+      .update({ ativo: false }, { count: 'exact' })
+      .eq('fonte', fonte).eq('ativo', true).is('data_leilao', null).lt('atualizado_em', corte);
+    if (error) console.log(`  ⚠️ ${nome}: desligar sumidos falhou: ${String(error.message).slice(0, 120)}`);
+    else if (count) console.log(`  🔻 ${nome}: ${count} veículo(s) sem data que saíram do site desligados`);
+  } catch (e) { console.log(`  ⚠️ ${nome}: desligar sumidos falhou: ${String(e.message).slice(0, 120)}`); }
 }
 
 // ─── FRAZÃO LEILÕES ───────────────────────────────────────────────────────────
