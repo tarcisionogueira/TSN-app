@@ -15,7 +15,7 @@ on:
 jobs:
   classificar:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180  # ~1.000 PDFs/hora; a rodada retoma de onde parou (indefinido fica marcado)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
