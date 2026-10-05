@@ -5171,6 +5171,51 @@ function VeiculosTab() {
 // Fila de KYC pendente (05/10): quem caiu em "revisão manual" não aparecia em lugar nenhum — a tela
 // do parceiro dizia "a equipe confere" e o saque ficava travado sem ninguém saber. Aqui o admin
 // reroda o face match sobre a selfie e o documento já guardados (mesmo critério do titular).
+// PEDIDOS AO LEILOEIRO QUE PRECISAM DA EQUIPE (05/10): o automático parou porque o leiloeiro não
+// respondeu 2 pedidos (equipe_whatsapp), não há e-mail cadastrado (sem_contato) ou o teto semanal do
+// endereço está cheio (aguardando — sai sozinho). Some da lista quando o documento chega ao lote ou
+// o leilão passa. Abrir o lote → Análise → "Pedir ao leiloeiro" (WhatsApp/e-mail).
+function PedidosLeiloeiroEquipeManager() {
+  const [linhas, setLinhas] = useState(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    (async () => {
+      const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+      const { data, error } = await supabase.from('documental_pedidos_leiloeiro')
+        .select('id, imovel_id, fonte, destinatario_email, itens_pedidos, status, criado_em')
+        .eq('automatico', true).in('status', ['equipe_whatsapp', 'sem_contato', 'aguardando'])
+        .gte('criado_em', desde).order('criado_em', { ascending: true });
+      if (error) { setErro('Não consegui ler os pedidos: ' + error.message); setLinhas([]); return; }
+      const ids = [...new Set((data || []).map(d => d.imovel_id))];
+      if (!ids.length) { setLinhas([]); return; }
+      const { data: ims, error: e2 } = await supabase.from('imoveis_leilao')
+        .select('id, titulo, cidade, estado, tem_matricula_doc, tem_edital_doc, ativo').in('id', ids);
+      if (e2) { setErro('Não consegui ler os lotes: ' + e2.message); setLinhas([]); return; }
+      const porId = Object.fromEntries((ims || []).map(i => [i.id, i]));
+      setErro('');
+      setLinhas((data || []).map(d => ({ ...d, im: porId[d.imovel_id] }))
+        .filter(d => d.im?.ativo && !(d.im.tem_matricula_doc && d.im.tem_edital_doc)));
+    })();
+  }, []);
+  if (linhas && !linhas.length && !erro) return null;
+  const ROT = { equipe_whatsapp: ['Leiloeiro não responde e-mail', '#b91c1c'], sem_contato: ['Sem e-mail cadastrado', '#b45309'], aguardando: ['Na fila (teto semanal)', '#64748b'] };
+  return (
+    <div style={S.card}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>📨 Documentos a pedir ao leiloeiro {linhas ? `(${linhas.length})` : ''}</div>
+      <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0 10px' }}>Lotes que um cliente quis analisar e estão sem matrícula/edital. Abra o lote → Análise → "Pedir ao leiloeiro" (WhatsApp ou e-mail). "Na fila" sai sozinho.</div>
+      {erro && <p style={{ fontSize: 11.5, color: '#dc2626' }}>⚠️ {erro}</p>}
+      {!linhas ? <p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando…</p> : linhas.map(l => (
+        <a key={l.id} href={`#/imovel/${l.imovel_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#f8fafc', borderRadius: 8, marginBottom: 4, flexWrap: 'wrap', textDecoration: 'none', color: 'inherit' }}>
+          <span style={{ fontWeight: 700, fontSize: 12, flex: 1, minWidth: 160 }}>{l.im?.titulo || l.imovel_id.slice(0, 8)} <span style={{ fontWeight: 400, color: '#64748b' }}>· {l.im?.cidade}/{l.im?.estado} · {l.fonte}</span></span>
+          <span style={{ fontSize: 11, color: '#475569' }}>{(l.itens_pedidos || []).join(', ')}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: (ROT[l.status] || [])[1] }}>{(ROT[l.status] || [l.status])[0]}</span>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function KycPendenteManager() {
   const [linhas, setLinhas] = useState(null);
   const [erro, setErro] = useState('');
@@ -8269,6 +8314,7 @@ function ScrapersTab() {
           )}
 
           <KycPendenteManager />
+          <PedidosLeiloeiroEquipeManager />
           <LeiloeiroContatoManager />
         </div>
       )}

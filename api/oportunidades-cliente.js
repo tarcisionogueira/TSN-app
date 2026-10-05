@@ -31,7 +31,6 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ROLES_EQUIPE = ['analista', 'advogado', 'consultor'];
 const RAIOS = [25000, 50000, 100000, 200000];
 const ALVO_CANDIDATOS = 40;
-const LIMITE_RESPOSTA = 15;
 const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento';
 
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
@@ -189,7 +188,8 @@ async function handler(req) {
         foto: im.link_foto || null, ocupacao: im.ocupacao || null, pagamento: im.forma_pagamento || null,
         distanciaKm: dists[0] ? Math.round(dists[0].d) : null, pontos, motivos: motivos.slice(0, 3),
       };
-    }).sort((a, b) => b.pontos - a.pontos).slice(0, LIMITE_RESPOSTA);
+    // TODOS os que cabem (05/10, dono: o corte em 15 escondia 33 de 48). Ordem = encaixe.
+    }).sort((a, b) => b.pontos - a.pontos);
 
     // Cliente 360 (02/10, dono): a busca fica na linha do tempo DO CLIENTE, com a equipe como
     // autora — a navegação de quem buscou já cai no 360 dela, mas no do cliente não aparecia nada.
@@ -200,7 +200,7 @@ async function handler(req) {
 
     return json({
       cliente: { id: perfil.id, nome: perfil.nome },
-      criterios, oportunidades, totalCandidatos: achados.size,
+      criterios, oportunidades, totalCandidatos: oportunidades.length,
       aviso: oportunidades.length ? null
         : `Nenhum lote ativo cabe no perfil até ${criterios.raioKm} km (${tipos.join('/') || 'qualquer tipo'}, desconto ≥ ${descontoMin}%, até ${tetoFaixa ? `R$ ${tetoFaixa.toLocaleString('pt-BR')}` : 'sem teto'}). Vale revisar a faixa de capital ou as cidades com o cliente.`,
     });

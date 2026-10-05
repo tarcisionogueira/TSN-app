@@ -13,6 +13,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmailAgora, orcamentoRestanteHoje, reservarOrcamentoEmail } from './_email.js';
+import { drenarPedidosAguardando } from './_pedido-leiloeiro-auto.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -86,5 +87,10 @@ async function handler(req) {
       });
     }
   }
-  return new Response(JSON.stringify({ ok: true, processados: fila.length, enviados, falhas, orcamento_restante: restante }), { headers: { 'Content-Type': 'application/json' } });
+  // Pedidos de documento ao leiloeiro que esperavam o teto semanal do endereço liberar (05/10).
+  // Depois da fila de e-mail, para não disputar o orçamento com o que já estava represado.
+  let pedidosLeiloeiro = null;
+  try { pedidosLeiloeiro = await drenarPedidosAguardando({ max: 10 }); }
+  catch (e) { pedidosLeiloeiro = { erro: String(e?.message || e).slice(0, 160) }; console.error('[drenar-fila-emails] pedidos ao leiloeiro:', pedidosLeiloeiro.erro); }
+  return new Response(JSON.stringify({ ok: true, processados: fila.length, enviados, falhas, orcamento_restante: restante, pedidosLeiloeiro }), { headers: { 'Content-Type': 'application/json' } });
 }

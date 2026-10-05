@@ -36064,3 +36064,13 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
   "não capturado · ver site" em vez de "no site" (lido como "existe no site").
 - Guarulhos (leilaobrasil_3801): mercadológico regerado pelo workflow `regerar-relatorios.yml`; o processo
   0077091-64.2003.8.26.0002 já foi extraído do edital.
+
+### 05/10 (tarde 3) — Pedido ao leiloeiro sem sobrecarga + Oportunidades sem corte
+- `_pedido-leiloeiro-auto.js`, travas: (1) teto de 3 e-mails/semana por ENDEREÇO — excedente fica
+  `aguardando` e sai pelo `drenar-fila-emails-cron` (`drenarPedidosAguardando`, re-confere doc/prazo antes);
+  1 e-mail por lote de propósito (juntar lotes impediria casar a resposta); (2) 2 pedidos sem resposta (≥3 dias,
+  após a última resposta) em 30 dias → `equipe_whatsapp`, sem e-mail; (3) fonte com ≥20 lotes e <10% com
+  matrícula → pede no 1º clique (`fonteNaoPublicaMatricula`, medido no acervo); (4) leilão em <48 h → não pede.
+- Admin: card "📨 Documentos a pedir ao leiloeiro" (equipe_whatsapp/sem_contato/aguardando, some quando o doc
+  chega). Política de SELECT para admin/analista/advogado em `documental_pedidos_leiloeiro` (aplicada).
+- Oportunidades do assessorado: sem o corte de 15 — mostra todos os lotes que cabem no perfil, por encaixe.

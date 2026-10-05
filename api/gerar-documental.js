@@ -26,7 +26,7 @@ import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { cacheGravar } from './_doc-extracao.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
-import { pedirDocumentosAoLeiloeiro, fraseDoPedido } from './_pedido-leiloeiro-auto.js';
+import { pedirDocumentosAoLeiloeiro, fraseDoPedido, fonteNaoPublicaMatricula } from './_pedido-leiloeiro-auto.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
@@ -1189,7 +1189,10 @@ export default async function handler(req, res) {
       // pedimos. Na 1ª passada com captura automática em curso, espera a captura; se ela não
       // resolveu (2ª passada ainda sem doc) ou não há captura possível, o e-mail sai. Dedup de
       // 7 dias por LOTE no helper.
-      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && (!emCaptura || resultadoAnterior?.precisaDocumentos))
+      // Fonte que comprovadamente não publica matrícula: esperar a captura não adianta — pede já.
+      const pedirJa = !emCaptura || resultadoAnterior?.precisaDocumentos
+        || ((faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital']).includes('matricula') && await fonteNaoPublicaMatricula(row?.fonte));
+      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && pedirJa)
         ? await pedirDocumentosAoLeiloeiro({ imovelId: String(imovelId), userId: ownerId, faltando: faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'] })
         : null;
       if (pedidoLeiloeiro?.status === 'erro' || pedidoLeiloeiro?.status === 'falha') console.error('[gerar-documental] pedido ao leiloeiro:', pedidoLeiloeiro.status, pedidoLeiloeiro.erro);
@@ -1997,7 +2000,10 @@ export default async function handler(req, res) {
       // pedimos. Na 1ª passada com captura automática em curso, espera a captura; se ela não
       // resolveu (2ª passada ainda sem doc) ou não há captura possível, o e-mail sai. Dedup de
       // 7 dias por LOTE no helper.
-      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && (!emCaptura || resultadoAnterior?.precisaDocumentos))
+      // Fonte que comprovadamente não publica matrícula: esperar a captura não adianta — pede já.
+      const pedirJa = !emCaptura || resultadoAnterior?.precisaDocumentos
+        || ((faltando).includes('matricula') && await fonteNaoPublicaMatricula(row?.fonte));
+      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && pedirJa)
         ? await pedirDocumentosAoLeiloeiro({ imovelId: String(imovelId), userId: ownerId, faltando: faltando })
         : null;
       if (pedidoLeiloeiro?.status === 'erro' || pedidoLeiloeiro?.status === 'falha') console.error('[gerar-documental] pedido ao leiloeiro:', pedidoLeiloeiro.status, pedidoLeiloeiro.erro);

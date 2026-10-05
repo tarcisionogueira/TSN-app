@@ -65,7 +65,7 @@ export default function OportunidadesPerfil({ cliente }) {
         </a>
       ))}
       {res.oportunidades?.length > 0 && (
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>{res.oportunidades.length} melhores de {res.totalCandidatos} lote(s) que cabem no perfil</div>
+        <div style={{ fontSize: 11, color: '#94a3b8' }}>{res.oportunidades.length} lote(s) que cabem no perfil, do maior para o menor encaixe</div>
       )}
     </div>
   );
