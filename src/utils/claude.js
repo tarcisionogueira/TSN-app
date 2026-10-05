@@ -192,17 +192,26 @@ REGRA CRÍTICA sobre PAGAMENTO PARCELADO: leilão JUDICIAL admite arrematação 
 
 REGRA CRÍTICA sobre o ENDEREÇO: "endereco"/"cidade"/"estado"/"cep" devem ser SEMPRE o endereço do IMÓVEL (o bem descrito na matrícula/edital), NUNCA o endereço de uma pessoa. Se o documento for PESSOAL e NÃO descrever o imóvel — comprovante de endereço, conta de luz/água, boleto, RG/CPF, procuração, comprovante de pagamento — deixe endereco/cidade/estado/cep VAZIOS (esse endereço é da pessoa, não do imóvel). Só preencha o endereço quando ele vier da descrição do IMÓVEL na matrícula, no edital ou no laudo.
 
+REGRAS CRÍTICAS DE LEITURA (05/10 — Alphaville Burle Marx, cada uma foi um erro real):
+- TIPO E ÁREA: matrícula de "lote de terreno" com AVERBAÇÃO DE CONSTRUÇÃO (casa, sobrado, prédio, edificação com área construída) descreve o imóvel CONSTRUÍDO: "tipo" = o da construção (casa/comercial…), "areaM2" = ÁREA CONSTRUÍDA, "areaTerrenoM2" = área do lote. "terreno" só quando NÃO há construção averbada nem descrita.
+- ORIGEM: alienação fiduciária, Lei 9.514/97, consolidação da propriedade em nome do credor, venda pelo banco/credor fiduciário, "(AF)" = "extrajudicial". "judicial" só com processo, vara ou ordem de juízo.
+- DÉBITOS ASSUMIDOS: só o que o documento põe por conta do COMPRADOR (IPTU, condomínio, regularização, com valor). NUNCA a dívida do financiamento/alienação fiduciária ou a hipoteca que está sendo executada — o leilão a extingue, o arrematante não a assume.
+- DATA DO LEILÃO: só a data do PREGÃO, lida no edital. Matrícula não tem data de leilão: datas de registro, prenotação, intimação ou consolidação NÃO são "dataLeilao" (deixe vazio).
+- AVALIAÇÃO: só um valor que o documento chame de avaliação / valor de avaliação / laudo. Venda de banco que só publica o LANCE MÍNIMO não tem avaliação: "valorAvaliacao" = null. Nunca copie o lance, o valor do contrato ou o da dívida para a avaliação.
+- CONDOMÍNIO/LOTEAMENTO: o nome comercial ("Alphaville Burle Marx", "Condomínio X") vai em "nomeCondominio".
+
 Retorne APENAS JSON:
 {
   "tipoDocumento": "matricula|edital|laudo|comprovante_endereco|boleto|documento_pessoal|outro",
   "descreveImovel": true (se o documento descreve o IMÓVEL — matrícula/edital/laudo) ou false (documento pessoal/financeiro),
   "nome": "identificação curta",
   "tipo": "casa|apartamento|terreno|comercial",
+  "nomeCondominio": "nome do condomínio/loteamento, ou vazio",
   "endereco": "endereço do IMÓVEL (vazio se o documento for pessoal/financeiro)",
   "cidade": "cidade do IMÓVEL (vazio se pessoal)",
   "estado": "UF do IMÓVEL (vazio se pessoal)",
   "cep": "",
-  "valorAvaliacao": número,
+  "valorAvaliacao": número ou null (null quando o documento não traz avaliação),
   "valorArrematacao": número (lance mínimo),
   "areaM2": número,
   "areaTerrenoM2": número ou null,
@@ -280,6 +289,47 @@ export async function extrairDadosDeArquivo(file) {
   return parseJSON(extractText(data));
 }
 
+// EDITAL COM VÁRIOS IMÓVEIS (05/10): o lote é localizado no texto pelos dados da matrícula
+// (src/utils/loteNoEdital.js) e a IA lê SÓ as condições gerais + o trecho dele. `null` = não achou.
+export async function extrairLoteDoEdital(texto, alvo) {
+  const { trechoDoLote } = await import('./loteNoEdital');
+  const trecho = trechoDoLote(texto, alvo);
+  if (!trecho) return null;
+  const quem = [alvo?.nome, alvo?.endereco, alvo?.cidade].filter(Boolean).join(' · ');
+  const content = `${getInstrucaoExtracao()}
+
+ATENÇÃO: este EDITAL lista VÁRIOS imóveis. Extraia SOMENTE o imóvel abaixo — ${quem}.
+Lance, débitos, ocupação e descrição são os DESTE item; das condições gerais use só o que vale para todos (data do pregão, leiloeiro, comissão, forma de pagamento). tipoDocumento = "edital".
+
+CONDIÇÕES GERAIS DO EDITAL (início do documento):
+${String(texto).slice(0, 12000)}
+
+ITEM DO EDITAL QUE É ESTE IMÓVEL:
+${trecho}`;
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+  return parseJSON(extractText(data));
+}
+
+// PDF ESCANEADO (05/10): a camada de texto da matrícula do Alphaville era só o carimbo do ONR. O
+// documental precisa dos ATOS (R-/Av-), não de um resumo — então a IA TRANSCREVE. Só para escaneado.
+export async function transcreverDocumento(file) {
+  const ehPdf = file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '');
+  const instrucao = 'Este documento é ESCANEADO. Transcreva INTEGRALMENTE o texto, na ordem, sem resumir e sem comentar. Na matrícula, preserve cada ato (R-n e Av-n) com data, partes, valores e números. Ignore carimbos de validação e de assinatura digital.';
+  let anexo;
+  if (ehPdf && (file?.size || 0) <= PDF_MAX_DIRETO) {
+    const { arquivoParaBase64 } = await import('./arquivo');
+    anexo = [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: await arquivoParaBase64(file) } }];
+  } else {
+    const { extrairTextoDoc } = await import('./extrairTextoDoc');
+    const r = await extrairTextoDoc(file);
+    const imagens = [r?.imagem, ...(r?.imagens || [])].filter((im) => im?.base64).slice(0, 8);
+    if (!imagens.length) throw new Error(r?.motivo || 'sem páginas legíveis para transcrever');
+    anexo = imagens.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType || 'image/jpeg', data: im.base64 } }));
+  }
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 8000, messages: [{ role: 'user', content: [...anexo, { type: 'text', text: instrucao }] }], system: 'Você transcreve documentos escaneados com fidelidade, sem inventar.' });
+  return extractText(data).trim();
+}
+
 /** Só o TEXTO de qualquer arquivo (PDF com texto, Word, .txt) — para campos de texto livre. */
 export async function textoDeArquivo(file) {
   const { extrairTextoDoc } = await import('./extrairTextoDoc');
@@ -321,6 +371,7 @@ export function consolidarDocsImovel(exts) {
     estado: put('estado', pick('estado', END)),
     cep: put('cep', pick('cep', END)),
     tipo: put('tipo', pick('tipo', END)),
+    nomeCondominio: put('nomeCondominio', pick('nomeCondominio', END)),
     areaM2: put('areaM2', pick('areaM2', END)),
     areaTerrenoM2: put('areaTerrenoM2', pick('areaTerrenoM2', END)),
     valorAvaliacao: put('valorAvaliacao', pick('valorAvaliacao', AVAL)),

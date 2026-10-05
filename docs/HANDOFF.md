@@ -36255,3 +36255,20 @@ teto 60 mil por doc, 12 docs) vai em `inputs.docsManuais` do mercado e do docume
 texto no corpo (cron/reabertura), recompõe dele; a trava conta `textoEdital`/`textoMatricula` como lidos; a
 tela reabre o lote manual com os anexos restaurados e o card fechado — só abre o card se não houver nada
 guardado (análises anteriores a hoje). `analise-nao-depende-do-state-volatil` atualizado: o recuperado vence.
+
+## 05/10 — Leitura dos anexos do lote manual: matrícula escaneada, edital com vários lotes, regras de extração
+Alphaville Burle Marx, 2ª tentativa do dono (lote `tsn_1791238803667_yx20b`). Medido no `inputs.docsManuais`:
+1. **Matrícula "lida — texto integral" = 410 caracteres do carimbo do ONR** ("Valide este documento…" ×3). PDF
+   escaneado. Agora `ehTextoSoCarimbo` (src/utils/loteNoEdital.js) detecta e a IA TRANSCREVE (`transcreverDocumento`)
+   — o documental precisa dos atos R-/Av-, não de resumo.
+2. **Edital do Bradesco tem ~20 imóveis**; a extração genérica voltou vazia. `trechoDoLote` localiza o item pelos
+   dados da matrícula (palavras do endereço/loteamento + áreas, cortando entre o lance do lote anterior e o dele) e
+   `extrairLoteDoEdital` lê só condições gerais + item. Rodado no texto REAL (54.801 car.): devolve exatamente o
+   item 6 — "Casa… terreno 440,18m² e construção 246,66m²… IPTU/condomínio ~R$ 20.000 do comprador… Ocupado. (AF).
+   Lance Mínimo: R$ 2.121.000,00". Teste `testar:lote-no-edital`.
+3. **Extração errava o imóvel inteiro**: matrícula de lote com casa averbada saiu `tipo: terreno` / área 440 → o
+   mercado avaliou um TERRENO (R$ 1,27 mi); `origem: judicial` numa venda AF do Bradesco; `debitosAssumidos: 2.770.000`
+   (a dívida fiduciária, que o leilão extingue); `dataLeilao` 13/07 tirada da matrícula (o pregão é 09/10). Regras
+   novas no prompt (`getInstrucaoExtracao`): construção averbada manda no tipo/área; AF/9.514 = extrajudicial; dívida
+   executada nunca é débito assumido; data só do edital; sem avaliação → null; `nomeCondominio` (vai ao mercado).
+Banco vendedor (Bradesco/AF) NÃO publica avaliação — a referência é o lance mínimo; o campo fica em branco.

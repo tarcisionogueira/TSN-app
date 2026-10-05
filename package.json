@@ -127,7 +127,8 @@
     "testar:vaga-garagem": "node scripts/testes/vaga-garagem.mjs",
     "testar:classificador-patio": "node scripts/testes/classificador-patio.mjs",
     "testar:vip-veiculo-titulo": "node scripts/testes/vip-veiculo-titulo.mjs",
-    "testar:docs-manuais": "node scripts/testes/docs-manuais.mjs"
+    "testar:docs-manuais": "node scripts/testes/docs-manuais.mjs",
+    "testar:lote-no-edital": "node scripts/testes/lote-no-edital.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

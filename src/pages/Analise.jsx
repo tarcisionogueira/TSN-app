@@ -12,7 +12,8 @@ import {
 import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
-import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel, extrairLoteDoEdital, transcreverDocumento } from '../utils/claude';
+import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil } from '../utils/loteNoEdital';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { ehDocArquivo, hrefDoc } from '../utils/documento';
@@ -1118,7 +1119,7 @@ export default function Analise() {
   const aplicarDadosDoArquivo = (ext) => {
     setD(p => ({
       ...p,
-      nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo,
+      nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo, nomeCondominio: ext.nomeCondominio || p.nomeCondominio,
       endereco: ext.endereco || p.endereco, cidade: ext.cidade || p.cidade,
       estado: ext.estado || p.estado, cep: ext.cep || p.cep,
       valorAvaliacao: ext.valorAvaliacao || p.valorAvaliacao,
@@ -1210,6 +1211,7 @@ export default function Analise() {
       .map((f) => ({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, nome: f.name, tipo: tipoPeloNomeArquivo(f.name) || 'outro', tipoDoNome: !!tipoPeloNomeArquivo(f.name), lendo: true, texto: '', ext: null, aviso: null, file: f }));
     if (!itens.length) return;
     setDocsManuais((prev) => [...prev, ...itens]);
+    const lidosAgora = [];
     for (const it of itens) {
       let texto = '', ext = null, aviso = null;
       try {
@@ -1218,6 +1220,18 @@ export default function Analise() {
         const [t, e] = await Promise.allSettled([textoDeArquivo(it.file), extrairDadosDeArquivo(it.file)]);
         texto = t.status === 'fulfilled' ? (t.value?.texto || '') : '';
         ext = e.status === 'fulfilled' ? (e.value || null) : null;
+        // Camada de texto que é SÓ o carimbo de assinatura digital = PDF escaneado (matrícula do
+        // Alphaville: 410 caracteres de "Valide este documento…", e a tela dizia "texto integral").
+        // O documental precisa dos atos da matrícula, não de um resumo: a IA transcreve.
+        if (ehTextoSoCarimbo(texto) && /pdf|image/i.test(`${it.file?.type} ${it.nome}`.replace(/\.(pdf|jpe?g|png|heic|webp)$/i, ' pdf'))) {
+          // Texto curto mas REAL (sem ser carimbo) sobrevive se a transcrição falhar.
+          const original = textoUtil(texto) ? texto : '';
+          texto = original;
+          try {
+            const tr = await transcreverDocumento(it.file);
+            if (!ehTextoSoCarimbo(tr)) { texto = `[Documento escaneado — transcrito pela IA]\n${tr}`; aviso = 'escaneado: transcrito pela IA'; }
+          } catch (errTr) { console.warn('[analise] transcrição do escaneado falhou:', errTr?.message); }
+        }
         if (!texto && ext?.observacoes) { texto = `[Documento escaneado — resumo lido pela IA]\n${ext.observacoes}`; aviso = 'escaneado: o texto integral não é legível, foi usado o resumo da IA'; }
         if (!texto && !ext) aviso = `não consegui ler (${(t.reason || e.reason)?.message || 'formato não suportado'})`;
         // Texto lido mas DADOS não (05/10, edital do Alphaville): antes a tela dizia "lido" e o relatório saía
@@ -1226,6 +1240,25 @@ export default function Analise() {
       } catch (err) { aviso = `não consegui ler (${err?.message || 'erro'})`; }
       setDocsManuais((prev) => prev.map((x) => (x.id === it.id ? { ...x, lendo: false, texto, ext, aviso,
         tipo: x.tipoDoNome ? x.tipo : (tipoPelaLeitura(ext) || x.tipo), file: undefined } : x)));
+      lidosAgora.push({ id: it.id, tipo: it.tipoDoNome ? it.tipo : (tipoPelaLeitura(ext) || it.tipo), texto, ext });
+    }
+    // EDITAL COM VÁRIOS IMÓVEIS (Bradesco: ~20 lotes num PDF) — a leitura genérica não sabe qual é o
+    // nosso e volta vazia (ou com o lote errado). 2ª passada: localiza o lote pelos dados da MATRÍCULA
+    // (ou da ficha) e lê só o item dele. Uma chamada a mais, só neste caso.
+    const exts = [...lidosAgora, ...docsManuais].map((x) => x.ext).filter(Boolean);
+    const daMatricula = exts.find((x) => x.tipoDocumento === 'matricula' && (x.endereco || x.nome)) || exts.find((x) => x.endereco);
+    const alvo = daMatricula || (d.endereco ? d : null);
+    for (const x of lidosAgora.filter((y) => y.tipo === 'edital' && y.texto && ehEditalMultiLote(y.texto))) {
+      let ext2 = null, aviso2;
+      if (!alvo) aviso2 = 'edital com vários imóveis: anexe a matrícula para localizarmos o lote — confira avaliação e lance';
+      else {
+        try {
+          ext2 = await extrairLoteDoEdital(x.texto, { nome: alvo.nome, endereco: alvo.endereco, cidade: alvo.cidade, nomeCondominio: alvo.nomeCondominio, areaM2: alvo.areaM2, areaTerrenoM2: alvo.areaTerrenoM2 });
+          aviso2 = !ext2 ? 'edital com vários imóveis: o lote não foi localizado no texto — confira avaliação e lance'
+            : Number(ext2.valorArrematacao) > 0 ? 'edital com vários imóveis: lote localizado pela matrícula' : 'lote localizado, mas sem lance legível — confira';
+        } catch (errLote) { aviso2 = `edital com vários imóveis: falha ao ler o lote (${errLote?.message || 'erro'}) — confira avaliação e lance`; }
+      }
+      setDocsManuais((prev) => prev.map((y) => (y.id === x.id ? { ...y, aviso: aviso2, ...(ext2 ? { ext: { ...ext2, tipoDocumento: 'edital' } } : {}) } : y)));
     }
     setOpenSec((p) => ({ ...p, doc: false, dados: true, viabilidade: true }));
     showMsg(itens.length > 1 ? `${itens.length} documentos lidos.` : `Documento lido: ${itens[0].nome}`);
