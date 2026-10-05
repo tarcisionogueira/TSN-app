@@ -36234,3 +36234,12 @@ judicial passa pelo classificador. Seco: 21/21 com cidade, 20/21 com data, mas m
 o título é texto livre ("Ford, Modelo Courier 1.6 Flex, Ano 2008", "FIAT PALIO FIRE - ANO 15/16"). Parser
 próprio `scripts/lib/vip-veiculo.mjs` (teste `testar:vip-veiculo-titulo` com os títulos reais; o padrão
 Detran segue pelo `marcaModeloAno` comum). Agendado GRAVA; disparo manual é seco salvo `vip_gravar=1`.
+
+## 05/10 — Lote MANUAL "sumia" das análises (achado do dono)
+Não sumia da lista: `minhas_analises_lista` devolvia o Alphaville (2º item). Sumia ao ABRIR. Duas causas em
+`Analise.jsx`: (1) a geração mandava `imovel: imovelInicial || null` — lote manual não tem `imovelInicial`, então
+gravava `imovel = null` e os dados ficavam só em `inputs.parecerInputs.d`; (2) a lista reabre com o state MAGRO
+({id, título, cidade}) e a recuperação via `imoveis_leilao` só existe para uuid — a ficha abria zerada (valor 0,
+área 0) e sem o card de anexos. Agora: geração grava `fotoLoteManual(d)` (`manual: true`); id `tsn_…` reabre lendo
+a foto da própria análise (ou remonta de `inputs.parecerInputs.d` nas antigas — conferido no Alphaville); o
+recuperado vence o state magro, re-semeia a ficha e reabre com o card de anexos (arquivos não ficam guardados).

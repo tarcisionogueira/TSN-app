@@ -63,6 +63,20 @@ const VAZIO = {
   cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: [],
 };
 
+// LOTE MANUAL (05/10, achado do dono: "o lote inserido manualmente não aparece nas análises").
+// Lote do acervo é relido do banco pelo uuid; o manual (`tsn_…`) só existe no que a análise gravou.
+// Gerava com `imovel: null` e, ao reabrir pela lista, a tela abria com o formulário zerado (valor 0,
+// área 0, sem o card de anexos) — com cara de análise sumida. Agora a geração grava esta FOTO do lote
+// e a reabertura a lê de volta (ou, nas análises antigas, remonta de `inputs.parecerInputs.d`).
+const ID_ACERVO_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ehIdManual = (id) => !!id && !ID_ACERVO_RE.test(String(id));
+const fotoLoteManual = (x, id, linkEdital) => ({
+  id, manual: true, titulo: x?.nome || x?.endereco || 'Imóvel', tipo: x?.tipo || '', endereco: x?.endereco || '',
+  cidade: x?.cidade || '', estado: x?.estado || '', valorAvaliacao: Number(x?.valorAvaliacao) || 0,
+  valorMinimo: Number(x?.valorArrematacao) || 0, areaM2: Number(x?.areaM2) || 0, leiloeiro: x?.leiloeiro || '',
+  dataLeilao: x?.dataLeilao || '', modalidade: x?.origem || '', linkEdital: linkEdital || '',
+});
+
 const STATUS_OPTS = [
   ['analise','Em Análise'],['aprovado','Aprovado'],['arrematado','Arrematado'],
   ['em_reforma','Em Reforma'],['venda','À Venda'],['alugado','Alugado'],
@@ -183,7 +197,9 @@ export default function Analise() {
   const [params] = useSearchParams();
   const idDaUrl = (params.get('imovel') || '').trim() || null;
   const [imovelRecuperado, setImovelRecuperado] = useState(null);
-  const imovelInicial = location.state?.imovel || imovelRecuperado;
+  // O recuperado VENCE o state: o state que a lista passa é magro ({id, título, cidade}); quando a
+  // recuperação roda é porque ele não servia (ver o efeito RECUPERAÇÃO).
+  const imovelInicial = imovelRecuperado || location.state?.imovel;
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
   const paraUserId = location.state?.paraUserId || null;
@@ -199,7 +215,9 @@ export default function Analise() {
   // a resposta do banco (e ficava aberta de vez quando o state se perdia): foi o "campo de
   // inclusão manual expandido num imóvel que tem documentos anexados" relatado em 10/09.
   const semImovelBase = !imovelInicial && !idDaUrl;
-  const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase);
+  // Lote manual reaberto pela lista: o card de anexos volta aberto — os arquivos não ficam guardados,
+  // e completar/regerar o documental exige anexá-los de novo.
+  const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase || ehIdManual(idDaUrl));
 
   const temCNJ = ROLES_COM_CNJ.includes(role);
   const semLimite = ROLES_SEM_LIMITE.includes(role);
@@ -306,9 +324,30 @@ export default function Analise() {
   useEffect(() => {
     if (!idDaUrl || recuperouRef.current) return;
     const jaTem = location.state?.imovel;
-    if (jaTem && String(jaTem.id) === idDaUrl && (jaTem.endereco || jaTem.cidade)) return; // state serve
+    const manual = ehIdManual(idDaUrl);
+    // Lote manual: só a foto completa (`manual: true`) serve — a magra da lista tem cidade e nada mais.
+    if (jaTem && String(jaTem.id) === idDaUrl && (manual ? jaTem.manual : (jaTem.endereco || jaTem.cidade))) return; // state serve
     recuperouRef.current = true;
     let vivo = true;
+    if (manual) {
+      (async () => {
+        const uid = effectiveUserId || user?.id;
+        const ler = (tabela, cols) => lerComRenovacao(supabase, () => supabase.from(tabela).select(cols)
+          .eq('user_id', uid).eq('imovel_id', idDaUrl).limit(1));
+        const [m, dc] = await Promise.all([ler('analises_mercado', 'imovel, inputs'), ler('analises_documental', 'imovel')]);
+        if (!vivo) return;
+        const foto = m.data?.[0]?.imovel || dc.data?.[0]?.imovel;
+        const dIn = m.data?.[0]?.inputs?.parecerInputs?.d;
+        const rec = foto?.manual ? foto : (dIn ? fotoLoteManual(dIn, idDaUrl) : null);
+        if (!rec) {
+          const motivo = m.error?.message || dc.error?.message || 'sem análise gravada';
+          registrarEvento('erro_ui', { alvo: 'analise_recuperar_manual', detalhe: `${idDaUrl}: ${motivo}`.slice(0, 120) });
+          return;
+        }
+        setImovelRecuperado({ ...rec, id: idDaUrl });
+      })();
+      return () => { vivo = false; };
+    }
     (async () => {
       // `{ data, error }`: falha de leitura não pode virar "imóvel sem endereço" — que é
       // exatamente o defeito que esta recuperação existe para consertar.
@@ -1311,7 +1350,7 @@ export default function Analise() {
     registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'iniciou no servidor' });
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
-      { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial || null, paraUserId },
+      { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial && !ehIdManual(analiseImovelId) ? imovelInicial : fotoLoteManual(dSnap, analiseImovelId, urlEdital), paraUserId },
       { mercadoInputs, parecerInputs }
     );
   };
@@ -1351,6 +1390,13 @@ export default function Analise() {
     if (!idNovo) return;
     setD((prev) => (prev.imovelIdAcervo === idNovo ? prev : sementeDoImovel(imovelInicial)));
   }, [imovelInicial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Recuperado com o MESMO id do state magro (lista → lote manual): o efeito acima não dispara, e a
+  // ficha ficava semeada com o magro (valor 0, área 0). Re-semeia — salvo se o usuário já preencheu.
+  useEffect(() => {
+    if (!imovelRecuperado) return;
+    setD((prev) => (prev.imovelIdAcervo === imovelRecuperado.id && (Number(prev.valorAvaliacao) || Number(prev.areaM2))
+      ? prev : sementeDoImovel(imovelRecuperado)));
+  }, [imovelRecuperado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Conteúdo DERIVADO do imóvel anterior — some junto, pelo mesmo motivo. `aplicadoRef` volta a
   // null para que o resultado do imóvel novo seja aplicado: ele guarda o `updatedAt` já aplicado
@@ -1537,7 +1583,7 @@ export default function Analise() {
     };
     showMsg('Análise documental iniciada no servidor, pode fechar a aba; acompanhe em "Análises" no topo.');
     iniciarDocumental(
-      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
+      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial && !ehIdManual(analiseImovelId) ? imovelInicial : fotoLoteManual(d, analiseImovelId, urlEdital), paraUserId },
       payload
     );
     // Gera IN-PLACE como o mercadológico: o card mostra "Gerando…" e o usuário
