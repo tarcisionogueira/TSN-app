@@ -2194,7 +2194,8 @@ export default function Analise() {
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <FileText size={14} style={{ flexShrink:0 }}/>
                       <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.label}</span>
-                      {it.viaPagina && <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600, flexShrink:0 }}>no site</span>}
+                      {/* "no site" era lido como "existe no site" — e o link só abre a PÁGINA do lote (05/10). */}
+                      {it.viaPagina && <span title="Não temos o arquivo — o link abre a página do lote no leiloeiro" style={{ fontSize:10, color:'#b45309', fontWeight:700, flexShrink:0 }}>não capturado · ver site</span>}
                       <ExternalLink size={11} style={{ marginLeft:'auto', flexShrink:0 }}/>
                     </a>
                   ) : (

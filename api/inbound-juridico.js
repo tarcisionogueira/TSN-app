@@ -569,13 +569,15 @@ function dataIso(v) {
   return null;
 }
 async function tratarRespostaLeiloeiro(data, headers, messageId, token) {
-  const rp = await sb(`documental_pedidos_leiloeiro?resposta_token=eq.${encodeURIComponent(token)}&select=id,imovel_id,user_id,itens_pedidos,anexos_recebidos&limit=1`);
+  const rp = await sb(`documental_pedidos_leiloeiro?resposta_token=eq.${encodeURIComponent(token)}&select=id,imovel_id,user_id,itens_pedidos,anexos_recebidos,automatico&limit=1`);
   if (!rp.ok) { console.error('[inbound-leiloeiro] pedido HTTP', rp.status); return json({ error: 'pedido_ilegivel' }, 500); }
   const [pedido] = await rp.json().catch(() => []);
   if (!/^[0-9a-f-]{36}$/i.test(String(pedido?.imovel_id || ''))) return null; // token desconhecido → roteamento normal (atendimento)
 
   const aut = autenticacaoDe(headers);
-  const caixaId = await registrarNaCaixa(data, headers, messageId, { aut, dono: pedido.user_id });
+  // Pedido AUTOMÁTICO saiu em nome da equipe: a resposta vai para a caixa comum (dono null), não
+  // para o cliente que gerou o relatório.
+  const caixaId = await registrarNaCaixa(data, headers, messageId, { aut, dono: pedido.automatico ? null : pedido.user_id });
   const origem = `email-leiloeiro:${messageId || data?.email_id || token}`;
   const rj = await sb(`imovel_anexos?imovel_id=eq.${pedido.imovel_id}&origem_url=eq.${encodeURIComponent(origem)}&select=id&limit=1`);
   if (rj.ok && (await rj.json().catch(() => [])).length) return json({ ok: true, duplicate: true, leiloeiro: true });
@@ -625,6 +627,14 @@ async function tratarRespostaLeiloeiro(data, headers, messageId, token) {
   const rpd = await sb(`documental_pedidos_leiloeiro?id=eq.${pedido.id}`, { method: 'PATCH', prefer: 'return=representation',
     body: { respondido_em: new Date().toISOString(), anexos_recebidos: (pedido.anexos_recebidos || 0) + salvos.length } });
   if (!rpd.ok) console.error('[inbound-leiloeiro] marcar respondido HTTP', rpd.status);
+  // Quem esperava pelo documento é atendido sozinho: toda análise documental deste lote parada em
+  // "faltam documentos" ganha regen_motivo, e o regenerar-relatorios-cron re-gera com o arquivo novo.
+  if (salvos.length) {
+    const rr = await sb(`analises_documental?imovel_id=eq.${encodeURIComponent(pedido.imovel_id)}&result->>precisaDocumentos=eq.true`, {
+      method: 'PATCH', prefer: 'return=representation', body: { regen_motivo: 'matricula_nao_lida', regen_tentativas: 0, updated_at: new Date().toISOString() } }); // sem gatilho de updated_at: a janela do cron lê esta data
+    if (!rr.ok) console.error('[inbound-leiloeiro] marcar regeração HTTP', rr.status);
+    else console.log('[inbound-leiloeiro] análises a regerar:', (await rr.json().catch(() => [])).length);
+  }
   return json({ ok: true, leiloeiro: true, pedido_id: pedido.id, anexos: salvos, falhas, caixa_id: caixaId });
 }
 

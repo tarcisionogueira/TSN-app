@@ -36052,3 +36052,15 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
   — a equipe reclassifica. Migração `20261005_pedido_leiloeiro_resposta_token.sql` (aplicada).
 - Lote Guarulhos (leilaobrasil_3801): edital .doc já reconhecido; o relatório de 04/10 21:20 é anterior à
   leitura de Word — "Gerar novamente" lê o edital.
+
+### 05/10 (tarde 2) — Sem documento, o documental PEDE ao leiloeiro (regra do dono)
+- `api/_pedido-leiloeiro-auto.js`: quando o documental cai em "faltam documentos" e a captura automática
+  não resolve (sem captura possível, ou 2ª passada ainda sem doc), o e-mail sai EM NOME DA EQUIPE para o
+  leiloeiro, reply-to `documentos+<token>@`. 1 pedido por LOTE a cada 7 dias (inclui `sem_contato`); não
+  pede para Caixa nem quando havia relatório bom preservado. Coluna `automatico` (migração aplicada).
+- A resposta com anexo (inbound) grava no lote E marca `regen_motivo='matricula_nao_lida'` em toda análise
+  documental do lote parada em `precisaDocumentos` → o regenerar-relatorios-cron gera sozinho (~2 h).
+- Tela: `ehDocArquivo` aceita Word (o edital .doc aparecia "no site"); o fallback por tópico agora diz
+  "não capturado · ver site" em vez de "no site" (lido como "existe no site").
+- Guarulhos (leilaobrasil_3801): mercadológico regerado pelo workflow `regerar-relatorios.yml`; o processo
+  0077091-64.2003.8.26.0002 já foi extraído do edital.

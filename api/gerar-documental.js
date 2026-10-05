@@ -26,6 +26,7 @@ import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { cacheGravar } from './_doc-extracao.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
+import { pedirDocumentosAoLeiloeiro, fraseDoPedido } from './_pedido-leiloeiro-auto.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
@@ -1184,6 +1185,14 @@ export default async function handler(req, res) {
       const matriculaNaoAutoResolve = faltandoInicial.includes('matricula') && !ehCaixaFonte
         && (temLoginParaFonte(row?.fonte) || !!row?.matricula_checada_em);
       const emCaptura = enfileirado && !matriculaNaoAutoResolve;
+      // PEDIDO AO LEILOEIRO (05/10, regra do dono): sem o documento, o relatório não sai — então
+      // pedimos. Na 1ª passada com captura automática em curso, espera a captura; se ela não
+      // resolveu (2ª passada ainda sem doc) ou não há captura possível, o e-mail sai. Dedup de
+      // 7 dias por LOTE no helper.
+      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && (!emCaptura || resultadoAnterior?.precisaDocumentos))
+        ? await pedirDocumentosAoLeiloeiro({ imovelId: String(imovelId), userId: ownerId, faltando: faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'] })
+        : null;
+      if (pedidoLeiloeiro?.status === 'erro' || pedidoLeiloeiro?.status === 'falha') console.error('[gerar-documental] pedido ao leiloeiro:', pedidoLeiloeiro.status, pedidoLeiloeiro.erro);
       const semDocs = {
         precisaDocumentos: true,
         integrado: (ehCaixaFonte || temPaginaLote) && !matriculaNaoAutoResolve,
@@ -1197,6 +1206,10 @@ export default async function handler(req, res) {
             ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
             : `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
+      if (pedidoLeiloeiro && pedidoLeiloeiro.status !== 'nada_a_pedir') {
+        semDocs.pedidoLeiloeiro = { status: pedidoLeiloeiro.status, em: pedidoLeiloeiro.em || null };
+        semDocs.motivo += fraseDoPedido(pedidoLeiloeiro);
+      }
       // RAIZ do "Preparando documentos…" preso: sem regen_motivo, o regenerar-relatorios-cron
       // NUNCA reprocessava este estado — então, quando a matrícula chegava (ou a captura falhava),
       // nada regerava o laudo. Marcamos 'matricula_nao_lida' SÓ quando a captura pode se resolver
@@ -1980,6 +1993,14 @@ export default async function handler(req, res) {
       const matriculaNaoAutoResolve = faltando.includes('matricula') && !ehCaixaFonte
         && (temLoginParaFonte(row?.fonte) || !!row?.matricula_checada_em);
       const emCaptura = enfileirado && !matriculaNaoAutoResolve;
+      // PEDIDO AO LEILOEIRO (05/10, regra do dono): sem o documento, o relatório não sai — então
+      // pedimos. Na 1ª passada com captura automática em curso, espera a captura; se ela não
+      // resolveu (2ª passada ainda sem doc) ou não há captura possível, o e-mail sai. Dedup de
+      // 7 dias por LOTE no helper.
+      const pedidoLeiloeiro = (!ehCaixaFonte && !tinhaRelatorioBom && (!emCaptura || resultadoAnterior?.precisaDocumentos))
+        ? await pedirDocumentosAoLeiloeiro({ imovelId: String(imovelId), userId: ownerId, faltando: faltando })
+        : null;
+      if (pedidoLeiloeiro?.status === 'erro' || pedidoLeiloeiro?.status === 'falha') console.error('[gerar-documental] pedido ao leiloeiro:', pedidoLeiloeiro.status, pedidoLeiloeiro.erro);
       const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
       const faltaTxt = faltando.map(nomeDoc).join(' e ');
       const jaTemTxt = lidos.length ? `Já lemos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
@@ -1996,6 +2017,10 @@ export default async function handler(req, res) {
             ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
             : `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
+      if (pedidoLeiloeiro && pedidoLeiloeiro.status !== 'nada_a_pedir') {
+        semDocs.pedidoLeiloeiro = { status: pedidoLeiloeiro.status, em: pedidoLeiloeiro.em || null };
+        semDocs.motivo += fraseDoPedido(pedidoLeiloeiro);
+      }
       // RAIZ do "Preparando documentos…" preso: sem regen_motivo, o regenerar-relatorios-cron
       // NUNCA reprocessava este estado — então, quando a matrícula chegava (ou a captura falhava),
       // nada regerava o laudo. Marcamos 'matricula_nao_lida' SÓ quando a captura pode se resolver

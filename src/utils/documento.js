@@ -32,8 +32,10 @@ export const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim
  * (SUPERBID, GRUPOLANCE, BIASI, SOLD, VIP, SODRE…), então tratar link como documento
  * promete um arquivo em ~14 mil lotes e entrega a página do anúncio.
  */
+// Word/ODT/RTF contam (05/10): o edital do LEILAOBRASIL é `.doc` — a tela dizia "Edital no site"
+// com o arquivo no banco e o selo aceso. Mesma régua do `doc_arquivo()` do banco.
 export const ehDocArquivo = (v) => ehUrl(v)
-  && (/\.pdf(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
+  && (/\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
 
 /**
  * Matrícula: além de ser arquivo, não pode ser o `matricula.asp` da Caixa — aquela
