@@ -1,11 +1,11 @@
 /**
  * Diagnóstico (#50, 05/10): por que um edital de VÁRIOS lotes não foi reconhecido como tal?
  * Lê o edital com as MESMAS funções de produção e imprime: ehDocMultiLote, as marcações de lote
- * achadas e trechos em volta de "lote". Não grava nada. Env: URLS (separadas por espaço).
+ * achadas e trechos em volta de "lote". Não grava nada. Env: EDITAIS_DIAG (URLs separadas por espaço).
  */
 import { lerTexto, ehDocMultiLote, isolarBlocoDoLote } from '../api/_edital-extrato.js';
 
-for (const url of String(process.env.URLS || '').split(/\s+/).filter(Boolean)) {
+for (const url of String(process.env.EDITAIS_DIAG || '').split(/\s+/).filter(Boolean)) {
   const t = await lerTexto(url, Date.now() + 60000);
   console.log(`\n===== ${url}\ntexto: ${t ? t.length : 'NULO'} chars · ehDocMultiLote=${t ? ehDocMultiLote(t) : '-'}`);
   if (!t) continue;

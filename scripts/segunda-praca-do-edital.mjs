@@ -1,8 +1,8 @@
 /**
  * #37 (05/10): valor da 2ª praça lido do EDITAL guardado no nosso bucket.
- * EM SECO por padrão (só imprime). APLICAR=1 grava `valor_minimo_2` onde está nulo.
+ * EM SECO por padrão (só imprime). PRACA2_APLICAR=1 grava `valor_minimo_2` onde está nulo.
  * Mede por fonte: lidos (texto extraído) · achou (regra da 2ª praça) · gravados.
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: N (200), FONTE, APLICAR.
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: PRACA2_N (200), PRACA2_FONTE, PRACA2_APLICAR.
  */
 import { createClient } from '@supabase/supabase-js';
 import { extrairSegundaPraca } from '../api/_segunda-praca.js';
@@ -14,9 +14,9 @@ const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(2); }
 const sb = createClient(SB_URL, SB_KEY);
-const N = Number(process.env.N || 200);
-const FONTE = (process.env.FONTE || '').trim();
-const APLICAR = process.env.APLICAR === '1';
+const N = Number(process.env.PRACA2_N || 200);
+const FONTE = (process.env.PRACA2_FONTE || '').trim();
+const APLICAR = process.env.PRACA2_APLICAR === '1';
 
 // Candidatos: lote ativo, sem valor da 2ª praça, com avaliação, fora da Caixa — paginado (teto 1.000).
 const lotes = [];

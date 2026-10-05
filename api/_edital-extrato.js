@@ -29,8 +29,36 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
  * apaga o que o edital apurou, e duas gerações simultâneas do mesmo lote não se atropelam.
  * Best-effort por contrato: falhar aqui nunca afeta o relatório em curso.
  */
+// IDENTIDADE CONTAMINADA (05/10, #50): o mesmo logradouro "do documento" em lotes de CIDADES
+// diferentes da mesma fonte não é o endereço deles — é o do leiloeiro (cabeçalho do edital: "Rua
+// Alice Além Saadi, 855" em 25 lotes de 15 cidades do 3TORRES) ou o de UM lote de um edital de
+// vários (ZUK "Rua Minas Gerais" em 26 lotes de 23 cidades). A ficha mostrava isso ao cliente como
+// "Endereço na documentação". Se o logradouro já está em 2+ lotes ativos da fonte em outra cidade,
+// a identidade não é publicada. Falha de leitura → não publica (o lado seguro: ficha sem o campo).
+// Logradouro + BAIRRO quando há bairro: "Rua São Paulo" existe em muitas cidades de verdade; a
+// cópia contaminada traz a identidade INTEIRA (mesmo bairro também), o homônimo legítimo não.
+async function identidadeContaminada(imovelId, logradouro, bairro) {
+  const h = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+  try {
+    const r1 = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,cidade_norm&limit=1`, { headers: h, signal: AbortSignal.timeout(6000) });
+    if (!r1.ok) return true;
+    const [im] = await r1.json();
+    if (!im?.fonte) return true;
+    const r2 = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?fonte=eq.${encodeURIComponent(im.fonte)}&ativo=eq.true&id=neq.${encodeURIComponent(imovelId)}`
+      + `&doc_fatos->identidade->>logradouro=eq.${encodeURIComponent(logradouro)}`
+      + (bairro ? `&doc_fatos->identidade->>bairro=eq.${encodeURIComponent(bairro)}` : '') + '&select=cidade_norm&limit=20', { headers: h, signal: AbortSignal.timeout(6000) });
+    if (!r2.ok) return true;
+    const outras = new Set((await r2.json()).map((x) => x.cidade_norm).filter((c) => c && c !== im.cidade_norm));
+    return outras.size >= 2;
+  } catch { return true; } // padrao-ok: sem conferir, não publica — ficha sem endereço é melhor que endereço de outro
+}
+
 async function publicarDocFatos(imovelId, fatos) {
   if (!SUPABASE_URL || !SERVICE_KEY || !imovelId || !fatos) return;
+  if (fatos.identidade?.logradouro && await identidadeContaminada(imovelId, fatos.identidade.logradouro, fatos.identidade.bairro)) {
+    console.warn('[doc-fatos] identidade não publicada (logradouro repetido em outras cidades da fonte):', imovelId, fatos.identidade.logradouro);
+    fatos = { ...fatos, identidade: null };
+  }
   const uteis = Object.fromEntries(Object.entries(fatos).filter(([, v]) => v && (typeof v !== 'object' || Object.values(v).some((x) => x !== null && x !== ''))));
   if (!Object.keys(uteis).length) return;
   try {
@@ -73,7 +101,16 @@ export function ehDocMultiLote(texto) {
   const nums = new Set();
   for (const m of t.matchAll(/(?:^|[\n.;]\s*|\s{2,})Lotes?\s*(?:n[ºo°.]?\s*)?(\d{1,3})\s*[)\-–:]/gi)) nums.add(Number(m[1]));
   for (const m of t.matchAll(/^[ \t]*Lotes?[ \t]*(?:n[ºo°.]?[ \t]*)?(\d{1,3})[ \t]*$/gim)) nums.add(Number(m[1]));
-  return nums.size >= 2;
+  if (nums.size >= 2) return true;
+  // 3ª forma (05/10, #50 — TRT-15/3TORRES): hasta unificada numera os bens por PROCESSO, sem a
+  // palavra "lote": "1: 0180100-24.1994.5.15.0096 - EXE3 - Jundiaí". Dois itens distintos = vários bens.
+  const itens = new Set([...t.matchAll(/^[ \t]*(\d{1,3})\s*:\s*\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/gm)].map((m) => Number(m[1])));
+  if (itens.size >= 2) return true;
+  // 4ª forma (05/10, #50 — edital de consolidação da Caixa, 146 páginas): lista os imóveis pela
+  // MATRÍCULA. 3+ matrículas distintas = vários imóveis (lote único cita a sua e, às vezes, a de
+  // origem — por isso 3, não 2). Errar aqui só deixa de extrair identidade: o lado seguro.
+  const mats = new Set([...t.matchAll(/matr[íi]cula\s*(?:n[ºo°.]?\s*)?:?\s*(\d[\d.]{2,9})/gi)].map((m) => m[1].replace(/\D/g, '')));
+  return mats.size >= 3;
 }
 
 export function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
@@ -509,7 +546,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     if (hit?.campos?.condicoes) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
       pagamento = hit.campos.pagamento || null; deCache = true;
-      custos = hit.campos.custos || null; identidade = hit.campos.identidade || null;
+      // Identidade de cache gravado ANTES de 05/10 13h UTC fica de fora: o detector de edital de
+      // vários bens não reconhecia TRT ("1: processo") nem lista por matrícula, e o cache por URL
+      // republicava a identidade de outro lote a cada geração (#50).
+      const cacheConfiavel = !hit.atualizado_em || Date.parse(hit.atualizado_em) >= Date.parse('2026-10-05T13:00:00Z');
+      custos = hit.campos.custos || null; identidade = cacheConfiavel ? (hit.campos.identidade || null) : null;
       processo = hit.campos.processo || null;
     } else {
       const txt = await lerTexto(url, fim);

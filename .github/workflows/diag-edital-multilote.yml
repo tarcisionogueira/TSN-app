@@ -12,5 +12,5 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm ci --ignore-scripts
-      - env: { URLS: '${{ inputs.urls }}' }
+      - env: { EDITAIS_DIAG: '${{ inputs.urls }}' }
         run: node scripts/diag-edital-multilote.mjs

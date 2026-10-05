@@ -1,0 +1,19 @@
+name: Limpar identidade contaminada da ficha (#50)
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar: { description: '1 = grava (padrão: em seco)', default: '0' }
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts
+      - env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          IDENT_APLICAR: ${{ inputs.aplicar }}
+        run: node scripts/limpar-identidade-contaminada.mjs

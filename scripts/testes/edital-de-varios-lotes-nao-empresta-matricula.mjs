@@ -13,5 +13,11 @@ eq('"LOTE 001" sozinho na linha (ZUK)', ehDocMultiLote(zuk), true);
 eq('endereço "Lote 23 Quadra 02" em linhas não é enumeração', ehDocMultiLote('ENDEREÇO Rua X, 10\nLote 23 Quadra 02\nLote 24 Quadra 02, Fortaleza'), false);
 eq('"LOTE 001" e "Lote 1" são o mesmo lote', ehDocMultiLote('LOTE 001\nCasa em Itu.\nLote 1 - Casa em Itu'), false);
 eq('texto vazio', ehDocMultiLote(''), false);
+// 05/10 (#50) — trechos REAIS do diagnóstico em produção (TRT-15 via 3TORRES e edital da Caixa).
+const trt = 'seguindo-se os descritivos dos lotes e/ou itens que o compõem, a saber:\n1: 0180100-24.1994.5.15.0096 - EXE3 - Jundiaí\n1.1 Tipo do Bem: Imóvel\nIdentificação: Matrícula: 65573 - 1º Cartório\n2: 0010234-11.2019.5.15.0002 - EXE1 - Jundiaí\n2.1 Tipo do Bem: Imóvel';
+eq('TRT: itens "N: processo" são multi-lote', ehDocMultiLote(trt), true);
+eq('TRT: um item só não é', ehDocMultiLote('1: 0180100-24.1994.5.15.0096 - EXE3 - Jundiaí\n1.1 Tipo do Bem: Imóvel'), false);
+eq('3 matrículas distintas = vários imóveis', ehDocMultiLote('Imóvel A, Matrícula: 99543. Imóvel B, matrícula nº 10.359. Imóvel C, MATRÍCULA 7513.'), true);
+eq('matrícula + origem (2) não é', ehDocMultiLote('Imóvel objeto da matrícula nº 12.345, aberta a partir da matrícula 6.789.'), false);
 console.log(`${falhas ? '✗' : '✓'} edital-de-varios-lotes: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);
