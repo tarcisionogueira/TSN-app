@@ -12,7 +12,7 @@ on:
 jobs:
   rodar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120   # 05/10: 3.000 editais não cabem em 30 min (parou em ~1.000)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
