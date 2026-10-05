@@ -8,6 +8,7 @@
  */
 import { loteDoPayload, descricaoDoLote } from './nordeste-parse.mjs';
 import { num, numPayload, fotoDeHtml } from './dom-parse-util.mjs';
+import { classificarPatio } from './patio-veiculo.mjs';
 // Veículo de pátio ("veículos conservados") vale R$ 400–1.500 de verdade: o piso de imóvel (R$ 1.000)
 // descartava 31 de 40 no seco de 30/09. Aqui o piso é R$ 100.
 const plausV = v => (v >= 100 && v <= 50_000_000 ? v : 0);
@@ -101,6 +102,7 @@ export function veiculoDoDetalhe(html, url) {
 }
 
 export function montarRowVeiculo(url, v) {
+  const patio = classificarPatio(v.descricao);
   return {
     fonte: 'NORDESTE', fonte_id: `nordeste_${(slugDoLote(url).match(/^\d+-\d+/) || [slugDoLote(url)])[0]}`,
     titulo: v.titulo, descricao: v.descricao, marca: v.marca, modelo: v.modelo,
@@ -110,7 +112,8 @@ export function montarRowVeiculo(url, v) {
     // Só manda `fotos` quando leu uma: null apagaria a já gravada numa leitura que falhou.
     ...(v.foto ? { fotos: [v.foto] } : {}),
     leiloeiro: v.leiloeiro, modalidade: 'judicial', forma_pagamento: 'a_vista', is_sucata: false,
-    status_patio: 'indefinido', status_patio_motivo: 'sem sinal de pátio na ficha (nordeste)',
+    // Classificador ÚNICO (lib/patio-veiculo.mjs): "Localização do Bem: …" sem sinal de devedor = selo.
+    status_patio: patio.status, status_patio_motivo: patio.motivo,
     ativo: !v.encerrado, atualizado_em: new Date().toISOString(),
   };
 }

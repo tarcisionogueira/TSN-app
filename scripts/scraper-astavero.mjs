@@ -197,6 +197,8 @@ async function coletarVeiculos(tenant) {
     if (det?.lote?.status && det.lote.status !== 'Aberto') { fora++; continue; }
     const row = montarRowVeiculoAstavero(item, det, tenant, { marcaModeloAno, tipoVeiculo });
     if (!row.valor_minimo) { fora++; continue; }
+    // Regra do dono (13/09): bem com o executado/devedor NUNCA é gravado — mesmo ponto de salvarVeiculos.
+    if (row.status_patio === 'excluido') { fora++; continue; }
     // A plataforma mantém "Aberto" lote de leilão vencido há meses (visto nos imóveis): entra inativo.
     if (row.data_leilao && Date.parse(row.data_leilao) < limite) { row.ativo = false; vencidos++; }
     for (const k of ['fotos', 'anexos']) if (row[k] == null) delete row[k];   // null apagaria o que já existe
@@ -204,7 +206,7 @@ async function coletarVeiculos(tenant) {
   }
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
   console.log(`[${tenant.fonte}] veículos: ${itens.length} listados · ${prontos.length} prontos (${vencidos} vencidos → inativos) · ${fora} fora · ${lerDetalhe.falhas()} sem detalhe`
-    + ` · marca ${pct((r) => r.marca)}% · ano ${pct((r) => r.ano_modelo)}% · placa ${pct((r) => r.placa)}% · foto ${pct((r) => r.fotos)}% · cidade ${pct((r) => r.cidade && r.estado)}%`);
+    + ` · pátio ${pct((r) => r.status_patio === 'confirmado')}%/selo ${pct((r) => r.status_patio === 'nao_confirmado')}% · marca ${pct((r) => r.marca)}% · ano ${pct((r) => r.ano_modelo)}% · placa ${pct((r) => r.placa)}% · foto ${pct((r) => r.fotos)}% · cidade ${pct((r) => r.cidade && r.estado)}%`);
   if (DRYRUN) {
     for (const r of prontos.slice(0, 3)) console.log(`   · ${r.fonte_id} | ${r.tipo_veiculo} | ${r.marca || '?'} ${r.modelo || ''} ${r.ano_fabricacao || '?'}/${r.ano_modelo || '?'} | placa ${r.placa || '—'} | R$ ${r.valor_minimo} / aval ${r.valor_avaliacao} | ${r.cidade}/${r.estado} | ${r.data_leilao?.slice(0, 10)} | sucata=${r.is_sucata} ativo=${r.ativo}`);
     return true;

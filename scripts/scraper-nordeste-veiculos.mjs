@@ -68,6 +68,8 @@ async function main() {
       if (v.motivo) { falhas++; console.warn(`  ${url}: ${v.motivo}`); continue; }
       if (!v.valor_minimo) { falhas++; console.warn(`  ${url}: sem valor`); continue; }
       const row = montarRowVeiculo(url, v);
+      // Regra do dono (13/09): bem com o executado/devedor nunca é gravado.
+      if (row.status_patio === 'excluido') { console.warn(`  ${url}: com o executado/devedor — não gravado`); continue; }
       rows.push(row);
       if (v.email_leiloeiro) contatos.set(v.leiloeiro, { leiloeiro: v.leiloeiro, email: v.email_leiloeiro, obs: 'payload do lote (nordesteleiloes.com.br)' });
       if (rows.length <= 8) console.log(`  [${DRYRUN ? 'seco' : 'ok'}] ${row.tipo_veiculo} · ${row.marca || '?'} ${row.modelo || ''} ${row.ano_modelo || ''} · R$ ${row.valor_minimo} / aval ${row.valor_avaliacao} · ${row.cidade || '?'}/${row.estado || '?'} · placa ${row.placa || '—'} · ativo=${row.ativo}`);

@@ -15,6 +15,7 @@
  *                  endereco, cep}, nome, detalhada(HTML), status} }
  */
 import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
+import { classificarPatio } from './patio-veiculo.mjs';
 
 export const TENANTS = [
   { fonte: 'DAMIANILEILOES', leiloeiro: 'Damiani Leilões', base: 'https://www.damianileiloes.com.br' },
@@ -173,6 +174,7 @@ export function montarRowVeiculoAstavero(item, det, tenant, { marcaModeloAno, ti
     .map((a) => ({ tipo: /edital/i.test(a.arquivo || a.url) ? 'edital' : 'outro', nome: /edital/i.test(a.arquivo || a.url) ? 'Edital' : 'Documento', url: a.url }));
   const fotos = [item.image].concat((Array.isArray(lote.anexos) ? lote.anexos : []).filter((a) => a && !a.private && /\.(jpe?g|png|webp)(\?|$)/i.test(a.url || '')).map((a) => a.url))
     .filter((u, i, arr) => u && /^https?:\/\//.test(u) && arr.indexOf(u) === i);
+  const patio = classificarPatio(descricao);
   const sucata = lote.sucata === true || /\bsucata\b/i.test(`${nome} ${descricao.slice(0, 400)}`);
   return {
     fonte: tenant.fonte, fonte_id: `${tenant.fonte.toLowerCase()}_${item.id}`,
@@ -192,9 +194,10 @@ export function montarRowVeiculoAstavero(item, det, tenant, { marcaModeloAno, ti
     // `raw.lot_location_address` é onde a tela do veículo lê o endereço do pátio (src/utils/patioVeiculo.js).
     raw: { plataforma: 'astavero', processo: lote.p?.processo || null, vara: lote.p?.vara || item.vara || null, praca: item.praca ?? null,
       segunda_praca: segunda || null, lot_location_address: daDesc.vistoria },
-    // Local de VISTORIA não prova "recolhido em pátio" (o que 'confirmado' afirma na tela): fica indefinido.
-    status_patio: 'indefinido',
-    status_patio_motivo: daDesc.vistoria ? 'local de vistoria na descrição (não prova recolhimento)' : 'sem local de vistoria na descrição',
+    // Pátio pelo classificador ÚNICO (lib/patio-veiculo.mjs). Local de vistoria sem sinal de devedor =
+    // 'nao_confirmado' (aparece com selo, opção 2 do dono, 05/10); 'excluido' nem chega a ser gravado (scraper).
+    status_patio: patio.status,
+    status_patio_motivo: patio.motivo,
     ativo: true, atualizado_em: new Date().toISOString(),
   };
 }

@@ -6,6 +6,7 @@
  * as APIs internas JSON — mais robusto que scraping de HTML.
  */
 
+import { classificarPatio, patioPreservado } from './lib/patio-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
@@ -2635,8 +2636,7 @@ function classificarTipoVeiculo(texto) {
 // de ":" seguido de espaço (dois não-alfanuméricos não formam fronteira de palavra) — testado
 // ao vivo em 11/09 (dispatch 34594866661) e confirmado como o motivo de 50/50 ficarem
 // 'indefinido' mesmo com a frase presente em toda descrição real.
-const SINAL_PATIO = /\b(p[áa]tio|apreendid[oa]|recolhid[oa] ao dep[óo]sito|dep[óo]sito do leiloeiro|j[áa] recolhido|dispon[íi]vel para retirada|retirado do dev[eê]dor|comitente\s*[:\-]?\s*(banco|financeira|seguradora|arrendadora))\b|bem encontra-se\s*:/i;
-const SINAL_EXECUTADO = /\b(n[ãa]o localizado|sujeito a busca e apreens[ãa]o|em poder do (executado|devedor)|posse do (executado|devedor)|aguardando localiza[çc][ãa]o|bem n[ãa]o recolhido)\b/i;
+// SINAL_PATIO / SINAL_EXECUTADO / classificarPatio: lib/patio-veiculo.mjs (compartilhado com Astavero/Nordeste, 05/10).
 // PÁTIO NA REDE SUPERBID (23/09, decisão do dono: "corporativo, prefeitura, extrajudicial ou
 // judicial que o veículo está apreendido/em pátio. troca de frota. todos os veículos que estão
 // em pátio"). 94% dos veículos SUPERBID (4.103 de 4.344) ficavam `indefinido` e sumiam da busca
@@ -2652,12 +2652,6 @@ function classificarPatioSuperbid(of, texto) {
   const c = classificarPatio(texto);
   if (c.status !== 'indefinido' || ehJudicialSuperbid(of)) return c;
   return { status: 'confirmado', motivo: 'venda extrajudicial pelo próprio dono do bem (frota/órgão/empresa) — não há executado' };
-}
-function classificarPatio(texto) {
-  const t = String(texto || '');
-  if (SINAL_EXECUTADO.test(t)) return { status: 'excluido', motivo: 'sinal textual de bem ainda não recolhido/apreendido' };
-  if (SINAL_PATIO.test(t)) return { status: 'confirmado', motivo: 'sinal textual de bem já em pátio/disponível' };
-  return { status: 'indefinido', motivo: 'sem sinal textual claro nos dois sentidos — não exibir por padrão' };
 }
 // ── SINISTRO/MOTOR/DOCUMENTAÇÃO/PAGAMENTO (11/09) ───────────────────────────────
 // Corrige a avaliação anterior de que esses dados "não existem" — eles EXISTEM, só não
@@ -2964,7 +2958,7 @@ async function salvarVeiculos(registros, rotulo) {
       if (Array.isArray(r.fotos)) r.fotos = fotosPreservadas(r.fotos, prev?.fotos);
       // Só preserva o que foi LIDO no lote (sinal textual/regra da fonte). Herança de leilão
       // ('leilão de pátio: …') é recalculada na rodada — preservá-la a congelaria.
-      if (r.status_patio === 'indefinido' && prev?.status_patio === 'confirmado' && !String(prev.status_patio_motivo || '').startsWith('leilão de pátio')) {
+      if (patioPreservado(r, prev)) {
         r.status_patio = 'confirmado'; r.status_patio_motivo = prev.status_patio_motivo; mantidos++;
       }
     }

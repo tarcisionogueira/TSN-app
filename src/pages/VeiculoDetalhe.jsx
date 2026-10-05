@@ -410,6 +410,11 @@ export default function VeiculoDetalhe() {
         {patio.cidade && <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>{patio.cidade}</div>}
         {patio.origem && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>{patio.origem}{patio.mapaAproximado ? ' · mapa pela coordenada informada (aproximado)' : ''}</div>}
         {v.status_patio === 'confirmado' && <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, marginTop: 6 }}>✓ Bem já recolhido em pátio (não está com o executado)</div>}
+        {v.status_patio === 'nao_confirmado' && (
+          <div style={{ fontSize: 12, color: '#92400e', fontWeight: 700, marginTop: 6, background: '#fef3c7', padding: '6px 10px', borderRadius: 8, lineHeight: 1.45 }}>
+            ⚠ Pátio não confirmado — o leiloeiro informa o local de vistoria e não há sinal de que o bem esteja com o devedor, mas não confirma que já foi recolhido. Confira no edital antes do lance.
+          </div>
+        )}
         {patio.mapaUrl && (
           <a href={patio.mapaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>
             <MapPin size={14} /> Abrir no mapa

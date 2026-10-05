@@ -16,6 +16,7 @@ const POR_PAGINA = 20;
 
 // Mesma lição de `Busca.jsx` (imóveis): NUNCA `select('*')`. `raw` e `descricao` completa
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
+const PATIO_VISIVEL = ['confirmado', 'nao_confirmado'];
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'marca_busca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
@@ -28,6 +29,8 @@ const COLUNAS = [
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
   // Motor declarado pelo leiloeiro (29/09) — ver supabase/migrations/20260929_veiculo_motor_status.sql
   'motor_status',
+  // Pátio (05/10, opção 2 do dono): 'nao_confirmado' aparece com selo — ver scripts/lib/patio-veiculo.mjs
+  'status_patio',
   // Pátio (29/09): nome do pátio quando o leiloeiro tem vários na mesma cidade ("Guarulhos III").
   'patio',
 ].join(',');
@@ -382,7 +385,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   async function diagnosticarVazio(f) {
     const ativos = Object.keys(ROTULO_FILTRO).filter(k => filtroAtivo(f, k));
     if (ativos.length < 2) return;
-    const base = () => supabase.from('veiculos_leilao').select('id', { count: 'exact', head: true }).eq('ativo', true).eq('status_patio', 'confirmado');
+    const base = () => supabase.from('veiculos_leilao').select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL);
     try {
       const contagens = await Promise.all(ativos.map(async k => {
         const { count, error } = await aplicarFiltros(base(), f, new Set([k]));
@@ -412,10 +415,11 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
     try {
       let q = supabase.from('veiculos_leilao').select(COLUNAS, { count: 'estimated' })
         .eq('ativo', true)
-        // Rede de segurança pública (11/09, pedido do dono): só bens já CONFIRMADOS em
-        // pátio — nunca em posse do executado. `indefinido` é o default conservador de
-        // `classificarPatio()` e não deve aparecer para o cliente.
-        .eq('status_patio', 'confirmado');
+        // Rede de segurança pública (11/09, pedido do dono): nunca bem em posse do executado.
+        // 05/10 (opção 2 do dono): além dos CONFIRMADOS em pátio, entram os 'nao_confirmado' — local de
+        // vistoria informado e nenhum sinal de devedor —, sempre com o selo "Pátio não confirmado".
+        // `indefinido` (nada, ou "em mãos de" uma pessoa) continua fora.
+        .in('status_patio', PATIO_VISIVEL);
       q = aplicarFiltros(q, f);
       const [coluna, dir] = f.ordenacao === 'valor_asc' ? ['valor_minimo', true]
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
@@ -672,6 +676,9 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
                       <span title="Classificação do sinistro, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: c.bg, color: c.fg, padding: '1px 6px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
                     ); })()}
+                    {v.status_patio === 'nao_confirmado' && (
+                      <span title="O leiloeiro informa onde vistoriar o veículo e não há sinal de que esteja com o devedor — mas não confirma que já foi recolhido a pátio. Confira no edital antes do lance." style={{ fontSize: 9, fontWeight: 800, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 8 }}>Pátio não confirmado</span>
+                    )}
                     {v.is_sucata && (
                       <span title="Vendido sem ATPV-E — só certificado de baixa; a transferência não é a padrão" style={{ fontSize: 9, fontWeight: 800, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 8 }}>⚠️ Sucata</span>
                     )}
