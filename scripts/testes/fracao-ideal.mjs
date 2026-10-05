@@ -25,6 +25,8 @@ const barra = [
   { titulo: '(2/9 do imóvel) Galpão, A.C. 749m², Centro, Itajobi/SP', descricao: '' },
   { titulo: '(2/9 do imóvel) Barracão Comercial, A.T. 1.020m²,  escritório, WC, Centro, Itajobi/SP', descricao: '' },
   { titulo: '1/6 do Prédio Coml c/ 380m² - Terreno 222,80m² -São Paulo/SP', descricao: '' },
+  // 05/10 — DBS (Astavero): o conector "de um" não era aceito
+  { titulo: '1/9 de Um Imóvel Urbano, Anita Garibaldi - SC', descricao: 'Fração de 1/9 de UM IMÓVEL URBANO, terreno registrado com área de 1.001,12m²' },
   { titulo: 'Imóvel', descricao: 'nua-propriedade do imóvel, área privativa 80 m², fração ideal de 2% no terreno' },
 ];
 for (const im of barra) assert.equal(ehFracaoIdeal(im), true, `devia barrar: ${im.titulo}`);

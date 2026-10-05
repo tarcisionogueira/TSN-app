@@ -303,7 +303,9 @@ const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s
 // Coml…" (LJUD) entravam porque a régua só conhecia as PALAVRAS "parte/fração ideal". Só no TÍTULO:
 // na descrição "1/20 do terreno" é a cota cartorial de um apartamento inteiro — por isso `terreno`
 // fica fora da lista. Espelhado em fracao_ideal_barrada() (migration 20261003_fracao_numerica_titulo.sql).
-export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(?:\([^)]{0,20}\)\s*)?(?:avos\s+)?(?:d[oa]s?|sobre\s+[oa])\s+(?:im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)(?![a-zà-ú])/i;
+// 05/10: "1/9 de Um Imóvel Urbano" (DBS/Astavero) passava — o conector só aceitava do/da/sobre. Espelho:
+// 20261005_fracao_de_um_imovel.sql.
+export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(?:\([^)]{0,20}\)\s*)?(?:avos\s+)?(?:d[oa]s?|de(?:\s+uma?)?|sobre\s+[oa])\s+(?:im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)(?![a-zà-ú])/i;
 
 export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';

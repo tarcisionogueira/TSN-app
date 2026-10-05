@@ -145,7 +145,7 @@ async function coletar(tenant) {
     + ` · cidade ${pct((r) => r.cidade && r.estado)}% · foto ${pct((r) => r.link_foto)}% · edital ${pct((r) => r.link_edital)}% · área ${pct((r) => r.area_m2 > 0)}% · 2ª praça ${pct((r) => r.valor_minimo_2)}%`);
 
   if (DRYRUN) {
-    console.log(JSON.stringify(prontos.slice(0, 2).map((r) => ({ ...r, descricao: r.descricao.slice(0, 120) })), null, 2));
+    for (const r of prontos.slice(0, 2)) console.log(`   · ${r.fonte_id} | ${r.titulo.slice(0, 60)} | ${r.cidade}/${r.estado} | 1ª ${r.valor_minimo} · 2ª ${r.valor_minimo_2} | ${r.data_leilao?.slice(0, 10)} | ${r.modalidade} | mat ${r.numero_matricula} | área ${r.area_m2} | docs ${r.anexos?.map((a) => a.tipo).join(',') || '-'}`);
     return true;
   }
   if (!prontos.length) {

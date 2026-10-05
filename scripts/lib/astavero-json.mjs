@@ -61,7 +61,8 @@ export function montarRowAstavero(item, det, tenant) {
   const minimo = item.praca === 2 && segunda ? segunda : (primeira || reais(item.valor));
   const datas = leilao.datas || {};
   const anexos = (Array.isArray(leilao.anexos) ? leilao.anexos : []).concat(Array.isArray(lote.anexos) ? lote.anexos : [])
-    .filter((a) => a && !a.private && /^https?:\/\//.test(a.url || ''))
+    // Foto do lote também vem em `anexos` (.jpg) — documento é só o que não é imagem.
+    .filter((a) => a && !a.private && /^https?:\/\//.test(a.url || '') && !/\.(jpe?g|png|webp|gif)(\?|$)/i.test(a.url))
     .map((a) => ({ tipo: /edital/i.test(a.arquivo || a.url) ? 'edital' : /matr[íi]cula/i.test(a.arquivo || a.url) ? 'matricula' : 'outro',
       nome: /edital/i.test(a.arquivo || a.url) ? 'Edital' : /matr[íi]cula/i.test(a.arquivo || a.url) ? 'Matrícula' : 'Documento', url: a.url }));
   // Com processo/vara é JUDICIAL — "Execução de Título Extrajudicial" é uma ação na Justiça; a palavra
