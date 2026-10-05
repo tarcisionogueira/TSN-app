@@ -535,6 +535,99 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
   return json({ ok: true, atendimento: true, chamado_id: chamado.id, novo });
 }
 
+// ---- RESPOSTA DO LEILOEIRO (05/10, pedido do dono) ----
+// O pedido de documento ao leiloeiro (api/pedir-documento-leiloeiro.js) sai com reply-to
+// `documentos+<token>@`. Quando o leiloeiro responde com o arquivo, ele vira anexo DO LOTE
+// (imovel_anexos) — matrícula/edital ficam visíveis a qualquer usuário logado (RLS), e o
+// gatilho `imovel_anexos_recalcula_selo` acende o selo de documento sozinho.
+function extrairTokenDocumentos(data, headers) {
+  for (const d of destinatarios(data, headers)) {
+    const m = String(d).match(/documentos\+([a-f0-9]{8,32})@/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+// Tipo pelo NOME do arquivo; sem pista no nome, pelo que foi pedido (se pediu uma coisa só).
+// O pdf-parse não roda no edge — a classificação pelo conteúdo fica para a equipe/cron.
+function tipoDoAnexoLeiloeiro(nome, itensPedidos) {
+  const n = String(nome || '').toLowerCase();
+  if (/matr[ií]c/.test(n)) return 'matricula';
+  if (/edital/.test(n)) return 'edital';
+  if (/laudo|avalia/.test(n)) return 'laudo';
+  const p = String(itensPedidos || '').toLowerCase();
+  const pediuMatricula = /matr[ií]c/.test(p), pediuEdital = /edital/.test(p);
+  if (pediuMatricula && !pediuEdital) return 'matricula';
+  if (pediuEdital && !pediuMatricula) return 'edital';
+  return 'outro';
+}
+// imoveis_leilao.data_leilao é TEXTO (ISO ou dd/mm/aaaa); imovel_anexos.data_leilao é DATE —
+// formato inesperado vira null em vez de derrubar o insert inteiro com 400.
+function dataIso(v) {
+  const t = String(v || '');
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return null;
+}
+async function tratarRespostaLeiloeiro(data, headers, messageId, token) {
+  const rp = await sb(`documental_pedidos_leiloeiro?resposta_token=eq.${encodeURIComponent(token)}&select=id,imovel_id,user_id,itens_pedidos,anexos_recebidos&limit=1`);
+  if (!rp.ok) { console.error('[inbound-leiloeiro] pedido HTTP', rp.status); return json({ error: 'pedido_ilegivel' }, 500); }
+  const [pedido] = await rp.json().catch(() => []);
+  if (!/^[0-9a-f-]{36}$/i.test(String(pedido?.imovel_id || ''))) return null; // token desconhecido → roteamento normal (atendimento)
+
+  const aut = autenticacaoDe(headers);
+  const caixaId = await registrarNaCaixa(data, headers, messageId, { aut, dono: pedido.user_id });
+  const origem = `email-leiloeiro:${messageId || data?.email_id || token}`;
+  const rj = await sb(`imovel_anexos?imovel_id=eq.${pedido.imovel_id}&origem_url=eq.${encodeURIComponent(origem)}&select=id&limit=1`);
+  if (rj.ok && (await rj.json().catch(() => [])).length) return json({ ok: true, duplicate: true, leiloeiro: true });
+
+  // data_leilao só alimenta a retenção do anexo; ilegível → null (o anexo fica, não some cedo).
+  const ri = await sb(`imoveis_leilao?id=eq.${pedido.imovel_id}&select=data_leilao&limit=1`);
+  if (!ri.ok) console.error('[inbound-leiloeiro] imovel HTTP', ri.status);
+  const [imovel] = ri.ok ? await ri.json().catch(() => []) : [];
+  const salvos = [], falhas = [];
+  for (const att of (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || [])).slice(0, ANEXO_MAX_QTD)) {
+    const ct = att?.content_type || '';
+    // Só documento: PDF, Word e imagem (foto/scan da matrícula). Texto puro/assinatura não.
+    if (!/^(application\/pdf|image\/(png|jpe?g|webp)|application\/(msword|vnd\.openxmlformats))/i.test(ct)) continue;
+    if (Number.isFinite(att?.size) && att.size > ANEXO_MAX_BYTES) { falhas.push(`${att?.filename}: acima de 10MB`); continue; }
+    const bytes = att?.content ? Uint8Array.from(atob(att.content), c => c.charCodeAt(0)) : (att?.id ? await baixarAnexoApi(data.email_id, att.id) : null);
+    if (!bytes || bytes.length > ANEXO_MAX_BYTES) { falhas.push(`${att?.filename}: download falhou`); continue; }
+    const nome = String(att.filename || 'documento').replace(/[^\w.\-]+/g, '_').slice(0, 120);
+    const path = `casos/${pedido.imovel_id}/leiloeiro_${Date.now()}_${nome}`;
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos/${path}`, {
+      method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': ct || 'application/octet-stream' }, body: bytes,
+    });
+    if (!up.ok) { falhas.push(`${nome}: storage ${up.status}`); continue; }
+    const signed = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${path}`, {
+      method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+    }).then(r => r.ok ? r.json() : null).catch(() => null); // padrao-ok: sem URL assinada o anexo vale pelo storage_path (doc-url assina na hora)
+    const linha = {
+      imovel_id: pedido.imovel_id, tipo: tipoDoAnexoLeiloeiro(nome, pedido.itens_pedidos), nome,
+      url: signed?.signedURL ? `${SUPABASE_URL}/storage/v1${signed.signedURL}` : null, storage_path: path,
+      origem_url: origem, tamanho_kb: Math.round(bytes.length / 1024), criado_por: pedido.user_id,
+      role_criador: 'leiloeiro', descricao: 'Enviado pelo leiloeiro em resposta ao pedido de documento',
+      data_leilao: dataIso(imovel?.data_leilao), arrematado: false,
+    };
+    let ins = await sb('imovel_anexos', { method: 'POST', prefer: 'return=representation', body: linha });
+    // 409 = o lote JÁ tem esse tipo (unique imovel_id+tipo p/ edital/matrícula): guarda como
+    // 'outro' para a equipe comparar, sem sobrescrever o documento que já estava lá.
+    if (ins.status === 409) ins = await sb('imovel_anexos', { method: 'POST', prefer: 'return=representation', body: { ...linha, tipo: 'outro', nome: `${linha.tipo}_leiloeiro_${nome}`.slice(0, 160) } });
+    const [gravado] = ins.ok ? await ins.json().catch(() => []) : [];
+    if (!gravado?.id) { falhas.push(`${nome}: imovel_anexos ${ins.status}`); continue; }
+    salvos.push({ id: gravado.id, tipo: gravado.tipo, nome });
+  }
+  if (falhas.length) console.error('[inbound-leiloeiro] anexos com falha:', pedido.id, falhas.join(' | '));
+  // Nada gravado mas havia arquivo que falhou → 500 para o Resend reentregar (o dedup acima
+  // só olha anexo gravado, então a reentrega tenta de novo).
+  if (!salvos.length && falhas.length) return json({ error: 'anexos_nao_gravados', falhas }, 500);
+
+  const rpd = await sb(`documental_pedidos_leiloeiro?id=eq.${pedido.id}`, { method: 'PATCH', prefer: 'return=representation',
+    body: { respondido_em: new Date().toISOString(), anexos_recebidos: (pedido.anexos_recebidos || 0) + salvos.length } });
+  if (!rpd.ok) console.error('[inbound-leiloeiro] marcar respondido HTTP', rpd.status);
+  return json({ ok: true, leiloeiro: true, pedido_id: pedido.id, anexos: salvos, falhas, caixa_id: caixaId });
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
   const raw = await req.text();
@@ -562,6 +655,13 @@ export default async function handler(req) {
   if (messageId) {
     const [dup] = await (await sb(`juridico_emails?message_id=eq.${encodeURIComponent(messageId)}&direcao=eq.entrada&select=id&limit=1`)).json();
     if (dup) return json({ ok: true, duplicate: true });
+  }
+
+  // Resposta do leiloeiro a um pedido de documento (documentos+<token>@) → anexo do lote.
+  const tokenDoc = extrairTokenDocumentos(data, headers);
+  if (tokenDoc) {
+    const resp = await tratarRespostaLeiloeiro(data, headers, messageId, tokenDoc);
+    if (resp) return resp;
   }
 
   // Casa ao caso: token do reply-to → fallback In-Reply-To/References

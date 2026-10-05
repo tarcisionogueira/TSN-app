@@ -101,7 +101,7 @@ async function enfileirar({ to, cc, subject, html, text, replyTo, meta }) {
         assunto: (subject || '').slice(0, 300),
         html: html || null,
         texto_plano: text || null,
-        reply_to: replyTo || null,
+        reply_to: (Array.isArray(replyTo) ? replyTo.filter(Boolean).join(', ') : replyTo) || null,
         tipo: meta?.tipo || null,
         user_id: meta?.userId || null,
       }),

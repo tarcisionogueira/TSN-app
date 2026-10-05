@@ -36039,3 +36039,16 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
 - Efeito após o SQL do dono (#137): PESTANA 4→99%, LEILAOBRASIL 4→99%, CALIL 40→90%. Resíduo: ALBERTOMACEDO e
   PURCENA não publicam arquivo (pedido ao leiloeiro); FERREIRALEIL/JELEILOES têm PDF escaneado (relatório lê
   por visão, selo não rotula).
+
+### 05/10 (tarde) — Resposta do leiloeiro vira documento do lote (pedido do dono)
+- SQL do dono conferido (4 blocos): selos recalculados, invariante = 0 → pendência #137 fechada.
+- "Pedir ao leiloeiro" sai com reply-to `documentos+<token>@` + o e-mail de quem pediu. `inbound-juridico.js`
+  casa pelo `documental_pedidos_leiloeiro.resposta_token` e grava PDF/Word/imagem em `imovel_anexos`
+  (`role_criador='leiloeiro'`, `origem_url='email-leiloeiro:<message-id>'` = dedup da reentrega). Tipo pelo
+  nome do arquivo ou, sem pista, pelo único item pedido; lote que já tem o tipo → grava `outro` (não
+  sobrescreve). Matrícula/edital ficam visíveis a todo logado (RLS) e o gatilho acende o selo. Marca
+  `respondido_em`/`anexos_recebidos` e registra na caixa de quem pediu. Fila de e-mail aceita reply-to múltiplo.
+- Limite: tipo é decidido sem ler o PDF (edge). Arquivo sem nome claro em pedido de vários itens vira `outro`
+  — a equipe reclassifica. Migração `20261005_pedido_leiloeiro_resposta_token.sql` (aplicada).
+- Lote Guarulhos (leilaobrasil_3801): edital .doc já reconhecido; o relatório de 04/10 21:20 é anterior à
+  leitura de Word — "Gerar novamente" lê o edital.

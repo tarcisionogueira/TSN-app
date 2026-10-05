@@ -56,7 +56,8 @@ async function handler(req) {
         subject: item.assunto,
         html: item.html || undefined,
         text: item.texto_plano || undefined,
-        replyTo: item.reply_to || undefined,
+        // Lista (vários reply-to) é gravada com vírgula pelo `enfileirar` — volta a ser array.
+        replyTo: item.reply_to ? (item.reply_to.includes(',') ? item.reply_to.split(/\s*,\s*/).filter(Boolean) : item.reply_to) : undefined,
         meta: { tipo: item.tipo || undefined, userId: item.user_id || undefined },
       });
     } catch (e) {

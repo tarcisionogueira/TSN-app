@@ -27,9 +27,9 @@
  * contato cadastrado, devolve `semContato:true` + o texto, para o front oferecer "copiar e
  * mandar manualmente" em vez de fingir que enviou.
  *
- * Reply-to = o PRÓPRIO e-mail do cliente: o leiloeiro responde direto para ele, sem exigir
- * infraestrutura de ingestão de resposta (diferente do jurídico, que precisa registrar a
- * devolutiva no caso).
+ * Reply-to = DOIS endereços (05/10, pedido do dono): `documentos+<token>@` (o inbound casa a
+ * resposta ao pedido e anexa o PDF/imagem ao LOTE — fica disponível para todos que abrirem o
+ * imóvel) e o e-mail de quem pediu (continua recebendo a resposta direto, como antes).
  */
 export const config = { runtime: 'edge' };
 
@@ -41,6 +41,7 @@ import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+const INBOUND_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN || 'bidprobrasil.com.br';
 
 // Quem pode negociar documentação com o leiloeiro EM NOME do cliente — só a equipe interna
 // (decisão do dono, 12/09, revista em 17/09: o Assessorado tinha acesso e foi retirado —
@@ -186,9 +187,11 @@ export default async function handler(req) {
     <p style="color:#94a3b8;font-size:11px;margin-top:24px;white-space:normal">Enviado via BidPro Brasil, a pedido do interessado no lote.</p>
   </div>`;
 
+  // Token da resposta: casa o e-mail do leiloeiro a ESTE pedido em api/inbound-juridico.js.
+  const respostaToken = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
   const r = await enviarEmail({
     to: contato.email,
-    replyTo: user.email,
+    replyTo: [`documentos+${respostaToken}@${INBOUND_DOMAIN}`, user.email].filter(Boolean),
     subject: assunto,
     html,
     text: textoFinal,
@@ -199,6 +202,7 @@ export default async function handler(req) {
     imovel_id: imovelId, user_id: user.id, fonte: imovel.fonte || null,
     destinatario_email: contato.email, itens_pedidos: itensTexto, texto_enviado: textoFinal,
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
+    resposta_token: (r.ok || r.enfileirado) ? respostaToken : null, // represado sai depois com o MESMO reply-to
   });
 
   // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
