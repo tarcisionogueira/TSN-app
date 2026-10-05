@@ -42,6 +42,18 @@ export async function viaBanco(url) {
   } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 80) }; }
 }
 
+// CHARSET (05/10, NAKAKOGUE: `<meta charset=iso-8859-1>`). `r.text()` decodifica SEMPRE como UTF-8 —
+// site Latin-1 viraria "Im�veis" em silêncio (dado plausível e errado). Só redecodifica quando o UTF-8
+// QUEBROU (U+FFFD) e o site DECLARA Latin-1 — fonte que já vinha certa não muda um byte.
+async function textoComCharset(r) {
+  let buf;
+  try { buf = await r.arrayBuffer(); } catch { return ''; } // padrao-ok: corpo ilegível = "corpo vazio", o chamador registra o motivo
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  if (!utf8.includes('\uFFFD')) return utf8;
+  const declarado = `${r.headers.get('content-type') || ''} ${utf8.slice(0, 3000).match(/charset=["']?([\w-]+)/i)?.[1] || ''}`;
+  return /iso-?8859-?1|latin-?1|windows-1252/i.test(declarado) ? new TextDecoder('windows-1252').decode(buf) : utf8;
+}
+
 export function criarMotorFetch(proposito) {
   const estado = { semCota: false };
   // DISJUNTOR POR HOST (revisão 29/09): sem memória, fonte que SEMPRE é Cloudflare (leilaobrasil,
@@ -66,7 +78,7 @@ export function criarMotorFetch(proposito) {
       const r = await fetch(url, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' } });
       clearTimeout(t);
       if (r.ok) {
-        const html = await r.text().catch(() => '');
+        const html = await textoComCharset(r);
         if (html && !ehChallenge(html)) return { html, via: 'gratis' };
         porQueGratis = html ? 'challenge' : 'corpo vazio';
       } else porQueGratis = `HTTP ${r.status}`;

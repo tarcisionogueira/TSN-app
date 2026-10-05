@@ -35,6 +35,10 @@ const idFonte = (tenant, id) => (tenant.chaveTenant
 // respondeu (fonte pode estar vazia)" de "não consegui buscar" (challenge/teto).
 export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   const urls = new Map();
+  // DETALHE NO PRÓPRIO CATÁLOGO (05/10, NAKAKOGUE): quando a listagem já traz título, valores e edital
+  // e a página do lote só se preenche por JS/sessão PHP, `parse.detalhesDoCatalogo(html, base)` devolve
+  // Map url→det e o laço de coleta usa o det daqui, sem abrir o detalhe. Fonte sem o gancho: intacta.
+  const detCatalogo = new Map();
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
@@ -45,6 +49,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     if (p === 1) htmlPagina1 = r.html;
     const antes = urls.size;
     for (const [id, u] of cfg.parse.extrairUrlsDeLote(r.html, tenant.base)) urls.set(id, u);
+    if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(r.html, tenant.base)) detCatalogo.set(u, det);
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
     if (urls.size === antes) break;
     await sleep(400);
@@ -102,7 +107,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   }
   if (fetchOk && urls.size === 0) await amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1);
   const vazioDeclarado = fetchOk && urls.size === 0 && (eventosDeclaramVazio || (!eventosCount && siteDeclaraVazio(htmlPagina1)));
-  return { urls: [...urls.values()], fetchOk, via, eventosCount, vazioDeclarado };
+  return { urls: [...urls.values()], fetchOk, via, eventosCount, vazioDeclarado, detCatalogo };
 }
 
 // AMOSTRA DO VAZIO (27/09). "Respondeu 200 e enumerou 0" diz QUE o parser não achou lote, mas
@@ -245,7 +250,8 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       }
       if (pararReleitura && i >= iReleitura) break;
       const url = alvo[i];
-      const r = await fetchFonte(url, { semBD });
+      const detPronto = enumerado.detCatalogo?.get(url);
+      const r = detPronto ? { html: null, via: 'catalogo' } : await fetchFonte(url, { semBD });
       // A releitura é um EXTRA que só existe enquanto for grátis: no primeiro detalhe que vier
       // pela via paga, para. Sem isto, a folga do orçamento viraria gasto de Bright Data em
       // lote que já temos — o oposto de "usar a sobra".
@@ -269,8 +275,8 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         break;
       }
       const html = r?.html;
-      if (!html) { sem++; continue; }
-      const det = cfg.parse.parseDetalhe(html, url);
+      if (!html && !detPronto) { sem++; continue; }
+      const det = detPronto || cfg.parse.parseDetalhe(html, url);
       if (det.encerrado) { encerrados++; continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
@@ -284,7 +290,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         continue;
       }
       prontos.push(row);
-      await sleep(350);
+      if (!detPronto) await sleep(350);
     }
   }
   // Enriquecimento pós-parse por fonte (03/10): dado que o HTML não traz e a fonte expõe por outra

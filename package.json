@@ -119,7 +119,8 @@
     "testar:frazao-resultado": "node scripts/testes/frazao-resultado-do-leilao.mjs",
     "testar:vip-resultado": "node scripts/testes/vip-resultado-do-leilao.mjs",
     "testar:mega-resultado": "node scripts/testes/mega-resultado-do-leilao.mjs",
-    "testar:ljud-veiculo-data": "node scripts/testes/ljud-veiculo-tem-data.mjs"
+    "testar:ljud-veiculo-data": "node scripts/testes/ljud-veiculo-tem-data.mjs",
+    "testar:nakakogue-catalogo": "node scripts/testes/nakakogue-catalogo.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

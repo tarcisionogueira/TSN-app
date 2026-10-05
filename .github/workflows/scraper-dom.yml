@@ -59,11 +59,13 @@ on:
       - 'scripts/lib/motor/fontes/leiloar.mjs'
       - 'scripts/scraper-lgcorretor.mjs'
       - 'scripts/lib/lgcorretor-parse.mjs'
+      - 'scripts/scraper-nakakogue.mjs'
+      - 'scripts/lib/nakakogue-parse.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor'
+        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -230,6 +232,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GLOBO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-globo.mjs
+
+      # NAKAKOGUE (05/10, #41): 2 páginas por execução (catálogo de imóveis + home) e 1 PDF por
+      # leilão sem cidade; `semBD` no wrapper — custo Bright Data zero por construção.
+      - name: Nakakogue
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'nakakogue')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NAKAKOGUE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-nakakogue.mjs
 
       - name: Leje
         # 27/09: fora do RODA_TUDO — o site dá 403 ao IP do runner desde 24/09 e o proxy ISP não

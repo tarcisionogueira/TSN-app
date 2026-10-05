@@ -113,6 +113,13 @@ export function cidadeDoSlug(slug) {
 }
 
 export function cidadeDoLote(txt, slug) {
+  const melhor = votosDeCidade(txt, slug)[0];
+  return melhor ? { cidade: melhor.exibe, estado: melhor.uf } : { cidade: null, estado: null };
+}
+
+// Todas as cidades citadas, validadas no IBGE, da mais votada para a menos (05/10: NAKAKOGUE usa o
+// placar para decidir se o EDITAL aponta UMA cidade sem ambiguidade — não basta o vencedor).
+export function votosDeCidade(txt, slug = '') {
   const votos = new Map();   // "UF|nome" → { n, exibe }
   const votar = (nomeCru, uf, peso = 1) => {
     const palavras = String(nomeCru).trim().split(/\s+/);
@@ -132,9 +139,7 @@ export function cidadeDoLote(txt, slug) {
   }
   const doSlug = cidadeDoSlug(slug);
   if (doSlug) votar(doSlug.cidade, doSlug.estado, 2);
-  let melhor = null;
-  for (const [chave, v] of votos) if (!melhor || v.n > melhor.n) melhor = { ...v, uf: chave.split('|')[0] };
-  return melhor ? { cidade: melhor.exibe, estado: melhor.uf } : { cidade: null, estado: null };
+  return [...votos].map(([chave, v]) => ({ ...v, uf: chave.split('|')[0] })).sort((a, b) => b.n - a.n);
 }
 
 export function parseDetalhe(html, url) {
