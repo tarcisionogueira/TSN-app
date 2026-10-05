@@ -36272,3 +36272,26 @@ Alphaville Burle Marx, 2ª tentativa do dono (lote `tsn_1791238803667_yx20b`). M
    novas no prompt (`getInstrucaoExtracao`): construção averbada manda no tipo/área; AF/9.514 = extrajudicial; dívida
    executada nunca é débito assumido; data só do edital; sem avaliação → null; `nomeCondominio` (vai ao mercado).
 Banco vendedor (Bradesco/AF) NÃO publica avaliação — a referência é o lance mínimo; o campo fica em branco.
+
+## 05/10 — Comissão/projeção do lote manual saíam da MATRÍCULA; desconto à vista; descrição do leiloeiro
+"Calculou errado o leiloeiro." Medido no `inputs.parecerInputs.d` do Alphaville: comissão **10,49%** (= juros do
+financiamento antigo do Bradesco, lido na matrícula) → R$ 222.492,90; parcelamento "art. 895, 25% + 30x a 12% SAC"
+(também da matrícula; art. 895 é de leilão JUDICIAL); "lance R$ 2.430.000" da matrícula (= a dívida). O edital diz:
+comissão 5% sobre o lance; à vista com **10% de desconto**; 25% + 12x sem acréscimo; >R$ 100 mil 30% + 36/48x a 12%
+Price; financiamento só desocupado. A IA não viu: `extrairLoteDoEdital` mandava os 12 mil primeiros caracteres e a
+seção 7 começa no 18.063º. Correções:
+- `condicoesGerais()` manda o edital até o início da lista de lotes ("Lance Mínimo: R$", teto 45 mil) — 41.752 car.
+  no Bradesco, com a seção 7 e sem nenhum outro lote;
+- prompt: matrícula NUNCA preenche comissão/lance/pagamento/leiloeiro/data; comissão só o que se chama comissão;
+  `descontoAVistaPct`, `parcelamento.jurosAnualPct` (0 = sem acréscimo) e `.tabela`; art. 895 só judicial;
+- `recomporDocsManuais`: campos do leilão apagados das extrações de matrícula; vazio não sobrescreve (o
+  `Object.assign` copiava o `null` do edital por cima da descrição);
+- `aplicarDadosDoArquivo`: art. 895 em venda extrajudicial é descartado; juros/tabela/desconto aplicados;
+- `calcularMetricasCenario`: `descontoAVistaPercentual` (só à vista; comissão e honorários sobre o lance, ITBI sobre
+  o pago) — o servidor recalcula o parecer com a MESMA função. Campo "Desconto à vista (%)" na tela. Teste
+  `testar:desconto-a-vista`;
+- link do lote: vira documento **"Descrição do leiloeiro"** (texto até 30 mil) em vez de `urlEdital` (o servidor
+  tentava baixar um edital de uma página HTML); `fetch-url` com cookies entre redirects (`manterCookies`, só para o
+  mesmo host) + UA de navegador — a VIP dava laço de redirect ("redirects hit maximum"). **Não verificado ao vivo**
+  (o sandbox não alcança a VIP): se ainda falhar, a tela agora diz o motivo.
+Pendência #141: coletor VIP não lê a descrição de nenhum lote (0/108) e perdeu o 22357.

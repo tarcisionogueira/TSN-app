@@ -55,6 +55,11 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
   const cet = Number(inputs.cetAnual) || 0;
   const tabelaAmort = inputs.tabelaAmortizacao || 'sac';
 
+  // DESCONTO À VISTA (05/10, edital Bradesco: "à vista, desconto de 10%… comissão de 5% sobre o valor
+  // de arremate, sem desconto"). O lance é o mesmo; o que SAI do caixa à vista é menor. Comissão do
+  // leiloeiro e honorários seguem sobre o LANCE; ITBI/registro, sobre o preço efetivamente pago.
+  const descAVistaPct = isAVista ? Math.min(Math.max(Number(inputs.descontoAVistaPercentual) || 0, 0), 50) : 0;
+  const valorPago = vArremate * (1 - descAVistaPct / 100);
   const taxaLeiloeiro = vArremate * (taxaLeiloeiroPct / 100);
   // Honorários BidPro (taxa de ÊXITO do escritório): padrão 10% em TODO arremate
   // (judicial E extrajudicial), sobrescrevível por inputs.honorariosPercentual.
@@ -62,7 +67,7 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
     ? Number(inputs.honorariosPercentual)
     : 10;
   const honorarios = vArremate * (honorariosPct / 100);
-  const itbiRegistro = vArremate * (itbiPct / 100);
+  const itbiRegistro = valorPago * (itbiPct / 100);
   // Taxa administrativa do leilão (% sobre a arrematação, ALÉM do leiloeiro — comum
   // na Superbid) + despesas administrativas (valor fixo, raras). Ambas vêm do EDITAL
   // e impactam a projeção — por isso entram nos aportes.
@@ -73,10 +78,10 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
   const custoCarrrego = (iptu + cond) * pVenda;
 
   if (isAVista) {
-    const capitalMobilizado = vArremate + custosExtra + custoCarrrego;
+    const capitalMobilizado = valorPago + custosExtra + custoCarrrego;
     const valorRef = isUsoProprio ? vMercado : vMercado * 0.90;
     const comissao = isUsoProprio ? 0 : valorRef * 0.05;
-    const baseGC = valorRef - (vArremate + custosExtra) - comissao;
+    const baseGC = valorRef - (valorPago + custosExtra) - comissao;
     const ir = (!isUsoProprio && baseGC > 0) ? baseGC * 0.15 : 0;
     const receitaLiquida = valorRef - comissao - ir;
     const lucro = receitaLiquida - capitalMobilizado;
@@ -85,10 +90,10 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
     return {
       vArremate, taxaLeiloeiro, honorarios, itbiRegistro, taxaAdministrativa, despesasAdm, laudemio, foreiro, debitos, manutencao,
       custoCarrrego, capitalMobilizado, valorRef, comissao, ir, receitaLiquida, lucro, roi,
-      valorSinal: vArremate, parcelasPagas: 0, saldoDevedor: 0, parcelaMedia: 0,
+      valorSinal: valorPago, valorPago, descontoAVista: vArremate - valorPago, parcelasPagas: 0, saldoDevedor: 0, parcelaMedia: 0,
       yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual,
       // Blocos de caixa (à vista): tudo é desembolsado na arrematação; sem parcela mensal.
-      custosExtra, desembolsoInicial: vArremate + custosExtra, carregoMensal: iptu + cond,
+      custosExtra, desembolsoInicial: valorPago + custosExtra, carregoMensal: iptu + cond,
       mesesCarregados: pVenda, custoVenda: comissao + ir + 0, aluguelMensal: vLocacao,
     };
   } else {

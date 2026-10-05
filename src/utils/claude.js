@@ -153,6 +153,15 @@ Retorne JSON: {"leiloeiros": [{"nome": "...", "site": "url ou null", "telefone":
   return parseJSON(extractText(data)) || { leiloeiros: [], fonteJunta: '' };
 }
 
+// Só o CONTEÚDO da página do lote (texto, ou PDF em base64) — para virar documento "Descrição do
+// leiloeiro" na inclusão manual. Erro do servidor LANÇA com o motivo (não vira "página vazia").
+export async function lerPaginaDoLote(url) {
+  const r = await apiCall('/api/fetch-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
 // Extrai dados de uma URL (PDF ou página HTML) sem armazenar nada
 export async function extrairDadosDocumentoUrl(url) {
   const instrucao = getInstrucaoExtracao();
@@ -199,6 +208,9 @@ REGRAS CRÍTICAS DE LEITURA (05/10 — Alphaville Burle Marx, cada uma foi um er
 - DATA DO LEILÃO: só a data do PREGÃO, lida no edital. Matrícula não tem data de leilão: datas de registro, prenotação, intimação ou consolidação NÃO são "dataLeilao" (deixe vazio).
 - AVALIAÇÃO: só um valor que o documento chame de avaliação / valor de avaliação / laudo. Venda de banco que só publica o LANCE MÍNIMO não tem avaliação: "valorAvaliacao" = null. Nunca copie o lance, o valor do contrato ou o da dívida para a avaliação.
 - CONDOMÍNIO/LOTEAMENTO: o nome comercial ("Alphaville Burle Marx", "Condomínio X") vai em "nomeCondominio".
+- MATRÍCULA NÃO É EDITAL: numa matrícula, deixe NULOS "taxaLeiloeiroPercentual", "valorArrematacao", "parcelamento", "descontoAVistaPct", "leiloeiro" e "dataLeilao". Taxa de juros, valor e prazo do FINANCIAMENTO registrado (R-/Av- da alienação fiduciária ou hipoteca) são do contrato antigo do devedor — nunca comissão, lance ou condição de pagamento do leilão.
+- COMISSÃO DO LEILOEIRO: só o percentual que o edital/descrição chama de comissão do leiloeiro (ex.: "comissão de 5% ao Leiloeiro"). Nunca use taxa de juros, correção ou percentual de sinal.
+- PAGAMENTO (edital/descrição do leiloeiro): "descontoAVistaPct" = desconto para pagamento à vista, se houver. "parcelamento" = a opção de parcelamento OFERECIDA PELO VENDEDOR que valha para o valor deste lote, preferindo a SEM juros quando houver mais de uma: entrada (%), nº de parcelas, "jurosAnualPct" (0 se "sem acréscimos"), "tabela" (price|sac) e "base" = "proposta_parcelada" (venda de banco/credor) ou "financiamento_bancario" (crédito imobiliário). "art_895_cpc" SOMENTE em leilão JUDICIAL.
 
 Retorne APENAS JSON:
 {
@@ -222,7 +234,8 @@ Retorne APENAS JSON:
   "foreiro": número (se houver, senão 0),
   "taxaLeiloeiroPercentual": número,
   "somenteAVista": boolean — true SOMENTE se o documento AFIRMAR que o pagamento é exclusivamente à vista. Na dúvida, ou se o documento não falar de forma de pagamento, retorne false: "não diz" não é "só à vista".
-  "parcelamento": { "aceita": boolean, "entradaPct": número ou null, "parcelas": número ou null (quantidade de meses), "correcao": "texto curto do índice/juros, ou null", "base": "art_895_cpc|proposta_parcelada|financiamento_bancario|outro|null" } ou null se o documento não tratar do assunto,
+  "parcelamento": { "aceita": boolean, "entradaPct": número ou null, "parcelas": número ou null (quantidade de meses), "jurosAnualPct": número ou null (0 = sem juros), "tabela": "price|sac|null", "correcao": "texto curto do índice/juros, ou null", "base": "art_895_cpc|proposta_parcelada|financiamento_bancario|outro|null" } ou null se o documento não tratar do assunto,
+  "descontoAVistaPct": número ou null (desconto para pagamento à vista),
   "origem": "judicial|extrajudicial",
   "leiloeiro": "nome",
   "dataLeilao": "DD/MM/AAAA",
@@ -289,6 +302,16 @@ export async function extrairDadosDeArquivo(file) {
   return parseJSON(extractText(data));
 }
 
+// As condições gerais vão até ONDE COMEÇA a lista de lotes (o 1º "Lance Mínimo"), com teto. Eram os 12 mil
+// primeiros caracteres: no edital do Bradesco a comissão e o pagamento (seção 7) começam no 18.063º —
+// a IA nunca os via, e a comissão saiu da MATRÍCULA (10,49% = juros do financiamento antigo).
+function condicoesGerais(texto) {
+  const t = String(texto || '');
+  const iLotes = t.search(/(?:lance\s+m[ií]nimo|valor\s+m[ií]nimo|1[ºo°]\s*leil[aã]o)\s*:?\s*R\$/i);
+  const fim = iLotes > 3000 ? Math.max(3000, iLotes - 800) : 45000;
+  return t.slice(0, Math.min(fim, 45000));
+}
+
 // EDITAL COM VÁRIOS IMÓVEIS (05/10): o lote é localizado no texto pelos dados da matrícula
 // (src/utils/loteNoEdital.js) e a IA lê SÓ as condições gerais + o trecho dele. `null` = não achou.
 export async function extrairLoteDoEdital(texto, alvo) {
@@ -299,10 +322,10 @@ export async function extrairLoteDoEdital(texto, alvo) {
   const content = `${getInstrucaoExtracao()}
 
 ATENÇÃO: este EDITAL lista VÁRIOS imóveis. Extraia SOMENTE o imóvel abaixo — ${quem}.
-Lance, débitos, ocupação e descrição são os DESTE item; das condições gerais use só o que vale para todos (data do pregão, leiloeiro, comissão, forma de pagamento). tipoDocumento = "edital".
+Lance, débitos, ocupação e descrição são os DESTE item; das condições gerais use só o que vale para todos (data do pregão, leiloeiro, comissão, desconto à vista, opções de parcelamento para o valor deste lote). tipoDocumento = "edital".
 
-CONDIÇÕES GERAIS DO EDITAL (início do documento):
-${String(texto).slice(0, 12000)}
+CONDIÇÕES GERAIS DO EDITAL:
+${condicoesGerais(texto)}
 
 ITEM DO EDITAL QUE É ESTE IMÓVEL:
 ${trecho}`;

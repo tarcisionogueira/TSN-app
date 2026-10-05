@@ -12,7 +12,7 @@ import {
 import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
-import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel, extrairLoteDoEdital, transcreverDocumento } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel, extrairLoteDoEdital, transcreverDocumento, lerPaginaDoLote } from '../utils/claude';
 import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil } from '../utils/loteNoEdital';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -56,6 +56,7 @@ const VAZIO = {
   // número sem dizer a procedência é oferecer uma premissa com cara de fato apurado.
   origemCondicoesPagamento: '',
   taxaLeiloeiroPercentual: 5, honorariosPercentual: 10, taxaAdministrativaPercentual: 0, despesasAdministrativas: 0,
+  descontoAVistaPercentual: 0,
   valorAvaliacao: 0, valorArrematacao: 0,
   areaM2: 0, areaTerrenoM2: 0, valorMercado: 0, valorLocacao: 0,
   manutencaoEstimada: 0, prazoReformaMeses: 3, debitosAssumidos: 0,
@@ -1116,7 +1117,13 @@ export default function Analise() {
 
   // Mapeia o que a IA leu de UM arquivo (ou a fusão de vários) para os dados do imóvel. Era o corpo de
   // handleFileUpload; virou função para a inclusão manual com VÁRIOS documentos usar a mesma regra (05/10).
-  const aplicarDadosDoArquivo = (ext) => {
+  const aplicarDadosDoArquivo = (extBruto) => {
+    // Art. 895 do CPC é parcelamento de leilão JUDICIAL. Numa venda de banco (AF/Lei 9.514) a leitura da
+    // matrícula do Alphaville devolveu "art. 895, 25% + 30x" — e a projeção saiu num financiamento que não existe.
+    const origemLida = extBruto?.origem;
+    const ext = extBruto?.parcelamento?.base === 'art_895_cpc' && (origemLida || d.origem) === 'extrajudicial'
+      ? { ...extBruto, parcelamento: null } : extBruto;
+    const pc = ext?.parcelamento;
     setD(p => ({
       ...p,
       nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo, nomeCondominio: ext.nomeCondominio || p.nomeCondominio,
@@ -1147,6 +1154,11 @@ export default function Analise() {
           : {}),
       ...(Number(ext.parcelamento?.entradaPct) > 0 ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
       ...(Number(ext.parcelamento?.parcelas) > 0 ? { prazoMeses: Number(ext.parcelamento.parcelas) } : {}),
+      // Juros e tabela DA PROPOSTA do vendedor ("12 parcelas sem acréscimos" = 0%): sem isto a projeção
+      // aplicava os 12% a.a. em SAC do padrão bancário a um parcelamento sem juros.
+      ...(pc && pc.jurosAnualPct != null && Number(pc.jurosAnualPct) >= 0 ? { cetAnual: Number(pc.jurosAnualPct) } : {}),
+      ...(pc && /^(price|sac)$/.test(pc.tabela || '') ? { tabelaAmortizacao: pc.tabela } : {}),
+      ...(Number(ext.descontoAVistaPct) > 0 ? { descontoAVistaPercentual: Number(ext.descontoAVistaPct) } : {}),
       origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
       // A PRAÇA É UM PAR — data E lance andam juntos (31/08).
       //
@@ -1189,11 +1201,23 @@ export default function Analise() {
     // Edital antes dos complementares: o servidor lê até 60 mil caracteres por campo; se cortar, corta o complementar.
     setTextoDoc([bloco(['edital'], 'EDITAL'), bloco(['outro'], 'DOCUMENTO COMPLEMENTAR')].filter(Boolean).join('\n\n'));
     setTextoMatricula(bloco(['matricula'], 'MATRÍCULA'));
-    const exts = prontos.filter((x) => x.ext).map((x) => ({ ...x.ext, tipoDocumento: x.tipo === 'outro' ? (x.ext.tipoDocumento || 'outro') : x.tipo }));
+    // CAMPOS DO LEILÃO (comissão, lance, pagamento, data, leiloeiro) são do EDITAL e da DESCRIÇÃO do
+    // leiloeiro — NUNCA da matrícula: a do Alphaville deu "comissão 10,49%" (juros do financiamento
+    // antigo) e "lance R$ 2.430.000" (a dívida). E um campo VAZIO do edital não apaga o da descrição:
+    // `Object.assign` copiava o `null` por cima (a comissão que só a página do lote trazia sumia).
+    const DO_LEILAO = ['taxaLeiloeiroPercentual', 'valorArrematacao', 'parcelamento', 'descontoAVistaPct', 'somenteAVista', 'leiloeiro', 'dataLeilao', 'taxaAdministrativaPercentual'];
+    const exts = prontos.filter((x) => x.ext).map((x) => {
+      const e = { ...x.ext, tipoDocumento: x.tipo === 'outro' ? (x.ext.tipoDocumento || 'outro') : x.tipo };
+      if (e.tipoDocumento === 'matricula') for (const k of DO_LEILAO) delete e[k];
+      return e;
+    });
     if (!exts.length) return;
-    // Campos sem regra de autoridade (custos, parcelamento, taxa): o EDITAL por último, então ele vence.
+    // Campos sem regra de autoridade (custos, parcelamento, taxa): o EDITAL por último, então ele vence —
+    // mas só com valor (vazio não sobrescreve).
     const peso = (e) => ({ matricula: 1, edital: 2 }[e.tipoDocumento] || 0);
-    const fundido = Object.assign({}, ...[...exts].sort((a, b) => peso(a) - peso(b)));
+    const temValor = (v) => v != null && v !== '' && !(typeof v === 'number' && Number.isNaN(v));
+    const fundido = {};
+    for (const e of [...exts].sort((a, b) => peso(a) - peso(b))) for (const [k, v] of Object.entries(e)) if (temValor(v)) fundido[k] = v;
     const autoridade = consolidarDocsImovel(exts);
     for (const k of ['endereco', 'cidade', 'estado', 'cep', 'tipo', 'areaM2', 'areaTerrenoM2', 'valorAvaliacao', 'valorArrematacao', 'dataLeilao', 'leiloeiro', 'modalidade']) {
       if (autoridade[k] != null && String(autoridade[k]).trim() !== '') fundido[k] = autoridade[k];
@@ -1316,11 +1340,27 @@ export default function Analise() {
     try {
       // 1) Extrai os dados do imóvel a partir do que o cliente forneceu
       if (link) {
-        setUrlEdital(link);
-        // Falhar ao ler o link NÃO bloqueia (os anexos seguem valendo), mas tem que APARECER: era um catch mudo,
-        // e o link da VIP (host fora da lista) sumia sem ninguém saber.
-        try { const ext = await extrairDadosDocumentoUrl(link); if (ext) aplicarExtracao(ext); else showMsg('A página do lote não trouxe dados legíveis — seguimos com os anexos.', 'error'); }
-        catch (e) { showMsg(`Não consegui ler a página do lote (${String(e?.message || 'erro').slice(0, 90)}) — seguimos com os anexos.`, 'error'); }
+        // Só PDF é "o edital". A página do lote ia como `urlEdital`, o servidor tentava BAIXAR um edital de
+        // uma página HTML e o documental travava com "Edital não lido" (Alphaville, 05/10).
+        if (/\.pdf($|[?#])/i.test(link)) setUrlEdital(link);
+        // DESCRIÇÃO DO LEILOEIRO (pedido do dono): muitas vezes o que não está no edital (comissão, pagamento,
+        // ocupação, débitos) está na página do lote. Ela entra como DOCUMENTO — vai ao documental como
+        // complementar e participa da consolidação (sem nunca vencer o edital no que o edital disser).
+        // Falhar ao ler o link NÃO bloqueia (os anexos seguem valendo), mas tem que APARECER.
+        try {
+          const pagina = await lerPaginaDoLote(link);
+          if (pagina?.texto && pagina.texto.length > 200) {
+            const ext = await extrairDadosDocumento(pagina.texto).catch((e) => { console.warn('[analise] extração da página do lote:', e?.message); return null; });
+            setDocsManuais((prev) => [...prev.filter((x) => x.origemLink !== link), {
+              id: `link_${Date.now()}`, nome: `Descrição do leiloeiro — ${dominioDoLink(link)}`, tipo: 'outro', tipoDoNome: true, origemLink: link,
+              lendo: false, texto: pagina.texto, ext: ext ? { ...ext, tipoDocumento: 'outro' } : null,
+              aviso: ext ? 'página do lote lida' : 'página lida, mas sem dados estruturados — o texto vai para a análise documental',
+            }]);
+          } else if (pagina?.base64) {
+            const ext = await extrairDadosDocumentoUrl(link);
+            if (ext) aplicarExtracao(ext);
+          } else showMsg('A página do lote não trouxe texto legível — seguimos com os anexos.', 'error');
+        } catch (e) { showMsg(`Não consegui ler a página do lote (${String(e?.message || 'erro').slice(0, 90)}) — seguimos com os anexos.`, 'error'); }
       } else if (temDoc && !docsManuais.length) {
         // Com docsManuais os dados JÁ foram lidos arquivo a arquivo — extrair de novo seria IA paga à toa.
         await extrairDoc();
@@ -3611,6 +3651,8 @@ export default function Analise() {
                   uma premissa e o relatório aplicava outra. O ITBI caía para 3 aqui e nascia 5
                   no estado inicial; a régua única é a de src/lib/rentabilidade.js. */}
               <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual ?? COMISSAO_LEILOEIRO_PCT} onChange={upN} type="number"/>
+              {/* Desconto para pagamento à vista oferecido pelo VENDEDOR (ex.: Bradesco 10%). Só o cenário à vista o usa. */}
+              <Field label="Desconto à vista (%)" name="descontoAVistaPercentual" value={d.descontoAVistaPercentual || 0} onChange={upN} type="number"/>
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual ?? ITBI_REGISTRO_PCT} onChange={upN} type="number"/>
               {/* Honorários BidPro (taxa de ÊXITO do escritório, partilhada com jurídico/
                   analista quando ativos): 10% por padrão, aplica-se a TODO arremate

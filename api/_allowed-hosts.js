@@ -113,12 +113,33 @@ export function hostExternoSeguro(rawUrl) {
  * TEXTO do hostname — um domínio com DNS apontando pra 169.254.169.254 passava). Deve
  * devolver `false` para bloquear o hop.
  */
+// `opts.manterCookies` (05/10): sites que setam cookie e redirecionam para si mesmos (Leilão VIP) entram em
+// laço infinito sem ele — "Number of redirects hit maximum amount". O cookie só volta para o MESMO host que
+// o setou (nunca vaza para o destino de um redirect externo).
+function cookiesDaResposta(r) {
+  const lista = typeof r.headers.getSetCookie === 'function' ? r.headers.getSetCookie()
+    : (r.headers.get('set-cookie') ? r.headers.get('set-cookie').split(/,(?=\s*[A-Za-z0-9_.-]+=)/) : []);
+  return lista.map((c) => String(c).split(';')[0].trim()).filter((c) => c.includes('='));
+}
+
 export async function fetchExternoSeguro(url, opts = {}, maxHops = 4, validarHost = null) {
+  const { manterCookies, ...fetchOpts } = opts;
+  const pote = new Map(); // host → Map(nome → "nome=valor")
   let atual = url;
   for (let i = 0; i <= maxHops; i++) {
     if (!hostExternoSeguro(atual)) throw new Error('ssrf_bloqueado');
-    if (validarHost && !(await validarHost(new URL(atual).hostname))) throw new Error('ssrf_bloqueado_dns');
-    const r = await fetch(atual, { ...opts, redirect: 'manual' });
+    const host = new URL(atual).hostname;
+    if (validarHost && !(await validarHost(host))) throw new Error('ssrf_bloqueado_dns');
+    const doHost = pote.get(host);
+    const headers = manterCookies && doHost?.size
+      ? { ...(fetchOpts.headers || {}), Cookie: [...doHost.values()].join('; ') } : fetchOpts.headers;
+    const r = await fetch(atual, { ...fetchOpts, headers, redirect: 'manual' });
+    if (manterCookies) {
+      for (const c of cookiesDaResposta(r)) {
+        if (!pote.has(host)) pote.set(host, new Map());
+        pote.get(host).set(c.split('=')[0], c);
+      }
+    }
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get('location');
       if (!loc) return r;                              // 3xx sem Location → devolve como está
