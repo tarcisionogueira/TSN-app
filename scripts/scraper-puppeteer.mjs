@@ -2346,24 +2346,30 @@ async function scraperLJUDVeiculos(browser) {
 // pelo próprio link (até 250/dia). Achou "Encerramento" → grava a data (aí a apuração e a limpeza
 // por data funcionam). Lote de simulação da plataforma sai do ar.
 async function datarVeiculosLjudSemData(browser, max = 250) {
+  // Simulação da plataforma: desligada à parte (não depende de cair na fatia do dia).
+  const { data: off, error: eSim } = await supabase.from('veiculos_leilao').update({ ativo: false })
+    .eq('fonte', 'LJUD').eq('ativo', true).or('titulo.ilike.*simulação*,titulo.ilike.*simulacao*,titulo.ilike.*teste transmiss*').select('id');
+  if (eSim) console.log(`  ⚠️ LJUD veículos: desligar simulação falhou (${String(eSim.message).slice(0, 80)})`);
+  else if (off?.length) console.log(`    LJUD veículos: ${off.length} lote(s) de simulação desligado(s)`);
+  // Nunca lido primeiro; depois o lido há mais tempo — quem não tinha rótulo vai para o fim.
   const { data: fila, error } = await supabase.from('veiculos_leilao')
     .select('id, fonte_id, link_lote, titulo').eq('fonte', 'LJUD').eq('ativo', true).is('data_leilao', null)
-    .order('atualizado_em', { ascending: true }).limit(max);
+    .order('data_lida_em', { ascending: true, nullsFirst: true }).order('atualizado_em', { ascending: true }).limit(max);
   if (error) { console.log(`  ⚠️ LJUD veículos sem data: fila ilegível (${String(error.message).slice(0, 80)})`); return; }
   if (!fila?.length) { console.log('    LJUD veículos sem data: nenhum'); return; }
-  const simul = fila.filter((v) => /simula[çc][ãa]o|teste transmiss/i.test(v.titulo || ''));
-  if (simul.length) {
-    const { data: off } = await supabase.from('veiculos_leilao').update({ ativo: false }).in('id', simul.map((v) => v.id)).select('id');
-    console.log(`    LJUD veículos: ${off?.length || 0} lote(s) de simulação desligado(s)`);
-  }
-  const alvo = fila.filter((v) => !simul.includes(v) && /^https?:\/\//.test(v.link_lote || ''));
+  const alvo = fila.filter((v) => /^https?:\/\//.test(v.link_lote || ''));
   const det = await visitarTextoDetalhe(browser, alvo, { getUrl: (v) => v.link_lote, getId: (v) => v.id, max, label: 'LJUD veículos sem data' });
   let datados = 0, semRotulo = 0, falhas = 0;
   for (const v of alvo) {
     const d = det.get(v.id);
     const enc = d?.texto ? datasLjud(d.texto)?.encerramento : null;
-    if (!enc) { semRotulo++; continue; }
-    const { data: ok, error: e2 } = await supabase.from('veiculos_leilao').update({ data_leilao: enc }).eq('id', v.id).is('data_leilao', null).select('id');
+    const lidaEm = new Date().toISOString();
+    if (!enc) {
+      semRotulo++;
+      if (d) await supabase.from('veiculos_leilao').update({ data_lida_em: lidaEm }).eq('id', v.id).select('id'); // vai para o fim da fila
+      continue;
+    }
+    const { data: ok, error: e2 } = await supabase.from('veiculos_leilao').update({ data_leilao: enc, data_lida_em: lidaEm }).eq('id', v.id).is('data_leilao', null).select('id');
     if (e2 || !ok?.length) falhas++; else datados++;
   }
   console.log(`    LJUD veículos sem data: ${alvo.length} lidos pelo link · ${datados} datados · ${semRotulo} sem rótulo de encerramento · ${falhas} falha(s) ao gravar`);
