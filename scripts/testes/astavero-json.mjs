@@ -34,4 +34,14 @@ assert.equal(r.desconto_percentual, 0);
 const so = montarRowAstavero({ ...item, praca: 2, valor: 110138.59 }, null, tenant);
 assert.deepEqual([so.cidade, so.estado, so.valor_minimo, so.valor_minimo_2], ['Grão Pará', 'SC', 110138.59, null]);
 assert.deepEqual(localDaListagem('Manhuaçu - MG'), { cidade: 'Manhuaçu', estado: 'MG' });
+// 2ª praça corrente: a data é a dela, não a d1 que já passou (Mazzolli, apto 502 do Res. Ilha de Bali — dado real).
+const apto = montarRowAstavero({ ...item, praca: 2, valor: 112500 }, {
+  leilao: { datas: { d1: '2026-10-01T21:30:00.000Z', d2: null } },
+  lote: { v: { avaliacao: 225000, primeira: 225000, segunda: 112500 }, p: { processo: '5045442-38.2023.8.24.0038' }, d: { uf: 'SC', cidade: 'Joinville' },
+    datas: { leilao: '2026-10-08T18:30:00.000Z', inicial: '2026-10-01T21:30:00.000Z' }, nome: 'Apartamento - Res. ilha de Bali',
+    detalhada: '<p>01 (um) apartamento n. 502, com área privativa de 59,74000m², área comum de 7,11337500m², área total de 66,85337500m²</p>' },
+}, tenant);
+assert.equal(apto.data_leilao, '2026-10-08T18:30:00.000Z');
+assert.equal(apto.valor_minimo, 112500);
+assert.ok(apto.area_m2 > 50 && apto.area_m2 < 70, `área de apartamento plausível, veio ${apto.area_m2}`);
 console.log('astavero-json: todos os casos passaram');

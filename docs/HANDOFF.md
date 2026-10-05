@@ -36157,3 +36157,10 @@ Saulo Júlio tem 0 imóveis hoje (1 carro, 1 compressor) — o volume está nos 
 (próximo passo, se o dono quiser: `veiculos_leilao` pela mesma API, `categoria:'Veículos'`).
 Ambos no `scraper-dom.yml` diário (passos Nakakogue e Astavero). Testes: `nakakogue-catalogo`, `astavero-json`.
 **Link de veículo:** contador de acessos medido em produção (1 acesso gravado após o `await`).
+
+**Fechamento do #41 (05/10, tarde):** dry-runs finais — NAKAKOGUE 52 prontos; ASTAVERO 70 (Damiani 40 · Mazzolli 17 ·
+FB 9 · DBS 4; Saulo Júlio 0), cidade/área 100%, edital 60–100%, 2ª praça 53–100%. Três armadilhas pegas MEDINDO, não lendo:
+(1) `/app/pregao/init` sem `id` nunca responde (parecia IP barrado); (2) com `id`, devolve o 1º lote do leilão, não o
+pedido — o lote certo é `/app/pregao/lote {id}` (o código confere o `_id`); (3) "área privativa de 59,74000m²" virava
+74000 m², e lote na 2ª praça gravava a data da 1ª (já passada — a limpeza por data o apagaria aberto). Fração
+"1/9 de um imóvel" passou a ser barrada nos dois espelhos (JS + `fracao_ideal_barrada`, hash conferido antes da troca).

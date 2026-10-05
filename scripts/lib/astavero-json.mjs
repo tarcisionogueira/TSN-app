@@ -51,6 +51,9 @@ export function montarRowAstavero(item, det, tenant) {
   const d = lote.d || {};
   const titulo = String(lote.nome || item.nome || '').replace(/^Lote\s+[\w.]+\s*-\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 180);
   const descricao = texto(lote.detalhada).slice(0, 8000) || titulo;
+  // Cartório escreve "área privativa de 59,74000m²" (5 casas): o extrator central lia 74000 m² num
+  // apartamento (dry-run 05/10, Mazzolli). Para medir a área, corta o excesso de casas decimais.
+  const paraArea = `${titulo} ${descricao}`.replace(/(\d),(\d{2})\d{1,6}(?=\s*(?:m²|m2|metros))/gi, '$1,$2');
   const daLista = localDaListagem(item.local);
   const estado = UF_RE.test(String(d.uf || '')) ? d.uf : daLista.estado;
   const cidade = String(d.cidade || '').trim() || daLista.cidade;
@@ -78,14 +81,16 @@ export function montarRowAstavero(item, det, tenant) {
     endereco: String(d.endereco || '').length <= 200 ? String(d.endereco || '').trim() : '',
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     valor_minimo_2: item.praca === 2 ? null : (segunda || null),
-    area_m2: extrairAreaM2(`${titulo} ${descricao}`) || 0,
+    area_m2: extrairAreaM2(paraArea) || 0,
     descricao,
     numero_processo: p.processo || null,
     numero_matricula: (descricao.match(/matr[íi]cul\w*\s+(?:sob\s+(?:o\s+)?)?(?:n[º°.o]?\s*)?([\d.]{3,})/i) || [])[1]?.replace(/\./g, '') || null,
     url_lote: item.url || `${tenant.base}/pregao/${item.leilao}/${item.id}`,
     leiloeiro: tenant.leiloeiro,
-    data_leilao: datas.d1 || item.data || null,
-    data_leilao_2: datas.d2 || null,
+    // Na 2ª praça a data que vale é a dela: d1 já passou, e a limpeza por data apagaria um lote ainda aberto
+    // (Mazzolli, dry-run 05/10: d1 = 01/10, praça corrente 08/10). `lote.datas.leilao` = praça corrente.
+    data_leilao: item.praca === 2 ? (datas.d2 || lote.datas?.leilao || item.data || null) : (datas.d1 || item.data || null),
+    data_leilao_2: item.praca === 2 ? null : (datas.d2 || null),
     forma_pagamento: 'a_vista', ativo: true, suprimido_motivo: null, atualizado_em: new Date().toISOString(),
   };
   if (d.cep && /^\d{5}-?\d{3}$/.test(String(d.cep))) row.cep = String(d.cep).replace('-', '');
