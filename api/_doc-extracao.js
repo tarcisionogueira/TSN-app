@@ -347,7 +347,7 @@ export function extrairIdentidadeTexto(texto) {
   //  • PREFIXO casa o começo da palavra (cobre flexão: "edilício/edilícia", "localizado/a");
   //  • EXATA casa a palavra INTEIRA — se "do|da|de" fosse prefixo, "Dona Otília" seria
   //    descartada por começar com "Do" (defeito real, pego no teste do Alphaville).
-  const NAO_NOME_PREFIXO = /^(edil[íi]ci|ordin|extraordin|localizad|situad|referid|mencionad|vencid|atrasad|pendent|respons|constitu[íi]d|integr|conven|assembl|administrador|s[íi]ndic|d[ée]bit|d[íi]vid|matr[íi]cul|apartament|im[óo]ve|unidade|artigo)/i;
+  const NAO_NOME_PREFIXO = /^(edil[íi]ci|ordin|extraordin|localizad|situad|referid|mencionad|vencid|atrasad|pendent|respons|constitu[íi]d|integr|conven|assembl|administrador|s[íi]ndic|d[ée]bit|d[íi]vid|matr[íi]cul|apartament|im[óo]ve|unidade|artigo|judicia|extrajudicia|ap[óo]s|edita|eletr[ôo]nic|virtua|presencia)/i; // 05/10: "Praça JUDICIAL Edital…", "Praça APÓS A PUBLICAÇÃO" (ZUK) viravam logradouro
   const NAO_NOME_EXATA = /^(geral|em|no|na|do|da|de|com|sem|ser|ser[áa]|fica|dever|dever[áa]|est[áa]|s[ãa]o|que|cujo|acima|objeto|atual|deste|desta|desse|dessa|este|esta|os|as|o|a|n[ºo°]|bloco|torre|lote|quadra|forma|taxa|cota|conforme|nos|art|lei|leil[ãa]o|hasta|pra[çc]a)$/i;
   const naoNome = (s) => NAO_NOME_PREFIXO.test(s) || NAO_NOME_EXATA.test(s);
   const ehTokenNome = (s) => /^[A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'’.-]*$/.test(s) || /^\d{1,4}[ºª°]?$/.test(s);
@@ -366,6 +366,7 @@ export function extrairIdentidadeTexto(texto) {
     for (const bruto of toks.slice(0, maxToks)) {
       const tok = bruto.replace(/[,;:)].*$/, '');
       if (!tok || /https?:|www\.|[(@]/i.test(tok)) break;
+      if (/^(edital|judicial|extrajudicial|leil[ãa]o|hasta)$/i.test(tok)) break; // fim do nome: começou o texto do leilão
       if (ehTokenNome(tok)) nome.push(tok);
       else if (ehLigacao(tok)) nome.push(tok.toLowerCase());
       else break;
