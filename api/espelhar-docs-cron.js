@@ -69,10 +69,18 @@ function sb(path, opts = {}) {
 }
 
 async function marcar(id, patch) {
-  await sb(`documento_espelho?id=eq.${id}`, {
+  const gravar = (p) => sb(`documento_espelho?id=eq.${id}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ ...patch, atualizado_em: new Date().toISOString() }),
-  }).catch(() => {});
+    body: JSON.stringify({ ...p, atualizado_em: new Date().toISOString() }),
+  });
+  try {
+    let r = await gravar(patch);
+    // TIPO DESCOBERTO QUE JÁ EXISTE (05/10): unique (imovel_id, tipo, url_origem) — o mesmo arquivo
+    // já está no espelho com esse tipo (gêmeo 'edital' + 'outro'). Grava o resto sem trocar o tipo;
+    // sem isto o 409 era engolido e a cópia ficava 'pendente', baixada de novo a cada rodada.
+    if (r.status === 409 && patch.tipo) { const { tipo, ...resto } = patch; r = await gravar(resto); }
+    if (!r.ok) console.error('[espelhar-docs] marcar falhou', id, r.status, (await r.text().catch(() => '')).slice(0, 160));
+  } catch (e) { console.error('[espelhar-docs] marcar falhou (rede)', id, e?.message || e); }
 }
 
 export default async function handler(req, res) {

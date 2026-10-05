@@ -44,12 +44,27 @@ for (const a of alvos) {
   console.log(`  ${(tipo || '—').padEnd(9)} ${a.fonte.padEnd(16)} «${cabeca || '(sem texto: escaneado?)'}»`);
   if (!tipo) continue;
   if (!APLICAR) continue;
-  await sb(`documento_espelho?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)`, {
-    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipo }) });
-  const up = await sb(`imovel_anexos?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)&select=id`, {
-    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ tipo, nome: NOME[tipo] }) });
-  res.gravados += up?.length || 0;
+  // Linha a linha: unique (imovel_id, tipo, url_origem) recusa a linha cujo gêmeo tipado já existe
+  // (mesma url já guardada como 'edital'). Essa fica 'outro' — o documento já está tipado no gêmeo.
+  const linhasDoArquivo = await sb(`documento_espelho?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)&select=id`);
+  for (const l of linhasDoArquivo || []) {
+    try { await sb(`documento_espelho?id=eq.${l.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipo }) }); }
+    catch (e) { if (/ 409 /.test(e.message)) res.gemeos = (res.gemeos || 0) + 1; else throw e; }
+  }
+  // imovel_anexos: unique (imovel_id, tipo) p/ edital/matrícula — lote que JÁ tem esse tipo recusa
+  // (409) e fica com o que tinha; por isso linha a linha, não um PATCH só (que falharia inteiro).
+  const anexos = await sb(`imovel_anexos?storage_path=eq.${encodeURIComponent(a.storage_path)}&tipo=in.(outro,anexo)&select=id`);
+  for (const x of anexos || []) {
+    try {
+      const up = await sb(`imovel_anexos?id=eq.${x.id}&select=id`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ tipo, nome: NOME[tipo] }) });
+      res.gravados += up?.length || 0;
+    } catch (e) {
+      if (/ 409 /.test(e.message)) res.jaTinha = (res.jaTinha || 0) + 1;
+      else { res.falhas++; console.log(`  ✗ imovel_anexos ${x.id}: ${e.message.slice(0, 120)}`); }
+    }
+  }
 }
-console.log(`\n${APLICAR ? 'GRAVADO' : 'EM SECO'} — alvos ${alvos.length} · lidos ${res.lidos} · falhas ${res.falhas}${APLICAR ? ` · imovel_anexos atualizados ${res.gravados}` : ''}`);
+console.log(`\n${APLICAR ? 'GRAVADO' : 'EM SECO'} — alvos ${alvos.length} · lidos ${res.lidos} · falhas ${res.falhas}${APLICAR ? ` · imovel_anexos atualizados ${res.gravados} · gêmeos já tipados ${res.gemeos || 0} · lote já tinha o tipo ${res.jaTinha || 0}` : ''}`);
 console.log('por tipo:', JSON.stringify(res.porTipo));
 for (const [f, t] of Object.entries(res.porFonte).sort()) console.log(`  ${f.padEnd(18)} ${JSON.stringify(t)}`);
