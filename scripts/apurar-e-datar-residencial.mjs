@@ -29,6 +29,7 @@
 import { apurarResultadoDoTexto, patchDaApuracao } from '../api/_resultado-leilao.js';
 import { extrairDatasLeilao } from '../api/enriquecer-lote.js';
 import { FONTES_APURACAO_RESIDENCIAL, FONTES_DATAS_RESIDENCIAL, HB_APURACAO, HB_DATAS } from '../api/_residencial.js';
+import { fetchComCookies } from './lib/fetch-com-cookies.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -67,7 +68,9 @@ const dormir = (ms) => new Promise(r => setTimeout(r, ms));
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
 async function baixar(url) {
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,*/*;q=0.8' }, signal: AbortSignal.timeout(20000) });
+    // Cookie entre redirecionamentos (05/10): o VIP grava cookie no redirect e manda voltar — sem
+    // levá-lo, o fetch entrava em laço e a página "não abria" (83 de 93 em 05/10).
+    const { response: r } = await fetchComCookies(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,*/*;q=0.8' } });
     const html = await r.text();
     return r.ok && html.length > 500 ? { html } : { html: '', motivo: `HTTP ${r.status}` };
   } catch (e) {
@@ -88,16 +91,19 @@ if (FONTES_APURAR.length) {
     + `&order=resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst,data_fim.desc&limit=${LIM_APURAR}`);
   const cont = { lidos: 0, vendido: 0, sem_lance: 0, cancelado: 0, aberto: 0, indeterminado: 0, nao_abriu: 0, nao_gravou: 0 };
   const motivos = {};
+  const porFonte = {}; // { ZUK: { lidos, nao_abriu } } — o carimbo diz QUAIS fontes foram cobertas
   for (const c of cand) {
     const alvo = c.url_lote || c.link_edital;
     if (!alvo || !/^https?:\/\//.test(alvo)) continue;
     const { html, motivo } = await baixar(alvo);
     if (!html) {
-      cont.nao_abriu++; motivos[motivo] = (motivos[motivo] || 0) + 1;
+      cont.nao_abriu++; motivos[`${c.fonte}:${motivo}`] = (motivos[`${c.fonte}:${motivo}`] || 0) + 1;
+      (porFonte[c.fonte] ||= { lidos: 0, nao_abriu: 0 }).nao_abriu++;
       if (APLICAR) await sb(`imoveis_leilao?id=eq.${c.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
       await dormir(PAUSA); continue;
     }
     cont.lidos++;
+    (porFonte[c.fonte] ||= { lidos: 0, nao_abriu: 0 }).lidos++;
     const achado = apurarResultadoDoTexto(html, alvo);
     const patch = patchDaApuracao(achado, { tabela: 'imoveis_leilao', tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: c.ativo === false });
     const chave = achado?.aberto ? 'aberto' : (achado?.resultado || 'indeterminado');
@@ -107,7 +113,10 @@ if (FONTES_APURAR.length) {
     await dormir(PAUSA);
   }
   console.log(`[apuração] fontes=${FONTES_APURAR.join(',')} candidatos=${cand.length}`, JSON.stringify(cont), Object.keys(motivos).length ? `não abriu: ${JSON.stringify(motivos)}` : '');
-  if (cont.lidos > 0 || !cand.length) await carimbar(HB_APURACAO, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}`);
+  // Coberta = a fonte abriu pelo menos metade das páginas tentadas (ou não tinha nada a tentar).
+  // As outras ficam FORA do carimbo e o cron da Vercel volta a cobri-las (05/10, #44 — VIP órfão).
+  const cobertas = FONTES_APURAR.filter((f) => !porFonte[f] || porFonte[f].lidos >= porFonte[f].nao_abriu);
+  await carimbar(HB_APURACAO, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}; cobertas=${cobertas.join(',')}`);
 }
 
 // ── 2) DATAS (mesma fila do enriquecer-datas-cron, só as fontes pedidas) ────────────────────

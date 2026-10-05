@@ -22,11 +22,19 @@ const RESERVA_DIAS = 7;
  */
 export async function fontesCobertasPeloResidencial(sb, chave, fontes) {
   try {
-    const r = await sb(`sistema_heartbeat?chave=eq.${encodeURIComponent(chave)}&select=ultimo_em`);
+    const r = await sb(`sistema_heartbeat?chave=eq.${encodeURIComponent(chave)}&select=ultimo_em,detalhe`);
     if (!r.ok) { console.warn(`[residencial] heartbeat ${chave} ilegível (HTTP ${r.status}) — cron cobre as fontes`); return []; }
     const [hb] = await r.json();
     const fresco = hb?.ultimo_em && Date.now() - Date.parse(hb.ultimo_em) < RESERVA_DIAS * 86400000;
-    return fresco ? fontes : [];
+    if (!fresco) return [];
+    // POR FONTE (05/10, #44): o carimbo valia para TODAS as fontes se o runner lesse QUALQUER
+    // página — em 05/10 leu 10 de 93 (VIP em laço de redirect) e o cron pulou VIP mesmo assim: 536
+    // lotes vencidos, 0 tentados. Agora o runner escreve `cobertas=ZUK,JELEILOES` (só as que ele
+    // de fato abriu) e o cron cobre o resto. Carimbo no formato antigo (sem `cobertas=`) = todas.
+    const m = String(hb.detalhe || '').match(/cobertas=([A-Z0-9_,]*)/);
+    if (!m) return fontes;
+    const cobertas = new Set(m[1].split(',').filter(Boolean));
+    return fontes.filter((f) => cobertas.has(f));
   } catch (e) {
     console.warn(`[residencial] heartbeat ${chave} falhou (${e?.message || e}) — cron cobre as fontes`);
     return [];
