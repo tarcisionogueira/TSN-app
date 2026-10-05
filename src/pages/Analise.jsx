@@ -2923,12 +2923,15 @@ export default function Analise() {
                   style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                   <Printer size={16}/> Baixar Parecer Final em PDF
                 </button>
+                {['assessorado', 'clube', 'admin'].includes(role) && (
                 <button onClick={sinalizarArremate}
                   disabled={arrematadoSinalizado || sinalizandoArremate}
                   title="Confirmo que arrematei este imóvel — mantém os documentos guardados"
                   style={{ marginTop:10, width:'100%', padding:'12px', background: arrematadoSinalizado ? '#ecfdf5' : 'white', color:'#059669', border:'1.5px solid #a7f3d0', borderRadius:12, fontWeight:800, fontSize:14, cursor: arrematadoSinalizado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                  <Award size={16}/> {arrematadoSinalizado ? 'Arremate confirmado ✓' : (sinalizandoArremate ? 'Enviando…' : 'Arrematei este imóvel')}
+                  {/* "registrado", não "confirmado" (05/10, #34): quem confirma é a equipe, com comprovante. */}
+                  <Award size={16}/> {arrematadoSinalizado ? 'Arremate registrado ✓ — anexe o auto ou recibo em Meus Arrematados' : (sinalizandoArremate ? 'Enviando…' : 'Arrematei este imóvel')}
                 </button>
+                )}
               </div>
             );
           })()}

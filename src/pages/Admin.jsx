@@ -5175,6 +5175,64 @@ function VeiculosTab() {
 // respondeu 2 pedidos (equipe_whatsapp), não há e-mail cadastrado (sem_contato) ou o teto semanal do
 // endereço está cheio (aguardando — sai sozinho). Some da lista quando o documento chega ao lote ou
 // o leilão passa. Abrir o lote → Análise → "Pedir ao leiloeiro" (WhatsApp/e-mail).
+// ARREMATES A CONFIRMAR (05/10, #34 — decisões do dono): o cliente declara; a equipe confirma
+// quando há comprovante (auto/carta de arrematação ou comprovante de pagamento) ou recusa com
+// motivo. O resultado apurado do leilão aparece ao lado para conferir o valor declarado.
+function ArrematesConfirmarManager() {
+  const [lista, setLista] = useState(null);
+  const [erro, setErro] = useState('');
+  const [rodando, setRodando] = useState('');
+  const carregar = async () => {
+    try {
+      const r = await apiCall('/api/arremate-confirmacao');
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setErro(''); setLista(j.pendentes || []);
+    } catch (e) { setErro('Não consegui ler a fila: ' + e.message); setLista([]); }
+  };
+  useEffect(() => { carregar(); }, []);
+  const decidir = async (a, acao) => {
+    let motivo = '';
+    if (acao === 'recusar') { motivo = window.prompt('Motivo da recusa (o cliente vai ver):') || ''; if (!motivo.trim()) return; }
+    setRodando(a.id);
+    try {
+      const r = await apiCall('/api/arremate-confirmacao', { method: 'POST', body: JSON.stringify({ arrematado_id: a.id, acao, motivo }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(j.error || `Falhou (HTTP ${r.status})`); return; }
+      await carregar();
+    } finally { setRodando(''); }
+  };
+  if (lista && !lista.length && !erro) return null;
+  const brl = (v) => (Number(v) > 0 ? 'R$ ' + Math.round(Number(v)).toLocaleString('pt-BR') : '—');
+  return (
+    <div style={S.card}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🏁 Arremates a confirmar {lista ? `(${lista.length})` : ''}</div>
+      <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0 10px' }}>Confirme com o comprovante (auto/carta de arrematação ou comprovante de pagamento). Confirmado o cliente não apaga mais; recusado ele vê o motivo.</div>
+      {erro && <p style={{ fontSize: 11.5, color: '#dc2626' }}>⚠️ {erro}</p>}
+      {!lista ? <p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando…</p> : lista.map(a => (
+        <div key={a.id} style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 8, marginBottom: 6, fontSize: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <b style={{ flex: 1, minWidth: 160 }}>{a.titulo || a.imovel_id} <span style={{ fontWeight: 400, color: '#64748b' }}>· {a.cliente || a.user_id.slice(0, 8)} · {a.cidade}/{a.estado}</span></b>
+            <span>Declarado <b>{brl(a.valor_arrematacao)}</b></span>
+            {a.leilao && <span style={{ color: '#475569' }}>Apuração: {a.leilao.resultado_leilao || 'sem resultado'}{a.leilao.valor_lance_vencedor ? ` ${brl(a.leilao.valor_lance_vencedor)}` : ''}</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 5 }}>
+            {a.comprovantes.length ? a.comprovantes.map(c => (
+              <a key={c.id} href={c.url || '#'} target="_blank" rel="noreferrer" style={{ color: '#0D63DB', fontWeight: 600 }}>📄 {c.nome || c.tipo}</a>
+            )) : <span style={{ color: '#b45309', fontWeight: 600 }}>Sem comprovante anexado ainda</span>}
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <button disabled={!!rodando || !a.comprovantes.length} onClick={() => decidir(a, 'confirmar')}
+                style={{ padding: '5px 10px', background: a.comprovantes.length ? '#15803d' : '#cbd5e1', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: rodando || !a.comprovantes.length ? 'default' : 'pointer' }}>Confirmar</button>
+              <button disabled={!!rodando} onClick={() => decidir(a, 'recusar')}
+                style={{ padding: '5px 10px', background: 'white', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: rodando ? 'default' : 'pointer' }}>Recusar</button>
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PedidosLeiloeiroEquipeManager() {
   const [linhas, setLinhas] = useState(null);
   const [erro, setErro] = useState('');
@@ -8315,6 +8373,7 @@ function ScrapersTab() {
 
           <KycPendenteManager />
           <PedidosLeiloeiroEquipeManager />
+          <ArrematesConfirmarManager />
           <LeiloeiroContatoManager />
         </div>
       )}

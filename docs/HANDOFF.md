@@ -36112,3 +36112,14 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
 - **#74:** dívida zerada — a trava `user-id-cru-em-dado-de-cliente` tem 0 na linha de base (138 `effectiveUserId`
   + exceções com motivo); escrita em modo suporte bloqueada. Agir EM NOME do cliente = feature (decisão do dono).
 - Ferramentas: `diag-pagina-resultado.yml` (abre lote com cookie e mostra o que o leitor concluiria).
+
+### 05/10 (tarde 6) — #34 fluxo de arremate (decisões do dono) e FIPE
+- **Decisões:** equipe confirma; comprovante = auto/carta de arrematação OU comprovante de pagamento; confirmado
+  o cliente não apaga. **Feito:** `arremate_confirmacao` (sem linha = declarado; confirmado/recusado + motivo,
+  escrita só pelo servidor `api/arremate-confirmacao.js`); índice único 1 arrematante por lote (imovel_id uuid);
+  delete do cliente bloqueado se confirmado (função `arremate_esta_confirmado` — a política direta dava
+  recursão de RLS, pego em teste com rollback); "Arrematei"/"Registrar" só Assessorado/Club (+admin), no
+  servidor e na RLS de insert. Admin: card "🏁 Arremates a confirmar" (comprovantes com link + apuração do
+  leilão). Meus Arrematados: selo Aguardando/Confirmado/Recusado(motivo). Botão diz "registrado", não "confirmado".
+- **FIPE:** já é cache — `_fipe-garantir` grava no veículo e reaproveita por 25 dias (3 se sem match). Conferido
+  no acesso do dono (Hilux 2022, 13:48).

@@ -48,6 +48,16 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
 
+  // SÓ ASSESSORADO/CLUB DECLARA ARREMATE (05/10, #34 — desenho aprovado pelo dono). O insert usa a
+  // service key (a RLS não se aplica aqui), então a regra é conferida no servidor. Falha ao ler o
+  // papel → recusa dizendo isso, nunca "sem permissão" silencioso.
+  const rPerfil = await sb(`perfis?id=eq.${user.id}&select=role&limit=1`);
+  if (!rPerfil.ok) return new Response(JSON.stringify({ error: 'Não foi possível verificar seu plano agora. Tente de novo.' }), { status: 502, headers });
+  const [perfil] = await rPerfil.json().catch(() => []);
+  if (!['assessorado', 'clube', 'admin'].includes(perfil?.role)) {
+    return new Response(JSON.stringify({ error: 'O registro de arremate é exclusivo dos planos Assessoria e Leilão Club. Fale com a equipe para registrar.' }), { status: 403, headers });
+  }
+
   const imovelId = String(body.imovel_id || '').trim();
   if (!imovelId) return new Response(JSON.stringify({ error: 'imovel_id obrigatório' }), { status: 400, headers });
 
@@ -84,6 +94,10 @@ export default async function handler(req) {
       // em `arrematados`. Pior que a mensagem errada: é esse registro que PROTEGE os
       // documentos do lote da limpeza por retenção, então o cliente ficava achando que
       // estava tudo guardado enquanto o prazo corria.
+      // UM ARREMATANTE POR LOTE (índice único): outro cliente já declarou este imóvel.
+      if (ins.status === 409) {
+        return new Response(JSON.stringify({ error: 'Este imóvel já tem um arremate registrado na BidPro. Se foi você quem arrematou, fale com a equipe.' }), { status: 409, headers });
+      }
       if (!ins.ok) {
         const corpo = await ins.text().catch(() => '');
         console.error('[sinalizar-arremate] insert falhou', ins.status, String(corpo).slice(0, 300));

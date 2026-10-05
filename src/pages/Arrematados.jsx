@@ -768,6 +768,7 @@ export default function Arrematados() {
   const uid = visaoEquipeDireta ? clienteIdParam : (effectiveUserId || user?.id || null);
   const [arrematados, setArrematados] = React.useState([]);
   const [saldos, setSaldos] = React.useState({}); // arrematado_id → saldo
+  const [confirmacoes, setConfirmacoes] = React.useState({}); // arrematado_id → { status, motivo } (05/10, #34)
   const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
   const [mercado, setMercado] = React.useState({}); // imovel_id → valorMercado
   const [avals, setAvals] = React.useState({});     // imovel_id → valor_avaliacao
@@ -792,6 +793,12 @@ export default function Arrematados() {
     setErroCarga('');
     const lista = Array.isArray(data) ? data : [];
     setArrematados(lista);
+    // Situação do arremate (05/10, #34): sem linha = declarado; a equipe confirma ou recusa.
+    if (lista.length) {
+      const { data: cs, error: errC } = await supabase.from('arremate_confirmacao').select('arrematado_id,status,motivo,em').in('arrematado_id', lista.map(a => a.id));
+      if (errC) console.warn('[arrematados] situação da confirmação ilegível:', errC.message);
+      setConfirmacoes(errC ? null : Object.fromEntries((cs || []).map(c => [c.arrematado_id, c])));
+    }
     if (lista.length) {
       // saldo por arrematado. 04/10: em erro NÃO zera — saldo desconhecido não é R$ 0.
       const { data: ls, error: errLs } = await supabase.from('arrematado_lancamentos').select('arrematado_id,tipo,valor').in('arrematado_id', lista.map(a => a.id));
@@ -850,6 +857,9 @@ export default function Arrematados() {
     const { data, error } = await supabase.from('arrematados').insert({ user_id: uid, status: 'arrematado', ...payload }).select().single();
     // 04/10: antes, uma falha aqui só devolvia ao formulário, sem dizer nada.
     if (error || !data) {
+      // 05/10 (#34): um arrematante por lote (índice único) e só Assessoria/Club registram (RLS).
+      if (error?.code === '23505') { alert('Este imóvel já tem um arremate registrado na BidPro. Se foi você quem arrematou, fale com a equipe.'); return; }
+      if (error?.code === '42501') { alert('O registro de arremate é exclusivo dos planos Assessoria e Leilão Club. Fale com a equipe para registrar.'); return; }
       alert(`Não foi possível registrar a arrematação — tente de novo.${error?.message ? `\n\n${error.message}` : ''}`);
       return;
     }
@@ -912,7 +922,7 @@ export default function Arrematados() {
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {!soLeitura && acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
+        {!soLeitura && ['assessorado', 'clube', 'admin'].includes(role) && acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
         {acaoBtn('Minhas análises', Search, '#0D63DB', () => nav('/analises'))}
         {ehStaff && uid && acaoBtn('Doc. pessoais', User, '#7c3aed', () => setVerDocsPessoais(true))}
         {visaoEquipeDireta && acaoBtn('Oportunidades', Target, '#7c3aed', () => nav(`/assessorados/${clienteIdParam}/oportunidades?nome=${encodeURIComponent(nomeClienteParam || '')}`))}
@@ -940,9 +950,11 @@ export default function Arrematados() {
               <button onClick={() => nav('/buscar')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                 <Search size={16} /> Buscar oportunidades
               </button>
+              {['assessorado', 'clube', 'admin'].includes(role) && (
               <button onClick={() => setNovo(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: 'white', color: '#059669', border: '1.5px solid #a7f3d0', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                 <Plus size={16} /> Já arrematei — registrar
               </button>
+              )}
             </div>
           )}
         </div>
@@ -950,6 +962,8 @@ export default function Arrematados() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {arrematados.map(a => {
             const st = STATUS[a.status] || STATUS.arrematado;
+            const conf = confirmacoes ? (confirmacoes[a.id] || { status: 'declarado' }) : null; // null = não li (não mostra)
+            const CONF = { declarado: ['Aguardando confirmação da equipe', '#fff7ed', '#9a3412'], confirmado: ['Confirmado pela equipe ✓', '#ecfdf5', '#15803d'], recusado: ['Recusado pela equipe', '#fef2f2', '#b91c1c'] };
             const saldo = saldos ? (saldos[a.id] || 0) : null; // null = leitura falhou (04/10), não R$ 0
             const docsCount = a.imovel_id ? (nDocs[a.imovel_id] || 0) : (Array.isArray(a.documentos) ? a.documentos.length : 0);
             const arrematacao = Number(a.valor_arrematacao) || null;
@@ -975,6 +989,9 @@ export default function Arrematados() {
                   <div style={{ fontSize: 12.5, color: '#64748b' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.c }}>{st.l}</span>
+                    {conf && <span title={conf.status === 'recusado' && conf.motivo ? `Motivo: ${conf.motivo}` : (conf.status === 'declarado' ? 'Anexe o auto de arrematação ou o comprovante de pagamento em Documentos' : '')}
+                      style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: CONF[conf.status][1], color: CONF[conf.status][2] }}>
+                      {CONF[conf.status][0]}{conf.status === 'recusado' && conf.motivo ? `: ${conf.motivo.slice(0, 80)}` : ''}</span>}
                     {modalidade && (
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#f1f5f9', color: '#475569' }}>
                         {MODALIDADE_LABEL[modalidade] || modalidade}
@@ -991,7 +1008,8 @@ export default function Arrematados() {
                     <span style={{ fontWeight: 700, color: saldo == null ? '#94a3b8' : saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {saldo == null ? 'indisponível' : brl(saldo)}</span>
                   </div>
                 </div>
-                {!soLeitura && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}
+                {/* Confirmado é registro do negócio: só a equipe remove (o banco também bloqueia). */}
+                {!soLeitura && conf?.status !== 'confirmado' && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}
               </div>
             );
           })}

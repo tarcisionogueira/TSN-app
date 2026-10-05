@@ -33,7 +33,9 @@ const CHIP = {
 
 export default function MinhasAnalises() {
   const { analises, documentais, laudos, emAndamento, remover } = useAnalises();
-  const { effectiveUserId, impersonate } = useAuth();
+  const { effectiveUserId, impersonate, role } = useAuth();
+  // Registro de arremate: só Assessoria e Leilão Club (05/10, #34 — o servidor confere de novo).
+  const podeDeclararArremate = ['assessorado', 'clube', 'admin'].includes(role);
   const nav = useNavigate();
   const isMobile = useIsMobile();
   // Estrela num card → a seção Acompanhamento relê (remonta pela chave).
@@ -332,7 +334,9 @@ export default function MinhasAnalises() {
                       tem prazo. Quem ganhou precisa ver isto — e agir pelo botão ao lado. */}
                   {!jaArr && leilaoPassou(a) && (
                     <div style={{ fontSize: 11.5, color: '#9a3412', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '5px 8px', marginTop: 5, lineHeight: 1.45 }}>
-                      Leilão em {new Date(a.dataLeilao).toLocaleDateString('pt-BR')} — <strong>arrematou?</strong> Registre em &quot;Arrematei&quot; para manter o relatório e os documentos.
+                      Leilão em {new Date(a.dataLeilao).toLocaleDateString('pt-BR')} — <strong>arrematou?</strong> {podeDeclararArremate
+                        ? <>Registre em &quot;Arrematei&quot; para manter o relatório e os documentos.</>
+                        : <>Fale com a equipe para registrar o arremate e manter o relatório e os documentos.</>}
                     </div>
                   )}
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -362,7 +366,7 @@ export default function MinhasAnalises() {
                   </button>
                 )}
                 {/* "Arrematei" é AÇÃO de sinalizar — some quando o imóvel já está arrematado. */}
-                {!jaArr && (doisProntos(a) || leilaoPassou(a)) && (
+                {!jaArr && podeDeclararArremate && (doisProntos(a) || leilaoPassou(a)) && (
                 <button onClick={(e) => sinalizarArremate(e, a)}
                   disabled={sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"
