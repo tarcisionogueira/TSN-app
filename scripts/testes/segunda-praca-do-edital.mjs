@@ -20,6 +20,7 @@ const negativos = [
   ['Segundo leilão: comissão do leiloeiro de 5% sobre o valor da arrematação.', {}],
   ['2º leilão em 20/10. Lote 1 R$ 80.000,00; Lote 2 R$ 95.000,00', { multiLote: true, valorMinimo: 200000 }],
   ['2º leilão em 20/10, lance R$ 500.000,00', { valorMinimo: 300000 }], // acima da 1ª praça
+  ['segundo leilão não poderá ser aceito lance inferior aos seguintes limites: a) Veículos automotores em geral: mínimo de 50% do valor da avaliação; b) Imóveis: 60%', {}],
   ['O imóvel foi avaliado e o 1º leilão será em 10/10 pelo valor de 100% da avaliação.', {}],
 ];
 for (const [t, ctx] of negativos) assert.equal(extrairSegundaPraca(t, ctx), null, `pegou indevidamente: ${t}`);

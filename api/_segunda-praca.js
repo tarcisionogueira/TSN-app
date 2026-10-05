@@ -29,6 +29,9 @@ export function extrairSegundaPraca(texto, { multiLote = false, valorAvaliacao =
   while ((m = ANCORA.exec(t))) {
     const janela = t.slice(m.index, m.index + 400);
     const p = janela.match(PCT_AVALIACAO);
+    // Regra POR CATEGORIA ("a) Veículos automotores: mínimo de 50%… b) Imóveis: 60%", LJUD): o
+    // percentual achado pode ser o de veículo. Com "veículo" entre a âncora e o número, não vale.
+    if (p && /ve[íi]culo|automotor|bens m[óo]veis/i.test(janela.slice(0, p.index || 0))) continue;
     if (p) {
       const pct = num(p[1]);
       if (pct >= 20 && pct <= 95) {

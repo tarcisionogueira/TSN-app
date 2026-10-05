@@ -77,7 +77,11 @@ for (const a of anexos.slice(0, N)) {
   s.achou++;
   s.pcts[res.pct] = (s.pcts[res.pct] || 0) + 1;
   if (exemplos.length < 25) exemplos.push({ fonte: l.fonte, id: l.id, pct: res.pct, valor: res.valor, v1: l.valor_minimo, aval: l.valor_avaliacao, trecho: res.trecho.slice(0, 180) });
-  if (APLICAR && res.valor > 0) {
+  // Só grava o que ACRESCENTA: em muitas fontes o "lance mínimo" coletado já É o da 2ª praça
+  // (ZUK/GRUPOLANCE/MEGA mostram a praça corrente) — repetir o mesmo valor como 2ª praça não informa nada.
+  const acrescenta = res.valor > 0 && (!(l.valor_minimo > 0) || res.valor < l.valor_minimo * 0.98);
+  if (!acrescenta) s.jaEra2a = (s.jaEra2a || 0) + 1;
+  if (APLICAR && acrescenta) {
     const { data, error } = await sb.from('imoveis_leilao').update({ valor_minimo_2: res.valor })
       .eq('id', l.id).is('valor_minimo_2', null).select('id');
     if (error || !data?.length) { falhasGravar++; console.error('gravar', l.id, error?.message || 'nenhuma linha'); } else { gravados++; s.gravados++; }
