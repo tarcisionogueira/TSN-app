@@ -54,7 +54,8 @@ function sanear(v) {
     descricao: semLinks(v.descricao),
     raw: {
       lot_location_address: raw.lot_location_address ?? null,
-      offerDescription: semLinks(raw.offerDescription ?? null),
+      // SUPERBID manda objeto aqui; só texto serve a localDoPatio (String(obj) = "[object Object]").
+      offerDescription: typeof raw.offerDescription === 'string' ? semLinks(raw.offerDescription) : null,
       addr: raw.addr ?? null,
       localidade: raw.localidade ?? null,
       local: raw.local ?? null,
@@ -83,8 +84,9 @@ export default async function handler(req) {
       if (Date.parse(c.expira_em) < Date.now()) return json({ error: 'Este link expirou. Peça um novo a quem compartilhou.' }, 410);
       const [v] = await ler(`veiculos_leilao?id=eq.${c.veiculo_id}&select=${COLUNAS}&limit=1`);
       if (!v) return json({ error: 'Veículo não encontrado.' }, 404);
-      // Contador de acessos: só rastro para a equipe saber se o link foi aberto — falha não trava a tela.
-      sb(`veiculo_compartilhamento?token=eq.${token}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      // Contador de acessos: rastro para a equipe saber se o link foi aberto — falha não trava a tela.
+      // AWAIT obrigatório: no edge, promessa solta morre quando a resposta sai (medido 05/10: 0 acessos).
+      await sb(`veiculo_compartilhamento?token=eq.${token}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ acessos: (c.acessos || 0) + 1, ultimo_acesso_em: new Date().toISOString() }) })
         .catch((e) => console.error('[veiculo-compartilhado] acesso:', e?.message));
       return json({ ok: true, veiculo: sanear(v), expira_em: c.expira_em }, 200, { 'Cache-Control': 'no-store' });
