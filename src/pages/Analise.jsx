@@ -1172,6 +1172,9 @@ export default function Analise() {
         ext = e.status === 'fulfilled' ? (e.value || null) : null;
         if (!texto && ext?.observacoes) { texto = `[Documento escaneado — resumo lido pela IA]\n${ext.observacoes}`; aviso = 'escaneado: o texto integral não é legível, foi usado o resumo da IA'; }
         if (!texto && !ext) aviso = `não consegui ler (${(t.reason || e.reason)?.message || 'formato não suportado'})`;
+        // Texto lido mas DADOS não (05/10, edital do Alphaville): antes a tela dizia "lido" e o relatório saía
+        // sem avaliação nem lance. O texto ainda vai ao documental; os valores, a pessoa confere/preenche.
+        else if (texto && !ext) aviso = `texto lido, mas os valores não foram extraídos (${e.reason?.message || 'resposta vazia da IA'}) — confira avaliação e lance nos dados do imóvel`;
       } catch (err) { aviso = `não consegui ler (${err?.message || 'erro'})`; }
       setDocsManuais((prev) => prev.map((x) => (x.id === it.id ? { ...x, lendo: false, texto, ext, aviso,
         tipo: x.tipoDoNome ? x.tipo : (tipoPelaLeitura(ext) || x.tipo), file: undefined } : x)));
@@ -1233,8 +1236,10 @@ export default function Analise() {
       // 1) Extrai os dados do imóvel a partir do que o cliente forneceu
       if (link) {
         setUrlEdital(link);
-        try { const ext = await extrairDadosDocumentoUrl(link); aplicarExtracao(ext); }
-        catch { /* extração pode falhar; segue com anexos/dados manuais */ }
+        // Falhar ao ler o link NÃO bloqueia (os anexos seguem valendo), mas tem que APARECER: era um catch mudo,
+        // e o link da VIP (host fora da lista) sumia sem ninguém saber.
+        try { const ext = await extrairDadosDocumentoUrl(link); if (ext) aplicarExtracao(ext); else showMsg('A página do lote não trouxe dados legíveis — seguimos com os anexos.', 'error'); }
+        catch (e) { showMsg(`Não consegui ler a página do lote (${String(e?.message || 'erro').slice(0, 90)}) — seguimos com os anexos.`, 'error'); }
       } else if (temDoc && !docsManuais.length) {
         // Com docsManuais os dados JÁ foram lidos arquivo a arquivo — extrair de novo seria IA paga à toa.
         await extrairDoc();

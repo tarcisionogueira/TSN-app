@@ -11,6 +11,14 @@ async function callAPI(payload, useSearch = false) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, useSearch }),
   });
+  // `.ok` checado (05/10): um PDF grande demais voltava 413 e o `r.json()` cru virava "extração vazia" —
+  // o edital do Alphaville (cliente) entrou como "lido" sem avaliação nem lance. Erro tem que LANÇAR.
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '');
+    let msg = '';
+    try { msg = JSON.parse(corpo)?.error || ''; } catch { msg = corpo.slice(0, 120); } // corpo não-JSON (ex.: 413 da Vercel) vira o próprio texto
+    throw new Error(r.status === 413 ? 'arquivo grande demais para leitura direta' : `IA indisponível (HTTP ${r.status}${msg ? `: ${String(msg).slice(0, 100)}` : ''})`);
+  }
   return r.json();
 }
 
@@ -225,7 +233,8 @@ export async function extrairDadosDocumento(texto, pdfBase64 = null) {
       { type: 'text', text: instrucao },
     ];
   } else {
-    content = `${instrucao}\n\nTEXTO DO DOCUMENTO:\n${texto.substring(0, 6000)}`;
+    // 40 mil (era 6 mil): num edital a avaliação e o lance quase nunca estão nos primeiros 6 mil caracteres.
+    content = `${instrucao}\n\nTEXTO DO DOCUMENTO:\n${texto.substring(0, 40000)}`;
   }
 
   const data = await callAPI({
@@ -244,9 +253,13 @@ export async function extrairDadosDocumento(texto, pdfBase64 = null) {
 // para a IA. Aqui: PDF segue igual; Word, texto e foto (inclusive HEIC no Safari) passam pelo mesmo
 // extrator do Criar Contrato (extrairTextoDoc). Arquivo que não abre LANÇA com o motivo, para a tela
 // dizer o que fazer — nunca "extraído vazio".
+// PDF acima disto não vai inteiro em base64 (o corpo da requisição tem teto de ~4,5 MB e o base64 incha
+// 33%): lê o TEXTO no navegador e manda só ele — ou as páginas como imagem, se for escaneado.
+const PDF_MAX_DIRETO = 3 * 1024 * 1024;
+
 export async function extrairDadosDeArquivo(file) {
   const ehPdf = file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '');
-  if (ehPdf) {
+  if (ehPdf && (file?.size || 0) <= PDF_MAX_DIRETO) {
     const { arquivoParaBase64 } = await import('./arquivo');
     return extrairDadosDocumento('', await arquivoParaBase64(file));
   }

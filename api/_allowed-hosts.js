@@ -26,6 +26,9 @@ export const ALLOWED_HOSTS = new Set([
   'patiorocha.com.br', 'www.patiorocha.com.br',
   'albertomacedo.com.br', 'www.albertomacedo.com.br',
   'vipleiloes.com.br', 'www.vipleiloes.com.br',
+  // O domínio REAL da VIP é leilaovip.com.br (VIP_BASE do coletor). Faltava: o link colado pelo cliente na
+  // inclusão manual era recusado em silêncio (05/10, lote Alphaville).
+  'leilaovip.com.br', 'www.leilaovip.com.br',
   'grupolance.com.br', 'www.grupolance.com.br',
   // Banco do Brasil
   'seuimovelbb.com.br', 'www.seuimovelbb.com.br', 'www42.bb.com.br',
