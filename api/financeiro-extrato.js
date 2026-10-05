@@ -24,8 +24,23 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
+
+// HOLDING NOGUEIRA (05/10, autorizado pelo dono): o sistema financeiro PESSOAL do dono — projeto
+// separado, outro banco, outro deploy — lê ESTE extrato para enxergar o faturamento do BidPro
+// (Mercado Pago + Asaas) sem gastar conexão de Open Finance. Entra com token PRÓPRIO
+// (`HOLDING_API_TOKEN`), nunca com o CRON_SECRET: o cron secret dispara todas as rotinas; este
+// token só LÊ este endpoint. Revogar = apagar a variável. Comparação em tempo constante sobre o
+// hash (iguala o tamanho dos dois lados); token ausente ou curto = porta fechada.
+function ehHoldingAutorizada(req) {
+  const esperado = (process.env.HOLDING_API_TOKEN || '').trim();
+  if (esperado.length < 32) return false;
+  const bruto = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+  const h = (v) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(h(bruto), h(esperado));
+}
 
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
 const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
@@ -165,8 +180,13 @@ export default async function handler(req, res) {
   // conciliação sozinho (senão a importação dependeria de alguém lembrar de apertar um botão).
   // O cron entra pelo CRON_SECRET, nunca por sessão, e só LÊ.
   const ehCron = isCronAuthorized(req);
+  const ehHolding = !ehCron && ehHoldingAutorizada(req);
+  if (ehHolding) {
+    const rl = await checkRateLimit('financeiro:holding', 30, 5 * 60_000);
+    if (!rl.ok) { res.status(429).json({ error: 'Muitas consultas. Aguarde alguns minutos.' }); return; }
+  }
   let user = null;
-  if (!ehCron) {
+  if (!ehCron && !ehHolding) {
     user = await getUser(req);
     if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
     const role = await getUserRoleById(user.id);

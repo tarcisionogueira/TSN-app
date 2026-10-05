@@ -45,6 +45,9 @@ chegam, crons rodam, cobrança processa). Tratar como configuradas:
 
 - **Núcleo:** `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `APP_BASE_URL`, `CRON_SECRET`
 - **Receita:** `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `ASAAS_API_KEY`
+- **Holding Nogueira (05/10):** `HOLDING_API_TOKEN` — criada pelo dono no painel (Sensitive). Deixa o sistema
+  pessoal do dono (projeto `holding-nogueira`, onde a mesma chave é `BIDPRO_API_TOKEN`) LER `/api/financeiro-extrato`
+  e nada mais. Ausente ou com menos de 32 caracteres = acesso fechado. Revogar = apagar a variável.
 - **Comunicação:** `RESEND_API_KEY`, `APP_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`
 - **IA:** `CLAUDE_KEY`, `GEMINI_API_KEY`
 - **Operação:** `BRIGHTDATA_API_TOKEN`, `BRIGHTDATA_ZONE`, `BRIGHTDATA_MAX_REQ_SEMANA`, `DAILY_API_KEY`
