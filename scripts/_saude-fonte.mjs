@@ -19,8 +19,10 @@ export function metricasColeta(imoveis) {
   const p = (x) => (n ? Number((x / n).toFixed(3)) : 0);
   const uf    = imoveis.filter(i => /^[A-Z]{2}$/.test(i.estado || '')).length;
   const valor = imoveis.filter(i => Number(i.valor_minimo) > 0).length;
-  const link  = imoveis.filter(i => /^https?:\/\//.test(i.link_edital || i.url_lote || '')).length;
-  const foto  = imoveis.filter(i => i.link_foto).length;
+  // Veículo (veiculos_leilao) nomeia diferente: `link_lote` e `fotos[]`. Sem estes dois, a saúde de todo
+  // coletor de veículo media link/foto 0% SEMPRE — NORDESTE_VEICULOS desde 30/09 (achado 05/10, forma nº 10).
+  const link  = imoveis.filter(i => /^https?:\/\//.test(i.link_edital || i.url_lote || i.link_lote || '')).length;
+  const foto  = imoveis.filter(i => i.link_foto || (Array.isArray(i.fotos) && i.fotos.length > 0)).length;
   return { n, uf_pct: p(uf), valor_pct: p(valor), link_pct: p(link), foto_pct: p(foto) };
 }
 

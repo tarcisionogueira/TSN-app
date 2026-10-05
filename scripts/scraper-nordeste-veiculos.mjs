@@ -72,12 +72,25 @@ async function main() {
       if (v.email_leiloeiro) contatos.set(v.leiloeiro, { leiloeiro: v.leiloeiro, email: v.email_leiloeiro, obs: 'payload do lote (nordesteleiloes.com.br)' });
       if (rows.length <= 8) console.log(`  [${DRYRUN ? 'seco' : 'ok'}] ${row.tipo_veiculo} · ${row.marca || '?'} ${row.modelo || ''} ${row.ano_modelo || ''} · R$ ${row.valor_minimo} / aval ${row.valor_avaliacao} · ${row.cidade || '?'}/${row.estado || '?'} · placa ${row.placa || '—'} · ativo=${row.ativo}`);
     }
-    console.log(`  prontos: ${rows.length} · falhas: ${falhas} · contatos de leiloeiro: ${contatos.size}`);
+    // Mesma foto em 3+ lotes = imagem genérica do site (banner/logo), não foto do bem (regra de anularFotoRepetida).
+    const freq = new Map();
+    for (const r of rows) if (r.fotos) freq.set(r.fotos[0], (freq.get(r.fotos[0]) || 0) + 1);
+    let genericas = 0;
+    for (const r of rows) if (r.fotos && freq.get(r.fotos[0]) >= 3) { delete r.fotos; genericas++; }
+    console.log(`  prontos: ${rows.length} · falhas: ${falhas} · com foto: ${rows.filter((r) => r.fotos).length}${genericas ? ` (${genericas} genérica(s) descartada(s))` : ''} · contatos de leiloeiro: ${contatos.size}`);
 
     if (!DRYRUN && rows.length) {
-      const { data, error } = await supabase.from('veiculos_leilao').upsert(rows, { onConflict: 'fonte,fonte_id' }).select('id');
-      if (error) throw new Error(`upsert veiculos: ${error.message}`);
-      console.log(`✅ ${data?.length || 0} veículos NORDESTE gravados/atualizados.`);
+      // Em GRUPOS de mesmo conjunto de colunas: num upsert misto o PostgREST grava NULL na coluna que falta, e o
+      // lote cuja foto não veio nesta rodada perderia a que já tinha (mesma regra do scraper-globo/astavero).
+      const grupos = new Map();
+      for (const r of rows) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+      let gravados = 0;
+      for (const g of grupos.values()) {
+        const { data, error } = await supabase.from('veiculos_leilao').upsert(g, { onConflict: 'fonte,fonte_id' }).select('id');
+        if (error) throw new Error(`upsert veiculos: ${error.message}`);
+        gravados += data?.length || 0;
+      }
+      console.log(`✅ ${gravados} veículos NORDESTE gravados/atualizados.`);
       if (contatos.size) {
         const { error: ec } = await supabase.rpc('contato_leiloeiro_tenant_auto', { p_fonte: 'NORDESTE', p_itens: [...contatos.values()] });
         if (ec) console.warn(`  contatos não gravados: ${ec.message}`);

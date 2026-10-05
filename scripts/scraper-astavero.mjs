@@ -236,10 +236,8 @@ async function coletarVeiculos(tenant) {
       }
     }
   }
-  // metricasColeta lê os nomes de IMÓVEL (url_lote/link_foto): sem o mapa, link e foto de veículo mediriam 0%
-  // sempre — número plausível sobre o campo errado (forma nº 10).
-  const paraSaude = prontos.filter((r) => r.ativo).map((r) => ({ estado: r.estado, valor_minimo: r.valor_minimo, url_lote: r.link_lote, link_foto: r.fotos?.[0] || null }));
-  await registrarSaude(supabase, fonteSaude, paraSaude, 'astavero-api', {
+  // metricasColeta (_saude-fonte.mjs) já entende link_lote/fotos de veículo desde 05/10.
+  await registrarSaude(supabase, fonteSaude, prontos.filter((r) => r.ativo), 'astavero-api', {
     ok: true, vazio: !itens.length, enumerados: itens.length, motivo: itens.length ? '' : 'site sem veículo em aberto' });
   return true;
 }

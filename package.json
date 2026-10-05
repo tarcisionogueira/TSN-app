@@ -122,7 +122,8 @@
     "testar:ljud-veiculo-data": "node scripts/testes/ljud-veiculo-tem-data.mjs",
     "testar:nakakogue-catalogo": "node scripts/testes/nakakogue-catalogo.mjs",
     "testar:astavero-json": "node scripts/testes/astavero-json.mjs",
-    "testar:astavero-veiculo": "node scripts/testes/astavero-veiculo.mjs"
+    "testar:astavero-veiculo": "node scripts/testes/astavero-veiculo.mjs",
+    "testar:saude-metricas-veiculo": "node scripts/testes/saude-metricas-veiculo.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

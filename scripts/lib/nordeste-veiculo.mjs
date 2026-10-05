@@ -7,7 +7,7 @@
  * vêm da DESCRIÇÃO deste lote (nunca do texto solto da página, que traz os outros lotes).
  */
 import { loteDoPayload, descricaoDoLote } from './nordeste-parse.mjs';
-import { num, numPayload } from './dom-parse-util.mjs';
+import { num, numPayload, fotoDeHtml } from './dom-parse-util.mjs';
 // Veículo de pátio ("veículos conservados") vale R$ 400–1.500 de verdade: o piso de imóvel (R$ 1.000)
 // descartava 31 de 40 no seco de 30/09. Aqui o piso é R$ 100.
 const plausV = v => (v >= 100 && v <= 50_000_000 ? v : 0);
@@ -89,6 +89,9 @@ export function veiculoDoDetalhe(html, url) {
     cidade: loc ? loc[1].trim() : (lote.city || null), estado: loc ? loc[2] : (/^[A-Z]{2}$/.test(lote.state || '') ? lote.state : null),
     placa: placa ? placa.replace('-', '').toUpperCase() : null, chassi: chassi ? chassi.toUpperCase() : null, renavam,
     descricao: desc.slice(0, 8000) || titulo,
+    // Foto: o MESMO extrator dos imóveis da NORDESTE (24/24 com foto, 23 distintas). Até 05/10 o coletor de
+    // veículos não lia foto nenhuma — 100 de 100 ativos sem foto, escondidos atrás da saúde que media 0% de tudo.
+    foto: fotoDeHtml(html, url) || null,
     data_leilao: proxima,
     leiloeiro: lote.auction?.auctioneer?.name || 'Nordeste Leilões',
     email_leiloeiro: lote.auction?.auctioneer?.email || null,
@@ -104,6 +107,8 @@ export function montarRowVeiculo(url, v) {
     ano_fabricacao: v.ano_fabricacao, ano_modelo: v.ano_modelo, placa: v.placa, chassi: v.chassi, renavam: v.renavam,
     tipo_veiculo: v.tipo_veiculo, valor_avaliacao: v.valor_avaliacao, valor_minimo: v.valor_minimo,
     cidade: v.cidade, estado: v.estado, link_lote: url, data_leilao: v.data_leilao,
+    // Só manda `fotos` quando leu uma: null apagaria a já gravada numa leitura que falhou.
+    ...(v.foto ? { fotos: [v.foto] } : {}),
     leiloeiro: v.leiloeiro, modalidade: 'judicial', forma_pagamento: 'a_vista', is_sucata: false,
     status_patio: 'indefinido', status_patio_motivo: 'sem sinal de pátio na ficha (nordeste)',
     ativo: !v.encerrado, atualizado_em: new Date().toISOString(),

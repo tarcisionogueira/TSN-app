@@ -45,4 +45,12 @@ assert.equal(numPayload('41.194,80'), 41194.8);
 assert.equal(numPayload('380.000'), 380000, 'ponto de milhar pt-BR continua milhar');
 const gol = marcaModeloAno('VEÍCULO CONSERVADO VW GOL 1.0 - 2004/2005');
 assert.equal(gol.marca, 'VW'); assert.equal(gol.modelo, 'GOL 1.0'); assert.equal(gol.ano_modelo, 2005);
+// Foto (05/10): só entra `fotos` quando houve foto — sem ela, a chave nem vai (null apagaria a gravada).
+{
+  const { montarRowVeiculo } = await import('../lib/nordeste-veiculo.mjs');
+  const base = { titulo: 'AUTOMÓVEL VW/GOL', marca: 'VW', modelo: 'GOL', valor_minimo: 5000, encerrado: false };
+  const url = 'https://nordesteleiloes.com.br/lotes/213-065-automovel-vw-gol';
+  assert.deepEqual(montarRowVeiculo(url, { ...base, foto: 'https://nordesteleiloes-files.s3.amazonaws.com/lotes/fotos/a.png' }).fotos, ['https://nordesteleiloes-files.s3.amazonaws.com/lotes/fotos/a.png']);
+  assert.equal('fotos' in montarRowVeiculo(url, { ...base, foto: null }), false);
+}
 console.log('nordeste-veiculo: todos os casos passaram');
