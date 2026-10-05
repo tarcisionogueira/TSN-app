@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ORIGEM_VENDA } from '../utils/origemVeiculo';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail } from 'lucide-react';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail, Share2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -18,6 +18,11 @@ import { localDoPatio } from '../utils/patioVeiculo';
 // em App.jsx já só existe sob /admin/veiculos-leilao*, roles=['admin','analista']). Por isso
 // "Solicitar análise" e "Enviar e-mail" abaixo não precisam tratar cliente/visitante: quem
 // chega aqui já passou pelo gate da rota.
+// EXCEÇÃO deliberada (05/10, dono): o LINK DE COMPARTILHAMENTO (/#/v/<token>, rota pública) abre
+// esta MESMA tela em modo `compartilhado` — uma tela só, sem cópia. Nele o dado vem de
+// api/veiculo-compartilhado.js já sem link do leiloeiro/anexos, e somem: voltar, favoritar,
+// ir ao leiloeiro, propor compra, solicitar análise e e-mail. Nada de FIPE on-demand nem
+// reapuração (visitante não gasta cota). Quem gera o link: admin/analista (botão Compartilhar).
 const ROLES_STAFF = ['admin', 'analista', 'advogado', 'consultor'];
 
 // Resultado real do leilão (21/09) — mesmo mapa de BuscaVeiculos.jsx (RESULTADO_BADGE) e de
@@ -81,7 +86,8 @@ export default function VeiculoDetalhe() {
   // (`state.deBusca`). Voltar "uma página" às cegas era o loop do dono (29/09): com o relatório
   // no meio da pilha, "Voltar à busca" caía no relatório. Sem a marca, vai direto à busca.
   const voltarABusca = () => (loc.state?.deBusca && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/admin/veiculos-leilao'));
-  const { id } = useParams();
+  const { id, token } = useParams();
+  const compartilhado = !!token;
   const isMobile = useIsMobile();
   const { user, role, effectiveUserId } = useAuth();
   const [v, setV] = useState(null);
@@ -92,11 +98,26 @@ export default function VeiculoDetalhe() {
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
   const [cota, setCota] = useState(null);
+  const [compartilhando, setCompartilhando] = useState(false);
+  const [avisoLink, setAvisoLink] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
     (async () => {
       setCarregando(true); setErro(null);
+      if (compartilhado) {
+        try {
+          const r = await fetch(`/api/veiculo-compartilhado?token=${encodeURIComponent(token)}`);
+          const d = await r.json().catch(() => ({}));
+          if (cancelado) return;
+          if (!r.ok || !d?.veiculo) { setErro(d?.error || 'Link inválido.'); setCarregando(false); return; }
+          setV(d.veiculo);
+        } catch (e) {
+          if (!cancelado) setErro(`Não foi possível abrir o link agora (${e?.message || 'rede'}). Tente de novo.`);
+        }
+        if (!cancelado) setCarregando(false);
+        return;
+      }
       const { data, error } = await supabase.from('veiculos_leilao').select(COLUNAS).eq('id', id).single();
       if (cancelado) return;
       if (error || !data) { setErro('Veículo não encontrado.'); setCarregando(false); return; }
@@ -104,13 +125,13 @@ export default function VeiculoDetalhe() {
       setCarregando(false);
     })();
     return () => { cancelado = true; };
-  }, [id]);
+  }, [id, token, compartilhado]);
 
   // Ao abrir a tela: se a FIPE ainda não tem valor fresco, busca on-demand (pedido do dono —
   // "ao abrir o veículo trazer a FIPE dele"). A trava de cota diária vive no servidor
   // (api/veiculo-fipe.js + registrar_uso_fipe) — aqui só reage ao resultado.
   useEffect(() => {
-    if (!v?.id) return;
+    if (!v?.id || compartilhado) return;
     // Recarrega ao abrir quando o valor passou de 25 dias (24/09, dono: "a FIPE deve ser recarregada
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
@@ -143,7 +164,7 @@ export default function VeiculoDetalhe() {
   // caso esteja divergente"). Mesmo endpoint/gate de ImovelDetalhe.jsx (cooldown/teto de
   // tentativas no servidor); só dispara quando já está 'indeterminado' e o leilão já encerrou.
   useEffect(() => {
-    if (!v?.id || v.resultado_leilao !== 'indeterminado') return;
+    if (!v?.id || compartilhado || v.resultado_leilao !== 'indeterminado') return;
     if (!v.data_leilao || new Date(v.data_leilao).getTime() >= Date.now()) return;
     let cancelado = false;
     apiCall('/api/reapurar-resultado-leilao', { method: 'POST', body: JSON.stringify({ veiculoId: v.id }) })
@@ -159,11 +180,30 @@ export default function VeiculoDetalhe() {
   // lança — falha de rede não pode virar "você não tem análise".
   useEffect(() => {
     const uid = effectiveUserId || user?.id;
-    if (!uid) { setCota(null); return; }
+    if (!uid || compartilhado) { setCota(null); return; }
     let vivo = true;
     lerCotaVeiculo(supabase, uid).then((c) => { if (vivo) setCota(c); });
     return () => { vivo = false; };
-  }, [user, effectiveUserId]);
+  }, [user, effectiveUserId, compartilhado]);
+
+  const compartilhar = async () => {
+    setCompartilhando(true); setAvisoLink(null);
+    try {
+      const r = await apiCall('/api/veiculo-compartilhado', { method: 'POST', body: JSON.stringify({ veiculo_id: v.id }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d?.token) { setAvisoLink(d?.error || `Não consegui gerar o link (HTTP ${r.status}).`); return; }
+      const url = `${window.location.origin}/#/v/${d.token}`;
+      const titulo = [v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo';
+      if (navigator.share) {
+        try { await navigator.share({ title: titulo, url }); setAvisoLink('Link compartilhado.'); return; }
+        catch (e) { if (e?.name === 'AbortError') return; } // cancelou a folha de compartilhar; senão cai na cópia
+      }
+      await navigator.clipboard.writeText(url);
+      setAvisoLink(`Link copiado — vale até ${new Date(d.expira_em).toLocaleDateString('pt-BR')}.`);
+    } catch (e) {
+      setAvisoLink(`Não consegui gerar o link: ${e?.message || 'erro de rede'}.`);
+    } finally { setCompartilhando(false); }
+  };
 
   if (carregando) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#64748b' }}><Loader2 className="animate-spin" size={22} /></div>;
@@ -172,7 +212,7 @@ export default function VeiculoDetalhe() {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
         <p>{erro || 'Veículo não encontrado.'}</p>
-        <button onClick={voltarABusca} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        {!compartilhado && <button onClick={voltarABusca} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>}
       </div>
     );
   }
@@ -196,9 +236,27 @@ export default function VeiculoDetalhe() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button onClick={voltarABusca} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
-        <ArrowLeft size={16} /> Voltar à busca
-      </button>
+      {compartilhado ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: '#1e3a8a' }}>
+          <span><strong>BidPro Brasil</strong> · veículo compartilhado com você pela nossa equipe</span>
+          <span style={{ color: '#475569' }}>Dúvidas ou interesse? Fale com quem enviou o link.</span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={voltarABusca} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+            <ArrowLeft size={16} /> Voltar à busca
+          </button>
+          {['admin', 'analista'].includes(role) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {avisoLink && <span style={{ fontSize: 12, color: '#475569' }}>{avisoLink}</span>}
+              <button onClick={compartilhar} disabled={compartilhando} title="Gera um link (30 dias) que abre esta tela sem login — sem análise e sem link do leiloeiro"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #cbd5e1', borderRadius: 9, padding: '7px 12px', color: '#0D63DB', cursor: compartilhando ? 'wait' : 'pointer', fontSize: 12.5, fontWeight: 700 }}>
+                {compartilhando ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} Compartilhar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 0.9fr)', gap: 20 }}>
         {/* Galeria */}
@@ -226,7 +284,7 @@ export default function VeiculoDetalhe() {
             <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', margin: 0 }}>
               {[v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
             </h1>
-            <FavoritoBotao tipo="veiculo" itemId={v.id || id} />
+            {!compartilhado && <FavoritoBotao tipo="veiculo" itemId={v.id || id} />}
           </div>
           <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {anoLabel && <span>{anoLabel}</span>}
@@ -305,6 +363,8 @@ export default function VeiculoDetalhe() {
 
           <div style={{ fontSize: 12.5, color: '#64748b' }}>🗓 {fmtDataLeilao(v.data_leilao)}</div>
 
+          {/* Ações — nenhuma no link compartilhado (acervo não é público: sem leiloeiro, sem análise). */}
+          {!compartilhado && (<>
           <a href={v.link_lote || undefined} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 16px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', pointerEvents: v.link_lote ? 'auto' : 'none' }}>
             Ver no leiloeiro <ExternalLink size={14} />
@@ -339,6 +399,7 @@ export default function VeiculoDetalhe() {
               )}
             </>
           )}
+          </>)}
         </div>
       </div>
 
@@ -365,7 +426,7 @@ export default function VeiculoDetalhe() {
         </div>
       )}
 
-      {anexos.length > 0 && (
+      {!compartilhado && anexos.length > 0 && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
           <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>Documentos do lote ({anexos.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -381,7 +442,7 @@ export default function VeiculoDetalhe() {
       {/* Enviar e-mail — só equipe (jurídico ou o leiloeiro deste lote), mesmo componente de
           ImovelDetalhe.jsx/Caso.jsx. Sem cliente/caso nesta tela (mesmo lote pode interessar a
           vários clientes) — só os anexos do lote. */}
-      {ROLES_STAFF.includes(role) && (
+      {!compartilhado && ROLES_STAFF.includes(role) && (
         <EnviarEmailCasoLote veiculoId={v.id} cardStyle={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16 }} />
       )}
 

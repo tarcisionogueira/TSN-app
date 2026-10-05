@@ -519,6 +519,10 @@ export default function App() {
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/festa" element={<Festa />} />
           <Route path="/c/:token" element={<ContratoLink />} />
+          {/* Link de compartilhamento do veículo (05/10): a MESMA tela da equipe, em modo leitura e
+              sem login — o token é a credencial (api/veiculo-compartilhado.js). Router de topo:
+              fora do MainLayout, o destinatário não vê menu de um sistema a que não tem acesso. */}
+          <Route path="/v/:token" element={<div style={{ minHeight: '100vh', background: '#f8fafc' }}><VeiculoDetalhe /></div>} />
           <Route path="/t/:token" element={<TestemunhaLink />} />
           {/* Páginas PÚBLICAS de eBook/Curso (preço + aquisição). Precisam estar no router
               de TOPO senão o /p/:tipo/:id (ProdutoLanding, sem tratamento) as sombreava →

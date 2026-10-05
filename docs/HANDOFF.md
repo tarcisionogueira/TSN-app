@@ -36123,3 +36123,19 @@ A medição "0% com documento" era a régua errada (forma nº 10): contava só l
   leilão). Meus Arrematados: selo Aguardando/Confirmado/Recusado(motivo). Botão diz "registrado", não "confirmado".
 - **FIPE:** já é cache — `_fipe-garantir` grava no veículo e reaproveita por 25 dias (3 se sem match). Conferido
   no acesso do dono (Hilux 2022, 13:48).
+
+## 05/10 — Compartilhar veículo + imóvel sem login com mais informação (pedido do dono)
+**Regra do dono:** sem acesso ao acervo (visitante no imóvel; qualquer pessoa no veículo, que não é público)
+NÃO pode ir ao leiloeiro, solicitar análise nem ver anexos. Imóvel após login: tudo. Veículo: só a página + FIPE.
+**Sem tela nova (pedido: "não criar telas com conteúdo similar"):**
+- **Veículo:** `VeiculoDetalhe.jsx` ganhou o modo `compartilhado` (rota pública `/#/v/:token`, router de topo,
+  sem MainLayout). Botão **Compartilhar** (admin/analista) → `api/veiculo-compartilhado.js` POST cria/reaproveita
+  token (24 bytes aleatórios, 30 dias; reaproveita se faltam >7 dias). GET `?token=` devolve o veículo JÁ SANEADO
+  no servidor: sem `link_lote`, sem `anexos`, `raw` reduzido aos campos do pátio, URLs removidas da descrição —
+  esconder só no front não bastaria. FIPE = a gravada (sem consulta on-demand nem reapuração: visitante não gasta
+  cota). Conta `acessos`/`ultimo_acesso_em` (rastro de "o cliente abriu?").
+  Tabela `veiculo_compartilhamento` (RLS sem política = só service) — `20261005_veiculo_compartilhamento.sql`, aplicada.
+- **Imóvel sem login:** `ImovelGate.jsx` deixou de ser cartão embaçado: galeria, ficha (ocupação, condomínio,
+  pagamento, 2ª praça), descrição inteira sem links, e o bloco "Entre para ver o imóvel completo" (endereço/mapa,
+  documentos, leiloeiro, análise). O link para `/leilao/:id` saiu — a tela já mostra mais do que ela.
+Auditoria de segurança 0/0 após a migração.

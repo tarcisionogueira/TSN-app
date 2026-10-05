@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Lock, MapPin, Loader2 } from 'lucide-react';
+import { Lock, MapPin, Loader2, Home } from 'lucide-react';
+import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { fotoCandidatos } from '../utils/foto';
 import { fmtBRL } from '../utils/format';
@@ -20,6 +21,8 @@ export default function ImovelGate() {
   const { id } = useParams();
   const [im, setIm] = useState(null);      // null = carregando; {} = não encontrado
   const [imgIdx, setImgIdx] = useState(0);
+  const [fotoAtiva, setFotoAtiva] = useState(0);
+  const isMobile = useIsMobile();
   const next = `/imovel/${id}`;
 
   useEffect(() => {
@@ -34,7 +37,10 @@ export default function ImovelGate() {
     // A DECISÃO DE 08/08 SEGUE DE PÉ: endereço exato, mapa, edital/matrícula e as análises
     // continuam atrás do cadastro. O público vê o FATO; a conta abre o que é NOSSO.
     supabase.from('imoveis_leilao')
-      .select('id,titulo,cidade,estado,bairro,tipo,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,modalidade,leiloeiro,descricao,link_foto,fonte,fonte_id')
+      // 05/10 (dono): "apresentar mais informações" — galeria, ocupação, condomínio, pagamento e
+      // data da 2ª praça entram; continuam FORA sem login: link do leiloeiro, anexos/documentos,
+      // endereço exato/mapa e análise. Após login, a página completa (ImovelDetalhe) abre tudo.
+      .select('id,titulo,cidade,estado,bairro,tipo,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,modalidade,leiloeiro,descricao,link_foto,fotos,fonte,fonte_id,ocupacao,forma_pagamento,nomecondominio')
       .eq('id', id).maybeSingle()
       // `{ data }` SEM `error` funde "não achei o imóvel" com "não consegui ler" — o
       // postgrest-js não lança em não-2xx. Numa rota PÚBLICA (as 33 mil páginas indexadas)
@@ -77,102 +83,110 @@ export default function ImovelGate() {
     ['Avaliação', Number(im.valor_avaliacao) > 0 ? fmtBRL(im.valor_avaliacao) : null],
     ['2ª praça', Number(im.valor_minimo_2) > 0 ? fmtBRL(im.valor_minimo_2) : null],
     ['Data do leilão', dataBR(im.data_leilao)],
+    ['Data da 2ª praça', im.data_leilao_2 ? dataBR(im.data_leilao_2) : null],
+    ['Ocupação', im.ocupacao ? String(im.ocupacao).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : null],
+    ['Condomínio', im.nomecondominio || null],
+    ['Pagamento', im.forma_pagamento ? String(im.forma_pagamento).replace(/_/g, ' ').slice(0, 80) : null],
     ['Modalidade', MODALIDADE_LABEL[String(im.modalidade || '').toLowerCase()] || im.modalidade || null],
     ['Leiloeiro', im.leiloeiro || null],
   ].filter(([, v]) => v);
 
-  return (
-    <div style={{ position: 'relative', minHeight: '78vh', overflow: 'hidden', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
-      {/* Fundo do imóvel, EMBAÇADO */}
-      <div aria-hidden style={{ position: 'absolute', inset: 0, filter: 'blur(9px)', transform: 'scale(1.08)' }}>
-        {foto
-          ? <img src={foto} alt="" onError={() => setImgIdx(i => i + 1)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1e293b,#334155)' }} />}
-      </div>
-      <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.62)' }} />
+  // Galeria: `fotos` (quando a fonte traz várias) ou a foto principal com seus espelhos.
+  const galeria = Array.isArray(im.fotos) ? im.fotos.filter((f) => typeof f === 'string' && /^https?:\/\//.test(f)) : [];
+  const fotoPrincipal = galeria.length > 1 ? galeria[fotoAtiva] : foto;
+  // Descrição sem links: sem login não há caminho para o leiloeiro (dono, 05/10).
+  const descricao = im.descricao ? String(im.descricao).replace(/\b(?:https?:\/\/|www\.)\S+/gi, '').trim() : '';
 
-      {/* Cartão central */}
-      <div style={{ position: 'relative', minHeight: '78vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, padding: '30px 26px', boxShadow: '0 24px 60px rgba(0,0,0,0.35)', textAlign: 'center' }}>
-          <div style={{ width: 54, height: 54, borderRadius: 16, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-            <Lock size={24} color="#0D63DB" />
+  if (!im.id) {
+    return (
+      <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center', color: '#64748b' }}>
+        <div>
+          <p style={{ margin: '0 0 14px' }}>{im._falhou ? 'Não foi possível carregar este imóvel agora. Tente de novo em instantes.' : 'Imóvel não encontrado.'}</p>
+          <button onClick={irEntrar} style={{ background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 11, padding: '11px 22px', fontWeight: 800, cursor: 'pointer' }}>Entrar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 0.9fr)', gap: 20 }}>
+        {/* Galeria — sem embaçar (05/10): foto é o que o lote já mostra na página pública. */}
+        <div>
+          <div style={{ width: '100%', aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {fotoPrincipal
+              ? <img src={fotoPrincipal} alt={im.titulo || ''} onError={() => (galeria.length > 1 ? null : setImgIdx((i) => i + 1))} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Home size={48} color="#cbd5e1" />}
+          </div>
+          {galeria.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
+              {galeria.map((f, i) => (
+                <button key={i} onClick={() => setFotoAtiva(i)}
+                  style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: i === fotoAtiva ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: 0, cursor: 'pointer', background: 'none' }}>
+                  <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', lineHeight: 1.3 }}>
+            {im.titulo || TIPO_LABEL[im.tipo] || 'Imóvel em leilão'}
+          </h1>
+          {local && (
+            <div style={{ fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <MapPin size={13} /> {[im.bairro, local].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14 }}>
+            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance mínimo</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 24, fontWeight: 900, color: '#0D63DB' }}>{im.valor_minimo ? fmtBRL(im.valor_minimo) : 'Consultar'}</span>
+              {desc > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>-{Math.round(desc)}%</span>}
+            </div>
           </div>
 
-          <h1 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900, color: '#111111' }}>Veja este imóvel completo</h1>
-
-          {im.id ? (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.35, margin: '0 0 4px' }}>
-                {im.titulo || TIPO_LABEL[im.tipo] || 'Imóvel em leilão'}
-              </div>
-              {local && (
-                <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 10 }}>
-                  <MapPin size={13} /> {local}
+          {/* Ficha de fatos — cada linha só aparece quando há dado (nada de "—" decorativo). */}
+          {fichaFatos.length > 0 && (
+            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px' }}>
+              {fichaFatos.map(([rot, val]) => (
+                <div key={rot} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '4px 0' }}>
+                  <span style={{ color: '#64748b' }}>{rot}</span>
+                  <strong style={{ color: '#0f172a', textAlign: 'right' }}>{val}</strong>
                 </div>
-              )}
-              <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '8px 14px', marginBottom: 14 }}>
-                <span style={{ fontSize: 18, fontWeight: 900, color: '#0D63DB' }}>{im.valor_minimo ? fmtBRL(im.valor_minimo) : 'Consultar'}</span>
-                {desc > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>-{Math.round(desc)}%</span>}
-              </div>
-
-              {/* Ficha de fatos — os mesmos campos da página pública do lote. Sem isto, quem
-                  recebia o link via WhatsApp via menos do que o Google já mostra do mesmo
-                  imóvel, e a função do botão é justamente apresentar o lote a quem está fora
-                  da plataforma. Cada linha só aparece quando há dado (nada de "—" decorativo). */}
-              {fichaFatos.length > 0 && (
-                <div style={{ textAlign: 'left', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
-                  {fichaFatos.map(([rot, val]) => (
-                    <div key={rot} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '3px 0' }}>
-                      <span style={{ color: '#64748b' }}>{rot}</span>
-                      <strong style={{ color: '#0f172a', textAlign: 'right' }}>{val}</strong>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {im.descricao && (
-                <p style={{ textAlign: 'left', fontSize: 12, color: '#475569', lineHeight: 1.55, margin: '0 0 14px', maxHeight: 110, overflow: 'hidden' }}>
-                  {String(im.descricao).slice(0, 320)}{String(im.descricao).length > 320 ? '…' : ''}
-                </p>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: '#64748b', margin: '4px 0 16px' }}>
-              Entre na sua conta para ver os imóveis em leilão.
+              ))}
             </div>
           )}
 
-          <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, margin: '0 0 20px' }}>
-            Crie sua conta <strong>gratuita</strong> ou entre para ver fotos, documentos (edital e matrícula),
-            localização e a análise de viabilidade do investimento.
-          </p>
-
-          <button onClick={irCadastro}
-            style={{ width: '100%', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 11, padding: '13px 0', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', marginBottom: 10 }}>
-            Criar conta grátis
-          </button>
-          <button onClick={irEntrar}
-            style={{ width: '100%', background: '#fff', color: '#0D63DB', border: '1.5px solid #bfdbfe', borderRadius: 11, padding: '12px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            Já tenho conta — Entrar
-          </button>
-
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 14 }}>
-            Você voltará para este imóvel assim que entrar.
+          {/* O que a conta abre: aqui ficam leiloeiro, documentos e análise (dono, 05/10). */}
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#1e3a8a', fontSize: 14, marginBottom: 6 }}>
+              <Lock size={16} /> Entre para ver o imóvel completo
+            </div>
+            <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.5, marginBottom: 12 }}>
+              Com sua conta <strong>gratuita</strong>: endereço e mapa, documentos (edital e matrícula),
+              acesso à página do leiloeiro e a análise de viabilidade do investimento.
+            </div>
+            <button onClick={irCadastro}
+              style={{ width: '100%', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 11, padding: '12px 0', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 8 }}>
+              Criar conta grátis
+            </button>
+            <button onClick={irEntrar}
+              style={{ width: '100%', background: '#fff', color: '#0D63DB', border: '1.5px solid #bfdbfe', borderRadius: 11, padding: '11px 0', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+              Já tenho conta — Entrar
+            </button>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, textAlign: 'center' }}>Você voltará para este imóvel assim que entrar.</div>
           </div>
-
-          {/* Saída SEM conta. A página pública do lote (`/leilao/:id`, servida pelo servidor em
-              api/publico.js) já existe desde 02/08, é indexada e traz a descrição completa e o
-              contexto da cidade. Quem recebeu o link e ainda não quer se cadastrar tinha, até
-              aqui, só duas portas — ambas pedindo conta. Oferecer a terceira não custa nada e
-              não abre nada novo: é a mesma página que o Google já serve deste imóvel. */}
-          {im.id && (
-            <a href={`/leilao/${im.id}`}
-              style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: '#64748b', textDecoration: 'underline' }}>
-              Ver a página pública deste imóvel, sem criar conta
-            </a>
-          )}
         </div>
       </div>
+
+      {descricao && (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Descrição</div>
+          <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{descricao}</div>
+        </div>
+      )}
     </div>
   );
 }
