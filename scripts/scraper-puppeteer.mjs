@@ -2339,6 +2339,36 @@ async function scraperLJUDVeiculos(browser) {
   }
 }
 
+// DATA PELO LINK DO LOTE (05/10, #98). A listagem /veiculos/carros NÃO mostra todo lote aberto (a
+// paginação repete a 1ª página: 833 cards × 1.894 ativos, e lote fora dela ainda tinha 2º
+// encerramento em 22/10) — então "sumiu da listagem" não prova nada e o lote fora dela nunca
+// ganhava data. Aqui a fila vem do BANCO: veículo LJUD ativo sem data, mais antigo primeiro, lido
+// pelo próprio link (até 250/dia). Achou "Encerramento" → grava a data (aí a apuração e a limpeza
+// por data funcionam). Lote de simulação da plataforma sai do ar.
+async function datarVeiculosLjudSemData(browser, max = 250) {
+  const { data: fila, error } = await supabase.from('veiculos_leilao')
+    .select('id, fonte_id, link_lote, titulo').eq('fonte', 'LJUD').eq('ativo', true).is('data_leilao', null)
+    .order('atualizado_em', { ascending: true }).limit(max);
+  if (error) { console.log(`  ⚠️ LJUD veículos sem data: fila ilegível (${String(error.message).slice(0, 80)})`); return; }
+  if (!fila?.length) { console.log('    LJUD veículos sem data: nenhum'); return; }
+  const simul = fila.filter((v) => /simula[çc][ãa]o|teste transmiss/i.test(v.titulo || ''));
+  if (simul.length) {
+    const { data: off } = await supabase.from('veiculos_leilao').update({ ativo: false }).in('id', simul.map((v) => v.id)).select('id');
+    console.log(`    LJUD veículos: ${off?.length || 0} lote(s) de simulação desligado(s)`);
+  }
+  const alvo = fila.filter((v) => !simul.includes(v) && /^https?:\/\//.test(v.link_lote || ''));
+  const det = await visitarTextoDetalhe(browser, alvo, { getUrl: (v) => v.link_lote, getId: (v) => v.id, max, label: 'LJUD veículos sem data' });
+  let datados = 0, semRotulo = 0, falhas = 0;
+  for (const v of alvo) {
+    const d = det.get(v.id);
+    const enc = d?.texto ? datasLjud(d.texto)?.encerramento : null;
+    if (!enc) { semRotulo++; continue; }
+    const { data: ok, error: e2 } = await supabase.from('veiculos_leilao').update({ data_leilao: enc }).eq('id', v.id).is('data_leilao', null).select('id');
+    if (e2 || !ok?.length) falhas++; else datados++;
+  }
+  console.log(`    LJUD veículos sem data: ${alvo.length} lidos pelo link · ${datados} datados · ${semRotulo} sem rótulo de encerramento · ${falhas} falha(s) ao gravar`);
+}
+
 // ─── SODRÉ SANTORO ────────────────────────────────────────────────────────────
 // Nuxt SPA. Os lotes vêm de POST /api/search-lots (results[] com campos ricos:
 // lot_title, lot_category, lot_description, bid_initial, lot_city/state,
@@ -6138,6 +6168,7 @@ async function main() {
       console.log('\n📋 LJUD (veículos, piloto)...');
       const veiculosLJUD = await scraperLJUDVeiculos(browser);
       await salvarVeiculos(veiculosLJUD);
+      await datarVeiculosLjudSemData(browser);
     }
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
