@@ -36327,3 +36327,16 @@ equipe enviar ao jurídico". Tudo o que guarda documento (`imovel_anexos`, FK p/
 - `enviar-juridico-email` modo AVULSO (`{ imovel_id, analise_user_id }`, admin/analista): mesmos destinatários e
   anexos; parecer = `analises_documental.result.parecer`; resposta volta a quem enviou; nada de caso é tocado. Botão
   "Enviar ao jurídico (e-mail)" na lateral da análise.
+
+## 06/10 — Lote manual promovido sem os arquivos: o PWA recarregou no meio do trabalho
+Rastro (eventos + logs da Vercel): o dono anexou às 00:59 rodando o bundle ANTERIOR (cache do PWA — o erro
+`imovel_anexos` com `tsn_` às 01:02:53 é dele); ao voltar o foco, `swAtualizacao` viu versão nova e recarregou —
+os arquivos (só em memória) sumiram; a versão nova criou o lote às 01:03:16 SEM arquivo para subir
+(`upload-anexo` nunca foi chamado) e sem o link (campo vazio após o reload). E o documental pediu os anexos de novo
+porque os textos só eram relidos para id `tsn_` — o lote já era uuid.
+- `swAtualizacao.definirTrabalhoNaoSalvo`: com doc lendo ou arquivo não guardado, a troca de versão ESPERA (o próximo
+  foco verifica de novo). Escolher arquivo no explorador e voltar = evento de foco = era o pior momento.
+- Textos dos anexos: `gerar-documental` relê `inputs.docsManuais` para QUALQUER id (e do MERCADOLÓGICO quando o
+  documental ainda não tem linha); `gerar-analise` preserva para qualquer id; a tela restaura para lote MANUAL uuid.
+- `origemLink` guardado no doc "Descrição do leiloeiro" → vira `url_lote` mesmo após reload. Alphaville corrigido
+  (migração `20261006_alphaville_manual_url_lote`). Pendência #13 (PWA recarrega sozinho após deploy) fechada: recarrega.

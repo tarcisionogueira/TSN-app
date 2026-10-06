@@ -32,7 +32,7 @@ import { comCascataBusca } from './_busca-modelo.js';
 import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
-import { ehLoteManual, docsManuaisSaneados } from './_docs-manuais.js';
+import { docsManuaisSaneados } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -1982,7 +1982,7 @@ export default async function handler(req, res) {
   // LOTE MANUAL (05/10): o texto dos anexos fica guardado com a análise (api/_docs-manuais.js) — é dele
   // que a tela reabre e o documental relê. A regeração pelo cron não manda os docs: preserva os gravados.
   let docsManuais = [];
-  if (ehLoteManual(imovelId)) {
+  { // qualquer id: o lote manual vira lote da base (uuid) — ver api/lote-manual.js
     docsManuais = docsManuaisSaneados(body.docsManuais);
     if (!docsManuais.length) {
       try {

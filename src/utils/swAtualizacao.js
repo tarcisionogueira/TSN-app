@@ -26,6 +26,17 @@ import { recarregarComGuarda } from './reportarErro.js';
 
 const MIN_ENTRE_CHECAGENS_MS = 60 * 1000; // não martela o servidor a cada troca de aba
 
+// TRABALHO NÃO SALVO SEGURA A ATUALIZAÇÃO (06/10, Alphaville). A checagem roda ao voltar o FOCO — e escolher
+// um arquivo no explorador e voltar é exatamente isso: o dono anexou edital e matrícula, a tela recarregou
+// para a versão nova e os arquivos (só em memória) sumiram sem aviso. Com algo não salvo, a troca de versão
+// espera: o próximo foco/visibilidade verifica de novo. (Chunk velho quebrado continua recarregando — é erro.)
+let trabalhoNaoSalvo = false;
+export function definirTrabalhoNaoSalvo(ativo) { trabalhoNaoSalvo = !!ativo; }
+function recarregarSePuder(motivo) {
+  if (trabalhoNaoSalvo) { console.info('[atualizacao] versão nova adiada: há trabalho não salvo na tela', motivo); return; }
+  recarregarComGuarda();
+}
+
 export function vigiarAtualizacaoDoApp(registration) {
   if (!registration || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 
@@ -35,7 +46,7 @@ export function vigiarAtualizacaoDoApp(registration) {
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!jaTinhaControlador) return;
-    recarregarComGuarda();
+    recarregarSePuder('service worker novo');
   });
 
   let ultimaChecagem = 0;
@@ -77,7 +88,7 @@ async function verificarVersaoNova() {
     const publicado = (await r.text()).match(RE_BUNDLE)?.[0];
     if (publicado && publicado !== atual) {
       console.info('[atualizacao] versão nova publicada', { atual, publicado });
-      recarregarComGuarda();
+      recarregarSePuder('bundle novo');
     }
   } catch (e) {
     console.warn('[atualizacao] não consegui verificar a versão publicada', e?.message);

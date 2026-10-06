@@ -40,6 +40,7 @@ import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
 import { soAceitaAVista } from '../data/pagamento.js';
 import { dataBrParaIso } from '../../api/_data-br.js';
+import { definirTrabalhoNaoSalvo } from '../utils/swAtualizacao';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -1215,7 +1216,12 @@ export default function Analise() {
     return data;
   };
   const docsManuaisRef = React.useRef([]);
-  useEffect(() => { docsManuaisRef.current = docsManuais; }, [docsManuais]);
+  useEffect(() => {
+    docsManuaisRef.current = docsManuais;
+    // Arquivo lendo ou ainda não guardado = trabalho que um recarregamento apagaria (src/utils/swAtualizacao.js).
+    definirTrabalhoNaoSalvo(docsManuais.some((x) => x.lendo || (x.file && !x.anexoId)));
+  }, [docsManuais]);
+  useEffect(() => () => definirTrabalhoNaoSalvo(false), []);
   const subirDocsManuaisPendentes = async (imovelId) => {
     const pendentes = docsManuaisRef.current.filter((x) => x.file && !x.anexoId && !x.lendo);
     let falhas = 0;
@@ -1240,13 +1246,15 @@ export default function Analise() {
     if (promovendoRef.current) return promovendoRef.current;
     const deTsn = analiseImovelId;
     const foto = fotoLoteManual(d, deTsn, urlEdital);
+    // O link colado some num recarregamento; o documento "Descrição do leiloeiro" guarda de onde veio.
+    const linkLote = externoLink.trim() || docsManuaisRef.current.find((x) => x.origemLink)?.origemLink || null;
     promovendoRef.current = (async () => {
       try {
         const r = await apiCall('/api/lote-manual', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lote: { ...foto, valorMinimo: foto.valorMinimo, urlLote: externoLink.trim() || null }, de_tsn: deTsn }) });
+          body: JSON.stringify({ lote: { ...foto, valorMinimo: foto.valorMinimo, urlLote: linkLote }, de_tsn: deTsn }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.id) throw new Error(j.error || `HTTP ${r.status}`);
-        const novo = { ...foto, id: j.id, fonte: 'MANUAL', manual: true, urlLote: externoLink.trim() || null };
+        const novo = { ...foto, id: j.id, fonte: 'MANUAL', manual: true, urlLote: linkLote };
         // Arquivos ANTES de trocar de id: o painel de documentos relê `imovel_anexos` ao trocar e já os encontra.
         await subirDocsManuaisPendentes(j.id);
         promovidoParaRef.current = j.id; // a troca de id abaixo é o MESMO lote — nada da tela é descartado
@@ -1281,7 +1289,7 @@ export default function Analise() {
 
   // O que vai GRAVADO com a análise (lote manual): texto e dados lidos — nunca o arquivo.
   const docsManuaisParaGravar = () => (docsManuais.length
-    ? docsManuais.filter((x) => !x.lendo && (x.texto || x.ext)).map(({ nome, tipo, texto, ext, aviso }) => ({ nome, tipo, texto, ext, aviso }))
+    ? docsManuais.filter((x) => !x.lendo && (x.texto || x.ext)).map(({ nome, tipo, texto, ext, aviso, origemLink }) => ({ nome, tipo, texto, ext, aviso, origemLink }))
     : []);
   const recomporDocsManuais = (lista) => {
     const prontos = lista.filter((x) => !x.lendo);
@@ -1582,6 +1590,28 @@ export default function Analise() {
   }, [imovelRecuperado]); // eslint-disable-line react-hooks/exhaustive-deps
   // Os anexos guardados entram DEPOIS da re-semeadura acima (efeito declarado depois = roda depois):
   // a recomposição deles aplica à ficha os dados lidos (avaliação, lance, área), e a semente não os apaga.
+  // LOTE MANUAL JÁ PROMOVIDO (uuid, fonte MANUAL): os textos dos anexos também voltam da análise. A recuperação
+  // acima só os relia para id local `tsn_…` — reaberto pela lista, o lote abria sem documento e o documental
+  // pedia edital e matrícula de novo (06/10). Independe de a recuperação rodar (o state da lista pode servir).
+  const restauradoRef = React.useRef(null);
+  useEffect(() => {
+    const id = imovelInicial?.id;
+    if (!id || ehIdManual(id) || !(imovelInicial?.manual || imovelInicial?.fonte === 'MANUAL')) return;
+    if (restauradoRef.current === id || docsManuais.length) return;
+    restauradoRef.current = id;
+    const uid = effectiveUserId || user?.id;
+    let vivo = true;
+    (async () => {
+      const ler = (t) => lerComRenovacao(supabase, () => supabase.from(t).select('inputs').eq('user_id', uid).eq('imovel_id', id).limit(1));
+      const [dc, m] = await Promise.all([ler('analises_documental'), ler('analises_mercado')]);
+      if (!vivo) return;
+      const docsDoc = dc.data?.[0]?.inputs?.docsManuais;
+      const docs = Array.isArray(docsDoc) && docsDoc.length ? docsDoc : m.data?.[0]?.inputs?.docsManuais;
+      if (Array.isArray(docs) && docs.length) setDocsRecuperados(docs);
+      else if (dc.error || m.error) registrarEvento('erro_ui', { alvo: 'analise_restaurar_docs', detalhe: `${id}: ${(dc.error || m.error).message}`.slice(0, 120) });
+    })();
+    return () => { vivo = false; };
+  }, [imovelInicial?.id, imovelInicial?.manual, imovelInicial?.fonte]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!docsRecuperados) return;
     setDocsManuais(docsRecuperados.map((x, i) => ({ ...x, id: `rec_${i}_${Date.now()}`, lendo: false, tipoDoNome: false })));

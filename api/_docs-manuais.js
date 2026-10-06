@@ -16,6 +16,9 @@ export function docsManuaisSaneados(lista) {
     texto: String(x.texto || '').slice(0, MAX_TEXTO),
     ext: x.ext && typeof x.ext === 'object' ? x.ext : null,
     aviso: x.aviso ? String(x.aviso).slice(0, 200) : null,
+    // De onde veio o texto quando é a PÁGINA do lote (link colado): sobrevive a um recarregamento e vira o
+    // `url_lote` do lote manual (api/lote-manual.js). Só https.
+    origemLink: /^https:\/\/\S+$/i.test(String(x.origemLink || '')) ? String(x.origemLink).slice(0, 500) : null,
   }));
 }
 

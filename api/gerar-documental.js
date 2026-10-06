@@ -30,7 +30,7 @@ import { pedirDocumentosAoLeiloeiro, fraseDoPedido, fonteNaoPublicaMatricula } f
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
-import { ehLoteManual, docsManuaisSaneados, textosDosDocsManuais } from './_docs-manuais.js';
+import { docsManuaisSaneados, textosDosDocsManuais } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -716,13 +716,24 @@ export default async function handler(req, res) {
   // A tela manda `inputs.docsManuais` ao gerar; a REGERAÇÃO (cron, ou reabrir sem os arquivos em
   // memória) chega sem texto nenhum — e lia só o link, que falhou, e travava o relatório com
   // "documento não lido" num edital que o cliente ANEXOU (Alphaville, 05/10). Relê daqui.
+  // 06/10: vale para QUALQUER id — o lote manual agora vira lote da base (uuid, api/lote-manual.js) e a
+  // trava por `ehLoteManual` deixava de achar os textos ("faltam documentos" com edital e matrícula lidos).
+  // E o 1º documental ainda não tem linha própria: os textos estão no MERCADOLÓGICO, que vem antes.
   let inputsAnteriores = null;
-  if (ehLoteManual(imovelId)) {
+  if (!body.textoEdital && !body.textoMatricula || !body.inputs?.docsManuais) {
     try {
-      const rIn = await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=inputs&limit=1`);
+      const filtro = `user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=inputs&limit=1`;
+      const rIn = await sb(`analises_documental?${filtro}`);
       if (!rIn.ok) throw new Error(`HTTP ${rIn.status}`);
       inputsAnteriores = (await rIn.json())?.[0]?.inputs || null;
-    } catch (e) { console.warn('[documental] inputs do lote manual não lidos:', e?.message); }
+      if (!Array.isArray(inputsAnteriores?.docsManuais) || !inputsAnteriores.docsManuais.length) {
+        const rM = await sb(`analises_mercado?${filtro}`);
+        const docsMercado = rM.ok ? (await rM.json())?.[0]?.inputs?.docsManuais : null;
+        if (Array.isArray(docsMercado) && docsMercado.length) inputsAnteriores = { ...(inputsAnteriores || {}), docsManuais: docsMercado };
+      }
+    } catch (e) { console.warn('[documental] textos dos anexos manuais não lidos:', e?.message); }
+  }
+  {
     const docs = docsManuaisSaneados(body.inputs?.docsManuais || inputsAnteriores?.docsManuais);
     body.inputs = docs.length ? { ...(inputsAnteriores || {}), ...(body.inputs || {}), docsManuais: docs } : (body.inputs || inputsAnteriores);
     if (!body.textoEdital && !body.textoMatricula && docs.length) {
