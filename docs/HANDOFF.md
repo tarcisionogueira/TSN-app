@@ -36362,3 +36362,23 @@ ser só a solicitação formal do CASO (mantidos: `created_at` em perfis e o blo
 `enviar-email-caso` (jurídico): texto padrão agora pede a análise da documentação para confirmar a viabilidade, com
 data do leilão (+2ª praça), lance mínimo, link e "precisamos do parecer antes dessa data".
 Envio que já saiu (06/10 ~01:30, Alphaville) foi o de um clique, para os 3 do escritório, com 2 anexos.
+
+## 06/10 — FECHAMENTO DA SESSÃO 05–06/10 (resumo para quem abrir a próxima)
+**Entregue (tudo em `main`, verificar:* + 110 testes + build verdes a cada push):**
+- Captura: NAKAKOGUE (52) e plataforma ASTAVERO (5 leiloeiros, imóveis + veículos); VIP **veículos** no agendamento
+  diário; fotos e pátio dos veículos Nordeste; vaga/box de garagem fora do acervo (regra `acervo.vaga_garagem`).
+- Pátio "opção 2": `nao_confirmado` com selo em /veiculos (classificador único `scripts/lib/patio-veiculo.mjs`).
+- Lote manual (o grosso do dia, caso Alphaville Burle Marx): vários anexos; texto integral ao documental; matrícula
+  escaneada TRANSCRITA; edital com vários lotes → lote localizado pela matrícula; regras de extração (tipo/área pela
+  construção averbada, AF = extrajudicial, dívida fiduciária ≠ débito, comissão/pagamento só do edital/descrição);
+  parcelamento escolhido por regra; desconto à vista na conta; página do leiloeiro como documento (fetch-url com
+  cookies); data BR ≠ americana (`api/_data-br.js`); lote manual vira LOTE DA BASE (`api/lote-manual.js`, fonte
+  MANUAL inativa) com anexos guardados; geração espera a leitura; PWA não recarrega com trabalho não salvo.
+- Jurídico: e-mail pela análise com PRÉVIA editável (`EnviarEmailCasoLote`), texto com data do leilão/lance/link;
+  500 do envio por `perfis.criado_em` (é `created_at`) — a mesma coluna sumia com a fatia do admin no honorário.
+**Pendências abertas hoje (no banco, `pendencias_abertas()`):** #141 VIP sem descrição + lote 22357 perdido ·
+#142 validar no navegador o lote manual e a prévia do e-mail (dono) · #143 conferir fatia do admin na próxima
+distribuição · #144 valor de mercado oscila ±13% entre gerações do mesmo imóvel · #145 limpar análises duplicadas do
+Alphaville (dono) · #146 conferir 1ª rodada agendada VIP veículos/Nordeste · #140 Banco Inter (adiado pelo dono).
+**Do dono, vencidas:** #1 P0 campanha Meta da masterclass apontando para aula fechada (0 inscritos, Meta gastou
+R$ 69,64 em 3 dias) · #4 Google Workspace com pagamento recusado · #3 Leiloaria Smart (vence hoje).
