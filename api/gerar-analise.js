@@ -33,6 +33,7 @@ import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.j
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 import { ehLoteManual, docsManuaisSaneados } from './_docs-manuais.js';
+import { dataLeilaoIso } from './_data-br.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1977,7 +1978,7 @@ export default async function handler(req, res) {
 
   // Data do leilão (para a regra de limpeza: 15 dias após o leilão sem arrematar).
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
-  const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
+  const dataLeilao = dataLeilaoIso(rawData); // dd/mm/aaaa do edital NÃO é mm/dd (ver api/_data-br.js)
   // LOTE MANUAL (05/10): o texto dos anexos fica guardado com a análise (api/_docs-manuais.js) — é dele
   // que a tela reabre e o documental relê. A regeração pelo cron não manda os docs: preserva os gravados.
   let docsManuais = [];

@@ -13,7 +13,7 @@ import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel, extrairLoteDoEdital, transcreverDocumento, lerPaginaDoLote } from '../utils/claude';
-import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil } from '../utils/loteNoEdital';
+import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil, escolherParcelamento } from '../utils/loteNoEdital';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { ehDocArquivo, hrefDoc } from '../utils/documento';
@@ -39,6 +39,7 @@ import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade'
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
 import { soAceitaAVista } from '../data/pagamento.js';
+import { dataBrParaIso } from '../../api/_data-br.js';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -76,7 +77,7 @@ const fotoLoteManual = (x, id, linkEdital) => ({
   id, manual: true, titulo: x?.nome || x?.endereco || 'Imóvel', tipo: x?.tipo || '', endereco: x?.endereco || '',
   cidade: x?.cidade || '', estado: x?.estado || '', valorAvaliacao: Number(x?.valorAvaliacao) || 0,
   valorMinimo: Number(x?.valorArrematacao) || 0, areaM2: Number(x?.areaM2) || 0, leiloeiro: x?.leiloeiro || '',
-  dataLeilao: x?.dataLeilao || '', modalidade: x?.origem || '', linkEdital: linkEdital || '',
+  dataLeilao: dataBrParaIso(x?.dataLeilao) || '', modalidade: x?.origem || '', linkEdital: linkEdital || '',
 });
 
 const STATUS_OPTS = [
@@ -1120,9 +1121,13 @@ export default function Analise() {
   const aplicarDadosDoArquivo = (extBruto) => {
     // Art. 895 do CPC é parcelamento de leilão JUDICIAL. Numa venda de banco (AF/Lei 9.514) a leitura da
     // matrícula do Alphaville devolveu "art. 895, 25% + 30x" — e a projeção saiu num financiamento que não existe.
-    const origemLida = extBruto?.origem;
-    const ext = extBruto?.parcelamento?.base === 'art_895_cpc' && (origemLida || d.origem) === 'extrajudicial'
-      ? { ...extBruto, parcelamento: null } : extBruto;
+    // Quando o documento LISTA as opções do vendedor, a escolha é do código (src/utils/loteNoEdital.js):
+    // a que vale para o lance, menor juro primeiro — não a que a IA achou melhor.
+    const escolhido = escolherParcelamento(extBruto?.opcoesParcelamento, extBruto?.valorArrematacao || d.valorArrematacao);
+    const ext0 = escolhido ? { ...extBruto, parcelamento: { ...escolhido, base: escolhido.base || 'proposta_parcelada' } } : extBruto;
+    const origemLida = ext0?.origem;
+    const ext = ext0?.parcelamento?.base === 'art_895_cpc' && (origemLida || d.origem) === 'extrajudicial'
+      ? { ...ext0, parcelamento: null } : ext0;
     const pc = ext?.parcelamento;
     setD(p => ({
       ...p,
@@ -1205,7 +1210,7 @@ export default function Analise() {
     // leiloeiro — NUNCA da matrícula: a do Alphaville deu "comissão 10,49%" (juros do financiamento
     // antigo) e "lance R$ 2.430.000" (a dívida). E um campo VAZIO do edital não apaga o da descrição:
     // `Object.assign` copiava o `null` por cima (a comissão que só a página do lote trazia sumia).
-    const DO_LEILAO = ['taxaLeiloeiroPercentual', 'valorArrematacao', 'parcelamento', 'descontoAVistaPct', 'somenteAVista', 'leiloeiro', 'dataLeilao', 'taxaAdministrativaPercentual'];
+    const DO_LEILAO = ['taxaLeiloeiroPercentual', 'valorArrematacao', 'parcelamento', 'opcoesParcelamento', 'descontoAVistaPct', 'somenteAVista', 'leiloeiro', 'dataLeilao', 'taxaAdministrativaPercentual'];
     const exts = prontos.filter((x) => x.ext).map((x) => {
       const e = { ...x.ext, tipoDocumento: x.tipo === 'outro' ? (x.ext.tipoDocumento || 'outro') : x.tipo };
       if (e.tipoDocumento === 'matricula') for (const k of DO_LEILAO) delete e[k];
@@ -1215,7 +1220,7 @@ export default function Analise() {
     // Campos sem regra de autoridade (custos, parcelamento, taxa): o EDITAL por último, então ele vence —
     // mas só com valor (vazio não sobrescreve).
     const peso = (e) => ({ matricula: 1, edital: 2 }[e.tipoDocumento] || 0);
-    const temValor = (v) => v != null && v !== '' && !(typeof v === 'number' && Number.isNaN(v));
+    const temValor = (v) => v != null && v !== '' && !(typeof v === 'number' && Number.isNaN(v)) && !(Array.isArray(v) && !v.length);
     const fundido = {};
     for (const e of [...exts].sort((a, b) => peso(a) - peso(b))) for (const [k, v] of Object.entries(e)) if (temValor(v)) fundido[k] = v;
     const autoridade = consolidarDocsImovel(exts);

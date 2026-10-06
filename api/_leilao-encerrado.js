@@ -27,6 +27,7 @@
  * falhou) o gate NÃO bloqueia. Impedir uma geração legítima por falta de informação é pior que
  * deixar passar uma inútil — o cliente pode ter contexto que o acervo não tem.
  */
+import { dataBrParaIso } from './_data-br.js';
 
 // Aceita 'AAAA-MM-DD', ISO completo e Date. Devolve o instante do FIM do prazo (para comparar) e
 // o DIA (para mostrar) — separados de propósito, porque juntá-los produzia dois erros opostos:
@@ -37,7 +38,8 @@
 // A referência é sempre Brasília: é o fuso em que o leiloeiro publica.
 function limite(v) {
   if (!v) return null;
-  const s = String(v).trim();
+  const s = dataBrParaIso(v); // "09/10/2026" é 9 de outubro — Date.parse leria 10 de setembro
+  if (!s) return null;
   const soData = /^\d{4}-\d{2}-\d{2}$/.test(s);
   const fim = Date.parse(soData ? `${s}T23:59:59-03:00` : s);
   if (Number.isNaN(fim)) return null;

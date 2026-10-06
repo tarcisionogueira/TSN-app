@@ -210,7 +210,8 @@ REGRAS CRÍTICAS DE LEITURA (05/10 — Alphaville Burle Marx, cada uma foi um er
 - CONDOMÍNIO/LOTEAMENTO: o nome comercial ("Alphaville Burle Marx", "Condomínio X") vai em "nomeCondominio".
 - MATRÍCULA NÃO É EDITAL: numa matrícula, deixe NULOS "taxaLeiloeiroPercentual", "valorArrematacao", "parcelamento", "descontoAVistaPct", "leiloeiro" e "dataLeilao". Taxa de juros, valor e prazo do FINANCIAMENTO registrado (R-/Av- da alienação fiduciária ou hipoteca) são do contrato antigo do devedor — nunca comissão, lance ou condição de pagamento do leilão.
 - COMISSÃO DO LEILOEIRO: só o percentual que o edital/descrição chama de comissão do leiloeiro (ex.: "comissão de 5% ao Leiloeiro"). Nunca use taxa de juros, correção ou percentual de sinal.
-- PAGAMENTO (edital/descrição do leiloeiro): "descontoAVistaPct" = desconto para pagamento à vista, se houver. "parcelamento" = a opção de parcelamento OFERECIDA PELO VENDEDOR que valha para o valor deste lote, preferindo a SEM juros quando houver mais de uma: entrada (%), nº de parcelas, "jurosAnualPct" (0 se "sem acréscimos"), "tabela" (price|sac) e "base" = "proposta_parcelada" (venda de banco/credor) ou "financiamento_bancario" (crédito imobiliário). "art_895_cpc" SOMENTE em leilão JUDICIAL.
+- PAGAMENTO (edital/descrição do leiloeiro): "descontoAVistaPct" = desconto CONCEDIDO por pagar à vista ("à vista, desconto de 10%"). NÃO é desconto à vista: "ofertado com até 30% de desconto sobre o valor de mercado/avaliação" (propaganda do preço) nem o deságio do lance.
+- "opcoesParcelamento": TODAS as opções de parcelamento oferecidas pelo VENDEDOR, uma por item, com a faixa de valor a que se aplicam ("valorMin"/"valorMax" do arremate, null se valer para qualquer valor): entrada (%), nº de parcelas, "jurosAnualPct" (0 se "sem acréscimos"/"sem juros"), "tabela" (price|sac|null) e "base" = "proposta_parcelada" (venda de banco/credor) ou "financiamento_bancario" (crédito imobiliário). "art_895_cpc" SOMENTE em leilão JUDICIAL. Não escolha: liste todas.
 
 Retorne APENAS JSON:
 {
@@ -235,7 +236,8 @@ Retorne APENAS JSON:
   "taxaLeiloeiroPercentual": número,
   "somenteAVista": boolean — true SOMENTE se o documento AFIRMAR que o pagamento é exclusivamente à vista. Na dúvida, ou se o documento não falar de forma de pagamento, retorne false: "não diz" não é "só à vista".
   "parcelamento": { "aceita": boolean, "entradaPct": número ou null, "parcelas": número ou null (quantidade de meses), "jurosAnualPct": número ou null (0 = sem juros), "tabela": "price|sac|null", "correcao": "texto curto do índice/juros, ou null", "base": "art_895_cpc|proposta_parcelada|financiamento_bancario|outro|null" } ou null se o documento não tratar do assunto,
-  "descontoAVistaPct": número ou null (desconto para pagamento à vista),
+  "descontoAVistaPct": número ou null (desconto concedido para pagamento à vista),
+  "opcoesParcelamento": [{ "entradaPct": número, "parcelas": número, "jurosAnualPct": número ou null, "tabela": "price|sac|null", "valorMin": número ou null, "valorMax": número ou null, "base": "..." }] ou [],
   "origem": "judicial|extrajudicial",
   "leiloeiro": "nome",
   "dataLeilao": "DD/MM/AAAA",

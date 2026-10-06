@@ -21,6 +21,7 @@
  * E a falha é ABERTA: sem data confiável, não bloqueia. Impedir uma geração legítima por falta
  * de informação é pior que deixar passar uma inútil.
  */
+import { dataBrParaIso } from '../../api/_data-br.js';
 
 // Aceita 'AAAA-MM-DD', ISO completo, Date. Devolve DUAS coisas, e a separação não é detalhe:
 //   • `fim` — o instante em que o prazo acaba, para COMPARAR. Data sem hora vale até o fim do
@@ -32,7 +33,8 @@
 //     do dia em -03:00 cai depois da meia-noite UTC e o toISOString devolvia o dia seguinte.
 function limite(v) {
   if (!v) return null;
-  const s = String(v).trim();
+  const s = dataBrParaIso(v); // "09/10/2026" é 9 de outubro — Date.parse leria 10 de setembro
+  if (!s) return null;
   const soData = /^\d{4}-\d{2}-\d{2}$/.test(s);
   const fim = Date.parse(soData ? `${s}T23:59:59-03:00` : s);
   if (Number.isNaN(fim)) return null;

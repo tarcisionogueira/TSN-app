@@ -37,3 +37,18 @@ assert.ok(tp.includes('450.000,00') && !tp.includes('500.000,00'), 'praças do l
 assert.equal(trechoDoLote(edital, { endereco: 'Rua das Acácias, Condomínio Jardim Botânico, Brasília' }), null);
 assert.equal(trechoDoLote(edital, {}), null);
 console.log('ok lote-no-edital');
+
+// Escolha do parcelamento — as 3 opções REAIS do edital Bradesco (seção 7), lance R$ 2.121.000.
+import { escolherParcelamento } from '../../src/utils/loteNoEdital.js';
+const opcoes = [
+  { entradaPct: 25, parcelas: 12, jurosAnualPct: 0, tabela: null, valorMin: null, valorMax: null },
+  { entradaPct: 25, parcelas: 24, jurosAnualPct: 12, tabela: 'price', valorMin: null, valorMax: 100000 },
+  { entradaPct: 30, parcelas: 48, jurosAnualPct: 12, tabela: 'price', valorMin: 100000, valorMax: null },
+];
+const e = escolherParcelamento(opcoes, 2121000);
+assert.deepEqual([e.entradaPct, e.parcelas, e.jurosAnualPct], [25, 12, 0], 'sem juros vence');
+const semZero = escolherParcelamento(opcoes.slice(1), 2121000);
+assert.deepEqual([semZero.entradaPct, semZero.parcelas], [30, 48], 'faixa de valor respeitada (a de até 100 mil sai)');
+assert.equal(escolherParcelamento(opcoes.slice(1, 2), 2121000), null, 'nenhuma vale para o lance');
+assert.equal(escolherParcelamento([], 1), null);
+console.log('ok escolher-parcelamento');

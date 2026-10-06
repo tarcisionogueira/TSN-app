@@ -4,6 +4,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { hostPermitido, fetchExternoSeguro } from './_allowed-hosts.js';
+import { decodificarEntidades } from './_texto-imovel.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -70,6 +71,7 @@ export default async function handler(req) {
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
+      .replace(/&[#a-z0-9]+;/gi, (e) => decodificarEntidades(e)) // "Leil&#xE3;o" → "Leilão" (VIP)
       .replace(/\s{2,}/g, ' ')
       .trim()
       // 30 mil (era 12 mil): a página do lote traz menu e rodapé; a DESCRIÇÃO do leiloeiro (comissão,

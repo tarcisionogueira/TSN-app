@@ -31,6 +31,7 @@ import { hostExternoSeguro } from './_allowed-hosts.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
 import { ehLoteManual, docsManuaisSaneados, textosDosDocsManuais } from './_docs-manuais.js';
+import { dataLeilaoIso } from './_data-br.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -811,7 +812,7 @@ export default async function handler(req, res) {
   };
   const dataLeilao = (() => {
     const raw = imovel?.dataLeilao || null;
-    return raw && !isNaN(Date.parse(raw)) ? new Date(raw).toISOString() : null;
+    return dataLeilaoIso(raw); // dd/mm/aaaa do edital NÃO é mm/dd (ver api/_data-br.js)
   })();
 
   const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, inputs: body.inputs || null, data_leilao: dataLeilao };

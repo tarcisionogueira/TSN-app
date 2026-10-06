@@ -72,3 +72,20 @@ export function trechoDoLote(texto, alvo, { janela = 1500, passo = 250 } = {}) {
   const fim = lance ? ancora + lance.index + lance[0].length : ancora + janela + 600;
   return t.slice(ini, fim);
 }
+
+// PARCELAMENTO DO VENDEDOR — escolha DETERMINÍSTICA entre as opções que o edital lista (06/10). Pedir à IA
+// "prefira a sem juros" não bastou: no Bradesco ela escolheu "30% + 36x a 12% Price" e deixou de fora
+// "25% + 12x sem acréscimos, independentemente do valor". Aqui: só as opções que valem para o LANCE deste
+// lote; menor juro; depois menor entrada; depois mais parcelas. `null` = nenhuma se aplica.
+export function escolherParcelamento(opcoes, lance) {
+  const v = Number(lance) || 0;
+  const validas = (Array.isArray(opcoes) ? opcoes : []).filter((o) => o && Number(o.parcelas) > 0
+    && (o.valorMin == null || !v || v > Number(o.valorMin) - 0.01)
+    && (o.valorMax == null || !v || v <= Number(o.valorMax)));
+  if (!validas.length) return null;
+  const j = (o) => (o.jurosAnualPct == null ? 99 : Number(o.jurosAnualPct));
+  const [melhor] = [...validas].sort((a, b) => j(a) - j(b)
+    || (Number(a.entradaPct) || 100) - (Number(b.entradaPct) || 100)
+    || Number(b.parcelas) - Number(a.parcelas));
+  return { aceita: true, ...melhor };
+}

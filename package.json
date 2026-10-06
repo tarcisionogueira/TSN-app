@@ -129,7 +129,8 @@
     "testar:vip-veiculo-titulo": "node scripts/testes/vip-veiculo-titulo.mjs",
     "testar:docs-manuais": "node scripts/testes/docs-manuais.mjs",
     "testar:lote-no-edital": "node scripts/testes/lote-no-edital.mjs",
-    "testar:desconto-a-vista": "node scripts/testes/desconto-a-vista.mjs"
+    "testar:desconto-a-vista": "node scripts/testes/desconto-a-vista.mjs",
+    "testar:data-br-leilao": "node scripts/testes/data-br-leilao.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

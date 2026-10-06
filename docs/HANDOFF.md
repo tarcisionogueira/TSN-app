@@ -36295,3 +36295,18 @@ seção 7 começa no 18.063º. Correções:
   mesmo host) + UA de navegador — a VIP dava laço de redirect ("redirects hit maximum"). **Não verificado ao vivo**
   (o sandbox não alcança a VIP): se ainda falhar, a tela agora diz o motivo.
 Pendência #141: coletor VIP não lê a descrição de nenhum lote (0/108) e perdeu o 22357.
+
+## 06/10 — "Leilão encerrado em 10/09" a 4 dias do pregão: data BR lida como americana + escolha do parcelamento
+- **Data**: o edital dá "09/10/2026"; `new Date("09/10/2026")` = 10 de SETEMBRO. A tela declarou o lote encerrado,
+  o servidor recusaria gerar e a retenção (15 dias após o leilão) apagaria a análise. `api/_data-br.js`
+  (`dataBrParaIso`/`dataLeilaoIso`) agora é usado em `leilaoEncerrado` (tela e servidor), `gerar-analise`,
+  `gerar-documental` e na foto do lote manual. Migração `20261006_data_leilao_br_corrigida` corrigiu as 2 linhas
+  gravadas (as únicas — medido). Teste `testar:data-br-leilao`.
+- **Parcelamento**: a IA escolheu "30% + 36x a 12% Price" e ignorou "25% + 12x sem acréscimos, independentemente do
+  valor". Agora ela LISTA `opcoesParcelamento` (com faixa de valor) e `escolherParcelamento` decide: vale para o lance,
+  menor juro, menor entrada, mais parcelas (teste em `testar:lote-no-edital` com as 3 opções reais).
+- **Página da VIP lida** (5.525 car. — o `manterCookies` resolveu o laço de redirect). Ela anuncia "até 30% de desconto
+  sobre o valor de mercado" e a IA leu como desconto à vista: regra no prompt (propaganda ≠ desconto por pagar à
+  vista). `fetch-url` decodifica entidades HTML ("Leil&#xE3;o").
+- Conferência (vm 2.741.875, lance 2.121.000): à vista com 10% → capital 2.342.495, ROI 0,1%; 25%+12x sem juros → ROI
+  −8,6% (o desconto só vale à vista); o gerado (30%+36x 12%) dava −22%. Teto p/ ROI 30% à vista: R$ 1.564.151.
