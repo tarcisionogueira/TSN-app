@@ -97,6 +97,12 @@ export function extrairJsonLote(html) {
 }
 
 const dataDe = obj => (obj && obj.date) ? obj.date.slice(0, 10) : null;
+// Data COM HORA no fuso de Brasília (06/10): `data_leilao_2` é timestamptz — gravar só o dia viraria
+// meia-noite UTC (21h da véspera em Brasília). O JSON traz "2026-11-13 10:25:00.000000" (horário local).
+const tsDe = obj => {
+  const m = String(obj?.date || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return m ? `${m[1]}T${m[2]}:00-03:00` : null;
+};
 
 const MAPA_TIPO = {
   apartamento: 'apartamento', apartamentos: 'apartamento',
@@ -167,6 +173,13 @@ export function parseDetalhe(html, url) {
     || null;
   const linkFoto = bem?.image?.full?.url || bem?.image?.thumb?.url || null;
   const dataLeilao = dataDe(leilao.dataProximoLeilao) || dataDe(leilao.dataFimPraca2) || dataDe(leilao.dataFimPraca1) || dataDe(lote.dataFechamento);
+  // 2ª PRAÇA (06/10): o JSON sempre trouxe `dataFimPraca2` e `valorInicial2`, mas o row gravava
+  // data_leilao_2: null fixo — 155 de 155 lotes ativos sem a 2ª praça, que é a MAIS BARATA (achado
+  // pelo invariante data_edital_recuou_prazo, LEILAOBRASIL 3801: site "1º fecha 13/10 · 2º fecha
+  // 13/11"). Só vale quando é uma praça DISTINTA e posterior à data já gravada em data_leilao.
+  const fimP2 = tsDe(leilao.dataFimPraca2);
+  const dataLeilao2 = fimP2 && dataLeilao && fimP2.slice(0, 10) > dataLeilao ? fimP2 : null;
+  const minimo2 = dataLeilao2 ? plaus(num(lote.valorInicial2)) : 0;
   const modalidade = leilao.judicial === true ? 'judicial' : (leilao.judicial === false ? 'extrajudicial' : 'judicial');
 
   return {
@@ -179,6 +192,8 @@ export function parseDetalhe(html, url) {
     numero_matricula: matricula,
     link_edital: linkEdital, link_foto: linkFoto,
     data_leilao: dataLeilao,
+    data_leilao_2: dataLeilao2,
+    valor_minimo_2: minimo2 && minimo2 !== minimo ? minimo2 : null,
     modalidade,
     tipo_hint: bem?.tipo?.nome || bem?.tipo?.codigo || '',
     leiloeiro_nome: leilao?.leiloeiro?.nome || null,
@@ -206,7 +221,8 @@ export function montarRow(url, det, tenant) {
     numero_matricula: det.numero_matricula || null, link_matricula: null,
     anexos: [],
     leiloeiro: det.leiloeiro_nome || tenant.leiloeiro,
-    data_leilao: det.data_leilao || null, data_leilao_2: null,
+    data_leilao: det.data_leilao || null, data_leilao_2: det.data_leilao_2 || null,
+    valor_minimo_2: det.valor_minimo_2 || null,
     forma_pagamento: 'a_vista',
     ativo: true,
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
