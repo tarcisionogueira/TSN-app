@@ -769,6 +769,10 @@ export default function Arrematados() {
   const [arrematados, setArrematados] = React.useState([]);
   const [saldos, setSaldos] = React.useState({}); // arrematado_id → saldo
   const [confirmacoes, setConfirmacoes] = React.useState({}); // arrematado_id → { status, motivo } (05/10, #34)
+  // 06/10 (dono): arremate em que a EQUIPE registrou algo (andamento do processo, documento) não mostra o
+  // "×" ao cliente — o banco já recusa (gatilho arrematados_protege_andamento); isto só não oferece o botão.
+  // null = não consegui ler → esconde (lado seguro: o cliente não perde o botão de nada que precise).
+  const [protegidos, setProtegidos] = React.useState(new Set());
   const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
   const [mercado, setMercado] = React.useState({}); // imovel_id → valorMercado
   const [avals, setAvals] = React.useState({});     // imovel_id → valor_avaliacao
@@ -798,6 +802,9 @@ export default function Arrematados() {
       const { data: cs, error: errC } = await supabase.from('arremate_confirmacao').select('arrematado_id,status,motivo,em').in('arrematado_id', lista.map(a => a.id));
       if (errC) console.warn('[arrematados] situação da confirmação ilegível:', errC.message);
       setConfirmacoes(errC ? null : Object.fromEntries((cs || []).map(c => [c.arrematado_id, c])));
+      const { data: prot, error: errP } = await supabase.rpc('arremates_com_registro_equipe');
+      if (errP) console.warn('[arrematados] registros da equipe ilegíveis:', errP.message);
+      setProtegidos(errP ? null : new Set((prot || []).map(x => (typeof x === 'string' ? x : x?.arremates_com_registro_equipe))));
     }
     if (lista.length) {
       // saldo por arrematado. 04/10: em erro NÃO zera — saldo desconhecido não é R$ 0.
@@ -1012,7 +1019,7 @@ export default function Arrematados() {
                   </div>
                 </div>
                 {/* Confirmado é registro do negócio: só a equipe remove (o banco também bloqueia). */}
-                {!soLeitura && conf?.status !== 'confirmado' && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}
+                {!soLeitura && conf?.status !== 'confirmado' && protegidos && !protegidos.has(a.id) && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}
               </div>
             );
           })}
