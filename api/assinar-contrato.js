@@ -329,6 +329,18 @@ export default async function handler(req) {
           sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ acao: 'contrato_criou_assinatura', ip, sucesso: ra.ok,
               detalhes: { contrato_id: contrato.id, user_id: uid, plano: tierAss } }) }).catch(() => {});
+          // ASSESSORIA INCLUI O PRO (06/10): contratada a assessoria, a mensalidade do Investidor
+          // Pro para. O cancelamento mora num helper Node (MP/Asaas + alerta) que este runtime Edge
+          // não carrega; dispara AGORA o cron de assessorias, que varre os assessorados ativos e
+          // cancela. Falhar aqui não é silencioso: o cron diário refaz, e o helper alerta.
+          if (ra.ok && tierAss === 'assessorado' && process.env.CRON_SECRET) {
+            try {
+              const rc = await fetch(`${new URL(req.url).origin}/api/concluir-assessorias-cron`, {
+                method: 'POST', headers: { 'x-cron-secret': process.env.CRON_SECRET },
+              });
+              if (!rc.ok) console.error('[assinar-contrato] cancelamento do Pro (cron) HTTP', rc.status);
+            } catch (e) { console.error('[assinar-contrato] cancelamento do Pro (cron):', e?.message || e); }
+          }
         }
       }
     }

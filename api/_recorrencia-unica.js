@@ -185,3 +185,61 @@ export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerI
   alertar();
   return out;
 }
+
+// ASSESSORIA INCLUI O PRO (06/10, regra_negocio['assessoria.inclui_pro']): contratada a assessoria,
+// a mensalidade do Investidor Pro para de ser cobrada — enquanto ela estiver ativa os benefícios
+// vêm do papel `assessorado`. Cancela SÓ a recorrência do Pro (MP: external_reference `uid|top2*`;
+// Asaas: descrição "Investidor Pro…", sem maxPayments). O parcelamento 12× da PRÓPRIA assessoria
+// também é recorrência e não pode ser tocado — por isso o filtro é pelo plano, não "todas as outras".
+// Nunca lança: a ativação da assessoria não pode cair por causa disto — toda falha ALERTA.
+export async function cancelarRecorrenciaPro({ userId, email, asaasCustomerId, origem }) {
+  const out = { mpCancelados: [], asaasCancelados: [], erros: [] };
+  if (!userId) return out;
+  const mpToken = process.env.MP_ACCESS_TOKEN;
+  try {
+    if (mpToken) {
+      if (!email) { try { email = await emailDaConta(userId); } catch (e) { out.erros.push(`e-mail da conta: ${e?.message || e}`); } }
+      if (!email) out.erros.push('sem e-mail da conta — mandatos do MP não conferidos');
+      else {
+        const r = await fetch(`${MP_BASE}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${mpToken}` } });
+        if (!r.ok) throw new Error(`MP busca ${r.status}`);
+        const d = await r.json();
+        for (const p of d?.results || []) {
+          const [uid, plano] = String(p.external_reference || '').split('|');
+          if (uid !== String(userId) || !/^top2/.test(plano || '')) continue;
+          const c = await fetch(`${MP_BASE}/preapproval/${p.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${mpToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
+          if (c.ok) out.mpCancelados.push(String(p.id)); else out.erros.push(`MP ${p.id}: ${c.status}`);
+        }
+      }
+    }
+    if (asaasKey()) {
+      const cust = asaasCustomerId || await asaasIdDoPerfil(userId);
+      if (cust) {
+        const d = await asaasGet(`/subscriptions?customer=${encodeURIComponent(cust)}&status=ACTIVE&limit=20`);
+        for (const s of d?.data || []) {
+          if (!s?.id || s.maxPayments || !/^Investidor Pro/i.test(String(s.description || ''))) continue;
+          try { await apagarAssinaturaAsaas(s.id); out.asaasCancelados.push(String(s.id)); }
+          catch (e) { out.erros.push(`Asaas ${s.id}: ${e?.message || e}`); } // padrao-ok: motivo vai para out.erros, logado e alertado no fim
+        }
+      }
+    }
+    // O mandato do Pro cancelado não pode continuar contando como "tem Pro próprio" —
+    // concluir_assessorias_entregues() lê mp_preapproval_id para decidir o papel na conclusão.
+    if (out.mpCancelados.length) {
+      const rp = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&mp_preapproval_id=in.(${out.mpCancelados.join(',')})`, {
+        method: 'PATCH', headers: { ...sbHdr(), Prefer: 'return=representation' }, body: JSON.stringify({ mp_preapproval_id: null }),
+      });
+      if (!rp.ok) out.erros.push(`perfis.mp_preapproval_id não limpo (${rp.status})`);
+    }
+  } catch (e) {
+    out.erros.push(e?.message || String(e));
+  }
+  if (out.mpCancelados.length || out.asaasCancelados.length) {
+    console.log(`[recorrencia-pro] ${origem}: user=${userId} mp=${out.mpCancelados.join(',') || '-'} asaas=${out.asaasCancelados.join(',') || '-'}`);
+  }
+  if (out.erros.length) {
+    console.error(`[recorrencia-pro] ${origem}: falhas`, out.erros);
+    alertarErro({ rota: `recorrencia-pro/${origem}`, erro: `Assessoria contratada mas a mensalidade do Investidor Pro NÃO foi cancelada — cliente ${userId} pode seguir sendo cobrado. Conferir MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId } });
+  }
+  return out;
+}

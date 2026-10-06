@@ -79,3 +79,14 @@ values ('assessoria.inclui_pro',
   true, array['concluir_assessorias_entregues'])
 on conflict (chave) do update set valor = excluded.valor, descricao = excluded.descricao,
   ativo = true, aplicada_por = excluded.aplicada_por;
+
+-- 06/10 (2ª parte, pedido do dono): contratar a assessoria CANCELA a recorrência do Investidor
+-- Pro (MP e Asaas) — api/_recorrencia-unica.js#cancelarRecorrenciaPro, chamado nos webhooks de
+-- confirmação e na varredura diária de assessorados de api/concluir-assessorias-cron.js (que a
+-- assinatura do contrato dispara na hora).
+insert into public.regra_negocio (chave, valor, descricao, ativo, aplicada_por)
+select chave, valor || '{"cancela_recorrencia_pro_ao_contratar": true}'::jsonb,
+       descricao || ' Ao contratar, a recorrência do Investidor Pro (MP/Asaas) é cancelada automaticamente; o parcelamento da própria assessoria não é tocado.',
+       ativo, aplicada_por
+  from public.regra_negocio where chave = 'assessoria.inclui_pro' and not (valor ? 'cancela_recorrencia_pro_ao_contratar')
+on conflict (chave) do update set valor = excluded.valor, descricao = excluded.descricao;

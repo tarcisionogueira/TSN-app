@@ -17,6 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
  */
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { cancelarRecorrenciaPro } from './_recorrencia-unica.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -53,9 +54,29 @@ async function handler(req) {
       avisos.falhas.push({ user_id: u.user_id, erro: String(e?.message || e).slice(0, 160) });
     }
   }
+  // MENSALIDADE DO PRO NÃO CORRE DURANTE A ASSESSORIA (06/10, regra_negocio['assessoria.inclui_pro']).
+  // Varredura de todos os assessorados ATIVOS: cobre os caminhos em que a assessoria entra sem
+  // passar pelo webhook (contrato assinado — que dispara este cron na hora —, registro manual do
+  // Admin). Os webhooks já cancelam na confirmação; aqui é a rede. O helper nunca lança e alerta.
+  const pro = { verificados: 0, mp: 0, asaas: 0, falhas: 0 };
+  const ra = await fetch(`${SUPABASE_URL}/rest/v1/plano_assinaturas?status=eq.ativo&plano_key=eq.assessorado&select=user_id`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  });
+  if (!ra.ok) {
+    pro.erro = `leitura de plano_assinaturas HTTP ${ra.status}`;
+  } else {
+    const uids = [...new Set((await ra.json()).map((x) => x.user_id).filter(Boolean))];
+    for (const uid of uids) {
+      const c = await cancelarRecorrenciaPro({ userId: uid, origem: 'varredura-assessorados' });
+      pro.verificados++;
+      pro.mp += c.mpCancelados.length;
+      pro.asaas += c.asaasCancelados.length;
+      if (c.erros.length) pro.falhas++;
+    }
+  }
   // Log sempre, inclusive com 0: silêncio não distingue "nada a concluir" de "cron parou".
-  console.log('[concluir-assessorias]', JSON.stringify({ ...(out || {}), avisos }));
-  return new Response(JSON.stringify({ ok: true, ...(out || {}), avisos }), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[concluir-assessorias]', JSON.stringify({ ...(out || {}), avisos, pro }));
+  return new Response(JSON.stringify({ ok: true, ...(out || {}), avisos, pro }), { headers: { 'Content-Type': 'application/json' } });
 }
 
 async function avisarConclusao({ user_id: userId, role }) {

@@ -25,6 +25,7 @@ import { enviarConversaoOffline, googleAdsAtivo } from './_google-ads.js';
 import { enviarEmail } from './_email.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
 import { logAtividade } from './_atividade.js';
+import { cancelarRecorrenciaPro } from './_recorrencia-unica.js';
 
 // Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
@@ -288,6 +289,12 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   }
   const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
   if (error) throw new Error(error.message);
+  // ASSESSORIA INCLUI O PRO (06/10): assessoria PAGA de verdade → para de cobrar a mensalidade
+  // do Investidor Pro. Só com cobrança real (mandato autorizado sem pagamento não conta) e só se o
+  // papel de fato virou assessorado (equipe/clube não são tocados). Nunca lança.
+  if (planoBaseKey === 'assessorado' && upd.role === 'assessorado' && temCobrancaReal) {
+    await cancelarRecorrenciaPro({ userId, origem: `${gateway}-ativacao` });
+  }
   try {
     // Trava de preço só conhece chaves-base (top2/clube) — normaliza (o valor anual mora
     // no mandato do gateway; preco_contratado é informativo). Evita o no-op silencioso.
@@ -651,6 +658,11 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
       if (cicloMarcado) await removerEventoProcessado({ gateway, gatewayPaymentId, evento: 'ciclo_aplicado' });
       throw new Error(error.message);
     }
+  }
+  // Mesma regra do ativarPlanoDireto, no outro caminho de confirmação (Asaas / fallback):
+  // assessoria paga → cancela a mensalidade do Investidor Pro (regra_negocio['assessoria.inclui_pro']).
+  if (mapeado?.plano === 'assessorado' && update.role === 'assessorado') {
+    await cancelarRecorrenciaPro({ userId: cliente.id, email, asaasCustomerId: gateway === 'asaas' ? gatewayCustomerId : null, origem: `${gateway}-confirmado` });
   }
 
   // LOG DE ATIVIDADE (Cliente 360) — cobre os dois gateways (MP e Asaas) num ponto só, já
