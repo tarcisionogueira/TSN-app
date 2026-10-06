@@ -54,9 +54,9 @@ async function sb(path, init = {}) {
   return t ? JSON.parse(t) : null;
 }
 // PATCH que PROVA o que mudou (forma nº 3): sem linha de volta, não gravou.
-async function gravar(id, patch) {
+async function gravar(id, patch, tabela = 'imoveis_leilao') {
   if (!APLICAR) return true;
-  const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
+  const rows = await sb(`${tabela}?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
   return Array.isArray(rows) && rows.length === 1;
 }
 async function carimbar(chave, detalhe) {
@@ -113,10 +113,44 @@ if (FONTES_APURAR.length) {
     await dormir(PAUSA);
   }
   console.log(`[apuração] fontes=${FONTES_APURAR.join(',')} candidatos=${cand.length}`, JSON.stringify(cont), Object.keys(motivos).length ? `não abriu: ${JSON.stringify(motivos)}` : '');
+
+  // VEÍCULOS das mesmas fontes (06/10). O cron da Vercel apura veículos só pela cota `geral` do
+  // Bright Data, que esgota todo dia: 19 de 19 veículos "semCota" por rodada e 7 do LJUD vencidos há
+  // 6+ dias sem resultado (invariante resultado_leilao_atrasado). Mesma fila do cron (janela, teto de
+  // tentativas, ordem) e mesmo leitor; o que não abre só carimba a hora, como nos imóveis.
+  const desdeISO = new Date(Date.now() - JANELA_DIAS * 86400000).toISOString();
+  const agoraISO = new Date(Date.now() - 3 * 3600000).toISOString();
+  const candV = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}`
+    + `&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${inFontes(FONTES_APURAR)}`
+    + `&select=id,fonte,link_lote,resultado_apuracao_tentativas`
+    + `&order=resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst,data_leilao.desc&limit=${LIM_APURAR}`);
+  const contV = { lidos: 0, vendido: 0, sem_lance: 0, cancelado: 0, aberto: 0, indeterminado: 0, nao_abriu: 0, nao_gravou: 0 };
+  for (const v of candV) {
+    const alvo = v.link_lote;
+    if (!alvo || !/^https?:\/\//.test(alvo)) continue;
+    const { html, motivo } = await baixar(alvo);
+    if (!html) {
+      contV.nao_abriu++; motivos[`${v.fonte}(veic):${motivo}`] = (motivos[`${v.fonte}(veic):${motivo}`] || 0) + 1;
+      (porFonte[v.fonte] ||= { lidos: 0, nao_abriu: 0 }).nao_abriu++;
+      if (APLICAR) await sb(`veiculos_leilao?id=eq.${v.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
+      await dormir(PAUSA); continue;
+    }
+    contV.lidos++;
+    (porFonte[v.fonte] ||= { lidos: 0, nao_abriu: 0 }).lidos++;
+    const achado = apurarResultadoDoTexto(html, alvo);
+    const patch = patchDaApuracao(achado, { tabela: 'veiculos_leilao', tentativasAntes: v.resultado_apuracao_tentativas });
+    const chave = achado?.aberto ? 'aberto' : (achado?.resultado || 'indeterminado');
+    contV[chave] = (contV[chave] || 0) + 1;
+    if (!APLICAR) console.log(`  [seco] ${v.fonte} veículo ${chave}${achado?.valor ? ` R$ ${achado.valor}` : ''} ${alvo}`);
+    else if (!(await gravar(v.id, patch, 'veiculos_leilao'))) contV.nao_gravou++;
+    await dormir(PAUSA);
+  }
+  console.log(`[apuração veículos] candidatos=${candV.length}`, JSON.stringify(contV));
+  cont.lidos += contV.lidos; cont.nao_abriu += contV.nao_abriu;
   // Coberta = a fonte abriu pelo menos metade das páginas tentadas (ou não tinha nada a tentar).
   // As outras ficam FORA do carimbo e o cron da Vercel volta a cobri-las (05/10, #44 — VIP órfão).
   const cobertas = FONTES_APURAR.filter((f) => !porFonte[f] || porFonte[f].lidos >= porFonte[f].nao_abriu);
-  await carimbar(HB_APURACAO, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}; cobertas=${cobertas.join(',')}`);
+  await carimbar(HB_APURACAO, `${cont.lidos} lidos de ${cand.length + candV.length}; não abriu ${cont.nao_abriu}; cobertas=${cobertas.join(',')}`);
 }
 
 // ── 2) DATAS (mesma fila do enriquecer-datas-cron, só as fontes pedidas) ────────────────────

@@ -237,13 +237,15 @@ export default async function handler(req, res) {
   const resumoImoveis = await apurarLote('imoveis_leilao', candidatosImoveis, T0, ORCAMENTO_MS * 0.6);
 
   // ── Veículos (data_leilao é `timestamptz`, sem praça2/data_fim — usa a própria coluna) ────
+  // Veículos das fontes que o runner residencial cobre também saem daqui (06/10): o script de casa/
+  // reserva do GitHub passou a apurar veículos, de graça; aqui só gastariam a cota `geral`.
   const desdeISO = new Date(Date.now() - JANELA_DIAS * 86400000).toISOString();
   const agoraISO = new Date(Date.now() - 3 * 3600000).toISOString();
   // Mesma correção de ordem do bloco de imóveis acima: DESC prioriza o que venceu HOJE
   // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
   // esgote o orçamento antes de chegar no lote de hoje. Mesma reabertura de 'indeterminado'
   // do bloco de imóveis acima (22/09).
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${FONTES_EXCLUIDAS_SQL}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=${ORDEM_FILA},data_leilao.desc&limit=${LOTE_TAMANHO}`);
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=${ORDEM_FILA},data_leilao.desc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
