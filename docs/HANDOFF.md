@@ -36310,3 +36310,20 @@ Pendência #141: coletor VIP não lê a descrição de nenhum lote (0/108) e per
   vista). `fetch-url` decodifica entidades HTML ("Leil&#xE3;o").
 - Conferência (vm 2.741.875, lance 2.121.000): à vista com 10% → capital 2.342.495, ROI 0,1%; 25%+12x sem juros → ROI
   −8,6% (o desconto só vale à vista); o gerado (30%+36x 12%) dava −22%. Teto p/ ROI 30% à vista: R$ 1.564.151.
+
+## 06/10 — Lote manual vira LOTE DA BASE: anexos guardados, envio ao jurídico pela análise, geração espera a leitura
+Pedido do dono: "se eu anexei edital, matrícula e url do lote, armazene e deixe disponível" + "permitir a mim e
+equipe enviar ao jurídico". Tudo o que guarda documento (`imovel_anexos`, FK p/ `imoveis_leilao`; upload-anexo; painel
+"Documentos do leiloeiro") e o envio ao jurídico exigem imóvel da base — o lote manual tinha só um id local `tsn_…`
+(o painel até dava erro: consultava `imovel_anexos` com o `tsn_`, que não é uuid).
+- `api/lote-manual.js`: na 1ª geração (`garantirLoteReal` em Analise.jsx) o lote vira linha em `imoveis_leilao`
+  com `fonte='MANUAL'`, `ativo=false` (fora da busca e dos monitores; as duas limpezas de inativos poupam lote com
+  análise) e `fonte_id = manual_<user>_<ts>` (teto 300/usuário). Com `de_tsn`, MOVE as análises do id local.
+  Descrição montada com "área construída": sem ela, `trg_tipo_lote_sem_construcao` rebaixava "Lote 06 - …" de casa
+  para TERRENO (medido em rollback). Os arquivos sobem por `upload-anexo` ANTES da troca de id; a troca não limpa a
+  tela (`promovidoParaRef` — o efeito que descarta conteúdo do imóvel anterior pularia anexos e relatório).
+- Geração ESPERA a leitura: a 2ª passada do edital marca o doc como `lendo`; mercado/documental recusam com "aguarde"
+  enquanto houver doc lendo. Causa do relatório de 00:29 (lance 0, 5% + 360x): o dono clicou Gerar no meio da passada.
+- `enviar-juridico-email` modo AVULSO (`{ imovel_id, analise_user_id }`, admin/analista): mesmos destinatários e
+  anexos; parecer = `analises_documental.result.parecer`; resposta volta a quem enviou; nada de caso é tocado. Botão
+  "Enviar ao jurídico (e-mail)" na lateral da análise.

@@ -76,7 +76,7 @@ const ehIdManual = (id) => !!id && !ID_ACERVO_RE.test(String(id));
 const fotoLoteManual = (x, id, linkEdital) => ({
   id, manual: true, titulo: x?.nome || x?.endereco || 'Imóvel', tipo: x?.tipo || '', endereco: x?.endereco || '',
   cidade: x?.cidade || '', estado: x?.estado || '', valorAvaliacao: Number(x?.valorAvaliacao) || 0,
-  valorMinimo: Number(x?.valorArrematacao) || 0, areaM2: Number(x?.areaM2) || 0, leiloeiro: x?.leiloeiro || '',
+  valorMinimo: Number(x?.valorArrematacao) || 0, areaM2: Number(x?.areaM2) || 0, areaTerrenoM2: Number(x?.areaTerrenoM2) || 0, leiloeiro: x?.leiloeiro || '',
   dataLeilao: dataBrParaIso(x?.dataLeilao) || '', modalidade: x?.origem || '', linkEdital: linkEdital || '',
 });
 
@@ -361,7 +361,7 @@ export default function Analise() {
       // exatamente o defeito que esta recuperação existe para consertar.
       const { data, error } = await lerComRenovacao(supabase, () => supabase
         .from('imoveis_leilao')
-        .select('id, titulo, tipo, endereco, bairro, cidade, estado, valor_avaliacao, valor_minimo, valor_minimo_2, data_leilao, data_leilao_2, area_m2, leiloeiro, modalidade, forma_pagamento, anexos, link_edital, link_matricula, url_lote, doc_fatos')
+        .select('id, fonte, titulo, tipo, endereco, bairro, cidade, estado, valor_avaliacao, valor_minimo, valor_minimo_2, data_leilao, data_leilao_2, area_m2, leiloeiro, modalidade, forma_pagamento, anexos, link_edital, link_matricula, url_lote, doc_fatos')
         .eq('id', idDaUrl).maybeSingle());
       if (!vivo) return;
       if (error || !data) {
@@ -376,6 +376,7 @@ export default function Analise() {
         areaM2: Number(data.area_m2) || 0, leiloeiro: data.leiloeiro, modalidade: data.modalidade,
         pagamento: data.forma_pagamento, anexos: data.anexos, linkEdital: data.link_edital,
         linkMatricula: data.link_matricula, urlLote: data.url_lote, docFatos: data.doc_fatos,
+        fonte: data.fonte, manual: data.fonte === 'MANUAL',
       });
     })();
     return () => { vivo = false; };
@@ -397,6 +398,9 @@ export default function Analise() {
     if (imovelInicial.numeroProcesso) setCnjNumero(imovelInicial.numeroProcesso);
     const idImovel = imovelInicial.id;
     if (!idImovel) return;
+    // Lote manual ANTIGO (id local `tsn_…`): não é imóvel da base — consultar `imovel_anexos` com ele dava
+    // erro de tipo e a tela dizia "Não foi possível carregar os documentos guardados" (06/10).
+    if (ehIdManual(idImovel)) { setDocsLeiloeiro([]); setErroDocsLeiloeiro(false); return; }
     let cancel = false;
     (async () => {
       const { data, error: eAnexos } = await supabase.from('imovel_anexos')
@@ -1195,8 +1199,88 @@ export default function Analise() {
   // (consolidarDocsImovel: matrícula manda no endereço/área, edital no lance/praças) — não do último a chegar.
   const tipoPeloNomeArquivo = (nome) => (/matr[ií]c/i.test(nome) ? 'matricula' : /edital|regras?\s*(de\s*)?venda/i.test(nome) ? 'edital' : null);
   const tipoPelaLeitura = (ext) => { const t = String(ext?.tipoDocumento || '').toLowerCase(); return /matric/.test(t) ? 'matricula' : /edital|regra/.test(t) ? 'edital' : null; };
+  // ── LOTE MANUAL → LOTE DA BASE (06/10, api/lote-manual.js) ──────────────────────────────────────────
+  // Na 1ª geração o lote incluído à mão vira um imóvel de verdade (fonte MANUAL, inativo, fora da busca): os
+  // arquivos anexados passam a ser GUARDADOS em `imovel_anexos` (painel "Documentos do leiloeiro", leitura do
+  // servidor, envio ao jurídico) e as análises feitas com o id local são movidas para ele.
+  const subirAnexo = async (file, tipo, imovelId) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('imovel_id', imovelId);
+    fd.append('tipo', ['edital', 'matricula'].includes(tipo) ? tipo : 'outro');
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  };
+  const docsManuaisRef = React.useRef([]);
+  useEffect(() => { docsManuaisRef.current = docsManuais; }, [docsManuais]);
+  const subirDocsManuaisPendentes = async (imovelId) => {
+    const pendentes = docsManuaisRef.current.filter((x) => x.file && !x.anexoId && !x.lendo);
+    let falhas = 0;
+    for (const x of pendentes) {
+      try {
+        const r = await subirAnexo(x.file, x.tipo, imovelId);
+        setDocsManuais((prev) => prev.map((y) => (y.id === x.id ? { ...y, anexoId: r.anexo_id || true, file: undefined } : y)));
+        setDocsLeiloeiro((prev) => [...(prev || []).filter((y) => x.tipo === 'outro' || y.tipo !== x.tipo), { id: r.anexo_id, tipo: ['edital', 'matricula'].includes(x.tipo) ? x.tipo : 'outro', nome: x.nome, url: r.url_publica }]);
+      } catch (e) {
+        falhas++;
+        console.warn('[analise] anexo do lote manual não guardado:', x.nome, e?.message);
+      }
+    }
+    if (falhas) showMsg(`${falhas} documento(s) não foram guardados — a análise usa o texto lido; anexe de novo para guardar.`, 'error');
+  };
+  const promovendoRef = React.useRef(null);
+  const promovidoParaRef = React.useRef(null);
+  // Devolve o id com que gerar: o da base (lote do acervo ou manual já promovido) ou o recém-criado.
+  // `null` = não consegui criar (a tela já disse o motivo) — a geração NÃO segue com id local.
+  const garantirLoteReal = () => {
+    if (!ehIdManual(analiseImovelId)) return Promise.resolve(analiseImovelId);
+    if (promovendoRef.current) return promovendoRef.current;
+    const deTsn = analiseImovelId;
+    const foto = fotoLoteManual(d, deTsn, urlEdital);
+    promovendoRef.current = (async () => {
+      try {
+        const r = await apiCall('/api/lote-manual', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lote: { ...foto, valorMinimo: foto.valorMinimo, urlLote: externoLink.trim() || null }, de_tsn: deTsn }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.id) throw new Error(j.error || `HTTP ${r.status}`);
+        const novo = { ...foto, id: j.id, fonte: 'MANUAL', manual: true, urlLote: externoLink.trim() || null };
+        // Arquivos ANTES de trocar de id: o painel de documentos relê `imovel_anexos` ao trocar e já os encontra.
+        await subirDocsManuaisPendentes(j.id);
+        promovidoParaRef.current = j.id; // a troca de id abaixo é o MESMO lote — nada da tela é descartado
+        setD((p) => ({ ...p, id: j.id, imovelIdAcervo: j.id }));
+        nav(`/analise?imovel=${j.id}`, { replace: true, state: { imovel: novo } });
+        return j.id;
+      } catch (e) {
+        showMsg(`Não consegui registrar o lote para guardar os documentos (${String(e?.message || 'erro').slice(0, 90)}). Tente de novo.`, 'error');
+        return null;
+      } finally { promovendoRef.current = null; }
+    })();
+    return promovendoRef.current;
+  };
+  const aindaLendoDocs = () => docsManuais.some((x) => x.lendo);
+  const [enviandoJuridico, setEnviandoJuridico] = useState(false);
+  const [envioJuridicoMsg, setEnvioJuridicoMsg] = useState(null);
+  const enviarAoJuridico = async () => {
+    if (enviandoJuridico || ehIdManual(analiseImovelId)) return;
+    if (!window.confirm('Enviar ao jurídico, por e-mail, os documentos guardados deste imóvel e o parecer documental?')) return;
+    setEnviandoJuridico(true); setEnvioJuridicoMsg(null);
+    try {
+      const r = await apiCall('/api/enviar-juridico-email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imovel_id: analiseImovelId, analise_user_id: effectiveUserId || user?.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setEnvioJuridicoMsg({ ok: true, texto: `Enviado a ${(j.para || []).join(', ') || j.advogado} com ${j.anexos} anexo(s). A resposta chega no seu e-mail.` });
+      registrarEvento('juridico_enviado', { alvo: 'analise', detalhe: `imovel=${analiseImovelId} anexos=${j.anexos}` });
+    } catch (e) {
+      setEnvioJuridicoMsg({ ok: false, texto: `Não enviado: ${String(e?.message || 'erro').slice(0, 140)}` });
+    } finally { setEnviandoJuridico(false); }
+  };
+
   // O que vai GRAVADO com a análise (lote manual): texto e dados lidos — nunca o arquivo.
-  const docsManuaisParaGravar = () => (ehIdManual(analiseImovelId)
+  const docsManuaisParaGravar = () => (docsManuais.length
     ? docsManuais.filter((x) => !x.lendo && (x.texto || x.ext)).map(({ nome, tipo, texto, ext, aviso }) => ({ nome, tipo, texto, ext, aviso }))
     : []);
   const recomporDocsManuais = (lista) => {
@@ -1268,7 +1352,7 @@ export default function Analise() {
         else if (texto && !ext) aviso = `texto lido, mas os valores não foram extraídos (${e.reason?.message || 'resposta vazia da IA'}) — confira avaliação e lance nos dados do imóvel`;
       } catch (err) { aviso = `não consegui ler (${err?.message || 'erro'})`; }
       setDocsManuais((prev) => prev.map((x) => (x.id === it.id ? { ...x, lendo: false, texto, ext, aviso,
-        tipo: x.tipoDoNome ? x.tipo : (tipoPelaLeitura(ext) || x.tipo), file: undefined } : x)));
+        tipo: x.tipoDoNome ? x.tipo : (tipoPelaLeitura(ext) || x.tipo) } : x)));
       lidosAgora.push({ id: it.id, tipo: it.tipoDoNome ? it.tipo : (tipoPelaLeitura(ext) || it.tipo), texto, ext });
     }
     // EDITAL COM VÁRIOS IMÓVEIS (Bradesco: ~20 lotes num PDF) — a leitura genérica não sabe qual é o
@@ -1277,7 +1361,11 @@ export default function Analise() {
     const exts = [...lidosAgora, ...docsManuais].map((x) => x.ext).filter(Boolean);
     const daMatricula = exts.find((x) => x.tipoDocumento === 'matricula' && (x.endereco || x.nome)) || exts.find((x) => x.endereco);
     const alvo = daMatricula || (d.endereco ? d : null);
-    for (const x of lidosAgora.filter((y) => y.tipo === 'edital' && y.texto && ehEditalMultiLote(y.texto))) {
+    const editaisMulti = lidosAgora.filter((y) => y.tipo === 'edital' && y.texto && ehEditalMultiLote(y.texto));
+    // Enquanto o lote é LOCALIZADO, o edital segue "lendo": a geração espera (06/10 — o dono clicou em Gerar
+    // no meio desta passada e o relatório saiu com lance 0 e o parcelamento padrão).
+    if (editaisMulti.length) setDocsManuais((prev) => prev.map((y) => (editaisMulti.some((x) => x.id === y.id) ? { ...y, lendo: true, aviso: 'edital com vários imóveis: localizando o lote…' } : y)));
+    for (const x of editaisMulti) {
       let ext2 = null, aviso2;
       if (!alvo) aviso2 = 'edital com vários imóveis: anexe a matrícula para localizarmos o lote — confira avaliação e lance';
       else {
@@ -1287,8 +1375,10 @@ export default function Analise() {
             : Number(ext2.valorArrematacao) > 0 ? 'edital com vários imóveis: lote localizado pela matrícula' : 'lote localizado, mas sem lance legível — confira';
         } catch (errLote) { aviso2 = `edital com vários imóveis: falha ao ler o lote (${errLote?.message || 'erro'}) — confira avaliação e lance`; }
       }
-      setDocsManuais((prev) => prev.map((y) => (y.id === x.id ? { ...y, aviso: aviso2, ...(ext2 ? { ext: { ...ext2, tipoDocumento: 'edital' } } : {}) } : y)));
+      setDocsManuais((prev) => prev.map((y) => (y.id === x.id ? { ...y, lendo: false, aviso: aviso2, ...(ext2 ? { ext: { ...ext2, tipoDocumento: 'edital' } } : {}) } : y)));
     }
+    // Lote manual que JÁ é lote da base (criado na 1ª geração): o arquivo novo é guardado na hora.
+    if (imovelInicial?.manual && !ehIdManual(imovelInicial.id)) await subirDocsManuaisPendentes(imovelInicial.id);
     setOpenSec((p) => ({ ...p, doc: false, dados: true, viabilidade: true }));
     showMsg(itens.length > 1 ? `${itens.length} documentos lidos.` : `Documento lido: ${itens[0].nome}`);
   };
@@ -1407,7 +1497,7 @@ export default function Analise() {
   // override em `analisarMercadoClick`; a diferença é que aqui a geração é a do SERVIDOR, que
   // persiste. As derivadas (`metricas`/`teto`) são recalculadas sobre o snapshot corrigido,
   // senão o laudo iria com a viabilidade dos dados velhos.
-  const gerarRelMercado = (override = null) => {
+  const gerarRelMercado = async (override = null) => {
     const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
     const dSnap = ov ? { ...d, ...ov } : { ...d };
     // A tentativa é registrada ANTES das recusas: sem isto, o clique que morre aqui some do
@@ -1422,6 +1512,12 @@ export default function Analise() {
       showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return;
     }
     if (gerandoMercado) { registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'ignorado: ja gerando' }); return; }
+    if (aindaLendoDocs()) {
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'aguardando: documentos ainda em leitura' });
+      showMsg('Aguarde: os documentos anexados ainda estão sendo lidos.', 'error'); return;
+    }
+    const idAlvo = await garantirLoteReal();
+    if (!idAlvo) return;
     const isAVistaSnap = cenario === 'aVista' || dSnap.somenteAVista;
     const metricasSnap = ov ? calcularMetricasCenario(dSnap, dSnap.valorArrematacao || 0, isAVistaSnap) : metricas;
     const tetoSnap = ov ? calcularTetoLance(dSnap, isAVistaSnap, META, dSnap.valorMercado || 0) : teto;
@@ -1437,7 +1533,7 @@ export default function Analise() {
     registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'iniciou no servidor' });
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
-      { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial && !ehIdManual(analiseImovelId) ? imovelInicial : fotoLoteManual(dSnap, analiseImovelId, urlEdital), paraUserId },
+      { imovelId: idAlvo, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial && !imovelInicial.manual && !ehIdManual(imovelInicial.id) ? imovelInicial : fotoLoteManual(dSnap, idAlvo, urlEdital), paraUserId },
       { mercadoInputs, parecerInputs, ...(docsManuaisParaGravar().length ? { docsManuais: docsManuaisParaGravar() } : {}) }
     );
   };
@@ -1500,6 +1596,9 @@ export default function Analise() {
     const idNovo = imovelInicial?.id;
     if (!idNovo || idAcervoRef.current === idNovo) return;
     idAcervoRef.current = idNovo;
+    // Lote manual que acabou de virar lote da base (garantirLoteReal): é o MESMO imóvel com id novo —
+    // apagar anexos, textos e relatório aqui descartaria tudo o que a pessoa acabou de anexar.
+    if (promovidoParaRef.current === idNovo) return;
     aplicadoRef.current = null;
     setMercado(null);
     setParecer('');
@@ -1615,8 +1714,11 @@ export default function Analise() {
   // CNJ NO SERVIDOR. O usuário pode FECHAR a aba — continua e grava no banco; o
   // resultado é aplicado de volta pelo efeito abaixo. Texto/processo colados na
   // tela (staff/inclusão manual) são enviados como reforço.
-  const gerarRelDocumental = (auto, bypassPreCheck) => {
+  const gerarRelDocumental = async (auto, bypassPreCheck) => {
     if (gerandoDocumental) return;
+    if (aindaLendoDocs()) { showMsg('Aguarde: os documentos anexados ainda estão sendo lidos.', 'error'); return; }
+    const idAlvo = await garantirLoteReal();
+    if (!idAlvo) return;
     // Ação manual do usuário (não é o auto-poll da captura) → zera o contador de
     // tentativas para uma nova rodada completa de espera pela captura.
     if (auto !== true) { capturaPollRef.current.n = 0; clearTimeout(capturaPollRef.current.timer); setPreparandoDocs(false); }
@@ -1678,7 +1780,7 @@ export default function Analise() {
     };
     showMsg('Análise documental iniciada no servidor, pode fechar a aba; acompanhe em "Análises" no topo.');
     iniciarDocumental(
-      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial && !ehIdManual(analiseImovelId) ? imovelInicial : fotoLoteManual(d, analiseImovelId, urlEdital), paraUserId },
+      { imovelId: idAlvo, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial && !imovelInicial.manual && !ehIdManual(imovelInicial.id) ? imovelInicial : fotoLoteManual(d, idAlvo, urlEdital), paraUserId },
       payload
     );
     // Gera IN-PLACE como o mercadológico: o card mostra "Gerando…" e o usuário
@@ -2478,6 +2580,18 @@ export default function Analise() {
                 ? 'Disponível após gerar o Mercadológico e a Análise Documental.'
                 : 'Você escolhe o horário; após a reunião o analista dá o parecer e libera o jurídico.'}
             </div>
+            {/* ENVIO AO JURÍDICO PELA ANÁLISE (06/10, pedido do dono): a equipe não abre caso em nome próprio, e o
+                envio só existia dentro do caso. Aqui vai direto: documentos guardados do imóvel + parecer documental. */}
+            {['admin', 'analista'].includes(role) && (
+              <>
+                <button onClick={enviarAoJuridico} disabled={!relDocumentalGerado || enviandoJuridico || ehIdManual(analiseImovelId)}
+                  title={ehIdManual(analiseImovelId) ? 'Gere um relatório para registrar o lote e guardar os documentos' : !relDocumentalGerado ? 'Gere a Análise Documental primeiro' : ''}
+                  style={{ width:'100%', padding:'10px', background:'white', color: (!relDocumentalGerado || ehIdManual(analiseImovelId)) ? '#94a3b8' : '#5b21b6', border:`1px solid ${(!relDocumentalGerado || ehIdManual(analiseImovelId)) ? '#e2e8f0' : '#c4b5fd'}`, borderRadius:12, fontWeight:700, fontSize:13, cursor: (!relDocumentalGerado || enviandoJuridico || ehIdManual(analiseImovelId)) ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                  {enviandoJuridico ? <Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/> : <ShieldAlert size={15}/>} Enviar ao jurídico (e-mail)
+                </button>
+                {envioJuridicoMsg && <div style={{ fontSize:10.5, color: envioJuridicoMsg.ok ? '#15803d' : '#b91c1c', textAlign:'center', lineHeight:1.4 }}>{envioJuridicoMsg.texto}</div>}
+              </>
+            )}
           </div>
         </aside>
         )}

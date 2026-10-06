@@ -5,6 +5,12 @@
  * nem financeiro — solicitando análise com brevidade para confirmação de viabilidade.
  * A resposta volta por e-mail (reply-to único por caso) e é ingerida em /api/inbound-juridico.
  * Body: { caso_id }
+ *
+ * ENVIO AVULSO (06/10, pedido do dono: "permitir a mim e equipe enviar ao jurídico"): sem caso aberto — o caso
+ * pertence ao cliente e a equipe não abre um em nome próprio —, a equipe envia direto da ANÁLISE.
+ * Body: { imovel_id, analise_user_id? }  → mesmos destinatários e anexos do imóvel; o parecer vem da análise
+ * documental (`analises_documental` de quem analisou); a resposta volta ao endereço de quem enviou (não há
+ * caso para registrá-la) e nada de caso é alterado.
  */
 export const config = { runtime: 'edge' };
 
@@ -60,10 +66,30 @@ export default async function handler(req) {
 
   let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
   const { caso_id } = body || {};
-  if (!caso_id) return json({ error: 'caso_id obrigatório' }, 400);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const avulso = !caso_id && UUID_RE.test(String(body?.imovel_id || ''));
+  if (!caso_id && !avulso) return json({ error: 'caso_id ou imovel_id obrigatório' }, 400);
 
-  const [caso] = await (await sb(`casos?id=eq.${encodeURIComponent(caso_id)}&select=*`)).json();
-  if (!caso) return json({ error: 'Caso não encontrado' }, 404);
+  let caso, docAvulso = null;
+  if (avulso) {
+    const rIm = await sb(`imoveis_leilao?id=eq.${body.imovel_id}&select=titulo,endereco,cidade,estado,modalidade&limit=1`);
+    const [im] = rIm.ok ? await rIm.json() : [];
+    if (!im) return json({ error: rIm.ok ? 'Imóvel não encontrado' : `Imóvel não lido (HTTP ${rIm.status})` }, rIm.ok ? 404 : 502);
+    const donoAnalise = UUID_RE.test(String(body.analise_user_id || '')) ? body.analise_user_id : user.id;
+    const rDoc = await sb(`analises_documental?user_id=eq.${donoAnalise}&imovel_id=eq.${body.imovel_id}&status=eq.concluida&select=result&limit=1`);
+    if (!rDoc.ok) return json({ error: `Análise documental não lida (HTTP ${rDoc.status})` }, 502);
+    const [ad] = await rDoc.json();
+    if (!ad?.result?.parecer) return json({ error: 'Gere a análise documental deste imóvel antes de enviar ao jurídico.' }, 409);
+    docAvulso = ad.result;
+    caso = {
+      id: null, imovel_id: body.imovel_id, advogado_id: null, juridico_token: null,
+      imovel_endereco: [im.endereco || im.titulo, im.cidade, im.estado].filter(Boolean).join(', '),
+      tipo_leilao: im.modalidade || '—',
+    };
+  } else {
+    [caso] = await (await sb(`casos?id=eq.${encodeURIComponent(caso_id)}&select=*`)).json();
+    if (!caso) return json({ error: 'Caso não encontrado' }, 404);
+  }
 
   // Advogado responsável (para registro no caso); usado como fallback de destino.
   let advogadoId = caso.advogado_id;
@@ -99,7 +125,13 @@ export default async function handler(req) {
   if (Array.isArray(anexos)) { for (const a of anexos) a.url = await urlDocumento(a); }
   // Triagem jurídica completa do sistema (documental + judicial/CNJ + sanções).
   // NÃO inclui mercadológico nem viabilidade financeira.
-  const [doc] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=eq.juridica_preliminar&select=conteudo_md,conteudo_json,versao&order=versao.desc&limit=1`)).json();
+  const [doc] = avulso
+    ? [{ conteudo_md: docAvulso.parecer, conteudo_json: {
+      modalidade: caso.tipo_leilao !== '—' ? caso.tipo_leilao : null,
+      numero_processo: docAvulso.extracao?.numeroProcesso || docAvulso.cnj?.numero || null,
+      riscos: (Array.isArray(docAvulso.riscos) ? docAvulso.riscos : []).map((r) => (typeof r === 'string' ? r : [r?.categoria, r?.descricao].filter(Boolean).join(': '))).filter(Boolean).slice(0, 15),
+    } }]
+    : await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=eq.juridica_preliminar&select=conteudo_md,conteudo_json,versao&order=versao.desc&limit=1`)).json();
   const dj = doc?.conteudo_json || {};
   const linhaTri = (rotulo, valor) => valor ? `<tr><td style="padding:3px 10px 3px 0;color:#64748b;white-space:nowrap">${esc(rotulo)}</td><td style="padding:3px 0">${valor}</td></tr>` : '';
   const triagemHtml = (dj.executado?.nome || dj.numero_processo || dj.score_juridico != null || (dj.sancoes||[]).length || (dj.riscos||[]).length) ? `
@@ -123,8 +155,8 @@ export default async function handler(req) {
   ` : '';
 
   const token = caso.juridico_token || (crypto.randomUUID().split('-')[0] + crypto.randomUUID().split('-')[0]);
-  const replyTo = `juridico+${token}@${INBOUND_DOMAIN}`;
-  const refCurto = String(caso_id).split('-')[0].toUpperCase();
+  let replyTo = `juridico+${token}@${INBOUND_DOMAIN}`;
+  const refCurto = String(caso_id || caso.imovel_id).split('-')[0].toUpperCase();
   const advNome = nomePrincipal;
 
   const listaAnexos = (anexos || []).length
@@ -149,7 +181,7 @@ export default async function handler(req) {
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55">${mdToHtml(doc?.conteudo_md)}</div>
     <p style="margin:18px 0 0">Caso identifique <strong>divergências</strong> em relação a esta avaliação, por favor aponte na resposta — usamos seus apontamentos para aprimorar a análise.</p>
     <p style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin:16px 0;font-size:14px">
-      👉 <strong>Basta responder a este próprio e-mail</strong> com seu parecer (recomenda / recomenda com ressalvas / não recomenda) e as observações. A resposta é registrada automaticamente no caso.
+      👉 <strong>Basta responder a este próprio e-mail</strong> com seu parecer (recomenda / recomenda com ressalvas / não recomenda) e as observações.${avulso ? '' : ' A resposta é registrada automaticamente no caso.'}
     </p>
     <p style="color:#64748b;font-size:12px;margin-top:18px">BidPro Brasil · Jurídico · Ref. ${esc(refCurto)}</p>
   </div>`;
@@ -164,18 +196,23 @@ export default async function handler(req) {
   const rPes = await sb(`equipe_email?user_id=eq.${user.id}&select=endereco&limit=1`);
   if (rPes.ok) enderecoDe = ((await rPes.json().catch(() => []))[0] || {}).endereco || null;
   else console.error('[enviar-juridico-email] equipe_email HTTP', rPes.status, '— sai pelo endereço do caso');
+  // Avulso: sem caso, o `juridico+token@` não teria onde registrar a resposta — ela volta para quem enviou.
+  if (avulso) replyTo = enderecoDe || (await emailDoUsuario(user.id)) || `juridico@${INBOUND_DOMAIN}`;
 
+  const assunto = avulso
+    ? `Análise documental para confirmação de viabilidade — ${String(caso.imovel_endereco || refCurto).slice(0, 90)}`
+    : `Análise documental para confirmação de viabilidade — Caso ${refCurto}`;
   const r = await enviarEmail({
     // Remetente REPLYÁVEL (não noreply): é o próprio endereço do caso, ingerido
     // por /api/inbound-juridico. Assim o advogado responde ao e-mail normalmente
     // (ao "de" ou ao reply-to, ambos caem no mesmo endereço e são registrados).
     from: enderecoDe
       ? `${perfil.nome || 'Equipe'} (BidPro Brasil Jurídico) <${enderecoDe}>`
-      : `BidPro Brasil Jurídico <juridico+${token}@${INBOUND_DOMAIN}>`,
+      : `BidPro Brasil Jurídico <${avulso ? `juridico@${INBOUND_DOMAIN}` : `juridico+${token}@${INBOUND_DOMAIN}`}>`,
     to: toList,
     cc: ccList,
     replyTo,
-    subject: `Análise documental para confirmação de viabilidade — Caso ${refCurto}`,
+    subject: assunto,
     html,
     attachments,
   });
@@ -191,13 +228,15 @@ export default async function handler(req) {
         direcao: 'saida', pasta: 'enviados', lido: true, enviado_por: user.id, dono: enderecoDe ? user.id : null,
         caixa: enderecoDe || `juridico@${INBOUND_DOMAIN}`, de_email: enderecoDe || `juridico+${token}@${INBOUND_DOMAIN}`,
         de_nome: perfil.nome || null, para: toList, cc: ccList,
-        assunto: `Análise documental para confirmação de viabilidade — Caso ${refCurto}`,
+        assunto,
         html, resend_email_id: r.id || null,
         anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
       }),
     });
     if (!rc.ok) console.error('[enviar-juridico-email] registro na caixa HTTP', rc.status);
   } catch (e) { console.error('[enviar-juridico-email] registro na caixa:', String(e?.message || e)); }
+
+  if (avulso) return json({ ok: true, avulso: true, advogado: advNome, para: toList, anexos: attachments.length });
 
   // Atualiza o caso
   await sb(`casos?id=eq.${encodeURIComponent(caso_id)}`, {
