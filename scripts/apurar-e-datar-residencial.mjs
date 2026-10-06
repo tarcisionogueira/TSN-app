@@ -145,7 +145,8 @@ if (FONTES_APURAR.length) {
     else if (!(await gravar(v.id, patch, 'veiculos_leilao'))) contV.nao_gravou++;
     await dormir(PAUSA);
   }
-  console.log(`[apuração veículos] candidatos=${candV.length}`, JSON.stringify(contV));
+  const motivosV = Object.fromEntries(Object.entries(motivos).filter(([k]) => k.includes('(veic)')));
+  console.log(`[apuração veículos] candidatos=${candV.length}`, JSON.stringify(contV), Object.keys(motivosV).length ? `não abriu: ${JSON.stringify(motivosV)}` : '');
   cont.lidos += contV.lidos; cont.nao_abriu += contV.nao_abriu;
   // Coberta = a fonte abriu pelo menos metade das páginas tentadas (ou não tinha nada a tentar).
   // As outras ficam FORA do carimbo e o cron da Vercel volta a cobri-las (05/10, #44 — VIP órfão).
