@@ -8,7 +8,7 @@
  *
  * Resposta: { podeContratar, motivo, role }
  *   motivo: 'ok' | 'nova_arrematacao' (já arrematou a anterior, liberado) |
- *           'assessoria_em_andamento' | 'clube_incluido' | 'requer_pro'
+ *           'assessoria_em_andamento' | 'clube_incluido' | 'requer_conta'
  *
  * Lido pelo Checkout (gate servidor-side espelhado na tela) e pela página de Planos
  * (CTA "Contratar nova arrematação" para quem já é assessorado).

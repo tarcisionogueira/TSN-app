@@ -5,7 +5,7 @@
  * criava a cobrança de uma 2ª assessoria em duplicidade (bug bounty — gate só decorativo).
  *
  * Retorna { podeContratar: bool, motivo }. Motivos:
- *   'ok' | 'nova_arrematacao' | 'assessoria_em_andamento' | 'clube_incluido' | 'requer_pro'
+ *   'ok' | 'nova_arrematacao' | 'assessoria_em_andamento' | 'clube_incluido' | 'requer_conta'
  */
 import { acessoAssessoria, ROLES_EQUIPE_ASSESSORIA } from '../src/lib/assessoria-acesso.js';
 
@@ -23,7 +23,7 @@ export async function podeContratarAssessoria({ userId, email, role }) {
   // e o Checkout usam, para as três não poderem divergir. Aqui segue o que só o banco sabe.
   const acesso = acessoAssessoria(role);
   if (acesso === 'incluido') return { podeContratar: false, motivo: 'clube_incluido' };
-  if (acesso === 'requer_pro') return { podeContratar: false, motivo: 'requer_pro' };
+  if (acesso === 'requer_conta') return { podeContratar: false, motivo: 'requer_conta' };
   if (ROLES_EQUIPE_ASSESSORIA.includes(String(role || ''))) return { podeContratar: true, motivo: 'ok' };
 
   // Contrato de assessoria VIVO (aguardando/assinado). Casa por criado_por OU assinante_email

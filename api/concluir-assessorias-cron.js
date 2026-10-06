@@ -16,6 +16,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
  * registro de link não encerra serviço nenhum, e sem imóvel não há onde procurar a prova.
  */
 import { isCronAuthorized } from './_auth.js';
+import { enviarEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -40,7 +41,51 @@ async function handler(req) {
     return new Response(JSON.stringify({ ok: false, status: r.status, detalhe: txt.slice(0, 200) }), { status: 502 });
   }
   const out = await r.json().catch(() => null);
+  // AVISO AO CLIENTE (06/10, regra_negocio['assessoria.inclui_pro']): os benefícios do Investidor
+  // Pro vinham da assessoria, sem mensalidade. Concluída, o banco devolveu o papel (explorador, ou
+  // top2 se ele tem Pro próprio) e o cliente precisa saber como manter os benefícios.
+  const avisos = { enviados: 0, falhas: [] };
+  for (const u of (out?.usuarios || [])) {
+    try {
+      await avisarConclusao(u);
+      avisos.enviados++;
+    } catch (e) {
+      avisos.falhas.push({ user_id: u.user_id, erro: String(e?.message || e).slice(0, 160) });
+    }
+  }
   // Log sempre, inclusive com 0: silêncio não distingue "nada a concluir" de "cron parou".
-  console.log('[concluir-assessorias]', JSON.stringify(out));
-  return new Response(JSON.stringify({ ok: true, ...(out || {}) }), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[concluir-assessorias]', JSON.stringify({ ...(out || {}), avisos }));
+  return new Response(JSON.stringify({ ok: true, ...(out || {}), avisos }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function avisarConclusao({ user_id: userId, role }) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=nome,email`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  });
+  if (!r.ok) throw new Error(`perfil HTTP ${r.status}`);
+  const [p] = await r.json();
+  if (!p?.email) throw new Error('perfil sem e-mail');
+  const base = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+  const nome = String(p.nome || '').trim().split(' ')[0] || 'Investidor';
+  const manteveProprio = /^top2/.test(String(role || ''));
+  const btn = (href, txt, cor) => `<a href="${href}" style="background:${cor};color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700;display:inline-block;margin:0 8px 10px 0">${txt}</a>`;
+  const linhaPro = manteveProprio
+    ? 'Como você mantém a sua assinatura do <strong>Investidor Pro</strong>, os benefícios dele continuam ativos.'
+    : 'Os benefícios do <strong>Investidor Pro</strong> vinham incluídos na assessoria e se encerram com ela. Para mantê-los, você pode <strong>contratar uma nova assessoria</strong> para o próximo imóvel ou <strong>assinar o Investidor Pro</strong>.';
+  const env = await enviarEmail({
+    to: p.email,
+    subject: 'Sua assessoria foi concluída — próximos passos',
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:540px;margin:0 auto;color:#1e293b">
+      <h2 style="color:#0D63DB;margin:0 0 12px">Parabéns, ${nome}! 🏠</h2>
+      <p style="font-size:15px;line-height:1.6">A sua assessoria foi <strong>concluída</strong>: a carta de arrematação e a matrícula registrada do imóvel já estão no seu acompanhamento.</p>
+      <p style="font-size:15px;line-height:1.6">${linhaPro}</p>
+      <p style="margin:20px 0 10px">${btn(`${base}/#/checkout?plano=assessorado`, 'Contratar nova assessoria', '#d97706')}${manteveProprio ? '' : btn(`${base}/#/checkout?plano=top2`, 'Assinar o Investidor Pro', '#0D63DB')}</p>
+      <p style="font-size:12px;color:#94a3b8;margin-top:20px">BidPro Brasil — Leilão &amp; Investimentos</p>
+    </div>`,
+    text: `Parabéns, ${nome}! A sua assessoria foi concluída. ${linhaPro.replace(/<[^>]+>/g, '')}\n\nNova assessoria: ${base}/#/checkout?plano=assessorado${manteveProprio ? '' : `\nInvestidor Pro: ${base}/#/checkout?plano=top2`}\n\nBidPro Brasil — Leilão & Investimentos`,
+    meta: { tipo: 'assessoria_concluida', userId },
+    idempotencyKey: `assessoria_concluida_${userId}_${new Date().toISOString().slice(0, 10)}`,
+  });
+  // Represado por orçamento (`enfileirado`) é entrega adiada, não falha.
+  if (!env?.ok && !env?.enfileirado) throw new Error(env?.error || 'envio falhou');
 }

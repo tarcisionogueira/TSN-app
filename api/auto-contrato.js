@@ -92,9 +92,8 @@ export default async function handler(req, res) {
   if (emailRaw && !emailUsuario) {
     return res.status(400).json({ error: 'emailUsuario inválido' });
   }
-  // TRAVA ABSOLUTA (dono): a assessoria é EXCLUSIVA do Investidor Pro. A regra não pode
-  // viver só na tela — sem isto, um POST direto aqui geraria o contrato de assessoria para
-  // um Explorador. Staff (atribuição manual) passa; 'clube' NÃO entra (já inclui assessoria,
+  // GATE DA ASSESSORIA no servidor (1 por arrematação, Club já inclui). Desde 06/10 NÃO exige
+  // mais o Investidor Pro (regra_negocio['assessoria.inclui_pro']). Staff (atribuição manual) passa; 'clube' NÃO entra (já inclui assessoria,
   // e o gate devolveria clube_incluido). Só self-service de 'assessorado' é barrado.
   if (planoKey === 'assessorado' && !isStaff) {
     try {

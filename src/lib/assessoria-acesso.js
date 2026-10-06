@@ -15,12 +15,16 @@
 // apenas "o papel dele permite?", que é o que uma tela consegue decidir sozinha.
 export const ROLES_EQUIPE_ASSESSORIA = ['admin', 'analista', 'advogado', 'suporte'];
 
+// MUDOU em 06/10 (decisão do dono, regra_negocio['assessoria.inclui_pro']): a assessoria NÃO
+// exige mais o Investidor Pro e não cobra a mensalidade dele — enquanto a assessoria está ativa o
+// papel `assessorado` já dá tudo do Pro. Explorador contrata direto; só o visitante sem conta
+// precisa criar uma (`requer_conta`). Ao concluir, o banco devolve o papel e o cliente é avisado.
 export function acessoAssessoria(role) {
   const r = String(role || '');
   if (/^clube/.test(r)) return 'incluido';                 // Leilão Club já tem, não contrata avulsa
   if (ROLES_EQUIPE_ASSESSORIA.includes(r)) return 'pode';
-  if (/^(top2|assessorado)/.test(r)) return 'pode';        // Investidor Pro e quem já é assessorado
-  return 'requer_pro';                                     // explorador e visitante deslogado
+  if (/^(explorador|top2|assessorado)/.test(r)) return 'pode'; // qualquer cliente com conta
+  return 'requer_conta';                                   // visitante deslogado / sem perfil
 }
 
 export const podePeloPapel = (role) => acessoAssessoria(role) === 'pode';

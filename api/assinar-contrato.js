@@ -262,11 +262,11 @@ export default async function handler(req) {
         // 'assessorado' quem o papel ATUAL já permite (Pro, equipe, ou já assessorado). Contrato
         // com cliente que nunca foi Pro não promove sozinho: fica registrado (audit_logs) para a
         // equipe decidir — cobrar o Pro à parte, ou uma promoção manual deliberada via Admin.
-        const bloqueadoPorPro = tier === 'assessorado' && acessoAssessoria(atual) === 'requer_pro';
+        const bloqueadoPorPro = tier === 'assessorado' && acessoAssessoria(atual) === 'requer_conta';
         if (bloqueadoPorPro) {
           sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ acao: 'contrato_assessoria_sem_gate_pro', ip, sucesso: false,
-              detalhes: { contrato_id: contrato.id, user_id: userId, papel_atual: atual, motivo: 'assinante não é Investidor Pro nem equipe — role não promovido e assinatura de assessoria não registrada' } }) }).catch(() => {});
+              detalhes: { contrato_id: contrato.id, user_id: userId, papel_atual: atual, motivo: 'assinante sem conta/perfil de cliente — role não promovido e assinatura de assessoria não registrada' } }) }).catch(() => {});
         } else if (atual !== undefined && rankAtual !== undefined && rankAtual < RANK_TIER[tier]) {
           const up = await sb(`perfis?id=eq.${encodeURIComponent(userId)}`, {
             method: 'PATCH', headers: { Prefer: 'return=minimal' },
@@ -306,7 +306,7 @@ export default async function handler(req) {
         const perfAss = tierAss === 'assessorado'
           ? await sb(`perfis?id=eq.${encodeURIComponent(uid)}&select=role`).then(x => x.json()).catch(() => [])
           : null;
-        const bloqueadoPorPro = tierAss === 'assessorado' && acessoAssessoria(perfAss?.[0]?.role) === 'requer_pro';
+        const bloqueadoPorPro = tierAss === 'assessorado' && acessoAssessoria(perfAss?.[0]?.role) === 'requer_conta';
         if (bloqueadoPorPro) {
           sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
             body: JSON.stringify({ acao: 'contrato_assessoria_sem_gate_pro', ip, sucesso: false,

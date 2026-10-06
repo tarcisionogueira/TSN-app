@@ -78,13 +78,14 @@ function mapearErro(msg = '') {
 // Passo de IDENTIFICAÇÃO por CPF no link de VENDA da assessoria (parceiro/sistema compartilha
 // ?plano=assessorado&ref=CODE). Um convidado NÃO-logado digita o CPF e é orientado: reusa
 // /api/verificar-cpf (rate-limit por IP + hash determinístico; NUNCA devolve nome/dados — só o
-// suficiente pra guiar). Três caminhos: sem cadastro (cria conta + Pro + assessoria), explorador
-// (assina o Pro junto) ou já assinante Pro (entra e contrata direto). A trava vale no servidor.
-function IdentificacaoCpfAssessoria({ nav, refCode, proLabel, assParcLabel, assVistaLabel }) {
+// suficiente pra guiar). Dois caminhos: sem cadastro (cria a conta e contrata) ou já tem conta
+// (entra e contrata). Desde 06/10 a assessoria NÃO exige assinar o Investidor Pro: enquanto ela
+// está ativa, os benefícios do Pro vêm junto (regra_negocio['assessoria.inclui_pro']).
+function IdentificacaoCpfAssessoria({ nav, refCode }) {
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
-  const [nivel, setNivel] = useState(null); // 'novo' | 'explorador' | 'pro'
+  const [nivel, setNivel] = useState(null); // 'novo' | 'conta'
   const refQ = refCode ? `&ref=${refCode}` : '';
   const fmtCpf = (v) => v.replace(/\D/g, '').slice(0, 11)
     .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
@@ -96,16 +97,14 @@ function IdentificacaoCpfAssessoria({ nav, refCode, proLabel, assParcLabel, assV
     try {
       const res = await apiCall('/api/verificar-cpf', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpf: limpo, produto: { tipo: 'plano', planoKey: 'top2' } }),
+        body: JSON.stringify({ cpf: limpo, produto: { tipo: 'plano', planoKey: 'assessorado' } }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setErro(d.error || 'Não foi possível verificar agora. Tente em instantes.'); return; }
-      // temConta=false → novo; temAcesso (>= top2) → já é Pro; senão → explorador.
-      setNivel(!d.temConta ? 'novo' : (d.temAcesso ? 'pro' : 'explorador'));
+      setNivel(d.temConta ? 'conta' : 'novo');
     } catch { setErro('Falha de conexão. Tente de novo.'); }
     finally { setLoading(false); }
   };
-
   const card = (children) => (
     <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
       <div style={{ maxWidth: 460, width: '100%', textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '36px 32px' }}>{children}</div>
@@ -118,39 +117,31 @@ function IdentificacaoCpfAssessoria({ nav, refCode, proLabel, assParcLabel, assV
     <button onClick={() => { setNivel(null); setCpf(''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Usar outro CPF</button>
   );
 
-  if (nivel === 'pro') return card(<>
+  const beneficio = (
+    <p style={{ color: '#64748b', fontSize: 12.5, lineHeight: 1.6, marginBottom: 18 }}>
+      Sem mensalidade do Investidor Pro: enquanto a assessoria estiver ativa, você tem <strong style={{ color: '#94a3b8' }}>todos os benefícios do Investidor Pro</strong> incluídos.
+    </p>
+  );
+
+  if (nivel === 'conta') return card(<>
     <div style={{ fontSize: 40, marginBottom: 14 }}>✅</div>
-    <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>Você já é assinante Investidor Pro</h2>
-    <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>Entre na sua conta para contratar a assessoria — é rápido.</p>
+    <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>Encontramos seu cadastro</h2>
+    <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 14 }}>Entre na sua conta para contratar a assessoria — é rápido.</p>
+    {beneficio}
     {cta('Entrar e contratar a assessoria →', `/login?next=${encodeURIComponent('/checkout?plano=assessorado')}`)}
     {trocarCpf}
   </>);
 
-  if (nivel === 'explorador' || nivel === 'novo') {
-    const novo = nivel === 'novo';
-    return card(<>
-      <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
-      <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>A Assessoria entra junto com o Investidor Pro</h2>
-      <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 18 }}>
-        {novo
-          ? <>Não encontramos cadastro com esse CPF — sem problema. Você <strong style={{ color: 'white' }}>cria sua conta, assina o Investidor Pro e contrata a assessoria</strong> em seguida.</>
-          : <>Encontramos seu cadastro. A assessoria é <strong style={{ color: 'white' }}>exclusiva do assinante <span style={{ color: '#60a5fa' }}>Investidor Pro</span></strong>, então a assinatura entra junto.</>}
-      </p>
-      <div style={{ textAlign: 'left', background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-          <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>1. Investidor Pro</span>
-          <span style={{ color: '#94a3b8', fontSize: 13 }}>{proLabel}/mês</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>2. Assessoria</span>
-          <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{assVistaLabel} à vista (PIX)<br/>ou {assParcLabel} em até 12× (3× sem juros)</span>
-        </div>
-      </div>
-      {cta(novo ? 'Criar conta e assinar o Pro →' : 'Entrar e assinar o Pro →',
-           novo ? `/checkout?plano=top2&apos=assessorado${refQ}` : `/login?next=${encodeURIComponent('/checkout?plano=top2&apos=assessorado')}`)}
-      {trocarCpf}
-    </>);
-  }
+  if (nivel === 'novo') return card(<>
+    <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
+    <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>Vamos criar sua conta</h2>
+    <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 14 }}>
+      Não encontramos cadastro com esse CPF — sem problema. Você <strong style={{ color: 'white' }}>cria sua conta e contrata a assessoria</strong> em seguida.
+    </p>
+    {beneficio}
+    {cta('Criar conta e contratar →', `/checkout?plano=assessorado&cadastro=1${refQ}`)}
+    {trocarCpf}
+  </>);
 
   return card(<>
     <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
@@ -173,8 +164,8 @@ export default function Checkout() {
   const [params] = useSearchParams();
   const { user, role, refreshPerfil, nome: nomePerfil } = useAuth();
   const planoKey = params.get('plano');
-  // Fluxo GUIADO da assessoria: quem não é Pro assina o Investidor Pro primeiro e, ao
-  // ativar, volta direto para contratar isto (ex.: ?plano=top2&apos=assessorado). Assim o
+  // Retorno pós-ativação (?apos=<plano>): ao ativar um plano, volta direto para contratar o
+  // seguinte. (Até 06/10 era o fluxo Pro→assessoria; links antigos com ?apos seguem valendo.) Assim o
   // link único de assessoria vira uma jornada só, reaproveitando os checkouts já testados.
   const aposPlano = params.get('apos') || '';
   const promoCode = params.get('promo')?.toUpperCase() || '';
@@ -457,46 +448,11 @@ export default function Checkout() {
   // Planos e a do servidor. A lista literal que estava aqui tinha 'top2' mas NÃO 'top2_anual':
   // quem assinava o Investidor Pro ANUAL era mandado de volta para "assine o Pro". A regex
   // compartilhada (^top2) cobre os dois — e é o tipo de divergência que só some com fonte única.
-  if (planoKey === 'assessorado' && acessoAssessoria(role) === 'requer_pro') {
-    // Regra ABSOLUTA (dono): assessoria só para Investidor Pro. Em vez de barrar num beco,
-    // a tela é TRANSPARENTE sobre a regra e as DUAS cobranças, e conduz: assina o Pro e volta
-    // direto para a assessoria (?apos=assessorado). Reaproveita os checkouts já testados.
-    const proLabel = PLANOS?.top2?.precoLabel || 'R$ 49,90';
-    const assParcLabel = plano?.precoLabel || 'R$ 6.000,00';
-    const assVistaLabel = plano?.precoVistaLabel || 'R$ 4.800,00';
-    // Convidado NÃO-logado no link de venda: identifica por CPF primeiro (parceiro/sistema
-    // compartilha). Logado já é identificado pelo papel → segue direto na tela de bundle.
-    if (!user) return <IdentificacaoCpfAssessoria nav={nav} refCode={refCode} proLabel={proLabel} assParcLabel={assParcLabel} assVistaLabel={assVistaLabel} />;
-    return (
-      <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
-        <div style={{ maxWidth: 480, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '36px 32px' }}>
-          <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
-          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 12 }}>A Assessoria entra junto com o Investidor Pro</h2>
-          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 18 }}>
-            A Assessoria (do lance à imissão de posse) é <strong style={{ color: 'white' }}>exclusiva do assinante <span style={{ color: '#60a5fa' }}>Investidor Pro</span></strong>. Você assina o Investidor Pro e contrata a assessoria na sequência — são duas contratações:
-          </p>
-          <div style={{ textAlign: 'left', background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-              <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>1. Investidor Pro</span>
-              <span style={{ color: '#94a3b8', fontSize: 13 }}>{proLabel}/mês</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>2. Assessoria</span>
-              <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{assVistaLabel} à vista (PIX)<br/>ou {assParcLabel} em até 12× (3× sem juros)</span>
-            </div>
-          </div>
-          <p style={{ color: '#64748b', fontSize: 12, lineHeight: 1.6, marginBottom: 20 }}>
-            Assim que o Investidor Pro for ativado, você segue <strong style={{ color: '#94a3b8' }}>direto</strong> para a contratação da assessoria.
-          </p>
-          <button onClick={() => nav('/checkout?plano=top2&apos=assessorado')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
-            Assinar o Investidor Pro e seguir →
-          </button>
-          <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
-            Ver todos os planos
-          </button>
-        </div>
-      </div>
-    );
+  // Assessoria SEM exigir o Investidor Pro (06/10, regra_negocio['assessoria.inclui_pro']): o
+  // explorador contrata direto. Só o visitante sem conta passa antes pela identificação por CPF
+  // (link de venda do parceiro) — `cadastro=1` é a volta dela para criar a conta aqui mesmo.
+  if (planoKey === 'assessorado' && acessoAssessoria(role) === 'requer_conta' && !user && params.get('cadastro') !== '1') {
+    return <IdentificacaoCpfAssessoria nav={nav} refCode={refCode} />;
   }
 
   // Assessoria em ANDAMENTO (contratada e ainda sem arremate sinalizado): a próxima
