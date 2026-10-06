@@ -14,6 +14,7 @@
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, montarRowDom } from './dom-parse-util.mjs';
 import { cidadeDoLote } from './albertomacedo-parse.mjs';
+import { inferirUF } from './inferir-uf.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
@@ -52,7 +53,19 @@ export function detalhesDoCatalogo(html, base) {
     const situacao = rotulo(bloco, /Situa(?:&ccedil;|ç)(?:&atilde;|ã)o:\s*<\/small>([^<]*)</i);
     const editalHref = (bloco.match(/Edital:\s*<\/small>\s*<a[^>]+href=["']([^"']+\.pdf)["']/i) || [])[1];
     let linkEdital = null; try { linkEdital = editalHref ? new URL(editalHref, `${base}/`).href : null; } catch { linkEdital = null; }
-    const { cidade, estado } = cidadeDoLote(texto, '');
+    let { cidade, estado } = cidadeDoLote(texto, '');
+    // 06/10: o "Curitiba/PR" do card mora FORA do h3 (que vem longo e cortado) — 4 lotes ativos sem
+    // UF sumiam de /leiloes. 1) "Cidade/UF" no resto do card; 2) só o ESTADO pelo juízo do edital
+    // ("2ª Vara do Trabalho de Paranaguá"), e só se a cidade do juízo existe numa UF só no IBGE. O
+    // juízo NÃO prova a cidade do imóvel (comarca cobre vários municípios): cidade fica vazia.
+    const textoCard = limpo(bloco);
+    if (!cidade) ({ cidade, estado } = cidadeDoLote(textoCard, ''));
+    if (!estado) {
+      const juizo = (textoCard.match(/Edital:\s*(.{3,120}?)\s*Situa/i) || [])[1] || '';
+      const sede = (juizo.match(/\bde\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40})$/) || [])[1];
+      const r = sede ? inferirUF({ cidade: sede.trim() }) : null;
+      if (r?.via === 'cidade_unica') estado = r.uf;
+    }
     const mat = (texto.match(/matr[íi]cula\s*(?:n[º°.o]?\s*)?([\d.]{3,})/i) || [])[1] || null;
     out.set(url, {
       categoria,
