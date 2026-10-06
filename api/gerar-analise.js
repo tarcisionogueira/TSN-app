@@ -3991,6 +3991,13 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       for (const c of [...aud.criticos, ...aud.faltando]) {
         await registrarAnomalia('relatorio_incoerente', '', imovelId, c.chave, c.msg).catch(() => {});
       }
+      // BAIXA quando a geração sai LIMPA (06/10): o alerta era gravado e nunca baixado — 5 de 6
+      // abertos já tinham relatório atual sem nenhum crítico/faltando. Só mexe na linha aberta.
+      if (!aud.criticos.length && !aud.faltando.length) {
+        await sb(`relatorio_anomalias?tipo=eq.relatorio_incoerente&imovel_id=eq.${encodeURIComponent(String(imovelId))}&resolvido=eq.false`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resolvido: true, atualizado_em: new Date().toISOString() }),
+        }).catch((e) => console.warn('[auditoria-relatorio] baixa do relatorio_incoerente falhou:', e?.message || e));
+      }
     } catch (e) { console.warn('[auditoria-relatorio] falhou:', e?.message); }
 
     // CONSISTÊNCIA FINAL DAS CONTAGENS DE AMOSTRA (12/09, achado do dono: "a quantidade de
