@@ -36340,3 +36340,15 @@ porque os textos só eram relidos para id `tsn_` — o lote já era uuid.
   documental ainda não tem linha); `gerar-analise` preserva para qualquer id; a tela restaura para lote MANUAL uuid.
 - `origemLink` guardado no doc "Descrição do leiloeiro" → vira `url_lote` mesmo após reload. Alphaville corrigido
   (migração `20261006_alphaville_manual_url_lote`). Pendência #13 (PWA recarrega sozinho após deploy) fechada: recarrega.
+
+## 06/10 — Envio ao jurídico dava 500; a MESMA coluna errada sumia com a fatia do admin no honorário
+- `enviar-juridico-email`: `perfis?…&order=criado_em` → 400 (perfis usa `created_at`, forma nº 6) → `[adv] = {erro}`
+  → "is not iterable" → 500. Só aparecia sem advogado no caso (o envio avulso sempre cai nesse ramo). Corrigido com
+  `created_at` + `ok` conferido. O e-mail agora traz **data do leilão** (e 2ª praça), lance mínimo e link do lote, e a
+  frase de pedido diz "o leilão acontece em dd/mm — precisamos do parecer antes" (pedido do dono).
+- `_honorarios.calcularDistribuicao`: mesma consulta → `adminRow` vazio → linha do admin sem id → `arrematacoes.js`
+  filtra `l.id` e DESCARTAVA a fatia do admin (4,5%) na distribuição. Medido: nenhuma distribuição feita ainda; 1
+  arrematação com honorário `pago` aguardando — teria perdido a fatia. Corrigido antes dela.
+- Alphaville OK no lote `a98254a8…`: 2 arquivos guardados, link VIP, documental amarelo/confiança média com edital e
+  matrícula lidos do storage; projeção com lance 2.121.000, comissão 5%, desconto à vista 10%, 25% + 12x sem juros.
+  O lote `ccd40da8…` (criado no recarregamento, sem arquivos) é duplicata — a análise dele pode ser removida.

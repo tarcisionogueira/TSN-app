@@ -28,7 +28,9 @@ export async function calcularDistribuicao(db, arr) {
   const minimo = Number(cfg.honorario_minimo) || 7000;
   const honorarioBase = valor * total / 100;
   const honorarioReal = Math.max(honorarioBase, minimo);
-  const adminRow = (await db('perfis?role=eq.admin&ativo=eq.true&select=id,nome&order=criado_em.asc&limit=1')).data?.[0];
+  // `created_at` (06/10): `perfis` não tem `criado_em` — o 400 deixava adminRow vazio, a linha do admin saía
+  // sem id e `distribuirHonorarios` a DESCARTAVA (filtra `l.id`): a fatia do admin nunca seria creditada.
+  const adminRow = (await db('perfis?role=eq.admin&ativo=eq.true&select=id,nome&order=created_at.asc&limit=1')).data?.[0];
 
   // Envolvidos designados no fluxo daquele cliente.
   const advogadoId = arr.advogado_id || null;

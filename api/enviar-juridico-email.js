@@ -70,9 +70,9 @@ export default async function handler(req) {
   const avulso = !caso_id && UUID_RE.test(String(body?.imovel_id || ''));
   if (!caso_id && !avulso) return json({ error: 'caso_id ou imovel_id obrigatório' }, 400);
 
-  let caso, docAvulso = null;
+  let caso, docAvulso = null, dadosLeilao = null;
   if (avulso) {
-    const rIm = await sb(`imoveis_leilao?id=eq.${body.imovel_id}&select=titulo,endereco,cidade,estado,modalidade&limit=1`);
+    const rIm = await sb(`imoveis_leilao?id=eq.${body.imovel_id}&select=titulo,endereco,cidade,estado,modalidade,data_leilao,data_leilao_2,valor_minimo,url_lote&limit=1`);
     const [im] = rIm.ok ? await rIm.json() : [];
     if (!im) return json({ error: rIm.ok ? 'Imóvel não encontrado' : `Imóvel não lido (HTTP ${rIm.status})` }, rIm.ok ? 404 : 502);
     const donoAnalise = UUID_RE.test(String(body.analise_user_id || '')) ? body.analise_user_id : user.id;
@@ -86,16 +86,30 @@ export default async function handler(req) {
       imovel_endereco: [im.endereco || im.titulo, im.cidade, im.estado].filter(Boolean).join(', '),
       tipo_leilao: im.modalidade || '—',
     };
+    dadosLeilao = im;
   } else {
     [caso] = await (await sb(`casos?id=eq.${encodeURIComponent(caso_id)}&select=*`)).json();
     if (!caso) return json({ error: 'Caso não encontrado' }, 404);
+    if (UUID_RE.test(String(caso.imovel_id || ''))) {
+      const rIm = await sb(`imoveis_leilao?id=eq.${caso.imovel_id}&select=data_leilao,data_leilao_2,valor_minimo,url_lote&limit=1`);
+      if (rIm.ok) [dadosLeilao] = await rIm.json();
+      else console.error('[enviar-juridico-email] dados do leilão HTTP', rIm.status);
+    }
   }
+  // DATA DO LEILÃO no e-mail (06/10, pedido do dono): é o prazo que o advogado tem — sem ela, "com brevidade"
+  // não diz quanto. Texto ISO (aaaa-mm-dd…) vira dd/mm/aaaa; a 2ª praça entra quando houver.
+  const dataBr = (v) => { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : null; };
+  const brl = (v) => (Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null);
+  const datasLeilao = [dataBr(dadosLeilao?.data_leilao), dataBr(dadosLeilao?.data_leilao_2)].filter(Boolean);
 
   // Advogado responsável (para registro no caso); usado como fallback de destino.
   let advogadoId = caso.advogado_id;
   if (!advogadoId) {
     // Só advogados ATIVOS podem receber casos (evita atribuir a um ex-advogado).
-    const [adv] = await (await sb(`perfis?role=eq.advogado&ativo=eq.true&select=id,nome&order=criado_em.asc&limit=1`)).json();
+    // `created_at` (06/10): `perfis` não tem `criado_em` — o 400 virava "is not iterable" e o envio dava 500.
+    const rAdv = await sb(`perfis?role=eq.advogado&ativo=eq.true&select=id,nome&order=created_at.asc&limit=1`);
+    if (!rAdv.ok) console.error('[enviar-juridico-email] advogado ativo HTTP', rAdv.status);
+    const [adv] = rAdv.ok ? await rAdv.json() : [];
     advogadoId = adv?.id;
   }
   const [advPerfil] = advogadoId ? await (await sb(`perfis?id=eq.${advogadoId}&select=nome`)).json() : [null];
@@ -165,10 +179,13 @@ export default async function handler(req) {
 
   const html = `<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#111">
     <p>Prezado(a) ${esc(advNome)},</p>
-    <p>Solicitamos a <strong>análise da documentação com brevidade, para confirmação de viabilidade</strong> da seguinte arrematação em leilão:</p>
+    <p>Solicitamos a <strong>análise da documentação com brevidade, para confirmação de viabilidade</strong> da seguinte arrematação em leilão${datasLeilao.length ? ` — <strong>o leilão acontece em ${esc(datasLeilao[0])}</strong>, então precisamos do seu parecer antes dessa data` : ''}:</p>
     <table style="border-collapse:collapse;margin:12px 0;font-size:14px">
       <tr><td style="padding:3px 10px 3px 0;color:#64748b">Imóvel</td><td style="padding:3px 0"><strong>${esc(caso.imovel_endereco || caso.imovel_id)}</strong></td></tr>
       <tr><td style="padding:3px 10px 3px 0;color:#64748b">Tipo de leilão</td><td style="padding:3px 0">${esc(caso.tipo_leilao || '—')}</td></tr>
+      ${datasLeilao.length ? `<tr><td style="padding:3px 10px 3px 0;color:#64748b">Data do leilão</td><td style="padding:3px 0"><strong>${esc(datasLeilao.join(' · 2ª praça '))}</strong></td></tr>` : ''}
+      ${brl(dadosLeilao?.valor_minimo) ? `<tr><td style="padding:3px 10px 3px 0;color:#64748b">Lance mínimo</td><td style="padding:3px 0">${esc(brl(dadosLeilao.valor_minimo))}</td></tr>` : ''}
+      ${/^https:\/\//.test(dadosLeilao?.url_lote || '') ? `<tr><td style="padding:3px 10px 3px 0;color:#64748b">Página do lote</td><td style="padding:3px 0"><a href="${esc(dadosLeilao.url_lote)}">${esc(dadosLeilao.url_lote)}</a></td></tr>` : ''}
       <tr><td style="padding:3px 10px 3px 0;color:#64748b">Ref. do caso</td><td style="padding:3px 0">${esc(refCurto)}</td></tr>
     </table>
     <p style="font-weight:700;margin:18px 0 4px">Documentos anexos a este e-mail:</p>
