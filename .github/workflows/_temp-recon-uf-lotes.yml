@@ -1,0 +1,23 @@
+name: _temp Recon UF dos lotes sem estado (só leitura)
+
+# 06/10: invariante estado_fora_do_padrao — 6 lotes (NAKAKOGUE ×5, WEBLEILOES ×1) sem cidade/UF no texto
+# coletado. Lê página, PDFs e documentos guardados; grava em recon_dump. Não toca no acervo. Apagar depois.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Recon
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          UF_IDS: '13b8c05d-4a78-4aec-8fa1-35ecb49e77dd,94a125a0-b5a2-4789-83fb-d55e35b48d77,800b2eb1-07ab-41a7-9412-d7c7a9c9cee6,b8e76a7b-7098-429a-b858-cdfbc07fe3a7,eab3674c-344b-453b-825b-16e9b8c77769,5823cfea-54d1-4228-b367-2a4dce29d304'
+        run: node scripts/recon-uf-lotes.mjs
