@@ -1689,6 +1689,12 @@ export default async function handler(req, res) {
     const numConcretoCNJ = String(procNum || ex.numeroProcesso || '').replace(/\D/g, '');
     if (numConcretoCNJ.length >= 15 && !(cnj && cnj.total)) {
       registrarAnomalia('cnj_vazio', row?.fonte, imovelId, 'cnj', `CNJ sem retorno p/ processo ${numConcretoCNJ} (modalidade=${im.modalidade || '?'}).`).catch(() => {});
+    } else if (numConcretoCNJ.length >= 15) {
+      // BAIXA quando o CNJ volta a responder (06/10): 2 de 7 `cnj_vazio` abertos já tinham o processo
+      // confirmado (6 resultados) e seguiam acusando. Só mexe na linha ABERTA; não cria linha nova.
+      sb(`relatorio_anomalias?tipo=eq.cnj_vazio&imovel_id=eq.${encodeURIComponent(String(imovelId))}&resolvido=eq.false`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resolvido: true, atualizado_em: new Date().toISOString() }),
+      }).catch((e) => console.warn('[documental] baixa do cnj_vazio falhou:', e?.message || e));
     }
     // Nunca o 1º processo da busca por NOME/sócio (auditoria 30/09, item 6): seria o processo de um
     // homônimo ou do sócio tratado como "o processo do lote" no DJEN e no antifraude.
