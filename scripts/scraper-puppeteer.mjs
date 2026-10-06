@@ -522,6 +522,13 @@ async function registrarSaude(fonte, imoveis, estrategia, validacao) {
   let status = 'ok', motivo = validacao?.motivo || '';
   if (!m.n) status = 'falhou';
   else if (!validacao?.ok) status = 'degradado';
+  // Coleta que o próprio coletor sabe PARCIAL não pode entrar no histórico como "ok" (06/10):
+  // o piso aprendido (fonte_baseline_aprendida) só usa runs saudáveis, e um parcial carimbado de
+  // saudável rebaixaria o "normal" da fonte — o monitor passaria a aceitar o buraco.
+  if (imoveis?.coletaParcial) {
+    if (status === 'ok') status = 'degradado';
+    motivo = [motivo, `coleta parcial (${imoveis.coletaParcial})`].filter(Boolean).join('; ');
+  }
   try {
     const { data: ant } = await supabase.from('fonte_saude')
       .select('total,enumerados').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
@@ -3944,11 +3951,27 @@ async function scraperPestana(browser) {
     // não afirmam venda). Nunca grava sem_lance: sumir da API não prova nada.
     const vendidosVistos = new Map();
     // 3) Lotes por leilão (fetch same-origin dentro da página).
+    // LEILÃO QUE FALHA NÃO É LEILÃO VAZIO (06/10). Antes: `qtd=300` só na página 1 (leilão com
+    // mais lotes era truncado calado) e `continue` em qualquer falha — e o sweep aposentava os lotes
+    // daquele leilão como "sumiu_da_fonte" (23/09: 20 lotes com leilão futuro). Agora pagina até a
+    // página vir incompleta, tenta 2× e, se ainda falhar, marca a coleta como PARCIAL.
+    const QTD = 300;
+    const falhas = [];
     for (const leilao of imovLeiloes) {
-      const lotes = await page.evaluate(async (id) => {
-        try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=1&qtd=300`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
-        catch (e) { return null; }
-      }, leilao.id).catch(() => null);
+      let lotes = [];
+      for (let pg = 1; pg <= 20; pg++) {
+        let pagina = null;
+        for (let t = 1; t <= 2 && !Array.isArray(pagina); t++) {
+          if (t > 1) await new Promise(r => setTimeout(r, 2000));
+          pagina = await page.evaluate(async ({ id, pg, qtd }) => {
+            try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=${pg}&qtd=${qtd}`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : `HTTP ${r.status}`; }
+            catch (e) { return `rede: ${String(e?.message || e).slice(0, 40)}`; }
+          }, { id: leilao.id, pg, qtd: QTD }).catch((e) => `evaluate: ${String(e?.message || e).slice(0, 40)}`);
+        }
+        if (!Array.isArray(pagina)) { falhas.push(`leilão ${leilao.id} p${pg} (${pagina})`); lotes = null; break; }
+        lotes.push(...pagina);
+        if (pagina.length < QTD) break;
+      }
       if (!Array.isArray(lotes)) continue;
       for (const lote of lotes) {
         if (lote && lote.situacaoId != null && Number(lote.situacaoId) !== 1) continue; // só Disponível
@@ -3967,6 +3990,10 @@ async function scraperPestana(browser) {
       await new Promise(r => setTimeout(r, 120));
     }
     if (vendidosVistos.size) await registrarVendidosPestana(vendidosVistos);
+    if (falhas.length) {
+      console.log(`    ⚠️ Pestana: coleta PARCIAL — ${falhas.length} leilão(ões) não lidos: ${falhas.slice(0, 5).join('; ')}`);
+      imoveis.coletaParcial = `PESTANA: ${falhas.length} leilão(ões) não lidos`;
+    }
   } finally { await page.close().catch(() => {}); }
   console.log(`    Pestana: ${imoveis.length} imóveis mapeados`);
   return imoveis;
@@ -5553,19 +5580,31 @@ async function scraperGrupoLance(browser) {
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const bens = new Map();
   const DEADLINE = Date.now() + 7 * 60 * 1000;
+  // FALHA NÃO É FIM DE CATÁLOGO (06/10). Em 05/10 o site devolveu 403 ao runner e a coleta parou
+  // em 32 de 377 lotes com status "ok" da paginação: `catch { break; }` e a página de bloqueio
+  // (sem cartões) eram lidos como "acabaram as páginas". Agora erro de navegação, HTTP >= 400 ou
+  // teto de tempo marcam `coletaParcial` — a trava do salvarEFinalizar não aposenta ninguém.
+  let parcial = null;
   try {
     for (let p = 1; p <= 60; p++) {
-      if (Date.now() > DEADLINE) { console.log('    Grupo Lance: teto de tempo atingido'); break; }
+      if (Date.now() > DEADLINE) { parcial = `teto de tempo na página ${p}`; console.log('    Grupo Lance: teto de tempo atingido'); break; }
       const antes = bens.size;
+      let resp = null;
       try {
-        await page.goto(`${GL_BASE}/imoveis?pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        resp = await page.goto(`${GL_BASE}/imoveis?pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await new Promise(r => setTimeout(r, 900));
-      } catch { break; }
+      } catch (e) {
+        parcial = `página ${p}: ${String(e?.message || e).slice(0, 60)}`;
+        break;
+      }
+      const st = resp ? resp.status() : 0;
+      if (st >= 400 || !resp) { parcial = `página ${p}: HTTP ${st || 'sem resposta'}`; break; }
       const lotes = await grupoLanceParsePagina(page);
       for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
-      if (bens.size === antes) break; // página sem novidade → fim da paginação
+      if (bens.size === antes) break; // página 200 sem novidade → fim da paginação
     }
   } finally { await page.close().catch(() => {}); }
+  if (parcial) console.log(`    ⚠️ Grupo Lance: coleta PARCIAL (${parcial}) — ${bens.size} lotes lidos até aqui`);
 
   const imoveis = [];
   const seen = new Set();
@@ -5576,6 +5615,7 @@ async function scraperGrupoLance(browser) {
     imoveis.push(row);
   }
   console.log(`    Grupo Lance: ${imoveis.length} imóveis mapeados (${bens.size} lotes)`);
+  if (parcial) imoveis.coletaParcial = `GRUPOLANCE: ${parcial}`;
   return imoveis;
 }
 
