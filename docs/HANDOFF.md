@@ -36382,3 +36382,15 @@ distribuição · #144 valor de mercado oscila ±13% entre gerações do mesmo i
 Alphaville (dono) · #146 conferir 1ª rodada agendada VIP veículos/Nordeste · #140 Banco Inter (adiado pelo dono).
 **Do dono, vencidas:** #1 P0 campanha Meta da masterclass apontando para aula fechada (0 inscritos, Meta gastou
 R$ 69,64 em 3 dias) · #4 Google Workspace com pagamento recusado · #3 Leiloaria Smart (vence hoje).
+
+## ▶ PRÓXIMA SESSÃO — ORDEM DE TRABALHO (pedido do dono, 06/10, fechamento)
+**Primeiro o ritual de abertura completo** (CLAUDE.md: heartbeat → `pendencias_abertas()` → 1b/1c → captura →
+regras → segurança). **Logo depois do diagnóstico, antes de qualquer outra coisa, resolver nesta ordem:**
+1. **#143 (P1, financeiro)** — distribuição do honorário com a fatia do ADMIN creditada (há 1 arrematação `pago`
+   aguardando; conferir `saldo_lancamentos` após distribuir). É dinheiro — vem primeiro.
+2. **#146 (P2)** — 1ª rodada agendada de VIP_VEICULOS gravou? `/veiculos` mostra VIP? Nordeste reclassificou pátio?
+3. **#141 (P2)** — coletor VIP: ler a DESCRIÇÃO de cada lote (0/108 hoje) e achar por que o 22357 (Alphaville) caiu.
+4. **#144 (P2)** — variância do valor de mercado entre gerações do mesmo imóvel (±13% no Alphaville).
+**Com o dono, na mesma abertura (são dele):** #142 validar no navegador o lote manual e a prévia editável do e-mail ·
+#145 apagar as análises duplicadas do Alphaville · vencidas #1 (P0, campanha Meta → aula fechada), #4 (Google
+Workspace), #3 (Leiloaria Smart). #140 Banco Inter segue adiado até o dono pedir.
