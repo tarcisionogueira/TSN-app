@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { registrarEvento } from '../utils/tracker';
 
 /**
  * ANDAMENTO DO PROCESSO — diário de um CASO ou de um ARREMATADO (pedido do dono, 24/09).
@@ -106,6 +107,9 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
     }).select('id');
     setSalvando(false);
     if (error || !data?.length) { setMsg(`Não gravou: ${error?.message || 'nenhuma linha criada'}`); return; }
+    // Rastro no Cliente 360 (06/10): o 360 só guardava o clique "Registrar", sem o QUE foi registrado —
+    // quando o andamento sumiu, o texto só existia no cache do resumo. Agora o conteúdo fica no rastro.
+    registrarEvento('submit', { alvo: `andamento registrado · ${origem}`, detalhe: `${dataEvento || ''} ${e}`.trim() });
     setEtapa(''); setObs(''); setMsg('Etapa registrada.');
     carregar();
   };
