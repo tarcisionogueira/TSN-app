@@ -202,7 +202,7 @@ async function salvarImoveis(imoveis, fonte) {
     try {
       const { data } = await supabase
         .from('imoveis_leilao')
-        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao, fotos')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao, fotos, estado, cidade')
         .in('fonte_id', fonteIds.slice(i, i + 150));
       for (const r of data || []) existentes.set(r.fonte_id, r);
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
@@ -291,6 +291,14 @@ async function salvarImoveis(imoveis, fonte) {
       // Sem preservar, o scrape diário zerava o edital capturado → o nº de docs "flutuava" entre
       // rodadas e re-baixava à toa. Agora só sobrescreve quando o dia traz um edital novo.
       if (prev.link_edital && !im.link_edital) row.link_edital = prev.link_edital;
+      // UF/cidade (06/10): coleta que veio SEM estado não apaga um estado válido já gravado — seja de
+      // rodada anterior que leu, seja correção com prova (sbid_5042538: "Prefeitura Municipal de Santo
+      // André", Jardim Irene → SP; o inferirUF recusa com razão, Santo André existe em SP e na PB).
+      // Sem isto, a UF corrigida voltava a '' na coleta seguinte e o lote sumia de /leiloes de novo.
+      if (!/^[A-Z]{2}$/.test(String(row.estado || '').trim()) && /^[A-Z]{2}$/.test(String(prev.estado || ''))) {
+        row.estado = prev.estado;
+        if (!String(row.cidade || '').trim() && prev.cidade) row.cidade = prev.cidade;
+      }
       // GALERIA (17/09): a API nem sempre traz `fotos` (mesmo ~38% de vazio documentado no
       // backfill de capa abaixo) — sem preservar, o upsert diário apagaria a galeria já
       // capturada num dia anterior sempre que o scrape do dia vier sem `fotos`.
