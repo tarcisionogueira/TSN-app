@@ -36352,3 +36352,13 @@ porque os textos só eram relidos para id `tsn_` — o lote já era uuid.
 - Alphaville OK no lote `a98254a8…`: 2 arquivos guardados, link VIP, documental amarelo/confiança média com edital e
   matrícula lidos do storage; projeção com lance 2.121.000, comissão 5%, desconto à vista 10%, 25% + 12x sem juros.
   O lote `ccd40da8…` (criado no recarregamento, sem arquivos) é duplicata — a análise dele pode ser removida.
+
+## 06/10 — E-mail ao jurídico pela análise: REVISAR antes de enviar (e um caminho só)
+"Deveria ter aberto a mensagem para eu revisar e editar; foi enviado direto." O botão que criei na análise chamava
+`enviar-juridico-email` em modo avulso — envio de um clique. Já EXISTIA o componente certo: `EnviarEmailCasoLote`
+(caso e ficha do lote) — prévia editável de destinatários/texto/relatórios, envia só ao confirmar, aceita `imovelId`.
+A análise passou a usá-lo (admin/analista, lote da base) e o caminho duplicado saiu: `enviar-juridico-email` voltou a
+ser só a solicitação formal do CASO (mantidos: `created_at` em perfis e o bloco data do leilão/lance/link).
+`enviar-email-caso` (jurídico): texto padrão agora pede a análise da documentação para confirmar a viabilidade, com
+data do leilão (+2ª praça), lance mínimo, link e "precisamos do parecer antes dessa data".
+Envio que já saiu (06/10 ~01:30, Alphaville) foi o de um clique, para os 3 do escritório, com 2 anexos.

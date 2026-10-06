@@ -41,6 +41,7 @@ import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis
 import { soAceitaAVista } from '../data/pagamento.js';
 import { dataBrParaIso } from '../../api/_data-br.js';
 import { definirTrabalhoNaoSalvo } from '../utils/swAtualizacao';
+import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -1269,23 +1270,6 @@ export default function Analise() {
     return promovendoRef.current;
   };
   const aindaLendoDocs = () => docsManuais.some((x) => x.lendo);
-  const [enviandoJuridico, setEnviandoJuridico] = useState(false);
-  const [envioJuridicoMsg, setEnvioJuridicoMsg] = useState(null);
-  const enviarAoJuridico = async () => {
-    if (enviandoJuridico || ehIdManual(analiseImovelId)) return;
-    if (!window.confirm('Enviar ao jurídico, por e-mail, os documentos guardados deste imóvel e o parecer documental?')) return;
-    setEnviandoJuridico(true); setEnvioJuridicoMsg(null);
-    try {
-      const r = await apiCall('/api/enviar-juridico-email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imovel_id: analiseImovelId, analise_user_id: effectiveUserId || user?.id }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      setEnvioJuridicoMsg({ ok: true, texto: `Enviado a ${(j.para || []).join(', ') || j.advogado} com ${j.anexos} anexo(s). A resposta chega no seu e-mail.` });
-      registrarEvento('juridico_enviado', { alvo: 'analise', detalhe: `imovel=${analiseImovelId} anexos=${j.anexos}` });
-    } catch (e) {
-      setEnvioJuridicoMsg({ ok: false, texto: `Não enviado: ${String(e?.message || 'erro').slice(0, 140)}` });
-    } finally { setEnviandoJuridico(false); }
-  };
 
   // O que vai GRAVADO com a análise (lote manual): texto e dados lidos — nunca o arquivo.
   const docsManuaisParaGravar = () => (docsManuais.length
@@ -2610,17 +2594,11 @@ export default function Analise() {
                 ? 'Disponível após gerar o Mercadológico e a Análise Documental.'
                 : 'Você escolhe o horário; após a reunião o analista dá o parecer e libera o jurídico.'}
             </div>
-            {/* ENVIO AO JURÍDICO PELA ANÁLISE (06/10, pedido do dono): a equipe não abre caso em nome próprio, e o
-                envio só existia dentro do caso. Aqui vai direto: documentos guardados do imóvel + parecer documental. */}
-            {['admin', 'analista'].includes(role) && (
-              <>
-                <button onClick={enviarAoJuridico} disabled={!relDocumentalGerado || enviandoJuridico || ehIdManual(analiseImovelId)}
-                  title={ehIdManual(analiseImovelId) ? 'Gere um relatório para registrar o lote e guardar os documentos' : !relDocumentalGerado ? 'Gere a Análise Documental primeiro' : ''}
-                  style={{ width:'100%', padding:'10px', background:'white', color: (!relDocumentalGerado || ehIdManual(analiseImovelId)) ? '#94a3b8' : '#5b21b6', border:`1px solid ${(!relDocumentalGerado || ehIdManual(analiseImovelId)) ? '#e2e8f0' : '#c4b5fd'}`, borderRadius:12, fontWeight:700, fontSize:13, cursor: (!relDocumentalGerado || enviandoJuridico || ehIdManual(analiseImovelId)) ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                  {enviandoJuridico ? <Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/> : <ShieldAlert size={15}/>} Enviar ao jurídico (e-mail)
-                </button>
-                {envioJuridicoMsg && <div style={{ fontSize:10.5, color: envioJuridicoMsg.ok ? '#15803d' : '#b91c1c', textAlign:'center', lineHeight:1.4 }}>{envioJuridicoMsg.texto}</div>}
-              </>
+            {/* E-MAIL AO JURÍDICO / LEILOEIRO PELA ANÁLISE (06/10, pedido do dono). O MESMO componente do caso e da ficha
+                do lote: abre a mensagem para REVISAR e EDITAR (destinatários, texto, relatórios anexados) e só envia ao
+                confirmar. Só com o lote na base (os anexos guardados são os do imóvel). */}
+            {['admin', 'analista'].includes(role) && !ehIdManual(analiseImovelId) && (
+              <EnviarEmailCasoLote imovelId={analiseImovelId} imovel={imovelInicial} cardStyle={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 14px' }} />
             )}
           </div>
         </aside>

@@ -162,7 +162,7 @@ export default async function handler(req) {
 
   let imovel = null;
   if (imovelId) {
-    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,endereco,tipo,anexos,leiloeiro,url_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao&limit=1`);
+    const rImovel = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=id,fonte,titulo,endereco,tipo,anexos,leiloeiro,url_lote,cidade,estado,valor_minimo,valor_avaliacao,resultado_leilao,modalidade,data_leilao,data_leilao_2&limit=1`);
     if (rImovel.ok) [imovel] = await rImovel.json();
   }
   let veiculo = null;
@@ -296,7 +296,23 @@ export default async function handler(req) {
   const restricao = destino === 'leiloeiro' && veiculo ? sinalVendaRestrita({ raw: { auction: veiculo.auction }, descricao: veiculo.descricao, titulo: veiculo.titulo }) : null;
   const corpoTextoPuroBase = destino === 'leiloeiro'
     ? `Prezados,\n\nEstamos em acompanhamento do lote abaixo e gostaríamos de mais informações / esclarecimentos:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote que já temos em mãos.\n\nAgradecemos desde já a atenção.\n\n${nomeRemetente}`
-    : `Prezados,\n\nSolicitamos análise/apoio jurídico referente ao caso abaixo:\n\n${rotuloTipo}: ${labelLote}\n\nSeguem em anexo os documentos do lote${ehAssessorado ? ' e os documentos pessoais do cliente' : ''}.\n\n${nomeRemetente}`;
+    : textoJuridico();
+  // JURÍDICO (06/10, pedido do dono): o pedido diz O QUE se quer (análise da documentação para confirmar a
+  // viabilidade) e ATÉ QUANDO — a data do leilão é o prazo do advogado; sem ela "com brevidade" não diz nada.
+  function textoJuridico() {
+    const dataBr = (v) => { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : null; };
+    const brl = (v) => (Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null);
+    const datas = [dataBr(lote?.data_leilao), dataBr(lote?.data_leilao_2)].filter(Boolean);
+    const linhas = [
+      `${rotuloTipo}: ${labelLote}`,
+      lote?.cidade ? `Cidade: ${[lote.cidade, lote.estado].filter(Boolean).join('/')}` : null,
+      lote?.modalidade ? `Modalidade: ${lote.modalidade}` : null,
+      datas.length ? `Data do leilão: ${datas[0]}${datas[1] ? ` (2ª praça: ${datas[1]})` : ''}` : null,
+      brl(lote?.valor_minimo) ? `Lance mínimo: ${brl(lote.valor_minimo)}` : null,
+      lote?.url_lote ? `Página do lote: ${lote.url_lote}` : null,
+    ].filter(Boolean).join('\n');
+    return `Prezados,\n\nSolicitamos a análise da documentação do imóvel abaixo, com brevidade, para confirmação de viabilidade da arrematação${datas.length ? ` — o leilão acontece em ${datas[0]}, então precisamos do parecer antes dessa data` : ''}.\n\n${linhas}\n\nSeguem em anexo os documentos do lote${ehAssessorado ? ' e os documentos pessoais do cliente' : ''}. Pedimos que indiquem riscos, ônus e pendências que impeçam ou recomendem cautela na arrematação.\n\nFicamos no aguardo do parecer.\n\n${nomeRemetente}`;
+  }
   const corpoTextoPuro = restricao ? comPerguntaRestricao(corpoTextoPuroBase) : corpoTextoPuroBase;
 
   // PASSO 1 — PREVIEW: mostra o rascunho e QUANTOS anexos sairiam, sem enviar nada. Sem
