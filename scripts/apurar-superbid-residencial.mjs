@@ -46,6 +46,11 @@ async function sb(path, init = {}) {
   return t ? JSON.parse(t) : null;
 }
 
+// LOJAS DA REDE SUPERBID (06/10): JMFLEILOES (store 16060), TOTALLEILOES, DILSONMOREIRA, CREPALDI,
+// SBID9 e SBID21 usam o mesmo /oferta/<id> montado no navegador. Seco no GitHub em 06/10: das 17
+// páginas JMF que abriram, 16 deram "indeterminado" pelo leitor de texto — só a offer-query (por id,
+// mesma consulta do KRONLEILOES) lê o desfecho. Saíram do cron da Vercel junto.
+const FONTES_REDE_SBID = ['SUPERBID', 'SOLD', 'KRONLEILOES', 'JMFLEILOES', 'TOTALLEILOES', 'DILSONMOREIRA', 'CREPALDI', 'SBID9', 'SBID21'];
 const idDaUrl = (u) => (String(u || '').match(/\/oferta\/(\d+)/) || [])[1] || null;
 
 // ── candidatos: vencidos sem resultado, mais recentes primeiro ─────────────────────────────
@@ -61,7 +66,7 @@ if (process.env.SBID_IDS) {
   const ordem = 'resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst';
   const meio = Math.ceil(LIMITE / 2);
   const [imo, vei] = await Promise.all([
-    sb(`imoveis_leilao?fonte=in.(SUPERBID,SOLD,KRONLEILOES)&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
+    sb(`imoveis_leilao?fonte=in.(${FONTES_REDE_SBID.join(',')})&data_fim=lt.${hoje}&${filtroRes}&select=id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo,data_fim&order=${ordem},data_fim.desc&limit=${meio}`),
     // indeterminado COM lance registrado já é "Com lance" (condicional) — não gasta vaga retentando.
     // Mas só o INDETERMINADO com lance: o `teve_lance=is.false` de antes barrava também o lote com
     // lance NUNCA apurado (26/09: 221 veículos ativos, 0 tentativas, fora da fila para sempre).

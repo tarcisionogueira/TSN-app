@@ -34,7 +34,9 @@ const COOLDOWN_MS = 6 * 3600000; // não refaz o fetch se a última tentativa fo
 // CEF (21/09): fetch direto bloqueado por IP; testado de novo com a sub-cota do Bright Data
 // liberada e AINDA falhou (`via:"fail"`) — bloqueio real do site (provável dependência de
 // sessão), não é mais questão de orçamento.
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD']);
+// + lojas da rede Superbid (06/10): página montada no navegador; apuração pela offer-query no
+// runner residencial (scripts/apurar-superbid-residencial.mjs). Aqui só gastavam cota em 'indeterminado'.
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD', 'KRONLEILOES', 'JMFLEILOES', 'TOTALLEILOES', 'DILSONMOREIRA', 'CREPALDI', 'SBID9', 'SBID21']);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

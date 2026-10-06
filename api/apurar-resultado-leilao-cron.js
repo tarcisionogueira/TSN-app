@@ -88,7 +88,9 @@ const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || '')
 // que tem nº de lances, vencedor e reserva. Tirar daqui também para de gastar o proxy ISP.
 // KRONLEILOES (24/09): Superbid white-label — página montada no navegador (fetch e Bright Data só
 // trazem a casca); apurada pela offer-query no runner residencial, como SUPERBID/SOLD.
-const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD', 'KRONLEILOES']);
+// + lojas da rede Superbid (06/10): página montada no navegador; apuração pela offer-query no
+// runner residencial (scripts/apurar-superbid-residencial.mjs). Aqui só gastavam cota em 'indeterminado'.
+const FONTES_APURACAO_NAO_CONFIAVEL = new Set(['PESTANA', 'EDITAL_DJEN', 'SODRE', 'CEF', 'SUPERBID', 'SOLD', 'KRONLEILOES', 'JMFLEILOES', 'TOTALLEILOES', 'DILSONMOREIRA', 'CREPALDI', 'SBID9', 'SBID21']);
 
 // Mesma lista acima, mas pronta pro operador `not.in` do PostgREST — aplicada DENTRO da
 // consulta SQL (não só depois em JS). Achado 21/09: aplicar só em JS deixava o `LIMIT 250`
