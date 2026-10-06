@@ -10,7 +10,12 @@
  */
 // KRONLEILOES saiu em 24/09: é Superbid white-label (página montada no navegador) — apurada pela
 // offer-query em scripts/apurar-superbid-residencial.mjs, como SUPERBID/SOLD.
-export const FONTES_APURACAO_RESIDENCIAL = ['ZUK', 'VIP', 'JELEILOES'];
+// 06/10: + FRANCOLEILOES (a reserva do GitHub já a cobria; faltava o cron saber e parar de pagar) e
+// + TORRES3/MILAN — 403 da Vercel E do GitHub (seco de 06/10: 131/131 e 15/15), mas o runner de CASA
+// já coleta as duas sem Bright Data (SOLEON_NO_BD). Ficam só na lista padrão (runner de casa): a
+// reserva do GitHub passa RESID_APURAR explícito sem elas. Não abriu de casa → fica fora do carimbo
+// `cobertas=` e o cron da Vercel volta a cobri-las (com o freio de 20 h na rota paga).
+export const FONTES_APURACAO_RESIDENCIAL = ['ZUK', 'VIP', 'JELEILOES', 'FRANCOLEILOES', 'TORRES3', 'MILAN'];
 export const FONTES_DATAS_RESIDENCIAL = ['BIASI', 'LJUD', 'GRUPOLANCE'];
 export const HB_APURACAO = 'runner_residencial_apuracao';
 export const HB_DATAS = 'runner_residencial_datas';

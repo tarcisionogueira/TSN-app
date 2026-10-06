@@ -43,7 +43,11 @@ const PAUSA = Number(process.env.RESID_PAUSA_MS || 1500);
 const MAX_TENTATIVAS = 3;       // o mesmo do cron
 // HTTP 410: a fonte APAGOU a página — resultado nunca será lido; sai da fila (mesma regra do cron).
 const PATCH_GONE = { resultado_leilao: 'indeterminado', resultado_apuracao_tentativas: MAX_TENTATIVAS };
-const JANELA_DIAS = 10;         // o mesmo do cron
+const JANELA_DIAS = 10;         // o mesmo do cron (religar na vitrine só dentro dela)
+// Janela de BUSCA pode ser maior que a de religar (06/10): 258 lotes VIP saíram da janela de 10 dias
+// sem leitura (laço de redirect de 05/10). Fonte grátis, então a reserva olha 30 dias — mas lote
+// antigo apurado como "sem lance" NÃO volta à vitrine (pode já ter ido a venda direta).
+const JANELA_BUSCA_DIAS = Math.max(JANELA_DIAS, Number(process.env.RESID_JANELA_DIAS || JANELA_DIAS));
 if (!SB_URL || !SB_KEY) { console.error('defina VITE_SUPABASE_URL e SUPABASE_SERVICE_KEY'); process.exit(1); }
 
 async function sb(path, init = {}) {
@@ -80,7 +84,8 @@ async function baixar(url) {
   }
 }
 const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-const desde = new Date(Date.now() - JANELA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const desde = new Date(Date.now() - JANELA_BUSCA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const desdeReligar = new Date(Date.now() - JANELA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const inFontes = (fs) => `fonte=in.(${fs.map(f => `"${f}"`).join(',')})`;
 
 console.log(`=== apurar-e-datar-residencial ${APLICAR ? '(GRAVANDO)' : '(EM SECO — nada é gravado)'} ===`);
@@ -89,7 +94,7 @@ console.log(`=== apurar-e-datar-residencial ${APLICAR ? '(GRAVANDO)' : '(EM SECO
 if (FONTES_APURAR.length) {
   const cand = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))`
     + `&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${inFontes(FONTES_APURAR)}`
-    + `&select=id,fonte,url_lote,link_edital,resultado_apuracao_tentativas,ativo`
+    + `&select=id,fonte,url_lote,link_edital,resultado_apuracao_tentativas,ativo,data_fim`
     + `&order=resultado_apuracao_tentativas.asc,resultado_apurado_em.asc.nullsfirst,data_fim.desc&limit=${LIM_APURAR}`);
   const cont = { lidos: 0, vendido: 0, sem_lance: 0, cancelado: 0, aberto: 0, indeterminado: 0, nao_abriu: 0, nao_gravou: 0 };
   const motivos = {};
@@ -107,7 +112,7 @@ if (FONTES_APURAR.length) {
     cont.lidos++;
     (porFonte[c.fonte] ||= { lidos: 0, nao_abriu: 0 }).lidos++;
     const achado = apurarResultadoDoTexto(html, alvo);
-    const patch = patchDaApuracao(achado, { tabela: 'imoveis_leilao', tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: c.ativo === false });
+    const patch = patchDaApuracao(achado, { tabela: 'imoveis_leilao', tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: c.ativo === false && String(c.data_fim || '').slice(0, 10) >= desdeReligar });
     const chave = achado?.aberto ? 'aberto' : (achado?.resultado || 'indeterminado');
     cont[chave] = (cont[chave] || 0) + 1;
     if (!APLICAR) console.log(`  [seco] ${c.fonte} ${chave}${achado?.valor ? ` R$ ${achado.valor}` : ''} ${alvo}`);

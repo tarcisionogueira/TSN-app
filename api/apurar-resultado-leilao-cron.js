@@ -233,9 +233,14 @@ export default async function handler(req, res) {
   // "sumiu_da_fonte": esses a fonte tirou do ar) — e o não-vendido é religado (apurarLote).
   // Fontes que o RUNNER RESIDENCIAL cobre (24/09): puladas aqui enquanto o carimbo dele tem < 7
   // dias — a cota do Bright Data sobra para o resto; sem carimbo, voltam para cá (reserva).
+  // FREIO DA ROTA PAGA (06/10, pedido do dono: "se usar caminho pago, reduza a frequência"): o mesmo
+  // lote só volta à fila 20 h depois da última tentativa (era a cada rodada de 3 h). O "sem cota" já
+  // carimba a hora, então o rodízio continua justo — só deixa de martelar a cota `geral` (esgotada
+  // em todas as rodadas de 05-06/10, ~190 lotes por rodada) com os mesmos lotes oito vezes por dia.
+  const freioPago = new Date(Date.now() - 20 * 3600000).toISOString();
   const doResidencial = await fontesCobertasPeloResidencial(sb, HB_APURACAO, FONTES_APURACAO_RESIDENCIAL);
   const excluidasIm = doResidencial.length ? `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL, ...doResidencial].join(',')})` : FONTES_EXCLUIDAS_SQL;
-  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado))&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
+  const rIm = await sb(`imoveis_leilao?and=(or(ativo.eq.true,suprimido_motivo.eq.praca_vencida),or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado),or(resultado_apurado_em.is.null,resultado_apurado_em.lt.${freioPago}))&data_fim=gte.${desde}&data_fim=lt.${hojeBRT}&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,modalidade,url_lote,link_edital,resultado_apuracao_tentativas,ativo&order=${ORDEM_FILA},data_fim.desc&limit=${LOTE_TAMANHO}`);
   if (!rIm.ok) {
     const detalhe = await rIm.text().catch(() => '');
     console.error('[apurar-resultado-leilao] imoveis', rIm.status, detalhe.slice(0, 300));
@@ -256,7 +261,7 @@ export default async function handler(req, res) {
   // (o pedido do dono) sobre o backlog dos 2 dias de reforço, evitando que este último
   // esgote o orçamento antes de chegar no lote de hoje. Mesma reabertura de 'indeterminado'
   // do bloco de imóveis acima (22/09).
-  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&or=(resultado_leilao.is.null,resultado_leilao.eq.indeterminado)&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=${ORDEM_FILA},data_leilao.desc&limit=${LOTE_TAMANHO}`);
+  const rVe = await sb(`veiculos_leilao?ativo=eq.true&data_leilao=gte.${desdeISO}&data_leilao=lte.${agoraISO}&and=(or(resultado_leilao.is.null,resultado_leilao.eq.indeterminado),or(resultado_apurado_em.is.null,resultado_apurado_em.lt.${freioPago}))&resultado_apuracao_tentativas=lt.${MAX_TENTATIVAS}&${excluidasIm}&select=id,fonte,link_lote,resultado_apuracao_tentativas&order=${ORDEM_FILA},data_leilao.desc&limit=${LOTE_TAMANHO}`);
   let resumoVeiculos = { candidatos: 0, vendidos: 0, semLance: 0, indeterminados: 0, semUrl: 0, semConteudo: 0, cortado: false, erro: null };
   if (!rVe.ok) {
     const detalhe = await rVe.text().catch(() => '');
