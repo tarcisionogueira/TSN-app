@@ -13,7 +13,11 @@ on:
   schedule:
     # ~2h40 depois de cada horário do runner (05/11/17/23 UTC): dá tempo de ele rodar primeiro.
     - cron: '40 1,7,13,19 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      forcar:
+        description: 'Rodar mesmo com o runner de casa em dia (sim/nao) — ex.: recuperar lotes fora da janela'
+        default: 'nao'
 
 concurrency: { group: residencial-reserva, cancel-in-progress: false }
 
@@ -33,6 +37,7 @@ jobs:
                 -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" || echo "ERRO")
           IDADE=$(node -e 'try{const j=JSON.parse(process.argv[1]);const t=Date.parse(j?.[0]?.ultimo_em);console.log(Number.isFinite(t)?Math.round((Date.now()-t)/3600000):-1)}catch{console.log(-1)}' "$J")
           echo "carimbo: $J · idade_h=$IDADE"
+          if [ "${{ inputs.forcar }}" = "sim" ]; then echo "rodar=sim" >> "$GITHUB_OUTPUT"; echo "Forçado no disparo manual."; exit 0; fi
           if [ "$IDADE" -ge 0 ] && [ "$IDADE" -lt 7 ]; then echo "rodar=nao" >> "$GITHUB_OUTPUT"; echo "Runner em dia — reserva não roda."; else echo "rodar=sim" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
         if: steps.hb.outputs.rodar == 'sim'
