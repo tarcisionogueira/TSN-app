@@ -879,10 +879,13 @@ export default function Arrematados() {
 
   const remover = async (id, e) => {
     e.stopPropagation();
-    if (!confirm('Remover este arrematado? Os lançamentos e a lista de documentos serão apagados.')) return;
+    if (!confirm('Remover este arrematado? Os lançamentos e a lista de documentos serão apagados. (Arremate com andamento do processo registrado pela equipe não pode ser removido.)')) return;
     // 19/08: mesma prova do delLanc — o diálogo diz "não há como desfazer"; a tela não pode
     // dizer que apagou o que a RLS não deixou.
     const { data: apagados, error } = await supabase.from('arrematados').delete().eq('id', id).select('id');
+    // 06/10: o banco recusa (gatilho arrematados_protege_andamento) arremate com andamento do processo —
+    // o cascade apagava o diário que a equipe registrou. Mostra o motivo, não um "não foi possível" mudo.
+    if (error?.hint === 'andamento_registrado') { alert(error.message); return; }
     if (error || !apagados?.length) { alert('Não foi possível remover este arrematado.'); return; }
     setArrematados(prev => prev.filter(a => a.id !== id));
   };
