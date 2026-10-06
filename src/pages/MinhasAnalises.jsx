@@ -78,8 +78,16 @@ export default function MinhasAnalises() {
     if (!effectiveUserId) return;
     // Renova a sessão e relê antes de acusar erro: o "JWT expired" que o dono viu em 10/09
     // era token vencido de PWA aberto há horas, não perda de dado. Ver src/lib/sessao-expirada.js.
-    const { data, error } = await lerComRenovacao(supabase, () =>
+    const ler = () => lerComRenovacao(supabase, () =>
       supabase.rpc('minhas_analises_lista', { p_user_id: effectiveUserId }));
+    let { data, error } = await ler();
+    // Timeout do banco é soluço, não falta de dado (01/10: um cliente viu "Não foi possível carregar
+    // suas análises" por um statement timeout isolado; a mesma RPC leva ~60 ms). Tenta mais uma vez
+    // antes de mostrar o erro — se falhar de novo, o erro aparece como antes.
+    if (error && /statement timeout/i.test(error.message || '')) {
+      await new Promise((r) => setTimeout(r, 1500));
+      ({ data, error } = await ler());
+    }
     if (error) {
       // Lista vazia por falha de leitura é indistinguível de "você não tem análises" — e essa
       // confusão é exatamente o que faz o cliente achar que os relatórios sumiram. Diz o que houve.
