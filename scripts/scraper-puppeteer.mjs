@@ -1707,6 +1707,38 @@ function extrairDataLeilaoHTML(html) {
 // (a data do PortalZuk é renderizada por JavaScript — um fetch cru não a enxerga).
 // Roda no runner do GitHub, grátis. Best-effort com teto de tempo p/ não estourar
 // o timeout da Action (o scrape continua e salva mesmo se não der tempo de todos).
+// FILA DAS DATAS ZUK (06/10). A visita às páginas tem teto de 25 min e parava em ~644 de 946 —
+// e como a listagem vem sempre na mesma ordem, os MESMOS ~300 do fim nunca eram visitados: 156
+// lotes ativos sem data nenhuma (sem data, o gate de leilão encerrado falha aberto). Pior: o
+// mapeador manda `data_leilao: null` e o merge do salvarImoveis não preserva data, então lote não
+// visitado PERDIA a data que já tinha. Agora: (1) cada lote parte da data que o banco já conhece
+// (não visitado mantém); (2) a visita começa por quem não tem data, depois data vencida, depois o
+// resto — o corte do teto cai sobre lotes já datados. `ordem` não muda o que é salvo (o array volta
+// para a ordem original), só quem é visitado primeiro.
+async function priorizarDatasZuk(imoveis) {
+  const ids = imoveis.map(im => im.fonte_id).filter(Boolean);
+  const conhecidas = new Map();
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('fonte_id, data_leilao, data_leilao_2').in('fonte_id', ids.slice(i, i + 150));
+    if (error) { console.log(`    PortalZuk: datas conhecidas não lidas (${String(error.message).slice(0, 60)}) — segue na ordem da listagem`); return; }
+    for (const r of data || []) conhecidas.set(r.fonte_id, r);
+  }
+  const hoje = new Date().toISOString().slice(0, 10);
+  const peso = (im) => {
+    const k = conhecidas.get(im.fonte_id);
+    if (k?.data_leilao && !im.data_leilao) im.data_leilao = k.data_leilao;
+    if (k?.data_leilao_2 && !im.data_leilao_2) im.data_leilao_2 = k.data_leilao_2;
+    if (!k?.data_leilao && !k?.data_leilao_2) return 0;                       // sem data: primeiro
+    const ultima = String(k.data_leilao_2 || k.data_leilao || '').slice(0, 10);
+    return ultima < hoje ? 1 : 2;                                              // vencida, depois o resto
+  };
+  const ordenados = imoveis.map((im, i) => ({ im, i, p: peso(im) })).sort((a, b) => a.p - b.p || a.i - b.i);
+  const semData = ordenados.filter(o => o.p === 0).length;
+  imoveis.ordemDatas = ordenados.map(o => o.im);
+  console.log(`    PortalZuk: ${semData} lote(s) sem data no banco vão primeiro na visita`);
+}
+
 async function enriquecerDatasZuk(browser, imoveis) {
   const DEADLINE = Date.now() + 25 * 60 * 1000; // teto de 25 min
   const page = await browser.newPage();
@@ -1721,7 +1753,7 @@ async function enriquecerDatasZuk(browser, imoveis) {
     });
   } catch { /* segue sem interceptar */ }
   let ok = 0, edt = 0, feitos = 0, pracas2 = 0;
-  for (const im of imoveis) {
+  for (const im of (imoveis.ordemDatas || imoveis)) {
     if (Date.now() > DEADLINE) { console.log('    PortalZuk: teto de tempo das datas atingido'); break; }
     if (!im.link_edital) continue;
     try {
@@ -1918,6 +1950,7 @@ async function scraperPortalZuk(browser) {
     }).filter(Boolean);
     console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados${n429 ? ` · ${n429}× 429 no "carregar mais"` : ''}`);
     if (botaoNoFim) imoveis.coletaParcial = `ZUK: "carregar mais" ainda na tela no fim (${n429}× 429)`;
+    await priorizarDatasZuk(imoveis);
     return await enriquecerDatasZuk(browser, imoveis);
   } catch (err) {
     console.log(`  Erro PortalZuk: ${err.message.slice(0, 100)}`);
