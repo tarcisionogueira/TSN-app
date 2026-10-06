@@ -43,7 +43,8 @@ const MAX_TENT = 3;
 // quebrava essa promessa em ~3h quando não havia concorrência de fila. Como o documento já foi
 // lido (só falta a consulta externa), o custo por tentativa aqui é baixo. `MAX_TENT` genérico
 // (matricula_caixa/leitura) fica em 3, intocado.
-const MAX_TENT_EXTERNAS = 47; // ~1/hora × 47h, cobre a janela de 48h anunciada na tela
+const MAX_TENT_EXTERNAS = 47; // a janela de 48h (created_at) é o teto real: o cron roda a cada 6h, ~8 tentativas.
+// Desde 06/10 a tentativa em que o CNJ segue fora sai ANTES da IA (gerar-documental.js) — custo baixo de fato.
 
 async function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

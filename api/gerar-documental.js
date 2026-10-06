@@ -857,11 +857,13 @@ export default async function handler(req, res) {
   // (teto Bright Data, URL assinada expirada, 403 momentâneo) nunca seria re-tentada mesmo
   // que o documento fosse capturado dias depois. Usa um motivo próprio para o cron continuar
   // tentando (até o teto de `regen_tentativas` já existente, MAX_TENT=3 — sem risco de loop).
-  const preservarSeBom = async (faltandoAgora) => {
+  const preservarSeBom = async (faltandoAgora, porTrava = false) => {
     if (!tinhaRelatorioBom) return null;
     await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: comCnjPendente('leitura_zero_transitoria') });
     registrarAnomalia('documental_regen_leitura_zero', row?.fonte, imovelId, 'documentos',
-      `Regeração leu 0 documentos (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
+      // `porTrava` (06/10): o chamador da TRAVA DE LIBERAÇÃO leu os documentos e chamou a IA — dizer
+      // "leu 0" ali mandava investigar a captura quando o bloqueio era outro (forma nº 10).
+      `${porTrava ? 'Regeração barrada na trava de liberação' : 'Regeração leu 0 documentos'} (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
     // ESTORNO AQUI DENTRO, não nos chamadores (10/08). Os dois pontos que chamam
     // `preservarSeBom` fazem `if (_pres) return _pres;` — e o bloco de estorno estava LOGO
     // ABAIXO desse return, portanto inalcançável nesse caminho. O cliente pagava a cota e
@@ -1310,6 +1312,18 @@ export default async function handler(req, res) {
       ? { status: (cnj && cnj.total) ? 'concluido' : 'indisponivel', n: (cnj?.total ?? null) }
       : { status: 'pulado', n: null };
     prog.parecer = { status: 'gerando', n: null };
+    // ECONOMIA (06/10): retentativa automática de laudo que só esperava o CNJ (`fontes_externas`) e o
+    // CNJ continua sem responder → a trava de liberação lá embaixo barraria de novo e preservaria o
+    // anterior, mas DEPOIS de pagar o documental inteiro (leitura por visão). Medido: 8 chamadas
+    // completas em 48h num lote LEILAOBRASIL, todas descartadas. Sai aqui, antes da IA, mantendo a
+    // marca para a próxima tentativa. Só no cron e só com relatório bom anterior.
+    if (isCron && procNum && cnjNumeroFalhou && tinhaRelatorioBom
+      && resultadoAnterior?.preliminar && resultadoAnterior?.preliminarMotivo === 'fontes_externas') {
+      // `regen_motivo` fica de FORA de propósito: o upsert é merge, então a marca anterior segue igual
+      // e os crons continuam decidindo exatamente como antes (inclusive o teto de 48h).
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior });
+      return resultadoAnterior;
+    }
     await flush();
 
     // 3) Monta a mensagem para o Claude (documentos + resumo do CNJ).
@@ -2146,7 +2160,7 @@ export default async function handler(req, res) {
         pendenciasLiberacao: pendLib,
         motivo: `O relatório documental só é liberado completo: todos os arquivos do leiloeiro lidos, as características e as movimentações da matrícula identificadas e o processo verificado. Pendente: ${pendLib.map((p) => p.texto).join(' ')} Estamos tentando de novo automaticamente e avisamos quando sair.${docsParaAnexar.length ? ' Se você tiver o arquivo, anexe para liberar na hora.' : ''}`,
       };
-      { const _pres = await preservarSeBom(docsParaAnexar.length ? docsParaAnexar : pendLib.map((p) => p.chave)); if (_pres) return _pres; }
+      { const _pres = await preservarSeBom(docsParaAnexar.length ? docsParaAnexar : pendLib.map((p) => p.chave), true); if (_pres) return _pres; }
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: bloqueio, regen_motivo: [...new Set(pendLib.map((p) => p.chave))].join(',') });
       persistidoNestaRodada = bloqueio;
       await logAtividade(ownerId, 'relatorio_documental_bloqueado', String(bloqueio.motivo).slice(0, 180), { imovel_id: String(imovelId), pendencias: pendLib.map((p) => p.chave) });
