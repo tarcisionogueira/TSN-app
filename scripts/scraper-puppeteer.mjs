@@ -5510,6 +5510,9 @@ const GL_BASE = 'https://www.grupolance.com.br';
 
 function mapLoteGrupoLance(l) {
   if (!l || !l.id) return null;
+  // Anúncio de TESTE do próprio site (06/10: "TESTE 1/2/3", gl_28937/28938/28969, ativos na vitrine
+  // e sem data). Não é imóvel. Fora da coleta, o sweep os desliga como sumiu_da_fonte.
+  if (/^\s*teste\b/i.test(String(l.titulo || '')) || /\/teste-\d+-\d+\/?$/i.test(String(l.href || ''))) return null;
   // Limpa o glitch de scraping "sImóvel, 12.796,46m²…" (char extra colado ao início do
   // título): uma letra minúscula solta grudada numa Maiúscula no começo é artefato.
   const titulo = String(l.titulo || '').replace(/\s+/g, ' ').trim().replace(/^[a-zà-ÿ](?=[A-ZÀ-Þ])/, '');

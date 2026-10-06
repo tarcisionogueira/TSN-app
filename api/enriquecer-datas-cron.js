@@ -55,7 +55,9 @@ export default async function handler(req, res) {
   const doResidencial = await fontesCobertasPeloResidencial(sb, HB_DATAS, FONTES_DATAS_RESIDENCIAL);
   const filtro = [
     'ativo=eq.true',
-    'and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))',
+    // RELEITURA (06/10, rota PAGA): lote que já tem uma das datas só volta 7 dias depois da última
+    // leitura — praça única não ganha 2ª data relendo todo dia. Sem data NENHUMA segue sempre na fila.
+    `and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*),or(and(data_leilao.is.null,data_leilao_2.is.null),enriquecido_em.is.null,enriquecido_em.lt.${new Date(Date.now() - 7 * 86400000).toISOString()}))`,
     `fonte=not.in.(${['CEF', 'caixa', ...doResidencial].join(',')})`,
     'modalidade=not.ilike.*venda*direta*',
     'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2,valor_minimo,valor_minimo_2,valor_avaliacao',

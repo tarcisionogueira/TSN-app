@@ -165,7 +165,11 @@ if (FONTES_APURAR.length) {
 if (FONTES_DATAS.length) {
   const sel = `select=id,fonte,url_lote,link_edital,data_leilao,data_leilao_2`;
   const genericas = FONTES_DATAS.filter(f => f !== 'LJUD');
-  const soFaltando = genericas.length ? await sb(`imoveis_leilao?ativo=eq.true&and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*))`
+  // RELEITURA (06/10): lote que JÁ TEM uma das datas só volta à fila 7 dias depois da última leitura.
+  // Seco de 06/10: BIASI 0 de 136 e GRUPOLANCE 0 de 83 páginas com data NOVA — praça única (venda de
+  // banco) ou só a praça atual publicada; nada a achar, relido todo dia. Sem data NENHUMA segue sempre.
+  const seteDias = new Date(Date.now() - 7 * 86400000).toISOString();
+  const soFaltando = genericas.length ? await sb(`imoveis_leilao?ativo=eq.true&and=(or(data_leilao.is.null,data_leilao_2.is.null),or(link_edital.ilike.*//*/*,url_lote.ilike.*//*/*),or(and(data_leilao.is.null,data_leilao_2.is.null),enriquecido_em.is.null,enriquecido_em.lt.${seteDias}))`
     + `&modalidade=not.ilike.*venda*direta*&${inFontes(genericas)}&${sel}`
     + `&order=data_leilao.asc.nullsfirst,enriquecido_em.asc.nullsfirst&limit=${LIM_DATAS}`) : [];
   // LJUD em RODÍZIO (tenha data ou não): quem foi lido há mais tempo primeiro.
@@ -204,5 +208,5 @@ if (FONTES_DATAS.length) {
     await dormir(PAUSA);
   }
   console.log(`[datas] fontes=${FONTES_DATAS.join(',')} candidatos=${cand.length}`, JSON.stringify(cont), JSON.stringify(porFonte), Object.keys(motivos).length ? `não abriu: ${JSON.stringify(motivos)}` : '');
-  if (cont.lidos > 0 || !cand.length) await carimbar(HB_DATAS, `${cont.lidos} lidos de ${cand.length}; não abriu ${cont.nao_abriu}`);
+  if (cont.lidos > 0 || !cand.length) await carimbar(HB_DATAS, `${cont.lidos} lidos de ${cand.length}; com data nova ${cont.lidos - cont.sem_data_na_pagina}; não abriu ${cont.nao_abriu}`);
 }
