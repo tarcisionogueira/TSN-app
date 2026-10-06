@@ -388,7 +388,12 @@ function incoerenciasDaEmissao(imovel, precoM2, aval, min, areaUsada) {
     }
   }
   const TIPOS = ['casa', 'apartamento', 'terreno', 'comercial', 'rural'];
-  const doTitulo = normalizarTipo(imovel?.titulo || imovel?.title || '');
+  // "Lote 06 - Quadra 10 - Alphaville..." é o ENDEREÇO no loteamento, não o tipo (06/10: casa de
+  // 246 m² construídos acusada 5× como "título diz terreno"). Tira a designação lote/quadra + número
+  // antes de ler o tipo; "Lote 200,00m²" (metragem) continua valendo como terreno.
+  const tituloSemLoteamento = String(imovel?.titulo || imovel?.title || '')
+    .replace(/\b(?:lote|quadra|qd|lt)\.?\s*(?:n[º°o.]*\s*)?\d+[a-z]?\b(?![.,]\d|\s*m)/gi, ' ');
+  const doTitulo = normalizarTipo(tituloSemLoteamento);
   if (TIPOS.includes(doTitulo) && TIPOS.includes(imovel?.tipo) && doTitulo !== imovel.tipo) {
     out.tipo_contradiz_titulo = true;
     out._detalhe.tipo_contradiz_titulo = `Relatório como "${imovel.tipo}", título diz "${doTitulo}" — comparáveis do tipo errado.`;
