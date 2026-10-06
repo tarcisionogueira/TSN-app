@@ -39,6 +39,11 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 - [ ] `estado_fora_do_padrao` deve cair para **6** depois das 8h UTC (os 6 restantes ficam sem cidade de propósito —
       cascas/ambíguos, ver entrada 04/10). `erro_na_tela_do_cliente` sai sozinho em 08/10.
 - [ ] Dono (P0): conferir a URL de destino da campanha Meta da masterclass (ou ativar o evento).
+      **06/10, causa confirmada:** `lucreantesdearrematar.com.br` (e `www`) resolve para **186.209.113.111**, não para
+      a Vercel (76.76.21.21) — o anúncio leva a uma página FORA do app (que tem o nosso pixel). 01–05/10: R$ 300,
+      120 `landing_page_view`, 35 `fb_pixel_lead` × 0 inscrições e 0 pageview de `/live/lucre-antes-de-arrematar`.
+      Se a LP externa é proposital: exportar os leads de lá e explicar o alerta; senão, DNS no Registro.br + ativar o evento.
+      (Pendência #1 — o UPDATE pelo conector travou; anexar esta nota lá pelo SQL Editor.)
 - [ ] Dono (P1): Google Workspace (pagamento recusado) · Leiloaria Smart (documentação do cliente).
 - [ ] P3 nova (id 119): RJLEILOES 48% sem foto — conferir a página antes de gastar cota do Bright Data.
 - [ ] Varredura multi-agente de bugs (ritual item 6) segue não rodada — fazer na próxima mudança substancial.
