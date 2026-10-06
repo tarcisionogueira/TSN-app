@@ -114,7 +114,7 @@ const FONTES_EXCLUIDAS_SQL = `fonte=not.in.(${[...FONTES_APURACAO_NAO_CONFIAVEL]
 const PARALELO = 4;
 
 async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxyIsp = false) {
-  let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, semCota = 0, abertos = 0, cancelados = 0, cortado = false;
+  let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, semCota = 0, abertos = 0, cancelados = 0, removidos = 0, cortado = false;
   const fila = [...candidatos];
   const trabalhador = async () => { while (fila.length) {
     const c = fila.shift();
@@ -132,6 +132,15 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
     // ramo de "sem conteúdo" logo abaixo, honesto (não conta tentativa, não afirma resultado).
     let via = '';
     try { ({ html, via } = await fetchLote(c.alvo, { proposito: 'geral', tentarProxyIsp })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; ver comentário acima
+    if (!html && via === 'gone') {
+      // Página APAGADA pela fonte (HTTP 410): o resultado nunca será lido. Indeterminado e fora da
+      // fila de vez (tentativas no teto) — antes ficava em "sem conteúdo", voltando a cada 3 h para
+      // sempre e pedindo Bright Data (7 veículos LJUD de 29-30/09 presos assim em 06/10).
+      removidos++;
+      await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ resultado_leilao: 'indeterminado', resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: MAX_TENTATIVAS }) }).catch(() => {}); // padrao-ok: mesmo padrão do ramo semUrl; falhar só repete o lote na próxima rodada
+      continue;
+    }
     if (!html) {
       // Sem conteúdo (fonte fora do ar, bloqueio, sem cota do dia): NÃO conta como tentativa,
       // mas CARIMBA a hora (24/09). Sem isso o lote voltava ao topo da fila em toda rodada e,
@@ -158,7 +167,7 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
     await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
   } };
   await Promise.all(Array.from({ length: PARALELO }, trabalhador));
-  return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, semCota, abertos, cancelados, cortado };
+  return { candidatos: candidatos.length, vendidos, semLance, indeterminados, semUrl, semConteudo, semCota, abertos, cancelados, removidos, cortado };
 }
 
 export default async function handler(req, res) {

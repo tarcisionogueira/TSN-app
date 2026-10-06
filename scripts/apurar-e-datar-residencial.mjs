@@ -41,6 +41,8 @@ const LIM_APURAR = Number(process.env.RESID_APURAR_LIMITE || 300);
 const LIM_DATAS = Number(process.env.RESID_DATAS_LIMITE || 400);
 const PAUSA = Number(process.env.RESID_PAUSA_MS || 1500);
 const MAX_TENTATIVAS = 3;       // o mesmo do cron
+// HTTP 410: a fonte APAGOU a página — resultado nunca será lido; sai da fila (mesma regra do cron).
+const PATCH_GONE = { resultado_leilao: 'indeterminado', resultado_apuracao_tentativas: MAX_TENTATIVAS };
 const JANELA_DIAS = 10;         // o mesmo do cron
 if (!SB_URL || !SB_KEY) { console.error('defina VITE_SUPABASE_URL e SUPABASE_SERVICE_KEY'); process.exit(1); }
 
@@ -99,7 +101,7 @@ if (FONTES_APURAR.length) {
     if (!html) {
       cont.nao_abriu++; motivos[`${c.fonte}:${motivo}`] = (motivos[`${c.fonte}:${motivo}`] || 0) + 1;
       (porFonte[c.fonte] ||= { lidos: 0, nao_abriu: 0 }).nao_abriu++;
-      if (APLICAR) await sb(`imoveis_leilao?id=eq.${c.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
+      if (APLICAR) await sb(`imoveis_leilao?id=eq.${c.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...(motivo === 'HTTP 410' ? PATCH_GONE : {}), resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
       await dormir(PAUSA); continue;
     }
     cont.lidos++;
@@ -132,7 +134,7 @@ if (FONTES_APURAR.length) {
     if (!html) {
       contV.nao_abriu++; motivos[`${v.fonte}(veic):${motivo}`] = (motivos[`${v.fonte}(veic):${motivo}`] || 0) + 1;
       (porFonte[v.fonte] ||= { lidos: 0, nao_abriu: 0 }).nao_abriu++;
-      if (APLICAR) await sb(`veiculos_leilao?id=eq.${v.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
+      if (APLICAR) await sb(`veiculos_leilao?id=eq.${v.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...(motivo === 'HTTP 410' ? PATCH_GONE : {}), resultado_apurado_em: new Date().toISOString() }) }).catch(e => console.error('  carimbo falhou:', e.message));
       await dormir(PAUSA); continue;
     }
     contV.lidos++;

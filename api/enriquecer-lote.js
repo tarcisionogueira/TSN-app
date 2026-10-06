@@ -61,6 +61,10 @@ export async function fetchLote(url, { semBrightData = false, proposito = 'geral
     const text = await resp.text().catch(() => '');
     if (text && text.length > 500) return { html: text, finalUrl: resp.url || url, via: 'direct' };
   }
+  // 410 GONE (06/10): a fonte APAGOU a página — o LJUD faz isso com o lote de veículo depois do
+  // leilão. É resposta definitiva, não falha: mandar ao Bright Data pagaria para ler o mesmo 410.
+  // Só 410 (explícito); 404 continua indo ao fallback, porque há site que devolve 404 a robô.
+  if (resp && resp.status === 410) return { html: '', finalUrl: url, via: 'gone' };
   if (semBrightData) return { html: '', finalUrl: url, via: 'fail' };
   // 19/08: era o `fetchViaBrightData` LEGADO, que devolve null tanto para "teto de cota"
   // quanto para "página vazia" — a forma #5 que o próprio _brightdata.js documenta como
