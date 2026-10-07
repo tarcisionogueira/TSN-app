@@ -70,7 +70,22 @@ async function carregarServicos(filtro) {
 async function cobrarParcela(parcela, servico, userId) {
   if (parcela.status === 'paga') return { erro: 'Parcela já paga.', status: 409 };
   if (parcela.status === 'cancelada') return { erro: 'Parcela cancelada.', status: 409 };
-  if (parcela.status === 'cobrada' && parcela.cobranca_avulsa_id) return { link: linkDe(parcela.cobranca_avulsa_id), jaExistia: true };
+  // Idempotente SÓ enquanto a cobrança está viva (07/10): o admin pode cancelar a cobrança pela tela
+  // do Financeiro, onde ela não se distingue das demais, e devolver esse link seria mandar o cliente
+  // a um boleto que não aceita mais pagamento — parcela presa em 'cobrada' para sempre. O gatilho
+  // `servico_cartorio_baixa_parcela` já solta a parcela nesse caso; aqui é a rede de segurança para
+  // o que foi cancelado antes dele existir (ou direto no banco, sem passar pelo gatilho).
+  if (parcela.status === 'cobrada' && parcela.cobranca_avulsa_id) {
+    const c = await db(`cobrancas_avulsas?id=eq.${parcela.cobranca_avulsa_id}&select=id,status`);
+    const viva = c.ok && c.data?.[0]?.status === 'aberta';
+    if (viva) return { link: linkDe(parcela.cobranca_avulsa_id), jaExistia: true };
+    if (!c.ok) return { erro: 'Não consegui conferir a cobrança desta parcela agora. Tente em instantes.', status: 503 };
+    if (c.data?.[0]?.status === 'paga') return { erro: 'A cobrança desta parcela já foi paga.', status: 409 };
+    const solta = await db(`servicos_cartorio_parcelas?id=eq.${parcela.id}&status=eq.cobrada`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'pendente', cobranca_avulsa_id: null }),
+    });
+    if (!solta.ok || !(solta.data || []).length) return { erro: 'A parcela mudou enquanto eu conferia a cobrança — atualize a tela.', status: 409 };
+  }
   // BOLETO + CUSTAS NO MESMO PAGAMENTO (07/10, dono): boleto é o meio mais barato (R$ 3,49 fixo, absorvido);
   // quando o cartório tem tabela prévia (certidões), as custas vão somadas no mesmo boleto.
   const custas = Number(parcela.custas) || 0;
