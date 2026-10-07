@@ -346,7 +346,19 @@ function parseDataLJUD(s) {
 function mapLoteLJUD(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || it.titulo || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || it.cidade || '').trim();
-  const vmin = parseNum(it.vl_lanceminimo || it.vl_ordenacao || it.valor_minimo || it.vl_minimo);
+  // Mesma regra do coletor principal (scripts/scraper-puppeteer.mjs, mapLoteLJUD_pp — conferida
+  // em 9 páginas reais em 07/10): no `get-lotes`, vl_lanceminimo é a AVALIAÇÃO e o lance é
+  // vl_lanceinicial (2ª praça em vl_lanceinicialsegundoleilao). Sem vl_lanceinicial o item veio do
+  // get-bens-por-estados, onde vl_lanceminimo é o lance de verdade.
+  // A API devolve decimal com PONTO ("800000.00"): `parseNum` é para texto brasileiro e tira o ponto
+  // (viraria 80.000.000). Campos da API passam por parseFloat direto.
+  const numApi = (v) => (typeof v === 'number' ? v : (parseFloat(v || 0) || 0));
+  const doGetLotes = it.vl_lanceinicial != null;
+  const vmin = doGetLotes
+    ? (numApi(it.vl_lanceinicial) || numApi(it.vl_ordenacao))
+    : (numApi(it.vl_lanceminimo) || numApi(it.vl_ordenacao) || parseNum(it.valor_minimo || it.vl_minimo));
+  const avalLJUD = numApi(it.vl_avaliacao) || (doGetLotes && numApi(it.vl_lanceminimo) >= vmin ? numApi(it.vl_lanceminimo) : 0);
+  const lance2LJUD = numApi(it.vl_lanceinicialsegundoleilao);
   const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : (it.nm_foto || it.foto || null);
   const urlLeil = String(it.nm_url_leiloeiro || it.url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
   return {
@@ -355,7 +367,7 @@ function mapLoteLJUD(it) {
     tipo: normalizarTipo(it.nm_subcategoria || it.nm_categoria || titulo),
     modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
     estado: String(it.nm_estado || it.uf || '').toUpperCase().slice(0, 2), cidade,
-    bairro: '', endereco: '', valor_avaliacao: parseNum(it.vl_avaliacao || 0), valor_minimo: vmin,
+    bairro: '', endereco: '', valor_avaliacao: avalLJUD, valor_minimo: vmin, valor_minimo_2: lance2LJUD > 0 && lance2LJUD < vmin ? lance2LJUD : null,
     area_m2: parseNum((titulo.match(/([\d.,]+)\s*m²/) || [])[1]),
     descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
     link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',

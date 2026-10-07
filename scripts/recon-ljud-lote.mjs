@@ -31,7 +31,8 @@ if (process.env.LJUD_AMOSTRA === '1') {
   const itens = [];
   for (const pg of [1, 2, 3]) {
     const url = `https://api.leiloesjudiciais.com.br/core/api/get-lotes?pg=${pg}&qtd_por_pagina=48&tipo=3&categoria=0&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null`;
-    const data = await page.evaluate(async (u) => { try { const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.ok ? await r.json() : {}; } catch { return {}; } }, url);
+    const data = await page.evaluate(async (u) => { try { const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.ok ? await r.json() : { __status: r.status }; } catch (e) { return { __err: String(e?.message || e) }; } }, url);
+    if (data.__status || data.__err) console.log(`  amostra p${pg}: ${data.__status || data.__err}`);
     for (const x of (data.items || data.data || [])) if (Number(x.statuslote_id) === 1) itens.push(x);
   }
   const num = (v) => parseFloat(v || 0) || 0;

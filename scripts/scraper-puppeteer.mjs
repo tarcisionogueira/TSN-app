@@ -3394,7 +3394,21 @@ function siteLeiloeiroLJUD(raw) {
 function mapLoteLJUD_pp(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || '').trim();
-  const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
+  // OS NOMES DOS CAMPOS MENTEM NO `get-lotes` (07/10, caso do dono: casa de Santana de Parnaíba com
+  // "lance" de R$ 1,6 mi e avaliação 0). Conferido em 9 páginas reais contra 144 itens da API:
+  //   vl_lanceminimo                → é a AVALIAÇÃO (bate com "Avaliação:" da página nos 9)
+  //   vl_lanceinicial               → é o LANCE da 1ª praça ("Lance mínimo:" da página)
+  //   vl_lanceinicialsegundoleilao  → lance da 2ª praça (111 de 144)
+  // e não existe vl_avaliacao (0 de 144). Lendo vl_lanceminimo como lance, o acervo gravava a
+  // avaliação no preço e deixava a avaliação zerada — 887 de 1.067 LJUD ativos sem avaliação.
+  // No `get-bens-por-estados` (o fallback da esteira) o mesmo nome é o LANCE de verdade e não há
+  // vl_lanceinicial: a presença de vl_lanceinicial é o que diz de qual endpoint o item veio.
+  const num = (v) => parseFloat(v || 0) || 0;
+  const doGetLotes = it.vl_lanceinicial != null;
+  const valMin = doGetLotes ? (num(it.vl_lanceinicial) || num(it.vl_ordenacao)) : (num(it.vl_lanceminimo) || num(it.vl_ordenacao));
+  const avalApi = num(it.vl_avaliacao) || (doGetLotes && num(it.vl_lanceminimo) >= valMin ? num(it.vl_lanceminimo) : 0);
+  const lance2 = num(it.vl_lanceinicialsegundoleilao);
+  const valMin2 = lance2 > 0 && lance2 < valMin ? lance2 : null;
   // GALERIA COMPLETA (17/09, achado do dono: "ainda há lotes sem fotos, precisamos de todas
   // as fotos fornecidas pelo leiloeiro"). `it.fotos` já vem como ARRAY da API — até hoje só
   // `fotos[0]` era usado (a capa). Captura todas, na mesma resolução 640x480 já aplicada à
@@ -3448,7 +3462,7 @@ function mapLoteLJUD_pp(it) {
     tipo: normalizarTipo(it.nm_subcategoria || it.nm_categoria || titulo),
     modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
     estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade: toTitleCase(cidade),
-    bairro: '', endereco: '', valor_avaliacao: parseFloat(it.vl_avaliacao || 0) || 0, valor_minimo: valMin,
+    bairro: '', endereco: '', valor_avaliacao: avalApi, valor_minimo: valMin, valor_minimo_2: valMin2,
     area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
     descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
     // Documentos reais do lote (antes tudo apontava p/ a home do leiloeiro).
