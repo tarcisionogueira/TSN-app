@@ -81,7 +81,7 @@
     "testar:mp-sdk": "node scripts/testes/mp-sdk.mjs",
     "testar:sessao": "node scripts/testes/sessao-vencida-se-conserta-sozinha.mjs",
     "testar:analise-url": "node scripts/testes/analise-nao-depende-do-state-volatil.mjs",
-    "testar:assessoria": "node scripts/testes/assessoria-so-para-investidor-pro.mjs",
+    "testar:assessoria": "node scripts/testes/assessoria-quem-contrata.mjs",
     "testar:entrega": "node scripts/testes/toast-so-anuncia-relatorio-entregue.mjs",
     "testar:mensagem-grupo": "node scripts/testes/mensagem-de-grupo-nao-inventa-numero.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs",
