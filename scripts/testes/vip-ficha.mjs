@@ -44,7 +44,8 @@ assert.match(a.descricao, /Matrícula nº 17\.876/);
 assert.ok(!/Eventuais alterações/.test(a.descricao), 'as Notas (texto padrão do site) não entram');
 assert.ok(!/Arquivos Importantes|Categoria/.test(a.descricao), 'a 1ª "Descrição" (lista de arquivos) não abre o painel');
 assert.equal(a.endereco, 'ALAMEDA PICASSO (LT. 06, QD. 10), LOT ALPHAVILLE SANTANNA (BURLE MARX), 978, ALAMEDA PICASSO');
-assert.equal(a.cep, '06539-300');
+assert.equal(a.cep, '06539300', 'formato do schema: varchar(8), só dígitos — com hífen o upsert do lote inteiro falha');
+assert.ok(a.cep.length <= 8);
 assert.equal(a.ocupacao, 'Ocupado');
 
 // Judicial, com Processo e fim em "ATENÇÃO!" (lote 22603, Tijuca).
@@ -82,7 +83,7 @@ assert.match(tj.descricao, /Processo: 0063106-98\.2018\.8\.19\.0001/);
 assert.match(tj.descricao, /ÔNUS: A PENHORA/);
 assert.ok(!/PARCELADO/.test(tj.descricao));
 assert.equal(tj.endereco, 'RUA CONDE DE BONFIM, 1148, TIJUCA');
-assert.equal(tj.cep, '20530-003');
+assert.equal(tj.cep, '20530003');
 assert.equal(tj.ocupacao, null, 'sem "Situação" no bloco: nulo, não palpite');
 
 // Rural sem CEP (lote 22581): endereço sim, CEP nulo.

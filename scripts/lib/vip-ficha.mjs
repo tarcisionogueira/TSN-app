@@ -30,7 +30,9 @@ export function fichaVip(innerText) {
     const me = painel.match(/^Endere[çc]o:\s*(.+)$/im);
     if (me) out.endereco = me[1].trim().slice(0, 300) || null;
     const mc = painel.match(/\bCEP:\s*(\d{5})-?(\d{3})\b/i);
-    if (mc) out.cep = `${mc[1]}-${mc[2]}`;
+    // 8 DÍGITOS, sem hífen: a coluna é varchar(8) e os 3.683 CEPs do acervo estão assim. Com o
+    // hífen (9 caracteres), a 1ª coleta real de 07/10 teve o lote INTEIRO do VIP recusado.
+    if (mc) out.cep = `${mc[1]}${mc[2]}`;
   }
 
   // "Situação\nOcupado" no bloco de detalhes (fora do painel). Só os dois valores que o acervo
