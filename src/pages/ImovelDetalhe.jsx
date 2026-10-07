@@ -396,12 +396,24 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
     } finally { setSalvando(false); }
   };
 
-  const atualizarStatus = async (status) => {
+  const atualizarStatus = async (status, extra = {}) => {
     const t = await token();
-    await fetch(`/api/arrematacoes?id=${dados.arrematacao.id}`, {
+    const r = await fetch(`/api/arrematacoes?id=${dados.arrematacao.id}`, {
       method: 'PATCH', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...extra }),
     });
+    // Finalizar sem advogado vinculado (07/10): o servidor recusa até a confirmação explícita.
+    if (r.status === 409) {
+      const e = await r.json().catch(() => ({}));
+      if (e.precisa_confirmar === 'sem_advogado') {
+        if (window.confirm(`${e.error}\n\nFinalizar mesmo assim, SEM advogado?`)) return atualizarStatus(status, { sem_advogado: true });
+        return;
+      }
+      alert(e.error || 'Não foi possível atualizar.');
+    } else if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert(e.error || 'Não foi possível atualizar.');
+    }
     carregar();
   };
 

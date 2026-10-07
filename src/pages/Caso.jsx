@@ -646,8 +646,11 @@ export default function Caso() {
   useEffect(() => {
     if (role !== 'admin') return;
     let cancel = false;
-    supabase.from('perfis').select('id,nome').eq('role','advogado').eq('ativo', true).order('nome')
-      .then(({ data }) => { if (!cancel) setAdvogadosAtivos(data || []); });
+    supabase.from('perfis').select('id,nome,razao_social,cnpj').eq('role','advogado').eq('ativo', true).order('nome')
+      .then(({ data, error }) => {
+        if (error) console.error('[caso] advogados ativos:', error.message);
+        if (!cancel) setAdvogadosAtivos(data || []);
+      });
     return () => { cancel = true; };
   }, [role]);
   // Pré-seleciona o advogado já vinculado ao caso (se houver) assim que a lista carrega.
@@ -656,14 +659,31 @@ export default function Caso() {
   }, [role, caso?.advogado_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Monitor do êxito (quem recebe e quanto): só admin, quando há arrematação.
+  const [advExito, setAdvExito] = useState('');
+  const [salvandoAdvExito, setSalvandoAdvExito] = useState(false);
+  const [recarregaMonitor, setRecarregaMonitor] = useState(0);
+  useEffect(() => { setAdvExito(arrematacao?.advogado_id || ''); }, [arrematacao?.advogado_id]);
   useEffect(() => {
     if (role !== 'admin' || !arrematacao?.id) { setMonitorExito(null); return; }
     let cancel = false;
     apiCall(`/api/honorarios-split?arrematacao_id=${arrematacao.id}`).then(r => r.json()).then(d => {
       if (!cancel && d && Array.isArray(d.linhas)) setMonitorExito(d);
-    }).catch(() => {});
+    }).catch(e => console.error('[caso] monitor do êxito:', e?.message || e));
     return () => { cancel = true; };
-  }, [role, arrematacao?.id]);
+  }, [role, arrematacao?.id, recarregaMonitor]);
+  // ADVOGADO/ESCRITÓRIO DO ÊXITO (07/10, pedido do dono): vincular quem conduziu o jurídico, mesmo que
+  // tenha se cadastrado DEPOIS do arremate — o rateio é recalculado na hora (projeção abaixo).
+  const salvarAdvogadoExito = async () => {
+    if (!arrematacao?.id) return;
+    setSalvandoAdvExito(true);
+    try {
+      const r = await apiCall(`/api/arrematacoes?id=${arrematacao.id}`, { method: 'PATCH', body: JSON.stringify({ advogado_id: advExito || null }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(d.error || 'Não foi possível vincular.'); return; }
+      setArrematacao(prev => prev ? { ...prev, advogado_id: advExito || null } : prev);
+      setRecarregaMonitor(n => n + 1);
+    } finally { setSalvandoAdvExito(false); }
+  };
 
 
   // ─── Carregar caso ────────────────────────────────────────────────────────
@@ -2000,6 +2020,28 @@ export default function Caso() {
                   <div style={{ fontSize:11, color:'#64748b', marginBottom:8 }}>
                     {monitorExito.distribuido ? 'Valores já creditados nesta venda.' : 'Projeção com base nos % vigentes. O admin recebe o saldo. Editável em Usuários → 💰 Êxito.'}
                   </div>
+                  {!monitorExito.distribuido && (
+                    <div style={{ marginBottom:10 }}>
+                      {!arrematacao?.advogado_id && (
+                        <div style={{ fontSize:11, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'6px 9px', marginBottom:6 }}>
+                          Sem advogado/escritório vinculado: a fatia do jurídico está indo para o admin. Vincule antes de finalizar.
+                        </div>
+                      )}
+                      <div style={{ display:'flex', gap:6 }}>
+                        <select value={advExito} onChange={e => setAdvExito(e.target.value)} style={{ flex:1, minWidth:0, padding:'7px 9px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12 }}>
+                          <option value="">— Sem advogado/escritório —</option>
+                          {advogadosAtivos.map(a => (
+                            <option key={a.id} value={a.id}>{a.razao_social ? `${a.razao_social} (${a.nome})` : a.nome}{a.cnpj ? ' · PJ' : ''}</option>
+                          ))}
+                        </select>
+                        <button onClick={salvarAdvogadoExito} disabled={salvandoAdvExito || advExito === (arrematacao?.advogado_id || '')}
+                          style={{ padding:'0 12px', border:'none', borderRadius:8, background:'#0D63DB', color:'white', fontWeight:700, fontSize:12, cursor:'pointer', opacity: (salvandoAdvExito || advExito === (arrematacao?.advogado_id || '')) ? 0.5 : 1 }}>
+                          {salvandoAdvExito ? 'Salvando…' : 'Vincular'}
+                        </button>
+                      </div>
+                      {advogadosAtivos.length === 0 && <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:4 }}>Nenhum advogado ativo cadastrado ainda — aparece aqui assim que o escritório criar a conta com o papel de advogado.</div>}
+                    </div>
+                  )}
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                     <thead><tr style={{ color:'#94a3b8', textAlign:'left' }}>
                       <th style={{ padding:'4px 0', fontWeight:700 }}>Envolvido</th>

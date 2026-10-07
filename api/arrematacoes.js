@@ -360,10 +360,37 @@ export default async function handler(req) {
     try { body = await req.json(); } catch { body = {}; }
 
     const allowed = {};
+    // ADVOGADO/ESCRITÓRIO DO ÊXITO (07/10, pedido do dono): o caso do Marcos teve advogado, mas o
+    // escritório ainda não tinha conta — sem vínculo, o rateio mandaria 100% para o admin. Só o
+    // admin vincula; só perfil `advogado` ativo (PF ou escritório PJ); nunca depois de distribuído
+    // (o snapshot do que foi pago não muda). `null` desvincula.
+    if (body.advogado_id !== undefined) {
+      if (userRole !== 'admin') return forbidden('Só o admin vincula o advogado do êxito');
+      const atual = (await dbFetch(`arrematacoes?id=eq.${encodeURIComponent(id)}&select=honorarios_status`)).data?.[0];
+      if (!atual) return json({ error: 'Arrematação não encontrada' }, 404);
+      if (atual.honorarios_status === 'distribuido') return json({ error: 'Honorário já distribuído — o rateio não muda mais.' }, 409);
+      if (body.advogado_id !== null) {
+        if (!/^[0-9a-f-]{36}$/i.test(String(body.advogado_id))) return json({ error: 'advogado_id inválido' }, 400);
+        const adv = (await dbFetch(`perfis?id=eq.${body.advogado_id}&select=id,role,ativo`)).data?.[0];
+        if (!adv || adv.role !== 'advogado' || adv.ativo === false) return json({ error: 'Selecione um advogado/escritório ativo.' }, 400);
+      }
+      allowed.advogado_id = body.advogado_id;
+    }
     if (body.status !== undefined) allowed.status = body.status;
     if (body.observacoes !== undefined) allowed.observacoes = body.observacoes;
     if (body.valor_arrematado !== undefined) allowed.valor_arrematado = body.valor_arrematado;
     allowed.atualizado_em = new Date().toISOString();
+
+    // FINALIZAR SEM JURÍDICO NÃO PODE SER ACIDENTE (07/10): finalizar dispara a distribuição, e sem
+    // advogado vinculado a fatia do jurídico vai inteira para o admin — e não volta. Exige a
+    // confirmação explícita `sem_advogado: true` (a tela pergunta antes).
+    if (allowed.status === 'finalizado' && body.sem_advogado !== true) {
+      const atual = (await dbFetch(`arrematacoes?id=eq.${encodeURIComponent(id)}&select=advogado_id,honorarios_status`)).data?.[0];
+      const advFinal = allowed.advogado_id !== undefined ? allowed.advogado_id : atual?.advogado_id;
+      if (atual && atual.honorarios_status === 'pago' && !advFinal) {
+        return json({ error: 'Sem advogado/escritório vinculado: a fatia do jurídico iria toda para o admin. Vincule no caso ou confirme a finalização sem advogado.', precisa_confirmar: 'sem_advogado' }, 409);
+      }
+    }
 
     const r = await dbFetch(`arrematacoes?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
