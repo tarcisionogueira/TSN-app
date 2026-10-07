@@ -21,6 +21,7 @@ import { checkRateLimit, getIP } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { enviarEmail } from './_email.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
+import { escapeHtml } from './_sanitize.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -28,6 +29,10 @@ const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const EQUIPE = ['admin', 'analista', 'advogado'];
 const STATUS_VALIDOS = ['aguardando_pagamento', 'em_preparo', 'aguardando_entrada', 'pronto_para_protocolo', 'protocolado', 'exigencia', 'registrado', 'cancelado'];
 const uuid = (v) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
+// O corpo da mensagem é digitado pela equipe e vai dentro de um HTML: escapar não é zelo,
+// é o que impede um '<' de quebrar o e-mail inteiro no cliente do cartório.
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const escaparHtml = (v) => escapeHtml(String(v ?? ''));
 const fmt = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Leitura/escrita com o motivo do erro SEMPRE junto (forma #2: não fundir "vazio" com "falhou").
@@ -58,10 +63,15 @@ async function carregarServicos(filtro) {
   if (!ids.length) return [];
   const p = await db(`servicos_cartorio_parcelas?servico_id=in.(${ids.join(',')})&select=*&order=ordem.asc`);
   if (!p.ok) throw new Error(`servicos_cartorio_parcelas ${p.status}`);
+  // Histórico de e-mails ao cartório junto: a tela precisa dizer O QUE já foi pedido e quando —
+  // sem isso quem pega o caso depois repete o pedido ou presume que foi feito.
+  const m = await db(`servicos_cartorio_mensagens?servico_id=in.(${ids.join(',')})&select=id,servico_id,para,assunto,corpo,enviado,erro,criado_em&order=criado_em.desc`);
+  if (!m.ok) throw new Error(`servicos_cartorio_mensagens ${m.status}`);
   return s.data.map((sv) => ({
     ...sv,
     parcelas: (p.data || []).filter((x) => x.servico_id === sv.id)
       .map((x) => ({ ...x, link: x.status === 'cobrada' ? linkDe(x.cobranca_avulsa_id) : null })),
+    mensagens: (m.data || []).filter((x) => x.servico_id === sv.id),
   }));
 }
 
@@ -222,6 +232,7 @@ export default async function handler(req, res) {
       const novo = {
         catalogo_id: cat.id, servico_nome: cat.nome, criado_por: user.id,
         cartorio: body.cartorio ? String(body.cartorio).slice(0, 200) : null,
+        cartorio_email: EMAIL_OK.test(String(body.cartorio_email || '').trim()) ? String(body.cartorio_email).trim().toLowerCase().slice(0, 200) : null,
         matricula: body.matricula ? String(body.matricula).slice(0, 60) : null,
         observacoes: body.observacoes ? String(body.observacoes).slice(0, 2000) : null,
       };
@@ -281,7 +292,7 @@ export default async function handler(req, res) {
         const nome = String(body.cliente_nome || '').trim();
         const email = String(body.cliente_email || '').trim().toLowerCase();
         if (nome.length < 3) return res.status(400).json({ error: 'Informe o nome do cliente.' });
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Informe um e-mail válido do cliente (é para onde vai a cobrança).' });
+        if (!EMAIL_OK.test(email)) return res.status(400).json({ error: 'Informe um e-mail válido do cliente (é para onde vai a cobrança).' });
         Object.assign(novo, {
           cliente_nome: nome.slice(0, 200), cliente_email: email.slice(0, 200),
           imovel_descricao: body.imovel_descricao ? String(body.imovel_descricao).slice(0, 300) : null,
@@ -379,6 +390,58 @@ export default async function handler(req, res) {
       }
       await auditLog({ acao: 'servico_cartorio_status', user_id: user.id, ip, detalhes: { servico_id: body.servico_id, status: body.status }, sucesso: true });
       return res.status(200).json({ ok: true, servico: up.data[0] });
+    }
+
+    // FALAR COM O CARTÓRIO (07/10, pedido do dono: pedir oficial em diligência, cobrar exigência,
+    // tirar dúvida de protocolo). A linha é gravada SEMPRE — inclusive quando o envio falha, com o
+    // motivo. "Enviei" que não deixa rastro é a mesma classe do e-mail de reunião fantasma (12/08).
+    if (body.action === 'email_cartorio') {
+      if (!uuid(body.servico_id)) return res.status(400).json({ error: 'servico_id inválido' });
+      const sv = await db(`servicos_cartorio?id=eq.${body.servico_id}&select=*`);
+      const servico = sv.data?.[0];
+      if (!sv.ok || !servico) return res.status(404).json({ error: 'Serviço não encontrado.' });
+      const para = String(body.para || servico.cartorio_email || '').trim().toLowerCase();
+      const assunto = String(body.assunto || '').trim();
+      const corpo = String(body.corpo || '').trim();
+      if (!EMAIL_OK.test(para)) return res.status(400).json({ error: 'Informe o e-mail do cartório.' });
+      if (assunto.length < 3) return res.status(400).json({ error: 'Informe o assunto.' });
+      if (corpo.length < 10) return res.status(400).json({ error: 'Escreva a mensagem.' });
+      // Guarda o e-mail no serviço na primeira vez: a próxima mensagem já vem preenchida.
+      if (!servico.cartorio_email || servico.cartorio_email !== para) {
+        const up = await db(`servicos_cartorio?id=eq.${servico.id}`, { method: 'PATCH', body: JSON.stringify({ cartorio_email: para.slice(0, 200) }) });
+        if (!up.ok) console.error('[servicos-cartorio] e-mail do cartório não gravou', up.status, up.data);
+      }
+      const ref = [servico.servico_nome, servico.protocolo_numero ? `protocolo ${servico.protocolo_numero}` : null, servico.matricula ? `matrícula ${servico.matricula}` : null]
+        .filter(Boolean).join(' · ');
+      const r = await enviarEmail({
+        from: 'BidPro Brasil <noreply@bidprobrasil.com.br>',
+        to: para,
+        replyTo: 'contato@bidprobrasil.com.br',
+        subject: assunto.slice(0, 200),
+        html: `<div style="max-width:620px;margin:0 auto;font-family:Arial,sans-serif;">${cabecalhoEmailHTML({ subtitulo: 'Serviços de cartório' })}
+          <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 16px 16px;padding:24px 28px;color:#0f172a;font-size:14px;line-height:1.6;">
+            <div style="white-space:pre-wrap;">${escaparHtml(corpo)}</div>
+            <hr style="border:0;border-top:1px solid #e2e8f0;margin:20px 0;">
+            <p style="font-size:12px;color:#64748b;margin:0;">
+              ${escaparHtml(ref)}${servico.imovel_descricao ? `<br>Imóvel: ${escaparHtml(servico.imovel_descricao)}` : ''}
+              ${servico.cartorio ? `<br>Cartório: ${escaparHtml(servico.cartorio)}` : ''}
+            </p>
+          </div></div>`,
+        meta: { tipo: 'servico_cartorio_mensagem', userId: user.id },
+      }).catch((e) => ({ ok: false, error: e?.message || String(e) }));
+      const reg = await db('servicos_cartorio_mensagens', {
+        method: 'POST',
+        body: JSON.stringify({
+          servico_id: servico.id, para, assunto: assunto.slice(0, 200), corpo: corpo.slice(0, 8000),
+          enviado: !!r?.ok, erro: r?.ok ? null : String(r?.error || 'falha desconhecida').slice(0, 300), autor_id: user.id,
+        }),
+      });
+      if (!reg.ok) console.error('[servicos-cartorio] mensagem não registrada', reg.status, reg.data);
+      await auditLog({ acao: 'servico_cartorio_email', user_id: user.id, ip, detalhes: { servico_id: servico.id, para, enviado: !!r?.ok }, sucesso: !!r?.ok });
+      // Falha de envio NÃO vira 500 silencioso: o chamador precisa saber que a mensagem ficou
+      // registrada mas não saiu, para reenviar ou ligar.
+      if (!r?.ok) return res.status(502).json({ error: `A mensagem ficou registrada, mas o e-mail não saiu: ${String(r?.error || '').slice(0, 120)}`, registrada: true });
+      return res.status(200).json({ ok: true });
     }
 
     if (body.action === 'catalogo_salvar') {

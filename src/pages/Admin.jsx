@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
+import ServicosCartorio from '../components/ServicosCartorio';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
@@ -3158,6 +3159,22 @@ function ConfigTab() {
           </button>
         </div>
       )}
+      {/* SERVIÇOS DE CARTÓRIO — PREÇOS (07/10, pedido do dono: "no admin, junto com os demais
+          serviços que são precificados, poderia listar os serviços lá para poder precificar").
+          É o MESMO componente do painel de operações (Financeiro → Cartório), em modo só-catálogo:
+          preço de serviço escrito em dois lugares é preço que diverge. */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Serviços de cartório — Preços</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Serviços executados pela equipe (registro, certidões, visualização de matrícula…), cobrados
+          por boleto em parcelas. <strong>Serviço</strong> = nossa remuneração; <strong>custas tabela</strong> = taxa do cartório já
+          conhecida, somada no mesmo boleto. Custas que só saem na devolutiva são lançadas depois, na
+          operação. Mudar o preço aqui <strong>não</strong> altera serviço já contratado. As operações ficam em
+          Financeiro → 🏛️ Cartório.
+        </p>
+        <ServicosCartorio ehEquipe ehAdmin somenteCatalogo />
+      </div>
+
       {/* Honorários de Êxito na Arrematação */}
       <div style={S.card}>
         <p style={S.subTitle}>Honorários de Êxito — Arrematação</p>

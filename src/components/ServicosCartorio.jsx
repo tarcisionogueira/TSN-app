@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Copy, Plus, Landmark } from 'lucide-react';
+import { Loader2, Copy, Plus, Landmark, Mail } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 
 // SERVIÇOS DE CARTÓRIO (07/10, pedido do dono) — UM componente para os dois lugares:
@@ -32,7 +32,7 @@ const composicao = (p) => (Number(p.custas) > 0 && Number(p.valor) > 0 ? ` (serv
 const inp = { width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' };
 const btn = (bg, cor = 'white') => ({ padding: '7px 12px', border: 'none', borderRadius: 8, background: bg, color: cor, fontWeight: 700, fontSize: 12, cursor: 'pointer' });
 
-export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = null, ehEquipe = false, ehAdmin = false }) {
+export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = null, ehEquipe = false, ehAdmin = false, somenteCatalogo = false }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState('');
@@ -42,6 +42,7 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
   const [protocolo, setProtocolo] = useState({});   // servico_id -> número digitado
   const [copiado, setCopiado] = useState('');
   const [custasForm, setCustasForm] = useState({});  // servico_id -> valor das custas da devolutiva
+  const [msgForm, setMsgForm] = useState(null);      // { servico_id, para, assunto, corpo }
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -84,6 +85,7 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {!somenteCatalogo && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 13, color: '#111', minWidth: 0 }}>
           <Landmark size={15} /> Serviços de cartório
@@ -94,10 +96,11 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
           </button>
         )}
       </div>
+      )}
 
       {erro && <div style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', borderRadius: 8, padding: '8px 10px' }}>{erro}</div>}
 
-      {!ctx && (
+      {!ctx && !somenteCatalogo && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[['abertos', 'Em andamento'], ['aguardando_entrada', 'Aguardando entrada'], ['pronto_para_protocolo', 'Prontos p/ protocolo'], ['protocolado', 'Protocolados'], ['registrado', 'Registrados'], ['todos', 'Todos']].map(([k, l]) => (
             <button key={k} onClick={() => setFiltro(k)} style={{ ...btn(filtro === k ? '#0D63DB' : 'white', filtro === k ? 'white' : '#475569'), border: '1px solid #e2e8f0', borderRadius: 20 }}>{l}</button>
@@ -105,7 +108,7 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
         </div>
       )}
 
-      {form && (
+      {!somenteCatalogo && form && (
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <select value={form.catalogo_id} onChange={(e) => setForm({ ...form, catalogo_id: e.target.value })} style={inp}>
             {catalogo.map((c) => (
@@ -126,6 +129,8 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 8 }}>
             <input placeholder="Cartório (ex.: RI de Barueri)" value={form.cartorio} onChange={(e) => setForm({ ...form, cartorio: e.target.value })} style={inp} />
+            {/* Capturado já na contratação para a 1ª mensagem ao cartório não precisar caçá-lo. */}
+            <input placeholder="E-mail do cartório (opcional — usado para falar com ele pelo sistema)" value={form.cartorio_email || ''} onChange={(e) => setForm({ ...form, cartorio_email: e.target.value })} style={inp} />
             <input placeholder="Matrícula" value={form.matricula} onChange={(e) => setForm({ ...form, matricula: e.target.value })} style={inp} />
           </div>
           <textarea placeholder="Observações (opcional)" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} style={{ ...inp, minHeight: 50 }} />
@@ -139,13 +144,13 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
         </div>
       )}
 
-      {servicos.length === 0 && !form && (
+      {!somenteCatalogo && servicos.length === 0 && !form && (
         <div style={{ fontSize: 12, color: '#64748b' }}>
           {arrematacaoId ? 'Nenhum serviço de cartório contratado para esta arrematação.' : 'Nenhuma operação neste filtro.'}
         </div>
       )}
 
-      {servicos.map((s) => {
+      {!somenteCatalogo && servicos.map((s) => {
         const st = STATUS[s.status] || { t: s.status, c: '#475569', b: '#f1f5f9' };
         const abertas = (s.parcelas || []).filter((p) => !['paga', 'cancelada'].includes(p.status));
         const total = (s.parcelas || []).reduce((t, p) => t + totalParc(p), 0);
@@ -223,11 +228,74 @@ export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = 
                 </button>
               </div>
             )}
+
+            {/* FALAR COM O CARTÓRIO (07/10, pedido do dono: pedir oficial em diligência, cobrar
+                exigência, tirar dúvida de protocolo). O histórico fica no serviço: quem pega o
+                caso depois precisa ver O QUE já foi pedido e quando, senão repete ou presume. */}
+            {ehEquipe && (
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#475569' }}>Cartório</span>
+                  <span style={{ fontSize: 11.5, color: '#64748b', flex: 1, minWidth: 0 }}>
+                    {s.cartorio_email || 'e-mail ainda não informado'}
+                    {(s.mensagens || []).length ? ` · ${s.mensagens.length} mensagem(ns)` : ''}
+                  </span>
+                  {msgForm?.servico_id !== s.id && (
+                    <button style={btn('white', '#0D63DB')}
+                      onClick={() => setMsgForm({
+                        servico_id: s.id, para: s.cartorio_email || '',
+                        assunto: [s.protocolo_numero ? `Protocolo ${s.protocolo_numero}` : s.servico_nome, s.matricula ? `matrícula ${s.matricula}` : null].filter(Boolean).join(' — '),
+                        corpo: '',
+                      })}>
+                      <Mail size={11} style={{ verticalAlign: -1 }} /> Falar com o cartório
+                    </button>
+                  )}
+                </div>
+
+                {msgForm?.servico_id === s.id && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <input placeholder="E-mail do cartório" value={msgForm.para}
+                      onChange={(e) => setMsgForm({ ...msgForm, para: e.target.value })} style={inp} />
+                    <input placeholder="Assunto" value={msgForm.assunto}
+                      onChange={(e) => setMsgForm({ ...msgForm, assunto: e.target.value })} style={inp} />
+                    <textarea placeholder={'Mensagem — ex.: solicitamos a designação de oficial para diligência no imóvel…'}
+                      value={msgForm.corpo} rows={5}
+                      onChange={(e) => setMsgForm({ ...msgForm, corpo: e.target.value })} style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                      O e-mail sai de noreply@bidprobrasil.com.br com resposta para contato@bidprobrasil.com.br, e leva no rodapé o serviço, o protocolo, a matrícula e o imóvel.
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={btn('#0D63DB')} disabled={ocupado === `m${s.id}`}
+                        onClick={async () => { const d = await acao(`m${s.id}`, { action: 'email_cartorio', servico_id: s.id, ...msgForm }, 'Mensagem enviada ao cartório.'); if (d) setMsgForm(null); }}>
+                        {ocupado === `m${s.id}` ? 'Enviando…' : 'Enviar'}
+                      </button>
+                      <button style={btn('white', '#475569')} onClick={() => setMsgForm(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                {(s.mensagens || []).length > 0 && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {s.mensagens.map((m) => (
+                      <div key={m.id} style={{ fontSize: 11.5, color: '#475569', borderLeft: `2px solid ${m.enviado ? '#bbf7d0' : '#fecaca'}`, paddingLeft: 8 }}>
+                        <div>
+                          <strong>{m.assunto}</strong> · {dt(m.criado_em)} · {m.para}
+                          {/* Mensagem registrada que NÃO saiu aparece como tal: "enviei" sem prova
+                              foi o que produziu a reunião fantasma de 12/08. */}
+                          {!m.enviado && <span style={{ color: '#b91c1c', fontWeight: 700 }}> · não saiu{m.erro ? ` (${m.erro})` : ''}</span>}
+                        </div>
+                        <div style={{ color: '#64748b', whiteSpace: 'pre-wrap' }}>{String(m.corpo || '').slice(0, 240)}{String(m.corpo || '').length > 240 ? '…' : ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
 
-      {ehAdmin && !arrematacaoId && (
+      {ehAdmin && !ctx && (
         <div style={{ marginTop: 6, borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 800, fontSize: 12.5, minWidth: 0 }}>Catálogo de serviços e preços</div>
