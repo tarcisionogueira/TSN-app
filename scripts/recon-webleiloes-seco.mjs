@@ -25,6 +25,13 @@ try {
     if (!resp || resp.status() >= 400) break;
     await new Promise((r) => setTimeout(r, 2000));
     const { lotes, itens } = await page.evaluate(extrairCardsWebLeiloes);
+    if (pagina === 1) {
+      // Diagnóstico da FOTO: o HTML cru dos links do 1º lote, para ver onde a imagem mora.
+      const html = await page.evaluate(() => [...document.querySelectorAll('a[href*="/imoveis/"]')]
+        .filter((a) => /-\d+$/.test((a.getAttribute('href') || '').split('?')[0])).slice(0, 3)
+        .map((a) => a.outerHTML.replace(/\s+/g, ' ').slice(0, 700)));
+      for (const h of html) console.log(`  link do 1º lote: ${h}`);
+    }
     if (itens) total = itens;
     for (const l of lotes) {
       const row = mapaCardWebLeiloes(l);

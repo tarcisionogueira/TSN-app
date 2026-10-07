@@ -154,6 +154,33 @@ export function mapaCardWebLeiloes({ href, texto = '', img = '' } = {}) {
 export function extrairCardsWebLeiloes() {
   const RE_LOTE = /\/imoveis\/[a-z0-9-]+\/[a-z]{2}\/[a-z0-9-]+\/.+-(\d+)(?:[?#]|$)/i;
   const idDe = (h) => (String(h || '').match(RE_LOTE) || [])[1] || null;
+  // FOTO (07/10): o ensaio em seco saiu com 0 de 49. O bloco onde o texto do card termina (a
+  // parada antecipada abaixo) é IRMÃO do bloco da foto, então "a img dentro do card" não acha
+  // nada. A foto é procurada primeiro nos links DO PRÓPRIO LOTE (o card de vitrine embrulha a
+  // foto num link para o lote), depois no card. Lê a PROPRIEDADE `src` — já absoluta —, depois
+  // `srcset`/`data-src` (lazy-load) e por fim `background-image`.
+  const urlDaImg = (img) => {
+    if (!img) return '';
+    const set = (img.getAttribute('srcset') || img.getAttribute('data-srcset') || '').split(',')[0].trim().split(/\s+/)[0];
+    const cand = [img.currentSrc, img.src, img.getAttribute('data-src'), img.getAttribute('data-lazy-src'), set];
+    for (const c of cand) {
+      if (!c || /^data:/i.test(c)) continue;
+      try { return new URL(c, location.href).href; } catch { /* candidato malformado: tenta o próximo */ }
+    }
+    return '';
+  };
+  const urlDoFundo = (el) => {
+    const m = (el && getComputedStyle(el).backgroundImage || '').match(/url\(["']?(.*?)["']?\)/);
+    return m && !/^data:/i.test(m[1]) ? new URL(m[1], location.href).href : '';
+  };
+  const fotoDoLote = (id, card) => {
+    for (const x of document.querySelectorAll('a[href]')) {
+      if (idDe(x.getAttribute('href')) !== id) continue;
+      const u = urlDaImg(x.querySelector('img')) || urlDoFundo(x) || [...x.querySelectorAll('*')].map(urlDoFundo).find(Boolean);
+      if (u) return u;
+    }
+    return card ? urlDaImg(card.querySelector('img')) : '';
+  };
   const vistos = new Set(); const out = [];
   for (const a of document.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href') || '';
@@ -174,13 +201,10 @@ export function extrairCardsWebLeiloes() {
       const t = el.textContent || '';
       if (new RegExp(`\\b${id}\\s*·\\s*Lote`).test(t) && /\d[ºo°]\s*Leil[ãa]o|Leil[ãa]o\s+[ÚU]nico/i.test(t) && /judicial|venda\s+direta/i.test(t)) break;
     }
-    const img = card ? card.querySelector('img') : null;
     out.push({
       href,
       texto: card ? (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600) : '',
-      // A PROPRIEDADE `src` (não o atributo): o navegador já a devolve absoluta. O atributo cru
-      // é caminho relativo e o mapeador o descartava — o ensaio de 07/10 saiu com 0 de 49 fotos.
-      img: img ? ([img.currentSrc, img.src, img.getAttribute('data-src')].find((x) => x && !/^data:/i.test(x)) || '') : '',
+      img: fotoDoLote(id, card),
     });
   }
   // "Imóveis 1-32 de 49 itens" — o total que a própria página declara.
