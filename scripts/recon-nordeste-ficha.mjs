@@ -80,5 +80,8 @@ for (const url of ALVOS) {
 }
 
 console.log(`\n${lidos}/${ALVOS.length} páginas abertas.`);
+// Fechar o motor: sem isto o Chromium segura o processo vivo e o job só termina no timeout do
+// workflow — foi o que aconteceu na 1ª execução (medição completa às 16:11, job cancelado 16:23).
+await motor.fechar?.().catch(() => {});
 // "Não consegui medir" não pode sair como "medi e está tudo bem" (CLAUDE.md, trava do schema).
 if (!lidos) { console.error('RECON INVÁLIDO: nenhuma página abriu — nada foi medido.'); process.exit(2); }

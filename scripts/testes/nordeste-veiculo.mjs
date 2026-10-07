@@ -62,5 +62,11 @@ assert.equal(gol.marca, 'VW'); assert.equal(gol.modelo, 'GOL 1.0'); assert.equal
   // Com ficha de verdade, o classificador único continua mandando (lote 213-027, texto real).
   const comFicha = montarRowVeiculo(url, { ...base, ficha: 'Bens: 01 (UM) AUTOMOTOR DE PLACA JML2C96 … Localização do Bem: RUA A, CENTRO, PIRITIBA/BA.' });
   assert.equal(comFicha.status_patio, 'nao_confirmado');
+  // "NÃO LI" × "NÃO EXISTE" (recon na página viva, 07/10): no lote de pátio o payload vem completo
+  // e `description` é string vazia — o leiloeiro não publica descrição. Dizer "não li" ali mandaria
+  // consertar um parser intacto; o motivo precisa separar os dois casos.
+  const vazia = montarRowVeiculo(url, { ...base, ficha: null, fichaVazia: true });
+  assert.equal(vazia.status_patio, 'indefinido');
+  assert.match(vazia.status_patio_motivo, /não publica descrição/);
 }
 console.log('nordeste-veiculo: todos os casos passaram');

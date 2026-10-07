@@ -94,9 +94,14 @@ export function veiculoDoDetalhe(html, url) {
     // vem — o card não pode ficar em branco —, e esse fallback estava sendo entregue ao
     // classificador de pátio como se FOSSE a ficha: 112 dos 117 ativos (os leilões 197–207, de
     // pátio) tinham 41–57 caracteres de TÍTULO e saíam com o motivo "sem sinal de pátio na ficha",
-    // afirmação sobre uma ficha que nunca foi lida. `ficha` é null quando não houve leitura, e aí
-    // `montarRowVeiculo` grava "ficha não lida" em vez de um veredito.
+    // afirmação sobre uma ficha que nunca foi lida.
     ficha: desc || null,
+    // E AS DUAS AUSÊNCIAS NÃO SÃO A MESMA COISA (recon de 07/10 na página viva): nos lotes de
+    // pátio o payload VEM, com 64 chaves, e `description` é string VAZIA — o leiloeiro não
+    // publica descrição nesses lotes; a página não tem "Descrição" nem "Localização do Bem". No
+    // lote judicial de controle o mesmo campo vem com 521 caracteres. Dizer "não li a ficha" onde
+    // não HÁ ficha mandaria consertar um parser intacto, que é o pior desfecho de um alarme.
+    fichaVazia: typeof lote.description === 'string' && !lote.description.trim(),
     // Foto: o MESMO extrator dos imóveis da NORDESTE (24/24 com foto, 23 distintas). Até 05/10 o coletor de
     // veículos não lia foto nenhuma — 100 de 100 ativos sem foto, escondidos atrás da saúde que media 0% de tudo.
     foto: fotoDeHtml(html, url) || null,
@@ -113,7 +118,12 @@ export function montarRowVeiculo(url, v) {
   // seguro), mas o motivo diz que NÃO foi possível ler — não inventa "sem sinal de pátio".
   const patio = v.ficha
     ? classificarPatio(v.ficha)
-    : { status: 'indefinido', motivo: 'ficha do lote não lida — pátio não classificado (nordeste)' };
+    : {
+      status: 'indefinido',
+      motivo: v.fichaVazia
+        ? 'o leiloeiro não publica descrição neste lote — nada a classificar (nordeste)'
+        : 'ficha do lote não lida — pátio não classificado (nordeste)',
+    };
   return {
     fonte: 'NORDESTE', fonte_id: `nordeste_${(slugDoLote(url).match(/^\d+-\d+/) || [slugDoLote(url)])[0]}`,
     titulo: v.titulo, descricao: v.descricao, marca: v.marca, modelo: v.modelo,
