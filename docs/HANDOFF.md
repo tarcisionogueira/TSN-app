@@ -9,6 +9,46 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 06–07/10 — o que evoluiu, o que falta, o que conferir primeiro
+> Pendências vivas no banco (`pendencias_abertas()`); novas desta sessão: **#159, #160, #161**. Fechadas: #150, #151,
+> #153, #156.
+
+**Evoluiu (tudo no `main`; deploy `fa68ebc` READY — 2 deploys intermediários barrados pelo `verificar:padroes`
+por um `catch` mudo no script de recon, corrigido no mesmo commit; produção nunca quebrou):**
+1. **Assessoria inclui o Pro sem mensalidade** + cancela a recorrência do Pro ao contratar (`_recorrencia-unica.js`,
+   `concluir-assessorias-cron`, regra `assessoria.inclui_pro`). Na conclusão, o cliente é avisado para renovar ou assinar o Pro.
+2. **LJUD — coletor lia os campos errados da API** (caso do dono: casa Santana de Parnaíba, "lance" R$ 1,6 mi). No
+   `get-lotes`, `vl_lanceminimo` = AVALIAÇÃO e o lance = `vl_lanceinicial` (2ª praça em `vl_lanceinicialsegundoleilao`).
+   Conferido em 9 páginas × 144 itens. Corrigido no coletor principal e no reserva (`api/scraper-leiloeiros.js`, que
+   ainda passava "800000.00" pelo `parseNum` brasileiro = 80 mi). **Coleta de 07/10: LJUD sem avaliação 887 → 7, com
+   2ª praça 124 → 335**, 0 lance > avaliação, desconto mediano 50%. Leitor de datas aceita "Leilão - dd/mm/aaaa".
+3. **Relatório corrige valor ERRADO, não só o que falta** (`1acdc4e`): edital corrige `valor_minimo/_2` com travas
+   (`editalValoresBatem`, 2ª ≤ 1ª ≤ avaliação, faixa 2%–4×, praça vigente não é "corrigida"). Rastro em
+   `imoveis_leilao.correcao_edital` (coluna nova); o coletor não regrava o mesmo valor errado. Documental passou a
+   preencher avaliação também quando a coleta gravou 0 (não só nulo).
+4. **Andamento do processo não some mais**: o cliente apagou o arremate pelo "×" e o `on delete cascade` levou as
+   movimentações da equipe. Gatilho `arrematados_protege_andamento` (andamento = ninguém apaga; registro da equipe = o
+   cliente não apaga), "×" escondido via `arremates_com_registro_equipe()`. **4 andamentos restaurados** do
+   `processo_resumo_cache` (itens confirmados pelo dono). Cliente 360 passa a guardar o TEXTO registrado, não só o clique.
+5. **Apuração/datas**: VIP recuperado, freio de 20 h na rota paga, veículos LJUD apurados (36 → 0 atrasados),
+   LEILAOBRASIL captura a 2ª praça (155/155 sem), NAKAKOGUE cidade/UF, estados fora do padrão.
+6. **Diagnóstico — baixa automática que faltava** em `cnj_vazio` e `relatorio_incoerente` (gravavam e nunca baixavam);
+   ~25 anomalias velhas baixadas com motivo via `registrar_anomalia_relatorio(..., true)` (contorna o UPDATE travado).
+   Falsos positivos corrigidos: "Lote 06 - Quadra 10" lido como terreno; "sem acesso comercial" virava erro do
+   cliente (agora `42501` → 403). Retentativa documental que só esperava o CNJ não paga mais a IA (8 chamadas/48 h).
+7. **Relatório de assessorado sem parecer desde 19/09** (gravado sem `parecerInputs`; o self-heal nunca conseguiria):
+   regerado com os dados do relatório da equipe do mesmo imóvel — 11.446 caracteres, leilão 14/10.
+8. **Marketing**: alerta Meta explicado — `lucreantesdearrematar.com.br` resolve fora da Vercel (186.209.113.111). P0 do dono.
+
+**Falta / conferir primeiro na próxima sessão:**
+- [ ] #159: LJUD com 60 lotes sem data — cai com o rodízio do runner residencial (leitor novo de "Leilão - dd/mm").
+- [ ] #160: primeiras correções de valor pelo edital — ler `valor_corrigido_edital` / `valor_divergente_edital`.
+- [ ] `data_edital_recuou_prazo` (LEILAOBRASIL 3801) cai na próxima coleta com a 2ª praça; `erro_na_tela_do_cliente`
+      (3) são antigos/não-defeito e saem sozinhos.
+- [ ] Dono (P0): DNS da masterclass (#1/#28). Dono: decidir se regera o relatório da equipe do b5d57dd6 (assume à
+      vista; edital parcela) e o terreno de Araraquara analisado como casa (anomalia 301).
+- [ ] Anomalias de relatório que restam (~20, de 16/09 a 04/10): divergências entre documentos e mercado × avaliação.
+
 ### 📌 FECHAMENTO 03–04/10 — o que evoluiu, o que falta, o que conferir primeiro
 > **O que está aberto agora mora no BANCO:** `select * from public.pendencias_abertas();` (P0 primeiro, vencidas no
 > topo). Esta lista abaixo é só o resumo da sessão; detalhes nas entradas de 03/10 e 04/10 logo abaixo.
