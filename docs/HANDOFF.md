@@ -36454,3 +36454,16 @@ Três defeitos encadeados, medidos no banco:
    `ImovelDetalhe` não os aplicava — o dono só veria o texto recarregando. Corrigido.
 Diagnóstico de abertura (07/10): segurança 0/0, regras 0 crítico, KYC 0, backup ok; **HASTA regressão 1 × piso 293**
 (investigar); `EDITAL_DJEN` (608) no ponto cego por desenho.
+
+## 07/10 — Serviços de cartório (registro simples R$ 2.000 = 1.000 na arrematação + 1.000 para dar entrada)
+Pedido do dono: a equipe executa (sem papel novo de despachante). Estrutura:
+- Banco (`20261007_servicos_cartorio.sql`): `servicos_cartorio_catalogo` (preço/parcelas editáveis no Admin),
+  `servicos_cartorio` (vinculado à arrematação OU avulso), `servicos_cartorio_parcelas`. Cada parcela cobrada vira uma
+  `cobrancas_avulsas` (link /cobranca/:id, MP); o gatilho `servico_cartorio_baixa_parcela` dá a baixa quando o webhook
+  marca paga (e desfaz em estorno). **Regra `cartorio.paga_antes_da_entrada`**: o banco recusa 'protocolado' com parcela
+  em aberto (`servico_cartorio_trava_protocolo` lê a regra). Testado no banco com rollback: parcela 1 paga → em_preparo;
+  protocolo travado; parcela 2 paga → pronto_para_protocolo; protocolo grava data.
+- API `api/servicos-cartorio.js` (equipe: admin/analista/advogado; cliente só lê a própria arrematação): criar (já cobra a
+  1ª parcela e manda e-mail), cobrar parcela (idempotente), status (protocolo exige número), catálogo (só admin).
+- Telas: `src/components/ServicosCartorio.jsx` no caso do assessorado (bloco da arrematação) e em Admin → Financeiro →
+  🏛️ Cartório (todas as operações, filtros, operação avulsa, catálogo). Custas/emolumentos/ITBI ficam fora (do cliente).

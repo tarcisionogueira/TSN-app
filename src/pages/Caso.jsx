@@ -17,6 +17,7 @@ import { maskMoedaDigitando } from '../utils/moeda';
 import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
+import ServicosCartorio from '../components/ServicosCartorio';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
@@ -2060,6 +2061,14 @@ export default function Caso() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Serviços de cartório (07/10): registro e demais operações ligadas a ESTA arrematação.
+                  Equipe contrata/cobra/protocola; o cliente acompanha e paga. */}
+              {arrematacao?.id && (
+                <div style={{ marginTop:14, padding:'14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
+                  <ServicosCartorio arrematacaoId={arrematacao.id} ehEquipe={['admin','analista','advogado'].includes(role)} ehAdmin={role === 'admin'} />
                 </div>
               )}
 
