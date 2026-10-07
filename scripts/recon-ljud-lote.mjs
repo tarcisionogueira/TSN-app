@@ -22,6 +22,35 @@ const PDFParse = await carregarPDFParse();
 
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 const saida = [];
+// AMOSTRA (LJUD_AMOSTRA=1): a regra "vl_lanceminimo do get-lotes é a AVALIAÇÃO e o lance é
+// vl_lanceinicial" foi vista em 1 lote. Confere em vários: campos da API × o que a PÁGINA mostra.
+if (process.env.LJUD_AMOSTRA === '1') {
+  const page = await browser.newPage();
+  await page.setUserAgent(UA);
+  await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+  const itens = [];
+  for (const pg of [1, 2, 3]) {
+    const url = `https://api.leiloesjudiciais.com.br/core/api/get-lotes?pg=${pg}&qtd_por_pagina=48&tipo=3&categoria=0&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null`;
+    const data = await page.evaluate(async (u) => { try { const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.ok ? await r.json() : {}; } catch { return {}; } }, url);
+    for (const x of (data.items || data.data || [])) if (Number(x.statuslote_id) === 1) itens.push(x);
+  }
+  const num = (v) => parseFloat(v || 0) || 0;
+  const resumo = itens.map((x) => ({ lote: `${x.leilao_id}/${x.lote_id}`, min: num(x.vl_lanceminimo), ini: num(x.vl_lanceinicial), ord: num(x.vl_ordenacao), aval: num(x.vl_avaliacao), ini2: num(x.vl_lanceinicialsegundoleilao), dt: x.dt_fechamento || null }));
+  const dif = resumo.filter((r) => r.ini > 0 && r.min > r.ini), igual = resumo.filter((r) => r.ini > 0 && Math.abs(r.min - r.ini) < 1);
+  const conferir = [...dif.slice(0, 6), ...igual.slice(0, 3)];
+  const paginas = [];
+  for (const r of conferir) {
+    try {
+      await page.goto(`https://www.leiloesjudiciais.com.br/lote/${r.lote}`, { waitUntil: 'networkidle2', timeout: 45000 });
+      await new Promise((res) => setTimeout(res, 2500));
+      const t = (await page.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ');
+      const pegar = (re) => (t.match(re) || [])[1] || null;
+      paginas.push({ ...r, pag_avaliacao: pegar(/Avalia[çc][ãa]o:\s*R\$\s*([\d.,]+)/i), pag_lance: pegar(/Lance m[íi]nimo:\s*R\$\s*([\d.,]+)/i), pag_datas: [...t.matchAll(/([\wºª°]*\s*(?:Leil[ãa]o|Encerramento)\s*-\s*\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?)/gi)].slice(0, 3).map((m) => m[1]) });
+    } catch (e) { paginas.push({ ...r, erro: String(e?.message || e).slice(0, 80) }); }
+  }
+  saida.push({ amostra: { total: resumo.length, com_ini: resumo.filter((r) => r.ini > 0).length, min_maior_que_ini: dif.length, iguais: igual.length, com_aval: resumo.filter((r) => r.aval > 0).length, com_dt: resumo.filter((r) => r.dt).length, com_ini2: resumo.filter((r) => r.ini2 > 0).length, razoes: dif.map((r) => Math.round(r.ini / r.min * 100) / 100).slice(0, 40) }, paginas });
+  await page.close().catch(() => {});
+}
 try {
   for (const par of LOTES) {
     const [leilaoId, loteId] = par.split('/');

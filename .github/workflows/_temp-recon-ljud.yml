@@ -8,7 +8,7 @@ on:
 jobs:
   recon:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,5 +24,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LJUD_LOTES: '99369/217021'
+          LJUD_AMOSTRA: '1'
           EDITAL_217021: 'https://s3-sa-east-1.amazonaws.com/906de634c48fb7d34136160b4c353ae4/public/anexo/4305391788893631.pdf'
         run: node scripts/recon-ljud-lote.mjs
