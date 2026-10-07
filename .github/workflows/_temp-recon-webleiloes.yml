@@ -1,0 +1,33 @@
+# _temp — RECON do WEBLEILOES (pendência #148). Só leitura, não grava nada. Apagar depois de
+# diagnosticado, como os outros _temp-recon-*.
+name: _temp Recon WEBLEILOES — por que zerou
+
+on:
+  workflow_dispatch:
+    inputs:
+      rotas:
+        description: 'Rotas separadas por vírgula (vazio = as três do coletor)'
+        required: false
+        default: ''
+
+jobs:
+  recon-webleiloes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon WEBLEILOES
+        env:
+          RECON_ROTAS: ${{ inputs.rotas }}
+        run: node scripts/recon-webleiloes.mjs
