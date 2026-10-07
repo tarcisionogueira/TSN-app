@@ -8,7 +8,7 @@
  * datas, cidade/UF e área, antes de o primeiro lote entrar no banco.
  */
 import puppeteer from 'puppeteer';
-import { extrairCardsWebLeiloes, mapaCardWebLeiloes } from './lib/webleiloes-lote.mjs';
+import { extrairCardsWebLeiloes, mapaCardWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 
 const BASE = 'https://www.webleiloes.com.br';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -43,6 +43,7 @@ try {
 } finally { await browser.close(); }
 
 const rows = [...bens.values()];
+console.log(`fotos genéricas descartadas: ${descartarFotoGenerica(rows.map((x) => x.row)).descartadas}`);
 const conta = (f) => rows.reduce((m, { row }) => (m[f(row)] = (m[f(row)] || 0) + 1, m), {});
 console.log(`\n═══ ${rows.length} lotes mapeados · ${total} declarados pelo site`);
 console.log('tipo:', JSON.stringify(conta((r) => r.tipo)));

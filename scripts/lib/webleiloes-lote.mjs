@@ -211,3 +211,28 @@ export function extrairCardsWebLeiloes() {
   const m = (document.body.innerText || '').match(/(\d+)\s*-\s*(\d+)\s+de\s+(\d+)\s+itens/i);
   return { lotes: out, itens: m ? Number(m[3]) : 0 };
 }
+
+/**
+ * FOTO GENÉRICA (07/10). O site serve uma imagem "sem foto" DENTRO da pasta de cada lote
+ * (`storage/batches/<xx>/<ID>/<hash>_thumb.png`) — a URL muda, o arquivo não. No ensaio em seco
+ * de 07/10, o mesmo `4a47a0db…_thumb.png` estava em 17 dos 49 lotes, de Bauru a Maringá. Gravar
+ * isso é mostrar ao cliente a mesma figura como se fosse o imóvel (o invariante
+ * `foto_repetida_como_lote` existe por causa disso no HASTAPUBLICA, 22/09). Regra: o MESMO nome
+ * de arquivo em 2+ lotes diferentes não é foto de lote — fica sem foto, que é a verdade.
+ * Muta e devolve `rows`; informa quantas descartou.
+ */
+export function descartarFotoGenerica(rows) {
+  const arquivo = (u) => String(u || '').split('?')[0].split('/').pop();
+  const lotesPorArquivo = new Map();
+  for (const r of rows || []) {
+    if (!r?.link_foto) continue;
+    const a = arquivo(r.link_foto);
+    if (!lotesPorArquivo.has(a)) lotesPorArquivo.set(a, new Set());
+    lotesPorArquivo.get(a).add(r.fonte_id);
+  }
+  let descartadas = 0;
+  for (const r of rows || []) {
+    if (r?.link_foto && lotesPorArquivo.get(arquivo(r.link_foto)).size >= 2) { r.link_foto = null; descartadas++; }
+  }
+  return { rows, descartadas };
+}

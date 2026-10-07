@@ -5,7 +5,7 @@
  * valida nada; o que valida é bater com o que a fonte publica.
  */
 import assert from 'node:assert/strict';
-import { loteDaUrl, pracasDoCard, mapaCardWebLeiloes, caminhoDoHref } from '../lib/webleiloes-lote.mjs';
+import { loteDaUrl, pracasDoCard, mapaCardWebLeiloes, caminhoDoHref, descartarFotoGenerica } from '../lib/webleiloes-lote.mjs';
 
 // ─── A URL NOVA ───────────────────────────────────────────────────────────────────────────
 const U1 = '/imoveis/casas/sp/itapetininga/casa-em-condominio-44m2-vila-belo-horizonte-itapetininga-sp-25931';
@@ -140,5 +140,24 @@ assert.equal(mapaCardWebLeiloes({ href: U1, texto: 'Judicial Aberto 2º leilão 
 // Foto só entra se for URL absoluta (o mapeador antigo já fazia assim).
 assert.equal(mapaCardWebLeiloes({ href: U1, texto: C_JUD, img: '/img/placeholder.png' }).link_foto, null);
 assert.equal(mapaCardWebLeiloes({ href: U1, texto: C_JUD, img: 'https://x/y.jpg' }).link_foto, 'https://x/y.jpg');
+
+// FOTO GENÉRICA — URLs REAIS do ensaio de 07/10: a pasta muda por lote, o arquivo não.
+{
+  const F = (id, pasta, arq) => ({ fonte_id: `webleiloes_${id}`, link_foto: `https://webleiloes.com.br/storage/batches/${pasta}/${id}/${arq}` });
+  const rows = [
+    F(25893, '30', '4a47a0db6e60853dedfcfdf08a5ca249_thumb.png'),
+    F(25898, 'fc', '4a47a0db6e60853dedfcfdf08a5ca249_thumb.png'),
+    F(25889, '0d', '2d21d1b771467b22d4e6e95a1a0627ca_thumb.png'),
+    F(25901, '2c', '2d21d1b771467b22d4e6e95a1a0627ca_thumb.png'),
+    F(25886, 'a8', 'eea97a1af59c98ecd09edd31521f88f1_thumb.jpg'),   // foto própria do lote
+    { fonte_id: 'webleiloes_1', link_foto: null },
+  ];
+  const { descartadas } = descartarFotoGenerica(rows);
+  assert.equal(descartadas, 4);
+  assert.deepEqual(rows.map((r) => r.link_foto && r.link_foto.split('/').pop()), [null, null, null, null, 'eea97a1af59c98ecd09edd31521f88f1_thumb.jpg', null]);
+  // O mesmo lote lido duas vezes (link absoluto e relativo) não conta como "2 lotes".
+  const dup = [F(1, 'aa', 'x.png'), F(1, 'aa', 'x.png')];
+  assert.equal(descartarFotoGenerica(dup).descartadas, 0);
+}
 
 console.log('webleiloes-lote: todos os casos passaram');

@@ -27,7 +27,7 @@ import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
-import { mapaCardWebLeiloes, extrairCardsWebLeiloes } from './lib/webleiloes-lote.mjs';
+import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -4468,6 +4468,8 @@ async function scraperWebLeiloes(browser) {
     }
   } finally { await page.close(); }
   const imoveis = [...bens.values()].filter(im => im.valor_minimo > 0 || (im.cidade && im.estado));
+  const { descartadas } = descartarFotoGenerica(imoveis);
+  if (descartadas) console.log(`    WebLeilões: ${descartadas} foto(s) genérica(s) "sem foto" descartadas (mesmo arquivo em 2+ lotes)`);
   // O site DIZ quantos tem. Se o que saiu daqui for bem menos, é regressão silenciosa — a
   // mesma classe do "+0 sem erro" que deixou esta fonte zerada por dois dias.
   if (total && imoveis.length < total * 0.8) {
