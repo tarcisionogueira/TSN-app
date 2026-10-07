@@ -139,6 +139,30 @@ async function cobrarParcela(parcela, servico, userId) {
   return { link, cobranca_id: cobId, emailEnviado };
 }
 
+// ARREMATE DO PORTFÓLIO → CONTEXTO DO SERVIÇO (07/10, pedido do dono: conduzir o registro na tela
+// do arremate). `arrematados` é o portfólio que o próprio cliente registra; `arrematacoes` é o caso
+// jurídico formal, e nem todo arremate tem um (3 para 1 hoje). Quando existe, o serviço nasce preso
+// a ele — é o vínculo mais rico, que já traz caso, cliente e matrícula. Quando não existe, nasce
+// preso ao `arrematado_id`, com cliente e imóvel copiados dali: o que NÃO pode acontecer é o
+// serviço nascer "avulso" e perder a ligação com o arremate que o originou.
+async function contextoDoArrematado(arrematadoId, user, ehEquipe) {
+  const a = await db(`arrematados?id=eq.${arrematadoId}&select=id,user_id,imovel_id,titulo,cidade,estado`);
+  if (!a.ok) return { erro: 'Não consegui ler o arremate.', status: 503 };
+  const arrm = a.data?.[0];
+  if (!arrm) return { erro: 'Arremate não encontrado.', status: 404 };
+  if (!ehEquipe && arrm.user_id !== user.id) return { erro: 'Sem acesso.', status: 403 };
+  // `arrematados.imovel_id` é TEXT e pode guardar um id LOCAL (`tsn_…`) que não é uuid — cruzar
+  // com `arrematacoes.imovel_id` (uuid) sem este guarda devolve 400 do PostgREST, que o
+  // `{ data }` sem `error` transformaria em "não tem arrematação" (formas #2 e #6 do CLAUDE.md).
+  let arrematacaoId = null;
+  if (uuid(arrm.imovel_id)) {
+    const x = await db(`arrematacoes?imovel_id=eq.${arrm.imovel_id}&arrematante_id=eq.${arrm.user_id}&select=id&limit=1`);
+    if (!x.ok) return { erro: 'Não consegui cruzar com a arrematação.', status: 503 };
+    arrematacaoId = x.data?.[0]?.id || null;
+  }
+  return { arrematado: arrm, arrematacaoId };
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autorizado' });
@@ -147,6 +171,20 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      // Pela tela do ARREMATE (portfólio): resolve o vínculo no servidor e lista os dois lados —
+      // o serviço pode ter nascido pela arrematação (antes desta tela existir) ou pelo arremate.
+      const arrmId = req.query?.arrematado_id;
+      if (arrmId) {
+        if (!uuid(arrmId)) return res.status(400).json({ error: 'arrematado_id inválido' });
+        const ctx = await contextoDoArrematado(arrmId, user, ehEquipe);
+        if (ctx.erro) return res.status(ctx.status).json({ error: ctx.erro });
+        const filtro = ctx.arrematacaoId
+          ? `or=(arrematado_id.eq.${arrmId},arrematacao_id.eq.${ctx.arrematacaoId})`
+          : `arrematado_id=eq.${arrmId}`;
+        const servicos = await carregarServicos(filtro);
+        const cat = ehEquipe ? await db('servicos_cartorio_catalogo?ativo=eq.true&select=*&order=nome.asc') : { ok: true, data: [] };
+        return res.status(200).json({ servicos, catalogo: cat.ok ? cat.data : [], arrematacao_id: ctx.arrematacaoId });
+      }
       const arrId = req.query?.arrematacao_id;
       if (arrId) {
         if (!uuid(arrId)) return res.status(400).json({ error: 'arrematacao_id inválido' });
@@ -187,6 +225,35 @@ export default async function handler(req, res) {
         matricula: body.matricula ? String(body.matricula).slice(0, 60) : null,
         observacoes: body.observacoes ? String(body.observacoes).slice(0, 2000) : null,
       };
+      // Criado a partir da tela do ARREMATE: o servidor resolve se existe arrematação formal.
+      // Existindo, segue pelo caminho dela (vínculo mais rico); não existindo, o serviço fica
+      // preso ao arremate com cliente e imóvel copiados dali — nunca "avulso solto".
+      if (body.arrematado_id) {
+        if (!uuid(body.arrematado_id)) return res.status(400).json({ error: 'arrematado_id inválido' });
+        const ctx = await contextoDoArrematado(body.arrematado_id, user, ehEquipe);
+        if (ctx.erro) return res.status(ctx.status).json({ error: ctx.erro });
+        novo.arrematado_id = ctx.arrematado.id;
+        if (ctx.arrematacaoId) body.arrematacao_id = ctx.arrematacaoId;
+        else {
+          const dup = await db(`servicos_cartorio?arrematado_id=eq.${ctx.arrematado.id}&catalogo_id=eq.${cat.id}&status=neq.cancelado&select=id`);
+          if (!dup.ok) return res.status(503).json({ error: 'Não consegui checar duplicidade.' });
+          if ((dup.data || []).length) return res.status(409).json({ error: 'Este serviço já está contratado para este arremate.' });
+          const [p, emailCli] = await Promise.all([
+            db(`perfis?id=eq.${ctx.arrematado.user_id}&select=nome`),
+            emailDoUsuario(ctx.arrematado.user_id),
+          ]);
+          // Sem e-mail do cliente não há para onde mandar o boleto — e o serviço nasceria
+          // cobrável sem cobrador. Melhor recusar aqui do que criar e descobrir na hora de cobrar.
+          if (!emailCli) return res.status(409).json({ error: 'O arrematante não tem e-mail no cadastro — a cobrança não teria destinatário.' });
+          Object.assign(novo, {
+            cliente_id: ctx.arrematado.user_id,
+            cliente_nome: p.data?.[0]?.nome || null,
+            cliente_email: emailCli,
+            imovel_descricao: [ctx.arrematado.titulo, [ctx.arrematado.cidade, ctx.arrematado.estado].filter(Boolean).join('/')].filter(Boolean).join(' — ').slice(0, 300) || null,
+          });
+        }
+      }
+
       if (body.arrematacao_id) {
         if (!uuid(body.arrematacao_id)) return res.status(400).json({ error: 'arrematacao_id inválido' });
         const a = await db(`arrematacoes?id=eq.${body.arrematacao_id}&select=id,caso_id,arrematante_id,imovel_id`);
@@ -207,8 +274,10 @@ export default async function handler(req, res) {
           imovel_descricao: [imv.titulo, [imv.cidade, imv.estado].filter(Boolean).join('/')].filter(Boolean).join(' — ').slice(0, 300) || null,
           matricula: novo.matricula || imv.numero_matricula || null,
         });
-      } else {
-        // OPERAÇÃO AVULSA: cliente fora de uma arrematação nossa.
+      } else if (!novo.arrematado_id) {
+        // OPERAÇÃO AVULSA: cliente fora de uma arrematação nossa. (Vindo da tela do arremate,
+        // cliente e imóvel já foram copiados acima — cair aqui exigiria nome/e-mail do corpo e
+        // sobrescreveria o que veio do arremate.)
         const nome = String(body.cliente_nome || '').trim();
         const email = String(body.cliente_email || '').trim().toLowerCase();
         if (nome.length < 3) return res.status(400).json({ error: 'Informe o nome do cliente.' });

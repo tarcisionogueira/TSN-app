@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip, User, Target } from 'lucide-react';
+import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp, Paperclip, User, Target, Landmark } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
+import ServicosCartorio from '../components/ServicosCartorio';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
@@ -396,6 +397,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
         <div style={{ display: 'flex', gap: 8, padding: '14px 20px 0' }}>
           {tab('lancamentos', 'Lançamentos', DollarSign)}
           {tab('documentos', 'Documentos', FileText)}
+          {/* REGISTRO DO IMÓVEL (07/10, pedido do dono: conduzir o registro na tela do arremate).
+              O mesmo componente do caso e do Admin — quem resolve o vínculo (arrematação formal
+              ou o próprio arremate) é o servidor, em /api/servicos-cartorio. */}
+          {tab('registro', 'Registro', Landmark)}
         </div>
 
         <div style={{ padding: 20 }}>
@@ -457,6 +462,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                 </div>
               )}
             </>
+          )}
+
+          {aba === 'registro' && (
+            <ServicosCartorio arrematadoId={arr.id} ehEquipe={ehEquipe} ehAdmin={ehEquipe && !soLeitura} />
           )}
 
           {aba === 'documentos' && (

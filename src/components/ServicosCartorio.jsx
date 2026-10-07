@@ -3,6 +3,9 @@ import { Loader2, Copy, Plus, Landmark } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 
 // SERVIÇOS DE CARTÓRIO (07/10, pedido do dono) — UM componente para os dois lugares:
+//  · na tela do ARREMATE do portfólio (`arrematadoId`, 07/10): o servidor resolve se existe uma
+//    arrematação formal por trás; existindo, o serviço nasce presa a ela, senão fica preso ao
+//    arremate — nunca "avulso solto", que perderia a ligação com o que o originou.
 //  · no caso do assessorado (`arrematacaoId`): o serviço nasce vinculado àquela arrematação;
 //    o cliente vê o andamento e o botão de pagar; a equipe contrata, cobra e avança o status.
 //  · no Admin → Financeiro → Cartório (sem `arrematacaoId`): todas as operações, filtro por
@@ -29,7 +32,7 @@ const composicao = (p) => (Number(p.custas) > 0 && Number(p.valor) > 0 ? ` (serv
 const inp = { width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' };
 const btn = (bg, cor = 'white') => ({ padding: '7px 12px', border: 'none', borderRadius: 8, background: bg, color: cor, fontWeight: 700, fontSize: 12, cursor: 'pointer' });
 
-export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = false, ehAdmin = false }) {
+export default function ServicosCartorio({ arrematacaoId = null, arrematadoId = null, ehEquipe = false, ehAdmin = false }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState('');
@@ -43,12 +46,14 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
   const carregar = useCallback(async () => {
     setErro('');
     try {
-      const r = await apiCall(arrematacaoId ? `/api/servicos-cartorio?arrematacao_id=${arrematacaoId}` : '/api/servicos-cartorio');
+      const q = arrematadoId ? `?arrematado_id=${arrematadoId}`
+        : arrematacaoId ? `?arrematacao_id=${arrematacaoId}` : '';
+      const r = await apiCall(`/api/servicos-cartorio${q}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Erro ${r.status}`);
       setDados(d);
     } catch (e) { setErro(e.message || 'Não foi possível carregar os serviços de cartório.'); }
-  }, [arrematacaoId]);
+  }, [arrematacaoId, arrematadoId]);
   useEffect(() => { carregar(); }, [carregar]);
 
   const acao = async (chave, body, okMsg) => {
@@ -72,7 +77,8 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
 
   if (!dados && !erro) return <div style={{ padding: 12, fontSize: 12, color: '#64748b' }}><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Carregando serviços de cartório…</div>;
 
-  const servicos = (dados?.servicos || []).filter((s) => arrematacaoId || filtro === 'todos'
+  const ctx = arrematacaoId || arrematadoId;   // tela de UM arremate/caso, não o painel geral
+  const servicos = (dados?.servicos || []).filter((s) => ctx || filtro === 'todos'
     || (filtro === 'abertos' ? !['registrado', 'cancelado'].includes(s.status) : s.status === filtro));
   const catalogo = (dados?.catalogo || []).filter((c) => c.ativo !== false);
 
@@ -84,14 +90,14 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
         </div>
         {ehEquipe && !form && catalogo.length > 0 && (
           <button style={btn('#0D63DB')} onClick={() => setForm({ catalogo_id: catalogo[0].id, cliente_nome: '', cliente_email: '', imovel_descricao: '', cartorio: '', matricula: '', observacoes: '' })}>
-            <Plus size={12} style={{ verticalAlign: -2 }} /> {arrematacaoId ? 'Contratar serviço' : 'Nova operação avulsa'}
+            <Plus size={12} style={{ verticalAlign: -2 }} /> {ctx ? 'Contratar serviço' : 'Nova operação avulsa'}
           </button>
         )}
       </div>
 
       {erro && <div style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', borderRadius: 8, padding: '8px 10px' }}>{erro}</div>}
 
-      {!arrematacaoId && (
+      {!ctx && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[['abertos', 'Em andamento'], ['aguardando_entrada', 'Aguardando entrada'], ['pronto_para_protocolo', 'Prontos p/ protocolo'], ['protocolado', 'Protocolados'], ['registrado', 'Registrados'], ['todos', 'Todos']].map(([k, l]) => (
             <button key={k} onClick={() => setFiltro(k)} style={{ ...btn(filtro === k ? '#0D63DB' : 'white', filtro === k ? 'white' : '#475569'), border: '1px solid #e2e8f0', borderRadius: 20 }}>{l}</button>
@@ -111,7 +117,7 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
               {(c.parcelas || []).map((p, i) => <div key={i}>{i + 1}. {p.rotulo}: <strong>{fmt(totalParc(p))}</strong>{composicao(p)}</div>)}
               <div style={{ color: '#64748b', marginTop: 2 }}>A 1ª parcela é cobrada ao contratar, por boleto. Custas não tabeladas (ex.: registro) são lançadas depois da devolutiva do cartório.</div>
             </div>) : null; })()}
-          {!arrematacaoId && (
+          {!ctx && (
             <>
               <input placeholder="Nome do cliente" value={form.cliente_nome} onChange={(e) => setForm({ ...form, cliente_nome: e.target.value })} style={inp} />
               <input placeholder="E-mail do cliente (recebe a cobrança)" value={form.cliente_email} onChange={(e) => setForm({ ...form, cliente_email: e.target.value })} style={inp} inputMode="email" />
@@ -126,7 +132,7 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
             <button style={btn('white', '#475569')} onClick={() => setForm(null)}>Cancelar</button>
             <button style={btn('#0D63DB')} disabled={ocupado === 'criar'}
-              onClick={async () => { const d = await acao('criar', { action: 'criar', ...form, arrematacao_id: arrematacaoId || undefined }, msgCobranca); if (d) setForm(null); }}>
+              onClick={async () => { const d = await acao('criar', { action: 'criar', ...form, arrematacao_id: arrematacaoId || undefined, arrematado_id: arrematadoId || undefined }, msgCobranca); if (d) setForm(null); }}>
               {ocupado === 'criar' ? 'Criando…' : 'Criar e cobrar 1ª parcela'}
             </button>
           </div>
