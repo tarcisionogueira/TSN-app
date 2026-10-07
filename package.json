@@ -133,7 +133,8 @@
     "testar:lote-no-edital": "node scripts/testes/lote-no-edital.mjs",
     "testar:desconto-a-vista": "node scripts/testes/desconto-a-vista.mjs",
     "testar:data-br-leilao": "node scripts/testes/data-br-leilao.mjs",
-    "testar:webleiloes": "node scripts/testes/webleiloes-lote.mjs"
+    "testar:webleiloes": "node scripts/testes/webleiloes-lote.mjs",
+    "testar:vip-ficha": "node scripts/testes/vip-ficha.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

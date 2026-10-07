@@ -28,6 +28,7 @@ import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
+import { fichaVip } from './lib/vip-ficha.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -5790,11 +5791,19 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de merge; falha só faz revisitar lote conhecido, nunca corrompe
       const { data } = await supabase.from('imoveis_leilao')
-        .select('fonte_id, area_m2, valor_avaliacao, link_matricula, link_regras_venda, anexos')
+        .select('fonte_id, area_m2, valor_avaliacao, link_matricula, link_regras_venda, anexos, descricao, endereco, cep, ocupacao')
         .in('fonte_id', ids.slice(i, i + 200));
       for (const db of data || []) {
         const im = imoveis.find(x => x.fonte_id === db.fonte_id);
         if (!im) continue;
+        // DESCRIÇÃO/ENDEREÇO/CEP/OCUPAÇÃO conquistados num dia anterior (07/10, #141). O upsert
+        // grava `...im`, e o card do dia traz a descrição como ECO do título e o endereço vazio:
+        // todo lote que ficava fora do rodízio de visitas daquele dia voltava ao eco no banco.
+        // Mesmo defeito que este merge já resolvia para área/avaliação/documentos (21/08).
+        if (descricaoEhEcoDoTitulo(im) && db.descricao && !descricaoEhEcoDoTitulo({ titulo: im.titulo, descricao: db.descricao })) im.descricao = db.descricao;
+        if (!im.endereco && db.endereco) im.endereco = db.endereco;
+        if (!im.cep && db.cep) im.cep = db.cep;
+        if (!im.ocupacao && db.ocupacao) im.ocupacao = db.ocupacao;
         if (!(Number(im.area_m2) > 0) && Number(db.area_m2) > 0) im.area_m2 = Number(db.area_m2);
         if (!(Number(im.valor_avaliacao) > 0) && Number(db.valor_avaliacao) > 0) im.valor_avaliacao = Number(db.valor_avaliacao);
         // REEXAMINA o que já estava gravado antes de carregar pra frente (achado 19/09, chácara
@@ -5914,6 +5923,19 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           // rodapé/outro lote e o trigger de preservação a tornava permanente (caso BIASI).
           const a2 = extrairAreaM2(texto, { permitirSolta: false });
           if (a2 > 0) im.area_m2 = a2;
+        }
+        // LEILÃO VIP (07/10, #141): o extrator genérico abaixo devolve NULL na página do VIP
+        // (medido em 3 de 3 lotes vivos), e o painel "Descrição" dela é o mais rico do acervo —
+        // endereço com CEP, ocupação, débitos por conta do comprador, penhoras. Leitor dedicado
+        // e testado (scripts/lib/vip-ficha.mjs); o genérico continua como rede para o resto.
+        if (im.fonte === 'VIP') {
+          const txtVip = await page.evaluate(() => document.body.innerText || '').catch((e) => { console.log(`    [VIP] innerText falhou (${im.fonte_id}): ${String(e.message).slice(0, 60)}`); return ''; });
+          const f = fichaVip(txtVip);
+          if (f.descricao && descricaoEhEcoDoTitulo(im)) im.descricao = f.descricao;
+          if (f.endereco && !im.endereco) im.endereco = f.endereco;
+          if (f.cep && !im.cep) im.cep = f.cep;
+          if (f.ocupacao && !im.ocupacao) im.ocupacao = f.ocupacao;
+          if (!f.descricao) console.log(`    [VIP] painel "Descrição" não encontrado em ${im.fonte_id} — página mudou?`);
         }
         // DESCRIÇÃO REAL, não eco do título (20/09, achado do dono numa ficha ZUK: a
         // "Descrição" mostrada ao cliente era idêntica ao título, diferente do texto real do
