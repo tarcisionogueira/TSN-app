@@ -71,11 +71,16 @@ async function cobrarParcela(parcela, servico, userId) {
   if (parcela.status === 'paga') return { erro: 'Parcela já paga.', status: 409 };
   if (parcela.status === 'cancelada') return { erro: 'Parcela cancelada.', status: 409 };
   if (parcela.status === 'cobrada' && parcela.cobranca_avulsa_id) return { link: linkDe(parcela.cobranca_avulsa_id), jaExistia: true };
-  const descricao = `${servico.servico_nome} — ${parcela.rotulo}${servico.imovel_descricao ? ` — ${servico.imovel_descricao}` : ''}`.slice(0, 500);
+  // BOLETO + CUSTAS NO MESMO PAGAMENTO (07/10, dono): boleto é o meio mais barato (R$ 3,49 fixo, absorvido);
+  // quando o cartório tem tabela prévia (certidões), as custas vão somadas no mesmo boleto.
+  const custas = Number(parcela.custas) || 0;
+  const total = Math.round((Number(parcela.valor) + custas) * 100) / 100;
+  const composicao = custas > 0 && Number(parcela.valor) > 0 ? ` (serviço ${fmt(parcela.valor)} + custas do cartório ${fmt(custas)})` : '';
+  const descricao = `${servico.servico_nome} — ${parcela.rotulo}${composicao}${servico.imovel_descricao ? ` — ${servico.imovel_descricao}` : ''}`.slice(0, 500);
   const cob = await db('cobrancas_avulsas', {
     method: 'POST',
     body: JSON.stringify({
-      descricao, valor: Number(parcela.valor),
+      descricao, valor: total, meio: 'boleto',
       destinatario_nome: servico.cliente_nome || null, destinatario_email: servico.cliente_email || null, criado_por: userId,
     }),
   });
@@ -99,15 +104,16 @@ async function cobrarParcela(parcela, servico, userId) {
     const r = await enviarEmail({
       from: 'BidPro Brasil <noreply@bidprobrasil.com.br>',
       to: servico.cliente_email,
-      subject: `${servico.servico_nome}: ${parcela.rotulo} — ${fmt(parcela.valor)}`,
+      subject: `${servico.servico_nome}: ${parcela.rotulo} — ${fmt(total)}`,
       html: `<div style="max-width:560px;margin:0 auto;font-family:Arial,sans-serif;">${cabecalhoEmailHTML({ subtitulo: 'Serviços de cartório' })}
         <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 16px 16px;padding:24px 28px;color:#0f172a;font-size:14px;line-height:1.6;">
           <p>Olá${servico.cliente_nome ? `, ${String(servico.cliente_nome).split(' ')[0]}` : ''}!</p>
           <p><strong>${servico.servico_nome}</strong>${servico.imovel_descricao ? ` — ${servico.imovel_descricao}` : ''}</p>
-          <p>Parcela: <strong>${parcela.rotulo}</strong> · <strong>${fmt(parcela.valor)}</strong></p>
+          <p>${parcela.rotulo}: <strong>${fmt(total)}</strong>${composicao ? `<br><span style="font-size:12px;color:#64748b;">${composicao.slice(2, -1)}</span>` : ''}</p>
           ${parcela.momento === 'entrada' ? '<p>Seu registro está preparado. Assim que o pagamento for confirmado, damos entrada no cartório.</p>' : ''}
-          <p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#0D63DB;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700;">Pagar agora</a></p>
-          <p style="font-size:12px;color:#64748b;">Custas, emolumentos do cartório e ITBI não estão incluídos neste valor e são pagos à parte.</p>
+          ${parcela.momento === 'custas' ? '<p>Estas são as custas informadas pelo cartório após a análise do registro.</p>' : ''}
+          <p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#0D63DB;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700;">Gerar boleto</a></p>
+          ${custas > 0 || parcela.momento === 'custas' ? '' : '<p style="font-size:12px;color:#64748b;">Custas do cartório e ITBI não estão incluídos neste valor.</p>'}
         </div></div>`,
       meta: { tipo: 'servico_cartorio_cobranca', userId: servico.cliente_id || null },
       idempotencyKey: `servico-cartorio-${parcela.id}`,
@@ -157,7 +163,7 @@ export default async function handler(req, res) {
       const c = await db(`servicos_cartorio_catalogo?id=eq.${body.catalogo_id}&ativo=eq.true&select=*`);
       const cat = c.data?.[0];
       if (!c.ok || !cat) return res.status(400).json({ error: 'Serviço não encontrado no catálogo.' });
-      const parcelas = Array.isArray(cat.parcelas) ? cat.parcelas.filter((p) => Number(p.valor) > 0) : [];
+      const parcelas = Array.isArray(cat.parcelas) ? cat.parcelas.filter((p) => (Number(p.valor) || 0) + (Number(p.custas) || 0) > 0) : [];
       if (!parcelas.length) return res.status(400).json({ error: 'Serviço sem parcelas configuradas.' });
 
       const novo = {
@@ -205,7 +211,8 @@ export default async function handler(req, res) {
         method: 'POST',
         body: JSON.stringify(parcelas.map((p, i) => ({
           servico_id: servico.id, ordem: i + 1, rotulo: String(p.rotulo || `Parcela ${i + 1}`).slice(0, 120),
-          momento: ['contratacao', 'entrada'].includes(p.momento) ? p.momento : 'outro', valor: Number(p.valor),
+          momento: ['contratacao', 'entrada'].includes(p.momento) ? p.momento : 'outro', valor: Number(p.valor) || 0,
+          custas: Math.max(0, Number(p.custas) || 0),
         }))),
       });
       if (!pi.ok) {
@@ -230,6 +237,35 @@ export default async function handler(req, res) {
       const r = await cobrarParcela(parcela, servico, user.id);
       if (r.erro) return res.status(r.status || 500).json({ error: r.erro });
       await auditLog({ acao: 'servico_cartorio_cobrado', user_id: user.id, ip, detalhes: { parcela_id: parcela.id, servico_id: servico.id }, sucesso: true });
+      return res.status(200).json({ ok: true, ...r });
+    }
+
+    // CUSTAS PÓS-DEVOLUTIVA (07/10, dono): no registro o cartório só informa as custas depois da entrada
+    // (faixa de valor do imóvel). A equipe lança o valor e o cliente recebe o boleto — não trava o
+    // protocolo (já feito), trava o 'registrado'.
+    if (body.action === 'adicionar_custas') {
+      if (!uuid(body.servico_id)) return res.status(400).json({ error: 'servico_id inválido' });
+      const v = Math.round(Number(String(body.valor || '').replace(',', '.')) * 100) / 100;
+      if (!(v > 0)) return res.status(400).json({ error: 'Informe o valor das custas.' });
+      const s = await db(`servicos_cartorio?id=eq.${body.servico_id}&select=*`);
+      const servico = s.data?.[0];
+      if (!s.ok || !servico) return res.status(404).json({ error: 'Serviço não encontrado.' });
+      if (['registrado', 'cancelado'].includes(servico.status)) return res.status(409).json({ error: 'Serviço já encerrado.' });
+      const ult = await db(`servicos_cartorio_parcelas?servico_id=eq.${servico.id}&select=ordem&order=ordem.desc&limit=1`);
+      if (!ult.ok) return res.status(503).json({ error: 'Não consegui ler as parcelas.' });
+      const ins = await db('servicos_cartorio_parcelas', {
+        method: 'POST',
+        body: JSON.stringify({
+          servico_id: servico.id, ordem: (ult.data?.[0]?.ordem || 0) + 1,
+          rotulo: String(body.rotulo || 'Custas do cartório').trim().slice(0, 120) || 'Custas do cartório',
+          momento: 'custas', valor: 0, custas: v,
+        }),
+      });
+      const parcela = ins.data?.[0];
+      if (!ins.ok || !parcela) return res.status(500).json({ error: 'Não foi possível lançar as custas.', detalhe: ins.data });
+      const r = await cobrarParcela(parcela, servico, user.id);
+      if (r.erro) return res.status(r.status || 500).json({ error: r.erro });
+      await auditLog({ acao: 'servico_cartorio_custas', user_id: user.id, ip, detalhes: { servico_id: servico.id, valor: v }, sucesso: true });
       return res.status(200).json({ ok: true, ...r });
     }
 
@@ -266,8 +302,13 @@ export default async function handler(req, res) {
       const nome = String(body.nome || '').trim();
       const chave = String(body.chave || nome).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60);
       const parcelas = (Array.isArray(body.parcelas) ? body.parcelas : [])
-        .map((p) => ({ rotulo: String(p.rotulo || '').trim().slice(0, 120), valor: Math.round(Number(p.valor) * 100) / 100, momento: ['contratacao', 'entrada'].includes(p.momento) ? p.momento : 'outro' }))
-        .filter((p) => p.rotulo && p.valor > 0);
+        .map((p) => ({
+          rotulo: String(p.rotulo || '').trim().slice(0, 120),
+          valor: Math.max(0, Math.round((Number(p.valor) || 0) * 100) / 100),
+          custas: Math.max(0, Math.round((Number(p.custas) || 0) * 100) / 100),
+          momento: ['contratacao', 'entrada'].includes(p.momento) ? p.momento : 'outro',
+        }))
+        .filter((p) => p.rotulo && p.valor + p.custas > 0);
       if (nome.length < 3 || !chave) return res.status(400).json({ error: 'Informe o nome do serviço.' });
       if (!parcelas.length) return res.status(400).json({ error: 'Informe ao menos uma parcela com valor.' });
       const reg = { chave, nome: nome.slice(0, 120), descricao: body.descricao ? String(body.descricao).slice(0, 1000) : null, parcelas, ativo: body.ativo !== false };

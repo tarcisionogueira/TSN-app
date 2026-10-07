@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import PagamentoServico from '../components/PagamentoServico';
+import BoletoMp from '../components/BoletoMp';
 import { AZUL, VERDE } from '../utils/marca';
 
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,6 +20,7 @@ export default function CobrarAvulso() {
   const [carregando, setCarregando] = useState(true);
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
+  const [viaBoleto, setViaBoleto] = useState(false);
 
   useEffect(() => {
     if (user?.email) setEmail(e => e || user.email);
@@ -140,7 +142,21 @@ export default function CobrarAvulso() {
           </div>
         ) : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Como você quer pagar?</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>{cob.meio === 'boleto' ? 'Pagamento por boleto' : 'Como você quer pagar?'}</div>
+            {/* BOLETO (07/10): cobrança marcada 'boleto' (serviços de cartório) só tem boleto; as demais
+                ganham o boleto como opção ao lado de Pix e cartão. Sem Pix parcial pago antes — o boleto
+                cobra o valor cheio. */}
+            {cob.meio !== 'boleto' && !(cob.valor_pago_pix > 0) && (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {[[false, 'Pix ou cartão'], [true, 'Boleto']].map(([v, l]) => (
+                  <button key={l} onClick={() => setViaBoleto(v)}
+                    style={{ flex: 1, minWidth: 0, padding: '8px', borderRadius: 8, border: `1px solid ${viaBoleto === v ? AZUL : '#e2e8f0'}`, background: viaBoleto === v ? AZUL : 'white', color: viaBoleto === v ? 'white' : '#475569', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{l}</button>
+                ))}
+              </div>
+            )}
+            {(cob.meio === 'boleto' || viaBoleto) ? (
+              <BoletoMp cobrancaId={cob.id} email={email} nomeSugerido={cob.nome_sugerido || ''} valor={cob.saldo_restante ?? cob.valor} />
+            ) : (
             <PagamentoServico
               servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
               extra={{ cobranca_id: cob.id }}
@@ -151,6 +167,7 @@ export default function CobrarAvulso() {
               permitirSplit
               recarregarSaldo={recarregarSaldo}
             />
+            )}
           </div>
         )}
 

@@ -7,7 +7,7 @@
  *   MP_ACCESS_TOKEN  — access_token da conta MP da plataforma (produção)
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
-import { honorarioComTaxa, gatewayDoBoleto } from '../src/utils/taxaHonorario.js';
+import { honorarioComTaxa, gatewayDoBoleto, TETO_BOLETO_MP } from '../src/utils/taxaHonorario.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -218,7 +218,7 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -229,6 +229,11 @@ export default async function handler(req, res) {
       const jaPagoPix = Number(cob.valor_pago_pix) || 0;
       const saldo = Math.round((total - jaPagoPix) * 100) / 100;
       if (saldo <= 0) return res.status(409).json({ error: 'Esta cobrança já foi coberta.' });
+      // BOLETO (07/10, serviços de cartório): R$ 3,49 fixo no MP, absorvido (é a forma mais barata).
+      // Cobrança marcada `meio='boleto'` SÓ aceita boleto; as demais aceitam boleto, Pix e cartão.
+      const ehBoletoAvulso = metodoPagamento === 'bolbradesco';
+      if (cob.meio === 'boleto' && !ehBoletoAvulso) return res.status(400).json({ error: 'Esta cobrança é paga por boleto.' });
+      if (ehBoletoAvulso && saldo > TETO_BOLETO_MP) return res.status(409).json({ error: 'Valor acima do teto do boleto do Mercado Pago (R$ 100 mil).' });
       // PIX + CARTÃO COMBINADO — mesmo mecanismo do honorário de êxito (ver comentário lá).
       const pixParcial = metodoPagamento === 'pix' ? Number(req.body?.valor_pix_parcial) : null;
       if (Number.isFinite(pixParcial) && pixParcial > 0) {
@@ -240,7 +245,7 @@ export default async function handler(req, res) {
         valor = saldo;
       }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
-      cobrancaCtx = { cobrancaId: cob.id };
+      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso };
     } catch (e) {
       console.error('[mp-checkout] cobranca_avulsa: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -258,9 +263,9 @@ export default async function handler(req, res) {
   // Boleto MP do honorário (07/10): 1 emissão por arrematação a cada 2 min — duplo clique ou
   // tela recarregada não pode deixar dois boletos vivos do mesmo saldo (pagar os dois = um recusado
   // no webhook como valor incompatível, com o dinheiro já na conta).
-  if (honorarioCtx?.boleto) {
-    const rlBol = await checkRateLimit(`mp-boleto-honorario:${honorarioCtx.arrematacaoId}`, 1, 120000);
-    if (!rlBol.ok) return res.status(429).json({ error: 'Um boleto acabou de ser gerado para este honorário. Aguarde 2 minutos antes de gerar outro.' });
+  if (honorarioCtx?.boleto || cobrancaCtx?.boleto) {
+    const rlBol = await checkRateLimit(`mp-boleto:${honorarioCtx?.arrematacaoId || cobrancaCtx?.cobrancaId}`, 1, 120000);
+    if (!rlBol.ok) return res.status(429).json({ error: 'Um boleto acabou de ser gerado para esta cobrança. Aguarde 2 minutos antes de gerar outro.' });
   }
   if (metodoPagamento === 'pix') {
     const anchorDup = user?.id || honorarioCtx?.arrematanteId || (cobrancaCtx ? `cobranca-${cobrancaCtx.cobrancaId}` : ip);
@@ -379,7 +384,7 @@ export default async function handler(req, res) {
   // HONORÁRIO PAGO POR TERCEIRO/EMPRESA (30/09): a tela pede o documento e o nome de QUEM PAGA; quando
   // vêm válidos, substituem os do perfil do assessorado (senão o MP receberia o CPF do assessorado com
   // o cartão de outra pessoa — dado trocado para o antifraude). Sem documento, fica como estava.
-  if (honorarioCtx) {
+  if (honorarioCtx || cobrancaCtx?.boleto) {
     const docPag = validarDocumento(req.body?.pagador_doc);
     if (docPag) {
       const partesPag = String(req.body?.pagador_nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
@@ -394,7 +399,7 @@ export default async function handler(req, res) {
   }
   // BOLETO MP (07/10): o MP exige documento, nome e endereço COMPLETO do pagador no próprio `payer`
   // (sem isso recusa a emissão). Vêm do body — é quem paga, que pode não ser o assessorado.
-  if (honorarioCtx?.boleto) {
+  if (honorarioCtx?.boleto || cobrancaCtx?.boleto) {
     const docPag = validarDocumento(req.body?.pagador_doc);
     const e = req.body?.endereco || {};
     const limpa = (v, n) => String(v || '').trim().slice(0, n);

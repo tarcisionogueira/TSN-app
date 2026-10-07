@@ -22,7 +22,10 @@ const STATUS = {
   registrado: { t: 'Registrado', c: '#166534', b: '#dcfce7' },
   cancelado: { t: 'Cancelado', c: '#475569', b: '#f1f5f9' },
 };
-const PARC = { pendente: 'A cobrar', cobrada: 'Cobrada', paga: 'Paga', cancelada: 'Cancelada' };
+const PARC = { pendente: 'A cobrar', cobrada: 'Boleto enviado', paga: 'Paga', cancelada: 'Cancelada' };
+const totalParc = (p) => Number(p.valor || 0) + Number(p.custas || 0);
+// "serviço R$ X + custas R$ Y" quando há custas do cartório somadas no mesmo boleto.
+const composicao = (p) => (Number(p.custas) > 0 && Number(p.valor) > 0 ? ` (serviço ${fmt(p.valor)} + custas ${fmt(p.custas)})` : Number(p.custas) > 0 ? ' (custas do cartório)' : '');
 const inp = { width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' };
 const btn = (bg, cor = 'white') => ({ padding: '7px 12px', border: 'none', borderRadius: 8, background: bg, color: cor, fontWeight: 700, fontSize: 12, cursor: 'pointer' });
 
@@ -35,6 +38,7 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
   const [catEdit, setCatEdit] = useState(null);     // edição do catálogo
   const [protocolo, setProtocolo] = useState({});   // servico_id -> número digitado
   const [copiado, setCopiado] = useState('');
+  const [custasForm, setCustasForm] = useState({});  // servico_id -> valor das custas da devolutiva
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -99,13 +103,13 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
         <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <select value={form.catalogo_id} onChange={(e) => setForm({ ...form, catalogo_id: e.target.value })} style={inp}>
             {catalogo.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome} — {fmt((c.parcelas || []).reduce((s, p) => s + Number(p.valor || 0), 0))} ({(c.parcelas || []).length}×)</option>
+              <option key={c.id} value={c.id}>{c.nome} — {fmt((c.parcelas || []).reduce((t, p) => t + totalParc(p), 0))} ({(c.parcelas || []).length}×)</option>
             ))}
           </select>
           {(() => { const c = catalogo.find((x) => x.id === form.catalogo_id); return c ? (
             <div style={{ fontSize: 11.5, color: '#475569' }}>
-              {(c.parcelas || []).map((p, i) => <div key={i}>{i + 1}. {p.rotulo}: <strong>{fmt(p.valor)}</strong></div>)}
-              <div style={{ color: '#64748b', marginTop: 2 }}>A 1ª parcela é cobrada ao contratar. Custas, emolumentos e ITBI à parte.</div>
+              {(c.parcelas || []).map((p, i) => <div key={i}>{i + 1}. {p.rotulo}: <strong>{fmt(totalParc(p))}</strong>{composicao(p)}</div>)}
+              <div style={{ color: '#64748b', marginTop: 2 }}>A 1ª parcela é cobrada ao contratar, por boleto. Custas não tabeladas (ex.: registro) são lançadas depois da devolutiva do cartório.</div>
             </div>) : null; })()}
           {!arrematacaoId && (
             <>
@@ -138,7 +142,7 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
       {servicos.map((s) => {
         const st = STATUS[s.status] || { t: s.status, c: '#475569', b: '#f1f5f9' };
         const abertas = (s.parcelas || []).filter((p) => !['paga', 'cancelada'].includes(p.status));
-        const total = (s.parcelas || []).reduce((t, p) => t + Number(p.valor || 0), 0);
+        const total = (s.parcelas || []).reduce((t, p) => t + totalParc(p), 0);
         return (
           <div key={s.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: 'white' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
@@ -155,12 +159,12 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {(s.parcelas || []).map((p) => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, flexWrap: 'wrap' }}>
-                  <span style={{ flex: 1, minWidth: 140, color: '#334155' }}>{p.ordem}. {p.rotulo} — <strong>{fmt(p.valor)}</strong></span>
+                  <span style={{ flex: 1, minWidth: 140, color: '#334155' }}>{p.ordem}. {p.rotulo} — <strong>{fmt(totalParc(p))}</strong><span style={{ color: '#64748b' }}>{composicao(p)}</span></span>
                   <span style={{ color: p.status === 'paga' ? '#059669' : '#92400e', fontWeight: 700 }}>{PARC[p.status] || p.status}{p.paga_em ? ` ${dt(p.paga_em)}` : ''}</span>
                   {p.status === 'cobrada' && p.link && (
                     ehEquipe
                       ? <button style={btn('white', '#0D63DB')} onClick={() => copiar(p.link)}><Copy size={11} style={{ verticalAlign: -1 }} /> {copiado === p.link ? 'Copiado' : 'Link'}</button>
-                      : <a href={p.link} target="_blank" rel="noopener noreferrer" style={{ ...btn('#0D63DB'), textDecoration: 'none' }}>Pagar</a>
+                      : <a href={p.link} target="_blank" rel="noopener noreferrer" style={{ ...btn('#0D63DB'), textDecoration: 'none' }}>Pagar (boleto)</a>
                   )}
                   {ehEquipe && p.status === 'pendente' && s.status !== 'cancelado' && (
                     <button style={btn('#0D63DB')} disabled={ocupado === p.id}
@@ -196,6 +200,17 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
                     <button style={btn('#059669')} onClick={() => acao(`r${s.id}`, { action: 'status', servico_id: s.id, status: 'registrado' })}>Registrado</button>
                   </>
                 )}
+                {['protocolado', 'exigencia', 'pronto_para_protocolo', 'em_preparo', 'aguardando_entrada'].includes(s.status) && (
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
+                    <input placeholder="Custas do cartório (R$)" inputMode="decimal" value={custasForm[s.id] || ''}
+                      onChange={(e) => setCustasForm({ ...custasForm, [s.id]: e.target.value })} style={{ ...inp, width: 170 }} />
+                    <button style={btn('white', '#0D63DB')} disabled={ocupado === `k${s.id}`}
+                      title="Valor que o cartório informou na devolutiva — vai por boleto ao cliente"
+                      onClick={async () => { const d = await acao(`k${s.id}`, { action: 'adicionar_custas', servico_id: s.id, valor: custasForm[s.id] }, msgCobranca); if (d) setCustasForm({ ...custasForm, [s.id]: '' }); }}>
+                      Cobrar custas
+                    </button>
+                  </span>
+                )}
                 <button style={{ ...btn('white', '#991b1b'), marginLeft: 'auto' }}
                   onClick={() => { if (window.confirm('Cancelar este serviço? As cobranças em aberto deixam de valer.')) acao(`c${s.id}`, { action: 'status', servico_id: s.id, status: 'cancelado' }); }}>
                   Cancelar
@@ -212,11 +227,11 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
             <div style={{ fontWeight: 800, fontSize: 12.5, minWidth: 0 }}>Catálogo de serviços e preços</div>
             {!catEdit && <button style={btn('white', '#0D63DB')} onClick={() => setCatEdit({ nome: '', descricao: '', parcelas: [{ rotulo: 'Na contratação', valor: '', momento: 'contratacao' }, { rotulo: 'Para dar entrada', valor: '', momento: 'entrada' }], ativo: true })}>+ Novo serviço</button>}
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0 6px' }}>Mudar o preço não altera serviços já contratados.</div>
+          <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0 6px' }}>Serviço = sua remuneração. Custas tabela = taxa do cartório já conhecida (certidões), cobrada no mesmo boleto. Mudar o preço não altera serviços já contratados.</div>
           {(dados?.catalogo || []).map((c) => (
             <div key={c.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, padding: '4px 0' }}>
               <span style={{ flex: 1, minWidth: 0, color: c.ativo === false ? '#94a3b8' : '#334155' }}>
-                {c.nome}{c.ativo === false ? ' (inativo)' : ''} — {(c.parcelas || []).map((p) => fmt(p.valor)).join(' + ')}
+                {c.nome}{c.ativo === false ? ' (inativo)' : ''} — {(c.parcelas || []).map((p) => fmt(totalParc(p)) + composicao(p)).join(' + ')}
               </span>
               <button style={btn('white', '#0D63DB')} onClick={() => setCatEdit({ ...c, parcelas: (c.parcelas || []).map((p) => ({ ...p })) })}>Editar</button>
             </div>
@@ -226,9 +241,10 @@ export default function ServicosCartorio({ arrematacaoId = null, ehEquipe = fals
               <input placeholder="Nome (ex.: Registro com averbação)" value={catEdit.nome} onChange={(e) => setCatEdit({ ...catEdit, nome: e.target.value })} style={inp} />
               <input placeholder="Descrição (opcional)" value={catEdit.descricao || ''} onChange={(e) => setCatEdit({ ...catEdit, descricao: e.target.value })} style={inp} />
               {catEdit.parcelas.map((p, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.3fr) auto', gap: 6 }}>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) auto', gap: 6 }}>
                   <input placeholder="Rótulo da parcela" value={p.rotulo} onChange={(e) => { const ps = [...catEdit.parcelas]; ps[i] = { ...p, rotulo: e.target.value }; setCatEdit({ ...catEdit, parcelas: ps }); }} style={inp} />
-                  <input placeholder="Valor" inputMode="decimal" value={p.valor} onChange={(e) => { const ps = [...catEdit.parcelas]; ps[i] = { ...p, valor: e.target.value.replace(',', '.') }; setCatEdit({ ...catEdit, parcelas: ps }); }} style={inp} />
+                  <input placeholder="Serviço R$" inputMode="decimal" value={p.valor} onChange={(e) => { const ps = [...catEdit.parcelas]; ps[i] = { ...p, valor: e.target.value.replace(',', '.') }; setCatEdit({ ...catEdit, parcelas: ps }); }} style={inp} />
+                  <input placeholder="Custas tabela R$" title="Custas do cartório quando já tabeladas (certidões). Vão no mesmo boleto." inputMode="decimal" value={p.custas ?? ''} onChange={(e) => { const ps = [...catEdit.parcelas]; ps[i] = { ...p, custas: e.target.value.replace(',', '.') }; setCatEdit({ ...catEdit, parcelas: ps }); }} style={inp} />
                   <select value={p.momento} onChange={(e) => { const ps = [...catEdit.parcelas]; ps[i] = { ...p, momento: e.target.value }; setCatEdit({ ...catEdit, parcelas: ps }); }} style={inp}>
                     <option value="contratacao">Na contratação</option>
                     <option value="entrada">Antes de dar entrada</option>

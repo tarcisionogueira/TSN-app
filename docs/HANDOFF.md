@@ -36467,3 +36467,13 @@ Pedido do dono: a equipe executa (sem papel novo de despachante). Estrutura:
   1ª parcela e manda e-mail), cobrar parcela (idempotente), status (protocolo exige número), catálogo (só admin).
 - Telas: `src/components/ServicosCartorio.jsx` no caso do assessorado (bloco da arrematação) e em Admin → Financeiro →
   🏛️ Cartório (todas as operações, filtros, operação avulsa, catálogo). Custas/emolumentos/ITBI ficam fora (do cliente).
+
+## 07/10 — Cartório por BOLETO + custas no mesmo pagamento (pedido do dono)
+- Cobrança avulsa ganhou `meio` ('boleto' = só boleto). Serviços de cartório sempre por boleto MP (R$ 3,49 fixo,
+  absorvido — mais barato que o 1% do Pix). Demais cobranças avulsas: boleto passa a ser opção ao lado de Pix/cartão
+  (`src/components/BoletoMp.jsx`, `mp-checkout` aceita `bolbradesco` em `cobranca_avulsa`, teto R$ 100 mil).
+- Catálogo: cada parcela tem `valor` (remuneração) + `custas` (taxa do cartório já tabelada — certidões); vão no MESMO
+  boleto, com a composição na descrição e no e-mail.
+- Registro: custas só saem na devolutiva → ação `adicionar_custas` (botão "Cobrar custas" no serviço) cria parcela
+  `momento='custas'` e manda o boleto. Trava ajustada (`20261007b_cartorio_custas_e_boleto.sql`): custas abertas NÃO
+  travam o protocolo, travam o 'registrado'. Testado no banco com rollback.
