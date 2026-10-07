@@ -2434,7 +2434,9 @@ export default async function handler(req, res) {
     try {
       const avalOficial = Number(parsed.extracao?.valorAvaliacaoOficial) || 0;
       if (avalOficial > 0 && !(Number(row?.valor_avaliacao) > 0)) {
-        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&valor_avaliacao=is.null`, {
+        // 07/10: `or(is.null,eq.0)` — LJUD/GRUPOLANCE/SODRE gravam 0 (não nulo) quando o card não
+        // traz avaliação; com `is.null` sozinho o PATCH não alcançava 887 de 1.067 LJUD ativos.
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&or=(valor_avaliacao.is.null,valor_avaliacao.eq.0)`, {
           method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ valor_avaliacao: avalOficial }),
         });
       }
