@@ -343,6 +343,19 @@ function parseDataLJUD(s) {
   if (ano < 2020 || ano > 2035) return null;
   return iso;
 }
+// DESCRIÇÃO REAL do lote LJUD (07/10, print do dono: casa Alphaville 12 com "Casa 247,88m² - Terreno
+// 445,66m² — Daniel Oliveira Júnior" na ficha e o texto inteiro da matrícula no site). O coletor
+// gravava `título — leiloeiro` em 1.021 de 1.076 ativos. O Vlance (MESMO backend, mesma API
+// `core/api/get-lotes`) já lê `nm_descricao` desde 20/09 (HTML rich-text) — a correção nunca foi
+// portada para cá. Aditivo: sem o campo no payload, cai no resumo de antes.
+function descricaoRealLJUD(it, titulo) {
+  const bruto = it?.nm_descricao || it?.nm_descricao_lote || it?.ds_descricao || '';
+  const txt = String(bruto).replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+  const resumo = [titulo, it?.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500);
+  return txt.replace(titulo || '', '').trim().length >= 40 ? txt.slice(0, 8000) : resumo;
+}
 function mapLoteLJUD(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || it.titulo || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || it.cidade || '').trim();
@@ -369,7 +382,7 @@ function mapLoteLJUD(it) {
     estado: String(it.nm_estado || it.uf || '').toUpperCase().slice(0, 2), cidade,
     bairro: '', endereco: '', valor_avaliacao: avalLJUD, valor_minimo: vmin, valor_minimo_2: lance2LJUD > 0 && lance2LJUD < vmin ? lance2LJUD : null,
     area_m2: parseNum((titulo.match(/([\d.,]+)\s*m²/) || [])[1]),
-    descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
+    descricao: descricaoRealLJUD(it, titulo) || null,
     link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',
     link_foto: foto, leiloeiro: String(it.nm_leiloeiro || it.leiloeiro || 'Leilões Judiciais').slice(0, 120),
     data_leilao: parseDataLJUD(it.dt_fechamento), forma_pagamento: null,

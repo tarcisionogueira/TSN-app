@@ -36439,3 +36439,18 @@ regras → segurança). **Logo depois do diagnóstico, antes de qualquer outra c
 **Com o dono, na mesma abertura (são dele):** #142 validar no navegador o lote manual e a prévia editável do e-mail ·
 #145 apagar as análises duplicadas do Alphaville · vencidas #1 (P0, campanha Meta → aula fechada), #4 (Google
 Workspace), #3 (Leiloaria Smart). #140 Banco Inter segue adiado até o dono pedir.
+
+## 07/10 — Descrição resumida na ficha × completa no leiloeiro (print do dono, LJUD 217021 Alphaville 12)
+Três defeitos encadeados, medidos no banco:
+1. **Coletor LJUD nunca leu a descrição real**: gravava `título — leiloeiro` (1.021 de 1.076 ativos). O Vlance (mesmo
+   backend, mesma `core/api/get-lotes`) lê `nm_descricao` desde 20/09 — não foi portado. `descricaoRealLJUD()` nos dois
+   coletores (`scripts/scraper-puppeteer.mjs`, `api/scraper-leiloeiros.js`), aditivo; o log imprime quantos vieram com
+   texto e quais chaves `*desc*` o payload tem (o sandbox não alcança a API — a 1ª coleta é a prova, pendência #162).
+2. **A coleta diária apagava o texto do enriquecimento**: `enriquecer-lote` gravou os 1.720 caracteres às 09:27 UTC
+   (quando o dono abriu a ficha), mas o upsert do dia seguinte trocaria de novo pelo resumo — sem trigger que
+   preservasse. Novo `trg_preservar_descricao_completa` (todas as fontes): resumo (<40 car. além do título) não
+   sobrescreve texto real. Afeta também ZUK 811/869, MEGA 336/433, VIP 108/109, BIASI 72/72.
+3. **A tela não mostrava o que acabara de ser gravado**: `enriquecer-lote` não devolvia `descricao`/`area_m2` e o
+   `ImovelDetalhe` não os aplicava — o dono só veria o texto recarregando. Corrigido.
+Diagnóstico de abertura (07/10): segurança 0/0, regras 0 crítico, KYC 0, backup ok; **HASTA regressão 1 × piso 293**
+(investigar); `EDITAL_DJEN` (608) no ponto cego por desenho.

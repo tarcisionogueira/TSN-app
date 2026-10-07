@@ -1014,6 +1014,10 @@ export default function ImovelDetalhe() {
         linkEdital: prev.linkEdital || d.edital || null,
         linkRegrasVenda: prev.linkRegrasVenda || d.regras || null,
         foto: prev.foto || d.foto || null,
+        // Texto completo do leiloeiro gravado AGORA pelo enriquecimento (07/10): sem isto a ficha
+        // continuava no resumo "título — leiloeiro" mesmo com o banco já corrigido.
+        descricao: d.descricao || prev.descricao,
+        areaM2: Number(prev.areaM2) > 0 ? prev.areaM2 : (d.area_m2 || prev.areaM2),
       } : prev);
     }).catch(() => {});
     return () => { cancel = true; };

@@ -637,6 +637,10 @@ export default async function handler(req, res) {
     foto: patch.link_foto || im.link_foto || null,
     data_leilao: patch.data_leilao || im.data_leilao || null,
     data_leilao_2: patch.data_leilao_2 || im.data_leilao_2 || null,
+    // 07/10 (print do dono, LJUD 217021): o texto completo ERA gravado aqui, mas não voltava na
+    // resposta — a ficha seguia mostrando o resumo até o cliente recarregar a página.
+    descricao: up.ok && patch.descricao ? patch.descricao : null,
+    area_m2: up.ok && patch.area_m2 ? patch.area_m2 : null,
     anexos: achado.anexos,
   });
 }

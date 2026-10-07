@@ -3267,6 +3267,19 @@ async function scraperFrazao(browser) {
 // 12 itens/página → iteramos as páginas. Campos: lote_id, nm_titulo_lote, vl_lanceminimo,
 // nm_cidade/nm_estado, nm_subcategoria, fotos[].nm_path_completo (196x146 →
 // troca p/ 640x480), nm_url_leiloeiro (site de origem = edital/matrícula/anexos).
+// DESCRIÇÃO REAL do lote LJUD (07/10, print do dono: casa Alphaville 12 com "Casa 247,88m² - Terreno
+// 445,66m² — Daniel Oliveira Júnior" na ficha e o texto inteiro da matrícula no site). O coletor
+// gravava `título — leiloeiro` em 1.021 de 1.076 ativos. O Vlance (MESMO backend, mesma API
+// `core/api/get-lotes`) já lê `nm_descricao` desde 20/09 (HTML rich-text) — a correção nunca foi
+// portada para cá. Aditivo: sem o campo no payload, cai no resumo de antes.
+function descricaoRealLJUD(it, titulo) {
+  const bruto = it?.nm_descricao || it?.nm_descricao_lote || it?.ds_descricao || '';
+  const txt = String(bruto).replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+  const resumo = [titulo, it?.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500);
+  return txt.replace(titulo || '', '').trim().length >= 40 ? txt.slice(0, 8000) : resumo;
+}
 async function scraperLeiloesJudiciais(browser) {
   console.log('  Leilões Judiciais — portal nacional (cookie via navegador + Node fetch)...');
   const bensMap = new Map();
@@ -3352,7 +3365,7 @@ async function scraperLeiloesJudiciais(browser) {
         valor_avaliacao: 0,
         valor_minimo: valMin,
         area_m2: area,
-        descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
+        descricao: descricaoRealLJUD(it, titulo),
         link_edital: urlLeiloeiro ? `https://${urlLeiloeiro}` : 'https://www.leiloesjudiciais.com.br',
         link_foto: foto,
         leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
@@ -3464,7 +3477,7 @@ function mapLoteLJUD_pp(it) {
     estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade: toTitleCase(cidade),
     bairro: '', endereco: '', valor_avaliacao: avalApi, valor_minimo: valMin, valor_minimo_2: valMin2,
     area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
-    descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
+    descricao: descricaoRealLJUD(it, titulo),
     // Documentos reais do lote (antes tudo apontava p/ a home do leiloeiro).
     // PÁGINA NÃO É EDITAL. O fallback para `loteUrl` fazia 423 lotes carregarem a página do
     // leilão no campo `link_edital` — a tela mostra "Edital" e abre uma listagem. Sem PDF de
@@ -3536,6 +3549,13 @@ async function scraperLJUD_navegador(browser, endpoint) {
     const row = mapLoteLJUD_pp(it);
     if (!row.valor_minimo || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id); imoveis.push(row);
+  }
+  // MEDIÇÃO da descrição real (07/10): quantos lotes vieram com o texto do leiloeiro e quais
+  // chaves `*desc*` o payload traz — o sandbox não alcança a API, então a 1ª coleta é a prova.
+  {
+    const comTexto = imoveis.filter(i => i.descricao && !i.descricao.endsWith(i.leiloeiro || '\u0000')).length;
+    const amostra = [...bens.values()][0] || {};
+    console.log(`    LJUD descrição real: ${comTexto}/${imoveis.length} · chaves desc no payload: ${Object.keys(amostra).filter(k => /desc/i.test(k)).join(',') || '(nenhuma)'}`);
   }
   // BACKFILL DE FOTO (og:image) — APRENDIZADO 2026-07-18: o get-lotes devolve fotos:[]
   // p/ ~38% dos lotes (foto só na PÁGINA do lote). Visitamos os SEM foto (todos têm
