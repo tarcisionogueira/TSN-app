@@ -69,4 +69,47 @@ assert.equal(gol.marca, 'VW'); assert.equal(gol.modelo, 'GOL 1.0'); assert.equal
   assert.equal(vazia.status_patio, 'indefinido');
   assert.match(vazia.status_patio_motivo, /não publica descrição/);
 }
+// ─── LEILÃO DE PÁTIO COMO PROVA (07/10, decisão do dono) ────────────────────────────────────
+{
+  const { ehLoteDePatio, promoverLeilaoDePatio } = await import('../lib/nordeste-veiculo.mjs');
+  // Títulos REAIS do acervo (07/10): 125 de 125 lotes dos 7 leilões de pátio, 0 de 5 do judicial.
+  assert.ok(ehLoteDePatio('VEICULO CONSERVADO DAFRA / SUPER 100 - 2009/2010'));
+  assert.ok(ehLoteDePatio('VEÍCULO CONSERVADO HONDA / CG 125 CARGO - 2002/2003'));
+  // Dois lotes do leilão 207 vêm com "\t" LITERAL (barra-t, não tabulação) colado no título.
+  // Sem engoli-lo a regra acertaria 123 de 125 — e a diferença passaria despercebida.
+  assert.ok(ehLoteDePatio('\\tVEICULO CONSERVADO GM / CORSA SUPER - 1997/1997'));
+  assert.ok(ehLoteDePatio('\tVEICULO CONSERVADO HONDA / CG 125 TITAN KS - 2003/2003'));
+  // Lote judicial NÃO entra: lá a ficha existe e o classificador é que manda.
+  assert.ok(!ehLoteDePatio('MOTOCICLETA YAMAHA/YBR125I FACTOR ED, ANO 2021/2022'));
+  assert.ok(!ehLoteDePatio('AUTOMÓVEL CHEVROLET/S10 LTZ, ANO 2012/2013'));
+  assert.ok(!ehLoteDePatio('SUCATA DE VEICULO CONSERVADO'), 'a marca é no COMEÇO do título');
+
+  const lote = (id, titulo, status_patio) => ({ fonte_id: `nordeste_${id}`, titulo, status_patio, status_patio_motivo: 'x' });
+  const r1 = promoverLeilaoDePatio([
+    lote('197-001', 'VEICULO CONSERVADO DAFRA / SUPER 100 - 2009/2010', 'indefinido'),
+    lote('197-002', 'VEICULO CONSERVADO HONDA / CG 125 - 2002/2003', 'indefinido'),
+  ]);
+  assert.equal(r1[0].status_patio, 'confirmado');
+  assert.match(r1[0].status_patio_motivo, /leilão de pátio da Nordeste/);
+  assert.equal(r1[1].status_patio, 'confirmado');
+
+  // TEXTO VENCE INFERÊNCIA: lote cuja ficha foi lida e classificada não é tocado.
+  const r2 = promoverLeilaoDePatio([lote('197-003', 'VEICULO CONSERVADO FIAT / UNO', 'nao_confirmado')]);
+  assert.equal(r2[0].status_patio, 'nao_confirmado');
+
+  // VETO POR LEILÃO: um lote com sinal de executado derruba a prova do leilão INTEIRO — a rede
+  // de segurança do dono (nunca exibir bem em posse do executado) não cede a uma inferência.
+  const r3 = promoverLeilaoDePatio([
+    lote('200-001', 'VEICULO CONSERVADO VW / GOL', 'indefinido'),
+    lote('200-002', 'VEICULO CONSERVADO FORD / KA', 'excluido'),
+    lote('201-001', 'VEICULO CONSERVADO FIAT / PALIO', 'indefinido'),  // outro leilão: não é vetado
+  ]);
+  assert.equal(r3[0].status_patio, 'indefinido', 'leilão com executado não promove');
+  assert.equal(r3[1].status_patio, 'excluido');
+  assert.equal(r3[2].status_patio, 'confirmado', 'o veto é por leilão, não global');
+
+  // Lote judicial no meio da lista continua intocado.
+  const r4 = promoverLeilaoDePatio([lote('213-001', 'MOTOCICLETA YAMAHA/YBR125I', 'indefinido')]);
+  assert.equal(r4[0].status_patio, 'indefinido');
+}
 console.log('nordeste-veiculo: todos os casos passaram');

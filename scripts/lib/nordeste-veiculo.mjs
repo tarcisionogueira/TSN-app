@@ -138,3 +138,46 @@ export function montarRowVeiculo(url, v) {
     ativo: !v.encerrado, atualizado_em: new Date().toISOString(),
   };
 }
+
+// ─── LEILÃO DE PÁTIO COMO PROVA (07/10, decisão do dono) ──────────────────────────────────────
+// O recon na página viva provou que a NORDESTE NÃO PUBLICA descrição nos lotes dos leilões de
+// pátio: o payload vem completo e o campo `description` é string vazia (no lote judicial de
+// controle o mesmo campo traz 521 caracteres com "Localização do Bem: …"). Sem texto, o
+// classificador único não tem o que ler e os 112 lotes ficavam `indefinido` — fora de /veiculos,
+// justamente os que mais interessam à vitrine. Decisão do dono: usar o LEILÃO como prova.
+//
+// A marca é a nomenclatura do leiloeiro. Medido no acervo em 07/10: nos 7 leilões de pátio,
+// 125 de 125 lotes se chamam "VEÍCULO CONSERVADO <marca> / <modelo> - ano/ano"; no leilão
+// judicial, 0 de 5 (lá são "MOTOCICLETA …", "AUTOMÓVEL …"). Dois lotes do leilão 207 chegaram com
+// um "\t" LITERAL (barra-t, não tabulação) colado no começo do título — por isso o regex engole
+// espaço, tabulação de verdade e a sequência escapada; sem isso a regra acertaria 123 de 125 e a
+// diferença passaria despercebida.
+const RE_LOTE_PATIO = /^(?:\s|\\[tnr])*ve[íi]culo\s+conservad[oa]\b/i;
+export const ehLoteDePatio = (titulo) => RE_LOTE_PATIO.test(String(titulo || ''));
+
+const leilaoDe = (fonteId) => (String(fonteId || '').match(/^nordeste_(\d+)-/) || [])[1] || null;
+
+/**
+ * Promove a `confirmado` os lotes SEM ficha de um leilão de pátio. Muta e devolve `rows`.
+ *
+ * Três freios, cada um por um motivo:
+ *  · só mexe em quem está `indefinido` — lote cuja FICHA foi lida e classificada manda nela:
+ *    texto real vence inferência, sempre.
+ *  · só promove quem tem a nomenclatura de pátio no título — é a prova, não o palpite.
+ *  · VETO POR LEILÃO: se qualquer lote do MESMO leilão trouxe sinal de bem com o executado
+ *    (`excluido`), o leilão inteiro deixa de servir de prova. É o "nenhum contra" que a regra de
+ *    herança por leilão do scraper-puppeteer já usava — a rede de segurança do dono (11/09) é
+ *    nunca exibir bem em posse do executado, e ela não pode ser atropelada por uma inferência.
+ */
+export function promoverLeilaoDePatio(rows) {
+  const vetado = new Set();
+  for (const r of rows || []) if (r?.status_patio === 'excluido') vetado.add(leilaoDe(r.fonte_id));
+  for (const r of rows || []) {
+    const leilao = leilaoDe(r?.fonte_id);
+    if (!leilao || vetado.has(leilao)) continue;
+    if (r.status_patio !== 'indefinido' || !ehLoteDePatio(r.titulo)) continue;
+    r.status_patio = 'confirmado';
+    r.status_patio_motivo = `leilão de pátio da Nordeste (lote "veículo conservado", leilão ${leilao}, nenhum sinal de executado no leilão)`;
+  }
+  return rows;
+}

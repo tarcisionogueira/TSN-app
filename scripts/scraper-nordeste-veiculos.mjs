@@ -12,7 +12,7 @@ import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { criarMotorDom } from './lib/motor/fetch-dom.mjs';
 import { TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote } from './lib/nordeste-parse.mjs';
-import { ehVeiculoInteiro, veiculoDoDetalhe, montarRowVeiculo } from './lib/nordeste-veiculo.mjs';
+import { ehVeiculoInteiro, veiculoDoDetalhe, montarRowVeiculo, promoverLeilaoDePatio } from './lib/nordeste-veiculo.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -74,6 +74,15 @@ async function main() {
       if (v.email_leiloeiro) contatos.set(v.leiloeiro, { leiloeiro: v.leiloeiro, email: v.email_leiloeiro, obs: 'payload do lote (nordesteleiloes.com.br)' });
       if (rows.length <= 8) console.log(`  [${DRYRUN ? 'seco' : 'ok'}] ${row.tipo_veiculo} · ${row.marca || '?'} ${row.modelo || ''} ${row.ano_modelo || ''} · R$ ${row.valor_minimo} / aval ${row.valor_avaliacao} · ${row.cidade || '?'}/${row.estado || '?'} · placa ${row.placa || '—'} · ativo=${row.ativo}`);
     }
+    // LEILÃO DE PÁTIO COMO PROVA (07/10, decisão do dono): a Nordeste não publica descrição nos
+    // lotes de pátio (recon na página viva), então o classificador não tem texto para ler e eles
+    // ficavam fora de /veiculos. A nomenclatura "VEÍCULO CONSERVADO" do leiloeiro é a prova —
+    // vetada no leilão inteiro se algum lote dele acusar bem com o executado.
+    const antes = rows.filter((r) => r.status_patio === 'confirmado').length;
+    promoverLeilaoDePatio(rows);
+    const promovidos = rows.filter((r) => r.status_patio === 'confirmado').length - antes;
+    if (promovidos) console.log(`  ${promovidos} lote(s) de leilão de pátio promovidos a 'confirmado' (sem ficha publicada pelo leiloeiro)`);
+
     // Mesma foto em 3+ lotes = imagem genérica do site (banner/logo), não foto do bem (regra de anularFotoRepetida).
     const freq = new Map();
     for (const r of rows) if (r.fotos) freq.set(r.fotos[0], (freq.get(r.fotos[0]) || 0) + 1);
