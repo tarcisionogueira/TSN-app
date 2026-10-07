@@ -202,7 +202,7 @@ async function salvarImoveis(imoveis, fonte) {
     try {
       const { data } = await supabase
         .from('imoveis_leilao')
-        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao, fotos, estado, cidade')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao, fotos, estado, cidade, correcao_edital')
         .in('fonte_id', fonteIds.slice(i, i + 150));
       for (const r of data || []) existentes.set(r.fonte_id, r);
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
@@ -307,6 +307,21 @@ async function salvarImoveis(imoveis, fonte) {
       // corrigiram o banco) não pode ser ZERADA pelo upsert diário: o card da listagem de
       // GL/LJUD/SODRE não traz avaliação (vem 0) e a linha inteira é sobrescrita. Preserva
       // o valor confirmado e mantém desconto/viabilidade coerentes com ele.
+      // VALOR CORRIGIDO PELO EDITAL (07/10): o relatório leu o edital e corrigiu o lance que esta
+      // coleta tinha trazido errado (rastro em `correcao_edital`: de → para). Se a fonte trouxer DE
+      // NOVO o mesmo valor errado (`de`), mantém o corrigido — senão a coleta seguinte desfaz a
+      // correção. Se trouxer um valor DIFERENTE do `de`, o site mudou (nova praça, retificação): o
+      // site está vivo e vence.
+      const corrEd = prev.correcao_edital && typeof prev.correcao_edital === 'object' ? prev.correcao_edital : null;
+      for (const col of ['valor_minimo', 'valor_minimo_2']) {
+        const c = corrEd?.[col];
+        if (c && Number(c.para) > 0 && Number(row[col]) > 0 && Math.abs(Number(row[col]) - Number(c.de)) < 0.01) row[col] = Number(c.para);
+      }
+      if (Number(row.valor_avaliacao) > 0 && Number(row.valor_minimo) > 0 && row.valor_avaliacao >= row.valor_minimo) {
+        row.desconto_percentual = Math.round((1 - row.valor_minimo / row.valor_avaliacao) * 100);
+        row.viavel = (1 - row.valor_minimo / row.valor_avaliacao) >= 0.3;
+        row.score_viabilidade = Math.min(100, Math.round((1 - row.valor_minimo / row.valor_avaliacao) * 150));
+      }
       const avalPrev = Number(prev.valor_avaliacao) || 0;
       if (!(Number(row.valor_avaliacao) > 0) && avalPrev > 0 && !SENTINELAS_VALOR.has(avalPrev)) {
         row.valor_avaliacao = avalPrev;

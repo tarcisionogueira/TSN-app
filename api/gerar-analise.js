@@ -2841,7 +2841,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     let avalDb = 0, fonteDb = '', areaFonte = areaDoEdital > 0 && areaM2 === areaDoEdital ? 'edital' : 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,titulo&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,titulo,correcao_edital&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
@@ -3102,6 +3102,51 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // apaga (a praça fantasma inventava um mês de folga que custaria o leilão).
         if (p1?.data && !p2 && pracasEd.length === 1 && imDb.data_leilao_2) {
           imDb.data_leilao_2 = null; patchPr.data_leilao_2 = null;
+        }
+        // VALORES: CONFERIR ≠ SÓ COMPLETAR (07/10, pedido do dono: "faça o sistema corrigir também
+        // os valores errados ao gerar relatório" — caso LJUD 217021, lance de R$ 1,6 mi que o site
+        // não mostra). Até aqui o edital só preenchia valor VAZIO; um lance que a coleta trouxe
+        // ERRADO seguia errado no card, na busca e no relatório. Agora o edital corrige, com as
+        // mesmas travas que já protegem as datas e mais três próprias de valor:
+        //   1. `valoresBatem` — o edital confere com a avaliação do anúncio (não é edital velho
+        //      nem de outro lote); sem isso nada é corrigido.
+        //   2. plausibilidade — 2ª praça ≤ 1ª praça ≤ avaliação (+5%).
+        //   3. faixa — só corrige diferença de 2% a 4× (fora disso é mais provável o edital de
+        //      vários lotes do que um erro de coleta: vira anomalia em aberto para olho humano).
+        // E uma regra de semântica: se `valor_minimo` já é o valor da 2ª praça (o site mostra a
+        // praça VIGENTE), ele está certo — não "corrige" para a 1ª. O rastro (de → para) fica em
+        // `correcao_edital`, que o coletor consulta para não regravar o mesmo valor errado.
+        if (valoresBatem) {
+          const p1v = Number(p1?.valor) || 0, p2v = Number(p2?.valor) || 0;
+          const vm1 = Number(imDb.valor_minimo) || 0, vm2 = Number(imDb.valor_minimo_2) || 0;
+          const aRef = avalDb > 0 ? avalDb : (Number(aEd) || 0);
+          const difere = (novo, atual) => novo > 0 && atual > 0 && Math.abs(novo - atual) / atual > 0.02;
+          const naFaixa = (novo, atual) => novo / atual <= 4 && novo / atual >= 0.25;
+          const perto = (x, y) => x > 0 && y > 0 && Math.abs(x - y) / y <= 0.02;
+          const plausivel = (!p1v || !p2v || p2v <= p1v * 1.001) && (!aRef || !p1v || p1v <= aRef * 1.05);
+          const corr = {};
+          const corrigir = (col, atual, novo) => {
+            if (!difere(novo, atual)) return;
+            if (!plausivel || !naFaixa(novo, atual)) {
+              registrarAnomalia('valor_divergente_edital', fonteDb, imovelId, col, `Acervo ${col}=R$ ${atual}; edital diz R$ ${novo} — MANTIDO (${!plausivel ? 'valores do edital incoerentes entre si' : 'diferença acima de 4×: edital de vários lotes?'}). Conferir.`).catch(() => {});
+              return;
+            }
+            corr[col] = { de: atual, para: novo };
+            imDb[col] = novo; patchPr[col] = novo;
+          };
+          if (!perto(vm1, p2v)) corrigir('valor_minimo', vm1, p1v);
+          corrigir('valor_minimo_2', vm2, p2v);
+          if (Object.keys(corr).length) {
+            patchPr.correcao_edital = { ...(imDb.correcao_edital || {}), ...corr, em: new Date().toISOString(), fonte: extratoDoc.fonteUrl || null };
+            const vmNovo = Number(patchPr.valor_minimo ?? imDb.valor_minimo) || 0;
+            if (avalDb > 0 && vmNovo > 0 && avalDb >= vmNovo) {
+              patchPr.desconto_percentual = Math.round((1 - vmNovo / avalDb) * 100);
+              patchPr.viavel = (1 - vmNovo / avalDb) >= 0.3;
+              patchPr.score_viabilidade = Math.min(100, Math.round((1 - vmNovo / avalDb) * 150));
+            }
+            registrarAnomalia('valor_corrigido_edital', fonteDb, imovelId, Object.keys(corr).join(','),
+              Object.entries(corr).map(([k, v]) => `${k}: R$ ${v.de} → R$ ${v.para}`).join('; ') + ' — corrigido pelo edital.', true).catch(() => {});
+          }
         }
         if (Object.keys(patchPr).length) {
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patchPr) }); } catch { /* best-effort */ }
