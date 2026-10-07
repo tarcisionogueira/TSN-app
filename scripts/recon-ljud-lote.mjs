@@ -46,6 +46,21 @@ try {
         item.api.push({ url: r.url().slice(0, 160), campos });
       } catch { /* resposta não-JSON: ignora */ }
     });
+    // Mesma chamada do coletor (scraperLJUD_navegador): fetch DENTRO da página, filtrada pelo leilão.
+    try {
+      await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+      for (const endpoint of ['get-lotes', 'get-bens-por-estados']) {
+        const url = `https://api.leiloesjudiciais.com.br/core/api/${endpoint}?pg=1&qtd_por_pagina=48&tipo=3&categoria=0&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=${leilaoId}&lote_id=0&ordenacao=null`;
+        const data = await page.evaluate(async (u) => {
+          try { const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.ok ? await r.json() : { __status: r.status }; }
+          catch (e) { return { __err: String(e?.message || e) }; }
+        }, url);
+        const items = (data && (data.items || data.data || (Array.isArray(data) ? data : []))) || [];
+        const o = items.find((x) => String(x.lote_id) === loteId);
+        const campos = o ? Object.fromEntries(Object.entries(o).filter(([k, v]) => /^(vl_|dt_|nu_|statuslote|praca|nr_)/.test(k) && typeof v !== 'object')) : null;
+        item.api.push({ endpoint, status: data?.__status || data?.__err || 200, itens: items.length, campos });
+      }
+    } catch (e) { item.api.push({ erro: String(e?.message || e).slice(0, 120) }); }
     try {
       await page.goto(`https://www.leiloesjudiciais.com.br/lote/${leilaoId}/${loteId}`, { waitUntil: 'networkidle2', timeout: 45000 });
       await new Promise((r) => setTimeout(r, 4000));
