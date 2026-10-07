@@ -68,6 +68,11 @@ try {
           hrefsDeCards: [...document.querySelectorAll('article, [class*="card"]')]
             .map((c) => c.querySelector('a[href]')?.getAttribute('href') || '')
             .filter(Boolean).filter((h, i, a) => a.indexOf(h) === i).slice(0, 10),
+          // Texto do 1º card: a modalidade (leilão × venda direta) saía da URL antiga
+          // (/oferta/leilao/… × /oferta/venda-direta/…) e sumiu do endereço novo. Se ela estiver
+          // no card, o conserto a lê de lá; se não estiver, é outro problema a resolver.
+          cardTexto: (document.querySelector('article, [class*="card"]')?.textContent || '')
+            .replace(/\s+/g, ' ').trim().slice(0, 400),
           hrefsProfundos: [...new Set(hrefs.filter((h) => !/^(https?:|mailto:|tel:|#|javascript:)/i.test(h)))]
             .filter((h) => h.split('/').length >= 4).slice(0, 12),
         };
@@ -80,6 +85,7 @@ try {
       for (const [f, n] of d.formas) console.log(`     ${String(n).padStart(4)} ${f}`);
       console.log('  href do 1º link de cada card:');
       for (const h of d.hrefsDeCards) console.log(`     ${h}`);
+      console.log(`  texto do 1º card: ${JSON.stringify(d.cardTexto)}`);
       console.log('  hrefs mais profundos:');
       for (const h of d.hrefsProfundos) console.log(`     ${h}`);
       console.log(`  texto: ${JSON.stringify(d.amostraTexto)}`);
