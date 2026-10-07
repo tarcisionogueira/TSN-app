@@ -248,8 +248,14 @@ export function cortarOutrosLotes(txt, ancora = CTX_ANCORA) {
 // "2º Encerramento - 20/10/2026". A página rotula as praças sem ambiguidade — lê só os rótulos.
 export function datasLjud(txt) { // exportada (05/10, #98): os VEÍCULOS LJUD leem a data do detalhe pelo mesmo leitor
   const RE = /(?:(\d)\s*[º°ª]\s*)?Encerramento\s*-\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/gi;
+  // "Leilão - 03/11/2026 10:00" (07/10, lote 99369/217021 — leilão unificado do TRT-2, praça única):
+  // a página não usa "Encerramento" e o lote ficava sem data. Só vale quando NÃO há rótulo de
+  // Encerramento (que é o fim, e tem precedência); exige o " - dd/mm/aaaa" logo após a palavra,
+  // então "710ª LEILÃO JUDICIAL" e "voltar para o leilão" não casam.
+  const RE_LEILAO = /(?:(\d)\s*[º°ª]\s*)?Leil[ãa]o\s*-\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/gi;
   const pracas = [];
-  for (const m of txt.matchAll(RE)) {
+  const achados = [...txt.matchAll(RE)];
+  for (const m of (achados.length ? achados : [...txt.matchAll(RE_LEILAO)])) {
     const [, n, d, mo, y, hh = '12', mm = '00'] = m;
     const t = Date.parse(`${y}-${mo}-${d}T${hh}:${mm}:00-03:00`);
     if (Number.isFinite(t)) pracas.push({ n: Number(n || 1), dia: `${y}-${mo}-${d}`, iso: new Date(t).toISOString(), t });

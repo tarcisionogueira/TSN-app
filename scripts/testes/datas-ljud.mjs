@@ -21,5 +21,11 @@ ok(passada.encerradaEm === '2020-08-20' && passada.inicio === null, 'datas passa
 
 ok(extrairDatasLeilao(pagina('sem rótulo nenhum 24/09/2026')).inicio === null, 'sem rótulo → nada (não cai no genérico)');
 
+// 07/10 (99369/217021): leilão unificado do TRT-2 — a página diz "Leilão - 03/11/2026 10:00", sem "Encerramento".
+const tlt = extrairDatasLeilao(pagina('710ª LEILÃO JUDICIAL UNIFICADO 143 lote(s) em RJ SP Leilão - 03/11/2099 10:00 voltar para o leilão'));
+ok(tlt.inicio === '2099-11-03' && tlt.fim === null, `"Leilão - dd/mm" → início, praça única (${tlt.inicio} / ${tlt.fim})`);
+const ambos = extrairDatasLeilao(pagina('1º Leilão - 01/10/2099 10:00 1º Encerramento - 13/10/2099 11:00 2º Encerramento - 20/10/2099 11:00'));
+ok(ambos.inicio === '2099-10-13', `Encerramento tem precedência sobre "Leilão -" (${ambos.inicio})`);
+
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);
