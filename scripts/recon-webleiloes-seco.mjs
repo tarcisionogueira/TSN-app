@@ -52,7 +52,8 @@ for (const { row, texto } of rows) {
   if (texto.length < 80) avisos.push(`CARD CURTO (${texto.length})`);
   if (avisos.length) problemas++;
   console.log(`${row.fonte_id} | ${row.tipo} | ${row.modalidade} | ${row.cidade}/${row.estado} | ${row.area_m2} m² | min ${row.valor_minimo} | aval ${row.valor_avaliacao} | ${row.data_leilao || '-'} → ${row.data_leilao_2 || '-'} | ${row.titulo}${avisos.length ? '  ⚠️ ' + avisos.join(', ') : ''}`);
-  if (avisos.length) console.log(`     card: ${texto.slice(0, 300)}`);
+  console.log(`     card: ${texto.slice(0, 320)}`);
+  console.log(`     foto: ${row.link_foto || '-'}`);
 }
 console.log(`\n${problemas} lote(s) com aviso.`);
 if (!rows.length || (total && rows.length < total * 0.8)) { console.log('⚠️ COLETA ABAIXO DO DECLARADO'); process.exitCode = 1; }

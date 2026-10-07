@@ -58,11 +58,13 @@ export function loteDaUrl(href) {
  */
 export function pracasDoCard(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
-  const re = /(\d)[ºo°]\s*Leil[ãa]o\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s*(?:R\$\s*([\d.]+,\d{2}))?/gi;
+  // "Leilão Único" (praça única, sem 1º/2º) é a forma de 12 dos 49 lotes no ensaio em seco de
+  // 07/10 — sem ela, saíam todos sem data, e lote sem data nunca expira pela limpeza horária.
+  const re = /(?:(\d)[ºo°]\s*Leil[ãa]o|Leil[ãa]o\s+[ÚU]nico)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s*(?:R\$\s*([\d.]+,\d{2}))?/gi;
   const out = [];
   for (const m of t.matchAll(re)) {
     const [dia, mes, ano] = m[4].split('/');
-    out.push({ n: Number(m[1]), fim: `${ano}-${mes}-${dia}T${m[5]}:00-03:00`, valor: brl(m[6]) });
+    out.push({ n: m[1] ? Number(m[1]) : 1, fim: `${ano}-${mes}-${dia}T${m[5]}:00-03:00`, valor: brl(m[6]) });
   }
   return out;
 }
@@ -97,15 +99,17 @@ export function mapaCardWebLeiloes({ href, texto = '', img = '' } = {}) {
   // Título: o trecho entre o contador e o "<ID> · Lote" já vem pronto e com acento
   // ("Casa em Condomínio 44m² Vila Belo Horizonte, Itapetininga/SP"). Sem ele, o slug — que
   // tem a mesma informação, só que sem acento.
-  const mt = t.match(/encerra em\s+(?:\d+\s*D\s+)?[\d:]+\s+(.*?)\s+\d+\s*·\s*Lote/i);
+  // O contador diz "Encerra em 13D 18:33:58" no lote aberto e "Inicia em 14D …" no que ainda
+  // não abriu — o ensaio em seco achou 11 destes caindo no título do slug, sem acento.
+  const mt = t.match(/(?:encerra|inicia)\s+em\s+(?:\d+\s*D\s+)?[\d:]+\s+(.*?)\s+\d+\s*·\s*Lote/i);
   const bruto = mt ? mt[1] : titulo(u.slug.replace(/-/g, ' '));
-  // O trecho carrega DUAS caudas de localização: "…, Cidade/UF" (fim da linha do título) e
-  // " Cidade, UF" (a linha de localização do card). Corta da PRIMEIRA em diante — tirar só a
-  // última deixava "…Vila Belo Horizonte, Itapetininga/" (o regex guloso comia o "SP" do meio).
-  const tituloLimpo = bruto
-    .replace(/,\s*[A-Za-zÀ-ÿ'.\- ]+\/[A-Z]{2}\b[\s\S]*$/, '')
-    .replace(/\s*[A-Za-zÀ-ÿ'.\- ]+,\s*[A-Z]{2}\s*$/, '')
-    .trim() || bruto;
+  // O trecho é "<título que termina em Cidade/UF> <Cidade, UF da linha de localização>". Corta
+  // logo DEPOIS do primeiro "/UF" — o título fica no padrão do acervo ("…, Sorocaba/SP") e a
+  // linha de localização, que repete a cidade, sai. Duas tentativas anteriores erravam por
+  // REGEX DE NOME DE CIDADE: com vírgula obrigatória sobrava "Casa 100m² Americana/", e o padrão
+  // guloso comia o "SP" do meio. A UF da URL é exata; não há nome de cidade para adivinhar.
+  const fimUf = bruto.search(new RegExp(`\\/${u.uf}\\b`));
+  const tituloLimpo = (fimUf > 0 ? bruto.slice(0, fimUf + 3) : bruto).trim() || bruto;
 
   // Área: "1437m²" no título, ou "44m2" no slug. Duas formas, e as DUAS mordem:
   //  · com separador de milhar, o padrão tem de exigir grupos de EXATAMENTE 3 dígitos, senão
@@ -115,7 +119,10 @@ export function mapaCardWebLeiloes({ href, texto = '', img = '' } = {}) {
   // Por isso a alternância: ou a forma agrupada INTEIRA, ou uma corrida simples de dígitos.
   const RE_AREA = /(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*m²/i;
   const am = bruto.match(RE_AREA) || u.slug.match(/(\d+)m2\b/i);
-  const area = am ? parseFloat(String(am[1]).replace(/\./g, '').replace(',', '.')) : 0;
+  // Hectare (ensaio de 07/10: "Sítio 14 hectares" saía com área 0). 1 ha = 10.000 m².
+  const ha = !am && bruto.match(/(\d+(?:,\d+)?)\s*(?:ha|hectares?)\b/i);
+  const area = am ? parseFloat(String(am[1]).replace(/\./g, '').replace(',', '.'))
+    : ha ? Math.round(parseFloat(ha[1].replace(',', '.')) * 10000) : 0;
 
   const p1 = pracas.find((p) => p.n === 1) || pracas[0] || null;
   const p2 = pracas.find((p) => p.n === 2) || null;
@@ -165,13 +172,15 @@ export function extrairCardsWebLeiloes() {
       // Já tem tudo o que o mapeador lê (marca do lote, praças e modalidade)? Para aqui. Sem esta
       // parada, uma página com UM lote só subiria até o <body> e o texto do card seria o menu.
       const t = el.textContent || '';
-      if (new RegExp(`\\b${id}\\s*·\\s*Lote`).test(t) && /\d[ºo°]\s*Leil[ãa]o/i.test(t) && /judicial|venda\s+direta/i.test(t)) break;
+      if (new RegExp(`\\b${id}\\s*·\\s*Lote`).test(t) && /\d[ºo°]\s*Leil[ãa]o|Leil[ãa]o\s+[ÚU]nico/i.test(t) && /judicial|venda\s+direta/i.test(t)) break;
     }
     const img = card ? card.querySelector('img') : null;
     out.push({
       href,
       texto: card ? (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600) : '',
-      img: img ? (img.getAttribute('src') || img.getAttribute('data-src') || '') : '',
+      // A PROPRIEDADE `src` (não o atributo): o navegador já a devolve absoluta. O atributo cru
+      // é caminho relativo e o mapeador o descartava — o ensaio de 07/10 saiu com 0 de 49 fotos.
+      img: img ? ([img.currentSrc, img.src, img.getAttribute('data-src')].find((x) => x && !/^data:/i.test(x)) || '') : '',
     });
   }
   // "Imóveis 1-32 de 49 itens" — o total que a própria página declara.

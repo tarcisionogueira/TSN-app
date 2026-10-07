@@ -54,7 +54,7 @@ assert.equal(j.fonte_id, 'webleiloes_25931');
 assert.equal(j.modalidade, 'judicial');
 assert.equal(j.estado, 'SP');
 assert.equal(j.cidade, 'Itapetininga');
-assert.equal(j.titulo, 'Casa em Condomínio 44m² Vila Belo Horizonte');
+assert.equal(j.titulo, 'Casa em Condomínio 44m² Vila Belo Horizonte, Itapetininga/SP', 'padrão do acervo: termina em Cidade/UF, sem a linha de localização');
 assert.equal(j.area_m2, 44);
 assert.equal(j.valor_avaliacao, 149980.01);
 assert.equal(j.valor_minimo, 89988.01, 'o mínimo é a praça VIGENTE, não a primeira');
@@ -68,7 +68,7 @@ assert.ok(Math.abs(j.valor_minimo - j.valor_avaliacao * 0.6) < 0.02);
 const C_EXTRA = 'Extrajudicial Aberto 2º leilão encerra em 18:34:10 Gleba de Terras 1437m² Fazenda Genebra, Sorocaba/SP Sorocaba, SP 25884 · Lote 1 R$ 1.811.647,93 1º Leilão 11/09/2026 14:00 01/10/2026 14:00 R$ 858.000,00 2º Leilão 01/10/2026 14:00 08/10/2026 14:00 R$ 1.811.647,93';
 const e = mapaCardWebLeiloes({ href: '/imoveis/glebas/sp/sorocaba/gleba-de-terras-1437m2-fazenda-genebra-sorocaba-sp-25884', texto: C_EXTRA });
 assert.equal(e.modalidade, 'extrajudicial');
-assert.equal(e.titulo, 'Gleba de Terras 1437m² Fazenda Genebra');
+assert.equal(e.titulo, 'Gleba de Terras 1437m² Fazenda Genebra, Sorocaba/SP');
 assert.equal(e.area_m2, 1437);
 assert.equal(e.valor_minimo, 1811647.93);
 assert.equal(e.valor_avaliacao, 1811647.93, 'avaliação é o MAIOR das praças — aqui a 2ª');
@@ -94,6 +94,29 @@ assert.ok(CANONICOS.has(mapaCardWebLeiloes({ href: '/imoveis/outros/sp/x/qualque
 // VENDA DIRETA mantém a modalidade própria: é ela que liga a reconferência de preço na página
 // do lote (`reconferirPreco` em scraper-puppeteer.mjs).
 assert.equal(mapaCardWebLeiloes({ href: U1, texto: 'Venda Direta Aberto Casa 44m² · Lote 1 R$ 10,00' }).modalidade, 'venda_direta');
+
+// ─── FORMAS QUE SÓ O ENSAIO EM SECO MOSTROU (07/10, 49 cards reais) ─────────────────────────
+// LEILÃO ÚNICO: 12 dos 49. Sem esta forma, saíam sem data — e lote sem data nunca expira.
+const C_UNICO = 'Judicial Aberto Encerra em 22D 18:12:10 Sítio 14 hectares Guararema/SP Guararema, SP 25890 · Lote 1 R$ 2.112.435,00 Leilão Único 24/09/2026 14:00 30/10/2026 14:00 R$ 2.112.435,00';
+const un = mapaCardWebLeiloes({ href: '/imoveis/imoveis-rurais/sp/guararema/sitio-14-hectares-guararema-sp-25890', texto: C_UNICO });
+assert.equal(un.data_leilao, '2026-10-30T14:00:00-03:00', 'encerramento da praça única');
+assert.equal(un.data_leilao_2, null);
+assert.equal(un.valor_minimo, 2112435);
+assert.equal(un.valor_avaliacao, 2112435);
+// Título sem vírgula antes da cidade: saía "Sítio 14 hectares Guararema/" (e "Casa 100m² Americana/").
+assert.equal(un.titulo, 'Sítio 14 hectares Guararema/SP');
+assert.equal(un.area_m2, 140000, '14 ha = 140.000 m² (saía 0)');
+assert.equal(un.tipo, 'rural');
+// "INICIA EM" (leilão que ainda não abriu): 11 dos 49 caíam no título do slug, sem acento.
+const C_BREVE = 'Judicial Em breve Inicia em 14D 18:12:10 Imóvel Residencial, 250m², Higienópolis, Piracicaba/SP Piracicaba, SP 25946 · Lote 1 R$ 282.411,06 Leilão Único 22/10/2026 14:00 23/11/2026 14:00 R$ 282.411,06';
+const br = mapaCardWebLeiloes({ href: '/imoveis/casas/sp/piracicaba/imovel-residencial-250m2-higienopolis-piracicaba-sp-25946', texto: C_BREVE });
+assert.equal(br.titulo, 'Imóvel Residencial, 250m², Higienópolis, Piracicaba/SP');
+assert.equal(br.area_m2, 250);
+assert.equal(br.data_leilao, '2026-11-23T14:00:00-03:00');
+assert.equal(br.tipo, 'casa');
+// Cidade com acento e várias palavras: o corte é pela UF da URL, não por nome de cidade.
+const C_SJC = 'Judicial Aberto Encerra em 12D 18:12:19 Apartamento 43m² Vila Iracema, São José dos Campos/SP São José Dos Campos, SP 25903 · Lote 1 R$ 215.356,00 Leilão Único 20/07/2026 14:00 20/10/2026 14:00 R$ 215.356,00';
+assert.equal(mapaCardWebLeiloes({ href: '/imoveis/apartamentos/sp/sao-jose-dos-campos/apartamento-43m2-vila-iracema-sao-jose-dos-campos-sp-25903', texto: C_SJC }).titulo, 'Apartamento 43m² Vila Iracema, São José dos Campos/SP');
 
 // "extrajudicial" contém "judicial": sem a exceção, todo lote extrajudicial viraria judicial.
 assert.equal(mapaCardWebLeiloes({ href: U1, texto: 'Extrajudicial Aberto' }).modalidade, 'extrajudicial');
