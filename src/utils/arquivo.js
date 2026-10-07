@@ -63,12 +63,10 @@ export function nomeArquivoSeguro(nome, maxBase = 70) {
 // editor de e-book (.docx).
 export const ACEITA_DOCUMENTO = 'image/*,.heic,.heif,.pdf,application/pdf,.txt,.md,text/plain,.doc,.docx';
 
-// DOCUMENTO QUE VAI SER ASSINADO — restrito de propósito (07/10). O PDF do contrato assinado é
-// montado a partir do arquivo: imagem vira página, PDF vira páginas (pdf.js). Word NÃO é
-// reproduzido, e o resultado era um documento de UMA página dizendo "Documento anexo: <link>" —
-// com cara de assinado e sem o conteúdo dentro. O dono assinou o requerimento do ONR assim e o
-// arquivo baixado veio vazio. Quem tem Word exporta em PDF antes; é um clique, e o que sai
-// passa a ser o documento de verdade.
-export const ACEITA_DOCUMENTO_ASSINAVEL = 'image/*,.heic,.heif,.pdf,application/pdf';
-export const ehArquivoAssinavel = (nome, tipo = '') =>
-  /\.(pdf|jpe?g|png|gif|webp|heic|heif)$/i.test(String(nome || '')) || /^image\//i.test(String(tipo || '')) || String(tipo || '') === 'application/pdf';
+// DOCUMENTO QUE VAI SER ASSINADO (07/10). Aceita os mesmos formatos dos demais campos, MENOS o
+// .doc binário antigo: `ContratoPDF` converte .docx (mammoth), .txt/.md e PDF (pdf.js) para dentro
+// do PDF assinado, e imagem vira página — mas o .doc de 1997 nenhuma das três lê, e o que sairia
+// seria um documento com cara de assinado e sem conteúdo (foi o que aconteceu com o requerimento
+// do ONR). Regra do dono: "independente do formato, uma vez assinado deve gerar como PDF podendo
+// visualizar o conteúdo".
+export const ACEITA_DOCUMENTO_ASSINAVEL = 'image/*,.heic,.heif,.pdf,application/pdf,.txt,.md,text/plain,.docx';

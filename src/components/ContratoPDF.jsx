@@ -34,6 +34,38 @@ async function pdfParaImagens(url) {
   } catch { return null; }
 }
 
+// WORD (.docx) → HTML, no navegador, via mammoth (já é dependência e já roda no cliente em
+// src/utils/parseDocx.js). Decisão do dono (07/10): "independente do formato, uma vez assinado
+// deve gerar como PDF podendo visualizar o conteúdo". O layout original não se preserva numa
+// conversão — o TEXTO sim, e é ele que foi assinado. Import dinâmico: não entra no bundle de
+// quem só lê contrato.
+async function docxParaHtml(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;                       // 404/403 não pode virar "documento vazio"
+    const buf = await r.arrayBuffer();
+    // MESMO import de src/utils/parseDocx.js, que já roda em produção: o `browser` field do
+    // mammoth troca o unzip de Node pelo do navegador. Apontar para o bundle .browser.js na mão
+    // funcionaria, mas seria um segundo caminho para a mesma coisa.
+    const mammoth = (await import('mammoth')).default;
+    const { value } = await mammoth.convertToHtml({ arrayBuffer: buf });
+    const limpo = String(value || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/ on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    return limpo.trim() || null;                  // .docx que converteu VAZIO não é conteúdo
+  } catch { return null; }                         // padrao-ok: cai no aviso explícito do chamador
+}
+
+// TXT/MD: o arquivo É o texto. `white-space: pre-wrap` preserva as quebras do original.
+async function textoParaHtml(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const t = await r.text();
+    return t.trim() ? `<div class="doctxt">${esc(t)}</div>` : null;
+  } catch { return null; }                         // padrao-ok: cai no aviso explícito do chamador
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dataHora = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }); } catch { return iso || ''; } };
 
@@ -69,6 +101,13 @@ const ESTILOS_CONTRATO = `
   .assimg{max-height:56px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;padding:3px;margin-top:4px;display:block;}
   .auth{margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0;font-size:10px;color:#475569;line-height:1.65;}
   .auth b{color:#111;}
+  .doctxt{white-space:pre-wrap;font-size:12px;line-height:1.6;color:#111;}
+  .docconv{font-size:12px;line-height:1.6;color:#111;}
+  .docconv h1{font-size:17px;margin:14px 0 8px;} .docconv h2{font-size:15px;margin:12px 0 6px;}
+  .docconv h3{font-size:13.5px;margin:10px 0 5px;} .docconv p{margin:0 0 8px;}
+  .docconv table{border-collapse:collapse;width:100%;margin:8px 0;}
+  .docconv td,.docconv th{border:1px solid #cbd5e1;padding:5px 7px;font-size:11.5px;vertical-align:top;}
+  .docconv img{max-width:100%;}
   .pagefoot{position:fixed;bottom:4mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.3;color:#94a3b8;word-break:break-all;}
 `;
 
@@ -84,9 +123,19 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
   // (…/object/sign/…?token=…) → termina em querystring, não na extensão; por isso detectamos o
   // tipo pelo NOME do arquivo (ou pela extensão antes de ?/#), senão a imagem caía como "link".
   const nomeArq = contrato.arquivo_nome || contrato.arquivo_url || '';
-  const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nomeArq) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url || '');
+  const ehTipo = (re) => re.test(nomeArq) || re.test(contrato.arquivo_url || '');
+  const ehImg = ehTipo(/\.(jpe?g|png|gif|webp)($|\?|#)/i);
+  const ehWord = ehTipo(/\.docx($|\?|#)/i);
+  const ehTexto = ehTipo(/\.(txt|md)($|\?|#)/i);
   let corpoDoc;
-  if (contrato.arquivo_url && ehImg) {
+  if (contrato.arquivo_url && ehWord) {
+    // WORD: converte o conteúdo e embute. Decisão do dono (07/10) — o arquivo de entrada pode ser
+    // texto ou PDF, mas o ASSINADO tem de ser um PDF em que se lê o documento.
+    const htmlDoc = await docxParaHtml(contrato.arquivo_url);
+    corpoDoc = htmlDoc ? `<div class="docconv">${htmlDoc}</div>` : null;
+  } else if (contrato.arquivo_url && ehTexto) {
+    corpoDoc = await textoParaHtml(contrato.arquivo_url);
+  } else if (contrato.arquivo_url && ehImg) {
     corpoDoc = `<div class="docpage"><img class="docimg" src="${esc(contrato.arquivo_url)}" alt="Documento" /></div>`;
   } else if (contrato.arquivo_url) {
     // PDF anexo: EMBUTE as páginas do documento (renderizadas via pdf.js) — o arquivo final traz
@@ -94,20 +143,21 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
     const imagens = await pdfParaImagens(contrato.arquivo_url);
     corpoDoc = (imagens && imagens.length)
       ? imagens.map((src) => `<div class="docpage"><img class="docimg" src="${src}" alt="Documento" /></div>`).join('')
-      // NÃO CONSEGUI REPRODUZIR O DOCUMENTO: isso precisa aparecer como tal. Até 07/10 saía um
-      // "Documento anexo: <link>" discreto, e o PDF baixado tinha cara de documento assinado com
-      // UMA página em branco — foi o que aconteceu com o requerimento do ONR (arquivo .docx, que
-      // o pdf.js não lê). Quem recebe o arquivo precisa entender na hora que o conteúdo está no
-      // original, não aqui. Word deixou de ser aceito na entrada (ACEITA_DOCUMENTO_ASSINAVEL);
-      // este aviso cobre os contratos que já foram assinados assim.
-      : `<div class="corpo" style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:12px 14px;">
-          <b>Este PDF não reproduz o documento assinado.</b><br/>
-          O arquivo original (<b>${esc(contrato.arquivo_nome || 'documento')}</b>) está em um formato que não pode ser
-          embutido aqui — o que segue abaixo é apenas o comprovante da assinatura eletrônica.
-          O documento em si fica no link: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'abrir documento')}</a>${verUrl ? `<br/>Página de verificação: <a href="${verUrl}">${verUrl}</a>` : ''}
-        </div>`;
+      : null;
   } else {
     corpoDoc = `<div class="corpo">${esc(contrato.conteudo || '')}</div>`;
+  }
+
+  // NENHUMA CONVERSÃO DEU CERTO (.doc antigo, arquivo fora do ar, docx corrompido, PDF que o
+  // pdf.js não renderiza): o PDF diz isso em destaque, em vez de sair com uma página em branco e
+  // cara de documento assinado — foi assim que o requerimento do ONR baixou vazio.
+  if (contrato.arquivo_url && !corpoDoc) {
+    corpoDoc = `<div class="corpo" style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:12px 14px;">
+      <b>Não foi possível reproduzir o documento neste PDF.</b><br/>
+      O arquivo original (<b>${esc(contrato.arquivo_nome || 'documento')}</b>) não pôde ser convertido — o que segue
+      abaixo é apenas o comprovante da assinatura eletrônica. O documento em si fica no link:
+      <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'abrir documento')}</a>${verUrl ? `<br/>Página de verificação: <a href="${verUrl}">${verUrl}</a>` : ''}
+    </div>`;
   }
 
   // Partes: usa o roster (todas as partes) quando disponível; senão, cai na própria linha do token.

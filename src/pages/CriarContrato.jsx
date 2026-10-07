@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairTextoDeVarios, chaveArquivo } from '../utils/extrairTextoDoc';
-import { nomeArquivoSeguro, ACEITA_DOCUMENTO_ASSINAVEL, ehArquivoAssinavel } from '../utils/arquivo';
+import { nomeArquivoSeguro, ACEITA_DOCUMENTO_ASSINAVEL } from '../utils/arquivo';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
@@ -149,14 +149,6 @@ export default function CriarContrato() {
     if (!file) return;
     const maxSize = 20 * 1024 * 1024;
     if (file.size > maxSize) { setErro('Arquivo muito grande. Limite: 20 MB.'); return; }
-    // WORD NÃO ENTRA AQUI (07/10). O PDF assinado é montado A PARTIR do arquivo: imagem vira
-    // página, PDF vira páginas. Word não é reproduzido, e o que saía era um documento de uma
-    // página só dizendo "Documento anexo: <link>" — com cara de assinado e sem conteúdo dentro.
-    // Barrar na entrada é o conserto: depois de assinado, não há como repor o que não foi lido.
-    if (!ehArquivoAssinavel(file.name, file.type)) {
-      setErro('Para assinar, o documento precisa ser PDF ou imagem. Arquivo do Word: abra e use "Salvar como PDF" — o documento assinado é gerado a partir do arquivo, e o Word não é reproduzido dentro dele.');
-      return;
-    }
     setArquivoDoc(file);
     setArquivoUrl('');
     setArquivoUploading(true);
@@ -483,7 +475,7 @@ export default function CriarContrato() {
             {/* Modo assinar: upload do arquivo */}
             {modo === 'assinar' && (
               <div>
-                <label style={S.label}>Arquivo do documento (PDF, JPG, PNG) *</label>
+                <label style={S.label}>Arquivo do documento (PDF, Word, texto, JPG, PNG) *</label>
                 <input ref={fileDocRef} type="file" accept={ACEITA_DOCUMENTO_ASSINAVEL} style={{ display: 'none' }}
                   onChange={e => handleDocUpload(e.target.files[0])} />
 
@@ -492,8 +484,9 @@ export default function CriarContrato() {
                     style={{ width: '100%', padding: '28px 20px', border: '2px dashed #cbd5e1', borderRadius: 12, background: '#f8fafc', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <Upload size={28} color="#94a3b8" />
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Clique para selecionar o documento</span>
-                    <span style={{ fontSize: 11.5, color: '#94a3b8' }}>PDF, JPG ou PNG — até 20 MB</span>
-                    <span style={{ fontSize: 11, color: '#94a3b8' }}>Documento no Word? Salve como PDF antes — é o arquivo que vira o documento assinado.</span>
+                    <span style={{ fontSize: 11.5, color: '#94a3b8' }}>PDF, Word, texto, JPG ou PNG — até 20 MB</span>
+                    {/* Qualquer um desses vira PDF com o conteúdo dentro na hora de assinar
+                        (decisão do dono, 07/10) — ver src/components/ContratoPDF.jsx. */}
                   </button>
                 ) : (
                   <div style={{ padding: '14px 16px', background: arquivoUploading ? '#fef3c7' : arquivoUrl ? '#f0fdf4' : '#f8fafc', borderRadius: 10, border: `1px solid ${arquivoUploading ? '#fcd34d' : arquivoUrl ? '#86efac' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
