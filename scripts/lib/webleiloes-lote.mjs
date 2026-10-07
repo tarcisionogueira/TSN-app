@@ -145,14 +145,29 @@ export function mapaCardWebLeiloes({ href, texto = '', img = '' } = {}) {
  * Devolve os cards (href + texto + foto) e o total que a própria página declara.
  */
 export function extrairCardsWebLeiloes() {
+  const RE_LOTE = /\/imoveis\/[a-z0-9-]+\/[a-z]{2}\/[a-z0-9-]+\/.+-(\d+)(?:[?#]|$)/i;
+  const idDe = (h) => (String(h || '').match(RE_LOTE) || [])[1] || null;
   const vistos = new Set(); const out = [];
   for (const a of document.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href') || '';
-    if (!/\/imoveis\/[a-z0-9-]+\/[a-z]{2}\//i.test(href)) continue;
-    const card = a.closest('article') || a.closest('li, [class*="card"]') || a.parentElement;
+    const id = idDe(href);
+    if (!id || vistos.has(id)) continue; vistos.add(id);
+    // O CARD É O MAIOR ANCESTRAL QUE SÓ CONTÉM ESTE LOTE (07/10). A 1ª versão usava
+    // `closest('[class*="card"]')` — o ancestral mais PRÓXIMO com "card" na classe — e no site
+    // novo esse é o invólucro da FOTO: o ensaio em seco trouxe 49 de 49 cards com texto VAZIO,
+    // logo sem valor e sem data. Sobe-se até o nível em que aparece o link de OUTRO lote (aí já
+    // é a grade); o último nível antes disso é o card inteiro, sem depender de nome de classe.
+    let card = a.parentElement;
+    for (let el = a.parentElement, i = 0; el && el !== document.body && i < 15; el = el.parentElement, i++) {
+      const outro = [...el.querySelectorAll('a[href]')].some((x) => { const o = idDe(x.getAttribute('href')); return o && o !== id; });
+      if (outro) break;
+      card = el;
+      // Já tem tudo o que o mapeador lê (marca do lote, praças e modalidade)? Para aqui. Sem esta
+      // parada, uma página com UM lote só subiria até o <body> e o texto do card seria o menu.
+      const t = el.textContent || '';
+      if (new RegExp(`\\b${id}\\s*·\\s*Lote`).test(t) && /\d[ºo°]\s*Leil[ãa]o/i.test(t) && /judicial|venda\s+direta/i.test(t)) break;
+    }
     const img = card ? card.querySelector('img') : null;
-    const k = href.split('?')[0];
-    if (vistos.has(k)) continue; vistos.add(k);
     out.push({
       href,
       texto: card ? (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600) : '',
