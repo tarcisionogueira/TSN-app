@@ -20,6 +20,7 @@
     "verificar:regras": "node scripts/verificar-regras-negocio.mjs",
     "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
     "testar:doc-normalizar": "node scripts/testes/doc-normalizar.mjs",
+    "testar:anexo-externo": "node scripts/testes/anexo-link-externo.mjs",
     "testar:lance-pagina": "node scripts/testes/lance-pagina.mjs",
     "testar:signatario": "node scripts/testes/signatario-preenchido.mjs",
     "testar:cnj-cache": "node scripts/testes/cnj-cache.mjs",

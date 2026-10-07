@@ -1,5 +1,6 @@
 export const config = { runtime: 'edge' };
 import { getAuthUser } from './_auth.js';
+import { linkExternoDoAnexo } from './_anexo-externo.js';
 
 // POST /api/doc-url { anexo_id } | { anexo_ids: [...] } → { url } | { urls: {id:url} }
 // Re-assina SOB DEMANDA uma URL curta para documento(s) do imóvel guardado(s) no
@@ -60,7 +61,7 @@ export default async function handler(req) {
   // pode ver; os demais simplesmente não aparecem no resultado. (ids já validados
   // como uuid, então o in-list é seguro sem aspas — mesma convenção do restante.)
   const r = await fetch(
-    `${SB}/rest/v1/imovel_anexos?id=in.(${ids.join(',')})&select=id,storage_path`,
+    `${SB}/rest/v1/imovel_anexos?id=in.(${ids.join(',')})&select=id,storage_path,url,origem_url`,
     { headers: { apikey: ANON, Authorization: `Bearer ${token}` } },
   );
   if (!r.ok) return json({ error: 'Falha ao consultar anexo' }, 502);
@@ -71,13 +72,24 @@ export default async function handler(req) {
   const assinados = await Promise.all(comArquivo.map(async (a) => [a.id, await assinar(a.storage_path)]));
   const urls = {};
   for (const [id, url] of assinados) if (url) urls[id] = url;
+  // ANEXO QUE MORA NO LEILOEIRO (07/10): sem `storage_path` o documento não é inexistente — o
+  // coletor guarda edital/matrícula do site do leiloeiro em `origem_url` (25 mil linhas hoje), e
+  // este leitor só sabia assinar arquivo nosso. Devolver "sem arquivo" nesse caso é entregar a
+  // limitação do leitor como se fosse ausência do documento. O RLS já decidiu quem vê a linha.
+  // Só para linha SEM `storage_path`: quando o arquivo é nosso, o caminho é assinar — cair no
+  // `url` gravado seria servir de novo a signed URL vencida que este endpoint existe para evitar.
+  for (const a of (Array.isArray(linhas) ? linhas : [])) {
+    if (urls[a.id]) continue;
+    const externo = linkExternoDoAnexo(a);
+    if (externo) urls[a.id] = externo;
+  }
 
   // Modo single: mantém a forma { url } (ou os erros equivalentes) para compatibilidade.
   if (!Array.isArray(body?.anexo_ids)) {
     const url = urls[ids[0]];
     if (!url) {
       const existe = (Array.isArray(linhas) ? linhas : []).some((a) => a?.id === ids[0]);
-      return json({ error: existe ? 'Anexo sem arquivo' : 'Acesso negado' }, existe ? 404 : 403);
+      return json({ error: existe ? 'O leiloeiro não disponibilizou o arquivo deste anexo.' : 'Acesso negado' }, existe ? 404 : 403);
     }
     return json({ url });
   }

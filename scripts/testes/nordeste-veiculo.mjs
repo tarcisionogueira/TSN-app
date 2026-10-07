@@ -52,5 +52,15 @@ assert.equal(gol.marca, 'VW'); assert.equal(gol.modelo, 'GOL 1.0'); assert.equal
   const url = 'https://nordesteleiloes.com.br/lotes/213-065-automovel-vw-gol';
   assert.deepEqual(montarRowVeiculo(url, { ...base, foto: 'https://nordesteleiloes-files.s3.amazonaws.com/lotes/fotos/a.png' }).fotos, ['https://nordesteleiloes-files.s3.amazonaws.com/lotes/fotos/a.png']);
   assert.equal('fotos' in montarRowVeiculo(url, { ...base, foto: null }), false);
+  // PÁTIO SEM FICHA (07/10): medido no acervo — os 112 ativos dos leilões 197–207 (de pátio) tinham
+  // `descricao` de 41–57 caracteres, que é o TÍTULO entrando pelo fallback, e saíam com o motivo
+  // "sem sinal de pátio na ficha". Veredito sobre ficha não lida. Sem ficha o motivo precisa DIZER
+  // que não leu; o status segue 'indefinido' (lado seguro: não aparece em /veiculos).
+  const semFicha = montarRowVeiculo(url, { ...base, descricao: 'VEICULO CONSERVADO HONDA / CG 125 TITAN KS - 2003/2003', ficha: null });
+  assert.equal(semFicha.status_patio, 'indefinido');
+  assert.match(semFicha.status_patio_motivo, /ficha do lote não lida/);
+  // Com ficha de verdade, o classificador único continua mandando (lote 213-027, texto real).
+  const comFicha = montarRowVeiculo(url, { ...base, ficha: 'Bens: 01 (UM) AUTOMOTOR DE PLACA JML2C96 … Localização do Bem: RUA A, CENTRO, PIRITIBA/BA.' });
+  assert.equal(comFicha.status_patio, 'nao_confirmado');
 }
 console.log('nordeste-veiculo: todos os casos passaram');

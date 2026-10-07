@@ -90,6 +90,13 @@ export function veiculoDoDetalhe(html, url) {
     cidade: loc ? loc[1].trim() : (lote.city || null), estado: loc ? loc[2] : (/^[A-Z]{2}$/.test(lote.state || '') ? lote.state : null),
     placa: placa ? placa.replace('-', '').toUpperCase() : null, chassi: chassi ? chassi.toUpperCase() : null, renavam,
     descricao: desc.slice(0, 8000) || titulo,
+    // A FICHA SEPARADA DO QUE VAI NA TELA (07/10). `descricao` cai para o título quando a ficha não
+    // vem — o card não pode ficar em branco —, e esse fallback estava sendo entregue ao
+    // classificador de pátio como se FOSSE a ficha: 112 dos 117 ativos (os leilões 197–207, de
+    // pátio) tinham 41–57 caracteres de TÍTULO e saíam com o motivo "sem sinal de pátio na ficha",
+    // afirmação sobre uma ficha que nunca foi lida. `ficha` é null quando não houve leitura, e aí
+    // `montarRowVeiculo` grava "ficha não lida" em vez de um veredito.
+    ficha: desc || null,
     // Foto: o MESMO extrator dos imóveis da NORDESTE (24/24 com foto, 23 distintas). Até 05/10 o coletor de
     // veículos não lia foto nenhuma — 100 de 100 ativos sem foto, escondidos atrás da saúde que media 0% de tudo.
     foto: fotoDeHtml(html, url) || null,
@@ -102,7 +109,11 @@ export function veiculoDoDetalhe(html, url) {
 }
 
 export function montarRowVeiculo(url, v) {
-  const patio = classificarPatio(v.descricao);
+  // Sem ficha, não há classificação: `indefinido` continua (o lote não aparece, que é o lado
+  // seguro), mas o motivo diz que NÃO foi possível ler — não inventa "sem sinal de pátio".
+  const patio = v.ficha
+    ? classificarPatio(v.ficha)
+    : { status: 'indefinido', motivo: 'ficha do lote não lida — pátio não classificado (nordeste)' };
   return {
     fonte: 'NORDESTE', fonte_id: `nordeste_${(slugDoLote(url).match(/^\d+-\d+/) || [slugDoLote(url)])[0]}`,
     titulo: v.titulo, descricao: v.descricao, marca: v.marca, modelo: v.modelo,
