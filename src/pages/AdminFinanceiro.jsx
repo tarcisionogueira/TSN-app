@@ -777,8 +777,11 @@ export default function AdminFinanceiro() {
       </div>
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+        {/* Seletor de visão. `flexWrap` desde 07/10: são NOVE abas e a barra, com `width:
+            fit-content` e sem quebra, media ~1.190px dentro de um container de 860 — as últimas
+            ficavam fora da tela. O dono não achou "🏛️ Cartório", que é justamente a última.
+            A aba existia e funcionava; o que faltava era caber. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content', maxWidth: '100%' }}>
           {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas'], ['recusas', '⛔ Recusas'], ['cobranca_avulsa', '🧾 Cobrança avulsa'], ['cartorio', '🏛️ Cartório']].map(([k, label]) => (
             <button key={k} onClick={() => setAba(k)}
               style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
