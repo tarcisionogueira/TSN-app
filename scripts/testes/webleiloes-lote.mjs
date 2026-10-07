@@ -155,6 +155,10 @@ assert.equal(mapaCardWebLeiloes({ href: U1, texto: C_JUD, img: 'https://x/y.jpg'
   const { descartadas } = descartarFotoGenerica(rows);
   assert.equal(descartadas, 4);
   assert.deepEqual(rows.map((r) => r.link_foto && r.link_foto.split('/').pop()), [null, null, null, null, 'eea97a1af59c98ecd09edd31521f88f1_thumb.jpg', null]);
+  // A versão GRANDE do mesmo placeholder (sem `_thumb`), que o enriquecimento traz da página do
+  // lote — 18 lotes na 1ª coleta real. Nome diferente do thumb, mas repetido entre lotes: sai.
+  const grande = [F(25891, 'f6', '4a47a0db6e60853dedfcfdf08a5ca249.png'), F(25926, '1d', '4a47a0db6e60853dedfcfdf08a5ca249.png')];
+  assert.equal(descartarFotoGenerica(grande).descartadas, 2);
   // O mesmo lote lido duas vezes (link absoluto e relativo) não conta como "2 lotes".
   const dup = [F(1, 'aa', 'x.png'), F(1, 'aa', 'x.png')];
   assert.equal(descartarFotoGenerica(dup).descartadas, 0);

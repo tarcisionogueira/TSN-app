@@ -6557,6 +6557,11 @@ async function main() {
       const imoveis = await scraperWebLeiloes(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos WebLeilões falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      // De novo DEPOIS do enriquecimento: a página do lote devolve a versão grande do mesmo
+      // "sem foto" (sem o `_thumb`) e o enriquecimento a gravava onde o card tinha sido limpo —
+      // 18 dos 45 lotes na 1ª coleta real de 07/10.
+      const fotoGen = descartarFotoGenerica(imoveis).descartadas;
+      if (fotoGen) console.log(`    WebLeilões: ${fotoGen} foto(s) genérica(s) descartadas após o enriquecimento`);
       total += await salvarEFinalizar(imoveis, 'WEBLEILOES');
       await aposentarRotaAntigaWebLeiloes(imoveis);
       await registrarSaude('WEBLEILOES', imoveis, 'principal', validarColeta(imoveis, 'WEBLEILOES'));
