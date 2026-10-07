@@ -9,6 +9,10 @@ on:
         description: 'Rotas separadas por vírgula (vazio = as três do coletor)'
         required: false
         default: ''
+      seco:
+        description: 'Ensaio em seco do coletor NOVO (recon-webleiloes-seco.mjs) em vez do recon'
+        type: boolean
+        default: false
 
 jobs:
   recon-webleiloes:
@@ -27,7 +31,11 @@ jobs:
             libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
             libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Ensaio em seco do coletor novo
+        if: ${{ inputs.seco }}
+        run: node scripts/recon-webleiloes-seco.mjs
       - name: Recon WEBLEILOES
+        if: ${{ !inputs.seco }}
         env:
           RECON_ROTAS: ${{ inputs.rotas }}
         run: node scripts/recon-webleiloes.mjs

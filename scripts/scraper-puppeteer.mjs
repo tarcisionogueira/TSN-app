@@ -27,6 +27,7 @@ import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
+import { mapaCardWebLeiloes, extrairCardsWebLeiloes } from './lib/webleiloes-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -4281,58 +4282,9 @@ function cidadeUfWL(txt) {
   return { cidade, uf };
 }
 
-function mapLoteWebLeiloes(l) {
-  const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
-  // Preço: 1º R$ do texto COMPLETO do card (robusto p/ leilão "R$ X" e venda-direta
-  // "Data Única R$ X"; o .r1 strong às vezes traz o título, não o valor).
-  const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
-  const valor = pm ? parseBRL(pm[1]) : 0;
-  // O card mostra o valor do 1º LEILÃO e um percentual ("50%"). ERA LIDO AO CONTRÁRIO até 29/09:
-  // o código tratava o valor como lance e derivava avaliação = valor ÷ (1 − %), gravando a
-  // avaliação em DOBRO e o lance DESATUALIZADO. Conferido na página de 8 lotes (pg_net): o valor
-  // do card é o 1º leilão (= avaliação; o edital de Araraquara diz R$ 1.436 × card R$ 1.431) e o
-  // "Valor atual" da página é SEMPRE card × (1 − %) — 158.149 × 0,5 = 79.074; 787.194 × 0,6 = 472.316.
-  // Logo: avaliação = valor do card; lance mínimo = valor × (1 − %). Sem % no card, nada muda.
-  // SÓ NO LEILÃO (/oferta/leilao/). Na VENDA DIRETA o valor do card JÁ É o valor atual (conferido:
-  // 528.259 = 528.259) e o % é o desconto sobre a avaliação — ali vale a conta antiga. Veículo idem
-  // (mapLoteWebLeiloesVeiculo, 5.100 = 5.100), por isso aquele mapeador não mudou.
-  const dm = String(l.descPct || l.texto || '').match(/(\d{1,3})\s*%/);
-  const desc = dm ? Math.min(99, Math.max(0, Number(dm[1]))) : 0;
-  const comDesconto = desc > 0 && desc < 100 && valor > 0;
-  const ehLeilao = /\/oferta\/leilao\//.test(url);
-  const avaliacao = !comDesconto ? 0 : (ehLeilao ? valor : Math.round(valor / (1 - desc / 100)));
-  const lanceAtual = comDesconto && ehLeilao ? Math.round(valor * (1 - desc / 100) * 100) / 100 : valor;
-  // Cidade/UF: prioriza a <li> de localização; fallback no alt e no slug da URL.
-  let { cidade, uf } = cidadeUfWL(l.local);
-  if (!uf) ({ cidade, uf } = cidadeUfWL(l.alt));
-  if (!uf) { const ms = url.match(/-([a-z\- ]+)-([a-z]{2})(?:$|[/?#])/i); if (ms) { cidade = toTitleCase(ms[1].replace(/-/g, ' ')); uf = ms[2].toUpperCase(); } }
-  const catUrl = String(l.categoria || '').replace(/-/g, ' ');
-  const tipo = normalizarTipo(`${catUrl} ${l.alt || ''}`);
-  const modalidade = /venda-direta/.test(String(l.href)) ? 'venda_direta'
-    : (/\bextrajudicial\b/i.test(l.texto || '') ? 'extrajudicial'
-    : (/\bjudicial\b/i.test(l.texto || '') ? 'judicial' : 'extrajudicial'));
-  const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
-  // ACHADO DO BLOCO 3 (03/09): `\d{1,3}` só permite UM grupo de milhar — "22.677,54 m²"
-  // (rural grande) casava só "677,54 m²", perdendo o "22." na frente e reportando 677 m²
-  // para um lote de 22.677 m² (33x menor). O padrão certo já existe e é usado em todo o
-  // resto do sistema (`extrairAreaM2` em api/_texto-imovel.js): 1-3 dígitos + grupos de
-  // milhar de EXATAMENTE 3 dígitos, decimal opcional.
-  const am = String(l.alt || '').match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/);
-  const area = am ? parseFloat(am[1].replace(/\./g, '').replace(',', '.')) : 0;
-  const titulo = (String(l.alt || '').replace(/\s+/g, ' ').trim() || `${toTitleCase(catUrl)}${cidade ? ' em ' + cidade : ''}`).slice(0, 180);
-  return {
-    fonte: 'WEBLEILOES', fonte_id: `webleiloes_${l.id}`,
-    titulo, tipo, modalidade,
-    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
-    cidade: cidade ? toTitleCase(cidade) : '',
-    bairro: '', endereco: '',
-    // avaliação = 1º leilão do card; mínimo = valor atual (card × (1 − %)) — ver acima.
-    valor_avaliacao: avaliacao, valor_minimo: lanceAtual, area_m2: area || 0,
-    descricao: String(l.alt || l.texto || '').slice(0, 500),
-    link_edital: url, url_lote: url, link_foto: foto,
-    leiloeiro: 'WebLeilões', data_leilao: null, forma_pagamento: 'a_vista',
-  };
-}
+// O mapeador do card de IMÓVEL saiu daqui em 07/10, quando o site trocou rota, URL e card de
+// uma vez: hoje é `mapaCardWebLeiloes` (scripts/lib/webleiloes-lote.mjs), puro e testado com
+// card real (npm run testar:webleiloes).
 
 // HastaPública (leiloeiros Euclides Maraschi Junior, Marcelo Valland etc., plataforma
 // HastaPública) — recon 18/09 (radar de editais): /leiloes é HTML server-rendered com os
@@ -4480,48 +4432,80 @@ export async function scraperHastaPublica(browser) {
 }
 
 async function scraperWebLeiloes(browser) {
-  console.log('  WebLeilões — server-rendered (imóveis + leilões)...');
+  console.log('  WebLeilões — /imoveis paginado (estrutura nova de 07/10)...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const bens = new Map();
+  let total = 0;
   try {
-    for (const path of ['/imoveis', '/busca?categoria=imoveis', '/leiloes']) {
+    // PAGINAÇÃO: `?pagina=N`. Medido no recon de 07/10 — `?page=N` é IGNORADO e devolve a
+    // página 1, então com o parâmetro errado o coletor leria o mesmo lote repetidamente e
+    // acharia que tinha paginado. O teto de 12 páginas é defensivo; quem manda parar é o
+    // "X-Y de N itens" da própria página, ou uma página que não trouxe lote novo.
+    for (let pagina = 1; pagina <= 12; pagina++) {
+      const url = pagina === 1 ? `${WEBLEILOES_BASE}/imoveis` : `${WEBLEILOES_BASE}/imoveis?pagina=${pagina}`;
+      const antes = bens.size;
       try {
-        await page.goto(`${WEBLEILOES_BASE}${path}`, { waitUntil: 'networkidle2', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 2500));
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-        await new Promise(r => setTimeout(r, 1500));
-        const lotes = await page.evaluate(() => {
-          const out = []; const vistos = new Set();
-          const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
-          document.querySelectorAll('a[href*="/oferta/"][href*="/imoveis/"]').forEach((a) => {
-            const href = a.getAttribute('href') || '';
-            const mid = href.match(/id-(\d+)/); const id = mid ? mid[1] : null;
-            if (!id || vistos.has(id)) return; vistos.add(id);
-            const mcat = href.match(/\/oferta\/(?:leilao|venda-direta)\/imoveis\/([^/]+)\//);
-            const card = a.closest('article') || a.closest('li, [class*="card"]') || a.parentElement;
-            const q = (sel) => card ? clean(card.querySelector(sel)?.textContent) : '';
-            const imgEl = card ? card.querySelector('img') : null;
-            out.push({
-              href, id, categoria: mcat ? mcat[1] : '',
-              descPct: q('.r1 small'),                                         // "50%" (desconto vs avaliação)
-              local: q('.cont-infos ul li') || q('ul li'),                    // "Cidade, UF"
-              alt: imgEl ? (imgEl.getAttribute('alt') || '') : '',            // "Tipo NNm²- Bairro, Cidade/UF"
-              img: imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '',
-              texto: card ? clean(card.textContent).slice(0, 400) : '',       // contém "R$ ..." (lance) e "NN%"
-            });
-          });
-          return out;
-        }).catch(() => []);
-        for (const l of lotes) if (l.id && !bens.has(l.id)) bens.set(l.id, l);
-        console.log(`    WebLeilões ${path}: +${lotes.length} (total ${bens.size})`);
-      } catch (e) { console.log(`    WebLeilões ${path}: ${String(e.message).slice(0, 60)}`); }
+        const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        const status = resp ? resp.status() : 0;
+        // 404 aqui é mudança de rota, não "acabou": as rotas /busca e /leiloes morreram assim
+        // em 06-07/10 e o coletor leu o 404 como lista vazia por dois dias.
+        if (status >= 400) { console.log(`    WebLeilões ${url}: HTTP ${status} — parando`); break; }
+        await new Promise(r => setTimeout(r, 2000));
+        const { lotes, itens } = await page.evaluate(extrairCardsWebLeiloes).catch(() => ({ lotes: [], itens: 0 }));
+        if (itens) total = itens;
+        for (const l of lotes) {
+          const row = mapaCardWebLeiloes(l);
+          if (row && !bens.has(row.fonte_id)) bens.set(row.fonte_id, row);
+        }
+        console.log(`    WebLeilões ${pagina === 1 ? '/imoveis' : `?pagina=${pagina}`}: +${bens.size - antes} (total ${bens.size}${total ? ` de ${total}` : ''})`);
+      } catch (e) { console.log(`    WebLeilões página ${pagina}: ${String(e.message).slice(0, 60)}`); break; }
+      // Para quando a página não acrescentou nada (fim real, ou paginação ignorada) ou quando
+      // já se tem tudo o que o site declara.
+      if (bens.size === antes) break;
+      if (total && bens.size >= total) break;
     }
   } finally { await page.close(); }
-  const imoveis = [...bens.values()].map(mapLoteWebLeiloes).filter(im => im.valor_minimo > 0 || (im.cidade && im.estado));
+  const imoveis = [...bens.values()].filter(im => im.valor_minimo > 0 || (im.cidade && im.estado));
+  // O site DIZ quantos tem. Se o que saiu daqui for bem menos, é regressão silenciosa — a
+  // mesma classe do "+0 sem erro" que deixou esta fonte zerada por dois dias.
+  if (total && imoveis.length < total * 0.8) {
+    console.log(`    ⚠️ WebLeilões: ${imoveis.length} de ${total} itens declarados pelo site`);
+    // Mesmo sinal que o sweep de salvarEFinalizar já respeita: coleta parcial não aposenta ninguém.
+    imoveis.coletaParcial = `${imoveis.length} de ${total} itens declarados`;
+  }
+  imoveis.declarados = total;
   console.log(`  ✅ WebLeilões: ${imoveis.length} imóveis`);
   return imoveis;
+}
+
+// O SITE RENUMEROU OS MESMOS IMÓVEIS (07/10). A gleba de Sorocaba era `id-2146` na rota antiga
+// (/oferta/leilao/imoveis/…) e é `-25884` na nova; a casa de Piracicaba, 2172 → 25934. Como o
+// fonte_id é o id do site, a rodada nova grava linhas NOVAS e as antigas ficam ativas — o
+// mesmo imóvel duas vezes na vitrine, uma delas com link que o site não serve mais. O sweep
+// geral não resolve: ele só roda com > 50 gravados, e o site inteiro hoje tem 49 lotes.
+// Aposenta SÓ o que tem a URL do formato antigo (`/oferta/`, que não aparece em nenhum dos 243
+// links da página nova) e SÓ depois de provar no banco que a rodada nova está gravada e ativa —
+// senão a fonte zera. Quando não houver mais linha antiga, isto não faz nada.
+async function aposentarRotaAntigaWebLeiloes(imoveis) {
+  if (!imoveis.length || imoveis.coletaParcial) return;
+  const ids = imoveis.map((i) => i.fonte_id);
+  const { count: novos, error: eNovos } = await supabase.from('imoveis_leilao')
+    .select('id', { count: 'exact', head: true })
+    .eq('fonte', 'WEBLEILOES').eq('ativo', true).in('fonte_id', ids);
+  if (eNovos) { console.error(`  WebLeilões: não consegui conferir a rodada nova (${eNovos.message}) — rota antiga mantida`); return; }
+  if ((novos || 0) < imoveis.length * 0.8) {
+    console.error(`  🛑 WebLeilões: só ${novos ?? 0} de ${imoveis.length} lotes novos estão ativos no banco — rota antiga mantida`);
+    return;
+  }
+  // `.select()` é a prova do que mudou: update que não alcança nada devolve error null.
+  const { data: aposentados, error } = await supabase.from('imoveis_leilao')
+    .update({ ativo: false, suprimido_motivo: 'renumerado_pela_fonte' })
+    .eq('fonte', 'WEBLEILOES').eq('ativo', true).like('url_lote', '%/oferta/%')
+    .select('fonte_id');
+  if (error) console.error(`  Erro ao aposentar a rota antiga do WebLeilões: ${error.message}`);
+  else if (aposentados?.length) console.log(`  🔻 WebLeilões: ${aposentados.length} lotes da numeração antiga aposentados (renumerado_pela_fonte)`);
 }
 
 // ─── WEBLEILÕES — VEÍCULOS (piloto, 13/09) ─────────────────────────────────────
@@ -5756,7 +5740,7 @@ function extrairAvaliacaoHtml(html) {
 // deste site é lance vivo ("Valor atual" / "Incremento mínimo" / "Ver histórico de lances"),
 // e o card da LISTAGEM pode divergir do que o comprador vê na hora de dar lance: um caso
 // confirmado mostrava R$ 1.561.083,14 na listagem (== avaliação/2, o que a fórmula de
-// `mapLoteWebLeiloes` produz a partir do badge "50%") contra R$ 780.541,57 na página do lote,
+// antigo `mapLoteWebLeiloes` (até 07/10) produzia a partir do badge "50%") contra R$ 780.541,57 na página do lote,
 // no MESMO dia da coleta. Ancorado em "valor atual"/"lance mínimo"/"lance inicial" — o rótulo
 // que o site usa varia por tipo de oferta (leilão vs venda direta).
 function extrairValorAtualWebLeiloesHtml(html) {
@@ -6564,7 +6548,7 @@ async function main() {
       console.log(`  ⚠️ Grupo Lance falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
-    // 15. WebLeilões — server-rendered (/imoveis, /leiloes). Foto no card; edital/
+    // 15. WebLeilões — server-rendered (/imoveis?pagina=N desde 07/10). Foto no card; edital/
     // matrícula na página do lote → enriquecerDocumentosLote vasculha. Blindado.
     if (rodar('WEBLEILOES')) console.log('\n📋 WebLeilões...');
     if (rodar('WEBLEILOES')) try {
@@ -6572,6 +6556,7 @@ async function main() {
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos WebLeilões falhou (segue sem): ${e.message.slice(0, 80)}`); }
       total += await salvarEFinalizar(imoveis, 'WEBLEILOES');
+      await aposentarRotaAntigaWebLeiloes(imoveis);
       await registrarSaude('WEBLEILOES', imoveis, 'principal', validarColeta(imoveis, 'WEBLEILOES'));
     } catch (e) {
       console.log(`  ⚠️ WebLeilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
