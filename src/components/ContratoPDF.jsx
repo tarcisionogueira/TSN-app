@@ -94,7 +94,18 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
     const imagens = await pdfParaImagens(contrato.arquivo_url);
     corpoDoc = (imagens && imagens.length)
       ? imagens.map((src) => `<div class="docpage"><img class="docimg" src="${src}" alt="Documento" /></div>`).join('')
-      : `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'documento')}</a><br/><span style="font-size:11px;color:#64748b;">(abra o link para visualizar o documento original assinado)</span></p>`;
+      // NÃO CONSEGUI REPRODUZIR O DOCUMENTO: isso precisa aparecer como tal. Até 07/10 saía um
+      // "Documento anexo: <link>" discreto, e o PDF baixado tinha cara de documento assinado com
+      // UMA página em branco — foi o que aconteceu com o requerimento do ONR (arquivo .docx, que
+      // o pdf.js não lê). Quem recebe o arquivo precisa entender na hora que o conteúdo está no
+      // original, não aqui. Word deixou de ser aceito na entrada (ACEITA_DOCUMENTO_ASSINAVEL);
+      // este aviso cobre os contratos que já foram assinados assim.
+      : `<div class="corpo" style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:12px 14px;">
+          <b>Este PDF não reproduz o documento assinado.</b><br/>
+          O arquivo original (<b>${esc(contrato.arquivo_nome || 'documento')}</b>) está em um formato que não pode ser
+          embutido aqui — o que segue abaixo é apenas o comprovante da assinatura eletrônica.
+          O documento em si fica no link: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'abrir documento')}</a>${verUrl ? `<br/>Página de verificação: <a href="${verUrl}">${verUrl}</a>` : ''}
+        </div>`;
   } else {
     corpoDoc = `<div class="corpo">${esc(contrato.conteudo || '')}</div>`;
   }

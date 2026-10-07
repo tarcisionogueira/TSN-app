@@ -62,3 +62,13 @@ export function nomeArquivoSeguro(nome, maxBase = 70) {
 // Campos que continuam restritos DE PROPÓSITO: selfie/foto de perfil (só imagem), extrato OFX e o
 // editor de e-book (.docx).
 export const ACEITA_DOCUMENTO = 'image/*,.heic,.heif,.pdf,application/pdf,.txt,.md,text/plain,.doc,.docx';
+
+// DOCUMENTO QUE VAI SER ASSINADO — restrito de propósito (07/10). O PDF do contrato assinado é
+// montado a partir do arquivo: imagem vira página, PDF vira páginas (pdf.js). Word NÃO é
+// reproduzido, e o resultado era um documento de UMA página dizendo "Documento anexo: <link>" —
+// com cara de assinado e sem o conteúdo dentro. O dono assinou o requerimento do ONR assim e o
+// arquivo baixado veio vazio. Quem tem Word exporta em PDF antes; é um clique, e o que sai
+// passa a ser o documento de verdade.
+export const ACEITA_DOCUMENTO_ASSINAVEL = 'image/*,.heic,.heif,.pdf,application/pdf';
+export const ehArquivoAssinavel = (nome, tipo = '') =>
+  /\.(pdf|jpe?g|png|gif|webp|heic|heif)$/i.test(String(nome || '')) || /^image\//i.test(String(tipo || '')) || String(tipo || '') === 'application/pdf';
