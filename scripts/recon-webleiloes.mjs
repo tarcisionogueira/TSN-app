@@ -60,6 +60,16 @@ try {
             'nenhum imóvel', 'no momento não', 'manutenção', '403', '429']
             .filter((m) => document.body.innerText.toLowerCase().includes(m)),
           amostraTexto: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+          // O AGRUPAMENTO POR FORMA NÃO BASTA (medido na 1ª execução): cada lote tem URL única,
+          // então cada um vira uma forma de contagem 1 e nenhum aparece no topo da lista — a
+          // página tinha 836 cards e o diagnóstico saiu só com os links de navegação. Aqui vai
+          // o href do PRIMEIRO link de cada um dos primeiros cards, que é o que o coletor
+          // precisa casar, mais uma amostra dos hrefs mais profundos.
+          hrefsDeCards: [...document.querySelectorAll('article, [class*="card"]')]
+            .map((c) => c.querySelector('a[href]')?.getAttribute('href') || '')
+            .filter(Boolean).filter((h, i, a) => a.indexOf(h) === i).slice(0, 10),
+          hrefsProfundos: [...new Set(hrefs.filter((h) => !/^(https?:|mailto:|tel:|#|javascript:)/i.test(h)))]
+            .filter((h) => h.split('/').length >= 4).slice(0, 12),
         };
       });
       console.log(`  título: ${JSON.stringify(d.titulo)}`);
@@ -68,6 +78,10 @@ try {
       if (d.marcas.length) console.log(`  ⚠️ marcas na página: ${d.marcas.join(', ')}`);
       console.log('  formas de link mais comuns:');
       for (const [f, n] of d.formas) console.log(`     ${String(n).padStart(4)} ${f}`);
+      console.log('  href do 1º link de cada card:');
+      for (const h of d.hrefsDeCards) console.log(`     ${h}`);
+      console.log('  hrefs mais profundos:');
+      for (const h of d.hrefsProfundos) console.log(`     ${h}`);
       console.log(`  texto: ${JSON.stringify(d.amostraTexto)}`);
     } catch (e) {
       console.log(`  ✗ não abriu: ${String(e.message).slice(0, 120)}`);
