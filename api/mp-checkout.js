@@ -13,6 +13,7 @@ import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { cpfDoRegistro, validarCPF, validarDocumento } from './_cpf.js';
 import { mpSdk } from './_mp-sdk.js';
+import { DIAS_BOLETO, vencimentoBoleto } from './_boleto-vencimento.js';
 
 // 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
 // morrer no meio de uma cobrança.
@@ -468,6 +469,12 @@ export default async function handler(req, res) {
             : `servico:${user.id}:${proposito}`,
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
+      // VENCIMENTO DO BOLETO: 7 DIAS (07/10, decisão do dono). Sem este campo o MP aplica o padrão
+      // dele (3 dias), que é curto para a parcela "para dar entrada no registro" — a regra é o
+      // cliente pagar ANTES de darmos entrada, e boleto vencido vira reemissão manual pela equipe
+      // (a trava de 2 min por cobrança impede o próprio cliente de gerar outro na hora).
+      // O MP exige offset explícito; fim do dia em Brasília (-03:00) para o dia 7 valer inteiro.
+      ...(honorarioCtx?.boleto || cobrancaCtx?.boleto ? { date_of_expiration: vencimentoBoleto(DIAS_BOLETO) } : {}),
     };
 
     // Cartão de crédito: requer token gerado pelo SDK MP no frontend
