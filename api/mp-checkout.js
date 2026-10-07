@@ -7,7 +7,7 @@
  *   MP_ACCESS_TOKEN  — access_token da conta MP da plataforma (produção)
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
-import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
+import { honorarioComTaxa, gatewayDoBoleto } from '../src/utils/taxaHonorario.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -162,8 +162,10 @@ export default async function handler(req, res) {
   if (proposito === 'honorario_exito') {
     const { arrematacao_id } = req.body || {};
     if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
-    // Pix saiu dos honorários (30/09, decisão do dono): boleto pelo Asaas ou cartão aqui.
-    if (metodoPagamento !== 'credit_card') return res.status(400).json({ error: 'Honorários: pague por boleto ou cartão de crédito.' });
+    // Pix saiu dos honorários (30/09, decisão do dono). Cartão aqui; boleto aqui ATÉ o teto do MP
+    // (07/10, decisão do dono: mesmo custo, e o MP credita mais rápido que o Asaas) — acima, Asaas.
+    const ehBoleto = metodoPagamento === 'bolbradesco';
+    if (metodoPagamento !== 'credit_card' && !ehBoleto) return res.status(400).json({ error: 'Honorários: pague por boleto ou cartão de crédito.' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
       const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
@@ -194,10 +196,13 @@ export default async function handler(req, res) {
       // TAXA DO CARTÃO REPASSADA (30/09, decisão do dono): cobra o saldo + a taxa do MP por cima
       // (src/utils/taxaHonorario.js, a MESMA conta que a tela mostra). A taxa vai no metadata
       // para o webhook descontar ao dar baixa — o honorário registrado é o líquido, nunca o total.
-      const cob = honorarioComTaxa(saldo, 'cartao_mp');
+      // Boleto acima do teto do MP não é tentado aqui: a tela (mesma regra, gatewayDoBoleto) já manda
+      // para o Asaas; 409 com `gateway` é a recusa explícita para quem chamar fora da tela.
+      if (ehBoleto && gatewayDoBoleto(saldo) !== 'mp') return res.status(409).json({ error: 'Valor acima do teto do boleto do Mercado Pago — este boleto sai pelo Asaas.', gateway: 'asaas' });
+      const cob = honorarioComTaxa(saldo, ehBoleto ? 'boleto_mp' : 'cartao_mp');
       valor = cob.total;
       descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
-      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa };
+      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa, boleto: ehBoleto };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -250,6 +255,13 @@ export default async function handler(req, res) {
   // diferença (duplo clique ou remount da tela de Pix — `criouRef` em PagamentoServico.jsx
   // só protege re-disparo DENTRO do mesmo mount) e as duas expiraram sem ninguém pagar.
   // Só trava PIX: cartão já tem proteção natural (token de uso único).
+  // Boleto MP do honorário (07/10): 1 emissão por arrematação a cada 2 min — duplo clique ou
+  // tela recarregada não pode deixar dois boletos vivos do mesmo saldo (pagar os dois = um recusado
+  // no webhook como valor incompatível, com o dinheiro já na conta).
+  if (honorarioCtx?.boleto) {
+    const rlBol = await checkRateLimit(`mp-boleto-honorario:${honorarioCtx.arrematacaoId}`, 1, 120000);
+    if (!rlBol.ok) return res.status(429).json({ error: 'Um boleto acabou de ser gerado para este honorário. Aguarde 2 minutos antes de gerar outro.' });
+  }
   if (metodoPagamento === 'pix') {
     const anchorDup = user?.id || honorarioCtx?.arrematanteId || (cobrancaCtx ? `cobranca-${cobrancaCtx.cobrancaId}` : ip);
     const rlDup = await checkRateLimit(`mp-pix-dup:${anchorDup}:${valorCentavos}`, 1, 8000);
@@ -379,6 +391,21 @@ export default async function handler(req, res) {
       // endereço/telefone do perfil são do ASSESSORADO — não valem para terceiro
       if (docPag.numero !== payerExtra._cpfPerfil) delete payerExtra._info;
     }
+  }
+  // BOLETO MP (07/10): o MP exige documento, nome e endereço COMPLETO do pagador no próprio `payer`
+  // (sem isso recusa a emissão). Vêm do body — é quem paga, que pode não ser o assessorado.
+  if (honorarioCtx?.boleto) {
+    const docPag = validarDocumento(req.body?.pagador_doc);
+    const e = req.body?.endereco || {};
+    const limpa = (v, n) => String(v || '').trim().slice(0, n);
+    const cep = String(e.cep || '').replace(/\D/g, '');
+    if (!docPag || !payerExtra.first_name || cep.length !== 8 || !e.logradouro || !e.numero || !e.bairro || !e.cidade || !/^[A-Za-z]{2}$/.test(String(e.uf || ''))) {
+      return res.status(400).json({ error: 'Para o boleto, informe CPF/CNPJ, nome e endereço completo de quem paga.' });
+    }
+    payerExtra.address = {
+      zip_code: cep, street_name: limpa(e.logradouro, 120), street_number: limpa(e.numero, 20),
+      neighborhood: limpa(e.bairro, 80), city: limpa(e.cidade, 80), federal_unit: String(e.uf).toUpperCase(),
+    };
   }
   delete payerExtra._cpfPerfil;
   const { _info: payerInfo, ...payerCampos } = payerExtra;
@@ -520,6 +547,9 @@ export default async function handler(req, res) {
       qrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64 || null,
       // Boleto
       boletoUrl: data.transaction_details?.external_resource_url || null,
+      linhaDigitavel: data.transaction_details?.digitable_line || data.barcode?.content || null,
+      vencimento: data.date_of_expiration ? String(data.date_of_expiration).slice(0, 10) : null,
+      ...(honorarioCtx?.boleto ? { valor: Number(valor), taxa: honorarioCtx.taxa, honorario: Math.round((Number(valor) - honorarioCtx.taxa) * 100) / 100 } : {}),
     });
   } catch (e) {
     console.error('[mp-checkout]', e.message);

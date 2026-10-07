@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { Loader2, Copy, FileText, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { AZUL, VERDE } from '../utils/marca';
+import { gatewayDoBoleto } from '../utils/taxaHonorario';
 
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// ROTEAMENTO (07/10, decisão do dono): até R$ 100 mil o boleto sai pelo MERCADO PAGO (mesma tarifa,
+// crédito mais rápido); acima, pelo Asaas. Regra única em gatewayDoBoleto (src/utils/taxaHonorario.js).
+// Se o MP falhar na emissão, cai no Asaas — o cliente nunca fica sem boleto.
 // BOLETO DO HONORÁRIO DE ÊXITO PELO ASAAS (30/09, decisão do dono). Testado em produção: o Asaas
 // emite boleto de até R$ 500 mil (o do Mercado Pago para em R$ 100 mil). O valor é recalculado no
 // servidor (api/asaas.js, `criar_cobranca_fallback` com meio='boleto'), nunca aceito daqui — a tela
 // só mostra a mesma conta (src/utils/taxaHonorario.js). A baixa é automática quando o boleto
 // compensa (api/asaas-webhook.js), registrando o honorário sem a taxa.
 // nome/documento = QUEM PAGA (CPF ou CNPJ), pedidos uma vez em PagarHonorario — pode não ser o assessorado.
-export default function BoletoHonorario({ arrematacaoId, email, nome, documento, previsto, onGerado }) {
+export default function BoletoHonorario({ arrematacaoId, email, nome, documento, previsto, saldo, onGerado }) {
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -37,15 +41,39 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
     if (![11, 14].includes(String(documento || '').length)) { setErro('Informe o CPF ou CNPJ de quem paga, lá em cima.'); return; }
     if (!enderecoOk) { setErro('Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF).'); return; }
     setEnviando(true); setErro('');
-    try {
+    const viaAsaas = async () => {
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         body: JSON.stringify({ action: 'criar_cobranca_fallback', proposito: 'honorario_exito', meio: 'boleto', arrematacao_id: arrematacaoId, nome: nome || email, email, documento, endereco: end }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.linkPagamento) throw new Error(data?.mensagem || data?.error || 'Não foi possível gerar o boleto agora.');
+      return { ...data, gateway: 'asaas' };
+    };
+    const viaMp = async () => {
+      const res = await apiCall('/api/mp-checkout', {
+        method: 'POST',
+        body: JSON.stringify({ proposito: 'honorario_exito', metodoPagamento: 'bolbradesco', arrematacao_id: arrematacaoId, email, pagador_doc: documento, pagador_nome: nome, endereco: end, descricao: 'Honorários de êxito — BidPro Brasil', valor: 1 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // 429 = boleto recém-gerado: NÃO cai no Asaas (seria um segundo boleto vivo do mesmo saldo).
+      if (res.status === 429) { const e = new Error(data?.error || 'Aguarde 2 minutos.'); e.semFallback = true; throw e; }
+      if (!res.ok || !data?.boletoUrl) throw new Error(data?.error || 'MP não emitiu o boleto');
+      return { linkPagamento: data.boletoUrl, linhaDigitavel: data.linhaDigitavel, vencimento: data.vencimento, valor: data.valor, taxa: data.taxa, honorario: data.honorario, gateway: 'mp' };
+    };
+    try {
+      let data;
+      if (gatewayDoBoleto(saldo ?? previsto?.honorario) === 'mp') {
+        try { data = await viaMp(); } catch (e) {
+          if (e.semFallback) throw e;
+          console.error('[BoletoHonorario] MP não emitiu, tentando Asaas:', e?.message || e);
+          data = await viaAsaas();
+        }
+      } else {
+        data = await viaAsaas();
+      }
       setBoleto(data);
-      onGerado?.();
+      onGerado?.(data.gateway);
     } catch (e) {
       setErro(e.message || 'Erro ao gerar o boleto.');
     } finally {

@@ -6,7 +6,7 @@ import { apiCall } from '../utils/apiCall';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 import BoletoHonorario from '../components/BoletoHonorario';
-import { honorarioComTaxa, TAXA_CARTAO_MP_PCT } from '../utils/taxaHonorario';
+import { honorarioComTaxa, TAXA_CARTAO_MP_PCT, gatewayDoBoleto } from '../utils/taxaHonorario';
 import { AZUL, VERDE } from '../utils/marca';
 
 // CPF ou CNPJ pelo dígito verificador — só para avisar na hora; o servidor revalida (api/_cpf.js).
@@ -138,7 +138,8 @@ export default function PagarHonorario() {
   const termo = termoDoProduto('assessorado', { valorLabel: fmtBRL(arr.honorarios_valor), modelo: 'parcelado' });
   // TAXA DO MEIO REPASSADA (30/09, decisão do dono) — mesma conta que o servidor cobra.
   const saldoDevido = Number(arr.honorarios_saldo_restante ?? arr.honorarios_valor) || 0;
-  const viaBoleto = honorarioComTaxa(saldoDevido, 'boleto_asaas');
+  const boletoPeloMp = gatewayDoBoleto(saldoDevido) === 'mp';
+  const viaBoleto = honorarioComTaxa(saldoDevido, boletoPeloMp ? 'boleto_mp' : 'boleto_asaas');
   const viaCartao = honorarioComTaxa(saldoDevido, 'cartao_mp');
 
   return (
@@ -168,7 +169,7 @@ export default function PagarHonorario() {
               {(arr.honorarios_partes || []).map((p, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, gap: 8 }}>
                   <span>
-                    {{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', cartao_asaas: 'Cartão', boleto_asaas: 'Boleto', pix_mp: 'Pix', pix_asaas: 'Pix', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}
+                    {{ pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', cartao_asaas: 'Cartão', boleto_asaas: 'Boleto', boleto_mp: 'Boleto', pix_mp: 'Pix', pix_asaas: 'Pix', dinheiro: 'Dinheiro', transferencia: 'Transferência' }[p.metodo] || p.metodo}
                     {p.metodo === 'cheque' && (p.banco || p.numero_cheque) && (
                       <span style={{ color: '#4d7c0f', fontWeight: 400 }}> ({p.banco || '—'}{p.numero_cheque ? ` nº ${p.numero_cheque}` : ''})</span>
                     )}
@@ -259,7 +260,7 @@ export default function PagarHonorario() {
               </button>
             )}
             {meio === 'boleto' && (
-              <BoletoHonorario arrematacaoId={arr.id} email={email} nome={pagadorNome.trim()} documento={pagadorDoc.replace(/\D/g, '')} previsto={viaBoleto} onGerado={() => registrarAceite('asaas')} />
+              <BoletoHonorario arrematacaoId={arr.id} email={email} nome={pagadorNome.trim()} documento={pagadorDoc.replace(/\D/g, '')} previsto={viaBoleto} saldo={saldoDevido} onGerado={(g) => registrarAceite(g === 'mp' ? 'mercadopago' : 'asaas')} />
             )}
             {meio === 'cartao' && (
               <>
@@ -282,7 +283,7 @@ export default function PagarHonorario() {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>
-          <ShieldCheck size={12} /> Boleto processado pelo Asaas · cartão pelo Mercado Pago
+          <ShieldCheck size={12} /> {boletoPeloMp ? 'Boleto e cartão processados pelo Mercado Pago' : 'Boleto processado pelo Asaas · cartão pelo Mercado Pago'}
         </div>
       </div>
     </div>

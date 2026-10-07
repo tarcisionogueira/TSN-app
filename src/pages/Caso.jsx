@@ -1940,7 +1940,7 @@ export default function Caso() {
                             <div key={r.id} style={{ fontSize:11.5, padding:'8px 10px', background:'white', border:'1px solid #e2e8f0', borderRadius:8 }}>
                               <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                                 <span style={{ fontWeight:700, color:'#111' }}>
-                                  {{ pix_externo:'Pix (fora do sistema)', cheque:'Cheque', cartao_mp:'Cartão (link)', cartao_asaas:'Cartão (Asaas)', boleto_asaas:'Boleto (Asaas)', pix_mp:'Pix (link)', pix_asaas:'Pix (Asaas)', dinheiro:'Dinheiro', transferencia:'Transferência' }[r.metodo] || r.metodo}
+                                  {{ pix_externo:'Pix (fora do sistema)', cheque:'Cheque', cartao_mp:'Cartão (link)', cartao_asaas:'Cartão (Asaas)', boleto_asaas:'Boleto (Asaas)', boleto_mp:'Boleto (link)', pix_mp:'Pix (link)', pix_asaas:'Pix (Asaas)', dinheiro:'Dinheiro', transferencia:'Transferência' }[r.metodo] || r.metodo}
                                 </span>
                                 <span style={{ fontWeight:800, color: r.status === 'estornado' ? '#dc2626' : '#059669' }}>
                                   {fmt(r.valor)}{r.status === 'aguardando_compensacao' ? ' (aguardando)' : r.status === 'estornado' ? ' (estornado)' : ''}

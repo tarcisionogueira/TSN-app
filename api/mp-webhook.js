@@ -597,14 +597,16 @@ export async function processarEventoMp(req, res) {
         // Método real (17/09): antes tudo que vinha do link gravava 'cartao_mp', mesmo Pix —
         // rótulo errado desde que o Pix parcial existe. `payment_method_id` do MP diz 'pix'
         // para Pix; qualquer outro valor aqui (visa/master/elo/...) é cartão.
-        const metodoReal = pagamento.payment_method_id === 'pix' ? 'pix_mp' : 'cartao_mp';
+        // Boleto MP (07/10): payment_type_id 'ticket' (payment_method_id 'bolbradesco').
+        const metodoReal = pagamento.payment_method_id === 'pix' ? 'pix_mp'
+          : (pagamento.payment_type_id === 'ticket' || pagamento.payment_method_id === 'bolbradesco') ? 'boleto_mp' : 'cartao_mp';
         const insRes = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos`, {
           method: 'POST',
           headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({
             arrematacao_id: arrId, metodo: metodoReal, valor: pago, status: 'confirmado',
-            justificativa: (metodoReal === 'pix_mp' ? 'Pago via Pix pelo link de honorários (Mercado Pago)' : 'Pago via cartão pelo link de honorários (Mercado Pago)')
-              + (taxaRepassada > 0 ? ` — taxa do cartão de R$ ${taxaRepassada.toFixed(2)} paga pelo cliente, fora do honorário` : ''),
+            justificativa: ({ pix_mp: 'Pago via Pix pelo link de honorários (Mercado Pago)', boleto_mp: 'Pago via boleto pelo link de honorários (Mercado Pago)' }[metodoReal] || 'Pago via cartão pelo link de honorários (Mercado Pago)')
+              + (taxaRepassada > 0 ? ` — taxa do ${metodoReal === 'boleto_mp' ? 'boleto' : 'cartão'} de R$ ${taxaRepassada.toFixed(2)} paga pelo cliente, fora do honorário` : ''),
             gateway_payment_id: String(pagamento.id),
           }),
         });
