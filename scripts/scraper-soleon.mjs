@@ -104,6 +104,11 @@ const TENANTS = filtro.length ? POOL.filter(t => filtro.includes(t.fonte)) : POO
 
 const MAX_LOTES = Number(process.env.SOLEON_MAX_LOTES || 40);
 const MAX_PAGES = Number(process.env.SOLEON_MAX_PAGES || 6);
+// TETO SÓ PARA A ROTA PAGA (08/10, #180). O teto de 6 páginas (×30 = 180 lotes) existe pelo custo do Bright
+// Data, mas valia também para quem lista de graça: FERREIRALEIL enumerava EXATAMENTE 180 em toda rodada (185
+// ativos), a enumeração nunca terminava "pelo fim da lista" e varrerSumidos() era PULADA para sempre — 11 lotes
+// sem data com a página em 404 desde setembro seguiam na vitrine. Grátis (direto/banco) vai até o fim.
+const MAX_PAGES_GRATIS = Number(process.env.SOLEON_MAX_PAGES_GRATIS || 25);
 // FREIO PRÓPRIO PRA TORRES3 (18/09, pedido do dono): é o único tenant deste cluster atrás de
 // Cloudflare — toda enumeração e todo detalhe dele caem no Bright Data pago (CALIL/VEGAS são
 // grátis). O freio de GRUPO do workflow (coleta-recente.mjs SOLEON 7, `scraper-soleon.yml`)
@@ -415,7 +420,7 @@ const MOTIVO_SEM_COTA = (fonte) => FREIO_FRESCOR.has(fonte)
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
   let via = null, completa = false;
-  for (let p = 1; p <= MAX_PAGES; p++) {
+  for (let p = 1; p <= (via === 'brightdata' ? MAX_PAGES : MAX_PAGES_GRATIS); p++) {
     // Listagem de imóveis do SOLEON: /lotes/imovel (pág 1) e ?tipo=imovel&page=N (2+).
     const url = `${tenant.base}/lotes/imovel${p > 1 ? `?tipo=imovel&page=${p}` : ''}`;
     const { html, via: v, semCota } = await fetchTenant(url);
