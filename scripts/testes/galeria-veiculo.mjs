@@ -91,5 +91,24 @@ ok(g.length === 2 && g.every((u) => u.includes('/1000/')), `BIASI: só o tamanho
 
 ok(montarFotos('https://cdn-biasi.blueintra.com/images/lot/16/11/250/1611385.jpg', g).length === 2, 'BIASI: capa 250 = 1ª foto 1000 (mesma imagem), não duplica');
 
+const gl = html([
+  'https://cdn.grupolance.com.br/batches/b9/28642/62978ba6f5962175505f581b246a85d7.png',
+  'https://cdn.grupolance.com.br/batches/b9/28642/62978ba6f5962175505f581b246a85d7_thumb.png',
+  'https://cdn.grupolance.com.br/batches/b9/28642/0dc661c60da7cfc3304f30fef109a289.png',
+  'https://cdn.grupolance.com.br/batches/b9/28642/0dc661c60da7cfc3304f30fef109a289_thumb.png',
+  'https://cdn.grupolance.com.br/batches/58/28151/4a47a0db6e60853dedfcfdf08a5ca249.png',
+]);
+const capaGl = 'https://cdn.grupolance.com.br/batches/b9/28642/62978ba6f5962175505f581b246a85d7_thumb.png';
+g = galeriaDoHtml('GRUPOLANCE', gl, { capa: capaGl });
+ok(g.length === 2 && g.every((u) => u.includes('/28642/') && !u.includes('_thumb')), `GRUPOLANCE: pasta do lote, tamanho cheio → ${g.length}`);
+ok(montarFotos(capaGl, g).length === 2, 'GRUPOLANCE: capa _thumb = foto cheia, não duplica');
+const hp = html([
+  'https://s3-sa-east-1.amazonaws.com/cdnhp/content/ad6989b5d553b8d7b40a72e22f2e2292.jpg',
+  'https://s3-sa-east-1.amazonaws.com/cdnhp/content/a17a66a59b4f9f6a305b07d71a53a63c.jpg',
+  'https://www.hastapublica.com.br/util/img/logo.png',
+]);
+ok(galeriaDoHtml('HASTAPUBLICA', hp, { capa: 'https://s3-sa-east-1.amazonaws.com/cdnhp/content/ad6989b5d553b8d7b40a72e22f2e2292.jpg' }).length === 2, 'HASTAPUBLICA: imagens de conteúdo com a capa presente');
+ok(galeriaDoHtml('HASTAPUBLICA', hp, { capa: 'https://s3-sa-east-1.amazonaws.com/cdnhp/content/ffffffffffffffffffffffffffffffff.jpg' }).length === 0, 'HASTAPUBLICA: capa ausente da página → nada');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

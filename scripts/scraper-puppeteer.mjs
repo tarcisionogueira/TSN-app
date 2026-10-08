@@ -5795,7 +5795,7 @@ function descricaoEhEcoDoTitulo(im) {
 }
 
 // Fontes cuja página de lote tem regra de galeria em lib/galeria-veiculo.mjs (medida em HTML real).
-const FONTES_GALERIA_DETALHE = new Set(['ZUK', 'MEGA', 'SUPORTE', 'BIASI']);
+const FONTES_GALERIA_DETALHE = new Set(['ZUK', 'MEGA', 'SUPORTE', 'BIASI', 'GRUPOLANCE', 'HASTAPUBLICA']);
 
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   // MERGE do que o BANCO já tem ANTES de decidir quem visitar (P3 de 21/08). Sem isto,

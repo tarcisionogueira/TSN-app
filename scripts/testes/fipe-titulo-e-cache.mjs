@@ -89,5 +89,13 @@ const falsa = async (path) => {
 const res = await buscarFipe(falsa, { marca: 'RENAULT', modelo: null, titulo: 'RENAULT OROCH 1.6 4X2, 2021/2022', ano_fabricacao: 2021, ano_modelo: 2022, tipo_veiculo: 'carro' });
 ok(res.valor === 78500 && res.status === 'aproximado', `Oroch 2021/22 → ${res.status} R$ ${res.valor} (antes: sem_match)`);
 
+console.log('\nmodelo sem marca no título (08/10, "HB20 1.0M UNIQUE - 2019")');
+const hb = mm('HB20 1.0M UNIQUE - 2019');
+ok(hb?.marca === 'hyundai' && hb.modelo.startsWith('hb20') && hb.modelo.includes('unique'), `HB20 sem marca → hyundai / ${hb?.modelo}`);
+ok(mm('ONIX LT 1.0 2020/2021')?.marca === 'chevrolet', 'ONIX sem marca → chevrolet');
+ok(mm('Veículo UP TAKE 2016') === null, '"UP" (palavra comum) não vira modelo');
+ok(mm('CASA EM BH') === null, 'texto sem modelo conhecido → null');
+ok(mm('HB20 1.0M UNIQUE - 2019', 'CITROEN') === null, 'com marca da fonte, o título não inventa outra (decisão fica no buscarFipe)');
+
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);

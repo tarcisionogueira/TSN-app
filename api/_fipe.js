@@ -45,7 +45,9 @@ export const RETENTAR_OK_DIAS = 25;
 export function fipeEstaVelho(fipeStatus, fipeAtualizadoEm) {
   if (!fipeAtualizadoEm) return true;
   const dias = (Date.now() - new Date(fipeAtualizadoEm).getTime()) / 86400000;
-  return fipeStatus === 'sem_match' ? dias >= RETENTAR_SEM_MATCH_DIAS : dias >= RETENTAR_OK_DIAS;
+  // `sem_dados` também volta em 3 dias (08/10): a régua do título melhora (modelo→marca), e 25 dias
+  // deixavam o "HB20 1.0M UNIQUE" sem FIPE por quase um mês depois do conserto.
+  return (fipeStatus === 'sem_match' || fipeStatus === 'sem_dados') ? dias >= RETENTAR_SEM_MATCH_DIAS : dias >= RETENTAR_OK_DIAS;
 }
 
 export const normalizar = (s) => String(s || '')
@@ -169,6 +171,44 @@ const MARCA_ALIAS = {
 const NAO_MODELO = new Set(['i', 'imp', 'importado', 'sucata', 'para', 'prensa', 'motocicleta', 'motoneta',
   'moto', 'automovel', 'veiculo', 'veiculos', 'lote', 'marca', 'modelo', 'benz', 'rover', 'davidson', 'em', 'leilao', 'de']);
 
+// MODELO → MARCA (08/10, caso do dono: "HB20 1.0M UNIQUE - 2019" ficava "sem_dados" com modelo e ano no
+// título). Leiloeiro costuma pôr o MODELO primeiro e omitir a marca — 2.765 SUPERBID e 1.627 LJUD ativos sem
+// marca. Só vale para o PRIMEIRO termo útil do título (modelo no meio do texto pode ser outra coisa), lista
+// fechada e sem nomes que são palavra comum ("up", "neo"). Também em memória: não grava `marca`.
+const MODELO_MARCA = Object.fromEntries(Object.entries({
+  hyundai: 'hb20 hb20s hb20x creta tucson i30 ix35 azera elantra veloster',
+  chevrolet: 'onix prisma celta corsa classic cruze cobalt spin tracker s10 montana agile vectra astra meriva zafira captiva equinox trailblazer sonic joy',
+  volkswagen: 'gol voyage fox polo virtus saveiro amarok golf jetta passat tiguan crossfox spacefox nivus taos kombi parati',
+  fiat: 'uno palio siena strada toro mobi argo cronos fiorino doblo idea punto linea ducato pulse fastback freemont bravo marea tempra',
+  ford: 'ka fiesta focus ecosport ranger fusion territory courier escort',
+  renault: 'sandero logan kwid duster captur oroch clio symbol megane fluence kangoo stepway',
+  toyota: 'corolla etios hilux yaris sw4 rav4 prius camry bandeirante',
+  honda: 'civic fit city hrv wrv crv accord cg biz pcx nxr bros xre titan twister',
+  yamaha: 'factor fazer ybr xtz lander crosser nmax tenere',
+  nissan: 'kicks versa march frontier sentra livina tiida',
+  jeep: 'renegade compass commander wrangler cherokee',
+  peugeot: '206 207 208 307 308 408 3008 partner hoggar',
+  citroen: 'c3 c4 aircross xsara berlingo jumper',
+  mitsubishi: 'l200 pajero asx outlander lancer',
+  kia: 'sportage cerato picanto sorento',
+}).flatMap(([marca, mods]) => mods.split(' ').map((m) => [m, marca])));
+
+export function marcaPorModeloDoTitulo(titulo) {
+  const toks = normalizar(titulo).split(' ').filter(Boolean);
+  const i = toks.findIndex((t) => !NAO_MODELO.has(t));
+  if (i < 0) return null;
+  const marca = MODELO_MARCA[toks[i]];
+  if (!marca) return null;
+  const modelo = [];
+  for (let j = i; j < toks.length && modelo.length < 4; j++) {
+    if (/^(19|20)\d{2}$/.test(toks[j]) && j > i) break;   // ano encerra o modelo
+    if (MARCA_ALIAS[toks[j]]) break;
+    // palavra ou número entra; fragmento misto de "1.0M" ("0m") não pontua na FIPE e sai
+    if (j === i || /^[a-z]{2,}$/.test(toks[j]) || /^\d{1,3}$/.test(toks[j])) modelo.push(toks[j]);
+  }
+  return { marca, modelo: modelo.join(' ') };
+}
+
 export function marcaModeloDoTitulo(titulo, marcaConhecida = null) {
   const toks = normalizar(titulo).split(' ').filter(Boolean);
   const alvoMarca = marcaConhecida ? normalizar(marcaConhecida).split(' ')[0] : null;
@@ -192,7 +232,7 @@ export function marcaModeloDoTitulo(titulo, marcaConhecida = null) {
     if (antes.length) return { marca, modelo: antes.slice(0, 3).join(' ') };
     return null;
   }
-  return null;
+  return marcaConhecida ? null : marcaPorModeloDoTitulo(titulo);
 }
 
 export function anoBate(nomeAno, anoFabricacao, anoModelo) {
@@ -316,9 +356,15 @@ export function criarFipeFetch(reservar, cache = null) {
  */
 export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
-  const doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
+  let doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
   // marca da fonte em sigla ("MMC", "VW", "GM") vira o nome que a FIPE usa
-  const marcaFonte = veiculo.marca ? (MARCA_ALIAS[normalizar(veiculo.marca)] || veiculo.marca) : null;
+  let marcaFonte = veiculo.marca ? (MARCA_ALIAS[normalizar(veiculo.marca)] || veiculo.marca) : null;
+  // Marca da fonte CONTRADIZ o modelo do título (08/10: "HB20 1.0M UNIQUE" gravado como CITROEN) → vale o
+  // modelo; procurar um HB20 na Citroën dá sem_match ou, pior, o carro errado.
+  if (marcaFonte && !veiculo.modelo) {
+    const pm = marcaPorModeloDoTitulo(veiculo.titulo);
+    if (pm && normalizar(marcaFonte).split(' ')[0] !== pm.marca.split(' ')[0]) { marcaFonte = null; doTitulo = pm; }
+  }
   const marca = marcaFonte || doTitulo?.marca;
   const modelo = veiculo.modelo || doTitulo?.modelo;
   if (!marca || !modelo || !anoFabricacao) return { status: 'sem_dados' };

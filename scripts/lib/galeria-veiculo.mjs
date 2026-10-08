@@ -47,6 +47,18 @@ export function galeriaDoHtml(fonte, html, { capa = null, idLote = null } = {}) 
     out = [...porHash.values()].map((x) => x.u);
   } else if (fonte === 'ZUK') {
     out = urls.filter((u) => /^https?:\/\/imagens\.portalzuk\.com\.br\/detalhe\//i.test(u));
+  } else if (fonte === 'GRUPOLANCE') {
+    // 08/10: `cdn.grupolance.com.br/batches/<xx>/<id do lote>/<hash>.jpg` (+ `_thumb`) — pasta exclusiva do
+    // lote. Fica o tamanho cheio; a miniatura `_thumb` é a mesma foto (montarFotos casa as duas).
+    const pasta = String(capa || '').match(/^(https?:\/\/cdn\.grupolance\.com\.br\/batches\/[0-9a-f]{2}\/\d+\/)/i)?.[1] || null;
+    out = pasta ? urls.filter((u) => u.startsWith(pasta) && !/_thumb\.\w+$/i.test(u)) : [];
+  } else if (fonte === 'HASTAPUBLICA') {
+    // 08/10: pasta COMPARTILHADA (`s3…/cdnhp/content/<hash>.jpg`), mas a página do lote é pequena e só mostra
+    // a galeria dele (medido em 5 lotes: 1 a 16 fotos, sem "veja também"). Trava: só vale se a CAPA do lote
+    // está entre as imagens — página diferente da esperada não pendura foto de ninguém.
+    const re = /^https?:\/\/s3-sa-east-1\.amazonaws\.com\/cdnhp\/content\/[0-9a-f]{32}\.(?:jpe?g|png|webp)$/i;
+    const cand = urls.filter((u) => re.test(u));
+    out = capa && cand.includes(capa) ? cand : [];
   } else if (fonte === 'BIASI') {
     // 08/10 (imóveis): o visualizador do lote usa o tamanho 1000 (`/images/lot/16/11/1000/1611385.jpg`, fotos
     // em sequência); capa e "veja também" vêm em 250/500. Medido em 2 lotes reais: 14 e 4 fotos.
@@ -77,7 +89,7 @@ export function montarFotos(capa, galeria = []) {
   const g = (galeria || []).filter((u) => u && !ehFotoPlaceholder(u));
   if (!g.length) return c ? [c] : [];
   // A capa costuma ser a mesma foto da galeria em outro tamanho: não duplica.
-  const chave = (u) => String(u).replace(/_(\d+x\d+)(?=\.\w+$)/, '').replace(/\/(mini|detalhe|640x480|196x146|250|500|1000)\//, '/').replace(/\.\w+$/, '');
+  const chave = (u) => String(u).replace(/_(\d+x\d+|thumb)(?=\.\w+$)/, '').replace(/\/(mini|detalhe|640x480|196x146|250|500|1000)\//, '/').replace(/\.\w+$/, '');
   const lista = c && !g.some((u) => chave(u) === chave(c)) ? [c, ...g] : g;
   return [...new Set(lista)].slice(0, MAX_FOTOS);
 }
