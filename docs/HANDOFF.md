@@ -67,6 +67,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    colunas) — agora NULL não apaga galeria; limpar de propósito = `'[]'`. Achado de passagem: 29 lotes Soleon e
    6 ZUK ativos com a página já fora do site (#179, #180). Área de trabalho fixa `bastidor` (ver CLAUDE.md).
 
+10. **Painel admin "Não foi possível carregar os indicadores" (statement timeout):** causado pelo MEU backfill —
+    12 timeouts entre 15:45 e 16:05 UTC, a janela das regex sobre páginas do pg_net + autovacuum de imoveis_leilao.
+    Fora dela, `admin_dashboard_contadores` roda em 0,09 s como admin. Limites registrados no CLAUDE.md.
+11. **#180 fechada:** `scraper-soleon` aplicava o teto de 6 páginas (×30 = 180) também na rota grátis →
+    FERREIRALEIL enumerava 180/185 e `varrerSumidos()` era PULADA sempre. Teto agora só na rota paga (TORRES3
+    mantém, decisão de custo). 11 lotes sem data em 404 desativados (`sumiu_da_fonte`). Lotes em 404 com leilão
+    negativo < 15 dias seguem pela regra do dono. Conferir na próxima rodada: #182. #179 (ZUK) era ciclo normal.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
