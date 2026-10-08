@@ -9,6 +9,41 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
+> Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168** (+ as do dia: #146, #149,
+> #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #172, #103, #88.
+
+**Evoluiu (tudo no `main`, produção conferida na Vercel):**
+1. **WEBLEILOES (#148)** — o site renumerou os mesmos imóveis e trocou rota/URL/card (`/busca` e `/leiloes` → 404).
+   Coletor reescrito (`scripts/lib/webleiloes-lote.mjs`, testado com cards reais) depois de **4 ensaios em seco no
+   site vivo** (`recon-webleiloes-seco.mjs`), cada um achando um defeito que teste não pegava: card vazio, "Leilão
+   Único", "Inicia em", hectares, foto placeholder (mesmo arquivo "sem foto" em 18 lotes). Banco: 45 ativos com data
+   e valor, 23 fotos distintas; os 71 da numeração antiga aposentados (`renumerado_pela_fonte`).
+2. **VIP (#141, fechada)** — 0 → **106 de 107 com descrição e endereço**, 67 com ocupação, 69 citando débito/penhora.
+   Causa dupla: o extrator genérico devolve NULL na página do VIP (leitor dedicado `vip-ficha.mjs`) **e** o upsert
+   (`...im`) regravava o eco do título por cima — o merge de `enriquecerDocumentosLote` agora carrega
+   descrição/endereço/CEP/ocupação do banco. **Isso vale para todas as fontes que passam por esse merge** (#88).
+   Pegadinha registrada: `cep` é `varchar(8)` só dígitos — com hífen o lote inteiro foi recusado (o guarda do sweep segurou).
+3. **Mercado oscilando entre gerações (#144)** — maior que o registrado: no `atividade_log`, mesmo imóvel a R$ 3,6 mi e
+   R$ 7,8 mi com minutos de diferença. Causa: a geração grava `result: null` na linha do usuário **antes** de procurar
+   o cache, apagando a única pesquisa recente. A geração anterior passou a servir de cache (`mercadoReutilizavel`).
+   Consequência de produto: "Regerar" em até 7 dias reusa os comparáveis (área corrigida continua refletindo).
+4. **Anexos sem arquivo (#168, fechada)** — são da limpeza de retenção (arquivo apagado, linha mantida). Análise,
+   Arremates e Caso filtram `ANEXO_COM_ARQUIVO` (`utils/docUrl.js`); os selos de acervo já exigiam arquivo.
+5. **SBID9/SBID21 (#152)** — publicam no portal com o próprio número (9 e 21); a apuração consultava `[2,15]`.
+   CREPALDI não tem nenhum lote no acervo (não é falha de apuração).
+6. **ZUK 37810 (#172)** — o site publica a data ("Encerra em 06/10/26 às 11h13", praça única, ano com 2 dígitos);
+   `pracasZuk` só lia a tabela "1º/2º Leilão". Esses lotes já encerraram: com data, saem da vitrine.
+7. **NORDESTE (#166)** — leilão de pátio como prova funcionando: 60 promovidos na 1ª rodada (teto 60/rodada).
+
+**Erro meu, para não repetir:** `npm run verificar:padroes | tail -1 && …` mascara o código de saída da trava (o
+`tail` sai 0). Dois commits de recon entraram com padrão proibido e o deploy deles deu ERROR — a produção ficou no
+último READY e o conserto veio em seguida. **Rodar a trava sem pipe, ou checar `$?`.**
+
+**Conferir primeiro na próxima sessão:** #148 MILAN (rodada de qui 08/10 11h35 UTC) · #166 (restantes 68 promovidos) ·
+#152 (SBID9/21 saindo com `resultado_origem=api_superbid_residencial`) · #144 (`reaproveitado=true` em regerações) ·
+#88 (endereço subindo em GRUPOLANCE 6%, HASTAPUBLICA 8%, FERREIRALEIL 14% com o merge novo).
+
 ### 📌 FECHAMENTO 06–07/10 — o que evoluiu, o que falta, o que conferir primeiro
 > Pendências vivas no banco (`pendencias_abertas()`); novas desta sessão: **#159, #160, #161**. Fechadas: #150, #151,
 > #153, #156.
