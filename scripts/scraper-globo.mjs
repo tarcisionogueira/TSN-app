@@ -13,6 +13,7 @@
 import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { FONTE, BASE, CATEGORIAS_IMOVEL, lerListagem, lerDetalhe, montarRowGlobo } from './lib/globo-json.mjs';
+import { idAnuncioComprei, urlVisitarComprei, fichaComprei } from './lib/comprei-pgfn.mjs';
 import { ehFracaoIdeal } from './lib/scraper-core.mjs';
 import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -23,6 +24,7 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 const supabase = createClient(SB_URL, SB_KEY);
 const DRYRUN = process.env.GLOBO_DRYRUN !== '0';
 const MAX_DETALHE = Number(process.env.GLOBO_MAX_DETALHE || 400);
+const MAX_COMPREI = Number(process.env.GLOBO_MAX_COMPREI || 200);
 const MAX_PAGINAS = 150;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -109,6 +111,7 @@ async function main() {
     for (const r of data || []) if (Array.isArray(r.anexos) && r.anexos.length) comFoto.add(r.fonte_id);
     if (!data || data.length < 1000) break;
   }
+  const comprei = { lidos: 0, falhas: 0, semFicha: 0, vendidos: 0 };
   const prontos = []; let gravados = 0; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
   for (const l of lotes) {
     const previa = montarRowGlobo(l);
@@ -121,7 +124,27 @@ async function main() {
       try { det = lerDetalhe(await baixar(previa.url_lote)); detalhes++; await sleep(250); }
       catch (e) { semDetalhe++; if (semDetalhe <= 3) console.log(`  ${previa.fonte_id}: detalhe não lido (${String(e.message).slice(0, 60)})`); }
     }
-    prontos.push(montarRowGlobo(l, det));
+    const row = montarRowGlobo(l, det);
+    // Venda direta da PGFN (Comprei, #185): o parceiro só manda o link; a API pública do anúncio
+    // traz matrícula, cartório, processo, ônus, CEP e endereço. Sem arquivo (o Comprei não publica).
+    const idComprei = idAnuncioComprei(row.url_lote);
+    if (idComprei && comprei.lidos < MAX_COMPREI) {
+      try {
+        const ficha = fichaComprei(JSON.parse(await baixar(urlVisitarComprei(idComprei))));
+        comprei.lidos++;
+        if (ficha) {
+          if (ficha.endereco && !row.endereco) row.endereco = ficha.endereco;
+          if (ficha.bairro && !row.bairro) row.bairro = ficha.bairro;
+          if (ficha.cep) row.cep = ficha.cep;
+          if (ficha.numero_matricula) row.numero_matricula = ficha.numero_matricula;
+          if (ficha.numero_processo) row.numero_processo = ficha.numero_processo;
+          if (ficha.bloco && !row.descricao.includes('Dados do Comprei')) row.descricao = `${row.descricao}\n\n${ficha.bloco}`.slice(0, 9000);
+          if (ficha.vendido) { row.ativo = false; row.suprimido_motivo = 'vendido_na_fonte'; comprei.vendidos++; }
+        } else comprei.semFicha++;
+        await sleep(150);
+      } catch (e) { comprei.falhas++; if (comprei.falhas <= 3) console.log(`  ${row.fonte_id}: Comprei não lido (${String(e.message).slice(0, 60)})`); }
+    }
+    prontos.push(row);
     // Grava em BLOCOS durante o laço (revisão 29/09): na 1ª rodada são ~400 detalhes pela via banco
     // (~20 min) e o job tem teto de 55 — gravar só no fim era perder tudo no corte e repetir o
     // mesmo trabalho no dia seguinte, para sempre. Assim cada bloco gravado já tira lote da fila.
@@ -129,6 +152,7 @@ async function main() {
   }
   const porLeiloeiro = prontos.reduce((m, r) => ({ ...m, [r.leiloeiro]: (m[r.leiloeiro] || 0) + 1 }), {});
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
+  if (comprei.lidos || comprei.falhas) console.log(`  Comprei (PGFN): ${comprei.lidos} anúncios lidos · ${comprei.semFicha} sem ficha · ${comprei.vendidos} vendidos · ${comprei.falhas} falhas`);
   console.log(`  ${prontos.length} prontos · ${fracao} fração ideal (fora) · ${semPraca} sem praça vigente · ${semLocal} sem cidade/UF · detalhe lido em ${detalhes} (${semDetalhe} falhas, ${pulados} já com foto)`);
   console.log(`  por leiloeiro: ${JSON.stringify(porLeiloeiro)} · foto ${pct((r) => r.link_foto)}% · área ${pct((r) => r.area_m2 > 0)}% · anexos ${pct((r) => r.anexos?.length)}%`);
 

@@ -25,6 +25,7 @@ import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado n
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
 import { enderecoSoleon } from './lib/endereco-pagina.mjs';
+import { idAnuncioComprei, urlVisitarComprei, fichaComprei } from './lib/comprei-pgfn.mjs';
 // NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
 // `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
 // chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
@@ -588,6 +589,23 @@ async function coletarTenant(tenant) {
     if (FONTES_PASTA_DA_CAPA.has(row.fonte)) {
       const gal = montarFotos(row.link_foto, galeriaDoHtml(row.fonte, r.html, { capa: row.link_foto }));
       if (gal.length > 1) row.fotos = gal;
+    }
+    // VENDA DIRETA DA PGFN (08/10, #185): a página aponta para o anúncio no Comprei, cuja API pública
+    // traz matrícula, cartório, processo e ônus. Só endereço/bairro (gatilho preserva) e o bloco na
+    // descrição: o upsert é em lote e colunas novas (cep, processo) apagariam as de outros lotes.
+    const idComprei = idAnuncioComprei(r.html);
+    if (idComprei) {
+      try {
+        const resp = await fetch(urlVisitarComprei(idComprei), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+        const ficha = resp.ok ? fichaComprei(await resp.json()) : null;
+        if (ficha) {
+          if (ficha.endereco && !row.endereco) row.endereco = ficha.endereco;
+          if (ficha.bairro && !row.bairro) row.bairro = ficha.bairro;
+          if (ficha.bloco && !String(row.descricao || '').includes('Dados do Comprei')) row.descricao = `${row.descricao || ''}\n\n${ficha.bloco}`.trim().slice(0, 9000);
+          // Vendido no Comprei e ainda listado na página da leiloeira: não está à venda.
+          if (ficha.vendido) { row.ativo = false; row.suprimido_motivo = 'vendido_na_fonte'; }
+        } else console.log(`  [${tenant.fonte}] Comprei ${idComprei}: ${resp.ok ? 'sem ficha' : `HTTP ${resp.status}`}`);
+      } catch (e) { console.log(`  [${tenant.fonte}] Comprei ${idComprei} não lido: ${String(e?.message || e).slice(0, 60)}`); }
     }
     const q = checarQualidade(row, { estrito: false });
     if (q.descartar) { reprov++; continue; }
