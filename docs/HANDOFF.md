@@ -46,8 +46,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 7. **Descrição completa ZUK/MEGA:** painel oficial com marcação fixa (MEGA `#tab-description`; ZUK "Descrição do
    imóvel" + `descricao-detalhes` escondido) — leitor dedicado `scripts/lib/descricao-lote.mjs` (teste
-   `testar:descricao-lote`) ligado na visita do `enriquecerDocumentosLote`. Backfill pelo banco: MEGA 337/338; ZUK em
-   andamento (a ZUK dá 429 depois de ~80 páginas — lotes de 40 com pausa). ⚠️ No Postgres, `.*?` vira guloso se o
+   `testar:descricao-lote`) ligado na visita do `enriquecerDocumentosLote`. Backfill pelo banco: MEGA 337/338; ZUK concluído
+   (6 restantes = lotes que a ZUK tirou do site, #179). A ZUK dá 429 depois de ~80 páginas: 80 por vez com 3 min de pausa.
+   Sobrou o schema `tmp_desc` (não exposto) — `drop schema tmp_desc cascade;` no SQL Editor. ⚠️ No Postgres, `.*?` vira guloso se o
    1º quantificador da regex for guloso (o recorte foi até o rodapé) — use todos não-gulosos.
 8. **🔴 Fração ideal v4 — o preenchimento DERRUBOU 82 unidades inteiras** (gatilho `trg_imovel_fracao_ideal` sobre a
    descrição nova): toda matrícula de apartamento cita "fração ideal do terreno", e "Vendedor: …Fundo de Investimento em
