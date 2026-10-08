@@ -1318,10 +1318,17 @@ async function mercadoRecente(imovelId) {
   const r = await sb(`analises_mercado?imovel_id=eq.${encodeURIComponent(imovelId)}&status=eq.concluida&updated_at=gte.${desde}&select=result,updated_at&order=updated_at.desc&limit=1`);
   if (!r.ok) return null;
   const [row] = await r.json().catch(() => []);
+  return mercadoReutilizavel(row);
+}
+// Uma linha de analises_mercado serve de cache? Mesma regra para os dois caminhos (o de
+// qualquer usuário, acima, e a geração ANTERIOR do próprio usuário, guardada antes do reset).
+// NÃO reaproveita pesquisa VAZIA (sem amostras nem preço): reusar um resultado ruim
+// propagaria o "mercadológico sem amostras". Nem fora da janela de REUSE_DIAS.
+function mercadoReutilizavel(row) {
   const mkt = row?.result?.mercado;
-  // NÃO reaproveita pesquisa VAZIA (sem amostras nem preço): reusar um resultado
-  // ruim propagaria o "mercadológico sem amostras". Melhor refazer a busca.
-  if (mkt && (((mkt.vendas?.length || 0) + (mkt.locacoes?.length || 0)) > 0 || mkt.precoMedioM2 > 0)) {
+  if (!mkt || !row?.updated_at) return null;
+  if (Date.now() - new Date(row.updated_at).getTime() > REUSE_DIAS * 24 * 3600 * 1000) return null;
+  if (((mkt.vendas?.length || 0) + (mkt.locacoes?.length || 0)) > 0 || mkt.precoMedioM2 > 0) {
     return { mercado: mkt, em: row.updated_at };
   }
   return null;
@@ -2374,10 +2381,19 @@ export default async function handler(req, res) {
   // restaurar nada — e o cliente que clicou "Regerar" num relatório PRONTO ficava sem nenhum
   // dos dois. Guardamos o result anterior aqui e o catch o devolve.
   let resultAnterior = null;
+  // O MESMO registro é o CACHE da pesquisa de mercado (08/10, #144). O reset logo abaixo grava
+  // `result: null` nesta linha ANTES de `mercadoRecente` procurar pesquisa recente — e quase
+  // sempre a única pesquisa recente do imóvel é justamente a deste usuário. Resultado: todo
+  // "Regerar" apagava o cache que ia procurar em seguida e refazia a busca ao vivo, com
+  // comparáveis diferentes a cada vez. Medido no atividade_log (60 dias): o mesmo imóvel
+  // saiu R$ 3,6 mi e R$ 7,8 mi com minutos de diferença; outro, R$ 0,65 mi e R$ 1,6 mi no
+  // mesmo dia — nenhuma das gerações marcada como reaproveitada.
+  let mercadoAnteriorReuso = null;
   try {
-    const [prev] = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result&limit=1`)).json();
+    const [prev] = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result,updated_at&limit=1`)).json();
     if (prev?.result) resultAnterior = prev.result;
-  } catch { /* sem anterior → nada a preservar */ }
+    mercadoAnteriorReuso = mercadoReutilizavel(prev);
+  } catch { /* sem anterior → nada a preservar nem a reaproveitar */ }
 
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
@@ -2424,7 +2440,7 @@ export default async function handler(req, res) {
     // não daria erro, e é justamente esse o problema: um auto-conserto que roda, não conserta e
     // não reclama. Só o cron liga (`isCron`); cliente nenhum pode forçar busca paga.
     const semCache = isCron && body.semCache === true;
-    const recente = semCache ? null : await mercadoRecente(String(imovelId));
+    const recente = semCache ? null : ((await mercadoRecente(String(imovelId))) || mercadoAnteriorReuso);
     const baseReuso = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
     const cacheTypeAware = (c) => !!(c?.consolidado?.baseCalculo) || Number(c?.consolidado?.valorEstimadoImovel) > 0;
     const reusoValido = recente && (cacheTypeAware(recente.mercado) || ['residencial', 'comercial', 'industrial'].includes(baseReuso));
