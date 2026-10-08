@@ -20,4 +20,5 @@ jobs:
       - name: Recon
         env:
           RECON_IDS: ${{ inputs.ids }}
+          RECON_VARRE: '1'
         run: node scripts/recon-sbid-portal.mjs

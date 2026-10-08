@@ -23,3 +23,20 @@ for (const id of IDS) {
     }
   }
 }
+
+// VARREDURA (2ª passada): a faixa 1..80 acha a oferta, mas o JSON não diz o portal. Um por um.
+if (process.env.RECON_VARRE === '1') {
+  for (const id of IDS) {
+    const achou = [];
+    for (let p = 1; p <= 80; p++) {
+      for (const st of ['closed', 'opened']) {
+        const url = `https://offer-query.superbid.net/offers/?portalId=[${p}]&locale=pt_BR&searchType=${st}&filter=id:${id}&pageNumber=1&pageSize=1`;
+        try {
+          const j = await (await fetch(url, { headers: H })).json();
+          if ((j?.offers || []).length) achou.push(`${p}(${st})`);
+        } catch { /* portal que responde erro não é o portal da oferta */ }
+      }
+    }
+    console.log(`VARRE ${id}: portais que acham a oferta → ${achou.join(', ') || 'nenhum'}`);
+  }
+}
