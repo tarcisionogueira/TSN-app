@@ -30,6 +30,7 @@ import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 import { fichaVip } from './lib/vip-ficha.mjs';
 import { enderecoObsPestana } from './lib/pestana-endereco.mjs';
+import { localizacaoGrupoLance } from './lib/grupolance-localizacao.mjs';
 import { descricaoDoPainel, FONTES_DESCRICAO_PAINEL } from './lib/descricao-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -6023,7 +6024,9 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // GALERIA (08/10, pedido do dono: "todas as fotos"): imóveis ZUK/MEGA/SUPORTE gravavam só a capa
     // do card (0 de 1.197 com galeria) — a página do lote, que esta visita JÁ baixa, tem todas.
     const faltaGaleria = FONTES_GALERIA_DETALHE.has(im.fonte) && !(Array.isArray(im.fotos) && im.fotos.length > 1);
-    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria;
+    // GRUPOLANCE: o endereço só existe na seção "Localização" da página (#88) — sem rua, visita.
+    const faltaEndereco = im.fonte === 'GRUPOLANCE' && !String(im.endereco || '').trim();
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria || faltaEndereco;
   });
   // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
   // `cap` alvos da lista, na mesma ordem que `imoveis` chega a cada rodada — se `alvos.length`
@@ -6134,6 +6137,10 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         if (FONTES_GALERIA_DETALHE.has(im.fonte)) {
           const gal = galeriaDoHtml(im.fonte, html, { capa: im.link_foto, idLote: im.fonte_id });
           if (gal.length) im.fotos = fotosPreservadas(montarFotos(im.link_foto, gal), im.fotos);
+        }
+        if (im.fonte === 'GRUPOLANCE' && !String(im.endereco || '').trim()) {
+          const loc = localizacaoGrupoLance(html);
+          if (loc) { im.endereco = loc.endereco; if (loc.bairro && !im.bairro) im.bairro = loc.bairro; }
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         // 20/09: docs.foto era CALCULADO aqui (vasculharDocumentos já varre <img> da página)
