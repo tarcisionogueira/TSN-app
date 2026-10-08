@@ -17,7 +17,11 @@
 const MAX_FOTOS = 30;
 
 // Imóveis com a galeria na MESMA pasta da capa, exclusiva do lote (medido em 08/10, 2 lotes reais de cada).
-export const FONTES_PASTA_DA_CAPA = new Set(['KLEILOES', 'JELEILOES', 'LEILAOBRASIL', 'TORRES3', 'DANIELGARCIA', 'FERREIRALEIL']);
+// 2ª leva (08/10, backfill medido: CALIL 28/30, SUPORTE 30/30, RJLEILOES 28/30, ISAIAS 22/30, LANCEJA 13/14…).
+// A regra só age quando a capa está numa pasta `/bens/<id>/` — fonte que não usa esse formato devolve [].
+export const FONTES_PASTA_DA_CAPA = new Set(['KLEILOES', 'JELEILOES', 'LEILAOBRASIL', 'TORRES3', 'DANIELGARCIA', 'FERREIRALEIL',
+  'CALIL', 'VEGAS', 'ISAIAS', 'APICE', 'CERULI', 'LANCEJA', 'TMLEILOES', 'PURCENA', 'AGOSTINHO', 'CASAMARTILLO', 'INFINITY',
+  'ALEXANDREPEDROSA', 'JOAOEMILIO', 'RJLEILOES']);
 
 // "Sem imagem" do próprio site não é foto: MEGA grava card-no-image, ZUK ImgNaoDisp*.
 export const ehFotoPlaceholder = (u) => /no-image|nao-?disp|sem-?foto|placeholder/i.test(String(u || ''));

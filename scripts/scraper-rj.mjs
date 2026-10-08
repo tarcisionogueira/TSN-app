@@ -62,6 +62,7 @@ import { registrarSaude } from './_saude-fonte.mjs';
 // protege o bolso é só o `MAX_LOTES` (mesmo de sempre) e a reserva semanal do propósito 'rj'
 // (`brightdata_reserva`), que o `bd()` abaixo já respeita por fora, sem mudança nenhuma aqui.
 import { planejarAlvo } from './lib/motor/runner.mjs';
+import { galeriaDoHtml, montarFotos } from './lib/galeria-veiculo.mjs';
 
 const BASE = 'https://www.rjleiloes.com.br';
 const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
@@ -452,6 +453,8 @@ async function main() {
       continue;
     }
     const row = montarRow(url, parseDetalhe(html, url));
+    // GALERIA (08/10): a capa mora em `…/bens/<id>/` exclusiva do lote; a galeria é o resto da pasta.
+    { const gal = montarFotos(row.link_foto, galeriaDoHtml('RJLEILOES', html, { capa: row.link_foto })); if (gal.length > 1) row.fotos = gal; }
     const q = checarQualidade(row, { estrito: false });
     console.log(`  ${idDaUrl(url)} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
     if (q.descartar) { reprov++; continue; }
