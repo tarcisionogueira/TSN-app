@@ -32,9 +32,11 @@ if (process.env.RECON_VARRE === '1') {
       for (const st of ['closed', 'opened']) {
         const url = `https://offer-query.superbid.net/offers/?portalId=[${p}]&locale=pt_BR&searchType=${st}&filter=id:${id}&pageNumber=1&pageSize=1`;
         try {
-          const j = await (await fetch(url, { headers: H })).json();
+          const r = await fetch(url, { headers: H });
+          if (!r.ok) continue;   // portal que responde erro não é o portal da oferta
+          const j = await r.json();
           if ((j?.offers || []).length) achou.push(`${p}(${st})`);
-        } catch { /* portal que responde erro não é o portal da oferta */ }
+        } catch (e) { console.log(`  portal ${p} ${st}: ${String(e.message).slice(0, 60)}`); }
       }
     }
     console.log(`VARRE ${id}: portais que acham a oferta → ${achou.join(', ') || 'nenhum'}`);
