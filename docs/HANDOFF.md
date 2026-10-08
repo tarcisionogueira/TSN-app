@@ -93,6 +93,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     fora da lista aberta (só com enumeração completa). Aplicado no banco: 683 desativados, 1.364 com data real, 113
     abertos. Conferir 1ª rodada: #184. #173 (Superbid imóveis): acervo 0 faltando vs fonte; falta lote NOVO provar o runner.
     #182: única rodada é anterior ao conserto; próxima ~11/10.
+16. **Rodada sequencial de pendências (08/10 noite):**
+    - **#174** `edital_natureza_bem`: `\mbens?\s*:` nunca casava "bem", "LOTE 01" contava como imóvel, e o texto cortado
+      em 20 mil perdia o bem (Kron põe no fim) → migração `20261008_edital_natureza_bem_v2` (chamadores leem
+      `payload->>'texto'`). 29 móveis + 4 despachos fora da vitrine de imóveis; seco conferido item a item.
+    - **#177/#103** SUPERBID: matrícula com acento corrompido virava "Outro"; PDF do evento (edital do leilão, nome UUID)
+      virava "anexo"; edital só nos lotes visitados → compartilhado no leilão. Edital 36→509, sem doc 761→474.
+      GLOBO relê lote sem anexo. Resto = PGFN/Comprei (~180) → #185.
+    - **#166** NORDESTE 133/133 visíveis. **#148, #159** conferidas e fechadas. **#152** SBID9/21 reabertos (gastaram
+      as 6 tentativas antes do conserto do portal). **#160** amostra insuficiente (1 relatório). **#88** PESTANA 19→79%.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
