@@ -307,18 +307,37 @@ const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s
 // 20261005_fracao_de_um_imovel.sql.
 export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(?:\([^)]{0,20}\)\s*)?(?:avos\s+)?(?:d[oa]s?|de(?:\s+uma?)?|sobre\s+[oa])\s+(?:im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)(?![a-zà-ú])/i;
 
+// v4 (08/10, espelho de 20261008_fracao_ideal_clausulas_v4.sql). Com a DESCRIÇÃO COMPLETA da ZUK/MEGA,
+// o gatilho derrubou 82 unidades inteiras: a matrícula de todo apartamento cita "fração ideal do terreno"
+// e a régua só conhecia 3 formas. Medido no acervo: 76 liberados (revisados 1 a 1), 0 ativo passa a barrar.
+// (1) o NOME DO VENDEDOR ("…Fundo de Investimento em Direitos Creditórios") não é o objeto à venda;
+// (2) formas cartoriais novas (abaixo), sempre com contexto de unidade; (3) fatia com número continua
+// barrada: "Fração ideal de 33,33% SOBRE imóvel rural", "83,48% DA fração ideal".
+const RE_FIDC = /fundos?\s+de\s+investimentos?\s+em\s+direitos\s+credit[óo]rios(\s+n[ãa]o[\s-]padronizados?)?/gi;
+const RE_RESPECTIVA = /(respectiv[ao]s?|correspondentes?)\s+fra[çc](ão|ao|ões|oes)\s+idea(l|is)/gi;
+const RE_FATIA_SOBRE = /fra[çc][ãa]o\s+ideal\s+(de\s+)?[0-9][0-9.,/]*\s*%?\s*(sobre|d[oa])[\])]?\s+(o\s+|a\s+|um\s+|uma\s+)?(im[óo]ve(l|is)|casa|bem|bens|sorte|gleba|fazenda|s[íi]tio|ch[áa]cara|pr[ée]dio|terra|[áa]rea\s+rural)/i;
+const RE_PCT_DA_FRACAO = /[0-9][0-9.,]*\s*%\s+d[ao]s?\s+(cota|fra[çc][ãa]o)\s+ideal/i;
+const RE_CLAUSULAS_V4 = [
+  /fra[çc][ãa]o\s+ideal[^.;]{0,60}?(?<![a-zà-ú])(terreno|solo|[áa]rea\s+comum|dom[íi]nio\s+[úu]til)/i,
+  /fra[çc][ãa]o\s+ideal\s*(\([^)]{0,20}\))?\s*:?\s*(de\s+)?[0-9]/i,
+  /[0-9][0-9.,]*\s*%\s+de\s+fra[çc][ãa]o\s+ideal/i,
+  /(terreno|privativa)\s*\/?\s*\(?\s*fra[çc][ãa]o\s+ideal/i,
+  /terreno\s*:?\s*[0-9][0-9.,]*\s*m[²2]\s*\(\s*fra[çc][ãa]o\s+ideal\s*\)/i,
+];
+const RE_CONTEXTO_UNIDADE = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[úu]til|[áa]rea\s+real|unidade\s+aut[ôo]noma|coisas\s+comuns|[áa]reas\s+comuns|coisas\s+de\s+uso\s+comum|apartamento|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])loja(?![a-zà-ú])|[áa]rea\s+(total\s+)?constru[íi]da|[áa]rea\s+edificada|vagas?\s+(de\s+|na\s+)?garagem)/i;
+
 export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';
-  const txt = `${titulo} ${imovel?.descricao || ''}`;
   // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
   if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo)) return true;
-  if (!RE_FRACAO_IDEAL.test(txt)) return false;
+  const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ');
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
   // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
-  // Por isso a exceção exige as três condições juntas.
-  const clausulaDescritiva = (RE_CLAUSULA_NUM_ANTES.test(txt) || RE_CLAUSULA_NUM_DEPOIS.test(txt) || RE_CLAUSULA_TERRENO_ANTES.test(txt))
-    && RE_CONTEXTO_CONDOMINIO.test(txt)
-    && !RE_FATIA_INEQUIVOCA.test(txt);
+  if (RE_FATIA_INEQUIVOCA.test(txt) || RE_FATIA_SOBRE.test(txt) || RE_PCT_DA_FRACAO.test(txt)) return true;
+  if (!RE_FRACAO_IDEAL.test(txt)) return false;
+  const clausulaDescritiva = (RE_CLAUSULA_NUM_ANTES.test(txt) || RE_CLAUSULA_NUM_DEPOIS.test(txt) || RE_CLAUSULA_TERRENO_ANTES.test(txt)
+      || RE_CLAUSULAS_V4.some((re) => re.test(txt)))
+    && (RE_CONTEXTO_CONDOMINIO.test(txt) || RE_CONTEXTO_UNIDADE.test(txt));
   return !clausulaDescritiva;
 }
 

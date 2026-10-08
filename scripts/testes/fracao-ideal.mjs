@@ -31,4 +31,26 @@ const barra = [
 ];
 for (const im of barra) assert.equal(ehFracaoIdeal(im), true, `devia barrar: ${im.titulo}`);
 
+// 08/10 — descrições COMPLETAS da ZUK/MEGA (textos reais). Unidades inteiras que a v3 barrava:
+const passaV4 = [
+  { titulo: 'Casa 236 m² - Centro - Ituiutaba - MG', descricao: 'Casa. Matrícula nº 14.224. Vendedor: Santiago Fundo de Investimento em Direitos Creditórios.' },
+  { titulo: 'Apartamento 181 m²', descricao: 'Área de uso comum 241,39m²; Área total construída 545,87m²; Fração ideal 8,2881%. Matr. 197.667' },
+  { titulo: 'Apartamento 58 m² (02 vagas)', descricao: 'vagas de garagem nº 93 e 93 A e respectivas frações ideais do terreno, situado à Rua Parambú' },
+  { titulo: 'Imóvel Comercial 68 m² (Loja e Sobreloja 06)', descricao: 'área real global, ocupando 1,98% de fração ideal do terreno, loja' },
+  { titulo: 'Casa 565 m²', descricao: 'CASA. constr. 485,25m², fração ideal 10/660 do domínio útil do respectivo terreno. Matr. 27.385' },
+  { titulo: 'Casa 96 m² - Brotas', descricao: 'Área terreno: 60,00m² (fração ideal); Área construída/privativa: 96,00m².' },
+  { titulo: 'Apartamento 62 m²', descricao: 'Área construída privativa (matrícula): 49,00m²; Fração ideal (matrícula): 27,5%;' },
+  { titulo: 'Casa Duplex nº 840 c/ 95,58m²', descricao: 'Casa Duplex nº 840, c/ fração ideal de 50,00%, entrada independente, c/ área construída de 95,58m²' },
+];
+for (const im of passaV4) assert.equal(ehFracaoIdeal(im), false, `não devia barrar (v4): ${im.titulo}`);
+// …e as fatias reais do mesmo dia continuam barradas, com número e tudo:
+const barraV4 = [
+  { titulo: 'Fazenda Marques — São Sebastião', descricao: 'Bem(ns): JB0007833 [Fração ideal de 33,33% sobre] imóvel rural área total de 13,33,36 ha' },
+  { titulo: 'Rua João Laurente, 57', descricao: '[Fração ideal de 1/3 sobre] casa com 3 quartos no Vila Cruzeiro do Sul' },
+  { titulo: 'Avenida Antônio Araújo, 852', descricao: 'correspondente a 48,33% da cota ideal da construção e 83,48% da fração ideal do terreno' },
+  { titulo: 'Casa em leilão - Rua Acácio Vieira de Camargo, 425', descricao: 'Parte Ideal (50%) - Casa, situada à Rua Acacio Vieira de Camargo, Condomínio Residencial' },
+  { titulo: 'Apartamento 67 m² e 02 Vagas', descricao: 'fração ideal de terreno de 1,1759%. Consta na Av.06 a penhora exequenda da parte ideal (50%) do imóvel' },
+];
+for (const im of barraV4) assert.equal(ehFracaoIdeal(im), true, `devia barrar (v4): ${im.titulo}`);
+
 console.log('fracao-ideal: todos os casos passaram');
