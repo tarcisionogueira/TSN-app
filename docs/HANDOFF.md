@@ -86,6 +86,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     (PESTANA `imagens[]` via GED; VLANCE `fotos[]` 196x146→640x480) e gravava-se só a capa. Corrigido (`3f32676`),
     preenche no próximo scrape (VLANCE via Bright Data → sem backfill pago). VIP segue aberta: sandbox bloqueado e
     pg_net em loop de redirect; regra às cegas arriscaria foto de outro lote do mesmo blob → recon no puppeteer.
+15. **#178 fechada — veículos SUPERBID errados aos milhares (e2466cf):** (a) o filtro `description:veiculos` dava
+    total=0 desde sempre → coleta sem filtro, 20.455 ofertas contra o teto de 10.000: veículo que encerra mais tarde
+    nunca entrava. Agora `productType.id:[10,11]` (8.417). (b) A Superbid encerra/remove antes do `endDate` gravado e o
+    banco ficava com data futura, fora da apuração e da limpeza: 2.160 ativos. Coletor agora confere POR ID os ativos
+    fora da lista aberta (só com enumeração completa). Aplicado no banco: 683 desativados, 1.364 com data real, 113
+    abertos. Conferir 1ª rodada: #184. #173 (Superbid imóveis): acervo 0 faltando vs fonte; falta lote NOVO provar o runner.
+    #182: única rodada é anterior ao conserto; próxima ~11/10.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
