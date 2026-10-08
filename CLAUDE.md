@@ -19,8 +19,13 @@ curto (5–8 linhas) antes de seguir:
    PORQUÊ; em 03/10 tinha 35.700 linhas e "pendente" 345 vezes enterrado na narrativa). Fechar exige prova:
    `select * from public.pendencia_fechar(<id>, '<como foi verificado>');` (ou `'descartada'` no 3º argumento).
    ⚠️ O conector MCP do Supabase **trava** em `UPDATE`/`DROP`/`REVOKE` soltos no `execute_sql` — até a PALAVRA no
-   texto do SQL basta. **DDL com DROP vai pelo `apply_migration`, que funciona** (07/10: `drop constraint` + `add
-   constraint` aplicados sem travar). Não mande o dono ao SQL Editor por DDL; só para UPDATE de dado sem função.
+   texto do SQL basta. Motivo (08/10): o conector **pede confirmação do dono** em comando destrutivo, e a sessão remota
+   não exibe o pedido — a chamada espera e cai em 60 s. `apply_migration` NÃO é saída garantida: em 07/10 um `drop
+   constraint` passou, em 08/10 um `drop table` travou. `create or replace` passa sempre.
+   **Backfill/varredura com estado entre chamadas (pg_net etc.): use o schema fixo `bastidor` (tabela `bastidor.req`,
+   filtre por `tarefa`).** NUNCA crie schema/tabela temporária nova: apagá-la exige DROP, que trava e vira tarefa do
+   dono (08/10: tmp_galeria, tmp_desc e public._tmp_req_galeria). Função de uma chamada só → `pg_temp`. E não contorne
+   a trava em DROP: é a confirmação do dono para o irreversível — peça a ele, com o comando pronto.
    Prioridade: P0 dinheiro/cliente agora · P1 risco · P2 melhoria · P3 ideia. Responsável: `dono` ou `claude`.
 
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
