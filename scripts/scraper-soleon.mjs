@@ -24,6 +24,7 @@
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
+import { enderecoSoleon } from './lib/endereco-pagina.mjs';
 // NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
 // `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
 // chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
@@ -341,6 +342,8 @@ function parseDetalhe(html, url) {
     numero_matricula: mat,
     link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i),
     anexos,
+    // Endereço do bloco "Localização do Imóvel" (08/10, #88) — a descrição é texto de matrícula.
+    local: enderecoSoleon(html),
   };
 }
 
@@ -363,6 +366,10 @@ function montarRow(tenant, url, det) {
     link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula, link_matricula: det.link_matricula,
     anexos: det.anexos,
+    ...(det.local?.endereco ? { endereco: det.local.endereco } : {}),
+    ...(det.local?.bairro ? { bairro: det.local.bairro } : {}),
+    // CEP fica FORA: o upsert é em lote (postgrest une as colunas) e, ao contrário de endereço/bairro,
+    // nenhum gatilho preserva `cep` — lote sem CEP na rodada apagaria o de outro.
     leiloeiro: tenant.leiloeiro,
     data_leilao: det.data_leilao || null,
     forma_pagamento: 'a_vista',

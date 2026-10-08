@@ -31,6 +31,7 @@ import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } fro
 import { fichaVip } from './lib/vip-ficha.mjs';
 import { enderecoObsPestana } from './lib/pestana-endereco.mjs';
 import { localizacaoGrupoLance } from './lib/grupolance-localizacao.mjs';
+import { enderecoHastaPublica } from './lib/endereco-pagina.mjs';
 import { descricaoDoPainel, FONTES_DESCRICAO_PAINEL } from './lib/descricao-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -6025,7 +6026,7 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // do card (0 de 1.197 com galeria) — a página do lote, que esta visita JÁ baixa, tem todas.
     const faltaGaleria = FONTES_GALERIA_DETALHE.has(im.fonte) && !(Array.isArray(im.fotos) && im.fotos.length > 1);
     // GRUPOLANCE: o endereço só existe na seção "Localização" da página (#88) — sem rua, visita.
-    const faltaEndereco = im.fonte === 'GRUPOLANCE' && !String(im.endereco || '').trim();
+    const faltaEndereco = (im.fonte === 'GRUPOLANCE' || im.fonte === 'HASTAPUBLICA') && !String(im.endereco || '').trim();
     return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria || faltaEndereco;
   });
   // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
@@ -6140,6 +6141,10 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         }
         if (im.fonte === 'GRUPOLANCE' && !String(im.endereco || '').trim()) {
           const loc = localizacaoGrupoLance(html);
+          if (loc) { im.endereco = loc.endereco; if (loc.bairro && !im.bairro) im.bairro = loc.bairro; }
+        }
+        if (im.fonte === 'HASTAPUBLICA' && !String(im.endereco || '').trim()) {
+          const loc = enderecoHastaPublica(html);
           if (loc) { im.endereco = loc.endereco; if (loc.bairro && !im.bairro) im.bairro = loc.bairro; }
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);

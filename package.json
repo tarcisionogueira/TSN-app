@@ -21,6 +21,7 @@
     "testar:descricao-lote": "node scripts/testes/descricao-lote.mjs",
     "testar:pestana-endereco": "node scripts/testes/pestana-endereco.mjs",
     "testar:grupolance-localizacao": "node scripts/testes/grupolance-localizacao.mjs",
+    "testar:endereco-pagina": "node scripts/testes/endereco-pagina.mjs",
     "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
     "testar:doc-normalizar": "node scripts/testes/doc-normalizar.mjs",
     "testar:anexo-externo": "node scripts/testes/anexo-link-externo.mjs",
