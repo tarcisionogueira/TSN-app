@@ -89,5 +89,7 @@ const biasi = html([
 g = galeriaDoHtml('BIASI', biasi);
 ok(g.length === 2 && g.every((u) => u.includes('/1000/')), `BIASI: só o tamanho 1000 do visualizador → ${g.length}`);
 
+ok(montarFotos('https://cdn-biasi.blueintra.com/images/lot/16/11/250/1611385.jpg', g).length === 2, 'BIASI: capa 250 = 1ª foto 1000 (mesma imagem), não duplica');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

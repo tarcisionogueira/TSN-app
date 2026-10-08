@@ -73,7 +73,7 @@ export function montarFotos(capa, galeria = []) {
   const g = (galeria || []).filter((u) => u && !ehFotoPlaceholder(u));
   if (!g.length) return c ? [c] : [];
   // A capa costuma ser a mesma foto da galeria em outro tamanho: não duplica.
-  const chave = (u) => String(u).replace(/_(\d+x\d+)(?=\.\w+$)/, '').replace(/\/(mini|detalhe|640x480|196x146)\//, '/').replace(/\.\w+$/, '');
+  const chave = (u) => String(u).replace(/_(\d+x\d+)(?=\.\w+$)/, '').replace(/\/(mini|detalhe|640x480|196x146|250|500|1000)\//, '/').replace(/\.\w+$/, '');
   const lista = c && !g.some((u) => chave(u) === chave(c)) ? [c, ...g] : g;
   return [...new Set(lista)].slice(0, MAX_FOTOS);
 }
