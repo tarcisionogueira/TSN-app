@@ -29,6 +29,7 @@ import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 import { fichaVip } from './lib/vip-ficha.mjs';
+import { enderecoObsPestana } from './lib/pestana-endereco.mjs';
 import { descricaoDoPainel, FONTES_DESCRICAO_PAINEL } from './lib/descricao-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
@@ -4097,7 +4098,13 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
   // "situado na Rua X, nº Y" (heurística já validada em texto de matrícula). Best-effort: null
   // quando não casar — não força endereço num lote rural/loteamento sem logradouro urbano.
   const textoBem = [bem.observacao, ...(bem.caracteristicas || []).map(c => c?.valor)].filter(Boolean).join(' ');
-  const enderecoPestana = textoBem ? extrairEnderecoMatricula(textoBem) : null;
+  // Formato fixo da observação ("Cidade/UF. Bairro. Rua X, nº. …") — o extrator genérico procura
+  // "situado à" e deixava 81% sem endereço (08/10, #88). Ele continua primeiro; este é o fallback.
+  const endGenerico = textoBem ? extrairEnderecoMatricula(textoBem) : null;
+  // O parágrafo "Cidade/UF. Bairro. Rua X, nº…" vem numa CARACTERÍSTICA (medido 08/10), às vezes na observação.
+  const endFormatoPestana = [bem.observacao, ...(bem.caracteristicas || []).map((c) => c?.valor)]
+    .map(enderecoObsPestana).find(Boolean) || null;
+  const enderecoPestana = endGenerico?.logradouro ? endGenerico : (endFormatoPestana || endGenerico);
   // Subtipo PRIMEIRO, descrição se ele não decidir (28/09). O subtipo da PESTANA para terreno é
   // "Residencial" — antes virava CASA pelo 'resid' (29 "Terreno - <cidade>" como casa); agora
   // "Residencial" sozinho não decide, e o `||` antigo nunca chegava a olhar a descrição.
