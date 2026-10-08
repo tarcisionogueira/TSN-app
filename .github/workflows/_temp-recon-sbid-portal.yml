@@ -1,0 +1,23 @@
+# _temp — RECON do portalId das lojas SBID9/SBID21 (#152). Só leitura. Apagar depois.
+name: _temp Recon SBID portalId
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'ids de oferta separados por vírgula'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon
+        env:
+          RECON_IDS: ${{ inputs.ids }}
+        run: node scripts/recon-sbid-portal.mjs
