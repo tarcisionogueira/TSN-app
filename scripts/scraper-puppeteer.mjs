@@ -5793,6 +5793,9 @@ function descricaoEhEcoDoTitulo(im) {
   return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
 }
 
+// Fontes cuja página de lote tem regra de galeria em lib/galeria-veiculo.mjs (medida em HTML real).
+const FONTES_GALERIA_DETALHE = new Set(['ZUK', 'MEGA', 'SUPORTE']);
+
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   // MERGE do que o BANCO já tem ANTES de decidir quem visitar (P3 de 21/08). Sem isto,
   // dois defeitos da mesma classe da regressão de datas da CEF: (a) o upsert diário do
@@ -5805,7 +5808,7 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de merge; falha só faz revisitar lote conhecido, nunca corrompe
       const { data } = await supabase.from('imoveis_leilao')
-        .select('fonte_id, area_m2, valor_avaliacao, link_matricula, link_regras_venda, anexos, descricao, endereco, cep, ocupacao')
+        .select('fonte_id, area_m2, valor_avaliacao, link_matricula, link_regras_venda, anexos, descricao, endereco, cep, ocupacao, fotos')
         .in('fonte_id', ids.slice(i, i + 200));
       for (const db of data || []) {
         const im = imoveis.find(x => x.fonte_id === db.fonte_id);
@@ -5818,6 +5821,8 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         if (!im.endereco && db.endereco) im.endereco = db.endereco;
         if (!im.cep && db.cep) im.cep = db.cep;
         if (!im.ocupacao && db.ocupacao) im.ocupacao = db.ocupacao;
+        // GALERIA já gravada (08/10): sem isto o lote parecia "sem galeria" todo dia e voltava ao rodízio.
+        if (Array.isArray(db.fotos) && db.fotos.length > (Array.isArray(im.fotos) ? im.fotos.length : 0)) im.fotos = db.fotos;
         if (!(Number(im.area_m2) > 0) && Number(db.area_m2) > 0) im.area_m2 = Number(db.area_m2);
         if (!(Number(im.valor_avaliacao) > 0) && Number(db.valor_avaliacao) > 0) im.valor_avaliacao = Number(db.valor_avaliacao);
         // REEXAMINA o que já estava gravado antes de carregar pra frente (achado 19/09, chácara
@@ -5886,7 +5891,10 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // específico já confirmado, não vira "falta foto" geral (CEF/EDITAL_DJEN/LJUD, que também
     // ficam sem foto, não passam por este enriquecimento de qualquer forma — outra causa).
     const fotoOgGenerica = /\/(og|opengraph|og-image)\.(jpe?g|png|webp)(?:[?#]|$)/i.test(im.link_foto || '');
-    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica;
+    // GALERIA (08/10, pedido do dono: "todas as fotos"): imóveis ZUK/MEGA/SUPORTE gravavam só a capa
+    // do card (0 de 1.197 com galeria) — a página do lote, que esta visita JÁ baixa, tem todas.
+    const faltaGaleria = FONTES_GALERIA_DETALHE.has(im.fonte) && !(Array.isArray(im.fotos) && im.fotos.length > 1);
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria;
   });
   // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
   // `cap` alvos da lista, na mesma ordem que `imoveis` chega a cada rodada — se `alvos.length`
@@ -5985,6 +5993,11 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           const end = baseTxt ? extrairEnderecoMatricula(baseTxt) : null;
           if (end?.logradouro) im.endereco = end.logradouro;
           if (end?.bairro && !im.bairro) im.bairro = end.bairro;
+        }
+        // Galeria do lote, do MESMO html (regras e âncora por lote em lib/galeria-veiculo.mjs).
+        if (FONTES_GALERIA_DETALHE.has(im.fonte)) {
+          const gal = galeriaDoHtml(im.fonte, html, { capa: im.link_foto, idLote: im.fonte_id });
+          if (gal.length) im.fotos = fotosPreservadas(montarFotos(im.link_foto, gal), im.fotos);
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         // 20/09: docs.foto era CALCULADO aqui (vasculharDocumentos já varre <img> da página)
