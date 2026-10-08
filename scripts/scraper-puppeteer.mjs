@@ -1296,9 +1296,27 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
             if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u) || !ehDocumento(u, label || '', '')) return; // mesmo portão central (_doc-scan.js) de todo anexo
             vis.add(u);
             const t = `${label || ''} ${u}`.toLowerCase();
-            const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
+            // `matr\S{0,6}cul` (08/10, #177): a Superbid manda `originalFileName` com o acento
+            // corrompido ("matrãâ­cula consolidada.pdf") — `matr[ií]cul` não casava e a matrícula
+            // entrava como "Outro", sem o selo tem_matricula_doc.
+            const tipo = /matr\S{0,6}cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
                        : (/(edital|regulament|condi[çc])/.test(t) || RE_PDF_DO_EVENTO.test(u)) ? 'edital' : 'outro';
-            out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url: u, tipo });
+            // Nome real do arquivo (08/10, #177): para "outro", o cliente via só "Outro" num auto de
+            // penhora, IPTU ou convenção de condomínio. `originalFileName` vem com o UTF-8 lido como
+            // Latin-1 (às vezes duas vezes) — desfaz enquanto houver a assinatura Ã/Â e o resultado
+            // for UTF-8 válido.
+            let orig = null;
+            try { orig = JSON.parse(label || '{}')?.originalFileName || null; } catch { orig = null; } // padrao-ok: label nem sempre é JSON (rede de segurança passa texto) — sem nome original, fica o rótulo do tipo
+            if (orig) {
+              for (let i = 0; i < 3 && /[ÃÂ]/.test(orig); i++) {
+                const d = Buffer.from(orig, 'latin1').toString('utf8');
+                if (d.includes('\uFFFD')) break;
+                orig = d;
+              }
+              orig = orig.replace(/\.pdf$/i, '').replace(/[\u00ad_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+            }
+            const rotulo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+            out.push({ nome: tipo === 'outro' && orig && !/^[0-9a-f-]{20,}$/i.test(orig) ? orig : rotulo, url: u, tipo });
           };
           // Varre recursivamente o objeto da oferta: qualquer objeto com uma URL .pdf vira
           // anexo, rotulado pelo próprio objeto (pega o tipo em qualquer chave/aninhamento).
