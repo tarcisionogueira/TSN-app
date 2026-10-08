@@ -330,7 +330,8 @@ export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';
   // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
   if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo)) return true;
-  const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ');
+  const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ')
+    .replace(/fra[çc](ões|oes)\s+ideais\s+(de\s+)?([0-9])/gi, 'fração ideal de $3'); // "com as frações ideais de 44,39m², 1,53m² … do terreno" (apto + vagas)
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
   // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
   if (RE_FATIA_INEQUIVOCA.test(txt) || RE_FATIA_SOBRE.test(txt) || RE_PCT_DA_FRACAO.test(txt)) return true;

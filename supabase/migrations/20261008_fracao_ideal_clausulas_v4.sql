@@ -10,16 +10,17 @@
 --  2. Formas cartoriais novas: "respectiva/correspondente fração ideal", "fração ideal … do
 --     (respectivo) terreno / domínio útil" (até 60 chars), "Fração ideal: 8,2881%", "Fração ideal
 --     (matrícula): 27,5%", "1,98% de fração ideal", "Área de terreno/fração ideal de 21,02m²",
---     "2,99/100 avos da área", "Área terreno: 60,00m² (fração ideal)" — sempre exigindo contexto de unidade (condomínio, área privativa,
+--     "2,99/100 avos da área", "Área terreno: 60,00m² (fração ideal)", "com as frações ideais de 44,39m², 1,53m² … do terreno" — sempre exigindo contexto de unidade (condomínio, área privativa,
 --     apartamento, casa, loja, área construída, vaga…).
 --  3. Fatia continua barrada mesmo com número: "Fração ideal de 33,33% SOBRE imóvel rural",
 --     "1/3 sobre casa", "83,48% DA fração ideal" (4 casos reais do EDITAL_DJEN que a regra 2 liberaria).
 create or replace function public.fracao_ideal_barrada(p_titulo text, p_descricao text)
 returns boolean language sql immutable set search_path to 'public' as $function$
   with t as (select
-    regexp_replace(regexp_replace(coalesce(p_titulo,'') || ' ' || coalesce(p_descricao,''),
+    regexp_replace(regexp_replace(regexp_replace(coalesce(p_titulo,'') || ' ' || coalesce(p_descricao,''),
       'fundos?\s+de\s+investimentos?\s+em\s+direitos\s+credit[óo]rios(\s+n[ãa]o[\s-]padronizados?)?', ' ', 'gi'),
-      '(respectiv[ao]s?|correspondentes?)\s+fra[çc](ão|ao|ões|oes)\s+idea(l|is)', ' fração ideal do terreno ', 'gi') as txt)
+      '(respectiv[ao]s?|correspondentes?)\s+fra[çc](ão|ao|ões|oes)\s+idea(l|is)', ' fração ideal do terreno ', 'gi'),
+      'fra[çc](ões|oes)\s+ideais\s+(de\s+)?([0-9])', 'fração ideal de \3', 'gi') as txt)
   select
     coalesce(p_titulo,'') ~* '(parte\s+ideal|fra[çc][ãa]o\s+ideal|fra[çc][õo]es\s+ideais|direitos?\s+credit[óo]rio|nua[\s-]propriedade)'
     or coalesce(p_titulo,'') ~* '(^|[^0-9/])[0-9]{1,3}\s*/\s*[0-9]{1,3}\s*(\([^)]{0,20}\)\s*)?(avos\s+)?(d[oa]s?|de(\s+uma?)?|sobre\s+[oa])\s+(im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)\M'
