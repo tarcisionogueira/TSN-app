@@ -59,6 +59,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    barrada por "modificar as frações ideais do prédio" e 2 ambíguos — conservador de propósito).
    **Lição:** gravar texto novo em massa passa pelos gatilhos de qualidade — medir `ativo` antes/depois do backfill.
 
+9. **Galeria das fontes médias (#176 fechada → resto em #181):** regra "pasta da capa" (`FONTES_PASTA_DA_CAPA` em
+   `lib/galeria-veiculo.mjs`: capa em `…/bens/<id>/` = pasta exclusiva do lote; o resto da pasta é a galeria) + BIASI
+   (visualizador em tamanho 1000). Ligada no motor, `scraper-soleon`, `scraper-rj` e na visita da BIASI. Backfill
+   via pg_net: **713 lotes** ganharam galeria em 21 fontes. Trava nova no banco `trg_imovel_fotos_nao_encolhem`:
+   upsert em lote com `fotos` em só parte das linhas gravava NULL nas demais (postgrest-js manda a união das
+   colunas) — agora NULL não apaga galeria; limpar de propósito = `'[]'`. Achado de passagem: 29 lotes Soleon e
+   6 ZUK ativos com a página já fora do site (#179, #180). Área de trabalho fixa `bastidor` (ver CLAUDE.md).
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
