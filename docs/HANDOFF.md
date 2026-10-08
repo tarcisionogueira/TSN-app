@@ -10,8 +10,8 @@ Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme re
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
-> Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168** (+ as do dia: #146, #149,
-> #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #172, #103, #88.
+> Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
+> #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
 
 **Evoluiu (tudo no `main`, produção conferida na Vercel):**
 1. **WEBLEILOES (#148)** — o site renumerou os mesmos imóveis e trocou rota/URL/card (`/busca` e `/leiloes` → 404).
@@ -33,7 +33,8 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
 5. **SBID9/SBID21 (#152)** — publicam no portal com o próprio número (9 e 21); a apuração consultava `[2,15]`.
    CREPALDI não tem nenhum lote no acervo (não é falha de apuração).
 6. **ZUK 37810 (#172)** — o site publica a data ("Encerra em 06/10/26 às 11h13", praça única, ano com 2 dígitos);
-   `pracasZuk` só lia a tabela "1º/2º Leilão". Esses lotes já encerraram: com data, saem da vitrine.
+   `pracasZuk` só lia a tabela "1º/2º Leilão". Coleta de 08/10: os 149 lotes do 37810 datados e fora da vitrine (já
+   encerrados); **ZUK inteiro: 760 ativos, 0 sem data** (eram 146).
 7. **NORDESTE (#166)** — leilão de pátio como prova funcionando: 60 promovidos na 1ª rodada (teto 60/rodada).
 
 **Erro meu, para não repetir:** `npm run verificar:padroes | tail -1 && …` mascara o código de saída da trava (o
