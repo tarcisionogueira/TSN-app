@@ -26,6 +26,10 @@ curto (5–8 linhas) antes de seguir:
    filtre por `tarefa`).** NUNCA crie schema/tabela temporária nova: apagá-la exige DROP, que trava e vira tarefa do
    dono (08/10: tmp_galeria, tmp_desc e public._tmp_req_galeria). Função de uma chamada só → `pg_temp`. E não contorne
    a trava em DROP: é a confirmação do dono para o irreversível — peça a ele, com o comando pronto.
+   **Backfill pesado COMPETE com o app (08/10):** regex sobre centenas de páginas de 300–700 KB do pg_net + UPDATE em
+   massa (que dispara autovacuum) derrubou o painel admin por 20 min ("statement timeout" — `authenticated` tem 8 s).
+   Regra: no máx. ~100 páginas por chamada de aplicação, pausa entre lotes, e confira `postgres_logs` por
+   "statement timeout" durante o backfill; se aparecer, PARE.
    Prioridade: P0 dinheiro/cliente agora · P1 risco · P2 melhoria · P3 ideia. Responsável: `dono` ou `claude`.
 
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
