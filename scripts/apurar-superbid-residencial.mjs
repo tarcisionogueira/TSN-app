@@ -115,8 +115,12 @@ await new Promise(r => setTimeout(r, 3000));
 async function consultar(ofertaId) {
   return page.evaluate(async (id) => {
     const erros = [];
+    // PORTAIS 9 e 21 (08/10, #152): as lojas SBID9 e SBID21 publicam no portal com o PRÓPRIO
+    // número — medido no recon-sbid-portal: a oferta 5009478 (SBID21) só aparece com portalId=[21]
+    // e a 3251216 (SBID9) só com [9]. Com [2,15] a apuração nunca as achava e gastava as 6
+    // tentativas de cada lote até sair 'indeterminado'. Uma chamada só, com os quatro portais.
     for (const st of ['closed', 'finished', '', 'opened']) {
-      const u = `https://offer-query.superbid.net/offers/?portalId=[2,15]&locale=pt_BR${st ? `&searchType=${st}` : ''}&filter=id:${id}&pageNumber=1&pageSize=5`;
+      const u = `https://offer-query.superbid.net/offers/?portalId=[2,9,15,21]&locale=pt_BR${st ? `&searchType=${st}` : ''}&filter=id:${id}&pageNumber=1&pageSize=5`;
       try {
         const x = await fetch(u, { headers: { Accept: 'application/json' } });
         if (!x.ok) { erros.push(`${st || 'nenhum'}:http ${x.status}`); continue; }

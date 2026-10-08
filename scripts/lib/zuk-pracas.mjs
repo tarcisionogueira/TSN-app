@@ -28,6 +28,15 @@ export function pracasZuk(texto) {
     const k = m[1] === '1' ? 'p1' : 'p2';
     if (!out[k]) out[k] = iso(m[2], m[3], m[4], m[5], m[6]);
   }
+  // PRAÇA ÚNICA (08/10, #172). Os 130 lotes do leilão 37810 (Santander) ficaram SEM DATA porque
+  // a página não tem "1º/2º Leilão": é "Encerra em 06/10/26 às 11h13 … Lance inicial: Data
+  // 06/10/26 às 11h13" (recon-texto-pagina, 08/10) — ou "Leilão Único 30/09/26 às 10h00". Só
+  // entra quando a tabela de praças não achou nada: com ela, a tabela manda (a frase "Encerra
+  // em" ali é a da praça corrente e repetiria uma das duas).
+  if (!out.p1 && !out.p2) {
+    const u = String(texto || '').match(/(?:Encerra\s+em|Leil[aã]o\s+[ÚU]nico)[^0-9]{0,20}(\d{2})\/(\d{2})\/(\d{2,4})(?:\s*(?:às|as|-)?\s*(\d{1,2})\s*[h:]\s*(\d{2})?)?/i);
+    if (u) out.p1 = iso(u[1], u[2], u[3], u[4], u[5]);
+  }
   // 2ª praça só se for DEPOIS da 1ª (mesma regra do gatilho trg_normaliza_praca_duplicada)
   if (out.p1 && out.p2 && out.p2.data <= out.p1.data) out.p2 = null;
   return out;
