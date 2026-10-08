@@ -371,6 +371,22 @@ def foto_url(lote):
     return None
 
 
+# GALERIA (08/10, #183): `fotos` é a lista INTEIRA do lote e só `fotos[0]` era gravado (via foto_url).
+# Mesma conversão de resolução da capa; lista só quando há mais de uma foto.
+def fotos_urls(lote):
+    out = []
+    for f in (lote.get("fotos") or [])[:30]:
+        u = None
+        if isinstance(f, str):
+            u = f
+        elif isinstance(f, dict):
+            u = f.get("nm_path_completo")
+            u = str(u).replace("/196x146/", "/640x480/") if u else next((str(f[k]) for k in ("url", "nm_foto", "nm_arquivo", "src", "link") if f.get(k)), None)
+        if u and u not in out:
+            out.append(u)
+    return out
+
+
 # 20/09: `anexos` é campo REAL do payload (confirmado no dump, `"anexos": []` presente e
 # vazio nas 3 amostras — mas a CHAVE existe, então a API suporta documentos por lote; só
 # nunca foi tentado ler). Mesma forma de item que LJUD (`nm`/`nm_path` = rótulo,
@@ -442,6 +458,7 @@ def montar_row(lote, pai, base, dom):
             if lote.get("leilao_id") and lote.get("lote_id") else base
         ),
         "link_foto": foto_url(lote),
+        **({"fotos": fotos_urls(lote)} if len(fotos_urls(lote)) > 1 else {}),
         "leiloeiro": lote.get("nm_leiloeiro") or pai.get("leilao_leiloeiro") or f"{slug(dom).capitalize()} Leilões",
         "data_leilao": data_leilao(lote, pai),
         "forma_pagamento": "a_vista",

@@ -3928,6 +3928,10 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
     || ((imgs.find(i => i && i.destaque) || imgs[0] || {}).media)
     || null;
   const foto = capaMedia ? `${PESTANA_GED}${encodeURIComponent(capaMedia)}?ims=fit-in/640x0` : null;
+  // GALERIA (08/10, #183): `bem.imagens` já vem com TODAS as fotos e só a capa era gravada. Capa primeiro,
+  // depois a ordem da API, na mesma URL redimensionada da capa.
+  const fotosPestana = [...new Set([capaMedia, ...imgs.map((i) => i && i.media)].filter(Boolean))]
+    .slice(0, 30).map((m) => `${PESTANA_GED}${encodeURIComponent(m)}?ims=fit-in/640x0`);
   // MODALIDADE: `bem.origem` é a fonte preferida, mas vem VAZIA em boa parte do acervo da
   // PESTANA — e o fallback era 'extrajudicial', um palpite AFIRMATIVO sobre a natureza
   // jurídica do lote. Medido em 17/08: **1.021 lotes ativos** marcados extrajudicial cuja
@@ -4011,6 +4015,7 @@ function mapLotePestana(lote, leilao, leiloesPorId) {
     anexos,
     url_lote: agenda,
     link_foto: foto,
+    ...(fotosPestana.length > 1 ? { fotos: fotosPestana } : {}),
     leiloeiro: String(leilao.leiloeiro || 'Pestana Leilões').slice(0, 120),
     data_leilao: parseDataPestana(leilao.data),
     forma_pagamento: 'a_vista',
