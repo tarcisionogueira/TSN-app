@@ -1369,6 +1369,13 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         forma_pagamento: 'a_vista',
       };
     }).filter(Boolean);
+    // Id do LEILÃO de cada lote, NÃO enumerável (não vai para o upsert): `compartilharEditalDoLeilao`
+    // usa para dar a todos os lotes do leilão o edital achado em qualquer um deles (#103).
+    for (const im of imoveis) {
+      const of = offers.find((o) => String(o.id || o.offerId) === String(im.fonte_id).replace(`${prefix}_`, ''));
+      const aid = of?.auction?.id;
+      if (aid) Object.defineProperty(im, '_leilaoId', { value: String(aid), enumerable: false });
+    }
 
     console.log(`    ${leiloeiro}: ${imoveis.length} imóveis mapeados`);
     // Contato de CADA leiloeiro da plataforma (28/09) — o `store` publica o e-mail dele.
@@ -1387,6 +1394,30 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
   } finally {
     await page.close();
   }
+}
+
+// EDITAL DO LEILÃO (08/10, #103). Na rede Superbid o edital é do LEILÃO (PDF do evento,
+// s.superbid.net/event/<id>/attachment/…) e aparece só em parte dos lotes — o que a visita de
+// enriquecimento (teto por rodada) ou a API trouxe. Medido: 341 lotes com o PDF e outros 158 do
+// MESMO leilão sem ele. Aqui o edital achado em qualquer lote vai para os irmãos; o salvamento une
+// com os anexos do banco, então nada se perde. Só PDF de evento: matrícula/laudo são do LOTE.
+function compartilharEditalDoLeilao(imoveis, fonte) {
+  const porLeilao = new Map();
+  for (const im of imoveis) {
+    if (!im._leilaoId || !Array.isArray(im.anexos)) continue;
+    const ed = im.anexos.find((a) => a?.tipo === 'edital' && RE_PDF_DO_EVENTO.test(a.url || ''));
+    if (ed && !porLeilao.has(im._leilaoId)) porLeilao.set(im._leilaoId, ed);
+  }
+  let n = 0;
+  for (const im of imoveis) {
+    const ed = im._leilaoId && porLeilao.get(im._leilaoId);
+    if (!ed) continue;
+    const atuais = Array.isArray(im.anexos) ? im.anexos : [];
+    if (atuais.some((a) => a?.url === ed.url)) continue;
+    im.anexos = [...atuais, { ...ed }];
+    n++;
+  }
+  if (n) console.log(`    ${fonte}: edital do leilão compartilhado com ${n} lote(s) do mesmo leilão`);
 }
 
 // ─── REDE SUPERBID — VEÍCULOS (piloto, 13/09) ──────────────────────────────────
@@ -6419,6 +6450,7 @@ async function main() {
         try { await enriquecerDocumentosLote(opts.browser || browser, imoveis, { cap: opts.enrichCap || 120 }); }
         catch (e) { console.log(`  ⚠️ Enriquecimento de documentos ${fonte} falhou (segue sem): ${e.message.slice(0, 80)}`); }
       }
+      compartilharEditalDoLeilao(imoveis, fonte);
       total += await salvarEFinalizar(imoveis, fonte);
       await registrarSaude(fonte, imoveis, 'principal', validarColeta(imoveis, fonte));
     };

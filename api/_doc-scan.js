@@ -116,8 +116,15 @@ const KW = {
   anexo: /[oô]nus|certid|processo|anexo|documento|memorial|contrato|escritura|d[eé]bito|iptu|condom[ií]nio|leil[aã]o|pe[cç]a/i,
 };
 
+// PDF do EVENTO da rede Superbid (s.superbid.net/event/<leilão>/attachment/<uuid>.pdf) é o edital
+// do leilão ("Veja o Edital"); o nome é um UUID, então nenhuma palavra-chave casa e ele caía como
+// "anexo" — 341 lotes SUPERBID sem o selo de edital em 08/10 (#103). O coletor por API já tratava
+// isso (RE_PDF_DO_EVENTO em scraper-puppeteer.mjs); faltava este caminho, o da visita à página.
+const RE_PDF_EVENTO_SUPERBID = /superbid\.net\/event\/\d+\/attachment\//i;
+
 function classificar(texto) {
   if (KW.matricula.test(texto)) return 'matricula';
+  if (RE_PDF_EVENTO_SUPERBID.test(texto)) return 'edital';
   if (KW.edital.test(texto)) return 'edital';
   if (KW.laudo.test(texto)) return 'laudo';
   if (KW.proposta.test(texto)) return 'proposta';
