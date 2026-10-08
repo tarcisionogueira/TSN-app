@@ -29,6 +29,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
      em `testes/leiloar-parse.mjs`. 13 desativados (`nao_imovel`), restam 6.
    - Mesma assinatura em potencial no EDITAL_DJEN (26 lotes): **#174**, não mexido no escuro.
 
+5. **Backfill de galeria da rede Superbid pelo BANCO (pg_net, custo zero):** a `offer-query` responde 200 ao
+   servidor do banco (o site dá 403). Pedido enxuto `fieldList=id;product.galleryJson` (~2,9 KB/lote) mantém a
+   galeria. Imóveis: SUPERBID 264 → 927 com galeria, KRON 74/105, DILSON 39/41, JMF 18/18, SOLD 21/70.
+   Veículos SUPERBID: 2.705 lotes a mais → 10.154 de 10.570. Lote do cliente (sbid_5027338): 25 fotos + matrícula
+   e edital. Só grava quando a galeria nova é MAIOR. Pendências: #175 ZUK+MEGA, #176 fontes médias, #177 anexos,
+   #178 veículos que sumiram da Superbid. ⚠️ `public._tmp_req_galeria` ficou no banco com RLS ligado (DROP e
+   TRUNCATE travam o conector) — apagar no SQL Editor: `drop table public._tmp_req_galeria;`.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
