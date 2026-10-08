@@ -9,6 +9,17 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 08/10 (manhã) — "não traz todas as fotos nem a descrição completa" (caso do dono: sbid_5027338)
+1. **Fotos (causa real):** a galeria da rede Superbid (`product.galleryJson`, 2ª passada sem fieldList) existe
+   desde 17/09 mas era **opt-in** (`SUPERBID_GALERIA=1`) e nunca foi ligada na coleta automática — só os lotes
+   do teste manual de 17/09 tinham galeria: **263 de 1.210 SUPERBID ativos**; os novos entravam só com a capa.
+   Ligado no `runner-residencial.sh` (onde a rede Superbid coleta). Custo zero de Bright Data. Conferir: **#173**.
+2. **Descrição:** estava COMPLETA no banco (2.649 caracteres) e a ficha a exibe inteira, mais abaixo na tela.
+   Não é defeito deste lote. (Descrição curta de verdade segue em outras fontes — ZUK, MEGA, GRUPOLANCE, HASTAPUBLICA: #88.)
+3. **Endereço "Praça única -, 13":** o leiloeiro põe a praça do LEILÃO no campo de rua. Trava nova em
+   `salvarImoveis` (`enderecoSemRotuloDePraca`): usa o "Endereço:" rotulado da descrição ou deixa vazio.
+   10 lotes corrigidos no banco (1 SUPERBID → Rua Rouxinol, nº 315, CEP, re-geocode; 9 HASTAPUBLICA → vazio).
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.

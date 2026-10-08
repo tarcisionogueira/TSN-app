@@ -273,7 +273,11 @@ rodar UBERLANDIALEILOES env LEILOAR_DRYRUN=0 node scripts/scraper-leiloar.mjs
 # ficar 7+ dias sem concluir — e aí sai pelo proxy ISP. Ver navegadorRedeSuperbid().
 # 25/09: + SBID9/SBID21/TOTALLEILOES/CREPALDI/KRONLEILOES — mesma offer-query, bloqueada no GitHub desde 24/09.
 # 27/09: + DILSONMOREIRA/JMFLEILOES — lojas white-label da rede (stores 16253/16060).
-rodar SUPERBID env SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,TOTALLEILOES,CREPALDI,KRONLEILOES,DILSONMOREIRA,JMFLEILOES node scripts/scraper-puppeteer.mjs
+# 08/10: + SUPERBID_GALERIA=1 — galeria completa de fotos (product.galleryJson, 2ª passada sem
+# fieldList). Era opt-in desde 17/09 e NUNCA foi ligada: só 263 de 1.210 SUPERBID ativos tinham mais
+# de 1 foto (as do teste manual de 17/09), o resto só a capa — caso do dono, sbid_5027338. Custo zero
+# de Bright Data (fetch dentro do Chromium, IP residencial); medido em 17/09: ~7 min a mais.
+rodar SUPERBID env SUPERBID_GALERIA=1 SCRAPER_FONTES=SUPERBID,SOLD,SUPERBID_VEICULOS,SBID9,SBID21,TOTALLEILOES,CREPALDI,KRONLEILOES,DILSONMOREIRA,JMFLEILOES node scripts/scraper-puppeteer.mjs
 
 # ── APURAÇÃO SUPERBID/SOLD (23/09) ─────────────────────────────────────────────────────────
 # Vendido/sem lance de ~7 mil lotes vencidos (imóveis SUPERBID+SOLD, veículos SUPERBID). A

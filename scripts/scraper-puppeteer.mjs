@@ -156,6 +156,19 @@ const ehEstrangeiroPelaCidade = (fonte, cidade) => {
 const SENTINELAS_VALOR = new Set([999999999, 99999999, 9999999999, 111111111, 123456789]);
 const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
 
+// ENDEREÇO QUE É RÓTULO DE PRAÇA (08/10, caso do dono: sbid_5027338 exibia "Praça única -, 13").
+// O cadastro do leiloeiro põe a praça do LEILÃO no campo de rua (Superbid `location.street`,
+// HASTAPUBLICA "Praca Única") e isso ia para a ficha e para o geocode como se fosse logradouro.
+// Medido em 08/10: 10 lotes ativos (9 HASTAPUBLICA, 1 SUPERBID). Quando a descrição traz o
+// endereço ROTULADO ("Endereço: Rua Rouxinol, nº 315 - …"), ele vence; senão fica vazio —
+// "sem endereço" é verdade, "Praça única" é mentira com cara de rua.
+const RE_ENDERECO_PRACA = /^\s*pra[çc]a\s+(?:[úu]nica|[12]\s*[ªaº°]?|primeira|segunda)(?![a-zà-ÿ])(?!\s+de\s)/i; // "Praça 1º de Maio" é rua
+function enderecoSemRotuloDePraca(endereco, descricao) {
+  if (!endereco || !RE_ENDERECO_PRACA.test(String(endereco))) return endereco;
+  const m = String(descricao || '').match(/endere[çc]o\s*:?\s*((?:rua|r\.|avenida|av\.|alameda|al\.|travessa|estrada|rodovia|pra[çc]a|largo|via)\s[^.\-–]{3,80}?(?:,\s*(?:n[º°o.]?\s*)?\d+[a-z]?)?)(?=\s*[-–,.]|$)/i);
+  return m && !RE_ENDERECO_PRACA.test(m[1]) ? m[1].trim() : null;
+}
+
 async function salvarImoveis(imoveis, fonte) {
   if (!imoveis.length) return { salvos: 0, esperados: 0 };
   // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
@@ -249,6 +262,7 @@ async function salvarImoveis(imoveis, fonte) {
     const row = {
       ...im,
       tipo: reforcarTipo(im), // choke point: upgrade do balde 'imovel' via categoria-URL/título
+      endereco: enderecoSemRotuloDePraca(im.endereco, im.descricao),
       valor_minimo: vMin,
       valor_avaliacao: vAval,
       area_m2: areaM2,
@@ -1074,8 +1088,8 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
   // verdade é SEM fieldList nenhum (payload cheio, como o próprio site usa). Por isso é
   // uma SEGUNDA passada de paginação, não um campo a mais na primeira — dobra as
   // requisições (sem custo de Bright Data, é fetch grátis dentro do navegador), então fica
-  // OPT-IN (SUPERBID_GALERIA=1) até medir o tempo real de uma rodada completa; o cron
-  // diário não liga sozinho (ver leiloeiros-puppeteer.yml).
+  // OPT-IN (SUPERBID_GALERIA=1). LIGADO no runner residencial desde 08/10 (é lá que a rede
+  // Superbid coleta); a reserva do GitHub (leiloeiros-puppeteer.yml) segue opt-in.
   const buscarGaleria = process.env.SUPERBID_GALERIA === '1';
 
   try {
