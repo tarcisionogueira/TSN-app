@@ -102,6 +102,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
       GLOBO relê lote sem anexo. Resto = PGFN/Comprei (~180) → #185.
     - **#166** NORDESTE 133/133 visíveis. **#148, #159** conferidas e fechadas. **#152** SBID9/21 reabertos (gastaram
       as 6 tentativas antes do conserto do portal). **#160** amostra insuficiente (1 relatório). **#88** PESTANA 19→79%.
+    - **#88 GRUPOLANCE 6→70%:** a página do lote tem o bloco "Localização" ("Rua, nº, compl., Bairro, Cidade, UF");
+      `lib/grupolance-localizacao.mjs` + teste, lido no enriquecimento. 214 lotes em `geocod_nivel=refazer`. O seco pegou
+      número/complemento caindo no bairro antes de gravar. Faltam HASTAPUBLICA e FERREIRALEIL (mesmo recon).
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
