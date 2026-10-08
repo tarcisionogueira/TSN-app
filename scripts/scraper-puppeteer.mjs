@@ -29,6 +29,7 @@ import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
 import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 import { fichaVip } from './lib/vip-ficha.mjs';
+import { descricaoDoPainel, FONTES_DESCRICAO_PAINEL } from './lib/descricao-lote.mjs';
 import { proxyIspDisponivel, proxyIspServidor, proxyIspCredenciais } from './lib/motor/proxy-isp.mjs';
 // A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
 // 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
@@ -5962,6 +5963,13 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         // DESCRIÇÃO REAL, não eco do título (20/09, achado do dono numa ficha ZUK: a
         // "Descrição" mostrada ao cliente era idêntica ao título, diferente do texto real do
         // portal do leiloeiro). Custo zero: já é o HTML que baixamos pra docs.
+        // ZUK/MEGA (08/10): painel oficial com marcação fixa — leitor dedicado (lib/descricao-lote.mjs).
+        // 692 ZUK e 339 MEGA seguiam com o eco do título: o genérico abaixo não achava o painel.
+        if (descricaoEhEcoDoTitulo(im) && FONTES_DESCRICAO_PAINEL.has(im.fonte)) {
+          const descPainel = descricaoDoPainel(im.fonte, html);
+          if (descPainel) im.descricao = descPainel;
+          else console.log(`    [${im.fonte}] painel de descrição não encontrado em ${im.fonte_id} — página mudou?`);
+        }
         if (descricaoEhEcoDoTitulo(im)) {
           const descPag = extrairDescricaoDoCorpo(html);
           if (descPag) im.descricao = descPag;
