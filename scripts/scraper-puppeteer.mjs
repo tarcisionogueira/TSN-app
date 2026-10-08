@@ -1416,27 +1416,34 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     // (mesmo achado dos imóveis, 17/09 — ver scraperSuperbidNet) → 2ª passada aditiva. Aqui fica
     // LIGADA por padrão (~70 páginas, fetch grátis dentro do navegador); SUPERBID_VEIC_GALERIA=0 desliga.
     const comGaleria = process.env.SUPERBID_VEIC_GALERIA !== '0';
-    const { offers: lista, comFiltro } = await page.evaluate(async ([portal]) => {
+    const { offers: lista, comFiltro, totalApi, falhou } = await page.evaluate(async ([portal]) => {
       const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+      // FILTRO POR ID DO TIPO (08/10, #178). `productType.description:veiculos` sempre voltou
+      // total=0 (a descrição é "Carros & Motos" / "Caminhões & Ônibus") → a coleta caía no modo
+      // SEM filtro: 20.455 ofertas abertas de todos os tipos contra o teto de 100 páginas (10.000),
+      // ordenadas por endDate — os veículos que encerram mais tarde NUNCA chegavam. Por id
+      // (10 = Carros & Motos, 11 = Caminhões & Ônibus) são 8.417 e cabem inteiros. O filtro local
+      // (ehVeiculoSuperbid) continua valendo para tirar peças/acessórios.
       const apiUrl = (n, comFiltro) =>
-        `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
+        `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.id:[10,11];&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
       const buscar = async (n, comFiltro) => {
-        try { const r = await fetch(apiUrl(n, comFiltro), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
+        try { const r = await fetch(apiUrl(n, comFiltro), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); if (n === 1 && Number.isFinite(Number(d.total))) totalApi = Number(d.total); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
         catch { return null; } // padrao-ok: falha de rede/parse na página N vira array vazio e quebra a paginação naturalmente logo abaixo — mesmo padrão de scraperSuperbidNet (imóveis, linha ~827) e scraperSodreVeiculos
       };
-      let comFiltro = true;
+      let comFiltro = true, totalApi = null, falhou = false;
       let first = await buscar(1, true);
       if (!first || !first.length) { comFiltro = false; first = await buscar(1, false); }
       const all = [...(first || [])];
       if (first && first.length >= 100) {
         for (let n = 2; n <= 100; n++) {
           const arr = await buscar(n, comFiltro);
-          if (!arr || !arr.length) break;
+          if (!arr) { falhou = true; break; }
+          if (!arr.length) break;
           all.push(...arr);
           if (arr.length < 100) break;
         }
       }
-      return { offers: all, comFiltro };
+      return { offers: all, comFiltro, totalApi, falhou };
     }, [portalId]);
     // 2ª passada (galeria + loja completa) em UM evaluate POR PÁGINA, com timeout por fetch (revisão
     // 29/09): dentro do evaluate da listagem, ~72 páginas pesadas somavam mais que o protocolTimeout
@@ -1449,7 +1456,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
         let pg;
         try {
           pg = await page.evaluate(async ([portal, comFiltro, n]) => {
-            const url = `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.description:veiculos;&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc`;
+            const url = `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&${comFiltro ? 'filter=product.productType.id:[10,11];&' : ''}pageNumber=${n}&pageSize=100&orderBy=endDate:asc`;
             const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(45000) });
             if (!r.ok) return { erro: `HTTP ${r.status} na página ${n}` };
             const d = await r.json();
@@ -1476,7 +1483,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     const erroGaleria = galeria.__erro; delete galeria.__erro;
     if (comGaleria) console.log(`    ${leiloeiro} (veículos): galeria capturada em ${Object.keys(galeria).length} oferta(s)${erroGaleria ? ` · parou: ${erroGaleria}` : ''}`);
 
-    console.log(`    ${leiloeiro} (veículos): ${lista.length} offers coletadas (categoria ${comFiltro ? '"veiculos" confirmada' : 'NÃO confirmada — filtrando aqui por productType/subCategory'})`);
+    console.log(`    ${leiloeiro} (veículos): ${lista.length} offers coletadas (categoria ${comFiltro ? '"tipo 10+11" confirmada' : 'NÃO confirmada — filtrando aqui por productType/subCategory'})`);
     const str = (v) => (typeof v === 'string' ? v : (v == null ? '' : String(v?.description ?? v?.name ?? '')));
     const seen = new Set();
     const pendentes = [];
@@ -1565,6 +1572,12 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       };
     });
     console.log(`    ${leiloeiro} (veículos): ${registros.length} registros mapeados`);
+    // Lista ABERTA completa? (#178) Só com o filtro por tipo confirmado, nenhuma página falhada e
+    // ≥ 97% do `total` da API (oferta que encerra no meio da paginação desloca a página seguinte).
+    // `reconciliarSumidosSuperbidVeic` só age com isso verdadeiro — e mesmo assim confere por id.
+    registros.idsAbertos = new Set(lista.map((of) => String(of.id || of.offerId)).filter(Boolean));
+    registros.enumeracaoCompleta = !!(comFiltro && !falhou && totalApi && registros.idsAbertos.size >= totalApi * 0.97);
+    console.log(`    ${leiloeiro} (veículos): enumeração ${registros.enumeracaoCompleta ? 'COMPLETA' : 'INCOMPLETA'} (${registros.idsAbertos.size}/${totalApi ?? '?'}${falhou ? ', página falhou' : ''})`);
     {
       const porLoja = new Map();
       for (const of of lista) { const l = lojaSuperbid(of.store); if (l.nome && l.email && !porLoja.has(l.nome)) porLoja.set(l.nome, { leiloeiro: l.nome.slice(0, 120), email: l.email, obs: `store da oferta ${of.id || ''} (${fonte} veículos)` }); }
@@ -1586,6 +1599,60 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
   } finally {
     await page.close();
   }
+}
+
+// SUMIDOS DA LISTA ABERTA (08/10, #178). A Superbid encerra, retira ou remove oferta ANTES do
+// `endDate` que gravamos (amostra: lote de 06/11 encerrado em 07/10; outro `removed: true`; outro
+// que a API nem acha mais). O banco ficava com a data futura → nem a apuração (data passada) nem
+// `desativar_leiloes_encerrados` chegavam: 2.160 veículos ativos assim em 08/10. Aqui, com a lista
+// aberta COMPLETA, cada ativo de data futura que não está nela é conferido POR ID (nada é inferido
+// da ausência — forma nº 4): some na API ou `removed` → desativa; encerrou → grava a data REAL, e a
+// apuração + a regra dos 15 dias do dono seguem dali; ainda aberto (paginação deslocou) → nada.
+async function reconciliarSumidosSuperbidVeic(browser, registros, { fonte = 'SUPERBID', prefixo = 'sbid_veic_', baseSite = 'https://www.superbid.net', max = 800 } = {}) {
+  if (!registros?.enumeracaoCompleta) { console.log('    sumidos (veículos SUPERBID): PULADO — enumeração incompleta'); return; }
+  const abertos = registros.idsAbertos;
+  const candidatos = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from('veiculos_leilao').select('id, fonte_id').eq('fonte', fonte).eq('ativo', true)
+      .gt('data_leilao', new Date().toISOString()).order('id').range(de, de + 999);
+    if (error) { console.log(`    sumidos: leitura falhou (${String(error.message).slice(0, 100)}) — PULADO`); return; }
+    for (const v of data) { const oid = String(v.fonte_id || '').replace(prefixo, ''); if (/^\d+$/.test(oid) && !abertos.has(oid)) candidatos.push({ ...v, oid }); }
+    if (data.length < 1000) break;
+  }
+  if (!candidatos.length) { console.log('    sumidos (veículos SUPERBID): nenhum'); return; }
+  const alvo = candidatos.slice(0, max);
+  const page = await browser.newPage();
+  const cont = { desativados: 0, redatados: 0, abertos: 0, falhas: 0 };
+  try {
+    await page.goto(`${baseSite}/categorias/carros-motos`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}); // padrao-ok: só dá a origem ao fetch; se a navegação falhar, cada consulta abaixo falha e conta em `falhas`
+    for (let i = 0; i < alvo.length; i += 20) {
+      const fatia = alvo.slice(i, i + 20);
+      const resp = await page.evaluate(async (ids) => Promise.all(ids.map(async (id) => {
+        try {
+          const r = await fetch(`https://offer-query.superbid.net/offers/?portalId=[2,15]&locale=pt_BR&timeZoneId=America/Sao_Paulo&filter=id:${id}&pageNumber=1&pageSize=5&fieldList=id;endDate;endDateTime;offerStatus`, { headers: { Accept: 'application/json' } });
+          if (!r.ok) return { id, erro: `HTTP ${r.status}` };
+          const d = await r.json();
+          if (!Number.isFinite(Number(d.total))) return { id, erro: 'resposta sem total' };
+          return { id, total: Number(d.total), of: (d.offers || [])[0] || null };
+        } catch (e) { return { id, erro: String(e?.message || e).slice(0, 80) }; }
+      })), fatia.map((c) => c.oid));
+      for (const [k, r] of resp.entries()) {
+        const c = fatia[k];
+        if (r.erro) { cont.falhas++; continue; }
+        if (r.total === 0 || r.of?.offerStatus?.removed === true) {
+          const { data, error } = await supabase.from('veiculos_leilao').update({ ativo: false }).eq('id', c.id).eq('ativo', true).select('id');
+          if (error) cont.falhas++; else cont.desativados += data.length;
+          continue;
+        }
+        const fim = dataFimSuperbid(r.of || {});
+        if (fim && new Date(fim) <= new Date()) {
+          const { data, error } = await supabase.from('veiculos_leilao').update({ data_leilao: fim }).eq('id', c.id).select('id');
+          if (error) cont.falhas++; else cont.redatados += data.length;
+        } else cont.abertos++;
+      }
+    }
+  } finally { await page.close(); }
+  console.log(`    sumidos (veículos SUPERBID): ${candidatos.length} fora da lista aberta, ${alvo.length} conferidos por id → ${cont.desativados} desativados (removidos/sem oferta), ${cont.redatados} com data real de encerramento (vão à apuração), ${cont.abertos} ainda abertos, ${cont.falhas} falhas`);
 }
 
 // ─── BANCO DO BRASIL ──────────────────────────────────────────────────────────
@@ -6355,6 +6422,8 @@ async function main() {
       console.log('\n📋 Superbid (veículos, piloto)...');
       const veiculosSuperbid = await scraperSuperbidVeiculos(bSbid, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' });
       await salvarVeiculos(veiculosSuperbid);
+      try { await reconciliarSumidosSuperbidVeic(bSbid, veiculosSuperbid); }
+      catch (e) { console.log(`  ⚠️ sumidos (veículos SUPERBID) falhou (segue sem): ${String(e.message).slice(0, 100)}`); }
     }
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
