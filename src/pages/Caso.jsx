@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
-import { assinarAnexos } from '../utils/docUrl';
+import { assinarAnexos, ANEXO_COM_ARQUIVO } from '../utils/docUrl';
 import { apiCall } from '../utils/apiCall';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -234,6 +234,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
     const { data } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,url,criado_em')
       .eq('imovel_id', imovelId)
+      .or(ANEXO_COM_ARQUIVO)
       // `carta_arrematacao` e `matricula_registrada` (29/08): são os DOIS documentos que
       // encerram a assessoria (`regra_negocio['assessoria.encerramento']`). Sem entrarem aqui,
       // a tela nunca mostraria que já foram anexados — e o anexo existente apareceria como

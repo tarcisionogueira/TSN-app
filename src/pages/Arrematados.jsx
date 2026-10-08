@@ -10,6 +10,7 @@ import FotoImovel from '../components/FotoImovel';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 import PagamentoArremate from '../components/PagamentoArremate';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import { ANEXO_COM_ARQUIVO } from '../utils/docUrl';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS = {
@@ -146,7 +147,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     setDocsLoading(true);
     const { data } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,storage_path,validacao,descricao,criado_em')
-      .eq('imovel_id', imovelId).order('criado_em', { ascending: true });
+      .eq('imovel_id', imovelId).or(ANEXO_COM_ARQUIVO).order('criado_em', { ascending: true });
     setDocs(Array.isArray(data) ? data : []);
     setDocsLoading(false);
   }, [imovelId]);
@@ -833,7 +834,7 @@ export default function Arrematados() {
       const imovelIds = [...new Set(lista.map(a => a.imovel_id).filter(ehUuid))];
       if (imovelIds.length) {
         try {
-          const { data: an } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds);
+          const { data: an } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds).or(ANEXO_COM_ARQUIVO);
           const dc = {}; (an || []).forEach(x => { dc[x.imovel_id] = (dc[x.imovel_id] || 0) + 1; }); setNDocs(dc);
         } catch { setNDocs({}); }
         try {

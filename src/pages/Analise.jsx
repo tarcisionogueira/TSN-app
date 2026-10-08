@@ -23,7 +23,7 @@ import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
 import { lerComRenovacao } from '../lib/sessao-expirada';
 import { lerCotas, bloqueado } from '../utils/cotaAnalise';
-import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
+import { assinarAnexos, chaveDocCanonica, ANEXO_COM_ARQUIVO } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
@@ -408,6 +408,7 @@ export default function Analise() {
       const { data, error: eAnexos } = await supabase.from('imovel_anexos')
         .select('id,tipo,nome,url,criado_em')
         .eq('imovel_id', idImovel)
+        .or(ANEXO_COM_ARQUIVO)
         .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'outro']);
       // 04/10: `error` conferido (mesmo padrão do bloco abaixo) — falha de leitura não pode
       // virar "nenhum documento do leiloeiro". Zera a lista (não herda a do imóvel anterior)

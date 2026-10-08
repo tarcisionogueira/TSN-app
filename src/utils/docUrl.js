@@ -1,5 +1,13 @@
 import { supabase } from './supabase';
 
+// ANEXO COM ARQUIVO (08/10, #168). A limpeza de retenção (api/limpar-documentos-cron.js) apaga
+// o arquivo e zera storage_path/url, mas MANTÉM a linha como registro de que o documento
+// existiu — 30 mil linhas assim hoje. A tela as listava como documento clicável (o leitor
+// respondia 404) e as CONTAVA no nº de documentos do arremate. Toda leitura de imovel_anexos
+// para EXIBIR ou CONTAR passa este filtro: tem arquivo nosso, url, ou link do leiloeiro.
+// Uso: `.or(ANEXO_COM_ARQUIVO)`.
+export const ANEXO_COM_ARQUIVO = 'storage_path.not.is.null,url.not.is.null,origem_url.not.is.null';
+
 // Chave CANÔNICA de documento (espelho browser-safe de api/_doc-scan.js): identifica
 // o ARQUIVO ignorando querystring volátil (cache-buster ?v= do Grupo Lance, assinatura
 // ?Expires/Signature da ZUK) — o mesmo edital chegava N vezes com URLs "diferentes" e a
