@@ -37,6 +37,13 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    #178 veículos que sumiram da Superbid. ⚠️ `public._tmp_req_galeria` ficou no banco com RLS ligado (DROP e
    TRUNCATE travam o conector) — apagar no SQL Editor: `drop table public._tmp_req_galeria;`.
 
+6. **#175 ZUK + MEGA (imóveis):** a visita ao lote do `enriquecerDocumentosLote` já baixava a página e descartava as
+   fotos. Agora lê a galeria (`galeriaDoHtml`, mesma regra dos veículos; ZUK/MEGA/SUPORTE), o merge carrega a galeria do
+   banco e lote sem galeria entra no rodízio. Backfill pelo banco (pg_net, grátis): **MEGA 0 → 376/436, ZUK 0 → 225/761**
+   (média 5–9 fotos). ZUK: a maioria dos restantes tem só 1 foto NA PRÓPRIA ZUK (pasta `detalhe` só com a capa);
+   78 ficaram por 429 (a ZUK limita rajada — ~80 por vez passa) e entram pela coleta diária. Sobrou o schema
+   `tmp_galeria` (não exposto; anon/authenticated sem acesso) — `drop schema tmp_galeria cascade;` no SQL Editor.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
