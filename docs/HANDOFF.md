@@ -44,6 +44,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    78 ficaram por 429 (a ZUK limita rajada — ~80 por vez passa) e entram pela coleta diária. Sobrou o schema
    `tmp_galeria` (não exposto; anon/authenticated sem acesso) — `drop schema tmp_galeria cascade;` no SQL Editor.
 
+7. **Descrição completa ZUK/MEGA:** painel oficial com marcação fixa (MEGA `#tab-description`; ZUK "Descrição do
+   imóvel" + `descricao-detalhes` escondido) — leitor dedicado `scripts/lib/descricao-lote.mjs` (teste
+   `testar:descricao-lote`) ligado na visita do `enriquecerDocumentosLote`. Backfill pelo banco: MEGA 337/338; ZUK em
+   andamento (a ZUK dá 429 depois de ~80 páginas — lotes de 40 com pausa). ⚠️ No Postgres, `.*?` vira guloso se o
+   1º quantificador da regex for guloso (o recorte foi até o rodapé) — use todos não-gulosos.
+8. **🔴 Fração ideal v4 — o preenchimento DERRUBOU 82 unidades inteiras** (gatilho `trg_imovel_fracao_ideal` sobre a
+   descrição nova): toda matrícula de apartamento cita "fração ideal do terreno", e "Vendedor: …Fundo de Investimento em
+   Direitos Creditórios" contava como venda de crédito. Régua v4 no banco (`20261008_fracao_ideal_clausulas_v4.sql`) e
+   no JS (`ehFracaoIdeal`), espelhadas e testadas com os textos reais: 76 liberados revisados 1 a 1, 0 ativo passa a
+   barrar; fatia com número segue barrada ("33,33% sobre imóvel rural", "Parte Ideal (50%)", "83,48% da fração ideal").
+   68 voltaram; 14 seguem fora (11 são fatia de verdade que estavam na vitrine escondidas atrás do eco do título; 1 loja
+   barrada por "modificar as frações ideais do prédio" e 2 ambíguos — conservador de propósito).
+   **Lição:** gravar texto novo em massa passa pelos gatilhos de qualidade — medir `ativo` antes/depois do backfill.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
