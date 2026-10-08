@@ -75,6 +75,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     mantém, decisão de custo). 11 lotes sem data em 404 desativados (`sumiu_da_fonte`). Lotes em 404 com leilão
     negativo < 15 dias seguem pela regra do dono. Conferir na próxima rodada: #182. #179 (ZUK) era ciclo normal.
 
+12. **#181 fechada (galeria das fontes difíceis):** GRUPOLANCE 0→173 (pasta `batches/<xx>/<id>/`, tamanho cheio)
+    e HASTAPUBLICA 0→64 (imagens de conteúdo, só com a capa presente na página). GLOBOLEILOES já lia a galeria
+    (`lib/globo-json.mjs`) — a origem tem 1 foto em 620/697. PESTANA/VLANCE/VIP = JS, recon no navegador → #183.
+13. **FIPE "Faltam marca, modelo ou ano" com modelo e ano no título** (HB20 1.0M UNIQUE - 2019): o título não traz
+    a MARCA e `marcaModeloDoTitulo` só reconhecia marca escrita. Tabela fechada MODELO→MARCA no 1º termo do
+    título (`api/_fipe.js`, em memória); marca da fonte que contradiz o modelo (o mesmo HB20 como CITROEN) cede;
+    `sem_dados` reabre em 3 dias (eram 25). 2.765 SUPERBID + 1.627 LJUD ativos sem marca são o universo.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
