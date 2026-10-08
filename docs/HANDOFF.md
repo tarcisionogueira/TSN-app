@@ -82,6 +82,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     a MARCA e `marcaModeloDoTitulo` só reconhecia marca escrita. Tabela fechada MODELO→MARCA no 1º termo do
     título (`api/_fipe.js`, em memória); marca da fonte que contradiz o modelo (o mesmo HB20 como CITROEN) cede;
     `sem_dados` reabre em 3 dias (eram 25). 2.765 SUPERBID + 1.627 LJUD ativos sem marca são o universo.
+14. **#183 (galeria PESTANA/VLANCE/VIP):** PESTANA e VLANCE NÃO eram JS — as APIs já devolviam a lista inteira
+    (PESTANA `imagens[]` via GED; VLANCE `fotos[]` 196x146→640x480) e gravava-se só a capa. Corrigido (`3f32676`),
+    preenche no próximo scrape (VLANCE via Bright Data → sem backfill pago). VIP segue aberta: sandbox bloqueado e
+    pg_net em loop de redirect; regra às cegas arriscaria foto de outro lote do mesmo blob → recon no puppeteer.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
