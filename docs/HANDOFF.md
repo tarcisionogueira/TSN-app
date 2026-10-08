@@ -108,6 +108,10 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     - **#88 fechada:** HASTAPUBLICA 8→99% (script `endereco=new Array(...)`), FERREIRALEIL 14→74% + 142 CEP (bloco
       "Localização do Imóvel" do Soleon — vale para todos os tenants). `lib/endereco-pagina.mjs` + teste. CEP fora do
       upsert em lote do Soleon (sem gatilho que o preserve). PESTANA também foi para `geocod_nivel=refazer` (133).
+    - **#185 fechada — Comprei (PGFN):** API em `comprei.pgfn.gov.br/gateway`; `/anuncio/visitar/{id}` é público
+      (o `/anuncio/{id}` pede login). Sem arquivo público de matrícula/laudo (teto). `lib/comprei-pgfn.mjs` grava
+      endereço/bairro e o bloco "Dados do Comprei (PGFN)" (matrícula, cartório, processo, juízo, ônus) na descrição —
+      Globo e Soleon (147/155 páginas da FERREIRALEIL são PGFN). 273 lotes com ficha; 15 vendidos fora do ar.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
