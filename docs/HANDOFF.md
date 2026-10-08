@@ -105,6 +105,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     - **#88 GRUPOLANCE 6→70%:** a página do lote tem o bloco "Localização" ("Rua, nº, compl., Bairro, Cidade, UF");
       `lib/grupolance-localizacao.mjs` + teste, lido no enriquecimento. 214 lotes em `geocod_nivel=refazer`. O seco pegou
       número/complemento caindo no bairro antes de gravar. Faltam HASTAPUBLICA e FERREIRALEIL (mesmo recon).
+    - **#88 fechada:** HASTAPUBLICA 8→99% (script `endereco=new Array(...)`), FERREIRALEIL 14→74% + 142 CEP (bloco
+      "Localização do Imóvel" do Soleon — vale para todos os tenants). `lib/endereco-pagina.mjs` + teste. CEP fora do
+      upsert em lote do Soleon (sem gatilho que o preserve). PESTANA também foi para `geocod_nivel=refazer` (133).
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
