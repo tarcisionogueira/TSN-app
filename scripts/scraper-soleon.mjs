@@ -44,6 +44,7 @@ import { registrarSaude } from './_saude-fonte.mjs';
 // ver o comentário completo acima de `coletarTenant`.
 import { planejarAlvo } from './lib/motor/runner.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from './lib/vazio-declarado.mjs';
+import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from './lib/galeria-veiculo.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -571,6 +572,11 @@ async function coletarTenant(tenant) {
     }
     if (!r.html) { sem++; continue; }
     const row = montarRow(tenant, alvo[i], parseDetalhe(r.html, alvo[i]));
+    // GALERIA (08/10): a pasta `…/bens/<id>/` da capa é exclusiva do lote (lib/galeria-veiculo.mjs).
+    if (FONTES_PASTA_DA_CAPA.has(row.fonte)) {
+      const gal = montarFotos(row.link_foto, galeriaDoHtml(row.fonte, r.html, { capa: row.link_foto }));
+      if (gal.length > 1) row.fotos = gal;
+    }
     const q = checarQualidade(row, { estrito: false });
     if (q.descartar) { reprov++; continue; }
     prontos.push(row);

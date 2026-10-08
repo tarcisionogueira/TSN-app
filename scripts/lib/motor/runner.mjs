@@ -20,6 +20,7 @@ import { criarMotorDom } from './fetch-dom.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
 import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
+import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from '../galeria-veiculo.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -279,6 +280,12 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       const det = detPronto || cfg.parse.parseDetalhe(html, url);
       if (det.encerrado) { encerrados++; continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
+      // GALERIA (08/10): plataformas com a galeria na pasta exclusiva da capa (lib/galeria-veiculo.mjs).
+      // Só grava quando achou mais de uma; o banco não deixa a galeria antiga virar nula (trg_imovel_fotos_nao_encolhem).
+      if (html && FONTES_PASTA_DA_CAPA.has(row.fonte)) {
+        const gal = montarFotos(row.link_foto, galeriaDoHtml(row.fonte, html, { capa: row.link_foto }));
+        if (gal.length > 1) row.fotos = gal;
+      }
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
       if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });

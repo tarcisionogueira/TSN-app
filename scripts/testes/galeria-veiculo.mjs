@@ -62,5 +62,32 @@ ok(fotosPreservadas(['https://a/1.jpg'], tres).length === 3, 'galeria não encol
 ok(fotosPreservadas(['https://a/1.jpg', 'https://a/9.jpg'], tres).length === 2, 'galeria relida hoje (2+) vale, mesmo menor');
 ok(fotosPreservadas(['https://x/card-no-image.png'], null).length === 0, 'placeholder sai mesmo sem anterior');
 
+// 08/10 — imóveis, URLs reais do recon via pg_net.
+const kle = html([
+  'https://static.suporteleiloes.com.br/kleiloescombr/bens/51483/arquivos/6a19c9890d942-6a19c98912680.jpg',
+  'https://static.suporteleiloes.com.br/kleiloescombr/bens/51483/arquivos/6a19c98a11111-6a19c98a22222.jpg',
+  'https://static.suporteleiloes.com.br/kleiloescombr/comitentes/sl-c-1.jpg',
+  'https://static.suporteleiloes.com.br/kleiloescombr/bens/40000/arquivos/outro.jpg',
+]);
+g = galeriaDoHtml('KLEILOES', kle, { capa: 'https://static.suporteleiloes.com.br/kleiloescombr/bens/51483/arquivos/6a19c9890d942-6a19c98912680.jpg' });
+ok(g.length === 2 && g.every((u) => u.includes('/bens/51483/')), `KLEILOES: só a pasta do bem da capa → ${g.length}`);
+ok(galeriaDoHtml('KLEILOES', kle).length === 0, 'KLEILOES: sem capa não adivinha a pasta');
+const torres = html([
+  'https://944d11d968d49f4d.cdn.gocache.net/watermark/bens/0000031582/img-31582-6ab57e70ce664.jpg',
+  'https://944d11d968d49f4d.cdn.gocache.net/watermark/bens/0000031582/img-31582-6ab57e70ce999.jpg',
+  'https://944d11d968d49f4d.cdn.gocache.net/banners/banner-1.jpg',
+]);
+g = galeriaDoHtml('TORRES3', torres, { capa: 'https://944d11d968d49f4d.cdn.gocache.net/watermark/bens/0000031582/img-31582-6ab57e70ce664.jpg' });
+ok(g.length === 2 && !g.some((u) => u.includes('banners')), `TORRES3: pasta do bem, sem banner → ${g.length}`);
+const biasi = html([
+  'https://cdn-biasi.blueintra.com/images/leilaotable/367.jpg',
+  'https://cdn-biasi.blueintra.com/images/lot/16/11/1000/1611385.jpg',
+  'https://cdn-biasi.blueintra.com/images/lot/16/11/1000/1611386.jpg',
+  'https://cdn-biasi.blueintra.com/images/lot/16/11/500/1611385.jpg',
+  'https://cdn-biasi.blueintra.com/images/vendedor/Ek8WLXHtw6YmeIP7sifZaq.png',
+]);
+g = galeriaDoHtml('BIASI', biasi);
+ok(g.length === 2 && g.every((u) => u.includes('/1000/')), `BIASI: só o tamanho 1000 do visualizador → ${g.length}`);
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

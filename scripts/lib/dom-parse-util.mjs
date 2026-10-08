@@ -360,7 +360,7 @@ export function anularFotoRepetida(rows, minimo = 3) {
   for (const r of rows) {
     if (Array.isArray(r?.fotos)) {
       const f = r.fotos.filter((u) => !genericas.has(u));
-      if (f.length !== r.fotos.length) r.fotos = f.length ? f : null;
+      if (f.length !== r.fotos.length) r.fotos = f; // [] explícito: nulo seria desfeito por trg_imovel_fotos_nao_encolhem
     }
     if (r?.link_foto && genericas.has(r.link_foto)) { r.link_foto = (Array.isArray(r.fotos) && r.fotos[0]) || null; n++; }
   }

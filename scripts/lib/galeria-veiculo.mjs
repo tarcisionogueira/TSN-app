@@ -16,6 +16,9 @@
 
 const MAX_FOTOS = 30;
 
+// Imóveis com a galeria na MESMA pasta da capa, exclusiva do lote (medido em 08/10, 2 lotes reais de cada).
+export const FONTES_PASTA_DA_CAPA = new Set(['KLEILOES', 'JELEILOES', 'LEILAOBRASIL', 'TORRES3', 'DANIELGARCIA', 'FERREIRALEIL']);
+
 // "Sem imagem" do próprio site não é foto: MEGA grava card-no-image, ZUK ImgNaoDisp*.
 export const ehFotoPlaceholder = (u) => /no-image|nao-?disp|sem-?foto|placeholder/i.test(String(u || ''));
 
@@ -40,6 +43,16 @@ export function galeriaDoHtml(fonte, html, { capa = null, idLote = null } = {}) 
     out = [...porHash.values()].map((x) => x.u);
   } else if (fonte === 'ZUK') {
     out = urls.filter((u) => /^https?:\/\/imagens\.portalzuk\.com\.br\/detalhe\//i.test(u));
+  } else if (fonte === 'BIASI') {
+    // 08/10 (imóveis): o visualizador do lote usa o tamanho 1000 (`/images/lot/16/11/1000/1611385.jpg`, fotos
+    // em sequência); capa e "veja também" vêm em 250/500. Medido em 2 lotes reais: 14 e 4 fotos.
+    out = urls.filter((u) => /^https?:\/\/cdn-biasi\.blueintra\.com\/images\/lot\/\d+\/\d+\/1000\/\d+\.(?:jpe?g|png|webp)$/i.test(u));
+  } else if (FONTES_PASTA_DA_CAPA.has(fonte)) {
+    // 08/10 (imóveis): a capa mora numa pasta EXCLUSIVA do lote (`…/bens/<id>/arquivos/` na plataforma
+    // Suporte Leilões; `…/bens/0000031582/` na de TORRES3/DANIELGARCIA/FERREIRALEIL). A galeria é o resto
+    // da mesma pasta. Sem capa numa pasta dessas → nada (não se adivinha a pasta do lote).
+    const pasta = String(capa || '').match(/^(https?:\/\/[^?#]+\/bens\/\d+\/(?:arquivos\/)?)/i)?.[1] || null;
+    out = pasta ? urls.filter((u) => u.startsWith(pasta)) : [];
   } else if (fonte === 'SUPORTE') {
     const pasta = (u) => u.match(/^(https?:\/\/static\.suporteleiloes\.com\.br\/[^/]+\/bens\/\d+\/arquivos\/)/i)?.[1] || null;
     let alvo = pasta(String(capa || ''));
