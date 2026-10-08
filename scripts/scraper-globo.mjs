@@ -100,10 +100,13 @@ async function main() {
   // Paginado: o PostgREST corta em 1.000 linhas e o resto releria detalhe todo dia.
   const comFoto = new Set();
   for (let de = 0; ; de += 1000) {
-    const { data, error: eJa } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE)
+    const { data, error: eJa } = await supabase.from('imoveis_leilao').select('fonte_id, anexos').eq('fonte', FONTE)
       .not('link_foto', 'is', null).order('fonte_id').range(de, de + 999);
     if (eJa) { comFoto.clear(); console.log(`  aviso: não li quem já tem foto (${eJa.message}) — lê o detalhe de todos`); break; }
-    for (const r of data || []) comFoto.add(r.fonte_id);
+    // Só pula quem tem foto E anexo (08/10, #177): o leiloeiro sobe a matrícula depois da 1ª
+    // leitura, e "já tem foto" deixava o lote sem documento para sempre (medido: matrícula na
+    // página, nada no banco). Lote sem anexo é minoria e volta à fila do teto MAX_DETALHE.
+    for (const r of data || []) if (Array.isArray(r.anexos) && r.anexos.length) comFoto.add(r.fonte_id);
     if (!data || data.length < 1000) break;
   }
   const prontos = []; let gravados = 0; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
