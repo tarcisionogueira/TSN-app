@@ -93,7 +93,12 @@ export function parseDetalhe(html, url) {
   // Tipo = a palavra-chave que aparece PRIMEIRO na descrição ("Um terreno situado… Residencial
   // Lago Azul" é terreno — o nome do loteamento não pode virar "Casa"; dry-run 28/09).
   const tipo = TIPOS.map(([re, nome]) => ({ nome, pos: descricao.search(re) })).filter((t) => t.pos >= 0)
-    .sort((a, b) => a.pos - b.pos)[0]?.nome || 'Imóvel';
+    .sort((a, b) => a.pos - b.pos)[0]?.nome
+    // Sem tipo reconhecido: "Imóvel" só se a descrição DIZ imóvel. Até 08/10 o padrão era 'Imóvel'
+    // para tudo, e esse rótulo inventado no título fazia o `naoEhImovel` do motor deixar passar
+    // carro, moto, sofá e aparador (12 de 19 ativos da UBERLANDIALEILOES eram bens móveis
+    // anunciados como "Imóvel - Machado/MG"). Com "Bem", o filtro do motor decide pelo texto real.
+    || (/im[óo]ve(?:l|is)/i.test(descricao) ? 'Imóvel' : 'Bem');
   const bairro = (descricao.match(/\bbairro\s+([A-ZÀ-Ý][\wÀ-ÿ' ]{2,40}?)(?=[,.;]| na | no | à )/i) || [])[1];
   const titulo = `${tipo}${bairro ? ` - ${titleCase(bairro.trim().toLowerCase())}` : ''}${cidade ? ` - ${cidade}/${estado}` : ''}`;
   const mat = (descricao.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;

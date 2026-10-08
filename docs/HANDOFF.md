@@ -20,6 +20,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
    `salvarImoveis` (`enderecoSemRotuloDePraca`): usa o "Endereço:" rotulado da descrição ou deixa vazio.
    10 lotes corrigidos no banco (1 SUPERBID → Rua Rouxinol, nº 315, CEP, re-geocode; 9 HASTAPUBLICA → vazio).
 
+4. **Fontes em alarme no diagnóstico:**
+   - **HASTA (1 × piso 290):** o site está vazio desde 30/08 (já sabido, parser íntegro) e voltou a publicar 1 lote. Explicação gravada.
+   - **UBERLANDIALEILOES "zerou":** a rodada de 07/10 falhou por ACESSO (403/520), não pelo parser. Achado maior no
+     mesmo lugar: **13 de 19 ativos eram bens móveis** (Kombi, Palio, motos, sofá, aparador) com título "Imóvel - Machado/MG".
+     O parser punha "Imóvel" quando não reconhecia o tipo, e esse rótulo inventado fazia o `naoEhImovel` do motor deixar
+     passar. Agora o padrão é "Bem" (salvo se a descrição diz imóvel); ensaio em seco sobre os 19 reais + 3 asserções novas
+     em `testes/leiloar-parse.mjs`. 13 desativados (`nao_imovel`), restam 6.
+   - Mesma assinatura em potencial no EDITAL_DJEN (26 lotes): **#174**, não mexido no escuro.
+
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
 > #155, #162, #169). Reagendadas com o que falta medir: #144, #148, #152, #166, #103, #88.
