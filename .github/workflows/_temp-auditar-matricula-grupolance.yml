@@ -1,0 +1,22 @@
+name: _temp Auditar matrículas auto GRUPOLANCE (#22)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['scripts/auditar-matricula-grupolance.mjs', '.github/workflows/_temp-auditar-matricula-grupolance.yml']
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci
+      - name: Auditar (não grava nada)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/auditar-matricula-grupolance.mjs
