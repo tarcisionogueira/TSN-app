@@ -112,6 +112,9 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
       (o `/anuncio/{id}` pede login). Sem arquivo público de matrícula/laudo (teto). `lib/comprei-pgfn.mjs` grava
       endereço/bairro e o bloco "Dados do Comprei (PGFN)" (matrícula, cartório, processo, juízo, ônus) na descrição —
       Globo e Soleon (147/155 páginas da FERREIRALEIL são PGFN). 273 lotes com ficha; 15 vendidos fora do ar.
+    - **#183 VIP:** recon no navegador (workflow temporário, já removido) — galeria no bloco `anuncio-midia`; o mesmo
+      blob serve os documentos na barra lateral (`a.an-document`). Regra em `galeriaDoHtml('VIP')` só dentro do bloco e
+      com a capa presente. 1ª coleta: 25/39 com galeria, 0 foto alheia. PESTANA 179/194. VLANCE espera a coleta agendada.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
