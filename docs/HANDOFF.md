@@ -115,6 +115,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
     - **#183 VIP:** recon no navegador (workflow temporário, já removido) — galeria no bloco `anuncio-midia`; o mesmo
       blob serve os documentos na barra lateral (`a.an-document`). Regra em `galeriaDoHtml('VIP')` só dentro do bloco e
       com a capa presente. 1ª coleta: 25/39 com galeria, 0 foto alheia. PESTANA 179/194. VLANCE espera a coleta agendada.
+    - **E-mail "Encaminhar":** leva todos os anexos da conversa (servidor resolve cada um com a mesma cerca de acesso;
+      falhou um, não envia nada). "Responder" segue só texto.
+    - **#22 fechada — matrículas "auto" do GRUPOLANCE:** auditoria dos 143 PDFs pelo CONTEÚDO (0 edital, 0 laudo;
+      certidões reais, 62% escaneadas — o documental manda PDF ao modelo, lê). A suspeita não se confirmou. O defeito
+      REAL era outro: **390 lotes (113 ativos: GL 69, ZUK 44) com `link_matricula` para arquivo do nosso Storage que não
+      existia mais, todos com selo verde** — passivo da retenção anterior a 04/10 (apagava arquivo, não zerava link).
+      Zerados; o selo recalculou; os coletores voltam a tentar. Vigia nova: invariante `link_matricula_morto` (limite 0)
+      em `qa_invariantes()` — migração `20261009_invariante_link_matricula_morto`.
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
