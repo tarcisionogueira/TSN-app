@@ -356,6 +356,8 @@ export default function CaixaEmail({ soPessoal = false }) {
       const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'anexo', id: m.id, anexo_id: a.id || undefined, anexo_idx: idx, proxy: true }) });
       if (!res.ok || /application\/json/.test(res.headers.get('content-type') || '')) {
         const j = await lerJsonSeguro(res);
+        // Cópia nossa no Storage: abre o link direto (vídeo/áudio precisam ler por pedaços).
+        if (res.ok && j.direto && j.url) { if (aba) aba.location.href = j.url; else window.location.href = j.url; return; }
         aba?.close();
         setErro(j.error || `Não consegui abrir o anexo (HTTP ${res.status}).`);
         return;

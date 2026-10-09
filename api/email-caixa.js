@@ -76,10 +76,10 @@ async function resolverAnexo(msg, { anexoId = '', idx = NaN } = {}) {
   if (item?.arquivo && String(item.arquivo).startsWith('email/')) {
     const rs = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${item.arquivo}`, {
       method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expiresIn: 300 }), signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ expiresIn: 3600 }), signal: AbortSignal.timeout(10000),
     });
     const js = rs.ok ? await rs.json().catch(() => null) : null;
-    if (js?.signedURL) return { url: `${SUPABASE_URL}/storage/v1${js.signedURL}`, nome: item.nome };
+    if (js?.signedURL) return { url: `${SUPABASE_URL}/storage/v1${js.signedURL}`, nome: item.nome, nosso: true };
     // Cópia registrada mas não assinável: diz, e segue para o Resend enquanto ele ainda tiver.
     console.error('[email-caixa] anexo arquivado não assinou:', rs.status, item.arquivo);
   }
@@ -159,6 +159,10 @@ export default async function handler(req) {
     if (msg && (msg.dono ? msg.dono !== user.id : soPessoal)) return json({ error: 'Anexo não encontrado' }, 404);
     const res = await resolverAnexo(msg, { anexoId, idx: Number(body?.anexo_idx) });
     if (res.erro) return json({ error: res.erro }, res.status);
+    // Cópia NOSSA (09/10, dono: vídeo anexado abria preto em 0:00): o Storage já serve com o tipo
+    // certo e aceita leitura por pedaços (Range), que é o que o player de vídeo/áudio precisa. Passar
+    // pela função quebrava mídia — teto de resposta da Vercel (~4,5 MB) e blob sem Range. Vai o link.
+    if (body?.proxy === true && res.nosso) return json({ ok: true, url: res.url, direto: true });
     if (body?.proxy === true) return entregarArquivo(res.url, res.nome);
     return json({ ok: true, url: res.url });
   }
