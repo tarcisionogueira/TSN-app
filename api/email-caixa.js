@@ -63,6 +63,66 @@ const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 const listaEmails = (v) => [...new Set([].concat(v || []).flatMap(x => String(x || '').split(/[,;\s]+/))
   .map(x => x.trim().toLowerCase()).filter(Boolean))];
 
+// LINK DO ANEXO de uma mensagem da caixa — usado ao ABRIR o anexo e ao ENCAMINHAR (09/10: o
+// "Encaminhar a conversa" mandava só o texto, nenhum anexo). Ordem: cópia nossa no bucket (o
+// Resend apaga em 30 dias) → anexo do envio (saída) → anexo recebido (entrada). Devolve
+// { url, nome } ou { erro, status } — nunca "sem anexo" calado.
+async function resolverAnexo(msg, { anexoId = '', idx = NaN } = {}) {
+  const lista = msg?.anexos || [];
+  const item = msg?.direcao === 'saida' ? lista[idx] : lista.find(a => a?.id && a.id === anexoId);
+  if (item?.arquivo && String(item.arquivo).startsWith('email/')) {
+    const rs = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${item.arquivo}`, {
+      method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 300 }), signal: AbortSignal.timeout(10000),
+    });
+    const js = rs.ok ? await rs.json().catch(() => null) : null;
+    if (js?.signedURL) return { url: `${SUPABASE_URL}/storage/v1${js.signedURL}`, nome: item.nome };
+    // Cópia registrada mas não assinável: diz, e segue para o Resend enquanto ele ainda tiver.
+    console.error('[email-caixa] anexo arquivado não assinou:', rs.status, item.arquivo);
+  }
+
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { erro: 'Envio de e-mail não configurado', status: 503 };
+
+  // ENVIADO (23/09): o arquivo é o que o Resend de fato ANEXOU no envio — GET
+  // /emails/{id}/attachments. Mostra exatamente o que o destinatário recebeu, não uma
+  // releitura da origem (que pode ter mudado, ou exigir login — caso da matrícula LEILOFY).
+  if (msg?.direcao === 'saida') {
+    const esperado = lista[idx];
+    if (!msg.resend_email_id || !esperado) return { erro: 'Anexo não encontrado', status: 404 };
+    const rl = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments`,
+      { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+    const jl = rl.ok ? await rl.json().catch(() => null) : null;
+    const itens = Array.isArray(jl?.data) ? jl.data : (Array.isArray(jl) ? jl : null);
+    if (!itens) {
+      console.error('[email-caixa] anexos enviados: Resend', rl.status, jl ? Object.keys(jl).join(',') : '(sem corpo)');
+      return { erro: `O provedor não listou os anexos deste envio (HTTP ${rl.status}).`, status: 502 };
+    }
+    const alvo = itens.find(a => a?.filename === esperado.nome) || itens[idx];
+    let url = alvo?.download_url || null;
+    if (!url && alvo?.id) {
+      const ra = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(alvo.id)}`,
+        { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+      const ja = ra.ok ? await ra.json().catch(() => null) : null;
+      url = ja?.download_url || null;
+      if (!url) console.error('[email-caixa] anexo enviado: Resend', ra.status, ja ? Object.keys(ja).join(',') : '(sem corpo)');
+    }
+    if (!url) return { erro: 'O provedor não entregou o anexo agora. Tente de novo em instantes.', status: 502 };
+    return { url, nome: alvo?.filename || esperado.nome };
+  }
+
+  // Só anexo que É desta mensagem — o id vem do cliente e não pode virar proxy do Resend.
+  if (!msg?.resend_email_id || !lista.some(a => a?.id && a.id === anexoId)) return { erro: 'Anexo não encontrado', status: 404 };
+  const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(anexoId)}`,
+    { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+  const j = r.ok ? await r.json().catch(() => null) : null;
+  if (!j?.download_url) {
+    console.error('[email-caixa] anexo: Resend', r.status, j ? Object.keys(j).join(',') : '(sem corpo)');
+    return { erro: 'O provedor não entregou o anexo agora. Tente de novo em instantes.', status: 502 };
+  }
+  return { url: j.download_url, nome: j.filename || lista.find(a => a?.id === anexoId)?.nome };
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': APP_ORIGIN, 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
@@ -94,71 +154,10 @@ export default async function handler(req) {
     // Mesma cerca da RLS (a chave aqui é de serviço): caixa pessoal só o dono; comunicação só
     // quem tem acesso a ela (advogado não).
     if (msg && (msg.dono ? msg.dono !== user.id : soPessoal)) return json({ error: 'Anexo não encontrado' }, 404);
-    // CÓPIA NOSSA PRIMEIRO (27/09): o arquivar-anexos-email-cron copia cada anexo para o bucket
-    // privado `documentos` (o Resend apaga em 30 dias). Com `arquivo` gravado, o Resend nem é
-    // consultado — o anexo continua abrindo depois que o provedor esqueceu dele.
-    {
-      const lista = msg?.anexos || [];
-      const item = msg?.direcao === 'saida' ? lista[Number(body?.anexo_idx)] : lista.find(a => a?.id && a.id === anexoId);
-      if (item?.arquivo && String(item.arquivo).startsWith('email/')) {
-        const rs = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${item.arquivo}`, {
-          method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expiresIn: 300 }), signal: AbortSignal.timeout(10000),
-        });
-        const js = rs.ok ? await rs.json().catch(() => null) : null;
-        if (js?.signedURL) {
-          const url = `${SUPABASE_URL}/storage/v1${js.signedURL}`;
-          if (body?.proxy === true) return entregarArquivo(url, item.nome);
-          return json({ ok: true, url });
-        }
-        // Cópia registrada mas não assinável: diz, e segue para o Resend enquanto ele ainda tiver.
-        console.error('[email-caixa] anexo arquivado não assinou:', rs.status, item.arquivo);
-      }
-    }
-
-    const key = process.env.RESEND_API_KEY;
-    if (!key) return json({ error: 'Envio de e-mail não configurado' }, 503);
-
-    // ENVIADO (23/09): o arquivo é o que o Resend de fato ANEXOU no envio — GET
-    // /emails/{id}/attachments. Mostra exatamente o que o destinatário recebeu, não uma
-    // releitura da origem (que pode ter mudado, ou exigir login — caso da matrícula LEILOFY).
-    if (msg?.direcao === 'saida') {
-      const idx = Number(body?.anexo_idx);
-      const esperado = (msg.anexos || [])[idx];
-      if (!msg.resend_email_id || !esperado) return json({ error: 'Anexo não encontrado' }, 404);
-      const rl = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments`,
-        { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
-      const jl = rl.ok ? await rl.json().catch(() => null) : null;
-      const itens = Array.isArray(jl?.data) ? jl.data : (Array.isArray(jl) ? jl : null);
-      if (!itens) {
-        console.error('[email-caixa] anexos enviados: Resend', rl.status, jl ? Object.keys(jl).join(',') : '(sem corpo)');
-        return json({ error: `O provedor não listou os anexos deste envio (HTTP ${rl.status}).` }, 502);
-      }
-      const alvo = itens.find(a => a?.filename === esperado.nome) || itens[idx];
-      let url = alvo?.download_url || null;
-      if (!url && alvo?.id) {
-        const ra = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(alvo.id)}`,
-          { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
-        const ja = ra.ok ? await ra.json().catch(() => null) : null;
-        url = ja?.download_url || null;
-        if (!url) console.error('[email-caixa] anexo enviado: Resend', ra.status, ja ? Object.keys(ja).join(',') : '(sem corpo)');
-      }
-      if (!url) return json({ error: 'O provedor não entregou o anexo agora. Tente de novo em instantes.' }, 502);
-      if (body?.proxy === true) return entregarArquivo(url, alvo?.filename || esperado.nome);
-      return json({ ok: true, url });
-    }
-
-    // Só anexo que É desta mensagem — o id vem do cliente e não pode virar proxy do Resend.
-    if (!msg?.resend_email_id || !(msg.anexos || []).some(a => a?.id && a.id === anexoId)) return json({ error: 'Anexo não encontrado' }, 404);
-    const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(anexoId)}`,
-      { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
-    const j = r.ok ? await r.json().catch(() => null) : null;
-    if (!j?.download_url) {
-      console.error('[email-caixa] anexo: Resend', r.status, j ? Object.keys(j).join(',') : '(sem corpo)');
-      return json({ error: 'O provedor não entregou o anexo agora. Tente de novo em instantes.' }, 502);
-    }
-    if (body?.proxy === true) return entregarArquivo(j.download_url, j.filename || (msg.anexos || []).find(a => a?.id === anexoId)?.nome);
-    return json({ ok: true, url: j.download_url });
+    const res = await resolverAnexo(msg, { anexoId, idx: Number(body?.anexo_idx) });
+    if (res.erro) return json({ error: res.erro }, res.status);
+    if (body?.proxy === true) return entregarArquivo(res.url, res.nome);
+    return json({ ok: true, url: res.url });
   }
 
   if (body?.acao !== 'enviar') return json({ error: 'acao inválida' }, 400);
@@ -183,6 +182,24 @@ export default async function handler(req) {
   if (!para.length || [...para, ...cc].some(e => !RE_EMAIL.test(e))) return json({ error: 'Confira os destinatários (e-mail inválido).' }, 400);
   if (para.length + cc.length > 10) return json({ error: 'No máximo 10 destinatários por mensagem.' }, 400);
   if (!assunto || !texto) return json({ error: 'Assunto e mensagem são obrigatórios.' }, 400);
+
+  // ANEXOS ENCAMINHADOS (09/10, dono: "Encaminhar a conversa" chegou sem nenhum anexo). A tela manda
+  // a referência de cada anexo das mensagens encaminhadas; aqui cada um vira link (cópia nossa ou
+  // provedor) e o Resend busca o arquivo. Faltou UM, nada sai: e-mail encaminhado sem o anexo que
+  // o destinatário espera é pior que um erro na tela, que dá para repetir.
+  const pedidos = Array.isArray(body?.encaminhar_anexos) ? body.encaminhar_anexos.slice(0, 21) : [];
+  if (pedidos.length > 20) return json({ error: 'No máximo 20 anexos por encaminhamento.' }, 400);
+  const anexosEnvio = [];
+  for (const p of pedidos) {
+    const idMsg = String(p?.id || '');
+    let m = null;
+    try { m = idMsg ? await ler1(`email_caixa?id=eq.${encodeURIComponent(idMsg)}&select=direcao,resend_email_id,anexos,dono`) : null; }
+    catch (e) { console.error('[email-caixa] encaminhar anexo:', e.message); return json({ error: 'Não foi possível ler os anexos a encaminhar.' }, 500); }
+    if (!m || (m.dono ? m.dono !== user.id : soPessoal)) return json({ error: 'Um dos anexos a encaminhar não foi encontrado. Nada foi enviado.' }, 404);
+    const res = await resolverAnexo(m, { anexoId: String(p?.anexo_id || ''), idx: Number(p?.anexo_idx) });
+    if (res.erro) return json({ error: `Anexo "${p?.nome || 'sem nome'}": ${res.erro} Nada foi enviado.` }, res.status);
+    anexosEnvio.push({ filename: String(res.nome || p?.nome || 'anexo').slice(0, 150), path: res.url });
+  }
 
   // Resposta: encadeia no fio do remetente e, se virou chamado, no chamado.
   let original = null, chamado = null;
@@ -238,6 +255,7 @@ export default async function handler(req) {
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
+    ...(anexosEnvio.length ? { attachments: anexosEnvio } : {}),
     headers: Object.keys(headers).length ? headers : undefined,
     meta: { tipo: 'caixa_equipe', userId: user.id },
     idempotencyKey: chaveEnvio ? `caixa:${user.id}:${chaveEnvio}` : undefined,
@@ -262,6 +280,7 @@ export default async function handler(req) {
     direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, de_email: enderecoDe, de_nome: nomeRemetente, dono: pessoal ? user.id : null,
     para, cc, assunto, texto: textoFinal, html, in_reply_to: original?.message_id || null,
     referencias: headers['References'] || null, resend_email_id: r.id || null, lido: true,
+    ...(anexosEnvio.length ? { anexos: anexosEnvio.map((a) => ({ nome: a.filename })) } : {}),
     chamado_id: chamado?.id || null, enviado_por: user.id, resposta_token: respostaToken,
   } });
   if (!ins.ok) { console.error('[email-caixa] registrar enviado HTTP', ins.status); avisos.push('enviado, mas não ficou registrado em Enviados'); }

@@ -444,7 +444,12 @@ export default function CaixaEmail({ soPessoal = false }) {
     }
     const corpo = `\n\n${cortou ? '(mensagens mais antigas omitidas por tamanho)\n\n' : ''}${blocos.join('\n\n')}`;
     const ult = msgs[msgs.length - 1];
-    abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null });
+    // ANEXOS VÃO JUNTO (09/10, dono: "Encaminhar a conversa" chegou sem os anexos). Como em todo
+    // cliente de e-mail: encaminhar leva os anexos; responder leva só o texto. Vai a REFERÊNCIA de
+    // cada anexo (mensagem + id ou posição); o servidor busca o arquivo e recusa o envio se faltar um.
+    const encaminhar_anexos = msgs.flatMap((m) => (m.anexos || []).map((a, i) => ({ id: m.id, anexo_id: a.id || undefined, anexo_idx: i, nome: a.nome || 'anexo' }))
+      .filter((x, i) => { const a = (m.anexos || [])[i]; return a && (a.id || a.arquivo || (m.direcao === 'saida' && m.resend_email_id)); }));
+    abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null, encaminhar_anexos });
   }
 
   async function enviar() {
@@ -454,7 +459,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), chave_envio: chaveEnvio.current || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -693,6 +698,20 @@ export default function CaixaEmail({ soPessoal = false }) {
               placeholder="Escreva sua mensagem… (sua assinatura entra automaticamente)"
               style={{ ...campo, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
             <RevisarTexto texto={compor.texto} onAplicar={t => setCompor(c => ({ ...c, texto: t }))} style={{ marginTop: 6 }} />
+            {compor.encaminhar_anexos?.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#475569' }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}><Paperclip size={12} /> {compor.encaminhar_anexos.length} anexo(s) vão junto:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {compor.encaminhar_anexos.map((a, i) => (
+                    <span key={`${a.id}-${a.anexo_idx}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 999, background: '#f8fafc' }}>
+                      {a.nome}
+                      <button type="button" title="Não encaminhar este anexo" onClick={() => setCompor(c => ({ ...c, encaminhar_anexos: c.encaminhar_anexos.filter((_, j) => j !== i) }))}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {compor.responder_a && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!compor.citar} onChange={e => setCompor({ ...compor, citar: e.target.checked })} />
