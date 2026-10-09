@@ -1,0 +1,22 @@
+name: _temp Probe vídeo anexado no e-mail (diagnóstico)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/_temp-probe-video-email.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: ffprobe dos vídeos (só lê)
+        env:
+          SB_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SB_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          for p in mv0bfvjy-y8ry0q-WhatsApp_Video_2026-10-08_at_22.55.52.mp4 mv0bfw6m-r8hl88-WhatsApp_Video_2026-10-08_at_22.55.20.mp4; do
+            curl -sS -o v.mp4 -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" "$SB_URL/storage/v1/object/documentos/email/saida/92c713f3-1f1a-4758-bab2-32e6c83da433/$p"
+            echo "== $p $(stat -c %s v.mp4) bytes"
+            ffprobe -v error -show_entries stream=codec_name,profile,width,height,pix_fmt,duration -show_entries format=format_name,duration -of compact v.mp4
+            ffmpeg -v error -i v.mp4 -f null - && echo "decodifica inteiro: OK" || echo "ERRO ao decodificar"
+          done
