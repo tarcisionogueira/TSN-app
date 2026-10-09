@@ -59,6 +59,19 @@ export function galeriaDoHtml(fonte, html, { capa = null, idLote = null } = {}) 
     const re = /^https?:\/\/s3-sa-east-1\.amazonaws\.com\/cdnhp\/content\/[0-9a-f]{32}\.(?:jpe?g|png|webp)$/i;
     const cand = urls.filter((u) => re.test(u));
     out = capa && cand.includes(capa) ? cand : [];
+  } else if (fonte === 'VIP') {
+    // 08/10 (#183, recon no navegador em 3 lotes): todas as fotos da VIP moram no MESMO blob
+    // (armazupleilaovipprd…/uploads/<uuid>), então a âncora é o CONTÊINER: a galeria do lote é o
+    // bloco `anuncio-midia` (carrossel + miniaturas). Fora dele, na barra lateral, o mesmo blob
+    // serve os DOCUMENTOS (`a.an-document`) — não são foto. Não há "veja também" na página.
+    // Trava: só vale se a capa do lote está no bloco.
+    const t = String(html || '');
+    const i = t.indexOf('anuncio-midia');
+    const fim = i < 0 ? -1 : [t.indexOf('an-sidebar', i), t.indexOf('anuncio-info', i)].filter((x) => x > i).sort((a, b) => a - b)[0] ?? -1;
+    if (i < 0 || fim < 0) return [];
+    const re = /^https?:\/\/armazupleilaovipprd\.blob\.core\.windows\.net\/uploads\/[0-9a-f-]{36}\.(?:jpe?g|png|webp)$/i;
+    const cand = urlsDoHtml(t.slice(i, fim)).filter((u) => re.test(u));
+    out = capa && cand.includes(capa) ? cand : [];
   } else if (fonte === 'BIASI') {
     // 08/10 (imóveis): o visualizador do lote usa o tamanho 1000 (`/images/lot/16/11/1000/1611385.jpg`, fotos
     // em sequência); capa e "veja também" vêm em 250/500. Medido em 2 lotes reais: 14 e 4 fotos.

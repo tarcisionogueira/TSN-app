@@ -110,5 +110,18 @@ const hp = html([
 ok(galeriaDoHtml('HASTAPUBLICA', hp, { capa: 'https://s3-sa-east-1.amazonaws.com/cdnhp/content/ad6989b5d553b8d7b40a72e22f2e2292.jpg' }).length === 2, 'HASTAPUBLICA: imagens de conteúdo com a capa presente');
 ok(galeriaDoHtml('HASTAPUBLICA', hp, { capa: 'https://s3-sa-east-1.amazonaws.com/cdnhp/content/ffffffffffffffffffffffffffffffff.jpg' }).length === 0, 'HASTAPUBLICA: capa ausente da página → nada');
 
+// VIP (#183): estrutura do recon de 08/10 — galeria no bloco anuncio-midia, documentos do MESMO blob na barra lateral.
+const B = 'https://armazupleilaovipprd.blob.core.windows.net/uploads/';
+const vip = `<div class="anuncio-grid"><div class="anuncio-midia"><div id="carousel" class="carousel slide"><div class="carousel-inner">
+  <div class="carousel-item active"><img class="d-block w-100" src="${B}4f4aa915-6c36-4f2c-9812-11dd74702fe0.jpg"></div>
+  <div class="carousel-item"><img class="d-block w-100" src="${B}000376c9-3940-4ebc-9273-c98c50b5f4bd.jpg"></div>
+  <div class="carousel-item"><img class="d-block w-100" src="${B}8b2e2914-71e6-4604-a0ce-d29e772cd660.png"></div></div></div>
+  <div class="thumbs"><img class="img-fluid active" src="${B}4f4aa915-6c36-4f2c-9812-11dd74702fe0.jpg"></div></div></div>
+  <div class="anuncio-info mb-3"><div class="an-sidebar"><a class="an-document" href="${B}3b8d0000-8fc5-43f4-b380-a7af3d487271.png">Matrícula</a></div></div>`;
+g = galeriaDoHtml('VIP', vip, { capa: `${B}4f4aa915-6c36-4f2c-9812-11dd74702fe0.jpg` });
+ok(g.length === 3 && !g.some((u) => u.includes('3b8d0000')), `VIP: 3 fotos do carrossel, documento da barra lateral fora → ${g.length}`);
+ok(galeriaDoHtml('VIP', vip, { capa: `${B}ffffffff-ffff-ffff-ffff-ffffffffffff.jpg` }).length === 0, 'VIP: capa ausente do bloco → nada');
+ok(galeriaDoHtml('VIP', '<div>sem bloco</div>', { capa: `${B}4f4aa915-6c36-4f2c-9812-11dd74702fe0.jpg` }).length === 0, 'VIP: sem anuncio-midia → nada');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');
