@@ -79,7 +79,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 CAMPOS_LOTE = [
     "lote_id", "leilao_id", "id", "nm_titulo_lote", "nm_titulo_leilao",
     "nm_categoria", "nm_subcategoria", "nm_segmento", "nm_cidade", "nm_estado",
-    "vl_lanceminimo", "vl_lanceinicial", "vl_venda", "vl_lanceinicialsegundoleilao",
+    "vl_lanceminimo", "vl_lanceinicial", "vl_venda", "vl_lanceinicialsegundoleilao", "vl_avaliacao", "vl_ordenacao",
     "nu_parcelas", "dt_fechamento", "dt_fechamento_formatado", "nm_statuslote",
     "imovel_id", "veiculo_id", "equipamento_id", "nm_leiloeiro", "nu_visitas", "nu_qtdelances",
 ]
@@ -412,12 +412,29 @@ def anexos_url(lote):
     return out
 
 
+# VALORES (09/10, #161). O `get-lotes` é o MESMO endpoint da LJUD, e lá a semântica foi conferida em
+# 9 páginas (07/10): `vl_lanceminimo` é a AVALIAÇÃO, `vl_lanceinicial` é o LANCE da 1ª praça e
+# `vl_lanceinicialsegundoleilao` o da 2ª. Aqui a ordem era a inversa: o lance virava a avaliação e,
+# como "mín > avaliação", a trava igualava os dois — 108 de 109 lotes VLANCE com lance = avaliação
+# (desconto zero), enquanto o gêmeo LJUD do mesmo lote mostrava 50%. Mesma regra de
+# api/scraper-leiloeiros.js: sem `vl_lanceinicial` no item, `vl_lanceminimo` volta a ser o lance.
+def valores_lote(lote):
+    do_get_lotes = lote.get("vl_lanceinicial") is not None
+    if do_get_lotes:
+        vm = num(lote.get("vl_lanceinicial")) or num(lote.get("vl_ordenacao")) or num(lote.get("vl_lanceminimo"))
+        va = num(lote.get("vl_avaliacao")) or (num(lote.get("vl_lanceminimo")) if num(lote.get("vl_lanceminimo")) >= vm else 0.0)
+    else:
+        vm = num(lote.get("vl_lanceminimo")) or num(lote.get("vl_ordenacao"))
+        va = num(lote.get("vl_avaliacao")) or num(lote.get("vl_venda"))
+    if va and vm and vm > va:  # avaliação menor que o lance não existe: melhor sem avaliação que desconto negativo
+        va = 0.0
+    vm2 = num(lote.get("vl_lanceinicialsegundoleilao"))
+    return va, vm, (vm2 if 0 < vm2 < vm else None)
+
+
 def montar_row(lote, pai, base, dom):
     """Mapeia um lote Vlance -> linha de imoveis_leilao (mesma forma dos scrapers Node)."""
-    va = next((num(lote.get(k)) for k in ("vl_venda", "vl_lanceinicial", "vl_lanceminimo") if num(lote.get(k)) > 0), 0.0)
-    vm = next((num(lote.get(k)) for k in ("vl_lanceminimo", "vl_lanceinicial") if num(lote.get(k)) > 0), 0.0)
-    if va > 0 and vm > va:  # evita desconto negativo (mín > avaliação): trata mín como piso
-        va = vm
+    va, vm, vm2 = valores_lote(lote)
     desconto = round((1 - vm / va) * 100) if va > 0 and vm > 0 else None
     judicial = norm(pai.get("leilao_judicial")) or norm(lote.get("tp_judicial_extrajudicial"))
     modalidade = "judicial" if "jud" in judicial and "extra" not in judicial else "extrajudicial"
@@ -431,7 +448,7 @@ def montar_row(lote, pai, base, dom):
     edital_doc = next((a["url"] for a in anexos if a["tipo"] == "edital"), None)
     m_matricula = re.search(r"matr[ií]cula[^\d]{0,20}([\d.\-]{3,})", descricao_real, re.I)
     numero_matricula = m_matricula.group(1) if m_matricula else None
-    return {
+    row = {
         "fonte": "VLANCE",
         "fonte_id": f"vlance_{slug(dom)}_{lote.get('lote_id')}",
         "titulo": (lote.get("nm_titulo_lote") or f"Lote {lote.get('lote_id')}")[:180],
@@ -439,7 +456,7 @@ def montar_row(lote, pai, base, dom):
         "modalidade": modalidade,
         "cidade": lote.get("nm_cidade") or None,
         "estado": (lote.get("nm_estado") or "")[:2].upper() or None,
-        "valor_avaliacao": va,
+        "valor_avaliacao": va or None,
         "valor_minimo": vm,
         "descricao": descricao_real[:8000],
         "numero_matricula": numero_matricula,
@@ -468,6 +485,10 @@ def montar_row(lote, pai, base, dom):
         "desconto_percentual": desconto if (desconto is not None and desconto >= 0) else None,
         "atualizado_em": datetime.now(timezone.utc).isoformat(),
     }
+    # 2ª praça só quando a API traz: a chave AUSENTE não apaga o que outro caminho (edital) gravou.
+    if vm2:
+        row["valor_minimo_2"] = vm2
+    return row
 
 
 def eh_ingerivel(lote):
@@ -520,8 +541,13 @@ def upsert_supabase(rows):
         "Prefer": "resolution=merge-duplicates,return=minimal",
     }
     total = 0
-    for i in range(0, len(rows), 200):
-        lote = rows[i:i + 200]
+    # PostgREST toma as chaves da 1ª linha e anula o que falta nas outras: grava em grupos de
+    # mesmo conjunto de chaves (valor_minimo_2 só existe em parte das linhas).
+    grupos = {}
+    for row in rows:
+        grupos.setdefault(tuple(sorted(row)), []).append(row)
+    fatias = [g[i:i + 200] for g in grupos.values() for i in range(0, len(g), 200)]
+    for lote in fatias:
         r = requests.post(endpoint, headers=headers, data=json.dumps(lote), timeout=60)
         if r.status_code >= 300:
             print(f"!! erro upsert ({r.status_code}): {r.text[:300]}", file=sys.stderr)

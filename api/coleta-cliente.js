@@ -55,10 +55,25 @@ function fotoUrl(lote) {
   if (f && typeof f === 'object') for (const k of ['url', 'nm_foto', 'nm_arquivo', 'src', 'link']) if (f[k]) return String(f[k]);
   return null;
 }
+// VALORES (09/10, #161) — mesma regra de scripts/scraper_vlance.py → valores_lote(): no `get-lotes`
+// `vl_lanceminimo` é a AVALIAÇÃO e o lance é `vl_lanceinicial` (2ª praça em
+// `vl_lanceinicialsegundoleilao`). A ordem antiga gravava lance = avaliação (desconto zero).
+export function valoresLoteVlance(lote) {
+  const doGetLotes = lote.vl_lanceinicial != null;
+  let vm, va;
+  if (doGetLotes) {
+    vm = numf(lote.vl_lanceinicial) || numf(lote.vl_ordenacao) || numf(lote.vl_lanceminimo);
+    va = numf(lote.vl_avaliacao) || (numf(lote.vl_lanceminimo) >= vm ? numf(lote.vl_lanceminimo) : 0);
+  } else {
+    vm = numf(lote.vl_lanceminimo) || numf(lote.vl_ordenacao);
+    va = numf(lote.vl_avaliacao) || numf(lote.vl_venda);
+  }
+  if (va && vm && vm > va) va = 0; // avaliação menor que o lance não existe
+  const vm2 = numf(lote.vl_lanceinicialsegundoleilao);
+  return { va, vm, vm2: vm2 > 0 && vm2 < vm ? vm2 : null };
+}
 function montarRow(lote, pai, base, dom) {
-  let va = [lote.vl_venda, lote.vl_lanceinicial, lote.vl_lanceminimo].map(numf).find((v) => v > 0) || 0;
-  const vm = [lote.vl_lanceminimo, lote.vl_lanceinicial].map(numf).find((v) => v > 0) || 0;
-  if (va > 0 && vm > va) va = vm; // evita desconto negativo (mín > avaliação)
+  const { va, vm, vm2 } = valoresLoteVlance(lote);
   const desc = (va > 0 && vm > 0) ? Math.round((1 - vm / va) * 100) : null;
   const jud = norm(pai?.tp_judicial_extrajudicial) || norm(lote.tp_judicial_extrajudicial);
   return {
@@ -69,7 +84,9 @@ function montarRow(lote, pai, base, dom) {
     modalidade: (jud.includes('jud') && !jud.includes('extra')) ? 'judicial' : 'extrajudicial',
     cidade: lote.nm_cidade || null,
     estado: String(lote.nm_estado || '').slice(0, 2).toUpperCase() || null,
-    valor_avaliacao: va, valor_minimo: vm,
+    valor_avaliacao: va || null, valor_minimo: vm,
+    // 2ª praça só quando a API traz — chave ausente não apaga o que o edital gravou (ver gravação).
+    ...(vm2 ? { valor_minimo_2: vm2 } : {}),
     descricao: String(lote.nm_titulo_lote || '').slice(0, 500),
     link_edital: `${base}/leilao/index/imoveis`,
     url_lote: base,
@@ -133,10 +150,15 @@ export default async function handler(req) {
     }
     let gravados = 0;
     if (rows.length) {
-      const up = await sb('imoveis_leilao?on_conflict=fonte_id', {
-        method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows),
-      });
-      if (!up.ok) return j({ error: 'Falha ao gravar', detalhe: (await up.text().catch(() => '')).slice(0, 300) }, 502);
+      // PostgREST toma as chaves da 1ª linha e anula o que falta nas outras: um POST por conjunto de chaves.
+      const grupos = new Map();
+      for (const r of rows) { const k = Object.keys(r).sort().join(','); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+      for (const grupo of grupos.values()) {
+        const up = await sb('imoveis_leilao?on_conflict=fonte_id', {
+          method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(grupo),
+        });
+        if (!up.ok) return j({ error: 'Falha ao gravar', detalhe: (await up.text().catch(() => '')).slice(0, 300) }, 502);
+      }
       gravados = rows.length;
       // fonte_saude p/ o monitor auto-aprendido passar a vigiar o VLANCE (best-effort).
       try { await sb('fonte_saude', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ fonte: 'VLANCE', status: 'ok', total: gravados, executado_em: new Date().toISOString() }) }); } catch { /* */ }

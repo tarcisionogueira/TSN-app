@@ -123,6 +123,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
       existia mais, todos com selo verde** — passivo da retenção anterior a 04/10 (apagava arquivo, não zerava link).
       Zerados; o selo recalculou; os coletores voltam a tentar. Vigia nova: invariante `link_matricula_morto` (limite 0)
       em `qa_invariantes()` — migração `20261009_invariante_link_matricula_morto`.
+    - **E-mail — anexar/colar:** botão "Anexar arquivos" (qualquer tipo, inclusive áudio), arrastar e Ctrl+V de imagem
+      (vira imagem no corpo via `content_id`). Arquivo sobe para `documentos/email/saida/<user>/`; o servidor só aceita
+      esse prefixo. Rascunho guarda os anexos (`email_rascunhos.anexos`). Com anexo, o envio NÃO vai para a fila do
+      orçamento diário (`semFila`) — a fila não guarda anexo nem remetente.
+    - **#161 fechada — VLANCE gravava lance = avaliação:** o `get-lotes` é o mesmo da LJUD (`vl_lanceminimo` = AVALIAÇÃO,
+      `vl_lanceinicial` = lance, `vl_lanceinicialsegundoleilao` = 2ª praça); `scraper_vlance.py` e `api/coleta-cliente.js`
+      liam ao contrário e a trava "mín > avaliação" igualava os dois → 108/109 lotes com desconto zero. Provado nos
+      gêmeos LJUD (mesmo lote_id, 50%/70%). Regra única (`valores_lote` / `valoresLoteVlance`); 2ª praça só entra quando
+      a API traz e a gravação agrupa por conjunto de chaves (PostgREST anula chave ausente). 63 lotes corrigidos pelo
+      gêmeo; os ~46 restantes na próxima coleta. Conferir: `select count(*) filter (where valor_minimo=valor_avaliacao),
+      count(*) from imoveis_leilao where ativo and fonte_id like 'vlance_%';` (era 108/109).
 
 ### 📌 FECHAMENTO 07–08/10 (noite) — coletores WEBLEILOES/VIP/ZUK, cache do mercado, anexos sem arquivo
 > Pendências vivas no banco (`pendencias_abertas()`). Fechadas nesta noite: **#141, #168, #172** (+ as do dia: #146, #149,
