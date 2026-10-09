@@ -28,9 +28,14 @@ ERRA — a LJUD grava a URL do PORTAL nos lotes atuais e a do site do leiloeiro 
 - **GESTÃO — consertado 09/10:** extrajust, lancetotal e vinco NUNCA entravam: o teto de 25 eventos
   era preenchido por granado + lancenoleilao (concatenação na ordem dos domínios). Agora rodízio entre
   domínios e teto 80 no residencial (grátis); o pago segue igual. lancetotal tinha terreno no ar.
-- **Plataforma `/externo/` (6 domínios, 1 coletor):** osvaldo, sanches, são caetano, delano, judhastas,
-  hisa. IDs de leilão globais (mesmo backend); página do leilão server-side com o imóvel no título, mas
-  os LOTES vêm por JS → recon de XHR com navegador (GitHub Actions, grátis; pg_net passa sem desafio).
+- **Plataforma `/externo/` = Plataforma Leiloar** (a mesma do motor `scraper-leiloar.mjs`, Uberlândia),
+  mas no modelo `listagem-bens-responsivo`: recon em navegador 09/10 (`scripts/recon-externo.mjs`)
+  mostrou que a página do leilão NÃO lista lotes — o leilão É o imóvel (título com tipo/área/cidade,
+  data, local) e AVALIAÇÃO/LANCE só existem no EDITAL PDF (`/arquivos/arquivos_leilao/<n>.pdf`). A
+  pesquisa avançada dá 403 (WAF) e o osvaldo põe desafio Cloudflare no IP do GitHub (pg_net e o runner
+  residencial passam). Volume: ~15 imóveis (osvaldo 5, sanches 5, judhastas 5; delano/são caetano 0;
+  todos "alienação por iniciativa particular TRT-2"). Integrar = coletor leilão→PDF com extração de
+  valores do edital. Custo/benefício baixo frente ao e-leiloes.
 - **e-leiloes (Nuxt):** e-leiloeiro + e-confianca = a mesma plataforma, centenas de imóveis. Coletor novo.
 - **SPA React "Carregando..." (white-label PostgREST):** cunha, shiokawa, zaccarino (+ picelli).
 - **Outros:** centraljudicial (`/lote/id/`, jQuery); crepaldi (WordPress, ~0 imóvel); sumare e sorgi
