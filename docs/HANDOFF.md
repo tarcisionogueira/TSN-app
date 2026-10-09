@@ -9,6 +9,47 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 FECHAMENTO 08–09/10 (noite) — o que evoluiu, o que falta, de onde paramos
+
+**Resolvido (com prova; detalhe no item 16 abaixo e em cada commit):**
+- **#174, #177/#103, #166, #148, #159, #152, #88, #185** — rodada sequencial (natureza do bem no edital,
+  documentos Superbid 36→509 editais, endereços PESTANA/GRUPOLANCE/HASTAPUBLICA/FERREIRALEIL, Comprei/PGFN).
+- **#22** — as matrículas "auto" do GRUPOLANCE são reais (143 PDFs lidos). O defeito real era outro:
+  **390 lotes com link de matrícula para arquivo apagado e selo verde** → zerados + invariante
+  `link_matricula_morto` em `qa_invariantes()`.
+- **#161** — VLANCE gravava **lance = avaliação** (campos do `get-lotes` lidos ao contrário) → coletores
+  corrigidos (`scraper_vlance.py`, `api/coleta-cliente.js`); 63 lotes corrigidos pelo gêmeo LJUD.
+- **Caixa de e-mail** (pedidos do dono, validados por ele no navegador):
+  - "Encaminhar" leva todos os anexos da conversa; "Responder" segue só texto.
+  - Anexar arquivos de qualquer tipo (áudio/vídeo inclusive), arrastar, e Ctrl+V de imagem → imagem no
+    corpo (`content_id`). Rascunho guarda os anexos (`email_rascunhos.anexos`).
+  - E-mail com anexo NÃO vai para a fila do orçamento diário (`semFila`): a fila não guarda anexo.
+  - Anexo com cópia nossa abre pelo link assinado direto (vídeo abria preto: teto ~4,5 MB da função +
+    falta de Range). Vídeos do e-mail do Roberto conferidos por ffprobe: H.264+AAC íntegros.
+- **#38 (parcial)** — triagem viva do backlog de leiloeiros:
+  - grupo Vlance inteiro já coberto pela LJUD (cruzar por domínio engana: a LJUD grava a URL do portal);
+  - **GESTÃO: extrajust/lancetotal/vinco nunca eram coletados** (teto de 25 eventos tomado pelos dois
+    primeiros domínios) → rodízio + teto 80 no residencial (commit 922625a);
+  - plataforma `/externo/` = Leiloar modelo `listagem-bens-responsivo`: leilão É o imóvel, valor só no
+    edital PDF, ~15 imóveis (osvaldo, sanches, judhastas) — baixo retorno.
+
+**De onde paramos:** #38 aguardando decisão do dono — fazer `/externo/` (~15 imóveis, coletor
+leilão→PDF) ou ir para **e-leiloes** (e-leiloeiro + e-confianca, mesma plataforma Nuxt, centenas de
+imóveis — recomendado). Mapa completo em `docs/LEILOEIROS_TRT15_BACKLOG.md` (seção 09/10).
+
+**Conferências agendadas (claude):**
+- 10/10 — #173 (galeria Superbid no residencial) · #184 (veículos Superbid: enumeração completa).
+- 11/10 — #152 (apuração Superbid JMF/TOTAL/DILSON/CREPALDI) · #183 (galeria VLANCE + resto da VIP).
+- ~11–12/10 — #182 · 13/10 — #38: lotes ativos com host lancetotal/vinco/extrajust > 0 após a coleta
+  GESTÃO residencial · 15/10 — #144 · 17/10 — #160.
+- VLANCE (#161): após a próxima coleta, `count(valor_minimo = valor_avaliacao)` nos `vlance_%` ativos
+  deve cair de 45 (era 108/109).
+
+**Do dono, vencidas ou vencendo** (`select * from public.pendencias_abertas();`): #1 campanha Meta na aula
+fechada (P0), #4 Workspace com pagamento recusado, #3 ficha Leiloaria Smart, #170 ONR/RI Digital,
+#142 validar lote manual no navegador, #154 recon FERREIRALEIL de casa, e o bloco de 10/10 (#2 pagantes
+sem relatório, #21 venda Top2 presa, #26 resposta ao Dr. José Roberto, #32 segurança, entre outros).
+
 ### 📌 08/10 (manhã) — "não traz todas as fotos nem a descrição completa" (caso do dono: sbid_5027338)
 1. **Fotos (causa real):** a galeria da rede Superbid (`product.galleryJson`, 2ª passada sem fieldList) existe
    desde 17/09 mas era **opt-in** (`SUPERBID_GALERIA=1`) e nunca foi ligada na coleta automática — só os lotes
