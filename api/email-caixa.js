@@ -6,6 +6,9 @@
  *   { acao: 'enviar', de: 'suporte'|'contato'|'privacidade', para: [..], cc?: [..],
  *     assunto, texto, responder_a?: <id em email_caixa> }
  *   { acao: 'anexo', id: <id em email_caixa>, anexo_id } → { url } (link temporário do Resend)
+ *   enviar aceita `anexos: [{ arquivo, nome, inline? }]` — arquivos que a TELA subiu para
+ *   documentos/email/saida/<user>/ (09/10). `inline` = imagem colada no corpo: o marcador
+ *   "[imagem: nome]" no texto vira a imagem no HTML (cid); sem marcador, vai como anexo comum.
  *
  * Resposta a e-mail que virou CHAMADO: o reply-to leva o token do chamado
  * (suporte+<token>@) e a mensagem entra no histórico do chamado como do atendente — a
@@ -201,6 +204,39 @@ export default async function handler(req) {
     anexosEnvio.push({ filename: String(res.nome || p?.nome || 'anexo').slice(0, 150), path: res.url });
   }
 
+  // ANEXOS DA TELA (09/10, dono: "permitir anexar documentos/fotos e colar imagem no corpo"). A tela
+  // sobe o arquivo direto para o bucket (só no prefixo do PRÓPRIO usuário) e manda o caminho; aqui
+  // conferimos o prefixo, assinamos e o Resend busca. Validade longa: se o Resend demorar a buscar,
+  // o link não pode ter vencido. Não assinou UM → nada sai (mesma regra do encaminhar).
+  const anexosTela = Array.isArray(body?.anexos) ? body.anexos.slice(0, 21) : [];
+  if (pedidos.length + anexosTela.length > 20) return json({ error: 'No máximo 20 anexos por mensagem.' }, 400);
+  const prefixo = `email/saida/${user.id}/`;
+  const inlines = [];
+  const anexosRegistro = anexosEnvio.map((a) => ({ nome: a.filename }));
+  for (const [i, a] of anexosTela.entries()) {
+    const arquivo = String(a?.arquivo || '');
+    const nome = String(a?.nome || 'anexo').replace(/[\r\n\]]/g, ' ').slice(0, 150);
+    if (!arquivo.startsWith(prefixo) || !/^[A-Za-z0-9._-]+$/.test(arquivo.slice(prefixo.length))) {
+      return json({ error: `Anexo "${nome}" inválido. Nada foi enviado.` }, 400);
+    }
+    let url = null;
+    try {
+      const rs = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${arquivo}`, {
+        method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expiresIn: 7 * 86400 }), signal: AbortSignal.timeout(10000),
+      });
+      const js = rs.ok ? await rs.json().catch(() => null) : null;
+      if (js?.signedURL) url = `${SUPABASE_URL}/storage/v1${js.signedURL}`;
+      else console.error('[email-caixa] anexo da tela não assinou:', rs.status, arquivo);
+    } catch (e) { console.error('[email-caixa] anexo da tela:', String(e?.message || e).slice(0, 120)); }
+    if (!url) return json({ error: `Anexo "${nome}" não foi encontrado no armazenamento (o envio do arquivo terminou?). Nada foi enviado.` }, 400);
+    const marcador = `[imagem: ${nome}]`;
+    const cid = a?.inline === true && texto.includes(marcador) ? `img${i}-${crypto.randomUUID().slice(0, 8)}@bidprobrasil` : null;
+    if (cid) inlines.push({ marcador, cid });
+    anexosEnvio.push({ filename: nome, path: url, ...(cid ? { content_id: cid } : {}) });
+    anexosRegistro.push({ nome, arquivo });
+  }
+
   // Resposta: encadeia no fio do remetente e, se virou chamado, no chamado.
   let original = null, chamado = null;
   if (body?.responder_a) {
@@ -244,7 +280,12 @@ export default async function handler(req) {
     : '';
   const nomeRemetente = perfil.nome || 'Equipe BidPro Brasil';
   const textoFinal = `${texto}\n\n—\n${nomeRemetente}\nBidPro Brasil${citacao}`;
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;color:#1e293b;line-height:1.6;white-space:pre-wrap">${esc(texto)}</div>`
+  // Imagem colada: o marcador no texto vira <img> apontando para o anexo inline (cid).
+  let corpoHtml = esc(texto);
+  for (const { marcador, cid } of inlines) {
+    corpoHtml = corpoHtml.split(esc(marcador)).join(`<img src="cid:${cid}" alt="${esc(marcador.slice(9, -1))}" style="max-width:100%;height:auto;display:block;margin:8px 0">`);
+  }
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;color:#1e293b;line-height:1.6;white-space:pre-wrap">${corpoHtml}</div>`
     + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(nomeRemetente)}<br>BidPro Brasil</p>`
     + (citacao ? `<blockquote style="border-left:3px solid #cbd5e1;margin:16px 0 0;padding:4px 12px;color:#64748b;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:13px">${esc(citacao.trim())}</blockquote>` : '');
 
@@ -255,14 +296,16 @@ export default async function handler(req) {
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
-    ...(anexosEnvio.length ? { attachments: anexosEnvio } : {}),
+    ...(anexosEnvio.length ? { attachments: anexosEnvio, semFila: true } : {}),
     headers: Object.keys(headers).length ? headers : undefined,
     meta: { tipo: 'caixa_equipe', userId: user.id },
     idempotencyKey: chaveEnvio ? `caixa:${user.id}:${chaveEnvio}` : undefined,
   });
   if (!r.ok) {
     const msg = r.error === 'orcamento_diario_excedido'
-      ? 'Limite diário de envio atingido — a mensagem foi colocada na fila e sai amanhã.'
+      ? (anexosEnvio.length
+        ? 'Limite diário de envio atingido. E-mail com anexo não vai para a fila (sairia sem o arquivo) — o rascunho ficou salvo, envie amanhã.'
+        : 'Limite diário de envio atingido — a mensagem foi colocada na fila e sai amanhã.')
       : r.error === 'suprimido' ? 'O destinatário está na lista de supressão (endereço com bounce/reclamação). Nada foi enviado.'
       : `Não foi possível enviar agora: ${r.error || 'falha desconhecida'}`;
     return json({ error: msg, enfileirado: !!r.enfileirado }, r.error === 'suprimido' ? 409 : 502);
@@ -278,9 +321,10 @@ export default async function handler(req) {
   }
   const ins = await sb('email_caixa', { method: 'POST', prefer: 'return=minimal', body: {
     direcao: 'saida', pasta: 'enviados', caixa: enderecoDe, de_email: enderecoDe, de_nome: nomeRemetente, dono: pessoal ? user.id : null,
-    para, cc, assunto, texto: textoFinal, html, in_reply_to: original?.message_id || null,
+    // Imagem inline (cid) não abre na nossa tela: em Enviados fica o marcador; a imagem segue nos anexos.
+    para, cc, assunto, texto: textoFinal, html: inlines.length ? html.split(corpoHtml).join(esc(texto)) : html, in_reply_to: original?.message_id || null,
     referencias: headers['References'] || null, resend_email_id: r.id || null, lido: true,
-    ...(anexosEnvio.length ? { anexos: anexosEnvio.map((a) => ({ nome: a.filename })) } : {}),
+    ...(anexosRegistro.length ? { anexos: anexosRegistro } : {}),
     chamado_id: chamado?.id || null, enviado_por: user.id, resposta_token: respostaToken,
   } });
   if (!ins.ok) { console.error('[email-caixa] registrar enviado HTTP', ins.status); avisos.push('enviado, mas não ficou registrado em Enviados'); }

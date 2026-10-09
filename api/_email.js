@@ -215,7 +215,7 @@ async function campanhaPermitida(userId) {
 // estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
 // `idempotencyKey` (25/09): o MESMO pedido repetido (toque duplo, retry) sai UMA vez — o Resend
 // devolve o envio original por 24 h em vez de mandar de novo.
-export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
+export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey, semFila = false }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   // LIMITE SEMANAL DE CAMPANHA (24/09, pedido do dono — ver api/_cadencia.js e a migração
   // cadencia_por_segmento.sql). Gratuito: 1 campanha/semana e no máximo 2 e-mails/semana
@@ -242,6 +242,16 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
   }
   const reserva = await reservarOrcamentoEmail();
   if (!reserva.permitido) {
+    // `semFila` (09/10): a fila não guarda anexo nem remetente — e-mail COM anexo represado sairia
+    // amanhã sem o arquivo e por outro endereço. Quem pede isto prefere a recusa agora.
+    if (semFila) {
+      await registrarEmailLog(destinos.map((dest) => ({
+        user_id: meta?.userId || null, destinatario: String(dest).toLowerCase().slice(0, 200),
+        assunto: (subject || '').slice(0, 300), tipo: meta?.tipo || null, status: 'limitado',
+        erro: 'orcamento diario do Resend excedido — e-mail com anexo nao vai para a fila',
+      })));
+      return { ok: false, error: 'orcamento_diario_excedido', enfileirado: false };
+    }
     const enfileirou = await enfileirar({ to: destinos, cc, subject, html, text, replyTo, meta });
     await registrarEmailLog(destinos.map((dest) => ({
       user_id: meta?.userId || null,

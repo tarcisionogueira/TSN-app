@@ -85,8 +85,15 @@ function separarCitacao(texto) {
   return { principal, citado: linhas.slice(corte).join('\n').trim() };
 }
 
-const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id'];
-const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim()));
+const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id', 'anexos'];
+const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim() || c.anexos?.length));
+
+// ANEXAR E COLAR IMAGEM (09/10, dono). O arquivo sobe DIRETO para o bucket, no prefixo do próprio
+// usuário (o servidor só aceita esse prefixo), e o e-mail leva o caminho. Teto do Resend: 40 MB por
+// mensagem, já contando a codificação — aqui 25 MB por arquivo e 30 MB no total.
+const MAX_ARQ = 25 * 1024 * 1024, MAX_TOTAL = 30 * 1024 * 1024;
+const nomeSeguro = (n) => String(n || 'arquivo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(-80) || 'arquivo';
+const fmtTam = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
 const fmtData = (iso) => {
   const d = new Date(iso);
@@ -212,6 +219,8 @@ export default function CaixaEmail({ soPessoal = false }) {
   // reconhecer a repetição mesmo assim (retry, aba duplicada).
   const enviandoRef = useRef(false);
   const chaveEnvio = useRef(null);
+  const [subindo, setSubindo] = useState(0);     // arquivos ainda subindo — trava o Enviar
+  const inputArquivo = useRef(null);
   const loc = useLocation();
   const navigate = useNavigate();
   const [enviando, setEnviando] = useState(false);
@@ -361,6 +370,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   // Abrir o Escrever sempre passa por aqui: zera (ou retoma) o id do rascunho.
   function abrirCompor(c) {
     rascunhoId.current = c?.rascunho_id || null;
+    if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [] };
     chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
     setSalvoEm(null);
     setCompor(c);
@@ -452,14 +462,53 @@ export default function CaixaEmail({ soPessoal = false }) {
     abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null, encaminhar_anexos });
   }
 
+  // Sobe os arquivos e põe em compor.anexos. `inline` = imagem colada: o marcador "[imagem: nome]"
+  // entra no texto onde estava o cursor e o servidor troca pela imagem no corpo do e-mail.
+  async function anexarArquivos(arquivos, { inline = false, alvo = null } = {}) {
+    const lista = [...(arquivos || [])].filter(Boolean);
+    if (!lista.length || !user?.id) return;
+    let total = (compor?.anexos || []).reduce((t, a) => t + (a.tamanho || 0), 0);
+    for (const f of lista) {
+      if (f.size > MAX_ARQ) { setErro(`"${f.name}" passa de 25 MB — e-mail não comporta. Mande por link.`); continue; }
+      if (total + f.size > MAX_TOTAL) { setErro('Os anexos passam de 30 MB no total — o e-mail não comporta.'); break; }
+      total += f.size;
+      const hora = new Date().toLocaleTimeString('pt-BR').replace(/:/g, '');
+      const nome = inline && (!f.name || f.name === 'image.png') ? `imagem-colada-${hora}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}` : (f.name || 'arquivo');
+      const arquivo = `email/saida/${user.id}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-${nomeSeguro(nome)}`;
+      if (inline && alvo) {
+        const marcador = `[imagem: ${nome}]`;
+        const ini = alvo.selectionStart ?? alvo.value.length, fim = alvo.selectionEnd ?? ini;
+        setCompor((c) => (c ? { ...c, texto: `${c.texto.slice(0, ini)}\n${marcador}\n${c.texto.slice(fim)}` } : c));
+      }
+      setSubindo((n) => n + 1);
+      const tirarMarcador = () => { if (inline) setCompor((c) => (c ? { ...c, texto: c.texto.split(`[imagem: ${nome}]`).join('') } : c)); };
+      try {
+        const { error } = await supabase.storage.from('documentos').upload(arquivo, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+        if (error) { tirarMarcador(); setErro(`Não consegui anexar "${nome}": ${error.message}`); continue; }
+        setCompor((c) => (c ? { ...c, anexos: [...(c.anexos || []), { arquivo, nome, tamanho: f.size, ...(inline ? { inline: true } : {}) }] } : c));
+      } catch (e) {
+        console.error('[caixa] upload de anexo:', e);
+        tirarMarcador();
+        setErro(`Não consegui anexar "${nome}": ${e.message}`);
+      } finally { setSubindo((n) => n - 1); }
+    }
+  }
+  function aoColar(e) {
+    const imgs = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
+    if (!imgs.length) return;           // texto colado segue o caminho normal
+    e.preventDefault();
+    anexarArquivos(imgs, { inline: true, alvo: e.target });
+  }
+
   async function enviar() {
     if (enviandoRef.current || enviando || !compor) return;
+    if (subindo > 0) { setErro('Aguarde os anexos terminarem de subir.'); return; }
     enviandoRef.current = true;
     setEnviando(true); setErro('');
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, chave_envio: chaveEnvio.current || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, anexos: compor.anexos?.length ? compor.anexos.map(({ arquivo, nome, inline }) => ({ arquivo, nome, inline })) : undefined, chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -694,10 +743,34 @@ export default function CaixaEmail({ soPessoal = false }) {
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
             <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={12}
+              onPaste={aoColar}
+              onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}
+              onDrop={e => { if (e.dataTransfer?.files?.length) { e.preventDefault(); anexarArquivos(e.dataTransfer.files); } }}
               spellCheck lang="pt-BR"
               placeholder="Escreva sua mensagem… (sua assinatura entra automaticamente)"
               style={{ ...campo, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
-            <RevisarTexto texto={compor.texto} onAplicar={t => setCompor(c => ({ ...c, texto: t }))} style={{ marginTop: 6 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              <RevisarTexto texto={compor.texto} onAplicar={t => setCompor(c => ({ ...c, texto: t }))} />
+              <button type="button" onClick={() => inputArquivo.current?.click()} style={{ ...btn(false), fontSize: 12 }}>
+                <Paperclip size={13} /> Anexar arquivos
+              </button>
+              <input ref={inputArquivo} type="file" multiple hidden onChange={e => { anexarArquivos(e.target.files); e.target.value = ''; }} />
+              <span style={{ fontSize: 11.5, color: '#94a3b8' }}>ou arraste para o texto · imagem copiada: cole (Ctrl+V) no texto</span>
+            </div>
+            {(compor.anexos?.length > 0 || subindo > 0) && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#475569' }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}><Paperclip size={12} /> Anexos{subindo > 0 ? ` — subindo ${subindo}…` : ''}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(compor.anexos || []).map((a, i) => (
+                    <span key={a.arquivo} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 999, background: '#f8fafc' }}>
+                      {a.inline ? '🖼️ ' : ''}{a.nome} <span style={{ color: '#94a3b8' }}>({fmtTam(a.tamanho || 0)})</span>
+                      <button type="button" title="Remover anexo" onClick={() => setCompor(c => ({ ...c, anexos: c.anexos.filter((_, j) => j !== i), texto: a.inline ? c.texto.split(`[imagem: ${a.nome}]`).join('') : c.texto }))}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {compor.encaminhar_anexos?.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: '#475569' }}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}><Paperclip size={12} /> {compor.encaminhar_anexos.length} anexo(s) vão junto:</div>
