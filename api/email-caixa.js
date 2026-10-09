@@ -35,7 +35,7 @@ const MAX_TEXTO = 20000;
 // TIPO PELO NOME DO ARQUIVO (26/09, dono: anexo abria página em branco no iPhone). O Resend
 // devolve todo anexo como application/octet-stream + "attachment" — o navegador do app não sabe
 // mostrar e fica em branco. Com `proxy: true` o arquivo passa por aqui, com o tipo certo e inline.
-const TIPOS = { pdf: 'application/pdf', html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain; charset=utf-8', csv: 'text/csv; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+const TIPOS = { pdf: 'application/pdf', html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain; charset=utf-8', csv: 'text/csv; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', amr: 'audio/amr', mp4: 'video/mp4', mov: 'video/quicktime', zip: 'application/zip' };
 const tipoPeloNome = (nome) => TIPOS[String(nome || '').toLowerCase().split('.').pop()] || 'application/octet-stream';
 async function entregarArquivo(url, nome) {
   const up = await fetch(url, { signal: AbortSignal.timeout(20000) });
