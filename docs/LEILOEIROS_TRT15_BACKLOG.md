@@ -16,6 +16,26 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 09/10 — TRIAGEM VIVA (custo zero: acervo + pg_net) — substitui as tabelas abaixo
+
+Cruzamento dos 60 domínios × acervo ativo. **Cuidado (forma nº 10):** cruzar só pelo domínio da URL
+ERRA — a LJUD grava a URL do PORTAL nos lotes atuais e a do site do leiloeiro só nos antigos. O certo
+é o NOME do leiloeiro (`imoveis_leilao.leiloeiro`, sem depender de acento: "Álvaro Sérgio Fuzo").
+
+- **Cobertos (28 por domínio + 11 Vlance pela LJUD):** todo o grupo Vlance — bruno, maria fixer
+  (Conceição), cida fixer (Aparecida), daniel oliveira, gilson, akimoto, carlo ferrari, verri, álvaro
+  (62 ativos), planalto (Ana Claudia Blasczyk). bomnegocio = API vazia; sudeste = só leilão-simulação.
+- **GESTÃO — consertado 09/10:** extrajust, lancetotal e vinco NUNCA entravam: o teto de 25 eventos
+  era preenchido por granado + lancenoleilao (concatenação na ordem dos domínios). Agora rodízio entre
+  domínios e teto 80 no residencial (grátis); o pago segue igual. lancetotal tinha terreno no ar.
+- **Plataforma `/externo/` (6 domínios, 1 coletor):** osvaldo, sanches, são caetano, delano, judhastas,
+  hisa. IDs de leilão globais (mesmo backend); página do leilão server-side com o imóvel no título, mas
+  os LOTES vêm por JS → recon de XHR com navegador (GitHub Actions, grátis; pg_net passa sem desafio).
+- **e-leiloes (Nuxt):** e-leiloeiro + e-confianca = a mesma plataforma, centenas de imóveis. Coletor novo.
+- **SPA React "Carregando..." (white-label PostgREST):** cunha, shiokawa, zaccarino (+ picelli).
+- **Outros:** centraljudicial (`/lote/id/`, jQuery); crepaldi (WordPress, ~0 imóvel); sumare e sorgi
+  com certificado SSL inválido; elizabethseoanes sem DNS; destak HTTP 400.
+
 ## 📊 30/07 — STATUS ATUAL (runner RESIDENCIAL validado; auditoria fresca no banco)
 Acervo em **26 fontes**. Desde 25/07, TODO o custo Bright Data das fontes dedicadas virou
 coleta GRÁTIS de IP residencial (runner do dono, WSL, 2 tarefas agendadas + marco de 72h no

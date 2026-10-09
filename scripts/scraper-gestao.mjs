@@ -17,7 +17,8 @@
  * → fonte única 'GESTAOLEILOES', leiloeiro por-linha lido do <title> do evento.
  *
  * SEGURANÇA DE CUSTO (cada request = 1 Bright Data, proposito 'gestao' → sub-cota + teto):
- *   - GESTAO_MAX_EVENTOS (default 25): teto de eventos/execução.
+ *   - GESTAO_MAX_EVENTOS (default 25 no pago, 80 no residencial): teto de eventos/execução,
+ *     repartido em rodízio entre os domínios.
  *   - GESTAO_DOC_CAP (default 30): teto de lotes/execução pra busca de documento (item 8
  *     abaixo) — 1 request Bright Data por lote, à parte do teto de eventos.
  *   - GESTAO_DRYRUN (default '1'): NÃO grava — parseia e loga o que inseriria.
@@ -77,7 +78,8 @@ const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extr
 const DOMINIOS = (process.env.GESTAO_DOMINIOS || DOMINIOS_PADRAO_CLUSTER)
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_EVENTOS_PADRAO = 25;
-const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || MAX_EVENTOS_PADRAO);
+// Residencial (Chromium em IP de casa) não paga por request: teto maior. O pago segue em 25.
+const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO_HEADLESS === '1' ? 80 : MAX_EVENTOS_PADRAO));
 // ESCOPO REDUZIDO (10/09): um dispatch manual com domínio/evento cortado (ex.: recon pontual
 // de 1 dos 5 domínios do cluster) não pode entrar no monitor com a MESMA etiqueta de uma
 // coleta de produção — foi exatamente isso que fez `fonte_regressao_suspeita()` acusar
@@ -508,16 +510,27 @@ async function main() {
   console.log(`GESTÃO ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · domínios: ${DOMINIOS.join(', ')} · max ${MAX_EVENTOS} eventos`);
 
   // 1) Enumera idLeilao de todos os domínios (dedup global de eventos por par domínio+id).
-  const eventos = [];
+  // RODÍZIO (09/10, #38): a lista era concatenada na ordem dos domínios e cortada no teto — granado
+  // e lancenoleilao enchiam as 25 vagas e extrajust/lancetotal/vinco NUNCA eram processados (o
+  // lancetotal tinha terreno em Piracicaba no ar; o vinco, 70 eventos na home). O corte parecia
+  // cobertura do cluster e era cobertura de 2 de 5 domínios. Agora cada domínio entra por vez.
+  const porDominio = [];
   const vistos = new Set();
   for (const dom of DOMINIOS) {
     const home = await fetchHome(dom);
     if (!home) { console.log(`  [${dom}] home não veio.`); continue; }
     const ids = extrairIdLeiloes(home).filter(id => !vistos.has(`${dom}:${id}`));
-    for (const id of ids) { vistos.add(`${dom}:${id}`); eventos.push({ dom, id }); }
+    for (const id of ids) vistos.add(`${dom}:${id}`);
+    porDominio.push(ids.map((id) => ({ dom, id })));
     console.log(`  [${dom}] ${ids.length} evento(s)`);
     await sleep(400);
   }
+  // Só no RESIDENCIAL (grátis, teto 80). No pago (teto 25, fallback) a ordem fica a de antes: o
+  // rodízio ali tiraria eventos do lancenoleilao e o acervo dele encolheria numa rodada paga.
+  const eventos = [];
+  if (RESIDENCIAL) {
+    for (let i = 0; porDominio.some((l) => i < l.length); i++) for (const l of porDominio) if (i < l.length) eventos.push(l[i]);
+  } else for (const l of porDominio) eventos.push(...l);
   const alvo = eventos.slice(0, MAX_EVENTOS);
   console.log(`Enumerados ${eventos.length} evento(s); processando ${alvo.length}.`);
 
