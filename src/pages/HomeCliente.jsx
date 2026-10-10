@@ -7,7 +7,7 @@ import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import TriagemPerfil from '../components/TriagemPerfil';
 import VitrineMaterial from '../components/VitrineMaterial';
 import ConvideAmigo from '../components/ConvideAmigo';
-import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO } from '../components/ConviteParceiro';
+import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO, DECLARACAO_REPASSE } from '../components/ConviteParceiro';
 import { LATAO } from '../utils/marca';
 
 // Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
@@ -379,7 +379,7 @@ export default function HomeCliente() {
             <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', cursor: 'pointer', background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '11px 13px', marginBottom: 14 }}>
               <input type="checkbox" checked={concordo} onChange={e => setConcordo(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }} />
               <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5b21b6', lineHeight: 1.5 }}>
-                Declaro que li, compreendi e concordo com este Termo de Adesão, os Termos de Uso e a Política de Privacidade, e que vou indicar de acordo com as regras.
+                Declaro que li, compreendi e concordo com este Termo de Adesão, os Termos de Uso e a Política de Privacidade, e que vou indicar de acordo com as regras. {DECLARACAO_REPASSE}
               </span>
             </label>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

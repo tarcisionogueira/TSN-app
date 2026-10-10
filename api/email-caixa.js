@@ -167,6 +167,28 @@ export default async function handler(req) {
     return json({ ok: true, url: res.url });
   }
 
+  // ─── CLIENTE DO CASO (10/10, dono): o advogado responde com a guia da parcela e a equipe manda
+  // SÓ o anexo ao cliente — sem o texto do advogado. A tela pede aqui o destinatário do caso.
+  // Só a equipe da caixa (advogado não fala com o cliente por aqui).
+  if (body?.acao === 'cliente_do_caso') {
+    if (soPessoal) return json({ error: 'Só a equipe envia ao cliente.' }, 403);
+    const casoId = String(body?.caso_id || '');
+    if (!/^[0-9a-f-]{36}$/i.test(casoId)) return json({ error: 'caso_id inválido' }, 400);
+    let caso;
+    try { caso = await ler1(`casos?id=eq.${casoId}&select=id,cliente_id,imovel_endereco,posse_em`); }
+    catch (e) { console.error('[email-caixa] caso:', e.message); return json({ error: 'Não foi possível ler o caso.' }, 500); }
+    if (!caso?.cliente_id) return json({ error: 'Caso sem cliente.' }, 404);
+    let cli = null, email = null;
+    try {
+      cli = await ler1(`perfis?id=eq.${caso.cliente_id}&select=nome`);
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${caso.cliente_id}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+      if (!r.ok) throw new Error(`auth HTTP ${r.status}`);
+      email = (await r.json())?.email || null;
+    } catch (e) { console.error('[email-caixa] cliente do caso:', e.message); return json({ error: 'Não foi possível ler o e-mail do cliente.' }, 500); }
+    if (!email) return json({ error: 'O cliente deste caso não tem e-mail cadastrado.' }, 404);
+    return json({ ok: true, email, nome: cli?.nome || null, endereco: caso.imovel_endereco || null, posse_em: caso.posse_em });
+  }
+
   if (body?.acao !== 'enviar') return json({ error: 'acao inválida' }, 400);
 
   const rl = await checkRateLimit(`email-caixa:user:${user.id}`, 80, 86_400_000);
@@ -330,6 +352,8 @@ export default async function handler(req) {
     referencias: headers['References'] || null, resend_email_id: r.id || null, lido: true,
     ...(anexosRegistro.length ? { anexos: anexosRegistro } : {}),
     chamado_id: chamado?.id || null, enviado_por: user.id, resposta_token: respostaToken,
+    // Envio ligado a um caso (guia da parcela ao cliente): fica na pasta do caso.
+    ...(!soPessoal && /^[0-9a-f-]{36}$/i.test(String(body?.caso_id || '')) ? { caso_id: body.caso_id } : {}),
   } });
   if (!ins.ok) { console.error('[email-caixa] registrar enviado HTTP', ins.status); avisos.push('enviado, mas não ficou registrado em Enviados'); }
 

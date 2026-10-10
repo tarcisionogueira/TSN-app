@@ -24,8 +24,9 @@
 // obrigando a algo que a plataforma não deixava fazer. Se alguém restringir aquela lista de
 // novo, esta cláusula vira letra morta — mexeu num, confira o outro.
 import React from 'react';
+import { DECLARACAO_REPASSE } from './ConviteParceiro';
 
-export const TERMO_JURIDICO_VERSAO = 'v6-2026-09';
+export const TERMO_JURIDICO_VERSAO = 'v7-2026-10'; // v7 (10/10): intermediação do pagamento e responsabilidade fiscal (item 7)
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 
@@ -56,7 +57,7 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '7. Quando e como você recebe',
-    d: 'O crédito é apurado quando a arrematação é registrada e distribuída na plataforma, e fica disponível no seu saldo. O pagamento é feito por PIX, após conferência, contra nota fiscal de serviços emitida por você ou pela sua sociedade de advogados. Valores relativos a operações posteriormente desfeitas, canceladas, anuladas judicialmente ou identificadas como fraude são estornados do saldo e podem ser descontados de pagamentos seguintes. Os tributos incidentes são de sua responsabilidade exclusiva.',
+    d: 'O crédito é apurado quando a arrematação é registrada e distribuída na plataforma, e fica disponível no seu saldo. O pagamento é feito por PIX, após conferência, contra nota fiscal de serviços emitida por você ou pela sua sociedade de advogados. Valores relativos a operações posteriormente desfeitas, canceladas, anuladas judicialmente ou identificadas como fraude são estornados do saldo e podem ser descontados de pagamentos seguintes. Os tributos incidentes são de sua responsabilidade exclusiva. A BidPro Brasil atua apenas como INTERMEDIÁRIA do pagamento: recebe do cliente o valor integral e repassa a você a sua parte. O valor repassado é receita SUA, não da BidPro Brasil — a emissão da nota fiscal e os tributos sobre ele são de sua responsabilidade exclusiva. A BidPro Brasil é responsável fiscal apenas pela parcela que lhe cabe na movimentação.',
   },
   {
     t: '8. Sigilo profissional e proteção de dados',
@@ -106,7 +107,7 @@ export function TermoJuridicoModal({ onFechar, onAceitar, concordo, setConcordo,
         <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 16, cursor: 'pointer' }}>
           <input type="checkbox" checked={concordo} onChange={e => setConcordo(e.target.checked)} style={{ marginTop: 3, width: 16, height: 16, cursor: 'pointer' }} />
           <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
-            Li e concordo com o Termo de Adesão do Advogado Parceiro. Declaro que minha inscrição na OAB está regular e ativa e me comprometo a manter agenda disponível para as reuniões com os investidores dos casos que aceitar.
+            Li e concordo com o Termo de Adesão do Advogado Parceiro. Declaro que minha inscrição na OAB está regular e ativa e me comprometo a manter agenda disponível para as reuniões com os investidores dos casos que aceitar. {DECLARACAO_REPASSE}
           </span>
         </label>
         <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>

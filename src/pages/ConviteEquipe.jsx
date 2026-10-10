@@ -8,7 +8,7 @@ import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Up
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { salvarConvite, lerConvite, limparConvite, salvarTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
-import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO_VERSAO } from '../components/ConviteParceiro';
+import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO_VERSAO, DECLARACAO_REPASSE } from '../components/ConviteParceiro';
 import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO, TERMO_JURIDICO_VERSAO } from '../components/TermoJuridico';
 
 const ROLE_CONFIG = {
@@ -112,9 +112,9 @@ const PASSO_SELFIE_DOC = {
 // `analista` fica de fora por ora — o percentual dele é 0 e NÃO existe termo próprio; inventar
 // um agora seria escrever contrato para uma remuneração que ainda não foi decidida.
 const TERMO_POR_PAPEL = {
-  advogado:  { chave: 'juridico', versao: TERMO_JURIDICO_VERSAO, titulo: 'Termo de Adesão — Advogado Parceiro', preambulo: TERMO_JURIDICO_PREAMBULO, clausulas: TERMO_JURIDICO, declaracao: 'Li e concordo com o Termo de Adesão do Advogado Parceiro, e declaro que minha inscrição na OAB está regular e ativa.' },
-  consultor: { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: 'Li e concordo com o Termo de Adesão do Programa de Parceiros.' },
-  afiliado:  { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: 'Li e concordo com o Termo de Adesão do Programa de Parceiros.' },
+  advogado:  { chave: 'juridico', versao: TERMO_JURIDICO_VERSAO, titulo: 'Termo de Adesão — Advogado Parceiro', preambulo: TERMO_JURIDICO_PREAMBULO, clausulas: TERMO_JURIDICO, declaracao: `Li e concordo com o Termo de Adesão do Advogado Parceiro, e declaro que minha inscrição na OAB está regular e ativa. ${DECLARACAO_REPASSE}` },
+  consultor: { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: `Li e concordo com o Termo de Adesão do Programa de Parceiros. ${DECLARACAO_REPASSE}` },
+  afiliado:  { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: `Li e concordo com o Termo de Adesão do Programa de Parceiros. ${DECLARACAO_REPASSE}` },
 };
 
 const PASSO_TERMO = { key: 'termo_aceito', label: 'Leia e aceite o termo da sua parceria', tipo: 'termo' };

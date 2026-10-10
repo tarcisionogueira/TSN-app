@@ -464,6 +464,24 @@ export default function CaixaEmail({ soPessoal = false }) {
     abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null, encaminhar_anexos });
   }
 
+  // SÓ O ANEXO AO CLIENTE (10/10, dono): o advogado responde com a guia da parcela e ela segue ao
+  // cliente sem o texto do advogado — mensagem padrão nossa + apenas os anexos daquela mensagem
+  // (dá para tirar algum no "×" antes de enviar). O destinatário vem do caso, não de digitação.
+  async function anexoAoCliente(m) {
+    setErro('');
+    const res = await apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'cliente_do_caso', caso_id: m.caso_id }) });
+    const j = await lerJsonSeguro(res);
+    if (!res.ok || !j.ok) { setErro(j.error || `Não consegui achar o cliente do caso (HTTP ${res.status}).`); return; }
+    const encaminhar_anexos = (m.anexos || []).map((a, i) => ({ id: m.id, anexo_id: a.id || undefined, anexo_idx: i, nome: a.nome || 'anexo' }));
+    const primeiro = String(j.nome || '').split(' ')[0];
+    abrirCompor({
+      de: meuEndereco ? 'pessoal' : dePadrao, para: j.email, cc: '',
+      assunto: `Guia de pagamento — ${j.endereco || 'seu imóvel arrematado'}`,
+      texto: `Olá${primeiro ? `, ${primeiro}` : ''}!\n\nSegue em anexo a guia de pagamento da parcela do seu arremate${j.endereco ? ` (${j.endereco})` : ''}.\n\nConfira o valor e o vencimento e, depois de pagar, responda este e-mail com o comprovante para registrarmos.\n\nQualquer dúvida, é só responder.`,
+      responder_a: null, encaminhar_anexos, caso_id: m.caso_id,
+    });
+  }
+
   // Sobe os arquivos e põe em compor.anexos. `inline` = imagem colada: o marcador "[imagem: nome]"
   // entra no texto onde estava o cursor e o servidor troca pela imagem no corpo do e-mail.
   async function anexarArquivos(arquivos, { inline = false, alvo = null } = {}) {
@@ -510,7 +528,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, anexos: compor.anexos?.length ? compor.anexos.map(({ arquivo, nome, inline }) => ({ arquivo, nome, inline })) : undefined, chave_envio: chaveEnvio.current || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, anexos: compor.anexos?.length ? compor.anexos.map(({ arquivo, nome, inline }) => ({ arquivo, nome, inline })) : undefined, caso_id: compor.caso_id || undefined, chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -655,6 +673,7 @@ export default function CaixaEmail({ soPessoal = false }) {
               {ultimaEntrada && pasta !== 'spam' && <button onClick={() => responder(ultimaEntrada)} style={btn(false)}><Reply size={13} /> Responder</button>}
               <button onClick={() => encaminhar([conversa[conversa.length - 1] || ativa])} style={btn(false)}><Forward size={13} /> {conversa.length > 1 ? 'Encaminhar a última' : 'Encaminhar'}</button>
               {conversa.length > 1 && <button onClick={() => encaminhar(conversa)} style={btn(false)}><Forward size={13} /> Encaminhar a conversa ({conversa.length})</button>}
+              {!soPessoal && ultimaEntrada?.caso_id && ultimaEntrada.anexos?.length > 0 && <button onClick={() => anexoAoCliente(ultimaEntrada)} style={{ ...btn(false), color: '#047857' }}><Forward size={13} /> Enviar só o anexo ao cliente</button>}
               {pasta === 'entrada' && <button onClick={() => mover(() => 'spam', 'Movido para Spam.')} style={btn(false)}><ShieldAlert size={13} /> Spam</button>}
               {pasta === 'spam' && <button onClick={() => mover(() => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} style={btn(false)}><Undo2 size={13} /> Não é spam</button>}
               {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, false)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear remetente</button>}
