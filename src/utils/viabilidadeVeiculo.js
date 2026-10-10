@@ -34,11 +34,23 @@ export function desagioFipe(v, anoAtual = new Date().getFullYear()) {
 
 // Comissão DECLARADA: número ≥ 0 (0 = "sem comissão", 10/10). null/ausente = não informada → presume o padrão.
 const comissaoDeclarada = (p) => (p !== null && p !== undefined && p !== '' && Number.isFinite(Number(p)) && Number(p) >= 0 && Number(p) <= 20 ? Number(p) : null);
-export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas = [], desagioPct = 0, revendaMercado = null }) {
+// TAXAS PERCENTUAIS SOBRE O LANCE, ALÉM DA COMISSÃO (10/10, dono: "há leiloeiros que cobram taxa
+// ou percentual adicional aos 5%"). Ex.: SUPERBID "Encargos Administrativos no valor correspondente
+// a 3% sobre o preço da arrematação", "Taxa de transferência da cota no valor de 1%". Até aqui só
+// entrava custo em R$ — o percentual ficava fora do teto de lance. Soma no máx. 15% (acima disso é
+// leitura errada) e cada item entre 0 e 15%.
+export const taxasPctValidas = (lista) => (Array.isArray(lista) ? lista : [])
+  .map((t) => ({ item: String(t?.item || '').slice(0, 100), pct: Number(t?.pct) }))
+  .filter((t) => t.item && t.pct > 0 && t.pct <= 15).slice(0, 4);
+const somaTaxasPct = (lista) => { const s = taxasPctValidas(lista).reduce((a, t) => a + t.pct, 0); return s <= 15 ? s : 0; };
+
+export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas = [], desagioPct = 0, revendaMercado = null, taxasPct = [] }) {
   const F = Number(fipe) || 0;
   const L = Number(lanceMinimo) || 0;
   if (!(F > 0) || !(L > 0)) return null;
-  const c = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100;
+  const cCom = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100;
+  const tx = somaTaxasPct(taxasPct) / 100;
+  const c = cCom + tx; // tudo que incide sobre o lance
   // Só entra na conta o que o leiloeiro DECLARA (débitos, taxas). Reparo estimado pela condição
   // (pneus, bateria, funilaria) é citado no relatório mas não tem valor (regra do dono, 30/09) —
   // relatórios antigos ainda trazem `origem: 'estimado'` com valor, e eles ficam fora do teto.
@@ -51,7 +63,9 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
   // Revenda: anúncios reais (média dos 5 mais baratos − 10%) quando houver; senão a régua sobre a FIPE.
   const fipeRealista = Number(revendaMercado) > 0 ? r2(Number(revendaMercado)) : r2(F * (1 - desagioPct / 100));
   return {
-    comissaoPct: c * 100, comissaoPresumida: comissaoDeclarada(comissaoPct) == null,
+    comissaoPct: Math.round(cCom * 10000) / 100, comissaoPresumida: comissaoDeclarada(comissaoPct) == null,
+    taxasPct: taxasPctValidas(taxasPct), taxasPctTotal: Math.round(tx * 10000) / 100,
+    pctSobreLance: Math.round(c * 10000) / 100,
     despesas: itens, despesasTotal: r2(despesasTotal),
     tetoAquisicao, tetoLance, investimentoNoMinimo,
     investimentoNoTeto: tetoAquisicao,
@@ -68,10 +82,11 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
 // que sai do bolso no ato — a comissão e os débitos não se parcelam no leilão). O saldo do lance
 // divide-se nas parcelas SEM correção: o índice (quando o edital informa) vai escrito ao lado.
 // O teto de 65% da FIPE não muda por ser parcelado — é sobre o custo total da aquisição.
-export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaPct, parcelas }) {
+export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaPct, parcelas, taxasPct = [] }) {
   const L = Number(lance) || 0, e = Number(entradaPct) / 100, n = Math.round(Number(parcelas));
   if (!(L > 0) || !(e > 0 && e < 1) || !(n >= 2)) return null;
-  const c = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100;
+  // comissão + taxas percentuais (encargos) — os dois saem no ato, junto com o sinal
+  const c = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100 + somaTaxasPct(taxasPct) / 100;
   const r2 = (x) => Math.round(x * 100) / 100;
   const entradaLance = r2(L * e);
   return {
@@ -141,6 +156,25 @@ export function extrairComissaoPct(texto) {
   for (const re of padroes) { const m = t.match(re); if (m && num(m[1]) != null) return num(m[1]); }
   return null;
 }
+
+// Taxas percentuais declaradas no texto (rede de segurança sob a IA). Exige o NOME da taxa antes do
+// número — "comissão do leiloeiro de 5%" fica com extrairComissaoPct, e "% da FIPE"/"% de desconto"
+// não casam. Medido no acervo em 10/10: só SUPERBID publica no texto (3% encargos, 1% transferência).
+export function extrairTaxasPct(texto) {
+  const t = consertarAcentos(texto || '').replace(/\s+/g, ' ');
+  const out = [];
+  const re = /\b(encargos?\s+(?:de\s+)?administra\w*|taxa\s+(?:de\s+)?administra\w*|despesas?\s+administrativas?|taxa\s+de\s+transfer[êe]ncia(?:\s+da\s+cota)?|taxa\s+de\s+servi[çc]o|taxa\s+(?:da\s+)?plataforma|fee\s+(?:da\s+)?plataforma|buyer'?s?\s+premium|comiss[ãa]o\s+do\s+comitente)[^%.;]{0,90}?(\d{1,2}(?:[.,]\d{1,2})?)\s?%/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const pct = Number(m[2].replace(',', '.'));
+    if (!(pct > 0 && pct <= 15)) continue;
+    const item = m[1].replace(/\s+/g, ' ').replace(/^./, (x) => x.toUpperCase());
+    if (!out.some((o) => o.pct === pct && o.item.toLowerCase().slice(0, 12) === item.toLowerCase().slice(0, 12))) out.push({ item, pct });
+  }
+  return out.slice(0, 4);
+}
+// "Encargos de administração conforme as Condições de Venda" SEM número: existe, não se sabe quanto.
+export const RE_ENCARGO_SEM_VALOR = /encargos?\s+(?:de\s+)?administra|taxa\s+(?:de\s+)?administra|fee\s+(?:da\s+)?plataforma/i;
 
 // DÉBITOS COM VALOR declarados ("DÉBITOS: R$ 7.473,15 E TAXAS DE LICENCIAMENTO" — SUPERBID, o
 // Cronos do print de 30/09, que saiu com "débitos —"; "Débitos em aberto: R$1.070,20"; na SODRÉ,

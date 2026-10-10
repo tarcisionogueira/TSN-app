@@ -161,6 +161,12 @@ const CALMARIA_MS = 60000; // um minuto sem incidente renova o orçamento da aba
 const TENTATIVAS_POR_RAJADA = 2;
 
 export function recarregarComGuarda() {
+  // RECARGA JÁ EM CURSO (10/10): um chunk que falha dispara VÁRIOS eventos na mesma rajada (um por
+  // dependência pré-carregada). Cada um gastava uma tentativa — o 1º mandava recarregar, o 2º forçava
+  // a rede e o 3º, milissegundos depois e com a navegação já pedida, caía no "PRESO" e cobria a tela
+  // com o aviso. Os 3 PRESO registrados em 09-10/10 eram isso. Pedida a recarga, as falhas seguintes
+  // desta mesma página são a mesma falha: não contam e não avisam.
+  if (typeof window !== 'undefined' && window.__bpRecarregando) return true;
   let tentativa = 0;
   try {
     const agora = Date.now();
@@ -174,6 +180,7 @@ export function recarregarComGuarda() {
 
   // Segunda tentativa da rajada: força ida à rede. `location.replace` para não empilhar
   // histórico — quem clicar em "voltar" tem que sair da página, não revisitar a falha.
+  try { window.__bpRecarregando = true; } catch { /* ignore */ }
   if (tentativa >= 1) {
     try {
       const u = new URL(location.href);

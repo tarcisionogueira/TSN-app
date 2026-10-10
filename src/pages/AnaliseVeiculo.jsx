@@ -89,6 +89,7 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
     : 'não disponível';
   const custos = viab ? [
     linha(`Comissão (honorário) do leiloeiro — ${viab.comissaoPct}% (${e(rotuloComissao(result, viab))})`, 'sobre o lance'),
+    ...viab.taxasPct.map((t) => linha(`${e(t.item)} — ${String(t.pct).replace('.', ',')}%`, 'sobre o lance')),
     ...viab.despesas.map((d) => linha(d.item, brl(d.valor))),
     `<tr class="t"><td class="r">Despesas assumidas (sem honorários)</td><td>${brl(viab.despesasTotal)}</td></tr>`,
   ].join('') : '';
@@ -99,7 +100,7 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
       ${linha('Investimento total no lance mínimo (lance + comissão + despesas)', `<b>${brl(viab.investimentoNoMinimo)}</b> (${viab.pctInvestimentoFipe.toFixed(0)}% da FIPE)`)}
       ${linha('Teto de aquisição (65% da FIPE)', brl(viab.tetoAquisicao))}
       ${linha('TETO DE LANCE (até este valor ainda é boa compra)', `<b style="color:${viab.fechaNaRegra ? '#15803d' : '#b91c1c'}">${brl(viab.tetoLance)}</b>`)}
-      ${parc ? [['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => linha(`Parcelado ${rot} (${parc.entradaPct}% + ${parc.parcelas}x${parc.correcao ? `, ${e(parc.correcao)}` : ''})`, `sinal ${brl(p.sinal)} (entrada ${brl(p.entradaLance)} + comissão ${brl(p.comissao)} + débitos ${brl(p.despesas)}) e ${p.parcelas}× ${brl(p.valorParcela)}`)).join('') : ''}
+      ${parc ? [['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => linha(`Parcelado ${rot} (${parc.entradaPct}% + ${parc.parcelas}x${parc.correcao ? `, ${e(parc.correcao)}` : ''})`, `sinal ${brl(p.sinal)} (entrada ${brl(p.entradaLance)} + ${viab.taxasPct.length ? 'comissão e encargos' : 'comissão'} ${brl(p.comissao)} + débitos ${brl(p.despesas)}) e ${p.parcelas}× ${brl(p.valorParcela)}`)).join('') : ''}
       ${textoFormasPagamento(result) ? linha('Pagamento', e(textoFormasPagamento(result))) : ''}
       ${linha(result.revendaMercado ? `Revenda sugerida (${e(rotuloRevenda(result.revendaMercado))} ${brl(result.revendaMercado.media)} − ${result.revendaMercado.descontoPct}%)` : `Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
       ${linha('Lucro estimado no lance mínimo', brl(viab.lucroNoMinimo))}
@@ -258,7 +259,7 @@ export default function AnaliseVeiculo() {
   const result = analise?.status === 'concluida' ? analise.result : null;
   // Cenário realista + teto de lance (29/09, pedido do dono) — regra em utils/viabilidadeVeiculo.js.
   const desagio = desagioFipe(v);
-  const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct, revendaMercado: result.revendaMercado?.valor }) : null;
+  const viab = result ? calcularViabilidade({ fipe: result.fipeValor, lanceMinimo: result.valorMinimo, comissaoPct: result.comissaoLeiloeiroPct, despesas: result.custos || [], desagioPct: desagio.pct, revendaMercado: result.revendaMercado?.valor, taxasPct: result.taxasPct || [] }) : null;
   const rm = result?.revendaMercado || null;
   // Anterior a 30/09 (sem `reparos`): comissão, débitos e revenda seguiam a regra antiga — oferece regerar.
   const semCustosNoRelatorio = result && (!Array.isArray(result.custos) || !Array.isArray(result.reparos));
@@ -266,8 +267,8 @@ export default function AnaliseVeiculo() {
   // Parcelado (29/09): plano no lance mínimo e no teto, quando o edital permite.
   const parc = result?.parcelamento && viab ? {
     ...result.parcelamento,
-    noMinimo: planoParcelado({ lance: result.valorMinimo, comissaoPct: viab.comissaoPct, despesasTotal: viab.despesasTotal, ...result.parcelamento }),
-    noTeto: viab.tetoLance > 0 ? planoParcelado({ lance: viab.tetoLance, comissaoPct: viab.comissaoPct, despesasTotal: viab.despesasTotal, ...result.parcelamento }) : null,
+    noMinimo: planoParcelado({ lance: result.valorMinimo, comissaoPct: viab.comissaoPct, despesasTotal: viab.despesasTotal, taxasPct: viab.taxasPct, ...result.parcelamento }),
+    noTeto: viab.tetoLance > 0 ? planoParcelado({ lance: viab.tetoLance, comissaoPct: viab.comissaoPct, despesasTotal: viab.despesasTotal, taxasPct: viab.taxasPct, ...result.parcelamento }) : null,
   } : null;
   const baixarPdf = () => imprimirHtml(htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }), `BidPro - Relatório ${titulo} ${[v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('-')}`, { esperaImagensMs: 15000 });
   const fotos = fotosDoVeiculo(v);
@@ -358,14 +359,14 @@ export default function AnaliseVeiculo() {
                   {viab.fechaNaRegra ? `Até ${fmtBRL(viab.tetoLance)} de lance ainda é uma boa compra.` : 'Nem o lance mínimo cabe no teto — não é boa compra pela regra da casa.'}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
-                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : result.comissaoFonte ? ` — ${result.comissaoFonte}` : ''}) + débitos e despesas assumidos ({viab.despesasTotal > 0 ? fmtBRL(viab.despesasTotal) : 'nenhum com valor declarado'}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
+                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : result.comissaoFonte ? ` — ${result.comissaoFonte}` : ''}){viab.taxasPct.length ? ` + ${viab.taxasPct.map((t) => `${t.item.toLowerCase()} (${String(t.pct).replace('.', ',')}%)`).join(' + ')}` : ''} + débitos e despesas assumidos ({viab.despesasTotal > 0 ? fmtBRL(viab.despesasTotal) : 'nenhum com valor declarado'}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
                   {' '}No lance mínimo, o investimento total é {fmtBRL(viab.investimentoNoMinimo)}.
                 </div>
                 {parc && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #cbd5e1', fontSize: 12, color: '#334155' }}>
                     <b>Parcelado ({parc.entradaPct}% de sinal + {parc.parcelas} parcelas{parc.correcao ? `, ${parc.correcao}` : ', sem correção informada'}):</b>
                     {[['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => (
-                      <div key={rot}>{rot}: sinal de {fmtBRL(p.sinal)} (entrada {fmtBRL(p.entradaLance)} + comissão {fmtBRL(p.comissao)} + débitos {fmtBRL(p.despesas)}) e {p.parcelas}× {fmtBRL(p.valorParcela)}</div>
+                      <div key={rot}>{rot}: sinal de {fmtBRL(p.sinal)} (entrada {fmtBRL(p.entradaLance)} + {viab.taxasPct.length ? 'comissão e encargos' : 'comissão'} {fmtBRL(p.comissao)} + débitos {fmtBRL(p.despesas)}) e {p.parcelas}× {fmtBRL(p.valorParcela)}</div>
                     ))}
                   </div>
                 )}

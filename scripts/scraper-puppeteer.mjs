@@ -5563,6 +5563,10 @@ function extrairAnexosPdfDeHtml(html) {
       const url = m[0];
       if (vis.has(url)) continue;
       vis.add(url);
+      // PDFs do RODAPÉ do site (10/10): a Superbid põe em toda página os 5 PDFs institucionais
+      // (cookies, privacidade, termos de uso...) — ~690 lotes os gravavam como anexo, e como o
+      // relatório lê só os 5 primeiros, o documento real do lote ficava de fora.
+      if (/\/politicas-institucionais\/|blog\.superbid\.net\/|\/(?:aviso-de-cookies|aviso-de-privacidade|termos-de-uso[^/]*|politica-de-privacidade)\.pdf/i.test(url)) continue;
       // O NOME DO ARQUIVO decide primeiro (30/09): o texto ANTES do link termina no rótulo do link
       // ANTERIOR — no MEGA, `megaleiloes_laudo_*.pdf` saía "Edital" e `megaleiloes_edital_*` saía
       // "Outro" (um deslocado do outro). Só sem pista no nome é que o contexto conta.

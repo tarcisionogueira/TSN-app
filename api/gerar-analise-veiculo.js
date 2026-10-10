@@ -21,7 +21,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo, slugsModeloMobiauto, anunciosOlx } from '../src/utils/viabilidadeVeiculo.js';
+import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, extrairTaxasPct, taxasPctValidas, RE_ENCARGO_SEM_VALOR, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo, slugsModeloMobiauto, anunciosOlx } from '../src/utils/viabilidadeVeiculo.js';
 import { paginaViaBanco } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -235,11 +235,18 @@ const brl = (v) => (v || v === 0 ? Number(v).toLocaleString('pt-BR', { style: 'c
 // PDF vai como `document` base64, sem extrair texto local; imagem também pode ir como
 // `image` quando o anexo aponta pra uma foto, ex. laudo escaneado como JPG). Até 5 anexos e
 // 6.5 MB cada — orçamento de tempo/tokens de uma função com 1 chamada de IA só.
+// PDFs institucionais da plataforma (10/10): ~690 lotes SUPERBID traziam em `anexos` os 5 PDFs do
+// rodapé do site (cookies, privacidade, termos de uso, segurança, igualdade salarial) + um relatório
+// do blog. Como só os 5 primeiros anexos vão para a IA, eles ocupavam TODAS as vagas — o anexo
+// real do evento (condições de venda, laudo) nunca era lido. Não são documento do lote.
+const RE_ANEXO_INSTITUCIONAL = /\/politicas-institucionais\/|blog\.superbid\.net\/|\/(?:aviso-de-cookies|aviso-de-privacidade|termos-de-uso[^/]*|politica-de-privacidade)\.pdf/i;
+export const anexoDoLote = (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && !RE_ANEXO_INSTITUCIONAL.test(u);
+
 async function anexosParaBlocos(anexos, deadline) {
   const blocos = [];
-  const urls = (Array.isArray(anexos) ? anexos : [])
+  const urls = [...new Set((Array.isArray(anexos) ? anexos : [])
     .map((a) => (typeof a === 'string' ? a : a?.url))
-    .filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u))
+    .filter(anexoDoLote))]
     .slice(0, 5);
   for (const url of urls) {
     if (Date.now() > deadline) break;
@@ -437,6 +444,7 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
   "comissaoLeiloeiroPct": número (ex.: 5, 7.5, 10) — a comissão do leiloeiro EXATAMENTE como o edital, os anexos, a página do lote ou a descrição informam (NÃO presuma 5%: varia por leiloeiro e por leilão); null se nenhum deles informar,
   "comissaoTrecho": "o trecho literal (até 160 caracteres) onde a comissão aparece, ou null",
   "custos": [{"item": "descrição curta", "valor": número em reais}] — SOMENTE débitos e taxas que o edital, a página ou a descrição dizem ficar com o ARREMATANTE e trazem VALOR: débitos em aberto (IPVA, multas, licenciamento, DPVAT), taxa administrativa/encargos de administração, pátio/estadia/depósito, remoção, despachante. Some nada, copie cada valor como está. NUNCA inclua reparos, honorários de assessoria nem a comissão do leiloeiro. Lista vazia se nada constar,
+  "taxasPercentuais": [{"item": "nome da taxa", "pct": número}] — taxas cobradas do arrematante em PERCENTUAL sobre o lance ALÉM da comissão do leiloeiro: encargos administrativos/de administração, taxa administrativa, fee/taxa da plataforma, buyer's premium, taxa de transferência, comissão do comitente. Copie o percentual exato. NUNCA inclua a comissão do leiloeiro. Lista vazia se nenhuma tiver percentual informado,
   "debitosSemValor": ["débito/encargo que fica com o arrematante mas SEM valor informado — ex.: 'multas e IPVA anteriores ao leilão, valor não informado', 'encargos de administração conforme condições de venda'. Vazio se nada."],
   "reparos": ["reparo/atenção apontado pela condição DECLARADA (ex.: 'pneus ruins — troca', 'bateria fraca', 'volante desgastado', 'pequenos amassados'), SEM valor. Vazio se nada."],
   "formasPagamento": ["SÓ as formas que NÃO estão em 'Formas de pagamento publicadas pela plataforma' acima, ou que acrescentam condição a elas (prazo, nº de vezes no cartão, desconto) — uma por item, cada forma de pagamento que o edital, a página ou a descrição ACEITAM, uma por item, com a condição (ex.: 'à vista em até 24h após a aprovação, por TED/boleto', 'cartão de crédito', 'parcelado: 30% de entrada + 10 parcelas', 'financiamento'). Vazio se nenhum deles disser."],
@@ -638,6 +646,8 @@ export default async function handler(req, res) {
     // Depósito de Bens: R$ 550,00, ..."). Vão para a IA e para a leitura determinística abaixo.
     const taxasPlataforma = consertarAcentos(v?.raw?.lot_rate_information || '').slice(0, 600);
     const textoDoLote = [v.descricao, taxasPlataforma, pagina.texto].filter(Boolean).join(' \n ');
+    // Só o texto DO LOTE (a página pode listar outros leilões) — base das leituras determinísticas.
+    const textoProprioLote = [v.descricao, taxasPlataforma].filter(Boolean).join(' \n ');
 
     const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma, formasPlataforma: pagina.plataforma?.formas, eventoTexto: pagina.plataforma?.eventoTexto }) }];
     // UMA chamada ao modelo. Chamada de novo, uma vez, quando o JSON volta inválido (ver abaixo).
@@ -700,13 +710,25 @@ export default async function handler(req, res) {
       // FIPE (item maior que o próprio carro é leitura errada), origem conhecida, no máximo 12.
       // Comissão (30/09): o que o LOTE declara vence; depois a IA (que leu anexos e página); depois
       // outro lote do mesmo evento; só então a tela presume 5% — e diz de onde veio cada uma.
-      ...comissaoComFonte({ pagina, textoDoLote, textoProprio: [v.descricao, taxasPlataforma].filter(Boolean).join(' \n '), ia: parsed.comissaoLeiloeiroPct, iaTrecho: parsed.comissaoTrecho, irmaos: comissaoIrmaos }),
+      ...comissaoComFonte({ pagina, textoDoLote, textoProprio: textoProprioLote, ia: parsed.comissaoLeiloeiroPct, iaTrecho: parsed.comissaoTrecho, irmaos: comissaoIrmaos }),
       // Débitos/taxas COM valor declarado. Reparo nunca tem valor aqui (dono, 30/09: "citar, sem
       // valores") — vai em `reparos`. A leitura determinística cobre o que a IA deixar passar.
       // Só descrição + taxas da plataforma: a página pode listar OUTROS lotes ("veja também") e o valor
       // de outro carro entraria aqui — a página inteira vai só para a IA, que lê o contexto.
       custos: juntarDebitos(parsed.custos, extrairDebitosDeclarados([v.descricao, taxasPlataforma].filter(Boolean).join(' \n ')), v.valor_fipe),
-      debitosSemValor: listaDeTextos(parsed.debitosSemValor),
+      // Taxas % além da comissão (10/10): leitura determinística + IA, sem repetir o mesmo percentual.
+      ...(() => {
+        const det = extrairTaxasPct(textoProprioLote);
+        const ia = taxasPctValidas(parsed.taxasPercentuais).filter((t) => !/comiss[ãa]o\s+do\s+leiloeiro/i.test(t.item));
+        const taxasPct = taxasPctValidas([...det, ...ia.filter((t) => !det.some((d) => d.pct === t.pct))]);
+        const semValor = listaDeTextos(parsed.debitosSemValor);
+        // Encargos existem mas o lote não diz quanto (SUPERBID: "conforme as Condições de Venda e
+        // Pagamento") — não some com o aviso: é custo real que o teto não consegue incluir.
+        if (!taxasPct.length && RE_ENCARGO_SEM_VALOR.test(textoProprioLote) && !semValor.some((x) => /encargo|administra|fee/i.test(x))) {
+          semValor.unshift('Encargos de administração cobrados pela plataforma, definidos nas Condições de Venda e Pagamento do evento — percentual não publicado no lote; confira antes do lance (não entram no teto)');
+        }
+        return { taxasPct, debitosSemValor: semValor.slice(0, 12) };
+      })(),
       reparos: listaDeTextos(parsed.reparos),
       paginaLote: pagina.motivo || 'lida',
       // Parcelamento (29/09): só com sinal e nº de parcelas plausíveis — valor fora disso é leitura errada.
