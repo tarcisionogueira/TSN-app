@@ -36751,3 +36751,9 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - **Recon**: `recon-dom.yml` ganhou a entrada `grep` (regex) para achar texto na página e nos JSON capturados.
 - Atalho útil: a rede do banco (`net.http_get` + `net._http_response`) alcança Superbid/s4bdigital quando o
   sandbox e a Vercel tomam 403 — foi assim que achei o campo em 2 consultas.
+- **Fonte principal da comissão Superbid = painel de lances** (`api.s4bdigital.net/offerpanel/api/app-context?offerId=`,
+  caminho `refreshResult.lote.comissaoPercentual`; também `allowInstallments/maxInstallments/minAdvanceRate`).
+  Cobre leilão de prefeitura, cuja página não tem o campo, e devolve 0 quando não há comissão (Cronos de
+  Itapejara: "+0%"; pátio de SBC: 0). Via banco: `json_pedir` (Accept JSON; só service_role).
+- **10 relatórios de veículo regerados** em 10/10 13:25 pelo `regerar-relatorios.yml`: 9 com 5% vindo da
+  plataforma e 1 com 0%. Nenhum ficou como "presumida". Formas sem repetição; o cartão em 12x via sbXPay aparece.
