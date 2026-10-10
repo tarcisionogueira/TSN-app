@@ -6,6 +6,7 @@ import { apiCall } from '../utils/apiCall';
 import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 import BoletoHonorario from '../components/BoletoHonorario';
+import AssinaturaCanvas from '../components/AssinaturaCanvas';
 import { honorarioComTaxa, TAXA_CARTAO_MP_PCT, gatewayDoBoleto } from '../utils/taxaHonorario';
 import { AZUL, VERDE } from '../utils/marca';
 
@@ -50,6 +51,15 @@ export default function PagarHonorario() {
   // vai no boleto (Asaas) e como pagador do cartão (MP); o servidor revalida.
   const [pagadorNome, setPagadorNome] = useState('');
   const [pagadorDoc, setPagadorDoc] = useState('');
+  // PROCURAÇÃO JUNTO COM O PAGAMENTO (10/10, pedido do dono): a procuração particular à Nogueira
+  // Empreendimentos (e a quem ela delegar) é assinada aqui, antes de pagar — em vez de pedir depois.
+  // O documento vem de /api/honorario-procuracao e a assinatura passa pelo /api/assinar-contrato
+  // (mesma prova de todo documento: IP do servidor, carimbo de tempo, hash do texto).
+  const [proc, setProc] = useState(null);           // { token, titulo, conteudo, status } | null
+  const [procCpf, setProcCpf] = useState('');
+  const [procAss, setProcAss] = useState('');
+  const [procAssinando, setProcAssinando] = useState(false);
+  const [procErro, setProcErro] = useState('');
 
   useEffect(() => {
     if (user?.email) setEmail(e => e || user.email);
@@ -76,6 +86,34 @@ export default function PagarHonorario() {
     })();
     return () => { cancel = true; };
   }, [arrematacaoId]);
+
+  useEffect(() => {
+    if (!arr?.id || ['pago', 'distribuido'].includes(arr.honorarios_status)) return;
+    let vivo = true;
+    fetch(`/api/honorario-procuracao?id=${encodeURIComponent(arr.id)}`)
+      .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => { if (vivo) setProc(ok ? (d.procuracao || null) : null); })
+      .catch((e) => console.error('[PagarHonorario] procuração:', e?.message || e)); // sem procuração, o pagamento segue
+    return () => { vivo = false; };
+  }, [arr?.id, arr?.honorarios_status]);
+
+  // Outorgante = o cliente da arrematação (o nome já está no texto da procuração).
+  const outorgante = (String(proc?.conteudo || '').match(/OUTORGANTE:\s*([^,\n]+)/) || [])[1]?.trim() || '';
+  const procPendente = !!proc && proc.status !== 'assinado';
+  const assinarProcuracao = async () => {
+    const cpf = procCpf.replace(/\D/g, '');
+    if (cpf.length !== 11 && cpf.length !== 14) { setProcErro('Informe o CPF (ou CNPJ) do titular da arrematação.'); return; }
+    if (!procAss) { setProcErro('Assine no quadro acima.'); return; }
+    setProcAssinando(true); setProcErro('');
+    try {
+      const r = await fetch('/api/assinar-contrato', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: proc.token, tipo_pessoa: cpf.length === 14 ? 'pj' : 'pf', dados: { nome: outorgante, ...(cpf.length === 14 ? { cnpj: cpf } : { cpf }), email }, assinatura: procAss }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d?.error) throw new Error(d?.error || `HTTP ${r.status}`);
+      setProc(p => ({ ...p, status: 'assinado' }));
+    } catch (e) { setProcErro(`Não foi possível assinar agora: ${e.message}`); }
+    finally { setProcAssinando(false); }
+  };
 
   const registrarAceite = async (gateway = 'mercadopago') => {
     try {
@@ -128,7 +166,7 @@ export default function PagarHonorario() {
           <CheckCircle2 size={48} color={VERDE} style={{ margin: '0 auto 16px' }} />
           <div style={{ fontSize: 19, fontWeight: 800, color: VERDE }}>Honorários pagos!</div>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 8 }}>
-            Obrigado. A equipe já foi avisada e o próximo passo (procuração) segue automaticamente.
+            Obrigado. A equipe já foi avisada{proc?.status === 'assinado' ? ' e a procuração ficou registrada junto com o pagamento' : ' e o próximo passo (procuração) segue automaticamente'}.
           </div>
         </div>
       </div>
@@ -230,9 +268,38 @@ export default function PagarHonorario() {
           </span>
         </label>
 
-        {!aceite || !/\S+@\S+\.\S+/.test(email) || !docValido(pagadorDoc) || pagadorNome.trim().length < 3 ? (
+        {proc && (
+          <div style={{ marginTop: 10, padding: '12px 14px', background: procPendente ? '#fffbeb' : '#f0fdf4', border: `1px solid ${procPendente ? '#fde68a' : '#bbf7d0'}`, borderRadius: 10 }}>
+            {!procPendente ? (
+              <div style={{ fontSize: 12.5, color: '#166534', fontWeight: 700 }}>✓ Procuração particular assinada — a Nogueira Empreendimentos já pode resolver as questões da arrematação em seu nome.</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#92400e' }}>Procuração para resolvermos a arrematação por você</div>
+                <div style={{ fontSize: 11.5, color: '#78350f', lineHeight: 1.55, marginTop: 4 }}>
+                  Para não precisarmos pedir depois, assine aqui a procuração particular que autoriza a <b>Nogueira Empreendimentos</b> (e quem ela indicar) a representar {outorgante || 'o titular'} junto a cartórios, prefeitura, leiloeiro e demais órgãos <b>desta arrematação</b>. Ela não permite receber dinheiro nem dispor do imóvel.
+                </div>
+                <details style={{ marginTop: 6 }}>
+                  <summary style={{ color: AZUL, cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>Ler a procuração completa</summary>
+                  <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#475569', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap', maxHeight: 260, overflowY: 'auto' }}>{proc.conteudo}</p>
+                </details>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', margin: '10px 0 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>CPF do titular ({outorgante || 'outorgante'})</label>
+                <input value={procCpf} onChange={e => setProcCpf(e.target.value)} inputMode="numeric" placeholder="000.000.000-00"
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', background: 'white' }} />
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', margin: '10px 0 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Assinatura do titular</div>
+                <AssinaturaCanvas onChange={setProcAss} altura={140} />
+                {procErro && <div style={{ fontSize: 11.5, color: '#dc2626', marginTop: 6 }}>{procErro}</div>}
+                <button onClick={assinarProcuracao} disabled={procAssinando}
+                  style={{ marginTop: 10, width: '100%', padding: '10px', border: 'none', borderRadius: 10, background: procAssinando ? '#94a3b8' : AZUL, color: 'white', fontWeight: 800, fontSize: 13, cursor: procAssinando ? 'wait' : 'pointer' }}>
+                  {procAssinando ? 'Registrando assinatura…' : 'Assinar a procuração'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {!aceite || procPendente || !/\S+@\S+\.\S+/.test(email) || !docValido(pagadorDoc) || pagadorNome.trim().length < 3 ? (
           <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>
-            {!aceite ? 'Aceite os termos acima' : !/\S+@\S+\.\S+/.test(email) ? 'Informe um e-mail válido' : pagadorNome.trim().length < 3 ? 'Informe o nome de quem vai pagar' : 'Informe um CPF ou CNPJ válido de quem vai pagar'} para continuar com o pagamento.
+            {!aceite ? 'Aceite os termos acima' : procPendente ? 'Assine a procuração acima' : !/\S+@\S+\.\S+/.test(email) ? 'Informe um e-mail válido' : pagadorNome.trim().length < 3 ? 'Informe o nome de quem vai pagar' : 'Informe um CPF ou CNPJ válido de quem vai pagar'} para continuar com o pagamento.
           </div>
         ) : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
