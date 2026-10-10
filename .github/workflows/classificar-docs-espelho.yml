@@ -3,6 +3,11 @@ name: Classificar documentos do espelho pelo conteúdo
 # 05/10 (resíduo da pendência 49): PDFs que o espelho guardou como 'outro' viram matrícula/edital/laudo
 # pelo texto das 2 primeiras páginas. Manual: comece em seco (aplicar=0) e confira as linhas.
 on:
+  # 10/10: ficava SÓ manual e acumulou ~3.250 PDFs genéricos de lote ativo nunca lidos (BIASI publica a
+  # matrícula com nome de timestamp: 197 de 200 lotes "sem matrícula" tinham o arquivo). Semanal,
+  # gravando, custo zero (Actions grátis em repo público; leitura sem IA).
+  schedule:
+    - cron: '23 6 * * 0'   # domingo 06:23 UTC
   workflow_dispatch:
     inputs:
       aplicar:
@@ -29,6 +34,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          CLASSIFICAR_APLICAR: ${{ github.event.inputs.aplicar }}
-          CLASSIFICAR_LIMITE: ${{ github.event.inputs.limite }}
+          CLASSIFICAR_APLICAR: ${{ github.event.inputs.aplicar || '1' }}
+          CLASSIFICAR_LIMITE: ${{ github.event.inputs.limite || '1500' }}
         run: node scripts/classificar-docs-espelho.mjs

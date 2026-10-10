@@ -78,7 +78,7 @@ async function main() {
   try {
     // rotas de login candidatas por fonte
     const rotas = FONTE === 'SODRE' ? ['/login'] : FONTE === 'FRAZAO' ? ['/minha-conta', '/entrar', '/login', '/wp-login.php', '/']
-      : FONTE === 'SUPERBID' ? ['/login', '/'] : FONTE === 'BIASI' ? ['/login', '/account/login', '/'] : FONTE === 'VIP' ? ['/login', '/entrar', '/'] : ['/entrar'];
+      : FONTE === 'SUPERBID' ? ['/'] : FONTE === 'BIASI' ? ['/login', '/account/login', '/'] : FONTE === 'VIP' ? ['/login', '/entrar', '/'] : ['/entrar'];
     let logou = false, usouRota = null, detalhe = null;
     for (const rota of rotas) {
       try {
@@ -96,7 +96,14 @@ async function main() {
         const estado = await page.evaluate(() => ({ url: location.href, logout: /sair|logout|minha[- ]conta|meus[- ]lances|ol[áa],|bem[- ]vindo/i.test(document.body.innerText || '') }));
         const cookies = await page.cookies();
         console.log(`   após submit: url=${estado.url} indicioLogado=${estado.logout} cookies=[${cookies.map(c => c.name).join(', ')}]`);
-        if (estado.logout || cookies.some(c => /token|session|auth|logged/i.test(c.name))) { logou = true; usouRota = rota; break; }
+        // 10/10: só conta login se o formulário foi PREENCHIDO e enviado. Antes, cookie de analytics
+        // (_hjSession, ai_session) bastava — a Superbid deu "login PROVÁVEL" numa página 404 sem campo
+        // nenhum. O instrumento mentindo é a forma nº 10 dentro da própria ferramenta de medir.
+        const ANALYTICS = /^(_ga|_gcl|_fbp|_hj|_uet|_clck|_clsk|__hs|hubspot|ai_|cf_|__cf)/i;
+        const cookieAuth = cookies.some(c => !ANALYTICS.test(c.name) && /token|session|auth|logged|jwt|bearer/i.test(c.name));
+        const aindaComSenha = await page.evaluate(() => !!document.querySelector('input[type=password]'));
+        if (detalhe?.ok && !aindaComSenha && (estado.logout || cookieAuth)) { logou = true; usouRota = rota; break; }
+        if (detalhe?.ok) console.log(`   formulário enviado mas sem prova de login (senha ainda na tela=${aindaComSenha}, cookie de sessão=${cookieAuth})`);
       } catch (e) { console.log(`   ERRO ${e.message}`); }
     }
     console.log(`\n  => login ${logou ? 'PROVÁVEL' : 'não confirmado'} (rota ${usouRota || '—'})`);
