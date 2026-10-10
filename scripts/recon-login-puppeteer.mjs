@@ -71,6 +71,28 @@ async function main() {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
   const rede = [];
+  // Corpos JSON da API da plataforma (Superbid/s4bdigital): guarda os campos de encargo/comissão/fee
+  // para comparar logado × anônimo. Só nomes de campo + valor curto — nada de dado pessoal.
+  const camposApi = [];
+  const RE_CAMPO = /encarg|fee|taxa|tax|percent|comiss|commission|charge|cvp|condic/i;
+  page.on('response', async (r) => {
+    try {
+      const u = r.url();
+      if (!/s4bdigital\.net\/(offerpanel\/api|habilitation|auction)/i.test(u) || !/json/i.test(r.headers()['content-type'] || '')) return;
+      const j = await r.json();
+      const achados = [];
+      const varre = (o, cam, d) => {
+        if (!o || typeof o !== 'object' || d > 6 || achados.length > 40) return;
+        for (const [k, v] of Object.entries(o)) {
+          const c = cam ? `${cam}.${k}` : k;
+          if (RE_CAMPO.test(k) && (v === null || typeof v !== 'object')) achados.push(`${c}=${String(v).slice(0, 60)}`);
+          else if (typeof v === 'object') varre(v, c, d + 1);
+        }
+      };
+      varre(j, '', 0);
+      camposApi.push(`${u.split('?')[0].slice(-70)} → ${achados.length ? achados.join(' | ') : '(nenhum campo de encargo/fee)'}`);
+    } catch { /* corpo não-JSON ou já consumido: o log de rede abaixo ainda registra a chamada */ }
+  });
   page.on('response', (r) => {
     try { const u = r.url(); if (RE_REDE.test(u)) rede.push(`${r.request().method()} ${r.status()} ${r.headers()['content-type'] || ''} ${u.slice(0, 150)}`); } catch { /* */ }
   });
@@ -140,6 +162,10 @@ async function main() {
       console.log(`   logado na página do lote: ${info.logado} · texto ${antes}→${info.tam} chars`);
       console.log(`   trechos com %: ${JSON.stringify(info.pct)}`);
       console.log(`   links de documento: ${JSON.stringify(info.docs)}`);
+      const temToken = await page.evaluate(() => Object.keys(localStorage).filter(k => /token|auth|session|user/i.test(k)));
+      console.log(`   chaves de sessão no localStorage: ${JSON.stringify(temToken)}`);
+      console.log('\n── campos de encargo/fee na API (logado):');
+      [...new Set(camposApi)].slice(0, 12).forEach(l => console.log(`   ${l}`));
       console.log('\n── rede capturada no lote:');
       [...new Set(rede)].slice(0, 40).forEach(l => console.log(`   ${l}`));
       return;
