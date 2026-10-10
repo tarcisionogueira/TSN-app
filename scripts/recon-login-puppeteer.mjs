@@ -93,6 +93,13 @@ async function main() {
         }
         detalhe = await preencherESubmeter(page);
         console.log(`   preenchimento: ${JSON.stringify(detalhe)}`);
+        // Login com IdP separado (Superbid: www → accounts.superbid.net/authorization → volta): espera
+        // a cadeia de redirecionamento terminar antes de julgar; se parar no IdP, mostra o que ele diz.
+        for (let i = 0; i < 15 && /accounts\.|\/authorization|\/oauth|\/auth\b/i.test(page.url()); i++) await sleep(2000);
+        if (/accounts\.|\/authorization/i.test(page.url())) {
+          const aviso = await page.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 400)).catch(() => '');
+          console.log(`   parado no provedor de login (${page.url()}): "${aviso}"`);
+        }
         const estado = await page.evaluate(() => ({ url: location.href, logout: /sair|logout|minha[- ]conta|meus[- ]lances|ol[áa],|bem[- ]vindo/i.test(document.body.innerText || '') }));
         const cookies = await page.cookies();
         console.log(`   após submit: url=${estado.url} indicioLogado=${estado.logout} cookies=[${cookies.map(c => c.name).join(', ')}]`);
@@ -111,7 +118,8 @@ async function main() {
     if (LOTE) {
       console.log(`\n── lote pedido (logado): ${LOTE}`);
       rede.length = 0;
-      await page.goto(LOTE, { waitUntil: 'networkidle2', timeout: 45000 });
+      try { await page.goto(LOTE, { waitUntil: 'networkidle2', timeout: 45000 }); }
+      catch (e) { console.log(`   1ª abertura falhou (${e.message}) — aguardando e tentando de novo`); await sleep(5000); await page.goto(LOTE, { waitUntil: 'networkidle2', timeout: 45000 }); }
       await sleep(3000);
       const antes = await page.evaluate(() => (document.body.innerText || '').length);
       const clicados = await page.evaluate(() => {
