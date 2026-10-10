@@ -24,11 +24,13 @@ function rpc(nome, args) {
   });
 }
 
-// Nunca lança; { html } ou { html: null, motivo }.
-export async function paginaViaBanco(url, deadline) {
+// Nunca lança; { html } ou { html: null, motivo }. `json: true` usa json_pedir (Accept JSON — a API
+// do painel da Superbid responde 406 ao Accept HTML de pagina_pedir; 10/10).
+export async function paginaViaBanco(url, deadline, { json = false } = {}) {
+  const pedir = json ? 'json_pedir' : 'pagina_pedir';
   try {
-    const rp = await rpc('pagina_pedir', { p_url: url });
-    if (!rp.ok) return { html: null, motivo: `pagina_pedir HTTP ${rp.status}` };
+    const rp = await rpc(pedir, { p_url: url });
+    if (!rp.ok) return { html: null, motivo: `${pedir} HTTP ${rp.status}` };
     const id = await rp.json();
     while (Date.now() < deadline - 1000) {
       await new Promise((ok) => setTimeout(ok, 1000));

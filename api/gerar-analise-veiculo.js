@@ -321,6 +321,37 @@ function condicoesDaPlataforma(html, url) {
   return { comissaoPct: pct, formas, parcelamento, eventoTexto: [of.auction?.desc, eventoTexto].filter(Boolean).join(' — ').slice(0, 600) };
 }
 
+// PAINEL DE LANCES DA SUPERBID (10/10): `api.s4bdigital.net/offerpanel/api/app-context?offerId=` traz
+// `comissaoPercentual` de TODA oferta — inclusive as de prefeitura, cuja página não publica comissão
+// (Cronos/Gol de Itaguajé e Itapejara saíram sem comissão com 5% no painel) e 0 nos leilões "sem
+// taxas e comissão" (pátio de SBC: 0). Também `allowInstallments`/`maxInstallments`/`minAdvanceRate`.
+// Direto e, se recusado, pela rede do banco. Nunca lança; null = não veio (o motivo vai ao log).
+async function painelSuperbid(url, deadline) {
+  const id = (String(url || '').match(/superbid\.net\/oferta\/(\d+)/i) || [])[1];
+  if (!id) return null;
+  const api = `https://api.s4bdigital.net/offerpanel/api/app-context?offerId=${id}&timeZoneId=UTC`;
+  let txt = null, motivo = null;
+  try {
+    const r = await fetchExternoSeguro(api, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json', Origin: 'https://www.superbid.net', Referer: 'https://www.superbid.net/' }, signal: AbortSignal.timeout(Math.max(3000, Math.min(8000, deadline - Date.now()))) });
+    if (r.ok) txt = await r.text(); else motivo = `HTTP ${r.status}`;
+  } catch (e) { motivo = String(e?.message || e).slice(0, 60); }
+  if (!txt) {
+    const b = await paginaViaBanco(api, deadline, { json: true });
+    if (!b.html) { console.warn('[veiculo] painel superbid:', motivo, '/ banco:', b.motivo); return null; }
+    txt = b.html;
+  }
+  let j; try { j = JSON.parse(txt); } catch { console.warn('[veiculo] painel superbid: JSON ilegível'); return null; }
+  const lote = j?.refreshResult?.lote || {}; // caminho medido em 10/10 (refreshResult.lote.*)
+  const bruto = lote.comissaoPercentual;
+  const pct = Number(bruto);
+  const n = Math.round(Number(lote.maxInstallments)), e = Number(lote.minAdvanceRate);
+  if (bruto === undefined) console.warn('[veiculo] painel superbid sem refreshResult.lote.comissaoPercentual — estrutura mudou?');
+  return {
+    comissaoPct: bruto !== null && bruto !== undefined && bruto !== '' && Number.isFinite(pct) && pct >= 0 && pct <= 20 ? pct : null,
+    parcelamento: lote.allowInstallments && n >= 2 && n <= 60 && e >= 5 && e < 100 ? { entradaPct: e, parcelas: n, correcao: null } : null,
+  };
+}
+
 async function lerPaginaDoLote(url, deadline) {
   if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, plataforma: null, motivo: 'sem link do lote' };
   try {
@@ -408,7 +439,7 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
   "custos": [{"item": "descrição curta", "valor": número em reais}] — SOMENTE débitos e taxas que o edital, a página ou a descrição dizem ficar com o ARREMATANTE e trazem VALOR: débitos em aberto (IPVA, multas, licenciamento, DPVAT), taxa administrativa/encargos de administração, pátio/estadia/depósito, remoção, despachante. Some nada, copie cada valor como está. NUNCA inclua reparos, honorários de assessoria nem a comissão do leiloeiro. Lista vazia se nada constar,
   "debitosSemValor": ["débito/encargo que fica com o arrematante mas SEM valor informado — ex.: 'multas e IPVA anteriores ao leilão, valor não informado', 'encargos de administração conforme condições de venda'. Vazio se nada."],
   "reparos": ["reparo/atenção apontado pela condição DECLARADA (ex.: 'pneus ruins — troca', 'bateria fraca', 'volante desgastado', 'pequenos amassados'), SEM valor. Vazio se nada."],
-  "formasPagamento": ["cada forma de pagamento que o edital, a página ou a descrição ACEITAM, uma por item, com a condição (ex.: 'à vista em até 24h após a aprovação, por TED/boleto', 'cartão de crédito', 'parcelado: 30% de entrada + 10 parcelas', 'financiamento'). Vazio se nenhum deles disser."],
+  "formasPagamento": ["SÓ as formas que NÃO estão em 'Formas de pagamento publicadas pela plataforma' acima, ou que acrescentam condição a elas (prazo, nº de vezes no cartão, desconto) — uma por item, cada forma de pagamento que o edital, a página ou a descrição ACEITAM, uma por item, com a condição (ex.: 'à vista em até 24h após a aprovação, por TED/boleto', 'cartão de crédito', 'parcelado: 30% de entrada + 10 parcelas', 'financiamento'). Vazio se nenhum deles disser."],
   "parcelamento": {"entradaPct": número (ex.: 25 = sinal de 25% do lance), "parcelas": número de parcelas do saldo, "correcao": "índice/juros do saldo, se informado"} SÓ se o edital/descrição PERMITIR expressamente pagar em parcelas; senão null,
   "recomendacao": "comprar" | "avaliar_com_cautela" | "evitar"
 }
@@ -420,13 +451,30 @@ function listaDeTextos(x) {
   return (Array.isArray(x) ? x : []).filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim().slice(0, 160)).slice(0, 12);
 }
 
+// Formas da plataforma + as da IA SEM repetir (10/10: a 1ª regeração listou "À vista" e "Cartão" duas
+// vezes — a IA reescreve o que leu no prompt). Item da IA do mesmo tipo (à vista/cartão/parcelado)
+// substitui o da plataforma só quando traz número que ela não tem (ex.: "em até 12x" no cartão).
+const tipoForma = (t) => (/^\s*[àa]\s*vista/i.test(t) ? 'vista' : /cart[ãa]o/i.test(t) ? 'cartao' : /parcel|entrada/i.test(t) ? 'parcelado' : /financ/i.test(t) ? 'financiamento' : null);
+function juntarFormas(plataforma, ia) {
+  const out = [...plataforma];
+  for (const t of ia) {
+    const tipo = tipoForma(t);
+    const i = tipo ? out.findIndex((x) => tipoForma(x) === tipo) : -1;
+    if (i < 0) { if (!out.includes(t)) out.push(t); continue; }
+    const nums = (x) => new Set(x.match(/\d+(?:[.,]\d+)?/g) || []);
+    const doPlat = nums(out[i]);
+    if ([...nums(t)].some((n) => !doPlat.has(n))) out[i] = t;
+  }
+  return out.slice(0, 8);
+}
+
 const pctValido = (n) => (Number(n) > 0 && Number(n) <= 20 ? Number(n) : null);
 // "Sem comissão" declarado (10/10): 0% é RESPOSTA, não ausência — sem isto o cálculo presumia 5%
 // sobre leilão de pátio municipal que anuncia "SEM TAXAS E COMISSÃO - SOMENTE VALOR DO ARREMATE".
 const RE_SEM_COMISSAO = /\bsem\s+(?:taxas?\s*(?:e|,)\s*)?comiss(?:[ãa]o|[õo]es)\b|\bisento\s+de\s+comiss|\bcomiss[ãa]o\s*(?:do\s+leiloeiro\s*)?:?\s*isent|somente\s+(?:o\s+)?valor\s+do\s+arremate/i;
 function comissaoComFonte({ pagina, textoDoLote, textoProprio, ia, iaTrecho, irmaos }) {
   const doTexto = extrairComissaoPct(textoDoLote);
-  if (pagina.comissaoPct != null) return { comissaoLeiloeiroPct: pagina.comissaoPct, comissaoFonte: 'página do lote (campo da plataforma)' };
+  if (pagina.comissaoPct != null) return { comissaoLeiloeiroPct: pagina.comissaoPct, comissaoFonte: pagina.comissaoPct === 0 ? 'plataforma do leilão: sem comissão' : 'plataforma do leilão (campo próprio)' };
   if (doTexto == null && RE_SEM_COMISSAO.test(`${textoProprio || ''} ${pagina.plataforma?.eventoTexto || ''}`)) {
     return { comissaoLeiloeiroPct: 0, comissaoFonte: 'condições do leilão: sem comissão (somente o valor do arremate)' };
   }
@@ -572,11 +620,19 @@ export default async function handler(req, res) {
     // Prazo TOTAL da busca (portais + web): 80 s, dentro do teto. A análise principal corre em paralelo.
     const revendaP = buscarRevendaMercado(v, Math.max(20000, HARD_MS - 25000 - (Date.now() - T0)), user.id, gastoBusca);
     const prazoDocs = T0 + Math.min(45000, HARD_MS - 30000);
-    const [blocosDoc, pagina, comissaoIrmaos] = await Promise.all([
+    const [blocosDoc, pagina, comissaoIrmaos, painel] = await Promise.all([
       anexosParaBlocos(v.anexos, prazoDocs),
       lerPaginaDoLote(v.link_lote, prazoDocs),
       comissaoDoMesmoLeilao(v),
+      painelSuperbid(v.link_lote, prazoDocs),
     ]);
+    // O painel da plataforma é a fonte mais direta da comissão (inclusive 0%) e do parcelamento.
+    if (painel?.comissaoPct != null) pagina.comissaoPct = painel.comissaoPct;
+    if (painel?.parcelamento) {
+      pagina.plataforma = { ...(pagina.plataforma || { formas: [] }), parcelamento: painel.parcelamento };
+      const f = pagina.plataforma.formas || [];
+      if (!f.some((x) => /^Parcelado/.test(x))) pagina.plataforma.formas = [...f, `Parcelado: entrada mínima de ${painel.parcelamento.entradaPct}% + até ${painel.parcelamento.parcelas} parcelas`];
+    }
     const semDocumentos = blocosDoc.length === 0 && !String(v.descricao || '').trim() && !pagina.texto;
     // Taxas que a plataforma publica em campo próprio (SODRÉ: "Comissão: 5.00% do valor do lance,
     // Depósito de Bens: R$ 550,00, ..."). Vão para a IA e para a leitura determinística abaixo.
@@ -662,7 +718,7 @@ export default async function handler(req, res) {
       })(),
       // Formas de pagamento (10/10): campo da plataforma + o que a IA leu no edital/página/descrição.
       // Vazio = ninguém publicou; a tela diz "não informadas" em vez de afirmar "à vista".
-      formasPagamento: [...new Set([...(pagina.plataforma?.formas || []), ...listaDeTextos(parsed.formasPagamento)])].slice(0, 8),
+      formasPagamento: juntarFormas(pagina.plataforma?.formas || [], listaDeTextos(parsed.formasPagamento)),
       formasPagamentoFonte: pagina.plataforma?.formas?.length ? 'página do lote (campos da plataforma)' : (listaDeTextos(parsed.formasPagamento).length ? 'edital/página/descrição (leitura da IA)' : null),
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
