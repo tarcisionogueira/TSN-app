@@ -13,6 +13,7 @@ import FavoritoBotao from '../components/FavoritoBotao';
 import PropostaVeiculoModal from '../components/PropostaVeiculoModal';
 import { podeProporVeiculo } from '../utils/propostaVeiculo';
 import { localDoPatio } from '../utils/patioVeiculo';
+import DescricaoOrganizada from '../components/DescricaoOrganizada';
 
 // Tela EXCLUSIVA do operacional (dono/equipe) — nunca do cliente (reafirmado 21/09; a rota
 // em App.jsx já só existe sob /admin/veiculos-leilao*, roles=['admin','analista']). Por isso
@@ -454,7 +455,7 @@ export default function VeiculoDetalhe() {
       {v.descricao && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
           <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Descrição do leiloeiro</div>
-          <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v.descricao}</div>
+          <DescricaoOrganizada texto={v.descricao} />
         </div>
       )}
     </div>

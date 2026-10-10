@@ -14,6 +14,7 @@ import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
 import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica, hrefDoc } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
+import DescricaoOrganizada from '../components/DescricaoOrganizada';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
@@ -1799,9 +1800,7 @@ export default function ImovelDetalhe() {
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Descrição
                 </h2>
-                <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {formatarDescricaoImovel(imovel.descricao)}
-                </p>
+                <DescricaoOrganizada texto={imovel.descricao} formatar={formatarDescricaoImovel} tamanho={14} />
               </div>
             )}
 

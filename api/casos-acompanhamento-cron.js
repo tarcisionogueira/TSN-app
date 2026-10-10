@@ -5,9 +5,10 @@
  * (casos.posse_em nulo), o e-mail sai do endereço PESSOAL do dono (equipe_email do admin) para o
  * advogado/escritório vinculado ao caso, pedindo:
  *   1) ATUALIZAÇÃO do processo — uma vez por semana (1º dia útil da semana em que rodar);
- *   2) a GUIA DA PRÓXIMA PARCELA do arremate (arrematados.parcelamento) — uma vez por parcela,
- *      a partir de 12 dias antes do vencimento (ou se já atrasou há até 7 dias).
- * Quando caem juntos, vai UM e-mail com os dois pedidos.
+ *   2) a GUIA DE CADA PARCELA do arremate (arrematados.parcelamento) — por VENCIMENTO, não por
+ *      semana (dono, 10/10): pedido a ~10 dias do vencimento; novo pedido a ~5 dias e na véspera/
+ *      atraso SÓ se a guia ainda não chegou (nenhuma resposta com anexo no caso desde o 1º pedido).
+ * Os dois vão em e-mails SEPARADOS, com assunto próprio: a guia não se perde no meio da atualização.
  *
  * A resposta volta para tarcisio+<token>@ → inbound-juridico encadeia na conversa (resposta_de) e o
  * gatilho email_caixa_classificar herda o caso_id. Na caixa, o botão "Enviar só o anexo ao cliente"
@@ -29,7 +30,9 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 // Etapas depois do arremate em que o caso ainda é nosso (até a posse).
 const ETAPAS = ['arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'];
-const JANELA_PARCELA = 12; // dias antes do vencimento em que a guia é pedida
+// Marcos do pedido da guia (dias até o vencimento → marco). Janela, não dia exato: o cron roda só em
+// dia útil, e um marco que cai no fim de semana ainda é pego no dia útil seguinte.
+const marcoGuia = (dias) => (dias >= 6 && dias <= 10 ? 10 : dias >= 2 && dias <= 5 ? 5 : dias >= -7 && dias <= 1 ? 0 : null);
 
 const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
 const sb  = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...hdr, ...(opts.headers || {}) } });
@@ -93,7 +96,7 @@ function semanaIso(d = new Date()) {
   return `${ano}-W${String(sem).padStart(2, '0')}`;
 }
 
-export function textoPedido({ advogado, cliente, endereco, processo, atualizacao, parcela }) {
+export function textoPedido({ advogado, cliente, endereco, processo, atualizacao, parcela, insistencia = false }) {
   const linhas = [
     `${advogado ? `Dr(a). ${advogado}` : 'Prezados'}, tudo bem?`,
     '',
@@ -104,7 +107,7 @@ export function textoPedido({ advogado, cliente, endereco, processo, atualizacao
   if (atualizacao) linhas.push(`${n++}) ATUALIZAÇÃO: poderia nos informar o andamento do processo desde o último contato e a previsão para a imissão na posse?`, '');
   if (parcela) {
     const quando = parcela.dias < 0 ? `venceu em ${dataBR(parcela.venc)}` : `vence em ${dataBR(parcela.venc)}`;
-    linhas.push(`${n++}) GUIA DA PARCELA: a ${parcela.rotulo} (valor nominal ${brl(parcela.valor)}) ${quando}. Por gentileza, responda este e-mail com a guia/boleto em anexo para encaminharmos ao cliente.`, '');
+    linhas.push(`${n++}) GUIA DA PARCELA: a ${parcela.rotulo} (valor nominal ${brl(parcela.valor)}) ${quando}.${insistencia ? ' Ainda não recebemos a guia; por gentileza,' : ' Por gentileza,'} responda este e-mail com a guia/boleto em anexo para encaminharmos ao cliente.`, '');
   }
   linhas.push('Basta responder este e-mail — a resposta fica registrada na pasta do caso.', '', 'Obrigado!');
   return linhas.join('\n');
@@ -138,7 +141,7 @@ async function handler(req) {
       if (arr?.parcelamento) {
         try {
           const p = proximaPendente(cronograma(arr.parcelamento, { valor: arr.valor_arrematacao, dataArrematacao: arr.data_arrematacao }), hoje);
-          if (p && p.dias <= JANELA_PARCELA && p.dias >= -7) parcela = p;
+          if (p && marcoGuia(p.dias) !== null) parcela = { ...p, marco: marcoGuia(p.dias) };
         } catch (e) { res.falhas++; console.error(`[acompanhamento] cronograma ilegível ${arr.id}:`, e?.message); }
       }
       let processo = null;
@@ -146,52 +149,60 @@ async function handler(req) {
         processo = (await ler(`imoveis_leilao?id=eq.${c.imovel_id}&select=numero_processo`))[0]?.numero_processo || null;
       }
 
-      const chaveAtu = `atualizacao|${c.id}|${semana}`;
-      const chavePar = parcela ? `parcela|${c.id}|${parcela.idx}|${parcela.venc}` : null;
+      // Guia já chegou? Insistir (marco 5 ou véspera/atraso) só se nenhuma resposta com anexo entrou
+      // no caso desde o 1º pedido desta parcela (~12 dias antes do vencimento).
+      if (parcela && parcela.marco !== 10) {
+        const desde = new Date(Date.parse(`${parcela.venc}T12:00:00Z`) - 12 * 864e5).toISOString();
+        const veio = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.entrada&anexos=not.is.null&criado_em=gte.${desde}&select=id&limit=1`);
+        if (veio.length) { res.guia_ja_recebida = (res.guia_ja_recebida || 0) + 1; parcela = null; }
+      }
+      const envios = [
+        { tipo: 'atualizacao', chave: `atualizacao|${c.id}|${semana}`,
+          assunto: `Acompanhamento — ${cli?.nome || 'cliente'} · ${c.imovel_endereco || 'imóvel arrematado'}`,
+          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao: true, parcela: null }) },
+        ...(parcela ? [{ tipo: 'parcela', chave: `parcela|${c.id}|${parcela.idx}|${parcela.venc}|${parcela.marco}`,
+          assunto: `Guia da ${parcela.rotulo} (vence ${dataBR(parcela.venc)}) — ${cli?.nome || 'cliente'} · ${c.imovel_endereco || 'imóvel arrematado'}`,
+          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao: false, parcela, insistencia: parcela.marco !== 10 }) }] : []),
+      ];
       if (seco) {
-        res.previa.push({ caso: c.id, cliente: cli?.nome, atualizacao_semana: semana, parcela: parcela ? `${parcela.rotulo} ${parcela.venc} (${parcela.dias}d)` : null });
+        res.previa.push({ caso: c.id, cliente: cli?.nome, envios: envios.map((e) => e.chave) });
         continue;
       }
-      const atualizacao = await travar(chaveAtu, c.id);
-      const pedeParcela = chavePar ? await travar(chavePar, c.id) : false;
-      if (!atualizacao && !pedeParcela) { res.ja_enviados++; continue; }
-      const soltar = async () => { if (atualizacao) await liberar(chaveAtu); if (pedeParcela) await liberar(chavePar); };
-
-      const { to: para, cc } = await destinatarios(c.advogado_id);
-      if (!para.length) { res.sem_email_advogado.push(c.id); await soltar(); continue; }
-
-      const texto = textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao, parcela: pedeParcela ? parcela : null });
-      const assinatura = `${admin.nome || 'Equipe BidPro Brasil'}\nBidPro Brasil`;
-      const textoFinal = `${texto}\n\n—\n${assinatura}`;
-      const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;color:#1e293b;line-height:1.6;white-space:pre-wrap">${esc(texto)}</div>`
-        + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(admin.nome || 'Equipe BidPro Brasil')}<br>BidPro Brasil</p>`;
-      // Assunto FIXO por caso: as semanas caem na mesma conversa (conversa_chave = contraparte + assunto).
-      const assunto = `Acompanhamento — ${cli?.nome || 'cliente'} · ${c.imovel_endereco || 'imóvel arrematado'}`.slice(0, 300);
-      const token = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
-      try {
-        const env = await enviarEmail({
-          from: `${admin.nome || 'Equipe'} (BidPro Brasil) <${remet.endereco}>`,
-          to: para, cc: cc.length ? cc : undefined, replyTo: remet.endereco.replace('@', `+${token}@`),
-          subject: assunto, html, text: textoFinal,
-          meta: { tipo: 'acompanhamento_caso', userId: admin.id },
-          idempotencyKey: `acompanhamento:${chaveAtu}:${chavePar || ''}`,
-        });
-        if (!env?.ok) throw new Error(env?.error || 'envio sem confirmação');
-        // O e-mail JÁ SAIU: falha no registro é só histórico — mas é o registro que liga a resposta
-        // ao caso, então grita no log em vez de engolir.
-        const ins = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
-          direcao: 'saida', pasta: 'enviados', caixa: remet.endereco, de_email: remet.endereco, de_nome: admin.nome, dono: admin.id,
-          para, cc, assunto, texto: textoFinal, html, resend_email_id: env.id || null, lido: true,
-          enviado_por: admin.id, resposta_token: token, caso_id: c.id,
-        }) });
-        if (!ins.ok) console.error(`[acompanhamento] enviado mas NÃO registrado em email_caixa (caso ${c.id}): HTTP ${ins.status} — a resposta do advogado não vai se ligar ao caso`);
-        res.enviados++;
-        if (atualizacao) res.atualizacoes++;
-        if (pedeParcela) res.parcelas++;
-      } catch (e) {
-        res.falhas++;
-        console.error(`[acompanhamento] envio falhou caso ${c.id}:`, e?.message);
-        await soltar(); // tenta de novo no próximo dia útil
+      let destinos = null;
+      for (const ev of envios) {
+        if (!(await travar(ev.chave, c.id))) { res.ja_enviados++; continue; }
+        destinos = destinos || await destinatarios(c.advogado_id);
+        const { to: para, cc } = destinos;
+        if (!para.length) { res.sem_email_advogado.push(c.id); await liberar(ev.chave); continue; }
+        const textoFinal = `${ev.texto}\n\n—\n${admin.nome || 'Equipe BidPro Brasil'}\nBidPro Brasil`;
+        const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;color:#1e293b;line-height:1.6;white-space:pre-wrap">${esc(ev.texto)}</div>`
+          + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(admin.nome || 'Equipe BidPro Brasil')}<br>BidPro Brasil</p>`;
+        const assunto = ev.assunto.slice(0, 300);
+        const token = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+        try {
+          const env = await enviarEmail({
+            from: `${admin.nome || 'Equipe'} (BidPro Brasil) <${remet.endereco}>`,
+            to: para, cc: cc.length ? cc : undefined, replyTo: remet.endereco.replace('@', `+${token}@`),
+            subject: assunto, html, text: textoFinal,
+            meta: { tipo: 'acompanhamento_caso', userId: admin.id },
+            idempotencyKey: `acompanhamento:${ev.chave}`,
+          });
+          if (!env?.ok) throw new Error(env?.error || 'envio sem confirmação');
+          // O e-mail JÁ SAIU: falha no registro é só histórico — mas é o registro que liga a resposta
+          // ao caso, então grita no log em vez de engolir.
+          const ins = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+            direcao: 'saida', pasta: 'enviados', caixa: remet.endereco, de_email: remet.endereco, de_nome: admin.nome, dono: admin.id,
+            para, cc, assunto, texto: textoFinal, html, resend_email_id: env.id || null, lido: true,
+            enviado_por: admin.id, resposta_token: token, caso_id: c.id,
+          }) });
+          if (!ins.ok) console.error(`[acompanhamento] enviado mas NÃO registrado em email_caixa (caso ${c.id}): HTTP ${ins.status} — a resposta do advogado não vai se ligar ao caso`);
+          res.enviados++;
+          if (ev.tipo === 'atualizacao') res.atualizacoes++; else res.parcelas++;
+        } catch (e) {
+          res.falhas++;
+          console.error(`[acompanhamento] envio falhou caso ${c.id} (${ev.tipo}):`, e?.message);
+          await liberar(ev.chave); // tenta de novo no próximo dia útil
+        }
       }
     }
   } catch (e) {
