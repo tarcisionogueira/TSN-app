@@ -2320,6 +2320,12 @@ const idLoteLJUD = (href) => (String(href || '').match(/\/lote\/(\d+)\/(\d+)/) |
 // Best-effort: se a API falhar, o lote fica com a capa do card, como antes — e o motivo é logado.
 async function galeriaLJUDVeiculosApi(browser) {
   const mapa = new Map();
+  // DESCRIÇÃO REAL (10/10, dono: "muitos veículos sem identificação do motor"). A MESMA chamada que
+  // traz as fotos traz `nm_descricao` — e o coletor gravava `descricao: titulo` ("VW/GOL 1.0 – 06/06 –
+  // Catanduva/SP") em 1.608 de 1.635 veículos: sem texto, o motor nunca podia ser classificado.
+  // Mesmo leitor dos imóveis LJUD (descricaoRealLJUD, 07/10). Vai num mapa à parte, pendurado no de fotos.
+  const descricoes = new Map();
+  mapa.descricoes = descricoes;
   const page = await browser.newPage();
   try {
     await page.setUserAgent(USER_AGENT);
@@ -2344,13 +2350,14 @@ async function galeriaLJUDVeiculosApi(browser) {
           .map((f) => f?.nm_path_completo ? String(f.nm_path_completo).replace('/196x146/', '/640x480/') : null)
           .filter(Boolean);
         if (it.lote_id && fotos.length) mapa.set(String(it.lote_id), fotos);
+        if (it.lote_id && (it.nm_descricao || it.nm_descricao_lote || it.ds_descricao)) descricoes.set(String(it.lote_id), it);
       }
       await new Promise((r) => setTimeout(r, 120));
     }
   } catch (e) {
     console.log(`    LJUD galeria (API): ${String(e?.message || e).slice(0, 80)} — segue com a capa do card`);
   } finally { await page.close().catch(() => {}); } // padrao-ok: fechar página best-effort
-  console.log(`    LJUD galeria (API): ${mapa.size} lotes com fotos`);
+  console.log(`    LJUD galeria (API): ${mapa.size} lotes com fotos · ${descricoes.size} com descrição`);
   return mapa;
 }
 
@@ -2480,7 +2487,7 @@ async function scraperLJUDVeiculos(browser) {
       const { status: statusPatio, motivo: statusPatioMotivo } = classificarPatio(textoParaPatio);
       return {
         fonte: 'LJUD', fonte_id: `ljud_veic_${id}`, leiloeiro: 'Leilões Judiciais (LJUD)',
-        titulo, descricao: titulo,
+        titulo, descricao: galeriaApiLJUD.descricoes?.has(id) ? descricaoRealLJUD(galeriaApiLJUD.descricoes.get(id), titulo) : titulo,
         marca: c.textoCard.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
         tipo_veiculo: classificarTipoVeiculo(c.textoCard),
         modelo: null,
