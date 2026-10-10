@@ -278,7 +278,7 @@ async function anexosParaBlocos(anexos, deadline) {
 // `commercialCondition` (cartão, limite do cartão, parcelas, entrada mínima). Procura a oferta PELO ID
 // (a página também lista outras ofertas do evento) e só cai no primeiro objeto quando não acha o id.
 function condicoesDaPlataforma(html, url) {
-  const vazio = { comissaoPct: null, formas: [], parcelamento: null };
+  const vazio = { comissaoPct: null, formas: [], parcelamento: null, eventoTexto: '' };
   const m = String(html || '').match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
   if (!m) return vazio;
   let raiz; try { raiz = JSON.parse(m[1]); } catch { return vazio; } // estado da página ilegível = sem condições; o relatório segue pelo texto
@@ -295,6 +295,19 @@ function condicoesDaPlataforma(html, url) {
   visitar(raiz, 0);
   const of = doId || (idOferta ? null : primeiro);
   if (!of) return vazio;
+  // Descrição do EVENTO: é onde os pátios municipais avisam "SEM TAXAS E COMISSÃO" (recon 10/10) —
+  // nesses lotes a plataforma não publica campo de comissão nenhum.
+  const idEvento = Number(of.auction?.id) || null;
+  let eventoTexto = '';
+  if (idEvento) {
+    passos = 0;
+    const acharEvento = (no, prof) => {
+      if (eventoTexto || !no || typeof no !== 'object' || prof > 14 || ++passos > 60000) return;
+      if (!Array.isArray(no) && Number(no.id) === idEvento && typeof no.fullDescription === 'string') { eventoTexto = no.fullDescription; return; }
+      for (const v of Array.isArray(no) ? no : Object.values(no)) acharEvento(v, prof + 1);
+    };
+    acharEvento(raiz, 0);
+  }
   const cc = of.commercialCondition || {};
   const pct = [cc.auctioneerCommissionPercent, of.groupOffer?.commissionPercent].map(Number).find((n) => n > 0 && n <= 20) ?? null;
   const formas = ['À vista (pagamento do lote, comissão e encargos)'];
@@ -305,7 +318,7 @@ function condicoesDaPlataforma(html, url) {
   const nParc = Math.round(Number(cc.maxInstallments)), entrada = Number(cc.minAdvanceRate);
   const parcelamento = nParc >= 2 && nParc <= 60 && entrada >= 5 && entrada < 100 ? { entradaPct: entrada, parcelas: nParc, correcao: null } : null;
   if (parcelamento) formas.push(`Parcelado: entrada mínima de ${entrada}% + até ${nParc} parcelas`);
-  return { comissaoPct: pct, formas, parcelamento };
+  return { comissaoPct: pct, formas, parcelamento, eventoTexto: [of.auction?.desc, eventoTexto].filter(Boolean).join(' — ').slice(0, 600) };
 }
 
 async function lerPaginaDoLote(url, deadline) {
@@ -379,7 +392,7 @@ DADOS DO LOTE (do sistema, não do documento — confie neles):
 - Lance mínimo: R$ ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: R$ ${brl(v.valor_avaliacao)}` : ''}
 - Leiloeiro/plataforma: ${[v.leiloeiro, v.fonte].filter(Boolean).join(' · ') || 'não informado'}${v.comitente_edital ? ` · Comitente: ${v.comitente_edital}` : ''}
 - Pátio: ${[v.patio, v.cidade, v.estado].filter(Boolean).join(' · ') || 'não informado'}${v.opcionais ? `\n- Opcionais: ${String(v.opcionais).slice(0, 300)}` : ''}${v.motor_doc_texto ? `\n- Trecho de documento sobre o motor: ${String(v.motor_doc_texto).slice(0, 400)}` : ''}
-${extra.taxasPlataforma ? `- Taxas publicadas pela plataforma para este lote: ${extra.taxasPlataforma}\n` : ''}${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
+${extra.eventoTexto ? `- Leilão (evento): ${extra.eventoTexto}\n` : ''}${extra.taxasPlataforma ? `- Taxas publicadas pela plataforma para este lote: ${extra.taxasPlataforma}\n` : ''}${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
 ${fipeTexto}
 
 DESCRIÇÃO DO LEILOEIRO:
@@ -408,9 +421,15 @@ function listaDeTextos(x) {
 }
 
 const pctValido = (n) => (Number(n) > 0 && Number(n) <= 20 ? Number(n) : null);
-function comissaoComFonte({ pagina, textoDoLote, ia, iaTrecho, irmaos }) {
+// "Sem comissão" declarado (10/10): 0% é RESPOSTA, não ausência — sem isto o cálculo presumia 5%
+// sobre leilão de pátio municipal que anuncia "SEM TAXAS E COMISSÃO - SOMENTE VALOR DO ARREMATE".
+const RE_SEM_COMISSAO = /\bsem\s+(?:taxas?\s*(?:e|,)\s*)?comiss(?:[ãa]o|[õo]es)\b|\bisento\s+de\s+comiss|\bcomiss[ãa]o\s*(?:do\s+leiloeiro\s*)?:?\s*isent|somente\s+(?:o\s+)?valor\s+do\s+arremate/i;
+function comissaoComFonte({ pagina, textoDoLote, textoProprio, ia, iaTrecho, irmaos }) {
   const doTexto = extrairComissaoPct(textoDoLote);
   if (pagina.comissaoPct != null) return { comissaoLeiloeiroPct: pagina.comissaoPct, comissaoFonte: 'página do lote (campo da plataforma)' };
+  if (doTexto == null && RE_SEM_COMISSAO.test(`${textoProprio || ''} ${pagina.plataforma?.eventoTexto || ''}`)) {
+    return { comissaoLeiloeiroPct: 0, comissaoFonte: 'condições do leilão: sem comissão (somente o valor do arremate)' };
+  }
   if (doTexto != null) return { comissaoLeiloeiroPct: doTexto, comissaoFonte: 'descrição/condições do lote' };
   if (pctValido(ia) != null) return { comissaoLeiloeiroPct: pctValido(ia), comissaoFonte: 'edital/documentos do lote', comissaoTrecho: typeof iaTrecho === 'string' ? iaTrecho.slice(0, 160) : null };
   if (irmaos != null) return { comissaoLeiloeiroPct: irmaos, comissaoFonte: 'outros lotes do mesmo leilão' };
@@ -564,7 +583,7 @@ export default async function handler(req, res) {
     const taxasPlataforma = consertarAcentos(v?.raw?.lot_rate_information || '').slice(0, 600);
     const textoDoLote = [v.descricao, taxasPlataforma, pagina.texto].filter(Boolean).join(' \n ');
 
-    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma, formasPlataforma: pagina.plataforma?.formas }) }];
+    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma, formasPlataforma: pagina.plataforma?.formas, eventoTexto: pagina.plataforma?.eventoTexto }) }];
     // UMA chamada ao modelo. Chamada de novo, uma vez, quando o JSON volta inválido (ver abaixo).
     const chamarModelo = async () => {
       const r = await anthropicFetch({
@@ -625,7 +644,7 @@ export default async function handler(req, res) {
       // FIPE (item maior que o próprio carro é leitura errada), origem conhecida, no máximo 12.
       // Comissão (30/09): o que o LOTE declara vence; depois a IA (que leu anexos e página); depois
       // outro lote do mesmo evento; só então a tela presume 5% — e diz de onde veio cada uma.
-      ...comissaoComFonte({ pagina, textoDoLote, ia: parsed.comissaoLeiloeiroPct, iaTrecho: parsed.comissaoTrecho, irmaos: comissaoIrmaos }),
+      ...comissaoComFonte({ pagina, textoDoLote, textoProprio: [v.descricao, taxasPlataforma].filter(Boolean).join(' \n '), ia: parsed.comissaoLeiloeiroPct, iaTrecho: parsed.comissaoTrecho, irmaos: comissaoIrmaos }),
       // Débitos/taxas COM valor declarado. Reparo nunca tem valor aqui (dono, 30/09: "citar, sem
       // valores") — vai em `reparos`. A leitura determinística cobre o que a IA deixar passar.
       // Só descrição + taxas da plataforma: a página pode listar OUTROS lotes ("veja também") e o valor

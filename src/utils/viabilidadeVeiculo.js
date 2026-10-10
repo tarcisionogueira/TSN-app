@@ -32,11 +32,13 @@ export function desagioFipe(v, anoAtual = new Date().getFullYear()) {
   return { pct, fatores };
 }
 
+// Comissão DECLARADA: número ≥ 0 (0 = "sem comissão", 10/10). null/ausente = não informada → presume o padrão.
+const comissaoDeclarada = (p) => (p !== null && p !== undefined && p !== '' && Number.isFinite(Number(p)) && Number(p) >= 0 && Number(p) <= 20 ? Number(p) : null);
 export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas = [], desagioPct = 0, revendaMercado = null }) {
   const F = Number(fipe) || 0;
   const L = Number(lanceMinimo) || 0;
   if (!(F > 0) || !(L > 0)) return null;
-  const c = (Number(comissaoPct) > 0 ? Number(comissaoPct) : COMISSAO_PADRAO_PCT) / 100;
+  const c = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100;
   // Só entra na conta o que o leiloeiro DECLARA (débitos, taxas). Reparo estimado pela condição
   // (pneus, bateria, funilaria) é citado no relatório mas não tem valor (regra do dono, 30/09) —
   // relatórios antigos ainda trazem `origem: 'estimado'` com valor, e eles ficam fora do teto.
@@ -49,7 +51,7 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
   // Revenda: anúncios reais (média dos 5 mais baratos − 10%) quando houver; senão a régua sobre a FIPE.
   const fipeRealista = Number(revendaMercado) > 0 ? r2(Number(revendaMercado)) : r2(F * (1 - desagioPct / 100));
   return {
-    comissaoPct: c * 100, comissaoPresumida: !(Number(comissaoPct) > 0),
+    comissaoPct: c * 100, comissaoPresumida: comissaoDeclarada(comissaoPct) == null,
     despesas: itens, despesasTotal: r2(despesasTotal),
     tetoAquisicao, tetoLance, investimentoNoMinimo,
     investimentoNoTeto: tetoAquisicao,
@@ -69,7 +71,7 @@ export function calcularViabilidade({ fipe, lanceMinimo, comissaoPct, despesas =
 export function planoParcelado({ lance, comissaoPct, despesasTotal = 0, entradaPct, parcelas }) {
   const L = Number(lance) || 0, e = Number(entradaPct) / 100, n = Math.round(Number(parcelas));
   if (!(L > 0) || !(e > 0 && e < 1) || !(n >= 2)) return null;
-  const c = (Number(comissaoPct) > 0 ? Number(comissaoPct) : COMISSAO_PADRAO_PCT) / 100;
+  const c = (comissaoDeclarada(comissaoPct) ?? COMISSAO_PADRAO_PCT) / 100;
   const r2 = (x) => Math.round(x * 100) / 100;
   const entradaLance = r2(L * e);
   return {
