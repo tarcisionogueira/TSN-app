@@ -28,7 +28,9 @@ const quando = (d) => {
   return new Date(t).toLocaleDateString('pt-BR');
 };
 
-export default function AcompanhamentoFavoritos() {
+// `tipo` (10/10, dono): a aba Imóveis mostra só imóveis e a aba Veículos só veículos — antes a lista
+// misturava os dois e o carro aparecia sob "Imóveis". Sem `tipo`, lista tudo.
+export default function AcompanhamentoFavoritos({ tipo = null } = {}) {
   const nav = useNavigate();
   const [lista, setLista] = React.useState(null);
   const [erro, setErro] = React.useState(null);
@@ -41,8 +43,8 @@ export default function AcompanhamentoFavoritos() {
       return;
     }
     setErro(null);
-    setLista(Array.isArray(data) ? data : []);
-  }, []);
+    setLista((Array.isArray(data) ? data : []).filter((f) => !tipo || f.tipo === tipo));
+  }, [tipo]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
   const abrir = (f) => nav(f.tipo === 'veiculo' ? `/admin/veiculos-leilao/${f.itemId}` : `/imovel/${f.itemId}`);
@@ -65,7 +67,7 @@ export default function AcompanhamentoFavoritos() {
         </div>
       ) : lista.length === 0 ? (
         <div style={{ fontSize: 13, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
-          Marque a <Star size={12} style={{ verticalAlign: -1 }} /> em um imóvel ou veículo para acompanhá-lo aqui, com o lance atualizado a cada coleta.
+          Marque a <Star size={12} style={{ verticalAlign: -1 }} /> em {tipo === 'veiculo' ? 'um veículo' : tipo === 'imovel' ? 'um imóvel' : 'um imóvel ou veículo'} para acompanhá-lo aqui, com o lance atualizado a cada coleta.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>

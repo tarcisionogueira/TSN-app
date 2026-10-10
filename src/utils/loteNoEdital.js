@@ -13,8 +13,14 @@ const sem = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 // Linhas de carimbo/assinatura digital, que se repetem em toda página de documento assinado.
 const RE_CARIMBO = /valide (?:este|aqui)[^\n]*|este documento|assinado digitalmente[^\n]*|https?:\/\/\S+|assinador-web\S*|c[oó]digo de valida[cç][aã]o[^\n]*/gi;
 
+// Página de MANIFESTO DE ASSINATURAS (Assinador ONR, 10/10 — #142): o cartório a anexa no FIM do PDF, com
+// signatários, CPFs e códigos — centenas de caracteres que não são a matrícula. Sem cortá-la, a matrícula
+// escaneada passava por "tem texto" e a IA lia o manifesto como se fosse o documento.
+const RE_MANIFESTO = /manifesto\s+de\s+assinaturas[\s\S]*$/i;
+export const ehNomeDeCarimbo = (nome) => /manifesto\s+de\s+assinaturas|assinador\s+onr|protocolo\s+de\s+assinatura/i.test(String(nome || ''));
+
 export function textoUtil(texto) {
-  return String(texto || '').replace(RE_CARIMBO, ' ').replace(/\s+/g, ' ').trim();
+  return String(texto || '').replace(RE_MANIFESTO, ' ').replace(RE_CARIMBO, ' ').replace(/\s+/g, ' ').trim();
 }
 // Abaixo disto, o PDF não tem texto de verdade: é imagem (escaneado) com, no máximo, o carimbo.
 export const ehTextoSoCarimbo = (texto) => textoUtil(texto).length < 400;

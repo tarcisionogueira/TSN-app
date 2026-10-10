@@ -36876,3 +36876,11 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
     genéricos de lote ativo nunca lidos. Agora roda semanal (domingo), grava, limite 1.500. Rodada disparada em 10/10.
   - Defeito no próprio recon: cookie de analytics (`_hjSession`) contava como login e dava "login PROVÁVEL" numa
     404 (forma nº 10). Agora exige formulário enviado, senha fora da tela e cookie que não seja de analytics.
+
+## 10/10 (noite) — #142 teste do dono: 3 defeitos do lote manual + Acompanhamento por aba
+- **Link de lote que já está no acervo** (o teste colou `milanleiloes.com.br/leilao/15592/lote/005`, MILAN, leilão 08/10): virava lote MANUAL sem cidade e o mercadológico travava com "Não conseguimos carregar os dados". Agora `analisarLeiloeiroExterno` procura o link em `imoveis_leilao.url_lote` (variantes http/https/www/barra) e abre o lote da base. Índice novo `idx_imoveis_leilao_url_lote` (80 mil linhas, 262 MB).
+- **Título "Manifesto de Assinaturas - Assinador ONR"**: a IA leu a página de assinatura do cartório como o documento. Instrução de extração ganhou a regra; `ehNomeDeCarimbo` descarta esse nome; `textoUtil` corta o manifesto (fim do PDF), e a matrícula escaneada cai na transcrição. Se a leitura estruturada veio sem endereço/cidade, extrai de novo pela transcrição (1 chamada, só nesse caso).
+- **Edital "resposta vazia da IA"**: extração com `max_tokens` 2048 truncava o JSON (opções de parcelamento + riscos) → `parseJSON` null. Subiu para 4096 nas 5 extrações (só cobra o que usa).
+- Caixa vermelha no lote MANUAL agora diz o que fazer (preencher cidade/endereço em Dados do imóvel), em vez de "recarregue a página".
+- **Acompanhamento**: `AcompanhamentoFavoritos tipo=` — aba Imóveis só imóveis, aba Veículos só veículos.
+- #147: dono mantém só o Search Console de domínio no Windsor (reagendada 14/10 para conferir a ingestão).

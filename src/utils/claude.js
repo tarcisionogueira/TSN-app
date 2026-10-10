@@ -172,7 +172,7 @@ export async function extrairDadosDocumentoUrl(url) {
       { type: 'document', source: { type: 'url', url } },
       { type: 'text', text: instrucao },
     ];
-    const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+    const data = await callAPI({ model: MODEL_FAST, max_tokens: 4096, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
     return parseJSON(extractText(data));
   }
 
@@ -190,7 +190,7 @@ export async function extrairDadosDocumentoUrl(url) {
   } else {
     content = `${instrucao}\n\nCONTEÚDO DA PÁGINA:\n${d.texto}`;
   }
-  const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 4096, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
   return parseJSON(extractText(data));
 }
 
@@ -207,6 +207,7 @@ REGRAS CRÍTICAS DE LEITURA (05/10 — Alphaville Burle Marx, cada uma foi um er
 - DÉBITOS ASSUMIDOS: só o que o documento põe por conta do COMPRADOR (IPTU, condomínio, regularização, com valor). NUNCA a dívida do financiamento/alienação fiduciária ou a hipoteca que está sendo executada — o leilão a extingue, o arrematante não a assume.
 - DATA DO LEILÃO: só a data do PREGÃO, lida no edital. Matrícula não tem data de leilão: datas de registro, prenotação, intimação ou consolidação NÃO são "dataLeilao" (deixe vazio).
 - AVALIAÇÃO: só um valor que o documento chame de avaliação / valor de avaliação / laudo. Venda de banco que só publica o LANCE MÍNIMO não tem avaliação: "valorAvaliacao" = null. Nunca copie o lance, o valor do contrato ou o da dívida para a avaliação.
+- PÁGINAS DE ASSINATURA (10/10, matrícula do teste #142 saiu "Manifesto de Assinaturas - Assinador ONR"): "Manifesto de Assinaturas", "Assinador ONR", certificado/protocolo de assinatura digital e lista de signatários são CARIMBO anexado pelo cartório — ignore essas páginas por completo. "nome", "tipoDocumento" e todos os campos vêm do documento que vem ANTES delas (a matrícula, o edital).
 - CONDOMÍNIO/LOTEAMENTO: o nome comercial ("Alphaville Burle Marx", "Condomínio X") vai em "nomeCondominio".
 - MATRÍCULA NÃO É EDITAL: numa matrícula, deixe NULOS "taxaLeiloeiroPercentual", "valorArrematacao", "parcelamento", "descontoAVistaPct", "leiloeiro" e "dataLeilao". Taxa de juros, valor e prazo do FINANCIAMENTO registrado (R-/Av- da alienação fiduciária ou hipoteca) são do contrato antigo do devedor — nunca comissão, lance ou condição de pagamento do leilão.
 - COMISSÃO DO LEILOEIRO: só o percentual que o edital/descrição chama de comissão do leiloeiro (ex.: "comissão de 5% ao Leiloeiro"). Nunca use taxa de juros, correção ou percentual de sinal.
@@ -263,7 +264,7 @@ export async function extrairDadosDocumento(texto, pdfBase64 = null) {
 
   const data = await callAPI({
     model: MODEL_FAST,
-    max_tokens: 2048,
+    max_tokens: 4096,
     messages: [{ role: 'user', content }],
     system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.',
   });
@@ -294,7 +295,7 @@ export async function extrairDadosDeArquivo(file) {
   if (!imagens.length) throw new Error(r?.motivo || 'Não consegui ler este arquivo');
   const data = await callAPI({
     model: MODEL_FAST,
-    max_tokens: 2048,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: [
       ...imagens.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType || 'image/jpeg', data: im.base64 } })),
       { type: 'text', text: getInstrucaoExtracao() },
@@ -331,7 +332,7 @@ ${condicoesGerais(texto)}
 
 ITEM DO EDITAL QUE É ESTE IMÓVEL:
 ${trecho}`;
-  const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 4096, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
   return parseJSON(extractText(data));
 }
 

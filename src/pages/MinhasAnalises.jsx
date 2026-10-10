@@ -300,14 +300,14 @@ export default function MinhasAnalises() {
         </div>
       )}
 
-      {veVeiculos && aba === 'veiculos' ? <MinhasAnalisesVeiculos userId={effectiveUserId} /> : (<>
+      {veVeiculos && aba === 'veiculos' ? (<><AcompanhamentoFavoritos tipo="veiculo" /><MinhasAnalisesVeiculos userId={effectiveUserId} /></>) : (<>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {acao('Buscar imóveis', Search, '#0D63DB', () => nav('/buscar'))}
         {acao('Incluir lote manual (URL/anexos)', Plus, '#7c3aed', () => nav('/analise', { state: { manual: true } }))}
         {acao('Meus arrematados', Home, '#059669', () => nav('/arrematados'))}
       </div>
 
-      <AcompanhamentoFavoritos key={favVersao} />
+      <AcompanhamentoFavoritos key={favVersao} tipo="imovel" />
 
       {erroLista ? (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 16, padding: '20px 22px' }}>

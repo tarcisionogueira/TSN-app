@@ -13,7 +13,7 @@ import { arquivoParaBase64, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { registrarEvento } from '../utils/tracker';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer, extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel, extrairLoteDoEdital, transcreverDocumento, lerPaginaDoLote } from '../utils/claude';
-import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil, escolherParcelamento } from '../utils/loteNoEdital';
+import { ehTextoSoCarimbo, ehEditalMultiLote, textoUtil, escolherParcelamento, ehNomeDeCarimbo } from '../utils/loteNoEdital';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { ehDocArquivo, hrefDoc } from '../utils/documento';
@@ -1335,9 +1335,19 @@ export default function Analise() {
           texto = original;
           try {
             const tr = await transcreverDocumento(it.file);
-            if (!ehTextoSoCarimbo(tr)) { texto = `[Documento escaneado — transcrito pela IA]\n${tr}`; aviso = 'escaneado: transcrito pela IA'; }
+            if (!ehTextoSoCarimbo(tr)) {
+              texto = `[Documento escaneado — transcrito pela IA]\n${tr}`; aviso = 'escaneado: transcrito pela IA';
+              // A leitura estruturada do PDF original pode ter lido só o manifesto de assinaturas (#142): sem
+              // endereço nem cidade, os dados saem da transcrição — uma chamada a mais, só neste caso.
+              if (!ext?.endereco && !ext?.cidade) {
+                const ext2 = await extrairDadosDocumento(tr).catch((errEx) => { console.warn('[analise] extração da transcrição:', errEx?.message); return null; });
+                if (ext2) ext = ext2;
+              }
+            }
           } catch (errTr) { console.warn('[analise] transcrição do escaneado falhou:', errTr?.message); }
         }
+        // Nome de CARIMBO não é nome de imóvel ("Manifesto de Assinaturas - Assinador ONR" virou o título do lote).
+        if (ext && ehNomeDeCarimbo(ext.nome)) ext = { ...ext, nome: '' };
         if (!texto && ext?.observacoes) { texto = `[Documento escaneado — resumo lido pela IA]\n${ext.observacoes}`; aviso = 'escaneado: o texto integral não é legível, foi usado o resumo da IA'; }
         if (!texto && !ext) aviso = `não consegui ler (${(t.reason || e.reason)?.message || 'formato não suportado'})`;
         // Texto lido mas DADOS não (05/10, edital do Alphaville): antes a tela dizia "lido" e o relatório saía
@@ -1426,6 +1436,24 @@ export default function Analise() {
     if (link && !/^https?:\/\//.test(link)) { showMsg('Informe um link válido (https://...).', 'error'); return; }
     setExternoEnviando(true);
     try {
+      // 0) O LINK JÁ É UM LOTE DO ACERVO? (#142, 10/10) O teste do dono colou um lote da MILAN que estava na
+      // base: virou lote MANUAL sem cidade (a matrícula foi lida pelo manifesto de assinaturas) e a tela
+      // travou o mercadológico. O acervo já tem endereço, valores e edital — abre o lote de lá.
+      if (link && ehIdManual(analiseImovelId)) {
+        const semProto = link.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/#?]+$/, '');
+        const variantes = [...new Set(['https://', 'http://', 'https://www.', 'http://www.'].flatMap((p) => [`${p}${semProto}`, `${p}${semProto}/`]))];
+        const { data: noAcervo, error: errAcervo } = await supabase.from('imoveis_leilao')
+          .select('id, ativo, data_leilao, fonte').in('url_lote', variantes)
+          .order('ativo', { ascending: false }).order('data_leilao', { ascending: false, nullsFirst: false }).limit(1);
+        if (errAcervo) console.warn('[analise] busca do link no acervo falhou — segue como lote manual:', errAcervo.message);
+        else if (noAcervo?.[0]?.id) {
+          showMsg(noAcervo[0].ativo
+            ? 'Este lote já está na nossa base — abrimos a análise dele com os dados e documentos do leiloeiro.'
+            : 'Este lote já está na nossa base, mas o leilão dele já passou — abrimos o lote para consulta.');
+          nav(`/analise?imovel=${noAcervo[0].id}`);
+          return;
+        }
+      }
       // 1) Extrai os dados do imóvel a partir do que o cliente forneceu
       if (link) {
         // Só PDF é "o edital". A página do lote ia como `urlEdital`, o servidor tentava BAIXAR um edital de
@@ -2718,11 +2746,17 @@ export default function Analise() {
                   Avisar é obrigatório: aqui, "não achei" e "não consegui ler" se parecem. */}
               {semDadosDoImovel && !aindaCarregandoImovel && (
                 <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#b91c1c', lineHeight:1.6 }}>
+                  {ehIdManual(analiseImovelId) ? (<>
+                  <strong>Os documentos não trouxeram o endereço nem a cidade do imóvel.</strong> O relatório
+                  mercadológico precisa de um dos dois para avaliar o mercado — preencha a cidade e o endereço
+                  em <strong>Dados do imóvel</strong> (ou anexe a matrícula legível). <strong>Nenhuma cota foi consumida</strong>.
+                  </>) : (<>
                   <strong>Não conseguimos carregar os dados deste imóvel nesta tela.</strong> O relatório
                   mercadológico precisa do endereço ou da cidade para avaliar o mercado, então ele fica
                   indisponível até os dados chegarem — <strong>nenhuma cota foi consumida</strong>.
                   {' '}<button onClick={() => window.location.reload()} style={{ background:'none', border:'none', padding:0, color:'#b91c1c', fontWeight:800, textDecoration:'underline', cursor:'pointer', font:'inherit' }}>Recarregar a página</button>
                   {' '}costuma resolver; se voltar a acontecer, abra o imóvel pela busca de novo.
+                  </>)}
                 </div>
               )}
               {falhouCarregar && (
