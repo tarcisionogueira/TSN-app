@@ -184,6 +184,15 @@ async function handler(req) {
     const { data, error: eGv } = await supabase.rpc('reconciliar_gemeos_vlance_ljud');
     gemeosVlance = eGv ? { erro: eGv.message } : data;
   }
+  // GÊMEOS NA MESMA FONTE (10/10, dono: "vários imóveis iguais"): a mesma matrícula 2-5× na mesma
+  // fonte — 1ª/2ª praça como itens separados (CERULI/ISAIAS), republicação em leilão novo (JE, FREITAS,
+  // K Leilões), URL dupla (Alberto Macedo slug × uuid). Fica 1; a 2ª praça vira valor_minimo_2.
+  // Ver supabase/migrations/20261010_gemeos_mesma_fonte.sql.
+  let gemeosMesmaFonte = null;
+  {
+    const { data, error: eGm } = await supabase.rpc('reconciliar_gemeos_mesma_fonte');
+    gemeosMesmaFonte = eGm ? { erro: eGm.message } : data;
+  }
 
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
@@ -208,6 +217,9 @@ async function handler(req) {
   // A4 (22/08): a falha da reconciliação de gêmeos precisa VIRAR problema — antes só saía no
   // corpo HTTP (que ninguém lê), então se a RPC sumisse/perdesse permissão a dedup ficava parada
   // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
+  if (gemeosMesmaFonte?.erro) {
+    problemas.push({ fonte: 'GÊMEOS MESMA FONTE', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosMesmaFonte.erro}` });
+  }
   if (gemeosVlance?.erro) {
     problemas.push({ fonte: 'GÊMEOS VLANCE×LJUD', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosVlance.erro}` });
   }
@@ -523,7 +535,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -584,7 +596,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

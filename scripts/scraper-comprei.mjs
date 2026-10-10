@@ -24,7 +24,7 @@ import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { COMPREI_API, urlVisitarComprei, fichaComprei } from './lib/comprei-pgfn.mjs';
 import { checarQualidade } from './lib/scraper-core.mjs';
-import { inferirTipo } from './lib/leilaopro-parse.mjs';
+import { inferirTipo, extrairArea } from './lib/leilaopro-parse.mjs';
 import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
 
@@ -133,7 +133,8 @@ function montarRow(a, v) {
     bairro: ficha.bairro || null, endereco: ficha.endereco || null, cep: ficha.cep || null,
     numero_matricula: ficha.numero_matricula || (String(a.matriculaBem || '').trim() || null),
     numero_processo: ficha.numero_processo || null,
-    valor_avaliacao: va, valor_minimo: vm, area_m2: 0,
+    // Área do texto do anúncio (10/10: era 0 fixo nos 534 lotes; 302 traziam "COM ÁREA DE 450M²").
+    valor_avaliacao: va, valor_minimo: vm, area_m2: extrairArea(titulo, desc) || 0,
     descricao,
     url_lote: `${SITE}/anuncio/detalhe/${a.id}`, link_edital: `${SITE}/anuncio/detalhe/${a.id}`,
     link_foto: foto, fotos: fotos.slice(0, 20).map((i) => `${COMPREI_API}/imagem/anuncio/${i}`),

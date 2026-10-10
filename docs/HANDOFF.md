@@ -36893,3 +36893,17 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   3. Trocar `GOOGLE_ADS_REFRESH_TOKEN` na Vercel e fazer redeploy.
   Dono retoma em 11/10. Quando ele confirmar, rodar `/api/ads-metrics-ingest` e conferir `max(data)` do Google Ads e o upload de conversões.
 - **Fila do dono para 11/10:** concluir a #68 → depois as vencidas #32, #29, #25, #23 e #31.
+
+## 10/10 (noite, 2) — "vários imóveis iguais" na busca
+- **O print (4 terrenos Rua Olavo Bilac, COMPREI) NÃO era duplicata:** são 4 matrículas diferentes (13345, 29596, 37133, 42016) — lotes vizinhos 17/19/20 da quadra 09 do mesmo processo, R$ 1.125.000 cada, com a mesma foto ilustrativa da PGFN.
+- **Mas a varredura por matrícula achou 90 cópias REAIS em 17 fontes** (nenhuma no COMPREI). Eram três tipos:
+  1. 1ª e 2ª praça publicadas como itens separados (CERULI 17, ISAIAS 20, CRLEILOES 5);
+  2. o mesmo bem republicado num leilão novo (JELEILOES, FREITAS, KLEILOES, LJUD até 5×);
+  3. a mesma URL em dois formatos (ALBERTOMACEDO slug × uuid, 9).
+  - Nova `reconciliar_gemeos_mesma_fonte()` (+ `gemeos_mesma_fonte_grupos()` para teste em seco). Ela segue o padrão dos gêmeos existentes: `suprimido_motivo='gemeo_mesma_fonte'`, o gatilho segura a ressurreição e o lote reativa sozinho quando o que ficou sai.
+  - A 2ª praça do gêmeo vira `valor_minimo_2`/`data_leilao_2` do que fica (22 fundidos).
+  - Roda todo dia no `monitor-fontes-cron`, e a falha vira alarme.
+  - 1ª rodada: 90 suprimidos; 2ª rodada 0/0/0.
+- **Matrícula que é DATA/ANO** (CALIL "06042026", DANIELGARCIA "2026") fica fora da chave. Está registrado aqui, mas o parser dessas fontes ainda grava data como matrícula (pendência).
+- **COMPREI com área 0 nos 534 lotes** (o scraper gravava 0 fixo; 302 têm a metragem no texto): agora usa `extrairArea`. Corrige-se na próxima coleta diária.
+- Lote com leilão já passado e ainda ativo NÃO é defeito: é a retenção de 15 dias para apurar o resultado.
