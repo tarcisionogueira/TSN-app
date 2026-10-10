@@ -13,9 +13,9 @@
  * Via: fetch direto do runner; se o gov.br recusar, cai na via BANCO (`json_pedir`, pg_net, que manda
  * o Origin do Comprei). Grátis nas duas — roda diário.
  *
- * Dedup com a GLOBOLEILOES: o lote do Comprei que a Globo também lista passa a ser SÓ desta fonte
- * (a Globo é intermediária; aqui é a origem). A Globo pula o link do Comprei (scraper-globo.mjs) e
- * esta rotina desativa a cópia antiga com `suprimido_motivo = 'duplicata_comprei'`.
+ * Dedup com a GLOBOLEILOES: cada corretor credenciado publica o SEU anúncio do mesmo bem (o link da
+ * Globo tem outro id). Chave = matrícula + UF. A cópia da Globo de bem já coletado aqui vira
+ * `suprimido_motivo = 'duplicata_comprei'` (aqui e no próprio scraper-globo.mjs ao regravar).
  *
  * Env: COMPREI_DRYRUN (default '1') · COMPREI_CONCORRENCIA (4) · COMPREI_MAX_PAGINAS (20).
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
@@ -171,18 +171,21 @@ async function varrerSumidos(vistos) {
   else console.log(`  varredura: ${sumidos.length} fora do site · ${data?.length || 0} desativados (sumiu_da_fonte)`);
 }
 
-// A cópia da Globo do MESMO anúncio sai do acervo ativo: a origem agora é coletada direto.
-// Só desativa o que esta rodada GRAVOU como COMPREI ativo (nunca deixa o anúncio sem nenhuma cópia).
-async function suprimirCopiaGlobo(idsGravados) {
-  const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id, url_lote')
+// A cópia da Globo do MESMO BEM sai do acervo ativo. Cada corretor credenciado publica o seu anúncio
+// do bem (ids diferentes), então a chave é matrícula + UF — e só contra o que esta rodada GRAVOU ativo.
+// A Globo aplica a mesma regra ao regravar (scraper-globo.mjs), senão reativaria a cópia todo dia.
+async function suprimirCopiaGlobo(gravados) {
+  const chave = (uf, mat) => `${String(uf || '').toUpperCase()}|${String(mat || '').replace(/\D/g, '')}`;
+  const bens = new Set(gravados.filter((r) => r.numero_matricula).map((r) => chave(r.estado, r.numero_matricula)));
+  const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id, estado, numero_matricula')
     .eq('fonte', 'GLOBOLEILOES').eq('ativo', true).ilike('url_lote', '%comprei.pgfn.gov.br%');
   if (error) { console.error(`  dedup Globo PULADO — ${error.message}`); return; }
-  const alvo = (data || []).filter((r) => idsGravados.has((String(r.url_lote).match(/anuncio\/detalhe\/(\d+)/) || [])[1])).map((r) => r.fonte_id);
+  const alvo = (data || []).filter((r) => r.numero_matricula && bens.has(chave(r.estado, r.numero_matricula))).map((r) => r.fonte_id);
   if (!alvo.length) { console.log(`  dedup Globo: nenhuma cópia ativa (${data?.length || 0} links do Comprei na Globo)`); return; }
   const { data: feitos, error: e } = await supabase.from('imoveis_leilao').update({ ativo: false, suprimido_motivo: 'duplicata_comprei' })
     .eq('fonte', 'GLOBOLEILOES').in('fonte_id', alvo).select('fonte_id');
   if (e) console.error(`  dedup Globo: erro ${e.message}`);
-  else console.log(`  dedup Globo: ${alvo.length} cópias · ${feitos?.length || 0} desativadas (duplicata_comprei)`);
+  else console.log(`  dedup Globo: ${alvo.length} de ${data.length} links do Comprei são bens já coletados · ${feitos?.length || 0} desativados (duplicata_comprei)`);
 }
 
 async function main() {
@@ -242,7 +245,7 @@ async function main() {
   // Varredura só com a lista inteira E todos os anúncios lidos: falha de leitura não é "saiu do site".
   if (completa && !cont.falhas) await varrerSumidos(new Set(itens.filter((a) => a.bemVendido !== true).map((a) => `comprei_${a.id}`)));
   else console.log(`  varredura PULADA — ${completa ? `${cont.falhas} anúncios não lidos` : 'listagem parcial'}.`);
-  await suprimirCopiaGlobo(new Set(ativos.map((r) => r.fonte_id.replace('comprei_', ''))));
+  await suprimirCopiaGlobo(ativos);
   await registrarSaude(supabase, FONTE, ativos, 'api', { enumerados: itens.length });
 }
 

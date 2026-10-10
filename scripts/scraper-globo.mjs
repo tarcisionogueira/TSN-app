@@ -113,15 +113,23 @@ async function main() {
   }
   const comprei = { lidos: 0, falhas: 0, semFicha: 0, vendidos: 0 };
   const prontos = []; let gravados = 0; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
-  // Comprei (PGFN) é coletado NA ORIGEM desde 10/10 (scraper-comprei.mjs, fonte COMPREI), que também
-  // desativa a cópia antiga daqui ('duplicata_comprei'). Regravar aqui reativaria a duplicata todo dia.
-  // A varredura não os conta como sumidos — quem decide o destino deles é a fonte COMPREI.
-  // GLOBO_PULA_COMPREI=0 volta ao comportamento antigo (ex.: se a coleta direta parar).
-  const pulaComprei = process.env.GLOBO_PULA_COMPREI !== '0';
-  const vistosComprei = new Set();
+  // Comprei (PGFN) é coletado NA ORIGEM desde 10/10 (scraper-comprei.mjs, fonte COMPREI). Cada corretor
+  // credenciado publica o SEU anúncio do mesmo bem — o link da Globo tem outro id de anúncio, então a chave
+  // é o BEM: matrícula + UF (111 de 128 casaram em 10/10). Bem que já está na COMPREI ativa sai daqui como
+  // 'duplicata_comprei'; o resto (sem matrícula, fora da listagem pública) segue pela Globo.
+  // Leitura falhou → não suprime nada (duplicar é o mal menor; sumir lote não).
+  const chaveBem = (uf, mat) => `${String(uf || '').toUpperCase()}|${String(mat || '').replace(/\D/g, '')}`;
+  const bensComprei = new Set();
+  for (let de = 0; ; de += 1000) {
+    const { data, error: eC } = await supabase.from('imoveis_leilao').select('estado, numero_matricula').eq('fonte', 'COMPREI')
+      .eq('ativo', true).not('numero_matricula', 'is', null).order('fonte_id').range(de, de + 999);
+    if (eC) { bensComprei.clear(); console.log(`  aviso: acervo COMPREI ilegível (${eC.message}) — nenhuma duplicata suprimida`); break; }
+    for (const r of data || []) bensComprei.add(chaveBem(r.estado, r.numero_matricula));
+    if (!data || data.length < 1000) break;
+  }
+  let dupComprei = 0;
   for (const l of lotes) {
     const previa = montarRowGlobo(l);
-    if (pulaComprei && idAnuncioComprei(previa.url_lote)) { vistosComprei.add(previa.fonte_id); continue; }
     if (ehFracaoIdeal(previa)) { fracao++; continue; }
     if (!previa.valor_minimo) { semPraca++; continue; }
     if (!previa.cidade || !previa.estado) { semLocal++; continue; }
@@ -147,6 +155,9 @@ async function main() {
           if (ficha.numero_processo) row.numero_processo = ficha.numero_processo;
           if (ficha.bloco && !row.descricao.includes('Dados do Comprei')) row.descricao = `${row.descricao}\n\n${ficha.bloco}`.slice(0, 9000);
           if (ficha.vendido) { row.ativo = false; row.suprimido_motivo = 'vendido_na_fonte'; comprei.vendidos++; }
+          else if (ficha.numero_matricula && bensComprei.has(chaveBem(row.estado, ficha.numero_matricula))) {
+            row.ativo = false; row.suprimido_motivo = 'duplicata_comprei'; dupComprei++;
+          }
         } else comprei.semFicha++;
         await sleep(150);
       } catch (e) { comprei.falhas++; if (comprei.falhas <= 3) console.log(`  ${row.fonte_id}: Comprei não lido (${String(e.message).slice(0, 60)})`); }
@@ -177,8 +188,8 @@ async function main() {
   }
   if (prontos.length > gravados) gravados += await gravar(prontos.slice(gravados));
   console.log(`✅ ${gravados} imóveis gravados/atualizados.`);
-  if (vistosComprei.size) console.log(`  ${vistosComprei.size} anúncios do Comprei pulados (coletados na origem, fonte COMPREI)`);
-  if (completa) await varrerSumidos(new Set([...prontos.map((r) => r.fonte_id), ...vistosComprei]));
+  if (dupComprei) console.log(`  ${dupComprei} anúncios do Comprei já coletados na origem (fonte COMPREI) → duplicata_comprei`);
+  if (completa) await varrerSumidos(new Set(prontos.map((r) => r.fonte_id)));
   else console.log('  varredura PULADA — enumeração parcial.');
   await registrarSaude(supabase, FONTE, prontos, 'inertia-json', { enumerados: lotes.length });
 }

@@ -36805,10 +36805,11 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
     escolhe o Origin pelo destino (migração `20261010_json_pedir_origem.sql`), e `viaBanco(url, {json:true})` usa essa via.
   - Acervo medido: 575 anúncios, todos de bens distintos. Valores: `situacaoAnuncio` 2/3 e `tipoVenda` 1/2/nulo
     (significado não confirmado; nenhum filtrado). O lance vem de `precoAtual`.
-  - Dedup com a GLOBOLEILOES:
-    - A Globo pula os links do Comprei e os conta como vistos na varredura.
-    - O COMPREI desativa a cópia da Globo (`duplicata_comprei`), mas só das que gravou nesta rodada.
-    - Se a coleta direta parar, `GLOBO_PULA_COMPREI=0` volta ao comportamento antigo.
+  - 1ª gravação (10/10): 534 ativos, `fonte_saude` ok (575 listados; 12 frações ideais, 28 vagas e 1 sem valor ficaram fora).
+  - **Dedup com a GLOBOLEILOES pelo BEM, não pelo anúncio**: cada corretor credenciado publica o SEU anúncio do
+    mesmo bem, então o link da Globo tem outro id (0 de 128 casaram por id). Chave = matrícula + UF, que casou 111
+    de 128. A cópia da Globo vira `duplicata_comprei`, tanto em `scraper-comprei.mjs` quanto em
+    `scraper-globo.mjs` ao regravar. Bens sem matrícula ou fora da listagem pública seguem pela Globo.
 - **Radar de editais: limite do instrumento**: `editais_leilao.leiloeiro_integrado` compara DOMÍNIO, então leiloeiro já
   coletado via rede (Alessandro Teixeira via LJUD; Helcio Kronberg via EDITAL_DJEN; Pedro Kronberg via SUPERBID) aparece
   como "não integrado" (forma nº 10). Status dos candidatos restantes:
