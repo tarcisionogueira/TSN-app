@@ -11,6 +11,9 @@ import puppeteer from 'puppeteer';
 
 const BASE = process.env.RECON_BASE || process.env.NORDESTE_BASE;
 const ROTAS = (process.env.RECON_ROTAS || '/').split(',').map(s => s.trim()).filter(Boolean);
+// RECON_GREP (10/10): regex de texto a procurar na página renderizada e nos JSON capturados — p.ex.
+// "comiss|parcel|pagamento|taxa" para achar onde o leiloeiro publica comissão e condições.
+const GREP = process.env.RECON_GREP ? new RegExp(process.env.RECON_GREP, 'i') : null;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 if (!BASE) { console.log('⚠️ defina RECON_BASE'); process.exit(1); }
 // RECON_DUMP=1 grava as chamadas capturadas em recon_dump (origem='dom-browser', chave=BASE) —
@@ -63,7 +66,8 @@ page.on('response', async (resp) => {
     const req = resp.request();
     respostas.push({ url: url.slice(0, 180), ct: ct.split(';')[0], len: txt.length, temLote: !!arr, nLote: arr?.length || 0, amostra: arr?.length ? JSON.stringify(arr[0]).slice(0, 1000) : (txt.length < 300 ? txt : ''),
       // RECON_DUMP (27/09): o que o parser precisa para CHAMAR a API sem navegador.
-      metodo: req.method(), corpo: (req.postData() || '').slice(0, 2000), urlInteira: url, bruto: arr?.length ? txt.slice(0, 30000) : '' });
+      metodo: req.method(), corpo: (req.postData() || '').slice(0, 2000), urlInteira: url, bruto: arr?.length ? txt.slice(0, 30000) : '',
+      grep: GREP ? [...txt.matchAll(new RegExp(`.{0,160}(?:${GREP.source}).{0,240}`, 'gi'))].slice(0, 8).map(m => m[0]) : [] });
   } catch { /* ignora */ }
 });
 
@@ -74,7 +78,7 @@ for (const rota of ROTAS) {
     console.log(`\n=== navegando ${url} ===`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 2500));
-    const info = await page.evaluate(() => {
+    const info = await page.evaluate((grep) => {
       const txt = document.body.innerText || '';
       const reais = [...txt.matchAll(/R\$\s?[\d.]+,\d{2}/g)].map(m => m[0]).slice(0, 10);
       const rotulado = [];
@@ -94,8 +98,11 @@ for (const rota of ROTAS) {
       const hrefs = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href') || ''))]
         .filter(h => /lote|leilao|leiloes|imove|evento|agenda/i.test(h) && !/facebook|instagram|whatsapp|wa\.me|blog|\.pdf$/i.test(h))
         .slice(0, 60);
-      return { nReais: reais.length, rotulado, area, cidade, cardHtml, hrefs };
-    });
+      const achados = grep ? txt.split(/\n+/).map((l, i, a) => ({ l, i, a })).filter(({ l }) => new RegExp(grep, 'i').test(l))
+        .slice(0, 25).map(({ i, a }) => a.slice(Math.max(0, i - 1), i + 3).join(' | ').slice(0, 500)) : [];
+      return { nReais: reais.length, rotulado, area, cidade, cardHtml, hrefs, achados };
+    }, GREP ? GREP.source : '');
+    if (info.achados?.length) { console.log(`   GREP na página (${info.achados.length}):`); info.achados.forEach(a => console.log(`     ▸ ${a}`)); }
     console.log(`   render: R$=${info.nReais} · área="${info.area}" · cidade="${info.cidade}"`);
     info.rotulado.forEach(r => console.log(`     ${r}`));
     console.log(`   hrefs lote/listagem (${info.hrefs.length}): ${JSON.stringify(info.hrefs)}`);
@@ -113,6 +120,7 @@ console.log(`>>> COM ARRAY DE LOTE (${comLote.length}) — se houver, o parser l
 for (const r of comLote) { console.log(`  ${r.url}  [${r.nLote} lotes, ${r.len}b]`); console.log(`    amostra: ${r.amostra}`); }
 console.log(`>>> demais JSON (${respostas.length - comLote.length}):`);
 for (const r of respostas.filter(r => !r.temLote).slice(0, 20)) console.log(`  ${r.url}  [${r.ct}, ${r.len}b]${r.amostra ? ' → ' + r.amostra.slice(0, 120) : ''}`);
+if (GREP) for (const r of respostas.filter(r => r.grep.length)) { console.log(`>>> GREP em JSON ${r.urlInteira.slice(0, 200)}:`); r.grep.forEach(g => console.log(`     ▸ ${g}`)); }
 
 if (process.env.RECON_DUMP === '1') {
   if (!SB || !SK) { console.log('⚠️ RECON_DUMP=1 sem VITE_SUPABASE_URL/SUPABASE_SERVICE_KEY — nada gravado'); process.exit(2); }
