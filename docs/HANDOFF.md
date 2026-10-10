@@ -36724,3 +36724,12 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - **Descrição organizada** (`src/utils/descricaoOrganizada.js` + `DescricaoOrganizada.jsx`, veículos e imóveis):
   ficha em grade, acessórios Sim/Não em etiquetas, observações em lista, texto jurídico em parágrafos; texto que
   já vem em linhas é respeitado; lixo RSC da NORDESTE limpo. `npm run testar:descricao-organizada`.
+- **NORDESTE confirmado:** coleta disparada às 12:50 UTC → NORDESTE_VEICULOS ok com 38 lotes; NORDESTE ok (100 enumerados).
+- **`link_matricula_morto` voltou (56, GRUPOLANCE) — causa raiz na RETENÇÃO:** `anexos_expirados` usava só a 1ª
+  praça (`data_leilao`); 53 dos 56 tinham 2ª praça futura. No acervo: ~365 matrículas/editais e **1.664 documentos do
+  espelho apagados de lote ainda em leilão**. Corrigido: usa `leilao_encerrado` (regra `acervo.leilao_encerrado`,
+  agora com `anexos_expirados` no aplicada_por) — conferido 0 candidatos de lote vivo. Gatilho do anexo zera
+  link_matricula/link_edital do imóvel quando o arquivo é apagado (o selo não fica mais verde sobre o nada).
+  Reparo: invariante 56 → 0; 1.664 espelhos de volta à fila (`motivo like 'reaberto 10/10%'`); GRUPOLANCE recaptura
+  as matrículas sem link. Conferir em 11/10: `select status, count(*) from documento_espelho where motivo like
+  'reaberto 10/10%' or (status='copiado' and atualizado_em > '2026-10-10') group by 1;`
