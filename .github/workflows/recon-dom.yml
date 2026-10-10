@@ -20,6 +20,10 @@ on:
         description: 'RECON_GREP regex opcional (ex: comiss|parcel|pagamento)'
         required: false
         default: ''
+      clicar:
+        description: 'RECON_CLICAR texto do botão a clicar após carregar (ex: Buscar)'
+        required: false
+        default: ''
 
 jobs:
   recon:
@@ -39,6 +43,7 @@ jobs:
           RECON_BASE: ${{ github.event.inputs.base }}
           RECON_ROTAS: ${{ github.event.inputs.rotas }}
           RECON_GREP: ${{ github.event.inputs.grep }}
+          RECON_CLICAR: ${{ github.event.inputs.clicar }}
         run: node scripts/recon-dom-browser.mjs
 
       # Sondas fixas do Passo 2 (rodam no push da branch de trabalho):

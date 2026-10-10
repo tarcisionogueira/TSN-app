@@ -14,6 +14,9 @@ const ROTAS = (process.env.RECON_ROTAS || '/').split(',').map(s => s.trim()).fil
 // RECON_GREP (10/10): regex de texto a procurar na página renderizada e nos JSON capturados — p.ex.
 // "comiss|parcel|pagamento|taxa" para achar onde o leiloeiro publica comissão e condições.
 const GREP = process.env.RECON_GREP ? new RegExp(process.env.RECON_GREP, 'i') : null;
+// RECON_CLICAR (10/10): texto do botão a clicar depois de carregar (ex.: "Buscar") — SPA que só
+// chama a API de listagem na interação (Comprei/PGFN). Captura o XHR que o clique dispara.
+const CLICAR = (process.env.RECON_CLICAR || '').trim();
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 if (!BASE) { console.log('⚠️ defina RECON_BASE'); process.exit(1); }
 // RECON_DUMP=1 grava as chamadas capturadas em recon_dump (origem='dom-browser', chave=BASE) —
@@ -78,6 +81,17 @@ for (const rota of ROTAS) {
     console.log(`\n=== navegando ${url} ===`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 2500));
+    if (CLICAR) {
+      const clicou = await page.evaluate((txt) => {
+        const alvo = [...document.querySelectorAll('button, a, input[type=submit]')]
+          .find((b) => (b.innerText || b.value || '').trim().toLowerCase() === txt.toLowerCase())
+          || [...document.querySelectorAll('button, a, input[type=submit]')].find((b) => (b.innerText || b.value || '').toLowerCase().includes(txt.toLowerCase()));
+        if (!alvo) return false;
+        alvo.click(); return true;
+      }, CLICAR);
+      console.log(`   clique em "${CLICAR}": ${clicou ? 'feito' : 'botão não encontrado'}`);
+      if (clicou) await new Promise(r => setTimeout(r, 6000));
+    }
     const info = await page.evaluate((grep) => {
       const txt = document.body.innerText || '';
       const reais = [...txt.matchAll(/R\$\s?[\d.]+,\d{2}/g)].map(m => m[0]).slice(0, 10);
@@ -117,7 +131,7 @@ await browser.close();
 console.log(`\n──────── JSON/XHR capturados (${respostas.length}) ────────`);
 const comLote = respostas.filter(r => r.temLote);
 console.log(`>>> COM ARRAY DE LOTE (${comLote.length}) — se houver, o parser lê a API, não o DOM:`);
-for (const r of comLote) { console.log(`  ${r.url}  [${r.nLote} lotes, ${r.len}b]`); console.log(`    amostra: ${r.amostra}`); }
+for (const r of comLote) { console.log(`  ${r.urlInteira || r.url}  [${r.nLote} lotes, ${r.len}b, ${r.metodo}]`); console.log(`    amostra: ${r.amostra}`); }
 console.log(`>>> demais JSON (${respostas.length - comLote.length}):`);
 for (const r of respostas.filter(r => !r.temLote).slice(0, 20)) console.log(`  ${r.url}  [${r.ct}, ${r.len}b]${r.amostra ? ' → ' + r.amostra.slice(0, 120) : ''}`);
 if (GREP) for (const r of respostas.filter(r => r.grep.length)) { console.log(`>>> GREP em JSON ${r.urlInteira.slice(0, 200)}:`); r.grep.forEach(g => console.log(`     ▸ ${g}`)); }
