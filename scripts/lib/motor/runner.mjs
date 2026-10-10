@@ -279,6 +279,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       const html = r?.html;
       if (!html && !detPronto) { sem++; continue; }
       const det = detPronto || cfg.parse.parseDetalhe(html, url);
+      // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
+      // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
+      if (!det) { sem++; continue; }
       if (det.encerrado) { encerrados++; continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
       // GALERIA (08/10): plataformas com a galeria na pasta exclusiva da capa (lib/galeria-veiculo.mjs).

@@ -13,7 +13,7 @@
  */
 const API = 'https://api.firecrawl.dev/v2/scrape';
 
-export function criarMotorFirecrawl({ timeoutMs = 60000 } = {}) {
+export function criarMotorFirecrawl({ timeoutMs = 60000, waitFor = 0 } = {}) {
   const chave = (process.env.FIRECRAWL_API_KEY || '').trim();
   const teto = Math.max(1, Number(process.env.FIRECRAWL_MAX_PAGINAS) || 60);
   const estado = { paginas: 0, creditos: 0, falhas: 0, teto, semCota: false };
@@ -30,7 +30,8 @@ export function criarMotorFirecrawl({ timeoutMs = 60000 } = {}) {
       const r = await fetch(API, {
         method: 'POST',
         headers: { Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, formats: ['rawHtml'], maxAge: 0, timeout: timeoutMs }),
+        // waitFor: página montada por JS (MGL/trimpath) só tem os valores depois de rodar o script.
+        body: JSON.stringify({ url, formats: ['rawHtml'], maxAge: 0, timeout: timeoutMs, ...(waitFor > 0 ? { waitFor } : {}) }),
         signal: AbortSignal.timeout(timeoutMs + 15000),
       });
       const j = await r.json().catch(() => null);

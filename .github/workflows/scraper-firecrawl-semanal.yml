@@ -1,0 +1,54 @@
+name: Scraper Firecrawl (semanal) — LEJE + Fernando/Jonas/Lucas
+
+# Fontes atrás de Cloudflare que só passam pelo Firecrawl (lib/motor/fetch-firecrawl.mjs), crédito
+# pago: 1 por página. Dono, 10/10: "se consome créditos, 1x por semana". Custo medido por rodada:
+# LEJE ~4 + MGL ~13 ≈ 17 créditos/semana. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
+# estourado, a fonte grava 'sem_cota' (orçamento), não regressão.
+on:
+  schedule:
+    - cron: '41 9 * * 1'   # segunda, 09:41 UTC (depois do scraper-dom das 8h)
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'csv: leje,mgl'
+        required: false
+        default: 'leje,mgl'
+      gravar:
+        description: '1 = grava no banco (default DRY-RUN; agendado sempre grava)'
+        required: false
+        default: '0'
+
+jobs:
+  firecrawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
+      FONTES: ${{ github.event.inputs.fontes || 'leje,mgl' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Leje
+        if: ${{ !cancelled() && contains(env.FONTES, 'leje') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_MAX_PAGINAS: '40'
+          LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-leje.mjs
+
+      - name: MGL (Fernando, Jonas, Lucas)
+        if: ${{ !cancelled() && contains(env.FONTES, 'mgl') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_MAX_PAGINAS: '40'
+          MGL_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-mgl.mjs
