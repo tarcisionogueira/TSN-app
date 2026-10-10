@@ -36884,3 +36884,12 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - Caixa vermelha no lote MANUAL agora diz o que fazer (preencher cidade/endereço em Dados do imóvel), em vez de "recarregue a página".
 - **Acompanhamento**: `AcompanhamentoFavoritos tipo=` — aba Imóveis só imóveis, aba Veículos só veículos.
 - #147: dono mantém só o Search Console de domínio no Windsor (reagendada 14/10 para conferir a ingestão).
+
+## 10/10 (fechamento) — #9 e #68 (marketing)
+- **#9 (campanhas na nossa conta):** verificado — as 2 campanhas da masterclass "Lucre Antes de Arrematar" ([Leads] 01–15/10 e [Tráfego] 07–15/10) rodam na NOSSA conta Meta: R$ 817,82, 1.213 cliques, 76 leads até 10/10, chegando a `marketing_metricas_dia`. A LP é de domínio externo (0 fbclid em `visita_origem`) — esperado, depende da #28. Falta o gestor confirmar que não há campanha em outra conta (reagendada 15/10).
+- **#68 (Google Ads):** o painel parou em 14/09 porque o token de 15/09 venceu (o app OAuth está em modo Teste, onde o token vale 7 dias). Isso também parou o envio de conversões gclid ao Ads. Passo a passo dado ao dono:
+  1. Tornar o app **Interno** (Workspace) ou **Publicar** ("Em produção", sem enviar verificação).
+  2. Gerar um novo refresh token no OAuth Playground.
+  3. Trocar `GOOGLE_ADS_REFRESH_TOKEN` na Vercel e fazer redeploy.
+  Dono retoma em 11/10. Quando ele confirmar, rodar `/api/ads-metrics-ingest` e conferir `max(data)` do Google Ads e o upload de conversões.
+- **Fila do dono para 11/10:** concluir a #68 → depois as vencidas #32, #29, #25, #23 e #31.
