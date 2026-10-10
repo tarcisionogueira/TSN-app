@@ -36782,3 +36782,15 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - DocuSign, Slack, HubSpot e Stripe não conectam nesta sessão (proxy 403).
 - **#190 (recópia)**: `link_matricula_morto = 0`; o espelho copia cerca de 900 documentos em 6 h e restam 792 dos 1.664
   reabertos às 17h de 10/10.
+- **Firecrawl ampliado (10/10, noite)**:
+  - Família "Sua Plataforma de Leilão"/Degrau, tema MGL (Fernando, Jonas, Lucas Leiloeiro):
+    `lib/mgl-parse.mjs` + `fontes/mgl.mjs` + `scraper-mgl.mjs`. A página é montada por JS, então usa
+    `waitFor` de 7 s; sem render o parser devolve null, para a avaliação não virar o "lance".
+  - 1ª coleta: Fernando 2 e Lucas 1 imóveis; Jonas só tem links `comprei-`, que redirecionam ao
+    Comprei/PGFN e já vêm pela GLOBO, por isso descartados antes de gastar crédito.
+  - Custo de 13 créditos/rodada.
+  - **Tudo que usa Firecrawl roda SEMANAL** (dono: crédito pago → 1x/semana):
+    `scraper-firecrawl-semanal.yml`, segunda 09:41 UTC; o LEJE saiu do diário.
+  - Kron, Suedpeter, Uberlândia, Leilão Brasil e Globo já coletavam; a lista de "bloqueados" estava velha.
+  - O runner agora trata parser que devolve null como "sem detalhe" (antes derrubava a coleta).
+  - Ideia: Comprei/PGFN como fonte direta (governo, venda direta nacional).
