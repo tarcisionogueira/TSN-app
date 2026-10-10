@@ -36712,3 +36712,15 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 
 **Pendências novas:** #186 (dono: vincular escritório nos 3 casos), #187 (1ª rodada do acompanhamento),
 #188 (1ª liquidação do Marcos ~19/10), #189 (dono: validar no navegador). #143 depende do #186.
+
+### 10/10 (tarde) — NORDESTE_VEICULOS "zerou", guia por vencimento, descrição organizada
+- **NORDESTE_VEICULOS zerou em 09/10 = intervalo entre leilões, não defeito.** Log do scraper-dom: a home só
+  tinha os 4 eventos de *sucatas* do leilão nº 20/2026 (os de veículos inteiros já tinham encerrado) → 57 lotes,
+  0 inteiros. Recon no navegador (recon-dom.yml, 10/10) mostrou os eventos novos do nº 21/2026
+  ("Guanambi/Juazeiro/Porto Seguro — veículos conservados"). Coleta disparada na hora (scraper-dom, fontes
+  nordeste,nordeste_veiculos, gravar=1). O acervo não perdeu nada (133 ativos até 20/10).
+- **Guia da parcela por vencimento** (pedido do dono): ~10 dias antes; reforço a ~5 dias e na véspera/atraso
+  só sem resposta com anexo no caso; e-mail próprio, separado da atualização semanal.
+- **Descrição organizada** (`src/utils/descricaoOrganizada.js` + `DescricaoOrganizada.jsx`, veículos e imóveis):
+  ficha em grade, acessórios Sim/Não em etiquetas, observações em lista, texto jurídico em parágrafos; texto que
+  já vem em linhas é respeitado; lixo RSC da NORDESTE limpo. `npm run testar:descricao-organizada`.
