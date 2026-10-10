@@ -575,7 +575,18 @@ export default function Caso() {
   // vira uma linha justificada em honorarios_recebimentos (api/honorario-recebimento.js).
   const [recebimentos, setRecebimentos] = useState(null); // { total, recebido, saldo_restante, recebimentos:[...] }
   const [carregandoReceb, setCarregandoReceb] = useState(false);
-  const [novoReceb, setNovoReceb] = useState({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '' });
+  // Cheque: compensou / voltou / com quem ficou (10/10). Mexe na base do split sobre o líquido.
+  const alterarCheque = async (r, acao, em_poder) => {
+    if (acao === 'cheque_voltou' && !window.confirm(`Marcar o cheque nº ${r.numero_cheque || ''} como DEVOLVIDO? O valor sai do recebido e o honorário volta a ter saldo a cobrar.`)) return;
+    setErroReceb('');
+    try {
+      const resp = await apiCall('/api/honorario-recebimento', { method: 'PATCH', body: JSON.stringify({ id: r.id, acao, em_poder }) });
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(d?.error || 'Não foi possível alterar o cheque.');
+      await carregarRecebimentos();
+    } catch (e) { setErroReceb(e.message || 'Erro ao alterar o cheque.'); }
+  };
+  const [novoReceb, setNovoReceb] = useState({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '', em_poder: 'plataforma' });
   const [registrandoReceb, setRegistrandoReceb] = useState(false);
   const [erroReceb, setErroReceb] = useState('');
 
@@ -607,11 +618,12 @@ export default function Caso() {
           justificativa: novoReceb.justificativa.trim(), comprovante_url: novoReceb.comprovante_url || null,
           banco: novoReceb.metodo === 'cheque' ? novoReceb.banco.trim() : null,
           numero_cheque: novoReceb.metodo === 'cheque' ? novoReceb.numero_cheque.trim() : null,
+          em_poder: novoReceb.metodo === 'cheque' ? novoReceb.em_poder : undefined,
         }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.error || 'Não foi possível registrar o recebimento.');
-      setNovoReceb({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '' });
+      setNovoReceb({ metodo: 'pix_externo', valor: '', justificativa: '', comprovante_url: '', banco: '', numero_cheque: '', em_poder: 'plataforma' });
       await carregarRecebimentos();
       await carregarCaso();
     } catch (e2) {
@@ -1973,8 +1985,23 @@ export default function Caso() {
                                   {r.banco || '—'}{r.numero_cheque ? ` · cheque nº ${r.numero_cheque}` : ''}
                                 </div>
                               )}
+                              {r.metodo === 'cheque' && r.status !== 'estornado' && (
+                                <div style={{ color: r.em_poder === 'advogado' ? '#7c3aed' : '#0f766e', marginTop:3, fontWeight:700 }}>
+                                  {r.em_poder === 'advogado' ? 'Com o advogado (abate da cota dele)' : (r.compensado_em ? `Compensado em ${fmtDate(r.compensado_em)}` : 'Com a plataforma — a compensar')}
+                                </div>
+                              )}
+                              {r.valor_liquido != null && Math.abs(Number(r.valor_liquido) - Number(r.valor)) >= 0.01 && (
+                                <div style={{ color:'#334155', marginTop:3 }}>Líquido recebido: <b>{fmt(r.valor_liquido)}</b> (taxa {fmt(Number(r.valor) - Number(r.valor_liquido))})</div>
+                              )}
                               <div style={{ color:'#64748b', marginTop:3 }}>{r.justificativa}</div>
                               <div style={{ color:'#94a3b8', marginTop:2, fontSize:10.5 }}>{fmtDate(r.criado_em)}</div>
+                              {role === 'admin' && r.metodo === 'cheque' && r.status === 'confirmado' && (
+                                <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
+                                  {r.em_poder !== 'advogado' && !r.compensado_em && <button type="button" onClick={() => alterarCheque(r, 'cheque_compensou')} style={{ fontSize:11, padding:'4px 8px', borderRadius:6, border:'1px solid #99f6e4', background:'#f0fdfa', color:'#0f766e', cursor:'pointer' }}>Compensou</button>}
+                                  <button type="button" onClick={() => alterarCheque(r, 'cheque_voltou')} style={{ fontSize:11, padding:'4px 8px', borderRadius:6, border:'1px solid #fecaca', background:'#fef2f2', color:'#b91c1c', cursor:'pointer' }}>Voltou (devolvido)</button>
+                                  <button type="button" onClick={() => alterarCheque(r, 'em_poder', r.em_poder === 'advogado' ? 'plataforma' : 'advogado')} style={{ fontSize:11, padding:'4px 8px', borderRadius:6, border:'1px solid #e2e8f0', background:'white', color:'#475569', cursor:'pointer' }}>{r.em_poder === 'advogado' ? 'Passou para a plataforma' : 'Ficou com o advogado'}</button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1995,6 +2022,10 @@ export default function Caso() {
                             <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:8 }}>
                               <input value={novoReceb.banco} onChange={e=>setNovoReceb(p=>({...p,banco:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Banco (ex.: SICOOB, Banco do Brasil)"/>
                               <input value={novoReceb.numero_cheque} onChange={e=>setNovoReceb(p=>({...p,numero_cheque:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder="Número do cheque"/>
+                              <select value={novoReceb.em_poder} onChange={e=>setNovoReceb(p=>({...p,em_poder:e.target.value}))} style={{ ...inp, fontSize:12, gridColumn:'1 / -1' }}>
+                                <option value="plataforma">O cheque fica com a plataforma (repasse quando compensar)</option>
+                                <option value="advogado">O cheque fica com o advogado (abate da cota dele)</option>
+                              </select>
                             </div>
                           )}
                           <input value={novoReceb.justificativa} onChange={e=>setNovoReceb(p=>({...p,justificativa:e.target.value}))} style={{ ...inp, fontSize:12 }} placeholder='Justificativa (ex.: "Pix recebido direto na conta pessoal em 16/09")' maxLength={500}/>

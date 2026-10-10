@@ -1,7 +1,7 @@
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
 import { sanitizeText } from './_sanitize.js';
 import { urlDocumento } from './_storage.js';
-import { calcularDistribuicao } from './_honorarios.js';
+import { liquidarHonorario } from './_honorario-liquidacao.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -49,52 +49,24 @@ async function equipeDoCaso(imovel_id, cliente_id) {
   return { analista_id: c.analista_id || null, advogado_id: c.advogado_id || null };
 }
 
-// Distribui o honorário de êxito no ledger. Idempotente. Grava um SNAPSHOT do que
-// foi pago em arrematacoes.honorarios_split (registro do que valeu naquela venda).
-// A projeção (quem recebe e quanto) vem de calcularDistribuicao (api/_honorarios.js).
+// Distribui o honorário de êxito no ledger — desde 10/10 sobre o LÍQUIDO RECEBIDO e em parcelas,
+// à medida que o dinheiro fica disponível (regra honorario.split_sobre_liquido; a conta toda é
+// do banco, em honorario_liquidar — ver api/_honorario-liquidacao.js). Idempotente: rodar de novo
+// só credita o que ainda falta e já está disponível. O cron honorarios-liquidar-cron continua de
+// onde a finalização parou (cartão que compensa em D+30, cheque que compensa depois).
 async function distribuirHonorarios(arr) {
   if (!arr || arr.honorarios_status === 'distribuido') return null;
   // GATE (16/09, pedido do dono): a equipe só pode ser creditada DEPOIS que o cliente pagou
-  // os honorários de êxito (honorarios_status='pago', setado pelo webhook do MP em
-  // api/mp-webhook.js ao confirmar o pagamento Transparente feito em
-  // src/pages/PagarHonorario.jsx via api/mp-checkout.js). Antes desta trava,
-  // `status='finalizado'` sozinho já disparava o crédito — nada no código verificava se
-  // o cliente de fato pagou.
+  // os honorários de êxito (honorarios_status='pago', setado pelo trigger de
+  // honorarios_recebimentos quando a soma bate o total).
   if (arr.honorarios_status !== 'pago') return { erro: 'honorario_nao_pago', distribuido: false };
-  const valor = Number(arr.valor_arrematado || 0);
-  if (valor <= 0) return null;
-
-  const dist = await calcularDistribuicao(dbFetch, arr);
-  const lancamentos = dist.linhas
-    .filter(l => l.id && l.valor > 0)
-    .map(l => ({
-      user_id: l.id, tipo: 'honorario_exito', valor: l.valor,
-      origem_tipo: 'arrematacao', origem_id: String(arr.id),
-      descricao: `Honorário de êxito (${l.papel} ${Number(l.pct).toFixed(2)}%) — arremate #${arr.id}`, status: 'disponivel',
-    }));
-
-  if (lancamentos.length) {
-    const ins = await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });
-    // 409/23505 = lançamentos já existem (índice único parcial uq_saldo_credito_origem) →
-    // idempotente, conta como sucesso. Qualquer OUTRA falha NÃO pode marcar 'distribuido':
-    // a guarda de idempotência (topo) impediria o reprocesso e a equipe nunca receberia o
-    // honorário. Deixa pendente (status intacto) para o próximo PATCH de finalização retentar.
-    const jaCreditado = ins.status === 409 || (ins.data && typeof ins.data === 'object' && ins.data.code === '23505');
-    if (!ins.ok && !jaCreditado) {
-      return { erro: 'falha_ao_creditar', status: ins.status, distribuido: false };
-    }
+  if (!(Number(arr.valor_arrematado || 0) > 0)) return null;
+  try {
+    return await liquidarHonorario(dbFetch, arr);
+  } catch (e) {
+    console.error('[arrematacoes] liquidar honorário', arr.id, e?.message);
+    return { erro: 'falha_ao_liquidar', detalhe: String(e?.message || e).slice(0, 200), distribuido: false };
   }
-  const total = lancamentos.reduce((s, l) => s + l.valor, 0);
-  await dbFetch(`arrematacoes?id=eq.${arr.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      honorarios_valor: total,
-      honorarios_status: 'distribuido',
-      honorarios_split: { total_pct: dist.total, linhas: dist.linhas }, // snapshot do que foi pago
-    }),
-    headers: { Prefer: 'return=minimal' },
-  });
-  return { total, lancamentos: lancamentos.length };
 }
 
 export const config = { runtime: 'edge' };

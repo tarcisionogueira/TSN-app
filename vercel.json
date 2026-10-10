@@ -188,6 +188,10 @@
       "schedule": "20 12 * * 1-5"
     },
     {
+      "path": "/api/honorarios-liquidar-cron",
+      "schedule": "35 12 * * *"
+    },
+    {
       "path": "/api/ativar-assinatura-bonus-cron",
       "schedule": "0 11 * * *"
     },

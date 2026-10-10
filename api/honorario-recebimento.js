@@ -65,7 +65,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     if (role !== 'admin') return res.status(403).json({ error: 'Só admin registra recebimento manual.' });
-    const { arrematacao_id, metodo, valor, justificativa, comprovante_url, status, banco, numero_cheque } = req.body || {};
+    const { arrematacao_id, metodo, valor, justificativa, comprovante_url, status, banco, numero_cheque, em_poder } = req.body || {};
     if (!UUID_RE.test(String(arrematacao_id || ''))) return res.status(400).json({ error: 'arrematacao_id inválido' });
     if (!METODOS.has(String(metodo))) return res.status(400).json({ error: 'método inválido' });
     if (metodo === 'cartao_mp') return res.status(400).json({ error: 'cartão via link é gravado pelo webhook, não manualmente.' });
@@ -91,6 +91,9 @@ export default async function handler(req, res) {
           comprovante_url: comprovante_url || null,
           banco: metodo === 'cheque' ? String(banco).trim().slice(0, 120) : null,
           numero_cheque: metodo === 'cheque' ? String(numero_cheque).trim().slice(0, 40) : null,
+          // Com quem o cheque ficou (10/10): com o advogado, conta no split e ABATE da cota dele
+          // (regra honorario.split_sobre_liquido). Só cheque pode ficar fora da conta da plataforma.
+          em_poder: metodo === 'cheque' && em_poder === 'advogado' ? 'advogado' : 'plataforma',
           registrado_por: user.id,
         }),
       });
@@ -118,6 +121,33 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('[honorario-recebimento] POST falhou:', e?.message || e);
       return res.status(500).json({ error: 'Erro ao registrar recebimento.' });
+    }
+  }
+
+  // CHEQUE: compensou / voltou / mudou de mão (10/10, admin). Compensar libera o valor para o
+  // repasse (cheque na conta da plataforma); voltar estorna o recebimento — o trigger reabre o
+  // honorário se a soma cair, e a próxima liquidação refaz as cotas sozinha.
+  if (req.method === 'PATCH') {
+    if (role !== 'admin') return res.status(403).json({ error: 'Só admin altera recebimento.' });
+    const { id, acao, em_poder } = req.body || {};
+    if (!UUID_RE.test(String(id || ''))) return res.status(400).json({ error: 'id inválido' });
+    const corpo = acao === 'cheque_compensou' ? { compensado_em: new Date().toISOString(), liquido_compensado: null }
+      : acao === 'cheque_voltou' ? { status: 'estornado' }
+      : acao === 'em_poder' && ['plataforma', 'advogado'].includes(em_poder) ? { em_poder, liquido_compensado: null }
+      : null;
+    if (!corpo) return res.status(400).json({ error: 'acao inválida' });
+    try {
+      const up = await sb(`honorarios_recebimentos?id=eq.${id}&metodo=eq.cheque`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(corpo) });
+      const linhas = up.ok ? await up.json().catch(() => null) : null;
+      if (!up.ok || !Array.isArray(linhas) || !linhas.length) {
+        const det = up.ok ? null : await up.json().catch(() => null);
+        return res.status(409).json({ error: det?.message || 'Recebimento não alterado (só cheques podem ser marcados assim).' });
+      }
+      await auditLog({ acao: `honorario_recebimento_${acao}`, user_id: user.id, ip, detalhes: { id, ...corpo }, sucesso: true });
+      return res.status(200).json({ ok: true, recebimento: linhas[0] });
+    } catch (e) {
+      console.error('[honorario-recebimento] PATCH falhou:', e?.message || e);
+      return res.status(500).json({ error: 'Erro ao alterar recebimento.' });
     }
   }
 
