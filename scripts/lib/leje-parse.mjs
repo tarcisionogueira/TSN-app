@@ -65,8 +65,11 @@ function tituloDaLinha(linhas) {
 const MES = { JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06', JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12' };
 export function datasLeje(bloco) {
   const out = [];
-  for (const m of String(bloco || '').matchAll(/\b(\d{2})\/(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{2}|\d{4})(?:\s*-\s*(\d{2}):(\d{2}))?/gi)) {
+  for (const m of String(bloco || '').matchAll(/\b(\d{2})\/(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{4}|\d{2})(?!\d)(?:\s*-\s*(\d{2}):(\d{2}))?/gi)) {
     const ano = m[3].length === 2 ? `20${m[3]}` : m[3];
+    // Plausibilidade (10/10): a 1ª versão casava "20" de "2026" e gravou 2020 — o lote expirou na
+    // hora. Ano de leilão anterior a 2025 é erro de leitura, nunca dado.
+    if (Number(ano) < 2025) continue;
     out.push(`${ano}-${MES[m[2].toUpperCase()]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00-03:00`);
   }
   return [...new Set(out)].sort();
