@@ -36768,3 +36768,17 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   `vite:preloadError` na mesma rajada, e cada um gastava uma tentativa: o 3º caía em PRESO com a recarga já
   pedida. Agora há `window.__bpRecarregando`. Correção de raiz possível: Skew Protection da Vercel (Pro), mas
   Vite SPA exige `?dpl=` nos assets; não ativado.
+- **Firecrawl (conector novo, 10/10)** passa o Cloudflare onde o runner e o proxy ISP tomam 403: LEJE com home e
+  detalhe em HTTP 200, proxy básico, 1 crédito/página; Kron também abriu. Motor `scripts/lib/motor/fetch-firecrawl.mjs`
+  (`cfg.fetch='firecrawl'`) com o mesmo contrato do fetch-dom: `success:false` num 200 e 403 da página-alvo não
+  viram conteúdo, e o teto `FIRECRAWL_MAX_PAGINAS` devolve semCota. LEJE trocado para ele. **Depende do secret
+  `FIRECRAWL_API_KEY` no GitHub** (pendência do dono). Próximos candidatos: FERNANDO/JONAS/KRON/SUEDPETER, lucas,
+  uberlandia, leilaobrasil e o recon do FERREIRALEIL.
+- **Conectores, auditoria de 10/10**:
+  - Sentry está MUDO, com 0 issues em 90 dias enquanto `erros_cliente` registra (pendência do dono: `VITE_SENTRY_DSN` no build).
+  - Resend achou 2 bounces de contrato para `tarcisio@bidpro.com.br`, domínio inexistente (erro de digitação num
+    link manual de 07/10; a versão correta foi entregue).
+  - O conector Vercel não lista envs (403).
+  - DocuSign, Slack, HubSpot e Stripe não conectam nesta sessão (proxy 403).
+- **#190 (recópia)**: `link_matricula_morto = 0`; o espelho copia cerca de 900 documentos em 6 h e restam 792 dos 1.664
+  reabertos às 17h de 10/10.
