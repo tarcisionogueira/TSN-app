@@ -36840,3 +36840,25 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - O re-parse era `.limit(300)` sem ordem com 549 pendentes, e podia reler sempre as mesmas linhas (forma nº 4).
     Agora é paginado.
   - Teste `npm run testar:leiloeiro`: 31/31.
+- **Pendências do dono, rodada 10/10 (noite)**:
+  - **P0, masterclass**: a campanha leva à landing do lançador (lucreantesdearrematar.com.br), que anuncia "15/10 às 20h",
+    online e gratuita, com formulário próprio. O evento interno (19h, inativo, 0 inscritos) saiu do funil. #1 fechada.
+  - **#21 venda Top2**: não estava presa. Marcos Oliveira pagou o Pro em 12/09 (2ª tentativa; a 1ª foi
+    `cc_rejected_high_risk`), cancelou a renovação em 01/10 e foi rebaixado na hora. O defeito do rebaixamento
+    imediato já tinha sido corrigido no mp-webhook em 01/10. Sem erro de checkout há 28 dias.
+  - **#2 pagantes sem relatório**: só 3 são risco real.
+    - Marcos Araujo, Matheus e Rafael estão no pós-arremate; "Fred Desenvolvedor" é conta de teste.
+    - Risco: Neuma, Alessandra e Airton (Airton clicou 4x e não gerou relatório).
+    - O e-mail de oportunidades respeita o tipo do perfil desde a curadoria por IA (24/09) e o teto de capital
+      (folga de 30% é regra).
+  - **#192 Sentry**: o DSN estava no bundle, mas o CSP `connect-src` bloqueava `*.ingest.us.sentry.io`. Corrigido
+    em vercel.json.
+  - **#195 LEJE**:
+    - O parser não lia "16/NOV/26" nem "15/OUT/2026"; datas agora vêm do bloco do lote.
+    - Lote que saiu do ar redireciona para a home e agora devolve null.
+    - Runner com `cfg.sumidoDias` (LEJE 15 dias): 12 lotes mortos saíram como `sumiu_da_fonte`.
+    - Bug da 1ª versão: o ano de 4 dígitos virou 2020 e 3 lotes vivos expiraram. Corrigido e reativados com a
+      data real. Atenção: o trigger `preservar_data_leilao` devolve a data antiga quando a nova é nula.
+  - **#91**: Jinkings integrado (7 imóveis, MGL/Firecrawl). Andra é da mesma plataforma, mas hoje só tem veículos.
+  - **#190**: não está travado. O cron de 4 h copia por urgência e os 817 elegíveis estão na fila.
+  - **Firecrawl**: o formato `query` custa 5 créditos/página; a rotina usa `rawHtml` (1 crédito).
