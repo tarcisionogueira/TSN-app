@@ -36733,3 +36733,21 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   Reparo: invariante 56 → 0; 1.664 espelhos de volta à fila (`motivo like 'reaberto 10/10%'`); GRUPOLANCE recaptura
   as matrículas sem link. Conferir em 11/10: `select status, count(*) from documento_espelho where motivo like
   'reaberto 10/10%' or (status='copiado' and atualizado_em > '2026-10-10') group by 1;`
+
+### 10/10 (tarde) — veículos: comissão real, formas de pagamento, motor, Minhas Análises
+- **Comissão Superbid era presumida à toa.** A plataforma publica em `groupOffer.commissionPercent`
+  (no `__NEXT_DATA__` da oferta e na offer-query); líamos só `commercialCondition.auctioneerCommissionPercent`,
+  que vem NULO. As 5 ofertas com relatório saíam "5%, presumida" com 5% publicado. `condicoesDaPlataforma()`
+  em `api/gerar-analise-veiculo.js` lê a oferta PELO ID: comissão, cartão (limite, se a comissão entra),
+  parcelas/entrada mínima e a descrição do evento.
+- **"Sem comissão" agora é 0%, não 5% presumido**: pátios municipais (Guarulhos/SBC) anunciam no evento
+  "SEM TAXAS E COMISSÃO - SOMENTE VALOR DO ARREMATE" e não têm campo. `calcularViabilidade` aceita 0 declarado.
+- **`forma_pagamento='a_vista'` é padrão do coletor** em quase todas as fontes, não condição do edital — saiu
+  do prompt como fato. A IA lista `formasPagamento`; a tela parou de afirmar "o edital não prevê parcelamento".
+- **Motor**: o filtro de /veiculos está certo; faltava TEXTO. LJUD gravava título como descrição (1.608/1.635)
+  — corrigido no coletor (vale da próxima coleta diária). +152 classificados pelas formas novas de
+  `motor_status_do_texto`. NORDESTE deixa a descrição vazia de fato; MEGA/WEB/VIP/SUPORTE seguem curtas.
+- **Minhas Análises**: aba Imóveis | Veículos (admin/analista — só eles acessam /analise-veiculo).
+- **Recon**: `recon-dom.yml` ganhou a entrada `grep` (regex) para achar texto na página e nos JSON capturados.
+- Atalho útil: a rede do banco (`net.http_get` + `net._http_response`) alcança Superbid/s4bdigital quando o
+  sandbox e a Vercel tomam 403 — foi assim que achei o campo em 2 consultas.
