@@ -36794,3 +36794,26 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - Kron, Suedpeter, Uberlândia, Leilão Brasil e Globo já coletavam; a lista de "bloqueados" estava velha.
   - O runner agora trata parser que devolve null como "sem detalhe" (antes derrubava a coleta).
   - Ideia: Comprei/PGFN como fonte direta (governo, venda direta nacional).
+- **Rafael Leiloeiro (radar DJEN → integrado, 10/10)**: front-end "oferta" da Suporte Leilões (`lib/suporte-oferta-parse.mjs`,
+  `var lote`/`var leilao` no HTML). Fetch grátis, diário (`scraper-dom.yml`, fonte `suporteoferta`); 7 imóveis na 1ª coleta.
+- **COMPREI (PGFN) como fonte direta (10/10)**: `scripts/scraper-comprei.mjs`, fonte `COMPREI`, diário no `scraper-dom.yml`.
+  - API pública, sem login e sem reCAPTCHA:
+    - `/gateway/sdc/uf`: o código fica em `value` (MG=60).
+    - `/gateway/anuncio/publico?ufs=<códigos>&page=N&size=100`: sem `ufs`, ou com a sigla, dá 500.
+    - `/gateway/anuncio/visitar/{id}`.
+  - O gateway exige `Origin: https://comprei.pgfn.gov.br` (com o Origin da Superbid dá 403). Por isso `json_pedir` agora
+    escolhe o Origin pelo destino (migração `20261010_json_pedir_origem.sql`), e `viaBanco(url, {json:true})` usa essa via.
+  - Acervo medido: 575 anúncios, todos de bens distintos. Valores: `situacaoAnuncio` 2/3 e `tipoVenda` 1/2/nulo
+    (significado não confirmado; nenhum filtrado). O lance vem de `precoAtual`.
+  - Dedup com a GLOBOLEILOES:
+    - A Globo pula os links do Comprei e os conta como vistos na varredura.
+    - O COMPREI desativa a cópia da Globo (`duplicata_comprei`), mas só das que gravou nesta rodada.
+    - Se a coleta direta parar, `GLOBO_PULA_COMPREI=0` volta ao comportamento antigo.
+- **Radar de editais: limite do instrumento**: `editais_leilao.leiloeiro_integrado` compara DOMÍNIO, então leiloeiro já
+  coletado via rede (Alessandro Teixeira via LJUD; Helcio Kronberg via EDITAL_DJEN; Pedro Kronberg via SUPERBID) aparece
+  como "não integrado" (forma nº 10). Status dos candidatos restantes:
+  - saulojulioleiloeiro: SPA Angular, falta recon.
+  - vivaleiloes: Cloudflare 400, candidato a Firecrawl.
+  - lancenow: Valland, aponta para o Comprei, agora coberto.
+  - lecape: erro de SSL.
+  - 1.113 editais sem nome nem domínio de leiloeiro: lacuna da extração.

@@ -72,6 +72,19 @@ const textoHtml = (h) => String(h || '').replace(/<br\s*\/?>|<\/p>|<\/li>/gi, '\
 const limparTitulo = (t) => String(t || '').replace(/^[\s\-_–]+|[\s\-_–]+$/g, '').replace(/\s+/g, ' ').trim();
 const titleCase = (s) => String(s || '').toLowerCase().replace(/(^|\s|'|-)([a-zà-ú])/g, (_, a, b) => a + b.toUpperCase())
   .replace(/\b(De|Do|Da|Dos|Das|E)\b/g, (m) => m.toLowerCase()).replace(/^\w/, (c) => c.toUpperCase());
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// `municipioNome` vem sem acento ("Lencois Paulista"); o título costuma trazer a grafia certa
+// ("LENÇOIS PAULISTA/SP"). Usa a do título quando é a MESMA cidade sem acento; senão fica a da API.
+function cidadeComAcento(cidade, titulo) {
+  if (!cidade) return cidade;
+  const alvo = semAcento(cidade); const n = alvo.split(' ').length;
+  const pal = String(titulo || '').split(/[\s,/-]+/);
+  for (let i = 0; i + n <= pal.length; i++) {
+    const cand = pal.slice(i, i + n).join(' ');
+    if (semAcento(cand) === alvo) return titleCase(cand);
+  }
+  return cidade;
+}
 const valor = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 1000 && n <= 500_000_000 ? Math.round(n * 100) / 100 : 0; };
 const idImg = (x) => (x && typeof x === 'object' ? (x.id ?? x.idImagem ?? x.imagemId) : x);
 
@@ -106,15 +119,16 @@ function montarRow(a, v) {
   ].filter(Boolean).join(' ');
   // Fallback de local: o `endereco` da listagem termina em "Cidade/UF" (sem acento: "Sao Jose Da Coroa Grande/PE").
   const cuLista = String(a.endereco || '').match(/-\s*([^-/]+)\/([A-Z]{2})\s*$/);
-  const fotos = [...(a.imagensAnuncio || []), ...(v.fotosAnuncio || [])].map(idImg).filter((x) => x != null);
+  const fotos = [...(a.imagensAnuncio || []), ...(v.fotosAnuncio || [])].map(idImg).filter((x) => x != null)
+    .filter((x, k, arr) => arr.indexOf(x) === k);
   const foto = fotos.length ? `${COMPREI_API}/imagem/anuncio/${fotos[0]}` : null;
   const descricao = [desc, condicoes, ficha.bloco].filter(Boolean).join('\n\n').slice(0, 9000);
   return {
     fonte: FONTE, fonte_id: `comprei_${a.id}`,
-    titulo: titleCase(titulo).slice(0, 300),
+    titulo: titleCase(titulo).replace(/([/-])([a-z]{2})\b(?=[^a-z]|$)/gi, (m, sep, uf) => (/^[A-Z]{2}$/i.test(uf) && m.length === 3 ? `${sep}${uf.toUpperCase()}` : m)).slice(0, 300),
     tipo: inferirTipo(titulo, desc.slice(0, 300)),
     modalidade: 'venda_direta',
-    cidade: v.municipioNome ? titleCase(String(v.municipioNome).trim()) : (cuLista ? titleCase(cuLista[1].trim()) : null),
+    cidade: cidadeComAcento(v.municipioNome ? titleCase(String(v.municipioNome).trim()) : (cuLista ? titleCase(cuLista[1].trim()) : null), titulo),
     estado: v.ufSigla ? String(v.ufSigla).trim().toUpperCase() : (cuLista ? cuLista[2] : null),
     bairro: ficha.bairro || null, endereco: ficha.endereco || null, cep: ficha.cep || null,
     numero_matricula: ficha.numero_matricula || (String(a.matriculaBem || '').trim() || null),
