@@ -17,6 +17,7 @@ import { registrarConhecimento, qualidadeColeta } from '../conhecimento.mjs';
 import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
+import { criarMotorFirecrawl } from './fetch-firecrawl.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
 import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
@@ -327,7 +328,10 @@ export async function rodarFonte(cfg, opts) {
   const rotulo = (cfg.chave || 'fonte').toUpperCase();
   // Eixo de FETCH da matriz: 'dom' renderiza num Chromium (SPA sem SSR); default é o motor
   // grátis→Bright Data. O contrato é o mesmo; o runner não distingue.
-  const motor = cfg.fetch === 'dom' ? criarMotorDom(cfg.dom) : criarMotorFetch(cfg.chave);
+  // 'firecrawl' (10/10): sites que dão 403 ao runner e ao proxy ISP (Cloudflare) — fetch-firecrawl.mjs.
+  const motor = cfg.fetch === 'dom' ? criarMotorDom(cfg.dom)
+    : cfg.fetch === 'firecrawl' ? criarMotorFirecrawl(cfg.firecrawl)
+    : criarMotorFetch(cfg.chave);
   const { fetchFonte, estado } = motor;
   cfg.maxPages = opts.maxPages ?? cfg.maxPages ?? 3;
 
