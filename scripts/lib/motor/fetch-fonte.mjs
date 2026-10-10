@@ -19,7 +19,9 @@ const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitig
 // dá 403 ao runner do GitHub e ao PC do dono, e 200 ao banco (14 leilões na home, medido). Dois
 // passos porque o pg_net só dispara depois do commit (supabase/migrations/20260929_pagina_pelo_banco.sql).
 // Desliga com MOTOR_VIA_BANCO=0. Devolve { html } ou { html: null, motivo } — nunca lança.
-export async function viaBanco(url) {
+// `json: true` (10/10, Comprei): pede pela irmã `json_pedir` (Accept JSON + Origin do próprio destino
+// para o gateway do Comprei) — a `pagina_pedir` manda Accept HTML e o gateway responde 403/406.
+export async function viaBanco(url, { json = false } = {}) {
   const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
   if (process.env.MOTOR_VIA_BANCO === '0') return { html: null, motivo: 'desligada' };
@@ -30,7 +32,7 @@ export async function viaBanco(url) {
     return r.json();
   };
   try {
-    const id = await rpc('pagina_pedir', { p_url: url });
+    const id = await rpc(json ? 'json_pedir' : 'pagina_pedir', { p_url: url });
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       const [row] = await rpc('pagina_ler', { p_id: id });

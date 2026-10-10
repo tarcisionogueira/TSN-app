@@ -113,8 +113,15 @@ async function main() {
   }
   const comprei = { lidos: 0, falhas: 0, semFicha: 0, vendidos: 0 };
   const prontos = []; let gravados = 0; let fracao = 0, semPraca = 0, semLocal = 0, detalhes = 0, semDetalhe = 0, pulados = 0;
+  // Comprei (PGFN) é coletado NA ORIGEM desde 10/10 (scraper-comprei.mjs, fonte COMPREI), que também
+  // desativa a cópia antiga daqui ('duplicata_comprei'). Regravar aqui reativaria a duplicata todo dia.
+  // A varredura não os conta como sumidos — quem decide o destino deles é a fonte COMPREI.
+  // GLOBO_PULA_COMPREI=0 volta ao comportamento antigo (ex.: se a coleta direta parar).
+  const pulaComprei = process.env.GLOBO_PULA_COMPREI !== '0';
+  const vistosComprei = new Set();
   for (const l of lotes) {
     const previa = montarRowGlobo(l);
+    if (pulaComprei && idAnuncioComprei(previa.url_lote)) { vistosComprei.add(previa.fonte_id); continue; }
     if (ehFracaoIdeal(previa)) { fracao++; continue; }
     if (!previa.valor_minimo) { semPraca++; continue; }
     if (!previa.cidade || !previa.estado) { semLocal++; continue; }
@@ -170,7 +177,8 @@ async function main() {
   }
   if (prontos.length > gravados) gravados += await gravar(prontos.slice(gravados));
   console.log(`✅ ${gravados} imóveis gravados/atualizados.`);
-  if (completa) await varrerSumidos(new Set(prontos.map((r) => r.fonte_id)));
+  if (vistosComprei.size) console.log(`  ${vistosComprei.size} anúncios do Comprei pulados (coletados na origem, fonte COMPREI)`);
+  if (completa) await varrerSumidos(new Set([...prontos.map((r) => r.fonte_id), ...vistosComprei]));
   else console.log('  varredura PULADA — enumeração parcial.');
   await registrarSaude(supabase, FONTE, prontos, 'inertia-json', { enumerados: lotes.length });
 }

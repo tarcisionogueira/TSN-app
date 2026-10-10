@@ -63,11 +63,13 @@ on:
       - 'scripts/lib/nakakogue-parse.mjs'
       - 'scripts/scraper-astavero.mjs'
       - 'scripts/lib/astavero-json.mjs'
+      - 'scripts/scraper-comprei.mjs'
+      - 'scripts/lib/comprei-pgfn.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta'
+        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -161,6 +163,15 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPORTEOFERTA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-suporteoferta.mjs
+
+      - name: Comprei (PGFN) — venda direta na origem
+        # 10/10: API pública do Comprei (listagem nacional + anúncio). Grátis (direto ou via banco) — diário.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'comprei')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          COMPREI_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-comprei.mjs
 
       - name: Leilaoindex
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilaoindex')) }}
