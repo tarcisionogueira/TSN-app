@@ -297,7 +297,14 @@ function parseDetalhe(html, url) {
   const modalidadeDePagina = (t) => /(?<!extra)judicial/i.test(t) ? 'judicial'
     : /extrajudicial/i.test(t) ? 'extrajudicial'
     : (!dataLeilaoDetectada && /venda\s*direta/i.test(t)) ? 'venda_direta' : null;
-  const modalidade = modalidadeDeJanela(janelaModalidade) || modalidadeDePagina(txt) || 'extrajudicial';
+  // VENDA DIRETA DA PGFN (10/10, #154). FERREIRALEIL é corretora credenciada do Comprei/PGFN: o leilão
+  // "COMPREI/PGFN - IMÓVEIS NO ESTADO DE SÃO PAULO" fica "Em andamento" sem data NENHUMA (recon de casa
+  // com fetch e Chromium: 0 datas nos lotes e na página do leilão). 146 dos 160 lotes "sem data" trazem
+  // "alienação por iniciativa particular"/PGFN no texto — não é data faltando, é venda direta. Só sem
+  // praça datada (regra do dono: praça com data nunca é venda direta; 2 lotes com data citam o termo).
+  const vendaDiretaPgfn = !dataLeilaoDetectada && /comprei|pgfn|aliena[çc][ãa]o\s+por\s+iniciativa\s+particular/i.test(txt);
+  const modalidade = vendaDiretaPgfn ? 'venda_direta'
+    : (modalidadeDeJanela(janelaModalidade) || modalidadeDePagina(txt) || 'extrajudicial');
   // ACHADO DO BLOCO 3 (03/09): `[\d.]+,\d{2}` exige DECIMAL colado ("1.813,00"), e "1.813M²"
   // (sem decimal) caía no fallback `\d+` — que não aceita ponto, então casava só "813",
   // perdendo o "1." e reportando 1/33 da área real (confirmado em CALIL, VEGAS, FERREIRALEIL,
@@ -706,6 +713,30 @@ async function main() {
     console.log(JSON.stringify(prontos.slice(0, 3), null, 2));
     console.log('\nPara gravar, rode com SOLEON_DRYRUN=0.');
     return;
+  }
+  // DUPLICATA DO COMPREI (10/10, #154): o lote de venda direta PGFN é o MESMO bem que a fonte COMPREI
+  // coleta na origem (108 de 160 casaram por matrícula + UF). Sai como 'duplicata_comprei' — mesma regra
+  // de scraper-globo.mjs. Leitura falhou → não suprime nada (duplicar é o mal menor; sumir lote não).
+  {
+    const chaveBem = (uf, mat) => `${String(uf || '').toUpperCase()}|${String(mat || '').replace(/\D/g, '')}`;
+    const bens = new Set();
+    let falhou = null;
+    for (let de = 0; ; de += 1000) {
+      const { data, error: eC } = await supabase.from('imoveis_leilao').select('estado, numero_matricula')
+        .eq('fonte', 'COMPREI').eq('ativo', true).not('numero_matricula', 'is', null).order('fonte_id').range(de, de + 999);
+      if (eC) { falhou = eC.message; break; }
+      for (const r of data || []) bens.add(chaveBem(r.estado, r.numero_matricula));
+      if (!data || data.length < 1000) break;
+    }
+    if (falhou) console.log(`  aviso: acervo COMPREI ilegível (${falhou}) — nenhuma duplicata suprimida`);
+    else {
+      let dup = 0;
+      for (const r of prontos) {
+        if (r.modalidade !== 'venda_direta' || !r.numero_matricula) continue;
+        if (bens.has(chaveBem(r.estado, r.numero_matricula))) { r.ativo = false; r.suprimido_motivo = 'duplicata_comprei'; dup++; }
+      }
+      if (dup) console.log(`  ${dup} lote(s) de venda direta PGFN já coletados na origem (COMPREI) → duplicata_comprei`);
+    }
   }
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
