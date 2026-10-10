@@ -67,7 +67,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero'
+        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -152,6 +152,15 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           JELEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-jeleiloes.mjs
+
+      - name: Suporte oferta (Rafael Leiloeiro)
+        # 10/10: achado no radar de editais (DJEN). Server-rendered, fetch grátis — diário.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'suporteoferta')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPORTEOFERTA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-suporteoferta.mjs
 
       - name: Leilaoindex
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilaoindex')) }}
