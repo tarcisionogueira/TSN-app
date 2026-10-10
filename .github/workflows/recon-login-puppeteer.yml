@@ -1,4 +1,4 @@
-name: Recon de login via navegador (SODRE/FRAZAO)
+name: Recon de login via navegador (SODRE/FRAZAO/SUPERBID/BIASI/VIP)
 
 # Para leiloeiros que são apps JS: loga no navegador real, captura a rede (API/token/docs)
 # e acha uma URL de lote válida. Só diagnostica. Manual.
@@ -6,8 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       fonte:
-        description: 'SODRE ou FRAZAO'
+        description: 'SODRE, FRAZAO, SUPERBID, BIASI ou VIP'
         required: true
+      lote:
+        description: 'URL de um lote para abrir LOGADO (opcional)'
+        required: false
+        default: ''
 
 jobs:
   recon:
@@ -25,10 +29,17 @@ jobs:
       - name: Recon login navegador
         env:
           RLP_FONTE: ${{ github.event.inputs.fonte }}
+          RLP_LOTE: ${{ github.event.inputs.lote }}
           SODRE_EMAIL: ${{ secrets.SODRE_EMAIL }}
           SODRE_SENHA: ${{ secrets.SODRE_SENHA }}
           FRAZAO_EMAIL: ${{ secrets.FRAZAO_EMAIL }}
           FRAZAO_SENHA: ${{ secrets.FRAZAO_SENHA }}
           GL_EMAIL: ${{ secrets.GL_EMAIL }}
           GL_SENHA: ${{ secrets.GL_SENHA }}
+          SUPERBID_EMAIL: ${{ secrets.SUPERBID_EMAIL }}
+          SUPERBID_SENHA: ${{ secrets.SUPERBID_SENHA }}
+          BIASI_EMAIL: ${{ secrets.BIASI_EMAIL }}
+          BIASI_SENHA: ${{ secrets.BIASI_SENHA }}
+          VIP_EMAIL: ${{ secrets.VIP_EMAIL }}
+          VIP_SENHA: ${{ secrets.VIP_SENHA }}
         run: node scripts/recon-login-puppeteer.mjs

@@ -16,11 +16,19 @@ import puppeteer from 'puppeteer';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1360,900'];
 const FONTE = (process.env.RLP_FONTE || '').toUpperCase();
-const BASES = { SODRE: 'https://www.sodresantoro.com.br', FRAZAO: 'https://www.frazaoleiloes.com.br', GRUPOLANCE: 'https://www.grupolance.com.br' };
+const BASES = {
+  SODRE: 'https://www.sodresantoro.com.br', FRAZAO: 'https://www.frazaoleiloes.com.br', GRUPOLANCE: 'https://www.grupolance.com.br',
+  // 10/10: credenciais SUPERBID_*/VIP_* estavam no GitHub havia 3 meses sem NENHUM workflow que as usasse.
+  // Recon para medir o que o login destrava (Superbid: % dos encargos + matrícula; Biasi: matrícula).
+  SUPERBID: 'https://www.superbid.net', BIASI: 'https://www.biasileiloes.com.br', VIP: 'https://www.leilaovip.com.br',
+};
+// RLP_LOTE: abre ESTE lote depois do login (em vez de procurar um na listagem) e clica nos botões de
+// encargos/documentos — é lá que a Superbid mostra "Detalhamento dos encargos, comissão e fee".
+const LOTE = (process.env.RLP_LOTE || '').trim();
 const CRED_PREFIX = { GRUPOLANCE: 'GL' };
 const P = CRED_PREFIX[FONTE] || FONTE;
 const EMAIL = process.env[`${P}_EMAIL`], SENHA = process.env[`${P}_SENHA`];
-const RE_REDE = /\/api\/|\/login|\/auth|token|autentic|documento|matricul|edital|laudo|cloudfront|cms\/files|\.pdf/i;
+const RE_REDE = /\/api\/|\/login|\/auth|token|autentic|documento|matricul|edital|laudo|cloudfront|cms\/files|\.pdf|s4bdigital|offerpanel|encarg|commission|fee/i;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -69,7 +77,8 @@ async function main() {
 
   try {
     // rotas de login candidatas por fonte
-    const rotas = FONTE === 'SODRE' ? ['/login'] : FONTE === 'FRAZAO' ? ['/minha-conta', '/entrar', '/login', '/wp-login.php', '/'] : ['/entrar'];
+    const rotas = FONTE === 'SODRE' ? ['/login'] : FONTE === 'FRAZAO' ? ['/minha-conta', '/entrar', '/login', '/wp-login.php', '/']
+      : FONTE === 'SUPERBID' ? ['/login', '/'] : FONTE === 'BIASI' ? ['/login', '/account/login', '/'] : FONTE === 'VIP' ? ['/login', '/entrar', '/'] : ['/entrar'];
     let logou = false, usouRota = null, detalhe = null;
     for (const rota of rotas) {
       try {
@@ -91,6 +100,35 @@ async function main() {
       } catch (e) { console.log(`   ERRO ${e.message}`); }
     }
     console.log(`\n  => login ${logou ? 'PROVÁVEL' : 'não confirmado'} (rota ${usouRota || '—'})`);
+
+    if (LOTE) {
+      console.log(`\n── lote pedido (logado): ${LOTE}`);
+      rede.length = 0;
+      await page.goto(LOTE, { waitUntil: 'networkidle2', timeout: 45000 });
+      await sleep(3000);
+      const antes = await page.evaluate(() => (document.body.innerText || '').length);
+      const clicados = await page.evaluate(() => {
+        const alvo = [...document.querySelectorAll('a,button,span,div[role=button]')]
+          .filter(e => /detalhamento|encargo|comiss[ãa]o|taxa|documento|matr[íi]cula|edital|condi[çc][õo]es/i.test(e.textContent || '') && (e.textContent || '').length < 80);
+        alvo.slice(0, 6).forEach(e => { try { e.click(); } catch { /* clique pode falhar em elemento oculto */ } });
+        return alvo.slice(0, 6).map(e => (e.textContent || '').trim().slice(0, 50));
+      });
+      await sleep(3000);
+      const info = await page.evaluate(() => {
+        const t = document.body.innerText || '';
+        const pct = [...t.matchAll(/[^\n]{0,70}\d+(?:[.,]\d+)?\s*%[^\n]{0,50}/g)].map(m => m[0].trim()).slice(0, 15);
+        const docs = [...document.querySelectorAll('a[href]')].map(a => a.href).filter(h => /\.pdf|documento|matricul|edital|download/i.test(h)).slice(0, 10);
+        const logado = /sair|logout|minha conta|meus lances|ol[áa],/i.test(t);
+        return { url: location.href, logado, pct, docs, tam: t.length };
+      });
+      console.log(`   clicados: ${JSON.stringify(clicados)}`);
+      console.log(`   logado na página do lote: ${info.logado} · texto ${antes}→${info.tam} chars`);
+      console.log(`   trechos com %: ${JSON.stringify(info.pct)}`);
+      console.log(`   links de documento: ${JSON.stringify(info.docs)}`);
+      console.log('\n── rede capturada no lote:');
+      [...new Set(rede)].slice(0, 40).forEach(l => console.log(`   ${l}`));
+      return;
+    }
 
     // pega uma URL de lote real a partir da listagem/busca de imóveis
     console.log('\n── procurando uma URL de lote válida na listagem');
