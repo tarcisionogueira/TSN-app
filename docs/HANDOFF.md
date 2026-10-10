@@ -36757,3 +36757,14 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   Itapejara: "+0%"; pátio de SBC: 0). Via banco: `json_pedir` (Accept JSON; só service_role).
 - **10 relatórios de veículo regerados** em 10/10 13:25 pelo `regerar-relatorios.yml`: 9 com 5% vindo da
   plataforma e 1 com 0%. Nenhum ficou como "presumida". Formas sem repetição; o cartão em 12x via sbXPay aparece.
+- **Taxas % além da comissão** (`extrairTaxasPct` + `taxasPercentuais` da IA → `calcularViabilidade({taxasPct})`):
+  entram no teto e no parcelado. No acervo só a SUPERBID publica no texto (3% encargos administrativos em 13
+  lotes, 1% transferência de cota em 5); nos demais, "encargos conforme CVP" vira aviso em débitos sem valor
+  (`temEncargoSemValor`, que respeita a negação "não será cobrado nenhum encargo"). O número exato da Superbid
+  está na tela de detalhamento, que exige login: pendência do dono (conta de serviço?).
+- **Anexos-lixo**: ~690 lotes SUPERBID tinham os 5 PDFs institucionais do rodapé como anexos e ocupavam as 5
+  vagas que o relatório lê. Filtrados no relatório (`anexoDoLote`) e no coletor (`extrairAnexosPdfDeHtml`).
+- **"Não conseguimos terminar de carregar a página"**: era alarme falso. Um chunk que falha dispara vários
+  `vite:preloadError` na mesma rajada, e cada um gastava uma tentativa: o 3º caía em PRESO com a recarga já
+  pedida. Agora há `window.__bpRecarregando`. Correção de raiz possível: Skew Protection da Vercel (Pro), mas
+  Vite SPA exige `?dpl=` nos assets; não ativado.
