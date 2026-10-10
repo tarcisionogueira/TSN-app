@@ -43,7 +43,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   const detCatalogo = new Map();
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   for (let p = 1; p <= maxPages; p++) {
-    const url = `${tenant.base}${cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`;
+    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
     if (!r.html) { if (p === 1) via = r.via || null; break; }
@@ -127,7 +127,7 @@ async function amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1) {
     if (!ja.ok || (await ja.json()).length) return;
     const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { ...h, Prefer: 'return=minimal' },
       body: JSON.stringify({ origem: 'motor-vazio', chave, conteudo: {
-        catalogo: `${tenant.base}${cfg.catalogo}`, html: String(htmlPagina1).slice(0, 200000),
+        catalogo: `${tenant.base}${tenant.catalogo ?? cfg.catalogo}`, html: String(htmlPagina1).slice(0, 200000),
         evento: htmlEvento1 ? { url: htmlEvento1.url, html: String(htmlEvento1.html).slice(0, 200000) } : null } }) });
     console.log(`   [${tenant.fonte}] 0 lotes — amostra do HTML ${r.ok ? 'gravada em recon_dump (motor-vazio)' : `NÃO gravada (HTTP ${r.status})`}`);
   } catch (e) { console.log(`   [${tenant.fonte}] amostra do vazio falhou: ${String(e?.message || e).slice(0, 120)}`); }
@@ -442,7 +442,7 @@ export async function rodarFonte(cfg, opts) {
 // Recon: enumera 1 tenant e disseca o 1º lote (o mesmo debugRecon dos scrapers de origem).
 async function debugRecon(fetchFonte, cfg) {
   for (const tenant of cfg.tenants) {
-    console.log(`\n🔎 ${tenant.fonte} RECON — ${tenant.base}${cfg.catalogo}`);
+    console.log(`\n🔎 ${tenant.fonte} RECON — ${tenant.base}${tenant.catalogo ?? cfg.catalogo}`);
     const { urls } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages || 3, debug: true });
     console.log(`   ${urls.length} lote(s): ${JSON.stringify(urls.slice(0, 4))}`);
     if (urls[0]) {

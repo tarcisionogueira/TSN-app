@@ -19,6 +19,10 @@ export const TENANTS = {
   fernando: { fonte: 'FERNANDOLEILOEIRO', leiloeiro: 'Fernando Leiloeiro', base: 'https://www.fernandoleiloeiro.com.br' },
   jonas: { fonte: 'JONASLEILOEIRO', leiloeiro: 'Jonas Leiloeiro', base: 'https://www.jonasleiloeiro.com.br' },
   lucas: { fonte: 'LUCASLEILOEIRO', leiloeiro: 'Lucas Leiloeiro', base: 'https://www.lucasleiloeiro.com.br' },
+  // 10/10: mesma plataforma Degrau, achada no radar de editais (Cloudflare 400 ao runner). SP capital.
+  viva: { fonte: 'VIVALEILOES', leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br',
+    // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro); a home lista os lotes abertos.
+    catalogo: '/' },
 };
 
 // Slug de lote que NÃO é imóvel (medido nos 3 catálogos em 10/10). Prefeitura = frota/sucata.
@@ -69,9 +73,16 @@ export function parseDetalhe(html, url, agora = new Date()) {
   const ultima = pracas[pracas.length - 1] || {};
 
   const tituloBruto = (String(html).match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || [])[1] || '';
-  const titulo = tituloBruto.split(/\s*\|\s*/)[0].replace(/\.\s*[A-ZÀ-Úa-zà-ú ]+ em leil[ãa]o\s*$/i, '').trim() || null;
+  // "… . Casas em Leilão" (MG) e "… Apartamentos em Leilão" (Viva, sem ponto): sufixo de SEO, não é título.
+  const titulo = tituloBruto.split(/\s*\|\s*/)[0].replace(/\.?\s*[A-ZÀ-Úa-zà-ú]+ em leil[ãa]o\s*$/i, '').trim() || null;
   const tUF = (titulo || '').match(/^([A-ZÀ-Ú][A-ZÀ-Ú .'-]+)\/([A-Z]{2})\b/);
-  const { cidade, estado } = tUF ? { cidade: titleCase(tUF[1].trim()), estado: tUF[2] } : cidadeUFBare(txt);
+  // Viva (10/10): o título não traz UF e o texto solto dava "Piqueri São Paulo" (bairro + cidade do
+  // breadcrumb). A linha "Endereço: …, Jardim Íris, São Paulo/SP, CEP …" é a fonte certa; Comarca, a reserva.
+  const cuDe = (re) => { const m = txt.match(re); return m ? { cidade: titleCase(m[1].trim()), estado: m[2] } : null; };
+  const { cidade, estado } = (tUF ? { cidade: titleCase(tUF[1].trim()), estado: tUF[2] } : null)
+    || cuDe(/Endere[çc]o\s*:[^.]{0,250}?,\s*([A-ZÀ-Úa-zà-ú][A-Za-zÀ-ú' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/)
+    || cuDe(/Comarca\s*:\s*([A-ZÀ-Úa-zà-ú][A-Za-zÀ-ú' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/)
+    || cidadeUFBare(txt);
 
   const desc = (txt.match(/Informa[çc][õo]es\s+(.{40,2500}?)\s+[ÔO]nus\b/i) || [])[1] || null;
   const mat = ((desc || txt).match(/matr[íi]cula\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i) || [])[1] || null;

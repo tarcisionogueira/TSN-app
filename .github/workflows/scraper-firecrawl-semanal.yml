@@ -2,7 +2,7 @@ name: Scraper Firecrawl (semanal) — LEJE + Fernando/Jonas/Lucas
 
 # Fontes atrás de Cloudflare que só passam pelo Firecrawl (lib/motor/fetch-firecrawl.mjs), crédito
 # pago: 1 por página. Dono, 10/10: "se consome créditos, 1x por semana". Custo medido por rodada:
-# LEJE ~4 + MGL ~13 ≈ 17 créditos/semana. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
+# LEJE ~4 + MGL ~13 + Viva ~18 ≈ 35 créditos/semana. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
 # estourado, a fonte grava 'sem_cota' (orçamento), não regressão.
 on:
   schedule:
@@ -13,6 +13,10 @@ on:
         description: 'csv: leje,mgl'
         required: false
         default: 'leje,mgl'
+      mgl_tenants:
+        description: 'csv dos sites MGL (fernando,jonas,lucas,viva) — vazio = todos'
+        required: false
+        default: ''
       gravar:
         description: '1 = grava no banco (default DRY-RUN; agendado sempre grava)'
         required: false
@@ -43,12 +47,13 @@ jobs:
           LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
 
-      - name: MGL (Fernando, Jonas, Lucas)
+      - name: MGL (Fernando, Jonas, Lucas, Viva)
         if: ${{ !cancelled() && contains(env.FONTES, 'mgl') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
-          FIRECRAWL_MAX_PAGINAS: '40'
+          FIRECRAWL_MAX_PAGINAS: '60'
           MGL_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          MGL_TENANTS: ${{ github.event.inputs.mgl_tenants }}
         run: node scripts/scraper-mgl.mjs
