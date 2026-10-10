@@ -11,6 +11,7 @@ import FotoImovel from '../components/FotoImovel';
 import { lerComRenovacao } from '../lib/sessao-expirada';
 import AcompanhamentoFavoritos from '../components/AcompanhamentoFavoritos';
 import FavoritoBotao from '../components/FavoritoBotao';
+import MinhasAnalisesVeiculos from '../components/MinhasAnalisesVeiculos';
 
 // Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
 const ETAPA_CURTA = {
@@ -40,6 +41,9 @@ export default function MinhasAnalises() {
   const isMobile = useIsMobile();
   // Estrela num card → a seção Acompanhamento relê (remonta pela chave).
   const [favVersao, setFavVersao] = React.useState(0);
+  // Imóveis × Veículos (10/10): relatório de veículo só existe para quem acessa /analise-veiculo.
+  const veVeiculos = ['admin', 'analista'].includes(role);
+  const [aba, setAba] = React.useState('imoveis');
 
   // Acompanhamento assistido: se o imóvel analisado já virou um caso (fluxo /caso),
   // conectamos os dois no mesmo lugar — o cliente pula direto para o acompanhamento.
@@ -285,6 +289,18 @@ export default function MinhasAnalises() {
         )}
       </div>
 
+      {veVeiculos && (
+        <div style={{ display: 'flex', gap: 6, background: '#f1f5f9', borderRadius: 12, padding: 4, alignSelf: 'flex-start' }}>
+          {[['imoveis', 'Imóveis'], ['veiculos', 'Veículos']].map(([k, rot]) => (
+            <button key={k} onClick={() => setAba(k)}
+              style={{ padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13, background: aba === k ? 'white' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b', boxShadow: aba === k ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
+              {rot}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {veVeiculos && aba === 'veiculos' ? <MinhasAnalisesVeiculos userId={effectiveUserId} /> : (<>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {acao('Buscar imóveis', Search, '#0D63DB', () => nav('/buscar'))}
         {acao('Incluir lote manual (URL/anexos)', Plus, '#7c3aed', () => nav('/analise', { state: { manual: true } }))}
@@ -396,6 +412,7 @@ export default function MinhasAnalises() {
           })}
         </div>
       )}
+      </>)}
     </div>
   );
 }
