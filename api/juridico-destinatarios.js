@@ -1,5 +1,5 @@
 /**
- * /api/juridico-destinatarios  (admin/analista)
+ * /api/juridico-destinatarios  (admin/analista/advogado — o advogado só os próprios)
  * Gerencia a lista de destinatários do jurídico (Para/Cópia).
  *  GET    -> lista
  *  POST   -> upsert { id?, nome, email, papel, copia, ativo }
@@ -31,7 +31,22 @@ export default async function handler(req) {
   const filtroDono = ehAdvogado ? `&advogado_id=eq.${user.id}` : '';
 
   if (req.method === 'GET') {
-    const lista = await (await sb(`juridico_destinatarios?select=*${filtroDono}&order=copia.asc,criado_em.asc`)).json();
+    const rl = await sb(`juridico_destinatarios?select=*${filtroDono}&order=copia.asc,criado_em.asc`);
+    if (!rl.ok) return json({ error: `Não foi possível ler os e-mails (HTTP ${rl.status}).` }, 502);
+    let lista = await rl.json();
+    // E-MAILS DO CADASTRO (10/10, pedido do dono): o advogado informa no convite quais e-mails
+    // recebem as comunicações. O papel só é elevado no 1º login, então eles ficam no metadata da
+    // conta e viram destinatários aqui, na 1ª vez que o portal abre — o primeiro é o "Para".
+    if (ehAdvogado && Array.isArray(lista) && !lista.length) {
+      const doCadastro = [...new Set(String(user?.user_metadata?.emails_comunicacao || '').split(/[,;\s]+/)
+        .map(e => e.trim().toLowerCase()).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 10);
+      if (doCadastro.length) {
+        const ins = await sb('juridico_destinatarios', { method: 'POST', prefer: 'return=representation', body:
+          doCadastro.map((email, i) => ({ email, advogado_id: user.id, copia: i > 0, ativo: true, papel: 'cadastro' })) });
+        if (ins.ok) lista = await ins.json();
+        else console.error('[juridico-destinatarios] semear do cadastro HTTP', ins.status);
+      }
+    }
     return json({ destinatarios: Array.isArray(lista) ? lista : [] });
   }
 
@@ -43,11 +58,13 @@ export default async function handler(req) {
     // advogado: força o vínculo a si mesmo; admin/analista podem direcionar a um advogado.
     if (ehAdvogado) row.advogado_id = user.id;
     else if (b.advogado_id !== undefined) row.advogado_id = b.advogado_id || null;
-    if (b.id) {
-      await sb(`juridico_destinatarios?id=eq.${encodeURIComponent(b.id)}${filtroDono}`, { method: 'PATCH', prefer: 'return=minimal', body: row });
-    } else {
-      await sb('juridico_destinatarios', { method: 'POST', prefer: 'return=minimal', body: row });
-    }
+    // `return=representation` + conferência (10/10): antes respondia ok:true sem olhar — um 400 ou
+    // um id de outro advogado (filtro não alcança nada) virava "salvo" na tela.
+    const r = b.id
+      ? await sb(`juridico_destinatarios?id=eq.${encodeURIComponent(b.id)}${filtroDono}`, { method: 'PATCH', prefer: 'return=representation', body: row })
+      : await sb('juridico_destinatarios', { method: 'POST', prefer: 'return=representation', body: row });
+    const linhas = r.ok ? await r.json().catch(() => null) : null;
+    if (!r.ok || !Array.isArray(linhas) || !linhas.length) return json({ error: `Não foi possível salvar o e-mail (HTTP ${r.status}).` }, 502);
     return json({ ok: true });
   }
 

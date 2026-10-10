@@ -43,13 +43,30 @@ async function ler(path) {
   if (!r.ok) throw new Error(`leitura ${path.split('?')[0]} HTTP ${r.status}`);
   return r.json();
 }
-async function emailDoUsuario(userId) {
+async function usuarioAuth(userId) {
   try {
     const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { headers: hdr, signal: AbortSignal.timeout(10000) });
     if (!r.ok) { console.error(`[acompanhamento] usuário ${userId}: HTTP ${r.status}`); return null; }
-    const u = await r.json();
-    return u?.email ? String(u.email).toLowerCase() : null;
-  } catch (e) { console.error('[acompanhamento] emailDoUsuario falhou:', e?.message); return null; }
+    return await r.json();
+  } catch (e) { console.error('[acompanhamento] usuarioAuth falhou:', e?.message); return null; }
+}
+const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// Para quem vai (10/10): os e-mails de comunicação do advogado (juridico_destinatarios — o
+// "Para" é quem não é cópia); sem lista ainda, os informados no cadastro (metadata); por fim, o
+// e-mail da conta. Mesma ordem de preferência que o portal mostra em "Meu Escritório".
+async function destinatarios(advogadoId) {
+  const lista = await ler(`juridico_destinatarios?advogado_id=eq.${advogadoId}&ativo=eq.true&select=email,copia&order=criado_em.asc`);
+  let to = lista.filter(d => d.copia === false).map(d => d.email.toLowerCase());
+  let cc = lista.filter(d => d.copia !== false).map(d => d.email.toLowerCase());
+  if (!to.length && cc.length) to = [cc.shift()];
+  if (!to.length) {
+    const u = await usuarioAuth(advogadoId);
+    const doCadastro = String(u?.user_metadata?.emails_comunicacao || '').split(/[,;\s]+/).map(e => e.trim().toLowerCase()).filter(e => RE_EMAIL.test(e));
+    if (doCadastro.length) { to = [doCadastro[0]]; cc = doCadastro.slice(1); }
+    else if (u?.email) to = [String(u.email).toLowerCase()];
+  }
+  cc = [...new Set(cc)].filter(e => !to.includes(e));
+  return { to, cc };
 }
 // O INSERT é a trava (PK única). Erro inesperado → trata como já enviado (não duplica).
 async function travar(chave, casoId) {
@@ -140,8 +157,8 @@ async function handler(req) {
       if (!atualizacao && !pedeParcela) { res.ja_enviados++; continue; }
       const soltar = async () => { if (atualizacao) await liberar(chaveAtu); if (pedeParcela) await liberar(chavePar); };
 
-      const para = await emailDoUsuario(c.advogado_id);
-      if (!para) { res.sem_email_advogado.push(c.id); await soltar(); continue; }
+      const { to: para, cc } = await destinatarios(c.advogado_id);
+      if (!para.length) { res.sem_email_advogado.push(c.id); await soltar(); continue; }
 
       const texto = textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao, parcela: pedeParcela ? parcela : null });
       const assinatura = `${admin.nome || 'Equipe BidPro Brasil'}\nBidPro Brasil`;
@@ -154,7 +171,7 @@ async function handler(req) {
       try {
         const env = await enviarEmail({
           from: `${admin.nome || 'Equipe'} (BidPro Brasil) <${remet.endereco}>`,
-          to: para, replyTo: remet.endereco.replace('@', `+${token}@`),
+          to: para, cc: cc.length ? cc : undefined, replyTo: remet.endereco.replace('@', `+${token}@`),
           subject: assunto, html, text: textoFinal,
           meta: { tipo: 'acompanhamento_caso', userId: admin.id },
           idempotencyKey: `acompanhamento:${chaveAtu}:${chavePar || ''}`,
@@ -164,7 +181,7 @@ async function handler(req) {
         // ao caso, então grita no log em vez de engolir.
         const ins = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
           direcao: 'saida', pasta: 'enviados', caixa: remet.endereco, de_email: remet.endereco, de_nome: admin.nome, dono: admin.id,
-          para: [para], assunto, texto: textoFinal, html, resend_email_id: env.id || null, lido: true,
+          para, cc, assunto, texto: textoFinal, html, resend_email_id: env.id || null, lido: true,
           enviado_por: admin.id, resposta_token: token, caso_id: c.id,
         }) });
         if (!ins.ok) console.error(`[acompanhamento] enviado mas NÃO registrado em email_caixa (caso ${c.id}): HTTP ${ins.status} — a resposta do advogado não vai se ligar ao caso`);

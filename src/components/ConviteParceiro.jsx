@@ -63,9 +63,9 @@ export const TERMO_PARCEIRO = [
 ];
 
 // Modal do termo — extraível p/ reuso. onAceitar recebe o clique de "Aceitar e ativar".
-export function TermoParceiroModal({ onFechar, onAceitar, concordo, setConcordo, aceitando }) {
+export function TermoParceiroModal({ onFechar, onAceitar, concordo, setConcordo, aceitando, bloqueante }) {
   return (
-    <div onClick={() => !aceitando && onFechar()}
+    <div onClick={() => !aceitando && !bloqueante && onFechar()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -88,10 +88,10 @@ export function TermoParceiroModal({ onFechar, onAceitar, concordo, setConcordo,
           <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>Li e concordo com o Termo de Adesão ao Programa de Parceiros. {DECLARACAO_REPASSE}</span>
         </label>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => !aceitando && onFechar()} disabled={aceitando}
+          {!bloqueante && <button onClick={() => !aceitando && onFechar()} disabled={aceitando}
             style={{ flex: '0 0 auto', padding: '11px 18px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: aceitando ? 'default' : 'pointer' }}>
             Agora não
-          </button>
+          </button>}
           <button onClick={onAceitar} disabled={!concordo || aceitando}
             style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: (!concordo || aceitando) ? '#93c5fd' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: (!concordo || aceitando) ? 'default' : 'pointer' }}>
             <Check size={15} /> {aceitando ? 'Ativando…' : 'Aceitar e ativar'}

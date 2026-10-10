@@ -30,6 +30,9 @@ const ROLE_CONFIG = {
     passos_extras: [
       { key: 'oab', label: 'Qual é o seu número de OAB?', tipo: 'text', placeholder: 'Ex: 123456/SP' },
       { key: 'areas_atuacao', label: 'Qual é sua área de atuação principal?', tipo: 'select', opts: ['Direito Imobiliário','Direito Civil','Execuções e Leilões','Outro'] },
+      // 10/10 (dono): para onde vão as comunicações do sistema (pedidos de atualização, guias de
+      // parcela, casos). Vira juridico_destinatarios no 1º acesso ao portal (api/juridico-destinatarios).
+      { key: 'emails_comunicacao', label: 'Quais e-mails devem receber as comunicações do sistema? (separe por vírgula — o primeiro é o principal)', tipo: 'text', placeholder: 'Ex: contato@escritorio.adv.br, socio@escritorio.adv.br' },
     ],
   },
   consultor: {
@@ -524,6 +527,10 @@ export default function ConviteEquipe() {
     if (!v) return 'Preencha este campo para continuar.';
     if (passo.key === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Email inválido.';
     if (passo.key === 'cpf' && v.replace(/\D/g, '').length < 11) return 'CPF deve ter 11 dígitos.';
+    if (passo.key === 'emails_comunicacao') {
+      const lista = v.split(/[,;\s]+/).filter(Boolean);
+      if (lista.some(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return 'Confira os e-mails (separe por vírgula).';
+    }
     // A tela PEDE "nome completo" desde sempre e aceitava um nome só — pedido sem regra é
     // sugestão. Mesma régua do cadastro comum (src/lib/nome.js).
     if (passo.key === 'nome') { const vn = validarNome(v); if (!vn.ok) return vn.erro; }

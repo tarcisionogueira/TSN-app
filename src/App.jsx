@@ -17,6 +17,7 @@ import ContratoObrigatorio from './components/ContratoObrigatorio';
 const CompletarCadastroModal = lazy(() => import('./components/CompletarCadastroModal'));
 const KycParceiroModal = lazy(() => import('./components/KycParceiroModal'));
 import TermosAtualizadosModal from './components/TermosAtualizadosModal';
+import ReaceiteTermosParceria from './components/ReaceiteTermosParceria';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 const ChatSuporte = lazy(() => import('./components/ChatSuporte'));
 const BoasVindasModal = lazy(() => import('./components/BoasVindasModal'));
@@ -347,6 +348,7 @@ function MainLayout() {
       {user && <SenhaPendenteModal />}
       {user && <Suspense fallback={null}><KycParceiroModal /></Suspense>}
       {user && <TermosAtualizadosModal />}
+      {user && <ReaceiteTermosParceria />}
       {user && <ToastRelatorioPronto />}
       {/* Boas-vindas: entra por ULTIMO entre os modais para nunca cobrir uma pendência
           que trava a conta (contrato, cadastro, KYC, termos). Ele mesmo se cala quando a
