@@ -36862,3 +36862,17 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - **#91**: Jinkings integrado (7 imóveis, MGL/Firecrawl). Andra é da mesma plataforma, mas hoje só tem veículos.
   - **#190**: não está travado. O cron de 4 h copia por urgência e os 817 elegíveis estão na fila.
   - **Firecrawl**: o formato `query` custa 5 créditos/página; a rotina usa `rawHtml` (1 crédito).
+- **Credenciais de leiloeiro no GitHub, auditoria (10/10)**:
+  - Em uso real: GL e ZUK (captura de documentos). Só em recon: BIASI, FRAZÃO, MEGA e SODRÉ.
+  - Nunca ligadas a workflow nenhum: SUPERBID_* e VIP_*.
+  - Recon por navegador (`recon-login-puppeteer.yml`, agora com SUPERBID/BIASI/VIP e entrada `lote`):
+    - **Superbid**: o login funciona (accounts.superbid.net; a sessão fica no localStorage), mas logado a API do painel
+      traz o mesmo que anônimo (comissão 5%). O detalhamento dos encargos só aparece na habilitação a cada evento,
+      então não se automatiza (#191 descartada).
+    - **VIP**: documentos públicos, 93% com matrícula; o login não acrescenta nada.
+    - **BIASI**: Edital.pdf e Matrícula.pdf são públicos. Os 66% "sem matrícula" são arquivo com nome de timestamp
+      (`loteanexo/<lote>/<n>.pdf`, 197 de 200 lotes têm), tipado "anexo".
+  - Correção: o classificador por conteúdo (`classificar-docs-espelho.yml`) era só manual e acumulou ~3.250 PDFs
+    genéricos de lote ativo nunca lidos. Agora roda semanal (domingo), grava, limite 1.500. Rodada disparada em 10/10.
+  - Defeito no próprio recon: cookie de analytics (`_hjSession`) contava como login e dava "login PROVÁVEL" numa
+    404 (forma nº 10). Agora exige formulário enviado, senha fora da tela e cookie que não seja de analytics.
