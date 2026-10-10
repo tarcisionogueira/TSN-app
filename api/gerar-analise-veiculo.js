@@ -270,8 +270,46 @@ async function anexosParaBlocos(anexos, deadline) {
 // do motor de coleta (pagina_pedir/pagina_ler, só service_role). Nunca lança; null = não veio.
 // (o helper mora em api/_contato-lote.js desde 30/09 — a proposta ao leiloeiro usa o mesmo)
 
+// CONDIÇÕES DE PAGAMENTO DA PLATAFORMA (10/10, dono: "a IA deve identificar as formas de pagamento
+// disponíveis e quanto seria a comissão do leiloeiro"). A SUPERBID publica no estado da página
+// (__NEXT_DATA__) da oferta: `groupOffer.commissionPercent` (a comissão de verdade — o campo
+// `commercialCondition.auctioneerCommissionPercent`, que líamos sozinho, vem NULO: medido em 10/10
+// nas 5 ofertas com relatório, todas "5%, presumida" com 5% publicado ao lado) e
+// `commercialCondition` (cartão, limite do cartão, parcelas, entrada mínima). Procura a oferta PELO ID
+// (a página também lista outras ofertas do evento) e só cai no primeiro objeto quando não acha o id.
+function condicoesDaPlataforma(html, url) {
+  const vazio = { comissaoPct: null, formas: [], parcelamento: null };
+  const m = String(html || '').match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+  if (!m) return vazio;
+  let raiz; try { raiz = JSON.parse(m[1]); } catch { return vazio; } // estado da página ilegível = sem condições; o relatório segue pelo texto
+  const idOferta = Number((String(url || '').match(/\/oferta\/(\d+)/) || [])[1]) || null;
+  let doId = null, primeiro = null, passos = 0;
+  const visitar = (no, prof) => {
+    if (doId || !no || typeof no !== 'object' || prof > 14 || ++passos > 60000) return;
+    if (!Array.isArray(no) && (no.commercialCondition || no.groupOffer)) {
+      if (idOferta && Number(no.id) === idOferta) { doId = no; return; }
+      if (!primeiro) primeiro = no;
+    }
+    for (const v of Array.isArray(no) ? no : Object.values(no)) visitar(v, prof + 1);
+  };
+  visitar(raiz, 0);
+  const of = doId || (idOferta ? null : primeiro);
+  if (!of) return vazio;
+  const cc = of.commercialCondition || {};
+  const pct = [cc.auctioneerCommissionPercent, of.groupOffer?.commissionPercent].map(Number).find((n) => n > 0 && n <= 20) ?? null;
+  const formas = ['À vista (pagamento do lote, comissão e encargos)'];
+  const lim = Number(cc.transactionLimit);
+  if (cc.allowsCreditCard) {
+    formas.push(`Cartão de crédito${cc.allowCreditCardTotalValue === false ? ' (parte do valor)' : ''}${lim > 0 ? ` para lotes de até ${brl(lim)}` : ''}${cc.allowCreditCardCommission === false ? ' — a comissão do leiloeiro não entra no cartão' : ''}`);
+  }
+  const nParc = Math.round(Number(cc.maxInstallments)), entrada = Number(cc.minAdvanceRate);
+  const parcelamento = nParc >= 2 && nParc <= 60 && entrada >= 5 && entrada < 100 ? { entradaPct: entrada, parcelas: nParc, correcao: null } : null;
+  if (parcelamento) formas.push(`Parcelado: entrada mínima de ${entrada}% + até ${nParc} parcelas`);
+  return { comissaoPct: pct, formas, parcelamento };
+}
+
 async function lerPaginaDoLote(url, deadline) {
-  if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, motivo: 'sem link do lote' };
+  if (!/^https?:\/\//i.test(String(url || ''))) return { texto: '', comissaoPct: null, plataforma: null, motivo: 'sem link do lote' };
   try {
     let html = null, motivoDireto = null;
     try {
@@ -281,7 +319,7 @@ async function lerPaginaDoLote(url, deadline) {
     } catch (e) { motivoDireto = String(e?.message || e).slice(0, 60); }
     if (!html) {
       const b = await paginaViaBanco(url, deadline);
-      if (!b.html) return { texto: '', comissaoPct: null, motivo: `página do lote indisponível (direto: ${motivoDireto}; banco: ${b.motivo})` };
+      if (!b.html) return { texto: '', comissaoPct: null, plataforma: null, motivo: `página do lote indisponível (direto: ${motivoDireto}; banco: ${b.motivo})` };
       html = b.html.slice(0, 3_000_000);
     }
     const m = html.match(/"auctioneerCommissionPercent"\s*:\s*(\d+(?:\.\d+)?)/);
@@ -290,10 +328,11 @@ async function lerPaginaDoLote(url, deadline) {
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
       .replace(/\s+/g, ' ')).trim().slice(0, 12000);
+    const plataforma = condicoesDaPlataforma(html, url);
     const pct = m ? Number(m[1]) : null;
-    return { texto, comissaoPct: pct > 0 && pct <= 20 ? pct : null, motivo: texto ? null : 'página do lote sem texto legível' };
+    return { texto, comissaoPct: pct > 0 && pct <= 20 ? pct : plataforma.comissaoPct, plataforma, motivo: texto ? null : 'página do lote sem texto legível' };
   } catch (e) {
-    return { texto: '', comissaoPct: null, motivo: `página do lote ilegível: ${String(e?.message || e).slice(0, 60)}` };
+    return { texto: '', comissaoPct: null, plataforma: null, motivo: `página do lote ilegível: ${String(e?.message || e).slice(0, 60)}` };
   }
 }
 
@@ -336,7 +375,7 @@ DADOS DO LOTE (do sistema, não do documento — confie neles):
 - Câmbio/combustível/cor: ${[v.cambio, v.combustivel, v.cor].filter(Boolean).join(' · ') || 'não informados'}
 - Modalidade: ${v.modalidade === 'judicial' ? 'Judicial' : v.modalidade === 'extrajudicial' ? 'Extrajudicial' : 'não identificada'}
 - Origem da venda: ${ORIGEM_PROMPT[v.origem_venda] || 'não identificada (o leiloeiro não informa quem vende)'}
-- Forma de pagamento: ${v.forma_pagamento || 'não informada'}
+- Formas de pagamento publicadas pela plataforma: ${extra.formasPlataforma?.length ? extra.formasPlataforma.join('; ') : 'não publicadas em campo próprio — procure no edital, na página e na descrição (o "à vista" do cadastro é padrão da coleta, NÃO é condição do edital)'}
 - Lance mínimo: R$ ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: R$ ${brl(v.valor_avaliacao)}` : ''}
 - Leiloeiro/plataforma: ${[v.leiloeiro, v.fonte].filter(Boolean).join(' · ') || 'não informado'}${v.comitente_edital ? ` · Comitente: ${v.comitente_edital}` : ''}
 - Pátio: ${[v.patio, v.cidade, v.estado].filter(Boolean).join(' · ') || 'não informado'}${v.opcionais ? `\n- Opcionais: ${String(v.opcionais).slice(0, 300)}` : ''}${v.motor_doc_texto ? `\n- Trecho de documento sobre o motor: ${String(v.motor_doc_texto).slice(0, 400)}` : ''}
@@ -356,6 +395,7 @@ TAREFA: com base em tudo acima e nos documentos anexos (se houver — edital/lau
   "custos": [{"item": "descrição curta", "valor": número em reais}] — SOMENTE débitos e taxas que o edital, a página ou a descrição dizem ficar com o ARREMATANTE e trazem VALOR: débitos em aberto (IPVA, multas, licenciamento, DPVAT), taxa administrativa/encargos de administração, pátio/estadia/depósito, remoção, despachante. Some nada, copie cada valor como está. NUNCA inclua reparos, honorários de assessoria nem a comissão do leiloeiro. Lista vazia se nada constar,
   "debitosSemValor": ["débito/encargo que fica com o arrematante mas SEM valor informado — ex.: 'multas e IPVA anteriores ao leilão, valor não informado', 'encargos de administração conforme condições de venda'. Vazio se nada."],
   "reparos": ["reparo/atenção apontado pela condição DECLARADA (ex.: 'pneus ruins — troca', 'bateria fraca', 'volante desgastado', 'pequenos amassados'), SEM valor. Vazio se nada."],
+  "formasPagamento": ["cada forma de pagamento que o edital, a página ou a descrição ACEITAM, uma por item, com a condição (ex.: 'à vista em até 24h após a aprovação, por TED/boleto', 'cartão de crédito', 'parcelado: 30% de entrada + 10 parcelas', 'financiamento'). Vazio se nenhum deles disser."],
   "parcelamento": {"entradaPct": número (ex.: 25 = sinal de 25% do lance), "parcelas": número de parcelas do saldo, "correcao": "índice/juros do saldo, se informado"} SÓ se o edital/descrição PERMITIR expressamente pagar em parcelas; senão null,
   "recomendacao": "comprar" | "avaliar_com_cautela" | "evitar"
 }
@@ -524,7 +564,7 @@ export default async function handler(req, res) {
     const taxasPlataforma = consertarAcentos(v?.raw?.lot_rate_information || '').slice(0, 600);
     const textoDoLote = [v.descricao, taxasPlataforma, pagina.texto].filter(Boolean).join(' \n ');
 
-    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma }) }];
+    const content = [...blocosDoc, { type: 'text', text: promptVeiculo(v, percentualFipe, faixa, { paginaTexto: pagina.texto, taxasPlataforma, formasPlataforma: pagina.plataforma?.formas }) }];
     // UMA chamada ao modelo. Chamada de novo, uma vez, quando o JSON volta inválido (ver abaixo).
     const chamarModelo = async () => {
       const r = await anthropicFetch({
@@ -595,11 +635,16 @@ export default async function handler(req, res) {
       reparos: listaDeTextos(parsed.reparos),
       paginaLote: pagina.motivo || 'lida',
       // Parcelamento (29/09): só com sinal e nº de parcelas plausíveis — valor fora disso é leitura errada.
-      parcelamento: (() => {
+      // O publicado pela plataforma em campo próprio vence a leitura da IA (10/10).
+      parcelamento: pagina.plataforma?.parcelamento || (() => {
         const p = parsed.parcelamento;
         const e = Number(p?.entradaPct), n = Math.round(Number(p?.parcelas));
         return p && e >= 5 && e < 100 && n >= 2 && n <= 60 ? { entradaPct: e, parcelas: n, correcao: typeof p.correcao === 'string' ? p.correcao.slice(0, 120) : null } : null;
       })(),
+      // Formas de pagamento (10/10): campo da plataforma + o que a IA leu no edital/página/descrição.
+      // Vazio = ninguém publicou; a tela diz "não informadas" em vez de afirmar "à vista".
+      formasPagamento: [...new Set([...(pagina.plataforma?.formas || []), ...listaDeTextos(parsed.formasPagamento)])].slice(0, 8),
+      formasPagamentoFonte: pagina.plataforma?.formas?.length ? 'página do lote (campos da plataforma)' : (listaDeTextos(parsed.formasPagamento).length ? 'edital/página/descrição (leitura da IA)' : null),
       fipeValor: v.valor_fipe || null, fipeStatus: v.fipe_status || null, fipeMesReferencia: v.fipe_mes_referencia || null,
       valorMinimo: v.valor_minimo || null, percentualFipe, faixaFipe: faixa,
       // Revenda sugerida pelo mercado (média dos 5 anúncios mais baratos − 10%) ou o motivo de não ter.

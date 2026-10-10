@@ -50,6 +50,14 @@ function rotuloComissao(result, viab) {
   if (viab.comissaoPresumida) return 'presumida — o lote não informa; confirme no edital';
   return result?.comissaoFonte ? `fonte: ${result.comissaoFonte}` : 'informada no lote';
 }
+// Formas de pagamento (10/10): o que a plataforma/edital publicam. Sem nada, NÃO afirmar "à vista":
+// o "a_vista" do cadastro é padrão do coletor, não condição do edital (era o que a tela repetia).
+function textoFormasPagamento(result) {
+  const f = Array.isArray(result?.formasPagamento) ? result.formasPagamento.filter(Boolean) : [];
+  if (f.length) return `Formas de pagamento: ${f.join(' · ')}${result.formasPagamentoFonte ? ` (fonte: ${result.formasPagamentoFonte})` : ''}.`;
+  if (Array.isArray(result?.formasPagamento)) return 'Formas de pagamento não informadas pelo leiloeiro nem pelo edital — o cálculo considera pagamento à vista; confirme antes do lance.';
+  return result?.parcelamento === null ? 'Parcelamento não encontrado no edital — o cálculo considera pagamento à vista.' : '';
+}
 function rotuloRevenda(rm) {
   // O rótulo diz o portal de ONDE a média veio (30/09: Mobiauto entrou como 1ª fonte).
   const portal = { webmotors: 'da Webmotors', mobiauto: 'do Mobiauto', olx: 'da OLX', icarros: 'do iCarros' }[rm.base] || 'de vários portais';
@@ -92,6 +100,7 @@ function htmlRelatorioVeiculo({ v, titulo, result, viab, desagio, parc }) {
       ${linha('Teto de aquisição (65% da FIPE)', brl(viab.tetoAquisicao))}
       ${linha('TETO DE LANCE (até este valor ainda é boa compra)', `<b style="color:${viab.fechaNaRegra ? '#15803d' : '#b91c1c'}">${brl(viab.tetoLance)}</b>`)}
       ${parc ? [['no lance mínimo', parc.noMinimo], ['no teto de lance', parc.noTeto]].filter(([, p]) => p).map(([rot, p]) => linha(`Parcelado ${rot} (${parc.entradaPct}% + ${parc.parcelas}x${parc.correcao ? `, ${e(parc.correcao)}` : ''})`, `sinal ${brl(p.sinal)} (entrada ${brl(p.entradaLance)} + comissão ${brl(p.comissao)} + débitos ${brl(p.despesas)}) e ${p.parcelas}× ${brl(p.valorParcela)}`)).join('') : ''}
+      ${textoFormasPagamento(result) ? linha('Pagamento', e(textoFormasPagamento(result))) : ''}
       ${linha(result.revendaMercado ? `Revenda sugerida (${e(rotuloRevenda(result.revendaMercado))} ${brl(result.revendaMercado.media)} − ${result.revendaMercado.descontoPct}%)` : `Revenda realista (FIPE − ${desagio.pct}%)`, brl(viab.fipeRealista))}
       ${linha('Lucro estimado no lance mínimo', brl(viab.lucroNoMinimo))}
       ${linha('Lucro estimado no teto de lance', brl(viab.lucroNoTeto))}
@@ -349,7 +358,7 @@ export default function AnaliseVeiculo() {
                   {viab.fechaNaRegra ? `Até ${fmtBRL(viab.tetoLance)} de lance ainda é uma boa compra.` : 'Nem o lance mínimo cabe no teto — não é boa compra pela regra da casa.'}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
-                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : ''}) + débitos e despesas assumidos ({viab.despesasTotal > 0 ? fmtBRL(viab.despesasTotal) : 'nenhum com valor declarado'}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
+                  Lance + comissão do leiloeiro ({viab.comissaoPct}%{viab.comissaoPresumida ? ', presumida' : result.comissaoFonte ? ` — ${result.comissaoFonte}` : ''}) + débitos e despesas assumidos ({viab.despesasTotal > 0 ? fmtBRL(viab.despesasTotal) : 'nenhum com valor declarado'}) = até {fmtBRL(viab.tetoAquisicao)}, {Math.round(TETO_FIPE * 100)}% da FIPE.
                   {' '}No lance mínimo, o investimento total é {fmtBRL(viab.investimentoNoMinimo)}.
                 </div>
                 {parc && (
@@ -360,7 +369,7 @@ export default function AnaliseVeiculo() {
                     ))}
                   </div>
                 )}
-                {result.parcelamento === null && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Pagamento à vista — o edital não prevê parcelamento.</div>}
+                {textoFormasPagamento(result) && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 6 }}>{textoFormasPagamento(result)}</div>}
               </div>
             )}
           </div>
@@ -426,6 +435,7 @@ export default function AnaliseVeiculo() {
                   <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{extras.reparos.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 </div>
               )}
+              {!semCustosNoRelatorio && result && !Array.isArray(result.formasPagamento) && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior à leitura das formas de pagamento e da comissão publicadas pela plataforma — clique em "Gerar novamente" para atualizar.</div>}
               {semCustosNoRelatorio && <div style={{ marginTop: 8, fontSize: 11.5, color: '#92400e' }}>Este relatório é anterior ao levantamento de custos — clique em "Gerar novamente" para incluir a comissão e os débitos declarados pelo leiloeiro e a revenda pelos anúncios de mercado.</div>}
             </div>
           )}
