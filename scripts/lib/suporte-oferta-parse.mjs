@@ -44,6 +44,22 @@ const dataBr = (t) => {
   return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00-03:00` : null;
 };
 
+// "… HOTEL CARATINGA/MG" → Caratinga; "… CRI TIROS/MG" → Tiros; "… BELO HORIZONTE/MG" → Belo Horizonte.
+// Até 4 palavras antes da barra (São João Del Rei), parando em substantivo de imóvel/cartório (não é nome de cidade).
+const NAO_CIDADE = /^(HOTEL|PR[ÉE]DIO|CASA|FAZENDA|S[ÍI]TIO|CH[ÁA]CARA|LOTE|TERRENO|APTO|APARTAMENTO|SALA|LOJA|GALP[ÃA]O|[ÁA]REA|CRI|RI|CART[ÓO]RIO|COMARCA|ABC|MATR[ÍI]CULA|N[º°]?|HECTARES?|M²)$/i;
+function cidadeAntesDaBarra(t) {
+  const m = t.match(/([A-ZÀ-Ú][A-ZÀ-Ú ]{1,60})\/([A-Z]{2})\s*$/);
+  if (!m) return null;
+  const palavras = m[1].trim().split(/\s+/);
+  const nome = [];
+  for (let i = palavras.length - 1; i >= 0 && nome.length < 4; i--) {
+    if (NAO_CIDADE.test(palavras[i]) || /\d/.test(palavras[i])) break;
+    nome.unshift(palavras[i]);
+  }
+  while (nome.length && /^(DE|DO|DA|DOS|DAS|E)$/i.test(nome[0])) nome.shift();
+  return nome.length ? [null, nome.join(' '), m[2]] : null;
+}
+
 export function parseDetalhe(html, url) {
   const lote = varJson(html, 'lote');
   const leilao = varJson(html, 'leilao') || {};
@@ -65,10 +81,13 @@ export function parseDetalhe(html, url) {
   const dataLeilao = prox || d2 || d1;
 
   const titulo = String(lote.titulo || leilao.titulo || '').trim() || null;
+  // "… EM JUIZ DE FORA - MG", "PRÉDIO DO ABC HOTEL CARATINGA/MG", "… CRI TIROS/MG" — cidade/UF no fim do título.
   const cu = (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
+    || cidadeAntesDaBarra(titulo || '')
     || String(lote.descricao || '').match(/\bde\s+([A-ZÀ-Ú][\wÀ-ú ]+?)[-/]([A-Z]{2})\b/);
   const desc = String(lote.descricao || '').replace(/\s*\n\s*/g, ' ').trim();
-  const mat = (desc.match(/matr[íi]cula\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i) || [])[1] || null;
+  const reMat = /matr[íi]cula\s*:?\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i;
+  const mat = (desc.match(reMat) || String(titulo || '').match(reMat) || [])[1] || null;
   const foto = (String(html).match(/https:\/\/static\.suporteleiloes\.com\.br\/[^"'\s]+\/bens\/\d+\/arquivos\/[^"'\s]+\.(?:jpe?g|png|webp)/i) || [])[0] || null;
   let linkEdital = null;
   for (const m of String(html).matchAll(/<a[^>]+href=["']([^"']+\.pdf)["'][^>]*>([\s\S]{0,300}?)<\/a>/gi)) {
