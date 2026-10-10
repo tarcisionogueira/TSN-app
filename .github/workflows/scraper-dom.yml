@@ -262,7 +262,9 @@ jobs:
         # da LEJE responde "acesso temporariamente bloqueado" e o monitor enchia de `falhou` que não
         # vinha da coleta de produção (4 das 6 falhas de 30/09 eram push).
         # 10/10: busca pelo Firecrawl (passa o Cloudflare; 1 crédito/página, teto por execução).
-        if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'leje') }}
+        # 1ª coleta real (run 38074812502): ok, 3 lotes. Volta ao AGENDADO diário (~4 créditos/dia);
+        # NÃO no push — cada commit gastaria crédito numa coleta dry-run.
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || contains(github.event.inputs.fontes, 'leje')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
