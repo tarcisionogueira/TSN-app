@@ -22,7 +22,10 @@ export const TENANTS = {
 };
 
 // Slug de lote que NÃO é imóvel (medido nos 3 catálogos em 10/10). Prefeitura = frota/sucata.
-const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje/i;
+// `comprei-`: a vitrine do leiloeiro REDIRECIONA para comprei.pgfn.gov.br (venda direta da PGFN,
+// medido no Jonas em 10/10 — 5 de 5 lotes) — não é lote do leiloeiro, já entra pela GLOBOLEILOES
+// (128 ativos), e abrir cada um custava 1 crédito para o parser devolver "sem detalhe".
+const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-/i;
 
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
