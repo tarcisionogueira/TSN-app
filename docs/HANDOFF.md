@@ -36680,3 +36680,35 @@ Pedido do dono: a equipe executa (sem papel novo de despachante). Estrutura:
 - Registro: custas só saem na devolutiva → ação `adicionar_custas` (botão "Cobrar custas" no serviço) cria parcela
   `momento='custas'` e manda o boleto. Trava ajustada (`20261007b_cartorio_custas_e_boleto.sql`): custas abertas NÃO
   travam o protocolo, travam o 'registrado'. Testado no banco com rollback.
+
+## 10/10 — Abertura + jurídico até a posse + split do honorário sobre o LÍQUIDO (pedidos do dono)
+**Diagnóstico de abertura:** segurança 0/0; regras tinha 1 crítico (`acervo.fracao_ideal` órfã — a v4 de 08/10
+recriou `fracao_ideal_barrada` sem citar a regra; corpo idêntico, comentário de volta) → 0. Fechadas com prova:
+#173, #184 (conferências SUPERBID), #3 (Leiloaria Smart cancelou a proposta), #4 (Workspace pago em 06/10).
+Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CRLEILOES medição velha;
+`link_matricula_morto` voltou a 56; `resultado_leilao_atrasado` 693.
+
+**Entregue (main):**
+- `casos-acompanhamento-cron` (dias úteis 09h20): caso pós-arremate sem posse e com advogado → e-mail do
+  tarcisio@ ao advogado (Para = e-mail principal de comunicação, demais em cópia) pedindo atualização (1×/semana)
+  e a guia da próxima parcela (1× por parcela, 12 dias antes). Resposta volta encadeada com `caso_id`; na caixa,
+  botão **"Enviar só o anexo ao cliente"** (`acao cliente_do_caso` em `api/email-caixa.js`).
+- Termos parceiro **v10** / jurídico **v7**: cláusula "a BidPro só intermedeia — recebe e repassa; responde
+  fiscalmente só pela própria parcela" + a mesma frase no checkbox (`DECLARACAO_REPASSE`). **Novo aceite
+  obrigatório** (`ReaceiteTermosParceria`, bloqueante; RPCs agora gravam a versão nova — antes nunca gravavam).
+- Convite do advogado pede os **e-mails de comunicação** → viram `juridico_destinatarios` no 1º acesso.
+- **Split sobre o líquido** (regra `honorario.split_sobre_liquido`, função `honorario_liquidar`, só
+  service_role/admin): base = líquido recebido; dinheiro com o advogado (cheques, `em_poder='advogado'`) abate
+  da cota dele; crédito automático do que já está disponível (terceiros antes do admin); `distribuido` só quando
+  tudo compensou. Líquido: Asaas (netValue; RECEIVED = disponível), MP (`mp_pagamentos`), manuais = valor.
+  Créditos seguintes usam `origem_tipo` `arrematacao_r2…` (o índice único e o `saque.js` exigem origem_id = id).
+  `honorarios-liquidar-cron` diário. No Caso: cheque "fica com" + Compensou / Voltou.
+  **Marcos:** cobrado 54.835,52 = Pix 2.163 + cartão Asaas 33.001,09 (líquido a ler, ~D+32) + 3 cheques
+  19.671,43 com o advogado. Seco: cota do advogado 27.417,76 − cheques = ~7.746 a repassar (provisório).
+- Portal do advogado, aba **Operações** (`/api/advogado-operacoes`): cobrado × recebido × líquido, a linha DELE do
+  repasse (mesma conta que credita), parcelas e anexos do lote (link assinado 1 h).
+- **Procuração à Nogueira junto com o pagamento** do honorário (`/api/honorario-procuracao` + assinatura pelo
+  `/api/assinar-contrato`); o pagamento só aparece depois de assinada.
+
+**Pendências novas:** #186 (dono: vincular escritório nos 3 casos), #187 (1ª rodada do acompanhamento),
+#188 (1ª liquidação do Marcos ~19/10), #189 (dono: validar no navegador). #143 depende do #186.
