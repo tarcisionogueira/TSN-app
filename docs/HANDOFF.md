@@ -36818,3 +36818,25 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - lancenow: Valland, aponta para o Comprei, agora coberto.
   - lecape: erro de SSL.
   - 1.113 editais sem nome nem domínio de leiloeiro: lacuna da extração.
+- **Viva Leilões integrada (10/10)**: plataforma Degrau/MGL, como Fernando, Jonas e Lucas; tenant `viva` em `lib/mgl-parse.mjs`.
+  - Roda via Firecrawl no `scraper-firecrawl-semanal.yml`. 1ª coleta: 14 imóveis, todos com matrícula.
+  - Mudanças no parser:
+    - Cidade pela linha "Endereço: …, Cidade/UF" (antes saía "Piqueri São Paulo").
+    - Sufixo "Apartamentos em Leilão" fora do título.
+  - O runner aceita `tenant.catalogo`: a busca `ID_Categoria=2` volta vazia na Viva, então o catálogo dela é a home.
+  - Teto do Firecrawl no MGL subiu de 40 para 60. Nova entrada `mgl_tenants` no dispatch, para rodar um site só.
+- **Radar: editais "sem leiloeiro" (10/10). A conta de 1.113 media outra coisa (forma nº 10)**:
+  - 667 deles são `nao_edital`, ruído que a IA já descartou.
+  - Os reais eram 549. A maioria é DECISÃO que só diz "o leiloeiro nomeado": não há nome no texto para extrair.
+  - Recuperado:
+    - `editais_leiloeiro_pelo_processo()`, no banco e chamada a cada run do radar: copia o leiloeiro de outro edital
+      ou de lote do acervo do MESMO processo, só quando há um leiloeiro único. Recuperou 34.
+    - Antes de copiar, a função anula nome-lixo, que a fonte também não aproveita: "Com A Remoção", "Outros Documentos",
+      "Da Presente Decisão" e "a publicação do edital…" (4 anulados). Site de órgão público (gov.br/jus.br) também não é copiado.
+    - Extrator JS:
+      - "NOME, LEILOEIRO OFICIAL", com o nome ANTES da função, só em trecho curto em caixa alta.
+      - Site pelo e-mail do leiloeiro (`@destakleiloes.com.br`), só domínio com "leil".
+      - `NOME_BLOQ` passou a barrar remoção, decisão e presente.
+  - O re-parse era `.limit(300)` sem ordem com 549 pendentes, e podia reler sempre as mesmas linhas (forma nº 4).
+    Agora é paginado.
+  - Teste `npm run testar:leiloeiro`: 31/31.

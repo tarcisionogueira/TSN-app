@@ -30,7 +30,7 @@
  * Certame Designado", "Informou O Recebimento de Cinco Propostas". É o pior tipo de defeito
  * possível aqui — a saída é plausível, e passaria numa revisão de código.
  */
-import { extrairLeiloeiro } from '../../api/radar-editais-cron.js';
+import { extrairLeiloeiro, extrairLeiloeiroAntes, plataformaPorEmail } from '../../api/radar-editais-cron.js';
 
 let ok = 0, falhas = 0;
 const checa = (nome, cond, extra) => {
@@ -96,6 +96,25 @@ checa('nenhum dos 4 falsos positivos volta',
 checa('"perante este Tribunal" só é barrado pela minúscula, não pelo NOME_BLOQ',
   extrairLeiloeiro('leiloeiro oficial credenciado perante este Tribunal,') === null
   && extrairLeiloeiro('leiloeiro oficial credenciado Perante Este Tribunal,') !== null);
+
+// ── 10/10: NOME ANTES DA FUNÇÃO e SITE PELO E-MAIL (trechos reais de editais sem leiloeiro) ──
+console.log('\nNOME ANTES DA FUNÇÃO (cabeçalho de partes do DJEN)');
+checa('"- DENYS PYERRE DE OLIVEIRA, LEILOEIRO OFICIAL -" vira o nome',
+  extrairLeiloeiroAntes('Daniel Sachs Silva  - LEJE  - LEILÃO JUDICIAL ELETRÔNICO - DENYS PYERRE DE OLIVEIRA, LEILOEIRO OFICIAL  - Vistos.') === 'Denys Pyerre de Oliveira',
+  extrairLeiloeiroAntes('Daniel Sachs Silva  - LEJE  - LEILÃO JUDICIAL ELETRÔNICO - DENYS PYERRE DE OLIVEIRA, LEILOEIRO OFICIAL  - Vistos.'));
+checa('frase longa em caixa alta antes de "LEILOEIRO OFICIAL" NÃO vira nome',
+  extrairLeiloeiroAntes('JUNTADA DO AUTO DE ARREMATAÇÃO E DOS COMPROVANTES DE PAGAMENTO RAFAEL ARAÚJO GOMES, LEILOEIRO OFICIAL') === null);
+checa('"leiloeiro oficial" em minúscula, sem nome antes, não inventa nada',
+  extrairLeiloeiroAntes('Intime-se o leiloeiro oficial nomeado nos autos') === null);
+
+checa('"Com A Remoção dos Bens" / "Da Presente Decisão" não são nome (achados no acervo, 10/10)',
+  extrairLeiloeiro('leiloeiro Com A Remoção dos bens') === null && extrairLeiloeiro('leiloeiro Da Presente Decisão,') === null);
+
+console.log('\nSITE PELO E-MAIL DO LEILOEIRO');
+checa('contato@destakleiloes.com.br → destakleiloes.com.br',
+  plataformaPorEmail('nomeado (Sr. Marcus Vinicius Yoshimi Uebara (contato@destakleiloes.com.br) acerca') === 'destakleiloes.com.br');
+checa('e-mail de tribunal/advogado não vira site de leilão',
+  plataformaPorEmail('intimações pelo e-mail sp-vara3@tjsp.jus.br ou adv.silva@gmail.com') === null);
 
 console.log('\nENTRADA VAZIA OU SEM A PALAVRA');
 eq('', null, 'texto vazio');

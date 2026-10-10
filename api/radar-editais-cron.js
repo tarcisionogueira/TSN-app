@@ -98,7 +98,8 @@ export const ufDoTribunal = (sigla) => ufValida(String(sigla || '').replace(/^TJ
 // janela de 80 chars não tinha delimitador antes dele). `leiloeir` bloqueia sem risco: a
 // palavra nunca aparece DENTRO de um nome válido (o preâmbulo já a consome antes da
 // janela), e não colide com "leilões"/"leilão" (raiz diferente: leiloeir-o vs leil-ão).
-const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|leiloeir|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b|document|\bn[ãa]o\b|\bser[áa]\b|notici|\bdeclarou\b|\bdeterminou\b|\binformou\b|\bdecidiu\b|\bconcluiu\b|\bexpediu\b)/i;
+const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|leiloeir|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b|document|\bn[ãa]o\b|\bser[áa]\b|notici|\bdeclarou\b|\bdeterminou\b|\binformou\b|\bdecidiu\b|\bconcluiu\b|\bexpediu\b|remo[çc][ãa]o|decis[ãa]o|\bpresente\b)/i;
+// 10/10: + remoção/decisão/presente — "Com A Remoção dos Bens" e "Da Presente Decisão" saíam como nome.
 // ⚠️ AMPLIADO (03/09), depois de medir as "cidades" dos 87 editais elegíveis para virar lote:
 // "Detran", "IBAPE", "OAB", "INTIME", "TRATANDO", "Justiça do Estado de São Paulo TJ",
 // "Portal de Auxiliares da Justiça do TJ", "Tabela Prática do TJ", "Vistos. CADASTRE",
@@ -218,6 +219,30 @@ export function extrairLeiloeiro(texto) {
   return null;
 }
 
+// NOME ANTES DA FUNÇÃO (10/10): o cabeçalho de partes do DJEN escreve "… - DENYS PYERRE DE
+// OLIVEIRA, LEILOEIRO OFICIAL - Vistos." — o nome vem ANTES de "leiloeiro", e `extrairLeiloeiro`
+// só olha DEPOIS. Conservador de propósito: só um trecho TODO MAIÚSCULO de 2–5 palavras que começa
+// logo depois de um separador ("-", ",", ";", ":", "." ou início). Trecho mais longo é frase em
+// caixa alta, não nome — medido: "…DA ARREMATAÇÃO E DOS COMPROVANTES DE PAGAMENTO RAFAEL ARAÚJO
+// GOMES, LEILOEIRO" casava o nome errado com qualquer janela fixa.
+const RE_NOME_ANTES = /(?:^|[-–—,;:.]\s*)([A-ZÀ-Ý][A-ZÀ-Ý'.]+(?:\s+[A-ZÀ-Ý][A-ZÀ-Ý'.]*){1,4}),?\s*[-–]?\s*LEILOEIR[OA](?:\(A\))?\s+(?:OFICIAL|P[ÚU]BLIC[OA]|JUDICIAL)\b/g;
+export function extrairLeiloeiroAntes(texto) {
+  for (const m of String(texto || '').matchAll(RE_NOME_ANTES)) {
+    const nome = nomeLeiloeiroValido(m[1]);
+    if (nome) return nome;
+  }
+  return null;
+}
+
+// SITE PELO E-MAIL DO LEILOEIRO (10/10): a decisão costuma dar o contato ("Sr. Marcus Vinicius
+// … (contato@destakleiloes.com.br)") sem escrever o site. Só domínio com "leil" no nome — e-mail
+// de advogado, cartório ou tribunal nunca vira site de leilão. Medido: 5 de 549 editais sem
+// leiloeiro tinham esse e-mail (destakleiloes, drleiloes, peixotoleiloes, minasgeraisleiloes).
+export function plataformaPorEmail(texto) {
+  const m = String(texto || '').match(/[a-z0-9._%+-]+@((?:[a-z0-9-]+\.)*[a-z0-9-]*leil[a-z0-9-]*\.(?:com|net|leilao)(?:\.br)?)\b/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
 export function cidadeValida(s) {
   let c = String(s || '').replace(/\s+/g, ' ').trim();
   c = c.replace(CIDADE_PREFIXO, '').trim();
@@ -256,7 +281,7 @@ function dominioDe(url) {
 function parseEdital(texto) {
   const t = String(texto || '');
   const pega = (re) => { const m = t.match(re); return m ? (m[1] || '').replace(/\s+/g, ' ').trim() : null; };
-  const leiloeiro = extrairLeiloeiro(t);
+  const leiloeiro = extrairLeiloeiro(t) || extrairLeiloeiroAntes(t);
   const jucesp = pega(/JUCESP[^\dA-Za-z]{0,6}(?:n[ºo.]?\s*)?([\d./-]{2,12})/i);
   const av = pega(/avalia[çc][ãa]o[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
   // 22/09 (achado do dono: card mostrando "Lance mín. R$ 500,00" pra terreno de R$3,4mi).
@@ -286,7 +311,8 @@ function parseEdital(texto) {
   // leiloeiro/leilão — o tipo de texto formal do DJEN não cita site alheio à toa).
   const plataformaWww = pega(/\bwww\.([a-z0-9][a-z0-9.\-]*\.com\.br)\b/i);
   const plataforma = pega(/https?:\/\/([a-z0-9.\-]+\.(?:com|net|br)[^\s"'<>)]*)/i)
-    || (plataformaWww ? plataformaWww.toLowerCase() : null);
+    || (plataformaWww ? plataformaWww.toLowerCase() : null)
+    || plataformaPorEmail(t);
   // Info ADICIONAL do edital (o DJEN não traz a certidão da matrícula, mas o edital descreve
   // o imóvel/ônus): área, ocupação, cartório (CRI), débitos, endereço, cidade/UF.
   const area = pega(/[áa]rea\s*(?:total|constru[íi]da|privativa|do\s+terreno|de)?\s*[:\-]?\s*([\d.]+,\d{2})\s*m/i);
@@ -983,37 +1009,48 @@ async function buscarDocumentosPendentes(supabase, teto = 15) {
   return { tentados, achados };
 }
 
-async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
-  const { data, error } = await supabase.from('editais_leilao')
-    .select('id, status, texto_integral, leilao_plataforma_url')
-    .is('leiloeiro_nome', null)
-    .in('status', ['processado', 'erro_parse'])   // `nao_edital` fica de fora: é ruído da busca
-    .not('texto_integral', 'is', null)
-    .limit(teto);
-  // Leitura que falhou NÃO pode virar "não havia o que corrigir": os dois desfechos são
-  // `corrigidos: 0` e levam a conclusões opostas sobre o parser.
-  if (error) return { erro: error.message.slice(0, 120), vistos: 0, corrigidos: 0 };
+async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 3000) {
+  // PAGINADO (10/10). Era `.limit(300)` sem ordem com 549 pendentes: o Postgres pode devolver as
+  // MESMAS 300 linhas toda rodada — as que nunca resolvem — e o resto jamais era relido (forma nº 4:
+  // o corte vira "acabou"). Regex sobre texto já guardado: ler as 549 custa pouco.
+  const data = [];
+  for (let de = 0; de < teto; de += 500) {
+    const { data: pg, error } = await supabase.from('editais_leilao')
+      .select('id, status, texto_integral, leilao_plataforma_url, leiloeiro_nome')
+      .or('leiloeiro_nome.is.null,leilao_plataforma_url.is.null')
+      .in('status', ['processado', 'erro_parse'])   // `nao_edital` fica de fora: é ruído da busca
+      .not('texto_integral', 'is', null)
+      .order('id').range(de, de + 499);
+    // Leitura que falhou NÃO pode virar "não havia o que corrigir": os dois desfechos são
+    // `corrigidos: 0` e levam a conclusões opostas sobre o parser.
+    if (error) return { erro: error.message.slice(0, 120), vistos: data.length, corrigidos: 0 };
+    data.push(...(pg || []));
+    if (!pg || pg.length < 500) break;
+  }
 
   let corrigidos = 0, falhasGravacao = 0;
-  for (const e of data || []) {
-    const nome = extrairLeiloeiro(e.texto_integral);
-    if (!nome) continue;
+  for (const e of data) {
+    const nome = e.leiloeiro_nome ? null : (extrairLeiloeiro(e.texto_integral) || extrairLeiloeiroAntes(e.texto_integral));
+    const dom = e.leilao_plataforma_url ? null : plataformaPorEmail(e.texto_integral);
+    if (!nome && !dom) continue;
+    const url = dom ? `https://${dom}` : e.leilao_plataforma_url;
+    const nomeFinal = nome || e.leiloeiro_nome;
     const upd = {
-      leiloeiro_nome: nome,
-      leiloeiro_nome_norm: norm(nome),
+      ...(nome ? { leiloeiro_nome: nome, leiloeiro_nome_norm: norm(nome) } : {}),
+      ...(dom ? { leilao_plataforma_url: url } : {}),
       // Domínio junto do nome (05/09) — mesma razão do outro call site: sem isso, um edital
       // com site batendo mas nome só encontrado agora podia regredir de true (do backfill por
       // domínio) pra false, sobrescrevendo com um sinal mais fraco.
-      leiloeiro_integrado: ehIntegrado(nome, dominioDe(e.leilao_plataforma_url)),
+      leiloeiro_integrado: ehIntegrado(nomeFinal, dominioDe(url)),
       atualizado_em: new Date().toISOString(),
     };
     // Achar o leiloeiro É extrair algo útil: quem estava em `erro_parse` deixou de estar.
-    if (e.status === 'erro_parse') upd.status = 'processado';
-    const { error: eUpd } = await supabase.from('editais_leilao').update(upd).eq('id', e.id);
-    if (eUpd) { falhasGravacao++; console.error('[radar-editais] re-parse não gravou', e.id, eUpd.message); continue; }
+    if (e.status === 'erro_parse' && nome) upd.status = 'processado';
+    const { data: feito, error: eUpd } = await supabase.from('editais_leilao').update(upd).eq('id', e.id).select('id');
+    if (eUpd || !feito?.length) { falhasGravacao++; console.error('[radar-editais] re-parse não gravou', e.id, eUpd?.message || '0 linhas'); continue; }
     corrigidos++;
   }
-  return { vistos: (data || []).length, corrigidos, falhas_gravacao: falhasGravacao || undefined };
+  return { vistos: data.length, corrigidos, falhas_gravacao: falhasGravacao || undefined };
 }
 
 /**
@@ -1205,6 +1242,16 @@ async function handler(req) {
   try { reparse = await reparsarLeiloeirosPendentes(supabase, ehIntegrado); }
   catch (e) { reparse = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] re-parse falhou', reparse.erro); }
 
+  // LEILOEIRO PELO PROCESSO (10/10): edital que não nomeia ninguém ("o leiloeiro nomeado") herda o
+  // leiloeiro de outra publicação do MESMO processo ou de um lote nosso do processo — só quando a
+  // fonte é inequívoca (ver a função no banco). Antes da reavaliação, que então já enxerga o domínio.
+  let peloProcesso = null;
+  try {
+    const { data, error } = await supabase.rpc('editais_leiloeiro_pelo_processo');
+    if (error) throw new Error(error.message);
+    peloProcesso = data;
+  } catch (e) { peloProcesso = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] leiloeiro pelo processo falhou', peloProcesso.erro); }
+
   // Idem, para editais cujo NOME já foi extraído mas o flag `leiloeiro_integrado` ficou
   // desatualizado (ver comentário da função) — leiloeiro integrado DEPOIS do processamento.
   let reavaliacao = null;
@@ -1267,7 +1314,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, reavaliacao, promocao, link_lote: linkLote, descoberta_site: descoberta, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, pelo_processo: peloProcesso, reavaliacao, promocao, link_lote: linkLote, descoberta_site: descoberta, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
