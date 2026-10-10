@@ -23,13 +23,17 @@ export const TENANTS = {
   viva: { fonte: 'VIVALEILOES', leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br',
     // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro); a home lista os lotes abertos.
     catalogo: '/' },
+  // 10/10 (#91): mesma plataforma; imóveis rurais/comerciais em MG/TO. A home redireciona para
+  // /proximos_leiloes/1/1/, que lista os lotes. (andraleiloes.com.br também é Degrau, mas em 10/10
+  // só tinha veículos do Detran e bens de prefeitura — fica de fora até ter imóvel.)
+  jinkings: { fonte: 'JINKINGSLEILOES', leiloeiro: 'Jinkings Leilões', base: 'https://www.jinkingsleiloes.com.br', catalogo: '/proximos_leiloes/1/1/' },
 };
 
 // Slug de lote que NÃO é imóvel (medido nos 3 catálogos em 10/10). Prefeitura = frota/sucata.
 // `comprei-`: a vitrine do leiloeiro REDIRECIONA para comprei.pgfn.gov.br (venda direta da PGFN,
 // medido no Jonas em 10/10 — 5 de 5 lotes) — não é lote do leiloeiro, já entra pela GLOBOLEILOES
 // (128 ativos), e abrir cada um custava 1 crédito para o parser devolver "sem detalhe".
-const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-/i;
+const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-|sofa|notebook|ar-condicionado|moveis-|eletro|detran/i;
 
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();

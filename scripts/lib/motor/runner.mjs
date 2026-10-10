@@ -433,6 +433,21 @@ export async function rodarFonte(cfg, opts) {
     // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
     // de verdade e cai aqui — sem este número a linha vira medição sadia da fonte.
     await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, cotaNegada });
+    // VARREDURA DE SUMIDOS, opt-in (10/10, #195). O motor só revisita o que o CATÁLOGO lista: lote
+    // que saiu do site nunca é reaberto, e sem data de leilão nunca expira — LEJE tinha 12 de 15
+    // ativos parados há semanas. `cfg.sumidoDias`: ativo desta fonte sem atualização há N dias
+    // (= ausente do catálogo em várias rodadas seguidas) sai como 'sumiu_da_fonte'. Só roda quando
+    // a enumeração FUNCIONOU e foi lida INTEIRA (enumerados <= maxLotes); lista cortada pelo teto
+    // não prova ausência, e rodada cortada pelo orçamento (semCota) também não. `.select()` prova o
+    // que saiu (forma nº 3).
+    if (cfg.sumidoDias > 0 && enumerados > 0 && enumerados <= maxLotes && !estado.semCota && !cotaNegada && !cfg.maxRefresh) {
+      const corte = new Date(Date.now() - cfg.sumidoDias * 864e5).toISOString();
+      const { data: sumidos, error: eSum } = await supabase.from('imoveis_leilao')
+        .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' })
+        .eq('fonte', tenant.fonte).eq('ativo', true).lt('atualizado_em', corte).select('id');
+      if (eSum) console.error(`[${tenant.fonte}] varredura de sumidos falhou:`, eSum.message);
+      else console.log(`[${tenant.fonte}] varredura: ${sumidos?.length || 0} lote(s) fora do catálogo há ${cfg.sumidoDias}+ dias → sumiu_da_fonte`);
+    }
     await registrarConhecimento(supabase, { fonte: tenant.fonte, ...cfg.conhecimento, qualidade: qualidadeColeta(prontos) });
   }
   if (dryrun) console.log(`\nPara gravar, rode com ${rotulo}_DRYRUN=0.`);

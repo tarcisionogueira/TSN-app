@@ -14,7 +14,7 @@ on:
         required: false
         default: 'leje,mgl'
       mgl_tenants:
-        description: 'csv dos sites MGL (fernando,jonas,lucas,viva) — vazio = todos'
+        description: 'csv dos sites MGL (fernando,jonas,lucas,viva,jinkings) — vazio = todos'
         required: false
         default: ''
       gravar:
@@ -47,7 +47,7 @@ jobs:
           LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
 
-      - name: MGL (Fernando, Jonas, Lucas, Viva)
+      - name: MGL (Fernando, Jonas, Lucas, Viva, Jinkings)
         if: ${{ !cancelled() && contains(env.FONTES, 'mgl') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

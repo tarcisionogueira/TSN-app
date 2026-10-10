@@ -24,6 +24,8 @@ export default {
   catalogo: '/',
   paginaParam: 'page',
   maxPages: 1,
+  // Semanal: 15 dias = ausente do catálogo em 2 rodadas seguidas → sumiu_da_fonte (ver runner).
+  sumidoDias: 15,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {

@@ -58,9 +58,36 @@ function tituloDaLinha(linhas) {
   return null;
 }
 
+// DATA NO FORMATO DO LEJE (10/10, #195): "1º Leilão 16/NOV/26 - 11:30", "Início: 14/DEZ/26 - 14:00".
+// `proximaData` só entende "16/11/2026" — todo lote LEJE saía sem data e NUNCA expirava (15 de 15
+// ativos sem data, 12 parados há semanas). Lê só o BLOCO do lote (a partir da linha "ID: NNNN"):
+// a página traz ~130 datas de OUTROS lotes nos "Destaques", e a primeira data da página não é a deste.
+const MES = { JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06', JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12' };
+export function datasLeje(bloco) {
+  const out = [];
+  for (const m of String(bloco || '').matchAll(/\b(\d{2})\/(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{2}|\d{4})(?:\s*-\s*(\d{2}):(\d{2}))?/gi)) {
+    const ano = m[3].length === 2 ? `20${m[3]}` : m[3];
+    out.push(`${ano}-${MES[m[2].toUpperCase()]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00-03:00`);
+  }
+  return [...new Set(out)].sort();
+}
+export function proximaDataLeje(bloco, agora = new Date()) {
+  const ds = datasLeje(bloco);
+  if (!ds.length) return null;
+  return ds.find((d) => new Date(d) >= agora) || ds[ds.length - 1];
+}
+
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const linhas = textoComLinhas(html).split('\n');
+  // LOTE QUE SAIU DO AR (10/10): o LEJE redireciona a URL do lote para a HOME (200, título
+  // "Leilão Judicial Eletrônico", sem a linha "ID: NNNN"). Parsear a home como lote devolvia um
+  // lote vazio — o lote velho ficava ativo para sempre. Sem a linha do ID: "não é o lote".
+  const iId = linhas.findIndex((l) => /^ID:\s*\d+/i.test(l));
+  if (iId < 0) return null;
+  const bruto = linhas.slice(iId, iId + 40).join(' ');
+  const fimBloco = bruto.search(/\b(Destaques|Outros lotes|Veja tamb[ée]m|Lotes relacionados)\b/i);
+  const bloco = fimBloco > 0 ? bruto.slice(0, fimBloco) : bruto;
 
   const avaliacao = plaus(num((txt.match(/Valor\s+de\s+avalia[çc][ãa]o\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const minimo = plaus(num((txt.match(/Valor\s+de\s+2[ºª°]?\s*leil[ãa]o\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1])) || avaliacao;
@@ -77,7 +104,7 @@ export function parseDetalhe(html, url) {
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     descricao: null,
-    data_leilao: proximaData(txt.slice(0, 2000)),
+    data_leilao: proximaDataLeje(bloco) || proximaData(bloco),
     numero_matricula: mat, ...docs,
     encerrado: /\b(arrematado|vendido|deserto|cancelad[oa]|suspens[oa])\b/i.test(txt.slice(0, 1500)),
   };
