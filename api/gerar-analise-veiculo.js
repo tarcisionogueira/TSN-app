@@ -21,7 +21,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
-import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, extrairTaxasPct, taxasPctValidas, RE_ENCARGO_SEM_VALOR, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo, slugsModeloMobiauto, anunciosOlx } from '../src/utils/viabilidadeVeiculo.js';
+import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, extrairTaxasPct, taxasPctValidas, temEncargoSemValor, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo, slugsModeloMobiauto, anunciosOlx } from '../src/utils/viabilidadeVeiculo.js';
 import { paginaViaBanco } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -724,7 +724,7 @@ export default async function handler(req, res) {
         const semValor = listaDeTextos(parsed.debitosSemValor);
         // Encargos existem mas o lote não diz quanto (SUPERBID: "conforme as Condições de Venda e
         // Pagamento") — não some com o aviso: é custo real que o teto não consegue incluir.
-        if (!taxasPct.length && RE_ENCARGO_SEM_VALOR.test(textoProprioLote) && !semValor.some((x) => /encargo|administra|fee/i.test(x))) {
+        if (!taxasPct.length && temEncargoSemValor(textoProprioLote) && !semValor.some((x) => /encargo|administra|fee/i.test(x))) {
           semValor.unshift('Encargos de administração cobrados pela plataforma, definidos nas Condições de Venda e Pagamento do evento — percentual não publicado no lote; confira antes do lance (não entram no teto)');
         }
         return { taxasPct, debitosSemValor: semValor.slice(0, 12) };

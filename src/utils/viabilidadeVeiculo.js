@@ -174,7 +174,19 @@ export function extrairTaxasPct(texto) {
   return out.slice(0, 4);
 }
 // "Encargos de administração conforme as Condições de Venda" SEM número: existe, não se sabe quanto.
-export const RE_ENCARGO_SEM_VALOR = /encargos?\s+(?:de\s+)?administra|taxa\s+(?:de\s+)?administra|fee\s+(?:da\s+)?plataforma/i;
+// Negação conta (10/10, Cronos de Itapejara): "Não será cobrado NENHUM encargo administrativo dos
+// arrematantes" — sem olhar o que vem antes, o aviso dizia o contrário do lote.
+export function temEncargoSemValor(texto) {
+  const t = consertarAcentos(texto || '').replace(/\s+/g, ' ');
+  const re = /encargos?\s+(?:de\s+)?administra|taxa\s+(?:de\s+)?administra|fee\s+(?:da\s+)?plataforma/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const antes = t.slice(Math.max(0, m.index - 60), m.index);
+    if (/\b(?:n[ãa]o|nenhum[a]?|sem|isent[oa]s?|isen[çc][ãa]o\s+d[eo])\b[^.;]*$/i.test(antes)) continue;
+    return true;
+  }
+  return false;
+}
 
 // DÉBITOS COM VALOR declarados ("DÉBITOS: R$ 7.473,15 E TAXAS DE LICENCIAMENTO" — SUPERBID, o
 // Cronos do print de 30/09, que saiu com "débitos —"; "Débitos em aberto: R$1.070,20"; na SODRÉ,
