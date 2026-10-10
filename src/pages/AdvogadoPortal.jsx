@@ -84,7 +84,7 @@ export default function AdvogadoPortal() {
       <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 20px' }}>Gerencie seu escritório, os e-mails em cópia e acompanhe seus casos e honorários.</p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[['escritorio', 'Meu Escritório', Building2], ['casos', 'Casos Recebidos', FileText], ['atendimentos', 'Atendimentos', MessageSquare], ['honorarios', 'Honorários', DollarSign]].map(([k, label, Icon]) => (
+        {[['escritorio', 'Meu Escritório', Building2], ['operacoes', 'Operações', Paperclip], ['casos', 'Casos Recebidos', FileText], ['atendimentos', 'Atendimentos', MessageSquare], ['honorarios', 'Honorários', DollarSign]].map(([k, label, Icon]) => (
           <button key={k} onClick={() => k === 'honorarios' ? nav('/comissoes') : setAba(k)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: aba === k ? '#7c3aed' : '#f1f5f9', color: aba === k ? 'white' : '#64748b' }}>
             <Icon size={14} /> {label}
@@ -93,8 +93,108 @@ export default function AdvogadoPortal() {
       </div>
 
       {aba === 'escritorio' && <SecaoEscritorio />}
+      {aba === 'operacoes' && <SecaoOperacoes />}
       {aba === 'casos' && <SecaoCasos user={user} alvoId={effectiveUserId || user.id} nav={nav} />}
       {aba === 'atendimentos' && <SecaoAtendimentos />}
+    </div>
+  );
+}
+
+// OPERAÇÕES (10/10, pedido do dono): situação de cada arremate em que o advogado atua — cobrado ×
+// recebido (bruto/líquido), a linha dele do repasse (mesma conta que credita), parcelas do cliente
+// e os anexos do lote. Fonte única: /api/advogado-operacoes.
+function SecaoOperacoes() {
+  const [ops, setOps] = useState(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await apiCall('/api/advogado-operacoes');
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+        setOps(d.operacoes || []);
+      } catch (e) { setErro(e.message || 'Falha ao carregar.'); setOps([]); }
+    })();
+  }, []);
+  const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const dt = d => d ? new Date(String(d).length === 10 ? `${d}T12:00:00` : d).toLocaleDateString('pt-BR') : '—';
+  const METODO = { pix_externo: 'Pix', cheque: 'Cheque', cartao_mp: 'Cartão', cartao_asaas: 'Cartão (Asaas)', boleto_asaas: 'Boleto', boleto_mp: 'Boleto', pix_mp: 'Pix', pix_asaas: 'Pix', dinheiro: 'Dinheiro', transferencia: 'Transferência' };
+  const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px' };
+  const lin = { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '3px 0' };
+
+  if (ops === null) return <div style={{ padding: 30, textAlign: 'center' }}><Loader2 size={20} color="#7c3aed" style={{ animation: 'spin 1s linear infinite' }} /></div>;
+  if (erro) return <div style={{ ...card, color: '#b91c1c', fontSize: 13 }}>Não foi possível carregar as operações: {erro}</div>;
+  if (!ops.length) return <div style={{ ...card, textAlign: 'center', color: '#94a3b8', fontSize: 14, padding: 40 }}>Nenhuma operação vinculada a você ainda. Quando o admin vincular seu escritório a um arremate, ele aparece aqui.</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {ops.map(o => (
+        <div key={o.id} style={card}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>{o.imovel || 'Imóvel arrematado'}</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>
+            {o.cliente || 'Cliente'} · {o.endereco || ''}{o.processo ? ` · processo ${o.processo}` : ''}
+          </div>
+          <div style={{ fontSize: 12.5, color: '#334155', marginTop: 6 }}>
+            Arrematado por <b>{brl(o.valor_arrematado)}</b> · etapa: <b>{o.etapa || o.status || '—'}</b> · posse: <b>{o.posse_em ? dt(o.posse_em) : 'ainda não'}</b>
+            {o.url_lote && <> · <a href={o.url_lote} target="_blank" rel="noreferrer" style={{ color: '#7c3aed' }}>ver lote</a></>}
+          </div>
+          {o.aviso && <div style={{ marginTop: 8, fontSize: 12, color: '#b45309' }}>{o.aviso}</div>}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 12 }}>
+            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#7c3aed', marginBottom: 4 }}>Honorário de êxito</div>
+              <div style={lin}><span>Cobrado do cliente</span><b>{brl(o.honorario.cobrado)}</b></div>
+              <div style={lin}><span>Recebido (bruto)</span><b>{brl(o.honorario.recebido_bruto)}</b></div>
+              {o.repasse && <div style={lin}><span>Recebido líquido (sem taxas)</span><b>{brl(o.repasse.base_liquida)}</b></div>}
+              {o.repasse?.falta_compensar > 0.009 && <div style={lin}><span>Ainda a compensar na conta</span><b>{brl(o.repasse.falta_compensar)}</b></div>}
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {o.honorario.recebimentos.map((r, i) => (
+                  <div key={i} style={{ fontSize: 11.5, color: r.status === 'estornado' ? '#b91c1c' : '#475569' }}>
+                    {METODO[r.metodo] || r.metodo} · {brl(r.valor)}
+                    {r.valor_liquido != null && Math.abs(Number(r.valor_liquido) - Number(r.valor)) >= 0.01 ? ` (líquido ${brl(r.valor_liquido)})` : ''}
+                    {r.metodo === 'cheque' ? ` · ${r.banco || ''} nº ${r.numero_cheque || ''} · ${r.em_poder === 'advogado' ? 'com você' : (r.compensado_em ? 'compensado' : 'a compensar')}` : ''}
+                    {r.status !== 'confirmado' ? ` · ${r.status}` : ''} · {dt(r.criado_em)}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {o.repasse && (
+              <div style={{ background: '#f5f3ff', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#7c3aed', marginBottom: 4 }}>Sua parte {o.repasse.pct != null ? `(${o.repasse.pct}% de 10%)` : ''}{o.repasse.projecao ? ' — projeção' : ''}</div>
+                <div style={lin}><span>Sua cota sobre o líquido</span><b>{brl(o.repasse.cota)}</b></div>
+                <div style={lin}><span>Já está com você (cheques)</span><b>{brl(o.repasse.com_voce)}</b></div>
+                <div style={lin}><span>Já creditado no seu saldo</span><b>{brl(o.repasse.creditado)}</b></div>
+                <div style={{ ...lin, borderTop: '1px solid #ddd6fe', marginTop: 4, paddingTop: 6 }}><span>{o.repasse.a_receber >= 0 ? 'A receber' : 'Recebido a mais'}</span><b style={{ color: o.repasse.a_receber >= 0 ? '#047857' : '#b91c1c' }}>{brl(Math.abs(o.repasse.a_receber))}</b></div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>
+                  O repasse é calculado sobre o valor <b>líquido</b> recebido (sem as taxas das operadoras) e creditado automaticamente no seu saldo à medida que o dinheiro compensa na conta da plataforma.
+                  {o.repasse.liquido_desconhecido > 0 ? ' Há pagamento cujo líquido ainda não foi confirmado pela operadora — os valores acima podem mudar.' : ''}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {o.parcelas?.itens?.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12.5, color: '#334155' }}>
+              <b>Parcelas do arremate:</b> {o.parcelas.itens.filter(x => x.paga).length} de {o.parcelas.itens.length} pagas
+              {o.parcelas.proxima && <> · próxima: <b>{o.parcelas.proxima.rotulo}</b> em {dt(o.parcelas.proxima.venc)} ({brl(o.parcelas.proxima.valor)} nominal)</>}
+            </div>
+          )}
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}><Paperclip size={12} /> Anexos do lote ({o.anexos.length})</div>
+            {o.anexos.length ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {o.anexos.map(x => (
+                  <a key={x.id} href={x.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 8, background: '#f1f5f9', color: '#334155', textDecoration: 'none', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={x.nome}>
+                    {x.tipo && x.tipo !== 'outro' ? `${x.tipo.replace(/_/g, ' ')} · ` : ''}{x.nome}
+                  </a>
+                ))}
+              </div>
+            ) : <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum anexo guardado para este lote.</div>}
+            <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Os links valem por 1 hora — recarregue a página para gerar novos.</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
