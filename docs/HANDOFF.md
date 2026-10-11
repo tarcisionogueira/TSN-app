@@ -36907,3 +36907,13 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - **Matrícula que é DATA/ANO** (CALIL "06042026", DANIELGARCIA "2026") fica fora da chave. Está registrado aqui, mas o parser dessas fontes ainda grava data como matrícula (pendência).
 - **COMPREI com área 0 nos 534 lotes** (o scraper gravava 0 fixo; 302 têm a metragem no texto): agora usa `extrairArea`. Corrige-se na próxima coleta diária.
 - Lote com leilão já passado e ainda ativo NÃO é defeito: é a retenção de 15 dias para apurar o resultado.
+
+## 11/10 — #196 matrícula com cara de data
+- O `scraper-soleon` pegava o 1º número depois de "matrícula" na página, que costuma ser o rótulo do documento ("Matrícula atualizada em 22/10/2020"). Resultado: 51 lotes CALIL tinham DATA como matrícula, e 13 DANIELGARCIA tinham "2026".
+- Novo `scripts/lib/matricula-texto.mjs`:
+  - lê a descrição antes da página;
+  - data nunca vale como matrícula;
+  - ano solto só vale colado ao rótulo ("Matrícula nº 2026").
+  - Teste: `npm run testar:matricula-do-texto`.
+- Banco corrigido pela migração `20261011_matricula_data_nao_e_matricula.sql`: 0 datas restantes. A dedup de gêmeos rodou depois sem achar par falso.
+- Anos soltos em outras fontes (COMPREI 6, RJ 4…) ficaram como estão: podem ser matrículas reais (ex.: matrícula 1998).

@@ -21,6 +21,7 @@
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import { matriculaDoTexto } from './lib/matricula-texto.mjs';
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades, extrairAreaM2 } from '../api/_texto-imovel.js';
@@ -318,7 +319,8 @@ function parseDetalhe(html, url) {
     || extrairAreaM2(txt, { permitirSolta: false })
     || num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
   const { cidade, estado } = cidadeUF(txt, base.titulo || '');
-  const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
+  // #196: a descrição do lote primeiro; data/ano no lugar do nº é rótulo do documento, não matrícula.
+  const mat = matriculaDoTexto(base.descricao, txt);
 
   const docs = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
