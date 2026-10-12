@@ -195,7 +195,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
               ))}
             </tbody>
           </table>
-          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} titulo={arr.titulo} />}
+          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao} />}
           {itens.length > visiveis.length || verTudo ? (
             <button onClick={() => setVerTudo((v) => !v)} style={{ marginTop: 6, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
               {verTudo ? 'mostrar só as próximas' : `ver cronograma completo (${itens.length})`}
@@ -210,8 +210,15 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
 // Painel "Emitir guia" — só equipe enquanto validamos (12/10). Não gera boleto: aponta o portal do
 // tribunal pelo nº CNJ e deixa os dados prontos para copiar. Valor NOMINAL; correção pela
 // calculadora oficial do BCB conforme o índice do edital.
-function GuiaDeposito({ parcela, processo, indice, titulo }) {
+function GuiaDeposito({ parcela, processo, indice, titulo, userId, dataArrematacao }) {
   const [aberto, setAberto] = React.useState(false);
+  // Nome do depositante = o arrematante (o SIF pede "Nome do depositante" quando ele não é parte).
+  const [arrematante, setArrematante] = React.useState('');
+  React.useEffect(() => {
+    if (!aberto || !userId || arrematante) return;
+    supabase.from('perfis').select('nome').eq('id', userId).maybeSingle()
+      .then(({ data, error }) => { if (error) console.warn('[GuiaDeposito] arrematante:', error.message); else if (data?.nome) setArrematante(data.nome); });
+  }, [aberto, userId, arrematante]);
   const [copiado, setCopiado] = React.useState('');
   const guia = portaisDaGuia(processo);
   const copiar = async (rotulo, texto) => {
@@ -219,13 +226,16 @@ function GuiaDeposito({ parcela, processo, indice, titulo }) {
     catch (e) { console.warn('[GuiaDeposito] copiar:', e?.message); setCopiado('erro'); }
   };
   const valorTxt = Number(parcela.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const observacao = `${parcela.rotulo} da arrematação — ${titulo || 'imóvel arrematado'}${dataArrematacao ? ` — auto de arrematação de ${dataBR(dataArrematacao)}` : ''}`.slice(0, 200);
   const resumo = [
     `Processo: ${guia?.cnj.formatado || processo || '(não informado)'}`,
     guia ? `Tribunal: ${guia.tribunal} · vara/órgão de origem ${guia.cnj.origem}` : null,
     `Referência: ${parcela.rotulo} da arrematação — ${titulo || 'imóvel arrematado'}`,
     `Valor nominal: R$ ${valorTxt}${indice ? ` (corrigir pelo ${indice}, conforme o auto/carta)` : ''}`,
     `Vencimento: ${dataBR(parcela.venc)}`,
-    'Depositante: o arrematante (nome e CPF dele)',
+    `Depositante: ${arrematante || 'o arrematante'} (CPF do arrematante)`,
+    'Finalidade: ARREMATAÇÃO DE BENS',
+    `Observação: ${observacao}`,
   ].filter(Boolean).join('\n');
   const linha = (rotulo, valor, chave) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderTop: '1px solid #f1f5f9', fontSize: 12.5 }}>
@@ -253,7 +263,10 @@ function GuiaDeposito({ parcela, processo, indice, titulo }) {
           {guia && linha('Tribunal', `${guia.tribunal} · origem ${guia.cnj.origem}`, null)}
           {linha('Valor nominal', `R$ ${valorTxt}`, valorTxt)}
           {linha('Vencimento', dataBR(parcela.venc), null)}
-          {linha('Índice do edital', indice || 'não registrado', null)}
+          {linha('Índice (do auto/carta)', indice || 'não consta no documento', null)}
+          {linha('Depositante', arrematante || 'o arrematante', arrematante || null)}
+          {linha('Finalidade', 'ARREMATAÇÃO DE BENS', null)}
+          {linha('Observação', observacao, observacao)}
           {guia && (
             <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {guia.opcoes.map((o) => (
@@ -272,10 +285,12 @@ function GuiaDeposito({ parcela, processo, indice, titulo }) {
             </ul>
           )}
           <ol style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#334155', lineHeight: 1.55 }}>
-            <li>Abra o portal do tribunal acima e informe o nº do processo — o portal busca vara e partes direto no processo.</li>
-            <li>Tipo de depósito: <b>judicial</b> (pagamento de arrematação), depositante = o arrematante, com o CPF dele.</li>
-            <li>Valor: o nominal da parcela{indice ? <> corrigido pelo <b>{indice}</b> desde a arrematação</> : ''}. Confira na calculadora do BCB e, na dúvida, com o jurídico antes de pagar.</li>
-            <li>Gere o boleto/ID, envie ao cliente e anexe o comprovante no caso; depois marque a parcela como paga.</li>
+            <li>No portal, informe o nº do processo. Em <b>Selecione o Reclamado</b>, escolha o executado (a parte cujo bem foi arrematado).</li>
+            <li>Marque <b>“Depositante não está cadastrado no processo”</b> — o arrematante não é parte — e preencha nome e CPF do arrematante.</li>
+            <li><b>Instituição financeira</b>: Caixa ou Banco do Brasil. <b>Finalidade</b>: <b>ARREMATAÇÃO DE BENS</b>.</li>
+            <li><b>Valor do depósito</b>: o nominal da parcela{indice ? <> corrigido pelo <b>{indice}</b> desde a arrematação</> : ''} (confira na calculadora do BCB; na dúvida, com o jurídico).</li>
+            <li><b>Observação</b>: cole a observação acima. Forma de pagamento: <b>PIX</b> (compensa na hora) ou boleto.</li>
+            <li>Envie a guia ao cliente, anexe o comprovante no caso e marque a parcela como paga.</li>
           </ol>
           {copiado === 'erro' && <p style={{ fontSize: 11.5, color: '#dc2626', marginTop: 6 }}>Não foi possível copiar — selecione o texto manualmente.</p>}
         </div>
