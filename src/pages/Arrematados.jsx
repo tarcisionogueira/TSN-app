@@ -339,7 +339,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
       </div>
 
       {/* PAGAMENTO (29/09, pedido do dono): data da arrematação + cronograma + lembrete de vencimento. */}
-      <PagamentoArremate arr={arr} podeEditar={ehEquipe || !soLeitura}
+      <PagamentoArremate arr={arr} podeEditar={ehEquipe || !soLeitura} ehEquipe={ehEquipe}
         cardStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: 18 }} />
 
       {/* ANDAMENTO DO PROCESSO (24/09, pedido do dono): equipe consulta o CNJ (leilão judicial) e

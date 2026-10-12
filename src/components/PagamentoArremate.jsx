@@ -2,16 +2,18 @@
 // (entrada e parcelas) + lembrete antes de cada vencimento. Regra de datas/valores em
 // src/utils/parcelamentoArremate.js (a mesma do cron que manda o aviso por e-mail).
 // A guia de depósito NÃO é gerada aqui — sai do portal do banco/tribunal pelo nº do processo.
+// "Emitir guia" (12/10, em validação, só equipe): diz ONDE emitir e entrega os dados prontos.
 import React from 'react';
 import { supabase } from '../utils/supabase';
 import { cronograma, proximaPendente, avisoPenalidade } from '../utils/parcelamentoArremate';
+import { portaisDaGuia, CALCULADORA_BCB } from '../utils/guiaDeposito';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dataBR = (s) => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '—');
 const inp = { padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, width: '100%', boxSizing: 'border-box' };
 const rot = { fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4, display: 'block' };
 
-export default function PagamentoArremate({ arr, podeEditar, cardStyle }) {
+export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe = false }) {
   const [p, setP] = React.useState(arr.parcelamento || null);
   const [editando, setEditando] = React.useState(false);
   const [form, setForm] = React.useState(() => ({ forma: 'parcelado', entrada_pct: 25, entrada_venc: arr.data_arrematacao || '', parcelas: 30, primeira_venc: '', indice: '', ...(arr.parcelamento || {}) }));
@@ -23,10 +25,15 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle }) {
   // Modalidade da FONTE (o imóvel do acervo): o jsonb do arremate costuma vir sem ela, e
   // `arrematacoes.tipo_leilao` já foi visto divergente (judicial gravado como extrajudicial).
   const [modalidade, setModalidade] = React.useState(arr.imovel?.modalidade || '');
+  const [processo, setProcesso] = React.useState(arr.imovel?.numero_processo || '');
   React.useEffect(() => {
     if (!arr.imovel_id) return;
-    supabase.from('imoveis_leilao').select('modalidade').eq('id', arr.imovel_id).maybeSingle()
-      .then(({ data, error }) => { if (error) console.warn('[PagamentoArremate] modalidade:', error.message); else if (data?.modalidade) setModalidade(data.modalidade); });
+    supabase.from('imoveis_leilao').select('modalidade, numero_processo').eq('id', arr.imovel_id).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) { console.warn('[PagamentoArremate] modalidade/processo:', error.message); return; }
+        if (data?.modalidade) setModalidade(data.modalidade);
+        if (data?.numero_processo) setProcesso(data.numero_processo);
+      });
   }, [arr.imovel_id]);
   const itens = cronograma(p, { valor, dataArrematacao: arr.data_arrematacao });
   const prox = proximaPendente(itens);
@@ -138,12 +145,90 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle }) {
               ))}
             </tbody>
           </table>
+          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} titulo={arr.titulo} />}
           {itens.length > visiveis.length || verTudo ? (
             <button onClick={() => setVerTudo((v) => !v)} style={{ marginTop: 6, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
               {verTudo ? 'mostrar só as próximas' : `ver cronograma completo (${itens.length})`}
             </button>
           ) : null}
         </>
+      )}
+    </div>
+  );
+}
+
+// Painel "Emitir guia" — só equipe enquanto validamos (12/10). Não gera boleto: aponta o portal do
+// tribunal pelo nº CNJ e deixa os dados prontos para copiar. Valor NOMINAL; correção pela
+// calculadora oficial do BCB conforme o índice do edital.
+function GuiaDeposito({ parcela, processo, indice, titulo }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [copiado, setCopiado] = React.useState('');
+  const guia = portaisDaGuia(processo);
+  const copiar = async (rotulo, texto) => {
+    try { await navigator.clipboard.writeText(texto); setCopiado(rotulo); setTimeout(() => setCopiado(''), 1800); }
+    catch (e) { console.warn('[GuiaDeposito] copiar:', e?.message); setCopiado('erro'); }
+  };
+  const valorTxt = Number(parcela.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const resumo = [
+    `Processo: ${guia?.cnj.formatado || processo || '(não informado)'}`,
+    guia ? `Tribunal: ${guia.tribunal} · vara/órgão de origem ${guia.cnj.origem}` : null,
+    `Referência: ${parcela.rotulo} da arrematação — ${titulo || 'imóvel arrematado'}`,
+    `Valor nominal: R$ ${valorTxt}${indice ? ` (corrigir pelo ${indice} conforme o edital)` : ''}`,
+    `Vencimento: ${dataBR(parcela.venc)}`,
+    'Depositante: o arrematante (nome e CPF dele)',
+  ].filter(Boolean).join('\n');
+  const linha = (rotulo, valor, chave) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderTop: '1px solid #f1f5f9', fontSize: 12.5 }}>
+      <span style={{ color: '#64748b', minWidth: 0 }}>{rotulo}</span>
+      <span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
+        <b style={{ color: '#0f172a', overflowWrap: 'anywhere', textAlign: 'right' }}>{valor}</b>
+        {chave && <button onClick={() => copiar(rotulo, chave)} style={{ border: '1px solid #cbd5e1', background: 'white', borderRadius: 6, fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{copiado === rotulo ? 'copiado' : 'copiar'}</button>}
+      </span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 10, border: '1px dashed #93c5fd', borderRadius: 10, padding: '10px 12px', background: '#f8fbff' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', minWidth: 0 }}>🧾 Emitir guia — {parcela.rotulo} <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', borderRadius: 6, padding: '1px 6px', marginLeft: 4 }}>equipe · em validação</span></div>
+        <button onClick={() => setAberto((v) => !v)} style={{ padding: '6px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{aberto ? 'Fechar' : 'Emitir guia'}</button>
+      </div>
+      {aberto && (
+        <div style={{ marginTop: 8 }}>
+          {!guia && (
+            <p style={{ fontSize: 12.5, color: '#b45309', margin: '4px 0 8px' }}>
+              ⚠️ Nº do processo {processo ? `"${processo}" fora do padrão CNJ` : 'não cadastrado no imóvel'} — peça o nº ao jurídico antes de emitir; sem ele não dá para saber o portal certo.
+            </p>
+          )}
+          {linha('Processo', guia?.cnj.formatado || processo || '—', guia?.cnj.formatado || processo || null)}
+          {guia && linha('Tribunal', `${guia.tribunal} · origem ${guia.cnj.origem}`, null)}
+          {linha('Valor nominal', `R$ ${valorTxt}`, valorTxt)}
+          {linha('Vencimento', dataBR(parcela.venc), null)}
+          {linha('Índice do edital', indice || 'não registrado', null)}
+          {guia && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {guia.opcoes.map((o) => (
+                <a key={o.url + o.banco} href={o.url} target="_blank" rel="noopener noreferrer" title={o.nota || ''}
+                  style={{ padding: '7px 12px', borderRadius: 8, background: '#0f172a', color: 'white', textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
+                  Abrir {o.sistema} ({o.banco}) ↗
+                </a>
+              ))}
+              <a href={CALCULADORA_BCB} target="_blank" rel="noopener noreferrer" style={{ padding: '7px 12px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>Calcular correção (BCB) ↗</a>
+              <button onClick={() => copiar('tudo', resumo)} style={{ padding: '7px 12px', borderRadius: 8, background: 'white', border: '1px solid #cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{copiado === 'tudo' ? 'Dados copiados' : 'Copiar todos os dados'}</button>
+            </div>
+          )}
+          {guia?.opcoes.some((o) => o.nota) && (
+            <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 11.5, color: '#475569' }}>
+              {guia.opcoes.filter((o) => o.nota).map((o) => <li key={o.sistema}>{o.sistema}: {o.nota}</li>)}
+            </ul>
+          )}
+          <ol style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#334155', lineHeight: 1.55 }}>
+            <li>Abra o portal do tribunal acima e informe o nº do processo — o portal busca vara e partes direto no processo.</li>
+            <li>Tipo de depósito: <b>judicial</b> (pagamento de arrematação), depositante = o arrematante, com o CPF dele.</li>
+            <li>Valor: o nominal da parcela{indice ? <> corrigido pelo <b>{indice}</b> desde a arrematação</> : ''}. Confira na calculadora do BCB e, na dúvida, com o jurídico antes de pagar.</li>
+            <li>Gere o boleto/ID, envie ao cliente e anexe o comprovante no caso; depois marque a parcela como paga.</li>
+          </ol>
+          {copiado === 'erro' && <p style={{ fontSize: 11.5, color: '#dc2626', marginTop: 6 }}>Não foi possível copiar — selecione o texto manualmente.</p>}
+        </div>
       )}
     </div>
   );
