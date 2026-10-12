@@ -35,6 +35,36 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
         if (data?.numero_processo) setProcesso(data.numero_processo);
       });
   }, [arr.imovel_id]);
+  // Condições LIDAS do auto/carta de arrematação (12/10, pedido do dono: o índice e as parcelas estão
+  // no documento — ninguém deveria digitar). Só equipe, em validação. Roda sozinho uma vez por sessão
+  // quando o cronograma ainda não tem a prova do documento (`fonte_doc`).
+  const [lendo, setLendo] = React.useState(false);
+  const [leitura, setLeitura] = React.useState(null); // { ok, avisos, erro }
+  const lerDoDocumento = React.useCallback(async () => {
+    setLendo(true); setLeitura(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch('/api/ler-condicoes-arremate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ arrematado_id: arr.id }),
+      });
+      const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      if (!r.ok) setLeitura({ ok: false, erro: d.error || `HTTP ${r.status}` });
+      else if (!d.ok) setLeitura({ ok: false, erro: d.erro || 'Não foi possível ler o documento.' });
+      else { setP(d.parcelamento || null); setLeitura({ ok: true, avisos: d.avisos || [] }); }
+    } catch (e) {
+      setLeitura({ ok: false, erro: `Falha de rede: ${e?.message || e}` });
+    }
+    setLendo(false);
+  }, [arr.id]);
+  React.useEffect(() => {
+    if (!ehEquipe || p?.fonte_doc) return;
+    const chave = `leu-condicoes-${arr.id}`;
+    try { if (sessionStorage.getItem(chave)) return; sessionStorage.setItem(chave, '1'); }
+    catch { /* sem storage: lê mesmo assim, uma vez por montagem */ }
+    lerDoDocumento();
+  }, [ehEquipe, arr.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const itens = cronograma(p, { valor, dataArrematacao: arr.data_arrematacao });
   const prox = proximaPendente(itens);
   const diasDesde = arr.data_arrematacao ? Math.round((Date.now() - new Date(`${arr.data_arrematacao}T12:00:00`).getTime()) / 86400000) : null;
@@ -51,6 +81,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
     const novo = form.forma === 'a_vista'
       ? { forma: 'a_vista', entrada_venc: form.entrada_venc || null, indice: form.indice || null, pagas: p?.pagas || [] }
       : { forma: 'parcelado', entrada_pct: Number(form.entrada_pct) || 25, entrada_venc: form.entrada_venc || null, parcelas: Number(form.parcelas) || 1, primeira_venc: form.primeira_venc || null, indice: form.indice || null, pagas: p?.pagas || [] };
+    if (p?.fonte_doc) novo.fonte_doc = { ...p.fonte_doc, editado_a_mao: true };
     if (await salvar(novo)) setEditando(false);
   };
   const alternarPaga = async (idx) => {
@@ -77,8 +108,14 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
               : 'Data da arrematação não registrada'}
           </div>
         </div>
+        {ehEquipe && !editando && (
+          <button onClick={lerDoDocumento} disabled={lendo} title="Lê entrada, parcelas, vencimentos e índice do auto/carta de arrematação anexado ao caso"
+            style={{ padding: '6px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', cursor: lendo ? 'wait' : 'pointer', fontSize: 12, fontWeight: 700, marginLeft: 'auto' }}>
+            {lendo ? 'Lendo o documento…' : p?.fonte_doc ? 'Reler do auto/carta' : 'Ler do auto/carta'}
+          </button>
+        )}
         {podeEditar && !editando && (
-          <button onClick={() => setEditando(true)} style={{ padding: '6px 12px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+          <button onClick={() => { setForm((f) => ({ ...f, ...(p || {}) })); setEditando(true); }} style={{ padding: '6px 12px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
             {p ? 'Editar condições' : 'Registrar condições'}
           </button>
         )}
@@ -100,7 +137,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
             <label><span style={rot}>1º vencimento das parcelas</span>
               <input type="date" value={form.primeira_venc || ''} onChange={(e) => setForm((f) => ({ ...f, primeira_venc: e.target.value }))} style={inp} /></label>
           </>}
-          <label><span style={rot}>Índice de correção (edital)</span>
+          <label><span style={rot}>Índice de correção (lido do auto/carta)</span>
             <input value={form.indice || ''} placeholder="ex.: IPCA, INPC, TJ" onChange={(e) => setForm((f) => ({ ...f, indice: e.target.value }))} style={inp} /></label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <button onClick={salvarForm} disabled={salvando} style={{ padding: '8px 14px', borderRadius: 8, background: '#0f172a', color: 'white', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{salvando ? 'Salvando…' : 'Salvar'}</button>
@@ -109,6 +146,19 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
         </div>
       )}
       {erro && <p style={{ fontSize: 12, color: '#dc2626', marginTop: 8 }}>⚠️ {erro}</p>}
+      {leitura && !leitura.ok && <p style={{ fontSize: 12, color: '#b45309', marginTop: 8 }}>⚠️ {leitura.erro}</p>}
+      {leitura?.ok && leitura.avisos.length > 0 && (
+        <ul style={{ fontSize: 12, color: '#b45309', margin: '8px 0 0', paddingLeft: 18 }}>{leitura.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
+      )}
+      {p?.fonte_doc && (
+        <details style={{ marginTop: 8, fontSize: 11.5, color: '#475569' }}>
+          <summary style={{ cursor: 'pointer' }}>
+            📄 Condições lidas do {p.fonte_doc.tipo === 'carta_arrematacao' ? 'carta de arrematação' : 'auto de arrematação'} ({p.fonte_doc.nome}) em {dataBR(p.fonte_doc.lido_em)}{p.indice ? ` · índice: ${p.indice}` : ' · sem índice no documento'}
+          </summary>
+          {p.fonte_doc.trecho_pagamento && <p style={{ margin: '6px 0 0', fontStyle: 'italic' }}>Pagamento: “{p.fonte_doc.trecho_pagamento}”</p>}
+          {p.fonte_doc.trecho_indice && <p style={{ margin: '4px 0 0', fontStyle: 'italic' }}>Índice: “{p.fonte_doc.trecho_indice}”</p>}
+        </details>
+      )}
 
       {!p && !editando && (
         <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 10 }}>
@@ -173,7 +223,7 @@ function GuiaDeposito({ parcela, processo, indice, titulo }) {
     `Processo: ${guia?.cnj.formatado || processo || '(não informado)'}`,
     guia ? `Tribunal: ${guia.tribunal} · vara/órgão de origem ${guia.cnj.origem}` : null,
     `Referência: ${parcela.rotulo} da arrematação — ${titulo || 'imóvel arrematado'}`,
-    `Valor nominal: R$ ${valorTxt}${indice ? ` (corrigir pelo ${indice} conforme o edital)` : ''}`,
+    `Valor nominal: R$ ${valorTxt}${indice ? ` (corrigir pelo ${indice}, conforme o auto/carta)` : ''}`,
     `Vencimento: ${dataBR(parcela.venc)}`,
     'Depositante: o arrematante (nome e CPF dele)',
   ].filter(Boolean).join('\n');

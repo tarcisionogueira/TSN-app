@@ -24,6 +24,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   pós-arremate estão com `advogado_id` nulo (#186), e o `casos-acompanhamento-cron` só pede a guia ao advogado do caso.
   O lembrete ao arrematante saiu (marco 5). Guia judicial (TRT-5) não tem API pública: gerar direto exigiria
   automatizar o portal do banco — ver resposta ao dono nesta data.
+- **"Emitir guia" (opção 2, só equipe, #197):** painel no cartão de pagamento do arremate aponta o portal pelo nº CNJ
+  (`src/utils/guiaDeposito.js`: TRT5 → SIF Caixa + SISCONDJ BB; demais TRTs/TJs da lista do BB; JF → Caixa), copia
+  processo/valor/vencimento e linka a calculadora do BCB. Valor NOMINAL de propósito.
+- **Condições lidas do auto/carta (pedido do dono: "não devo precisar informar o índice"):** `api/ler-condicoes-arremate.js`
+  lê a carta (prioridade) ou o auto do caso (inclusive `outro` com nome AUTO/CARTA) com IA, extrai forma/entrada/parcelas/
+  vencimentos/índice COM trecho literal e grava em `arrematados.parcelamento` (+ `fonte_doc`) pela RPC, com o token do
+  usuário. Valor e data divergentes viram AVISO, nunca sobrescrita. Roda sozinho 1× por sessão para a equipe quando falta
+  `fonte_doc`; botão "Ler/Reler do auto/carta". Não deu para testar com o PDF do Marcos nesta sessão (link assinado
+  expirado, sem service key no sandbox) — 1ª leitura real é a do dono ao abrir o caso.
 
 ### 📌 FECHAMENTO 08–09/10 (noite) — o que evoluiu, o que falta, de onde paramos
 
