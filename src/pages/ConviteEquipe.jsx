@@ -521,7 +521,11 @@ export default function ConviteEquipe() {
       return form[passo.key] ? '' : 'Capture ou envie uma foto para continuar.';
     }
     if (passo.tipo === 'termo') {
-      return form.termo_aceito ? '' : 'É preciso ler e aceitar o termo para continuar.';
+      if (!form.termo_aceito) return 'É preciso ler e aceitar o termo para continuar.';
+      // Advogado entra JÁ como parceiro (12/10, dono: "para ele já entrar como parceiro e poder
+      // indicar e vender") — o aceite do Programa de Parceiros é passo explícito, não presumido.
+      if (roleKey === 'advogado' && !form.parceria_aceita) return 'Aceite também o Programa de Parceiros para poder indicar e vender.';
+      return '';
     }
     const v = (form[passo.key] || '').trim();
     if (!v) return 'Preencha este campo para continuar.';
@@ -577,7 +581,10 @@ export default function ConviteEquipe() {
       // no primeiro login, DEPOIS de resgatar o convite (a RPC do jurídico exige o papel já
       // elevado). Sem isto, a pessoa leria e aceitaria o termo e o banco ficaria sem prova.
       if (termoDoPapel && form.termo_aceito) {
-        salvarTermosAceitos({ [termoDoPapel.chave]: termoDoPapel.versao });
+        salvarTermosAceitos({
+          [termoDoPapel.chave]: termoDoPapel.versao,
+          ...(roleKey === 'advogado' && form.parceria_aceita ? { parceiro: TERMO_PARCEIRO_VERSAO } : {}),
+        });
       }
 
       const extraData = Object.fromEntries(cfg.passos_extras.map(p => [p.key, form[p.key] || '']));
@@ -797,6 +804,31 @@ export default function ConviteEquipe() {
                   style={{ marginTop: 3, width: 16, height: 16, cursor: 'pointer' }} />
                 <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{termoDoPapel.declaracao}</span>
               </label>
+              {roleKey === 'advogado' && (
+                <div style={{ marginTop: 14, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: cfg.cor }}>Programa de Parceiros — indicar e vender</div>
+                  <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.55, margin: '4px 0 8px' }}>
+                    Como advogado parceiro você também pode indicar investidores e vender planos da BidPro, recebendo comissão pelas indicações.
+                  </p>
+                  <details style={{ fontSize: 12, color: '#334155' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700, color: cfg.cor }}>Ler o Termo de Adesão do Programa de Parceiros (versão {TERMO_PARCEIRO_VERSAO})</summary>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', maxHeight: 220, overflowY: 'auto', background: '#f8fafc', marginTop: 6 }}>
+                      <p style={{ margin: '0 0 8px', lineHeight: 1.6 }}>{TERMO_PARCEIRO_PREAMBULO}</p>
+                      {TERMO_PARCEIRO.map((c, i) => (
+                        <div key={i} style={{ marginBottom: 8 }}>
+                          <div style={{ fontWeight: 800 }}>{c.t}</div>
+                          <div style={{ lineHeight: 1.6 }}>{c.d}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                  <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!form.parceria_aceita} onChange={e => setVal('parceria_aceita', e.target.checked ? TERMO_PARCEIRO_VERSAO : '')}
+                      style={{ marginTop: 3, width: 16, height: 16, cursor: 'pointer' }} />
+                    <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>Li e concordo com o Termo de Adesão do Programa de Parceiros.</span>
+                  </label>
+                </div>
+              )}
             </div>
           )}
 
