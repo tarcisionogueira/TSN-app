@@ -1281,9 +1281,11 @@ async function garantirValores(imovelId, deadline) {
   }
 
   // SANIDADE do valor LIDO do edital: uma avaliação muito acima do lance mínimo (desconto
-  // implícito > 90%) é quase sempre MIS-READ (a IA/regex pegou um total de vários lotes, outra
+  // implícito >= 88%) é quase sempre MIS-READ (a IA/regex pegou um total de vários lotes, outra
   // métrica, ou erro) — não pode virar um "94% de desconto" FALSO no card. Descarta e sinaliza.
-  if (faltaAval && aval > 0 && vmin > 0 && aval > vmin * 10) {
+  // 12/10 (QA): o corte era 90% (aval > 10×) e o relatório usa 88% — a faixa 88–90% era gravada
+  // aqui e depois tratada como "avaliação ausente" no relatório ("a confirmar" com edital em mãos).
+  if (faltaAval && aval > 0 && vmin > 0 && (1 - vmin / aval) >= 0.88) {
     await registrarAnomalia('avaliacao_incoerente', im.fonte, imovelId, 'valor_avaliacao',
       `Avaliação lida R$${Math.round(aval)} vs lance mínimo R$${Math.round(vmin)} (${(aval / vmin).toFixed(1)}x = desconto ~${Math.round((1 - vmin / aval) * 100)}%) — provável leitura errada do edital. Descartada (mantém sem avaliação).`);
     aval = 0;
@@ -2975,7 +2977,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // garantirValores) e é persistida — o acervo inteiro se beneficia, não só o relatório.
       const aEd = Number(extratoDoc.avaliacao) || 0;
       const vmDb = Number(imDb?.valor_minimo) || 0;
-      if (!(avalDb > 0) && aEd > 0 && (vmDb <= 0 || (aEd > vmDb && aEd <= vmDb * 10))) {
+      if (!(avalDb > 0) && aEd > 0 && (vmDb <= 0 || (aEd > vmDb && (1 - vmDb / aEd) < 0.88))) {
         avalDb = aEd;
         try {
           await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
@@ -3150,7 +3152,12 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             corr[col] = { de: atual, para: novo };
             imDb[col] = novo; patchPr[col] = novo;
           };
-          if (!perto(vm1, p2v)) corrigir('valor_minimo', vm1, p1v);
+          // 1ª praça já passou e há 2ª: o lance VIGENTE é o da 2ª — corrigir para a 1ª (mais alta e
+          // vencida) seria o erro que o QA de 12/10 apontou no 1acdc4e.
+          const d1 = String(p1?.data || imDb.data_leilao || '').slice(0, 10);
+          const primeiraPassou = p2v > 0 && /^\d{4}-\d{2}-\d{2}$/.test(d1) && Date.parse(`${d1}T23:59:59-03:00`) < Date.now();
+          if (primeiraPassou) corrigir('valor_minimo', vm1, p2v);
+          else if (!perto(vm1, p2v)) corrigir('valor_minimo', vm1, p1v);
           corrigir('valor_minimo_2', vm2, p2v);
           if (Object.keys(corr).length) {
             patchPr.correcao_edital = { ...(imDb.correcao_edital || {}), ...corr, em: new Date().toISOString(), fonte: extratoDoc.fonteUrl || null };

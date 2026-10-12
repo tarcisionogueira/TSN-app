@@ -79,7 +79,7 @@ async function resolverAnexo(msg, { anexoId = '', idx = NaN } = {}) {
       body: JSON.stringify({ expiresIn: 3600 }), signal: AbortSignal.timeout(10000),
     });
     const js = rs.ok ? await rs.json().catch(() => null) : null;
-    if (js?.signedURL) return { url: `${SUPABASE_URL}/storage/v1${js.signedURL}`, nome: item.nome, nosso: true };
+    if (js?.signedURL) return { url: `${SUPABASE_URL}/storage/v1${js.signedURL}`, nome: item.nome, nosso: true, arquivo: item.arquivo };
     // Cópia registrada mas não assinável: diz, e segue para o Resend enquanto ele ainda tiver.
     console.error('[email-caixa] anexo arquivado não assinou:', rs.status, item.arquivo);
   }
@@ -227,7 +227,10 @@ export default async function handler(req) {
     if (!m || (m.dono ? m.dono !== user.id : soPessoal)) return json({ error: 'Um dos anexos a encaminhar não foi encontrado. Nada foi enviado.' }, 404);
     const res = await resolverAnexo(m, { anexoId: String(p?.anexo_id || ''), idx: Number(p?.anexo_idx) });
     if (res.erro) return json({ error: `Anexo "${p?.nome || 'sem nome'}": ${res.erro} Nada foi enviado.` }, res.status);
-    anexosEnvio.push({ filename: String(res.nome || p?.nome || 'anexo').slice(0, 150), path: res.url });
+    // `arquivo`: o anexo encaminhado JÁ tem cópia nossa (a da mensagem de origem) — registrar o
+    // caminho dela evita que o arquivador tente baixá-lo de novo do provedor (12/10: 5 anexos de um
+    // encaminhamento acusavam `anexo_email_nao_arquivado` sem nunca ter corrido risco).
+    anexosEnvio.push({ filename: String(res.nome || p?.nome || 'anexo').slice(0, 150), path: res.url, ...(res.arquivo ? { arquivo: res.arquivo } : {}) });
   }
 
   // ANEXOS DA TELA (09/10, dono: "permitir anexar documentos/fotos e colar imagem no corpo"). A tela
@@ -238,7 +241,7 @@ export default async function handler(req) {
   if (pedidos.length + anexosTela.length > 20) return json({ error: 'No máximo 20 anexos por mensagem.' }, 400);
   const prefixo = `email/saida/${user.id}/`;
   const inlines = [];
-  const anexosRegistro = anexosEnvio.map((a) => ({ nome: a.filename }));
+  const anexosRegistro = anexosEnvio.map((a) => ({ nome: a.filename, ...(a.arquivo ? { arquivo: a.arquivo, arquivado_em: new Date().toISOString() } : {}) }));
   for (const [i, a] of anexosTela.entries()) {
     const arquivo = String(a?.arquivo || '');
     const nome = String(a?.nome || 'anexo').replace(/[\r\n\]]/g, ' ').slice(0, 150);
@@ -322,7 +325,7 @@ export default async function handler(req) {
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
-    ...(anexosEnvio.length ? { attachments: anexosEnvio, semFila: true } : {}),
+    ...(anexosEnvio.length ? { attachments: anexosEnvio.map(({ arquivo, ...resto }) => resto), semFila: true } : {}), // eslint-disable-line no-unused-vars
     headers: Object.keys(headers).length ? headers : undefined,
     meta: { tipo: 'caixa_equipe', userId: user.id },
     idempotencyKey: chaveEnvio ? `caixa:${user.id}:${chaveEnvio}` : undefined,

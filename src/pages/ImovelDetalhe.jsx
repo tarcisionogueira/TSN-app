@@ -1317,8 +1317,8 @@ export default function ImovelDetalhe() {
   // lote — padrão da maioria dos leiloeiros: a auditoria mostrou link_edital = url_lote em
   // ~100% de SUPERBID/GRUPOLANCE/BIASI/SOLD/VIP…). Prioriza o PDF capturado no nosso Storage.
   const editalDeAnexo = (!isVendaDireta && !ehDocArquivo(docRegras)) ? (
-    (Array.isArray(anexosDocs) ? anexosDocs : []).find(a => /edital/i.test(a.tipo || a.nome || '') && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
-    || (Array.isArray(imovel.anexos) ? imovel.anexos : []).find(a => /edital/i.test(a.tipo || a.nome || '') && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
+    (Array.isArray(anexosDocs) ? anexosDocs : []).find(a => /edital/i.test(`${a.tipo || ''} ${a.nome || ''}`) && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
+    || (Array.isArray(imovel.anexos) ? imovel.anexos : []).find(a => /edital/i.test(`${a.tipo || ''} ${a.nome || ''}`) && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
     || null
   ) : null;
   // Documento OFICIAL (arquivo): venda direta = regras da Caixa (ou página de regras online);

@@ -13,6 +13,8 @@
 // → a requisição pendurava e a busca por raio ficava em "Buscando..." pra sempre.
 export const config = { runtime: 'edge' };
 
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
@@ -22,12 +24,14 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 function janelaPrazo(opcao) {
   if (!opcao) return { semData: false, dataDe: null, dataAte: null };
   if (opcao === 'sem_data') return { semData: true, dataDe: null, dataAte: null };
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  // "Hoje" em Brasília (QA 12/10): o servidor roda em UTC e, depois das 21h do último dia do mês,
+  // "este mês" virava o mês seguinte — divergindo do caminho sem raio, que usa o fuso do navegador.
+  const [a, m, d] = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10).split('-').map(Number);
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return { semData: false, dataDe: null, dataAte: null };
-  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0);
-  const iso = (d) => d.toISOString().slice(0, 10);
-  return { semData: false, dataDe: iso(hoje), dataAte: iso(fim) };
+  const fim = new Date(Date.UTC(a, m - 1 + meses, 0));
+  const iso = (dt) => dt.toISOString().slice(0, 10);
+  return { semData: false, dataDe: iso(new Date(Date.UTC(a, m - 1, d))), dataAte: iso(fim) };
 }
 
 function sb(path, opts = {}) {
@@ -49,7 +53,15 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Body inválido' }), { status: 400 }); }
 
-  const { lat, lng, raioKm = 50, pagina = 1, porPagina = 24, filtros = {}, sortAtivo } = body;
+  // Rota pública (a Busca chama sem sessão) com chave de serviço: tetos para não virar raspagem do
+  // acervo inteiro (QA 12/10). A tela usa 24 por página e raio de até algumas centenas de km.
+  const rl = await checkRateLimit(`busca-raio:${getIP(req)}`, 60, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+  const lim = (v, min, max, pad) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : pad; };
+  const { lat, lng, filtros = {}, sortAtivo } = body;
+  const raioKm = lim(body.raioKm, 1, 500, 50);
+  const pagina = Math.floor(lim(body.pagina, 1, 500, 1));
+  const porPagina = Math.floor(lim(body.porPagina, 1, 100, 24));
 
   if (!lat || !lng) return new Response(JSON.stringify({ error: 'lat e lng são obrigatórios' }), { status: 400 });
 

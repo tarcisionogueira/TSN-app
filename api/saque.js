@@ -208,7 +208,13 @@ export default async function handler(req) {
     // avisava por `podeReceber()` e o banco decidia por outro caminho, que não bloqueava
     // ninguém. Agora quem responde é `saque_avaliar`, a MESMA função que a RPC obedece e
     // que a auditoria confere. Passamos valor 0 = "o que você diria antes de eu pedir".
-    const av = (await rpc('saque_avaliar', { p_user_id: alvoId, p_valor: 0 })).data || {};
+    const avR = await rpc('saque_avaliar', { p_user_id: alvoId, p_valor: 0 });
+    // Erro do banco não é "não pode sacar": sem isto a tela travava sem motivo (QA 12/10).
+    if (!avR.ok || !avR.data || typeof avR.data !== 'object') {
+      console.error('[saque] saque_avaliar (GET) falhou:', avR.status, String(JSON.stringify(avR.data)).slice(0, 200));
+      return json({ error: 'Não foi possível consultar as regras de saque agora. Tente novamente em instantes.' }, 503);
+    }
+    const av = avR.data;
     const perfil = (await db(`perfis?id=eq.${alvoId}&select=pj_revalidacao_motivo`)).data?.[0] || {};
 
     // Flag INFORMATIVO (não bloqueia): quem não está em plano pago não GANHA comissões
@@ -238,7 +244,12 @@ export default async function handler(req) {
     // e PJ antes de chamar a RPC — mais um espelho, mais uma chance de divergir. Agora ela
     // só PERGUNTA. Todas as travas (cadastro, KYC, PJ, teto do mês, nota fiscal) vivem em
     // `saque_avaliar`, e a RPC reavalia sob advisory lock antes de reservar o valor.
-    const av = (await rpc('saque_avaliar', { p_user_id: user.id, p_valor: valor })).data || {};
+    const avR = await rpc('saque_avaliar', { p_user_id: user.id, p_valor: valor });
+    if (!avR.ok || !avR.data || typeof avR.data !== 'object') {
+      console.error('[saque] saque_avaliar (POST) falhou:', avR.status, String(JSON.stringify(avR.data)).slice(0, 200));
+      return json({ error: 'Não foi possível validar o saque agora. Tente novamente em instantes.' }, 503);
+    }
+    const av = avR.data;
 
     // Equipe operacional e parceiro já liberado: caminho direto.
     if (av.permitido) {
