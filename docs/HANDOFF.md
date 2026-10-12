@@ -42,6 +42,20 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 12/10 (noite) — QA semanal, críticos falsos, convite do advogado, #183
+- **QA semanal (5 achados) corrigidos** no código: corte de avaliação implausível unificado em 88%; edital não troca a
+  2ª praça vigente pela 1ª vencida; `saque_avaliar` com erro → 503 com motivo; botão Edital testa tipo+nome; busca por
+  raio (pública) com rate limit/tetos e "este mês" em Brasília.
+- **Críticos falsos zerados:** `mp_liberacao_atrasada` era BOLETO (D+2/3 normal) → invariante ignora boleto
+  (`20261012_mp_liberacao_atrasada_sem_boleto.sql`, troca só o predicado). `anexo_email_nao_arquivado` eram 5 anexos de
+  um ENCAMINHAMENTO (cópia já existia na mensagem de origem) → registro reparado e `email-caixa` passa a gravar `arquivo`.
+- **Convite de advogado já ativa o Programa de Parceiros** (aceite explícito do termo no passo do convite → `aceitar_parceria`
+  no 1º login). Convite gerado para o Dr. José Roberto (Cajado de Menezes), válido até 19/10; rascunho do e-mail na caixa
+  do dono (`email_rascunhos` bc8faf9f…) para revisão e envio.
+- **#183 fechada:** VIP "18%" contava 100 lotes encerrados retidos 15 dias (sem_lance) — nos leilões futuros, 62%.
+- **Guia da parcela:** pedido ao jurídico 5 dias antes; caso sem advogado vira aviso à equipe; cliente não recebe mais
+  instrução de emitir guia. SIF do TRT5: observação ≤ 70 caracteres; Caixa respondeu "falha na geração do ID" (lado do banco).
+
 ### 📌 FECHAMENTO 08–09/10 (noite) — o que evoluiu, o que falta, de onde paramos
 
 **Resolvido (com prova; detalhe no item 16 abaixo e em cada commit):**
