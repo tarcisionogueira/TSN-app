@@ -9,6 +9,22 @@
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
 acumular em paralelo com o rastro narrativo das Partes abaixo.
 
+### 📌 12/10 — abertura: #190 fechada, Meta explicado, guia da parcela do Marcos sem pedido
+- **#190 fechada.** Espelho: 3.071 copiados (os 3 pendentes são de lote inativo). `link_matricula_morto` tinha
+  voltado a 60 por causa NOVA: a recaptura (`captura-documentos.mjs`, CAMINHO 1) baixa o próprio
+  `matricula_<fonte>_auto.pdf`, regrava como `matricula_<hash>.pdf` e atualiza a linha do anexo; o gatilho só
+  tratava `storage_path → NULL`, então o link ficava no nome antigo (órfão, apagado pela limpeza). Agora
+  `trg_anexo_atualiza_tem_edital` também repõe link_matricula/link_edital quando o storage_path MUDA
+  (`20261012_link_doc_segue_anexo_movido.sql`). Reparo: 4 repontados, 57 zerados (GRUPOLANCE: a matrícula segue
+  pelo link do leiloeiro e a recaptura pega os sem link). Invariante = ok.
+- **`mkt_clique_pago_sem_rastreio` é falso alarme (forma nº 10):** as 2 campanhas Meta levam à LP externa
+  `lucreantesdearrematar.com.br`; 0 `fbclid` aqui é o esperado (já visto em #9). Some quando as campanhas acabarem (15/10).
+- **Google Ads SUSPENSO por pagamento atrasado (R$ 401,64, e-mail de 10/10)** — dono.
+- **Parcela 1/16 do Marcos (R$ 25.704,15, 16/10): o pedido da guia ao jurídico NÃO saiu** — os 3 casos
+  pós-arremate estão com `advogado_id` nulo (#186), e o `casos-acompanhamento-cron` só pede a guia ao advogado do caso.
+  O lembrete ao arrematante saiu (marco 5). Guia judicial (TRT-5) não tem API pública: gerar direto exigiria
+  automatizar o portal do banco — ver resposta ao dono nesta data.
+
 ### 📌 FECHAMENTO 08–09/10 (noite) — o que evoluiu, o que falta, de onde paramos
 
 **Resolvido (com prova; detalhe no item 16 abaixo e em cada commit):**
