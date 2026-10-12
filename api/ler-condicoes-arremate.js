@@ -52,11 +52,13 @@ Responda apenas um JSON:
  "parcelas":number|null, "valor_parcela":number|null, "primeira_venc":"AAAA-MM-DD"|null,
  "indice":string|null,
  "trecho_indice":string|null, "trecho_pagamento":string|null,
+ "exequente":string|null, "executado":string|null, "trecho_partes":string|null,
  "documento_usado":number}
 Regras:
 - "indice" = o índice de correção das parcelas COMO ESCRITO no documento (ex.: "IPCA-E", "INPC", "SELIC", "tabela do TJBA"). Se o documento não menciona índice, null — NÃO deduza pelo tipo de processo.
 - "trecho_indice" e "trecho_pagamento" = cópia LITERAL (até 300 caracteres) do trecho de onde saiu cada informação. Sem trecho, o campo correspondente é null.
 - Datas que o documento dá como "30 dias após", "mesmo dia dos meses subsequentes" etc.: calcule a partir da data da arrematação e mantenha o trecho.
+- "exequente" = o(s) reclamante(s)/exequente(s) e "executado" = o(s) reclamado(s)/executado(s), COMO ESCRITOS no documento (vários: separe por "; "). "trecho_partes" = cópia literal de onde saíram. Não constando, null.
 - "documento_usado" = índice (0, 1…) do documento de onde saíram as condições.
 - Na dúvida, null. Nunca invente.`;
 
@@ -152,6 +154,7 @@ export default async function handler(req, res) {
   novo.fonte_doc = {
     anexo_id: usado.id, tipo: usado.tipo, nome: String(usado.nome || '').slice(0, 120),
     trecho_indice: txt(ia.trecho_indice, 300), trecho_pagamento: txt(ia.trecho_pagamento, 300),
+    exequente: txt(ia.exequente, 200), executado: txt(ia.executado, 200), trecho_partes: txt(ia.trecho_partes, 300),
     lido_em: new Date().toISOString(),
   };
 

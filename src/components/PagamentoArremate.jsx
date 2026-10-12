@@ -195,7 +195,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
               ))}
             </tbody>
           </table>
-          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao} />}
+          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} partes={p.fonte_doc} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao} />}
           {itens.length > visiveis.length || verTudo ? (
             <button onClick={() => setVerTudo((v) => !v)} style={{ marginTop: 6, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
               {verTudo ? 'mostrar só as próximas' : `ver cronograma completo (${itens.length})`}
@@ -210,7 +210,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
 // Painel "Emitir guia" — só equipe enquanto validamos (12/10). Não gera boleto: aponta o portal do
 // tribunal pelo nº CNJ e deixa os dados prontos para copiar. Valor NOMINAL; correção pela
 // calculadora oficial do BCB conforme o índice do edital.
-function GuiaDeposito({ parcela, processo, indice, titulo, userId, dataArrematacao }) {
+function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataArrematacao }) {
   const [aberto, setAberto] = React.useState(false);
   // Nome do depositante = o arrematante (o SIF pede "Nome do depositante" quando ele não é parte).
   const [arrematante, setArrematante] = React.useState('');
@@ -264,6 +264,8 @@ function GuiaDeposito({ parcela, processo, indice, titulo, userId, dataArrematac
           {linha('Valor nominal', `R$ ${valorTxt}`, valorTxt)}
           {linha('Vencimento', dataBR(parcela.venc), null)}
           {linha('Índice (do auto/carta)', indice || 'não consta no documento', null)}
+          {linha('Reclamado (executado)', partes?.executado || 'não lido — use “Reler do auto/carta”', partes?.executado || null)}
+          {linha('Reclamante (exequente)', partes?.exequente || 'não lido — use “Reler do auto/carta”', partes?.exequente || null)}
           {linha('Depositante', arrematante || 'o arrematante', arrematante || null)}
           {linha('Finalidade', 'ARREMATAÇÃO DE BENS', null)}
           {linha('Observação', observacao, observacao)}
@@ -285,7 +287,7 @@ function GuiaDeposito({ parcela, processo, indice, titulo, userId, dataArrematac
             </ul>
           )}
           <ol style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#334155', lineHeight: 1.55 }}>
-            <li>No portal, informe o nº do processo. Em <b>Selecione o Reclamado</b>, escolha o executado (a parte cujo bem foi arrematado).</li>
+            <li>No portal, informe o nº do processo. Em <b>Reclamante</b> e <b>Reclamado</b>, escolha as partes que o auto/carta indica (acima). Com vários reclamantes e o auto sem distinguir, confirme com o jurídico/secretaria da vara — a guia fica vinculada a essa parte.</li>
             <li>Marque <b>“Depositante não está cadastrado no processo”</b> — o arrematante não é parte — e preencha nome e CPF do arrematante.</li>
             <li><b>Instituição financeira</b>: Caixa ou Banco do Brasil. <b>Finalidade</b>: <b>ARREMATAÇÃO DE BENS</b>.</li>
             <li><b>Valor do depósito</b>: o nominal da parcela{indice ? <> corrigido pelo <b>{indice}</b> desde a arrematação</> : ''} (confira na calculadora do BCB; na dúvida, com o jurídico).</li>
