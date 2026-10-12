@@ -151,6 +151,7 @@ export default async function handler(req, res) {
       };
   novo.indice = txt(ia.indice, 80);
   novo.pagas = Array.isArray(anterior.pagas) ? anterior.pagas : [];
+  if (anterior.guias) novo.guias = anterior.guias; // guias anexadas sobrevivem à releitura
   novo.fonte_doc = {
     anexo_id: usado.id, tipo: usado.tipo, nome: String(usado.nome || '').slice(0, 120),
     trecho_indice: txt(ia.trecho_indice, 300), trecho_pagamento: txt(ia.trecho_pagamento, 300),

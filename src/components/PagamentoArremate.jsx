@@ -82,6 +82,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
       ? { forma: 'a_vista', entrada_venc: form.entrada_venc || null, indice: form.indice || null, pagas: p?.pagas || [] }
       : { forma: 'parcelado', entrada_pct: Number(form.entrada_pct) || 25, entrada_venc: form.entrada_venc || null, parcelas: Number(form.parcelas) || 1, primeira_venc: form.primeira_venc || null, indice: form.indice || null, pagas: p?.pagas || [] };
     if (p?.fonte_doc) novo.fonte_doc = { ...p.fonte_doc, editado_a_mao: true };
+    if (p?.guias) novo.guias = p.guias;
     if (await salvar(novo)) setEditando(false);
   };
   const alternarPaga = async (idx) => {
@@ -195,7 +196,9 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
               ))}
             </tbody>
           </table>
-          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} partes={p.fonte_doc} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao} />}
+          {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} partes={p.fonte_doc} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao}
+            arrematadoId={arr.id} imovelId={arr.imovel_id} guiaGerada={p.guias?.[prox.idx] || null} onParcelamento={setP}
+            marcarPaga={async (idx) => salvar({ ...p, pagas: [...new Set([...(p.pagas || []).map(Number), idx])].sort((a, b) => a - b) })} />}
           {itens.length > visiveis.length || verTudo ? (
             <button onClick={() => setVerTudo((v) => !v)} style={{ marginTop: 6, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
               {verTudo ? 'mostrar só as próximas' : `ver cronograma completo (${itens.length})`}
@@ -210,7 +213,20 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
 // Painel "Emitir guia" — só equipe enquanto validamos (12/10). Não gera boleto: aponta o portal do
 // tribunal pelo nº CNJ e deixa os dados prontos para copiar. Valor NOMINAL; correção pela
 // calculadora oficial do BCB conforme o índice do edital.
-function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataArrematacao }) {
+// Chamada autenticada às rotas do servidor (token da sessão).
+async function chamarApi(caminho, { json, form } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const r = await fetch(caminho, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session?.access_token || ''}`, ...(json ? { 'Content-Type': 'application/json' } : {}) },
+    body: json ? JSON.stringify(json) : form,
+  });
+  const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
+function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataArrematacao, arrematadoId, imovelId, guiaGerada, onParcelamento, marcarPaga }) {
   const [aberto, setAberto] = React.useState(false);
   // Nome do depositante = o arrematante (o SIF pede "Nome do depositante" quando ele não é parte).
   const [arrematante, setArrematante] = React.useState('');
@@ -220,6 +236,53 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
       .then(({ data, error }) => { if (error) console.warn('[GuiaDeposito] arrematante:', error.message); else if (data?.nome) setArrematante(data.nome); });
   }, [aberto, userId, arrematante]);
   const [copiado, setCopiado] = React.useState('');
+  // Fluxo da guia já gerada (12/10, opção 1): anexar → ler → enviar ao cliente → comprovante dá baixa.
+  const [ocupado, setOcupado] = React.useState('');
+  const [msg, setMsg] = React.useState(null); // { tipo: 'ok'|'erro', txt, avisos }
+  const subir = async (file, tipo, descricao) => {
+    const fd = new FormData();
+    fd.append('file', file); fd.append('imovel_id', imovelId); fd.append('tipo', tipo); fd.append('descricao', descricao);
+    const d = await chamarApi('/api/upload-anexo', { form: fd });
+    if (!d.anexo_id) throw new Error('upload sem identificador do anexo');
+    return d.anexo_id;
+  };
+  const anexarGuia = async (file) => {
+    if (!file) return;
+    setOcupado('guia'); setMsg(null);
+    try {
+      const anexoId = await subir(file, 'boleto_aquisicao', `Guia ${parcela.rotulo}`);
+      const d = await chamarApi('/api/guia-parcela', { json: { acao: 'ler', arrematado_id: arrematadoId, anexo_id: anexoId, parcela_idx: parcela.idx } });
+      onParcelamento(d.parcelamento);
+      setMsg({ tipo: 'ok', txt: 'Guia anexada e lida. Confira os dados e envie ao cliente.', avisos: d.avisos || [] });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+    setOcupado('');
+  };
+  const enviarCliente = async () => {
+    setOcupado('enviar'); setMsg(null);
+    try {
+      const d = await chamarApi('/api/guia-parcela', { json: { acao: 'enviar', arrematado_id: arrematadoId, parcela_idx: parcela.idx } });
+      if (d.parcelamento) onParcelamento(d.parcelamento);
+      setMsg({ tipo: 'ok', txt: `Guia enviada para ${d.enviada_para}.${d.aviso ? ` ${d.aviso}` : ''}` });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+    setOcupado('');
+  };
+  const anexarComprovante = async (file) => {
+    if (!file) return;
+    setOcupado('comprovante'); setMsg(null);
+    try {
+      await subir(file, 'comprovante_pagamento', `Comprovante ${parcela.rotulo}`);
+      const ok = await marcarPaga(parcela.idx);
+      setMsg(ok ? { tipo: 'ok', txt: `Comprovante anexado e ${parcela.rotulo} marcada como paga.` } : { tipo: 'erro', txt: 'Comprovante anexado, mas não consegui marcar a parcela como paga — marque na tabela.' });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+    setOcupado('');
+  };
+  const botaoArquivo = (rotulo, onFile, chave, cor = '#0f172a') => (
+    <label style={{ padding: '7px 12px', borderRadius: 8, background: ocupado ? '#94a3b8' : cor, color: 'white', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>
+      {ocupado === chave ? 'Enviando…' : rotulo}
+      <input type="file" accept="application/pdf,image/*" disabled={!!ocupado} style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; onFile(f); }} />
+    </label>
+  );
   const guia = portaisDaGuia(processo);
   const copiar = async (rotulo, texto) => {
     try { await navigator.clipboard.writeText(texto); setCopiado(rotulo); setTimeout(() => setCopiado(''), 1800); }
@@ -295,6 +358,40 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
             <li>Envie a guia ao cliente, anexe o comprovante no caso e marque a parcela como paga.</li>
           </ol>
           {copiado === 'erro' && <p style={{ fontSize: 11.5, color: '#dc2626', marginTop: 6 }}>Não foi possível copiar — selecione o texto manualmente.</p>}
+
+          <div style={{ marginTop: 12, borderTop: '1px solid #dbeafe', paddingTop: 10 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>Guia gerada</div>
+            {guiaGerada ? (
+              <>
+                {linha('Valor da guia', guiaGerada.valor != null ? `R$ ${Number(guiaGerada.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—', null)}
+                {linha('Vencimento da guia', guiaGerada.vencimento ? dataBR(guiaGerada.vencimento) : '—', null)}
+                {guiaGerada.pix && linha('PIX copia e cola', `${guiaGerada.pix.slice(0, 28)}…`, guiaGerada.pix)}
+                {guiaGerada.linha_digitavel && linha('Código de barras', guiaGerada.linha_digitavel, guiaGerada.linha_digitavel)}
+                {guiaGerada.id_deposito && linha('ID do depósito', guiaGerada.id_deposito, guiaGerada.id_deposito)}
+                <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4 }}>
+                  {guiaGerada.enviada_em ? `✅ Enviada ao cliente (${guiaGerada.enviada_para || 'e-mail do cadastro'}) em ${dataBR(guiaGerada.enviada_em)}.` : 'Ainda não enviada ao cliente.'}
+                </div>
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={enviarCliente} disabled={!!ocupado} style={{ padding: '7px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>
+                    {ocupado === 'enviar' ? 'Enviando…' : guiaGerada.enviada_em ? 'Reenviar ao cliente' : 'Enviar ao cliente'}
+                  </button>
+                  {botaoArquivo('Anexar comprovante (dá baixa)', anexarComprovante, 'comprovante', '#15803d')}
+                  {botaoArquivo('Trocar guia', anexarGuia, 'guia', '#64748b')}
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {botaoArquivo('Anexar guiaGerada gerada (PDF)', anexarGuia, 'guia')}
+                <span style={{ fontSize: 11.5, color: '#64748b' }}>O sistema lê valor, vencimento, código de barras e PIX.</span>
+              </div>
+            )}
+            {msg && (
+              <div style={{ marginTop: 8, fontSize: 12, color: msg.tipo === 'ok' ? '#15803d' : '#dc2626' }}>
+                {msg.tipo === 'ok' ? '✓ ' : '⚠️ '}{msg.txt}
+                {msg.avisos?.length > 0 && <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: '#b45309' }}>{msg.avisos.map((a) => <li key={a}>{a}</li>)}</ul>}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -149,6 +149,8 @@ async function handler(req) {
         processo = (await ler(`imoveis_leilao?id=eq.${c.imovel_id}&select=numero_processo`))[0]?.numero_processo || null;
       }
 
+      // Guia já anexada no sistema pela equipe (painel "Emitir guia", 12/10): não pede ao jurídico.
+      if (parcela && arr.parcelamento?.guias?.[parcela.idx]?.anexo_id) { res.guia_ja_no_sistema = (res.guia_ja_no_sistema || 0) + 1; parcela = null; }
       // Guia já chegou? Insistir (marco 5 ou véspera/atraso) só se nenhuma resposta com anexo entrou
       // no caso desde o 1º pedido desta parcela (~12 dias antes do vencimento).
       if (parcela && parcela.marco !== 10) {

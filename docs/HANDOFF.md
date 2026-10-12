@@ -33,6 +33,14 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   usuário. Valor e data divergentes viram AVISO, nunca sobrescrita. Roda sozinho 1× por sessão para a equipe quando falta
   `fonte_doc`; botão "Ler/Reler do auto/carta". Não deu para testar com o PDF do Marcos nesta sessão (link assinado
   expirado, sem service key no sandbox) — 1ª leitura real é a do dono ao abrir o caso.
+- **1ª leitura real (Marcos) corrigiu o índice: cadastro "Tj" → IPCA-E** (trecho literal gravado). O SIF do TRT5 tem
+  **captcha próprio do PJe** (desafio imagem/áudio → `captchaToken` de 1 h): gerar a guia sozinho = burlar controle do
+  tribunal — NÃO fazer. Opção 1 do dono, feita: `api/guia-parcela.js` — a equipe anexa o PDF gerado no SIF
+  (tipo `boleto_aquisicao`, "Guia Parcela N/M"), a IA lê valor/vencimento/linha digitável/PIX/ID e grava em
+  `parcelamento.guias[idx]` (processo ≠ caso ou valor > ±10% do nominal = aviso); "Enviar ao cliente" manda o PDF +
+  códigos (cópia equipe, `semFila`, idempotente); "Anexar comprovante" anexa `comprovante_pagamento` e marca paga.
+  `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
+  jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
 ### 📌 FECHAMENTO 08–09/10 (noite) — o que evoluiu, o que falta, de onde paramos
 
