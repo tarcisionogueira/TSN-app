@@ -177,7 +177,9 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
             ) : <div style={{ fontSize: 13.5, color: cor.fg, fontWeight: 800 }}>✅ Todas as parcelas registradas como pagas</div>}
             {prox && <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4 }}>{avisoPenalidade(modalidade)}</div>}
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-              A guia de depósito é emitida no portal do banco/tribunal com o nº do processo. Valor nominal{p.indice ? ` — a correção pelo ${p.indice} é aplicada na guia` : ' — a correção do edital é aplicada na guia'}. Lembrete por e-mail 5 dias e 1 dia antes do vencimento.
+              {ehEquipe
+                ? <>Equipe: a guia é emitida no portal do tribunal (painel abaixo). O jurídico recebe o pedido da guia 5 dias antes do vencimento. Valor nominal{p.indice ? ` — corrigir pelo ${p.indice}` : ''}.</>
+                : <>Valor nominal{p.indice ? `, corrigido pelo ${p.indice} na guia` : ''}. A guia de cada parcela é enviada pela nossa equipe por e-mail antes do vencimento — você recebe também um lembrete 5 dias e 1 dia antes.</>}
             </div>
           </div>
           <table style={{ width: '100%', marginTop: 10, borderCollapse: 'collapse', fontSize: 12.5 }}>
@@ -384,7 +386,7 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
               </>
             ) : (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                {botaoArquivo('Anexar guiaGerada gerada (PDF)', anexarGuia, 'guia')}
+                {botaoArquivo('Anexar guia gerada (PDF)', anexarGuia, 'guia')}
                 <span style={{ fontSize: 11.5, color: '#64748b' }}>O sistema lê valor, vencimento, código de barras e PIX.</span>
               </div>
             )}

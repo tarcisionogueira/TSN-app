@@ -68,7 +68,7 @@ export function corpo({ titulo, prox, penalidade, processo, link }) {
     <tr><td style="padding:4px 12px 4px 0;color:#64748b">Valor nominal</td><td><b>${brl(prox.valor)}</b></td></tr>
     ${processo ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Processo</td><td>${esc(processo)}</td></tr>` : ''}
   </table>
-  <p style="font-size:13px;color:#475569">Emita a guia de depósito no portal do banco/tribunal com o número do processo — a correção do índice do edital é aplicada na própria guia.</p>
+  <p style="font-size:13px;color:#475569">A guia de depósito desta parcela, já com a correção prevista no auto de arrematação, será enviada pela nossa equipe por e-mail antes do vencimento. Pague somente pela guia que receber de nós.</p>
   <p style="font-size:13px;color:#b91c1c">${esc(penalidade)}</p>
   <p><a href="${link}" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Ver cronograma</a></p>
 </div>`;

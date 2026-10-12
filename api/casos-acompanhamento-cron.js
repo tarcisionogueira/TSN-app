@@ -6,16 +6,17 @@
  * advogado/escritório vinculado ao caso, pedindo:
  *   1) ATUALIZAÇÃO do processo — uma vez por semana (1º dia útil da semana em que rodar);
  *   2) a GUIA DE CADA PARCELA do arremate (arrematados.parcelamento) — por VENCIMENTO, não por
- *      semana (dono, 10/10): pedido a ~10 dias do vencimento; novo pedido a ~5 dias e na véspera/
- *      atraso SÓ se a guia ainda não chegou (nenhuma resposta com anexo no caso desde o 1º pedido).
+ *      semana: pedido a 5 dias do vencimento (dono, 12/10 — antes eram ~10); novo pedido na véspera/
+ *      atraso SÓ se a guia ainda não chegou (nenhuma resposta com anexo no caso desde o 1º pedido,
+ *      nem guia anexada pela equipe no painel do arremate).
  * Os dois vão em e-mails SEPARADOS, com assunto próprio: a guia não se perde no meio da atualização.
  *
  * A resposta volta para tarcisio+<token>@ → inbound-juridico encadeia na conversa (resposta_de) e o
  * gatilho email_caixa_classificar herda o caso_id. Na caixa, o botão "Enviar só o anexo ao cliente"
  * manda a guia ao cliente sem o texto do advogado (api/email-caixa.js, acao cliente_do_caso).
  *
- * Caso sem advogado vinculado NÃO recebe nada (não há para quem cobrar) — sai na contagem
- * `sem_advogado` com o id, para não virar silêncio. Trava: webhook_eventos_processados (mesmo
+ * Caso sem advogado vinculado: não há jurídico a cobrar — o pedido da guia vira AVISO para a equipe
+ * (12/10: a 1ª parcela do Marcos ia vencer sem ninguém pedir a guia) e o id sai em `sem_advogado`. Trava: webhook_eventos_processados (mesmo
  * desenho do parcelas-arremate-cron); falhou o envio → libera a trava e tenta no próximo dia.
  * `?seco=1` mostra o que sairia, sem enviar nem travar.
  */
@@ -32,7 +33,7 @@ const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const ETAPAS = ['arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'];
 // Marcos do pedido da guia (dias até o vencimento → marco). Janela, não dia exato: o cron roda só em
 // dia útil, e um marco que cai no fim de semana ainda é pego no dia útil seguinte.
-const marcoGuia = (dias) => (dias >= 6 && dias <= 10 ? 10 : dias >= 2 && dias <= 5 ? 5 : dias >= -7 && dias <= 1 ? 0 : null);
+const marcoGuia = (dias) => (dias >= 2 && dias <= 5 ? 5 : dias >= -7 && dias <= 1 ? 0 : null);
 
 const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
 const sb  = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...hdr, ...(opts.headers || {}) } });
@@ -125,10 +126,35 @@ async function handler(req) {
 
     const casos = await ler(`casos?posse_em=is.null&advogado_id=not.is.null&status_etapa=in.(${ETAPAS.join(',')})&select=id,cliente_id,advogado_id,imovel_id,imovel_endereco`);
     // Os sem advogado não entram no laço, mas aparecem no resultado.
-    for (const c of await ler(`casos?posse_em=is.null&advogado_id=is.null&status_etapa=in.(${ETAPAS.join(',')})&select=id`)) res.sem_advogado.push(c.id);
+    const semAdv = await ler(`casos?posse_em=is.null&advogado_id=is.null&status_etapa=in.(${ETAPAS.join(',')})&select=id,cliente_id,imovel_id,imovel_endereco`);
+    for (const c of semAdv) res.sem_advogado.push(c.id);
     res.casos = casos.length;
 
     const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // dia em Brasília
+
+    // Sem advogado, a guia não tem a quem ser pedida: avisa a equipe no mesmo marco (5 dias / véspera).
+    for (const c of semAdv) {
+      const arrs = await ler(`arrematados?user_id=eq.${c.cliente_id}&select=id,imovel_id,valor_arrematacao,data_arrematacao,parcelamento`);
+      const arr = arrs.find((a) => c.imovel_id && a.imovel_id === c.imovel_id) || (arrs.length === 1 ? arrs[0] : null);
+      if (!arr?.parcelamento) continue;
+      let p;
+      try { p = proximaPendente(cronograma(arr.parcelamento, { valor: arr.valor_arrematacao, dataArrematacao: arr.data_arrematacao }), hoje); }
+      catch (e) { res.falhas++; console.error(`[acompanhamento] cronograma ilegível ${arr.id}:`, e?.message); continue; }
+      const marco = p ? marcoGuia(p.dias) : null;
+      if (marco === null || arr.parcelamento?.guias?.[p.idx]?.anexo_id) continue;
+      const chave = `semadv|${c.id}|${p.idx}|${p.venc}|${marco}`;
+      if (seco) { res.previa.push({ caso: c.id, aviso_equipe_sem_advogado: chave }); continue; }
+      if (!(await travar(chave, c.id))) { res.ja_enviados++; continue; }
+      const [cli] = await ler(`perfis?id=eq.${c.cliente_id}&select=nome`);
+      const env = await enviarEmail({
+        from: `BidPro Brasil <${remet.endereco}>`, to: process.env.ADMIN_ALERT_EMAIL || remet.endereco,
+        subject: `⚠️ Guia da ${p.rotulo} (vence ${dataBR(p.venc)}) — ${cli?.nome || 'cliente'}: caso SEM advogado`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;color:#1e293b;line-height:1.6"><p>A <b>${esc(p.rotulo)}</b> de ${esc(cli?.nome || 'cliente')} (${esc(c.imovel_endereco || 'imóvel arrematado')}) vence em <b>${dataBR(p.venc)}</b> — valor nominal ${brl(p.valor)}.</p><p>O caso está <b>sem advogado vinculado</b>, então ninguém recebeu o pedido da guia. Vincule o escritório no caso ou gere a guia pelo painel "Emitir guia" em <a href="${BASE}/arrematados">${BASE}/arrematados</a>.</p></div>`,
+        meta: { tipo: 'acompanhamento_sem_advogado' }, idempotencyKey: `acompanhamento:${chave}`,
+      }).catch((e) => ({ ok: false, error: e?.message }));
+      if (env?.ok) res.avisos_sem_advogado = (res.avisos_sem_advogado || 0) + 1;
+      else { res.falhas++; console.error(`[acompanhamento] aviso sem advogado falhou caso ${c.id}:`, env?.error); await liberar(chave); }
+    }
     const semana = semanaIso(new Date(`${hoje}T12:00:00Z`));
 
     for (const c of casos) {
@@ -151,10 +177,10 @@ async function handler(req) {
 
       // Guia já anexada no sistema pela equipe (painel "Emitir guia", 12/10): não pede ao jurídico.
       if (parcela && arr.parcelamento?.guias?.[parcela.idx]?.anexo_id) { res.guia_ja_no_sistema = (res.guia_ja_no_sistema || 0) + 1; parcela = null; }
-      // Guia já chegou? Insistir (marco 5 ou véspera/atraso) só se nenhuma resposta com anexo entrou
-      // no caso desde o 1º pedido desta parcela (~12 dias antes do vencimento).
-      if (parcela && parcela.marco !== 10) {
-        const desde = new Date(Date.parse(`${parcela.venc}T12:00:00Z`) - 12 * 864e5).toISOString();
+      // Guia já chegou? Insistir (véspera/atraso) só se nenhuma resposta com anexo entrou no caso
+      // desde o 1º pedido desta parcela (5 dias antes do vencimento; margem para fim de semana).
+      if (parcela && parcela.marco !== 5) {
+        const desde = new Date(Date.parse(`${parcela.venc}T12:00:00Z`) - 7 * 864e5).toISOString();
         const veio = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.entrada&anexos=not.is.null&criado_em=gte.${desde}&select=id&limit=1`);
         if (veio.length) { res.guia_ja_recebida = (res.guia_ja_recebida || 0) + 1; parcela = null; }
       }
@@ -164,7 +190,7 @@ async function handler(req) {
           texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao: true, parcela: null }) },
         ...(parcela ? [{ tipo: 'parcela', chave: `parcela|${c.id}|${parcela.idx}|${parcela.venc}|${parcela.marco}`,
           assunto: `Guia da ${parcela.rotulo} (vence ${dataBR(parcela.venc)}) — ${cli?.nome || 'cliente'} · ${c.imovel_endereco || 'imóvel arrematado'}`,
-          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao: false, parcela, insistencia: parcela.marco !== 10 }) }] : []),
+          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco: c.imovel_endereco, processo, atualizacao: false, parcela, insistencia: parcela.marco !== 5 }) }] : []),
       ];
       if (seco) {
         res.previa.push({ caso: c.id, cliente: cli?.nome, envios: envios.map((e) => e.chave) });
