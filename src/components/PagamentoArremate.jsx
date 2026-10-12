@@ -289,7 +289,10 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
     catch (e) { console.warn('[GuiaDeposito] copiar:', e?.message); setCopiado('erro'); }
   };
   const valorTxt = Number(parcela.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const observacao = `${parcela.rotulo} da arrematação — ${titulo || 'imóvel arrematado'}${dataArrematacao ? ` — auto de arrematação de ${dataBR(dataArrematacao)}` : ''}`.slice(0, 200);
+  // O SIF do TRT5 recusa observação com mais de 70 caracteres (12/10) e o boleto caiu com "Internal
+  // Server Error" com travessão/acentos — sai curta e sem acento.
+  const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s./-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const observacao = semAcento(`${parcela.rotulo} arrematacao${processo ? ` proc ${guia?.cnj.formatado || processo}` : ''}`).slice(0, 70);
   const resumo = [
     `Processo: ${guia?.cnj.formatado || processo || '(não informado)'}`,
     guia ? `Tribunal: ${guia.tribunal} · vara/órgão de origem ${guia.cnj.origem}` : null,
