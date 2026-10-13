@@ -16,6 +16,14 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 13/10 (noite) — /externo/ (Leiloar listagem-bens-responsivo): INTEGRADO, só SANCHES
+- Sanches, Osvaldo e Judhastas publicam o MESMO conjunto de leilões (ids diferentes, título/data/valores iguais).
+  Coletamos só o Sanches (`scraper-externo.yml`). Osvaldo tem Cloudflare no IP do GitHub até nos PDFs (403) —
+  outro motivo para não usar o espelho. Delano e São Caetano: home sem leilão.
+- Valores: só no edital PDF; formas lidas: "avaliado em R$ X", "preço mínimo de R$ X, referente a N% da avaliação"
+  (avaliação = X/N), "1º leilão … igual ou superior à avaliação". Edital sem essas frases → lote fica fora (nunca
+  usa a avaliação como mínimo).
+
 ## 📊 13/10 (noite) — plataforma ARES (picelli + shiokawa): INTEGRADA (`scripts/lib/ares-parse.mjs`, fontes PICELLI/SHIOKAWA)
 - "Ares Plataforma de Leilões" (Agência Ares): React + Supabase, UM projeto por leiloeiro em `api.<domínio>/rest/v1`.
   A API exige `apikey: sb_publishable_…` — a chave que o próprio site manda (pública). Shiokawa: lida do

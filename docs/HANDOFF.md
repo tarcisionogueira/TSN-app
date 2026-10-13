@@ -42,6 +42,27 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 13/10 (noite, 2ª parte) — /externo/, contatos da Superbid, cron de limpeza, reconciliação MP
+- **Contato da Superbid (e-mails "setor errado"):** os contatos de FIAT 5042728 e MITSUBISHI 5041090 foram ao
+  `imoveis.sac@superbid.net` (SAC de IMÓVEIS da SOLD), que respondeu em 13/10 "somos do setor de imóveis" e indicou
+  `suporte.sbxos.com/portal` (chamado). Causas: `enviar-email-caso` usava o cadastro da FONTE para veículo, e o
+  próprio evento do FIAT publica o SAC de imóveis no ticker. Agora (`api/_contato-lote.js`): veículo → organizador
+  do evento + cc `contato.comercial@sbwebservices.net`; SAC de imóveis nunca serve para veículo (cai no comercial).
+  IMÓVEL: 762 dos 1.245 ativos são de 48 OUTROS leiloeiros da plataforma e todos caíam no SAC da SOLD → o
+  organizador é lido da página da oferta (`eventoDaOferta`) antes do cadastro (pedido de documento manual e
+  automático, e-mail do caso). Reenviar ao dono: MITSUBISHI → `atendimento.infraenergia@superbid.net` (SOLD MAISATIVO);
+  FIAT → comercial.
+- **/externo/ (Leiloar) integrado — só o SANCHES** (`scripts/lib/externo-parse.mjs`, cron 9h30 UTC): leilão = imóvel;
+  documentos NOMEADOS em `/externo/arquivos/<cabecalho>`; avaliação e mínimo lidos do edital em PDF (pdf-parse).
+  Osvaldo e Judhastas REPUBLICAM os mesmos leilões do Sanches → fora. Runner: `parseDetalhe` pode ser async e recebe
+  `fetchFonte`. Teste: `npm run testar:externo`.
+- **Limpeza de encerrados ainda estourava (17:05, 22:05):** a função custa ~0,1 s parada e 28 ms por imóvel (medido
+  com EXPLAIN ANALYZE dentro de função que aborta), mas varia de 35 ms a 8 s no pg_stat_statements: é a CARGA das :00
+  (44 de 76 crons). Cron para `:37`, maxDuration 60 s, 1 nova tentativa só no 57014. Escritas de 1 linha em
+  `imoveis_leilao` também levam 5–8 s em média nesses picos — vale espalhar mais crons do minuto 0 (não feito).
+- **#206 resolvida na causa:** `limit=20` dava 400 desde 18/09; o conserto exige cobrança aprovada em 35 dias para não
+  reativar o mandato 059f6e7a (inadimplente). **#205 fechada** (PDF em produção sem erro após o deploy).
+
 ### 📌 13/10 (madrugada de 14) — #203, coletor e-Leilões, PDF em produção, revisão dos conectores
 - **#203 fechada** (c7153e4): Política de Privacidade cita PostHog e Sentry, transferência internacional e retenção.
 - **e-Leilões no ar** (`scripts/lib/eleiloes-parse.mjs`, fonte `ELEILOES`, cron 8h50 UTC): `__NUXT_DATA__` em devalue
