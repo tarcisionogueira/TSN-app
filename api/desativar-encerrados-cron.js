@@ -10,7 +10,7 @@
  * mesmas cautelas do gate de relatório: venda direta nunca vence por data, e vale a MAIS FUTURA
  * das datas conhecidas (só a 1ª praça ter passado é normal).
  */
-export const config = { runtime: 'nodejs', maxDuration: 30 };
+export const config = { runtime: 'nodejs', maxDuration: 60 }; // 60 s: cabe 1 nova tentativa no timeout (13/10)
 
 import { isCronAuthorized } from './_auth.js';
 
@@ -23,15 +23,25 @@ export default async function handler(req, res) {
 
   // 13/10: falha deste passo NÃO aborta mais os outros. Medido: estourava o statement timeout de
   // 8 s em 1 de cada 2 horas, e cada falha pulava o desconto anunciado e os números da vitrine.
+  // 13/10 (noite): a função custa ~0,1 s parada e 28 ms por imóvel desligado (medido com EXPLAIN
+  // ANALYZE), mas no pg_stat_statements vai de 35 ms a 8 s: estoura só quando pega o banco carregado
+  // pela onda das :00 (44 dos 76 crons). Cron movido para :37 e UMA nova tentativa no timeout — segura,
+  // porque cada chamada desliga no máximo 500 e o que já saiu não volta para a fila.
   let desativados = null;
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
-      method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    desativados = r.ok ? await r.json().catch(() => 0) : { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}` };
-  } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200) }; }
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
+        method: 'POST',
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (r.ok) { desativados = await r.json().catch(() => 0); break; }
+      const txt = (await r.text().catch(() => '')).slice(0, 200);
+      desativados = { erro: `${r.status} ${txt}`, tentativas: tentativa };
+      if (!/57014/.test(txt)) break; // só o timeout de carga vale nova tentativa
+      await new Promise(ok => setTimeout(ok, 15000));
+    } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200), tentativas: tentativa }; break; }
+  }
 
   // Cópias do mesmo bem (13/10): veículo relistado e 2ª praça publicada como outro anúncio.
   // RPC própria — dentro de desativar_leiloes_encerrados somava ~2 s a quem já estourava o teto.

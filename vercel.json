@@ -241,7 +241,7 @@
     },
     {
       "path": "/api/desativar-encerrados-cron",
-      "schedule": "5 * * * *"
+      "schedule": "37 * * * *"
     },
     {
       "path": "/api/apurar-resultado-leilao-cron",

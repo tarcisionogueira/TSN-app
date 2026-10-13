@@ -118,10 +118,17 @@ async function handler(req) {
           // mandato; sem uma processada/aprovada, não há o que reativar. Quando há, ela vai
           // como `cobranca` — o que também restaura a recuperação legítima de quem pagou e
           // perdeu o webhook, caso que a guarda de `ativarPlanoDireto` sozinha barraria.
-          const pagos = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(sub.id)}&limit=20`);
+          // 13/10: `limit=20` dava HTTP 400 ("Invalid value for limit") — a checagem NUNCA rodou desde
+          // 18/09 (o log só passou a dizer o motivo hoje). E ela aceitava QUALQUER cobrança aprovada do
+          // histórico: o mandato 059f6e7a… pagou em 06/08 e foi RECUSADO em 06/09 e 06/10 — com o 400
+          // consertado, seria reativado como pagante. Vale só cobrança aprovada nos últimos 35 dias.
+          const pagos = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(sub.id)}`);
           if (pagos === null) { console.error('[reconciliar] histórico de cobranças indisponível para', sub.id, '— não ativa às cegas'); continue; }
+          const recente = Date.now() - 35 * 864e5;
           const cobrado = (pagos?.results || []).find(p =>
-            (p?.status === 'processed' || p?.payment?.status === 'approved') && Number(p?.transaction_amount) > 0);
+            (p?.status === 'processed' || p?.payment?.status === 'approved') && p?.payment?.status !== 'rejected'
+            && Number(p?.transaction_amount) > 0
+            && Date.parse(p?.debit_date || p?.date_created || p?.last_modified || '') >= recente);
           if (!cobrado) continue;
           try {
             await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago',
