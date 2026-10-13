@@ -19,7 +19,7 @@ const POR_PAGINA = 20;
 const PATIO_VISIVEL = ['confirmado', 'nao_confirmado'];
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'marca_busca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'valor_fipe', 'fipe_status', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
   // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
@@ -84,6 +84,10 @@ const TIPOS_VEICULO_LABEL = {
 // filtro é honesto (não inventa valor), mas precisa DIZER que deixa de fora quem não informa,
 // senão a lista curta parece "não há oportunidade".
 const AVISO_SEM_AVALIACAO = 'Poucos leiloeiros de veículos informam avaliação — este filtro mostra só os lotes que informam.';
+// REFERÊNCIA = FIPE, ou a avaliação do leiloeiro quando não há FIPE (13/10, dono: "coloco quanto pretendo
+// investir e quero saber qual FIPE consigo comprar"). FIPE primeiro: é a mesma régua para todo o
+// acervo; a avaliação judicial varia de perito para perito. Sem nenhuma das duas, o lote fica fora.
+const AVISO_SEM_REFERENCIA = 'Usa a FIPE e, sem ela, a avaliação do leiloeiro — lote sem nenhuma das duas fica fora. A FIPE do acervo é preenchida aos poucos (lote noturno + ao abrir o veículo).';
 const avisoCobertura = { display: 'block', marginTop: 4, fontSize: 11, color: '#64748b', lineHeight: 1.3 };
 
 const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande monta', 'perda total'];
@@ -274,8 +278,8 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 
 function filtrosVazios() {
   return {
-    estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '',
-    valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
+    estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMin: '', valorMax: '',
+    valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -310,7 +314,11 @@ function aplicarFiltros(q, f, ign = new Set()) {
   if (!ign.has('anoMin') && f.anoMin) q = q.gte('ano_fabricacao', Number(f.anoMin));
   if (!ign.has('anoMax') && f.anoMax) q = q.lte('ano_fabricacao', Number(f.anoMax));
   if (!ign.has('valorMax') && f.valorMax) q = q.lte('valor_minimo', Number(f.valorMax));
-  if (!ign.has('valorAvaliacaoMax') && f.valorAvaliacaoMax) q = q.lte('valor_avaliacao', Number(f.valorAvaliacaoMax));
+  if (!ign.has('valorMin') && f.valorMin) q = q.gte('valor_minimo', Number(f.valorMin));
+  // Faixa de REFERÊNCIA (FIPE; sem FIPE, a avaliação) — cada limite num `or` próprio, e o PostgREST
+  // combina os dois por AND. `valorAvaliacaoMax` manteve o nome por compatibilidade; hoje é o teto da referência.
+  if (!ign.has('valorRefMin') && f.valorRefMin) { const n = Number(f.valorRefMin); q = q.or(`valor_fipe.gte.${n},and(valor_fipe.is.null,valor_avaliacao.gte.${n})`); }
+  if (!ign.has('valorAvaliacaoMax') && f.valorAvaliacaoMax) { const n = Number(f.valorAvaliacaoMax); q = q.or(`valor_fipe.lte.${n},and(valor_fipe.is.null,valor_avaliacao.gt.0,valor_avaliacao.lte.${n})`); }
   if (!ign.has('descontoMin') && f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
   if (!ign.has('tipoMonta') && f.tipoMonta.length) {
     const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
@@ -338,7 +346,7 @@ function aplicarFiltros(q, f, ign = new Set()) {
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMax: 'Lance máx.', valorAvaliacaoMax: 'Avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMin: 'Lance mín.', valorMax: 'Lance máx.', valorRefMin: 'FIPE/avaliação mín.', valorAvaliacaoMax: 'FIPE/avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 // `embutido` (29/09, pedido do dono): a aba Veículos do Admin mostra lotes e filtros direto, sem
@@ -520,13 +528,21 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
             <input style={inp} type="number" placeholder="Ex.: 2024" value={filtros.anoMax} onChange={e => setFiltros(f => ({ ...f, anoMax: e.target.value }))} />
           </div>
           <div>
+            <label style={lbl}>Lance mín. (R$)</label>
+            <input style={inp} type="number" placeholder="Ex.: 34000" value={filtros.valorMin} onChange={e => setFiltros(f => ({ ...f, valorMin: e.target.value }))} />
+          </div>
+          <div>
             <label style={lbl}>Lance máx. (R$)</label>
             <input style={inp} type="number" placeholder="Ex.: 50000" value={filtros.valorMax} onChange={e => setFiltros(f => ({ ...f, valorMax: e.target.value }))} />
           </div>
           <div>
-            <label style={lbl}>Avaliação máx. (R$)</label>
+            <label style={lbl}>FIPE/avaliação mín. (R$)</label>
+            <input style={inp} type="number" placeholder="Ex.: 50000" value={filtros.valorRefMin} onChange={e => setFiltros(f => ({ ...f, valorRefMin: e.target.value }))} />
+            {(filtros.valorRefMin || filtros.valorAvaliacaoMax) && <small style={avisoCobertura}>{AVISO_SEM_REFERENCIA}</small>}
+          </div>
+          <div>
+            <label style={lbl}>FIPE/avaliação máx. (R$)</label>
             <input style={inp} type="number" placeholder="Ex.: 80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
-            {filtros.valorAvaliacaoMax && <small style={avisoCobertura}>{AVISO_SEM_AVALIACAO}</small>}
           </div>
           <div>
             <label style={lbl}>Desconto mín.</label>
@@ -619,7 +635,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 12.5, whiteSpace: 'nowrap' }}>{ks.length > 1 ? 'Tirar estes filtros' : 'Tirar este filtro'}</button>
                 </div>
               ); })}
-              {diagnostico.some(d => (d.ks || [d.k]).some(k => k === 'valorAvaliacaoMax' || k === 'tipoMonta')) && (
+              {diagnostico.some(d => (d.ks || [d.k]).some(k => k === 'valorAvaliacaoMax' || k === 'valorRefMin' || k === 'tipoMonta')) && (
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Muitos leiloeiros (ex.: Superbid) não informam avaliação nem tipo de monta — esses veículos saem quando você filtra por esses campos. Em "Tipo de monta", marque também "Não informado" para incluí-los.</div>
               )}
             </div>
@@ -718,6 +734,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                   <div style={{ marginTop: 2 }}>
                     <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mín.</div>
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
+                    {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : ''} {fmtBRL(v.valor_fipe)}</div>}
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>

@@ -80,7 +80,9 @@ async function main() {
       novos++;
     },
   };
-  const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: TETO_CRON_FIPE }).then(r => {
+  // Teto do LOTE no contador do dia (13/10): o agendado passa FIPE_TETO_LOTE=250 para sobrar cota à tela.
+  const teto = Math.min(TETO_CRON_FIPE, Number(process.env.FIPE_TETO_LOTE) || TETO_CRON_FIPE);
+  const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: teto }).then(r => {
     if (r.error) throw new Error(r.error.message);
     return r.data;
   }), cacheFipe);
