@@ -227,6 +227,34 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [bloqueados, setBloqueados] = useState([]);
   const [origem, setOrigem] = useState('todas');
   const [meuEndereco, setMeuEndereco] = useState(null); // tarcisio@… (equipe_email) ou null
+  // CONTATOS DO HISTÓRICO (13/10, pedido do dono: autopreencher com Tab ou clique). Endereços que
+  // escreveram para nós ou para quem escrevemos, do mais frequente para o menos; carregado 1× ao
+  // abrir o Escrever (a RLS já limita às mensagens que esta pessoa pode ver). Automáticos ficam fora.
+  const [contatos, setContatos] = useState([]);
+  const contatosCarregados = useRef(false);
+  useEffect(() => {
+    if (!compor || contatosCarregados.current) return;
+    contatosCarregados.current = true;
+    supabase.from('email_caixa').select('de_email, de_nome, para, cc, direcao').order('criado_em', { ascending: false }).limit(800)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[caixa] contatos do histórico:', error.message); contatosCarregados.current = false; return; }
+        const robo = /(^|[._-])(no-?reply|nao-?responda|mailer-daemon|bounce|notifica|notifications?|alertas?)([._-]|@)/i;
+        const mapa = new Map();
+        const somar = (email, nome) => {
+          const e = String(email || '').trim().toLowerCase();
+          if (!e || !e.includes('@') || robo.test(e)) return;
+          const atual = mapa.get(e) || { email: e, nome: '', n: 0 };
+          atual.n += 1;
+          if (nome && !atual.nome) atual.nome = String(nome).replace(/["<>]/g, '').trim();
+          mapa.set(e, atual);
+        };
+        for (const m of data || []) {
+          if (m.direcao === 'entrada') somar(m.de_email, m.de_nome);
+          else [...(m.para || []), ...(m.cc || [])].forEach((e) => somar(e));
+        }
+        setContatos([...mapa.values()].sort((a, b) => b.n - a.n));
+      });
+  }, [compor]);
   const { user } = useAuth();
   useEffect(() => {
     if (!user?.id) return;
@@ -757,8 +785,8 @@ export default function CaixaEmail({ soPessoal = false }) {
               </select>],
               // Etiquetas por endereço (25/09): Tab/Enter/vírgula ou terminar em .com.br confirma cada um.
               // `key` = a chave deste envio: remonta só ao abrir outro rascunho, não a cada tecla.
-              ['Para', <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" />],
-              ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" />],
+              ['Para', <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" sugestoes={contatos} />],
+              ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" sugestoes={contatos} />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],
             ].map(([rot, el]) => (
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
