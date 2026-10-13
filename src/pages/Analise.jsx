@@ -4,7 +4,7 @@ import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData } from 
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
-  CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer, ExternalLink,
+  CheckCircle2, XCircle, AlertTriangle, Printer, ExternalLink,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock, FileWarning,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
@@ -132,22 +132,6 @@ function Section({ step, title, icon: Icon, color='#0D63DB', open, onToggle, bad
   );
 }
 
-function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
-  return (
-    <div style={{background:'white',borderRadius:14,border:'1px solid #e2e8f0',padding:large?'20px 22px':'16px',boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-        <span style={{fontSize:10,color:'#94a3b8',fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,lineHeight:1.4}}>{label}</span>
-        <div style={{background:bg,borderRadius:8,padding:'6px'}}><Icon size={15} color={color}/></div>
-      </div>
-      <div style={{fontSize:large?28:22,fontWeight:900,color,lineHeight:1}}>{value}</div>
-      {sub && <div style={{fontSize:11,color:'#94a3b8',marginTop:6,fontWeight:500}}>{sub}</div>}
-    </div>
-  );
-}
-
-// Cabeçalho de "banda" do relatório mercadológico — organiza a informação (antes era
-// uma pilha vertical longa) em 4 blocos numerados: Resumo, Referências de preço,
-// Amostras/comparativos e Metodologia. Mantém a MESMA informação, só agrupada.
 function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:2 }}>
@@ -4096,7 +4080,7 @@ export default function Analise() {
             </div>
           );
         })()}
-        {/* ── CAPA / RESUMO PARA LEIGOS: veredito + 3 números + próximo passo ── */}
+        {/* ── CAPA = PAINEL ÚNICO DE RETORNO: veredito + números que decidem + detalhe + próximo passo ── */}
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
             {isUsoProprio ? <CheckCircle2 size={22} color="#10b981"/> : (mercadoSemDados ? <AlertTriangle size={22} color="#f59e0b"/> : (isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>))}
@@ -4118,21 +4102,68 @@ export default function Analise() {
               A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Não consumimos sua cota</strong> e o sistema vai <strong>tentar de novo automaticamente</strong> (a cada poucas horas, por até 48h) — quando preencher, aparece aqui sozinho. Se preferir na hora, <strong>gere novamente</strong> (grátis) ou informe o valor de mercado. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
             </div>
           )}
-          {/* SÓ "DESCONTO VS. MERCADO" AQUI (12/09, pedido do dono: remover campo repetitivo).
-              ROI/ROE e TIR saíram deste resumo — apareciam de novo, com o MESMO valor, na seção
-              "Indicadores de retorno" logo abaixo (que ainda traz VPL/Payback/Múltiplo junto, e é
-              o lugar mais completo pra essa leitura). O desconto é o único número que só existe
-              aqui, então fica sozinho, sem grid de 3 pra não sobrar espaço vazio ao lado dele. */}
-          <div style={{ display:'flex', justifyContent: isMobile?'stretch':'flex-start' }}>
-            {[
-              [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
-            ].map(([l,v,c])=>(
-              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0', width: isMobile?'100%':220 }}>
-                <div style={{ fontSize:9, color:'#64748b', fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
-                <div style={{ fontSize:20, fontWeight:900, color:c }}>{v}</div>
-              </div>
-            ))}
-          </div>
+          {/* PAINEL ÚNICO DE RETORNO (13/10, decisão do dono — pendência #84). ROI/ROE, TIR, teto e o
+              veredito apareciam em 3 lugares (esta capa, "Indicadores de retorno" e os cartões grandes +
+              faixa de veredito da Etapa 4), cada um com um recorte. Agora é um painel só: 1ª linha = o
+              que decide (desconto, lucro com ROI/ROE, TIR, teto); 2ª = o detalhe (capital, VPL, payback,
+              múltiplo, aluguel). Sem mercado estimado, tudo que DERIVA dele sai "—" em vez de um
+              "−100% / reprovada" que mede a ausência do dado, não a operação. */}
+          {(() => {
+            const semM = mercadoSemDados;
+            const roiTxt = semM ? '—' : `${fmtPct(metricas.roi)} ${isAVista ? 'ROI' : 'ROE'}`;
+            const linha1 = [
+              [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB', null],
+              [isUsoProprio ? 'Economia real' : 'Lucro líquido', semM ? '—' : `R$ ${fmt(metricas.lucro)}`, semM ? '#64748b' : (metricas.roi>=META?'#10b981':'#ef4444'), isUsoProprio ? null : roiTxt + (semM ? '' : ` · mín. ${META}%`)],
+              ['TIR (revenda)', !semM && indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed', 'Rentabilidade anual'],
+              ['Teto de disputa', semM ? '—' : `R$ ${fmt(teto)}`, '#f59e0b', isUsoProprio ? null : `Margem de ${META}%`],
+            ];
+            const linha2 = [
+              ['Capital aportado', `R$ ${fmt(metricas.capitalMobilizado)}`, 'Total mobilizado'],
+              ['VPL (revenda)', semM ? '—' : `R$ ${fmt(indicadores.vpl,0)}`, 'Ganho além da régua'],
+              ['Payback', !semM && indicadores.payback.meses!=null ? `${indicadores.payback.meses} meses` : '—', 'Tempo p/ recuperar'],
+              ['Múltiplo do capital', !semM && indicadores.multiplo!=null ? `${fmt(indicadores.multiplo)}x` : '—', 'Quanto o capital volta'],
+              ['Rentab. do aluguel', Number(metricas.yieldMensal) > 0 ? fmtPct(metricas.yieldMensal)+'/mês' : '—', Number(metricas.yieldAnual) > 0 ? fmtPct(metricas.yieldAnual)+' a.a.' : 'Sem aluguel apurado'],
+            ];
+            return (
+              <>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr) minmax(0, 1fr)':'repeat(4, minmax(0, 1fr))', gap:10 }}>
+                  {linha1.map(([l,v,c,sub])=>(
+                    <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', border:'1px solid #e2e8f0', minWidth:0 }}>
+                      <div style={{ fontSize:9, color:'#64748b', fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
+                      <div style={{ fontSize:20, fontWeight:900, color:c, overflowWrap:'anywhere' }}>{v}</div>
+                      {sub && <div style={{ fontSize:10.5, color:'#64748b', marginTop:3 }}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr) minmax(0, 1fr)':'repeat(5, minmax(0, 1fr))', gap:8, marginTop:8 }}>
+                  {linha2.map(([l,v,sub])=>(
+                    <div key={l} style={{ borderRadius:10, padding:'8px 12px', border:'1px solid #eef2f7', minWidth:0 }}>
+                      <div style={{ fontSize:9, color:'#94a3b8', fontWeight:800, textTransform:'uppercase', letterSpacing:0.5 }}>{l}</div>
+                      <div style={{ fontSize:14, fontWeight:800, color:'#334155', marginTop:2, overflowWrap:'anywhere' }}>{v}</div>
+                      <div style={{ fontSize:9.5, color:'#94a3b8' }}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+                {!semM && <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:8 }}>Régua (TMA) de VPL e payback: o dinheiro deveria render ao menos <strong>{fmtPct(indicadores.tma,0)} ao ano</strong>; os números já descontam essa régua.</div>}
+                {!semM && (Number(indicadores.loc?.aluguelLiquido) > 0 ? (
+                  <div style={{ marginTop:10, padding:'10px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
+                    <div style={{ display:'flex', gap:18, flexWrap:'wrap', fontSize:13, color:'#4b5563' }}>
+                      <div>Aluguel líquido: <strong>{moedaOuTraco(indicadores.loc.aluguelLiquido, { sufixo: '/mês' })}</strong></div>
+                      <div>VPL: <strong style={{ color: indicadores.loc.vpl>=0?'#10b981':'#ef4444' }}>R$ {fmt(indicadores.loc.vpl,0)}</strong></div>
+                      <div>TIR: <strong>{indicadores.loc.tir!=null?fmtPct(indicadores.loc.tir)+' a.a.':'—'}</strong></div>
+                    </div>
+                    <div style={{ fontSize:10, color:'#a78bfa', marginTop:6 }}>Premissa: compra à vista, aluguel líquido de IPTU/condomínio e venda ao valor de mercado atual no fim do período.</div>
+                  </div>
+                ) : (
+                  /* Sem aluguel apurado o cenário não é calculável (15/08): VPL/TIR sobre zero seriam inventados. */
+                  <div style={{ marginTop:10, padding:'10px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, fontSize:12, color:'#475569', lineHeight:1.6 }}>
+                    <b style={{ color:'#334155' }}>Cenário de locação: não projetado.</b> A pesquisa não encontrou aluguel para este imóvel; os indicadores de revenda acima não dependem de aluguel e seguem valendo.
+                  </div>
+                ))}
+              </>
+            );
+          })()}
           {(() => {
             const okStyle = mercadoSemDados
               ? { bg:'#fffbeb', bd:'#fde68a', fg:'#92400e' }
@@ -4152,49 +4183,6 @@ export default function Analise() {
           })()}
         </div>
 
-        {/* ── INDICADORES DE RETORNO: VPL / TIR / payback / múltiplo + locação ── */}
-        <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ fontSize:14, fontWeight:900, color:'#111', marginBottom:4 }}>Indicadores de retorno</div>
-          <div style={{ fontSize:11, color:'#94a3b8', marginBottom:14 }}>Régua (TMA): consideramos que o dinheiro deveria render ao menos <strong>{fmtPct(indicadores.tma,0)} ao ano</strong>. Os números abaixo já descontam essa régua.</div>
-          <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr) minmax(0, 1fr)':'repeat(4, minmax(0, 1fr))', gap:10 }}>
-            {[
-              ['VPL (revenda)', `R$ ${fmt(indicadores.vpl,0)}`, indicadores.vpl>=0?'#10b981':'#ef4444', 'Ganho hoje além da régua'],
-              ['TIR (revenda)', indicadores.tir!=null?fmtPct(indicadores.tir)+' a.a.':'—', '#7c3aed', 'Rentabilidade anual'],
-              ['Payback', indicadores.payback.meses!=null?`${indicadores.payback.meses} meses`:'—', '#0D63DB', 'Tempo p/ recuperar'],
-              ['Múltiplo do capital', indicadores.multiplo!=null?`${fmt(indicadores.multiplo)}x`:'—', '#f59e0b', 'Quanto o capital volta'],
-            ].map(([l,v,c,sub])=>(
-              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', border:'1px solid #e2e8f0' }}>
-                <div style={{ fontSize:9, color:c, fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
-                <div style={{ fontSize:18, fontWeight:900, color:c }}>{v}</div>
-                <div style={{ fontSize:10, color:'#94a3b8', marginTop:3 }}>{sub}</div>
-              </div>
-            ))}
-          </div>
-          {/* CENÁRIO DE LOCAÇÃO SEM ALUGUEL NÃO É UM CENÁRIO (15/08, 2º achado do dono).
-              O bloco era exibido mesmo com aluguel zero e imprimia "Aluguel líquido
-              R$ 0,00/mês" ao lado de "VPL −R$ 130.025" e "TIR 8,56%" — uma projeção de 60
-              meses inteira construída sobre um número que não existe, apresentada como
-              análise. Pior que o card de resumo: ali era um dado zerado, aqui é uma
-              CONCLUSÃO derivada dele. Sem aluguel apurado o cenário não é calculável, e o
-              honesto é dizer isso. (Reparei que a trava `medida-ausente-virando-zero` não
-              pegou este ponto: aqui era `fmt(x)` sem `|| 0`, e `fmt(0)` imprime "0,00"
-              igual — a regra procurava a construção, não o desfecho.) */}
-          {Number(indicadores.loc?.aluguelLiquido) > 0 ? (
-            <div style={{ marginTop:12, padding:'12px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
-              <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
-              <div style={{ display:'flex', gap:18, flexWrap:'wrap', fontSize:13, color:'#4b5563' }}>
-                <div>Aluguel líquido: <strong>{moedaOuTraco(indicadores.loc.aluguelLiquido, { sufixo: '/mês' })}</strong></div>
-                <div>VPL: <strong style={{ color: indicadores.loc.vpl>=0?'#10b981':'#ef4444' }}>R$ {fmt(indicadores.loc.vpl,0)}</strong></div>
-                <div>TIR: <strong>{indicadores.loc.tir!=null?fmtPct(indicadores.loc.tir)+' a.a.':'—'}</strong></div>
-              </div>
-              <div style={{ fontSize:10, color:'#a78bfa', marginTop:6 }}>Premissa: compra à vista, aluguel líquido de IPTU/condomínio e venda ao valor de mercado atual no fim do período.</div>
-            </div>
-          ) : (
-            <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, fontSize:12.5, color:'#475569', lineHeight:1.6 }}>
-              <b style={{ color:'#334155' }}>Cenário de locação: não projetado.</b> A pesquisa não encontrou aluguel para este imóvel, e sem esse número o VPL e a TIR de locação seriam calculados sobre zero — não seriam uma estimativa, seriam um resultado inventado. Os indicadores acima (revenda) não dependem de aluguel e seguem valendo.
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Item 2 — CORREÇÃO COM IMPACTO: a leitura dos documentos (documental) achou dado que
@@ -4997,37 +4985,8 @@ export default function Analise() {
             );
           })()}
 
-          {/* KPIs grandes */}
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap:12 }}>
-            <KpiCard large label="Capital Aportado" value={`R$ ${fmt(metricas.capitalMobilizado)}`} sub="Total mobilizado" color="#ef4444" bg="#fef2f2" icon={DollarSign}/>
-            <KpiCard large label={isUsoProprio?'Economia Real':'Lucro Líquido'} value={`R$ ${fmt(metricas.lucro)}`} sub={`${fmtPct(metricas.roi)} ${isAVista?'ROI':'ROE'}`} color={metricas.roi>=META?'#10b981':'#ef4444'} bg={metricas.roi>=META?'#d1fae5':'#fef2f2'} icon={TrendingUp}/>
-            <KpiCard large label="Rentabilidade do Aluguel" value={fmtPct(metricas.yieldMensal)+'/mês'} sub={fmtPct(metricas.yieldAnual)+' a.a.'} color="#8b5cf6" bg="#ede9fe" icon={BarChart3}/>
-            <KpiCard large label="Teto de Disputa" value={`R$ ${fmt(teto)}`} sub={`Margem de ${META}%`} color="#f59e0b" bg="#fef3c7" icon={Gavel}/>
-          </div>
-
-          {/* Badge de viabilidade */}
-          <div style={{ background:isViavel?'#d1fae5':'#fee2e2', border:`2px solid ${isViavel?'#10b981':'#ef4444'}`, borderRadius:14, padding: isMobile ? '14px 16px' : '18px 22px', display:'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent:'space-between', gap:16 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-              {isViavel ? <CheckCircle2 size={32} color="#10b981"/> : <XCircle size={32} color="#ef4444"/>}
-              <div>
-                <div style={{ fontWeight:900, fontSize:17, color:isViavel?'#065f46':'#b91c1c' }}>
-                  {isViavel ? (isUsoProprio?'Aprovado para Uso Próprio':'Operação Viável, Aprovada pela BidPro Brasil') : 'Operação Reprovada, Retorno Insuficiente'}
-                </div>
-                <div style={{ fontSize:13, color:isViavel?'#047857':'#dc2626', marginTop:4 }}>
-                  {isUsoProprio ? `Economia de R$ ${fmt(metricas.lucro)} sobre o valor de mercado` : `ROI ${fmtPct(metricas.roi)} · Mínimo exigido: ${META}% · Teto de lance: R$ ${fmt(teto)}`}
-                </div>
-              </div>
-            </div>
-            {mercado && (
-              <div style={{ textAlign:'right', flexShrink:0 }}>
-                <div style={{ fontSize:10, color:'#94a3b8', fontWeight:700 }}>DESCONTO vs MERCADO</div>
-                <div style={{ fontSize:24, fontWeight:900, color:isViavel?'#10b981':'#ef4444' }}>
-                  {d.valorMercado>0 ? fmtPct((1-d.valorArrematacao/d.valorMercado)*100) : '—'}
-                </div>
-              </div>
-            )}
-          </div>
-
+          {/* KPIs grandes + faixa de veredito SAÍRAM daqui (13/10, #84): repetiam veredito, ROI/ROE,
+              teto e desconto já mostrados no painel único de retorno, no topo do relatório. */}
           {/* Resumo de caixa: quanto ter AO ARREMATAR × quanto suportar POR MÊS × despesas NA VENDA */}
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : (isUsoProprio ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))'), gap:12 }}>
             <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:14, padding:'16px 18px' }}>
