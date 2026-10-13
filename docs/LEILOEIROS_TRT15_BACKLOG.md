@@ -197,7 +197,7 @@ Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF
 - [~] `crepaldileiloes.com.br` → **SUPERBID loja 16139** (armado 30/07 — loja sem ofertas hoje)
 - [ ] `planaltoleiloes.com.br`
 - [ ] `e-leiloeiro.com.br`  *(pode ser plataforma white-label — alto valor se onboarda vários)*
-- [ ] `centraljudicial.com.br`  *(nome sugere portal agregador — verificar)*
+- [~] `centraljudicial.com.br` → **avaliado 13/10, NÃO integrado**: não é agregador, é UM leiloeiro (André Sobreira da Silva, JUCESP 898), HTML de servidor (`/lote/id/<n>`, `/leilao/id/<n>`, anexos em `/anexo-lote/...`). Só **2 lotes abertos** (Tatuí R$ 3,47 mi · Vista Alegre do Alto R$ 88 mil), sem rota de listagem (`/leiloes`, `/busca` = 404) — os lotes só aparecem na home. Nenhum agregador o traz. Coletor não compensa o workflow; reavaliar se a home passar de ~10 lotes.
 - [ ] `extrajustleiloes.com.br`
 - [ ] `lancetotal.com.br`
 - [x] `satoleiloes.com.br` → **SATO** (API pública, `scraper-sato.mjs`, 30/07)
