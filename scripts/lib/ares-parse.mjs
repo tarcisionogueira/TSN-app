@@ -116,7 +116,11 @@ export function detalheDoLote(l, agora = Date.now()) {
   const slugCat = String(l.categories?.slug || '');
   const tipo = /^areas_ou_glebas/.test(slugCat) && !/\b(fazenda|s[ií]tio|ch[áa]cara|rural)\b/i.test(l.title || '') ? 'terreno'
     : /^imoveis_rurais/.test(slugCat) ? 'rural'
-    : inferirTipo(`${l.categories?.name || ''} ${l.title || ''}`, '');
+    : (() => {
+      const t = inferirTipo(`${l.categories?.name || ''} ${l.title || ''}`, '');
+      // Título genérico ("Imóveis comerciais | Prox. Parque Municipal"): a categoria vira o padrão.
+      return t !== 'outros' ? t : /^imoveis_comerciais/.test(slugCat) ? 'comercial' : t;
+    })();
   const local = (l.cities?.name && l.states?.code) ? {} : cidadeDoEndereco(l.address);
   const avaliacao = plaus(num(l.evaluation_value)) || plaus(num(fases[0]?.initial_value));
   const minimo = plaus(num(vig?.initial_value)) || avaliacao;

@@ -72,4 +72,6 @@ assert.deepEqual([semCid.cidade, semCid.estado], ['Serra Negra', 'SP']);
 assert.equal(detalheDoLote({ ...bertioga, title: 'Terreno em Campinas com 22.918m² | Jardim Campineiro', categories: { slug: 'areas_ou_glebas_', name: 'Áreas ou glebas' } }).tipo, 'terreno');
 assert.equal(detalheDoLote({ ...bertioga, title: 'Fazenda para pecuária', categories: { slug: 'imoveis_rurais', name: 'Imóveis rurais' } }).tipo, 'rural');
 
+assert.equal(detalheDoLote({ ...bertioga, title: 'Imóveis comerciais | Prox. Parque Municipal', categories: { slug: 'imoveis_comerciais', name: 'Imóveis comerciais' } }).tipo, 'comercial');
+
 console.log('✓ ares-praca-e-filtros: listagem, praças, docs, fotos, teste/Leads e coordenada');
