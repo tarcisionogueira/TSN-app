@@ -42,6 +42,17 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 13/10 (noite) — vitrine sem cópia/arrematado, crons de limpeza, painel único, parceiro, PostHog
+- Vitrine: veículo relistado (mesma 1ª foto+título+fonte) e 2ª praça publicada como outro anúncio → `reconciliar_relistados()`
+  (RPC própria, hora em hora); veículo encerrado COM lance sai; sem-lance 15 d contados da DATA do leilão. 1ª rodada 2.445.
+- `limpar-imoveis-stale-cron` morria no 1º passo (CEF) sem log e pulava tudo: pino genérico 277→0 e 1.228 CEF que a Caixa
+  já tirou da lista saíram. `desativar-encerrados` estourava 8 s em 1 de cada 2 h: passos agora independentes, com alerta.
+- #84 painel único de retorno no relatório · #83 passos do saque com ação + PIX certo (o da EMPRESA) · backfill do corpo vivo
+  de `saque_avaliar` (forma 7b). `preservar_supressao_gemeo` cobria só 'gemeo_hasta' (agora todos os motivos).
+- e-leiloes (#38): recon pronto (docs/LEILOEIROS_TRT15_BACKLOG.md) — só 15 imóveis ativos; construção aguarda o dono.
+- PostHog ligado (021c7ee): gravação só em telas da lista de PERMITIDAS, inputs mascarados, equipe fora, IP anonimizado.
+  Pendências #201 (Sentry: dono desligar filtro "browser extensions" — descarta todo erro do navegador), #202, #203.
+
 ### 📌 13/10 (tarde) — valor de mercado estável (#144), chaves dos gateways vigiadas, Inter em validação
 - **#144 (opção A do dono):** `avaliarMercado` agora soma às amostras da geração as da BASE (`indice_amostra`, 12 meses,
   mesmo tipo) via `amostrasBaseParaValor` — distância real com coordenada, nível 2 só por bairro. Marcadas `origemBase`
