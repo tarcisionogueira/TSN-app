@@ -96,10 +96,10 @@ export function extrairJsonLote(html) {
   return null;
 }
 
-const dataDe = obj => (obj && obj.date) ? obj.date.slice(0, 10) : null;
+export const dataDe = obj => (obj && obj.date) ? obj.date.slice(0, 10) : null;
 // Data COM HORA no fuso de Brasília (06/10): `data_leilao_2` é timestamptz — gravar só o dia viraria
 // meia-noite UTC (21h da véspera em Brasília). O JSON traz "2026-11-13 10:25:00.000000" (horário local).
-const tsDe = obj => {
+export const tsDe = obj => {
   const m = String(obj?.date || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
   return m ? `${m[1]}T${m[2]}:00-03:00` : null;
 };
@@ -145,7 +145,12 @@ function parseDetalheFallback(html, url) {
 export function parseDetalhe(html, url) {
   const lote = extrairJsonLote(html);
   if (!lote || !lote.bem) return parseDetalheFallback(html, url);
+  return parseLoteObj(lote);
+}
 
+// O objeto `lote` da infra Suporte Leilões, já decodificado — exportado (13/10) porque o
+// e-leiloes (front Nuxt, `__NUXT_DATA__`) entrega o MESMO objeto por outro caminho.
+export function parseLoteObj(lote) {
   const bem = lote.bem || {};
   const leilao = lote.leilao || {};
   const descTexto = stripHtml(bem.siteDescricao || bem.descricao || '');

@@ -1,0 +1,44 @@
+name: Scraper e-Leilões (Suporte Leilões, 4º template Nuxt)
+
+# e-leiloes.com.br (= e-leiloeiro + e-confianca) — fetch direto, sem Cloudflare, custo Bright Data
+# zero (recon 13/10). Cron GRAVA (dryrun '0'); dispatch manual também grava por default — mesma
+# lição do RJLEILOES (11/08). Para ensaio, dispare com dryrun=1.
+on:
+  schedule:
+    - cron: '50 8 * * *'  # diário, 8h50 UTC (depois do leilaobrasil, sem disputar runner)
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_lotes:
+        description: 'Máx. de lotes por execução'
+        required: false
+        default: '150'
+      debug:
+        description: '1 = log por página/lote'
+        required: false
+        default: '0'
+
+jobs:
+  scraper-eleiloes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper ELEILOES
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ELEILOES_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          ELEILOES_MAX_LOTES: ${{ github.event.inputs.max_lotes || '150' }}
+          ELEILOES_DEBUG: ${{ github.event.inputs.debug || '0' }}
+        run: node scripts/scraper-eleiloes.mjs
