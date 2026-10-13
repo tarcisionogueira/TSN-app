@@ -7,7 +7,7 @@ const T = TENANTS.shiokawa;
 const dia = (d) => new Date(Date.now() + d * 864e5).toISOString();
 const bertioga = {
   id: '4484768f-51a9-4a56-bf9b-c1fcbbb71338', title: 'Apartamento / Unidade Residencial nº 22 (Bloco Itatinga) – Condomínio Residencial Buriquioca – Bertioga/SP',
-  description: '<p>Matrícula nº 41.123 do CRI de Bertioga. Área útil de 64,50 m².</p>', status: 'futuro', evaluation_value: 297131.42,
+  description: '<p>Condomínio em terreno com área de 6.629,90 m². Unidade com área útil de 64,50 m². Matrícula nº 41.123 do CRI.</p>', status: 'futuro', evaluation_value: 297131.42,
   address: 'Rua X, 10, Bertioga/SP', latitude: -23.85, longitude: -46.13, judicial_process_number: '1000000-00.2020.8.26.0075',
   featured_image_url: 'https://api.shiokawaleiloes.com.br/storage/v1/object/public/lot-files/a/capa.jpeg',
   cities: { name: 'Bertioga' }, states: { code: 'SP' }, categories: { slug: 'imoveis_residenciais', name: 'Imóveis residenciais' },
@@ -41,6 +41,11 @@ assert.equal(r.link_matricula, 'https://x/m.pdf');
 assert.deepEqual(r.anexos.map(a => a.tipo), ['matricula', 'laudo']);
 assert.deepEqual(r.fotos, ['https://api.shiokawaleiloes.com.br/storage/v1/object/public/lot-files/a/capa.jpeg', 'https://x/1.jpeg', 'https://x/2.jpeg']);
 assert.equal(r.numero_matricula, '41.123');
+assert.equal(r.area_m2, 64.5, 'área do apartamento, não a do condomínio (6.629,90)');
+// Atributo estruturado vence o texto: "Matrícula" 47.299 e "Área privativa" 57,25 (Shiokawa/Picelli reais).
+const comAttr = detalheDoLote({ ...bertioga, lot_attributes: [{ value: '47.299', category_attributes: { name: 'Matrícula' } }, { value: '57,25', category_attributes: { name: 'Área privativa' } }, { value: '420', category_attributes: { name: 'Área total' } }] });
+assert.equal(comAttr.numero_matricula, '47.299');
+assert.equal(comAttr.area_m2, 57.25);
 assert.equal(r.latitude, -23.85);
 assert.equal(d.encerrado, false);
 

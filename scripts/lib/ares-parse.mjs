@@ -15,8 +15,10 @@
  *   • Página pública do lote: `/lote/<id>` (a rota do site aceita slug OU id — o id não muda quando
  *     o título é editado, o slug sim).
  */
-import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { numeroMatriculaDoTexto } from '../../api/_texto-imovel.js';
+import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
+// extrairAreaM2 (servidor) prioriza privativa/útil sobre a área do condomínio/terreno citada antes —
+// o extrairArea genérico leu 6.629,9 m² (o condomínio) no apartamento de Bertioga (13/10).
+import { numeroMatriculaDoTexto, extrairAreaM2 } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
   picelli: {
@@ -35,6 +37,7 @@ export const SELECT = [
   'judicial_process_number', 'judicial_court', 'featured_image_url',
   'cities(name)', 'states(code)', 'categories(slug,name)', 'auctions!fk_lots_auction_id(title,auction_type,status)',
   'lot_phases(phase_order,end_date,initial_value)', 'lot_images(image_url,display_order)', 'lot_documents(title,file_url,document_type)',
+  'lot_attributes(value,category_attributes(name))',
 ].join(',');
 export const CATALOGO = `/rest/v1/lots?select=${SELECT}&status=in.(aberto,futuro)&hidden=eq.false&order=created_at.desc&limit=1000`;
 
@@ -67,6 +70,20 @@ export function detalhesDoCatalogo(txt, base) {
 }
 
 const DIA = 864e5;
+const semAcento = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+// Atributos ESTRUTURADOS do lote (category_attributes): "Matrícula", "Área privativa", "Área útil"…
+// O valor vem em texto do jeito que o leiloeiro digitou ("136.514 ", "64,50").
+function atributos(l) {
+  const out = new Map();
+  for (const a of Array.isArray(l.lot_attributes) ? l.lot_attributes : []) {
+    const nome = semAcento(a?.category_attributes?.name), v = String(a?.value ?? '').trim();
+    if (nome && v && !out.has(nome)) out.set(nome, v);
+  }
+  return out;
+}
+const areaDoAtributo = (v) => extrairAreaM2(`${v} m²`, { permitirSolta: true });
+// Ordem do que baliza R$/m²: privativa > útil > construída > total > terreno.
+const AREAS = ['area privativa', 'area util', 'area construida', 'area construida (m2)', 'area construida (m²)', 'area total', 'area terreno'];
 const diaBR = iso => { const d = new Date(iso); return Number.isNaN(+d) ? null : new Date(+d - 3 * 3600e3).toISOString().slice(0, 10); };
 
 export function detalheDoLote(l, agora = Date.now()) {
@@ -77,6 +94,7 @@ export function detalheDoLote(l, agora = Date.now()) {
   const iVig = fases.findIndex(f => +new Date(f.end_date) >= agora - DIA / 24);
   const vig = iVig >= 0 ? fases[iVig] : null, prox = iVig >= 0 ? fases[iVig + 1] : null;
   const desc = stripHtml(l.description);
+  const attrs = atributos(l);
   const avaliacao = plaus(num(l.evaluation_value)) || plaus(num(fases[0]?.initial_value));
   const minimo = plaus(num(vig?.initial_value)) || avaliacao;
   const minimo2 = prox ? plaus(num(prox.initial_value)) : 0;
@@ -104,8 +122,9 @@ export function detalheDoLote(l, agora = Date.now()) {
     valor_minimo_2: minimo2 && minimo2 !== minimo ? minimo2 : null,
     modalidade,
     tipo_hint: `${l.categories?.name || ''} ${l.title || ''}`,
-    area_m2: extrairArea(`${l.title || ''} ${desc}`) || 0,
-    numero_matricula: numeroMatriculaDoTexto(desc),
+    area_m2: AREAS.map(k => attrs.get(k)).filter(Boolean).map(areaDoAtributo).find(v => v > 0)
+      || extrairAreaM2(l.title || '') || extrairAreaM2(desc) || 0,
+    numero_matricula: (attrs.get('matricula') || '').replace(/[^\d.]/g, '').replace(/^\.+|\.+$/g, '') || numeroMatriculaDoTexto(desc),
     numero_processo: String(l.judicial_process_number || '').trim() || null,
     link_foto: fotos[0] || null, fotos,
     link_edital: docDe('edital'), link_matricula: docDe('matricula'),
