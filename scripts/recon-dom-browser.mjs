@@ -56,6 +56,14 @@ const page = await browser.newPage();
 await page.setUserAgent(UA);
 
 const respostas = [];
+// CHAVE PÚBLICA de API (13/10, plataforma Ares/Supabase: picelli, shiokawa): a API PostgREST exige o
+// cabeçalho `apikey`, e o site só se abre num navegador (Cloudflare). Captura SÓ chave
+// `sb_publishable_…` — feita para o navegador, não é segredo; token de sessão/Authorization nunca.
+const chavesPublicas = new Set();
+page.on('request', (req) => {
+  const k = req.headers()?.apikey || '';
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(k)) chavesPublicas.add(`${new URL(req.url()).host} ${k}`);
+});
 page.on('response', async (resp) => {
   try {
     const ct = resp.headers()['content-type'] || '';
@@ -134,6 +142,7 @@ console.log(`>>> COM ARRAY DE LOTE (${comLote.length}) — se houver, o parser l
 for (const r of comLote) { console.log(`  ${r.urlInteira || r.url}  [${r.nLote} lotes, ${r.len}b, ${r.metodo}]`); console.log(`    amostra: ${r.amostra}`); }
 console.log(`>>> demais JSON (${respostas.length - comLote.length}):`);
 for (const r of respostas.filter(r => !r.temLote).slice(0, 20)) console.log(`  ${r.url}  [${r.ct}, ${r.len}b]${r.amostra ? ' → ' + r.amostra.slice(0, 120) : ''}`);
+for (const c of chavesPublicas) console.log(`🔑 chave pública da API: ${c}`);
 if (GREP) for (const r of respostas.filter(r => r.grep.length)) { console.log(`>>> GREP em JSON ${r.urlInteira.slice(0, 200)}:`); r.grep.forEach(g => console.log(`     ▸ ${g}`)); }
 
 if (process.env.RECON_DUMP === '1') {
