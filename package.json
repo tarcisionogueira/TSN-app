@@ -155,6 +155,7 @@
     "mercadopago": "^3.6.1",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^4.10.38",
+    "posthog-js": "1.434.13",
     "puppeteer": "^25.1.0",
     "qrcode-generator": "^2.0.4",
     "react": "^19.2.6",

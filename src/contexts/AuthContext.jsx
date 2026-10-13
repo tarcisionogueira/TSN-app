@@ -4,6 +4,7 @@ import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
 import { anonId, registrarEvento } from '../utils/tracker';
+import { identificarPostHog } from '../utils/posthog';
 import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO } from '../utils/convitePendente';
 import { lerComRenovacao, ehErroDeSessao } from '../lib/sessao-expirada';
 
@@ -145,6 +146,9 @@ export function AuthProvider({ children }) {
   const [nome, setNome]             = useState(''); // nome do usuário (p/ cabeçalho de relatórios)
   const [planoLegado, setPlanoLegado] = useState(false); // assinante antigo (cota 15+15+5)
   const [loading, setLoading]       = useState(true);
+  // PostHog (13/10): só identifica quando o perfil terminou de carregar — antes disso o papel é o
+  // padrão 'explorador' e a sessão da equipe seria gravada. Sem usuário = visitante anônimo.
+  useEffect(() => { if (!loading) identificarPostHog(user?.id || null, user ? role : null); }, [loading, user?.id, role]);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
   // Simulação de role: admin testa a UI como outro tipo de usuário

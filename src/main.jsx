@@ -13,6 +13,7 @@ import { instalarTracker } from './utils/tracker.js'
 import { initMetaPixel, initOpenAIPixel, capturarMarketing } from './utils/marketing.js'
 import { resgatarDestinoDaCampanha } from './utils/destinoDaCampanha.js'
 import { initSentry } from './utils/sentry.js'
+import { initPostHog } from './utils/posthog.js'
 
 // Antes de qualquer captura de erro — sem isso, um erro cedo no boot nunca chegaria ao Sentry.
 initSentry();
@@ -33,6 +34,9 @@ instalarCapturaErros();
 
 // Rastreamento de atividade (navegação + cliques) para o Cliente 360 — diagnóstico de falhas.
 instalarTracker();
+
+// Gravação de sessão (PostHog) — carrega DEPOIS da página, sem pesar no primeiro paint.
+if (typeof window !== 'undefined') window.addEventListener('load', () => { setTimeout(initPostHog, 1500); }, { once: true });
 
 // Marketing: liga o Meta Pixel (se VITE_META_PIXEL_ID existir) e captura a atribuição do anúncio
 // (gclid/fbclid/utm) que trouxe o visitante — consumida no cadastro p/ medir a captação por origem.
