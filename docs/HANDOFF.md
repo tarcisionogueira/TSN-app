@@ -42,6 +42,21 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 13/10 (tarde) — valor de mercado estável (#144), chaves dos gateways vigiadas, Inter em validação
+- **#144 (opção A do dono):** `avaliarMercado` agora soma às amostras da geração as da BASE (`indice_amostra`, 12 meses,
+  mesmo tipo) via `amostrasBaseParaValor` — distância real com coordenada, nível 2 só por bairro. Marcadas `origemBase`
+  (não são regravadas). Simulação em 12 imóveis recentes: +4 a +27 amostras cada. **Verificar:** 2 gerações seguidas do
+  mesmo imóvel devem sair com valor próximo (antes: ±25%). Pendência fica aberta até essa prova.
+- **Defeito achado no caminho:** `Number(null)` = 0 passa no `isFinite` → imóvel sem coordenada gravava amostras em 0,0
+  (54 em Santana de Parnaíba/Alphaville). Corrigido (`coordNum`) em gerar-analise e `_indice-ponderacao`; migração limpou.
+- **Health-check** testa a chave do Asaas e o token do MP 2×/dia (e-mail se recusada). O aviso do Asaas ("TSN Ativos"
+  expira 12/12) é OUTRA chave, parada: a do BidPro é usada várias vezes por dia (logs). Saldo do MP: endpoint não
+  liberado pelo MP, não é o token.
+- **Backfill MP:** pagamento de conta APAGADA (FK de user_id) agora grava sem vínculo (176064159391 entra domingo 18/10).
+- Webhook tokens do Asaas refeitos como Sensitive pelo dono (próximo saque/pagamento Asaas confirma o valor colado).
+- **Inter PJ:** integração "Bidpro Brasil" enviada, status *Em validação* (até 30 dias úteis). Envs `INTER_PJ_*` quando aprovar.
+- Fechadas: #182 (FERREIRALEIL enumerou 217), #160 (correção de valor pelo edital coerente com o site). `holding_recebimentos` dropada pelo dono.
+
 ### 📌 13/10 — honorários Matheus/Rafael, ponte holding descartada, autocompletar de e-mail
 - **Honorários do Matheus e do Rafael foram pagos INTEGRALMENTE na conta Inter PJ** (dono, 13/10) — não estão no MP/Asaas
   nem no banco do BidPro. Só o Marcos tem `arrematacoes`/honorários registrados. Caminho imediato: dono exporta o OFX do
