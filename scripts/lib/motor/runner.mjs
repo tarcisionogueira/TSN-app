@@ -18,6 +18,7 @@ import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 import { criarMotorFirecrawl } from './fetch-firecrawl.mjs';
+import { criarMotorApi } from './fetch-api.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
 import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
@@ -334,6 +335,8 @@ export async function rodarFonte(cfg, opts) {
   // 'firecrawl' (10/10): sites que dão 403 ao runner e ao proxy ISP (Cloudflare) — fetch-firecrawl.mjs.
   const motor = cfg.fetch === 'dom' ? criarMotorDom(cfg.dom)
     : cfg.fetch === 'firecrawl' ? criarMotorFirecrawl(cfg.firecrawl)
+    // 'api' (13/10): catálogo é API JSON com cabeçalho por tenant (plataforma Ares) — fetch-api.mjs.
+    : cfg.fetch === 'api' ? criarMotorApi(cfg)
     : criarMotorFetch(cfg.chave);
   const { fetchFonte, estado } = motor;
   cfg.maxPages = opts.maxPages ?? cfg.maxPages ?? 3;
@@ -427,7 +430,17 @@ export async function rodarFonte(cfg, opts) {
       if (eNi) console.error(`[${tenant.fonte}] não consegui retirar os não-imóveis:`, eNi.message);
       else if (saiu?.length) console.log(`🚗 [${tenant.fonte}] ${saiu.length} lote(s) que eram veículo/máquina retirados do acervo de imóveis.`);
     }
-    const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    // UPSERT POR FORMATO DE LINHA (13/10). Em lote, o supabase-js manda a UNIÃO das chaves e completa
+    // com NULL a que falta numa linha (`defaultToNull`): parser que só põe `fotos`/`latitude` quando
+    // tem apagava, todo dia, a galeria e a coordenada já geocodificada das linhas sem elas. Agrupar
+    // pelas chaves faz cada linha mandar só o que trouxe.
+    const grupos = new Map();
+    for (const r of prontos) { const k = Object.keys(r).sort().join(','); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+    let error = null;
+    for (const g of grupos.values()) {
+      ({ error } = await supabase.from('imoveis_leilao').upsert(g, { onConflict: 'fonte_id', ignoreDuplicates: false }));
+      if (error) break;
+    }
     if (error) { console.error(`[${tenant.fonte}] erro ao gravar:`, error.message); process.exitCode = 1; continue; }
     console.log(`✅ [${tenant.fonte}] ${prontos.length} imóveis gravados/atualizados.`);
     // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
