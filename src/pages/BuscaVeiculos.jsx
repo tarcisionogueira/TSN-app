@@ -1,4 +1,5 @@
 import { marcasDoTermo } from '../lib/marcas';
+import InputReais from '../components/InputReais';
 import React, { useEffect, useRef, useState } from 'react';
 import { ORIGEM_VENDA, ORIGENS_EXTRAJUDICIAIS } from '../utils/origemVeiculo';
 import { useNavigate } from 'react-router-dom';
@@ -537,20 +538,20 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
           </div>
           <div>
             <label style={lbl}>Lance mín. (R$)</label>
-            <input style={inp} type="number" placeholder="Ex.: 34000" value={filtros.valorMin} onChange={e => setFiltros(f => ({ ...f, valorMin: e.target.value }))} />
+            <InputReais style={inp} placeholder="Ex.: R$ 34.000" value={filtros.valorMin} onChange={v => setFiltros(f => ({ ...f, valorMin: v }))} />
           </div>
           <div>
             <label style={lbl}>Lance máx. (R$)</label>
-            <input style={inp} type="number" placeholder="Ex.: 50000" value={filtros.valorMax} onChange={e => setFiltros(f => ({ ...f, valorMax: e.target.value }))} />
+            <InputReais style={inp} placeholder="Ex.: R$ 50.000" value={filtros.valorMax} onChange={v => setFiltros(f => ({ ...f, valorMax: v }))} />
           </div>
           <div>
             <label style={lbl}>FIPE/avaliação mín. (R$)</label>
-            <input style={inp} type="number" placeholder="Ex.: 50000" value={filtros.valorRefMin} onChange={e => setFiltros(f => ({ ...f, valorRefMin: e.target.value }))} />
+            <InputReais style={inp} placeholder="Ex.: R$ 50.000" value={filtros.valorRefMin} onChange={v => setFiltros(f => ({ ...f, valorRefMin: v }))} />
             {(filtros.valorRefMin || filtros.valorAvaliacaoMax) && <small style={avisoCobertura}>{AVISO_SEM_REFERENCIA}</small>}
           </div>
           <div>
             <label style={lbl}>FIPE/avaliação máx. (R$)</label>
-            <input style={inp} type="number" placeholder="Ex.: 80000" value={filtros.valorAvaliacaoMax} onChange={e => setFiltros(f => ({ ...f, valorAvaliacaoMax: e.target.value }))} />
+            <InputReais style={inp} placeholder="Ex.: R$ 80.000" value={filtros.valorAvaliacaoMax} onChange={v => setFiltros(f => ({ ...f, valorAvaliacaoMax: v }))} />
           </div>
           <div>
             <label style={lbl}>Desconto mín.</label>
