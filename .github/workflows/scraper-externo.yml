@@ -1,4 +1,4 @@
-name: Scraper Leiloar /externo/ (Sanches, Osvaldo, Judhastas)
+name: Scraper Leiloar /externo/ (Sanches)
 
 # Plataforma Leiloar /externo/: o leilão é o imóvel; avaliação e lance mínimo só no edital em PDF
 # (lido com pdf-parse no runner). Sem Bright Data. Cron GRAVA; dispatch manual também grava por
@@ -38,9 +38,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          # só para o PDF do Osvaldo (Cloudflare), pelo ledger — propósito 'externo'
-          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
-          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           EXTERNO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           EXTERNO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '60' }}
           EXTERNO_DEBUG: ${{ github.event.inputs.debug || '0' }}

@@ -17,10 +17,12 @@ export default {
   // Leilão já gravado NÃO é relido: o PDF do Osvaldo custa crédito de Bright Data, e o edital não muda.
   // Fim do leilão sai pela limpeza por data (desativar_leiloes_encerrados), não por releitura.
   maxRefresh: 0,
-  // JUDHASTAS fora (13/10): espelha os 5 leilões do Sanches (mesmo título, data e valores — 2251=2253,
-  // 2247=2249, 2241=2242, 2255=2256, 2223=2227). Sem releitura, a deduplicação em memória não veria o
-  // Sanches já gravado e o espelho entraria duplicado todo dia. Volta se passar a ter leilão próprio.
-  tenants: [TENANTS.sanches, TENANTS.osvaldo],
+  // SÓ O SANCHES (13/10): Osvaldo e Judhastas REPUBLICAM os mesmos leilões do Sanches (ensaio: os 4 do
+  // Osvaldo e os 5 do Judhastas têm título, data e valores idênticos aos do Sanches — 2252/2248/2243/2257 e
+  // 2253/2249/2242/2256/2227). Sem releitura, a deduplicação em memória não veria o Sanches já gravado e os
+  // espelhos entrariam duplicados todo dia — e o Osvaldo ainda cobraria Bright Data pelo PDF (Cloudflare).
+  // Volta um tenant se ele passar a ter leilão próprio (o recon é a home de cada um).
+  tenants: [TENANTS.sanches],
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Leiloar /externo/ (listagem-bens-responsivo) — backend único, leilão = imóvel',
