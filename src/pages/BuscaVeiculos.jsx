@@ -56,7 +56,8 @@ const MOTOR_OPTS = [
 ];
 
 const RESULTADO_OPTS = [
-  ['vendido', 'Com lance', 'O leilão recebeu lance — arrematado, ou lance abaixo da reserva aguardando o comitente.'],
+  // 'Com lance' SAIU (13/10, dono): lote arrematado não aceita proposta e já sai da vitrine na
+  // varredura horária (desativar_leiloes_encerrados) — o filtro só listaria o que não se pode comprar.
   ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
   ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
 ];
