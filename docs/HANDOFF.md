@@ -42,6 +42,18 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 13/10 — honorários Matheus/Rafael, ponte holding descartada, autocompletar de e-mail
+- **Honorários do Matheus e do Rafael foram pagos INTEGRALMENTE na conta Inter PJ** (dono, 13/10) — não estão no MP/Asaas
+  nem no banco do BidPro. Só o Marcos tem `arrematacoes`/honorários registrados. Caminho imediato: dono exporta o OFX do
+  Inter PJ e importa em Admin → Financeiro → Conciliação (`importar_ofx`, idempotente por FITID); depois registrar os
+  honorários dos dois. Caminho definitivo: integração direta do BidPro com a API do Inter PJ (#140 — o caixa da empresa
+  é do sistema da empresa).
+- **Ponte holding→BidPro DESCARTADA no mesmo dia:** a holding só tem as contas PF do dono; expor PF ao BidPro não se
+  justifica. O código saiu do repositório (cron, endpoint, migração), mas a tabela `holding_recebimentos` ficou no banco
+  (vazia) — DROP é do dono no SQL Editor: `drop table public.holding_recebimentos;`. Nada foi gravado no repo da holding.
+- **Caixa de e-mail:** autocompletar de destinatário (Tab/Enter/clique) com os contatos do histórico.
+- **#198:** vincular o escritório do Dr. José Roberto aos 3 casos quando ele concluir o convite (vale até 19/10).
+
 ### 📌 12/10 (noite) — QA semanal, críticos falsos, convite do advogado, #183
 - **QA semanal (5 achados) corrigidos** no código: corte de avaliação implausível unificado em 88%; edital não troca a
   2ª praça vigente pela 1ª vencida; `saque_avaliar` com erro → 503 com motivo; botão Edital testa tipo+nome; busca por

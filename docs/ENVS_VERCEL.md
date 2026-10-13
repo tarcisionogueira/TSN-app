@@ -48,9 +48,6 @@ chegam, crons rodam, cobrança processa). Tratar como configuradas:
 - **Holding Nogueira (05/10):** `HOLDING_API_TOKEN` — criada pelo dono no painel (Sensitive). Deixa o sistema
   pessoal do dono (projeto `holding-nogueira`, onde a mesma chave é `BIDPRO_API_TOKEN`) LER `/api/financeiro-extrato`
   e nada mais. Ausente ou com menos de 32 caracteres = acesso fechado. Revogar = apagar a variável.
-- **Holding → BidPro (13/10, A CONFIGURAR pelo dono):** `HOLDING_API_URL` (endereço do app da holding) e
-  `HOLDING_EXTRATO_TOKEN` — token SÓ desta direção (o BidPro LÊ `/api/externo/recebimentos` da holding). Na holding o
-  MESMO valor se chama `EXTRATO_EXTERNO_TOKEN`. Ausentes = `/api/holding-recebimentos-cron` responde "desligada".
 - **Comunicação:** `RESEND_API_KEY`, `APP_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`
 - **IA:** `CLAUDE_KEY`, `GEMINI_API_KEY`
 - **Operação:** `BRIGHTDATA_API_TOKEN`, `BRIGHTDATA_ZONE`, `BRIGHTDATA_MAX_REQ_SEMANA`, `DAILY_API_KEY`
