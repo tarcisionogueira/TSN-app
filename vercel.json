@@ -256,6 +256,10 @@
       "schedule": "25 8 * * *"
     },
     {
+      "path": "/api/holding-recebimentos-cron",
+      "schedule": "40 8 * * *"
+    },
+    {
       "path": "/api/enriquecer-proximidades",
       "schedule": "*/15 * * * *"
     },
