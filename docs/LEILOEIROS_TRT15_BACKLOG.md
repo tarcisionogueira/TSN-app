@@ -23,7 +23,11 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
   pg_net e GitHub Actions passam. Custo Bright Data: ZERO.
 - **Enumeração:** `/sitemap-lotes.xml` (20.000 URLs, inclui histórico; ~8 mil com cara de imóvel) no formato
   `/eventos/leilao/<slug>/lote/<ID>/<slug>` — o `idDaUrl` do leilaobrasil-parse já entende. Filtrar por slug de
-  imóvel + IDs mais altos e confirmar ativo pelo detalhe. Categoria `/leilao/imoveis` diz total ≈ 191 ativos.
+  imóvel + IDs mais altos e confirmar ativo pelo detalhe. ⚠️ CORREÇÃO (13/10, mesma sessão): o "≈191" era um
+  `total` qualquer da página (forma nº 10). A lista de resultados da categoria Imóveis (`__NUXT_DATA__` →
+  `leilao-categoria-imoveis--{}` → results.total) diz **15 imóveis ativos**. Enumerar por essa listagem
+  (`?page=N`, 12/pág), não pelo sitemap. Detalhe = o MESMO objeto `lote` do leilaobrasil-parse (bem/leilao/
+  dataFimPraca1-2/valorInicial2/arquivos) — só que valorAvaliacao vem 0: usar valorInicial como 1ª praça.
 - **Detalhe:** JSON-LD `Product` (name, description, image, offers.price, offers.priceValidUntil = data,
   availability InStock/OutOfStock = ativo/encerrado, seller = comitente, broker = leiloeiro + JUCESP) +
   BreadcrumbList (Imóveis › Terreno = tipo). Avaliação/praças/endereço/documentos no `__NUXT_DATA__`
