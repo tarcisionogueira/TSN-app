@@ -1292,7 +1292,7 @@ export default function Perfil() {
                 <li>Você pode solicitar saques <strong>quando quiser</strong> durante a semana (valores avulsos).</li>
                 <li>Os pagamentos são feitos <strong>toda sexta-feira</strong>, via PIX.</li>
                 <li><strong>Corte às sextas, 12h:</strong> pedidos até o meio-dia de sexta entram <strong>naquela sexta</strong>; após o corte, na <strong>sexta seguinte</strong>.</li>
-                <li>É preciso ter a <strong>chave PIX cadastrada</strong> (nos dados cadastrais, abaixo).</li>
+                <li>O saque é pago na <strong>chave PIX da sua empresa</strong> (PJ da qual você é sócio), cadastrada no bloco Empresa abaixo.</li>
               </ul>
               {proximaLiberacao && (
                 <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
@@ -1307,7 +1307,7 @@ export default function Perfil() {
                   <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#92400e', lineHeight: 1.6 }}>
                     {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
                   </ul>
-                  <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Telefone, CPF e chave PIX você preenche abaixo, nos dados cadastrais. Nome, se faltar, fale com o atendimento.</div>
+                  <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Telefone e CPF você preenche nos dados cadastrais; CNPJ, razão social e PIX da empresa, no bloco Empresa abaixo. Nome, se faltar, fale com o atendimento.</div>
                 </div>
               )}
             </div>
@@ -1619,7 +1619,7 @@ export default function Perfil() {
                 <label style={labelStyle}>Chave PIX para recebimento</label>
                 <input type="text" value={chavePix} onChange={e => setChavePix(e.target.value)}
                   placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" style={inputStyle} />
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Usada para transferência de comissões e saques</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Contato pessoal. O saque de comissão é pago na chave PIX da EMPRESA (aba Parceiros).</div>
               </div>
             )}
 

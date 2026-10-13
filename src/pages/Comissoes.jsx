@@ -38,10 +38,9 @@ export default function Comissoes() {
   const [extrato, setExtrato] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState('resumo'); // resumo | analitico | saques
-  const [pixKey, setPixKey] = useState('');
-  const [pixKeySalva, setPixKeySalva] = useState('');
-  const [salvandoPix, setSalvandoPix] = useState(false);
-  const [msgPix, setMsgPix] = useState(null);
+  // 13/10 (#83): o saque é pago SEMPRE na chave PIX da EMPRESA (`pj_chave_pix`, regra
+  // saque.destino_sempre_pj). Este cartão editava `perfis.chave_pix`, que nenhum pagamento usa.
+  const [pjRecebe, setPjRecebe] = useState(null); // { pix, razao } | null
   const [solicitandoSaque, setSolicitandoSaque] = useState(false);
   // Trava SÍNCRONA contra duplo clique (03/10): o `disabled` vem de estado do React, que só
   // vale no próximo render — dois toques no mesmo instante passavam e geravam DOIS pedidos de
@@ -80,7 +79,7 @@ export default function Comissoes() {
     try {
       const [{ data: c, error: errC }, { data: p, error: errP }, { data: cf }, saqueRes] = await Promise.all([
         supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
-        supabase.from('perfis').select('chave_pix').eq('id', alvoId).maybeSingle(),
+        supabase.from('perfis').select('pj_chave_pix, razao_social').eq('id', alvoId).maybeSingle(),
         supabase.from('config_financeira').select('*'),
         // Rejeição de rede vira `null` aqui e cai no aviso de saldo abaixo, sem derrubar o resto.
         apiCall(suporte ? `/api/saque?ver_como=${encodeURIComponent(alvoId)}` : '/api/saque').catch(e => { console.warn('[comissoes] /api/saque', e); return null; }),
@@ -121,11 +120,7 @@ export default function Comissoes() {
         setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
       }
       // Perfil ilegível não é "sem chave PIX" — mantém o que já estava na tela.
-      if (!errP) {
-        const k = p?.chave_pix || '';
-        setPixKey(k);
-        setPixKeySalva(k);
-      }
+      if (!errP) setPjRecebe({ pix: p?.pj_chave_pix || '', razao: p?.razao_social || '' });
       if (cf) {
         const m = {};
         cf.forEach(r => { m[r.gateway] = r; });
@@ -144,16 +139,6 @@ export default function Comissoes() {
     carregar();
   }, [role, carregar]);
 
-  async function salvarPix() {
-    if (suporte) { setMsgPix({ tipo: 'erro', txt: 'Modo suporte: visualização apenas.' }); return; }
-    setSalvandoPix(true);
-    setMsgPix(null);
-    const { error } = await supabase.from('perfis').update({ chave_pix: pixKey.trim() }).eq('id', user.id);
-    if (error) setMsgPix({ tipo: 'erro', txt: 'Erro ao salvar.' });
-    else { setPixKeySalva(pixKey.trim()); setMsgPix({ tipo: 'ok', txt: 'Chave PIX salva!' }); }
-    setSalvandoPix(false);
-    setTimeout(() => setMsgPix(null), 3000);
-  }
 
   async function solicitarSaque() {
     if (suporte) { setMsgSaque({ tipo: 'erro', txt: 'Modo suporte: visualização apenas.' }); return; }
@@ -286,24 +271,18 @@ export default function Comissoes() {
           ))}
         </div>
 
-        {/* Chave PIX */}
+        {/* Onde o saque cai — a chave da EMPRESA (13/10, #83) */}
         <div style={cardStyle}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>Chave PIX para saque</div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              value={pixKey}
-              onChange={e => setPixKey(e.target.value)}
-              placeholder="CPF, e-mail, telefone ou chave aleatória"
-              style={{ ...inputStyle, flex: 1, minWidth: 200 }}
-            />
-            <button onClick={salvarPix} disabled={salvandoPix || pixKey === pixKeySalva}
-              style={{ padding: '9px 18px', background: pixKey === pixKeySalva ? '#e2e8f0' : '#111111', color: pixKey === pixKeySalva ? '#94a3b8' : 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: pixKey === pixKeySalva ? 'default' : 'pointer' }}>
-              {salvandoPix ? 'Salvando...' : 'Salvar PIX'}
-            </button>
-          </div>
-          {msgPix && (
-            <div style={{ marginTop: 8, fontSize: 12, color: msgPix.tipo === 'ok' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
-              {msgPix.txt}
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Recebimento do saque</div>
+          {pjRecebe?.pix ? (
+            <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+              Pago na chave PIX da sua empresa{pjRecebe.razao ? <> (<strong>{pjRecebe.razao}</strong>)</> : null}: <strong>{pjRecebe.pix}</strong>.{' '}
+              <a href="#/perfil?aba=parceiros" style={{ color: '#0D63DB', fontWeight: 700 }}>Alterar</a>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: '#92400e', lineHeight: 1.6 }}>
+              O saque é pago na <strong>chave PIX da sua empresa</strong> (PJ da qual você é sócio). Cadastre CNPJ, razão social e PIX da empresa em{' '}
+              <a href="#/minha-rede" style={{ color: '#b45309', fontWeight: 800 }}>Programa de Parceiros →</a>
             </div>
           )}
         </div>
@@ -383,7 +362,7 @@ export default function Comissoes() {
               <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#92400e', lineHeight: 1.6 }}>
                 {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
               </ul>
-              <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Chave PIX você preenche acima. Telefone e CPF, no seu Perfil; nome, se faltar, fale com o atendimento.</div>
+              <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>O PIX que recebe é o da sua empresa (cartão acima). Telefone e CPF, no seu Perfil; nome, se faltar, fale com o atendimento.</div>
             </div>
           )}
           {showSaqueForm && (

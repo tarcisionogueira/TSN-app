@@ -117,6 +117,46 @@ function CardComercial() {
   );
 }
 
+// PASSOS PARA LIBERAR O SAQUE (13/10, #83). Antes era uma frase com os itens separados por vírgula
+// ("complete seu cadastro: CPF, identidade validada…") sem dizer ONDE resolver cada um. Cada item
+// de `faltando` (texto do `saque_avaliar` — a regra vive lá, aqui só o atalho) vira uma linha com
+// a ação que o resolve. Item que não reconhecemos aparece igual, com o link genérico do perfil:
+// regra nova no banco nunca some da tela por falta de mapeamento aqui.
+function PassosSaque({ itens, emSuporte }) {
+  const acao = (f) => {
+    if (/identidade/i.test(f)) return { rotulo: 'Verificar agora', fn: () => window.dispatchEvent(new Event('tsn:parceiro-atualizado')), dica: 'Selfie + foto do documento. Leva 2 minutos.' };
+    if (/termos/i.test(f)) return { rotulo: 'Ler e aceitar', fn: () => abrirTermosModal('saque') };
+    if (/^cpf$|telefone/i.test(f)) return { rotulo: 'Completar', href: '#/perfil?aba=dados' };
+    if (/^nome$/i.test(f)) return { rotulo: 'Falar com o atendimento', href: '#/chamados' };
+    return { rotulo: 'Resolver', href: '#/perfil?aba=parceiros' };
+  };
+  return (
+    <div style={{ marginTop: 12, border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 12, padding: '12px 14px' }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#92400e', marginBottom: 8 }}>
+        Para liberar o saque, falta{itens.length > 1 ? `m ${itens.length} passos` : ' 1 passo'}:
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {itens.map((f, i) => {
+          const a = acao(f);
+          const btn = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: 'pointer', textDecoration: 'none', flexShrink: 0 };
+          return (
+            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', background: 'white', border: '1px solid #fde68a', borderRadius: 10, padding: '8px 10px' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#78350f' }}>{i + 1}. {f.charAt(0).toUpperCase() + f.slice(1)}</div>
+                {a.dica && <div style={{ fontSize: 11, color: '#a16207', marginTop: 2 }}>{a.dica}</div>}
+              </div>
+              {/* No modo suporte o admin só OLHA: ação pessoal (selfie, aceite) não pode ser feita por ele. */}
+              {!emSuporte && (a.href
+                ? <a href={a.href} style={btn}>{a.rotulo} <ArrowRight size={13} /></a>
+                : <button onClick={a.fn} style={btn}>{a.rotulo} <ArrowRight size={13} /></button>)}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function MinhaRede() {
   const { user, effectiveUserId, effectiveRole, impersonate } = useAuth();
   const isAdmin = effectiveRole === 'admin';
@@ -155,6 +195,11 @@ export default function MinhaRede() {
   const [erroSaldo, setErroSaldo] = useState('');     // leitura do saldo FALHOU (≠ saldo zero)
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false);
   const [proximaLib, setProximaLib] = useState(null);
+  // 13/10 (#83): o GET já devolvia estes campos e a tela descartava — a PJ pendente/revalidação e o
+  // teto sem nota só apareciam como RECUSA depois de clicar em sacar.
+  const [pjPendente, setPjPendente] = useState(false);
+  const [pjRevalidar, setPjRevalidar] = useState(false);
+  const [tetoSemNf, setTetoSemNf] = useState(null);       // { teto, disponivel }
   // Cadastro da PJ
   const [pj, setPj] = useState({ cnpj: '', razao_social: '', pj_chave_pix: '' });
   const [pjSalva, setPjSalva] = useState(false);
@@ -240,6 +285,9 @@ export default function MinhaRede() {
       setFaltando(Array.isArray(sq.faltando) ? sq.faltando : []);
       setNaoGanhaNovas(!!sq.nao_ganha_novas);
       setProximaLib(sq.proxima_liberacao || null);
+      setPjPendente(!!sq.pj_pendente);
+      setPjRevalidar(!!sq.pj_revalidar);
+      setTetoSemNf(sq.teto_sem_nf != null ? { teto: Number(sq.teto_sem_nf), disponivel: Number(sq.disponivel_sem_nf ?? sq.teto_sem_nf) } : null);
     } catch {
       // NÃO zera: saldo desconhecido não é saldo zero. A tela passa a dizer que não conseguiu ler.
       setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
@@ -286,6 +334,13 @@ export default function MinhaRede() {
     } catch (e) { console.error('[MinhaRede] leitura da aula lancou:', e?.message); setAula(null); }
   }, [uid, emSuporte]);
   useEffect(() => { carregarMeu(); }, [carregarMeu]);
+  // Etapa resolvida em outro componente (popup de termos ou de identidade) → a lista se atualiza sozinha.
+  useEffect(() => {
+    const h = () => { carregarMeu(); };
+    window.addEventListener('termos-uso-aceitos', h);
+    window.addEventListener('tsn:parceiro-atualizado', h);
+    return () => { window.removeEventListener('termos-uso-aceitos', h); window.removeEventListener('tsn:parceiro-atualizado', h); };
+  }, [carregarMeu]);
 
   const buscarParceiro = async (q) => {
     setBusca(q);
@@ -730,9 +785,7 @@ export default function MinhaRede() {
                 </div>
               )}
               {outrosPendentes.length > 0 ? (
-                <div style={{ marginTop: 12, fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px' }}>
-                  Para liberar o saque, complete seu cadastro: <strong>{outrosPendentes.join(', ')}</strong>.
-                </div>
+                <PassosSaque itens={outrosPendentes} emSuporte={emSuporte} />
               ) : saldo > 0 ? (
                 <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input type="number" value={valorSaque} onChange={e => setValorSaque(e.target.value)} placeholder={`Valor até ${fmtBRL(saldo)}`}
@@ -746,6 +799,23 @@ export default function MinhaRede() {
                 erroSaldo
                   ? <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 11px', fontWeight: 600 }}>{erroSaldo}</div>
                   : <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>Você ainda não tem saldo a sacar.</div>
+              )}
+              {/* O que o saque ainda vai conferir — dito ANTES do clique, não na recusa (13/10, #83). */}
+              {outrosPendentes.length === 0 && pjRevalidar && (
+                <div style={{ marginTop: 10, fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 11px', lineHeight: 1.55 }}>
+                  <strong>Repasse retido:</strong> os dados da sua empresa divergiram na reconferência periódica. Atualize CNPJ/razão social e clique em "Verificar automaticamente".{' '}
+                  {!emSuporte && <a href="#/perfil?aba=parceiros" style={{ color: '#b45309', fontWeight: 800 }}>Atualizar empresa →</a>}
+                </div>
+              )}
+              {outrosPendentes.length === 0 && !pjRevalidar && pjPendente && (
+                <div style={{ marginTop: 10, fontSize: 11.5, color: '#475569', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 11px', lineHeight: 1.55 }}>
+                  Na primeira solicitação conferimos automaticamente se o seu CPF consta no quadro societário do CNPJ. Se não bater, a equipe valida manualmente pelo contrato social.
+                </div>
+              )}
+              {outrosPendentes.length === 0 && saldo > 0 && tetoSemNf && (
+                <div style={{ marginTop: 8, fontSize: 11.5, color: '#64748b', lineHeight: 1.55 }}>
+                  Neste mês você pode sacar até <strong>{fmtBRL(tetoSemNf.disponivel)}</strong> sem nota fiscal. Acima de {fmtBRL(tetoSemNf.teto)} no mês, o saque exige plano pago e a nota fiscal do valor total sacado no mês.
+                </div>
               )}
               {msgSaque && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: msgSaque.tipo === 'ok' ? '#059669' : '#dc2626' }}>{msgSaque.txt}</div>}
             </>
