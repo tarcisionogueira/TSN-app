@@ -58,6 +58,15 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   98,3% entregues, 4 bounces, banco × Resend batem por dia — sadio. **Vercel runtime errors entrou no ritual (1b-bis)**:
   foi a única fonte que mostrou o PDF. Reconciliar-assinaturas loga o status do MP agora (#206; o caso 059f6e7a… é
   ex-pagante com cartão recusado — rebaixamento correto).
+- **Plataforma ARES integrada (PICELLI ~74 + SHIOKAWA 3 imóveis, inéditos):** API PostgREST pública de cada leiloeiro
+  com a chave publishable do próprio site; motor novo `api` (`scripts/lib/motor/fetch-api.mjs`). Área/matrícula de
+  `lot_attributes`; apartamento com área de texto > 1.000 m² = desconhecida (Bertioga citava só o terreno do condomínio).
+  Detalhes em `docs/LEILOEIROS_TRT15_BACKLOG.md`. Teste: `npm run testar:ares`.
+- **Runner do motor: upsert agrupado por formato de linha** — o supabase-js completava com NULL a chave ausente
+  (`fotos`, coordenadas) e apagava dado de linha que não a trazia.
+- **`desativar_leiloes_encerrados()` ainda estourava os 8 s (14:05 UTC):** pré-filtro por data (28.751 → 1.295
+  candidatos; 1.920 → 224 ms), teto de 500 por chamada e índice parcial `veiculos_leilao(data_leilao) where ativo`
+  (2.470 → 20 ms). Conferir nos runtime errors da Vercel que o `57014` sumiu.
 
 ### 📌 13/10 (noite) — vitrine sem cópia/arrematado, crons de limpeza, painel único, parceiro, PostHog
 - Vitrine: veículo relistado (mesma 1ª foto+título+fonte) e 2ª praça publicada como outro anúncio → `reconciliar_relistados()`

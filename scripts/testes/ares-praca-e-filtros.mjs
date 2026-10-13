@@ -68,4 +68,8 @@ assert.deepEqual(cidadeDoEndereco('Avenida Doutor Leonardo de Bonna, 110 - Cente
 const semCid = detalheDoLote({ ...bertioga, cities: null, states: null, address: '979M+XVW Serra Negra, SP' });
 assert.deepEqual([semCid.cidade, semCid.estado], ['Serra Negra', 'SP']);
 
+// (7) Categoria "Áreas ou glebas" urbana = terreno (o inferidor dizia rural por causa de "gleba").
+assert.equal(detalheDoLote({ ...bertioga, title: 'Terreno em Campinas com 22.918m² | Jardim Campineiro', categories: { slug: 'areas_ou_glebas_', name: 'Áreas ou glebas' } }).tipo, 'terreno');
+assert.equal(detalheDoLote({ ...bertioga, title: 'Fazenda para pecuária', categories: { slug: 'imoveis_rurais', name: 'Imóveis rurais' } }).tipo, 'rural');
+
 console.log('✓ ares-praca-e-filtros: listagem, praças, docs, fotos, teste/Leads e coordenada');

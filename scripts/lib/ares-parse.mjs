@@ -110,7 +110,13 @@ export function detalheDoLote(l, agora = Date.now()) {
   const vig = iVig >= 0 ? fases[iVig] : null, prox = iVig >= 0 ? fases[iVig + 1] : null;
   const desc = stripHtml(l.description);
   const attrs = atributos(l);
-  const tipo = inferirTipo(`${l.categories?.name || ''} ${l.title || ''}`, '');
+  // A CATEGORIA da plataforma decide o que ela sabe dizer: "Áreas ou glebas" é terreno (o texto "gleba"
+  // fazia o inferidor dizer rural — Campinas, 22.918 m², urbano); "Imóveis rurais" é rural. O resto
+  // (residencial/comercial) o título detalha melhor: apartamento, casa, sala, galpão.
+  const slugCat = String(l.categories?.slug || '');
+  const tipo = /^areas_ou_glebas/.test(slugCat) && !/\b(fazenda|s[ií]tio|ch[áa]cara|rural)\b/i.test(l.title || '') ? 'terreno'
+    : /^imoveis_rurais/.test(slugCat) ? 'rural'
+    : inferirTipo(`${l.categories?.name || ''} ${l.title || ''}`, '');
   const local = (l.cities?.name && l.states?.code) ? {} : cidadeDoEndereco(l.address);
   const avaliacao = plaus(num(l.evaluation_value)) || plaus(num(fases[0]?.initial_value));
   const minimo = plaus(num(vig?.initial_value)) || avaliacao;
@@ -137,7 +143,7 @@ export function detalheDoLote(l, agora = Date.now()) {
     data_leilao: vig ? diaBR(vig.end_date) : null,
     data_leilao_2: prox?.end_date ? new Date(prox.end_date).toISOString() : null,
     valor_minimo_2: minimo2 && minimo2 !== minimo ? minimo2 : null,
-    modalidade,
+    modalidade, tipo,
     tipo_hint: `${l.categories?.name || ''} ${l.title || ''}`,
     area_m2: AREAS.map(k => attrs.get(k)).filter(Boolean).map(areaDoAtributo).find(v => v > 0)
       || areaDoTexto(l.title, desc, tipo),
@@ -156,7 +162,7 @@ export function montarRow(url, det, tenant) {
   return {
     fonte: tenant.fonte, fonte_id: `${tenant.fonte.toLowerCase()}_${det.id}`,
     titulo: det.titulo || `Imóvel ${tenant.leiloeiro}`,
-    tipo: inferirTipo(det.tipo_hint || det.titulo || '', url), modalidade: det.modalidade,
+    tipo: det.tipo || inferirTipo(det.tipo_hint || det.titulo || '', url), modalidade: det.modalidade,
     cidade: det.cidade, estado: det.estado, endereco: det.endereco, bairro: null,
     ...(det.latitude != null ? { latitude: det.latitude, longitude: det.longitude, geocod_nivel: 'endereco' } : {}),
     valor_avaliacao: va, valor_minimo: vm, area_m2: det.area_m2 || 0,
