@@ -598,7 +598,11 @@ const _norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀
 // cidade_norm no formato do banco (imoveis_leilao/indice_amostra): minúsculas, sem acento e SEM
 // separadores (ex.: "São Bernardo" → "saobernardo"). Difere do _norm, que mantém espaço (usado p/ bairro).
 const _cidadeNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-const geoGridDe = (lat, lng) => (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) ? `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}` : '';
+// Coordenada VÁLIDA: `Number(null)` é 0 e passa no isFinite — imóvel sem lat/lng virava o ponto
+// 0,0 (Golfo da Guiné) e as amostras herdavam isso (13/10: 54 amostras de Santana de Parnaíba com
+// geo_grid "0.00,0.00", invisíveis a qualquer recorte por raio). 0 exato não é coordenada do Brasil.
+const coordNum = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) !== 0;
+const geoGridDe = (lat, lng) => (coordNum(lat) && coordNum(lng)) ? `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}` : '';
 
 // TRIANGULAÇÃO DO IMÓVEL-ALVO (pedido do dono): quando a coordenada do imóvel é IMPRECISA (nível
 // bairro/cidade/nula), o raio de 250m/1km do relatório ancora num centroide errado. Aqui, NO
@@ -630,8 +634,8 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const bDe = (s) => _norm(s?.bairro) || bairroNorm;   // bairro POR AMOSTRA (a IA marca cada uma)
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     // Coordenada do imóvel-alvo → guardada em cada amostra p/ o recorte por RAIO (~250m) no Índice.
-    const latA = Number.isFinite(Number(imDb.latitude)) ? Number(imDb.latitude) : null;
-    const lngA = Number.isFinite(Number(imDb.longitude)) ? Number(imDb.longitude) : null;
+    const latA = coordNum(imDb.latitude) && coordNum(imDb.longitude) ? Number(imDb.latitude) : null;
+    const lngA = latA !== null ? Number(imDb.longitude) : null;
     const nowMes = new Date().toISOString().slice(0, 7);
     const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
     const vendas = vendasDe(mercado);
@@ -707,6 +711,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
 
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
+      if (s?.origemBase) continue; // veio DA base (amostrasBaseParaValor): regravar seria a base se auto-alimentar
       if (!perto(s)) continue;
       if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
@@ -857,6 +862,55 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
     const text = `\n\nBASE PRÓPRIA DA REGIÃO (Índice BidPro — ${arr.length} comparáveis de VENDA do MESMO tipo já capturados no nível ${nivel}, SEM leilão; mediana ${Math.round(mediana).toLocaleString('pt-BR')} R$/m²). Use estes comparáveis REAIS como ÂNCORA principal e complemente com no MÁXIMO 1–2 buscas web só para preencher lacunas (padrão do imóvel, anúncios ativos recentes). NÃO ignore esta base nem invente números fora dela:\n${linhas}`;
     return { hit: true, nivel, n: arr.length, mediana, text, arr };
   } catch { return null; }
+}
+
+// BASE ACUMULADA ENTRA NA CONTA DO VALOR (13/10, pendência #144 — opção A do dono).
+// O valor de mercado já era CÓDIGO (_valor-mercado.js), mas a ENTRADA da conta eram só os
+// anúncios que a IA achava NESTA geração — cada geração uma amostra diferente, e o mesmo imóvel
+// de Alphaville saiu 3,38 / 2,74 / 2,56 / 3,30 mi. Toda amostra de relatório anterior já fica
+// guardada em `indice_amostra`; aqui ela volta para a conta, com a MESMA régua de níveis:
+//   • com coordenada válida dos dois lados → distância real (≤250 m n1 · ≤1 km n2 · ≤2 km n3);
+//   • sem coordenada, mas do MESMO bairro → nível 2 sem distância (o teto nominal de 1 km, pior
+//     caso do nível — erra para o conservador, igual às amostras da IA sem distância).
+// A cada geração a base cresce e a média converge, em vez de recomeçar do zero. Marcadas
+// `origemBase` para (a) o cliente ver de onde vieram e (b) `gravarAmostrasIndice` não as regravar.
+// Falha de leitura = segue só com as amostras da geração (nunca derruba o relatório), com rastro.
+async function amostrasBaseParaValor(imDb, segmento, existentes = []) {
+  if (!imDb?.cidade_norm || !imDb?.estado) return { 1: [], 2: [], 3: [] };
+  const uf = String(imDb.estado).toUpperCase();
+  const desde = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&data_ref=gte.${desde}`
+    + '&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm,lat,lng&order=criado_em.desc&limit=600');
+  if (!r.ok) throw new Error(`indice_amostra HTTP ${r.status}`);
+  const rows = await r.json();
+  const latA = coordNum(imDb.latitude) && coordNum(imDb.longitude) ? Number(imDb.latitude) : null;
+  const lngA = latA !== null ? Number(imDb.longitude) : null;
+  const bairroAlvo = _norm(imDb.bairro);
+  const chave = (x) => (x?.url ? `u:${x.url}` : `v:${Math.round(Number(x?.valorM2 ?? x?.valor_m2) || 0)}|${Math.round(Number(x?.m2 ?? x?.area_m2) || 0)}`);
+  const vistos = new Set((existentes || []).map(chave));
+  const out = { 1: [], 2: [], 3: [] };
+  for (const a of (Array.isArray(rows) ? rows : [])) {
+    if (!(Number(a.valor_m2) > 0) || ehFonteLeilao(a.fonte)) continue;
+    let nivel = null, dist;
+    if (latA !== null && coordNum(a.lat) && coordNum(a.lng)) {
+      const rad = Math.PI / 180, dLat = (a.lat - latA) * rad, dLng = (a.lng - lngA) * rad;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(latA * rad) * Math.cos(a.lat * rad) * Math.sin(dLng / 2) ** 2;
+      dist = 2 * 6371 * Math.asin(Math.sqrt(h));
+      nivel = dist <= 0.25 ? 1 : dist <= 1 ? 2 : dist <= 2 ? 3 : null;
+    } else if (bairroAlvo && a.bairro_norm === bairroAlvo) {
+      nivel = 2;
+    }
+    if (!nivel) continue;
+    const amostra = { valor: Number(a.valor_total) || null, m2: Number(a.area_m2) || null, valorM2: Number(a.valor_m2),
+      ...(dist !== undefined ? { distanciaKm: Math.round(dist * 1000) / 1000 } : {}),
+      data: String(a.data_ref || '').slice(0, 7), fonte: a.fonte || 'Base BidPro', url: a.url || null,
+      endereco: a.endereco || null, condominio: a.condominio || null, origemBase: true };
+    const k = chave(amostra);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    out[nivel].push(amostra);
+  }
+  return out;
 }
 
 /**
@@ -3280,8 +3334,16 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     let avalPond = null;
     try {
       if (['residencial', 'comercial', 'industrial'].includes(baseTipo) && areaM2 > 0) {
+        let base = { 1: [], 2: [], 3: [] };
+        try {
+          base = await amostrasBaseParaValor(imDb, segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo),
+            vendasDe(mercado));
+        } catch (e) { console.error('[gerar-analise] base acumulada fora da conta do valor:', e?.message || e); }
+        if (mercado) mercado.amostrasDaBase = base[1].length + base[2].length + base[3].length;
         avalPond = avaliarMercado({
-          nivel1: mercado?.nivel1?.vendas, nivel2: mercado?.nivel2?.vendas, nivel3: mercado?.nivel3?.vendas,
+          nivel1: [...(mercado?.nivel1?.vendas || []), ...base[1]],
+          nivel2: [...(mercado?.nivel2?.vendas || []), ...base[2]],
+          nivel3: [...(mercado?.nivel3?.vendas || []), ...base[3]],
           // `vminImovel` só é declarado mais abaixo (const, zona morta temporal) — usar aqui
           // daria ReferenceError engolido pelo catch, desligando a trava de auto-referência EM
           // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.

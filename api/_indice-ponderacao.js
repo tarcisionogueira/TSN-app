@@ -19,7 +19,9 @@
 
 // Distância equirretangular (m) — mesma da consulta do índice (barata, boa em escala de cidade).
 const distanciaM = (aLat, aLng, lat, lng) => {
-  if (![aLat, aLng, lat, lng].every(n => Number.isFinite(Number(n)))) return null;
+  // `Number(null)` é 0: sem esta guarda, amostra sem coordenada media distância até o ponto 0,0
+  // (13/10) em vez de cair no ramo "sem geo" (d = null) que o chamador trata à parte.
+  if (![aLat, aLng, lat, lng].every(n => n !== null && n !== undefined && n !== '' && Number.isFinite(Number(n)) && Number(n) !== 0)) return null;
   const dLat = (+aLat - +lat), dLng = (+aLng - +lng) * Math.cos(+lat * Math.PI / 180);
   return 111320 * Math.sqrt(dLat * dLat + dLng * dLng);
 };
@@ -69,7 +71,7 @@ export function referenciaPonderada(amostras, alvo, opts = {}) {
   const k = opts.k ?? K_CREDIBILIDADE;
   const lista = (amostras || []).filter(a => Number(a.valor_m2) > 0);
   if (lista.length < 3) return null; // base curta demais p/ ponderar com sentido — chamador segue no caminho atual
-  const temAlvoGeo = alvo && Number.isFinite(Number(alvo.lat)) && Number.isFinite(Number(alvo.lng));
+  const temAlvoGeo = alvo && [alvo.lat, alvo.lng].every(n => n !== null && n !== undefined && n !== '' && Number.isFinite(Number(n)) && Number(n) !== 0);
   if (!temAlvoGeo) return null;      // sem coordenada do alvo não existe "proximidade" — não força mistura
   const ticket = medianaSimples(lista.map(a => a.valor_m2));
   if (!(ticket > 0)) return null;
