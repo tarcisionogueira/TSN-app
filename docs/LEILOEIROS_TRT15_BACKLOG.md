@@ -16,6 +16,21 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 13/10 — e-leiloes: recon feito (custo zero, pg_net) — PRONTO PARA CONSTRUIR
+- e-leiloeiro.com.br e e-confianca.com.br = o MESMO portal **e-leiloes.com.br** (canonical), infra Suporte
+  Leilões (CDN `static.e-leiloes.com.br/eleiloescombr/…`, `sl-bem-…`), front-end Nuxt 3 (4º template).
+- Acesso: plain fetch 200 (sem Cloudflare); `robots.txt` = Allow /. O proxy do ambiente Claude barra,
+  pg_net e GitHub Actions passam. Custo Bright Data: ZERO.
+- **Enumeração:** `/sitemap-lotes.xml` (20.000 URLs, inclui histórico; ~8 mil com cara de imóvel) no formato
+  `/eventos/leilao/<slug>/lote/<ID>/<slug>` — o `idDaUrl` do leilaobrasil-parse já entende. Filtrar por slug de
+  imóvel + IDs mais altos e confirmar ativo pelo detalhe. Categoria `/leilao/imoveis` diz total ≈ 191 ativos.
+- **Detalhe:** JSON-LD `Product` (name, description, image, offers.price, offers.priceValidUntil = data,
+  availability InStock/OutOfStock = ativo/encerrado, seller = comitente, broker = leiloeiro + JUCESP) +
+  BreadcrumbList (Imóveis › Terreno = tipo). Avaliação/praças/endereço/documentos no `__NUXT_DATA__`
+  (formato devalue: array com referências por índice — precisa de um decodificador pequeno).
+- Plano: `lib/eleiloes-parse.mjs` (JSON-LD + devalue) + fonte do motor + workflow com DRYRUN=1 na CI,
+  validar contra 3 lotes conhecidos (ex.: lote 38309, terreno 4.588 m² Suzano, R$ 3.257.000) antes de gravar.
+
 ## 📊 09/10 — TRIAGEM VIVA (custo zero: acervo + pg_net) — substitui as tabelas abaixo
 
 Cruzamento dos 60 domínios × acervo ativo. **Cuidado (forma nº 10):** cruzar só pelo domínio da URL
