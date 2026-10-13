@@ -279,7 +279,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       }
       const html = r?.html;
       if (!html && !detPronto) { sem++; continue; }
-      const det = detPronto || cfg.parse.parseDetalhe(html, url);
+      // `await` + `fetchFonte` (13/10): parser que precisa de uma 2ª página ou de um PDF (plataforma
+      // Leiloar /externo/: valores só no edital) é assíncrono. Para os síncronos, nada muda.
+      const det = detPronto || await cfg.parse.parseDetalhe(html, url, { fetchFonte, tenant });
       // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
       // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
       if (!det) { sem++; continue; }
@@ -476,7 +478,8 @@ async function debugRecon(fetchFonte, cfg) {
     if (urls[0]) {
       const { html, via } = await fetchFonte(urls[0]);
       if (html) {
-        const det = cfg.parse.parseDetalhe(html, urls[0]);
+        const det = await cfg.parse.parseDetalhe(html, urls[0], { fetchFonte, tenant });
+        if (!det) { console.log(`   detalhe ${urls[0]} (via ${via}) → null (parser não conseguiu ler)`); continue; }
         console.log(`   detalhe ${urls[0]} (via ${via}) →`, JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }, null, 2));
       }
     }
