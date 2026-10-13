@@ -21,18 +21,29 @@ export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
-    method: 'POST',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!r.ok) {
-    const detalhe = await r.text().catch(() => '');
-    console.error('[desativar-encerrados]', r.status, detalhe.slice(0, 300));
-    res.status(500).json({ error: 'Falha ao desativar encerrados', detalhe: detalhe.slice(0, 300) });
-    return;
-  }
-  const desativados = await r.json().catch(() => 0);
+  // 13/10: falha deste passo NÃO aborta mais os outros. Medido: estourava o statement timeout de
+  // 8 s em 1 de cada 2 horas, e cada falha pulava o desconto anunciado e os números da vitrine.
+  let desativados = null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    desativados = r.ok ? await r.json().catch(() => 0) : { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}` };
+  } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200) }; }
+
+  // Cópias do mesmo bem (13/10): veículo relistado e 2ª praça publicada como outro anúncio.
+  // RPC própria — dentro de desativar_leiloes_encerrados somava ~2 s a quem já estourava o teto.
+  let relistados = null;
+  try {
+    const rr = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reconciliar_relistados`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    relistados = rr.ok ? await rr.json().catch(() => null) : { erro: `${rr.status} ${(await rr.text().catch(() => '')).slice(0, 200)}` };
+  } catch (e) { relistados = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // Mesma varredura horária cuida do DESCONTO ANUNCIADO: ele é o da praça mais descontada ainda
   // DISPONÍVEL, e "ainda disponível" muda com o relógio sem ninguém escrever na linha. Quando a
@@ -64,6 +75,7 @@ export default async function handler(req, res) {
 
   // Log sempre, inclusive o zero: é o que permite ver que a varredura RODOU num dia sem baixas
   // (silêncio total não distingue "nada a fazer" de "cron parou").
-  console.log('[desativar-encerrados]', JSON.stringify({ desativados, descontos, numeros }));
-  res.status(200).json({ ok: true, desativados, descontos_recalculados: descontos, numeros_vitrine: numeros });
+  const falhou = [desativados, relistados, descontos, numeros].some(v => v && typeof v === 'object' && v.erro);
+  (falhou ? console.error : console.log)('[desativar-encerrados]', JSON.stringify({ desativados, relistados, descontos, numeros }));
+  res.status(falhou ? 500 : 200).json({ ok: !falhou, desativados, relistados, descontos_recalculados: descontos, numeros_vitrine: numeros });
 }

@@ -27,12 +27,14 @@ export default async function handler(req, res) {
   });
 
   // 1) CEF (sweep por estado, já existente).
-  const r = await rpc('desativar_imoveis_cef_vencidos', { margem: `${MARGEM_HORAS} hours` });
-  if (!r.ok) {
-    const detalhe = await r.text().catch(() => '');
-    return res.status(500).json({ error: 'Falha ao desativar vencidos (CEF)', detalhe: detalhe.slice(0, 300) });
-  }
-  const desativados = await r.json().catch(() => 0);
+  // 13/10: falha AQUI saía com 500 sem log nenhum e PULAVA todos os passos abaixo (leiloeiro stale,
+  // encerrados, pino genérico). Medido: o pino genérico acumulou 276 e 1.228 imóveis CEF que a Caixa
+  // já tinha tirado da lista seguiam na vitrine. Agora é um passo como os outros: falha vira alerta.
+  let desativados = null;
+  try {
+    const r = await rpc('desativar_imoveis_cef_vencidos', { margem: `${MARGEM_HORAS} hours` });
+    desativados = r.ok ? await r.json().catch(() => 0) : { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}` };
+  } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // 1b) CEF VENDIDO inferido (23/09): imóvel de leilão/licitação que SAIU da lista da Caixa a
   // partir da véspera do leilão = vendido (resultado_origem='inferido_lista_caixa'). Roda logo
@@ -79,13 +81,13 @@ export default async function handler(req, res) {
   // statement timeout por DIAS com o cron devolvendo ok:true — o {erro} só existia no log
   // e ninguém lê log de cron que "deu certo". Uma falha aqui não derruba os outros passos,
   // mas vira alerta (e-mail do health) para não crescer em silêncio de novo.
-  const falhas = Object.entries({ leiloeiro, encerrados, pinos })
+  const falhas = Object.entries({ cef: desativados, vendidos_cef: vendidosCef, leiloeiro, encerrados, pinos })
     .filter(([, v]) => v && typeof v === 'object' && v.erro)
     .map(([k, v]) => `${k}: ${v.erro}`);
   if (falhas.length) {
     try { alertarErro({ rota: 'limpar-imoveis-stale', erro: `Passo(s) da limpeza diária falhou(aram): ${falhas.join(' · ')}`, extra: { desativados } }); } catch { /* alerta é best-effort */ }
   }
 
-  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos }));
-  return res.status(200).json({ ok: true, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
+  (falhas.length ? console.error : console.log)('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos, falhas }));
+  return res.status(falhas.length ? 500 : 200).json({ ok: !falhas.length, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
 }
