@@ -33,7 +33,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { redigirProposta } from './_redator-proposta.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
-import { contatoDaPaginaDoLote, fonteComContatoNaPagina } from './_contato-lote.js';
+import { contatoVeiculoSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -41,7 +41,6 @@ const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
 
 const ROLES_PROPOSTA_VEICULO = ['admin', 'analista', 'suporte'];
 const MAX_TEXTO_EDITADO = 4000;
-const SUPERBID_COMERCIAL = 'contato.comercial@sbwebservices.net';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN } });
@@ -136,18 +135,8 @@ export default async function handler(req) {
   // com o motivo. Demais fontes: cadastro (contato_leiloeiro_resolver, 28/09). Roda em paralelo
   // com o redator no preview — os dois são I/O e a Edge tem 25 s para começar a responder.
   const resolverContato = async () => {
-    if (fonteComContatoNaPagina(veiculo.fonte)) {
-      const r = await contatoDaPaginaDoLote({ fonte: veiculo.fonte, linkLote: veiculo.link_lote, auctionId: veiculo.auction_id }, Date.now() + 12000);
-      // CANAL COMERCIAL DA SUPERBID (30/09): o atendimento do próprio site (chat "Yara", lote
-      // 5013583) indicou este e-mail para propostas. Organizador achado → vai para ele, com cópia
-      // para o comercial; não achado → vai para o comercial, em vez de "sem contato".
-      if (r.contato?.email) return { contato: { ...r.contato, cc: SUPERBID_COMERCIAL }, motivo: null };
-      return {
-        contato: { ...(r.contato || {}), email: SUPERBID_COMERCIAL, organizador: 'Superbid — comercial (plataforma)',
-          caminho: `Organizador do evento não encontrado na página (${r.motivo || 'sem e-mail'}); canal comercial indicado pelo atendimento da Superbid.` },
-        motivo: null,
-      };
-    }
+    // Organizador do evento + cópia ao comercial; sem ele, o comercial (ver _contato-lote.js).
+    if (fonteComContatoNaPagina(veiculo.fonte)) return contatoVeiculoSuperbid({ linkLote: veiculo.link_lote, auctionId: veiculo.auction_id });
     const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: veiculo.fonte || '', p_leiloeiro: veiculo.leiloeiro || null }) });
     if (!rContato.ok) return { erro: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` };
     const [c] = await rContato.json();

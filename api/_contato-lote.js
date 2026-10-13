@@ -99,3 +99,30 @@ export async function contatoDaPaginaDoLote({ fonte, linkLote, auctionId }, dead
   if (!b.html) return { contato: null, motivo: `página do lote indisponível (${b.motivo})` };
   return contatoDoEventoSuperbid(b.html, auctionId);
 }
+
+// CANAL COMERCIAL DA SUPERBID (30/09): o atendimento do próprio site (chat "Yara", lote 5013583)
+// indicou este e-mail para propostas e dúvidas de lote que não sejam de imóveis.
+export const SUPERBID_COMERCIAL = 'contato.comercial@sbwebservices.net';
+
+export const ehEmailDeImoveisSuperbid = (email) => /^(imoveis|imovel|realestate|real\.estate)[._-]?[a-z]*@superbid\.net$/i.test(String(email || '').trim());
+
+// VEÍCULO da Superbid → organizador do EVENTO (com cópia ao comercial); sem ele, o comercial.
+// NUNCA o cadastro da fonte: ali mora `imoveis.sac@superbid.net` (o SAC de IMÓVEIS da SOLD), e em
+// 13/10 ele respondeu aos contatos de FIAT e MITSUBISHI "somos do setor de imóveis, não
+// conseguimos verificar outros segmentos". Os dois pedidos ficaram 3 dias parados no setor errado.
+// Mesmo contrato do resto do arquivo: { contato, motivo }, nunca lança.
+export async function contatoVeiculoSuperbid({ linkLote, auctionId }, deadline = Date.now() + 12000) {
+  const r = await contatoDaPaginaDoLote({ fonte: 'SUPERBID', linkLote, auctionId }, deadline);
+  // E-mail de IMÓVEIS publicado no PRÓPRIO evento de veículo (13/10, oferta 5042728, FIAT: o ticker
+  // do evento da SOLD MAISATIVO traz imoveis.sac@superbid.net) — o organizador reaproveita o SAC de
+  // imóveis, que não atende veículo. Não vale: cai no comercial, dizendo por quê.
+  const deImoveis = ehEmailDeImoveisSuperbid(r.contato?.email);
+  if (r.contato?.email && !deImoveis) return { contato: { ...r.contato, cc: SUPERBID_COMERCIAL }, motivo: null };
+  const porque = deImoveis ? `o evento publica ${r.contato.email}, que é o SAC de IMÓVEIS e não atende veículo`
+    : `organizador do evento não encontrado na página (${r.motivo || 'sem e-mail'})`;
+  return {
+    contato: { ...(r.contato || {}), email: SUPERBID_COMERCIAL, cc: undefined, organizador: 'Superbid — comercial (plataforma)',
+      caminho: `${porque[0].toUpperCase()}${porque.slice(1)}; canal comercial indicado pelo atendimento da Superbid.` },
+    motivo: null,
+  };
+}

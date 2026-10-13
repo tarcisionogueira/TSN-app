@@ -45,6 +45,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { comExtensao, urlDiretaDoDocumento } from './_anexo-nome.js';
 import { redigirProposta } from './_redator-proposta.js';
+import { contatoVeiculoSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 import { assinarDocumento } from './_storage.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
@@ -269,10 +270,18 @@ export default async function handler(req) {
   if (destino === 'leiloeiro') {
     // Contato do LEILOEIRO do lote, não da fonte (28/09): em plataforma multi-tenant o contato
     // por fonte era o de UM leiloeiro (6 pedidos de veículos diversos do SUPERBID foram à JRF).
-    const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: loteFonte || '', p_leiloeiro: lote?.leiloeiro || null }) });
-    if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
-    const [contato] = await rContato.json();
-    if (contato?.email) destinatarios = [norm(contato.email)];
+    // VEÍCULO da Superbid (13/10): o cadastro da fonte é o SAC de IMÓVEIS (imoveis.sac), que devolveu os
+    // contatos de FIAT/MITSUBISHI como "setor errado". Vai ao organizador do evento + cópia ao comercial.
+    if (veiculo && fonteComContatoNaPagina(loteFonte)) {
+      const r = await contatoVeiculoSuperbid({ linkLote: veiculo.link_lote, auctionId: veiculo.auction?.id });
+      if (r.contato?.email) destinatarios = [norm(r.contato.email)];
+      if (r.contato?.cc) ccList = [norm(r.contato.cc)];
+    } else {
+      const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: loteFonte || '', p_leiloeiro: lote?.leiloeiro || null }) });
+      if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
+      const [contato] = await rContato.json();
+      if (contato?.email) destinatarios = [norm(contato.email)];
+    }
   } else {
     // Jurídico: mesma resolução de api/enviar-juridico-email.js (destinatários do escritório
     // do advogado do caso + os globais; copia=false → Para, copia=true → CC), SEM sortear nem
