@@ -11,14 +11,17 @@ function AssinaturaCanvas({ onChange }) {
   const [desenhando, setDesenhando] = useState(false);
   const [tem, setTem] = useState(false);
   const last = useRef(null);
-  const getPos = (e, c) => { const r = c.getBoundingClientRect(); const s = e.touches?.[0] || e; return { x: s.clientX - r.left, y: s.clientY - r.top }; };
+  // Coordenada da TELA → do canvas (800px internos, ~300px no celular): sem isto a assinatura saía
+  // espremida no terço esquerdo (13/10, mesmo defeito do ContratoLink).
+  const getPos = (e, c) => { const r = c.getBoundingClientRect(); const s = e.touches?.[0] || e;
+    return { x: (s.clientX - r.left) * (r.width ? c.width / r.width : 1), y: (s.clientY - r.top) * (r.height ? c.height / r.height : 1) }; };
   const iniciar = (e) => { e.preventDefault(); setDesenhando(true); last.current = getPos(e, canvasRef.current); };
   const terminar = () => { if (!desenhando) return; setDesenhando(false); setTem(true); onChange(canvasRef.current.toDataURL()); };
   const desenhar = (e) => {
     if (!desenhando) return; e.preventDefault();
     const ctx = canvasRef.current.getContext('2d'); const pos = getPos(e, canvasRef.current);
     ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y); ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = '#111111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke(); last.current = pos;
+    ctx.strokeStyle = '#111111'; { const r = ctx.canvas.getBoundingClientRect(); ctx.lineWidth = 2.5 * (r.width ? ctx.canvas.width / r.width : 1); } ctx.lineCap = 'round'; ctx.stroke(); last.current = pos;
   };
   const limpar = () => { const ctx = canvasRef.current.getContext('2d'); ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); setTem(false); onChange(''); };
   return (

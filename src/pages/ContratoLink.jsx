@@ -187,7 +187,11 @@ function AssinaturaCanvas({ onChange }) {
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect();
     const src = e.touches?.[0] || e;
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+    // 13/10 (assinatura "amontoada" do Tiago, celular): o canvas tem 800px INTERNOS e aparece com
+    // ~300px na tela. Sem converter a escala, o traço feito na largura toda era desenhado no terço
+    // esquerdo — o nome saía espremido. Converte da coordenada da TELA para a do canvas.
+    const sx = rect.width ? canvas.width / rect.width : 1, sy = rect.height ? canvas.height / rect.height : 1;
+    return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
   };
 
   const iniciar = (e) => { e.preventDefault(); setDesenhando(true); last.current = getPos(e, canvasRef.current); };
@@ -203,7 +207,7 @@ function AssinaturaCanvas({ onChange }) {
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e, canvasRef.current);
     ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y);
-    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2.5;
+    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#111111'; { const r = ctx.canvas.getBoundingClientRect(); ctx.lineWidth = 2.5 * (r.width ? ctx.canvas.width / r.width : 1); }
     ctx.lineCap = 'round'; ctx.stroke();
     last.current = pos;
   };
