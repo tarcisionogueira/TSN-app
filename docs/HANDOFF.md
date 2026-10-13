@@ -4,6 +4,17 @@
 
 ---
 
+
+## 13/10 (madrugada de 14, 3ª parte) — apurar-resultado com índice, 429 do MP com nova tentativa
+
+- **`apurar-resultado-leilao-cron` 57014 (21h UTC):** a fila de imóveis fazia *seq scan* — 10,2 s medidos FORA do pico
+  (teto do service_role = 8 s). Os OR do filtro (`ativo OR praca_vencida`, `resultado NULL OR indeterminado`) não implicam o
+  predicado de nenhum índice parcial existente. Índice `imoveis_leilao_fila_apuracao_idx (data_fim) WHERE resultado_leilao
+  IS NULL OR = 'indeterminado'` → **1,5 ms**. Migração `20261013_idx_apuracao_fila.sql` (aplicada). Veículos: 239 ms, ok.
+- **`reconciliar-assinaturas-cron` 429 `local_rate_limited`:** `mpGet` tenta de novo 1× após o Retry-After (teto 5 s); o laço
+  de UPGRADE passou a usar `mpGet` (o fetch cru encerrava a varredura sem log). O 400 de `limit` sumiu no deploy novo.
+- #170 ONR: dono respondeu o chamado em 13/10 com contrato social + certidão; aguardando retorno.
+
 ## ✅ PENDÊNCIAS EM ABERTO (checar ao abrir nova sessão, antes de qualquer coisa nova)
 
 Lista viva das pontas soltas da Sessão 25 — atualizar/riscar item conforme resolver, não deixar
