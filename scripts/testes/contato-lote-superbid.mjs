@@ -1,7 +1,7 @@
 // Teste do leitor de contato do ORGANIZADOR do evento Superbid (api/_contato-lote.js).
 // Fixture = campos reais da oferta 4995864 (Montana LS 2015, evento 785731), medidos em 30/09.
 import assert from 'node:assert/strict';
-import { contatoDoEventoSuperbid, fonteComContatoNaPagina, ehEmailDeImoveisSuperbid } from '../../api/_contato-lote.js';
+import { contatoDoEventoSuperbid, fonteComContatoNaPagina, ehEmailDeImoveisSuperbid, eventoDaOferta } from '../../api/_contato-lote.js';
 
 const pagina = (dados) => `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(dados)}</script></html>`;
 const evento = { id: 785731, desc: 'Tijolarte', managerId: 9, managerName: 'SOLD MAISATIVO',
@@ -56,6 +56,12 @@ t('SAC de imóveis da Superbid não serve para veículo (13/10, FIAT 5042728)', 
   assert.equal(ehEmailDeImoveisSuperbid('imoveis.sac@superbid.net'), true);
   assert.equal(ehEmailDeImoveisSuperbid('atendimento.infraenergia@superbid.net'), false);
   assert.equal(ehEmailDeImoveisSuperbid('leilaopetrobras@superbid.net'), false);
+});
+
+t('imóvel sem raw: o evento sai da própria página da oferta (13/10)', () => {
+  assert.equal(eventoDaOferta(html, 'https://www.superbid.net/oferta/4995864'), '785731');
+  assert.equal(eventoDaOferta(html, 'https://www.superbid.net/oferta/1'), null);
+  assert.equal(eventoDaOferta('<html></html>', 'https://www.superbid.net/oferta/4995864'), null);
 });
 
 console.log(`${ok} ok`);

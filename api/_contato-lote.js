@@ -91,13 +91,40 @@ export function fonteComContatoNaPagina(fonte) {
   return /^SUPERBID$/i.test(String(fonte || ''));
 }
 
+// Id do EVENTO a partir da própria página da oferta (13/10): imóvel da Superbid não guarda `raw` — mas
+// `offerDetails.offers[id = <id da URL>].auction.id` está no __NEXT_DATA__ da mesma página.
+export function eventoDaOferta(html, linkLote) {
+  const oferta = (String(linkLote || '').match(/\/oferta\/(\d+)/) || [])[1];
+  const m = String(html || '').match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!oferta || !m) return null;
+  let dados; try { dados = JSON.parse(m[1]); } catch { return null; } // JSON ilegível = "não sei o evento"
+  let achado = null;
+  const visitar = (o, prof = 0) => {
+    if (achado || !o || typeof o !== 'object' || prof > 30) return;
+    if (!Array.isArray(o) && String(o.id) === oferta && o.auction?.id != null) { achado = String(o.auction.id); return; }
+    for (const v of Object.values(o)) visitar(v, prof + 1);
+  };
+  visitar(dados);
+  return achado;
+}
+
 export async function contatoDaPaginaDoLote({ fonte, linkLote, auctionId }, deadline = Date.now() + 15000) {
   if (!fonteComContatoNaPagina(fonte)) return { contato: null, motivo: 'fonte sem contato por evento' };
   if (!/^https?:\/\//i.test(String(linkLote || ''))) return { contato: null, motivo: 'lote sem link' };
-  if (!auctionId) return { contato: null, motivo: 'lote sem id do evento (raw.auction.id)' };
   const b = await paginaViaBanco(linkLote, deadline);
   if (!b.html) return { contato: null, motivo: `página do lote indisponível (${b.motivo})` };
-  return contatoDoEventoSuperbid(b.html, auctionId);
+  const evento = auctionId || eventoDaOferta(b.html, linkLote);
+  if (!evento) return { contato: null, motivo: 'id do evento não encontrado (nem no lote nem na página da oferta)' };
+  return contatoDoEventoSuperbid(b.html, evento);
+}
+
+// IMÓVEL da Superbid (13/10): 762 dos 1.245 ativos são de OUTROS leiloeiros dentro da plataforma (KRON,
+// Camila Presotto, André Luiz…) e o cadastro devolvia para eles o SAC da SOLD (imoveis.sac). Organizador
+// do evento quando a página o publica; senão `null` e o chamador segue no cadastro — que, para imóvel,
+// é o SAC de imóveis da própria Superbid (ele atende imóvel; só não atende veículo).
+export async function contatoImovelSuperbid({ linkLote }, deadline = Date.now() + 12000) {
+  const r = await contatoDaPaginaDoLote({ fonte: 'SUPERBID', linkLote }, deadline);
+  return r.contato?.email ? { contato: r.contato, motivo: null } : { contato: null, motivo: r.motivo };
 }
 
 // CANAL COMERCIAL DA SUPERBID (30/09): o atendimento do próprio site (chat "Yara", lote 5013583)

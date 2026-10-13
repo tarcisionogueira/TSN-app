@@ -45,7 +45,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { comExtensao, urlDiretaDoDocumento } from './_anexo-nome.js';
 import { redigirProposta } from './_redator-proposta.js';
-import { contatoVeiculoSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
+import { contatoVeiculoSuperbid, contatoImovelSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 import { assinarDocumento } from './_storage.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
@@ -277,10 +277,15 @@ export default async function handler(req) {
       if (r.contato?.email) destinatarios = [norm(r.contato.email)];
       if (r.contato?.cc) ccList = [norm(r.contato.cc)];
     } else {
-      const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: loteFonte || '', p_leiloeiro: lote?.leiloeiro || null }) });
-      if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
-      const [contato] = await rContato.json();
-      if (contato?.email) destinatarios = [norm(contato.email)];
+      // Imóvel da Superbid: organizador do evento primeiro (13/10); o cadastro fica de reserva.
+      const org = imovel && fonteComContatoNaPagina(loteFonte) ? await contatoImovelSuperbid({ linkLote: imovel.url_lote }) : null;
+      if (org?.contato?.email) destinatarios = [norm(org.contato.email)];
+      else {
+        const rContato = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: loteFonte || '', p_leiloeiro: lote?.leiloeiro || null }) });
+        if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
+        const [contato] = await rContato.json();
+        if (contato?.email) destinatarios = [norm(contato.email)];
+      }
     }
   } else {
     // Jurídico: mesma resolução de api/enviar-juridico-email.js (destinatários do escritório

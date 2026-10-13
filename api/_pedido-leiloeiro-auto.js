@@ -27,6 +27,7 @@
  * Nunca lança: o chamador é a geração do relatório, e o pedido é acessório a ela. O retorno diz
  * O QUE aconteceu (`status`), inclusive a falha — não um null que se confunde com "não precisou".
  */
+import { contatoImovelSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 import { enviarEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -130,9 +131,14 @@ export async function pedirDocumentosAoLeiloeiro({ imovelId, userId, faltando })
     if (prox.encerrado) return { status: 'nada_a_pedir' };
     if (prox.ms && prox.ms - Date.now() < PRAZO_MIN_LEILAO_H * 3_600_000) return { status: 'prazo_curto' };
 
-    const rc = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null }) });
-    if (!rc.ok) return { status: 'erro', erro: `contato HTTP ${rc.status}` };
-    const [contato] = await rc.json();
+    // Superbid (13/10): organizador do EVENTO na página da oferta antes do cadastro (que dá o SAC da SOLD
+    // para os 48 leiloeiros da plataforma). Sem organizador, segue o cadastro como antes.
+    let contato = fonteComContatoNaPagina(imovel.fonte) ? (await contatoImovelSuperbid({ linkLote: imovel.url_lote })).contato : null;
+    if (!contato?.email) {
+      const rc = await sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null }) });
+      if (!rc.ok) return { status: 'erro', erro: `contato HTTP ${rc.status}` };
+      [contato] = await rc.json();
+    }
     const itensTexto = itens.map(t => ROTULO[t]);
     const base = { imovel_id: String(imovelId), user_id: userId, fonte: imovel.fonte || null, itens_pedidos: itensTexto, automatico: true };
 

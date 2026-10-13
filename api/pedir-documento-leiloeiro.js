@@ -33,6 +33,7 @@
  */
 export const config = { runtime: 'edge' };
 
+import { contatoImovelSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 import { contatosAlternativos, mensagemBloqueio } from './_contatos-alternativos.js';
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
@@ -158,7 +159,13 @@ export default async function handler(req) {
     sb('rpc/telefone_leiloeiro_resolver', { method: 'POST', body: argsContato }).catch((e) => ({ ok: false, status: String(e?.message || e).slice(0, 60) })),
   ]);
   if (!rContato.ok) return json({ error: `Não consegui consultar o contato do leiloeiro agora (HTTP ${rContato.status}). Tente de novo.` }, 502);
-  const [contato] = await rContato.json();
+  let [contato] = await rContato.json();
+  // Superbid (13/10): o organizador do EVENTO vence o cadastro da fonte (SAC da SOLD para todos os 48
+  // leiloeiros da plataforma); sem organizador publicado, fica o cadastro.
+  if (fonteComContatoNaPagina(imovel.fonte)) {
+    const org = await contatoImovelSuperbid({ linkLote: imovel.url_lote });
+    if (org.contato?.email) contato = { ...(contato || {}), email: org.contato.email, escopo: 'organizador do evento' };
+  }
   let telefone = null, telefoneErro = false;
   if (rTel.ok) {
     const [t] = await rTel.json().catch(() => [null]);
