@@ -82,6 +82,21 @@ function atributos(l) {
   return out;
 }
 const areaDoAtributo = (v) => extrairAreaM2(`${v} m²`, { permitirSolta: true });
+// Área tirada do TEXTO: em apartamento, número acima de 1.000 m² é o terreno do condomínio (Bertioga,
+// 13/10: "Fração ideal de 0,78125% do TERRENO … área total de 6.629,90 m²" e nenhuma área da unidade).
+// Área desconhecida é melhor que área do prédio inteiro — ela some do R$/m² em vez de distorcê-lo.
+function areaDoTexto(titulo, desc, tipo) {
+  const a = extrairAreaM2(titulo || '') || extrairAreaM2(desc || '') || 0;
+  return tipo === 'apartamento' && a > 1000 ? 0 : a;
+}
+// Lote sem city_id/state_id (Picelli, Serra Negra): o endereço do Google traz "…, Cidade - UF, Brasil"
+// ou "979M+XVW Serra Negra, SP" (Plus Code na frente — tirado antes).
+export function cidadeDoEndereco(endereco) {
+  const t = String(endereco || '').replace(/\b[0-9A-Z]{4,8}\+[0-9A-Z]{2,3}\b/g, ' ').replace(/,?\s*Brasil\s*$/i, '').trim();
+  const ms = [...t.matchAll(/(?:^|[,\-–]\s*)([A-ZÀ-Ú][A-Za-zÀ-ú'. ]{1,40}?)\s*[,\-–]\s*([A-Z]{2})\b/g)];
+  const m = ms[ms.length - 1];
+  return m ? { cidade: m[1].trim(), uf: m[2] } : { cidade: null, uf: null };
+}
 // Ordem do que baliza R$/m²: privativa > útil > construída > total > terreno.
 const AREAS = ['area privativa', 'area util', 'area construida', 'area construida (m2)', 'area construida (m²)', 'area total', 'area terreno'];
 const diaBR = iso => { const d = new Date(iso); return Number.isNaN(+d) ? null : new Date(+d - 3 * 3600e3).toISOString().slice(0, 10); };
@@ -95,6 +110,8 @@ export function detalheDoLote(l, agora = Date.now()) {
   const vig = iVig >= 0 ? fases[iVig] : null, prox = iVig >= 0 ? fases[iVig + 1] : null;
   const desc = stripHtml(l.description);
   const attrs = atributos(l);
+  const tipo = inferirTipo(`${l.categories?.name || ''} ${l.title || ''}`, '');
+  const local = (l.cities?.name && l.states?.code) ? {} : cidadeDoEndereco(l.address);
   const avaliacao = plaus(num(l.evaluation_value)) || plaus(num(fases[0]?.initial_value));
   const minimo = plaus(num(vig?.initial_value)) || avaliacao;
   const minimo2 = prox ? plaus(num(prox.initial_value)) : 0;
@@ -113,7 +130,7 @@ export function detalheDoLote(l, agora = Date.now()) {
     id: l.id,
     titulo: String(l.title || '').trim() || null,
     descricao: desc.slice(0, 8000) || null,
-    cidade: l.cities?.name || null, estado: l.states?.code || null,
+    cidade: l.cities?.name || local.cidade, estado: l.states?.code || local.uf,
     endereco: String(l.address || '').trim() || null,
     latitude: coordOk ? lat : null, longitude: coordOk ? lon : null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
@@ -123,7 +140,7 @@ export function detalheDoLote(l, agora = Date.now()) {
     modalidade,
     tipo_hint: `${l.categories?.name || ''} ${l.title || ''}`,
     area_m2: AREAS.map(k => attrs.get(k)).filter(Boolean).map(areaDoAtributo).find(v => v > 0)
-      || extrairAreaM2(l.title || '') || extrairAreaM2(desc) || 0,
+      || areaDoTexto(l.title, desc, tipo),
     numero_matricula: (attrs.get('matricula') || '').replace(/[^\d.]/g, '').replace(/^\.+|\.+$/g, '') || numeroMatriculaDoTexto(desc),
     numero_processo: String(l.judicial_process_number || '').trim() || null,
     link_foto: fotos[0] || null, fotos,

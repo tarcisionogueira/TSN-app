@@ -16,6 +16,18 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 13/10 (noite) — plataforma ARES (picelli + shiokawa): INTEGRADA (`scripts/lib/ares-parse.mjs`, fontes PICELLI/SHIOKAWA)
+- "Ares Plataforma de Leilões" (Agência Ares): React + Supabase, UM projeto por leiloeiro em `api.<domínio>/rest/v1`.
+  A API exige `apikey: sb_publishable_…` — a chave que o próprio site manda (pública). Shiokawa: lida do
+  `assets/client-*.js`. Picelli: site atrás de Cloudflare → lida pelo `recon-dom.yml` (agora imprime a chave
+  publishable que o navegador envia). Chave trocada = `api HTTP 401` na saúde da fonte → rodar o recon de novo.
+- Catálogo numa consulta (`lots` + cidades/UF/categoria/leilão/praças/fotos/documentos tipados/atributos). Picelli:
+  161 lotes vivos, 74 imóveis (73 prontos). Shiokawa: 8 de imóvel, 3 vivos (o resto = lote de TESTE e anúncio
+  "Leads" marcados `aberto` com praça vencida). Área e matrícula vêm de `lot_attributes` (o texto cita a área do
+  condomínio antes da unidade). NÃO ler `judicial_defendant`/`plaintiff` (CPF) nem tabelas de usuário.
+- Outros sites da plataforma: procurar `Ares Plataforma de Leilões` no `<meta name=description>` — é só
+  acrescentar o tenant (base da API + chave) em `TENANTS`.
+
 ## 📊 13/10 — e-leiloes: recon feito (custo zero, pg_net) — PRONTO PARA CONSTRUIR
 - e-leiloeiro.com.br e e-confianca.com.br = o MESMO portal **e-leiloes.com.br** (canonical), infra Suporte
   Leilões (CDN `static.e-leiloes.com.br/eleiloescombr/…`, `sl-bem-…`), front-end Nuxt 3 (4º template).

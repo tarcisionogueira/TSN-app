@@ -1,7 +1,7 @@
 // ARES (13/10): catálogo PostgREST → linha do acervo. Formas REAIS do Shiokawa (Bertioga, 2 praças;
 // "REPASSE 1" de teste com praça vencida; anúncio "Leads"; categoria eletrônicos).
 import assert from 'node:assert/strict';
-import { extrairUrlsDeLote, detalhesDoCatalogo, detalheDoLote, montarRow, idDaUrl, TENANTS } from '../lib/ares-parse.mjs';
+import { extrairUrlsDeLote, detalhesDoCatalogo, detalheDoLote, montarRow, idDaUrl, cidadeDoEndereco, TENANTS } from '../lib/ares-parse.mjs';
 
 const T = TENANTS.shiokawa;
 const dia = (d) => new Date(Date.now() + d * 864e5).toISOString();
@@ -58,5 +58,14 @@ assert.equal(dets.get(urls.get(teste.id)).encerrado, true);
 assert.equal(dets.get(urls.get(leads.id)).encerrado, true);
 assert.equal(detalheDoLote({ ...bertioga, latitude: 0, longitude: 0 }).latitude, null);
 assert.equal('latitude' in montarRow('u', detalheDoLote({ ...bertioga, latitude: null, longitude: null }), T), false);
+
+// (5) Texto REAL de Bertioga: só a área do terreno do condomínio → área desconhecida, não 6.629,90.
+const real = detalheDoLote({ ...bertioga, description: 'Fração ideal de 0,78125% do TERRENO sob nº 110 … medindo 66,66 metros de frente … encerrando a área total de 6.629,90 m², confrontando …' });
+assert.equal(real.area_m2, 0);
+// (6) Cidade/UF do endereço quando a API não traz (Picelli, Serra Negra) — Plus Code e "Brasil" fora.
+assert.deepEqual(cidadeDoEndereco('979M+XVW Serra Negra, SP'), { cidade: 'Serra Negra', uf: 'SP' });
+assert.deepEqual(cidadeDoEndereco('Avenida Doutor Leonardo de Bonna, 110 - Centervalle, Bertioga - SP, Brasil'), { cidade: 'Bertioga', uf: 'SP' });
+const semCid = detalheDoLote({ ...bertioga, cities: null, states: null, address: '979M+XVW Serra Negra, SP' });
+assert.deepEqual([semCid.cidade, semCid.estado], ['Serra Negra', 'SP']);
 
 console.log('✓ ares-praca-e-filtros: listagem, praças, docs, fotos, teste/Leads e coordenada');
