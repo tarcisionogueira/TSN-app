@@ -464,6 +464,29 @@ async function handler(req) {
     return { status: 'ok', detalhe: `configurado e válido (${bruto.slice(0, 2)}.${bruto.slice(2, 5)}.***)` };
   }));
 
+  // ── 4b. Gateways de pagamento — a CHAVE ainda é aceita? (13/10) ──
+  // Chave revogada/expirada não dá erro em lugar nenhum até o dia em que é preciso: o Asaas é
+  // o BACKUP do checkout e só é chamado quando o MP falha — exatamente o pior momento para
+  // descobrir que a chave morreu (o Asaas expira chave parada há 6 meses). Leitura de saldo
+  // é a consulta mais barata que exige a chave válida. 401/403 = chave recusada = erro.
+  const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
+  itens.push(await check('Pagamentos — chave do Asaas (backup)', async () => {
+    if (!ASAAS_KEY) return { status: 'erro', detalhe: 'ASAAS_API_KEY não configurada — o checkout fica sem backup' };
+    const base = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    const r = await fetch(`${base}/finance/balance`, { headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(15000) });
+    if (r.status === 401 || r.status === 403) return { status: 'erro', detalhe: `Asaas recusou a chave (HTTP ${r.status}) — checkout sem backup; gere nova chave e atualize ASAAS_API_KEY` };
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return { status: 'ok', detalhe: 'chave aceita' };
+  }));
+  const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
+  itens.push(await check('Pagamentos — token do Mercado Pago (principal)', async () => {
+    if (!MP_TOKEN) return { status: 'erro', detalhe: 'MP_ACCESS_TOKEN não configurado — checkout principal fora' };
+    const r = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${MP_TOKEN}` }, signal: AbortSignal.timeout(15000) });
+    if (r.status === 401 || r.status === 403) return { status: 'erro', detalhe: `Mercado Pago recusou o token (HTTP ${r.status}) — checkout principal fora` };
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return { status: 'ok', detalhe: 'token aceito' };
+  }));
+
   // ── 5. Daily.co — API ──
   if (DAILY_KEY) {
     itens.push(await check('Daily.co — API', async () => {

@@ -48,7 +48,7 @@ async function handler(req) {
         const ext = String(p.external_reference || '').trim();
         const [refUser, refPlano] = ext.includes('|') ? ext.split('|') : [];
         const usuario = refUser || p.metadata?.user_id || p.metadata?.userId || null;
-        const { error } = await supabase.from('mp_pagamentos').upsert({
+        const linha = {
           mp_payment_id: String(p.id),
           user_id: usuario,
           plano_key: refPlano || p.metadata?.planoKey || null,
@@ -77,7 +77,15 @@ async function handler(req) {
           // chegou a aprovar. Não afeta o webhook (já grava perto da hora real).
           criado_em: p.date_approved || p.date_created || new Date().toISOString(),
           atualizado_em: new Date().toISOString(),
-        }, { onConflict: 'mp_payment_id' });
+        };
+        let { error } = await supabase.from('mp_pagamentos').upsert(linha, { onConflict: 'mp_payment_id' });
+        // 13/10: venda de conta que depois foi APAGADA tem external_reference com um user_id que
+        // não existe mais → violação de FK e o pagamento nunca era gravado (176064159391 falhava
+        // toda semana). O dinheiro entrou do mesmo jeito: grava sem o vínculo, mantendo `origem`
+        // (continua venda nossa) e o external_ref, que preserva quem era.
+        if (error?.code === '23503' && linha.user_id) {
+          ({ error } = await supabase.from('mp_pagamentos').upsert({ ...linha, user_id: null }, { onConflict: 'mp_payment_id' }));
+        }
         if (!error) gravados++;
         else { falhasGravacao++; console.error('[backfill-mp] upsert falhou', p.id, error.message); }
       }
