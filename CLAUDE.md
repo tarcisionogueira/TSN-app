@@ -95,6 +95,14 @@ curto (5–8 linhas) antes de seguir:
    >   round(100.0*count(*) filter (where tem_matricula_doc)/count(*),0) as pct_matricula
    >   from imoveis_leilao where ativo and fonte not in ('CEF','caixa') group by 1 having count(*)>=20 order by 3, 2 desc;
    > ```
+   > **1b-bis. ERROS DE RUNTIME DO SERVIDOR (Vercel) — custo zero, uma chamada (13/10):**
+   > `mcp__Vercel__get_runtime_errors` (projectId `prj_E0tUYhPJN9IteuNI8spS0CEgZuxo`, teamId
+   > `team_NX93pzFY6eXbk8CWxjjilEle`, `since: "24h"`). Agrupa o que as funções LOGARAM com erro. Foi
+   > assim que apareceu, em 13/10, que **toda leitura de texto de PDF falhava em produção desde
+   > 22/09** (worker do pdf.js fora do pacote): o banco não acusava nada porque os outros pontos
+   > engoliam o erro e caíam na leitura por IA. Leia o motivo de cada grupo; ruído conhecido
+   > (`DEP0169 url.parse`, `sem cota Bright Data`) não é achado. E o Sentry só cobre o NAVEGADOR —
+   > enquanto o filtro "browser-extensions" estiver ligado (#201), ele descarta tudo.
    > **Duas checagens automáticas convivem, e elas NÃO são a mesma coisa:**
    > `/api/health-check` (2×/dia, **custo zero** — não usa IA; só manda e-mail quando há
    > problema) **continua ligado e deve continuar**. A auditoria do Claude

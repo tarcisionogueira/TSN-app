@@ -42,6 +42,23 @@ acumular em paralelo com o rastro narrativo das Partes abaixo.
   `casos-acompanhamento-cron` não pede guia ao jurídico se ela já está em `guias[idx]`. Guias de parcela paga saem do
   jsonb (teto de 8 KB da RPC). Valor da 1/16 calculado com o dono: R$ 25.704,15 × IPCA-15 set/26 (0,70%) = R$ 25.884,08.
 
+### 📌 13/10 (madrugada de 14) — #203, coletor e-Leilões, PDF em produção, revisão dos conectores
+- **#203 fechada** (c7153e4): Política de Privacidade cita PostHog e Sentry, transferência internacional e retenção.
+- **e-Leilões no ar** (`scripts/lib/eleiloes-parse.mjs`, fonte `ELEILOES`, cron 8h50 UTC): `__NUXT_DATA__` em devalue
+  → o MESMO `lote` do leilaobrasil (`parseLoteObj` exportado). Praça vigente decidida pelas datas (`valorMinimo` vem 0:
+  lote na 2ª praça sairia com o lance da 1ª). **JSON-LD `availability` NÃO serve** — `OutOfStock` também em lote aberto
+  (o 1º ensaio marcou o 38390 como encerrado; corrigido para "última praça vencida"). 15/15 gravados, saúde `ok · 15`.
+  Teste: `npm run testar:eleiloes`.
+- **PDF em produção estava QUEBRADO desde 22/09 (e02a862):** `pdf.worker.mjs` fora do pacote da Vercel (o pdf.js o
+  carrega por `import()` dinâmico). 35/35 PDFs do documental com `charsTexto` nulo; 58 falhas do espelho na semana.
+  Conserto em `_pdf-safe.js` (worker em `globalThis.pdfjsWorker`, import literal do pdfjs ANINHADO no pdf-parse) —
+  provado com `@vercel/nft` (antes sem o arquivo, depois com). Verificação = pendência **#205**.
+- **Conectores:** PostHog recebe (`$pageview`, `$dead_click`, `$identify`; tráfego baixo bate com o nosso rastreador —
+  #202 segue até 15/10). Sentry: 0 aceitos, tudo `filtered: browser-extensions` (#201, dono). Resend: 233 enviados,
+  98,3% entregues, 4 bounces, banco × Resend batem por dia — sadio. **Vercel runtime errors entrou no ritual (1b-bis)**:
+  foi a única fonte que mostrou o PDF. Reconciliar-assinaturas loga o status do MP agora (#206; o caso 059f6e7a… é
+  ex-pagante com cartão recusado — rebaixamento correto).
+
 ### 📌 13/10 (noite) — vitrine sem cópia/arrematado, crons de limpeza, painel único, parceiro, PostHog
 - Vitrine: veículo relistado (mesma 1ª foto+título+fonte) e 2ª praça publicada como outro anúncio → `reconciliar_relistados()`
   (RPC própria, hora em hora); veículo encerrado COM lance sai; sem-lance 15 d contados da DATA do leilão. 1ª rodada 2.445.

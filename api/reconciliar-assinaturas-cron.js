@@ -74,6 +74,8 @@ async function handler(req) {
   let verificados = 0, corrigidos = 0, rebaixados = 0;
   const mpGet = async (path) => {
     const r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+    // 13/10: o null sozinho não dizia POR QUE — "histórico indisponível" repetia 1×/h sem o status.
+    if (!r.ok) console.error('[reconciliar] MP', path.split('?')[0], 'HTTP', r.status, (await r.text().catch(() => '')).slice(0, 160));
     return r.ok ? r.json() : null;
   };
   try {
