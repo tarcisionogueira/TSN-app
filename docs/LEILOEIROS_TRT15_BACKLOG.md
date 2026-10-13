@@ -29,7 +29,7 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
   (`?page=N`, 12/pág), não pelo sitemap. Detalhe = o MESMO objeto `lote` do leilaobrasil-parse (bem/leilao/
   dataFimPraca1-2/valorInicial2/arquivos) — só que valorAvaliacao vem 0: usar valorInicial como 1ª praça.
 - **Detalhe:** JSON-LD `Product` (name, description, image, offers.price, offers.priceValidUntil = data,
-  availability InStock/OutOfStock = ativo/encerrado, seller = comitente, broker = leiloeiro + JUCESP) +
+  availability ⚠️ NÃO confiável (OutOfStock também em lote aberto — medido 13/10), seller = comitente, broker = leiloeiro + JUCESP) +
   BreadcrumbList (Imóveis › Terreno = tipo). Avaliação/praças/endereço/documentos no `__NUXT_DATA__`
   (formato devalue: array com referências por índice — precisa de um decodificador pequeno).
 - Plano: `lib/eleiloes-parse.mjs` (JSON-LD + devalue) + fonte do motor + workflow com DRYRUN=1 na CI,

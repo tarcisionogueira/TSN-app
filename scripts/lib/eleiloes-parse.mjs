@@ -84,20 +84,6 @@ export function extrairUrlsDeLote(html, base) {
   return urls;
 }
 
-// JSON-LD Product: availability OutOfStock = lote encerrado (vendido/sem venda) no próprio site.
-function disponibilidade(html) {
-  for (const m of String(html || '').matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    try {
-      const j = JSON.parse(m[1]);
-      for (const o of Array.isArray(j) ? j : [j]) {
-        const av = o?.offers?.availability;
-        if (o?.['@type'] === 'Product' && av) return String(av);
-      }
-    } catch { /* bloco JSON-LD inválido: segue para o próximo — a disponibilidade é só um reforço */ }
-  }
-  return null;
-}
-
 const FOTO = /\.(jpe?g|png|webp)(\?|$)/i;
 const DOC = /\.(pdf|docx?)(\?|$)/i;
 
@@ -137,7 +123,11 @@ export function parseDetalhe(html, url) {
   det.link_edital = edital || det.link_edital;
   det.anexos = [...new Set([...docsLeilao, ...arquivos.filter(u => DOC.test(u))])]
     .map(u => (u === edital ? { tipo: 'edital', nome: 'Edital', url: u } : { tipo: 'documento', nome: 'Documento do lote', url: u }));
-  det.encerrado = /OutOfStock|SoldOut|Discontinued/i.test(disponibilidade(html) || '');
+  // ENCERRADO pela data da última praça. O JSON-LD `offers.availability` NÃO serve: o site publica
+  // `OutOfStock` também em lote ABERTO para lances (medido 13/10 nos lotes 38390 e 38411) — usá-lo
+  // descartaria o acervo inteiro como "encerrado" (forma nº 10, o sinal mede outra coisa).
+  const ultima = p2 && (!p1 || p2 > p1) ? p2 : p1;
+  det.encerrado = !!ultima && ultima < hoje;
   return det;
 }
 

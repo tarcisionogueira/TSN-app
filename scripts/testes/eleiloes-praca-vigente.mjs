@@ -53,9 +53,10 @@ assert.equal(r.data_leilao, dia(5).date.slice(0, 10));
 assert.ok(r.data_leilao_2?.startsWith(dia(25).date.slice(0, 10)));
 assert.equal(r.valor_minimo_2, 183681);
 
-// (3) JSON-LD OutOfStock = encerrado no site; página sem __NUXT_DATA__ = null (sem detalhe, não "encerrado").
+// (3) Última praça vencida = encerrado; JSON-LD OutOfStock NÃO decide (o site o publica em lote aberto).
 const ld = '<script type="application/ld+json">{"@type":"Product","offers":{"availability":"https://schema.org/OutOfStock"}}</script>';
-assert.equal(parseDetalhe(pagina({ data: { 'lote-38390': lote(dia(-30), dia(-10)) } }, ld), URL).encerrado, true);
+assert.equal(parseDetalhe(pagina({ data: { 'lote-38390': lote(dia(-7), dia(14)) } }, ld), URL).encerrado, false);
+assert.equal(parseDetalhe(pagina({ data: { 'lote-38390': lote(dia(-30), dia(-10)) } }), URL).encerrado, true);
 assert.equal(parseDetalhe('<html>sem nuxt</html>', URL), null);
 
 // (4) Listagem: só a chave da categoria (o "featured" mistura veículos).
