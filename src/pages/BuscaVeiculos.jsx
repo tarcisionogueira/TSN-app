@@ -19,7 +19,7 @@ const POR_PAGINA = 20;
 const PATIO_VISIVEL = ['confirmado', 'nao_confirmado'];
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'marca_busca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
-  'valor_minimo', 'valor_avaliacao', 'valor_fipe', 'fipe_status', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
+  'valor_minimo', 'valor_avaliacao', 'valor_fipe', 'fipe_status', 'desconto_percentual', 'desconto_fipe_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
   // Direto da API do leiloeiro (11/09) — ver supabase/migrations/veiculos_leilao_sinais_leiloeiro.sql
   'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao',
   // Categoria do veículo (13/09, pedido do dono) — ver supabase/migrations/veiculos_leilao_tipo_veiculo.sql
@@ -279,7 +279,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMin: '', valorMax: '',
-    valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
+    valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', descontoBase: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -319,7 +319,14 @@ function aplicarFiltros(q, f, ign = new Set()) {
   // combina os dois por AND. `valorAvaliacaoMax` manteve o nome por compatibilidade; hoje é o teto da referência.
   if (!ign.has('valorRefMin') && f.valorRefMin) { const n = Number(f.valorRefMin); q = q.or(`valor_fipe.gte.${n},and(valor_fipe.is.null,valor_avaliacao.gte.${n})`); }
   if (!ign.has('valorAvaliacaoMax') && f.valorAvaliacaoMax) { const n = Number(f.valorAvaliacaoMax); q = q.or(`valor_fipe.lte.${n},and(valor_fipe.is.null,valor_avaliacao.gt.0,valor_avaliacao.lte.${n})`); }
-  if (!ign.has('descontoMin') && f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  // DESCONTO SOBRE (14/10, dono): FIPE · avaliação · padrão = FIPE e, sem FIPE, a avaliação — a mesma
+  // régua da faixa de referência acima. `desconto_fipe_percentual` é mantido por trigger no banco.
+  if (!ign.has('descontoMin') && f.descontoMin) {
+    const n = Number(f.descontoMin);
+    if (f.descontoBase === 'fipe') q = q.gte('desconto_fipe_percentual', n);
+    else if (f.descontoBase === 'avaliacao') q = q.gte('desconto_percentual', n);
+    else q = q.or(`desconto_fipe_percentual.gte.${n},and(valor_fipe.is.null,desconto_percentual.gte.${n})`);
+  }
   if (!ign.has('tipoMonta') && f.tipoMonta.length) {
     const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
     const conds = [];
@@ -434,6 +441,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         : f.ordenacao === 'valor_desc' ? ['valor_minimo', false]
         : f.ordenacao === 'ano_desc' ? ['ano_fabricacao', false]
         : f.ordenacao === 'desconto_desc' ? ['desconto_percentual', false]
+        : f.ordenacao === 'desconto_fipe_desc' ? ['desconto_fipe_percentual', false]
         : ['atualizado_em', false];
       q = q.order(coluna, { ascending: dir, nullsFirst: false });
       const de = (p - 1) * POR_PAGINA;
@@ -552,7 +560,14 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
               <option value="40">40% ou mais</option>
               <option value="60">60% ou mais</option>
             </select>
-            {filtros.descontoMin && <small style={avisoCobertura}>{AVISO_SEM_AVALIACAO}</small>}
+            {filtros.descontoMin && (
+              <select style={{ ...inp, marginTop: 6 }} value={filtros.descontoBase} onChange={e => setFiltros(f => ({ ...f, descontoBase: e.target.value }))} title="Sobre qual valor o desconto é medido">
+                <option value="">sobre a FIPE (sem FIPE, avaliação)</option>
+                <option value="fipe">só sobre a FIPE</option>
+                <option value="avaliacao">só sobre a avaliação</option>
+              </select>
+            )}
+            {filtros.descontoMin && <small style={avisoCobertura}>{filtros.descontoBase === 'avaliacao' ? AVISO_SEM_AVALIACAO : AVISO_SEM_REFERENCIA}</small>}
           </div>
           <div>
             <label style={lbl}>Tipo de monta</label>
@@ -599,7 +614,8 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
               <option value="valor_asc">Menor lance</option>
               <option value="valor_desc">Maior lance</option>
               <option value="ano_desc">Ano (mais novo)</option>
-              <option value="desconto_desc">Maior desconto</option>
+              <option value="desconto_desc">Maior desconto (avaliação)</option>
+              <option value="desconto_fipe_desc">Maior desconto (FIPE)</option>
             </select>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -648,7 +664,9 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       {!loading && !erro && resultados.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
           {resultados.map(v => {
-            const desc = desconto(v);
+            // Selo: desconto sobre a FIPE quando há (mesma régua do filtro); senão, sobre a avaliação.
+            const descFipe = v.desconto_fipe_percentual ?? null;
+            const desc = descFipe ?? desconto(v);
             const fotos = fotosArray(v);
             const cont = contagemLeilao(v.data_leilao);
             const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
@@ -662,7 +680,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                   <LazyImage src={fotos} alt={v.titulo} style={{ width: '100%', height: '100%' }} />
                   {desc != null && (
                     <div style={{ position: 'absolute', top: 8, right: 8, background: desc >= 40 ? '#16a34a' : desc >= 20 ? '#d97706' : '#dc2626', color: 'white', fontWeight: 900, fontSize: 13, padding: '3px 8px', borderRadius: 8 }}>
-                      -{desc}%
+                      -{desc}%{descFipe != null && <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 3 }}>FIPE</span>}
                     </div>
                   )}
                   {v.leiloeiro && (
