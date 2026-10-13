@@ -21,6 +21,13 @@ const pct = valoresDoTexto('Valor da avaliação: R$ 200.000,00. A venda se dar�
 assert.equal(pct.avaliacao, 200000); assert.equal(pct.minimo, 120000);
 assert.deepEqual(valoresDoTexto('sem números'), { avaliacao: 0, minimo: 0, pctMinimo: null });
 
+// Formas reais do edital TRT-2 (13/10): mínimo com o percentual (avaliação sai dele) e 1º leilão pela avaliação.
+const ref = valoresDoTexto('Fixo o preço mínimo de R$ 600.000,00 (seiscentos mil reais), referente a 60% do valor da avaliação realizada pelo Oficial de Justiça.');
+assert.equal(ref.minimo, 600000); assert.equal(ref.avaliacao, 1000000);
+const primeiro = valoresDoTexto('Bem avaliado em R$ 690.000,00. No 1º leilão os bens somente poderão ser arrematados por valor igual ou superior ao de sua avaliação.');
+assert.deepEqual([primeiro.avaliacao, primeiro.minimo], [690000, 690000]);
+assert.equal(valoresDoTexto('custas de R$ 1.080,00 a título de avaliação').avaliacao, 0, 'piso de R$ 10 mil');
+
 const urls = extrairUrlsDeLote('<a href="/externo/leilao/2255">x</a><a href="/externo/leilao/2251">y</a>', 'https://www.sanchesleiloes.com.br');
 assert.deepEqual([...urls.keys()], ['2255', '2251']);
 console.log('✓ externo-pagina-e-valores: página do leilão, arquivos nomeados, cidade/UF e valores do edital');

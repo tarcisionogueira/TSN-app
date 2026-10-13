@@ -17,6 +17,7 @@
 import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
 import { numeroMatriculaDoTexto, extrairAreaM2 } from '../../api/_texto-imovel.js';
 import { carregarPDFParse } from '../../api/_pdf-safe.js';
+import { buscarViaBrightData, ErroBrightData } from '../../api/_brightdata.js';
 
 export const TENANTS = {
   sanches: { fonte: 'SANCHES', leiloeiro: 'Antônio Sanches Ramos Junior (JUCESP 677)', base: 'https://www.sanchesleiloes.com.br' },
@@ -28,7 +29,8 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 const limpa = s => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
 const reais = s => { const n = Number(String(s || '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
-const plaus = v => (v >= 1000 && v <= 500_000_000 ? v : 0);
+// Piso de R$ 10 mil: o edital cita custas e taxas (o leilão 2223 leu "R$ 1.080,00" como avaliação).
+const plaus = v => (v >= 10_000 && v <= 500_000_000 ? v : 0);
 
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
@@ -78,33 +80,52 @@ const RS = String.raw`R\$\s*([\d.]{1,15},\d{2})`;
 export function valoresDoTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
   const achar = (re) => { const m = t.match(re); return m ? plaus(reais(m[1])) : 0; };
-  const avaliacao = achar(new RegExp(String.raw`(?:avalia(?:do|da|ção|cao)(?:\s+total)?|valor\s+da\s+avalia(?:ção|cao))[^R]{0,80}?` + RS, 'i'));
+  let avaliacao = achar(new RegExp(String.raw`(?:avalia(?:do|da|ção|cao)(?:\s+total)?|valor\s+da\s+avalia(?:ção|cao))[^R]{0,80}?` + RS, 'i'));
   let minimo = achar(new RegExp(String.raw`(?:lance|valor|pre[çc]o)\s+m[íi]nimo[^R]{0,80}?` + RS, 'i'));
+  // "Fixo o preço mínimo de R$ 600.000,00 (…), referente a 60% do valor da avaliação" (TRT-2, 13/10):
+  // o mínimo vem com o PERCENTUAL — a avaliação sai dele quando o edital não a escreve.
+  const ref = t.match(new RegExp(RS + String.raw`[^%]{0,120}?referente\s+a\s+(\d{2,3}(?:,\d+)?)\s*%[^.]{0,40}?avalia`, 'i'));
+  if (ref) { minimo = minimo || plaus(reais(ref[1])); if (!avaliacao && minimo) avaliacao = plaus(Math.round(minimo * 100 / reais(ref[2]) * 100) / 100); }
   const pct = t.match(/(?:n[ãa]o\s+inferior\s+a|m[íi]nimo\s+de|correspondente\s+a)\s*(\d{2,3}(?:,\d+)?)\s*%[^.]{0,60}?avalia/i);
   if (!minimo && pct && avaliacao) minimo = Math.round(avaliacao * reais(pct[1]) / 100 * 100) / 100;
-  return { avaliacao, minimo, pctMinimo: pct ? reais(pct[1]) : null };
+  // "1º leilão … por valor igual ou superior ao de sua avaliação": na 1ª praça o mínimo É a avaliação.
+  if (!minimo && avaliacao && /1[ºo°]\s*leil[ãa]o[\s\S]{0,200}?igual\s+ou\s+superior\s+ao\s+de\s+sua\s+avalia/i.test(t)) minimo = avaliacao;
+  return { avaliacao, minimo, pctMinimo: pct ? reais(pct[1]) : (ref ? reais(ref[2]) : null) };
 }
 
-// PDF → texto. Direto do domínio; challenge/HTML no lugar do PDF (osvaldo põe Cloudflare no IP do
-// GitHub) → tenta o MESMO caminho nos outros domínios da plataforma (backend único).
-async function textoDoPdf(url) {
-  const caminho = (() => { try { const u = new URL(url); return u.pathname; } catch { return null; } })();
-  const candidatos = [url, ...(caminho ? BASES.map(b => b + caminho).filter(u => u !== url) : [])];
-  const motivos = [];
-  for (const u of candidatos) {
-    try {
-      const r = await fetch(u, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, signal: AbortSignal.timeout(30000) });
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (!r.ok || buf.subarray(0, 5).toString() !== '%PDF-') { motivos.push(`${new URL(u).host} HTTP ${r.status}${r.ok ? ' não-PDF' : ''}`); continue; }
-      const PDFParse = await carregarPDFParse();
-      const p = new PDFParse({ data: buf });
-      try { return { texto: String((await p.getText())?.text || ''), motivo: null }; }
-      finally { await p.destroy().catch(() => {}); }
-    } catch (e) { // padrao-ok: o motivo vai para `motivos` e sai no retorno (e no log do parser)
-      motivos.push(`${u.slice(8, 40)}: ${String(e?.message || e).slice(0, 60)}`); }
-  }
-  return { texto: '', motivo: motivos.join(' · ') || 'sem candidato' };
+// PDF → texto. Direto do domínio (grátis); recusado (o Osvaldo põe Cloudflare no IP do GitHub — 403,
+// e o mesmo caminho NÃO existe nos outros domínios: 404, medido 13/10) → Web Unlocker pelo ledger,
+// propósito `externo`. O "não" do orçamento sai NOMEADO (forma nº 5), nunca como "PDF vazio".
+async function lerPdf(buf) {
+  const PDFParse = await carregarPDFParse();
+  const p = new PDFParse({ data: buf });
+  try { return String((await p.getText())?.text || ''); }
+  finally { await p.destroy().catch(() => {}); }
 }
+async function textoDoPdf(url) {
+  const motivos = [];
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, signal: AbortSignal.timeout(30000) });
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (r.ok && buf.subarray(0, 5).toString() === '%PDF-') return { texto: await lerPdf(buf), motivo: null, via: 'gratis' };
+    motivos.push(`direto HTTP ${r.status}${r.ok ? ' não-PDF' : ''}`);
+  } catch (e) { motivos.push(`direto: ${String(e?.message || e).slice(0, 60)}`); }
+  try {
+    const bd = await buscarViaBrightData(url, { proposito: 'externo', exigirOk: false, timeoutMs: 60000 });
+    const buf = Buffer.from(await bd.arrayBuffer());
+    if (bd.ok && buf.subarray(0, 5).toString() === '%PDF-') return { texto: await lerPdf(buf), motivo: null, via: 'brightdata' };
+    motivos.push(`brightdata HTTP ${bd.status}${bd.ok ? ' não-PDF' : ''}`);
+  } catch (e) {
+    motivos.push(e instanceof ErroBrightData && e.semCota ? 'brightdata: SEM COTA (decisão de orçamento)' : `brightdata: ${String(e?.message || e).slice(0, 60)}`);
+  }
+  return { texto: '', motivo: motivos.join(' · ') };
+}
+
+// O MESMO imóvel publicado por dois leiloeiros da plataforma (13/10: Sanches 2251 = Judhastas 2253,
+// 2247 = 2249, 2241 = 2242, 2255 = 2256 — título, data e valores idênticos). Entra uma vez só: o 1º
+// tenant da ordem fica com ele; os seguintes saem como `encerrado` (não contam como lote da fonte).
+const vistos = new Map();
+const chaveImovel = (titulo, data) => `${String(titulo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '')}|${data || ''}`;
 
 const TIPO_ANEXO = [[/edital/i, 'edital'], [/matr[íi]cula/i, 'matricula'], [/avalia/i, 'laudo']];
 
@@ -112,6 +133,10 @@ export async function parseDetalhe(html, url, { fetchFonte } = {}) {
   const pg = lerPaginaLeilao(html);
   if (!pg.titulo) return null; // página sem o bloco do leilão (layout mudou / challenge)
   const base = new URL(url).origin;
+  const chave = chaveImovel(pg.titulo, pg.data);
+  const dono = vistos.get(chave);
+  if (dono && dono !== base) { console.log(`[externo] ${url}: mesmo imóvel já coletado em ${dono} — fica uma vez só`); return { encerrado: true, duplicado: true }; }
+  vistos.set(chave, base);
   let arquivos = [];
   if (pg.cabecalho && fetchFonte) {
     const r = await fetchFonte(`${base}/externo/arquivos/${pg.cabecalho}`, { semBD: true });
@@ -134,8 +159,8 @@ export async function parseDetalhe(html, url, { fetchFonte } = {}) {
   if (v.avaliacao && !v.minimo && v.pctMinimo) v.minimo = Math.round(v.avaliacao * v.pctMinimo) / 100;
   if (!v.avaliacao || !v.minimo) {
     const amostra = textoEdital.replace(/\s+/g, ' ');
-    const i = amostra.search(/avalia|lance|m[íi]nimo/i);
-    console.warn(`[externo] ${url}: valores incompletos (aval ${v.avaliacao}, mín ${v.minimo})${motivoPdf ? ` · PDF: ${motivoPdf}` : ''}${i >= 0 ? ` · trecho: «${amostra.slice(Math.max(0, i - 80), i + 320)}»` : ''}`);
+    const trechos = [...amostra.matchAll(/.{0,120}(?:m[íi]nim|\d{2}\s*%|R\$\s*[\d.]+,\d{2}).{0,160}/gi)].slice(0, 4).map(m => `«${m[0]}»`).join(' ');
+    console.warn(`[externo] ${url}: valores incompletos (aval ${v.avaliacao}, mín ${v.minimo})${motivoPdf ? ` · PDF: ${motivoPdf}` : ''}${trechos ? ` · trechos: ${trechos}` : ''}`);
   }
 
   const { cidade, uf } = cidadeUf(pg.titulo, pg.local);
