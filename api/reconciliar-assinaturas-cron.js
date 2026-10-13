@@ -73,7 +73,15 @@ async function handler(req) {
 
   let verificados = 0, corrigidos = 0, rebaixados = 0;
   const mpGet = async (path) => {
-    const r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+    let r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+    // 13/10: o MP devolve 429 "local_rate_limited" em rajada (este cron + o da fila de webhook, que
+    // roda a cada minuto, no mesmo token). Uma nova tentativa após o Retry-After (teto 5 s) resolve
+    // o transitório; persistindo, segue o null de falha (fail-closed nos chamadores).
+    if (r.status === 429) {
+      const espera = Math.min(5000, (Number(r.headers.get('retry-after')) || 2) * 1000);
+      await new Promise(ok => setTimeout(ok, espera));
+      r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+    }
     // 13/10: o null sozinho não dizia POR QUE — "histórico indisponível" repetia 1×/h sem o status.
     if (!r.ok) console.error('[reconciliar] MP', path.split('?')[0], 'HTTP', r.status, (await r.text().catch(() => '')).slice(0, 160));
     return r.ok ? r.json() : null;
@@ -81,11 +89,9 @@ async function handler(req) {
   try {
     // ── UPGRADE: pagou (authorized) mas segue no Explorador → reativa. ─────────
     for (let offset = 0; offset < 3000; offset += 100) {
-      const r = await fetch(`https://api.mercadopago.com/preapproval/search?status=authorized&offset=${offset}&limit=100`, {
-        headers: { Authorization: `Bearer ${MP_TOKEN}` },
-      });
-      if (!r.ok) break;
-      const data = await r.json();
+      // Via mpGet (13/10): ganha o log do status e a nova tentativa no 429 — o fetch cru daqui
+      // encerrava a varredura em silêncio. Falha → null → lista vazia → para (não ativa ninguém).
+      const data = await mpGet(`/preapproval/search?status=authorized&offset=${offset}&limit=100`);
       const results = data?.results || [];
       if (!results.length) break;
 
