@@ -62,6 +62,19 @@
   `documentosAnalisados` e gravava `matricula_nao_lida,edital_nao_lido` → regeração à toa; o vício agora usa a mesma régua
   da trava (tipo do doc lido); (c) risco cortado sem severidade vira "alerta". Pendente: `extracao.dataLeilao` pegou a
   ABERTURA (06/10), não o fechamento — o acervo já tem 26/01/2027.
+- **DataJud TJSP "timeout" (17 dias desde 30/09) — medido pelo pg_net (chave pública do CNJ):** o processo do 640 EXISTE
+  no DataJud. O índice do TJSP gasta 5–9 s SÓ no Elasticsearch (`took`): match formatado+dígitos 8,0 s · match dígitos 9,0 s ·
+  term 5,2 s (as três juntas); term sozinho noutro nº 7,8 s. Somado a fila (429 es_rejected) e rede, passava dos 20 s.
+  Consertos em `api/_cnj.js`: busca por número vira `term` com os 20 dígitos (o match formatado casava pedaços como "8","26"
+  com o índice inteiro) e o teto por tribunal vai a 30 s (consultas paralelas). Busca por NOME no DataJud = 0 hits (sem
+  partes no índice público) — o código já usa o DJEN para nome. Vigiar `[cnj] falha` no 1b-bis nos próximos dias.
+- **Corte da resposta do documental (8 de 14 relatórios em 14 dias sem o raioX):** parecer médio 12,2 mil chars (máx.
+  15,4 mil) + a cadeia da matrícula repetida no raioX. Formato novo: campos curtos de classificação e `documentosAnalisados`
+  ANTES do parecer, parecer limitado a 9.000 caracteres, `raioX.cadeiaDominial` fora (o servidor copia de
+  `extracao.movimentacoesMatricula`). max_tokens segue 8.500 (o modelo gera ~45 tok/s; 12 mil estouraria os 300 s).
+- **Data do leilão no documental:** `extracao.dataLeilao` = ENCERRAMENTO da última praça (o 640 saiu com a abertura). E o
+  servidor agora ESTENDE o prazo do lote quando o edital mostra fim futuro e posterior ao do acervo (praca1/2_fim; reabre
+  `praca_vencida` e zera "sem lance"/"indeterminado"). Relatório salvo do 640 corrigido (26/01/2027, severidade vazia → alerta).
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

@@ -142,7 +142,10 @@ async function buscarTribunal(tribunal, query) {
       body: JSON.stringify({ size: 10, query }),
       // 20 s (era 12): medido 30/09 do Brasil (gru1 e pg_net), o DataJud levou 5–15 s por tribunal e
       // abortou TJSP/STJ aos 12 s numa leva de 7 relatórios. Com número são só 1–2 tribunais.
-      signal: AbortSignal.timeout(20000),
+      // 30 s (14/10): o TJSP gasta 5–9 s SÓ no Elasticsearch do CNJ (campo `took`, medido), antes de fila e
+      // rede; os 20 s abortaram TJSP/STJ em 17 dias desde 30/09 e todo documental judicial de SP saía
+      // "processo não verificado". As consultas são paralelas, então o teto não soma por tribunal.
+      signal: AbortSignal.timeout(30000),
     });
     let res = await pedir();
     // 24/09 — HTTP 429 `es_rejected_execution_exception` = a fila de busca do DataJud está cheia
@@ -570,7 +573,12 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   let query;
   if (numero_processo) {
     const numLimpo = String(numero_processo).replace(/\D/g, '');
-    query = { bool: { should: [{ match: { numeroProcesso: numero_processo } }, { match: { numeroProcesso: numLimpo } }], minimum_should_match: 1 } };
+    // 14/10 — busca EXATA (`term`) só com os 20 dígitos. O `match` com o número FORMATADO era analisado
+    // em pedaços ("0000624","77","2024","8","26","0529") e casava com boa parte do índice do TJSP (todo
+    // processo é ".8.26."), que tinha de ser ranqueado. Medido pelo pg_net no processo do BAYIT 640, com
+    // as três rodando juntas: match formatado+dígitos 8,0 s · match dígitos 9,0 s · term 5,2 s no próprio
+    // servidor do CNJ — todas acham o mesmo documento (TJSP_G1_00006247720248260529).
+    query = { term: { numeroProcesso: numLimpo } };
   } else if (nome_parte) {
     // 19/09 — NÃO envolver em `nested`: o log de erro (capturado ao vivo após o fix do corpo
     // de resposta) mostrou HTTP 400 em 6/6 tribunais com o motivo exato do Elasticsearch:
