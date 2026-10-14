@@ -2074,7 +2074,9 @@ export default async function handler(req, res) {
     if (!Array.isArray(parsed.riscos)) parsed.riscos = [];
     const exR = parsed.extracao || {};
     const promoverOuIncluir = (re, novo) => {
-      const r = parsed.riscos.find((x) => re.test(`${x?.categoria || ''} ${x?.descricao || ''}`));
+      // Pula o que a OUTRA regra já promoveu: o risco de fração cita "extinção de condomínio" e a busca da
+      // dívida (/condom[íi]ni/) o pegava de novo, deixando a dívida no nível que a IA deu (Vila Matilde, 14/10).
+      const r = parsed.riscos.find((x) => !x?.regraDono && re.test(`${x?.categoria || ''} ${x?.descricao || ''}`));
       if (r) { r.severidade = 'bloqueante'; r.constaNaDoc = true; r.diligencia = false; r.regraDono = true; return; }
       parsed.riscos.unshift({ ...novo, severidade: 'bloqueante', constaNaDoc: true, regraDono: true });
     };
