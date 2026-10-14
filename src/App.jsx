@@ -38,6 +38,7 @@ const BuscaVeiculos = lazy(() => import('./pages/BuscaVeiculos'));
 const AnaliseVeiculo = lazy(() => import('./pages/AnaliseVeiculo'));
 const VeiculoDetalhe = lazy(() => import('./pages/VeiculoDetalhe'));
 const RetomadaVeiculos = lazy(() => import('./pages/RetomadaVeiculos'));
+const CarteiraPropostas = lazy(() => import('./components/CarteiraPropostas'));
 const ImovelDetalhe = lazy(() => import('./pages/ImovelDetalhe'));
 const ImovelGate = lazy(() => import('./pages/ImovelGate'));
 const Analise = lazy(() => import('./pages/Analise'));
@@ -383,6 +384,7 @@ function MainLayout() {
           <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista']}><VeiculoDetalhe /></PrivateRoute>} />
           <Route path="/analise-veiculo" element={<PrivateRoute roles={['admin','analista']}><AnaliseVeiculo /></PrivateRoute>} />
+          <Route path="/carteira-propostas" element={<PrivateRoute roles={['admin','analista','consultor']}><div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><CarteiraPropostas /></div></PrivateRoute>} />
           <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />

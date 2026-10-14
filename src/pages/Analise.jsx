@@ -1026,6 +1026,17 @@ export default function Analise() {
             <ExternalLink size={14}/> Abrir a página do lote no leiloeiro
           </a>
         )}
+        {/* 14/10 (dono: "ainda não consigo gerar"): esta tela só oferecia anexar/pedir ao
+            leiloeiro — com um "faltam documentos" ANTIGO gravado, não havia como mandar o
+            servidor tentar ler de novo os links que a barra lateral já mostra (ex.: BAYIT, que
+            passou a ler pela cota própria do leiloeiro). Pula a pré-checagem: ela só olha se HÁ
+            link, e aqui o problema era a leitura, não a falta de link. */}
+        {!compact && (
+          <button onClick={() => gerarRelDocumental(false, true)} disabled={gerandoDocumental}
+            style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: gerandoDocumental ? 'default' : 'pointer', opacity: gerandoDocumental ? 0.6 : 1 }}>
+            <RefreshCw size={15}/> {gerandoDocumental ? 'Gerando…' : 'Buscar os documentos de novo e gerar'}
+          </button>
+        )}
         {imovelInicial?.id ? (<>
           <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
             {faltam.map(t => (

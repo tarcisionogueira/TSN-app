@@ -9,7 +9,8 @@ import { fmtBRL } from '../utils/format';
 // interesse dos clientes → desconto → prazo). A Caixa fica de fora: venda online/direta dela é
 // compra direta no site, sem leiloeiro para receber proposta.
 // Daqui a equipe abre o lote, gera os relatórios (liberados para a equipe em lote encerrado sem
-// lance — liberaEquipePosLeilao) e vai à página do leiloeiro.
+// lance — liberaEquipePosLeilao) e vai à página do leiloeiro. "Gerar relatórios" abre a análise com
+// `autoGerar`: mercadológico e documental saem em sequência, sem outro clique (mesma máquina da proposta).
 
 const TIPO = { casa: 'Casa', apartamento: 'Apto', terreno: 'Terreno', comercial: 'Comercial', rural: 'Rural', galpao: 'Galpão', imovel: 'Imóvel' };
 
@@ -56,7 +57,7 @@ export default function CarteiraPropostas() {
   const btn = (bg, fg, bd) => ({ padding: '5px 10px', borderRadius: 7, background: bg, color: fg, border: `1px solid ${bd}`, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none' });
 
   return (
-    <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ maxWidth: 1100, width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <div style={{ fontWeight: 900, fontSize: 18, color: '#111111' }}>🎯 Carteira de propostas</div>
         <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
@@ -134,7 +135,7 @@ export default function CarteiraPropostas() {
               </div>
               <div style={{ flex: '0 0 auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button onClick={() => nav(`/imovel/${l.id}`)} style={btn('white', '#334155', '#e2e8f0')}>Abrir</button>
-                <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(l.id)}`)} style={btn('#0D63DB', 'white', '#0D63DB')}>Gerar relatórios</button>
+                <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(l.id)}`, { state: { autoGerar: true } })} style={btn('#0D63DB', 'white', '#0D63DB')}>Gerar relatórios</button>
                 {l.url_lote && <a href={l.url_lote} target="_blank" rel="noopener noreferrer" style={btn('#111111', 'white', '#111111')}>Leiloeiro ↗</a>}
               </div>
             </div>

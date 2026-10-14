@@ -436,6 +436,13 @@ export default function Header() {
             </button>
           )}
 
+          {['analista','consultor','admin'].includes(papelEquipe) && (
+            <button onClick={() => nav('/carteira-propostas')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/carteira-propostas') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              🎯 Propostas
+            </button>
+          )}
+
           {['analista','advogado','consultor','admin'].includes(papelEquipe) && (
             <button onClick={() => nav('/assessorados')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/assessorados') ? '#4f46e5' : '#4f46e522', color: '#a5b4fc', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -589,6 +596,12 @@ export default function Header() {
             <button onClick={() => { nav('/cliente-360'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#5eead4', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               👤 360º Cliente
+            </button>
+          )}
+          {['analista','consultor','admin'].includes(papelEquipe) && (
+            <button onClick={() => { nav('/carteira-propostas'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              🎯 Carteira de propostas
             </button>
           )}
           {['analista','advogado','consultor','admin'].includes(papelEquipe) && (

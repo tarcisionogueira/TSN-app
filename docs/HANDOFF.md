@@ -32,6 +32,12 @@
 - **Tela Admin → Comercial → 🎯 Carteira de propostas** (`src/components/CarteiraPropostas.jsx`): lê
   `oportunidades_proposta()` (agora SEM a Caixa — venda direta é compra no site), filtros UF/leiloeiro/busca/"só com
   interesse", prazo da janela de 15 dias, e botões Abrir · Gerar relatórios · Leiloeiro. 938 lotes, 88 ms.
+- **"Ainda não consigo gerar" (14/10, tarde):** a tela dedicada de "Faltam documentos" NÃO tinha botão de tentar de
+  novo — com um resultado antigo gravado (o da BAYIT era de 11/09) a correção da leitura nunca era acionada (0 chamadas ao
+  gerar-documental). Botão "Buscar os documentos de novo e gerar" (pula a pré-checagem). "Gerar relatórios" da carteira
+  abre a análise com `autoGerar` (mercadológico → documental em sequência).
+- **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
+  `oportunidades_proposta()` deixou de usar `is_equipe()` (não inclui consultor) e usa a lista de ROLES_EQUIPE_RELATORIO.
 - **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por
   relatórios + favoritos, desconto e dias restantes da janela de 15 dias. 939 fora da CEF; só 4 com relatório.
 
