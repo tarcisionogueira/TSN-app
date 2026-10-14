@@ -72,13 +72,19 @@ async function handler(req) {
   } catch (e) { signatario = { erro: String(e?.message || e).slice(0, 120) }; }
 
   let verificados = 0, corrigidos = 0, rebaixados = 0;
+  // 14/10: o 429 seguiu mesmo com a nova tentativa de 2 s — o limite do MP é de RAJADA no /preapproval/search
+  // (5-6 buscas no mesmo segundo; só há 8 assinaturas, o volume é pequeno). Espaça as chamadas em 700 ms.
+  let ultimaMp = 0;
   const mpGet = async (path) => {
+    const falta = ultimaMp + 700 - Date.now();
+    if (falta > 0) await new Promise(ok => setTimeout(ok, falta));
+    ultimaMp = Date.now();
     let r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
     // 13/10: o MP devolve 429 "local_rate_limited" em rajada (este cron + o da fila de webhook, que
     // roda a cada minuto, no mesmo token). Uma nova tentativa após o Retry-After (teto 5 s) resolve
     // o transitório; persistindo, segue o null de falha (fail-closed nos chamadores).
     if (r.status === 429) {
-      const espera = Math.min(5000, (Number(r.headers.get('retry-after')) || 2) * 1000);
+      const espera = Math.min(8000, (Number(r.headers.get('retry-after')) || 5) * 1000);
       await new Promise(ok => setTimeout(ok, espera));
       r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
     }
