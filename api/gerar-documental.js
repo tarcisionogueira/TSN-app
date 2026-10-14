@@ -2100,7 +2100,10 @@ export default async function handler(req, res) {
     const lanceBase = num(row?.valor_minimo) || num(im?.valor_minimo);
     const avaliacaoBase = num(row?.valor_avaliacao) || num(exR.valorAvaliacaoOficial);
     if (dividaAssumida > 0) {
-      if (parsed.raioX && typeof parsed.raioX === 'object' && parsed.raioX.debitos && !num(parsed.raioX.debitos.totalAssumidoArrematante)) {
+      // Conservador: vale a SOMA do propter rem, não a "parte proporcional" que a IA às vezes calcula — em
+      // fração, o condomínio pode cobrar o débito inteiro de qualquer condômino (Vila Matilde: a IA pôs
+      // R$ 148 mil, metade, e a própria observação dela dizia que a cobrança pode ser total).
+      if (parsed.raioX && typeof parsed.raioX === 'object' && parsed.raioX.debitos && num(parsed.raioX.debitos.totalAssumidoArrematante) < dividaAssumida) {
         parsed.raioX.debitos.totalAssumidoArrematante = Math.round(dividaAssumida * 100) / 100;
       }
       let grave = null;
