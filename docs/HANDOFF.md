@@ -6,6 +6,29 @@
 
 
 
+
+## 14/10 — FECHAMENTO DA SESSÃO 13-14/10 (o que concluiu × o que ficou)
+
+**Concluído (tudo em `main`):**
+- **Captura:** e-Leilões (ELEILOES, 15) · plataforma ARES (PICELLI 74 + SHIOKAWA 3, API PostgREST) · Leiloar `/externo/`
+  (Sanches 3; Osvaldo/Judhastas são espelhos) · centraljudicial avaliado e NÃO integrado (leiloeiro único, 2 lotes) · #203.
+- **Contato com leiloeiro (Superbid):** organizador do evento pela página da oferta; SAC de imóveis nunca recebe veículo
+  (canal comercial em cópia) — `api/_contato-lote.js`. 762 imóveis Superbid de 48 outros leiloeiros vão ao organizador.
+- **PDF em produção** (#205): worker do pdf.js entra no pacote da Vercel — toda leitura de PDF falhava desde 22/09.
+- **Crons:** `apurar-resultado-leilao` (índice da fila, 10 s→1,5 ms) · `desativar-encerrados` (minuto :37 + retry 57014,
+  prefiltro por data) · `espelhar-docs` (enable_mergejoin=off na fila, 6,2 s→1,0 s) · `reconciliar-assinaturas` (limit=20 dava
+  400; exige cobrança aprovada em 35 dias; MP espaçado 700 ms + nova tentativa no 429).
+- **Veículos:** filtros Lance mín. e FIPE/avaliação mín./máx. em R$ · desconto sobre a FIPE (coluna por trigger, filtro com base
+  escolhida, ordenação, selo) · lote FIPE noturno (teto 250/dia, carros primeiro) · ficha Superbid (ano/modelo/FIPE do
+  leiloeiro/motor) · classificador de motor (58 veículos corrigidos; ~4,8 mil "não informado" são anúncios sem declaração).
+- **PostHog** (#202 fechada) · **Sentry**: dono desligou o filtro browser-extensions · **ONR** (#170): dono respondeu o chamado.
+- 1b-bis no ritual do CLAUDE.md (erros de runtime da Vercel).
+
+**Ficou para conferir amanhã (Claude):** #207 ficha Superbid após a coleta de 12h UTC · #208 crons + lote FIPE agendado
+(não rodara até 01h UTC) · #201 Sentry recebendo erros do navegador · #198 convite do Dr. José Roberto · #144 (precisa de
+geração nova) · #206 (16/10) · #187 (17/10) · #143/#188 (~20/10) · #38 backlog restante de baixo valor.
+**Decisões do dono nesta sessão:** sem FIPE_TOKEN por ora (#209) · Superbid: resposta sobre veículo vai ao canal certo.
+
 ## 14/10 (madrugada) — veículos: FIPE (filtro, desconto, lote noturno, ficha Superbid) e motor
 
 - **Busca de veículos:** Lance mín., FIPE/avaliação mín./máx. (FIPE primeiro; sem ela, avaliação), desconto sobre
