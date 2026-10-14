@@ -89,6 +89,11 @@
   Corrigido (capa re-hospedada primeiro, até 4). (b) Planilha .xlsx e ODT/ODS viravam XML cru no ramo de "pacote ZIP";
   agora viram texto tabular (`_doc-normalizar.js`, sem dependência nova; teste `testar:doc-normalizar` 10 casos).
   (c) Instrução do sistema: PROVA = DOCUMENTO — citar ato/cláusula; fala de leiloeiro/anúncio não é prova.
+- **5ª regeração do 640 (17:43, versão 226feaa) — VALIDADA:** 8 arquivos lidos (matrícula, edital, laudo, IPTU + 4 fotos —
+  a leitura de fotos voltou), confiança ALTA, amarelo, judicial, DataJud confirmado, financiamento = não, data 26/01/2027,
+  cronograma presente, riscos citando R-04/R-05/cláusula do edital e as fotos (terreno vazio, área edificada 0). Resíduos:
+  ainda `stop_reason=max_tokens` (27 mil chars; o corte cai no fim, `prazoEmbargos` truncado) e um risco cita o "CRI de
+  Barueri" quando a Av.08 transferiu a matrícula para o registro de Santana de Parnaíba desde 03/11/2023.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
