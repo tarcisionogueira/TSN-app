@@ -75,6 +75,11 @@
 - **Data do leilão no documental:** `extracao.dataLeilao` = ENCERRAMENTO da última praça (o 640 saiu com a abertura). E o
   servidor agora ESTENDE o prazo do lote quando o edital mostra fim futuro e posterior ao do acervo (praca1/2_fim; reabre
   `praca_vencida` e zera "sem lance"/"indeterminado"). Relatório salvo do 640 corrigido (26/01/2027, severidade vazia → alerta).
+- **3ª regeração do 640 (17:15, versão nova) — conferida:** DataJud CONFIRMOU o processo (term + 30 s funcionou), data
+  26/01/2027, raio-X presente, parecer 10,1 mil. Mas "Financiamento a assumir" bloqueante VOLTOU: a trava lia só o campo
+  redigido pela IA (`responsabilidadeDebitos`), que mudou de redação. Agora a prova vem do TEXTO DO EDITAL (cláusula
+  condicional "Tratando-se de imóvel gravado com hipoteca ou alienação fiduciária" ou art. 908/"não devendo arcar").
+  Ainda `stop_reason=max_tokens` (23,5 mil chars): max_tokens 8500→9500 e parecer ≤ 8.000 chars. Vigiar tempo (~50 tok/s).
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
