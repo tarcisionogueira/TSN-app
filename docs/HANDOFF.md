@@ -132,7 +132,8 @@
   - `lote_eh_fracao()` + gatilho preenchem `imoveis_leilao.fracionado`, coluna que existia e estava 0/29.792.
     Hoje marca 56 ativos. A 1ª régua marcou 69, e os 13 a mais eram todos inteiros (número sem %, "50% do
     lote" de casa, "metade ideal" do histórico da matrícula). Eles saíram antes do fechamento.
-  - Ficaram de fora, de propósito: cotas de multipropriedade (apart-hotel 3/52, 1/13).
+  - **Multipropriedade NÃO conta como fração** (decisão do dono, 14/10, pendência 215 fechada). `lote_eh_multipropriedade()`
+    exclui da régua; o prompt do documental põe `parteDoImovelPct = 100` para cota de tempo. Fração ativa: 55.
   - Convive com `fracao_ideal_barrada()` (regra `acervo.fracao_ideal`, desativa o lote): a antiga não pega
     "50% do apartamento" nem "a penhora recaiu sobre 50% do bem". A nova MARCA e não desativa: o lote some
     da carteira de propostas e o documental o trata como achado grave.
@@ -183,8 +184,8 @@
   - o contexto processual e os desfechos reais de arremate.
   - Regerar só para validar correção de código ou para uso com cliente.
 - **Pendências abertas hoje vão para `pendencias_projeto`, não para este texto:** ids 212 (vigiar o corte em fluxo), 213
-  (validar o "Avise aqui" da Caixa), 214 (Cotia aguardando matrícula, dono) e 215 (multipropriedade conta como
-  fração? dono).
+  (validar o "Avise aqui" da Caixa) e 214 (Cotia aguardando matrícula, dono). A 215 (multipropriedade) foi decidida
+  e fechada.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

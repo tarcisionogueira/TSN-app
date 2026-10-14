@@ -141,3 +141,25 @@ insert into public.regra_negocio (chave, valor, descricao, aplicada_por, ativo) 
 on conflict (chave) do update set valor = excluded.valor, descricao = excluded.descricao, aplicada_por = excluded.aplicada_por, ativo = true, atualizado_em = now();
 -- (No banco, lote_eh_fracao, veiculo_eh_sucata e oportunidades_proposta receberam o comentário
 --  "regra oportunidade.fracao_parcial|veiculo_sucata" — a auditoria_regras_negocio exige a citação.)
+
+-- ── Decisão do dono (14/10, noite): MULTIPROPRIEDADE não conta como fração ────────────────────
+create or replace function public.lote_eh_multipropriedade(p_titulo text, p_descricao text)
+returns boolean language sql immutable as $$
+  -- Multipropriedade/time-sharing (cota de tempo de unidade) NÃO é fração (dono, 14/10).
+  select coalesce(
+       (coalesce(p_titulo,'') || ' ' || coalesce(p_descricao,'')) ~* 'multipropriedade|time[- ]?shar|fra[çc][ãa]o (de )?tempo|designada cota|\mcota\s*\d+\s*(d[oa])\s*(apartamento|apto|unidade|su[íi]te|flat)',
+    false);
+$$;
+-- lote_eh_fracao passa a começar por `select not public.lote_eh_multipropriedade(p_titulo, p_descricao) and coalesce(`
+-- (aplicado no banco por replace no corpo vigente; migração multipropriedade_nao_e_fracao).
+do $m$
+declare v text; n text;
+begin
+  v := pg_get_functiondef('public.lote_eh_fracao(text,text)'::regprocedure);
+  if position('lote_eh_multipropriedade' in v) = 0 then
+    n := replace(v, 'select coalesce(', 'select not public.lote_eh_multipropriedade(p_titulo, p_descricao) and coalesce(');
+    execute n;
+  end if;
+end $m$;
+update public.imoveis_leilao set fracionado = public.lote_eh_fracao(titulo, descricao)
+ where ativo and coalesce(fracionado, false) <> public.lote_eh_fracao(titulo, descricao);
