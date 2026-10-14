@@ -1038,6 +1038,7 @@ export default async function handler(req, res) {
     const tiposGuardados = Object.values(cache).filter((c) => c?.storage_path).map((c) => c.tipo);
     const blocos = [];
     const propositoBD = await propositoDaFonte(row?.fonte, 'geral'); // cota própria do leiloeiro (14/10)
+    let textoEditalLido = ''; // texto do edital (camada de texto do PDF), para a data de encerramento
     const lidos = [];
     // Impressão digital do CONTEÚDO de cada documento já embarcado — ver a dedup logo
     // abaixo, no corpo do laço. A dedup por URL (no `add`) não cobre o caso real: o MESMO
@@ -1134,7 +1135,12 @@ export default async function handler(req, res) {
           try {
             const PDFParse = await carregarPDFParse();
             const parser = new PDFParse({ data: Buffer.from(doc.base64, 'base64') });
-            try { charsTexto = String((await parser.getText())?.text || '').length; }
+            try {
+              const txtPdf = String((await parser.getText())?.text || '');
+              charsTexto = txtPdf.length;
+              // Guarda o texto do EDITAL para ler a data de ENCERRAMENTO sem depender da IA (14/10).
+              if ((u.tipo || tipoDoc) === 'edital' && txtPdf.length > textoEditalLido.length) textoEditalLido = txtPdf.slice(0, 200000);
+            }
             finally { await parser.destroy().catch(() => {}); }
           } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
         }
@@ -2317,6 +2323,22 @@ export default async function handler(req, res) {
         : naoLidosNaoBloqueantes.length ? `${naoLidosNaoBloqueantes.length} arquivo(s) do lote não foram lidos (link inexistente no leiloeiro ou limite por análise).`
         : String(parsed.confiancaMotivo || '').trim());
 
+    // DATA DE ENCERRAMENTO LIDA DO EDITAL (14/10, BAYIT 640): a IA gravou a ABERTURA da praça única
+    // (06/10/2026) em vez do fim (26/01/2027) duas vezes seguidas. O edital diz por extenso "se
+    // encerrará em dd/mm/aaaa" / "término em" / "encerramento: " — regra determinística, a mais tardia
+    // dessas datas vence a da IA quando for posterior.
+    try {
+      const reFim = /(?:se\s+)?encerrar[áa]\s+(?:em|no\s+dia)?\s*(\d{2})\/(\d{2})\/(\d{4})|(?:t[ée]rmino|encerramento|fechamento)\s*(?:em|:|previsto\s+para)?\s*(\d{2})\/(\d{2})\/(\d{4})/gi;
+      const fins = [...String(textoEditalLido || '').matchAll(reFim)]
+        .map((m) => (m[1] ? `${m[3]}-${m[2]}-${m[1]}` : `${m[6]}-${m[5]}-${m[4]}`))
+        .filter((d) => d >= '2000-01-01' && d <= '2100-12-31').sort();
+      const fimEdital = fins.pop();
+      const daIA = String(parsed.extracao?.dataLeilao || '').slice(0, 10);
+      if (fimEdital && fimEdital > daIA && parsed.extracao && typeof parsed.extracao === 'object') {
+        console.log(`[documental] data do leilão: IA ${daIA || '—'} → encerramento do edital ${fimEdital}`);
+        parsed.extracao.dataLeilao = fimEdital;
+      }
+    } catch (e) { console.warn('[documental] leitura da data de encerramento falhou:', e?.message || e); }
     const result = {
       extracao: parsed.extracao || null,
       riscos: rlist,
