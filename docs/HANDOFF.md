@@ -52,6 +52,10 @@
   CREDORES fiduciários (Nova Aldeia/Lote 01) e o devedor é o próprio exequente; o edital diz que o arrematante não arca com
   nada além do lance + 5%. O leiloeiro estava certo. Prompt ganhou a regra; servidor rebaixa "sim" sem saldo + art. 908 para
   alerta de baixa registral. Regerar o documental do 640 após o deploy.
+- **Regeração do 640 manteve o relatório ERRADO (16:35):** leu os 4 docs, mas o DataJud/TJSP deu timeout e a trava de
+  liberação (processo não verificado — agora que o lote é judicial com nº CNJ) PRESERVOU o relatório antigo. Regra nova:
+  só CNJ pendente + relatório anterior já entregue → entrega o NOVO com o vício `cnj_nao_consultado` (juridico-retry-cron
+  retenta e avisa). TJSP no DataJud: timeout recorrente desde 30/09 (17 dias) — vale investigar à parte.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

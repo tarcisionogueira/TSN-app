@@ -2187,6 +2187,14 @@ export default async function handler(req, res) {
     if (processoNaoVerificado) {
       pendLib.push({ chave: 'cnj_nao_consultado', texto: 'o processo judicial ainda não foi verificado no CNJ/DJEN (a fonte pública não respondeu).' });
     }
+    // SÓ O CNJ PENDENTE + JÁ HAVIA RELATÓRIO ENTREGUE (14/10, BAYIT 640): a trava preservava o relatório
+    // ANTIGO — que também não tinha o processo verificado — no lugar do NOVO, já com os documentos
+    // relidos e as correções. O DataJud do TJSP deu timeout em 17 dias desde 30/09; com a trava, um lote
+    // judicial de SP ficava preso à análise anterior, ERRADA, indefinidamente. Aqui entrega o novo com o
+    // vício `cnj_nao_consultado` (juridico-retry-cron tenta de novo em escada e avisa quando o CNJ
+    // responder). Sem relatório anterior, a trava segue valendo como antes.
+    const soCnjPendente = pendLib.length > 0 && pendLib.every((p) => p.chave === 'cnj_nao_consultado');
+    if (soCnjPendente && tinhaRelatorioBom) pendLib.length = 0;
     if (pendLib.length) {
       const docsParaAnexar = [...new Set(naoLidosBloqueiam.map((n) => n.tipo).filter((t) => ['matricula', 'edital', 'regras_venda'].includes(t)))];
       const bloqueio = {
