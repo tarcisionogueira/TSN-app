@@ -21,7 +21,10 @@ export const COLUNAS_FIPE = 'id,titulo,marca,modelo,placa,chassi,anexos,link_lot
 
 export async function garantirFipe(v, { forcar = false } = {}) {
   const id = v.id;
-  if (!forcar && !fipeEstaVelho(v.fipe_status, v.fipe_atualizado_em)) {
+  // 'sem_dados' gravado quando faltava o ano: se o ano chegou depois (ficha da Superbid, 14/10), tenta já —
+  // sem esperar os 3 dias do `sem_dados`, que é a espera de quem continua sem dado.
+  const anoChegou = v.fipe_status === 'sem_dados' && !!v.ano_fabricacao;
+  if (!forcar && !anoChegou && !fipeEstaVelho(v.fipe_status, v.fipe_atualizado_em)) {
     return { valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, de_cache: true };
   }
   // Sem marca/modelo na fonte, `buscarFipe` tenta pelo título (24/09) e devolve 'sem_dados'

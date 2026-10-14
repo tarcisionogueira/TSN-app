@@ -1454,6 +1454,30 @@ export function dataFimSuperbid(of) {
   return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(t) ? `${t.replace(' ', 'T')}-03:00` : null;
 }
 
+// FICHA DO VEÍCULO na oferta Superbid (14/10, print do dono: Palio Weekend "sem FIPE — faltam marca, modelo
+// ou ano"). A oferta tem `product.template.groups[].properties[]` com ids marca/modelo/anofabricacao/
+// anomodelo, mas a coleta pedia uma `fieldList` sem `product.template` e lia o ano só do texto livre —
+// 1.217 veículos SUPERBID ativos sem ano, logo sem FIPE. Ano fora de faixa ou modelo < fabricação → descarta.
+export function fichaVeiculoSuperbid(template) {
+  const props = {};
+  for (const g of (template && Array.isArray(template.groups) ? template.groups : [])) {
+    for (const pr of (Array.isArray(g?.properties) ? g.properties : [])) {
+      const v = String(pr?.value ?? '').trim();
+      if (pr?.id && v && !(pr.id in props)) props[pr.id] = v;
+    }
+  }
+  const lim = new Date().getFullYear() + 1;
+  const ano = (x) => { const n = Number(String(x || '').match(/\b(19[5-9]\d|20[0-4]\d)\b/)?.[1]); return n && n <= lim ? n : null; };
+  let fab = ano(props.anofabricacao), mod = ano(props.anomodelo);
+  if (!fab && mod) fab = mod;
+  if (fab && mod && (mod < fab || mod - fab > 1)) mod = null;
+  return {
+    marca: props.marca ? props.marca.toUpperCase().slice(0, 60) : null,
+    modelo: props.modelo ? props.modelo.slice(0, 120) : null,
+    ano_fabricacao: fab, ano_modelo: fab ? mod : null,
+  };
+}
+
 async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leiloeiro, prefix, baseSite }) {
   console.log(`  ${leiloeiro} (veículos, piloto) — API offers (portal ${portalId})...`);
   const page = await browser.newPage();
@@ -1469,7 +1493,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
     // LIGADA por padrão (~70 páginas, fetch grátis dentro do navegador); SUPERBID_VEIC_GALERIA=0 desliga.
     const comGaleria = process.env.SUPERBID_VEIC_GALERIA !== '0';
     const { offers: lista, comFiltro, totalApi, falhou } = await page.evaluate(async ([portal]) => {
-      const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+      const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;product.template;auction;offerDetail;offerDescription';
       // FILTRO POR ID DO TIPO (08/10, #178). `productType.description:veiculos` sempre voltou
       // total=0 (a descrição é "Carros & Motos" / "Caminhões & Ônibus") → a coleta caía no modo
       // SEM filtro: 20.455 ofertas abertas de todos os tipos contra o teto de 100 páginas (10.000),
@@ -1567,17 +1591,20 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const link_lote = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
       const anoMatch = textoCompleto.match(REGEX_ANO);
       const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0) || null;
+      const ficha = fichaVeiculoSuperbid(p.template);
       pendentes.push({
         id, link_lote, textoCompleto,
         base: {
           // O leiloeiro de verdade é a loja (store) da oferta (28/09) — o rótulo da plataforma
           // fica só de reserva. Era "Superbid" para os 6.851 veículos.
           fonte, fonte_id: `${prefix}_veic_${id}`, leiloeiro: (lojaSuperbid(of.store).nome || leiloeiro).slice(0, 120), titulo, descricao,
-          marca: textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null,
+          // FICHA da oferta primeiro (14/10): `product.template` traz marca/modelo/ano em campos próprios;
+          // o texto livre fica de reserva para oferta sem ficha.
+          marca: ficha.marca || (textoCompleto.match(MARCAS_VEICULO)?.[0]?.toUpperCase() ?? null),
           tipo_veiculo: classificarTipoVeiculo(textoCompleto),
-          modelo: null,
-          ano_fabricacao: anoMatch?.[1] ? Number(anoMatch[1]) : null,
-          ano_modelo: anoMatch?.[2] ? Number(anoMatch[2]) : null,
+          modelo: ficha.modelo,
+          ano_fabricacao: ficha.ano_fabricacao || (anoMatch?.[1] ? Number(anoMatch[1]) : null),
+          ano_modelo: ficha.ano_fabricacao ? ficha.ano_modelo : (anoMatch?.[2] ? Number(anoMatch[2]) : null),
           placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
           km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
           valor_minimo: valMin,
