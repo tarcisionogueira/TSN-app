@@ -223,7 +223,8 @@ for (const a of alvos) {
     const fimLeilao = Date.parse(a.data_fim || a.data_leilao || '');
     const recente = Number.isFinite(fimLeilao) && Date.now() - fimLeilao < 30 * 864e5;
     const religavel = recente && (a.tabela !== 'imoveis_leilao' || !a.suprimido_motivo || ['praca_vencida', 'sumiu_da_fonte'].includes(a.suprimido_motivo));
-    if (religavel && res !== 'vendido' && res !== 'em_andamento' && res !== 'retirado') {
+    // 14/10: só 'sem_lance' confirmado religa — 'indeterminado' aqui é quase sempre condicional (teve lance).
+    if (religavel && res === 'sem_lance') {
       patch.ativo = true;
       if (a.tabela === 'imoveis_leilao') patch.suprimido_motivo = null;
     }

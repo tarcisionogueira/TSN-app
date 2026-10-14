@@ -7,6 +7,21 @@
 
 
 
+## 14/10 (tarde) — vitrine pós-leilão: só fica quem encerrou SEM LANCE confirmado
+
+- **Pedido do dono:** lote com data vencida e arrematado ainda aparecia (print: SUPERBID 5027338, Casa New Ville,
+  praça 13/10). **Causa:** `indeterminado` era retido 15 dias e religado como se fosse `sem_lance` — na offer-query da
+  Superbid ele é quase sempre lance abaixo da reserva (teve lance). Agora só `sem_lance` confirmado fica/volta:
+  `desativar_leiloes_encerrados`, `trg_desativa_leilao_encerrado`, invariante `leilao_vencido_ativo`
+  (`20261014_vitrine_pos_leilao_so_sem_lance.sql`), `patchDaApuracao` e `apurar-superbid-residencial.mjs`. O
+  indeterminado segue na fila de reapuração e volta sozinho se confirmar sem lance. 1ª rodada: 294 desligados.
+- **CEF: 1.661 imóveis À VENDA (lista de hoje, venda online/direta) estavam como `vendido`** (`inferido_lista_caixa`):
+  saíram da lista na véspera, voltaram com o mesmo número e o gatilho de relistagem só trocava nulo/indeterminado.
+  Gatilho corrigido + cura diária em `apurar_vendidos_cef()` → 0 restantes.
+- **Card da Busca:** selo "Sem lance · aceita proposta" (modo raio não traz o campo — sem selo lá).
+- **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por
+  relatórios + favoritos, desconto e dias restantes da janela de 15 dias. 939 fora da CEF; só 4 com relatório.
+
 ## 14/10 — FECHAMENTO DA SESSÃO 13-14/10 (o que concluiu × o que ficou)
 
 **Concluído (tudo em `main`):**

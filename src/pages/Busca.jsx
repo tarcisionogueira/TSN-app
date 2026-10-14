@@ -1367,6 +1367,7 @@ export default function Busca() {
             scoreFinanceiro: im.score_financeiro ?? null,
             scoreJuridico: im.score_juridico ?? null,
             scoreLocalizacao: im.score_localizacao ?? null,
+            resultadoLeilao: im.resultado_leilao ?? null,
           };
         });
         if (!atual()) return;   // busca antiga: outra já assumiu a tela
@@ -1498,6 +1499,7 @@ export default function Busca() {
         scoreFinanceiro: im.score_financeiro ?? null,
         scoreJuridico: im.score_juridico ?? null,
         scoreLocalizacao: im.score_localizacao ?? null,
+        resultadoLeilao: im.resultado_leilao ?? null,
       })) : [];
 
       if (!atual()) return;   // idem para a lista
@@ -2474,6 +2476,11 @@ export default function Busca() {
                           ? <span title="Data do leilão" style={{ fontSize:9, fontWeight:800, background:c.bg, color:c.fg, padding:'1px 6px', borderRadius:8 }}>🗓 {c.texto}</span>
                           : <span style={{ fontSize:9, color:'#94a3b8' }}>🗓 {fmtData(im.dataFim || im.dataLeilao, im.modalidade)}</span>;
                       })()}
+                      {/* 14/10 (dono): lote com praça vencida só fica na vitrine se encerrou SEM LANCE
+                          confirmado — e o card tem de dizer isso, senão parece leilão em aberto. */}
+                      {im.resultadoLeilao === 'sem_lance' && (
+                        <span title="Apurado na página do leiloeiro: o leilão encerrou sem nenhum lance. Dá para propor compra direta." style={{ fontSize:9, fontWeight:800, background:'#f3e8ff', color:'#6d28d9', padding:'1px 6px', borderRadius:8 }}>Sem lance · aceita proposta</span>
+                      )}
                     </div>
 
                     {(im.scoreFinanceiro !== null || im.scoreJuridico !== null) && (

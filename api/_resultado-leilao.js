@@ -218,7 +218,9 @@ export function apurarResultadoDoTexto(html, url = '') {
 //                (rodízio da fila) e, em imóvel, grava a data nova (venda direta renovada/2ª praça) e
 //                religa se a limpeza tinha desligado por praça vencida.
 //   cancelado  → sai do ar com motivo próprio (não é "sem lance": não dá para propor).
-//   vendido / sem_lance / null(indeterminado) → como sempre; religar só se não vendeu.
+//   vendido / sem_lance / null(indeterminado) → como sempre; religar SÓ com sem_lance confirmado
+//   (14/10, dono: só volta à vitrine quem dá para comprar por proposta — indeterminado na Superbid
+//   é, quase sempre, lance abaixo da reserva; ele segue na fila e volta se a reapuração confirmar).
 export function patchDaApuracao(achado, { tabela, tentativasAntes = 0, religarSeNaoVendido = false }) {
   const agora = new Date().toISOString();
   if (achado?.aberto) {
@@ -239,6 +241,6 @@ export function patchDaApuracao(achado, { tabela, tentativasAntes = 0, religarSe
   } else {
     patch.resultado_leilao = 'indeterminado';
   }
-  if (religarSeNaoVendido && patch.resultado_leilao !== 'vendido') { patch.ativo = true; patch.suprimido_motivo = null; }
+  if (religarSeNaoVendido && patch.resultado_leilao === 'sem_lance') { patch.ativo = true; patch.suprimido_motivo = null; }
   return patch;
 }
