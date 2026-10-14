@@ -181,6 +181,22 @@ export function apurarResultadoDoTexto(html, url = '') {
     if (r) return r; // sem status reconhecível → cai no genérico abaixo
   }
 
+  // 0) PREGÃO AINDA ABERTO PELO RÓTULO "Fechamento/Encerramento <data futura>" (14/10, BAYIT 640):
+  //    praça única aberta de 06/10/2026 a 26/01/2027 — o acervo só tinha o INÍCIO (o feed não traz o
+  //    fim), a limpeza deu por encerrado e o genérico abaixo leu "nenhum lance" (ainda não houve,
+  //    porque o pregão está correndo) como resultado: "sem lance" num leilão aberto. Data de
+  //    fechamento no futuro decide antes de qualquer palavra-sinal; grava o fim real das praças.
+  {
+    const hojeISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const fins = [...txt.matchAll(/\b(?:Fechamento|Encerramento)\s*:?\s*(?:em\s+)?(\d{2})\/(\d{2})\/(\d{4})(?:\s*(?:-|–|às|as)?\s*(\d{2}):(\d{2}))?/gi)]
+      .map(f => ({ dia: `${f[3]}-${f[2]}-${f[1]}`, ts: `${f[3]}-${f[2]}-${f[1]}T${f[4] || '23'}:${f[5] || '59'}:00-03:00` }));
+    if (fins.length && fins[fins.length - 1].dia >= hojeISO) {
+      const nova = { praca1_fim: fins[0].ts };
+      if (fins.length > 1) nova.praca2_fim = fins[fins.length - 1].ts;
+      return { resultado: null, aberto: true, novaData: nova };
+    }
+  }
+
   // 1) Sinal FORTE — 1º não-negado já basta; procura valor perto, senão na página inteira
   //    (aqui é seguro: a frase já é declarativa o bastante pra confiar num R$ mais distante).
   RE_VENDIDO_FORTE.lastIndex = 0;

@@ -147,7 +147,7 @@ function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
 // Havia quatro cópias desta tabela no frontend e todas já divergiam do servidor.
 const ROLES_SEM_LIMITE = ['admin'];
 // Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
-const ROLES_SEM_DOCUMENTAL = ['explorador', 'consultor'];
+const ROLES_SEM_DOCUMENTAL = ['explorador']; // consultor liberado em 14/10 (limite_ia documental = 5)
 const ROLES_COM_CNJ   = ['top2','assessorado','clube','analista','advogado','admin'];
 // "Pedir ao leiloeiro" (12/09, pedido do dono; restrito à equipe em 17/09 — o cliente
 // Assessorado tinha acesso e o dono decidiu que essa comunicação com o leiloeiro deve

@@ -131,6 +131,17 @@ function rateTexto(s) {
   return Number.isFinite(n) ? n / 100 : 0;
 }
 
+// FIM DAS PRAÇAS (14/10): o feed só traz o INÍCIO de cada praça (start_date). A página do lote mostra
+// "Abertura dd/mm/aaaa - hh:mm / Fechamento dd/mm/aaaa - hh:mm" por praça; sem o fechamento, a praça
+// única do lote 640 (aberta até 26/01/2027) foi dada por encerrada no dia da ABERTURA e apurada como
+// "sem lance". praca1_fim/praca2_fim são o prazo real que a limpeza e o gate de relatório leem.
+function fimDasPracas(txt) {
+  const fins = [...String(txt || '').matchAll(/\bFechamento\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s*-?\s*(\d{2}):(\d{2}))?/gi)]
+    .map(f => `${f[3]}-${f[2]}-${f[1]}T${f[4] || '23'}:${f[5] || '59'}:00-03:00`);
+  if (!fins.length) return {};
+  return fins.length > 1 ? { praca1_fim: fins[0], praca2_fim: fins[fins.length - 1] } : { praca1_fim: fins[0] };
+}
+
 function parseFeed(xml) {
   const blocos = xml.match(/<listing>[\s\S]*?<\/listing>/gi) || [];
   return blocos.map((bloco) => {
@@ -273,7 +284,13 @@ async function enriquecerDetalhe(urlLote, fotoAtual, nPracasComData = 0) {
   // exato do leiloeiro (ver api/_modalidade.js). Só cai pro texto quando não há NENHUMA praça
   // com data (aí sim pode ser venda direta de verdade, ou o texto ao menos não é o único sinal
   // disponível).
-  const modalidade = nPracasComData >= 1 ? 'extrajudicial'
+  // NÚMERO CNJ = JUDICIAL (14/10): os 38 BAYIT ativos saíam todos "extrajudicial" (o default acima),
+  // inclusive o lote 640, um Cumprimento de Sentença da 1ª Vara Cível de Santana de Parnaíba — o
+  // documental o tratou como extrajudicial. Processo no padrão CNJ não aparece no menu genérico
+  // que contamina o texto: é sinal do PRÓPRIO lote.
+  const cnj = (txt.match(/\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/) || [])[0] || null;
+  const modalidade = cnj ? 'judicial'
+    : nPracasComData >= 1 ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta'
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
@@ -287,6 +304,8 @@ async function enriquecerDetalhe(urlLote, fotoAtual, nPracasComData = 0) {
     modalidade,
     area_m2: extrairAreaM2(txt) || 0,
     numero_matricula: numeroMatricula,
+    ...(cnj ? { numero_processo: cnj } : {}),
+    ...fimDasPracas(txt),
   };
 }
 

@@ -607,6 +607,18 @@ CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóve
   com o agente financeiro ANTES do lance. Em alienação fiduciária levada a leilão JUDICIAL,
   explique também que pode estar sendo alienado o DIREITO DO DEVEDOR FIDUCIANTE, e não a
   propriedade plena — quem arremata entra no lugar do devedor, com o saldo em aberto.
+  ⚠️ CLÁUSULA PADRÃO NÃO É ACHADO (14/10, caso BAYIT lote 640, Santana de Parnaíba): quase todo
+  edital judicial de SP traz o parágrafo GENÉRICO "Tratando-se de imóvel gravado com hipoteca ou
+  alienação fiduciária (...) o arrematante se sub-rogará nos direitos do antigo devedor fiduciante
+  em relação ao credor fiduciário". Ele vale "SE houver" — não afirma que exista contrato ativo nem
+  dívida. Só marque financiamentoAssumido="sim" quando a MATRÍCULA tiver alienação fiduciária/
+  financiamento NÃO cancelado em que o DEVEDOR (fiduciante/mutuário) seja o EXECUTADO ou o dono
+  cujo bem está sendo vendido. Se os EXECUTADOS são os CREDORES fiduciários (ex.: incorporadora que
+  vendeu parcelado) e o devedor fiduciante é o EXEQUENTE ou terceiro, o arrematante NÃO assume
+  dívida nenhuma — no máximo há uma questão REGISTRAL (como a carta de arrematação vai cancelar o
+  R-/Av- da alienação fiduciária): marque "nao" e registre isso como "alerta" a confirmar nos autos,
+  nunca como financiamento assumido. Se o edital também diz que o arrematante não arca com nada além
+  do lance e da comissão (art. 908 §1º CPC), o "sim" exige prova de contrato ativo com saldo.
 DOIS EIXOS SEPARADOS — LEIA ANTES DE CLASSIFICAR (regra de 31/08):
 - "nivelRisco" responde SÓ: **o que eu ENCONTREI nos documentos é grave?** Considere APENAS achados com constaNaDoc=true ou confirmados por consulta externa (CNJ/DJEN). O que você NÃO conseguiu verificar NÃO entra aqui — nem para piorar, nem para melhorar.
 - "confianca" responde a outra pergunta: **quanto do checklist eu consegui de fato verificar?** "alta" = documentos legíveis e processo confirmado; "media" = faltou confirmar itens relevantes; "baixa" = faltou documento essencial (matrícula/edital) ou o processo não pôde ser checado.
@@ -1734,7 +1746,28 @@ export default async function handler(req, res) {
     // que depende de o modelo LEMBRAR não é garantia. Este risco é montado pelo servidor a
     // partir do campo extraído, entra na MESMA lista que a tela ordena por severidade, e por
     // isso não depende da redação do parecer para aparecer em destaque.
-    const finAssumido = String(ex.financiamentoAssumido || '').toLowerCase() === 'sim';
+    let finAssumido = String(ex.financiamentoAssumido || '').toLowerCase() === 'sim';
+    // TRAVA DA CLÁUSULA PADRÃO (14/10): "sim" SEM saldo e com o edital dizendo que o arrematante não
+    // arca com nada além do preço (art. 908 §1º) é, na prática, o parágrafo genérico de alienação
+    // fiduciária lido como achado — o caso BAYIT 640 saiu "bloqueante: dívida acompanha o imóvel"
+    // quando os executados eram os CREDORES fiduciários e o leiloeiro confirmou não haver
+    // financiamento a assumir. Rebaixa para alerta de diligência registral, sem afirmar dívida.
+    const saldoFin = Number(ex.financiamentoSaldo) || 0;
+    const editalLivraArrematante = /908|n[aã]o\s+(devendo|arcar)|al[eé]m\s+do\s+(pre[cç]o|valor\s+do\s+lan[cç]o)/i.test(String(ex.responsabilidadeDebitos || ''));
+    if (finAssumido && saldoFin <= 0 && editalLivraArrematante) {
+      finAssumido = false;
+      const credorAF = String(ex.financiamentoCredor || '').trim();
+      riscosAntifraude.push({
+        categoria: 'Alienação fiduciária na matrícula (confirmar baixa)',
+        severidade: 'alerta',
+        constaNaDoc: true,
+        descricao: `A matrícula tem alienação fiduciária${credorAF ? ` (credor: ${credorAF})` : ''} e o edital traz a cláusula padrão `
+          + 'sobre sub-rogação do arrematante "se o imóvel for gravado com alienação fiduciária". O mesmo edital, porém, diz que o '
+          + 'arrematante não arca com nenhum valor além do lance e da comissão, e nenhum documento informa saldo devedor. Não há '
+          + 'evidência de financiamento a assumir. Confirme nos autos (ou com o leiloeiro) como a carta de arrematação vai cancelar '
+          + 'o registro da alienação fiduciária e quem é o devedor fiduciante.',
+      });
+    }
     if (finAssumido) {
       const saldo = Number(ex.financiamentoSaldo) || 0;
       const credor = String(ex.financiamentoCredor || '').trim();

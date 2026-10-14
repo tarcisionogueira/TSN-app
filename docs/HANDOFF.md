@@ -40,6 +40,20 @@
   auto-sequência — uma vez por imóvel, só se o mercadológico terminou nesta sessão ou há < 30 min, sem documental
   existente, respeitando plano (ROLES_SEM_DOCUMENTAL), leilão encerrado e termos. Reabrir mercadológico antigo não gera.
   Vigiar custo de IA do documental nos próximos dias (cada mercadológico novo agora puxa um documental).
+- **BAYIT lote 640 (Santana de Parnaíba) — o leilão NÃO tinha acabado:** edital = praça ÚNICA de 06/10/2026 a 26/01/2027
+  (Cumprimento de Sentença 0000624-77.2024.8.26.0529). O feed só traz o INÍCIO da praça; a limpeza deu por encerrado em
+  06/10 e a apuração leu "nenhum lance" num pregão aberto → "sem lance". Consertos: `apurarResultadoDoTexto` reconhece
+  "Fechamento/Encerramento <data futura>" como ABERTO (grava praca1_fim/praca2_fim); `scraper-bayit` grava o fim das
+  praças da página e marca JUDICIAL quando há nº CNJ (os 38 BAYIT saíam todos "extrajudicial"). Dados: 640 corrigido
+  (judicial, fim 26/01/2027, ativo); demais BAYIT `sem_lance` voltaram para a fila de apuração (o gatilho os desligou
+  até a reapuração religar — depende do runner residencial).
+- **Falso "Financiamento a assumir" (bloqueante) no 640:** a IA tomou a cláusula PADRÃO do edital ("tratando-se de imóvel
+  gravado com... alienação fiduciária, o arrematante se sub-rogará...") como achado. Na matrícula os EXECUTADOS são os
+  CREDORES fiduciários (Nova Aldeia/Lote 01) e o devedor é o próprio exequente; o edital diz que o arrematante não arca com
+  nada além do lance + 5%. O leiloeiro estava certo. Prompt ganhou a regra; servidor rebaixa "sim" sem saldo + art. 908 para
+  alerta de baixa registral. Regerar o documental do 640 após o deploy.
+- **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
+  ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
   `oportunidades_proposta()` deixou de usar `is_equipe()` (não inclui consultor) e usa a lista de ROLES_EQUIPE_RELATORIO.
 - **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por
