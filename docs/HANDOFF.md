@@ -100,6 +100,11 @@
   `comarca` (guarda `cartorioOrigem`), troca o cartório antigo SÓ nas orientações (riscos, lacunas, certidões recomendadas —
   o parecer não é reescrito: "aberta em Barueri" é fato) e acrescenta o risco informativo "Cartório competente atual". Prompt
   do campo `cartorio` pede o competente HOJE. Relatório salvo do 640 corrigido.
+  - **Endurecido depois da regeração das 18h11:** a guarda não disparou porque a IA resumiu a Av.08 como "Oficial de
+    Registro de Imóveis de Santana de Parnaíba", sem "Comarca de". Agora o destino também é reconhecido pela forma "Imóveis
+    (da Circunscrição) de X". O nome antigo é tirado de um `comarca` misto ("Barueri (aberta)…; atual …"). A frase que
+    NARRA a transferência não é reescrita. O cartório que a IA já acertou não é sobrescrito, e o aviso não é duplicado.
+    Nessa regeração a IA acertou sozinha. A guarda é para quando ela errar.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

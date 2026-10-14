@@ -302,7 +302,12 @@ function cartorioPorTransferencia(movs = []) {
   for (const mv of [...(Array.isArray(movs) ? movs : [])].reverse()) {
     const t = `${mv?.evento || ''} ${mv?.parte || ''}`;
     if (!/compet[êe]ncia\s+registr|transfer[êe]ncia\s+(?:da\s+)?(?:compet|circunscri)|passou\s+a\s+pertencer\s+[àa]\s+circunscri/i.test(t)) continue;
-    const cands = [...t.matchAll(/Comarca\s+de\s+([A-ZÀ-Ú][\wÀ-ú']*(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ú][\wÀ-ú']*)*)/g)].map((x) => x[1]);
+    // Destino: "…da Sede da Comarca de X" (redação da certidão) ou "…Registro de Imóveis de X" (redação resumida
+    // pela IA — 14/10, 2ª regeração do 640 veio assim e a 1ª versão desta função não reconhecia).
+    const NOME = "([A-ZÀ-Ú][\\wÀ-ú']*(?:\\s+(?:d[aeo]s?\\s+)?[A-ZÀ-Ú][\\wÀ-ú']*)*)";
+    const porComarca = [...t.matchAll(new RegExp(`Comarca\\s+de\\s+${NOME}`, 'g'))].map((x) => x[1]);
+    const porRI = [...t.matchAll(new RegExp(`Im[óo]veis\\s+(?:da\\s+)?(?:Circunscri[çc][ãa]o\\s+)?de\\s+${NOME}`, 'g'))].map((x) => x[1]);
+    const cands = porComarca.length ? porComarca : porRI;
     if (cands.length) return { comarca: cands[cands.length - 1], ato: mv?.ato || '', data: mv?.data || '' };
   }
   return null;
@@ -2371,20 +2376,31 @@ export default async function handler(req, res) {
     try {
       const exC = parsed.extracao;
       const tr = exC && typeof exC === 'object' ? cartorioPorTransferencia(exC.movimentacoesMatricula) : null;
-      const antiga = String(exC?.comarca || '').replace(/^comarca\s+de\s+/i, '').replace(/\/[A-Z]{2}$/, '').trim();
+      // `comarca` às vezes vem como frase ("Barueri (registro original); circunscrição atual: …") — vale o 1º nome.
+      const antiga = String(exC?.comarca || '').split(/[(;,]/)[0].replace(/^comarca\s+de\s+/i, '').replace(/\/[A-Z]{2}\s*$/, '').trim();
       if (tr && tr.comarca && antiga.toLowerCase() !== tr.comarca.toLowerCase()) {
         const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const reAnt = antiga ? new RegExp(`((?:CRI|Cart[óo]rio\\s+de\\s+Registro\\s+de\\s+Im[óo]veis|Registro\\s+de\\s+Im[óo]veis|Oficial\\s+de\\s+Registro\\s+de\\s+Im[óo]veis|RI)\\s+(?:d[aeo]\\s+)?(?:Comarca\\s+de\\s+)?)${escRe(antiga)}`, 'gi') : null;
-        const trocar = (txt) => (reAnt && typeof txt === 'string' ? txt.replace(reAnt, `$1${tr.comarca}`) : txt);
+        // Troca frase a frase e PULA a que narra a própria transferência ("passou do CRI de Barueri para…"):
+        // ali o nome antigo é o fato, e trocá-lo produziria "passou do CRI de Santana de Parnaíba para Santana…".
+        const narraTransf = /compet[êe]ncia|transfer|passou|anteriormente|origin[áa]ri|aberta\s+(?:em|no)/i;
+        const trocar = (txt) => (reAnt && typeof txt === 'string'
+          ? txt.split(/(?<=[.;!?])\s+/).map((fr) => (narraTransf.test(fr) ? fr : fr.replace(reAnt, `$1${tr.comarca}`))).join(' ')
+          : txt);
         if (Array.isArray(parsed.riscos)) parsed.riscos = parsed.riscos.map((r) => ({ ...r, descricao: trocar(r.descricao) }));
         if (Array.isArray(parsed.lacunas)) parsed.lacunas = parsed.lacunas.map(trocar);
         if (Array.isArray(parsed.raioX?.certidoesRecomendadas)) {
           parsed.raioX.certidoesRecomendadas = parsed.raioX.certidoesRecomendadas.map((c) => ({ ...c, orgao: trocar(c?.orgao), nome: trocar(c?.nome), motivo: trocar(c?.motivo) }));
         }
-        exC.cartorioOrigem = exC.cartorio || (antiga ? `Registro de Imóveis de ${antiga}` : null);
-        exC.cartorio = `Registro de Imóveis da Comarca de ${tr.comarca} (competência transferida pela ${tr.ato || 'averbação'} da matrícula)`;
+        const iaJaAcertou = String(exC.cartorio || '').toLowerCase().includes(tr.comarca.toLowerCase());
+        if (!iaJaAcertou) {
+          exC.cartorioOrigem = exC.cartorio || (antiga ? `Registro de Imóveis de ${antiga}` : null);
+          exC.cartorio = `Registro de Imóveis da Comarca de ${tr.comarca} (competência transferida pela ${tr.ato || 'averbação'} da matrícula)`;
+        }
         exC.comarca = tr.comarca;
-        if (Array.isArray(parsed.riscos)) parsed.riscos.push({
+        const jaAvisa = Array.isArray(parsed.riscos) && parsed.riscos.some((r) => /compet[êe]ncia|cart[óo]rio\s+competente/i.test(`${r?.categoria || ''} ${r?.descricao || ''}`)
+          && String(r?.descricao || '').toLowerCase().includes(tr.comarca.toLowerCase()));
+        if (Array.isArray(parsed.riscos) && !jaAvisa) parsed.riscos.push({
           categoria: 'Cartório competente atual',
           severidade: 'informativo',
           constaNaDoc: true,
