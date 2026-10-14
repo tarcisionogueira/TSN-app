@@ -23,6 +23,15 @@
   (`ehEquipe`), mas ImovelDetalhe e Análise bloqueavam o botão para todos. `liberaEquipePosLeilao(im, role)` em
   `src/utils/leilaoEncerrado.js` (papéis = `ROLES_EQUIPE_RELATORIO` do servidor): equipe passa, salvo `vendido`/
   `cancelado`; cliente continua barrado. Análise mostra aviso roxo "liberado para a equipe… proposta".
+- **Documental de lote BAYIT nunca saía ("Faltam documentos" para sempre):** o Cloudflare da BAYIT dá 403 a datacenter
+  em todo PDF (espelho: 14 links `ignorado`, 0 PDF guardado nos 14 BAYIT sem lance). O caminho pago lia pela cota
+  COMPARTILHADA (`docs` 25/dia — esgotada às 11h de 14/10; `geral` no documental) e a cota própria `bayit` (460/sem,
+  0 usada) só servia ao coletor. `propositoDaFonte()` em `api/_brightdata.js`: leiloeiro com sub-cota em
+  `brightdata_reserva` usa a dele — no `lerDoc` do documental e na captura (`captura-documentos.mjs` agora tenta o
+  PDF CONHECIDO pelo Bright Data, até 4 por lote, antes de abrir a página). Vale para LJUD, FREITAS, PECINI etc.
+- **Tela Admin → Comercial → 🎯 Carteira de propostas** (`src/components/CarteiraPropostas.jsx`): lê
+  `oportunidades_proposta()` (agora SEM a Caixa — venda direta é compra no site), filtros UF/leiloeiro/busca/"só com
+  interesse", prazo da janela de 15 dias, e botões Abrir · Gerar relatórios · Leiloeiro. 938 lotes, 88 ms.
 - **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por
   relatórios + favoritos, desconto e dias restantes da janela de 15 dias. 939 fora da CEF; só 4 com relatório.
 

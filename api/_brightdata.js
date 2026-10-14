@@ -67,6 +67,30 @@ export class ErroBrightData extends Error {
   }
 }
 
+/**
+ * COTA PRÓPRIA DO LEILOEIRO (14/10). Leiloeiro com sub-cota em `brightdata_reserva` (BAYIT, LJUD,
+ * FREITAS, PECINI…) já tem orçamento reservado para ele — mas a leitura de DOCUMENTO caía sempre na
+ * cota compartilhada (`docs`, 25/dia; `geral`). Medido em 14/10: `docs` esgotada às 11h e `bayit`
+ * com 460 livres; resultado, os PDFs da BAYIT (403 do Cloudflare para datacenter) nunca chegavam e o
+ * documental de lote sem lance ficava em "Faltam documentos" para sempre. Devolve a sub-cota da
+ * fonte quando ela existe; senão, o `padrao` do chamador. Falha de leitura → `padrao` (registra).
+ */
+const _propositosCache = new Map();
+export async function propositoDaFonte(fonte, padrao = 'docs') {
+  const chave = String(fonte || '').trim().toLowerCase();
+  if (!chave || !SB_URL || !SB_KEY) return padrao;
+  if (_propositosCache.has(chave)) return _propositosCache.get(chave) || padrao;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/brightdata_reserva?proposito=eq.${encodeURIComponent(chave)}&select=proposito&limit=1`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) { console.warn(`[brightdata] propositoDaFonte(${chave}) HTTP ${r.status} — usa ${padrao}`); return padrao; }
+    const [row] = await r.json();
+    _propositosCache.set(chave, row?.proposito || null);
+    return row?.proposito || padrao;
+  } catch (e) { console.warn(`[brightdata] propositoDaFonte(${chave}) falhou: ${e?.message} — usa ${padrao}`); return padrao; }
+}
+
 /** Bright Data está configurado nesta instância? */
 export function brightDataDisponivel() {
   return !!(BD_TOKEN && BD_ZONE);

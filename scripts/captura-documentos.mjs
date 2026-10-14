@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
-import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { fetchViaBrightData, brightDataDisponivel, propositoDaFonte } from '../api/_brightdata.js';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
 import { isolarBlocoDoLote, ehDocMultiLote } from '../api/_edital-extrato.js';
@@ -168,9 +168,9 @@ async function baixarPdfDireto(url, referer) {
 
 // Download via Bright Data (CAMINHO 3): para PDFs cujo host também barra o fetch
 // direto (Cloudflare no CDN do leiloeiro). Respeita o teto semanal (proposito 'docs').
-async function baixarPdfBD(url, referer) {
+async function baixarPdfBD(url, referer, proposito = 'docs') {
   if (!brightDataDisponivel()) return null;
-  const resp = await fetchViaBrightData(url, { proposito: 'docs', timeoutMs: 45000, headers: referer ? { Referer: referer } : null });
+  const resp = await fetchViaBrightData(url, { proposito, timeoutMs: 45000, headers: referer ? { Referer: referer } : null });
   if (!resp || !resp.ok) return null;
   try {
     const buf = Buffer.from(await resp.arrayBuffer());
@@ -288,10 +288,17 @@ async function processar(browser, item) {
   if (ehUrl(im.link_edital) && /\.pdf(\?|#|$)/i.test(im.link_edital)) conhecidos.push({ url: im.link_edital, nome: 'edital' });
   if (ehUrl(im.link_regras_venda) && /\.pdf(\?|#|$)/i.test(im.link_regras_venda)) conhecidos.push({ url: im.link_regras_venda, nome: 'regras venda' });
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) if (ehUrl(a?.url)) conhecidos.push({ url: a.url, nome: a?.nome || '' });
+  // Cota própria do leiloeiro (14/10): quem tem sub-cota em brightdata_reserva (ex.: BAYIT, cujo
+  // Cloudflare devolve 403 a qualquer datacenter) busca o PDF CONHECIDO direto pelo Bright Data —
+  // 1 request por documento, em vez de esperar a página ser barrada e gastar a cota `docs` comum.
+  const propositoBD = await propositoDaFonte(im.fonte, 'docs');
+  const temCotaPropria = propositoBD !== 'docs';
+  let viaCotaPropria = 0;
   for (const c of conhecidos) {
     if (capturados.length >= 8) break;
     if (urlsSalvas.has(c.url)) continue;
-    const buf = await baixarPdfDireto(c.url, paginaLote);
+    let buf = await baixarPdfDireto(c.url, paginaLote);
+    if (!buf && temCotaPropria && viaCotaPropria < 4) { viaCotaPropria++; buf = await baixarPdfBD(c.url, paginaLote, propositoBD); }
     if (buf) { try { await salvar(buf, c.url, limparNome(c.nome)); } catch { /* */ } }
   }
 
@@ -442,7 +449,7 @@ async function processar(browser, item) {
   // lote, extrai os links de documento e busca cada PDF (direto → e, se o host também
   // barrar, via Bright Data). Respeita o teto semanal de custo (proposito 'docs').
   if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel()) {
-    const resp = await fetchViaBrightData(paginaLote, { proposito: 'docs', timeoutMs: 45000 });
+    const resp = await fetchViaBrightData(paginaLote, { proposito: propositoBD, timeoutMs: 45000 });
     if (resp && resp.ok) {
       const html = await resp.text().catch(() => '');
       const cands = linksDocDeHtml(html, paginaLote);
@@ -450,7 +457,7 @@ async function processar(browser, item) {
       for (const l of cands) {
         if (capturados.length >= 8) break;
         let buf = await baixarPdfDireto(l.href, paginaLote);
-        if (!buf) buf = await baixarPdfBD(l.href, paginaLote);
+        if (!buf) buf = await baixarPdfBD(l.href, paginaLote, propositoBD);
         if (buf) { try { await salvar(buf, l.href, limparNome(l.txt)); } catch { /* */ } }
       }
     }

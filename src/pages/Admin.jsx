@@ -14,6 +14,7 @@ import { imprimirHtml } from '../components/pdfImprimir';
 import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO } from '../components/TermoJuridico';
+import CarteiraPropostas from '../components/CarteiraPropostas'; // 14/10: lotes sem lance para proposta
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { maskMoedaDigitando } from '../utils/moeda';
@@ -12457,7 +12458,7 @@ function LiveTab() {
 const GRUPOS_ADMIN = [
   { nome: 'Início',        icone: '🏠', desc: 'Visão geral do dia',            tabs: ['Dashboard'] },
   { nome: 'Administrativo',icone: '🏢', desc: 'Pessoas, contratos e ajustes',  tabs: ['Usuários', 'Convites', 'Equipe', 'Contratos', 'Configurações'] },
-  { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Marketing', 'Promoções', 'Aula ao vivo', 'Cursos', 'eBooks'] },
+  { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Propostas', 'Marketing', 'Promoções', 'Aula ao vivo', 'Cursos', 'eBooks'] },
   { nome: 'Financeiro',    icone: '💰', desc: 'Fluxo de caixa e conciliação',  tabs: ['Financeiro'] },
   { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Veiculos', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
@@ -12473,6 +12474,7 @@ const ROTULO_TAB = {
   Qualidade: '✅ Qualidade',
   Demografia: '👥 Demografia',
   Marketing: '📣 Marketing',
+  Propostas: '🎯 Carteira de propostas',
   'Aula ao vivo': '🎥 Aula ao vivo',
 };
 
@@ -13497,6 +13499,7 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Comercial'      && <ComercialTab />}
+        {tab === 'Propostas'      && <CarteiraPropostas />}
         {tab === 'Equipe'         && <EquipeHub />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Veiculos'       && <VeiculosTab />}

@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { getUser, isCronAuthorized } from './_auth.js';
 import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado, ehEquipe } from './_leilao-encerrado.js';
-import { fetchViaBrightData } from './_brightdata.js';
+import { fetchViaBrightData, propositoDaFonte } from './_brightdata.js';
 import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
@@ -528,7 +528,8 @@ async function lerDoc(url, deadline, info = {}) {
     ? { 'User-Agent': UA, Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp', Accept: 'application/pdf,application/octet-stream,*/*' }
     : { 'User-Agent': UA, Accept: '*/*', ...(ref ? { Referer: ref } : {}) };
   try {
-    const bd = await fetchViaBrightData(url, { headers: bdHeaders });
+    // Cota própria do leiloeiro quando existe (info.proposito, 14/10); senão a `geral` de sempre.
+    const bd = await fetchViaBrightData(url, { headers: bdHeaders, proposito: info.proposito || 'geral' });
     if (bd) {
       const bdClone = bd.clone();
       console.log(`[lerDoc] brightdata resp status=${bd.status} ct=${bd.headers.get('content-type') || ''} ${url}`);
@@ -1025,6 +1026,7 @@ export default async function handler(req, res) {
     // de leitura, não "doc ainda não capturado").
     const tiposGuardados = Object.values(cache).filter((c) => c?.storage_path).map((c) => c.tipo);
     const blocos = [];
+    const propositoBD = await propositoDaFonte(row?.fonte, 'geral'); // cota própria do leiloeiro (14/10)
     const lidos = [];
     // Impressão digital do CONTEÚDO de cada documento já embarcado — ver a dedup logo
     // abaixo, no corpo do laço. A dedup por URL (no `add`) não cobre o caso real: o MESMO
@@ -1067,7 +1069,7 @@ export default async function handler(req, res) {
         if (doc) deCache = true;
       }
       // 2) Senão, lê da fonte (fetch direto → Bright Data) e GUARDA para a próxima.
-      const infoLeitura = {};
+      const infoLeitura = { proposito: propositoBD };
       if (!doc) {
         doc = await lerDoc(u.url, deadline, infoLeitura);
         if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !cache[tipoDoc] && Date.now() < deadline) {
