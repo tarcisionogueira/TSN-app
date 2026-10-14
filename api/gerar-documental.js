@@ -16,7 +16,7 @@ import { fetchViaBrightData, propositoDaFonte } from './_brightdata.js';
 import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
+import { custoRespostaClaude, registrarCustoGeracao, registrarUso } from './_uso.js';
 import { buscarProcessosCNJ, gerarParecerRisco, buscarDjen } from './_cnj.js';
 import { buscarQSA } from './_pj-socio.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
@@ -375,6 +375,67 @@ async function anthropic(payload, fetchOpts) {
   const j = await r.json();
   try { _custoMicroReq += custoRespostaClaude(payload?.model, j?.usage); } catch { /* medição nunca quebra a geração */ }
   return j;
+}
+
+// CHAMADA PRINCIPAL EM FLUXO (14/10): 12 de 12 relatórios do dia bateram no max_tokens (9.500) e o fim
+// (raioX, lacunas) saía cortado. Subir o teto sem fluxo era trocar o corte por um risco pior: a resposta
+// inteira chega só no fim, e se o prazo da função vencer antes o abort perde TUDO (laudo preliminar).
+// Em fluxo o teto sobe e o prazo vira um corte CONTROLADO: em `ateMs` paramos de ler e ficamos com o
+// texto já recebido, que o parseJSON tolerante a truncamento aproveita como antes.
+// Reserva Gemini (resposta JSON, não SSE) segue funcionando pelo mesmo anthropicFetch.
+async function anthropicFluxo(payload, { timeoutMs, ateMs }) {
+  const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify({ ...payload, stream: true }) }, { retries: 0, timeoutMs, noFallback: true });
+  if (!r.ok) {
+    let corpo = ''; try { corpo = await r.text(); } catch { /* corpo indisponível */ }
+    console.error('[anthropic:documental] HTTP', r.status, String(corpo).slice(0, 600));
+    throw new Error(`anthropic_http_${r.status}`);
+  }
+  if (!String(r.headers.get('content-type') || '').includes('text/event-stream')) {
+    const j = await r.json(); // reserva Gemini: já vem no formato Anthropic
+    try { _custoMicroReq += custoRespostaClaude(payload?.model, j?.usage); } catch { /* medição best-effort */ }
+    return j;
+  }
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', texto = '', stop = null, usage = {}, erroFluxo = null;
+  const ler = (async () => {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const linha = buf.slice(0, i).split('\n').find((l) => l.startsWith('data:'));
+        buf = buf.slice(i + 2);
+        if (!linha) continue;
+        let d; try { d = JSON.parse(linha.slice(5)); } catch { continue; }
+        if (d.type === 'message_start') usage = { ...(d.message?.usage || {}) };
+        else if (d.type === 'content_block_delta' && d.delta?.type === 'text_delta') texto += d.delta.text;
+        else if (d.type === 'message_delta') { stop = d.delta?.stop_reason || stop; if (d.usage) usage = { ...usage, ...d.usage }; }
+        else if (d.type === 'error') { erroFluxo = d.error?.type || 'erro'; return; }
+      }
+    }
+  })();
+  let timer;
+  const prazo = new Promise((ok) => { timer = setTimeout(() => ok('prazo'), Math.max(1000, ateMs - Date.now())); });
+  const fim = await Promise.race([ler.then(() => 'ok'), prazo]);
+  clearTimeout(timer);
+  if (fim === 'prazo') { stop = 'prazo'; try { await reader.cancel(); } catch { /* conexão já encerrada */ } }
+  if (erroFluxo) {
+    console.warn(`[documental] fluxo interrompido pelo provedor (${erroFluxo}) após ${texto.length} caracteres`);
+    if (!texto) throw new Error(`anthropic_stream_${erroFluxo}`);
+    stop = `erro_${erroFluxo}`;
+  }
+  // Medição: no corte por prazo o message_delta final não chega; estima a saída pelo texto (~3 car./token).
+  if (!(usage.output_tokens > 1)) usage.output_tokens = Math.round(texto.length / 3);
+  try {
+    const custo = custoRespostaClaude(payload?.model, usage);
+    _custoMicroReq += custo;
+    const tin = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+    registrarUso('claude', 'messages', { requests: 1, tokens_in: tin, tokens_out: usage.output_tokens, custo_usd_micro: custo });
+  } catch { /* medição nunca quebra a geração */ }
+  return { content: [{ type: 'text', text: texto }], stop_reason: stop, usage };
 }
 
 // Documentos ESTÁTICOS da Caixa (venda-imoveis.caixa.gov.br). O portal grava no
@@ -1476,13 +1537,13 @@ export default async function handler(req, res) {
     const orcamentoIA = Math.max(90000, hardDeadline - Date.now() - 45000);
     let data = null;
     try {
-      data = await anthropic({
-        // 7000→8500 (01/10): o raioX (último campo) vinha cortado em 6 de 14 relatórios, e as
-        // movimentações da matrícula passaram a ser obrigatórias no começo do JSON.
-        model: MODEL, max_tokens: 9500, // 8500→9500 (14/10): mesmo com o parecer limitado, 3/3 regerações do BAYIT 640 bateram no teto; ~50 tok/s cabe em 300 s
+      data = await anthropicFluxo({
+        // 7000→8500 (01/10) → 9500 → 16000 (14/10, em FLUXO): 12/12 relatórios do dia bateram nos 9.500
+        // (~26 mil caracteres) e o fim saía cortado. O teto agora é folga; quem limita o tempo é `ateMs`.
+        model: MODEL, max_tokens: 16000,
         system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. PROVA = DOCUMENTO (regra do dono, 14/10): fundamente cada conclusão no que está ESCRITO nos arquivos fornecidos (matrícula, edital, laudo, certidões, planilhas, fotos) e cite o ato/cláusula (ex.: "Av.10", "item DOS DÉBITOS do edital"). Afirmação do leiloeiro, do anúncio ou de terceiros que não conste dos documentos NÃO é prova e não muda o diagnóstico. Seja assertivo: quando o documento resolve a questão, afirme; quando não resolve, diga exatamente qual documento falta. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
-      }, { retries: 0, timeoutMs: orcamentoIA, noFallback: true });
+      }, { timeoutMs: orcamentoIA, ateMs: Date.now() + orcamentoIA });
     } catch (e) {
       console.warn(`[documental] chamada principal indisponível (${e?.message}) — seguindo com extração focada + fallbacks`);
       data = null;
@@ -1491,7 +1552,7 @@ export default async function handler(req, res) {
     const parsed = parseJSON(rawTxt) || {};
     // Observabilidade: se a IA truncou (max_tokens) ou o parse não achou parecer,
     // registra — é o sintoma que fazia o laudo cair no texto "preliminar".
-    if (data?.stop_reason === 'max_tokens' || (rawTxt && !parsed.parecer)) {
+    if (data?.stop_reason === 'max_tokens' || data?.stop_reason === 'prazo' || (rawTxt && !parsed.parecer)) {
       console.warn(`[documental] stop_reason=${data?.stop_reason || '?'} len=${rawTxt.length} parecer=${parsed.parecer ? 'ok' : 'VAZIO'} riscos=${Array.isArray(parsed.riscos) ? parsed.riscos.length : 'n/a'} lidos=${lidos.length}`);
     }
 

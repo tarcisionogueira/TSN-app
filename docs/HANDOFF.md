@@ -105,6 +105,18 @@
     (da Circunscrição) de X". O nome antigo é tirado de um `comarca` misto ("Barueri (aberta)…; atual …"). A frase que
     NARRA a transferência não é reescrita. O cartório que a IA já acertou não é sobrescrito, e o aviso não é duplicado.
     Nessa regeração a IA acertou sozinha. A guarda é para quando ela errar.
+- **Corte da resposta do documental (max_tokens):** 12 de 12 relatórios de 14/10 pararam nos 9.500 tokens (~26 mil
+  caracteres), e o fim (raioX, lacunas) saía cortado. Do início do pedido até a IA terminar levava ~180–210 s, e o prazo
+  da função é 275 s. Subir o teto numa chamada comum arriscava o abort por prazo, que perde a resposta inteira.
+  - A chamada principal agora é em FLUXO (`anthropicFluxo`), com `max_tokens` 16000. O prazo (`ateMs`) passou a ser um
+    corte controlado: para de ler e fica com o que chegou, que o `parseJSON` tolerante aproveita. No log aparece
+    `stop_reason=prazo`.
+  - Erro do provedor no meio do fluxo mantém o texto parcial; se não chegou nada, lança como antes. A reserva Gemini
+    responde JSON e continua funcionando pelo mesmo `anthropicFetch`.
+  - `_claude.js` não clona mais respostas SSE para medir uso: o clone manteria a conexão aberta depois do corte, e a IA
+    seguiria gerando e cobrando. A medição desse caso fica em `anthropicFluxo`, com `registrarUso` e o custo da geração.
+  - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir. Se `prazo` aparecer com frequência, o
+    gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

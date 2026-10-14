@@ -58,7 +58,12 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
     try {
       const res = await fetch(URL_CLAUDE, { ...options, signal: options.signal || ctrl.signal });
       if (!RETRYABLE.has(res.status)) {
-        if (res.ok) { medirClaude(options, res.clone()); return res; } // mede tokens/buscas sem consumir o corpo do caller
+        if (res.ok) {
+          // Resposta em FLUXO (SSE) é medida por quem a lê (gerar-documental): clonar aqui manteria a
+          // conexão aberta depois de o chamador cortar a leitura, e a IA seguiria gerando (e cobrando).
+          if (!String(res.headers.get('content-type') || '').includes('text/event-stream')) medirClaude(options, res.clone());
+          return res;
+        } // mede tokens/buscas sem consumir o corpo do caller
         if (!estrito && await provedorParou(res)) {
           console.error(`[ia] Claude HTTP ${res.status} (falha do provedor) — tentando o Gemini`);
           return (await reservaGemini(options, restante(), `HTTP ${res.status}`)) || res;
