@@ -36,6 +36,10 @@
   novo — com um resultado antigo gravado (o da BAYIT era de 11/09) a correção da leitura nunca era acionada (0 chamadas ao
   gerar-documental). Botão "Buscar os documentos de novo e gerar" (pula a pré-checagem). "Gerar relatórios" da carteira
   abre a análise com `autoGerar` (mercadológico → documental em sequência).
+- **Documental dispara sozinho depois do mercadológico, para todos (dono, 14/10):** efeito em `Analise.jsx` logo após a
+  auto-sequência — uma vez por imóvel, só se o mercadológico terminou nesta sessão ou há < 30 min, sem documental
+  existente, respeitando plano (ROLES_SEM_DOCUMENTAL), leilão encerrado e termos. Reabrir mercadológico antigo não gera.
+  Vigiar custo de IA do documental nos próximos dias (cada mercadológico novo agora puxa um documental).
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
   `oportunidades_proposta()` deixou de usar `is_equipe()` (não inclui consultor) e usa a lista de ROLES_EQUIPE_RELATORIO.
 - **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por

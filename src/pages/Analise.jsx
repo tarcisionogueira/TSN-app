@@ -1976,6 +1976,29 @@ export default function Analise() {
     if (s.etapa === 2 && ambosRelatorios && LAUDO_NOVO_ATIVO && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, conferiuRelatorios, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // DOCUMENTAL SOZINHO DEPOIS DO MERCADOLÓGICO — para todos (14/10, dono: "dispare o documental
+  // sozinho em todos"). Antes só a auto-sequência acima (proposta/arremate) encadeava; no fluxo
+  // comum o mercadológico ficava pronto e o documental esperava um clique que nem todo cliente dá.
+  // Dispara UMA vez por imóvel nesta montagem e só quando é a continuação natural do que acabou de
+  // acontecer: o mercadológico TERMINOU nesta sessão (vimos 'gerando' → pronto) ou ficou pronto há
+  // menos de 30 min. Reabrir um mercadológico antigo NÃO gera documental (custo de IA sem pedido).
+  // Mesmas travas do botão: plano sem documental, leilão encerrado (cliente), e nunca por cima de um
+  // documental que já existe — inclusive o "faltam documentos", que tem botão próprio.
+  const mercadoViGerandoRef = React.useRef(null); // id do imóvel cujo mercadológico vimos gerando
+  const autoDocFeitoRef = React.useRef(null);
+  useEffect(() => {
+    if (gerandoMercado) { mercadoViGerandoRef.current = analiseImovelId; return; }
+    if (autoGerar || !conferiuRelatorios || !relMercadoGerado || relMercadoIncompleto) return;
+    if (docEntry || gerandoDocumental || relDocumentalPreparando) return;
+    if (ROLES_SEM_DOCUMENTAL.includes(role) || loteEncerrado.encerrado) return;
+    if (autoDocFeitoRef.current === analiseImovelId) return;
+    const prontoEm = new Date(analiseEntry?.updatedAt || 0).getTime();
+    const recente = Number.isFinite(prontoEm) && Date.now() - prontoEm < 30 * 60 * 1000;
+    if (mercadoViGerandoRef.current !== analiseImovelId && !recente) return;
+    autoDocFeitoRef.current = analiseImovelId;
+    gerarRelDocumental(true);
+  }, [gerandoMercado, autoGerar, conferiuRelatorios, relMercadoGerado, relMercadoIncompleto, docEntry, gerandoDocumental, relDocumentalPreparando, role, loteEncerrado.encerrado, analiseImovelId, analiseEntry?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // AUTO-HEAL do parecer vazio (caso Marcelo): ao abrir um relatório concluído com o parecer em
   // branco, dispara UMA regeração — sem custo (isNovo=false) e sem loop (ref por imóvel). Fecha a
   // janela em que o cliente veria um relatório "pronto" sem texto/PDF, em vez de esperar o cron.
