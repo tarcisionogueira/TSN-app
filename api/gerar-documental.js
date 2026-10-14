@@ -700,6 +700,7 @@ CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóve
   nunca como financiamento assumido. Se o edital também diz que o arrematante não arca com nada além
   do lance e da comissão (art. 908 §1º CPC), o "sim" exige prova de contrato ativo com saldo.
 DOIS EIXOS SEPARADOS — LEIA ANTES DE CLASSIFICAR (regra de 31/08):
+- REGRAS DO DONO (14/10) — dois achados GRAVES, com severidade "bloqueante" e constaNaDoc=true quando o documento os mostrar: (a) LEILÃO DE PARTE DO IMÓVEL (penhora/venda de 50%, 1/3, cota-parte — NÃO a fração ideal do terreno de unidade em condomínio): o arrematante vira condômino do executado/cônjuge, não tem a posse livre nem revende sozinho; o ideal é arrematar imóvel INTEIRO; (b) DÍVIDA QUE FICA COM O ARREMATANTE (propter rem assumida, ou o SALDO que a sub-rogação no preço não cobre) maior ou igual ao lance, ou perto do valor do imóvel: o custo real é lance + dívida. Nos dois casos a "Recomendação" do parecer é NÃO RECOMENDO (salvo se o documento mostrar que a dívida será quitada com o preço sem saldo ao arrematante).
 - "nivelRisco" responde SÓ: **o que eu ENCONTREI nos documentos é grave?** Considere APENAS achados com constaNaDoc=true ou confirmados por consulta externa (CNJ/DJEN). O que você NÃO conseguiu verificar NÃO entra aqui — nem para piorar, nem para melhorar.
 - "confianca" responde a outra pergunta: **quanto do checklist eu consegui de fato verificar?** "alta" = documentos legíveis e processo confirmado; "media" = faltou confirmar itens relevantes; "baixa" = faltou documento essencial (matrícula/edital) ou o processo não pôde ser checado.
 - POR QUE ISSO IMPORTA: medido em 31/08, 55% dos riscos emitidos eram "não foi possível verificar" e não achado — e isso empurrava TODO relatório para "amarelo". Dezenove de dezenove saíram amarelos, o que impede o cliente de distinguir um lote limpo de um lote problemático. Diligência pendente é informação sobre A ANÁLISE, não sobre o IMÓVEL.
@@ -739,7 +740,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", os campos curtos de classificação, "riscos" e "parecer" vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. O "parecer" tem de caber em NO MÁXIMO 8.000 caracteres (frases curtas, sem repetir o que já está em "riscos" e "extracao"): a resposta inteira tem teto, e em 14/10 8 de 14 relatórios saíram cortados no fim. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis COMPETENTE HOJE para a matrícula — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'. Parta do CABEÇALHO, mas se alguma averbação TRANSFERIU a competência registrária/circunscrição para outro cartório, o competente é o NOVO, e é nele que se pedem certidões e se registra a carta)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data em que o leilão TERMINA: o ENCERRAMENTO da última praça. Leilão eletrônico que 'ocorrerá a partir de X e se encerrará em Y' → use Y, nunca X (14/10: praça aberta de 06/10/2026 a 26/01/2027 saiu como 06/10). Licitação/venda: o prazo final das propostas. Senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0, "movimentacoesMatricula": [{"ato":"(R-1, Av-2…)","data":"AAAA-MM-DD","evento":"(compra e venda, penhora, hipoteca, indisponibilidade, consolidação, baixa…)","parte":""}] },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis COMPETENTE HOJE para a matrícula — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'. Parta do CABEÇALHO, mas se alguma averbação TRANSFERIU a competência registrária/circunscrição para outro cartório, o competente é o NOVO, e é nele que se pedem certidões e se registra a carta)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data em que o leilão TERMINA: o ENCERRAMENTO da última praça. Leilão eletrônico que 'ocorrerá a partir de X e se encerrará em Y' → use Y, nunca X (14/10: praça aberta de 06/10/2026 a 26/01/2027 saiu como 06/10). Licitação/venda: o prazo final das propostas. Senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0, "parteDoImovelPct": "(PERCENTUAL do imóvel que está sendo leiloado/penhorado: 100 quando é o imóvel INTEIRO; 50 quando é a metade ideal/50% do bem; 33.33 para 1/3 etc. ATENÇÃO: a 'fração ideal de 0,0823 do terreno/solo' de apartamento, sala ou casa em condomínio é a quota do terreno e NÃO reduz este número — o imóvel é vendido inteiro → 100. Só some do 100 quando a penhora/venda for de PARTE do imóvel)", "movimentacoesMatricula": [{"ato":"(R-1, Av-2…)","data":"AAAA-MM-DD","evento":"(compra e venda, penhora, hipoteca, indisponibilidade, consolidação, baixa…)","parte":""}] },
   "nivelRisco": "verde|amarelo|vermelho",
   "confianca": "alta|media|baixa",
   "confiancaMotivo": "1 frase dizendo O QUE faltou verificar (vazio quando confianca=alta)",
@@ -904,7 +905,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,url_lote,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,data_fim,area_m2,valor_avaliacao,matricula_checada_em,fotos,link_foto&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,url_lote,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,data_fim,area_m2,valor_avaliacao,valor_minimo,fracionado,matricula_checada_em,fotos,link_foto&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -2066,6 +2067,56 @@ export default async function handler(req, res) {
     }
     // Pontos de atenção (resumo escaneável no topo, com contagem por severidade).
     // Os riscos ANTIFRAUDE (procedência/processo) entram na frente da lista da IA.
+    // REGRAS DO DONO (14/10, regra_negocio oportunidade.fracao_parcial e documental.divida_assumida):
+    // leilão de PARTE do imóvel e dívida que fica com o arrematante acima do lance são achados GRAVES.
+    // Vila Matilde: 50% do apartamento + condomínio de R$ 296 mil (propter rem) contra lance de R$ 198 mil
+    // saiu "amarelo" com os dois como simples alerta. O servidor decide, a partir do documento e do acervo.
+    if (!Array.isArray(parsed.riscos)) parsed.riscos = [];
+    const exR = parsed.extracao || {};
+    const promoverOuIncluir = (re, novo) => {
+      const r = parsed.riscos.find((x) => re.test(`${x?.categoria || ''} ${x?.descricao || ''}`));
+      if (r) { r.severidade = 'bloqueante'; r.constaNaDoc = true; r.diligencia = false; r.regraDono = true; return; }
+      parsed.riscos.unshift({ ...novo, severidade: 'bloqueante', constaNaDoc: true, regraDono: true });
+    };
+    const pctParte = Number(String(exR.parteDoImovelPct ?? '').replace(',', '.'));
+    const ehFracao = (pctParte > 0 && pctParte < 100) || row?.fracionado === true;
+    if (ehFracao) {
+      promoverOuIncluir(/fra[çc][ãa]o|parte ideal|metade ideal|copropriedade|cond[ôo]mino|\b\d{1,2}\s?%\s*(do|da)\s*(im[óo]vel|apartamento|bem)/i, {
+        categoria: 'Leilão de parte do imóvel (fração)',
+        descricao: `O lote é ${pctParte > 0 && pctParte < 100 ? `${String(pctParte).replace('.', ',')}% do imóvel` : 'uma parte (fração) do imóvel'}, não o imóvel inteiro. Quem arremata vira coproprietário do executado ou de terceiros: não tem a posse livre, não revende nem financia sozinho e pode precisar de ação de extinção de condomínio. Regra da casa: o ideal é arrematar imóvel inteiro.`,
+      });
+    }
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const rxDeb = parsed.raioX?.debitos || {};
+    let dividaAssumida = (Array.isArray(rxDeb.propterRem) ? rxDeb.propterRem : []).reduce((a, d) => a + num(d?.valor), 0);
+    if (!dividaAssumida) {
+      dividaAssumida = (Array.isArray(exR.debitosDiscriminados) ? exR.debitosDiscriminados : [])
+        .filter((d) => /arremat|propter/i.test(String(d?.responsavel || '')) && !/baixad|extint|sub-?rog|quitad[ao] com o pre[çc]o|executado/i.test(String(d?.responsavel || '')))
+        .reduce((a, d) => a + num(d?.valor), 0);
+    }
+    dividaAssumida = Math.max(dividaAssumida, num(rxDeb.totalAssumidoArrematante));
+    const lanceBase = num(row?.valor_minimo) || num(im?.valor_minimo);
+    const avaliacaoBase = num(row?.valor_avaliacao) || num(exR.valorAvaliacaoOficial);
+    if (dividaAssumida > 0) {
+      if (parsed.raioX && typeof parsed.raioX === 'object' && parsed.raioX.debitos && !num(parsed.raioX.debitos.totalAssumidoArrematante)) {
+        parsed.raioX.debitos.totalAssumidoArrematante = Math.round(dividaAssumida * 100) / 100;
+      }
+      let grave = null;
+      try {
+        const rg = await sb('rpc/divida_assumida_grave', { method: 'POST', body: JSON.stringify({ p_divida: dividaAssumida, p_lance: lanceBase || null, p_avaliacao: avaliacaoBase || null }) });
+        if (rg.ok) grave = (await rg.json()) === true;
+        else console.warn('[documental] divida_assumida_grave HTTP', rg.status);
+      } catch (e) { console.warn('[documental] divida_assumida_grave:', e?.message || e); }
+      // Sem a resposta da régua do banco, aplica o mesmo critério padrão (≥ lance ou ≥ 50% da avaliação).
+      if (grave === null) grave = (lanceBase > 0 && dividaAssumida >= lanceBase) || (avaliacaoBase > 0 && dividaAssumida >= avaliacaoBase * 0.5);
+      if (grave) {
+        const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        promoverOuIncluir(/d[ée]bito|d[íi]vida|condom[íi]ni|iptu|propter/i, {
+          categoria: 'Dívida que fica com o arrematante maior que o lance',
+          descricao: `Débitos que acompanham o imóvel somam ${brl(dividaAssumida)}${lanceBase ? `, contra lance mínimo de ${brl(lanceBase)}` : ''}${avaliacaoBase ? ` e avaliação de ${brl(avaliacaoBase)}` : ''}. Se não forem quitados com o preço (sub-rogação), o saldo é do arrematante: o custo real é lance + dívida.`,
+        });
+      }
+    }
     const rlist = [...riscosAntifraude, ...(Array.isArray(parsed.riscos) ? parsed.riscos : [])];
     const pontosAtencao = {
       total: rlist.length,
@@ -2371,7 +2422,7 @@ export default async function handler(req, res) {
     const RE_FALHA_VERIF = /n[ãa]o (foi |ser[áa] )?(poss[ií]vel|localizad|encontrad|identificad|confirmad)|inacess[ií]vel|indispon[ií]vel|em branco|ileg[ií]vel|n[ãa]o (declara|informa|discrimina|menciona|traz|consta)|erro (no|ao) (site|acessar|baixar)|n[ãa]o est[áa] (mais )?dispon/i;
     let demovidos = 0;
     for (const r of (rlist || [])) {
-      if (r && r.constaNaDoc !== false && RE_FALHA_VERIF.test(`${r.descricao || ''}`)) {
+      if (r && !r.regraDono && r.constaNaDoc !== false && RE_FALHA_VERIF.test(`${r.descricao || ''}`)) {
         r.constaNaDoc = false; r.diligencia = true; demovidos++;
       }
     }

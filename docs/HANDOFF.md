@@ -123,7 +123,27 @@
     juridico-retry-cron.
   - Economia: nesse cron, com o CNJ ainda falhando e `regen_motivo` igual SÓ a `cnj_nao_consultado`, a rodada sai antes
     da IA e mantém o relatório. Antes, cada degrau (30 min→6 h, sem teto) pagava a IA inteira para nada.
-  - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir. Se `prazo` aparecer com frequência, o
+  - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir.
+- **Regras do dono: fração, dívida assumida e sucata** (`20261014_fracao_ideal_e_sucata.sql`, 3 linhas em `regra_negocio`).
+  - **Fração** = penhora/venda de PARTE do imóvel (50%, 1/3, cota-parte). NÃO é a "fração ideal de 0,07 do
+    terreno/solo" de apartamento: aí o imóvel é vendido inteiro (alerta do dono). Também não é "reservando a
+    cota parte do coproprietário (art. 843)", que vende o bem inteiro.
+  - `lote_eh_fracao()` + gatilho preenchem `imoveis_leilao.fracionado`, coluna que existia e estava 0/29.792.
+    Hoje marca 56 ativos. A 1ª régua marcou 69, e os 13 a mais eram todos inteiros (número sem %, "50% do
+    lote" de casa, "metade ideal" do histórico da matrícula). Eles saíram antes do fechamento.
+  - Ficaram de fora, de propósito: cotas de multipropriedade (apart-hotel 3/52, 1/13).
+  - Convive com `fracao_ideal_barrada()` (regra `acervo.fracao_ideal`, desativa o lote): a antiga não pega
+    "50% do apartamento" nem "a penhora recaiu sobre 50% do bem". A nova MARCA e não desativa: o lote some
+    da carteira de propostas e o documental o trata como achado grave.
+  - **Dívida assumida:** `divida_assumida_grave()` (limites em `regra_negocio`: ≥ lance ou ≥ 50% da
+    avaliação). O documental soma o propter rem do raioX (ou `debitosDiscriminados` do arrematante) e, se
+    grave, promove o risco a bloqueante (→ vermelho). Vila Matilde: R$ 296 mil de condomínio × lance de
+    R$ 198 mil saía "amarelo".
+  - Campo novo na extração: `parteDoImovelPct`. O prompt pede "NÃO RECOMENDO" nos dois casos.
+  - **Sucata:** `veiculo_eh_sucata()` + gatilho em `is_sucata` (estava 0/12.168; agora 1.641). A busca de
+    veículos oculta por padrão (filtro "Sucata": ocultar / incluir / só). A viabilidade do veículo (−60%)
+    passa a valer de fato.
+ Se `prazo` aparecer com frequência, o
     gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.

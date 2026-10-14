@@ -280,7 +280,7 @@ const lbl = { fontSize: 10, fontWeight: 700, color: '#475569', display: 'block',
 function filtrosVazios() {
   return {
     estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMin: '', valorMax: '',
-    valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', descontoBase: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
+    valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', descontoBase: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', sucata: '', ordenacao: 'atualizado_desc',
   };
 }
 
@@ -350,11 +350,16 @@ function aplicarFiltros(q, f, ign = new Set()) {
   if (ign.has('motor') || !f.motor) { /* sem filtro */ }
   else if (f.motor === 'nao_informado') q = q.is('motor_status', null);
   else q = q.eq('motor_status', f.motor);
+  // SUCATA (14/10, regra do dono oportunidade.veiculo_sucata): não é oportunidade — fica FORA por padrão
+  // ('' = ocultar). `is_sucata` é marcado pelo banco (veiculo_eh_sucata) a partir do texto do anúncio.
+  if (ign.has('sucata') || f.sucata === 'incluir') { /* sem filtro */ }
+  else if (f.sucata === 'so') q = q.eq('is_sucata', true);
+  else q = q.or('is_sucata.is.null,is_sucata.eq.false');
   return q;
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMin: 'Lance mín.', valorMax: 'Lance máx.', valorRefMin: 'FIPE/avaliação mín.', valorAvaliacaoMax: 'FIPE/avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMin: 'Lance mín.', valorMax: 'Lance máx.', valorRefMin: 'FIPE/avaliação mín.', valorAvaliacaoMax: 'FIPE/avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor', sucata: 'Sucata' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 // `embutido` (29/09, pedido do dono): a aba Veículos do Admin mostra lotes e filtros direto, sem
@@ -569,6 +574,14 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
               </select>
             )}
             {filtros.descontoMin && <small style={avisoCobertura}>{filtros.descontoBase === 'avaliacao' ? AVISO_SEM_AVALIACAO : AVISO_SEM_REFERENCIA}</small>}
+          </div>
+          <div>
+            <label style={lbl} title="Sucata (PRF/DETRAN: aproveitável ou inservível, para peças, baixa definitiva) não volta a circular">Sucata</label>
+            <select style={inp} value={filtros.sucata || ''} onChange={e => setFiltros(f => ({ ...f, sucata: e.target.value }))}>
+              <option value="">Ocultar sucatas (padrão)</option>
+              <option value="incluir">Incluir sucatas</option>
+              <option value="so">Só sucatas</option>
+            </select>
           </div>
           <div>
             <label style={lbl}>Tipo de monta</label>
