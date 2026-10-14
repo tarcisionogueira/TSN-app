@@ -123,7 +123,8 @@
     juridico-retry-cron.
   - Economia: nesse cron, com o CNJ ainda falhando e `regen_motivo` igual SÓ a `cnj_nao_consultado`, a rodada sai antes
     da IA e mantém o relatório. Antes, cada degrau (30 min→6 h, sem teto) pagava a IA inteira para nada.
-  - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir.
+  - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir. Se `prazo` aparecer com frequência, o
+    gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
 - **Regras do dono: fração, dívida assumida e sucata** (`20261014_fracao_ideal_e_sucata.sql`, 3 linhas em `regra_negocio`).
   - **Fração** = penhora/venda de PARTE do imóvel (50%, 1/3, cota-parte). NÃO é a "fração ideal de 0,07 do
     terreno/solo" de apartamento: aí o imóvel é vendido inteiro (alerta do dono). Também não é "reservando a
@@ -157,8 +158,33 @@
   - Não carimba `vendido`. Como o `scraper-caixa` grava `ativo: true` em todo lote presente na lista do dia,
     aviso errado se desfaz em menos de 24 h.
   - O lote do print foi desativado na mão (migração `cef_8787711264566_retirado_pela_caixa`).
- Se `prazo` aparecer com frequência, o
-    gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
+- **Ajustes finais da régua do documental (noite de 14/10):**
+  - **Bem indivisível com coproprietário NÃO executado** (Peruíbe, LJUD: 50% da executada + 50% da irmã, penhora de
+    100%). A IA tratava como "penhora de bem de terceiro, risco de nulidade (art. 844)". Pelo CPC art. 843, o bem vai
+    INTEIRO e a cota do coproprietário é paga em dinheiro com o preço. O único risco é a intimação dele (art. 889).
+    Regra no prompt; validado na regeração das 22h08.
+  - **As duas regras do dono não brigam mais:** o risco de fração cita "extinção de condomínio", e a busca da regra da
+    dívida (`/condom[íi]ni/`) o pegava. Agora ela pula risco com `regraDono`.
+  - **Total assumido = SOMA do propter rem,** nunca a "parte proporcional" que a IA calcula. Em fração, o condomínio
+    cobra tudo de qualquer condômino. A Vila Matilde gravou R$ 148 mil (metade); o relatório salvo foi corrigido
+    para R$ 296.629,83 (migração `vila_matilde_total_assumido_integral`).
+- **Validação real do dia (todas no deploy novo):**
+  - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
+    financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.
+  - **Vila Matilde:** vermelho, "NÃO RECOMENDO", com os dois bloqueantes das regras do dono (fração 50% + condomínio
+    acima do lance). Saiu com o CNJ "não verificado", depois de a trava liberar o 1º relatório.
+  - **Peruíbe:** amarelo; art. 843 tratado certo; IPTU sub-rogado por despacho; CNJ (TRT-2) confirmado.
+  - **Casa em Cotia (LEILAOBRASIL):** bloqueou CERTO. O leiloeiro não publica a matrícula: a página tem só dois
+    `.doc` de edital, medido pelo pg_net. O pedido ao leiloeiro foi por e-mail em 14/10.
+- **Aprendizado ≠ regerar** (pergunta do dono): a IA não aprende com relatórios gerados, porque cada chamada é
+  independente e cada regeração custa uma chamada. O que melhora o sistema:
+  - as regras e o prompt (o ganho de hoje);
+  - `juridico_aprendizado` (correções de advogado, injetadas no prompt);
+  - o contexto processual e os desfechos reais de arremate.
+  - Regerar só para validar correção de código ou para uso com cliente.
+- **Pendências abertas hoje vão para `pendencias_projeto`, não para este texto:** ids 212 (vigiar o corte em fluxo), 213
+  (validar o "Avise aqui" da Caixa), 214 (Cotia aguardando matrícula, dono) e 215 (multipropriedade conta como
+  fração? dono).
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
