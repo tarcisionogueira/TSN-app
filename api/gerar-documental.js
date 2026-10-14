@@ -1765,6 +1765,7 @@ export default async function handler(req, res) {
     const editalLivraArrematante = /908|n[aã]o\s+(devendo|arcar)|al[eé]m\s+do\s+(pre[cç]o|valor\s+do\s+lan[cç]o)/i.test(String(ex.responsabilidadeDebitos || ''));
     if (finAssumido && saldoFin <= 0 && editalLivraArrematante) {
       finAssumido = false;
+      ex.financiamentoAssumido = 'nao'; // o campo também é lido adiante (débitos/raio-X): não pode seguir "sim"
       const credorAF = String(ex.financiamentoCredor || '').trim();
       riscosAntifraude.push({
         categoria: 'Alienação fiduciária na matrícula (confirmar baixa)',
