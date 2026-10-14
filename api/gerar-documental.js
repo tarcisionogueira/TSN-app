@@ -294,6 +294,20 @@ async function salvarComprovante(imovelId, meta, fonte) {
   } catch { return null; }
 }
 
+// CARTÓRIO COMPETENTE ATUAL (14/10, BAYIT 640): a matrícula 172.203 nasceu no RI de Barueri, mas a Av.08
+// transferiu a competência registrária de Santana de Parnaíba para o RI da Comarca de Santana de Parnaíba
+// desde 03/11/2023 — e o relatório mandava pedir a certidão em Barueri. Lê a ÚLTIMA averbação de
+// transferência de competência/circunscrição e devolve a comarca de destino.
+function cartorioPorTransferencia(movs = []) {
+  for (const mv of [...(Array.isArray(movs) ? movs : [])].reverse()) {
+    const t = `${mv?.evento || ''} ${mv?.parte || ''}`;
+    if (!/compet[êe]ncia\s+registr|transfer[êe]ncia\s+(?:da\s+)?(?:compet|circunscri)|passou\s+a\s+pertencer\s+[àa]\s+circunscri/i.test(t)) continue;
+    const cands = [...t.matchAll(/Comarca\s+de\s+([A-ZÀ-Ú][\wÀ-ú']*(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ú][\wÀ-ú']*)*)/g)].map((x) => x[1]);
+    if (cands.length) return { comarca: cands[cands.length - 1], ato: mv?.ato || '', data: mv?.data || '' };
+  }
+  return null;
+}
+
 function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
@@ -659,7 +673,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", os campos curtos de classificação, "riscos" e "parecer" vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. O "parecer" tem de caber em NO MÁXIMO 8.000 caracteres (frases curtas, sem repetir o que já está em "riscos" e "extracao"): a resposta inteira tem teto, e em 14/10 8 de 14 relatórios saíram cortados no fim. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data em que o leilão TERMINA: o ENCERRAMENTO da última praça. Leilão eletrônico que 'ocorrerá a partir de X e se encerrará em Y' → use Y, nunca X (14/10: praça aberta de 06/10/2026 a 26/01/2027 saiu como 06/10). Licitação/venda: o prazo final das propostas. Senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0, "movimentacoesMatricula": [{"ato":"(R-1, Av-2…)","data":"AAAA-MM-DD","evento":"(compra e venda, penhora, hipoteca, indisponibilidade, consolidação, baixa…)","parte":""}] },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis COMPETENTE HOJE para a matrícula — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'. Parta do CABEÇALHO, mas se alguma averbação TRANSFERIU a competência registrária/circunscrição para outro cartório, o competente é o NOVO, e é nele que se pedem certidões e se registra a carta)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data em que o leilão TERMINA: o ENCERRAMENTO da última praça. Leilão eletrônico que 'ocorrerá a partir de X e se encerrará em Y' → use Y, nunca X (14/10: praça aberta de 06/10/2026 a 26/01/2027 saiu como 06/10). Licitação/venda: o prazo final das propostas. Senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "financiamentoAssumido": "sim|nao|nao_consta (o arrematante terá de ASSUMIR um financiamento/saldo devedor já existente sobre o imóvel? Procure no edital e na matrícula: 'assumir o saldo devedor', 'assumir o financiamento', 'remanescente do financiamento', 'sub-rogação no contrato de financiamento', 'dívida junto ao agente financeiro'. NÃO confunda com a dívida que ORIGINOU o leilão e se extingue com a arrematação: aqui é dívida que SOBREVIVE e passa para quem arremata)", "financiamentoSaldo": 0, "financiamentoCredor": "", "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "valorAvaliacaoOficial": 0, "movimentacoesMatricula": [{"ato":"(R-1, Av-2…)","data":"AAAA-MM-DD","evento":"(compra e venda, penhora, hipoteca, indisponibilidade, consolidação, baixa…)","parte":""}] },
   "nivelRisco": "verde|amarelo|vermelho",
   "confianca": "alta|media|baixa",
   "confiancaMotivo": "1 frase dizendo O QUE faltou verificar (vazio quando confianca=alta)",
@@ -2351,6 +2365,34 @@ export default async function handler(req, res) {
         parsed.extracao.dataLeilao = fimEdital;
       }
     } catch (e) { console.warn('[documental] leitura da data de encerramento falhou:', e?.message || e); }
+    // CARTÓRIO ATUAL pela averbação de transferência (ver cartorioPorTransferencia). Só corrige o que é
+    // ORIENTAÇÃO para frente (riscos, certidões, lacunas) e o campo do cartório; o parecer não é reescrito,
+    // porque "matrícula aberta no RI de Barueri" é fato histórico verdadeiro.
+    try {
+      const exC = parsed.extracao;
+      const tr = exC && typeof exC === 'object' ? cartorioPorTransferencia(exC.movimentacoesMatricula) : null;
+      const antiga = String(exC?.comarca || '').replace(/^comarca\s+de\s+/i, '').replace(/\/[A-Z]{2}$/, '').trim();
+      if (tr && tr.comarca && antiga.toLowerCase() !== tr.comarca.toLowerCase()) {
+        const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const reAnt = antiga ? new RegExp(`((?:CRI|Cart[óo]rio\\s+de\\s+Registro\\s+de\\s+Im[óo]veis|Registro\\s+de\\s+Im[óo]veis|Oficial\\s+de\\s+Registro\\s+de\\s+Im[óo]veis|RI)\\s+(?:d[aeo]\\s+)?(?:Comarca\\s+de\\s+)?)${escRe(antiga)}`, 'gi') : null;
+        const trocar = (txt) => (reAnt && typeof txt === 'string' ? txt.replace(reAnt, `$1${tr.comarca}`) : txt);
+        if (Array.isArray(parsed.riscos)) parsed.riscos = parsed.riscos.map((r) => ({ ...r, descricao: trocar(r.descricao) }));
+        if (Array.isArray(parsed.lacunas)) parsed.lacunas = parsed.lacunas.map(trocar);
+        if (Array.isArray(parsed.raioX?.certidoesRecomendadas)) {
+          parsed.raioX.certidoesRecomendadas = parsed.raioX.certidoesRecomendadas.map((c) => ({ ...c, orgao: trocar(c?.orgao), nome: trocar(c?.nome), motivo: trocar(c?.motivo) }));
+        }
+        exC.cartorioOrigem = exC.cartorio || (antiga ? `Registro de Imóveis de ${antiga}` : null);
+        exC.cartorio = `Registro de Imóveis da Comarca de ${tr.comarca} (competência transferida pela ${tr.ato || 'averbação'} da matrícula)`;
+        exC.comarca = tr.comarca;
+        if (Array.isArray(parsed.riscos)) parsed.riscos.push({
+          categoria: 'Cartório competente atual',
+          severidade: 'informativo',
+          constaNaDoc: true,
+          descricao: `A ${tr.ato || 'averbação'} da matrícula transferiu a competência registrária para o Registro de Imóveis da Comarca de ${tr.comarca}${antiga ? ` (a matrícula foi aberta em ${antiga})` : ''}. Certidões atualizadas e o registro da carta de arrematação devem ser pedidos em ${tr.comarca}.`,
+        });
+        console.log(`[documental] cartório atual pela ${tr.ato}: ${antiga || '—'} → ${tr.comarca}`);
+      }
+    } catch (e) { console.warn('[documental] cartório por transferência falhou:', e?.message || e); }
     const result = {
       extracao: parsed.extracao || null,
       riscos: rlist,

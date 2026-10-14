@@ -94,6 +94,12 @@
   cronograma presente, riscos citando R-04/R-05/cláusula do edital e as fotos (terreno vazio, área edificada 0). Resíduos:
   ainda `stop_reason=max_tokens` (27 mil chars; o corte cai no fim, `prazoEmbargos` truncado) e um risco cita o "CRI de
   Barueri" quando a Av.08 transferiu a matrícula para o registro de Santana de Parnaíba desde 03/11/2023.
+- **Cartório competente atual (640):** o relatório mandava pedir certidão no "CRI de Barueri"; a Av.08 da matrícula transferiu
+  a competência para o RI da Comarca de Santana de Parnaíba (desde 03/11/2023). `cartorioPorTransferencia()` lê a última
+  averbação de transferência de competência/circunscrição em `extracao.movimentacoesMatricula`, corrige `extracao.cartorio`/
+  `comarca` (guarda `cartorioOrigem`), troca o cartório antigo SÓ nas orientações (riscos, lacunas, certidões recomendadas —
+  o parecer não é reescrito: "aberta em Barueri" é fato) e acrescenta o risco informativo "Cartório competente atual". Prompt
+  do campo `cartorio` pede o competente HOJE. Relatório salvo do 640 corrigido.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de
