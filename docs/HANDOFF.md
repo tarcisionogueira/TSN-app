@@ -143,6 +143,16 @@
   - **Sucata:** `veiculo_eh_sucata()` + gatilho em `is_sucata` (estava 0/12.168; agora 1.641). A busca de
     veículos oculta por padrão (filtro "Sucata": ocultar / incluir / só). A viabilidade do veículo (−60%)
     passa a valer de fato.
+- **Imóvel da Caixa que a Caixa já tirou do ar** (dono, CEF 8787711264566, venda direta: "não está mais disponível
+  para venda", e ele seguia na vitrine). A venda direta vende a qualquer hora e o CSV oficial sai 1×/dia.
+  - Conferir sozinho NÃO dá: `detalhe-imovel.asp` responde **403 (WAF)** a acesso automatizado. Medido em 14/10
+    pelo pg_net (Brasil), nos dois lotes testados, inclusive um à venda. Em 21/09 falhava até pelo Bright Data.
+  - Saída: `POST /api/informar-vendido` (logado, só CEF, 10/h por usuário). Na ficha, ao lado de "Acessar
+    leiloeiro", há um aviso ("lista atualizada 1×/dia, última: …") e o link "Avise aqui": um clique DESATIVA o
+    lote para todos.
+  - Não carimba `vendido`. Como o `scraper-caixa` grava `ativo: true` em todo lote presente na lista do dia,
+    aviso errado se desfaz em menos de 24 h.
+  - O lote do print foi desativado na mão (migração `cef_8787711264566_retirado_pela_caixa`).
  Se `prazo` aparecer com frequência, o
     gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);

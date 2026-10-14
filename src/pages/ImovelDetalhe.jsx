@@ -791,6 +791,7 @@ export default function ImovelDetalhe() {
   const { id: paramId } = useParams();
   const { user, role, effectiveUserId } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
+  const [avisoVendido, setAvisoVendido] = useState(null); // null | 'enviando' | 'ok' | 'erro'
   const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
   const [anexosDocs, setAnexosDocs] = useState([]);
   const [buscandoDocs, setBuscandoDocs] = useState('');
@@ -927,7 +928,7 @@ export default function ImovelDetalhe() {
           // um lote em pregão (Guarulhos, 28/08). Mapear é o conserto, não consultar mais.
           dataFim: data.data_fim ?? null,
           praca1Fim: data.praca1_fim ?? null, praca2Fim: data.praca2_fim ?? null,
-          pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
+          pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id, atualizadoEm: data.atualizado_em ?? null,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo, anexos: data.anexos || null, enriquecidoEm: data.enriquecido_em,
           latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos, geocodNivel: data.geocod_nivel,
@@ -2184,6 +2185,32 @@ export default function ImovelDetalhe() {
                   {ehUrlGenerica(imovel.urlLote) && (
                     <div style={{ marginTop: 6, fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5, textAlign: 'center' }}>
                       Leva ao catálogo geral do leiloeiro — este leiloeiro não publica link direto por lote.
+                    </div>
+                  )}
+                  {/* CAIXA (14/10): venda direta/online vende a qualquer hora e a lista oficial sai 1×/dia; o
+                      site da Caixa bloqueia conferência automática (403). Quem vê a página é o cliente —
+                      um clique tira o lote da vitrine para todos (a lista do dia seguinte desfaz se for engano). */}
+                  {imovel.fonte === 'CEF' && user && (
+                    <div style={{ marginTop: 7, fontSize: 11.5, color: '#64748b', lineHeight: 1.5, textAlign: 'center' }}>
+                      {avisoVendido === 'ok' ? (
+                        <span style={{ color: '#059669', fontWeight: 700 }}>Obrigado! Retiramos este imóvel da vitrine.</span>
+                      ) : (
+                        <>
+                          Imóvel da Caixa pode ser vendido a qualquer hora; nossa lista é atualizada 1× por dia
+                          {imovel.atualizadoEm ? ` (última: ${new Date(imovel.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})` : ''}.
+                          {' '}A Caixa disse que não está mais disponível?{' '}
+                          <button disabled={avisoVendido === 'enviando'} onClick={async () => {
+                            setAvisoVendido('enviando');
+                            try {
+                              const r = await apiCall('/api/informar-vendido', { method: 'POST', body: JSON.stringify({ imovelId: imovel.id }) });
+                              setAvisoVendido(r.ok ? 'ok' : 'erro');
+                            } catch (e) { console.error('[informar-vendido]', e?.message || e); setAvisoVendido('erro'); }
+                          }} style={{ background: 'none', border: 'none', padding: 0, color: '#0D63DB', fontWeight: 700, fontSize: 11.5, cursor: 'pointer', textDecoration: 'underline' }}>
+                            {avisoVendido === 'enviando' ? 'Enviando…' : 'Avise aqui'}
+                          </button>
+                          {avisoVendido === 'erro' && <span style={{ color: '#dc2626' }}> — não consegui registrar, tente de novo.</span>}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
