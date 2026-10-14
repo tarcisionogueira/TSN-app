@@ -56,6 +56,12 @@
   liberação (processo não verificado — agora que o lote é judicial com nº CNJ) PRESERVOU o relatório antigo. Regra nova:
   só CNJ pendente + relatório anterior já entregue → entrega o NOVO com o vício `cnj_nao_consultado` (juridico-retry-cron
   retenta e avisa). TJSP no DataJud: timeout recorrente desde 30/09 (17 dias) — vale investigar à parte.
+- **640 regerado (16:47) — correto no essencial:** judicial, financiamento a assumir = não, risco amarelo, sem bloqueante,
+  "direitos fiduciários" como alerta a confirmar. Ajustes: (a) texto à IA dizia "DataJud NÃO localizou" quando a consulta
+  FALHOU (forma nº 10) — agora diz "não respondeu"; (b) resposta cortada no max_tokens (2/2 regerações, ~24 mil chars) perdia
+  `documentosAnalisados` e gravava `matricula_nao_lida,edital_nao_lido` → regeração à toa; o vício agora usa a mesma régua
+  da trava (tipo do doc lido); (c) risco cortado sem severidade vira "alerta". Pendente: `extracao.dataLeilao` pegou a
+  ABERTURA (06/10), não o fechamento — o acervo já tem 26/01/2027.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

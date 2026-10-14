@@ -1399,7 +1399,7 @@ export default async function handler(req, res) {
         // JUDICIAL → existência do processo no CNJ. EXTRAJUDICIAL → conferir no site do leiloeiro.
         (ehJudicial || procDigitsPre.length === 20)
           ? (procDigitsPre.length === 20
-              ? `- Leilão judicial · Processo ${procDigitsPre}: dígito verificador CNJ ${cnjValido(procDigitsPre) ? 'VÁLIDO' : 'INVÁLIDO (número possivelmente incorreto ou forjado)'}; DataJud ${temProc ? 'CONFIRMOU o processo' : 'NÃO localizou o processo (confirmar no tribunal antes do lance)'}.`
+              ? `- Leilão judicial · Processo ${procDigitsPre}: dígito verificador CNJ ${cnjValido(procDigitsPre) ? 'VÁLIDO' : 'INVÁLIDO (número possivelmente incorreto ou forjado)'}; DataJud ${temProc ? 'CONFIRMOU o processo' : cnjNumeroFalhou ? 'NÃO RESPONDEU agora (fonte pública indisponível — isso NÃO significa que o processo não existe; não escreva "não localizado"; confirmar no tribunal antes do lance)' : 'NÃO localizou o processo (confirmar no tribunal antes do lance)'}.`
               : '- Leilão judicial sem número de processo no padrão CNJ nos documentos — confirmar o processo no tribunal antes do lance.')
           : '',
         ehExtrajudicial ? `- Leilão extrajudicial (Lei 9.514, sem processo judicial): a legitimidade se confere no SITE OFICIAL do leiloeiro${linkOficial ? ` (${linkOficial})` : ''} — confirme que o lote, o edital e o leiloeiro constam lá antes de qualquer lance ou pagamento.` : '',
@@ -1472,6 +1472,10 @@ export default async function handler(req, res) {
     // da execução, ocupação com imissão garantida) NÃO podem sair como "bloqueante".
     // Rebaixa para "alerta" — o bloqueante fica só para risco concreto e comprovado.
     if (Array.isArray(parsed.riscos)) {
+      // Último risco CORTADO no max_tokens chega sem severidade (BAYIT 640, 14/10): na tela ele não
+      // entra em nenhuma faixa. Sem descrição não é risco; sem severidade, vale "alerta" (a confirmar).
+      parsed.riscos = parsed.riscos.filter((r) => r && String(r.descricao || '').trim().length > 20)
+        .map((r) => (['bloqueante', 'alerta', 'informativo'].includes(r.severidade) ? r : { ...r, severidade: 'alerta' }));
       const rotineiro = /penhora|execu[çc]|hipotec|indisponibil|bacenjud|renajud|arresto|ocupa|imiss|bloqueio/i;
       // DIVERGÊNCIA DE IDENTIDADE DO IMÓVEL não é RISCO JURÍDICO: quando os documentos descrevem
       // um imóvel DIFERENTE do informado p/ análise (endereço/município/lote trocado — ex.: a
@@ -2371,8 +2375,11 @@ export default async function handler(req, res) {
     };
     // APRENDER NA EMISSÃO (durável, sem IA) + apontar regeração se houver vício.
     const qualDoc = {
-      matricula_nao_lida: !da.matricula,
-      edital_nao_lido: !da.edital,
+      // 14/10: `da` (documentosAnalisados) some quando a resposta é cortada no max_tokens (BAYIT 640: 2 de 2
+      // regerações com stop_reason=max_tokens) — e o vício mandava o cron REGERAR à toa um relatório com os
+      // dois documentos lidos. Mesma régua da trava acima: confirmação da IA OU o tipo do documento lido.
+      matricula_nao_lida: !leuMatriculaFinal,
+      edital_nao_lido: !leuEdital,
       // Só FALHA de consulta dispara a re-tentativa (auditoria 30/09, item 10): "consultou e o DataJud
       // não tem" é resposta, e re-gerar com IA a cada 6 h por ela não muda nada.
       cnj_nao_consultado: processoNaoVerificado,
