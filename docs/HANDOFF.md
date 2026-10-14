@@ -80,6 +80,15 @@
   redigido pela IA (`responsabilidadeDebitos`), que mudou de redação. Agora a prova vem do TEXTO DO EDITAL (cláusula
   condicional "Tratando-se de imóvel gravado com hipoteca ou alienação fiduciária" ou art. 908/"não devendo arcar").
   Ainda `stop_reason=max_tokens` (23,5 mil chars): max_tokens 8500→9500 e parecer ≤ 8.000 chars. Vigiar tempo (~50 tok/s).
+- **4ª regeração do 640 (17:30, versão nova) — correta pelos documentos:** judicial, processo CONFIRMADO no DataJud,
+  data 26/01/2027, financiamento a assumir = não, risco amarelo, sem bloqueante; o objeto do leilão (direitos das credoras
+  fiduciárias, Av.10) aparece como alerta com fundamento na matrícula. Resta: resposta ainda bate no teto (27 mil chars,
+  `raioX.cronogramaLeilao` cortado).
+- **Leitura de TUDO o que o leiloeiro publica (dono, 14/10: "não leve em conta o que o leiloeiro disse"):**
+  (a) FOTOS nunca eram lidas — `fotos`/`link_foto` fora do select do lote; 0 de 16 documentais em 30 dias leram foto.
+  Corrigido (capa re-hospedada primeiro, até 4). (b) Planilha .xlsx e ODT/ODS viravam XML cru no ramo de "pacote ZIP";
+  agora viram texto tabular (`_doc-normalizar.js`, sem dependência nova; teste `testar:doc-normalizar` 10 casos).
+  (c) Instrução do sistema: PROVA = DOCUMENTO — citar ato/cláusula; fala de leiloeiro/anúncio não é prova.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);
   ROLES_SEM_DOCUMENTAL = só explorador.
 - **Carteira para analista e consultor:** rota `/carteira-propostas` + botão "🎯 Propostas" no menu da equipe; o gate de

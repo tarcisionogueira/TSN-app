@@ -824,7 +824,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,url_lote,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,data_fim,area_m2,valor_avaliacao,matricula_checada_em&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,url_lote,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,data_fim,area_m2,valor_avaliacao,matricula_checada_em,fotos,link_foto&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -1170,7 +1170,11 @@ export default async function handler(req, res) {
     // 4 fotos e teto de tempo próprio — não pode competir com a leitura dos documentos, que
     // é a peça central da análise jurídica.
     try {
-      const listaFotos = (Array.isArray(row?.fotos) && row.fotos.length ? row.fotos : [row?.link_foto].filter(Boolean)).slice(0, 4);
+      // 14/10: `fotos`/`link_foto` NÃO vinham no select do lote — a lista saía sempre vazia e 0 de 16 documentais
+      // em 30 dias leram foto (o cruzamento foto × matrícula de 18/09 nunca rodou). A CAPA vai primeiro: ela é
+      // re-hospedada no nosso bucket em várias fontes (BAYIT, CEF), então é lida de graça mesmo quando o CDN do
+      // leiloeiro barra o servidor.
+      const listaFotos = [...new Set([row?.link_foto, ...(Array.isArray(row?.fotos) ? row.fotos : [])].filter((u) => /^https?:\/\//i.test(String(u || ''))))].slice(0, 4);
       const deadlineFotos = Math.min(deadline, Date.now() + 15000);
       for (const urlFoto of listaFotos) {
         if (Date.now() > deadlineFotos) break;
@@ -1457,7 +1461,7 @@ export default async function handler(req, res) {
         // 7000→8500 (01/10): o raioX (último campo) vinha cortado em 6 de 14 relatórios, e as
         // movimentações da matrícula passaram a ser obrigatórias no começo do JSON.
         model: MODEL, max_tokens: 9500, // 8500→9500 (14/10): mesmo com o parecer limitado, 3/3 regerações do BAYIT 640 bateram no teto; ~50 tok/s cabe em 300 s
-        system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
+        system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. PROVA = DOCUMENTO (regra do dono, 14/10): fundamente cada conclusão no que está ESCRITO nos arquivos fornecidos (matrícula, edital, laudo, certidões, planilhas, fotos) e cite o ato/cláusula (ex.: "Av.10", "item DOS DÉBITOS do edital"). Afirmação do leiloeiro, do anúncio ou de terceiros que não conste dos documentos NÃO é prova e não muda o diagnóstico. Seja assertivo: quando o documento resolve a questão, afirme; quando não resolve, diga exatamente qual documento falta. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
       }, { retries: 0, timeoutMs: orcamentoIA, noFallback: true });
     } catch (e) {

@@ -67,4 +67,21 @@ const rj = await normalizarDocumento(jpg, { url: 'x.jpg' });
 assert.equal(rj.kind, 'imagem'); assert.equal(rj.convertido, undefined);
 ok('JPEG comum segue nativo, sem conversão');
 
+// PLANILHA .xlsx (tabela de débitos) e ODT (edital em LibreOffice) — 14/10: viravam XML cru no ramo de pacote.
+// (JSZip já importado acima)
+const x = new JSZip();
+x.file('[Content_Types].xml', '<Types/>'); x.file('xl/workbook.xml', '<workbook/>');
+x.file('xl/sharedStrings.xml', '<sst><si><t>Débito</t></si><si><t>IPTU 2016-2025</t></si><si><t>Condomínio &amp; taxas</t></si></sst>');
+x.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>Valor (R$)</t></is></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>60730.37</v></c></row><row r="3"><c r="A3" t="s"><v>2</v></c><c r="B3"><v>44538.71</v></c></row></sheetData></worksheet>');
+const rx = await normalizarDocumento(await x.generateAsync({ type: 'nodebuffer' }), { url: 'debitos.xlsx' });
+assert.equal(rx.kind, 'texto'); assert.equal(rx.convertido, 'xlsx→texto');
+assert.match(rx.texto, /IPTU 2016-2025 \| 60730\.37/); assert.match(rx.texto, /Condomínio & taxas \| 44538\.71/);
+ok('XLSX vira texto tabular (linha "IPTU 2016-2025 | 60730.37")');
+
+const o = new JSZip(); o.file('mimetype', 'application/vnd.oasis.opendocument.text');
+o.file('content.xml', '<office:document-content><office:body><office:text><text:h>EDITAL</text:h><text:p>Praça única se encerrará em 26/01/2027 às 14:00h, conforme as regras do leilão eletrônico.</text:p></office:text></office:body></office:document-content>');
+const ro = await normalizarDocumento(await o.generateAsync({ type: 'nodebuffer' }), { url: 'edital.odt' });
+assert.equal(ro.kind, 'texto'); assert.equal(ro.convertido, 'odt→texto'); assert.match(ro.texto, /se encerrará em 26\/01\/2027/);
+ok('ODT vira texto (edital do LibreOffice)');
+
 console.log(`\n✓ doc-normalizar: ${n} casos`);

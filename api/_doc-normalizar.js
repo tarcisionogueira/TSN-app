@@ -9,6 +9,42 @@ import { classificarDocumento, MAX_BYTES_VISAO } from './_doc-leitura.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 
 const TEXTO_MAX = 60000;      // texto convertido (DOCX, PDF grande): matrícula longa cabe inteira
+
+// ── Planilhas e ODF (14/10) ─────────────────────────────────────────────────────────────────
+const desescapar = (t) => String(t || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+// XLSX = ZIP com xl/sharedStrings.xml (textos) + xl/worksheets/sheetN.xml (células). Cada linha vira
+// "A | B | C" — a IA lê tabela de débitos/cronograma como lê um texto, e o valor numérico vem cru.
+async function planilhaXlsxParaTexto(zip) {
+  const sharedXml = zip.file('xl/sharedStrings.xml') ? await zip.file('xl/sharedStrings.xml').async('string') : '';
+  const shared = [...sharedXml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => desescapar([...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join('')));
+  const abas = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a, b) => Number(a.match(/(\d+)/)[1]) - Number(b.match(/(\d+)/)[1]));
+  const partes = [];
+  for (const nome of abas.slice(0, 10)) {
+    const xml = await zip.file(nome).async('string');
+    const linhas = [];
+    for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+      const cels = [...row[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)].map((c) => {
+        const tipo = (c[1].match(/\bt="([^"]+)"/) || [])[1];
+        const v = (c[2].match(/<v>([\s\S]*?)<\/v>/) || [])[1];
+        if (tipo === 's') return shared[Number(v)] ?? '';
+        if (tipo === 'inlineStr') return desescapar([...c[2].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join(''));
+        return desescapar(v ?? '');
+      }).map((x) => String(x).trim());
+      if (cels.some(Boolean)) linhas.push(cels.join(' | '));
+      if (linhas.length >= 2000) break;
+    }
+    if (linhas.length) partes.push(`=== Planilha: aba ${partes.length + 1} ===\n${linhas.join('\n')}`);
+  }
+  return partes.join('\n\n').trim();
+}
+// ODT/ODS: content.xml — parágrafos e células viram linhas; tags de estilo somem.
+function xmlOdfParaTexto(xml) {
+  return desescapar(String(xml || '')
+    .replace(/<text:tab\/>/g, '\t').replace(/<text:line-break\/>/g, '\n')
+    .replace(/<\/table:table-cell>/g, ' | ').replace(/<\/table:table-row>/g, '\n')
+    .replace(/<\/text:p>|<\/text:h>/g, '\n')
+    .replace(/<[^>]+>/g, '')).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 const IMG_LADO_MAX = 2400;    // px: legível para a visão e bem abaixo do teto de bytes
 
 const ascii = (buf, i, f) => buf.slice(i, f).toString('latin1');
@@ -53,6 +89,21 @@ export async function normalizarDocumento(buf, { url = '', contentType = '', pro
         const texto = String(value || '').replace(/\s+\n/g, '\n').trim();
         if (texto.length >= 80) return { kind: 'texto', mediaType: 'text/plain', texto: texto.slice(0, TEXTO_MAX), convertido: 'docx→texto' };
         return { kind: 'ilegivel', motivo: 'DOCX sem texto extraível' };
+      }
+      // PLANILHA (.xlsx) e ODF (.odt/.ods) — 14/10, pedido do dono: "ler arquivos, imagens, planilhas, tudo o
+      // que o leiloeiro forneça". Antes caíam no ramo de PACOTE abaixo e cada XML interno virava "texto" cru
+      // (tags, estilos), com cara de documento lido. Aqui viram texto TABULAR legível, sem dependência nova.
+      if (zip.file('xl/workbook.xml')) {
+        const texto = await planilhaXlsxParaTexto(zip);
+        if (texto.length >= 40) return { kind: 'texto', mediaType: 'text/plain', texto: texto.slice(0, TEXTO_MAX), convertido: 'xlsx→texto' };
+        return { kind: 'ilegivel', motivo: 'planilha XLSX sem conteúdo legível' };
+      }
+      if (zip.file('content.xml') && zip.file('mimetype')) {
+        const tipoOdf = String(await zip.file('mimetype').async('string')).trim();
+        const xml = await zip.file('content.xml').async('string');
+        const texto = xmlOdfParaTexto(xml);
+        if (texto.length >= 40) return { kind: 'texto', mediaType: 'text/plain', texto: texto.slice(0, TEXTO_MAX), convertido: `${/spreadsheet/.test(tipoOdf) ? 'ods' : 'odt'}→texto` };
+        return { kind: 'ilegivel', motivo: 'documento ODF sem texto extraível' };
       }
       if (profundidade >= 1) return { kind: 'ilegivel', motivo: 'ZIP dentro de ZIP não é aberto' };
       // Pacote: lê CADA arquivo interno pela mesma rota (teto de 8 itens).
