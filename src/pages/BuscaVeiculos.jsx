@@ -753,7 +753,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                   <div style={{ marginTop: 2 }}>
                     <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mín.</div>
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
-                    {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : ''} {fmtBRL(v.valor_fipe)}</div>}
+                    {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : v.fipe_status === 'leiloeiro' ? ' (leiloeiro)' : ''} {fmtBRL(v.valor_fipe)}</div>}
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>

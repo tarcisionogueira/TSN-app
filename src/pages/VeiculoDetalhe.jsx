@@ -77,6 +77,7 @@ const FIPE_EXPLICACAO = {
   sem_match: 'Não foi possível casar marca/modelo com a tabela FIPE automaticamente.',
   sem_dados: 'Faltam marca, modelo ou ano cadastrados para consultar a FIPE.',
   erro: 'A consulta à FIPE falhou — tente novamente mais tarde.',
+  leiloeiro: 'Valor da tabela FIPE informado pelo próprio leiloeiro na ficha do lote — não foi conferido por nós.',
 };
 
 export default function VeiculoDetalhe() {
@@ -137,7 +138,7 @@ export default function VeiculoDetalhe() {
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
     const velha = Date.now() - Date.parse(v.fipe_atualizado_em || 0) > 25 * 86400000;
-    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'sem_dados');
+    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados');
     if (!precisaBuscar) return;
     let cancelado = false;
     (async () => {
@@ -224,7 +225,7 @@ export default function VeiculoDetalhe() {
   const opcionais = Array.isArray(v.opcionais) ? v.opcionais.filter(Boolean).map(String) : [];
   const PAGAMENTO = { a_vista: 'À vista', parcelado: 'Parcelado', financiado: 'Financiável', a_vista_ou_parcelado: 'À vista ou parcelado' };
   const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
-  const mostrarFipe = v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado');
+  const mostrarFipe = v.valor_fipe > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status);
   const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
@@ -350,7 +351,7 @@ export default function VeiculoDetalhe() {
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
                     {v.fipe_codigo ? `Código FIPE ${v.fipe_codigo} · ` : ''}{v.fipe_mes_referencia || ''}
                   </div>
-                  {v.fipe_status === 'aproximado' && <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>{FIPE_EXPLICACAO.aproximado}</div>}
+                  {(v.fipe_status === 'aproximado' || v.fipe_status === 'leiloeiro') && <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>{FIPE_EXPLICACAO[v.fipe_status]}</div>}
                 </>
               ) : (
                 <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>

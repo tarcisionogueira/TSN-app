@@ -5,6 +5,19 @@
 ---
 
 
+
+## 14/10 (madrugada) — veículos: FIPE (filtro, desconto, lote noturno, ficha Superbid) e motor
+
+- **Busca de veículos:** Lance mín., FIPE/avaliação mín./máx. (FIPE primeiro; sem ela, avaliação), desconto sobre
+  FIPE (`desconto_fipe_percentual`, trigger) com escolha da base, ordenação "Maior desconto (FIPE)", campos em R$.
+- **FIPE em lote:** `enriquecer-fipe.yml` volta todo dia 00h20 UTC com teto 250/dia (sobram 200 para a tela);
+  carros primeiro na fila. 1º lote: 66 com FIPE (cota fria ≈ 3,8 consultas/veículo). Dono NÃO quer FIPE_TOKEN por ora.
+- **Ficha Superbid (`product.template`):** marca/modelo/ano (1.217 veículos SUPERBID estavam sem ano → sem FIPE),
+  `valortabelafipe` (~54% dos carros) → `valor_fipe_leiloeiro` → trigger usa só sem FIPE consultada, status
+  'leiloeiro' (tela/relatório dizem "informada pelo leiloeiro"); "Motor" da ficha (raro) entra como "Motor: X" no texto.
+- **Motor:** classificador lia mal 58 veículos ("Com Avarias Funcionando", "ótimo estado de conservação e funcionamento",
+  "sem funcionamento", "não está funcionando"…). Os ~4,8 mil carros SUPERBID "não informado" não declaram nada.
+
 ## 13/10 (madrugada de 14, 3ª parte) — apurar-resultado com índice, 429 do MP com nova tentativa
 
 - **`apurar-resultado-leilao-cron` 57014 (21h UTC):** a fila de imóveis fazia *seq scan* — 10,2 s medidos FORA do pico

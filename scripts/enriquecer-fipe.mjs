@@ -45,21 +45,25 @@ async function main() {
   // e deixava por último o "sem lance", que é exatamente onde entra a proposta de compra direta.
   // Agora: 1º sem lance/condicional (alvo de proposta), 2º leilão futuro mais próximo. Vendido
   // não entra — FIPE de lote arrematado não serve a ninguém.
-  const base = () => supabase
+  // CARROS PRIMEIRO (14/10, dono: "dê preferência aos carros, são os que eu mais consulto"): a fila é
+  // montada em duas levas — carro, depois os demais tipos — e a cota do dia acaba nos carros antes.
+  const base = (tipos) => supabase
     .from('veiculos_leilao')
     .select('id, titulo, marca, modelo, ano_fabricacao, ano_modelo, tipo_veiculo, fipe_status, fipe_atualizado_em')
     .eq('ativo', true)
-    .in('tipo_veiculo', TIPOS_COM_FIPE)
+    .in('tipo_veiculo', tipos)
     .not('ano_fabricacao', 'is', null)
     .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde25})`);
   const hoje = new Date().toISOString().slice(0, 10);
-  const [propostas, futuros] = await Promise.all([
-    base().in('resultado_leilao', ['sem_lance', 'condicional']).order('resultado_apurado_em', { ascending: false, nullsFirst: false }).limit(LIMITE),
-    base().is('resultado_leilao', null).gte('data_leilao', hoje).order('data_leilao', { ascending: true }).limit(LIMITE),
-  ]);
-  const errBusca = propostas.error || futuros.error;
+  const OUTROS = TIPOS_COM_FIPE.filter((t) => t !== 'carro');
+  const leva = (tipos) => [
+    base(tipos).in('resultado_leilao', ['sem_lance', 'condicional']).order('resultado_apurado_em', { ascending: false, nullsFirst: false }).limit(LIMITE),
+    base(tipos).is('resultado_leilao', null).gte('data_leilao', hoje).order('data_leilao', { ascending: true }).limit(LIMITE),
+  ];
+  const respostas = await Promise.all([...leva(['carro']), ...leva(OUTROS)]);
+  const errBusca = respostas.find((r) => r.error)?.error;
   const vistos = new Set();
-  const candidatos = [...(propostas.data || []), ...(futuros.data || [])]
+  const candidatos = respostas.flatMap((r) => r.data || [])
     .filter((v) => !vistos.has(v.id) && vistos.add(v.id)).slice(0, LIMITE);
   if (errBusca) { console.error('Erro ao buscar candidatos:', errBusca.message); process.exit(1); }
   if (!candidatos?.length) { console.log('Nada pendente.'); return; }

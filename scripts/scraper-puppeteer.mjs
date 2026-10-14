@@ -1471,7 +1471,13 @@ export function fichaVeiculoSuperbid(template) {
   let fab = ano(props.anofabricacao), mod = ano(props.anomodelo);
   if (!fab && mod) fab = mod;
   if (fab && mod && (mod < fab || mod - fab > 1)) mod = null;
+  // FIPE da ficha (`valortabelafipe`, ~54% das ofertas de carro em 14/10) e MOTOR ("Condições Gerais", só
+  // alguns vendedores preenchem). A FIPE vai para `valor_fipe_leiloeiro`: o trigger do banco só a usa quando
+  // não há FIPE consultada por nós, com fipe_status 'leiloeiro' — a origem fica visível na tela.
+  const fipe = Number(String(props.valortabelafipe || '').replace(',', '.'));
   return {
+    fipe: fipe >= 1000 && fipe <= 5_000_000 ? Math.round(fipe) : null,
+    motor: props.motor ? props.motor.slice(0, 40) : null,
     marca: props.marca ? props.marca.toUpperCase().slice(0, 60) : null,
     modelo: props.modelo ? props.modelo.slice(0, 120) : null,
     ano_fabricacao: fab, ano_modelo: fab ? mod : null,
@@ -1584,14 +1590,16 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const partesDesc = [textoDaOferta(of.offerDescription), str(p.shortDesc)]
         .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
       // 20/09: mesmo fix — texto real do leiloeiro (offerDescription/offerDetail), não título.
-      const descricao = (partesDesc.join(' — ') || titulo).slice(0, 8000);
+      const ficha = fichaVeiculoSuperbid(p.template);
+      // "Motor: <valor>" da ficha entra no texto: o classificador do banco (motor_status_do_texto) lê esse formato.
+      const descBase = (partesDesc.join(' — ') || titulo);
+      const descricao = (ficha.motor && !/motor\s*:/i.test(descBase) ? `${descBase} · Motor: ${ficha.motor}` : descBase).slice(0, 8000);
       const textoCompleto = `${titulo} ${descricao}`;
       const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
       const linkURL = str(of.linkURL);
       const link_lote = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
       const anoMatch = textoCompleto.match(REGEX_ANO);
       const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0) || null;
-      const ficha = fichaVeiculoSuperbid(p.template);
       pendentes.push({
         id, link_lote, textoCompleto,
         base: {
@@ -1609,6 +1617,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
           km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
           valor_minimo: valMin,
           valor_avaliacao: valAval,
+          valor_fipe_leiloeiro: ficha.fipe,
           desconto_percentual: descontoPercentualVeiculo(valMin, valAval),
           modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s)) && !/extra/i.test(str(s))) ? 'judicial' : 'extrajudicial',
           cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),

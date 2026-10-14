@@ -416,7 +416,7 @@ function promptVeiculo(v, percentualFipe, faixa, extra = {}) {
 
   const fipeTexto = faixa === 'sem_fipe'
     ? 'FIPE não disponível para este veículo (marca/modelo/ano não bateram com a tabela, ou consulta ainda não feita).'
-    : `Lance mínimo é ${percentualFipe.toFixed(1)}% da FIPE (R$ ${brl(v.valor_fipe)}, referência ${v.fipe_mes_referencia || 'não informada'}${v.fipe_status === 'aproximado' ? ' — valor APROXIMADO, mais de uma versão do modelo bateu com o ano' : ''}). Regra da casa: ATÉ 65% da FIPE é considerado ótimo ponto de entrada; acima de 100% (lance acima da própria FIPE) é sinal de alerta forte.`;
+    : `Lance mínimo é ${percentualFipe.toFixed(1)}% da FIPE (R$ ${brl(v.valor_fipe)}, referência ${v.fipe_mes_referencia || 'não informada'}${v.fipe_status === 'aproximado' ? ' — valor APROXIMADO, mais de uma versão do modelo bateu com o ano' : v.fipe_status === 'leiloeiro' ? ' — valor INFORMADO PELO LEILOEIRO na ficha do lote, não conferido na tabela' : ''}). Regra da casa: ATÉ 65% da FIPE é considerado ótimo ponto de entrada; acima de 100% (lance acima da própria FIPE) é sinal de alerta forte.`;
 
   return `Você avalia veículos de leilão para um investidor. Use SOMENTE o que está nos documentos anexos e na descrição abaixo — nunca invente característica, defeito ou ausência de defeito que não conste. Quando a informação não constar em lugar nenhum, diga explicitamente "não informado pelo leiloeiro" em vez de presumir.
 
@@ -595,7 +595,7 @@ export default async function handler(req, res) {
   // triangular"). Sem valor válido, tenta AGORA — forçando por cima da espera de 90 dias de um
   // `sem_match` antigo — com a mesma régua da tela (api/_fipe-garantir.js: ano pelo edital, cache,
   // cota e triangulação por ano+combustível). Teto de 25 s: não pode comer o prazo da análise.
-  if (!(Number(v.valor_fipe) > 0 && ['ok', 'aproximado'].includes(v.fipe_status))) {
+  if (!(Number(v.valor_fipe) > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status))) {
     try {
       const fipe = await Promise.race([
         garantirFipe(v, { forcar: true }),
@@ -616,7 +616,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    const percentualFipe = (v.valor_fipe > 0 && (v.fipe_status === 'ok' || v.fipe_status === 'aproximado') && v.valor_minimo > 0)
+    const percentualFipe = (v.valor_fipe > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status) && v.valor_minimo > 0)
       ? (Number(v.valor_minimo) / Number(v.valor_fipe)) * 100
       : null;
     const faixa = faixaFipe(percentualFipe);
