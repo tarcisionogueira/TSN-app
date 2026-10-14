@@ -2099,21 +2099,32 @@ export default async function handler(req, res) {
     dividaAssumida = Math.max(dividaAssumida, num(rxDeb.totalAssumidoArrematante));
     const lanceBase = num(row?.valor_minimo) || num(im?.valor_minimo);
     const avaliacaoBase = num(row?.valor_avaliacao) || num(exR.valorAvaliacaoOficial);
+    // SUB-ROGAÇÃO NO PREÇO (BAYIT 640, 14/10): IPTU + condomínio de R$ 105 mil pagos com o próprio lance (R$ 393 mil)
+    // — o arrematante não assume nada. Aí o que fica com ele é só o SALDO (dívida − lance), e é isso que o dono
+    // chama de grave ("haverá saldo a pagar"); o critério dos 50% da avaliação vale só para dívida assumida direto.
+    const propterLista = Array.isArray(rxDeb.propterRem) ? rxDeb.propterRem.filter((d) => num(d?.valor) > 0) : [];
+    // Negação conta: "o edital NÃO traz cláusula expressa de sub-rogação" (Vila Matilde) é o oposto.
+    const negaSubrog = (t) => /n[ãa]o\b[^.;]{0,60}sub-?roga|sem\s+(?:cl[áa]usula\s+(?:expressa\s+)?de\s+)?sub-?roga/i.test(t);
+    const afirmaSubrog = (t) => /sub-?roga/i.test(t) && !negaSubrog(t);
+    const subRogado = afirmaSubrog(String(exR.responsabilidadeDebitos || ''))
+      || (propterLista.length > 0 && propterLista.every((d) => { const o = String(d?.observacao || ''); return afirmaSubrog(o) || /pago com o pre[çc]o|quitad[oa] com o pre[çc]o/i.test(o); }));
     if (dividaAssumida > 0) {
       // Conservador: vale a SOMA do propter rem, não a "parte proporcional" que a IA às vezes calcula — em
       // fração, o condomínio pode cobrar o débito inteiro de qualquer condômino (Vila Matilde: a IA pôs
       // R$ 148 mil, metade, e a própria observação dela dizia que a cobrança pode ser total).
-      if (parsed.raioX && typeof parsed.raioX === 'object' && parsed.raioX.debitos && num(parsed.raioX.debitos.totalAssumidoArrematante) < dividaAssumida) {
-        parsed.raioX.debitos.totalAssumidoArrematante = Math.round(dividaAssumida * 100) / 100;
+      const ficaComArrematante = subRogado ? Math.max(0, dividaAssumida - (lanceBase || 0)) : dividaAssumida;
+      if (parsed.raioX && typeof parsed.raioX === 'object' && parsed.raioX.debitos
+          && (subRogado || num(parsed.raioX.debitos.totalAssumidoArrematante) < ficaComArrematante)) {
+        parsed.raioX.debitos.totalAssumidoArrematante = Math.round(ficaComArrematante * 100) / 100;
       }
       let grave = null;
       try {
-        const rg = await sb('rpc/divida_assumida_grave', { method: 'POST', body: JSON.stringify({ p_divida: dividaAssumida, p_lance: lanceBase || null, p_avaliacao: avaliacaoBase || null }) });
+        const rg = await sb('rpc/divida_assumida_grave', { method: 'POST', body: JSON.stringify({ p_divida: dividaAssumida, p_lance: lanceBase || null, p_avaliacao: subRogado ? null : (avaliacaoBase || null) }) });
         if (rg.ok) grave = (await rg.json()) === true;
         else console.warn('[documental] divida_assumida_grave HTTP', rg.status);
       } catch (e) { console.warn('[documental] divida_assumida_grave:', e?.message || e); }
       // Sem a resposta da régua do banco, aplica o mesmo critério padrão (≥ lance ou ≥ 50% da avaliação).
-      if (grave === null) grave = (lanceBase > 0 && dividaAssumida >= lanceBase) || (avaliacaoBase > 0 && dividaAssumida >= avaliacaoBase * 0.5);
+      if (grave === null) grave = (lanceBase > 0 && dividaAssumida >= lanceBase) || (!subRogado && avaliacaoBase > 0 && dividaAssumida >= avaliacaoBase * 0.5);
       if (grave) {
         const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         promoverOuIncluir(/d[ée]bito|d[íi]vida|condom[íi]ni|iptu|propter/i, {

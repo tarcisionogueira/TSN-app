@@ -140,6 +140,10 @@
     grave, promove o risco a bloqueante (→ vermelho). Vila Matilde: R$ 296 mil de condomínio × lance de
     R$ 198 mil saía "amarelo".
   - Campo novo na extração: `parteDoImovelPct`. O prompt pede "NÃO RECOMENDO" nos dois casos.
+  - **Sub-rogação** (BAYIT 640: IPTU + condomínio de R$ 105 mil pagos com o lance de R$ 393 mil): o que fica com o
+    arrematante é só o SALDO (dívida − lance). Grave só com saldo; os 50% da avaliação valem só para dívida
+    assumida direto. "O edital NÃO traz cláusula de sub-rogação" (Vila Matilde) conta como ausência, não como
+    sub-rogação.
   - **Sucata:** `veiculo_eh_sucata()` + gatilho em `is_sucata` (estava 0/12.168; agora 1.641). A busca de
     veículos oculta por padrão (filtro "Sucata": ocultar / incluir / só). A viabilidade do veículo (−60%)
     passa a valer de fato.
