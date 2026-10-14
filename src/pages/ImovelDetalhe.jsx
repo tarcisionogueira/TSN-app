@@ -9,7 +9,7 @@ import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import FavoritoBotao from '../components/FavoritoBotao';
 import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
-import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR, liberaEquipePosLeilao } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
 import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica, hrefDoc } from '../utils/documento';
@@ -1197,6 +1197,9 @@ export default function ImovelDetalhe() {
   // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório
   // "continuava disponível". Mesma regra dos dois lados (src/utils/leilaoEncerrado.js).
   const encerrado = leilaoEncerrado(imovel);
+  // 14/10: equipe gera relatório de lote encerrado SEM lance, para compor a proposta de compra direta.
+  const propostaPosLeilao = encerrado.encerrado && liberaEquipePosLeilao(imovel, role);
+  const bloqueioEncerrado = encerrado.encerrado && !propostaPosLeilao;
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;
 
@@ -2188,7 +2191,7 @@ export default function ImovelDetalhe() {
 
               {/* Solicitar análise */}
               {user ? (
-                encerrado.encerrado ? (
+                bloqueioEncerrado ? (
                   <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
                     <strong>Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, o relatório não é gerado para este lote.
                   </div>
@@ -2290,7 +2293,7 @@ export default function ImovelDetalhe() {
           </a>
         )}
         {user ? (
-          encerrado.encerrado ? (
+          bloqueioEncerrado ? (
             <div style={{ flex: 1, padding: '11px 13px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12, color: '#9a3412', fontWeight: 700, textAlign: 'center' }}>
               Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}
             </div>

@@ -22,6 +22,7 @@
  * de informação é pior que deixar passar uma inútil.
  */
 import { dataBrParaIso } from '../../api/_data-br.js';
+import { ROLES_EQUIPE_RELATORIO } from '../../api/_leilao-encerrado.js';
 
 // Aceita 'AAAA-MM-DD', ISO completo, Date. Devolve DUAS coisas, e a separação não é detalhe:
 //   • `fim` — o instante em que o prazo acaba, para COMPARAR. Data sem hora vale até o fim do
@@ -162,4 +163,17 @@ export function motivoLeilaoEncerrado(ultimaData) {
   return ultimaData
     ? `O leilão deste lote já ocorreu (última data prevista: ${dataBR(ultimaData)}). Como não é mais possível dar lance, o relatório não pode ser gerado.`
     : 'O leilão deste lote já ocorreu. Como não é mais possível dar lance, o relatório não pode ser gerado.';
+}
+
+// EQUIPE GERA RELATÓRIO PÓS-LEILÃO PARA COMPOR PROPOSTA (14/10, pedido do dono: "permitir os lotes
+// que não tiveram lance para a equipe poder gerar os relatórios para compor uma proposta"). O
+// servidor já deixava a equipe passar desde 30/09 (ehEquipe em api/_leilao-encerrado.js), mas esta
+// tela bloqueava todo mundo — o botão nem aparecia. Mesma lista de papéis do servidor, importada
+// de lá para não divergir. Lote ARREMATADO/cancelado continua travado: não há o que propor.
+// Resultado ainda não apurado (null/indeterminado) passa — é equipe, sem cota de cliente em jogo,
+// e a apuração pode estar atrasada justamente no lote que vale a proposta.
+export function liberaEquipePosLeilao(im, role) {
+  if (!ROLES_EQUIPE_RELATORIO.includes(String(role || ''))) return false;
+  const r = im?.resultadoLeilao ?? im?.resultado_leilao ?? null;
+  return r !== 'vendido' && r !== 'cancelado';
 }

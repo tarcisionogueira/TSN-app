@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData, liberaEquipePosLeilao } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
@@ -244,7 +244,11 @@ export default function Analise() {
   // LEILÃO ENCERRADO — mesma regra do servidor (api/_leilao-encerrado.js). O gate de lá já
   // recusava gerar (sem cobrar cota), mas esta tela seguia oferecendo os três botões: o cliente
   // clicava, esperava, e só então tomava o "não". Achado do dono em 07/08, no lote de Guarulhos.
-  const loteEncerrado = leilaoEncerrado(imovelInicial);
+  // 14/10: a EQUIPE gera de lote encerrado sem lance (proposta de compra direta) — o servidor já
+  // aceitava (ehEquipe); aqui o gate deixa de travar os botões e a tela avisa o porquê.
+  const loteEncerradoReal = leilaoEncerrado(imovelInicial);
+  const propostaPosLeilao = loteEncerradoReal.encerrado && liberaEquipePosLeilao(imovelInicial, role);
+  const loteEncerrado = propostaPosLeilao ? { ...loteEncerradoReal, encerrado: false } : loteEncerradoReal;
   // SEMENTE DO FORMULÁRIO A PARTIR DO IMÓVEL (extraída em 31/08 para poder ser REUSADA).
   // Era o corpo do inicializador de `useState`, que roda UMA ÚNICA VEZ no mount — ver o efeito
   // de re-semeadura logo abaixo do `useState` para o porquê.
@@ -2751,6 +2755,11 @@ export default function Analise() {
               {loteEncerrado.encerrado && (
                 <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#9a3412', lineHeight:1.6 }}>
                   <strong>Leilão encerrado{loteEncerrado.ultimaData ? ` em ${dataBR(loteEncerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, novos relatórios não são gerados para este lote — e nenhuma cota é consumida. Relatórios já gerados continuam disponíveis para consulta.
+                </div>
+              )}
+              {propostaPosLeilao && (
+                <div style={{ background:'#f3e8ff', border:'1px solid #ddd6fe', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
+                  <strong>Leilão encerrado{loteEncerradoReal.ultimaData ? ` em ${dataBR(loteEncerradoReal.ultimaData)}` : ''} sem lance registrado.</strong> Liberado para a equipe gerar os relatórios e compor a proposta de compra direta ao leiloeiro.
                 </div>
               )}
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr)':'minmax(0, 1fr) minmax(0, 1fr)', gap:14 }}>

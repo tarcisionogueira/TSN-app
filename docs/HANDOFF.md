@@ -19,6 +19,10 @@
   saíram da lista na véspera, voltaram com o mesmo número e o gatilho de relistagem só trocava nulo/indeterminado.
   Gatilho corrigido + cura diária em `apurar_vendidos_cef()` → 0 restantes.
 - **Card da Busca:** selo "Sem lance · aceita proposta" (modo raio não traz o campo — sem selo lá).
+- **Equipe gera relatório de lote encerrado sem lance (para compor proposta):** o servidor já aceitava desde 30/09
+  (`ehEquipe`), mas ImovelDetalhe e Análise bloqueavam o botão para todos. `liberaEquipePosLeilao(im, role)` em
+  `src/utils/leilaoEncerrado.js` (papéis = `ROLES_EQUIPE_RELATORIO` do servidor): equipe passa, salvo `vendido`/
+  `cancelado`; cliente continua barrado. Análise mostra aviso roxo "liberado para a equipe… proposta".
 - **Carteira de propostas:** `select * from oportunidades_proposta(200, null)` (só equipe) — sem lance, ordenado por
   relatórios + favoritos, desconto e dias restantes da janela de 15 dias. 939 fora da CEF; só 4 com relatório.
 
