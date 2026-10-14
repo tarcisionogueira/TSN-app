@@ -115,6 +115,14 @@
     responde JSON e continua funcionando pelo mesmo `anthropicFetch`.
   - `_claude.js` não clona mais respostas SSE para medir uso: o clone manteria a conexão aberta depois do corte, e a IA
     seguiria gerando e cobrando. A medição desse caso fica em `anthropicFluxo`, com `registrarUso` e o custo da geração.
+- **Só o CNJ pendente libera também na PRIMEIRA geração** (LEILAOBRASIL, Vila Matilde, proc. 0003732-05.2022.8.26.0006).
+  - Matrícula e edital foram lidos, mas o DataJud do TJSP não respondeu. Pelo pg_net, a partir do Brasil, deu timeout
+    de 60 s às 18h42. Sem relatório anterior, a trava descartava a análise já paga, estornava a cota e exibia "faltam
+    documentos" com os PDFs anexados.
+  - Agora o relatório sai com o bloco CNJ `nao_verificado`, e o vício `cnj_nao_consultado` segue para o
+    juridico-retry-cron.
+  - Economia: nesse cron, com o CNJ ainda falhando e `regen_motivo` igual SÓ a `cnj_nao_consultado`, a rodada sai antes
+    da IA e mantém o relatório. Antes, cada degrau (30 min→6 h, sem teto) pagava a IA inteira para nada.
   - **Vigiar:** no log `[documental] stop_reason=`, `max_tokens` deve sumir. Se `prazo` aparecer com frequência, o
     gargalo passa a ser o tempo, e o próximo passo é encurtar o parecer.
 - **Consultor gera documental:** `limite_ia('consultor','documental')` 0 → 5/mês (igual ao mercadológico);

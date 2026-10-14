@@ -925,11 +925,12 @@ export default async function handler(req, res) {
   // 403 da Caixa, URL assinada expirada) NÃO pode rebaixar um parecer BOM já emitido
   // para o estado "faltam documentos". Guardamos o anterior e, nos GATES de semDocs
   // abaixo, se já havia um relatório bom, ele é preservado em vez de sobrescrito.
-  let resultadoAnterior = null, cnjPendenteAntes = false;
+  let resultadoAnterior = null, cnjPendenteAntes = false, soCnjPendenteAntes = false;
   try {
     const [ant] = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result,regen_motivo&limit=1`)).json();
     resultadoAnterior = ant?.result || null;
     cnjPendenteAntes = /cnj_nao_consultado/.test(String(ant?.regen_motivo || ''));
+    soCnjPendenteAntes = String(ant?.regen_motivo || '').trim() === 'cnj_nao_consultado';
   } catch { /* best-effort */ }
   // Saída antecipada (sem ler documentos) NÃO consulta o CNJ: se a consulta estava pendente, a marca
   // continua. Antes ela era sobrescrita e o juridico-retry-cron mandava ao cliente "consulta jurídica
@@ -1420,8 +1421,11 @@ export default async function handler(req, res) {
     // anterior, mas DEPOIS de pagar o documental inteiro (leitura por visão). Medido: 8 chamadas
     // completas em 48h num lote LEILAOBRASIL, todas descartadas. Sai aqui, antes da IA, mantendo a
     // marca para a próxima tentativa. Só no cron e só com relatório bom anterior.
+    // 14/10: vale também para o relatório ENTREGUE com o processo pendente (`regen_motivo` = só
+    // `cnj_nao_consultado`): o juridico-retry-cron tenta a cada 30 min→6 h sem teto, e com o TJSP fora
+    // cada tentativa pagava a IA inteira para chegar ao mesmo relatório. Só a resposta do CNJ muda algo.
     if (isCron && procNum && cnjNumeroFalhou && tinhaRelatorioBom
-      && resultadoAnterior?.preliminar && resultadoAnterior?.preliminarMotivo === 'fontes_externas') {
+      && ((resultadoAnterior?.preliminar && resultadoAnterior?.preliminarMotivo === 'fontes_externas') || soCnjPendenteAntes)) {
       // `regen_motivo` fica de FORA de propósito: o upsert é merge, então a marca anterior segue igual
       // e os crons continuam decidindo exatamente como antes (inclusive o teto de 48h).
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior });
@@ -2293,9 +2297,14 @@ export default async function handler(req, res) {
     // relidos e as correções. O DataJud do TJSP deu timeout em 17 dias desde 30/09; com a trava, um lote
     // judicial de SP ficava preso à análise anterior, ERRADA, indefinidamente. Aqui entrega o novo com o
     // vício `cnj_nao_consultado` (juridico-retry-cron tenta de novo em escada e avisa quando o CNJ
-    // responder). Sem relatório anterior, a trava segue valendo como antes.
+    // responder).
+    // E NA PRIMEIRA GERAÇÃO também (14/10, LEILAOBRASIL Vila Matilde): com todos os arquivos lidos e só o
+    // DataJud do TJSP sem responder, a trava descartava a análise já paga, estornava a cota e mostrava
+    // "faltam documentos" ao lado de matrícula e edital anexados. Falha de fonte pública não é falta de
+    // documento: o relatório sai com o processo marcado como não verificado (bloco CNJ `nao_verificado`)
+    // e o vício segue para o juridico-retry-cron, que avisa quando o CNJ responder.
     const soCnjPendente = pendLib.length > 0 && pendLib.every((p) => p.chave === 'cnj_nao_consultado');
-    if (soCnjPendente && tinhaRelatorioBom) pendLib.length = 0;
+    if (soCnjPendente) pendLib.length = 0;
     if (pendLib.length) {
       const docsParaAnexar = [...new Set(naoLidosBloqueiam.map((n) => n.tipo).filter((t) => ['matricula', 'edital', 'regras_venda'].includes(t)))];
       const bloqueio = {
