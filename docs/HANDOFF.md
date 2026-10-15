@@ -47,7 +47,16 @@
     lições gerais em `juridico_aprendizado` (já lido pelo gerar-documental), resumo ao dono.
   - Histórico importado do Gmail da Reimob para `email_caixa` (caixa='tarcisioaraujo@reimob.com.br'): Vila Rica 16,
     Feira de Santana 14, Matheus 10 (notificação extrajudicial). Matheus: endereço do caso corrigido (Alagoinhas era o
-    do cliente); ainda SEM acompanhamento liberado (sem `acompanhamento_para`) — decidir com o dono.
+    do cliente). **Liberado em 15/10 (dono)** no fio da notificação extrajudicial: âncora = msg do Enock de 20/08
+    (message_id/references gravados por migração); a busca da âncora ignora "Fwd:"/"Âncora:" (os reencaminhamentos
+    de importação não são a conversa do escritório).
+  - Documentos pessoais (dono): reencaminhados "Documentos Ana Paula" (esposa de Matheus, imóvel no nome dela) ao
+    caso Matheus; CNH/recibo e ficha+ITBI do Rafael ao caso Rafael. Marcos: nada pessoal no Gmail. Os 8 arquivos
+    do Matheus de 21/05 ("Documentação do Imóvel em Fsa": RG Ana Paula, escritura, certidões, ITIV) são LINKS do
+    Drive dele, não anexos: não entram pelo fluxo de e-mail; precisam ser baixados e reenviados como anexo.
+- **FIPE (15/10, dono):** `registrar_uso_fipe` comparava com o teto gravado pelo lote (250) e a tela (450) levava
+  "cota esgotada" (Renault Logan, Eckert). Agora cada chamador usa o próprio teto: lote 75% (`TETO_CRON_FIPE`),
+  tela 100% → sempre sobram 25% para quem abre o carro. `modelo` nulo (SUPERBID/LJUD): nome vem do título.
   - Anexos: 20 e-mails reencaminhados do Gmail para tarcisio+<token>@ (token do caso) → arquivados →
     `caso-documentos-cron` (4x/dia) lê cada anexo e grava `caso_documentos` (pessoal/arrematação/outro, tipo,
     resumo). 29 documentos, todos "arrematação" (nenhum pessoal nessas conversas). Tela: `DocumentosCaso.jsx` no /caso.
