@@ -14,6 +14,7 @@
  */
 import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, titleCase, anexosDeHtml, fotoDeHtml, montarRowDom, cidadeUFBare } from './dom-parse-util.mjs';
+import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
 
 export const TENANTS = {
   fernando: { fonte: 'FERNANDOLEILOEIRO', leiloeiro: 'Fernando Leiloeiro', base: 'https://www.fernandoleiloeiro.com.br' },
@@ -21,12 +22,13 @@ export const TENANTS = {
   lucas: { fonte: 'LUCASLEILOEIRO', leiloeiro: 'Lucas Leiloeiro', base: 'https://www.lucasleiloeiro.com.br' },
   // 10/10: mesma plataforma Degrau, achada no radar de editais (Cloudflare 400 ao runner). SP capital.
   viva: { fonte: 'VIVALEILOES', leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br',
-    // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro); a home lista os lotes abertos.
-    catalogo: '/' },
+    // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro). 15/10: catálogo = feed
+    // /sitemap.xml (43 abertos contra 13 no acervo pela home) — ver lib/degrau-feed.mjs. Jinkings idem.
+    catalogo: '/sitemap.xml' },
   // 10/10 (#91): mesma plataforma; imóveis rurais/comerciais em MG/TO. A home redireciona para
   // /proximos_leiloes/1/1/, que lista os lotes. (andraleiloes.com.br também é Degrau, mas em 10/10
   // só tinha veículos do Detran e bens de prefeitura — fica de fora até ter imóvel.)
-  jinkings: { fonte: 'JINKINGSLEILOES', leiloeiro: 'Jinkings Leilões', base: 'https://www.jinkingsleiloes.com.br', catalogo: '/proximos_leiloes/1/1/' },
+  jinkings: { fonte: 'JINKINGSLEILOES', leiloeiro: 'Jinkings Leilões', base: 'https://www.jinkingsleiloes.com.br', catalogo: '/sitemap.xml' },
 };
 
 // Slug de lote que NÃO é imóvel (medido nos 3 catálogos em 10/10). Prefeitura = frota/sucata.
@@ -35,10 +37,19 @@ export const TENANTS = {
 // (128 ativos), e abrir cada um custava 1 crédito para o parser devolver "sem detalhe".
 const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-|sofa|notebook|ar-condicionado|moveis-|eletro|detran/i;
 
+// Feed (15/10): o slug de veículo às vezes é só marca/modelo (`yamaha-nmax-2020`, `honda-fit-2012`, VIVA) e
+// a plataforma publica lotes de demonstração (`exemplo-de-leilao`, JINKINGS). O nome do lote passa pelo
+// mesmo crivo — "HONDA FIT 2012" sem marca no slug ainda cai.
+const RE_MARCA_VEICULO = /\b(honda|yamaha|suzuki|kawasaki|fiat|volkswagen|vw|chevrolet|gm|ford|toyota|hyundai|renault|nissan|jeep|peugeot|citroen|mitsubishi|kia|bmw|mercedes|audi|scania|iveco|volvo|nmax|biz|titan)\b/i;
+const RE_DEMO = /exemplo-de-leilao|^exemplo/i;
+export const naoImovelDoFeed = (slug, nome) => RE_SLUG_NAO_IMOVEL.test(slug) || RE_DEMO.test(slug)
+  || RE_MARCA_VEICULO.test(slug.replace(/-/g, ' ')) || RE_SLUG_NAO_IMOVEL.test(nome) || RE_MARCA_VEICULO.test(nome);
+
 export function extrairUrlsDeLote(html, base) {
+  if (ehFeedDegrau(html)) return lotesDoFeed(html, base, { descartar: naoImovelDoFeed });
   const urls = new Map();
   for (const m of String(html || '').matchAll(/href=["']((?:https?:\/\/[^"'/]+)?\/lote\/([^"'/]+)\/(\d+)\/?)["']/gi)) {
-    if (RE_SLUG_NAO_IMOVEL.test(decodeURIComponent(m[2]))) continue;
+    if (naoImovelDoFeed(decodeURIComponent(m[2]), '')) continue;
     try { urls.set(m[3], new URL(m[1], base).href); } catch { /* href malformado: ignora o link */ }
   }
   return urls;

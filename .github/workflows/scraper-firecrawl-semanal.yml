@@ -2,7 +2,8 @@ name: Scraper Firecrawl (semanal) — LEJE + Fernando/Jonas/Lucas
 
 # Fontes atrás de Cloudflare que só passam pelo Firecrawl (lib/motor/fetch-firecrawl.mjs), crédito
 # pago: 1 por página. Dono, 10/10: "se consome créditos, 1x por semana". Custo medido por rodada:
-# LEJE ~4 + MGL ~13 + Viva ~18 ≈ 35 créditos/semana. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
+# LEJE ~4 + MGL ~13 + Viva ~18 ≈ 35 créditos/semana. 15/10: Viva e Jinkings enumeram pelo feed
+# /sitemap.xml (lib/degrau-feed.mjs) — mais lotes (Viva 40 imóveis abertos), ainda sob o mesmo teto. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
 # estourado, a fonte grava 'sem_cota' (orçamento), não regressão.
 on:
   schedule:
@@ -21,6 +22,10 @@ on:
         description: '1 = grava no banco (default DRY-RUN; agendado sempre grava)'
         required: false
         default: '0'
+      mgl_max:
+        description: 'teto de lotes por site MGL nesta execução (vazio = 40) — dry-run barato: 3'
+        required: false
+        default: ''
 
 jobs:
   firecrawl:
@@ -56,4 +61,5 @@ jobs:
           FIRECRAWL_MAX_PAGINAS: '60'
           MGL_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           MGL_TENANTS: ${{ github.event.inputs.mgl_tenants }}
+          MGL_MAX_LOTES: ${{ github.event.inputs.mgl_max || '40' }}
         run: node scripts/scraper-mgl.mjs

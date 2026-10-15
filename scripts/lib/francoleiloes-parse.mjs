@@ -34,34 +34,17 @@
  */
 import { inferirTipo, extrairArea, proximaData, cidadeUF, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, montarRowDom, fotoDeHtml } from './dom-parse-util.mjs';
+import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
 
 export const TENANTS = {
   francoleiloes: { fonte: 'FRANCOLEILOES', leiloeiro: 'Franco Leilões', base: 'https://www.francoleiloes.com.br' },
 };
 
-// FEED (15/10): desde 14/10 a lista de /proximos_leiloes/ vem por AJAX e não completa no navegador do
-// runner (2 rodadas com 200 e 0 lotes; o Firecrawl, de outro IP, recebe a lista). O /sitemap.xml do site
-// é na verdade um FEED de anúncios (<listings><listing>, formato de catálogo do Meta), XML puro, com TODOS
-// os lotes já publicados (226 em 15/10) — e cada um traz <url> e <end_date>. Ficam só os que ainda não
-// encerraram (73 em 15/10): sem o filtro o motor reabriria ~150 lotes históricos por dia (encerrado não é
-// guardado e volta como "novo"). Sem <end_date> o lote entra (o detalhe decide).
-export function lotesDoFeed(xml, base, hojeISO = new Date().toISOString().slice(0, 10)) {
-  const urls = new Map();
-  for (const [, item] of String(xml || '').matchAll(/<listing>([\s\S]*?)<\/listing>/gi)) {
-    const u = (item.match(/<url>\s*([^<\s]*\/lote\/[a-z0-9-]+\/\d+\/?)\s*<\/url>/i) || [])[1];
-    if (!u) continue;
-    // Lote de várias praças repete <available_dates_price_config> (uma por praça): vale a ÚLTIMA data —
-    // a 1ª vencida com a 2ª em aberto continua aberto (medido na Jinkings, mesma plataforma, 15/10).
-    const fim = [...item.matchAll(/<end_date>\s*(\d{4}-\d{2}-\d{2})/gi)].map(m => m[1]).sort().pop();
-    if (fim && fim < hojeISO) continue;
-    try { const href = new URL(u, base).href; const id = idDaUrl(href); if (id) urls.set(id, href); } catch { /* skip */ }
-  }
-  return urls;
-}
-
+// FEED (15/10): a lista de /proximos_leiloes/ vem por AJAX e não completa no runner; a enumeração usa o
+// feed /sitemap.xml (ver lib/degrau-feed.mjs — formato, filtro de abertos e medições).
 export function extrairUrlsDeLote(html, base) {
   const txt = String(html || '');
-  if (/<listing>/i.test(txt)) return lotesDoFeed(txt, base);
+  if (ehFeedDegrau(txt)) return lotesDoFeed(txt, base);
   const urls = new Map();
   for (const m of txt.matchAll(/href=["']([^"']*\/lote\/[a-z0-9-]+\/(\d+))\/?["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
