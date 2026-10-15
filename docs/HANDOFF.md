@@ -66,6 +66,14 @@
     fora. 4 lições ruins (2 com NOME de pessoa, 2 fatos do caso) — o DELETE travou na confirmação do dono;
     prompts agora proíbem nome/CPF/endereço de pessoa (as lições vão para relatórios de outros clientes).
     Lacuna: andamentos do CNJ gravados por `arrematado_id` (sem caso_id) ainda não entram no cron.
+- **Relatórios de caso com lote fora do acervo (15/10, dono):** workflow `gerar-relatorios-caso.yml`
+  (`scripts/gerar-relatorios-caso.mjs`): completa o lote-marcador só onde está vazio (0 conta como vazio), liga ao lote
+  os documentos do caso (matrícula/edital: um por tipo, índice único), gera documental → mercadológico (tipo/área do
+  que o documental LEU) → laudo, com CRON_SECRET + paraUserId. `gerar-analise` aceita `posArremate: true` só via cron
+  (antes: 422 "leilão já ocorreu"). Rafael: terreno 375,59 m², mercado R$ 284.804, laudo condicional. Matheus: casa
+  43,45 m² em lote de 200 m², mercado R$ 179.712, aluguel R$ 1.800, laudo condicional. Os relatórios são escritos
+  como PRÉ-lance: recomendam o que já foi feito (ITIV pago, escritura lavrada). O `casos.tipo_leilao` do Matheus diz
+  "judicial" e é venda direta Caixa (UPDATE trava no MCP — corrigir pela tela/dono).
 - **Tipo "fazenda" como nome de lugar (15/10, dono):** "Fazenda Tamboré Residencial 2 - Casa com 710m²" saiu rural e
   o mercadológico avaliou por hectare (R$ 1,2 mi × avaliação R$ 15,8 mi). `fazendaEhNome` em `api/_tipo.js` (usado
   por normalizarTipo e pelo inferirTipo de 19 parsers); gerar-analise relê lote gravado rural e não reaproveita
