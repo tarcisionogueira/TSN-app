@@ -31,7 +31,9 @@ export function criarMotorFirecrawl({ timeoutMs = 60000, waitFor = 0 } = {}) {
         method: 'POST',
         headers: { Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
         // waitFor: página montada por JS (MGL/trimpath) só tem os valores depois de rodar o script.
-        body: JSON.stringify({ url, formats: ['rawHtml'], maxAge: 0, timeout: timeoutMs, ...(waitFor > 0 ? { waitFor } : {}) }),
+        // XML (feed /sitemap.xml da Degrau) não tem script para esperar: com waitFor o Firecrawl deu 408 na
+        // VIVA (15/10); sem ele, 200 em segundos.
+        body: JSON.stringify({ url, formats: ['rawHtml'], maxAge: 0, timeout: timeoutMs, ...(waitFor > 0 && !/\.xml(\?|$)/i.test(url) ? { waitFor } : {}) }),
         signal: AbortSignal.timeout(timeoutMs + 15000),
       });
       const j = await r.json().catch(() => null);

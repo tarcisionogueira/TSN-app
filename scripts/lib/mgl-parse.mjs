@@ -67,7 +67,11 @@ export function dataPraca(txt) {
   return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00-03:00` : null;
 }
 
-export function parseDetalhe(html, url, agora = new Date()) {
+// O motor (runner.mjs, desde 13/10) chama parseDetalhe(html, url, { fetchFonte, tenant }): o 3º argumento
+// é um OBJETO de contexto, não a data. Usado como `agora`, `new Date(fim) > {…}` dava sempre false e TODO
+// lote com praça saía "encerrado" (dry-run de 15/10: Jinkings 10 e 22, praças em dez/2026). Data só se for Date.
+export function parseDetalhe(html, url, ctx) {
+  const agora = ctx instanceof Date ? ctx : new Date();
   const txt = textoDe(html);
   const ORD = ['Primeira', 'Segunda', 'Terceira'];
   const pracas = [1, 2, 3].map((n) => ({
