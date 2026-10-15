@@ -154,7 +154,9 @@ export function extrairPagamentoTexto(texto) {
       }
       return n >= 2 && n <= 420 ? n : null;
     })(),
-    sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
+    // Duas ordens: "sinal de 50%" e "50% de sinal" (16/10, documental do lote TJSP em Santana de Parnaíba).
+    sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
+      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     // Comissão: o vão entre a palavra e o percentual muda muito de edital para edital —
     // "comissão de 5%", "comissão do(a) leiloeiro(a) a título de 5%", "Arbitro a comissão
