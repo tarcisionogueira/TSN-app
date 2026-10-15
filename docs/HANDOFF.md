@@ -36,6 +36,21 @@
   - **Defeito pego no dry-run (grave):** desde 13/10 o `runner.mjs` chama `parseDetalhe(html, url, { fetchFonte, tenant })`
     e o MGL lia o 3º argumento como `agora` → `new Date(fim) > {…}` = false → TODO lote com praça "encerrado". A coleta
     semanal de 20/10 teria zerado Fernando/Jonas/Lucas/Viva/Jinkings. Só o MGL tinha essa assinatura (conferido).
+- **Jurídico: acompanhamento semanal, aprendizado e documentos (15/10, tarde, dono):**
+  - `casos-acompanhamento-cron`: caso SEM conta de advogado usa `casos.acompanhamento_para/_cc` (escritório
+    Cajado: Para Enock, Cc José Roberto e Monique), só após `acompanhamento_liberado_em`; atualização às QUARTAS;
+    responde à última mensagem do caso (In-Reply-To/References, "Re: <acompanhamento_assunto>") = mesma conversa
+    do escritório. Modelo do dono: só "andamento desde a última comunicação", sem prazo de posse, sem travessões,
+    assinatura "Tarcísio Nogueira". 1º envio (Rafael e Marcos) em 15/10 13h15 BRT por `?atualizar_agora=1`.
+  - `juridico-devolutivas-cron` (dias úteis 13h10/20h10 UTC): IA lê cada resposta do escritório com a conversa
+    inteira → `caso_acompanhamento_analise` (situação, pendências nossas, intervalo 7/14 → quinzenal quando lento),
+    lições gerais em `juridico_aprendizado` (já lido pelo gerar-documental), resumo ao dono.
+  - Histórico importado do Gmail da Reimob para `email_caixa` (caixa='tarcisioaraujo@reimob.com.br'): Vila Rica 16,
+    Feira de Santana 14, Matheus 10 (notificação extrajudicial). Matheus: endereço do caso corrigido (Alagoinhas era o
+    do cliente); ainda SEM acompanhamento liberado (sem `acompanhamento_para`) — decidir com o dono.
+  - Anexos: 20 e-mails reencaminhados do Gmail para tarcisio+<token>@ (token do caso) → arquivados →
+    `caso-documentos-cron` (4x/dia) lê cada anexo e grava `caso_documentos` (pessoal/arrematação/outro, tipo,
+    resumo). 29 documentos, todos "arrematação" (nenhum pessoal nessas conversas). Tela: `DocumentosCaso.jsx` no /caso.
 - **JMFLEILOES "regressão" explicada** em `fonte_regressao_explicada` (até 14/11): leiloeiro pequeno entre leilões,
   API Superbid traz 1–2 lotes vivos/dia desde 06/10; os outros 18 são sem_lance retidos.
 - **Vigiar:** `limpar-imoveis-stale` (passo CEF) e `fotos-orfas` deram 57014 na janela 04h20–05h de hoje; 0
