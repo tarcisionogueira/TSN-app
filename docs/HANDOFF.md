@@ -166,6 +166,11 @@
     Regra no prompt; validado na regeração das 22h08.
   - **As duas regras do dono não brigam mais:** o risco de fração cita "extinção de condomínio", e a busca da regra da
     dívida (`/condom[íi]ni/`) o pegava. Agora ela pula risco com `regraDono`.
+  - **Um risco só para a dívida grave (15/10, dono):** a Vila Matilde saiu com "débito condominial astronômico" e "débito
+    excede o valor do lote", dois bloqueantes para o mesmo problema. Depois da regra da dívida, os outros riscos GRAVES
+    de dívida propter rem saem e fica o da regra. Alerta e informativo de dívida (IPTU a levantar) continuam.
+    O prompt pede "um problema = um risco" e tom sóbrio, sem "astronômico" ou "gritante".
+    Relatório salvo corrigido (migração `vila_matilde_risco_divida_unico`): 2 bloqueantes, 10 itens.
   - **Total assumido = SOMA do propter rem,** nunca a "parte proporcional" que a IA calcula. Em fração, o condomínio
     cobra tudo de qualquer condômino. A Vila Matilde gravou R$ 148 mil (metade); o relatório salvo foi corrigido
     para R$ 296.629,83 (migração `vila_matilde_total_assumido_integral`).
