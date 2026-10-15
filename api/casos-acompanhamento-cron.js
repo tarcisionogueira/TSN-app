@@ -108,20 +108,26 @@ function semanaIso(d = new Date()) {
   return `${ano}-W${String(sem).padStart(2, '0')}`;
 }
 
+// Modelo do dono (15/10): só pede a atualização desde a última comunicação — sem prazo de posse (depende
+// do juiz) e sem travessões. Cada e-mail leva UM pedido (atualização e guia saem separados).
+// Endereço vindo do acervo traz " - "/"—" como separador ("Galpão em ruína -Feira de Santana/BA"): vira vírgula.
+const semTracos = (s) => String(s || '').replace(/\s*[—–]\s*|\s+-\s*|\s*-\s+/g, ', ').replace(/,\s*,/g, ',').trim();
+export const ASSINATURA = 'Tarcísio Nogueira'; // como o dono assina com o escritório (15/10)
+
 export function textoPedido({ advogado, cliente, endereco, processo, atualizacao, parcela, insistencia = false }) {
+  const imovel = semTracos(endereco) || 'imóvel arrematado';
   const linhas = [
     `${advogado ? `Dr(a). ${advogado}` : 'Prezados'}, tudo bem?`,
     '',
-    `Estamos acompanhando a pasta do(a) cliente ${cliente || '(sem nome)'} — ${endereco || 'imóvel arrematado'}${processo ? `, processo nº ${processo}` : ''}.`,
+    `Estamos acompanhando a pasta do(a) cliente ${cliente || '(sem nome)'}, ${imovel}${processo ? `, processo nº ${processo}` : ''}.`,
     '',
   ];
-  let n = 1;
-  if (atualizacao) linhas.push(`${n++}) ATUALIZAÇÃO: poderia nos informar o andamento do processo desde o último contato e a previsão para a imissão na posse?`, '');
+  if (atualizacao) linhas.push('Por gentileza, poderiam nos informar o andamento do processo desde a última comunicação?', '');
   if (parcela) {
     const quando = parcela.dias < 0 ? `venceu em ${dataBR(parcela.venc)}` : `vence em ${dataBR(parcela.venc)}`;
-    linhas.push(`${n++}) GUIA DA PARCELA: a ${parcela.rotulo} (valor nominal ${brl(parcela.valor)}) ${quando}.${insistencia ? ' Ainda não recebemos a guia; por gentileza,' : ' Por gentileza,'} responda este e-mail com a guia/boleto em anexo para encaminharmos ao cliente.`, '');
+    linhas.push(`A ${parcela.rotulo} (valor nominal ${brl(parcela.valor)}) ${quando}.${insistencia ? ' Ainda não recebemos a guia. Por gentileza,' : ' Por gentileza,'} respondam este e-mail com a guia/boleto em anexo para encaminharmos ao cliente.`, '');
   }
-  linhas.push('Basta responder este e-mail — a resposta fica registrada na pasta do caso.', '', 'Obrigado!');
+  linhas.push('Basta responder este e-mail. A resposta fica registrada na pasta do caso.', '', 'Obrigado!');
   return linhas.join('\n');
 }
 
@@ -234,14 +240,14 @@ async function handler(req) {
         destinos = destinos || await destinosDoCaso();
         const { to: para, cc } = destinos;
         if (!para.length) { res.sem_email_advogado.push(c.id); await liberar(ev.chave); continue; }
-        const textoFinal = `${ev.texto}\n\n—\n${admin.nome || 'Equipe BidPro Brasil'}\nBidPro Brasil`;
+        const textoFinal = `${ev.texto}\n\n${ASSINATURA}\nBidPro Brasil`;
         const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;color:#1e293b;line-height:1.6;white-space:pre-wrap">${esc(ev.texto)}</div>`
-          + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(admin.nome || 'Equipe BidPro Brasil')}<br>BidPro Brasil</p>`;
+          + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">${esc(ASSINATURA)}<br>BidPro Brasil</p>`;
         const assunto = ev.assunto.slice(0, 300);
         const token = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
         try {
           const env = await enviarEmail({
-            from: `${admin.nome || 'Equipe'} (BidPro Brasil) <${remet.endereco}>`,
+            from: `${ASSINATURA} (BidPro Brasil) <${remet.endereco}>`,
             to: para, cc: cc.length ? cc : undefined, replyTo: remet.endereco.replace('@', `+${token}@`),
             subject: assunto, html, text: textoFinal, ...(fio ? { headers: fio } : {}),
             meta: { tipo: 'acompanhamento_caso', userId: admin.id },
@@ -251,7 +257,7 @@ async function handler(req) {
           // O e-mail JÁ SAIU: falha no registro é só histórico — mas é o registro que liga a resposta
           // ao caso, então grita no log em vez de engolir.
           const ins = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
-            direcao: 'saida', pasta: 'enviados', caixa: remet.endereco, de_email: remet.endereco, de_nome: admin.nome, dono: admin.id,
+            direcao: 'saida', pasta: 'enviados', caixa: remet.endereco, de_email: remet.endereco, de_nome: ASSINATURA, dono: admin.id,
             para, cc, assunto, texto: textoFinal, html, resend_email_id: env.id || null, lido: true,
             enviado_por: admin.id, resposta_token: token, caso_id: c.id,
             in_reply_to: fio?.['In-Reply-To'] || null, referencias: fio?.References || null,
