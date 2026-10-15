@@ -83,9 +83,13 @@ async function handler(req) {
     // 13/10: o MP devolve 429 "local_rate_limited" em rajada (este cron + o da fila de webhook, que
     // roda a cada minuto, no mesmo token). Uma nova tentativa após o Retry-After (teto 5 s) resolve
     // o transitório; persistindo, segue o null de falha (fail-closed nos chamadores).
-    if (r.status === 429) {
-      const espera = Math.min(8000, (Number(r.headers.get('retry-after')) || 5) * 1000);
+    // 15/10: com 1 só nova tentativa o 429 seguiu em ~5 de 24 rodadas — agora até 2 novas tentativas,
+    // 5 s e 15 s (o cron tem 300 s e faz poucas chamadas). Persistindo, continua o fail-closed.
+    for (const base of [5000, 15000]) {
+      if (r.status !== 429) break;
+      const espera = Math.min(15000, Math.max(base, (Number(r.headers.get('retry-after')) || 0) * 1000));
       await new Promise(ok => setTimeout(ok, espera));
+      ultimaMp = Date.now();
       r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
     }
     // 13/10: o null sozinho não dizia POR QUE — "histórico indisponível" repetia 1×/h sem o status.

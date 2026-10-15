@@ -215,6 +215,17 @@
 - **Carteira de propostas: voltar do lote para o mesmo lugar.** Filtros (UF, leiloeiro, busca, "só com interesse") em
   sessionStorage e rolagem devolvida no voltar (`useRolagemDaLista`, mesmo mecanismo da Busca). A aba do Admin já
   era lembrada.
+- **Pendências vencidas do Claude (15/10, madrugada):**
+  - **#144 FECHADA (oscilação do valor de mercado):** desde a correção de 08/10, o imóvel mais regerado (Vila Sônia,
+    5×) mudou UMA vez (a correção de metragem). As 4 gerações seguintes saíram `reaproveitado=true` com o mesmo valor.
+    Os outros: amplitude de 0,2% e 0%.
+  - **#207 FECHADA (Superbid veículos):** sem ano 1.217→773, com modelo 0→5.715, FIPE do leiloeiro em 4.335.
+    O `valortabelafipe` é FIPE de verdade: 4 carros consultados na API hoje (pg_net) bateram com diferença de
+    +0,2% a +1,8%. Os 4.335 só voltam ao lote noturno depois de 25 dias, então a comparação não aconteceria sozinha.
+  - **#208 reagendada para 16/10.** O lote FIPE agendado roda (250/250 em 13 e 14/10). Sobravam dois erros:
+    - (a) `live_plataforma_numeros_atualizar` (passo `numeros` do desativar-encerrados) dava 57014: o `FILTER (where
+      ativo)` varria 81,7 mil linhas, 5,7 s. Com `WHERE ativo` leva 0,12 s (migração `20261015_live_numeros_where_ativo`).
+    - (b) o reconciliar ainda tomava 429 do MP em ~5 de 24 rodadas: agora até 2 novas tentativas (5 s e 15 s).
 - **Validação real do dia (todas no deploy novo):**
   - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
     financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.
