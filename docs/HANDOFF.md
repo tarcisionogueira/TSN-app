@@ -226,6 +226,29 @@
     - (a) `live_plataforma_numeros_atualizar` (passo `numeros` do desativar-encerrados) dava 57014: o `FILTER (where
       ativo)` varria 81,7 mil linhas, 5,7 s. Com `WHERE ativo` leva 0,12 s (migração `20261015_live_numeros_where_ativo`).
     - (b) o reconciliar ainda tomava 429 do MP em ~5 de 24 rodadas: agora até 2 novas tentativas (5 s e 15 s).
+- **Encerramento da sessão 14-15/10 (02h UTC de 15/10).** O que está aberto mora em `pendencias_projeto`.
+  Contagem: Claude 13 (nenhuma vencida); dono 60 (12 vencidas, 9 delas P1). Próximas do Claude:
+  - **15/10 #198:** vincular o escritório do Dr. José Roberto aos 3 casos pós-arremate quando ele concluir o convite.
+  - **16/10:**
+    - **#208:** logs 24 h sem 57014 no desativar e com menos 429 no reconciliar.
+    - **#206:** `/authorized_payments/search` do MP.
+  - **17/10 #187:** 1ª rodada do casos-acompanhamento-cron.
+  - **20/10:**
+    - **#188:** 1ª liquidação do honorário do Marcos.
+    - **#38:** backlog de leiloeiros.
+  - **21/10:**
+    - **#212:** vigiar o corte do documental em fluxo.
+    - **#213:** botão "Avise aqui" da Caixa em uso real.
+  - **Do dono, P1 vencidas:**
+    - #25 revisão jurídica dos Termos;
+    - #29 analista;
+    - #31 chaves de escopo mínimo + WebISS;
+    - #32 MFA/PITR/pentest;
+    - #23 runner WSL;
+    - #142 validar o lote manual;
+    - #147 Windsor.ai pausado;
+    - #186/#164 vincular o advogado nos casos (Marcos).
+  - **Do dono, ainda:** #197 "Emitir guia" da parcela 1/16 (16/10); #214 matrícula de Cotia com o leiloeiro.
 - **Validação real do dia (todas no deploy novo):**
   - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
     financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.
