@@ -23,6 +23,10 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(null);
   const [verTodas, setVerTodas] = useState(false);
+  // Confirmação NA TELA (15/10): window.confirm é bloqueado em silêncio em navegador de celular/app embutido — o
+  // dono "aprovou" a guia do Marcos e nenhuma requisição chegou ao servidor.
+  const [confirmando, setConfirmando] = useState(null);
+  const [ok, setOk] = useState('');
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -36,15 +40,15 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
   useEffect(() => { if (casoId) carregar(); }, [casoId, carregar]);
 
   const aprovar = async (item) => {
-    const g = dados?.guias?.[item.idx];
-    const aviso = g?.avisos?.length ? `\n\nAtenção: ${g.avisos.join(' ')}` : '';
-    if (!window.confirm(`Enviar a guia da ${item.rotulo} (${brl(g?.valor || item.valor)}) ao arrematante, com cópia para você?\nPagar até ${dataBR(item.pagar_ate)} · vencimento ${dataBR(item.venc)}${aviso}`)) return;
+    setErro(''); setOk('');
     setEnviando(item.idx);
     try {
       const r = await apiCall('/api/guia-parcela', { method: 'POST', body: JSON.stringify({ acao: 'enviar', arrematado_id: dados.arrematado.id, parcela_idx: item.idx }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setOk(`Guia da ${item.rotulo} enviada para ${d.enviada_para} (cópia para você).`);
       if (d.aviso) setErro(d.aviso);
+      setConfirmando(null);
       await carregar();
     } catch (e) { console.error('[ParcelasCaso] enviar:', e?.message); setErro(`Não foi possível enviar: ${e.message}`); }
     finally { setEnviando(null); }
@@ -67,6 +71,7 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
         Vencimento a cada 30 dias da data do leilão. "Pagar até" é o vencimento menos a folga, antecipado para dia útil. A guia que chega por e-mail entra aqui sozinha e só vai ao arrematante com a sua aprovação.
       </div>
       {erro && <div style={{ fontSize: 12.5, color: '#b91c1c', marginBottom: 10 }}>{erro}</div>}
+      {ok && <div style={{ fontSize: 12.5, color: '#15803d', fontWeight: 700, marginBottom: 10 }}>✓ {ok}</div>}
       {dados === null && <div style={{ fontSize: 13, color: '#64748b' }}><Loader2 size={14} style={{ verticalAlign: -2 }} /> Carregando…</div>}
       {dados && !dados.arrematado && <div style={{ fontSize: 13, color: '#64748b' }}>Este caso ainda não tem o parcelamento registrado (tela de Arrematados).</div>}
       {visiveis.length > 0 && (
@@ -89,12 +94,24 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
                     {g?.avisos?.length > 0 && !x.paga && <div style={{ fontSize: 11, color: '#b45309' }}><AlertTriangle size={11} style={{ verticalAlign: -1 }} /> {g.avisos.join(' ')}</div>}
                   </td>
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {(st.aprovar || (g?.enviada_em && !x.paga)) && (
-                      <button onClick={() => aprovar(x)} disabled={enviando === x.idx}
+                    {(st.aprovar || (g?.enviada_em && !x.paga)) && (confirmando === x.idx ? (
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: '#334155' }}>Enviar ao arrematante: pagar até {dataBR(x.pagar_ate)}?</span>
+                        <span style={{ display: 'inline-flex', gap: 6 }}>
+                          <button onClick={() => aprovar(x)} disabled={enviando === x.idx}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 8, border: 'none', background: '#15803d', color: 'white', cursor: 'pointer' }}>
+                            {enviando === x.idx ? <Loader2 size={12} /> : <Send size={12} />} Confirmar envio
+                          </button>
+                          <button onClick={() => setConfirmando(null)} disabled={enviando === x.idx}
+                            style={{ fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer' }}>Cancelar</button>
+                        </span>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setConfirmando(x.idx); setOk(''); setErro(''); }}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 8, border: st.aprovar ? 'none' : '1px solid #cbd5e1', background: st.aprovar ? '#0D63DB' : 'white', color: st.aprovar ? 'white' : '#334155', cursor: 'pointer' }}>
-                        {enviando === x.idx ? <Loader2 size={12} /> : <Send size={12} />} {st.aprovar ? 'Aprovar e enviar' : 'Reenviar'}
+                        <Send size={12} /> {st.aprovar ? 'Aprovar e enviar' : 'Reenviar'}
                       </button>
-                    )}
+                    ))}
                   </td>
                 </tr>
               );
