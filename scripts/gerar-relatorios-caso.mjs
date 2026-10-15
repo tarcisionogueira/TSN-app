@@ -52,13 +52,17 @@ async function completarLote(id, valores) {
 const PRIORIDADE = ['matricula', 'edital', 'auto_arrematacao', 'carta_arrematacao', 'decisao_judicial', 'exigencia_cartorio', 'nota_devolucao', 'parecer_juridico', 'contrato', 'laudo'];
 async function ligarDocumentos(imovelId, casoId) {
   const docs = await ler(`caso_documentos?caso_id=eq.${casoId}&grupo=eq.arrematacao&select=tipo,titulo,storage_path`);
-  const ja = new Set((await ler(`imovel_anexos?imovel_id=eq.${imovelId}&storage_path=not.is.null&select=storage_path`)).map((a) => a.storage_path));
+  const existentes = await ler(`imovel_anexos?imovel_id=eq.${imovelId}&select=tipo,storage_path`);
+  const ja = new Set(existentes.map((a) => a.storage_path).filter(Boolean));
+  // Matrícula e edital: um por imóvel (índice único imovel_id+tipo). O que já foi anexado na atribuição vale.
+  const tiposUnicos = new Set(existentes.map((a) => a.tipo).filter((t) => t === 'matricula' || t === 'edital'));
   const vistos = new Set();
   const novos = docs
     .filter((d) => PRIORIDADE.includes(d.tipo) && !ja.has(d.storage_path))
+    .filter((d) => { if (d.tipo !== 'matricula' && d.tipo !== 'edital') return true; if (tiposUnicos.has(d.tipo)) return false; tiposUnicos.add(d.tipo); return true; })
     .sort((a, b) => PRIORIDADE.indexOf(a.tipo) - PRIORIDADE.indexOf(b.tipo))
     .filter((d) => { const k = `${d.tipo}|${d.titulo}`; if (vistos.has(k)) return false; vistos.add(k); return true; })
-    .slice(0, Math.max(0, 10 - ja.size))
+    .slice(0, Math.max(0, 10 - existentes.length))
     .map((d) => ({ imovel_id: imovelId, tipo: ['matricula', 'edital'].includes(d.tipo) ? d.tipo : 'outro', nome: String(d.titulo || d.tipo).slice(0, 200),
       storage_path: d.storage_path, arrematado: true, role_criador: 'sistema', descricao: 'Documento do caso (e-mails do escritório), ligado por gerar-relatorios-caso' }));
   if (!novos.length) return 0;
