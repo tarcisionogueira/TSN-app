@@ -28,6 +28,12 @@ const partesSignificativas = (s) =>
 
 export const MSG_NOME_INVALIDO = 'Digite seu nome e sobrenome (como no documento).';
 
+// NOME DE EMPRESA NÃO É NOME (15/10, dono): "Medina Imoveis" passou porque a régua só pedia duas palavras.
+// Conta é de PESSOA (contrato, CPF, KYC); a empresa entra depois, no perfil (CNPJ). Lista conservadora:
+// nada que seja sobrenome comum ("Sá", "Me" ficam de fora).
+const TERMO_EMPRESA = /(?:^|[\s.,-])(im[óo]veis|imobili[áa]ri[ao]s?|imob|ltda|eireli|epp|s\/a|s\.a\.?|cia|corretora|consultoria|neg[óo]cios|investimentos|empreendimentos|participa[çc][õo]es|holding|assessoria|leil[õo]es|construtora|incorporadora|com[ée]rcio|servi[çc]os|administradora|realty|properties|advocacia|advogados|associados|solu[çc][õo]es|patrimonial)(?=$|[\s.,-])/iu;
+export const MSG_NOME_EMPRESA = 'Use o seu nome pessoal (como no documento). Os dados da empresa (CNPJ) entram depois, no perfil.';
+
 /**
  * Válido = nome + sobrenome, sem número nem símbolo estranho. Só isso.
  * Devolve { ok, erro } para a tela poder explicar o que falta.
@@ -40,6 +46,7 @@ export function validarNome(s) {
   if (/\d/.test(v)) return { ok: false, erro: 'O nome não deve conter números.' };
   if (!CARACTERES_OK.test(v)) return { ok: false, erro: 'O nome deve conter apenas letras.' };
   if (partesSignificativas(v).length < 2) return { ok: false, erro: MSG_NOME_INVALIDO };
+  if (TERMO_EMPRESA.test(v)) return { ok: false, erro: MSG_NOME_EMPRESA };
   return { ok: true, erro: '' };
 }
 

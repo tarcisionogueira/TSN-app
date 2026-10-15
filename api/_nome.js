@@ -17,6 +17,12 @@ const partesSignificativas = (s) =>
 
 export const MSG_NOME_INVALIDO = 'Digite seu nome e sobrenome (como no documento).';
 
+// NOME DE EMPRESA NÃO É NOME (15/10, dono): "Medina Imoveis" passou porque a régua só pedia duas palavras.
+// Conta é de PESSOA (contrato, CPF, KYC); a empresa entra depois, no perfil (CNPJ). Lista conservadora:
+// nada que seja sobrenome comum ("Sá", "Me" ficam de fora).
+const TERMO_EMPRESA = /(?:^|[\s.,-])(im[óo]veis|imobili[áa]ri[ao]s?|imob|ltda|eireli|epp|s\/a|s\.a\.?|cia|corretora|consultoria|neg[óo]cios|investimentos|empreendimentos|participa[çc][õo]es|holding|assessoria|leil[õo]es|construtora|incorporadora|com[ée]rcio|servi[çc]os|administradora|realty|properties|advocacia|advogados|associados|solu[çc][õo]es|patrimonial)(?=$|[\s.,-])/iu;
+export const MSG_NOME_EMPRESA = 'Use o seu nome pessoal (como no documento). Os dados da empresa (CNPJ) entram depois, no perfil.';
+
 /** @returns {string} mensagem de erro, ou '' quando válido. */
 export function erroNome(s) {
   const v = limparNome(s);
@@ -25,6 +31,7 @@ export function erroNome(s) {
   if (v.length > 80) return 'Nome muito longo (máximo 80 caracteres).';
   if (/\d/.test(v)) return 'O nome não deve conter números.';
   if (!CARACTERES_OK.test(v)) return 'O nome deve conter apenas letras.';
+  if (TERMO_EMPRESA.test(v)) return MSG_NOME_EMPRESA;
   return '';
 }
 

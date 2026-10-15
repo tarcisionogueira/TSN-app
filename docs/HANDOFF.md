@@ -205,6 +205,14 @@
 - **Metragem na correção sugerida:** "90.0485 m²" (ponto decimal) era lido por "Corrigir e regerar" como 900.485 m²,
   porque o parser tirava todos os pontos. Agora: formato BR com 2 casas no documental e parser robusto na tela
   (ponto só é milhar quando seguido de 3 dígitos). A sugestão salva da Vila Sônia foi corrigida.
+- **Cadastro com nome de empresa (15/10, dono: "Medina Imoveis"):** a régua de nome só pedia duas palavras com letras.
+  `src/lib/nome.js` e `api/_nome.js` (espelhos) recusam termos de empresa: imóveis, imobiliária, ltda, eireli, s/a,
+  corretora, consultoria, leilões, holding etc. A mensagem é "Use o seu nome pessoal… os dados da empresa (CNPJ)
+  entram depois, no perfil". A lista é conservadora: "Sá", "Sa" e "Me" passam. Único caso no banco: "Medina Imoveis"
+  (explorador, 14/10). O pop-up de completar cadastro só pede nome VAZIO, então essa conta não será cobrada sozinha.
+- **"Pátio não confirmado" nos veículos** é a decisão do dono de 05/10 (opção 2): além dos `confirmado` (10.869), a
+  vitrine mostra os `nao_confirmado` (177, 113 judiciais), que têm local de vistoria e nenhum sinal de devedor, com o
+  selo. `indefinido` (1.101) fica fora.
 - **Validação real do dia (todas no deploy novo):**
   - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
     financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.
