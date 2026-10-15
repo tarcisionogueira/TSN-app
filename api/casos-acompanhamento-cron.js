@@ -134,6 +134,8 @@ export function textoPedido({ advogado, cliente, endereco, processo, atualizacao
 async function handler(req) {
   if (!isCronAuthorized(req)) return new Response(JSON.stringify({ error: 'não autorizado' }), { status: 401 });
   const seco = new URL(req.url, BASE).searchParams.get('seco') === '1';
+  // ?atualizar_agora=1 (dono, 15/10: 1º envio aprovado fora da quarta) — a trava por semana impede repetir.
+  const atualizarAgora = new URL(req.url, BASE).searchParams.get('atualizar_agora') === '1';
   const res = { casos: 0, sem_advogado: [], sem_email_advogado: [], enviados: 0, atualizacoes: 0, parcelas: 0, ja_enviados: 0, falhas: 0, seco, previa: [] };
   try {
     // Remetente: o endereço pessoal do admin (o dono).
@@ -178,7 +180,7 @@ async function handler(req) {
       else { res.falhas++; console.error(`[acompanhamento] aviso sem advogado falhou caso ${c.id}:`, env?.error); await liberar(chave); }
     }
     const semana = semanaIso(new Date(`${hoje}T12:00:00Z`));
-    const diaDeAtualizacao = new Date(`${hoje}T12:00:00Z`).getUTCDay() === DIA_ATUALIZACAO;
+    const diaDeAtualizacao = atualizarAgora || new Date(`${hoje}T12:00:00Z`).getUTCDay() === DIA_ATUALIZACAO;
 
     for (const c of casos) {
       const [cli] = await ler(`perfis?id=eq.${c.cliente_id}&select=nome`);
