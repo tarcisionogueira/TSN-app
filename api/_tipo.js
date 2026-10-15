@@ -15,13 +15,25 @@
 // comerciais para o investidor). 'imovel' é o balde genérico de segurança:
 // nunca some da busca porque o filtro sempre o inclui. Assim NENHUM lote fica
 // invisível — atende "não pode haver falhas" para tipologias atípicas.
+const RE_UNIDADE_URBANA = /\b(terreno|apart|apto|cobertura|flat|kitnet|sobrado|loja|sala comercial|loteamento|residencial|condominio|cond\.)|\bcasas?\b(?!\s+(sede|de caseiro|do caseiro|de colono|de colonos))/;
+const RE_TERRA_RURAL = /hectare|\d\s*ha\b|alqueire|gleba|pasto|pastagem|lavoura|curral|agricol|agropecu|pecuari|haras|zona rural|area rural|imovel rural/;
+export function fazendaEhNome(s) {
+  const t = String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return RE_UNIDADE_URBANA.test(t) && !RE_TERRA_RURAL.test(t);
+}
+
 export function normalizarTipo(t) {
   if (!t) return 'imovel';
   // minúsculas + sem acento/cedilha → "Indústria"→"industria", "Galpão"→"galpao".
   const s = String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
   // Rural/agro PRIMEIRO: "galpão em fazenda", "sítio com casa" devem cair em rural.
-  if (s.includes('rural') || s.includes('fazenda') || s.includes('sitio') ||
+  // "FAZENDA" TAMBÉM É NOME DE LUGAR (15/10, dono): "Fazenda Tamboré Residencial 2 - Casa com 710m²"
+  // (condomínio de alto padrão em Santana de Parnaíba) saiu rural e o mercadológico avaliou a casa por
+  // HECTARE: R$ 1,2 mi contra avaliação de R$ 15,8 mi. Idem "Fazenda Rio Grande/PR" (cidade) e
+  // "Condomínio Nossa Fazenda". Quando o texto nomeia uma unidade urbana e nada diz de terra rural,
+  // "fazenda" é o nome do loteamento/cidade, não o tipo. Sítio/chácara seguem rurais sempre.
+  if (s.includes('rural') || (s.includes('fazenda') && !fazendaEhNome(s)) || s.includes('sitio') ||
       s.includes('chacara') || s.includes('agricol') || s.includes('agropecu') ||
       s.includes('pecuari') || s.includes('haras') || s.includes('lavoura')) return 'rural';
 

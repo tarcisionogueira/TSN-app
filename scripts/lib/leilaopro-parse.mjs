@@ -16,6 +16,7 @@
  *   • Modalidade: "Processo"/"Judicial"/"Juiz" → judicial; "venda direta" → venda_direta.
  *   • Docs: /uploads/media/documentos_leilao/… (edital) e /documentos_bem/… (matrícula/laudo).
  */
+import { fazendaEhNome } from '../../api/_tipo.js';
 import { extrairGenerico, checarQualidade } from './scraper-core.mjs';
 import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
 
@@ -48,7 +49,8 @@ const titleCase = s => String(s || '').toLowerCase().replace(/(^|\s|'|-)([a-zà-
 export function inferirTipo(titulo = '', url = '') {
   const t = (titulo + ' ' + url).toLowerCase();
   if (/apartament|apto|flat|kitnet|studio|cobertura/.test(t)) return 'apartamento';
-  if (/fazenda|s[íi]tio|ch[áa]cara|rural|gleba/.test(t)) return 'rural';
+  // "Fazenda Tamboré Residencial 2 - Casa" (15/10): fazenda é nome de lugar quando o texto nomeia unidade urbana.
+  if (/s[íi]tio|ch[áa]cara|rural|gleba/.test(t) || (/fazenda/.test(t) && !fazendaEhNome(titulo))) return 'rural';
   if (/casa|sobrado|residenc/.test(t)) return 'casa';
   if (/sala|loja|comercial|gal[pã]|pr[ée]dio|escrit[óo]rio|andar|industrial|barrac/.test(t)) return 'comercial';
   if (/terreno|lote|[áa]rea\s+de\s+terra|\bterra\b/.test(t)) return 'terreno';

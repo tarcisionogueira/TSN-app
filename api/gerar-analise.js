@@ -2172,6 +2172,19 @@ export default async function handler(req, res) {
       mercadoInputs.tipoImovel = imA.tipo;
       if (parecerInputs?.d && /^(outros|imovel|)$/i.test(String(parecerInputs.d.tipo || ''))) parecerInputs.d.tipo = imA.tipo;
     }
+    // "RURAL" PELO NOME DO LUGAR (15/10, Fazenda Tamboré Residencial 2): lote gravado rural antes da
+    // correção do normalizarTipo chega aqui com tipo rural e o mercado sai por HECTARE. Se o texto do
+    // lote, relido com a régua atual, diz unidade urbana, vale ela (só abaixo de 1 ha).
+    if (mercadoInputs && /^rural$/i.test(String(mercadoInputs.tipoImovel || '')) && imA?.titulo) {
+      const tipoTexto = normalizarTipo(`${imA.titulo} ${imA.descricao || ''}`);
+      const areaR = Number(mercadoInputs.areaTerrenoM2) || Number(mercadoInputs.areaM2) || Number(imA.area_m2) || 0;
+      if (tipoTexto !== 'rural' && tipoTexto !== 'imovel' && areaR > 0 && areaR < 10000) {
+        mercadoInputs.tipoImovel = tipoTexto;
+        if (parecerInputs?.d && /^rural$/i.test(String(parecerInputs.d.tipo || ''))) parecerInputs.d.tipo = tipoTexto;
+        try { await registrarAnomalia('tipo_rural_por_nome', imA.fonte || null, String(imovelId), 'tipo', `Lote gravado rural; o texto diz "${tipoTexto}" ("fazenda" é nome do lugar).`, true); }
+        catch (e) { console.warn('[analise] anomalia tipo_rural_por_nome:', e?.message); }
+      }
+    }
     // ÁREA FORA DE ESCALA (15/10, SUBLIME Vila Sônia): o acervo tinha 90,0485 m² (área privativa da
     // matrícula, 4 casas decimais) e o relatório chegou com 485 m² — "90,0485" lido como "485". O
     // relatório inteiro saiu sem valor de mercado. Quando a área recebida está a mais de 3× (para mais ou
@@ -2517,7 +2530,12 @@ export default async function handler(req, res) {
     const recente = semCache ? null : ((await mercadoRecente(String(imovelId))) || mercadoAnteriorReuso);
     const baseReuso = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
     const cacheTypeAware = (c) => !!(c?.consolidado?.baseCalculo) || Number(c?.consolidado?.valorEstimadoImovel) > 0;
-    const reusoValido = recente && (cacheTypeAware(recente.mercado) || ['residencial', 'comercial', 'industrial'].includes(baseReuso));
+    // UNIDADE DO CACHE × TIPO DE AGORA (15/10, Fazenda Tamboré): a pesquisa anterior foi feita com o tipo
+    // errado (rural, R$/hectare). Corrigido o tipo, reaproveitá-la devolveria o MESMO valor por hectare para
+    // uma casa. Pesquisa em hectare só serve a rural, e rural só aceita pesquisa em hectare.
+    const unidadeCache = String(recente?.mercado?.consolidado?.unidadeValor || '');
+    const unidadeConfere = !unidadeCache || ((unidadeCache === 'hectare') === (baseReuso === 'rural'));
+    const reusoValido = recente && unidadeConfere && (cacheTypeAware(recente.mercado) || ['residencial', 'comercial', 'industrial'].includes(baseReuso));
     if (reusoValido) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
