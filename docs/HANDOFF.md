@@ -30,6 +30,12 @@
   ("All scraping engines failed"), inconclusivo. Para adotar: o filtro de não-imóvel por slug é fraco (deixa passar
   `yamaha-nmax-2020`, `honda-fit-2012`, `ar-condicionado-e-notebook`, `sofa`); a Jinkings tem lotes "exemplo-de-leilao";
   `<price>` com vírgula decimal e `<rate>` em centavos na multi-praça; `<property_type>` quase sempre `other`.
+  - **Adotado (15/10, tarde):** `lib/degrau-feed.mjs` comum (FRANCO + MGL). VIVA e JINKINGS com `catalogo: '/sitemap.xml'`;
+    filtro novo por marca/modelo de veículo, lote de demonstração e NOME do lote (Viva 43→40, Jinkings 16→9, zero erro
+    no feed real). Firecrawl sem `waitFor` em `.xml` (dava 408). Workflow semanal ganhou `mgl_max` (dry-run com 3 lotes ≈ 8 créditos).
+  - **Defeito pego no dry-run (grave):** desde 13/10 o `runner.mjs` chama `parseDetalhe(html, url, { fetchFonte, tenant })`
+    e o MGL lia o 3º argumento como `agora` → `new Date(fim) > {…}` = false → TODO lote com praça "encerrado". A coleta
+    semanal de 20/10 teria zerado Fernando/Jonas/Lucas/Viva/Jinkings. Só o MGL tinha essa assinatura (conferido).
 - **JMFLEILOES "regressão" explicada** em `fonte_regressao_explicada` (até 14/11): leiloeiro pequeno entre leilões,
   API Superbid traz 1–2 lotes vivos/dia desde 06/10; os outros 18 são sem_lance retidos.
 - **Vigiar:** `limpar-imoveis-stale` (passo CEF) e `fotos-orfas` deram 57014 na janela 04h20–05h de hoje; 0
