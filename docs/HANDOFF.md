@@ -23,8 +23,13 @@
   FEED XML (`<listing>` com `<url>` e `<end_date>`), sem JS: 226 lotes, 73 com `end_date` futuro (a home mostrava 13).
   `lotesDoFeed()` em `francoleiloes-parse.mjs` filtra pelos abertos (sem o filtro o motor reabriria o histórico todo
   dia — encerrado não é guardado). Em seco: 73 enumerados, 40 prontos, 0 descartados, foto/descrição 100%. Gravado por
-  dispatch; o resto entra nas próximas coletas. **Vale testar o mesmo feed nas outras Degrau (MGL, Jinkings, Viva) —
-  hoje via Firecrawl pago.**
+  dispatch; o resto entra nas próximas coletas. Vale a ÚLTIMA `end_date` (lote de várias praças repete o bloco).
+  A coleta diária passou do teto de 55 min (Astavero cortado em 15/10) → `timeout-minutes: 75`.
+- **Feed nas outras Degrau (Firecrawl, 1 crédito/site):** VIVA tem (44 lotes, 43 abertos, quase todos imóvel — o
+  acervo tem 13) e JINKINGS tem (16 abertos, ~9 imóveis — acervo 7). Fernando/Jonas/Lucas: o Firecrawl falhou
+  ("All scraping engines failed"), inconclusivo. Para adotar: o filtro de não-imóvel por slug é fraco (deixa passar
+  `yamaha-nmax-2020`, `honda-fit-2012`, `ar-condicionado-e-notebook`, `sofa`); a Jinkings tem lotes "exemplo-de-leilao";
+  `<price>` com vírgula decimal e `<rate>` em centavos na multi-praça; `<property_type>` quase sempre `other`.
 - **JMFLEILOES "regressão" explicada** em `fonte_regressao_explicada` (até 14/11): leiloeiro pequeno entre leilões,
   API Superbid traz 1–2 lotes vivos/dia desde 06/10; os outros 18 são sem_lance retidos.
 - **Vigiar:** `limpar-imoveis-stale` (passo CEF) e `fotos-orfas` deram 57014 na janela 04h20–05h de hoje; 0
