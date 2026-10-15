@@ -59,12 +59,14 @@ async function liberar(chave) {
 }
 
 export function corpo({ titulo, prox, penalidade, processo, link }) {
-  const quando = prox.dias > 0 ? `vence em ${prox.dias} dia${prox.dias > 1 ? 's' : ''}` : prox.dias === 0 ? 'vence hoje' : `está em atraso há ${-prox.dias} dia${prox.dias < -1 ? 's' : ''}`;
+  // `dias` conta até a data de PAGAMENTO (vencimento − folga, em dia útil): é ela que o cliente deve seguir.
+  const quando = prox.dias > 0 ? `pagar em ${prox.dias} dia${prox.dias > 1 ? 's' : ''}` : prox.dias === 0 ? 'pagar hoje' : prox.dias_venc >= 0 ? 'passou da data sugerida, vence em breve' : `está em atraso há ${-prox.dias_venc} dia${prox.dias_venc < -1 ? 's' : ''}`;
   return `<div style="font-family:Arial,sans-serif;max-width:560px;color:#0f172a">
   <h2 style="margin:0 0 8px">${prox.dias < 0 ? '⚠️' : '⏰'} ${esc(prox.rotulo)} ${esc(quando)}</h2>
   <p style="margin:0 0 12px;color:#475569">${esc(titulo)}</p>
   <table style="border-collapse:collapse;font-size:14px">
-    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vencimento</td><td><b>${dataBR(prox.venc)}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Pagar até</td><td><b>${dataBR(prox.pagar_ate || prox.venc)}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vencimento</td><td>${dataBR(prox.venc)}</td></tr>
     <tr><td style="padding:4px 12px 4px 0;color:#64748b">Valor nominal</td><td><b>${brl(prox.valor)}</b></td></tr>
     ${processo ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Processo</td><td>${esc(processo)}</td></tr>` : ''}
   </table>
@@ -111,7 +113,7 @@ async function handler(req) {
       // enviarEmail NÃO lança: falha do Resend, suprimido e sem_resend voltam como { ok:false }.
       const env = await enviarEmail({
         from: FROM, to: email, cc: EQUIPE && EQUIPE !== email ? EQUIPE : undefined,
-        subject: `${prox.dias < 0 ? 'Parcela em atraso' : 'Lembrete de parcela'}: ${prox.rotulo} — ${dataBR(prox.venc)}`,
+        subject: `${prox.dias_venc < 0 ? 'Parcela em atraso' : 'Lembrete de parcela'}: ${prox.rotulo} — pagar até ${dataBR(prox.pagar_ate || prox.venc)}`,
         html: corpo({ titulo: a.titulo || 'Imóvel arrematado', prox, penalidade: avisoPenalidade(fonte[a.imovel_id]?.modalidade || a.imovel?.modalidade), processo: fonte[a.imovel_id]?.numero_processo || a.imovel?.numero_processo, link: `${BASE}/arrematados` }),
         meta: { userId: a.user_id, tipo: 'parcela_arremate' },
         idempotencyKey: `parcela_arremate:${chave}`,

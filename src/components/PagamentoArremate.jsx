@@ -16,7 +16,7 @@ const rot = { fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4, 
 export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe = false }) {
   const [p, setP] = React.useState(arr.parcelamento || null);
   const [editando, setEditando] = React.useState(false);
-  const [form, setForm] = React.useState(() => ({ forma: 'parcelado', entrada_pct: 25, entrada_venc: arr.data_arrematacao || '', parcelas: 30, primeira_venc: '', indice: '', ...(arr.parcelamento || {}) }));
+  const [form, setForm] = React.useState(() => ({ forma: 'parcelado', entrada_pct: 25, entrada_venc: arr.data_arrematacao || '', parcelas: 30, primeira_venc: '', indice: '', entrada_paga_em: '', folga_dias: 1, ...(arr.parcelamento || {}) }));
   const [salvando, setSalvando] = React.useState(false);
   const [erro, setErro] = React.useState('');
   const [verTudo, setVerTudo] = React.useState(false);
@@ -80,9 +80,12 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
   const salvarForm = async () => {
     const novo = form.forma === 'a_vista'
       ? { forma: 'a_vista', entrada_venc: form.entrada_venc || null, indice: form.indice || null, pagas: p?.pagas || [] }
-      : { forma: 'parcelado', entrada_pct: Number(form.entrada_pct) || 25, entrada_venc: form.entrada_venc || null, parcelas: Number(form.parcelas) || 1, primeira_venc: form.primeira_venc || null, indice: form.indice || null, pagas: p?.pagas || [] };
+      : { forma: 'parcelado', entrada_pct: Number(form.entrada_pct) || 25, entrada_venc: form.entrada_venc || null, entrada_paga_em: form.entrada_paga_em || null, parcelas: Number(form.parcelas) || 1, primeira_venc: form.primeira_venc || null, indice: form.indice || null, pagas: p?.pagas || [] };
+    // Folga (dias antes do vencimento) vale para à vista e parcelado; 0 a 10, padrão 1 (dono, 15/10).
+    novo.folga_dias = Math.max(0, Math.min(10, Math.round(Number(form.folga_dias ?? 1)) || 0));
     if (p?.fonte_doc) novo.fonte_doc = { ...p.fonte_doc, editado_a_mao: true };
     if (p?.guias) novo.guias = p.guias;
+    if (p?.pagamentos) novo.pagamentos = p.pagamentos;
     if (await salvar(novo)) setEditando(false);
   };
   const alternarPaga = async (idx) => {
@@ -135,9 +138,11 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
           {form.forma === 'parcelado' && <>
             <label><span style={rot}>Nº de parcelas</span>
               <input type="number" min="1" max="60" value={form.parcelas} onChange={(e) => setForm((f) => ({ ...f, parcelas: e.target.value }))} style={inp} /></label>
-            <label><span style={rot}>1º vencimento das parcelas</span>
-              <input type="date" value={form.primeira_venc || ''} onChange={(e) => setForm((f) => ({ ...f, primeira_venc: e.target.value }))} style={inp} /></label>
+            <label><span style={rot}>Entrada paga em (base dos 30 dias)</span>
+              <input type="date" value={form.entrada_paga_em || ''} onChange={(e) => setForm((f) => ({ ...f, entrada_paga_em: e.target.value }))} style={inp} /></label>
           </>}
+          <label><span style={rot}>Folga (dias antes do vencimento)</span>
+            <input type="number" min="0" max="10" value={form.folga_dias ?? 1} onChange={(e) => setForm((f) => ({ ...f, folga_dias: e.target.value }))} style={inp} /></label>
           <label><span style={rot}>Índice de correção (lido do auto/carta)</span>
             <input value={form.indice || ''} placeholder="ex.: IPCA, INPC, TJ" onChange={(e) => setForm((f) => ({ ...f, indice: e.target.value }))} style={inp} /></label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
@@ -172,7 +177,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
           <div style={{ marginTop: 12, background: cor.bg, border: `1px solid ${cor.bd}`, borderRadius: 10, padding: '10px 14px' }}>
             {prox ? (
               <div style={{ fontSize: 13.5, color: cor.fg, fontWeight: 800 }}>
-                ⏰ {prox.rotulo} · {brl(prox.valor)} · {dataBR(prox.venc)} — {quando(prox.dias)}
+                ⏰ {prox.rotulo} · {brl(prox.valor)} · pagar até {dataBR(prox.pagar_ate || prox.venc)} (vence {dataBR(prox.venc)}) — {quando(prox.dias)}
               </div>
             ) : <div style={{ fontSize: 13.5, color: cor.fg, fontWeight: 800 }}>✅ Todas as parcelas registradas como pagas</div>}
             {prox && <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4 }}>{avisoPenalidade(modalidade)}</div>}
@@ -186,7 +191,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
             <tbody>
               {visiveis.map((x) => (
                 <tr key={x.idx} style={{ borderTop: '1px solid #f1f5f9', color: x.paga ? '#94a3b8' : '#0f172a' }}>
-                  <td style={{ padding: '6px 4px' }}>{dataBR(x.venc)}</td>
+                  <td style={{ padding: '6px 4px' }} title={`Vencimento ${dataBR(x.venc)}`}>{dataBR(x.pagar_ate || x.venc)}<div style={{ fontSize: 10.5, color: '#94a3b8' }}>vence {dataBR(x.venc)}</div></td>
                   <td style={{ padding: '6px 4px' }}>{x.rotulo}</td>
                   <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700 }}>{brl(x.valor)}</td>
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>

@@ -21,6 +21,7 @@ import ServicosCartorio from '../components/ServicosCartorio';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import DocumentosCaso from '../components/DocumentosCaso';
+import ParcelasCaso from '../components/ParcelasCaso';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
@@ -1484,6 +1485,7 @@ export default function Caso() {
 
       {/* Documentos do caso (15/10, dono): anexos dos e-mails lidos pela IA e separados em pessoais e
           da arrematação — ver DocumentosCaso.jsx / caso-documentos-cron. */}
+      {isStaff && <ParcelasCaso casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
       {isStaff && <DocumentosCaso casoId={caso.id} podeMover={['admin', 'analista', 'consultor'].includes(role)} cardStyle={{ ...card, marginBottom:20 }} />}
 
       {/* Andamento do processo (prazo processual pós-arremate) — SÓ ADMIN, pedido do dono 24/09.

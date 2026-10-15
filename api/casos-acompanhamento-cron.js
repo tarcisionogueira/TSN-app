@@ -46,6 +46,8 @@ const DIA_ATUALIZACAO = 3; // quarta-feira (getUTCDay sobre a data de Brasília)
 // "Operação atribuída pela equipe" / "Arremate atribuído pela equipe" são marcadores do cadastro manual,
 // não endereço — não vão para o assunto nem para o texto do e-mail ao escritório.
 const RE_PLACEHOLDER = /atribu[ií]d[ao] pela equipe/i;
+// Guia já no sistema: anexada na tela (imovel_anexos → anexo_id) ou vinda por e-mail (caso_documentos → storage_path).
+const temGuia = (arr, idx) => { const g = arr?.parcelamento?.guias?.[idx]; return !!(g?.anexo_id || g?.storage_path); };
 const marcoGuia = (dias) => (dias >= 2 && dias <= 5 ? 5 : dias >= -7 && dias <= 1 ? 0 : null);
 
 const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
@@ -169,7 +171,7 @@ async function handler(req) {
       try { p = proximaPendente(cronograma(arr.parcelamento, { valor: arr.valor_arrematacao, dataArrematacao: arr.data_arrematacao }), hoje); }
       catch (e) { res.falhas++; console.error(`[acompanhamento] cronograma ilegível ${arr.id}:`, e?.message); continue; }
       const marco = p ? marcoGuia(p.dias) : null;
-      if (marco === null || arr.parcelamento?.guias?.[p.idx]?.anexo_id) continue;
+      if (marco === null || temGuia(arr, p.idx)) continue;
       const chave = `semadv|${c.id}|${p.idx}|${p.venc}|${marco}`;
       if (seco) { res.previa.push({ caso: c.id, aviso_equipe_sem_advogado: chave }); continue; }
       if (!(await travar(chave, c.id))) { res.ja_enviados++; continue; }
@@ -209,7 +211,7 @@ async function handler(req) {
       }
 
       // Guia já anexada no sistema pela equipe (painel "Emitir guia", 12/10): não pede ao jurídico.
-      if (parcela && arr.parcelamento?.guias?.[parcela.idx]?.anexo_id) { res.guia_ja_no_sistema = (res.guia_ja_no_sistema || 0) + 1; parcela = null; }
+      if (parcela && temGuia(arr, parcela.idx)) { res.guia_ja_no_sistema = (res.guia_ja_no_sistema || 0) + 1; parcela = null; }
       // Guia já chegou? Insistir (véspera/atraso) só se nenhuma resposta com anexo entrou no caso
       // desde o 1º pedido desta parcela (5 dias antes do vencimento; margem para fim de semana).
       if (parcela && parcela.marco !== 5) {
