@@ -66,6 +66,21 @@
     fora. 4 lições ruins (2 com NOME de pessoa, 2 fatos do caso) — o DELETE travou na confirmação do dono;
     prompts agora proíbem nome/CPF/endereço de pessoa (as lições vão para relatórios de outros clientes).
     Lacuna: andamentos do CNJ gravados por `arrematado_id` (sem caso_id) ainda não entram no cron.
+- **Ciclo das parcelas da arrematação (15/10, noite, dono):**
+  - Datas (`src/utils/parcelamentoArremate.js` + `src/utils/feriados.js`): parcela n = entrada paga + 30×n dias
+    (âncora `entrada_paga_em`, senão `entrada_venc`; `primeira_venc` não manda mais). `pagar_ate` = venc − `folga_dias`
+    (padrão 1), antecipado para dia útil (fins de semana, feriados nacionais, Carnaval, Sexta Santa, Corpus Christi).
+    `proximaPendente().dias` conta até `pagar_ate` (lembretes), `dias_venc` até o vencimento. Teste:
+    `scripts/testes/cronograma-30-dias.mjs`. Mudou o calendário do Marcos (parcela 2: 16/11 → 15/11, pagar até 13/11).
+  - A) `parcelas-documentos-cron` (hora em hora, :50): caso_documentos `guia_deposito` → lê (nº da parcela, valor,
+    validade, código, PIX) → `parcelamento.guias[idx]` com `aguardando_aprovacao` pela RPC atômica
+    `parcelamento_registrar` (só service_role) → e-mail ao dono. Dúvida = `caso_documentos.parcela_status='aviso'`.
+  - B) Envio só pelo botão "Aprovar e enviar" (`ParcelasCaso.jsx` no /caso → `guia-parcela` acao `enviar`): cópia
+    para tarcisioaraujo@reimob.com.br, "pagar até" + vencimento, responder cai no caso (tarcisio+token, email_caixa).
+  - C) `comprovante_pagamento` que bate com UMA parcela pendente → `parcelamento.pagamentos[idx]` + `pagas`.
+  - `caso-documentos-cron` e `arquivar-anexos-email-cron` passaram a rodar de hora em hora (a guia não espera 6 h).
+  - 1ª guia ligada: Marcos, Parcela 1/16, R$ 25.704,15 (BB), aguardando aprovação em 15/10 20h50 UTC.
+  - Rafael tem 30 parcelas mas SEM parcelamento registrado em `arrematados` — a guia dele fica `sem_parcelamento`.
 - **Relatórios de caso com lote fora do acervo (15/10, dono):** workflow `gerar-relatorios-caso.yml`
   (`scripts/gerar-relatorios-caso.mjs`): completa o lote-marcador só onde está vazio (0 conta como vazio), liga ao lote
   os documentos do caso (matrícula/edital: um por tipo, índice único), gera documental → mercadológico (tipo/área do
