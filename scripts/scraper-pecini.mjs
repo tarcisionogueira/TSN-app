@@ -104,9 +104,9 @@ function inferirTipo(titulo = '') {
   const t = titulo.toLowerCase();
   if (/apartament|apto|flat|kitnet|studio/.test(t)) return 'apartamento';
   if (/casa|sobrado|residenc/.test(t)) return 'casa';
+  if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';   // antes de terreno: "área rural" é rural
   if (/terreno|lote|gleba|[áa]rea/.test(t)) return 'terreno';
   if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio/.test(t)) return 'comercial';
-  if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';
   return 'outros';
 }
 
@@ -422,14 +422,27 @@ function montarRow(rec, det) {
   }
   const ufInferida = rec.uf ? null : inferirUF({ cidade: rec.cidade, titulo: det.titulo, descricao: det.descricao });
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
+  // SUBLIME (15/10): o título do site é uma linha de CARACTERÍSTICAS ("Vaga | 90m² útil", "3 dormitórios |
+  // 64m² útil") e o TIPO vinha no sufixo "Apartamentos em leilão", que o parseDetalhe corta. Resultado:
+  // apartamento da Vila Sônia gravado como "Vaga" e tipo `outros` (10 lotes). O slug do endereço diz o
+  // que é ("/lote/apartamento-na-vila-sonia/3418/"): manda no tipo e abre o título. Slug de lote múltiplo
+  // ("4-areas-em-vilhena-ro") não abre o título — cada lote tem o seu.
+  const slugTxt = FONTE !== 'PECINI' ? ((rec.loteUrl || '').match(/\/lote\/([^/]+)\/\d+/) || [])[1]?.replace(/-/g, ' ') || '' : '';
+  const tipoSlug = slugTxt ? inferirTipo(slugTxt) : 'outros';
+  // O slug é do LEILÃO, não do lote: em leilão de vários bens ele descreve outro imóvel ("casas na praia
+  // grande" sobre um terreno em Jundiaí). Por isso só entra quando o título do LOTE não diz o tipo.
+  const tipoTitulo = inferirTipo(det.titulo);
+  const slugTitulo = tipoTitulo === 'outros' && slugTxt && !/^\d/.test(slugTxt) && tipoSlug !== 'outros'
+    ? slugTxt.replace(/\b([a-zà-ú])/g, (m) => m.toUpperCase()).replace(/\b(Na|No|Em|De|Da|Do|Das|Dos|E)\b/g, (m) => m.toLowerCase()) : '';
+  const tituloBase = slugTitulo ? `${slugTitulo} | ${det.titulo.replace(/^\s*\d*\s*vagas?\s*\|\s*/i, '')}` : det.titulo;
   return {
     fonte: FONTE,
     fonte_id: `${PREFIXO}${rec.id}`,
     // Título do Sublime não diz ONDE ("Terreno de 250m² | Constr. de 150m²"): acrescenta Cidade/UF.
     titulo: (FONTE !== 'PECINI' && (rec.cidade || ufInferida?.cidade))
-      ? `${det.titulo} - ${rec.cidade || ufInferida.cidade}${(rec.uf || ufInferida?.uf) ? '/' + (rec.uf || ufInferida.uf) : ''}`.slice(0, 180)
-      : det.titulo,
-    tipo: inferirTipo(det.titulo),
+      ? `${tituloBase} - ${rec.cidade || ufInferida.cidade}${(rec.uf || ufInferida?.uf) ? '/' + (rec.uf || ufInferida.uf) : ''}`.slice(0, 180)
+      : tituloBase,
+    tipo: tipoTitulo !== 'outros' ? tipoTitulo : tipoSlug,
     modalidade: det.modalidade,
     // UF do slug; faltando (Sublime: "casa-em-campinas" não traz UF), deduz pela cidade e pelo
     // texto ("município e comarca de Atibaia - SP") com o mesmo inferirUF do motor.
@@ -437,7 +450,8 @@ function montarRow(rec, det) {
     cidade: rec.cidade || ufInferida?.cidade || null,
     valor_avaliacao: va,
     valor_minimo: vm,
-    area_m2: det.area_m2 || 0,
+    // 2 casas: "90,0485 m²" com 4 casas foi lido adiante como 485 m² (15/10).
+    area_m2: det.area_m2 ? Math.round(det.area_m2 * 100) / 100 : 0,
     descricao: det.descricao,
     // Edital REAL (PDF) quando a página o expõe; senão a página do lote (comportamento atual).
     link_edital: det.link_edital_doc || rec.loteUrl,

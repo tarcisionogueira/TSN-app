@@ -2166,6 +2166,18 @@ export default async function handler(req, res) {
     const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo,area_m2&limit=1`)).json();
     descricaoImovel = imA?.descricao || null;
     areaAcervoPre = Number(imA?.area_m2) || 0;
+    // ÁREA FORA DE ESCALA (15/10, SUBLIME Vila Sônia): o acervo tinha 90,0485 m² (área privativa da
+    // matrícula, 4 casas decimais) e o relatório chegou com 485 m² — "90,0485" lido como "485". O
+    // relatório inteiro saiu sem valor de mercado. Quando a área recebida está a mais de 3× (para mais ou
+    // para menos) da do acervo, vale a do acervo — a matrícula, se lida adiante, continua mandando.
+    {
+      const aIn = Number(mercadoInputs?.areaM2) || 0;
+      if (areaAcervoPre >= 5 && aIn > 0 && (aIn / areaAcervoPre > 3 || areaAcervoPre / aIn > 3)) {
+        console.warn('[area] informada fora de escala — usando a do acervo', JSON.stringify({ imovel: String(imovelId), informada: aIn, acervo: areaAcervoPre }));
+        mercadoInputs.areaM2 = Math.round(areaAcervoPre * 100) / 100;
+        if (parecerInputs?.d && Number(parecerInputs.d.areaM2) === aIn) parecerInputs.d.areaM2 = mercadoInputs.areaM2;
+      }
+    }
     if (imA && mercadoInputs) {
       const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
       const ruaOk = (e) => { const s = String(e || '').trim(); return s.length >= 6 && /[a-zà-ú]{3}/i.test(s) && !lixo.test(s); };

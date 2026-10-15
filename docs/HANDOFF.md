@@ -174,6 +174,19 @@
   - **Total assumido = SOMA do propter rem,** nunca a "parte proporcional" que a IA calcula. Em fração, o condomínio
     cobra tudo de qualquer condômino. A Vila Matilde gravou R$ 148 mil (metade); o relatório salvo foi corrigido
     para R$ 296.629,83 (migração `vila_matilde_total_assumido_integral`).
+- **SUBLIME "Vaga | 90m² útil" (15/10): era um APARTAMENTO, e o relatório saiu sem valor de mercado.**
+  - **Título e tipo:** o `og:title` da Sublime é uma linha de características ("Vaga | 90m² útil", "3 dormitórios |
+    64m²") e o tipo ficava no sufixo "Apartamentos em leilão", que o `parseDetalhe` corta. Resultado: 10 lotes
+    `outros`, este com o título "Vaga".
+  - **Correção no coletor** (`scraper-pecini.mjs`): o slug do endereço (`/lote/apartamento-na-vila-sonia/`) dá o tipo
+    e abre o título SÓ quando o título do lote não diz o tipo. O slug é do LEILÃO: em leilão de vários bens ele
+    descreve outro imóvel. A 1ª versão pôs "Casas na Praia Grande" num terreno de Jundiaí e foi revertida antes do
+    fechamento. "Área rural" agora é rural, não terreno. Área com 2 casas decimais.
+  - **Banco:** 50 lotes ativos corrigidos (migrações `sublime_tipo_titulo_area_pelo_slug` e
+    `sublime_slug_so_quando_titulo_nao_diz_tipo`).
+  - **Área de 485 m²:** o acervo tinha 90,0485 m² e o relatório chegou com 485 ("90,0485" lido como "485" no
+    caminho da tela; a origem exata não foi isolada). Guarda no `gerar-analise`: área recebida a mais de 3× da do
+    acervo → vale a do acervo, com log `[area] informada fora de escala`. A matrícula, se lida, continua mandando.
 - **Validação real do dia (todas no deploy novo):**
   - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
     financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.
