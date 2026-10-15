@@ -1,4 +1,4 @@
-// Regra do dono (15/10): parcela n vence em entrada + 30×n (encadeado do PAGAMENTO da entrada, nunca da data com
+// Regra do dono (15/10): parcela n vence em leilão + 30×n (encadeado da DATA DO LEILÃO, nunca da data com
 // folga); "pagar até" = vencimento − folga, antecipado para dia útil (fim de semana, feriado nacional, Carnaval,
 // Sexta-feira Santa, Corpus Christi).
 import assert from 'node:assert/strict';
@@ -14,9 +14,13 @@ assert.equal(c[2].pagar_ate, '2026-11-13');            // 14/11 é sábado (e 15
 assert.equal(c[16].venc, '2028-01-09');                // 480 dias: a folga não acumula
 assert.equal(Math.round(c.reduce((s, x) => s + x.valor, 0) * 100) / 100, 548355.15);
 
-// entrada_paga_em manda no encadeamento quando existe
-const c2 = cronograma({ ...p, entrada_paga_em: '2026-09-18' }, { valor: 548355.15, dataArrematacao: '2026-09-16' });
-assert.equal(c2[1].venc, '2026-10-18');
+// a DATA DO LEILÃO manda no encadeamento (dono, 15/10): entrada paga em outro dia não desloca as parcelas
+const c2 = cronograma({ ...p, entrada_paga_em: '2026-09-18', entrada_venc: '2026-09-17' }, { valor: 548355.15, dataArrematacao: '2026-09-16' });
+assert.equal(c2[1].venc, '2026-10-16');
+assert.equal(c2[1].pagar_ate, '2026-10-15');            // leilão + 29
+// sem data do leilão, cai na entrada
+const c4 = cronograma({ ...p, entrada_paga_em: '2026-09-18' }, { valor: 548355.15, dataArrematacao: null });
+assert.equal(c4[1].venc, '2026-10-18');
 // folga configurável
 const c3 = cronograma({ ...p, folga_dias: 3 }, { valor: 548355.15, dataArrematacao: '2026-09-16' });
 assert.equal(c3[1].pagar_ate, '2026-10-13');

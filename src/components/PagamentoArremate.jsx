@@ -138,8 +138,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
           {form.forma === 'parcelado' && <>
             <label><span style={rot}>Nº de parcelas</span>
               <input type="number" min="1" max="60" value={form.parcelas} onChange={(e) => setForm((f) => ({ ...f, parcelas: e.target.value }))} style={inp} /></label>
-            <label><span style={rot}>Entrada paga em (base dos 30 dias)</span>
-              <input type="date" value={form.entrada_paga_em || ''} onChange={(e) => setForm((f) => ({ ...f, entrada_paga_em: e.target.value }))} style={inp} /></label>
+            <p style={{ fontSize: 11.5, color: '#64748b', margin: 0, alignSelf: 'end' }}>Parcelas a cada 30 dias da data do leilão ({dataBR(arr.data_arrematacao)}); pagar até = vencimento − folga.</p>
           </>}
           <label><span style={rot}>Folga (dias antes do vencimento)</span>
             <input type="number" min="0" max="10" value={form.folga_dias ?? 1} onChange={(e) => setForm((f) => ({ ...f, folga_dias: e.target.value }))} style={inp} /></label>

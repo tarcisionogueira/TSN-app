@@ -12,9 +12,10 @@
 //   entrada_paga_em, parcelas, primeira_venc, indice, folga_dias, pagas: [índices pagos; 0 = entrada/à vista],
 //   guias: { [idx]: {...} } }
 //
-// VENCIMENTO (15/10, regra do dono): 30 dias CORRIDOS encadeados a partir do pagamento da entrada —
-// parcela n = entrada + 30×n. Nunca a partir da data com folga (a folga acumularia parcela a parcela).
-// `primeira_venc` deixa de mandar no encadeamento; fica só como dado lido do auto/edital.
+// VENCIMENTO (15/10, regra do dono): 30 dias CORRIDOS encadeados a partir da DATA DO LEILÃO (data_arrematacao) —
+// parcela n = leilão + 30×n; com a folga padrão de 1 dia, paga-se em leilão + 29, + 59, … ("contagem em 29 dias da
+// data do leilão", dono, 15/10). Nunca a partir da data com folga (a folga acumularia parcela a parcela).
+// `primeira_venc` e `entrada_paga_em` não mandam no encadeamento; só valem quando o arremate não tem data do leilão.
 // DATA DE PAGAMENTO (`pagar_ate`): vencimento − folga_dias (padrão 1), antecipada para o dia útil anterior
 // se cair em fim de semana ou feriado bancário (src/utils/feriados.js). Lembretes e telas usam `pagar_ate`
 // e mostram o `venc` real junto.
@@ -48,8 +49,8 @@ export function cronograma(p, { valor, dataArrematacao }) {
   const pct = Math.min(100, Math.max(0, Number(p.entrada_pct ?? 25)));
   const n = Math.max(1, Math.min(60, Math.round(Number(p.parcelas) || 0)));
   const entrada = centavos(Number(valor) * pct / 100);
-  // Âncora do encadeamento: o dia em que a entrada foi PAGA; sem ele, o vencimento da entrada; sem ele, o leilão.
-  const ancora = String(p.entrada_paga_em || p.entrada_venc || base || '').slice(0, 10) || null;
+  // Âncora do encadeamento: SEMPRE a data do leilão; sem ela (arremate antigo/incompleto), a entrada.
+  const ancora = String(base || p.entrada_paga_em || p.entrada_venc || '').slice(0, 10) || null;
   if (!ancora) return [];
   const saldo = Number(valor) - entrada;
   const parcela = centavos(saldo / n);

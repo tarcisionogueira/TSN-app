@@ -64,7 +64,7 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
         {dados?.arrematado && <span style={{ fontSize: 12, color: '#64748b' }}>{itens.length - pendentes.length} de {itens.length} pagas · folga {dados.arrematado.folga_dias} dia(s)</span>}
       </div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
-        Vencimento a cada 30 dias do pagamento da entrada. "Pagar até" é o vencimento menos a folga, antecipado para dia útil. A guia que chega por e-mail entra aqui sozinha e só vai ao arrematante com a sua aprovação.
+        Vencimento a cada 30 dias da data do leilão. "Pagar até" é o vencimento menos a folga, antecipado para dia útil. A guia que chega por e-mail entra aqui sozinha e só vai ao arrematante com a sua aprovação.
       </div>
       {erro && <div style={{ fontSize: 12.5, color: '#b91c1c', marginBottom: 10 }}>{erro}</div>}
       {dados === null && <div style={{ fontSize: 13, color: '#64748b' }}><Loader2 size={14} style={{ verticalAlign: -2 }} /> Carregando…</div>}

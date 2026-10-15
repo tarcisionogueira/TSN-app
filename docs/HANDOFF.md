@@ -67,11 +67,14 @@
     prompts agora proíbem nome/CPF/endereço de pessoa (as lições vão para relatórios de outros clientes).
     Lacuna: andamentos do CNJ gravados por `arrematado_id` (sem caso_id) ainda não entram no cron.
 - **Ciclo das parcelas da arrematação (15/10, noite, dono):**
-  - Datas (`src/utils/parcelamentoArremate.js` + `src/utils/feriados.js`): parcela n = entrada paga + 30×n dias
-    (âncora `entrada_paga_em`, senão `entrada_venc`; `primeira_venc` não manda mais). `pagar_ate` = venc − `folga_dias`
+  - Datas (`src/utils/parcelamentoArremate.js` + `src/utils/feriados.js`): parcela n = DATA DO LEILÃO + 30×n dias
+    (dono, 15/10: "contagem em 29 dias da data do leilão" = venc − folga 1). `entrada_paga_em`/`entrada_venc` só
+    valem sem data do leilão; `primeira_venc` não manda mais. `pagar_ate` = venc − `folga_dias`
     (padrão 1), antecipado para dia útil (fins de semana, feriados nacionais, Carnaval, Sexta Santa, Corpus Christi).
     `proximaPendente().dias` conta até `pagar_ate` (lembretes), `dias_venc` até o vencimento. Teste:
-    `scripts/testes/cronograma-30-dias.mjs`. Mudou o calendário do Marcos (parcela 2: 16/11 → 15/11, pagar até 13/11).
+    `scripts/testes/cronograma-30-dias.mjs`. Marcos: leilão 16/09, entrada e comprovante (Santander) em 16/09 em
+    imovel_anexos; parcela 1 vence 16/10 (pagar até 15/10); parcela 2: 16/11 → 15/11, pagar até 13/11. A guia da
+    parcela 1 tem VALIDADE 13/11 — não é vencimento (a lição gravada "vencível em 13/11" leu errado).
   - A) `parcelas-documentos-cron` (hora em hora, :50): caso_documentos `guia_deposito` → lê (nº da parcela, valor,
     validade, código, PIX) → `parcelamento.guias[idx]` com `aguardando_aprovacao` pela RPC atômica
     `parcelamento_registrar` (só service_role) → e-mail ao dono. Dúvida = `caso_documentos.parcela_status='aviso'`.
