@@ -188,6 +188,10 @@
       "schedule": "20 12 * * 1-5"
     },
     {
+      "path": "/api/caso-documentos-cron",
+      "schedule": "40 1,7,13,19 * * *"
+    },
+    {
       "path": "/api/juridico-devolutivas-cron",
       "schedule": "10 13,20 * * 1-5"
     },
