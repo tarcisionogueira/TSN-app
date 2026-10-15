@@ -62,6 +62,14 @@
     `fonte`, `uf`, `modalidade`). Devolutivas: leem o resumo dos anexos, gravam `fonte='devolutiva'` e não disparam
     com reencaminhamento nosso (@reimob/@bidpro). `gerar-documental` lê 150 e prioriza mesma UF/modalidade.
     Falha da IA não move o cursor. `juridico_aprendizado` não tinha CREATE em migração (7b): espelhado agora.
+    1ª rodada (15/10 17h26 UTC): 17 lições (Marcos 6, Rafael 6, Matheus 5); casos "Encerrado sem análise" ficam
+    fora. 4 lições ruins (2 com NOME de pessoa, 2 fatos do caso) — o DELETE travou na confirmação do dono;
+    prompts agora proíbem nome/CPF/endereço de pessoa (as lições vão para relatórios de outros clientes).
+    Lacuna: andamentos do CNJ gravados por `arrematado_id` (sem caso_id) ainda não entram no cron.
+- **Tipo "fazenda" como nome de lugar (15/10, dono):** "Fazenda Tamboré Residencial 2 - Casa com 710m²" saiu rural e
+  o mercadológico avaliou por hectare (R$ 1,2 mi × avaliação R$ 15,8 mi). `fazendaEhNome` em `api/_tipo.js` (usado
+  por normalizarTipo e pelo inferirTipo de 19 parsers); gerar-analise relê lote gravado rural e não reaproveita
+  pesquisa em hectare para tipo não rural. 4 lotes ativos corrigidos. Teste: `scripts/testes/fazenda-nome-de-lugar.mjs`.
   - **Relatórios no "Documentos do caso":** mercadológico, documental e laudo do CLIENTE do caso, com "Abrir
     relatórios" e "Gerar os que faltam" (modo suporte, só admin/analista). Rafael e Matheus: nenhum gerado (lotes
     fora do acervo; o Gerar abre o fluxo manual com endereço/UF do caso, e a matrícula está nos documentos).
