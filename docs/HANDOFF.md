@@ -7,6 +7,29 @@
 
 
 
+## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
+
+- **"Mandei e-mail ao leiloeiro e começou a gerar relatórios" (dono):** é a regra de 30/09 — e-mail da equipe ao
+  LEILOEIRO pela tela do lote abre a auto-sequência dos relatórios que faltam (`EnviarEmailCasoLote.jsx:90-98`). Saiu o
+  mercadológico (SUPERBID, Santana de Parnaíba, `d9973dc0…`); o documental só sai com a tela de análise aberta.
+- **`link_matricula_morto` 53 → 0, causa raiz de verdade (3ª volta, todos GRUPOLANCE, leilão em aberto):** o gatilho
+  de 10/10 zerava `link_matricula` quando o arquivo era apagado, mas a URL seguia no jsonb `imoveis_leilao.anexos`
+  (o `captura-docs-grupolance` grava nos dois). O merge do `scraper-puppeteer` ("DESALINHAMENTO anexos×link_*",
+  ~linha 6028) deriva o link de `anexos[tipo=matricula]` e o ressuscitava na coleta seguinte. Gatilho agora tira a
+  entrada morta do jsonb também; passivo reparado (`20261015_link_morto_sai_tambem_do_anexos_jsonb.sql`). Com o jsonb
+  vazio, o coletor GL volta a baixar a matrícula.
+- **FRANCOLEILOES zerou em 14/10 (200, 0 lotes):** a lista do site (plataforma Degrau) passou a vir por AJAX que não
+  completa no navegador do runner — nem com `/proximos_leiloes/1/1/` + 7 s (rodada em seco, 0). O `/sitemap.xml` é um
+  FEED XML (`<listing>` com `<url>` e `<end_date>`), sem JS: 226 lotes, 73 com `end_date` futuro (a home mostrava 13).
+  `lotesDoFeed()` em `francoleiloes-parse.mjs` filtra pelos abertos (sem o filtro o motor reabriria o histórico todo
+  dia — encerrado não é guardado). Em seco: 73 enumerados, 40 prontos, 0 descartados, foto/descrição 100%. Gravado por
+  dispatch; o resto entra nas próximas coletas. **Vale testar o mesmo feed nas outras Degrau (MGL, Jinkings, Viva) —
+  hoje via Firecrawl pago.**
+- **JMFLEILOES "regressão" explicada** em `fonte_regressao_explicada` (até 14/11): leiloeiro pequeno entre leilões,
+  API Superbid traz 1–2 lotes vivos/dia desde 06/10; os outros 18 são sem_lance retidos.
+- **Vigiar:** `limpar-imoveis-stale` (passo CEF) e `fotos-orfas` deram 57014 na janela 04h20–05h de hoje; 0
+  candidatos depois — contenção, não defeito, enquanto não repetir.
+
 ## 14/10 (tarde) — vitrine pós-leilão: só fica quem encerrou SEM LANCE confirmado
 
 - **Pedido do dono:** lote com data vencida e arrematado ainda aparecia (print: SUPERBID 5027338, Casa New Ville,
