@@ -31,3 +31,9 @@ create index if not exists caso_documentos_caso_idx on public.caso_documentos (c
 alter table public.caso_documentos enable row level security;
 drop policy if exists caso_documentos_equipe on public.caso_documentos;
 create policy caso_documentos_equipe on public.caso_documentos for select using (public.pode_caixa_email());
+
+-- Correção manual na tela (api/caso-documentos.js): quem moveu, quando e o grupo que a IA tinha dado.
+alter table public.caso_documentos add column if not exists corrigido_por uuid;
+alter table public.caso_documentos add column if not exists corrigido_em timestamptz;
+alter table public.caso_documentos add column if not exists grupo_ia text;
+comment on column public.caso_documentos.grupo_ia is 'Grupo que a IA tinha dado antes da correção manual (sinal de erro da classificação).';

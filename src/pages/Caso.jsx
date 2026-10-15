@@ -20,6 +20,7 @@ import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 import ServicosCartorio from '../components/ServicosCartorio';
 import FinanciamentoTracker from '../components/FinanciamentoTracker';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import DocumentosCaso from '../components/DocumentosCaso';
 import AndamentoProcessoCaso from '../components/AndamentoProcessoCaso';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
@@ -1480,6 +1481,10 @@ export default function Caso() {
           só manda o que já temos pra quem escolher (jurídico ou o leiloeiro deste lote).
           Componente compartilhado com ImovelDetalhe.jsx — ver EnviarEmailCasoLote.jsx. */}
       {isStaff && <EnviarEmailCasoLote casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
+
+      {/* Documentos do caso (15/10, dono): anexos dos e-mails lidos pela IA e separados em pessoais e
+          da arrematação — ver DocumentosCaso.jsx / caso-documentos-cron. */}
+      {isStaff && <DocumentosCaso casoId={caso.id} podeMover={['admin', 'analista', 'consultor'].includes(role)} cardStyle={{ ...card, marginBottom:20 }} />}
 
       {/* Andamento do processo (prazo processual pós-arremate) — SÓ ADMIN, pedido do dono 24/09.
           Diário de etapas + consulta sob demanda ao CNJ (DataJud/DJEN). Ver AndamentoProcessoCaso.jsx. */}
