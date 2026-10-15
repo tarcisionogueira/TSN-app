@@ -35,7 +35,10 @@ const DOC_TIPOS = [
   ['carta_arrematacao', 'Carta de arrematação (judicial)'],
   ['boleto_sinal', 'Boleto do sinal'],
   ['boleto_aquisicao', 'Boleto da aquisição'],
-  ['comprovante_pagamento', 'Comprovante de pagamento'],
+  // Parcelas (16/10, dono): a guia e o comprovante de cada parcela ligam-se sozinhos à parcela do cronograma.
+  ['guia_parcela', 'Guia de parcela (depósito judicial)'],
+  ['comprovante_parcela', 'Comprovante de pagamento de parcela'],
+  ['comprovante_pagamento', 'Comprovante de pagamento (outros)'],
   ['contrato_banco', 'Contrato do banco (financiado)'],
   ['escritura', 'Escritura / lavratura'],
   ['matricula_registrada', 'Matrícula registrada'],

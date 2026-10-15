@@ -35,7 +35,7 @@ const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
 // comprovante de pagamento: existem em QUALQUER modalidade — judicial também tem
 // sinal e aquisição à vista (18/09, correção do dono: rótulo antigo dizia
 // "extrajudicial" e não fazia sentido para leilão judicial).
-const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'comprovante_pagamento'];
+const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'comprovante_pagamento', 'guia_parcela', 'comprovante_parcela'];
 const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
