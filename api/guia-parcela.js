@@ -18,7 +18,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 90 };
 
 import crypto from 'node:crypto';
-import { getUser, getUserRoleById } from './_auth.js';
+import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 import { assinarDocumento } from './_storage.js';
 import { lerGuiaArquivo, camposDaGuia, avisosDaGuia } from './_parcela-docs.js';
 import { enviarEmail } from './_email.js';
@@ -59,6 +59,15 @@ async function gravar(token, arrId, parcelamento) {
   return r.json();
 }
 
+async function registrarServidor(arrId, idx, guia) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/parcelamento_registrar`, {
+    method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_arrematado: arrId, p_idx: idx, p_guia: guia }), signal: AbortSignal.timeout(10000),
+  });
+  if (!r.ok) throw new Error(`gravar (servidor): ${(await r.text().catch(() => '')).slice(0, 160) || `HTTP ${r.status}`}`);
+  return r.json();
+}
+
 async function baixar(anexo) {
   const url = await assinarDocumento(anexo.storage_path, 300);
   if (!url) throw new Error('não consegui assinar o arquivo');
@@ -68,14 +77,25 @@ async function baixar(anexo) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Use POST' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
-
-  const user = await getUser(req);
-  if (!user?.id) { res.status(401).json({ error: 'Faça login' }); return; }
-  const role = await getUserRoleById(user.id);
-  if (!EQUIPE.includes(role)) { res.status(403).json({ error: 'Recurso em validação — só equipe' }); return; }
-  const token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+  // ENVIO PELO SERVIDOR (15/10): o dono aprovou a guia do Marcos na tela e nada chegou aqui. Com CRON_SECRET, o
+  // envio sai em nome de quem APROVOU (aprovado_por = admin/analista), só a ação 'enviar', parâmetros na URL.
+  const cron = isCronAuthorized(req);
+  if (!cron && req.method !== 'POST') { res.status(405).json({ error: 'Use POST' }); return; }
+  let user, token = null;
+  if (cron) {
+    const q = req.query || {};
+    req.body = { acao: q.acao, arrematado_id: q.arrematado_id, parcela_idx: q.parcela_idx != null ? Number(q.parcela_idx) : undefined };
+    if (req.body.acao !== 'enviar' || !/^[0-9a-f-]{36}$/i.test(String(q.aprovado_por || ''))) { res.status(400).json({ error: 'cron: só acao=enviar com aprovado_por' }); return; }
+    user = { id: String(q.aprovado_por) };
+    if (!['admin', 'analista'].includes(await getUserRoleById(user.id))) { res.status(403).json({ error: 'aprovado_por precisa ser admin/analista' }); return; }
+  } else {
+    user = await getUser(req);
+    if (!user?.id) { res.status(401).json({ error: 'Faça login' }); return; }
+    const role = await getUserRoleById(user.id);
+    if (!EQUIPE.includes(role)) { res.status(403).json({ error: 'Recurso em validação — só equipe' }); return; }
+    token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+  }
 
   const { acao } = req.body || {};
 
@@ -209,9 +229,11 @@ export default async function handler(req, res) {
           resend_email_id: envio.id || null, lido: true, enviado_por: user.id, resposta_token: tokenResposta, caso_id: caso.id }) }).catch((e) => ({ ok: false, status: e?.message }));
       if (!ins.ok) console.error(`[guia-parcela] guia enviada mas NÃO registrada em email_caixa (caso ${caso.id}): ${ins.status} — o comprovante respondido não vai se ligar ao caso`);
     }
-    guias[idx] = { ...g, aguardando_aprovacao: false, aprovado_por: user.id, enviada_em: new Date().toISOString(), enviada_para: destino, pagar_ate_enviado: pagarAte };
+    const carimbo = { aguardando_aprovacao: false, aprovado_por: user.id, enviada_em: new Date().toISOString(), enviada_para: destino, pagar_ate_enviado: pagarAte };
+    guias[idx] = { ...g, ...carimbo };
     try {
-      const parcelamento = await gravar(token, arr.id, { ...arr.parcelamento, guias });
+      // Pelo servidor não há token de usuário: grava pela função atômica (só service_role), só a chave da parcela.
+      const parcelamento = cron ? await registrarServidor(arr.id, idx, carimbo) : await gravar(token, arr.id, { ...arr.parcelamento, guias });
       res.status(200).json({ ok: true, enviada_para: destino, parcelamento });
     } catch (e) {
       console.error('[guia-parcela] carimbo de envio:', e.message);
