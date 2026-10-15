@@ -769,7 +769,7 @@ export default function Caso() {
             imovel_endereco: [imovelInit.endereco, imovelInit.cidade, imovelInit.estado].filter(Boolean).join(', '),
             imovel_valor: imovelInit.valorMinimo || imovelInit.valorAvaliacao || null,
             status_etapa: 'analise_solicitada',
-            tipo_leilao: imovelInit.modalidade === 'judicial' ? 'judicial' : 'extrajudicial',
+            tipo_leilao: imovelInit.modalidade === 'judicial' ? 'judicial' : /^venda_(direta|online)$/.test(imovelInit.modalidade || '') ? 'venda_direta' : 'extrajudicial',
           }).select().single();
           if (errNovo) throw errNovo;
           casoData = novo;
@@ -1462,7 +1462,7 @@ export default function Caso() {
             )}
             <div style={{ marginTop:10 }}>
               <Badge label={STATUS_ETAPA_LABEL[statusAtual] || statusAtual} color="#0D63DB" bg="#eff6ff"/>
-              <span style={{ marginLeft:8, fontSize:11, color:'#64748b' }}>{caso.tipo_leilao === 'judicial' ? 'Leilão Judicial' : 'Leilão Extrajudicial'}</span>
+              <span style={{ marginLeft:8, fontSize:11, color:'#64748b' }}>{caso.tipo_leilao === 'judicial' ? 'Leilão Judicial' : caso.tipo_leilao === 'venda_direta' ? 'Venda Direta' : 'Leilão Extrajudicial'}</span>
             </div>
           </div>
           {imovelInit?.url && (
@@ -2146,6 +2146,7 @@ export default function Caso() {
                   <select value={arrForm.tipo_leilao} onChange={e=>setArrForm(p=>({...p,tipo_leilao:e.target.value}))} style={inp}>
                     <option value="judicial">Judicial</option>
                     <option value="extrajudicial">Extrajudicial</option>
+                    <option value="venda_direta">Venda direta</option>
                   </select>
                 </div>
                 <div>

@@ -73,6 +73,8 @@ export default async function handler(req) {
   // Guard contra "extraJUDICIAL" casar /judicial/ (senão um arremate extrajudicial
   // digitado pela equipe era gravado como 'judicial' — modalidade errada no imóvel).
   const modalidade = /judicial/i.test(tipo_leilao || '') && !/extra/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial';
+  // No CASO, venda direta (Caixa/banco) tem tipo próprio desde 15/10; o lote segue 'extrajudicial'.
+  const tipoCaso = /venda/i.test(tipo_leilao || '') ? 'venda_direta' : modalidade;
 
   // 0) REAPROVEITA o imóvel se ele JÁ está no nosso acervo (18/09, pedido do dono: "deve
   //    usar o mesmo arquivo... não pode haver duplicidades"). Antes, TODA atribuição manual
@@ -123,7 +125,7 @@ export default async function handler(req) {
     imovel_valor: valor,
     status_etapa: 'arrematado',
     arrematado_em: agora.toISOString(),
-    tipo_leilao: modalidade,
+    tipo_leilao: tipoCaso,
     analista_id: role === 'analista' ? user.id : null,
   };
   const casoRes = await sb('casos', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(casoRow) });
