@@ -188,6 +188,10 @@
       "schedule": "20 12 * * 1-5"
     },
     {
+      "path": "/api/juridico-devolutivas-cron",
+      "schedule": "10 13,20 * * 1-5"
+    },
+    {
       "path": "/api/honorarios-liquidar-cron",
       "schedule": "35 12 * * *"
     },

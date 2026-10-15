@@ -25,7 +25,9 @@
  * aprova o 1º rascunho); (b) a ATUALIZAÇÃO semanal sai às QUARTAS (a guia segue o vencimento, qualquer dia
  * útil); (c) o e-mail RESPONDE à última mensagem do caso em email_caixa (In-Reply-To/References) com
  * "Re: <casos.acompanhamento_assunto>" — fica na mesma conversa do imóvel que o escritório já tem, e a
- * conversa importada do Gmail da Reimob entra na mesma pasta.
+ * conversa importada do Gmail da Reimob entra na mesma pasta; (d) o juridico-devolutivas-cron lê as
+ * respostas e ajusta casos.acompanhamento_intervalo_dias (14 = quinzenal quando o que se espera é lento)
+ * e a referência ao último ponto citada no pedido de atualização.
  */
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
@@ -114,7 +116,7 @@ function semanaIso(d = new Date()) {
 const semTracos = (s) => String(s || '').replace(/\s*[—–]\s*|\s+-\s*|\s*-\s+/g, ', ').replace(/,\s*,/g, ',').trim();
 export const ASSINATURA = 'Tarcísio Nogueira'; // como o dono assina com o escritório (15/10)
 
-export function textoPedido({ advogado, cliente, endereco, processo, atualizacao, parcela, insistencia = false }) {
+export function textoPedido({ advogado, cliente, endereco, processo, atualizacao, parcela, insistencia = false, referencia = null }) {
   const imovel = semTracos(endereco) || 'imóvel arrematado';
   const linhas = [
     `${advogado ? `Dr(a). ${advogado}` : 'Prezados'}, tudo bem?`,
@@ -122,7 +124,9 @@ export function textoPedido({ advogado, cliente, endereco, processo, atualizacao
     `Estamos acompanhando a pasta do(a) cliente ${cliente || '(sem nome)'}, ${imovel}${processo ? `, processo nº ${processo}` : ''}.`,
     '',
   ];
-  if (atualizacao) linhas.push('Por gentileza, poderiam nos informar o andamento do processo desde a última comunicação?', '');
+  // referencia: o último ponto lido das devolutivas pela IA (juridico-devolutivas-cron), quando houver.
+  const ref = semTracos(referencia).replace(/[.?!]+$/, '');
+  if (atualizacao) linhas.push(`Por gentileza, poderiam nos informar o andamento do processo desde a última comunicação${ref ? `, sobre ${ref}` : ''}?`, '');
   if (parcela) {
     const quando = parcela.dias < 0 ? `venceu em ${dataBR(parcela.venc)}` : `vence em ${dataBR(parcela.venc)}`;
     linhas.push(`A ${parcela.rotulo} (valor nominal ${brl(parcela.valor)}) ${quando}.${insistencia ? ' Ainda não recebemos a guia. Por gentileza,' : ' Por gentileza,'} respondam este e-mail com a guia/boleto em anexo para encaminharmos ao cliente.`, '');
@@ -143,7 +147,7 @@ async function handler(req) {
     const remet = admin ? (await ler(`equipe_email?user_id=eq.${admin.id}&select=endereco`))[0] : null;
     if (!remet?.endereco) throw new Error('admin sem endereço pessoal em equipe_email');
 
-    const COLS = 'id,cliente_id,advogado_id,imovel_id,imovel_endereco,acompanhamento_para,acompanhamento_cc,acompanhamento_liberado_em,acompanhamento_assunto';
+    const COLS = 'id,cliente_id,advogado_id,imovel_id,imovel_endereco,acompanhamento_para,acompanhamento_cc,acompanhamento_liberado_em,acompanhamento_assunto,acompanhamento_intervalo_dias';
     const todos = await ler(`casos?posse_em=is.null&status_etapa=in.(${ETAPAS.join(',')})&select=${COLS}`);
     const temEscritorio = (c) => Array.isArray(c.acompanhamento_para) && c.acompanhamento_para.length > 0;
     // Cobrado: conta de advogado vinculada, OU e-mails do escritório no caso com o 1º envio já aprovado.
@@ -214,12 +218,20 @@ async function handler(req) {
         const veio = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.entrada&anexos=neq.[]&criado_em=gte.${desde}&select=id&limit=1`);
         if (veio.length) { res.guia_ja_recebida = (res.guia_ja_recebida || 0) + 1; parcela = null; }
       }
+      // Intervalo aprendido das devolutivas (7 = toda quarta; 14 = quarta sim, quarta não): conta desde o
+      // último acompanhamento ENVIADO pelo cron (resposta_token só existe nos envios dele).
+      let atualizaHoje = diaDeAtualizacao;
+      if (atualizaHoje && !atualizarAgora && Number(c.acompanhamento_intervalo_dias) === 14) {
+        const [ultEnvio] = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.saida&resposta_token=not.is.null&select=criado_em&order=criado_em.desc&limit=1`);
+        if (ultEnvio && Date.now() - Date.parse(ultEnvio.criado_em) < 12 * 864e5) { atualizaHoje = false; res.quinzenal_aguardando = (res.quinzenal_aguardando || 0) + 1; }
+      }
+      const [analise] = await ler(`caso_acompanhamento_analise?caso_id=eq.${c.id}&select=referencia_curta&order=criado_em.desc&limit=1`);
       // Conversa do imóvel: assunto da conversa que o escritório já tem → "Re: …" para os dois e-mails.
       const assuntoConversa = c.acompanhamento_assunto ? `Re: ${c.acompanhamento_assunto.replace(/^(re|res|fwd?):\s*/i, '')}` : null;
       const envios = [
-        ...((diaDeAtualizacao || seco) ? [{ tipo: 'atualizacao', chave: `atualizacao|${c.id}|${semana}`,
+        ...((atualizaHoje || seco) ? [{ tipo: 'atualizacao', chave: `atualizacao|${c.id}|${semana}`,
           assunto: assuntoConversa || `Acompanhamento — ${cli?.nome || 'cliente'} · ${endereco || 'imóvel arrematado'}`,
-          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco, processo, atualizacao: true, parcela: null }) }] : []),
+          texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco, processo, atualizacao: true, parcela: null, referencia: analise?.referencia_curta }) }] : []),
         ...(parcela ? [{ tipo: 'parcela', chave: `parcela|${c.id}|${parcela.idx}|${parcela.venc}|${parcela.marco}`,
           assunto: assuntoConversa || `Guia da ${parcela.rotulo} (vence ${dataBR(parcela.venc)}) — ${cli?.nome || 'cliente'} · ${endereco || 'imóvel arrematado'}`,
           texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco, processo, atualizacao: false, parcela, insistencia: parcela.marco !== 5 }) }] : []),
