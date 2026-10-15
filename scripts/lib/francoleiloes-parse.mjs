@@ -50,7 +50,9 @@ export function lotesDoFeed(xml, base, hojeISO = new Date().toISOString().slice(
   for (const [, item] of String(xml || '').matchAll(/<listing>([\s\S]*?)<\/listing>/gi)) {
     const u = (item.match(/<url>\s*([^<\s]*\/lote\/[a-z0-9-]+\/\d+\/?)\s*<\/url>/i) || [])[1];
     if (!u) continue;
-    const fim = (item.match(/<end_date>\s*(\d{4}-\d{2}-\d{2})/i) || [])[1];
+    // Lote de várias praças repete <available_dates_price_config> (uma por praça): vale a ÚLTIMA data —
+    // a 1ª vencida com a 2ª em aberto continua aberto (medido na Jinkings, mesma plataforma, 15/10).
+    const fim = [...item.matchAll(/<end_date>\s*(\d{4}-\d{2}-\d{2})/gi)].map(m => m[1]).sort().pop();
     if (fim && fim < hojeISO) continue;
     try { const href = new URL(u, base).href; const id = idDaUrl(href); if (id) urls.set(id, href); } catch { /* skip */ }
   }
