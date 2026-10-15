@@ -53,7 +53,18 @@
   - Documentos pessoais (dono): reencaminhados "Documentos Ana Paula" (esposa de Matheus, imóvel no nome dela) ao
     caso Matheus; CNH/recibo e ficha+ITBI do Rafael ao caso Rafael. Marcos: nada pessoal no Gmail. Os 8 arquivos
     do Matheus de 21/05 ("Documentação do Imóvel em Fsa": RG Ana Paula, escritura, certidões, ITIV) são LINKS do
-    Drive dele, não anexos: não entram pelo fluxo de e-mail; precisam ser baixados e reenviados como anexo.
+    Drive dele, não anexos. **Trazidos no mesmo dia** pelo workflow `importar-drive-caso.yml`
+    (`scripts/importar-drive-caso.mjs`: link aberto a qualquer pessoa → bucket privado → linha em email_caixa
+    ligada ao caso → caso-documentos-cron classifica). Reusar para qualquer cliente que mande link do Drive.
+  - **Aprendizado contínuo (dono, 15/10):** `caso-aprendizado-cron` (11h25/21h25 UTC) lê por caso só o NOVO desde
+    `caso_aprendizado_cursor` (caso_documentos, caso_andamentos, processo_movimentos pelo nº do processo) e o que o
+    documental/mercadológico do cliente PREVIU; grava lições gerais em `juridico_aprendizado` (colunas novas
+    `fonte`, `uf`, `modalidade`). Devolutivas: leem o resumo dos anexos, gravam `fonte='devolutiva'` e não disparam
+    com reencaminhamento nosso (@reimob/@bidpro). `gerar-documental` lê 150 e prioriza mesma UF/modalidade.
+    Falha da IA não move o cursor. `juridico_aprendizado` não tinha CREATE em migração (7b): espelhado agora.
+  - **Relatórios no "Documentos do caso":** mercadológico, documental e laudo do CLIENTE do caso, com "Abrir
+    relatórios" e "Gerar os que faltam" (modo suporte, só admin/analista). Rafael e Matheus: nenhum gerado (lotes
+    fora do acervo; o Gerar abre o fluxo manual com endereço/UF do caso, e a matrícula está nos documentos).
 - **FIPE (15/10, dono):** `registrar_uso_fipe` comparava com o teto gravado pelo lote (250) e a tela (450) levava
   "cota esgotada" (Renault Logan, Eckert). Agora cada chamador usa o próprio teto: lote 75% (`TETO_CRON_FIPE`),
   tela 100% → sempre sobram 25% para quem abre o carro. `modelo` nulo (SUPERBID/LJUD): nome vem do título.
