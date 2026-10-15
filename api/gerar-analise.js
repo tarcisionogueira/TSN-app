@@ -2068,7 +2068,10 @@ export default async function handler(req, res) {
   // como reforço); sem data confiável, deixa passar — ver api/_leilao-encerrado.js.
   {
     const lz = await leilaoEncerrado(sb, imovelId, rawData);
-    if (lz.encerrado && !(await ehEquipe(sb, user.id))) { // equipe gera p/ proposta pós-leilão (ehEquipe)
+    // Pós-arremate (15/10, dono: relatórios dos casos do Rafael e do Matheus): o servidor gera em nome do
+    // cliente que JÁ arrematou — o relatório serve ao acompanhamento e ao aprendizado, não a um lance.
+    const posArremateCron = isCron && body.posArremate === true;
+    if (lz.encerrado && !posArremateCron && !(await ehEquipe(sb, user.id))) { // equipe gera p/ proposta pós-leilão (ehEquipe)
       res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
       return;
     }

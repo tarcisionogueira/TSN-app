@@ -140,12 +140,17 @@ if (SO.has('mercado')) {
       somenteAVista: true, taxaLeiloeiroPercentual: judicial ? 5 : 0, itbiPercentual: 3, honorariosPercentual: 0,
       prazoVendaMeses: 12, prazoReformaMeses: lote.tipo === 'terreno' ? 0 : 3, nomeCondominio: mercadoInputs.nomeCondominio,
     } };
-    await chamar('gerar-analise', { ...ident(), imovel: { id: imovelId, titulo: lote.titulo, tipo: lote.tipo, areaM2: area, cidade: lote.cidade, estado: lote.estado, modalidade: lote.modalidade }, mercadoInputs, parecerInputs });
+    await chamar('gerar-analise', { ...ident(), posArremate: true, imovel: { id: imovelId, titulo: lote.titulo, tipo: lote.tipo, areaM2: area, cidade: lote.cidade, estado: lote.estado, modalidade: lote.modalidade }, mercadoInputs, parecerInputs });
   } catch (e) { falhas.push(e.message); console.error(`FALHOU ${e.message}`); }
 }
 
 if (SO.has('laudo')) {
-  try { await chamar('gerar-laudo-viabilidade', ident()); } catch (e) { falhas.push(e.message); console.error(`FALHOU ${e.message}`); }
+  try {
+    await chamar('gerar-laudo-viabilidade', ident());
+    // O laudo responde 200 também quando RECUSA (falta mercadológico/documental entregue): só a linha prova.
+    const [l] = await ler(`analises_laudo?imovel_id=eq.${imovelId}&user_id=eq.${caso.cliente_id}&select=status&limit=1`);
+    if (!l) throw new Error('laudo respondeu sem gravar (faltou mercadológico ou documental entregue)');
+  } catch (e) { falhas.push(e.message); console.error(`FALHOU ${e.message}`); }
 }
 
 for (const t of ['analises_documental', 'analises_mercado', 'analises_laudo']) {
