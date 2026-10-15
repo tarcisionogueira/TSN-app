@@ -20,7 +20,7 @@ import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { auditarMercadologico } from './_auditoria-relatorio.js';
-import { resolverPagamentoDoc } from './_doc-extracao.js';
+import { resolverPagamentoDoc, extrairPagamentoTexto } from './_doc-extracao.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
@@ -3323,6 +3323,27 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // foram descartados acima) — o consenso não pode ser envenenado por edital alheio.
       if (extratoDoc.pagamento && !extratoDoc.deCache) {
         try { await pagamentoAprender(fonteDb, String(imDb?.modalidade || ''), extratoDoc.pagamento); } catch { /* best-effort */ }
+      }
+    }
+    // CONDIÇÕES DE PAGAMENTO LIDAS PELO DOCUMENTAL (15/10, terreno judicial TJSP em Santana de Parnaíba): o
+    // documental leu "à vista ou parcelado: sinal de 50% + duas parcelas de 25%" e o mercadológico saiu só à vista,
+    // porque a projeção olha o edital/ficha/título e nunca o que o documental extraiu. Entra quando o edital não
+    // trouxe regra de parcelamento — documento lido vale mais que o padrão do leiloeiro (logo abaixo).
+    {
+      const rpAtual = mercado.condicoesEdital?.regrasPagamento;
+      const semParcelaNoEdital = !rpAtual || !(Number(rpAtual.parcelas) >= 2 || rpAtual.parcelamentoPermitido === true || rpAtual.financiavel === true);
+      if (semParcelaNoEdital) {
+        try {
+          const rDoc = await sb(`analises_documental?imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result->extracao->>formaPagamento&order=updated_at.desc&limit=1`);
+          const [dRow] = rDoc.ok ? await rDoc.json() : [];
+          const formaTxt = dRow?.formaPagamento || '';
+          const doDoc = formaTxt ? extrairPagamentoTexto(formaTxt) : null;
+          if (doDoc && (Number(doDoc.parcelas) >= 2 || doDoc.parcelamentoPermitido === true || doDoc.financiavel === true)) {
+            mercado.condicoesEdital = { ...(mercado.condicoesEdital || {}),
+              regrasPagamento: { ...(rpAtual || {}), ...Object.fromEntries(Object.entries(doDoc).filter(([, v]) => v !== null)), parcelamentoPermitido: true },
+              regrasOrigem: 'documental', regrasTexto: formaTxt.slice(0, 400) };
+          }
+        } catch (e) { console.warn('[analise] condições do documental:', e?.message); }
       }
     }
     // EDITAL NÃO LIDO (escaneado/judicial/sem PDF): herda o CONSENSO aprendido do

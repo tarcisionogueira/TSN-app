@@ -142,8 +142,16 @@ export function extrairPagamentoTexto(texto) {
     // qualquer outro número seguido de x (área, medida, quantidade).
     parcelas: (() => {
       const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i)
-             || t.match(/(?:\+|em)\s*(\d{1,3})\s*x\b/i);
-      const n = m ? Number(m[1]) : 0;
+             || t.match(/(?:\+|em)\s*(\d{1,3})\s*x\b/i)
+             || t.match(/(?:\+|e|mais|em)\s+(\d{1,2})\s+parcelas\b/i);
+      let n = m ? Number(m[1]) : 0;
+      // Número POR EXTENSO (15/10, lote judicial TJSP em Santana de Parnaíba): "sinal de 50% + duas parcelas
+      // de 25%" — o relatório saía à vista com o parcelamento escrito no documental.
+      if (!n) {
+        const ext = { duas: 2, dois: 2, tres: 3, 'três': 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, doze: 12 };
+        const me = t.match(/\b(duas|dois|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|doze)\s+parcelas\b/i);
+        n = me ? ext[me[1].toLowerCase()] || 0 : 0;
+      }
       return n >= 2 && n <= 420 ? n : null;
     })(),
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
