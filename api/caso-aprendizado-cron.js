@@ -38,7 +38,7 @@ async function ler(path) {
 
 const SISTEMA = `Você é o analista jurídico de uma assessoria de leilões de imóveis. Recebe, de UM caso já arrematado, o que o relatório da empresa previu antes do lance e o que aconteceu depois (documentos recebidos, registros da equipe, movimentos do processo). Extraia LIÇÕES que ajudem a avaliar OUTROS imóveis no futuro. Responda SOMENTE com JSON válido:
 {"licoes":[{"fonte":"documento|andamento|movimento","tema":"curto, ex.: ITBI, carta de arrematação, desocupação, emolumentos, registro","licao":"regra prática em 1-2 frases, com prazo/valor/órgão quando o material mostrar","recorte":"geral|uf|modalidade"}]}
-Regras: só o que o material sustenta; nunca invente prazos, valores ou órgãos. Lição é regra reaproveitável (ex.: "em Vargem Grande Paulista/SP o ITBI de arrematação é calculado sobre o valor venal e pago antes do registro"), não um fato isolado deste caso. Quando o relatório previu algo que não se confirmou, ou deixou de prever o que aconteceu, isso é a lição mais valiosa: diga o que o diagnóstico deveria verificar. Não repita as lições já existentes listadas. Se não houver lição nova, devolva {"licoes":[]}. Sem travessões no texto.`;
+Regras: só o que o material sustenta; nunca invente prazos, valores ou órgãos. Lição é regra reaproveitável (ex.: "em Vargem Grande Paulista/SP o ITBI de arrematação é calculado sobre o valor venal e pago antes do registro"), não um fato isolado deste caso. Quando o relatório previu algo que não se confirmou, ou deixou de prever o que aconteceu, isso é a lição mais valiosa: diga o que o diagnóstico deveria verificar. Não repita as lições já existentes listadas. Nunca tire lição sobre o funcionamento interno da empresa, do sistema ou da abertura/encerramento de casos: só sobre imóvel, documentação, processo, cartório, tributos, custos, prazos e mercado. Fato isolado deste caso (um valor, uma data) só entra como exemplo dentro de uma regra. Se não houver lição nova, devolva {"licoes":[]}. Sem travessões no texto.`;
 
 const ufDo = (caso, lote) => lote?.estado || (/\/([A-Z]{2})\b(?!.*\/[A-Z]{2}\b)/.exec(caso.imovel_endereco || '') || [])[1] || null;
 
@@ -65,7 +65,9 @@ async function processarCaso(caso, cursor, licoesExistentes, { seco }) {
   const desde = (c) => (c ? `&criado_em=gt.${encodeURIComponent(c)}` : '');
 
   const docs = await ler(`caso_documentos?caso_id=eq.${caso.id}${desde(cursor?.documentos_ate)}&grupo=neq.outro&select=tipo,titulo,resumo,data_documento,criado_em&order=criado_em.asc&limit=40`);
-  const ands = await ler(`caso_andamentos?caso_id=eq.${caso.id}${desde(cursor?.andamentos_ate)}&select=etapa,observacao,data_evento,numero_processo,criado_em&order=criado_em.asc&limit=40`);
+  // "Encerrado sem análise" é limpeza de caso aberto por engano (1º dry-run, 15/10: virou "lição" sobre o nosso
+  // fluxo interno). Não é fato do imóvel nem do processo: fica fora.
+  const ands = await ler(`caso_andamentos?caso_id=eq.${caso.id}${desde(cursor?.andamentos_ate)}&etapa=not.ilike.Encerrado%20sem%20an*&select=etapa,observacao,data_evento,numero_processo,criado_em&order=criado_em.asc&limit=40`);
   const numeros = [...new Set([lote?.numero_processo, ...(await ler(`caso_andamentos?caso_id=eq.${caso.id}&numero_processo=not.is.null&select=numero_processo`)).map((a) => a.numero_processo)].filter(Boolean))];
   const movs = numeros.length
     ? await ler(`processo_movimentos?numero_processo=in.(${numeros.map((n) => `"${String(n).replace(/"/g, '')}"`).join(',')})${desde(cursor?.movimentos_ate)}&select=data,descricao,risco,criado_em&order=criado_em.asc&limit=60`)
