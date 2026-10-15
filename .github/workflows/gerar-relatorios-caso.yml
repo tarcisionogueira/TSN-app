@@ -1,0 +1,35 @@
+name: Gerar os relatórios de um caso (lote fora do acervo)
+
+# scripts/gerar-relatorios-caso.mjs — completa o lote-marcador do caso, liga os documentos dos e-mails do caso
+# e gera documental → mercadológico → laudo em nome do cliente (CRON_SECRET + paraUserId, sem cota do cliente).
+on:
+  workflow_dispatch:
+    inputs:
+      caso_id:
+        description: 'id do caso (uuid)'
+        required: true
+      lote_json:
+        description: 'campos do lote a completar (JSON; só preenche o que está vazio)'
+        default: '{}'
+      so:
+        description: 'quais gerar: documental,mercado,laudo'
+        default: 'documental,mercado,laudo'
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Gerar
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CASO_ID: ${{ inputs.caso_id }}
+          LOTE_JSON: ${{ inputs.lote_json }}
+          SO: ${{ inputs.so }}
+        run: node scripts/gerar-relatorios-caso.mjs
