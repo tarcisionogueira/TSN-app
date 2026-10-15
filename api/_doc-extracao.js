@@ -278,6 +278,22 @@ export function extrairCustosTexto(texto) {
     if (ehDebito(`${antes} ${depois}`)) { if (out.condominioDebito == null) out.condominioDebito = faixa(v, 50, 2000000); }
     else if (out.condominioMensal == null) out.condominioMensal = faixa(v, 30, 100000);
   }
+  // QUEM PAGA OS DÉBITOS (15/10, dono: "se o arrematante assume deve aparecer nas projeções; se sub-roga, deve
+  // informar se o valor satisfaz"). O cartão só mostrava o valor e pedia ao cliente para ler o edital. A cláusula
+  // está no mesmo texto: sub-rogação no preço (CTN 130 § único / CPC 908 § 1º, "sub-rogam-se no preço") ou
+  // débitos "por conta / a cargo / de responsabilidade do arrematante". ITBI, registro e escritura também são
+  // "por conta do arrematante" e NÃO são débito do imóvel — por isso a cláusula precisa citar débito/condomínio/IPTU.
+  if (out.iptuDebito != null || out.condominioDebito != null) {
+    const SUB = /sub-?roga\w*\s+(?:-se\s+)?(?:no|sobre\s+o)\s+(?:respectivo\s+)?pre[çc]o|art(?:igo)?\.?\s*130,?\s*(?:§|par[áa]grafo)\s*[úu]nico|art(?:igo)?\.?\s*908,?\s*§\s*1|ser[ãa]o\s+(?:pagos|quitados|satisfeitos)\s+com\s+o\s+(?:produto|pre[çc]o)/i;
+    const ARR = /(?:d[ée]bitos?|condom[íi]ni\w*|iptu|tributos?\s+(?:atrasad|em\s+aberto|vencid)\w*)(?:[^.;]|\.(?=\d)){0,140}?(?:por\s+conta|[àa]\s+cargo|de\s+(?:inteira\s+|exclusiva\s+)?responsabilidade|ser[ãa]o\s+suportad\w+|ficar[ãa]o?\s+a\s+cargo)\s+(?:exclusiv\w+\s+)?d[oa]s?\s+arrematante|arrematante\s+(?:ser[áa]\s+respons[áa]vel|arcar[áa]|assumir[áa]|responder[áa])\s+(?:pel[oa]s?\s+)?[^.;]{0,60}?(?:d[ée]bitos?|condom[íi]ni|iptu)/i;
+    const NAO_DEBITO = /transfer[êe]ncia|transmiss|itbi|registro|escritura|emolument|imiss[ãa]o|desocupa/i;
+    const mSub = t.match(SUB);
+    let mArr = null;
+    for (const m of t.matchAll(new RegExp(ARR.source, 'gi'))) { if (!NAO_DEBITO.test(m[0])) { mArr = m; break; } }
+    const trecho = (m) => t.slice(Math.max(0, m.index - 60), Math.min(t.length, m.index + m[0].length + 40)).trim();
+    out.responsabilidadeDebitos = mSub && mArr ? 'ambigua' : mSub ? 'subrogacao' : mArr ? 'arrematante' : null;
+    out.responsabilidadeTrecho = mArr && !mSub ? trecho(mArr) : mSub ? trecho(mSub) : null;
+  }
   return Object.values(out).some((v) => v !== null) ? out : null;
 }
 

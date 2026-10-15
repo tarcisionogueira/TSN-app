@@ -2923,8 +2923,10 @@ export default async function handler(req, res) {
             impacto: `A pesquisa de mercado foi feita em ${usouCidade}, mas a matrícula indica que o imóvel fica em ${muni}/${uf}. Isso muda os comparáveis e o valor de mercado — recomenda-se regerar o relatório.` });
         }
         if (aPriv >= 5 && aPriv <= 100000 && usouArea > 0 && Math.abs(aPriv - usouArea) / Math.max(aPriv, usouArea) > 0.05) {
-          correcoes.push({ campo: 'metragem', de: `${usouArea} m²`, para: `${aPriv} m²`,
-            impacto: `A metragem usada foi ${usouArea} m², mas a matrícula indica ${aPriv} m². O valor de mercado é calculado por R$/m² × área — o valor estimado muda proporcionalmente.` });
+          // Formato brasileiro com 2 casas: "90.0485 m²" (15/10) parecia outra leitura errada da matrícula.
+          const m2 = (v) => `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m²`;
+          correcoes.push({ campo: 'metragem', de: m2(usouArea), para: m2(aPriv),
+            impacto: `A metragem usada foi ${m2(usouArea)}, mas a matrícula indica ${m2(aPriv)}. O valor de mercado é calculado por R$/m² × área — o valor estimado muda proporcionalmente.` });
         }
         if (correcoes.length) {
           result.correcoesMercado = correcoes; // devolve à tela p/ oferecer regerar na hora

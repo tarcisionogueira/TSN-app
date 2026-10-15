@@ -187,6 +187,21 @@
   - **Área de 485 m²:** o acervo tinha 90,0485 m² e o relatório chegou com 485 ("90,0485" lido como "485" no
     caminho da tela; a origem exata não foi isolada). Guarda no `gerar-analise`: área recebida a mais de 3× da do
     acervo → vale a do acervo, com log `[area] informada fora de escala`. A matrícula, se lida, continua mandando.
+- **Débitos em aberto: o edital agora diz QUEM paga (15/10, dono).** O cartão mostrava "Condomínio em aberto: R$ 202 mil"
+  e pedia ao cliente para ler o edital que o sistema já tinha lido.
+  - **Leitura da cláusula:** `extrairCustosTexto` (`_doc-extracao.js`) devolve `responsabilidadeDebitos` +
+    `responsabilidadeTrecho`, sem IA:
+    - `subrogacao`: "sub-rogam-se no preço", CTN 130 § único, CPC 908 § 1º;
+    - `arrematante`: débito, condomínio ou IPTU "por conta / a cargo / de responsabilidade do arrematante". ITBI,
+      registro, escritura e transferência ficam de fora;
+    - `ambigua`: as duas cláusulas; `null`: nenhuma.
+  - **Projeção:** com `arrematante`, o total entra em "Débitos assumidos"; com `subrogacao`, só o SALDO que o lance
+    não cobre.
+  - **Cartão:** explica qual caso vale e cita o trecho do edital. Ambígua ou sem cláusula remete ao documental.
+  - **Cache:** edital lido antes de 15/10 com débito e sem a cláusula é relido uma vez.
+- **Metragem na correção sugerida:** "90.0485 m²" (ponto decimal) era lido por "Corrigir e regerar" como 900.485 m²,
+  porque o parser tirava todos os pontos. Agora: formato BR com 2 casas no documental e parser robusto na tela
+  (ponto só é milhar quando seguido de 3 dígitos). A sugestão salva da Vila Sônia foi corrigida.
 - **Validação real do dia (todas no deploy novo):**
   - **BAYIT 640:** completo, em fluxo, sem corte. Amarelo, confiança alta. Cartório Santana de Parnaíba,
     financiamento "não", data 26/01/2027, CNJ confirmado. Sub-rogado: R$ 105 mil < lance, nada fica com o arrematante.

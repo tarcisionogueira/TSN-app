@@ -1716,6 +1716,17 @@ export default function Analise() {
       if (Number(cst?.condominioMensal) > 0 && !(Number(d.condominioMensal) > 0)) {
         patch.condominioMensal = Number(cst.condominioMensal); aplicados.push(`condomínio R$ ${fmt(cst.condominioMensal)}/mês`);
       }
+      // DÉBITOS EM ABERTO (15/10, dono): o servidor lê no edital QUEM paga. Do arrematante → entra na projeção.
+      // Sub-rogado no preço → só o SALDO que o lance não cobre entra. Ambíguo/sem cláusula → fica no cartão.
+      const debTotal = (Number(cst?.iptuDebito) || 0) + (Number(cst?.condominioDebito) || 0);
+      if (debTotal > 0 && !(Number(d.debitosAssumidos) > 0)) {
+        const lanceRef = Number(d.valorArrematacao) || Number(d.valorMinimo) || 0;
+        if (cst.responsabilidadeDebitos === 'arrematante') {
+          patch.debitosAssumidos = debTotal; aplicados.push(`débitos em aberto R$ ${fmt(debTotal)} (o edital os põe por conta do arrematante)`);
+        } else if (cst.responsabilidadeDebitos === 'subrogacao' && lanceRef > 0 && debTotal > lanceRef) {
+          patch.debitosAssumidos = debTotal - lanceRef; aplicados.push(`saldo de débitos que o lance não cobre R$ ${fmt(debTotal - lanceRef)}`);
+        }
+      }
       // ── AS CONDIÇÕES DE PARCELAMENTO DO EDITAL TAMBÉM PRECISAM CHEGAR AQUI (17/09) ──────
       // `aplicarExtracao` (extração manual por URL/PDF/texto) já aplicava `regrasPagamento`
       // à projeção há semanas — mas o carregamento AUTOMÁTICO do relatório recém-gerado
@@ -4113,7 +4124,21 @@ export default function Analise() {
               )}
               {debitoLinhas.length > 0 && (
                 <div style={{ fontSize:12, color:'#9a3412', lineHeight:1.55, marginTop:6, background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'8px 10px' }}>
-                  <strong>Débitos em aberto no documento:</strong> {debitoLinhas.join(' · ')}. Não entram automaticamente na projeção: confirme no edital quem assume o débito após a arrematação e, se for do arrematante, lance o valor em "Débitos assumidos".
+                  <strong>Débitos em aberto no documento:</strong> {debitoLinhas.join(' · ')}.{' '}
+                  {(() => {
+                    const tot = (Number(cst.iptuDebito) || 0) + (Number(cst.condominioDebito) || 0);
+                    const lance = Number(d.valorArrematacao) || Number(d.valorMinimo) || 0;
+                    const cit = cst.responsabilidadeTrecho ? <> Edital: <em>"…{String(cst.responsabilidadeTrecho).slice(0, 220)}…"</em></> : null;
+                    if (cst.responsabilidadeDebitos === 'arrematante') return <><strong>Por conta do arrematante</strong> — já somados à projeção em "Débitos assumidos".{cit}</>;
+                    if (cst.responsabilidadeDebitos === 'subrogacao') {
+                      if (!(lance > 0)) return <><strong>Sub-rogados no preço</strong> (pagos com o valor da arrematação).{cit}</>;
+                      return tot <= lance
+                        ? <><strong>Sub-rogados no preço:</strong> o lance de R$ {fmt(lance)} cobre os R$ {fmt(tot)} — nada fica com o arrematante.{cit}</>
+                        : <><strong>Sub-rogados no preço, mas o lance de R$ {fmt(lance)} não cobre:</strong> o saldo de R$ {fmt(tot - lance)} pode recair sobre o arrematante e foi somado à projeção.{cit}</>;
+                    }
+                    if (cst.responsabilidadeDebitos === 'ambigua') return <>O edital traz cláusulas nos dois sentidos (sub-rogação e responsabilidade do arrematante) — o <strong>relatório documental</strong> decide qual vale para estes débitos.{cit}</>;
+                    return <>O edital não diz quem paga: o <strong>relatório documental</strong> lê a cláusula; se for do arrematante, lance o valor em "Débitos assumidos".</>;
+                  })()}
                 </div>
               )}
               {ce.identidade?.nomeCondominio && (
@@ -4248,7 +4273,13 @@ export default function Analise() {
               const corr = {};
               for (const c of cs) {
                 if (c.campo === 'cidade') { const m = String(c.para).match(/(.+?)[\/,]\s*([A-Za-z]{2})\s*$/); if (m) { corr.cidade = m[1].trim(); corr.estado = m[2].toUpperCase(); } }
-                if (c.campo === 'metragem') { const n = parseFloat(String(c.para).replace(/[^0-9,.]/g,'').replace(/\./g,'').replace(',', '.')); if (n>0) corr.areaM2 = n; }
+                if (c.campo === 'metragem') {
+                  // "90,05 m²" (BR) ou "90.0485 m²" (formato antigo, ponto DECIMAL). Tirar todos os pontos
+                  // transformava o antigo em 900.485 m² (15/10). Ponto só é milhar quando seguido de 3 dígitos.
+                  const bruto = String(c.para).replace(/[^0-9,.]/g, '');
+                  const n = parseFloat(/,/.test(bruto) ? bruto.replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.') : (/\.\d{3}$/.test(bruto) ? bruto.replace(/\./g, '') : bruto));
+                  if (n > 0) corr.areaM2 = Math.round(n * 100) / 100;
+                }
               }
               setD(p => ({ ...p, ...corr }));
               setCorrecoesMercado(null);

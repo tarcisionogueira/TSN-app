@@ -543,7 +543,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     // edital cobre vários) e é sempre recalculado abaixo contra os valores DESTE lote.
     let cond = null, datas = null, pagamento = null, custos = null, identidade = null, processo = null, deCache = false, pracasVisao = null;
     const hit = await cacheLer(chaveUrl(url));
-    if (hit?.campos?.condicoes) {
+    // Cache anterior a 15/10 com DÉBITO e sem a cláusula de quem paga (`responsabilidadeDebitos`): relê o edital
+    // uma vez — senão o cartão seguiria pedindo ao cliente para ler o edital que o sistema já tinha lido.
+    const cHit = hit?.campos?.custos;
+    const custoSemResp = cHit && (cHit.iptuDebito != null || cHit.condominioDebito != null) && !('responsabilidadeDebitos' in cHit);
+    if (hit?.campos?.condicoes && !custoSemResp) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
       pagamento = hit.campos.pagamento || null; deCache = true;
       // Identidade de cache gravado ANTES de 05/10 13h UTC fica de fora: o detector de edital de
