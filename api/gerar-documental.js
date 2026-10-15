@@ -1547,7 +1547,7 @@ export default async function handler(req, res) {
         // 7000→8500 (01/10) → 9500 → 16000 (14/10, em FLUXO): 12/12 relatórios do dia bateram nos 9.500
         // (~26 mil caracteres) e o fim saía cortado. O teto agora é folga; quem limita o tempo é `ateMs`.
         model: MODEL, max_tokens: 16000,
-        system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. PROVA = DOCUMENTO (regra do dono, 14/10): fundamente cada conclusão no que está ESCRITO nos arquivos fornecidos (matrícula, edital, laudo, certidões, planilhas, fotos) e cite o ato/cláusula (ex.: "Av.10", "item DOS DÉBITOS do edital"). Afirmação do leiloeiro, do anúncio ou de terceiros que não conste dos documentos NÃO é prova e não muda o diagnóstico. Seja assertivo: quando o documento resolve a questão, afirme; quando não resolve, diga exatamente qual documento falta. Retorne apenas JSON válido.' + aprendizados,
+        system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. PROVA = DOCUMENTO (regra do dono, 14/10): fundamente cada conclusão no que está ESCRITO nos arquivos fornecidos (matrícula, edital, laudo, certidões, planilhas, fotos) e cite o ato/cláusula (ex.: "Av.10", "item DOS DÉBITOS do edital"). Afirmação do leiloeiro, do anúncio ou de terceiros que não conste dos documentos NÃO é prova e não muda o diagnóstico. Seja assertivo: quando o documento resolve a questão, afirme; quando não resolve, diga exatamente qual documento falta. Tom técnico e sóbrio: sem adjetivos sensacionalistas ("astronômico", "gritante", "absurdo") — o número fala por si. Um problema = um risco: não repita o mesmo achado em dois itens. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
       }, { timeoutMs: orcamentoIA, ateMs: Date.now() + orcamentoIA });
     } catch (e) {
@@ -2132,6 +2132,15 @@ export default async function handler(req, res) {
           categoria: 'Dívida que fica com o arrematante maior que o lance',
           descricao: `Débitos que acompanham o imóvel somam ${brl(dividaAssumida)}${lanceBase ? `, contra lance mínimo de ${brl(lanceBase)}` : ''}${avaliacaoBase ? ` e avaliação de ${brl(avaliacaoBase)}` : ''}. Se não forem quitados com o preço (sub-rogação), o saldo é do arrematante: o custo real é lance + dívida.`,
         });
+      }
+      // Um achado só para a dívida (dono, 15/10): a IA às vezes escreve o MESMO problema em dois riscos ("débito
+      // condominial astronômico" + "débito excede o valor do lote"). Fica o promovido pela regra; os outros riscos
+      // GRAVES de dívida propter rem saem. Alerta/informativo de dívida (ex.: IPTU a levantar) continua.
+      if (grave) {
+        const ehRiscoDivida = (r) => /d[ée]bito|d[íi]vida/i.test(`${r?.categoria || ''} ${r?.descricao || ''}`)
+          && /condom[íi]ni|propter|iptu/i.test(`${r?.categoria || ''} ${r?.descricao || ''}`);
+        const mantido = parsed.riscos.find((r) => r?.regraDono && ehRiscoDivida(r));
+        if (mantido) parsed.riscos = parsed.riscos.filter((r) => r === mantido || !(r?.severidade === 'bloqueante' && !r?.regraDono && ehRiscoDivida(r)));
       }
     }
     const rlist = [...riscosAntifraude, ...(Array.isArray(parsed.riscos) ? parsed.riscos : [])];
