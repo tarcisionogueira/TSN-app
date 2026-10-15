@@ -1,0 +1,38 @@
+name: Importar arquivos do Google Drive para um caso
+
+# scripts/importar-drive-caso.mjs — cliente mandou LINK do Drive em vez de anexo. Baixa (link aberto a
+# qualquer pessoa), arquiva no bucket privado e liga ao caso; o caso-documentos-cron classifica depois.
+on:
+  workflow_dispatch:
+    inputs:
+      caso_id:
+        description: 'id do caso (uuid)'
+        required: true
+      drive_ids:
+        description: 'ids dos arquivos do Drive, separados por vírgula'
+        required: true
+      assunto:
+        description: 'assunto da linha em email_caixa'
+        default: 'Documentos importados do Google Drive'
+      de_email:
+        description: 'quem enviou os links (opcional)'
+        default: ''
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Importar
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CASO_ID: ${{ inputs.caso_id }}
+          DRIVE_IDS: ${{ inputs.drive_ids }}
+          ASSUNTO: ${{ inputs.assunto }}
+          DE_EMAIL: ${{ inputs.de_email }}
+        run: node scripts/importar-drive-caso.mjs
