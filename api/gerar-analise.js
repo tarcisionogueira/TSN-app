@@ -2163,9 +2163,15 @@ export default async function handler(req, res) {
   let descricaoImovel = null; // usada adiante pela soma de áreas de lote com vários bens
   let areaAcervoPre = 0; // área do anúncio no acervo — o edital só preenche quando ela também é 0
   try {
-    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo,area_m2&limit=1`)).json();
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio,fonte,situacao_geo,restricoes_geo,area_m2,tipo&limit=1`)).json();
     descricaoImovel = imA?.descricao || null;
     areaAcervoPre = Number(imA?.area_m2) || 0;
+    // TIPO GENÉRICO (15/10, SUBLIME Vila Sônia): a tela mandou "outros" (estado antigo do lote) e o acervo já
+    // dizia "apartamento". O tipo orienta os comparáveis — vale o específico do acervo.
+    if (mercadoInputs && /^(outros|imovel|)$/i.test(String(mercadoInputs.tipoImovel || '').trim()) && imA?.tipo && !/^(outros|imovel)$/i.test(imA.tipo)) {
+      mercadoInputs.tipoImovel = imA.tipo;
+      if (parecerInputs?.d && /^(outros|imovel|)$/i.test(String(parecerInputs.d.tipo || ''))) parecerInputs.d.tipo = imA.tipo;
+    }
     // ÁREA FORA DE ESCALA (15/10, SUBLIME Vila Sônia): o acervo tinha 90,0485 m² (área privativa da
     // matrícula, 4 casas decimais) e o relatório chegou com 485 m² — "90,0485" lido como "485". O
     // relatório inteiro saiu sem valor de mercado. Quando a área recebida está a mais de 3× (para mais ou

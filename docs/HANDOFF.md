@@ -199,6 +199,9 @@
     não cobre.
   - **Cartão:** explica qual caso vale e cita o trecho do edital. Ambígua ou sem cláusula remete ao documental.
   - **Cache:** edital lido antes de 15/10 com débito e sem a cláusula é relido uma vez.
+- **Tipo genérico da tela:** com "outros" vindo da tela e o acervo sabendo o tipo (ex.: "apartamento"), o `gerar-analise`
+  usa o do acervo. Validação da Vila Sônia (01h06 de 15/10): área da matrícula 90,05 m²; débito sub-rogado lido no edital
+  (CTN 130 § único) e coberto pelo lance de R$ 243.962,28; valor de mercado R$ 573.698 (49 amostras, R$ 6.371/m²).
 - **Metragem na correção sugerida:** "90.0485 m²" (ponto decimal) era lido por "Corrigir e regerar" como 900.485 m²,
   porque o parser tirava todos os pontos. Agora: formato BR com 2 casas no documental e parser robusto na tela
   (ponto só é milhar quando seguido de 3 dígitos). A sugestão salva da Vila Sônia foi corrigida.
