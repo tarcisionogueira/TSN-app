@@ -246,7 +246,9 @@ async function handler(req) {
       }
       // Última mensagem conhecida do caso (importada do Gmail, resposta do escritório ou envio anterior):
       // o e-mail responde a ela e entra na mesma conversa do lado do escritório.
-      const [ult] = await ler(`email_caixa?caso_id=eq.${c.id}&message_id=not.is.null&select=message_id,referencias&order=criado_em.desc&limit=1`);
+      // Fora: reencaminhamentos internos (Fwd: do Gmail da Reimob para a caixa do BidPro, 15/10) e âncoras —
+      // o escritório nunca recebeu essas mensagens, e responder a elas partiria a conversa do lado dele.
+      const [ult] = await ler(`email_caixa?caso_id=eq.${c.id}&message_id=not.is.null&assunto=not.ilike.fwd:*&assunto=not.ilike.*ncora:*&select=message_id,referencias&order=criado_em.desc&limit=1`);
       const fio = ult ? { 'In-Reply-To': ult.message_id, References: `${ult.referencias || ''} ${ult.message_id}`.trim().split(/\s+/).slice(-20).join(' ') } : null;
       let destinos = null;
       for (const ev of envios) {

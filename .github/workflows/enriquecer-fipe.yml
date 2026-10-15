@@ -6,8 +6,8 @@ name: Enriquecer FIPE (veículos)
 on:
   # 25/09 (dono): agendamento removido — o lote das 5h BRT comia 400 das 450 e a tela ficava com 50.
   # 13/10 (dono: filtrar a busca por FIPE — "invisto 34-40 mil, compro quanto de FIPE?"): com 33 de
-  # 12 mil veículos com FIPE o filtro não tem o que filtrar. Volta TODA NOITE, mas com TETO de 250
-  # no contador do dia: sobram 200 para a tela (uso real 5-18/dia em outubro). 00h20 UTC = 21h20
+  # 12 mil veículos com FIPE o filtro não tem o que filtrar. Volta TODA NOITE, com teto de 75% da cota (15/10, dono;
+  # TETO_CRON_FIPE em api/_fipe.js): 25% fica sempre para a tela. 00h20 UTC = 21h20
   # BRT, logo após a virada do dia da cota (UTC) — a consulta do dono no dia seguinte já conta com
   # o cache do lote (mesmo modelo/ano não gasta cota de novo).
   schedule:
@@ -39,5 +39,4 @@ jobs:
           FIPE_LIMITE: ${{ github.event.inputs.limite || '600' }}
           FIPE_TOKEN: ${{ secrets.FIPE_TOKEN }}
           FIPE_COTA_DIARIA: ${{ secrets.FIPE_COTA_DIARIA }}
-          FIPE_TETO_LOTE: '250'
         run: node scripts/enriquecer-fipe.mjs

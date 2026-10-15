@@ -80,6 +80,15 @@ const FIPE_EXPLICACAO = {
   leiloeiro: 'Valor da tabela FIPE informado pelo próprio leiloeiro na ficha do lote — não foi conferido por nós.',
 };
 
+// Nome do veículo (15/10, dono: Renault aparecia só "RENAULT"). 3,9 mil lotes SUPERBID (e todos os LJUD)
+// chegam sem `modelo`, mas o título traz ("RENAULT LOGAN ZEN10MT ANO: 2022/2023 PLACA FINAL 4 (PR)"): sem
+// modelo, usa o título sem o rabo de ano/placa.
+function nomeVeiculo(v) {
+  if (v.modelo) return [v.marca, v.modelo].filter(Boolean).join(' ');
+  const t = String(v.titulo || '').replace(/\s*[-–,]?\s*(ANO\s*:|ANO\s+\d{4}|PLACA\b|CHASSI\b).*$/i, '').trim();
+  return t || v.marca || 'Veículo';
+}
+
 export default function VeiculoDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -195,7 +204,7 @@ export default function VeiculoDetalhe() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d?.token) { setAvisoLink(d?.error || `Não consegui gerar o link (HTTP ${r.status}).`); return; }
       const url = `${window.location.origin}/#/v/${d.token}`;
-      const titulo = [v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo';
+      const titulo = nomeVeiculo(v);
       if (navigator.share) {
         try { await navigator.share({ title: titulo, url }); setAvisoLink('Link compartilhado.'); return; }
         catch (e) { if (e?.name === 'AbortError') return; } // cancelou a folha de compartilhar; senão cai na cópia
@@ -284,7 +293,7 @@ export default function VeiculoDetalhe() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
             <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', margin: 0 }}>
-              {[v.marca, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
+              {nomeVeiculo(v)}
             </h1>
             {!compartilhado && <FavoritoBotao tipo="veiculo" itemId={v.id || id} />}
           </div>

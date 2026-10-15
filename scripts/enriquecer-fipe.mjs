@@ -84,7 +84,7 @@ async function main() {
       novos++;
     },
   };
-  // Teto do LOTE no contador do dia (13/10): o agendado passa FIPE_TETO_LOTE=250 para sobrar cota à tela.
+  // Teto do LOTE no contador do dia: 75% da cota útil (TETO_CRON_FIPE, 15/10); FIPE_TETO_LOTE só para baixar à mão.
   const teto = Math.min(TETO_CRON_FIPE, Number(process.env.FIPE_TETO_LOTE) || TETO_CRON_FIPE);
   const fipeGet = criarFipeFetch(() => supabase.rpc('registrar_uso_fipe', { p_teto: teto }).then(r => {
     if (r.error) throw new Error(r.error.message);

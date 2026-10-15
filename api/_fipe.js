@@ -34,7 +34,10 @@ const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: '
 // (Vercel e secret do GitHub), sem mexer em código. Sem as duas, fica o padrão sem token (500).
 const COTA_DIARIA_FIPE = Math.max(50, Number(process.env.FIPE_COTA_DIARIA) || 500);
 export const TETO_DIARIO_FIPE = COTA_DIARIA_FIPE - 50;
-export const TETO_CRON_FIPE = COTA_DIARIA_FIPE - 80;
+// 15/10 (dono): o lote automático usa até 75% da cota útil e 25% fica SEMPRE para a tela (abrir o carro).
+// O contador é um só (fipe_uso) e cada chamador compara com o próprio teto (registrar_uso_fipe corrigido
+// em 15/10 — antes comparava com o teto gravado pelo lote e a tela levava "cota esgotada" com folga).
+export const TETO_CRON_FIPE = Math.floor(TETO_DIARIO_FIPE * 0.75);
 const FIPE_TOKEN = process.env.FIPE_TOKEN || '';
 
 // 90 → 3 (02/10): com a triangulação por ano, um `sem_match` deixou de ser definitivo — e a
