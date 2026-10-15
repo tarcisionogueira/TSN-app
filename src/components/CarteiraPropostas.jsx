@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
+import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 
 // CARTEIRA DE PROPOSTAS (14/10, pedido do dono): os lotes de leiloeiro cujo leilão ENCERROU SEM
 // LANCE confirmado e que ainda estão na janela de 15 dias — os únicos em que cabe proposta de
@@ -21,10 +22,15 @@ export default function CarteiraPropostas() {
   const [linhas, setLinhas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
-  const [uf, setUf] = useState('');
-  const [fonte, setFonte] = useState('');
-  const [busca, setBusca] = useState('');
-  const [soInteresse, setSoInteresse] = useState(false);
+  // Voltar do lote para a carteira no MESMO lugar (15/10, dono): filtros por aba em sessionStorage e a
+  // rolagem devolvida ao voltar (mesmo mecanismo da Busca — utils/estadoLista.js).
+  const salvo = lerSessao('carteira_filtros', {}) || {};
+  const [uf, setUf] = useState(salvo.uf || '');
+  const [fonte, setFonte] = useState(salvo.fonte || '');
+  const [busca, setBusca] = useState(salvo.busca || '');
+  const [soInteresse, setSoInteresse] = useState(!!salvo.soInteresse);
+  useEffect(() => { gravarSessao('carteira_filtros', { uf, fonte, busca, soInteresse }); }, [uf, fonte, busca, soInteresse]);
+  useRolagemDaLista('carteira_propostas', !carregando);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null);

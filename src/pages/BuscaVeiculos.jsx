@@ -17,7 +17,8 @@ const POR_PAGINA = 20;
 
 // Mesma lição de `Busca.jsx` (imóveis): NUNCA `select('*')`. `raw` e `descricao` completa
 // (sem truncar no banco) ficam de fora — pesam e não aparecem no card.
-const PATIO_VISIVEL = ['confirmado', 'nao_confirmado'];
+// 15/10 (dono): SÓ pátio confirmado — 'nao_confirmado' (opção 2 de 05/10) saiu: "isso pode trazer complicações".
+const PATIO_VISIVEL = ['confirmado'];
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'marca_busca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'km',
   'valor_minimo', 'valor_avaliacao', 'valor_fipe', 'fipe_status', 'desconto_percentual', 'desconto_fipe_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado', 'fotos', 'data_leilao', 'leiloeiro',
