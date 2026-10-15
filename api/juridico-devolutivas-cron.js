@@ -41,8 +41,19 @@ const SISTEMA = `Você acompanha, para uma empresa de assessoria em leilões de 
 {"situacao":"2-3 frases: onde o processo está hoje","ultimo_movimento":"o último fato concreto, com data se houver","referencia_curta":"até 110 caracteres, para citar no próximo e-mail ao escritório (ex.: \\"o pedido de reconsideração para expedição da Carta de Arrematação, protocolado em 07/10\\")","aguardando":"juiz|cartorio|cliente|escritorio|nos|nada","pendencias_nossas":["o que a EMPRESA ou o CLIENTE precisa fazer, se houver"],"intervalo_dias":7|14,"motivo_intervalo":"uma frase","licoes":[{"tema":"curto","licao":"regra geral útil para OUTROS imóveis, só se o escritório afirmou com clareza"}]}
 Regras: nunca invente fatos, datas ou números; use só o que está nos e-mails. intervalo_dias=14 quando o que se espera depende de prazo longo de terceiros (decisão do juiz, expedição de carta, registro em cartório) ou quando as últimas respostas não trouxeram novidade; senão 7. Lições só quando forem regra geral (não fatos deste caso). Sem travessões no texto.`;
 
-function conversaTexto(msgs) {
-  return msgs.map((m) => `### ${String(m.criado_em).slice(0, 10)} · ${m.direcao === 'entrada' ? 'ESCRITÓRIO' : 'EMPRESA'} (${m.de_email})${(m.anexos || []).length ? ` · anexos: ${m.anexos.map((a) => a.nome).filter(Boolean).join(', ')}` : ''}\n${String(m.texto || '').slice(0, 4000)}`).join('\n\n');
+// Nossos endereços (reencaminhamentos de importação, cópias internas) não são o escritório falando.
+const RE_NOSSO = /@(reimob\.com\.br|bidprobrasil\.com\.br)$/i;
+const autor = (m) => (m.direcao !== 'entrada' || RE_NOSSO.test(m.de_email || '') ? 'EMPRESA' : `ESCRITÓRIO/CLIENTE`);
+
+// Anexo com leitura da IA (caso_documentos) entra pelo RESUMO, não só pelo nome: é o conteúdo que ensina.
+function conversaTexto(msgs, docsPorPath = new Map()) {
+  return msgs.map((m) => {
+    const anexos = (m.anexos || []).map((a) => {
+      const d = a?.arquivo ? docsPorPath.get(a.arquivo) : null;
+      return d ? `${d.titulo || a.nome} (${String(d.resumo || '').slice(0, 300)})` : a?.nome;
+    }).filter(Boolean);
+    return `### ${String(m.criado_em).slice(0, 10)} · ${autor(m)} (${m.de_email})${anexos.length ? ` · anexos: ${anexos.join('; ')}` : ''}\n${String(m.texto || '').slice(0, 4000)}`;
+  }).join('\n\n');
 }
 
 function lerJSON(txt) {
@@ -52,11 +63,16 @@ function lerJSON(txt) {
 }
 
 async function analisarCaso(casoId, emailId, { seco }) {
-  const [caso] = await ler(`casos?id=eq.${casoId}&select=id,imovel_id,imovel_endereco,cliente_id,acompanhamento_intervalo_dias`);
+  const [caso] = await ler(`casos?id=eq.${casoId}&select=id,imovel_id,imovel_endereco,cliente_id,tipo_leilao,acompanhamento_intervalo_dias`);
   if (!caso) return { caso: casoId, erro: 'caso não encontrado' };
   const msgs = await ler(`email_caixa?caso_id=eq.${casoId}&pasta=neq.spam&pasta=neq.lixeira&select=id,direcao,de_email,criado_em,texto,anexos&order=criado_em.asc&limit=60`);
   if (!msgs.length) return { caso: casoId, erro: 'sem mensagens' };
-  const ia = await iaTexto({ system: SISTEMA, prompt: `Conversa do caso (${caso.imovel_endereco || 'imóvel arrematado'}):\n\n${conversaTexto(msgs)}`, maxTokens: 1500, primario: 'claude', timeoutMs: 60000 });
+  const docs = await ler(`caso_documentos?caso_id=eq.${casoId}&select=storage_path,titulo,resumo&limit=200`);
+  const docsPorPath = new Map(docs.map((d) => [d.storage_path, d]));
+  const lote = caso.imovel_id ? (await ler(`imoveis_leilao?id=eq.${caso.imovel_id}&select=estado,modalidade`))[0] : null;
+  const uf = lote?.estado || (/\/([A-Z]{2})\b(?!.*\/[A-Z]{2}\b)/.exec(caso.imovel_endereco || '') || [])[1] || null;
+  const modalidade = lote?.modalidade || caso.tipo_leilao || null;
+  const ia = await iaTexto({ system: SISTEMA, prompt: `Conversa do caso (${caso.imovel_endereco || 'imóvel arrematado'}):\n\n${conversaTexto(msgs, docsPorPath)}`, maxTokens: 1500, primario: 'claude', timeoutMs: 60000 });
   // Falha da IA não é "nada a aprender": não grava, e a resposta volta na próxima rodada.
   if (!ia) return { caso: casoId, erro: 'IA indisponível' };
   const a = lerJSON(ia.texto);
@@ -86,7 +102,7 @@ async function analisarCaso(casoId, emailId, { seco }) {
   }
   if (licoes.length) {
     const r = await sb('juridico_aprendizado', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(licoes.map((l) => ({
-      caso_id: casoId, imovel_id: caso.imovel_id || null, campo: `licao_escritorio:${String(l.tema || 'geral').slice(0, 60)}`,
+      caso_id: casoId, imovel_id: caso.imovel_id || null, fonte: 'devolutiva', uf, modalidade, campo: `licao_escritorio:${String(l.tema || 'geral').slice(0, 60)}`,
       valor_ia: null, valor_advogado: String(l.licao).slice(0, 600), observacao: 'aprendido das devolutivas por e-mail (juridico-devolutivas-cron)',
     }))) });
     if (!r.ok) console.error(`[devolutivas] lições do caso ${casoId} não gravadas: HTTP ${r.status}`);
@@ -135,7 +151,7 @@ async function handler(req) {
     } else {
       // Respostas do escritório ligadas a caso, das últimas 3 semanas, ainda sem análise.
       const desde = new Date(Date.now() - 21 * 864e5).toISOString();
-      const novas = await ler(`email_caixa?direcao=eq.entrada&caso_id=not.is.null&pasta=eq.entrada&criado_em=gte.${desde}&select=id,caso_id,criado_em&order=criado_em.asc&limit=50`);
+      const novas = await ler(`email_caixa?direcao=eq.entrada&caso_id=not.is.null&pasta=eq.entrada&criado_em=gte.${desde}&de_email=not.ilike.*@reimob.com.br&de_email=not.ilike.*@bidprobrasil.com.br&select=id,caso_id,criado_em&order=criado_em.asc&limit=50`);
       const ids = novas.map((n) => n.id);
       const feitas = ids.length ? await ler(`caso_acompanhamento_analise?email_id=in.(${ids.join(',')})&select=email_id`) : [];
       const ja = new Set(feitas.map((f) => f.email_id));

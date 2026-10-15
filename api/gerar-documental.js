@@ -1510,13 +1510,25 @@ export default async function handler(req, res) {
     // sem devolutivas ainda, é no-op; vai ficando mais preciso com o uso.
     let aprendizados = '';
     try {
-      const licoes = await (await sb('juridico_aprendizado?select=campo,valor_ia,valor_advogado,observacao&order=criado_em.desc&limit=40')).json();
+      // 15/10 (dono): as lições agora vêm de devolutivas, anexos, andamentos e movimentos de TODOS os casos
+      // (caso-aprendizado-cron). Pega um lote maior e prioriza o mesmo recorte: lição da UF e da modalidade
+      // deste imóvel primeiro, depois as gerais, por fim as de outros recortes; correções do advogado sempre.
+      const licoes = await (await sb('juridico_aprendizado?select=campo,valor_ia,valor_advogado,observacao,uf,modalidade,fonte&order=criado_em.desc&limit=150')).json();
       if (Array.isArray(licoes)) {
+        const ufIm = String(im.estado || '').toUpperCase();
+        const modIm = String(im.modalidade || '').toLowerCase();
+        const peso = (l) => (l.valor_ia ? 0 : 3)
+          - (l.uf && l.uf.toUpperCase() === ufIm ? 2 : 0) - (l.modalidade && String(l.modalidade).toLowerCase() === modIm ? 1 : 0)
+          + (l.uf && ufIm && l.uf.toUpperCase() !== ufIm ? 3 : 0);
         const linhas = licoes
           .filter(l => l && (l.campo || l.observacao || l.valor_advogado))
-          .slice(0, 30)
-          .map(l => `- ${l.campo ? l.campo + ': ' : ''}o sistema indicou "${String(l.valor_ia || '—').slice(0, 120)}", o advogado corrigiu para "${String(l.valor_advogado || '—').slice(0, 120)}"${l.observacao ? ` — ${String(l.observacao).slice(0, 200)}` : ''}`);
-        if (linhas.length) aprendizados = `\n\nAPRENDIZADOS COM ADVOGADOS (correções reais de devolutivas anteriores — aplique estas lições e NÃO repita os mesmos erros):\n${linhas.join('\n')}`;
+          .map((l, i) => ({ l, i, p: peso(l) }))
+          .sort((x, y) => x.p - y.p || x.i - y.i)
+          .slice(0, 35)
+          .map(({ l }) => l.valor_ia
+            ? `- ${l.campo ? l.campo + ': ' : ''}o sistema indicou "${String(l.valor_ia).slice(0, 120)}", o advogado corrigiu para "${String(l.valor_advogado || '—').slice(0, 120)}"${l.observacao ? ` — ${String(l.observacao).slice(0, 200)}` : ''}`
+            : `- [${String(l.campo || 'lição').replace(/^licao_/, '').replace(':', ' · ')}${l.uf ? ` · ${l.uf}` : ''}] ${String(l.valor_advogado || '').slice(0, 400)}`);
+        if (linhas.length) aprendizados = `\n\nAPRENDIZADOS DE CASOS REAIS (correções de advogados e lições de arremates acompanhados: devolutivas, documentos, andamentos e movimentos processuais — aplique-as e NÃO repita os mesmos erros):\n${linhas.join('\n')}`;
       }
     } catch { /* aprendizado é best-effort, nunca trava o parecer */ }
     // Fluxo PROCESSUAL real de arremates da mesma modalidade (desembaraço no CNJ —

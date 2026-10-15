@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FolderOpen, User, Gavel, FileQuestion, ExternalLink, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FolderOpen, User, Gavel, FileQuestion, ExternalLink, Loader2, FileBarChart } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Documentos do caso, organizados pela IA (15/10, pedido do dono): "separando os documentos pessoais e os
@@ -28,6 +30,9 @@ export default function DocumentosCaso({ casoId, podeMover = false, cardStyle })
   const [erro, setErro] = useState('');
   const [abrindo, setAbrindo] = useState(null);
   const [movendo, setMovendo] = useState(null);
+  const [rel, setRel] = useState({ relatorios: [], imovel_id: null, cliente: null, imovel: null });
+  const { iniciarSuporte, podeImpersonar } = useAuth();
+  const nav = useNavigate();
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -36,6 +41,7 @@ export default function DocumentosCaso({ casoId, podeMover = false, cardStyle })
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setDocs(d.documentos || []);
+      setRel({ relatorios: d.relatorios || [], imovel_id: d.imovel_id || null, cliente: d.cliente || null, imovel: d.imovel || null });
     } catch (e) { console.error("[DocumentosCaso] carregar:", e?.message); setErro(`Não foi possível carregar os documentos: ${e.message}`); setDocs([]); }
   }, [casoId]);
   useEffect(() => { if (casoId) carregar(); }, [casoId, carregar]);
@@ -65,6 +71,18 @@ export default function DocumentosCaso({ casoId, podeMover = false, cardStyle })
     finally { setMovendo(null); }
   };
 
+  // Os relatórios são do CLIENTE: abrir (ou gerar em nome dele) é pelo modo suporte, o mesmo caminho do
+  // Admin ao atribuir um arremate (prosseguirGerarRelatorios) — a tela /analise lê as análises de quem se vê.
+  const abrirRelatorio = (gerar) => {
+    if (!rel.cliente || !rel.imovel_id) return;
+    iniciarSuporte({ id: rel.cliente.id, nome: rel.cliente.nome, role: rel.cliente.role });
+    const imovel = rel.imovel ? { id: rel.imovel_id, ...rel.imovel } : undefined;
+    nav(`/analise?imovel=${encodeURIComponent(rel.imovel_id)}`, { state: gerar
+      ? { manual: true, autoGerar: true, paraUserId: rel.cliente.id, imovel }
+      : (imovel ? { imovel } : {}) });
+  };
+  const faltaRelatorio = rel.relatorios.some((r) => r.status !== 'concluida');
+
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -76,6 +94,39 @@ export default function DocumentosCaso({ casoId, podeMover = false, cardStyle })
         Organizados pela IA a partir dos anexos dos e-mails do caso. Chegou anexo novo por e-mail, ele entra aqui sozinho.
       </div>
       {erro && <div style={{ fontSize: 12.5, color: '#b91c1c', marginBottom: 10 }}>{erro}</div>}
+      {rel.relatorios.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: '#0f766e', marginBottom: 8 }}>
+            <FileBarChart size={15} /> Relatórios BidPro do imóvel
+          </div>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+            {rel.relatorios.map((r) => (
+              <div key={r.tipo} style={{ fontSize: 13, color: '#111111', padding: '3px 0' }}>
+                {r.titulo}: {r.status === 'concluida'
+                  ? <span style={{ color: '#0f766e', fontWeight: 700 }}>pronto{dataBR(r.updated_at) ? ` em ${dataBR(r.updated_at)}` : ''}</span>
+                  : <span style={{ color: '#b45309', fontWeight: 700 }}>{r.status ? r.status.replace(/_/g, ' ') : 'não gerado'}</span>}
+              </div>
+            ))}
+            {podeImpersonar ? (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                {rel.relatorios.some((r) => r.status === 'concluida') && (
+                  <button onClick={() => abrirRelatorio(false)} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 8, border: 'none', background: '#0D63DB', color: 'white', cursor: 'pointer' }}>
+                    <ExternalLink size={13} /> Abrir relatórios
+                  </button>
+                )}
+                {faltaRelatorio && (
+                  <button onClick={() => abrirRelatorio(true)} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 8, border: '1px solid #0D63DB', background: 'white', color: '#0D63DB', cursor: 'pointer' }}>
+                    Gerar os que faltam
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 6 }}>Abrir e gerar relatórios do cliente é feito por admin ou analista (modo suporte).</div>
+            )}
+          </div>
+        </div>
+      )}
+      {!rel.imovel_id && docs !== null && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>Este caso não tem imóvel vinculado: os relatórios BidPro aparecem aqui quando houver.</div>}
       {docs === null && <div style={{ fontSize: 13, color: '#64748b' }}><Loader2 size={14} style={{ verticalAlign: -2 }} /> Carregando…</div>}
       {docs && docs.length === 0 && !erro && <div style={{ fontSize: 13, color: '#64748b' }}>Nenhum documento organizado ainda.</div>}
       {docs && docs.length > 0 && GRUPOS.map((g) => {

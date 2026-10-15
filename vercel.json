@@ -196,6 +196,10 @@
       "schedule": "10 13,20 * * 1-5"
     },
     {
+      "path": "/api/caso-aprendizado-cron",
+      "schedule": "25 11,21 * * *"
+    },
+    {
       "path": "/api/honorarios-liquidar-cron",
       "schedule": "35 12 * * *"
     },

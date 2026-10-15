@@ -50,7 +50,34 @@ export default async function handler(req) {
     if (!(await podeVerCaso(perfil, user.id, casoId))) return json({ error: 'Caso não encontrado' }, 404);
     const r = await sb(`caso_documentos?caso_id=eq.${casoId}&select=id,grupo,tipo,titulo,resumo,data_documento,pessoa,nome,lido,corrigido_por,criado_em&order=data_documento.asc.nullslast,criado_em.asc`);
     if (!r.ok) return json({ error: 'Não foi possível ler os documentos' }, 500);
-    return json({ documentos: await r.json() });
+    // Relatórios do BidPro do imóvel do caso (15/10, dono: "inclua os relatórios mercadológico e documental
+    // nos anexos do imóvel"). São os do CLIENTE (user_id = cliente do caso), os mesmos que ele vê.
+    const cr = await sb(`casos?id=eq.${casoId}&select=imovel_id,cliente_id,imovel_endereco,imovel_valor,tipo_leilao`);
+    if (!cr.ok) return json({ error: 'Não foi possível ler o caso' }, 500);
+    const [caso] = await cr.json();
+    let relatorios = [];
+    let cliente = null;
+    if (caso?.imovel_id && caso?.cliente_id) {
+      const filtro = `imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&user_id=eq.${caso.cliente_id}&select=status,updated_at&limit=1`;
+      const [m, d, l, p] = await Promise.all([
+        sb(`analises_mercado?${filtro}`), sb(`analises_documental?${filtro}`), sb(`analises_laudo?${filtro}`),
+        sb(`perfis?id=eq.${caso.cliente_id}&select=id,nome,role`),
+      ]);
+      if (![m, d, l, p].every((x) => x.ok)) return json({ error: 'Não foi possível ler os relatórios do caso' }, 500);
+      const [[rm], [rd], [rl], [pc]] = await Promise.all([m.json(), d.json(), l.json(), p.json()]);
+      relatorios = [
+        { tipo: 'mercadologico', titulo: 'Relatório mercadológico', ...(rm || { status: null }) },
+        { tipo: 'documental', titulo: 'Relatório documental', ...(rd || { status: null }) },
+        { tipo: 'laudo', titulo: 'Laudo de viabilidade', ...(rl || { status: null }) },
+      ];
+      cliente = pc || null;
+    }
+    // O imóvel do caso vai junto: arremate atribuído pela equipe costuma ser lote FORA do acervo, e a tela
+    // /analise só gera com o endereço em mãos (mesmo state do Admin em prosseguirGerarRelatorios).
+    const m = /([^,—–]+)\/([A-Z]{2})\s*$/.exec(caso?.imovel_endereco || '');
+    const imovel = caso ? { endereco: caso.imovel_endereco || '', cidade: m ? m[1].trim() : '', estado: m ? m[2] : '',
+      valorMinimo: Number(caso.imovel_valor) || 0, modalidade: /judicial/i.test(caso.tipo_leilao || '') && !/extra/i.test(caso.tipo_leilao || '') ? 'judicial' : 'extrajudicial' } : null;
+    return json({ documentos: await r.json(), relatorios, imovel_id: caso?.imovel_id || null, cliente, imovel });
   }
 
   const docId = req.method === 'GET' ? url.searchParams.get('id') : null;
