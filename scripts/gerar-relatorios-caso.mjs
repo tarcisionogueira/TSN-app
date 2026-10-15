@@ -38,7 +38,9 @@ async function completarLote(id, valores) {
   const patch = {};
   for (const k of CAMPOS_LOTE) {
     if (valores[k] == null || valores[k] === '') continue;
-    const vazio = atual[k] == null || atual[k] === '' || (k === 'titulo' && TITULO_MARCADOR.test(atual[k]));
+    // Área/valor 0 é "não informado" no marcador da atribuição (Vila Rica chegou com area_m2 = 0).
+    const vazio = atual[k] == null || atual[k] === '' || (k === 'titulo' && TITULO_MARCADOR.test(atual[k]))
+      || (['area_m2', 'valor_minimo', 'valor_avaliacao'].includes(k) && !(Number(atual[k]) > 0));
     if (vazio) patch[k] = valores[k];
   }
   if (!Object.keys(patch).length) return { ...atual, mudou: [] };
