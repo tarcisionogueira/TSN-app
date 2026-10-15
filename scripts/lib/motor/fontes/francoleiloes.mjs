@@ -12,6 +12,8 @@
  * `${row.URLlote}` — recon_dump `vazio:FRANCOLEILOES`). É a plataforma Degrau, que monta a lista
  * por AJAX e redireciona a home para /proximos_leiloes/1/1/ (Firecrawl, 15/10: 8 lotes ali). Mesma
  * receita da família MGL/Jinkings: catálogo direto nessa página e 7 s de hidratação.
+ * A rodada em seco com essa receita AINDA deu 0 (o AJAX não completa no runner) → catálogo passa ao
+ * /sitemap.xml — feed XML com <end_date> por lote; só os não encerrados (ver francoleiloes-parse.mjs).
  */
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
@@ -22,15 +24,15 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'francoleiloes',
   fetch: 'dom',
-  dom: { esperaMs: 7000, isolarSessao: true },
-  catalogo: '/proximos_leiloes/1/1/',
+  dom: { esperaMs: 3500, isolarSessao: true },
+  catalogo: '/sitemap.xml',
   paginaParam: 'page',
   maxPages: 1,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Própria', acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'cloudflare (por sessão, isolarSessao resolve)',
-    enumeracao: '/proximos_leiloes/1/1/ (lista montada por AJAX — esperar 7 s)',
+    enumeracao: '/sitemap.xml (feed <listing> com <end_date>; a lista do site vem por AJAX e não completa no runner)',
     url_lote: '/lote/<leilao-slug>/<id>/', scraper: 'scraper-francoleiloes.mjs',
   },
 };
