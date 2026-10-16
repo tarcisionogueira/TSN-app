@@ -27,6 +27,11 @@
   — advogado re-aceita no portal. `calcularDistribuicao` perdeu o fallback embutido (pagava 0% ao parceiro se a
   leitura falhasse): agora lança. Distribuição já gravada não muda; a do Marcos (`pago`, não distribuída) tem upline
   `padrao_dono`.
+- **Regra de comissão do parceiro confirmada pelo dono (16/10):** cursos e e-books 25% · assessoria 10% · êxito 10% do
+  honorário. Banco conferido: assinatura e produto nível 1 = 25%, `venda_direta` nível 1 = 10%, `consultor_pct` = 1.
+  **Divergência corrigida:** 2 e-books pagos (R$ 29,90 — "Lucre Antes de Arrematar" e "O Lance Que Muda Tudo") estavam
+  com `comissao_pct = 0`, contra o item 3(b) do termo; 2 cursos inativos com 30%. Todos em 25%
+  (`20261016_comissao_produtos_25pct.sql`). Sem dano retroativo: `compras_produtos` está vazia (nenhuma venda de produto).
 
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 
