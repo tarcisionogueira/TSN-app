@@ -100,7 +100,13 @@
     espelho `comprovante_parcela` no imóvel. Próxima: Parcela 2 (pagar até 13/11, venc 15/11). Imagens de
     assinatura (`image.png`) são descartadas pelo `RE_IMAGEM_DE_ASSINATURA`. Rodar à mão: `cron-manual.yml` com
     `/api/parcelas-documentos-cron?seco=1` (seco não grava) e depois sem `seco`.
-  - Rafael tem 30 parcelas mas SEM parcelamento registrado em `arrematados` — a guia dele fica `sem_parcelamento`.
+  - **Rafael (Vila Rica) registrado em 16/10 (SQL rodado pelo dono):** leilão 23/06/2026 (o arremate estava com
+    14/07, data do cadastro), 25% + 30× R$ 2.823,74. Pagas: entrada e 1/30 (guia+comprovante no mesmo PDF; o Enock
+    confirmou por escrito em 12/08). Parcela 2 (venc 22/08) e 3 (21/09) sem comprovante: aparecem em atraso e, por
+    estarem > 7 dias vencidas, NÃO disparam lembrete (o cron só olha a 1ª pendente). Advogado próprio do cliente gera
+    as guias; aqui é só registro. Comprovantes de ITBI marcados `ignorado`. Andamentos gravados: 24/09 devolução do
+    Cartório de Cotia (prot. 424.222) e 07/10 pedido de reconsideração do item 2 da decisão (carta de arrematação
+    antes da quitação, com hipoteca — item 2.17 "l" do edital + art. 895 §1º CPC), diligência com o juiz em 09/10.
 - **Relatórios de caso com lote fora do acervo (15/10, dono):** workflow `gerar-relatorios-caso.yml`
   (`scripts/gerar-relatorios-caso.mjs`): completa o lote-marcador só onde está vazio (0 conta como vazio), liga ao lote
   os documentos do caso (matrícula/edital: um por tipo, índice único), gera documental → mercadológico (tipo/área do
