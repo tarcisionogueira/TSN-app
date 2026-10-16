@@ -7,6 +7,27 @@
 
 
 
+## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
+
+- **Timeout (57014), causa por causa — medido isolado antes de mexer:**
+  - `processo_fluxo_estatistica` levava **13,6 s** sozinha (subconsulta correlacionada: 3.889 conclusões/decisões ×
+    16 mil movimentos) e o `authenticator` corta em 8 s → **toda** chamada da API falhava e `_previsao-processo.js`
+    ficava sem a base da plataforma. Reescrita com janela por processo: **0,43 s**, 69 linhas, zero diferença
+    (EXCEPT nos dois sentidos) — `20261016_processo_fluxo_estatistica_janela.sql`, aplicada.
+  - O resto (`acervo_*`, `admin_dashboard_contadores`, `desativar_*`, `fotos_orfas`) mede 7 ms–1,3 s isolado: é
+    **pico de carga** nas janelas de coleta (8 timeouts às 13h45 e 7 às 15h30 de 15/10). Triggers de
+    `imoveis_leilao` (34; ~15 em todo UPDATE) custam ~0,3 s / 500 linhas — não são a causa.
+  - **O estrago real do pico estava nas páginas públicas:** `rpc()`/`sb()` devolvem null em falha e
+    `/leiloes`, `/leiloes/<uf>` e a cidade saíam "0 imóveis" + **noindex**, cacheadas 1 h na borda. Agora lançam →
+    500 `no-store` → a borda segue servindo a última cópia boa (stale-while-revalidate).
+  - `pg_stat_statements` acumula desde 15/06: a média de lá NÃO descreve hoje (a fila de geocode "3,4 s" mede 3 ms).
+- **Parceiro indicante no êxito: 0,5 → 1,0 p.p. do arrematado (10% do honorário)** — decisão comercial do dono e do
+  time. `config_honorarios`: consultor 1,0 · advogado 4,5 · admin 4,5 (migração `20261016_honorario_exito_parceiro_10pct.sql`,
+  aplicada). Termos: parceiro **v11** (item 3d) e jurídico **v8** (item 6: 4,5% com parceiro, 5,5% se ele mesmo indicou)
+  — advogado re-aceita no portal. `calcularDistribuicao` perdeu o fallback embutido (pagava 0% ao parceiro se a
+  leitura falhasse): agora lança. Distribuição já gravada não muda; a do Marcos (`pago`, não distribuída) tem upline
+  `padrao_dono`.
+
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 
 - **"Mandei e-mail ao leiloeiro e começou a gerar relatórios" (dono):** é a regra de 30/09 — e-mail da equipe ao

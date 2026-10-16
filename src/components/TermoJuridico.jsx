@@ -26,7 +26,8 @@
 import React from 'react';
 import { DECLARACAO_REPASSE } from './ConviteParceiro';
 
-export const TERMO_JURIDICO_VERSAO = 'v7-2026-10'; // v7 (10/10): intermediação do pagamento e responsabilidade fiscal (item 7)
+export const TERMO_JURIDICO_VERSAO = 'v8-2026-10'; // v8 (16/10): parceiro passa a 1 ponto percentual do arrematado (10% do honorário) — item 6
+// v7 (10/10): intermediação do pagamento e responsabilidade fiscal (item 7)
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 
@@ -53,7 +54,7 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '6. Como você é remunerado',
-    d: 'A remuneração é por ÊXITO. Quando a arrematação de um cliente que você acompanhou se concretiza, a BidPro Brasil recebe honorário de êxito de 10% sobre o valor arrematado, e esse honorário é dividido MEIO A MEIO entre você e a plataforma, depois de descontada a participação do parceiro que indicou o cliente, quando houver. Na prática: (a) SEM parceiro envolvido, você recebe 50% do honorário — 5% do valor arrematado; (b) COM parceiro, o parceiro recebe meio ponto percentual e o restante é dividido meio a meio, cabendo a você 4,75% do valor arrematado. O desconto do parceiro sai igualmente dos dois lados, nunca só do seu. (c) Se VOCÊ MESMO for o parceiro que indicou o cliente, acumula as duas participações — 5,25% do valor arrematado —, desde que também tenha aderido ao Programa de Parceiros. Você pode ter um percentual individual diferente, registrado no seu perfil, que prevalece sobre o padrão quando existir. Essa participação remunera TODO o seu trabalho no caso — a análise, o parecer, a reunião com o investidor e o acompanhamento —, e não há cobrança nem pagamento à parte por nenhuma dessas etapas. NÃO há remuneração fixa, por hora, por parecer emitido, por reunião realizada ou por caso que não resulte em arrematação. O valor é calculado sobre o estado vigente das regras no momento em que a arrematação é distribuída; casos já distribuídos não são recalculados.',
+    d: 'A remuneração é por ÊXITO. Quando a arrematação de um cliente que você acompanhou se concretiza, a BidPro Brasil recebe honorário de êxito de 10% sobre o valor arrematado, e esse honorário é dividido MEIO A MEIO entre você e a plataforma, depois de descontada a participação do parceiro que indicou o cliente, quando houver. Na prática: (a) SEM parceiro envolvido, você recebe 50% do honorário — 5% do valor arrematado; (b) COM parceiro, o parceiro recebe um ponto percentual (10% do honorário) e o restante é dividido meio a meio, cabendo a você 4,5% do valor arrematado. O desconto do parceiro sai igualmente dos dois lados, nunca só do seu. (c) Se VOCÊ MESMO for o parceiro que indicou o cliente, acumula as duas participações — 5,5% do valor arrematado —, desde que também tenha aderido ao Programa de Parceiros. Você pode ter um percentual individual diferente, registrado no seu perfil, que prevalece sobre o padrão quando existir. Essa participação remunera TODO o seu trabalho no caso — a análise, o parecer, a reunião com o investidor e o acompanhamento —, e não há cobrança nem pagamento à parte por nenhuma dessas etapas. NÃO há remuneração fixa, por hora, por parecer emitido, por reunião realizada ou por caso que não resulte em arrematação. O valor é calculado sobre o estado vigente das regras no momento em que a arrematação é distribuída; casos já distribuídos não são recalculados.',
   },
   {
     t: '7. Quando e como você recebe',

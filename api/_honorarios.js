@@ -19,8 +19,14 @@
 // `db` → função REST (retorna { data }). `arr` → linha de arrematacoes.
 export async function calcularDistribuicao(db, arr) {
   const valor = Number(arr.valor_arrematado || 0);
-  const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,admin_pct,advogado_pct,analista_pct,consultor_pct,honorario_minimo')).data?.[0]
-    || { total_pct: 10, admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0, honorario_minimo: 7000 };
+  // SEM FALLBACK (16/10). Havia um padrão embutido aqui ({consultor_pct: 0, ...}) — cópia que
+  // envelhece: estava defasado desde 14/09 e, se a leitura falhasse, a distribuição saía com
+  // 0% para o parceiro e era GRAVADA assim (forma 2 do CLAUDE.md: "não consegui ler" virando
+  // "não há"). Dinheiro não se calcula com número inventado: lança, e quem chama
+  // (liquidarHonorario, monitor) já trata exceção.
+  const lida = await db('config_honorarios?id=eq.1&select=total_pct,admin_pct,advogado_pct,analista_pct,consultor_pct,honorario_minimo');
+  const cfg = lida.data?.[0];
+  if (!cfg) throw new Error(`config_honorarios ilegível (HTTP ${lida.status ?? '?'}) — distribuição não calculada`);
   const total = Number(cfg.total_pct) || 10;
   // HONORÁRIO MÍNIMO (termo de adesão, decisão do dono 30/07): o texto que o cliente aceita
   // promete R$ 7.000,00 sempre que 10% do valor arrematado ficar abaixo disso. O total

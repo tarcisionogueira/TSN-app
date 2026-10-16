@@ -60,8 +60,10 @@ export default async function handler(req) {
 
     // Editor de Usuários: equipe + % individual e padrão do papel.
     if (sp.get('equipe') === '1') {
-      const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
-        || { total_pct: 10, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
+      // Sem padrão embutido (16/10): a cópia estava defasada e mostraria ao admin um split que
+      // não é o vigente. Não conseguiu ler → diz que não conseguiu.
+      const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0];
+      if (!cfg) return json({ error: 'config_honorarios ilegível — tente de novo' }, 503);
       const padrao = { advogado: Number(cfg.advogado_pct) || 0, analista: Number(cfg.analista_pct) || 0, consultor: Number(cfg.consultor_pct) || 0 };
       const membros = (await db('perfis?role=in.(advogado,analista,consultor)&ativo=eq.true&select=id,nome,role,honorario_exito_pct&order=role.asc,nome.asc')).data || [];
       return json({

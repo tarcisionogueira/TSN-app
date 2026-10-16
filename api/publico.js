@@ -717,6 +717,9 @@ function caixaConviteLive(prox, estado) {
 async function paginaBusca(termo) {
   const q = String(termo || '').trim().slice(0, 60);
   const achados = q.length >= 2 ? await rpc('acervo_busca_cidade', { p_q: q }) : [];
+  // `rpc()` devolve null em QUALQUER falha. Sem esta linha um timeout virava "Não encontramos
+  // lotes" — falha entregue como resposta (forma 4 do CLAUDE.md). O catch do handler devolve 500.
+  if (achados === null) throw new Error('acervo_busca_cidade indisponível');
   const lista = Array.isArray(achados) ? achados : [];
 
   // Resultado da busca NÃO entra no índice: é conteúdo gerado por consulta, muda a cada
@@ -740,6 +743,10 @@ async function paginaBusca(termo) {
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
 async function paginaBrasil(estadoConvite = null) {
   const dados = await rpc('acervo_uf_contagem');
+  // Falha do banco NÃO pode virar "0 imóveis em 0 estados": esta página fica 1 h na borda
+  // (s-maxage=3600). Lançando, o handler devolve 500 (não cacheado) e o stale-while-revalidate
+  // segue servindo a última cópia boa. Os timeouts aqui são de pico de carga (16/10).
+  if (dados === null) throw new Error('acervo_uf_contagem indisponível');
   // Próxima edição da aula ao vivo, para o convite logo abaixo do hero. `rpc()` já devolve
   // `null` em qualquer falha (RPC fora do ar, evento inativo) — `caixaConviteLive` trata o
   // `null` como "sem bloco", então esta página nunca fica refém da aula existir.
@@ -799,6 +806,9 @@ async function paginaBrasil(estadoConvite = null) {
 async function paginaUF(uf) {
   const nomeUF = UF_NOME[uf];
   const dados = await rpc('acervo_cidades_uf', { p_uf: uf });
+  // Mesma regra da página nacional, e aqui pior: total 0 vira `indexar: false` — um timeout
+  // mandava NOINDEX ao Google na página do estado, cacheado por 1 h.
+  if (dados === null) throw new Error('acervo_cidades_uf indisponível');
   const cidades = (Array.isArray(dados) ? dados : [])
     .map((r) => [r.cidade_norm, { nome: r.cidade, n: Number(r.total) || 0 }]);
   const total = cidades.reduce((s, [, c]) => s + c.n, 0);
@@ -830,6 +840,9 @@ async function paginaCidade(uf, cidadeNorm, page) {
   const { linhas, total } = await sb(
     `imoveis_leilao?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
     `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`);
+  // `sb()` devolve linhas null em falha. Sem isto a cidade saía "Nenhum lote ativo" + noindex,
+  // cacheada 1 h na borda, por causa de um timeout (16/10).
+  if (linhas === null) throw new Error('acervo da cidade indisponível');
   const itens = Array.isArray(linhas) ? linhas : [];
   const nomeCidade = itens[0]?.cidade || cidadeNorm;
   const base = `${SITE}/leiloes/${uf.toLowerCase()}/${cidadeNorm}`;
@@ -1204,6 +1217,7 @@ export default async function handler(req, res) {
     return res.status(200).send(html);
   } catch (e) {
     console.error('[publico]', e?.message || e);
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(500).send('Erro ao montar a página.');
   }
 }
