@@ -59,6 +59,29 @@
   nota 100 × saque 100 → saque gravado e nota presa; 2ª nota ativa → índice barra. Auditorias 0/0.
   **Para o contador (pendência #25):** repasse sem retenção foi decisão do dono; confirmar se há IRRF obrigatório
   na fonte sobre comissão paga a PJ fora do Simples.
+- **Pendências 220, 221 e 223 (16/10, tarde):**
+  - **link_matricula_morto (220) — 4ª volta, causa nova, sem contaminação:** a limpeza do espelho junta arquivos
+    IDÊNTICOS (etag+tamanho) e trocava só `imovel_anexos.storage_path`; a `url` ficava na duplicata apagada e o
+    gatilho `trg_anexo_atualiza_tem_edital` copiava essa url morta para `link_matricula` (22 ZUK). Gatilho usa url
+    VÁLIDA do arquivo novo (ou zera), `_limpeza-espelho.js` grava a url assinada do canônico,
+    `espelho_reconciliar_ausentes` conserta 500 urls/dia (1.272 desencontradas) e links mortos. **Índice novo
+    `idx_imovel_anexos_storage_path`** (74 mil linhas varridas a cada busca; reparo foi de 90 s cancelado → 0,24 s).
+  - **E-mails sem anexo (221 — o laço do cron era sintoma):** anexo ia por LINK e o Resend descartava calado o que
+    não conseguia buscar; gravávamos `enviado:true`. Auditoria contra o Resend (11 e-mails/30 dias): **4 saíram sem
+    documento** — Apoio jurídico e Contato de Santana/Fazenda Tamboré (15/10), Contato Melville/Barueri (0 de 2),
+    Fwd Brotas Salvador (09/10, 0 de 5). `api/_email.js` agora BAIXA e manda o conteúdo (`materializarAnexos`, 20 MB
+    por anexo, 28 MB total) e devolve `anexos_status`; as 3 telas avisam o que ficou de fora. Cron de arquivo casava
+    "pela posição" e guardou conteúdo de um arquivo com nome de outro: agora só pelo nome (e `resend_anexo_id`),
+    marca `enviado:false` em vez de girar. Registros dos 4 corrigidos; caixa mostra anexo não enviado riscado.
+    **Reenviar os 4 = pendência 224 (dono).**
+  - **Invariantes (223):** estado (7 corrigidos pela cidade escrita no lote, 14 explicados 30 dias), venda direta
+    SHIOKAWA isenta (plataforma marca venda direta com prazo, como COMPREI), supressão era falso alarme (e-mail
+    barrado por cadência — conta só o que saiu), mkt conversão atribuída em dia sem clique. Patches em
+    `qa_invariantes` por troca pontual com trava (`raise` se o trecho sumir). Resto → **pendência 225**, começando por
+    `matricula_area_de_outro_lote` (3, novo).
+  - Conector Supabase travou (confirmação invisível) em `apply_migration` com `tg_op = 'DELETE'` no corpo e num
+    UPDATE de texto longo em `pendencias_projeto`; contornado reescrevendo a condição (`not in ('INSERT','UPDATE')`)
+    e usando `pendencia_fechar` + insert.
 
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 
