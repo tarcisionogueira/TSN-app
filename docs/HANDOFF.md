@@ -83,6 +83,23 @@
   - C) `comprovante_pagamento` que bate com UMA parcela pendente → `parcelamento.pagamentos[idx]` + `pagas`.
   - `caso-documentos-cron` e `arquivar-anexos-email-cron` passaram a rodar de hora em hora (a guia não espera 6 h).
   - 1ª guia ligada: Marcos, Parcela 1/16, R$ 25.704,15 (BB), aguardando aprovação em 15/10 20h50 UTC.
+  - **Aprovação pela tela não chegou ao servidor (15/10, ABERTO):** o dono "aprovou" e não houve log nem mudança no
+    banco. Troquei `window.confirm` (bloqueado em silêncio em navegador de celular/app embutido) por confirmação na
+    tela ("Confirmar envio" + mensagem de ok/erro). Causa NÃO confirmada (pendência #216) — se repetir, pedir ao dono a mensagem que
+    aparece. Saída de servidor para envio já aprovado: `guia-parcela` com `x-cron-secret` + query
+    `acao=enviar&arrematado_id&parcela_idx&aprovado_por` (admin/analista), grava por `parcelamento_registrar`.
+    Foi por ela que a guia 1/16 do Marcos saiu (entregue 15/10 22h14 UTC; pagar até 15/10, venc 16/10).
+  - **Tela do arremate (`/arrematados`):** tipos novos em `imovel_anexos`: `guia_parcela` ("Guia de parcela
+    (depósito judicial)") e `comprovante_parcela`; o antigo `comprovante_pagamento` virou "(outros)". Migração
+    `20261016_imovel_anexos_parcela.sql` (parcela_idx/status/aviso/processado_em). O cron também lê esses anexos, e o
+    que chega por e-mail é ESPELHADO em `imovel_anexos` (o advogado reclamou que a guia não aparecia no imóvel).
+    Sem caso, o aviso ao dono aponta para `#/arrematados`. `upload-anexo.js` aceita os dois tipos.
+  - **Ciclo fechado de ponta a ponta (15/10 23h04 UTC):** o dono mandou o comprovante da parcela 1 pelo Reimob com o
+    BidPro em cópia (o e-mail do BidPro não tinha os destinatários do jurídico) → arquivado → classificado
+    `comprovante_pagamento` → ligado à Parcela 1/16 por valor+data → `pagas: [0,1]`, `pagamentos.1` com o PDF, e
+    espelho `comprovante_parcela` no imóvel. Próxima: Parcela 2 (pagar até 13/11, venc 15/11). Imagens de
+    assinatura (`image.png`) são descartadas pelo `RE_IMAGEM_DE_ASSINATURA`. Rodar à mão: `cron-manual.yml` com
+    `/api/parcelas-documentos-cron?seco=1` (seco não grava) e depois sem `seco`.
   - Rafael tem 30 parcelas mas SEM parcelamento registrado em `arrematados` — a guia dele fica `sem_parcelamento`.
 - **Relatórios de caso com lote fora do acervo (15/10, dono):** workflow `gerar-relatorios-caso.yml`
   (`scripts/gerar-relatorios-caso.mjs`): completa o lote-marcador só onde está vazio (0 conta como vazio), liga ao lote
@@ -90,8 +107,14 @@
   que o documental LEU) → laudo, com CRON_SECRET + paraUserId. `gerar-analise` aceita `posArremate: true` só via cron
   (antes: 422 "leilão já ocorreu"). Rafael: terreno 375,59 m², mercado R$ 284.804, laudo condicional. Matheus: casa
   43,45 m² em lote de 200 m², mercado R$ 179.712, aluguel R$ 1.800, laudo condicional. Os relatórios são escritos
-  como PRÉ-lance: recomendam o que já foi feito (ITIV pago, escritura lavrada). O `casos.tipo_leilao` do Matheus diz
-  "judicial" e é venda direta Caixa (UPDATE trava no MCP — corrigir pela tela/dono).
+  como PRÉ-lance: recomendam o que já foi feito (ITIV pago, escritura lavrada). Matheus: `casos.tipo_leilao` agora é
+  `venda_direta` (opção nova no /caso e no `atribuir-arremate`; migração `20261015_casos_tipo_leilao_venda_direta.sql`).
+- **Santana de Parnaíba: o mercadológico não projetava o parcelamento (15/10, dono).** O edital diz que aceita
+  financiamento E parcelado no leilão, e o relatório saía sem projeção. Duas causas: (1) o mercadológico não usava o
+  que o DOCUMENTAL já leu — agora `extracao.formaPagamento` → `extrairPagamentoTexto` → `condicoesEdital.regrasPagamento`
+  com `regrasOrigem: 'documental'`; (2) o parser não entendia "50% de sinal" (percentual antes da palavra), "duas
+  parcelas" por extenso nem "+ 2 parcelas". Regerado: sinal 50% + 2×25%, mercado R$ 677.848. Teste:
+  `scripts/testes/pagamento-do-documental.mjs`.
 - **Tipo "fazenda" como nome de lugar (15/10, dono):** "Fazenda Tamboré Residencial 2 - Casa com 710m²" saiu rural e
   o mercadológico avaliou por hectare (R$ 1,2 mi × avaliação R$ 15,8 mi). `fazendaEhNome` em `api/_tipo.js` (usado
   por normalizarTipo e pelo inferirTipo de 19 parsers); gerar-analise relê lote gravado rural e não reaproveita
