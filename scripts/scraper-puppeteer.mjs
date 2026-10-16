@@ -880,7 +880,8 @@ function mapearMegaVeiculo(c, detalhe = null) {
     desconto_percentual: descontoPercentualVeiculo(valMin, valAval > valMin ? valAval : null),
     modalidade,
     cidade: toTitleCase(cidade),
-    estado: /^[A-Z]{2}$/.test(uf) ? uf : null,
+    // UF REAL (16/10): o caminho da URL traz "si" (sem informação) e 19 veículos saíram com UF "SI".
+    estado: UFS_BR.has(uf) ? uf : null,
     link_lote: c.href,
     fotos: montarFotos(c.foto, detalhe?.fotos),
     anexos: detalhe?.anexos,
@@ -2808,6 +2809,8 @@ const REGEX_KM = /\bKM[:\s]*([\d.]{1,3}(?:\.\d{3})*|\d+)\b/i;
 // Mitsubishi Motors Corporation, usada pelo próprio DETRAN/CRLV em vez do nome por extenso —
 // não é gíria nem abreviação nossa, é o que consta no documento do veículo. Sem ela, todo
 // Mitsubishi cadastrado como "MMC/<modelo>" saía com marca null.
+// Tipo de veículo no lugar de cidade (título "MARCA/MODELO" lido como "Cidade/UF" — mapLoteSuporteVeiculo).
+const RE_TIPO_VEICULO_TITULO = /\b(onibus|ônibus|micro-?onibus|motocicleta|moto|caminh[aã]o|caminhonete|camioneta|automovel|automóvel|carro|reboque|semi-?reboque|trator|utilit[aá]rio|m\.\s*benz)\b/i;
 const MARCAS_VEICULO = /\b(vw|volkswagen|gm|chevrolet|fiat|ford|renault|toyota|honda|hyundai|nissan|peugeot|citroen|citroën|scania|iveco|volvo|mercedes|mercedes-benz|mitsubishi|mmc|kia|jeep|caoa|byd|bmw|audi|troller|agrale)\b/i;
 
 // MODELO via convenção DETRAN/CRLV "MARCA/MODELO" (ex.: "MMC/L200 TRITON", "VW/GOL") — o
@@ -5470,8 +5473,13 @@ function mapLoteSuporteVeiculo(l, tenant, modalidadeDetectada = null, textoDetal
   let cidade = lm ? lm[1].trim() : '';
   let uf = lm ? lm[2].toUpperCase() : '';
   if (!cidade || !uf) {
-    const dm = titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/)
-      || [...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*\/\s*([A-Z]{2})\b/g)].pop();
+    // Título de VEÍCULO é "MARCA/MODELO" ("ONIBUS M.BENZ/LO 814", "MOTOCICLETA HONDA/CG 150"): lido
+    // como "Cidade/UF", gravava cidade "Onibus M.benz" e UF "LO" (16/10, pendência 226). Só aceita
+    // UF que existe e "cidade" que não traz marca nem tipo de veículo — senão, sem cidade (o edital
+    // preenche depois; ver CIDADE NÃO ESQUECE).
+    const dm = [titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/),
+      ...[...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*\/\s*([A-Z]{2})\b/g)].reverse()]
+      .find((m) => m && UFS_BR.has(m[2]) && !MARCAS_VEICULO.test(m[1]) && !RE_TIPO_VEICULO_TITULO.test(m[1]));
     if (dm) { cidade = cidade || dm[1].trim(); uf = uf || dm[2].toUpperCase(); }
   }
   const tenantKey = tenant.domain.replace(/\..*/, '');

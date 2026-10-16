@@ -100,6 +100,12 @@
     "Cuiabá - Mt". Aceita "- UF", "(UF)" e "Do Oeste"→"D'Oeste". Restam distritos (Indápolis, Santa Zélia), nomes
     ambíguos sem UF e **3 do SUPORTE com o MODELO do veículo como cidade ("Onibus M.benz"/estado "LO")** — defeito
     do coletor, pendência nova.
+  - **Pendência 226 (fechada no mesmo dia):** veículo SUPORTE sem local na listagem caía no TÍTULO e lia
+    "MARCA/MODELO" como "Cidade/UF" ("ONIBUS M.BENZ/LO 814" → cidade "Onibus M.benz", UF "LO").
+    `mapLoteSuporteVeiculo` só aceita UF real e "cidade" sem marca/tipo de veículo (`RE_TIPO_VEICULO_TITULO`).
+    A mesma varredura achou **19 MEGA com UF "SI"** (caminho da URL = sem informação) → `mapearMegaVeiculo` usa
+    `UFS_BR`. Registros limpos (senão "cidade não esquece" preservaria o lixo). **Invariante novo
+    `veiculo_uf_invalida`** (limite 0), irmão do `estado_fora_do_padrao` dos imóveis.
   - **Coletor SUBLIME:** campo "Comarca" às vezes vinha com a VARA ("5ª Vara Cível" virou cidade); agora vara não é
     cidade e "Franca do Estado de São Paulo" vira "Franca" (`scripts/scraper-pecini.mjs`).
 
