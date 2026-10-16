@@ -93,8 +93,19 @@ async function main() {
   const cache = new Map(); // marcas/modelos por categoria — reaproveitado por todo o lote
 
   let ok = 0, aproximado = 0, semMatch = 0, semDados = 0, erro = 0, semCota = 0;
+  let falhasSeguidas = 0;
   for (const v of candidatos) {
-    const resultado = await buscarFipe(fipeGet, v, cache);
+    // 16/10: UMA requisição lenta (timeout de 15 s) derrubava o lote inteiro com exit 1 — os 279
+    // gastos no dia ficaram sem o resto. Falha de rede não é "sem FIPE": não grava nada no veículo
+    // (ele volta amanhã), conta como erro e segue; 5 seguidas = API fora, para o lote.
+    let resultado;
+    try { resultado = await buscarFipe(fipeGet, v, cache); falhasSeguidas = 0; }
+    catch (e) {
+      erro++; falhasSeguidas++;
+      console.log(`  ⚠️ FIPE falhou para ${v.id}: ${String(e?.message || e).slice(0, 100)} — fica para a próxima rodada`);
+      if (falhasSeguidas >= 5) { console.log('  🛑 5 falhas seguidas — API da FIPE fora; parando o lote.'); break; }
+      continue;
+    }
     if (resultado.status === 'sem_cota') {
       console.log('  🛑 cota diária da FIPE esgotada — parando o lote aqui (retoma amanhã).');
       semCota++; break;

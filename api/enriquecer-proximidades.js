@@ -68,7 +68,14 @@ export default async function handler(req, res) {
   // uma falha transitória do Overpass — ver migration proximidades_tentativas_retry).
   const MAX_TENT = 5;
   const COLS = 'id,latitude,longitude,proximidades_tentativas,proximidades_vazios,proximidades_vazio_em,proximidades_espelhos';
-  const fila = await (await sb(`imoveis_leilao?select=${COLS}&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&geocod_nivel=in.(${NIVEIS_ATENDIDOS})&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`)).json();
+  // 16/10: com o banco em timeout, o PostgREST devolve {code:'57014',...} e esse OBJETO virava a
+  // "fila" — o `fila.push` da revalidação estourava ("fila.push is not a function"). Erro de
+  // leitura não é fila vazia: registra o motivo e segue só com a revalidação.
+  const rFila = await sb(`imoveis_leilao?select=${COLS}&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&geocod_nivel=in.(${NIVEIS_ATENDIDOS})&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`);
+  const filaBruta = await rFila.json().catch(() => null);
+  const erroFila = !rFila.ok || !Array.isArray(filaBruta) ? `HTTP ${rFila.status} ${JSON.stringify(filaBruta)?.slice(0, 160)}` : null;
+  if (erroFila) console.error('[proximidades] fila não lida:', erroFila);
+  const fila = Array.isArray(filaBruta) ? filaBruta : [];
 
   // REVALIDAÇÃO DO VAZIO (10/08). Um resultado vazio é o que uma consulta que falhou em
   // silêncio também produz — e, uma vez gravado, ficava valendo PARA SEMPRE, porque a fila
@@ -79,7 +86,7 @@ export default async function handler(req, res) {
   // um vazio falso se conserta sozinho, sem ninguém precisar perceber.
   const VALIDADE_VAZIO_D = 30;
   const corte = new Date(Date.now() - VALIDADE_VAZIO_D * 86400000).toISOString();
-  const sobra = LOTE - (Array.isArray(fila) ? fila.length : 0);
+  const sobra = LOTE - fila.length;
   if (sobra > 0) {
     // O filtro de igualdade jsonb vai no servidor por eficiência, mas NÃO é a garantia: o
     // `select` traz `pontos_proximos` e a emptiness é reconferida aqui. Se o PostgREST
