@@ -342,7 +342,7 @@ export default function HomeCliente() {
               que `src/utils/cotaAnalise.js` documenta (a tabela de limites copiada em 4 telas,
               as 4 divergindo). Cópia envelhece sozinha; ponteiro não. */}
           <div style={{ fontSize: 12.5, color: '#1e3a8a', lineHeight: 1.65 }}>
-            Convide investidores para a BidPro. <strong>Todos podem convidar e todos ganham</strong> — inclusive no plano gratuito. Suas indicações ficam vinculadas a você. A <strong>assinatura</strong> só entra em cena para <strong>sacar acima do teto mensal</strong>, que aí também pede nota fiscal; o valor do teto aparece em <strong>Indicações</strong>.
+            Convide investidores para a BidPro. <strong>Todos podem convidar e todos ganham</strong> — inclusive no plano gratuito. Suas indicações ficam vinculadas a você. Todo saque é feito para a sua empresa, contra a <strong>nota fiscal</strong> do valor sacado. A <strong>assinatura</strong> só entra em cena para <strong>sacar acima do teto mensal</strong>; o valor do teto aparece em <strong>Indicações</strong>.
           </div>
           <div style={{ background: '#eff6ff', border: '1px dashed #93c5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#084BA6', lineHeight: 1.6 }}>
             Ative sua participação e <strong>aceite as regras</strong> do Programa. Leva 10 segundos e libera a aba <strong>Indicações</strong> no menu.

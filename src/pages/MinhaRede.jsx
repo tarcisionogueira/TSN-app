@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import NotaFiscalSaque from '../components/NotaFiscalSaque';
 import { limparCnpj, cnpjValido, formatarCnpj } from '../utils/cnpj';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, Building2, Lock, ArrowRight, Sparkles, Phone, Mail } from 'lucide-react';
@@ -212,6 +213,7 @@ export default function MinhaRede() {
   const [aula, setAula] = useState(null);
   // Saque
   const [valorSaque, setValorSaque] = useState('');
+  const [nfSugerido, setNfSugerido] = useState(null); // valor da nota pedido pelo servidor (16/10)
   const [msgSaque, setMsgSaque] = useState(null);
   const [sacando, setSacando] = useState(false);
   // Trava SÍNCRONA contra duplo clique (03/10) — `sacando` só vale no próximo render; ver Comissoes.jsx.
@@ -447,7 +449,11 @@ export default function MinhaRede() {
           const lib = fmtLib(proximaLib);
           setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Pagamento ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
           setValorSaque(''); carregarMeu();
-        } else setMsgSaque({ tipo: 'erro', txt: data.error || 'Não foi possível solicitar o saque.' });
+        } else {
+          // Falta a nota deste saque (16/10: nota em TODO saque) → o anexo abaixo já vem com o valor.
+          if (data.exige_nf || data.falta_nf) setNfSugerido(Number(data.nf_valor_exigido || valor));
+          setMsgSaque({ tipo: 'erro', txt: data.error || 'Não foi possível solicitar o saque.' });
+        }
       } catch { setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' }); }
       setSacando(false);
       setTimeout(() => setMsgSaque(null), 6000);
@@ -814,8 +820,14 @@ export default function MinhaRede() {
               )}
               {outrosPendentes.length === 0 && saldo > 0 && tetoSemNf && (
                 <div style={{ marginTop: 8, fontSize: 11.5, color: '#64748b', lineHeight: 1.55 }}>
-                  Neste mês você pode sacar até <strong>{fmtBRL(tetoSemNf.disponivel)}</strong> sem nota fiscal. Acima de {fmtBRL(tetoSemNf.teto)} no mês, o saque exige plano pago e a nota fiscal do valor total sacado no mês.
+                  Todo saque exige a nota fiscal da sua empresa, no valor bruto do saque. Neste mês você pode sacar até <strong>{fmtBRL(tetoSemNf.disponivel)}</strong> sem plano pago; acima de {fmtBRL(tetoSemNf.teto)} no mês, o saque exige também plano pago.
                 </div>
+              )}
+              {/* NOTA FISCAL — todo saque exige (16/10). Antes não havia anexo NESTA tela, que é a
+                  dos parceiros: acima do teto eles recebiam "anexe a nota" sem ter onde anexar. */}
+              {outrosPendentes.length === 0 && saldo > 0 && (
+                <NotaFiscalSaque userId={uid} valorSugerido={nfSugerido || Number(valorSaque) || null}
+                  somenteLeitura={emSuporte} onAprovada={(v) => setValorSaque(String(v))} />
               )}
               {msgSaque && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: msgSaque.tipo === 'ok' ? '#059669' : '#dc2626' }}>{msgSaque.txt}</div>}
             </>

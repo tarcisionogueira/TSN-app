@@ -40,6 +40,25 @@
   Prova em seco (desfeita): assessoria R$ 1.000 → só n1 R$ 100; curso R$ 1.000 com upline pagante → n2 R$ 40, sem
   repetir o n1; upline admin em n2 não recebe (`comissao.profundidade_por_papel`: n2+ só para pagante). Auditorias
   de regras e segurança: 0/0. Termo do parceiro **v12** (item 3).
+- **Nota fiscal em TODO saque, pelo valor BRUTO exato (dono, 16/10)** — `20261016_saque_nf_sempre.sql`.
+  Regra nova `saque.exige_nf_sempre`; o teto de R$ 2.500 (`saque.teto_sem_nf`, nome mantido) passou a governar só o
+  PLANO PAGO acima dele (zerar o teto teria exigido plano em todo saque e travado o parceiro grátis). A nota é a
+  ÚLTIMA checagem do `saque_avaliar` (só pede nota quando cadastro/PJ/saldo estão certos); `saque_nf_que_cobre` exige
+  valor igual (±0,01) e a nota fica presa ao saque (`lancamento_id`, também no ramo PJ pendente); nota de saque
+  cancelado volta a valer. Uma nota ativa por pessoa (índice `saque_nf_uma_ativa`). Parceiro não exclui nem troca
+  (sem política de exclusão/alteração em `saque_nf` e no bucket; API recusa 2ª nota ativa).
+  **Achados:** (1) parceiros sacam pela Minha Rede, que NÃO tinha anexo de nota — só Comissões (equipe) tinha;
+  (2) NÃO havia tela para a equipe conferir nota em `revisao_manual` (tudo sem link da prefeitura parava ali para
+  sempre). Agora: `src/components/NotaFiscalSaque.jsx` (as duas telas) e Admin → Financeiro → **Notas fiscais de
+  saque** (`NotasFiscaisSaqueAdmin.jsx`: aprovar / reprovar / liberar substituição — nada é apagado; PATCH só admin).
+  API: `api/saque-nf.js` (GET/PATCH admin; POST com trava de nota ativa e valor exato), `api/saque.js` roteia por
+  `falta_nf` (o `exige_nf` agora vem true em toda recusa). Termos: parceiro **v13**, jurídico **v9**,
+  `DECLARACAO_REPASSE` (bruto, sem retenção), Termos de Uso **3.4** (cláusula 8.3 e re-aceite) com
+  `regra_negocio.saque.exige_termos_vigentes.versao = termos_uso-v3.4` — parceiro re-aceita antes do próximo saque.
+  Seco (desfeito): sem nota → pede nota do bruto; em revisão → "em conferência"; nota 100 × saque 120 → recusa;
+  nota 100 × saque 100 → saque gravado e nota presa; 2ª nota ativa → índice barra. Auditorias 0/0.
+  **Para o contador (pendência #25):** repasse sem retenção foi decisão do dono; confirmar se há IRRF obrigatório
+  na fonte sobre comissão paga a PJ fora do Simples.
 
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 

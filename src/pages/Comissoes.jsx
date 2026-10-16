@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import NotaFiscalSaque from '../components/NotaFiscalSaque';
 import { useIsMobile } from '../utils/useIsMobile';
 import { DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
-import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 const ROLES_ELEGÍVEIS = ['admin', 'consultor', 'analista', 'advogado'];
 
@@ -53,7 +53,8 @@ export default function Comissoes() {
   const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
   // Teto de saque do mês (regra saque.teto_sem_nf) e o estado da nota fiscal, quando exigida.
   const [teto, setTeto] = useState({ teto: null, ja: 0, disponivel: null });
-  const [nf, setNf] = useState(null);   // { exigido, enviando, status, motivo }
+  // Valor sugerido para a nota (16/10: nota em TODO saque) — o componente cuida do resto.
+  const [nfSugerido, setNfSugerido] = useState(null);
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false); // sem plano pago em dia: pode sacar o acumulado, mas não ganha novas comissões
 
   const [cfinConfig, setCfinConfig] = useState({});  // prazo/antecipação por gateway
@@ -160,9 +161,8 @@ export default function Comissoes() {
         setShowSaqueForm(false);
         carregar();
       } else {
-        // Acima do teto do mês: em vez de só recusar, abre o anexo da nota JÁ com o valor
-        // exigido preenchido — que é o INTEGRAL sacado no mês, não o deste pedido.
-        if (data.exige_nf) setNf({ exigido: Number(data.nf_valor_exigido || valor), status: null, motivo: null });
+        // Falta a nota deste saque: preenche o valor no anexo — a nota é do valor BRUTO exato do saque.
+        if (data.exige_nf || data.falta_nf) setNfSugerido(Number(data.nf_valor_exigido || valor));
         setMsgSaque({ tipo: 'erro', txt: data.error || 'Erro ao solicitar saque.' });
       }
     } catch {
@@ -172,31 +172,6 @@ export default function Comissoes() {
     }
     setSolicitandoSaque(false);
     setTimeout(() => setMsgSaque(null), 8000);
-  }
-
-  // ── NOTA FISCAL DO SAQUE (pedido do dono, 08/08) ───────────────────────────
-  // "Na mesma tela do saque deve ter o botão de anexar a nota fiscal referente ao valor
-  // sacado." O arquivo sobe para o bucket privado e o servidor confere: dados da nota
-  // contra o pedido e, quando houver link/QR da prefeitura, a emissão de verdade.
-  async function enviarNotaFiscal(file) {
-    if (suporte) return;
-    if (!file || !nf?.exigido) return;
-    setNf(n => ({ ...n, enviando: true, status: null, motivo: null }));
-    try {
-      const ext = ((file.name || '').split('.').pop() || 'pdf').toLowerCase();
-      const path = `nf/${user.id}/nf-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
-      const res = await apiCall('/api/saque-nf', { method: 'POST', body: JSON.stringify({ storage_path: path, valor: nf.exigido }) });
-      const d = await res.json().catch(() => ({}));
-      // `.ok` checado antes de ler o corpo: um 4xx traz JSON sem `status` e a tela diria
-      // "enviado" para uma nota que o servidor recusou.
-      if (!res.ok) { setNf(n => ({ ...n, enviando: false, status: 'erro', motivo: d.error || 'Não consegui enviar a nota.' })); return; }
-      setNf(n => ({ ...n, enviando: false, status: d.status, motivo: d.motivo }));
-      if (d.status === 'aprovada') carregar();
-    } catch (e) {
-      setNf(n => ({ ...n, enviando: false, status: 'erro', motivo: e?.message || 'Falha ao enviar a nota.' }));
-    }
   }
 
   const totalPendente = comissoes.filter(c => c.status === 'pendente').reduce((a, c) => a + Number(c.valor_comissao), 0);
@@ -306,9 +281,8 @@ export default function Comissoes() {
                   só na recusa é o jeito errado de contar. */}
               {teto.teto != null && (
                 <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-                  Sacado neste mês: <strong>{fmt(teto.ja)}</strong> · sem nota fiscal você ainda pode sacar{' '}
-                  <strong style={{ color: teto.disponivel > 0 ? '#059669' : '#b45309' }}>{fmt(teto.disponivel)}</strong>
-                  {' '}(limite de {fmt(teto.teto)}/mês)
+                  Sacado neste mês: <strong>{fmt(teto.ja)}</strong> · todo saque exige nota fiscal · acima de{' '}
+                  {fmt(teto.teto)}/mês, também plano pago
                 </div>
               )}
             </div>
@@ -327,35 +301,9 @@ export default function Comissoes() {
               <button onClick={() => { window.location.hash = '#/planos'; }} style={{ marginTop: 8, padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>Ver planos →</button>
             </div>
           )}
-          {/* ANEXO DA NOTA FISCAL — aparece na própria tela do saque quando o mês passa do
-              teto. O valor exigido é o INTEGRAL sacado no mês (quem tirou 3× R$ 1.000 sem
-              nota e pede mais R$ 500 precisa de nota de R$ 3.500), e o texto diz isso. */}
-          {nf?.exigido > 0 && (
-            <div style={{ marginTop: 10, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '11px 13px' }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#9a3412', marginBottom: 4 }}>
-                📎 Nota fiscal necessária — {fmt(nf.exigido)}
-              </div>
-              <div style={{ fontSize: 11.5, color: '#9a3412', lineHeight: 1.55 }}>
-                Este saque leva o mês acima do limite de {fmt(teto.teto)}. Anexe a nota fiscal de serviço no valor
-                <strong> integral sacado no mês ({fmt(nf.exigido)})</strong>, emitida pelo seu CNPJ contra a BidPro Brasil.
-                Conferimos os dados automaticamente e, quando a nota traz o link de verificação da prefeitura, checamos a emissão.
-              </div>
-              <label style={{ display: 'inline-block', marginTop: 9, padding: '8px 16px', background: nf.enviando ? '#94a3b8' : '#ea580c', color: 'white', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: nf.enviando ? 'default' : 'pointer' }}>
-                {nf.enviando ? 'Conferindo a nota…' : 'Anexar nota fiscal'}
-                <input type="file" accept={ACEITA_DOCUMENTO} disabled={nf.enviando} style={{ display: 'none' }}
-                  onChange={e => enviarNotaFiscal(e.target.files?.[0])} />
-              </label>
-              {nf.status && (
-                <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 700, lineHeight: 1.55,
-                  color: nf.status === 'aprovada' ? '#047857' : nf.status === 'reprovada' || nf.status === 'erro' ? '#b91c1c' : '#a16207' }}>
-                  {nf.status === 'aprovada' ? '✓ Nota aprovada — pode solicitar o saque.'
-                    : nf.status === 'revisao_manual' ? '⏳ Nota recebida e em conferência da equipe.'
-                    : '✕ Nota não aceita.'}
-                  {nf.motivo ? ` ${nf.motivo}` : ''}
-                </div>
-              )}
-            </div>
-          )}
+          {/* NOTA FISCAL — todo saque exige (16/10). Componente único, o mesmo da Minha Rede. */}
+          <NotaFiscalSaque userId={alvoId} valorSugerido={nfSugerido || Number(valorSaque) || null}
+            somenteLeitura={suporte} onAprovada={(v) => { setValorSaque(String(v)); setShowSaqueForm(true); }} />
           {faltandoSaque.length > 0 && (
             <div style={{ marginTop: 8, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px' }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 4 }}>⚠ Complete seu cadastro para liberar o saque. Falta:</div>

@@ -20,6 +20,14 @@
  * Por isso o veredito tem TRÊS estados, nunca dois: aprovada · reprovada ·
  * revisao_manual. Só `aprovada` destrava o saque (o gate vive em `saque_avaliar`,
  * no banco — esta rota não libera nada sozinha, ela só carimba a NF).
+ *
+ * DESDE 16/10 (dono): nota em TODO saque, no valor BRUTO EXATO do saque (`saque.exige_nf_sempre`).
+ * A BidPro repassa o bruto; tributos sobre a parte do parceiro são dele.
+ *   - Uma nota ATIVA por pessoa (revisao_manual, ou aprovada ainda não usada) — índice único no
+ *     banco. O parceiro não apaga nem troca: para substituir, a equipe libera (status
+ *     'substituida'; a nota antiga fica guardada, é documento contábil).
+ *   - GET  (admin) → fila de notas com link assinado do arquivo.
+ *   - PATCH (admin) → aprovar · reprovar · liberar_substituicao.
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
@@ -161,11 +169,78 @@ async function conferirNoEmissor(url, numero) {
   }
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
+async function linkAssinado(path) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${path}`, {
+    method: 'POST',
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expiresIn: 900 }),
+    signal: AbortSignal.timeout(10000),
+  }).catch((e) => { console.error('[saque-nf] link', e?.message); return null; });
+  if (!r?.ok) return null;
+  const j = await r.json().catch(() => null);
+  return j?.signedURL ? `${SUPABASE_URL}/storage/v1${j.signedURL}` : null;
+}
 
+// ── Equipe: fila de notas e decisões ────────────────────────────────────────
+// Só ADMIN decide sobre nota fiscal (é o dono quem responde por ela perante o fisco).
+async function rotaAdmin(req, res, user) {
+  const quem = (await db(`perfis?id=eq.${user.id}&select=role`));
+  if (!quem.ok) { res.status(503).json({ error: 'Não consegui conferir seu acesso agora.' }); return; }
+  if (quem.data?.[0]?.role !== 'admin') { res.status(403).json({ error: 'Apenas administrador.' }); return; }
+
+  if (req.method === 'GET') {
+    const r = await db('saque_nf?select=id,user_id,lancamento_id,storage_path,valor_pedido,numero,emitente_cnpj,tomador_cnpj,valor_nf,emitida_em,verificacao_url,verificacao_status,ia_veredito,status,motivo,revisado_por,revisado_em,criado_em&order=criado_em.desc&limit=200');
+    if (!r.ok || !Array.isArray(r.data)) { res.status(503).json({ error: 'Não consegui ler as notas agora.' }); return; }
+    const ids = [...new Set(r.data.map((n) => n.user_id))];
+    const pf = ids.length ? await db(`perfis?id=in.(${ids.join(',')})&select=id,nome,razao_social,cnpj`) : { ok: true, data: [] };
+    const porId = Object.fromEntries((Array.isArray(pf.data) ? pf.data : []).map((p) => [p.id, p]));
+    const notas = await Promise.all(r.data.map(async (n) => ({
+      ...n, parceiro: porId[n.user_id] || null, arquivo_url: await linkAssinado(n.storage_path),
+    })));
+    res.status(200).json({ notas, perfis_ok: pf.ok });
+    return;
+  }
+
+  // PATCH — decisão da equipe. Toda decisão grava quem, quando e por quê.
+  let body = {};
+  try { body = typeof req.body === 'object' && req.body ? req.body : JSON.parse(req.body || '{}'); } catch { /* vazio */ }
+  const id = String(body.id || '');
+  const acao = String(body.acao || '');
+  const motivo = String(body.motivo || '').trim().slice(0, 500);
+  if (!/^[0-9a-f-]{36}$/i.test(id)) { res.status(400).json({ error: 'Nota inválida.' }); return; }
+  const DESTINO = { aprovar: 'aprovada', reprovar: 'reprovada', liberar_substituicao: 'substituida' };
+  if (!DESTINO[acao]) { res.status(400).json({ error: 'Ação inválida.' }); return; }
+  if (acao !== 'aprovar' && !motivo) { res.status(400).json({ error: 'Escreva o motivo — ele aparece para o parceiro.' }); return; }
+
+  // Nota já usada num saque não muda mais: ela documenta um repasse que aconteceu.
+  // O filtro vai NA PRÓPRIA escrita (lancamento_id=is.null) e o `.select` da resposta prova que
+  // algo mudou — update que não alcança nada volta 200 vazio (forma 3 do CLAUDE.md).
+  const corpo = {
+    status: DESTINO[acao],
+    motivo: motivo || 'Aprovada na conferência da equipe.',
+    revisado_por: user.id, revisado_em: new Date().toISOString(),
+  };
+  const up = await db(`saque_nf?id=eq.${id}&lancamento_id=is.null&status=in.(revisao_manual,aprovada,reprovada)`, {
+    method: 'PATCH', body: JSON.stringify(corpo),
+  });
+  if (!up.ok) {
+    // 23505 = já existe outra nota ativa da mesma pessoa (índice único) — só pode haver uma.
+    const dup = /23505|saque_nf_uma_ativa/.test(JSON.stringify(up.data || ''));
+    res.status(dup ? 409 : 500).json({ error: dup ? 'O parceiro já tem outra nota ativa. Libere a substituição dela antes.' : 'Não consegui gravar a decisão.' });
+    return;
+  }
+  if (!Array.isArray(up.data) || !up.data.length) {
+    res.status(409).json({ error: 'Esta nota já foi usada num saque ou não está mais pendente — não pode ser alterada.' });
+    return;
+  }
+  res.status(200).json({ ok: true, nota: up.data[0] });
+}
+
+export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
+  if (req.method === 'GET' || req.method === 'PATCH') { await rotaAdmin(req, res, user); return; }
+  if (req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
   const rl = await checkRateLimit(`saquenf:${user.id}`, 10, 10 * 60_000);
   if (!rl.ok) { res.status(429).json({ error: 'Muitos envios. Aguarde alguns minutos.' }); return; }
 
@@ -176,6 +251,21 @@ export default async function handler(req, res) {
   const path = pathDaNf(body.storage_path, user.id);
   if (!path) { res.status(400).json({ error: 'Arquivo inválido.' }); return; }
   if (!(valor > 0)) { res.status(400).json({ error: 'Informe o valor do saque pretendido.' }); return; }
+
+  // UMA NOTA ATIVA POR VEZ (16/10). Anexada, ela não sai pelas mãos do parceiro: em conferência
+  // ou aprovada-e-não-usada, a troca é decisão da equipe. Checado aqui para responder ANTES de
+  // gastar a leitura da IA; o índice único no banco é quem garante de verdade.
+  const ativa = await db(`saque_nf?user_id=eq.${user.id}&lancamento_id=is.null&status=in.(revisao_manual,aprovada)&select=id,status,valor_nf&limit=1`);
+  if (!ativa.ok) { res.status(503).json({ error: 'Não consegui conferir suas notas agora. Tente de novo.' }); return; }
+  if (ativa.data?.[0]) {
+    const a = ativa.data[0];
+    res.status(409).json({
+      error: a.status === 'aprovada'
+        ? `Você já tem uma nota aprovada${a.valor_nf ? ` de R$ ${Number(a.valor_nf).toFixed(2)}` : ''} aguardando o saque. Para trocá-la, peça à equipe que libere a substituição.`
+        : 'Você já tem uma nota em conferência pela equipe. Para trocá-la, peça que a equipe libere a substituição.',
+    });
+    return;
+  }
 
   const perfil = (await db(`perfis?id=eq.${user.id}&select=cnpj,razao_social,nome`)).data?.[0] || {};
 
@@ -196,12 +286,26 @@ export default async function handler(req, res) {
       ia_veredito: lida || null,
       ...extra,
     };
-    await db('saque_nf', { method: 'POST', body: JSON.stringify(linha) });
+    const ins = await db('saque_nf', { method: 'POST', body: JSON.stringify(linha) });
+    // Sem isto a tela dizia "nota recebida" para uma nota que o banco recusou (ex.: corrida entre
+    // dois envios esbarrando no índice de uma-nota-ativa).
+    if (!ins.ok) {
+      const e = new Error(/23505|saque_nf_uma_ativa/.test(JSON.stringify(ins.data || '')) ? 'duplicada' : `gravação HTTP ${ins.status}`);
+      e.duplicada = e.message === 'duplicada';
+      throw e;
+    }
     return linha;
+  };
+  const responderFalhaGravacao = (e) => {
+    console.error('[saque-nf] gravar', e?.message);
+    res.status(e?.duplicada ? 409 : 500).json({ error: e?.duplicada
+      ? 'Você já tem uma nota ativa. Para trocá-la, peça à equipe que libere a substituição.'
+      : 'A nota foi lida, mas não consegui registrá-la. Tente de novo.' });
   };
 
   if (!lida) {
-    await registrar({ status: 'revisao_manual', verificacao_status: 'nao_checada', motivo: 'Não consegui ler a nota automaticamente.' });
+    try { await registrar({ status: 'revisao_manual', verificacao_status: 'nao_checada', motivo: 'Não consegui ler a nota automaticamente.' }); }
+    catch (e) { responderFalhaGravacao(e); return; }
     res.status(200).json({ ok: true, status: 'revisao_manual', motivo: 'Não consegui ler a nota automaticamente. Nossa equipe vai conferir manualmente.' });
     return;
   }
@@ -223,7 +327,9 @@ export default async function handler(req, res) {
 
   const valorNf = Number(lida.valor) || 0;
   if (!(valorNf > 0)) problemas.push('não identifiquei o valor na nota');
-  else if (valorNf + 0.01 < valor) problemas.push(`o valor da nota (R$ ${valorNf.toFixed(2)}) é menor que o saque pedido (R$ ${valor.toFixed(2)})`);
+  // Valor EXATO (16/10): o repasse é pelo BRUTO da nota. Nota maior que o saque documentaria um
+  // pagamento que não aconteceu; menor, um pagamento sem documento.
+  else if (Math.abs(valorNf - valor) > 0.01) problemas.push(`o valor da nota (R$ ${valorNf.toFixed(2)}) é diferente do saque pedido (R$ ${valor.toFixed(2)}) — a nota deve ser do valor bruto exato do saque`);
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(lida.emitida_em || '')) {
     const dias = (Date.now() - new Date(`${lida.emitida_em}T12:00:00Z`).getTime()) / 86400000;
@@ -250,7 +356,8 @@ export default async function handler(req, res) {
     motivo = `Enviada para conferência da equipe: ${[verif.detalhe, ...ressalvas].filter(Boolean).join(' ')}`;
   }
 
-  await registrar({ status, motivo, verificacao_url: lida.verificacao_url || null, verificacao_status: verif.status });
+  try { await registrar({ status, motivo, verificacao_url: lida.verificacao_url || null, verificacao_status: verif.status }); }
+  catch (e) { responderFalhaGravacao(e); return; }
 
   res.status(200).json({
     ok: true, status, motivo,

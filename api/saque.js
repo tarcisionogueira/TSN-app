@@ -224,11 +224,12 @@ export default async function handler(req) {
       nao_ganha_novas: naoGanhaNovas,
       pj_pendente: !!av.pj_pendente, pj_revalidar: !!av.pj_revalidar,
       pj_revalidacao_motivo: perfil.pj_revalidacao_motivo || null,
-      // Teto do mês: a tela mostra quanto ainda cabe sem nota fiscal e quando a NF entra.
+      // Teto do mês: desde 16/10 governa só o PLANO PAGO (acima dele). A nota fiscal vale para
+      // TODO saque (`saque.exige_nf_sempre`) — os nomes `*_sem_nf` ficaram por compatibilidade.
       teto_sem_nf: av.teto ?? null,
       ja_sacado_na_janela: av.ja_sacado_na_janela ?? 0,
       disponivel_sem_nf: av.disponivel_sem_nf ?? null,
-      exige_nf_acima_do_teto: true,
+      exige_nf_sempre: av.exige_nf !== false,
       saque_habilitado: !!av.permitido,
       faltando: av.faltando || [],
       motivo: av.permitido ? null : (av.motivo || null) });
@@ -260,14 +261,16 @@ export default async function handler(req) {
       return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
     }
 
-    // Acima do teto do mês: ou falta assinar, ou falta a nota fiscal. Devolve o número —
-    // a tela precisa dizer quanto ainda cabe hoje, senão o parceiro só vê "não pode".
-    if (av.precisa_assinar || av.exige_nf) {
+    // Falta assinar (acima do teto) ou falta a nota fiscal deste saque. `falta_nf`, e não
+    // `exige_nf`: desde 16/10 a nota é exigida SEMPRE, então `exige_nf` vem true em toda recusa
+    // (até de cadastro incompleto) e mandaria tudo para esta resposta.
+    if (av.precisa_assinar || av.falta_nf) {
       return json({
         error: av.motivo,
-        acima_do_teto: true,
+        acima_do_teto: !!av.acima_do_teto,
         precisa_assinar: !!av.precisa_assinar,
-        exige_nf: !!av.exige_nf,
+        exige_nf: !!av.falta_nf,
+        nf_em_revisao: !!av.nf_em_revisao,
         teto: av.teto, ja_sacado_na_janela: av.ja_sacado_na_janela,
         disponivel_sem_nf: av.disponivel_sem_nf,
         // `nf_valor_exigido` e `total_do_mes` vinham do `saque_avaliar` e eram DESCARTADOS aqui
@@ -312,7 +315,8 @@ export default async function handler(req) {
     // Validação MANUAL: reserva como 'aguardando_pj' (não pagável) e abre chamado p/ analista + dono.
     const r = await rpc('solicitar_saque_pj_pendente', { p_user_id: user.id, p_valor: valor });
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-    if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
+    if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente,
+      exige_nf: !!r.data?.falta_nf, nf_valor_exigido: r.data?.nf_valor_exigido ?? null, precisa_assinar: !!r.data?.precisa_assinar }, r.data?.falta_nf ? 422 : 400);
     await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro — CPF não confirmado no quadro societário; conferir contrato social e liberar/reprovar');
     await logSaque(user.id, 'saque', `Saque de parceiro solicitado — R$ ${valor.toFixed(2)} (em validação manual da PJ)`, { valor, em_validacao: true });
     return json({ ok: true, em_validacao: true, saldo_restante: r.data.saldo_restante }, 201);

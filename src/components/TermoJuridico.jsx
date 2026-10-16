@@ -26,7 +26,8 @@
 import React from 'react';
 import { DECLARACAO_REPASSE } from './ConviteParceiro';
 
-export const TERMO_JURIDICO_VERSAO = 'v8-2026-10'; // v8 (16/10): parceiro passa a 1 ponto percentual do arrematado (10% do honorário) — item 6
+export const TERMO_JURIDICO_VERSAO = 'v9-2026-10'; // v9 (16/10): nota fiscal em todo saque, repasse pelo bruto (item 7)
+// v8 (16/10): parceiro passa a 1 ponto percentual do arrematado (10% do honorário) — item 6
 // v7 (10/10): intermediação do pagamento e responsabilidade fiscal (item 7)
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
@@ -58,7 +59,7 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '7. Quando e como você recebe',
-    d: 'O crédito é apurado quando a arrematação é registrada e distribuída na plataforma, e fica disponível no seu saldo. O pagamento é feito por PIX, após conferência, contra nota fiscal de serviços emitida por você ou pela sua sociedade de advogados. Valores relativos a operações posteriormente desfeitas, canceladas, anuladas judicialmente ou identificadas como fraude são estornados do saldo e podem ser descontados de pagamentos seguintes. Os tributos incidentes são de sua responsabilidade exclusiva. A BidPro Brasil atua apenas como INTERMEDIÁRIA do pagamento: recebe do cliente o valor integral e repassa a você a sua parte. O valor repassado é receita SUA, não da BidPro Brasil — a emissão da nota fiscal e os tributos sobre ele são de sua responsabilidade exclusiva. A BidPro Brasil é responsável fiscal apenas pela parcela que lhe cabe na movimentação.',
+    d: 'O crédito é apurado quando a arrematação é registrada e distribuída na plataforma, e fica disponível no seu saldo. O pagamento é feito por PIX, após conferência, pelo valor BRUTO, sem retenção, contra nota fiscal de serviços emitida por você ou pela sua sociedade de advogados no valor exato de cada saque — a nota anexada não pode ser excluída por você; a substituição depende de liberação da equipe. Valores relativos a operações posteriormente desfeitas, canceladas, anuladas judicialmente ou identificadas como fraude são estornados do saldo e podem ser descontados de pagamentos seguintes. Os tributos e encargos incidentes sobre o valor recebido são de sua responsabilidade exclusiva. A BidPro Brasil atua apenas como INTERMEDIÁRIA do pagamento: recebe do cliente o valor integral e repassa a você a sua parte. O valor repassado é receita SUA, não da BidPro Brasil — a emissão da nota fiscal e os tributos sobre ele são de sua responsabilidade exclusiva. A BidPro Brasil é responsável fiscal apenas pela parcela que lhe cabe na movimentação.',
   },
   {
     t: '8. Sigilo profissional e proteção de dados',
