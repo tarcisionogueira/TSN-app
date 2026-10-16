@@ -1,6 +1,7 @@
 // Edital de VÁRIOS lotes sem o bloco do nosso lote isolado não pode doar matrícula/área (28/09:
 // 27 lotes com a mesma área de matrícula em cidades diferentes — fato de outro lote colado no nosso).
-import { ehDocMultiLote } from '../../api/_edital-extrato.js';
+import { ehDocMultiLote, isolarBlocoDoLote } from '../../api/_edital-extrato.js';
+import { extrairMatriculaTexto } from '../../api/_doc-extracao.js';
 let ok = 0, falhas = 0;
 const eq = (n, a, b) => { const p = a === b; p ? ok++ : falhas++; if (!p) console.log('✗', n, a, '≠', b); };
 eq('enumeração de lotes é multi-lote', ehDocMultiLote('EDITAL. Lote 01 - Casa em Jaú, matrícula 1.234.\nLote 02 - Terreno em Bauru, matrícula 5.678.'), true);
@@ -19,5 +20,18 @@ eq('TRT: itens "N: processo" são multi-lote', ehDocMultiLote(trt), true);
 eq('TRT: um item só não é', ehDocMultiLote('1: 0180100-24.1994.5.15.0096 - EXE3 - Jundiaí\n1.1 Tipo do Bem: Imóvel'), false);
 eq('3 matrículas distintas = vários imóveis', ehDocMultiLote('Imóvel A, Matrícula: 99543. Imóvel B, matrícula nº 10.359. Imóvel C, MATRÍCULA 7513.'), true);
 eq('matrícula + origem (2) não é', ehDocMultiLote('Imóvel objeto da matrícula nº 12.345, aberta a partir da matrícula 6.789.'), false);
+// 5ª forma (16/10, SUBLIME 5ª Vara de Franca): bens por LETRA, 2 matrículas, endereço com "lote 04 da quadra".
+const franca = `IMÓVEIS:
+(A) – 01 (UM) PRÉDIO RESIDENCIAL, à RUA RAUL MONTES TORRES nº 920, terreno composto do lote 04 da quadra 17,
+confrontando com parte do lote 06, encerrando a área de 250,00 m2. MATRÍCULA Nº 15.839 DO 2º CARTÓRIO.
+AVALIAÇÃO ATUALIZADA: R$ 635.514,71 em outubro/2026.
+(B) – 01 (UMA) GLEBA DE TERRAS, Ribeirão Corrente-SP, com a área de 10,55,00 ha, por 253,00 m.
+MATRÍCULA Nº 17.677 DO 2º CARTÓRIO. AVALIAÇÃO ATUALIZADA: R$ 3.014.535,96 em outubro/2026.`;
+eq('bens (A)/(B) com 2 matrículas = multi', ehDocMultiLote(franca), true);
+eq('a casa fica com a matrícula DELA', extrairMatriculaTexto(isolarBlocoDoLote(franca, { valorAvaliacao: 635514.71 }) || '')?.numeroMatricula, '15839');
+eq('a gleba fica com a DELA', extrairMatriculaTexto(isolarBlocoDoLote(franca, { valorAvaliacao: 3014535.96 }) || '')?.numeroMatricula, '17677');
+eq('a gleba não herda os 250 m² da casa', extrairMatriculaTexto(isolarBlocoDoLote(franca, { valorAvaliacao: 3014535.96 }) || '')?.areaTerrenoM2 ?? null, null);
+eq('lote principal (A+B) não casa com bloco nenhum', isolarBlocoDoLote(franca, { valorAvaliacao: 3650050.67 }), null);
+eq('"a) à vista; b) parcelado" com 1 matrícula não é multi', ehDocMultiLote('Matrícula nº 12.345.\na) – pagamento à vista;\nb) – parcelado em 30 vezes.'), false);
 console.log(`${falhas ? '✗' : '✓'} edital-de-varios-lotes: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);

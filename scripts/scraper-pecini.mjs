@@ -389,7 +389,14 @@ function parseDetalhe(html, rec) {
     // o corte voltaria a acontecer, só que num ponto diferente.
     descricao: (base.descricao || '').slice(0, 8000) || null,
     // "Comarca: Sorocaba Vara: 4ª Vara Cível …" — cidade quando o slug só traz o BAIRRO (Sublime).
-    comarca: ((txt.match(/Comarca:\s*(.{2,60}?)\s+Vara:/i) || [])[1] || '').trim() || null,
+    // 16/10: a captura do campo às vezes traz a VARA ("5ª Vara Cível") — 3 lotes de Franca saíram com
+    // ela de cidade e sumiram de /leiloes. Vara não é cidade: descarta (o slug/IBGE decidem). E
+    // "Franca do Estado de São Paulo" (forma do edital) vira "Franca".
+    comarca: (() => {
+      const c = ((txt.match(/Comarca:\s*(.{2,60}?)\s+Vara:/i) || [])[1] || '').trim()
+        .replace(/\s+(?:d[oa]\s+)?Estado\s+d[eo]\s+.*$/i, '').trim();
+      return c && !/\bvaras?\b|c[íi]vel|juizado|\bforo\b|^\d+\s*[ªºa]/i.test(c) ? c : null;
+    })(),
     data_leilao: pracasDatadas[0]?.data || base.data_leilao || extrairData(html),
     data_leilao_2: pracasDatadas[1]?.data || null,
     numero_matricula: base.numero_matricula || null,

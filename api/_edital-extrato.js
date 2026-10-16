@@ -109,12 +109,35 @@ export function ehDocMultiLote(texto) {
   // 4ª forma (05/10, #50 — edital de consolidação da Caixa, 146 páginas): lista os imóveis pela
   // MATRÍCULA. 3+ matrículas distintas = vários imóveis (lote único cita a sua e, às vezes, a de
   // origem — por isso 3, não 2). Errar aqui só deixa de extrair identidade: o lado seguro.
-  const mats = new Set([...t.matchAll(/matr[íi]cula\s*(?:n[ºo°.]?\s*)?:?\s*(\d[\d.]{2,9})/gi)].map((m) => m[1].replace(/\D/g, '')));
-  return mats.size >= 3;
+  const mats = matriculasDistintas(t);
+  if (mats >= 3) return true;
+  // 5ª forma (16/10, SUBLIME 5ª Vara de Franca): um lote principal com os bens por LETRA —
+  // "(A) – PRÉDIO RESIDENCIAL ... MATRÍCULA Nº 15.839" / "(B) – GLEBA DE TERRAS ... MATRÍCULA Nº 17.677".
+  // Sem "Lote N" e com 2 matrículas só, passava como lote único: a casa recebeu o número da gleba
+  // e a gleba (10,55 ha) a área de 250 m² e o endereço da casa. Exige 2+ matrículas junto com as
+  // letras: "a) pagamento à vista; b) parcelado" de edital de lote único não é enumeração de bens.
+  return itensPorLetra(t).length >= 2 && mats >= 2;
+}
+
+const matriculasDistintas = (t) =>
+  new Set([...String(t || '').matchAll(/matr[íi]cula\s*(?:n[ºo°.]?\s*)?:?\s*(\d[\d.]{2,9})/gi)].map((m) => m[1].replace(/\D/g, ''))).size;
+// Bens enumerados por letra no INÍCIO da linha: "(A) –", "A) -", "B) :". Devolve só a 1ª ocorrência
+// de cada letra, em ordem — são as fronteiras dos blocos.
+function itensPorLetra(t) {
+  const vistos = new Set();
+  return [...String(t || '').matchAll(/^[ \t]*\(?([A-J])\)[ \t]*[–\-:]/gm)]
+    .filter((m) => !vistos.has(m[1]) && vistos.add(m[1]));
 }
 
 export function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
-  const marcas = [...String(texto || '').matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
+  texto = String(texto || '');
+  // Bens por letra (5ª forma acima) vêm ANTES de "lote N": num documento assim, "lote 04 da quadra
+  // 17" e "confrontando com o lote 06" são endereço, e usá-los como fronteira devolvia um bloco
+  // que começava no meio do bem (A) e ia até o fim do (B) — com os dois imóveis dentro.
+  const letras = itensPorLetra(texto);
+  const marcas = letras.length >= 2 && matriculasDistintas(texto) >= 2
+    ? letras
+    : [...texto.matchAll(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/gi)];
   if (marcas.length < 2) return null;
   const fmtBr = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const alvo = [valorAvaliacao, valorMinimo].map(Number).filter((v) => v > 0).map(fmtBr);

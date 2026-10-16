@@ -82,6 +82,26 @@
   - Conector Supabase travou (confirmação invisível) em `apply_migration` com `tg_op = 'DELETE'` no corpo e num
     UPDATE de texto longo em `pendencias_projeto`; contornado reescrevendo a condição (`not in ('INSERT','UPDATE')`)
     e usando `pendencia_fechar` + insert.
+- **Pendência 225 (16/10, noite) — invariantes zerados, exceto o de marketing (147, dono):**
+  - **matricula_area_de_outro_lote (3) era contaminação REAL — 5ª forma de edital multi-bem.** SUBLIME, 5ª Vara de
+    Franca: o edital enumera os bens por LETRA ("(A) – PRÉDIO RESIDENCIAL ... MATRÍCULA Nº 15.839" / "(B) – GLEBA ...
+    MATRÍCULA Nº 17.677"), sem "Lote N" e com só 2 matrículas → `ehDocMultiLote` dizia lote único. Pior:
+    `isolarBlocoDoLote` usava "lote 04 da quadra"/"lote 06" (ENDEREÇO da casa) como fronteira e devolvia um bloco com
+    os dois bens, que a captura tratava como isolado. Casa ficou com o número da gleba; gleba (10,55 ha) com 250 m² e
+    a rua da casa. Conserto: bens por letra contam como enumeração quando há 2+ matrículas, e viram as fronteiras do
+    bloco antes de "lote N". Teste com o texto real (`edital-de-varios-lotes-nao-empresta-matricula.mjs`, +6 casos).
+    Dados dos 3 corrigidos conferindo edital e matrícula (Firecrawl — o container não alcança o site nem o Storage).
+  - **doc_debito_maior_que_avaliacao: débito REAL**, não leitura errada — edital diz condomínio R$ 497.627,40 contra
+    avaliação R$ 409.814,67 (Santos, SUBLIME 3438). Invariante passa a ler `qa_invariante_explicada`; caso explicado.
+  - **data_edital_recuou_prazo:** anomalia 344 obsoleta (as duas datas passaram; lote remarcado p/ 13/11) — resolvida.
+  - **lote_sem_area_nem_matricula media outra coisa (forma nº 10):** "sem matrícula" = sem link no JSON; 104 dos 110
+    BIASI TÊM matrícula (`tem_matricula_doc`). Usa o selo agora. O salto 402→449 foi o RJLEILOES voltando (39 novos).
+  - **veiculo_cidade_fora_do_ibge 33→25:** gatilho `trg_veiculo_local` só tirava UF em "Cidade/UF"; SUPERBID manda
+    "Cuiabá - Mt". Aceita "- UF", "(UF)" e "Do Oeste"→"D'Oeste". Restam distritos (Indápolis, Santa Zélia), nomes
+    ambíguos sem UF e **3 do SUPORTE com o MODELO do veículo como cidade ("Onibus M.benz"/estado "LO")** — defeito
+    do coletor, pendência nova.
+  - **Coletor SUBLIME:** campo "Comarca" às vezes vinha com a VARA ("5ª Vara Cível" virou cidade); agora vara não é
+    cidade e "Franca do Estado de São Paulo" vira "Franca" (`scripts/scraper-pecini.mjs`).
 
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 
