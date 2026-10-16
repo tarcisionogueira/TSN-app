@@ -488,7 +488,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     // cliente de e-mail: encaminhar leva os anexos; responder leva só o texto. Vai a REFERÊNCIA de
     // cada anexo (mensagem + id ou posição); o servidor busca o arquivo e recusa o envio se faltar um.
     const encaminhar_anexos = msgs.flatMap((m) => (m.anexos || []).map((a, i) => ({ id: m.id, anexo_id: a.id || undefined, anexo_idx: i, nome: a.nome || 'anexo' }))
-      .filter((x, i) => { const a = (m.anexos || [])[i]; return a && (a.id || a.arquivo || (m.direcao === 'saida' && m.resend_email_id)); }));
+      .filter((x, i) => { const a = (m.anexos || [])[i]; return a && a.enviado !== false && (a.id || a.arquivo || (m.direcao === 'saida' && m.resend_email_id)); }));
     abrirCompor({ de: dePadrao, para: '', cc: '', assunto: `Fwd: ${String(ult?.assunto || '').replace(RE_PREFIXO, '')}`, texto: corpo.slice(0, 18000), responder_a: null, encaminhar_anexos });
   }
 
@@ -741,7 +741,11 @@ export default function CaixaEmail({ soPessoal = false }) {
 
                   {(m.anexos || []).length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
-                      {m.anexos.map((a, i) => (a.id || (nossa && m.resend_email_id))
+                      {m.anexos.map((a, i) => a.enviado === false
+                        // 16/10: anexo que NÃO foi no e-mail (o servidor não conseguiu baixar, ou o Resend
+                        // não entregou). Mostrar como clicável fingia um envio que não aconteceu.
+                        ? <span key={i} title={a.motivo || ''} style={{ fontSize: 12, color: '#b91c1c', textDecoration: 'line-through' }}><Paperclip size={12} /> {a.nome} — não foi no e-mail</span>
+                        : (a.id || (nossa && m.resend_email_id))
                         ? <button key={i} onClick={() => baixarAnexo(m, a, i)} style={{ ...btn(false), fontWeight: 600 }}><Paperclip size={12} /> {a.nome}</button>
                         : <span key={i} style={{ fontSize: 12, color: '#94a3b8' }}><Paperclip size={12} /> {a.nome}{nossa ? '' : ' (indisponível)'}</span>)}
                     </div>

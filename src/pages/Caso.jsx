@@ -1025,7 +1025,7 @@ export default function Caso() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar e-mail ao advogado');
       await carregarCaso();
-      setMsg(`📨 Documentação enviada ao advogado (${d.advogado}) com ${d.anexos} anexo(s). A devolutiva chega por e-mail e aparece no Atendimento. Prazo de 10 dias.`);
+      setMsg(`📨 Documentação enviada ao advogado (${d.advogado}) com ${d.anexos} anexo(s). A devolutiva chega por e-mail e aparece no Atendimento. Prazo de 10 dias.${d.aviso ? ` ⚠️ ${d.aviso}` : ''}`);
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {

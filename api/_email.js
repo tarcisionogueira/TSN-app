@@ -266,6 +266,60 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
   return enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey });
 }
 
+// ── ANEXO POR LINK É BAIXADO AQUI (16/10) ───────────────────────────────────────────────────
+// Antes, anexo com `path` ia para o Resend buscar sozinho no ato do envio. Quando a busca falha
+// (link do leiloeiro com login, tempo, arquivo grande), o Resend DESCARTA o anexo sem erro — e
+// nós gravávamos `enviado: true`. Auditoria de 16/10: 4 de 11 e-mails com anexo saíram faltando
+// documento (dois "Apoio jurídico"/"Contato" de 15/10 sem matrícula e edital; um com ZERO de
+// 2 e outro com ZERO de 5). Agora o servidor baixa cada arquivo e manda o CONTEÚDO: o que não
+// baixou fica de fora E É DITO (`anexos_status`), para a tela avisar e o registro não mentir.
+// Limite do Resend: 40 MB por e-mail DEPOIS do base64 (+33%) → 28 MB de arquivo, folgado.
+const ANEXO_MAX_BYTES = 20 * 1024 * 1024;
+const ANEXOS_MAX_TOTAL = 28 * 1024 * 1024;
+
+// base64 sem Buffer: os envios rodam em edge (sem Buffer) e em Node.
+function paraBase64(bytes) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+async function materializarAnexos(attachments) {
+  const baixados = await Promise.all(attachments.map(async (a) => {
+    if (!a?.path || a.content) return { a, ok: true };
+    try {
+      const r = await fetch(a.path, {
+        redirect: 'follow', signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBot/1.0)', Accept: '*/*' },
+      });
+      if (!r.ok) return { a, ok: false, motivo: `o arquivo não abriu (HTTP ${r.status})` };
+      const tipo = (r.headers.get('content-type') || '').split(';')[0].trim();
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (!bytes.length) return { a, ok: false, motivo: 'arquivo vazio' };
+      if (bytes.length > ANEXO_MAX_BYTES) return { a, ok: false, motivo: `arquivo de ${Math.round(bytes.length / 1048576)} MB, acima do limite por anexo` };
+      if (/text\/html/i.test(tipo) && !/\.html?$/i.test(a.filename || '')) return { a, ok: false, motivo: 'o link devolveu uma página (exige login?), não o arquivo' };
+      return { a, ok: true, bytes, tipo };
+    } catch (e) {
+      return { a, ok: false, motivo: e?.name === 'TimeoutError' ? 'tempo esgotado ao baixar o arquivo' : String(e?.message || e).slice(0, 120) };
+    }
+  }));
+  const prontos = [];
+  const status = [];
+  let total = 0;
+  for (const b of baixados) {
+    const nome = b.a?.filename || 'anexo';
+    if (!b.ok) { status.push({ nome, enviado: false, motivo: b.motivo }); continue; }
+    if (!b.bytes) { prontos.push(b.a); status.push({ nome, enviado: true }); continue; }
+    if (total + b.bytes.length > ANEXOS_MAX_TOTAL) { status.push({ nome, enviado: false, motivo: 'a soma dos anexos passou do limite do e-mail' }); continue; }
+    total += b.bytes.length;
+    const { path, ...resto } = b.a; // eslint-disable-line no-unused-vars
+    prontos.push({ ...resto, content: paraBase64(b.bytes), ...(resto.content_type || !b.tipo ? {} : { content_type: b.tipo }) });
+    status.push({ nome, enviado: true });
+  }
+  return { prontos, status };
+}
+
 // Envio de verdade, sem checar orçamento (quem chama já garantiu isso). Exportado só para
 // `drenar-fila-emails-cron.js` — todo o resto deve chamar `enviarEmail`.
 export async function enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
@@ -318,7 +372,13 @@ export async function enviarEmailAgora({ from, to, cc, subject, html, text, atta
   if (text) payload.text = text;
   if (replyTo) payload.reply_to = replyTo;
   if (headers) payload.headers = headers;
-  if (attachments?.length) payload.attachments = attachments;
+  // `anexos_status` tem a MESMA ordem de `attachments` (nomes repetidos são comuns: "Documento.pdf" ×3).
+  let anexosStatus = null;
+  if (attachments?.length) {
+    const m = await materializarAnexos(attachments);
+    anexosStatus = m.status;
+    if (m.prontos.length) payload.attachments = m.prontos;
+  }
 
   let out;
   try {
@@ -335,6 +395,7 @@ export async function enviarEmailAgora({ from, to, cc, subject, html, text, atta
       registrarUso('resend', 'email', { unidades: n });
       out = { ok: true, id: data?.id || null };
     }
+    if (anexosStatus) out.anexos_status = anexosStatus;
   } catch (e) {
     out = { ok: false, error: String(e?.message || e) };
   }

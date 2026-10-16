@@ -80,7 +80,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
       if (d.semContato) { setMsg('Informe um e-mail válido — não há contato cadastrado para este destino ainda.'); return; }
-      const base = `📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}`;
+      const base = `📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}${d.aviso ? ` ⚠️ ${d.aviso}` : ''}`;
       setMsg(base);
       const eraLeiloeiro = emailPreview.destino === 'leiloeiro';
       setEmailPreview(null);

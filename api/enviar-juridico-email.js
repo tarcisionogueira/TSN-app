@@ -210,7 +210,9 @@ export default async function handler(req) {
         de_nome: perfil.nome || null, para: toList, cc: ccList,
         assunto: `Análise documental para confirmação de viabilidade — Caso ${refCurto}`,
         html, resend_email_id: r.id || null,
-        anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
+        // 16/10: o que FOI de fato (ver api/_email.js, materializarAnexos).
+        anexos: attachments.map((a, i) => ({ nome: a.filename, enviado: r.anexos_status?.[i]?.enviado !== false,
+          ...(r.anexos_status?.[i]?.enviado === false ? { motivo: r.anexos_status[i].motivo } : {}) })),
       }),
     });
     if (!rc.ok) console.error('[enviar-juridico-email] registro na caixa HTTP', rc.status);
@@ -246,5 +248,7 @@ export default async function handler(req) {
         conteudo: `📨 Documentação enviada ao advogado (${advNome}) por e-mail, solicitando análise da documentação com brevidade. Aguardando devolutiva jurídica.`, anexos: [] } });
   }
 
-  return json({ ok: true, advogado: advNome, anexos: attachments.length });
+  const naoEnviados = (r.anexos_status || []).filter(s => s.enviado === false);
+  return json({ ok: true, advogado: advNome, anexos: attachments.length - naoEnviados.length, anexosNaoEnviados: naoEnviados,
+    ...(naoEnviados.length ? { aviso: `E-mail enviado SEM: ${naoEnviados.map(s => `${s.nome} (${s.motivo})`).join('; ')}. Envie esses documentos ao advogado por outro meio.` } : {}) });
 }

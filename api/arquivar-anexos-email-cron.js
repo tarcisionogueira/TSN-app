@@ -56,9 +56,16 @@ async function resendJson(path) {
   return { status: r.status, j };
 }
 
+// Nome comparável: o Resend devolve o filename como foi enviado, mas acento composto/decomposto e
+// caixa variam entre quem gravou e quem lê.
+const nomeCmp = (n) => String(n || '').normalize('NFC').trim().toLowerCase();
+
+// Anexo enviado que o Resend NÃO entregou (16/10). Não é falha a tentar de novo: é fato a registrar.
+class NaoEntregue extends Error {}
+
 // Devolve { bytes, contentType } ou lança com o motivo (nunca "vazio" calado).
-async function baixar(msg, anexo, idx, cacheEnviados) {
-  let url = null, tipo = anexo?.content_type || null;
+async function baixar(msg, anexo, idx, cacheEnviados, usados) {
+  let url = null, tipo = anexo?.content_type || null, alvoId = null;
   if (msg.direcao === 'entrada') {
     if (!anexo?.id) throw new Error('anexo recebido sem id do Resend');
     const { status, j } = await resendJson(`/emails/receiving/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(anexo.id)}`);
@@ -73,8 +80,13 @@ async function baixar(msg, anexo, idx, cacheEnviados) {
       cacheEnviados.set(msg.id, itens);
     }
     const itens = cacheEnviados.get(msg.id);
-    const alvo = itens.find(a => a?.filename === anexo?.nome) || itens[idx];
-    if (!alvo) throw new Error('anexo enviado não listado pelo Resend');
+    // SÓ PELO NOME (16/10). A reserva `|| itens[idx]` (pela posição) guardou "Condições Gerais.pdf"
+    // com o nome "Matrícula.pdf" quando a matrícula não tinha ido. Nome repetido ("Documento.pdf" ×3):
+    // cada item do Resend serve a UM anexo só (`usados`).
+    const alvo = itens.find(a => a?.id && !usados.has(a.id) && nomeCmp(a?.filename) === nomeCmp(anexo?.nome));
+    if (!alvo) throw new NaoEntregue('o Resend não entregou este anexo (não consta no e-mail enviado)');
+    usados.add(alvo.id);
+    alvoId = alvo.id;
     url = alvo.download_url || null;
     if (!url && alvo.id) {
       const { status, j } = await resendJson(`/emails/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(alvo.id)}`);
@@ -87,7 +99,7 @@ async function baixar(msg, anexo, idx, cacheEnviados) {
   if (!hostPermitido(url)) throw new Error(`download_url com host fora da allowlist: ${(() => { try { return new URL(url).hostname; } catch { return '?'; } })()}`);
   const bin = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!bin.ok) throw new Error(`download HTTP ${bin.status}`);
-  return { bytes: new Uint8Array(await bin.arrayBuffer()), contentType: tipo || bin.headers.get('content-type') || 'application/octet-stream' };
+  return { bytes: new Uint8Array(await bin.arrayBuffer()), contentType: tipo || bin.headers.get('content-type') || 'application/octet-stream', resendId: alvoId };
 }
 
 // Named export `GET` (27/09): no runtime Node, `export default` que devolve `Response` é IGNORADO
@@ -113,20 +125,29 @@ export async function GET(req) {
     if (Date.now() - T0 > ORCAMENTO_MS) { out.cortado = true; break; }
     const anexos = Array.isArray(msg.anexos) ? msg.anexos.map(a => ({ ...a })) : [];
     let mudou = false;
+    // Itens do Resend já casados em rodadas anteriores não servem de novo (nome repetido).
+    const usados = new Set(anexos.map(a => a?.resend_anexo_id).filter(Boolean));
     for (let idx = 0; idx < anexos.length; idx++) {
       const a = anexos[idx];
-      if (a?.arquivo) continue;
+      if (a?.arquivo || a?.enviado === false) continue;
       try {
-        const { bytes, contentType } = await baixar(msg, a, idx, cacheEnviados);
+        const { bytes, contentType, resendId } = await baixar(msg, a, idx, cacheEnviados, usados);
         const nome = String(a?.nome || 'anexo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_').slice(0, 120);
         const path = `email/${msg.id}/${idx}_${nome}`;
         const up = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos/${path}`, {
           method: 'POST', headers: { ...sbH(), 'Content-Type': contentType, 'x-upsert': 'true' }, body: bytes,
         });
         if (!up.ok) throw new Error(`storage HTTP ${up.status} ${(await up.text()).slice(0, 120)}`);
-        anexos[idx] = { ...a, arquivo: path, arquivado_em: new Date().toISOString(), tamanho: a?.tamanho ?? bytes.length, content_type: a?.content_type || contentType };
+        anexos[idx] = { ...a, arquivo: path, arquivado_em: new Date().toISOString(), ...(resendId ? { resend_anexo_id: resendId } : {}), tamanho: a?.tamanho ?? bytes.length, content_type: a?.content_type || contentType };
         mudou = true; out.arquivados++;
       } catch (e) {
+        if (e instanceof NaoEntregue) {
+          // Registra a verdade e sai da fila (antes: tentava de novo a cada rodada, para sempre).
+          anexos[idx] = { ...a, enviado: false, motivo: e.message };
+          mudou = true; out.nao_entregues = (out.nao_entregues || 0) + 1;
+          console.error('[arquivar-anexos] não entregue', msg.id, a?.nome);
+          continue;
+        }
         out.falhas.push({ email_caixa: msg.id, anexo: a?.nome || idx, motivo: String(e?.message || e).slice(0, 160) });
         console.error('[arquivar-anexos] falha', msg.id, a?.nome, String(e?.message || e).slice(0, 160));
       }

@@ -465,7 +465,9 @@ export default async function handler(req) {
         para: destinatarios, cc: ccList,
         assunto: `${destino === 'leiloeiro' ? 'Contato' : 'Apoio jurídico'} — ${labelLote}`.slice(0, 500),
         texto: textoFinal, html, resend_email_id: r.id || null, lido: true, enviado_por: user.id,
-        anexos: attachments.map(a => ({ nome: a.filename, enviado: true })),
+        // 16/10: o que FOI de fato (o servidor baixa cada anexo; o que não baixou fica de fora e é dito).
+        anexos: attachments.map((a, i) => ({ nome: a.filename, enviado: r.anexos_status?.[i]?.enviado !== false,
+          ...(r.anexos_status?.[i]?.enviado === false ? { motivo: r.anexos_status[i].motivo } : {}) })),
       }) });
       if (!rc.ok) console.error('[enviar-email-caso] registro na caixa HTTP', rc.status);
     } catch (e) { console.error('[enviar-email-caso] registro na caixa falhou:', String(e?.message || e)); }
@@ -483,5 +485,8 @@ export default async function handler(req) {
   const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : novos;
   for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, leiloeiro: lote?.leiloeiro || null, advogadoId: caso?.advogado_id, nomeRemetente });
 
-  return json({ ok: true, destinatario: destinatarioEmail, anexos: attachments.length, contatoSalvo: aSalvar.length > 0, contatosSalvos: aSalvar.length });
+  const naoEnviados = (r.anexos_status || []).filter(s => s.enviado === false);
+  return json({ ok: true, destinatario: destinatarioEmail, anexos: attachments.length - naoEnviados.length, anexosNaoEnviados: naoEnviados,
+    ...(naoEnviados.length ? { aviso: `E-mail enviado SEM ${naoEnviados.length === 1 ? 'este anexo' : 'estes anexos'}: ${naoEnviados.map(s => `${s.nome} (${s.motivo})`).join('; ')}. Reenvie o documento por outro meio ou anexe o arquivo à mão.` } : {}),
+    contatoSalvo: aSalvar.length > 0, contatosSalvos: aSalvar.length });
 }

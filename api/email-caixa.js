@@ -342,6 +342,14 @@ export default async function handler(req) {
 
   // Registro na caixa (Enviados). O e-mail JÁ SAIU — falha aqui é só histórico: avisa, não esconde.
   const avisos = [];
+  // 16/10: anexo que o servidor não conseguiu baixar NÃO foi junto — registro e tela dizem isso.
+  // `anexos_status` tem a mesma ordem de `anexosEnvio`, que é a mesma de `anexosRegistro`.
+  (r.anexos_status || []).forEach((st, i) => {
+    if (st?.enviado === false && anexosRegistro[i]) {
+      anexosRegistro[i] = { ...anexosRegistro[i], enviado: false, motivo: st.motivo };
+      avisos.push(`"${st.nome}" NÃO foi anexado: ${st.motivo}`);
+    }
+  });
   if (r.id) {
     const ja = await sb(`email_caixa?resend_email_id=eq.${encodeURIComponent(r.id)}&select=id&limit=1`);
     const linhas = ja.ok ? await ja.json().catch(() => null) : null;

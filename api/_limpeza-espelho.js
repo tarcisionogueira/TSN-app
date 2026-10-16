@@ -20,6 +20,16 @@ export async function limparEspelho({ url, key, aplicar = false, prazoMs = 24000
   const lista = (paths) => paths.map((p) => `"${String(p).replace(/"/g, '')}"`).join(',');
   const r = { rodadas: 0, expirados: 0, dups: 0, bytes: 0, reapontados: 0, falhas: 0, erro: null, amostra: [] };
 
+  // URL assinada de 1 ano (o mesmo prazo do coletor da ZUK) para o arquivo que FICA.
+  async function assinar(path) {
+    const res = await fetch(`${url}/storage/v1/object/sign/${BUCKET}/${path}`, {
+      method: 'POST', headers: h, body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }), signal: AbortSignal.timeout(15000),
+    }).catch(() => null);
+    if (!res?.ok) return null;
+    const j = await res.json().catch(() => null);
+    return j?.signedURL ? `${url}/storage/v1${j.signedURL}` : null;
+  }
+
   async function apagar(paths) {
     if (!paths.length) return [];
     const res = await fetch(`${url}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: h, body: JSON.stringify({ prefixes: paths }) });
@@ -52,7 +62,13 @@ export async function limparEspelho({ url, key, aplicar = false, prazoMs = 24000
     for (let i = 0; i < dups.length; i += 8) {
       await Promise.all(dups.slice(i, i + 8).map(async (c) => {
         const corpo = (campo) => JSON.stringify({ [campo]: c.canonico });
-        const a = await rest(`imovel_anexos?storage_path=eq.${encodeURIComponent(c.path)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: corpo('storage_path') }).catch(() => null);
+        // 16/10: trocar SÓ o storage_path deixava a `url` do anexo na duplicata que vai ser apagada,
+        // e o gatilho copiava essa url morta para imoveis_leilao.link_matricula (22 lotes ZUK com
+        // selo verde sobre arquivo inexistente). Agora o anexo leva junto a url ASSINADA do canônico;
+        // sem conseguir assinar, não reaponta nem apaga esta duplicata.
+        const assinada = await assinar(c.canonico);
+        if (!assinada) { r.falhas++; log(`assinar canônico falhou ${c.canonico}`); return; }
+        const a = await rest(`imovel_anexos?storage_path=eq.${encodeURIComponent(c.path)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ storage_path: c.canonico, url: assinada }) }).catch(() => null);
         const e = await rest(`documento_espelho?storage_path=eq.${encodeURIComponent(c.path)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: corpo('storage_path') }).catch(() => null);
         if (a?.ok && e?.ok) {
           const na = (await a.json().catch(() => [])).length || 0;
