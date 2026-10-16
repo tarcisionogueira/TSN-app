@@ -107,6 +107,17 @@
     as guias; aqui é só registro. Comprovantes de ITBI marcados `ignorado`. Andamentos gravados: 24/09 devolução do
     Cartório de Cotia (prot. 424.222) e 07/10 pedido de reconsideração do item 2 da decisão (carta de arrematação
     antes da quitação, com hipoteca — item 2.17 "l" do edital + art. 895 §1º CPC), diligência com o juiz em 09/10.
+    **Plano do dono (16/10, pendência #217):** decidido o pedido e concluído o registro no CRI de Cotia, a Cajado de
+    Menezes SUBSTABELECE SEM RESERVA ao advogado próprio do Rafael e o caso sai do nosso acompanhamento. Se o juiz
+    negar, o registro só sai após a 30ª parcela (dez/2028) — rever. Até lá: comprovantes com o BidPro em cópia.
+- **A IA não lê documentos juntados ao processo (16/10, pergunta do dono):** DataJud = só movimentos ("juntada de
+  petição", sem conteúdo); DJEN = textos publicados (decisões/despachos), esses sim lidos. Petição/comprovante do
+  advogado ficam no PJe, que exige OAB/certificado. Caminho: comprovante por e-mail com o BidPro em cópia (já liga
+  sozinho à parcela). Ideia não construída: ao ver "juntada" perto de um vencimento, pedir o comprovante ao advogado.
+- **Fechamento da sessão 15-16/10.** Aberto em `pendencias_projeto`: #216 (aprovação de guia pela tela não chegou ao
+  servidor — conferir na Parcela 2 do Marcos, antes de 13/11) e #217 (Rafael: substabelecimento sem reserva após o
+  registro). Marcos: entrada + 1/16 pagas; próxima pagar até 13/11. Rafael: entrada + 1/30 pagas; 2 e 3 sem comprovante;
+  4 pagar até 20/10.
 - **Relatórios de caso com lote fora do acervo (15/10, dono):** workflow `gerar-relatorios-caso.yml`
   (`scripts/gerar-relatorios-caso.mjs`): completa o lote-marcador só onde está vazio (0 conta como vazio), liga ao lote
   os documentos do caso (matrícula/edital: um por tipo, índice único), gera documental → mercadológico (tipo/área do
