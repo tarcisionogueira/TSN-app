@@ -32,6 +32,14 @@
   **Divergência corrigida:** 2 e-books pagos (R$ 29,90 — "Lucre Antes de Arrematar" e "O Lance Que Muda Tudo") estavam
   com `comissao_pct = 0`, contra o item 3(b) do termo; 2 cursos inativos com 30%. Todos em 25%
   (`20261016_comissao_produtos_25pct.sql`). Sem dano retroativo: `compras_produtos` está vazia (nenhuma venda de produto).
+- **Rede (níveis 2+ e bônus infinito) só em ASSINATURA e CURSO (dono, 16/10)** — regra `comissao.rede_escopo`
+  (`20261016_rede_so_assinatura_e_curso.sql`). Assessoria/Clube (`venda_direta`) passou a pagar só o nível 1 (função
+  corta em 1 e sem infinito; níveis 2+ zerados na tabela). Curso ganhou rede: `distribuir_comissao_rede_curso`, chamada
+  por `confirmar_compra_produto` só para `curso` — sobe a partir de QUEM VENDEU (last-touch), nível 1 já pago ali (25%),
+  níveis 2+ = `comissao_regras` tipo `produto` (4/3/2/2/1), infinito incluído. E-book e êxito: só direta.
+  Prova em seco (desfeita): assessoria R$ 1.000 → só n1 R$ 100; curso R$ 1.000 com upline pagante → n2 R$ 40, sem
+  repetir o n1; upline admin em n2 não recebe (`comissao.profundidade_por_papel`: n2+ só para pagante). Auditorias
+  de regras e segurança: 0/0. Termo do parceiro **v12** (item 3).
 
 ## 15/10 — abertura: link de matrícula morto (3ª volta), FRANCOLEILOES pelo feed, JMF explicada
 

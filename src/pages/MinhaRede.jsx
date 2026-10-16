@@ -721,7 +721,7 @@ export default function MinhaRede() {
             })}
           </div>
           <div style={{ fontSize: 10.5, color: '#94a3b8', margin: '0 20px', padding: '10px 0 16px', borderTop: '1px solid #f1f5f9', lineHeight: 1.55 }}>
-            No <strong>1º nível</strong> (sua indicação direta) você recebe <strong>{indicacaoPct}%</strong> das <strong>assinaturas</strong> (ex.: Investidor Pro) e das vendas da <strong>loja</strong> (e-books e cursos). Os produtos de <strong>alto ticket</strong> — <strong>Assessoria</strong> e <strong>Leilão Club</strong> — pagam <strong>{Number(nivel?.indicacao_por_tipo?.venda_direta ?? 10)}%</strong> no 1º nível. A comissão é sempre <strong>mediante o pagamento recebido</strong>: em assinatura recorrente, <strong>mês a mês</strong>; em compra à vista ou parcelada recebida de uma vez, <strong>de uma vez</strong>. Os níveis 2+ da rede recebem percentuais menores.
+            No <strong>1º nível</strong> (sua indicação direta) você recebe <strong>{indicacaoPct}%</strong> das <strong>assinaturas</strong> (ex.: Investidor Pro) e das vendas da <strong>loja</strong> (e-books e cursos). Os produtos de <strong>alto ticket</strong> — <strong>Assessoria</strong> e <strong>Leilão Club</strong> — pagam <strong>{Number(nivel?.indicacao_por_tipo?.venda_direta ?? 10)}%</strong>, só na indicação direta. A comissão é sempre <strong>mediante o pagamento recebido</strong>: em assinatura recorrente, <strong>mês a mês</strong>; em compra à vista ou parcelada recebida de uma vez, <strong>de uma vez</strong>. Os níveis 2+ da rede recebem percentuais menores, e só sobre <strong>assinaturas</strong> e <strong>cursos</strong>.
           </div>
         </div>
       )}
