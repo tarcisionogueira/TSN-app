@@ -25,7 +25,12 @@
   `TurnstileWidget` agora mostra aviso + "Tentar novamente" em vez de sumir com o botão travado
   (e8bdbbd). Pendência 228 (P2, dono).
 - Fechadas: 2, 147, 197 (painel "Emitir guia" NÃO vai ao cliente — guia sempre pelo jurídico),
-  224 (Tamboré descartado; resto → 229).
+  224 (Tamboré descartado; resto → 229), 229 (dono falou por telefone).
+- **Regra do dono (17/10): lembrete de andamento ao jurídico SÓ para operação ARREMATADA.** Conversa
+  informativa (consulta, análise de lote, apoio pré-leilão) não recebe cobrança. Conferido: o
+  `casos-acompanhamento-cron` já filtra `status_etapa in (arrematado, honorarios_pagos,
+  procuracao_assinada, pos_arrematacao)` e `posse_em is null` — hoje 3 casos, os 3 com registro em
+  `arrematados`. Ao mexer nesse filtro, não incluir etapas pré-arremate.
 
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
 
