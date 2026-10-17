@@ -7,6 +7,26 @@
 
 
 
+## 17/10 — limpeza diária morria em timeout; login no 5G; pendências do dono
+
+- **`limpar-imoveis-stale` falhava TODO DIA (≥ 15/10) em statement timeout** no 1º passo
+  (`desativar_imoveis_cef_vencidos`): ~1.056 imóveis CEF que a Caixa tirou da lista, cada UPDATE
+  passando por ~30 triggers → não cabia em 8 s, nunca terminava, o backlog nunca diminuía (vitrine
+  com imóvel vendido). O pino genérico idem (63 → 177 no mesmo dia). Conserto
+  (`20261017_limpeza_diaria_em_lotes.sql`): RPCs `_lote` (200 linhas, ~3,8 s CEF / ~2,6 s pino) e o
+  cron chama em laço com orçamento de tempo. A seleção do pino foi reescrita agrupando por
+  coordenada — o EXISTS com `via_normalizada` dos dois lados estourava 8 s até com LIMIT; mesma
+  regra, mesmos 176 casos. Backlog drenado na mão: 1.056 CEF desativados, 176 pinos rebaixados,
+  sem timeout no app. `qa_invariantes` caiu de 14,1 s para 9,7 s.
+- **Lote SUPORTE 27407967 (Sandra Santos, SENAD):** `local` = "Chácara - MG" — Chácara É município
+  de MG (comarca de Juiz de Fora), mas o lote entrou sem estado/cidade/data/área. Corrigido à mão
+  (MG, Chácara, 12/11, 11,5 ha, matrícula 17.468). Causa no coletor não investigada (1 lote).
+- **Login:** iPhone do dono no 5G não alcançava supabase.co nem o Turnstile (no Wi-Fi entrou).
+  `TurnstileWidget` agora mostra aviso + "Tentar novamente" em vez de sumir com o botão travado
+  (e8bdbbd). Pendência 228 (P2, dono).
+- Fechadas: 2, 147, 197 (painel "Emitir guia" NÃO vai ao cliente — guia sempre pelo jurídico),
+  224 (Tamboré descartado; resto → 229).
+
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
 
 - **Timeout (57014), causa por causa — medido isolado antes de mexer:**

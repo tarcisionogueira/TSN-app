@@ -25,6 +25,23 @@ export default async function handler(req, res) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   });
+  // EM LOTES (17/10): um UPDATE só sobre ~1.000 linhas atravessa ~30 triggers e estoura os 8 s do
+  // statement_timeout TODO DIA — e como nunca termina, o backlog nunca diminui. As RPCs `_lote`
+  // tocam no máx. LOTE linhas; aqui chamamos até vir menos que LOTE ou acabar o orçamento.
+  const LOTE = 200;
+  const inicio = Date.now();
+  async function emLotes(fn, body, orcamentoMs) {
+    let total = 0;
+    for (let i = 0; i < 25 && Date.now() - inicio < orcamentoMs; i++) {
+      const r = await rpc(fn, { ...body, lote: LOTE });
+      if (!r.ok) return { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`, parcial: total };
+      const n = Number(await r.json());
+      if (!Number.isFinite(n)) return { erro: 'resposta sem contagem', parcial: total };
+      total += n;
+      if (n < LOTE) return total;
+    }
+    return { erro: `orçamento de tempo esgotou com backlog restante`, parcial: total };
+  }
 
   // 1) CEF (sweep por estado, já existente).
   // 13/10: falha AQUI saía com 500 sem log nenhum e PULAVA todos os passos abaixo (leiloeiro stale,
@@ -32,8 +49,7 @@ export default async function handler(req, res) {
   // já tinha tirado da lista seguiam na vitrine. Agora é um passo como os outros: falha vira alerta.
   let desativados = null;
   try {
-    const r = await rpc('desativar_imoveis_cef_vencidos', { margem: `${MARGEM_HORAS} hours` });
-    desativados = r.ok ? await r.json().catch(() => 0) : { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}` };
+    desativados = await emLotes('desativar_imoveis_cef_vencidos_lote', { margem: `${MARGEM_HORAS} hours` }, 25000);
   } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // 1b) CEF VENDIDO inferido (23/09): imóvel de leilão/licitação que SAIU da lista da Caixa a
@@ -73,8 +89,7 @@ export default async function handler(req, res) {
   // Aqui roda FORA de qualquer upsert, então pode tocar várias linhas sem risco de colisão.
   let pinos = null;
   try {
-    const r4 = await rpc('demover_pinos_genericos', {});
-    pinos = r4.ok ? await r4.json().catch(() => null) : { erro: (await r4.text().catch(() => '')).slice(0, 200) };
+    pinos = await emLotes('demover_pinos_genericos_lote', {}, 52000);
   } catch (e) { pinos = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // Best-effort NÃO pode ser invisível (23/08): a varredura do pino genérico morreu em
