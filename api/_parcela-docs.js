@@ -56,6 +56,8 @@ export function camposDaGuia(lido) {
     valor: valorOk(lido?.valor), vencimento: dataOk(lido?.vencimento),
     linha_digitavel: str(lido?.linha_digitavel, 70), pix: str(lido?.pix_copia_cola, 400), id_deposito: str(lido?.id_deposito, 30),
     banco: str(lido?.banco, 40), lida_em: new Date().toISOString(),
+    // Os 3 itens que o dono confere antes de aprovar (17/10): nome, processo e valor.
+    processo: str(lido?.processo, 40), depositante: str(lido?.depositante, 120),
   };
 }
 

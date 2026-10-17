@@ -144,6 +144,7 @@ async function processar(doc, { seco }) {
     await avisarDono({ casoId, assunto: `Guia da ${parcela.rotulo} recebida · aprove o envio · ${cliente}`, linhas: [
       cab,
       `Guia da <b>${esc(parcela.rotulo)}</b>: ${brl(guia.valor || parcela.valor)}. Pagar até <b>${dataBR(parcela.pagar_ate)}</b> (vencimento ${dataBR(parcela.venc)})${guia.vencimento ? `, validade da guia ${dataBR(guia.vencimento)}` : ''}.`,
+      `Conferir: <b>nome</b> ${esc(guia.depositante || 'não lido')} (cliente: ${esc(cliente)}) · <b>processo</b> ${esc(guia.processo || 'não lido')} (caso: ${esc(lote?.numero_processo || '—')}) · <b>valor</b> ${brl(guia.valor)} (parcela: ${brl(parcela.valor)}).`,
       ...(avisos.length ? [`<span style="color:#b45309">Atenção: ${esc(avisos.join(' '))}</span>`] : []),
       'O envio ao arrematante só sai depois da sua aprovação, no botão "Aprovar e enviar" da tela do caso.',
     ] });

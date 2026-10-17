@@ -96,6 +96,13 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>
                     {(st.aprovar || (g?.enviada_em && !x.paga)) && (confirmando === x.idx ? (
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        {st.aprovar && (
+                          <div style={{ fontSize: 11, color: '#334155', textAlign: 'left', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', lineHeight: 1.6 }}>
+                            <div><b>Nome:</b> {g?.depositante || 'não lido na guia'} <span style={{ color: '#64748b' }}>· caso: {dados.conferir?.cliente || '—'}</span></div>
+                            <div><b>Processo:</b> {g?.processo || 'não lido na guia'} <span style={{ color: '#64748b' }}>· caso: {dados.conferir?.processo || '—'}</span></div>
+                            <div><b>Valor:</b> {brl(g?.valor)} <span style={{ color: '#64748b' }}>· parcela: {brl(x.valor)}</span></div>
+                          </div>
+                        )}
                         <span style={{ fontSize: 11, color: '#334155' }}>Enviar ao arrematante: pagar até {dataBR(x.pagar_ate)}?</span>
                         <span style={{ display: 'inline-flex', gap: 6 }}>
                           <button onClick={() => aprovar(x)} disabled={enviando === x.idx}

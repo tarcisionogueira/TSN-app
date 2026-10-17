@@ -112,7 +112,11 @@ export default async function handler(req, res) {
       const docs = await sbGet(`caso_documentos?caso_id=eq.${casoId}&tipo=in.(guia_deposito,comprovante_pagamento)&select=id,tipo,titulo,nome,parcela_idx,parcela_status,parcela_aviso,criado_em&order=criado_em.desc&limit=40`);
       if (!a) { res.status(200).json({ ok: true, arrematado: null, itens: [], docs }); return; }
       const itens = cronograma(a.parcelamento, { valor: a.valor_arrematacao, dataArrematacao: a.data_arrematacao });
-      res.status(200).json({ ok: true, arrematado: { id: a.id, titulo: a.titulo, folga_dias: a.parcelamento.folga_dias ?? 1, entrada_paga_em: a.parcelamento.entrada_paga_em || null },
+      // Referência para a conferência da guia (17/10): nome do arrematante e processo do caso.
+      const [cli] = await sbGet(`perfis?id=eq.${caso.cliente_id}&select=nome`);
+      const [lote] = a.imovel_id ? await sbGet(`imoveis_leilao?id=eq.${a.imovel_id}&select=numero_processo`) : [];
+      res.status(200).json({ ok: true, conferir: { cliente: cli?.nome || null, processo: lote?.numero_processo || a.parcelamento?.fonte_doc?.processo || null },
+        arrematado: { id: a.id, titulo: a.titulo, folga_dias: a.parcelamento.folga_dias ?? 1, entrada_paga_em: a.parcelamento.entrada_paga_em || null },
         itens, guias: a.parcelamento.guias || {}, pagamentos: a.parcelamento.pagamentos || {}, docs });
     } catch (e) {
       console.error('[guia-parcela] listar:', e.message);

@@ -37,11 +37,10 @@
   nos webhooks); a classificação vem do GET `/api/honorario-recebimento` (`liquidacao`, `compensado`)
   e a tela do caso mostra o badge (92e5e7c). **Repasse do saldo só pelo sistema** (crédito em saldo):
   o `honorarios-liquidar-cron` só pega arrematação com advogado vinculado → depende da #198.
-- **#216 (guia): dono quer tirar o "aprovar"** — quem gera a guia é o advogado. Proposta: envio
-  automático ao cliente quando a guia passa nas conferências (processo = do caso, valor ±10%), e
-  aprovação manual só com aviso. NÃO aplicado: aguarda confirmação explícita do dono (envio de
-  cobrança sem revisão humana). Código pronto para `api/parcelas-documentos-cron.js` reaproveitando
-  o caminho de servidor que já existe em `api/guia-parcela.js` (CRON_SECRET + `aprovado_por`).
+- **#216 (guia): a APROVAÇÃO FICA (dono, 17/10)**, mas a conferência é só nome, processo e valor —
+  quem manda a guia é o advogado. A guia agora guarda `processo` e `depositante` lidos; a confirmação
+  na tela do caso e o e-mail ao dono mostram os 3 itens ao lado do que o caso diz (cliente, processo,
+  valor da parcela). Envio automático sem aprovação foi DESCARTADO.
 - **#140/#200 (Inter):** aguardando o e-mail de confirmação e liberação de uso do banco.
 
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
