@@ -52,9 +52,18 @@ export default async function handler(req, res) {
       const recebimentos = recR.ok ? await recR.json() : [];
       const somado = recebimentos.filter(r => r.status === 'confirmado').reduce((s, r) => s + Number(r.valor || 0), 0);
       const total = Number(arr.honorarios_valor) || 0;
+      // PAGAMENTO PARCIAL (17/10, dono): o cliente pode ter pago tudo (status 'pago' — e é esse status
+      // que impede uma 2ª cobrança) sem que o dinheiro tenha entrado: cartão a ~D+30, cheque pré-datado.
+      // Compensado = o que já está disponível; o resto é repassado pelo sistema conforme compensa.
+      const confirmados = recebimentos.filter(r => r.status === 'confirmado');
+      const compensadoDe = (r) => (r.compensado_em ? Number(r.valor_liquido ?? r.valor ?? 0) : Number(r.liquido_compensado || 0));
+      const compensado = Math.round(confirmados.reduce((s, r) => s + compensadoDe(r), 0) * 100) / 100;
+      const aCompensar = confirmados.filter(r => compensadoDe(r) < Number(r.valor_liquido ?? r.valor ?? 0) - 0.005).length;
+      const liquidacao = !confirmados.length ? 'pendente' : aCompensar ? 'parcial' : 'quitado';
       return res.status(200).json({
         ok: true, arrematacao_id: arr.id, honorarios_status: arr.honorarios_status,
         total, recebido: somado, saldo_restante: Math.max(0, Math.round((total - somado) * 100) / 100),
+        compensado, recebimentos_a_compensar: aCompensar, liquidacao,
         recebimentos,
       });
     } catch (e) {

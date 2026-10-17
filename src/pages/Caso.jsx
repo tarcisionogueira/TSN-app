@@ -1928,10 +1928,21 @@ export default function Caso() {
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
-                <Badge label={arrematacao.honorarios_status === 'pago' ? 'Honorários pagos' : 'Honorários pendentes'}
-                  color={arrematacao.honorarios_status === 'pago' ? '#10b981' : '#f59e0b'}
-                  bg={arrematacao.honorarios_status === 'pago' ? '#ecfdf5' : '#fef3c7'}/>
+                {(() => {
+                  // Pago pelo cliente ≠ dinheiro na conta (17/10): cartão compensa ~D+30, cheque na data dele.
+                  const parcial = arrematacao.honorarios_status === 'pago' && recebimentos?.liquidacao === 'parcial';
+                  const pago = arrematacao.honorarios_status === 'pago' || arrematacao.honorarios_status === 'distribuido';
+                  return <Badge label={parcial ? 'Pagamento parcial' : pago ? 'Honorários pagos' : 'Honorários pendentes'}
+                    color={parcial ? '#b45309' : pago ? '#10b981' : '#f59e0b'}
+                    bg={parcial ? '#fffbeb' : pago ? '#ecfdf5' : '#fef3c7'}/>;
+                })()}
               </div>
+              {isStaff && arrematacao.honorarios_status === 'pago' && recebimentos?.liquidacao === 'parcial' && (
+                <div style={{ padding:'10px 12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e', marginBottom:10, lineHeight:1.5 }}>
+                  Compensado <strong>{fmt(recebimentos.compensado)}</strong> de {fmt(recebimentos.total)} · {recebimentos.recebimentos_a_compensar} recebimento(s) a compensar.
+                  O saldo é repassado <strong>pelo sistema</strong> (crédito no saldo de cada um) conforme compensa — não repassar por fora.
+                </div>
+              )}
               {!arrematacao.em_nome_proprio && (
                 <div style={{ padding:'10px 12px', background:'#f8fafc', borderRadius:8, fontSize:12, color:'#475569' }}>
                   <strong>Beneficiário:</strong> {arrematacao.beneficiario_nome} (CPF: {arrematacao.beneficiario_cpf})
