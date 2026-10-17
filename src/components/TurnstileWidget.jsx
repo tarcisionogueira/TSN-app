@@ -23,8 +23,15 @@ function carregarScript() {
     s.async = true;
     s.defer = true;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Falha ao carregar o Turnstile'));
+    s.onerror = () => { scriptPromise = null; s.remove(); reject(new Error('Falha ao carregar o Turnstile')); };
     document.head.appendChild(s);
+    // Rede que não responde nem com erro (iCloud Private Relay, bloqueador, 5G instável) deixava a
+    // promessa pendente PARA SEMPRE: sem widget, sem token, botão travado e nenhum aviso (17/10).
+    setTimeout(() => {
+      if (window.turnstile) return;
+      scriptPromise = null; s.remove();
+      reject(new Error('Turnstile não carregou em 12 s'));
+    }, 12000);
   });
   return scriptPromise;
 }
@@ -43,6 +50,7 @@ export default function TurnstileWidget({ onVerify, onExpire, resetKey }) {
   const elRef = useRef(null);
   const widgetIdRef = useRef(null);
   const [erro, setErro] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     if (!SITE_KEY) return;
@@ -58,9 +66,10 @@ export default function TurnstileWidget({ onVerify, onExpire, resetKey }) {
           // travar o cadastro pra sempre numa tela sem saída — melhor deixar o gate normal
           // (sem Turnstile) do que um visitante legítimo preso por causa da infra do captcha.
           'error-callback': () => { setErro(true); onVerify?.(null); },
+          'unsupported-callback': () => { setErro(true); onVerify?.(null); },
         });
       })
-      .catch(() => setErro(true));
+      .catch((e) => { console.warn('[turnstile]', e?.message); setErro(true); });
     return () => {
       cancelado = true;
       if (widgetIdRef.current && window.turnstile) {
@@ -68,9 +77,23 @@ export default function TurnstileWidget({ onVerify, onExpire, resetKey }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey]);
+  }, [resetKey, tentativa]);
 
-  if (!SITE_KEY || erro) return null;
+  if (!SITE_KEY) return null;
+  // O Supabase EXIGE o token: sumir com o widget em silêncio deixava o botão apagado sem
+  // explicação (o visitante conclui que o site travou). A falha tem que ser dita, com saída.
+  if (erro) {
+    return (
+      <div role="alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', lineHeight: 1.5 }}>
+        Não foi possível carregar a verificação de segurança (Cloudflare). Verifique a conexão,
+        desative bloqueadores de conteúdo/VPN ou a Retransmissão Privada do iCloud e tente de novo.
+        <button type="button" onClick={() => { setErro(false); setTentativa(n => n + 1); }}
+          style={{ display: 'block', marginTop: 8, background: '#92400e', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
   return <div ref={elRef} style={{ margin: '4px 0' }} />;
 }
 
