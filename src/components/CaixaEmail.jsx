@@ -8,6 +8,7 @@ import { apiCall } from '../utils/apiCall';
 import EmailHtml from './EmailHtml';
 import CampoEmails, { separarEmails } from './CampoEmails';
 import RevisarTexto from './RevisarTexto';
+import CobrarPosicao from './CobrarPosicao';
 
 // ─── CAIXA DE E-MAIL DA EQUIPE (23/09, pedido do dono) ────────────────────────────────────
 // Tudo que chega em suporte@/contato@/privacidade@ (via webhook do Resend → `email_caixa`) e
@@ -710,6 +711,8 @@ export default function CaixaEmail({ soPessoal = false }) {
                 ? <button onClick={() => mover(() => 'lixeira', 'Movido para a Lixeira.')} style={btn(false)}><Trash2 size={13} /> Lixeira</button>
                 : <button onClick={() => mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.')} style={btn(false)}><Undo2 size={13} /> Restaurar</button>}
             </div>
+
+            {pasta !== 'spam' && pasta !== 'lixeira' && user?.id && <CobrarPosicao conversa={conversa} userId={user.id} onErro={setErro} onAviso={setAviso} />}
 
             <GuardaConversa conversa={conversa} onErro={setErro} onAviso={setAviso} soLeitura={soPessoal} />
 

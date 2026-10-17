@@ -42,6 +42,13 @@
   na tela do caso e o e-mail ao dono mostram os 3 itens ao lado do que o caso diz (cliente, processo,
   valor da parcela). Envio automático sem aprovação foi DESCARTADO.
 - **#140/#200 (Inter):** aguardando o e-mail de confirmação e liberação de uso do banco.
+- **"Cobrar posição" na caixa de e-mail (dono, 17/10).** Em conversa cuja última mensagem é envio da
+  caixa pessoal: liga cobrança a cada 7/15/30 dias, até 3 (`email_cobranca`, `CobrarPosicao.jsx`).
+  `api/email-cobranca-cron.js` (seg–sex 12h35 UTC) manda "Re:" do endereço do dono, com o original
+  citado, e para quando: resposta pelo +token (`resposta_de` em qualquer envio da cadeia) ou do mesmo
+  destinatário com o mesmo assunto; 3 cobranças sem resposta (avisa o dono); ou o dono desliga.
+  O quadro "Andamento com o jurídico" do caso ficou (liga/desliga e frequência dos arrematados), e a
+  trava do trigger `casos_protege_atribuicao` para `acompanhamento_*` (só admin) também.
 
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
 

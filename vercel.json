@@ -188,6 +188,10 @@
       "schedule": "20 12 * * 1-5"
     },
     {
+      "path": "/api/email-cobranca-cron",
+      "schedule": "35 12 * * 1-5"
+    },
+    {
       "path": "/api/caso-documentos-cron",
       "schedule": "40 * * * *"
     },
