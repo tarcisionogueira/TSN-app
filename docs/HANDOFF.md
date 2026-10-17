@@ -31,6 +31,18 @@
   `casos-acompanhamento-cron` já filtra `status_etapa in (arrematado, honorarios_pagos,
   procuracao_assinada, pos_arrematacao)` e `posse_em is null` — hoje 3 casos, os 3 com registro em
   `arrematados`. Ao mexer nesse filtro, não incluir etapas pré-arremate.
+- **#143 honorário do Marcos = PAGAMENTO PARCIAL (dono, 17/10).** O cliente pagou os R$ 54.835,52, mas
+  só R$ 2.163 (Pix) compensaram; cartão Asaas R$ 33.001 e 3 cheques (R$ 19.671,43, com o advogado) a
+  compensar. `honorarios_status` segue `pago` DE PROPÓSITO (é o que bloqueia 2ª cobrança no checkout e
+  nos webhooks); a classificação vem do GET `/api/honorario-recebimento` (`liquidacao`, `compensado`)
+  e a tela do caso mostra o badge (92e5e7c). **Repasse do saldo só pelo sistema** (crédito em saldo):
+  o `honorarios-liquidar-cron` só pega arrematação com advogado vinculado → depende da #198.
+- **#216 (guia): dono quer tirar o "aprovar"** — quem gera a guia é o advogado. Proposta: envio
+  automático ao cliente quando a guia passa nas conferências (processo = do caso, valor ±10%), e
+  aprovação manual só com aviso. NÃO aplicado: aguarda confirmação explícita do dono (envio de
+  cobrança sem revisão humana). Código pronto para `api/parcelas-documentos-cron.js` reaproveitando
+  o caminho de servidor que já existe em `api/guia-parcela.js` (CRON_SECRET + `aprovado_por`).
+- **#140/#200 (Inter):** aguardando o e-mail de confirmação e liberação de uso do banco.
 
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
 
