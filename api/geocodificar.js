@@ -74,15 +74,19 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
+async function processarLote(estadosFilter, lote = 50, deadline = Infinity, estados = null) {
   // Pendentes = sem coordenada (latitude NULL) ou sentinela 0 ainda NÃO marcada como
   // 'falhou'. Itens marcados 'falhou' saem da fila (não são re-tentados todo ciclo).
   // Pendentes de coordenada OU aproximados (bairro/cidade) marcados para
   // reprocessamento (geocod_nivel='refazer') — a cascata melhorada (CEP) pode
   // agora alcançar nível rua/endereço onde antes caía no bairro.
-  const r = await sb(
-    `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null),geocod_nivel.eq.refazer)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
-  );
+  // 18/10: via RPC `geocode_fila` — pelo PostgREST o filtro chegava parametrizado e o banco não usava o
+  // índice parcial da fila (média 3,5 s, encostando no teto de 8 s; com o predicado literal da função, ~7 ms).
+  const r = await sb('rpc/geocode_fila', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_lote: lote, p_estados: estados?.length ? estados : null }),
+  });
   // Falha ao LER a fila não é "fila vazia" (forma 2 do CLAUDE.md, 30/09): ~650 imóveis ficaram parados
   // com o cron respondendo 200 de hora em hora — e a rota, chamada à mão, processava normalmente.
   if (!r.ok) {
@@ -218,7 +222,7 @@ export default async function handler(req, resp) {
   // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
   if (modoManual) {
-    const res = await processarLote(estadosFilter, 50, Date.now() + 240_000);
+    const res = await processarLote(estadosFilter, 50, Date.now() + 240_000, estados);
     if (!res || res.erro) return resp.status(500).json({ error: res?.erro || 'Supabase error' });
     if (!res.processados) return resp.status(200).json({ processados: 0, msg: 'Nenhum imóvel pendente' });
     return resp.status(200).json(res);
@@ -234,7 +238,7 @@ export default async function handler(req, resp) {
 
   let erroLeitura = null, tentativasLeitura = 0;
   while (Date.now() < deadline) {
-    const res = await processarLote(estadosFilter, 50, deadline);
+    const res = await processarLote(estadosFilter, 50, deadline, estados);
     if (res?.erro) {
       // Leitura falhou: tenta de novo (até 3×, com espera) antes de desistir da rodada.
       erroLeitura = res.erro;
