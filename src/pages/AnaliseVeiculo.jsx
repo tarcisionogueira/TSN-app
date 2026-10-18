@@ -9,6 +9,15 @@ import { useIsMobile } from '../utils/useIsMobile';
 import { desagioFipe, calcularViabilidade, planoParcelado, TETO_FIPE } from '../utils/viabilidadeVeiculo';
 import { mdSimplesParaHtml } from '../utils/mdSimples';
 import { imprimirHtml } from '../components/pdfImprimir';
+
+// Mesmo defeito do Índice (18/10): o link do anúncio é REDIGIDO pela IA com número inventado e abria página
+// expirada/errada. Busca no portal pelo que o anúncio descreve (título, ano, cidade) — sempre abre.
+function buscaDoAnuncioVeiculo(a) {
+  let site = '';
+  try { if (a.url) site = new URL(a.url).hostname.replace(/^www\./, ''); } catch { /* link malformado: busca sem site */ }
+  const termos = [site && `site:${site}`, a.titulo, a.ano, a.local].filter(Boolean).join(' ');
+  return `https://www.google.com/search?q=${encodeURIComponent(termos)}`;
+}
 import { FileDown } from 'lucide-react';
 
 /**
@@ -413,7 +422,7 @@ export default function AnaliseVeiculo() {
               {rm ? (
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 11.5, color: '#64748b' }}>
                   {rm.anuncios.map((a, i) => (
-                    <li key={i}>{fmtBRL(a.preco)} · {a.titulo || 'anúncio'}{a.ano ? ` · ${a.ano}` : ''}{a.km ? ` · ${Number(a.km).toLocaleString('pt-BR')} km` : ''}{a.local ? ` · ${a.local}` : ''} · {a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}>{a.portal || 'ver anúncio'}</a> : (a.portal || '')}</li>
+                    <li key={i}>{fmtBRL(a.preco)} · {a.titulo || 'anúncio'}{a.ano ? ` · ${a.ano}` : ''}{a.km ? ` · ${Number(a.km).toLocaleString('pt-BR')} km` : ''}{a.local ? ` · ${a.local}` : ''} · {(a.url || a.titulo) ? <a href={buscaDoAnuncioVeiculo(a)} target="_blank" rel="noopener noreferrer" title="Busca o anúncio no portal pelo que ele descreve" style={{ color: '#0D63DB' }}>{a.portal ? `buscar no ${a.portal}` : 'buscar anúncio'}</a> : (a.portal || '')}</li>
                   ))}
                 </ul>
               ) : (
