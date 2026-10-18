@@ -8,7 +8,7 @@
  * gravando todos sob a mesma `fonte`, sem erro nenhum.
  */
 import {
-  FONTE, LEILOEIRO, BASE, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  FONTE, LEILOEIRO, BASE, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../emiliomatos-parse.mjs';
 
 // ── CANDIDATOS DA JUCEMG (29/08) — FORA DA PRODUÇÃO ATÉ O DRY-RUN PROVAR ────────────────────
@@ -49,11 +49,40 @@ const CANDIDATOS_JUCEMG = [
   { fonte: 'DENIS',          leiloeiro: 'Dênis de Oliveira Fernandes',       base: 'https://leiloeirodenis.com.br' },
 ];
 
+// ── SÓ O ACERVO DO LEILOEIRO (18/10, conserto do cron suspenso em 29/08) ─────────────────────
+// Recon em 18/10 (Firecrawl, página viva): a HOME do white-label lista só os EVENTOS do próprio
+// leiloeiro (`/imoveis-stars-bank-em-sao-paulo-38451`, `/imoveis-cnp-no-ce-mg-ms-pi-e-sp-38395`), e
+// dentro do evento cada lote dele mora em `/emilio-matos-rocha/imoveis/<tipo>/<slug>-<ID>` (29 + 13
+// lotes). O catálogo `/busca/segmento/imoveis` é o GLOBAL do Superbid e usa `/imoveis/...` sem o
+// prefixo — por isso o lote só é aceito COM o prefixo do leiloeiro: um "destaque" global que apareça
+// na home ou no evento não entra mais como se fosse dele.
+const PREFIXO_LEILOEIRO = '/emilio-matos-rocha/imoveis/';
+function extrairUrlsDoLeiloeiro(html, base = BASE) {
+  const urls = new Map();
+  for (const m of String(html).matchAll(/href=["']((?:https?:\/\/[^/"']+)?\/emilio-matos-rocha\/imoveis\/[^"'?#]+?-(\d{4,}))["']/gi)) {
+    try { urls.set(m[2], new URL(m[1], base).href); } catch { /* href malformado: ignora */ }
+  }
+  return urls;
+}
+// Evento de IMÓVEIS na home: slug com "imoveis" terminando em -<id do leilão>. Os de veículos/máquinas ficam fora.
+function extrairEventosDeImoveis(html, base = BASE) {
+  const eventos = new Map();
+  for (const m of String(html).matchAll(/href=["']((?:https?:\/\/[^/"']+)?\/(?:[a-z0-9-]+\/)?([a-z0-9-]*imoveis[a-z0-9-]*)-(\d{5,}))["']/gi)) {
+    if (m[1].includes(PREFIXO_LEILOEIRO)) continue; // é lote, não evento
+    try { eventos.set(m[3], new URL(m[1], base).href); } catch { /* href malformado: ignora */ }
+  }
+  return eventos;
+}
+
 export default {
   chave: 'emiliomatos',
-  catalogo: '/busca/segmento/imoveis',
+  // Firecrawl (18/10): o preço ("Próxima Oferta") só foi medido na página MONTADA; o site fica atrás de Cloudflare.
+  // ~45 créditos/semana (home + 2 eventos + ~42 lotes) no scraper-firecrawl-semanal.yml.
+  fetch: 'firecrawl',
+  catalogo: '/',                      // a HOME (eventos do leiloeiro), não o catálogo global
   paginaParam: 'page',                // ⚠️ Superbid usa ?page= (não ?pagina=)
-  maxPages: 15,
+  maxPages: 1,
+  maxPagesEvento: 2,                  // evento de 29 lotes coube numa página; a 2ª só confirma o fim
   // ⚠️ OS 11 TENANTS DA JUCEMG FORAM REMOVIDOS PELO DRY-RUN (29/08), e a lição fica.
   //
   // A triagem os classificou como Superbid/MBV porque o HTML deles continha `/busca/segmento/`.
@@ -75,10 +104,12 @@ export default {
     ...(process.env.EMILIOMATOS_CANDIDATOS === '1' ? CANDIDATOS_JUCEMG : []),
   ],
 
-  parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // Os candidatos da JUCEMG (só com EMILIOMATOS_CANDIDATOS=1) continuariam no catálogo global: eles nem rodam a
+  // plataforma (dry-run de 29/08). `extrairUrlsDeLote` do parser fica para eles e para os testes.
+  parse: { extrairUrlsDeLote: extrairUrlsDoLeiloeiro, extrairUrlsDeEvento: extrairEventosDeImoveis, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'gratis+brightdata', custo: 'misto',
-    anti_bot: 'cloudflare', enumeracao: '/busca/segmento/imoveis?page=N',
-    url_lote: '/imoveis/<tipo>/<slug>-<ID>', scraper: 'scraper-emiliomatos.mjs',
+    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'firecrawl', custo: 'firecrawl ~45 créditos/semana',
+    anti_bot: 'cloudflare', enumeracao: 'home → eventos de imóveis → /emilio-matos-rocha/imoveis/...',
+    url_lote: '/emilio-matos-rocha/imoveis/<tipo>/<slug>-<ID>', scraper: 'scraper-emiliomatos.mjs',
   },
 };

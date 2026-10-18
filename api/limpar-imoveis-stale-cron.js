@@ -92,17 +92,23 @@ export default async function handler(req, res) {
     pinos = await emLotes('demover_pinos_genericos_lote', {}, 52000);
   } catch (e) { pinos = { erro: String(e?.message || e).slice(0, 200) }; }
 
+  // 5) PREÇO DA PRAÇA VIGENTE (18/10, dono): lote cuja 1ª praça passou e ninguém reescreveu passa a valer pela 2ª.
+  let precoVigente = null;
+  try {
+    precoVigente = await emLotes('atualizar_valor_vigente_lote', {}, 57000);
+  } catch (e) { precoVigente = { erro: String(e?.message || e).slice(0, 200) }; }
+
   // Best-effort NÃO pode ser invisível (23/08): a varredura do pino genérico morreu em
   // statement timeout por DIAS com o cron devolvendo ok:true — o {erro} só existia no log
   // e ninguém lê log de cron que "deu certo". Uma falha aqui não derruba os outros passos,
   // mas vira alerta (e-mail do health) para não crescer em silêncio de novo.
-  const falhas = Object.entries({ cef: desativados, vendidos_cef: vendidosCef, leiloeiro, encerrados, pinos })
+  const falhas = Object.entries({ cef: desativados, vendidos_cef: vendidosCef, leiloeiro, encerrados, pinos, preco_vigente: precoVigente })
     .filter(([, v]) => v && typeof v === 'object' && v.erro)
     .map(([k, v]) => `${k}: ${v.erro}`);
   if (falhas.length) {
     try { alertarErro({ rota: 'limpar-imoveis-stale', erro: `Passo(s) da limpeza diária falhou(aram): ${falhas.join(' · ')}`, extra: { desativados } }); } catch { /* alerta é best-effort */ }
   }
 
-  (falhas.length ? console.error : console.log)('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos, falhas }));
+  (falhas.length ? console.error : console.log)('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos, preco_vigente: precoVigente, falhas }));
   return res.status(falhas.length ? 500 : 200).json({ ok: !falhas.length, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
 }

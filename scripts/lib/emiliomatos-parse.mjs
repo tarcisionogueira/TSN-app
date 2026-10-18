@@ -116,6 +116,9 @@ export function parseDetalhe(html, url) {
   const ofertas = [];
   for (const m of txt.matchAll(/oferta\s*inicial[^R]{0,25}R\$\s*([\d.]+,\d{2})/gi)) ofertas.push(num(m[1]));
   if (!ofertas.length) for (const m of txt.matchAll(/lance\s*(?:inicial|m[íi]nimo|atual)[^R]{0,25}R\$\s*([\d.]+,\d{2})/gi)) ofertas.push(num(m[1]));
+  // Layout de 10/2026 (recon 18/10): sem "oferta inicial" no card — o valor vem como "Próxima Oferta R$ X"
+  // (sem lance ainda = o lance mínimo da praça vigente). A página do lote tem UM só (conferido).
+  if (!ofertas.length) for (const m of txt.matchAll(/pr[óo]xim[ao]\s*(?:oferta|lance)[^R]{0,25}R\$\s*([\d.]+,\d{2})/gi)) ofertas.push(num(m[1]));
   const ofUnq = [...new Set(ofertas.map(plaus).filter(Boolean))];
   const aval = plaus(num((txt.match(/(?:avalia[çc][ãa]o|valor\s+de\s+avalia)[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const valor_avaliacao = aval || (ofUnq.length ? Math.max(...ofUnq) : 0);
@@ -125,7 +128,11 @@ export function parseDetalhe(html, url) {
   // literal do dono). ofUnq (ofertas/lances rotulados, já extraídos acima) é o sinal — achar
   // um valor de oferta/lance inicial é a assinatura de praça formal, incompatível com venda direta.
   const temPraca = ofUnq.length > 0;
-  const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
+  // "judicial" solto NÃO serve (recon 18/10): a página traz o filtro "Judicial (17)" do menu, o nome da
+  // plataforma "Bomvalor Judicial" e cláusulas de contrato ("decisão judicial", "notificação judicial ou
+  // extrajudicial") — marcava judicial um leilão de seguradora (consolidação = extrajudicial). Só sinal FORTE.
+  const judicialForte = /leil[ãa]o\s+judicial|hasta\s+p[úu]blica|processo\s*(?:n[ºo°.]?\s*)?\d{7}-\d{2}\.\d{4}|\d+[ªa]?\s*vara\b/i;
+  const modalidade = judicialForte.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   // ACHADO DO BLOCO 3 (03/09): mesmo defeito de scraper-soleon.mjs/scraper-rj.mjs (código da
