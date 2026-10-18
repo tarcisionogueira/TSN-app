@@ -29,6 +29,16 @@ export const TENANTS = {
     fonte: 'SHIOKAWA', leiloeiro: 'Shiokawa Leilões', site: 'https://www.shiokawaleiloes.com.br',
     base: 'https://api.shiokawaleiloes.com.br', headers: { apikey: 'sb_publishable_eBr5iSp_7jKGIj_8XO-lpw_68HjspXC' },
   },
+  // 18/10 (pendência 38): mesma plataforma — o backlog os listava como "SPA React PostgREST" junto com
+  // Picelli/Shiokawa. Chave publishable tirada do bundle público de cada site (é pública por desenho).
+  zaccarino: {
+    fonte: 'ZACCARINO', leiloeiro: 'Zaccarino Leilões', site: 'https://www.zaccarino.com.br',
+    base: 'https://api.zaccarino.com.br', headers: { apikey: 'sb_publishable_yk1zTg31VCifVk4AHuZIbQ_9G_N8qiH' },
+  },
+  cunha: {
+    fonte: 'CUNHA', leiloeiro: 'Cunha Leiloeiro', site: 'https://www.cunhaleiloeiro.com.br',
+    base: 'https://api.cunhaleiloeiro.com.br', headers: { apikey: 'sb_publishable_-9Hgjbq1X_N614naMFSPHA_h1LMqujK' },
+  },
 };
 const SITE_POR_API = new Map(Object.values(TENANTS).map(t => [t.base, t.site]));
 

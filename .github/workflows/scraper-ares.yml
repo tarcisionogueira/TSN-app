@@ -1,4 +1,4 @@
-name: Scraper Ares (Picelli + Shiokawa, API PostgREST)
+name: Scraper Ares (Picelli + Shiokawa + Zaccarino + Cunha, API PostgREST)
 
 # Plataforma Ares (picellileiloes + shiokawaleiloes): catálogo por API PostgREST pública com a chave
 # publishable do próprio site — sem navegador, custo Bright Data zero (recon 13/10). Cron GRAVA;
@@ -15,7 +15,7 @@ on:
       max_lotes:
         description: 'Máx. de lotes por execução'
         required: false
-        default: '150'
+        default: '300'
       debug:
         description: '1 = log por página/lote'
         required: false
@@ -39,6 +39,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ARES_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          ARES_MAX_LOTES: ${{ github.event.inputs.max_lotes || '150' }}
+          ARES_MAX_LOTES: ${{ github.event.inputs.max_lotes || '300' }}
           ARES_DEBUG: ${{ github.event.inputs.debug || '0' }}
         run: node scripts/scraper-ares.mjs

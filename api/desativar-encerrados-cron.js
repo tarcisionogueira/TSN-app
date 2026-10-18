@@ -27,20 +27,31 @@ export default async function handler(req, res) {
   // ANALYZE), mas no pg_stat_statements vai de 35 ms a 8 s: estoura só quando pega o banco carregado
   // pela onda das :00 (44 dos 76 crons). Cron movido para :37 e UMA nova tentativa no timeout — segura,
   // porque cada chamada desliga no máximo 500 e o que já saiu não volta para a fila.
-  let desativados = null;
-  for (let tentativa = 1; tentativa <= 2; tentativa++) {
-    try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
-        method: 'POST',
-        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      if (r.ok) { desativados = await r.json().catch(() => 0); break; }
-      const txt = (await r.text().catch(() => '')).slice(0, 200);
-      desativados = { erro: `${r.status} ${txt}`, tentativas: tentativa };
-      if (!/57014/.test(txt)) break; // só o timeout de carga vale nova tentativa
-      await new Promise(ok => setTimeout(ok, 15000));
-    } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200), tentativas: tentativa }; break; }
+  // 18/10 (pendência 222): a função passou a desligar no máx. 150 por chamada (500 × 28 ms = 14 s estourava os
+  // 8 s mesmo sem carga). Lote cheio = pode haver mais: chama de novo enquanto couber no orçamento de 35 s.
+  const LOTE = 150, inicio = Date.now();
+  let desativados = null, total = 0, chamadas = 0;
+  rodada: while (Date.now() - inicio < 35000 && chamadas < 6) {
+    chamadas++;
+    let n = null;
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_leiloes_encerrados`, {
+          method: 'POST',
+          headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (r.ok) { n = Number(await r.json().catch(() => 0)) || 0; break; }
+        const txt = (await r.text().catch(() => '')).slice(0, 200);
+        desativados = { erro: `${r.status} ${txt}`, tentativas: tentativa, ja_desativados: total };
+        if (!/57014/.test(txt)) break rodada; // só o timeout de carga vale nova tentativa
+        await new Promise(ok => setTimeout(ok, 15000));
+      } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200), tentativas: tentativa, ja_desativados: total }; break rodada; }
+    }
+    if (n === null) break;
+    total += n;
+    desativados = total;
+    if (n < LOTE) break; // veio menos que um lote: a fila acabou
   }
 
   // Cópias do mesmo bem (13/10): veículo relistado e 2ª praça publicada como outro anúncio.
