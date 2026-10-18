@@ -79,6 +79,7 @@ export default {
   // Firecrawl (18/10): o preço ("Próxima Oferta") só foi medido na página MONTADA; o site fica atrás de Cloudflare.
   // ~45 créditos/semana (home + 2 eventos + ~42 lotes) no scraper-firecrawl-semanal.yml.
   fetch: 'firecrawl',
+  firecrawl: { waitFor: 1500 },       // preço entra por script: sem espera, parte dos lotes saía sem valor (dry-run 18/10: 15 de 42)
   catalogo: '/',                      // a HOME (eventos do leiloeiro), não o catálogo global
   paginaParam: 'page',                // ⚠️ Superbid usa ?page= (não ?pagina=)
   maxPages: 1,

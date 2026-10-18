@@ -50,6 +50,22 @@
   O quadro "Andamento com o jurídico" do caso ficou (liga/desliga e frequência dos arrematados), e a
   trava do trigger `casos_protege_atribuicao` para `acompanhamento_*` (só admin) também.
 
+## 18/10 — decisões do dono: preço da praça vigente, EMILIOMATOS de volta, duplicado
+
+- **#33 preço = praça vigente.** `valor_minimo_ref` era GERADA = LEAST(1ª, 2ª): 2.955 lotes com a 1ª
+  praça futura apareciam pelo valor da 2ª. Agora é coluna comum (dono rodou o `drop expression`)
+  mantida por `trg_zzzz_valor_praca_vigente` + `atualizar_valor_vigente_lote` no
+  limpar-imoveis-stale-cron (vira a 2ª no dia seguinte à 1ª; sem data → 1ª). 3.279 recalculados, 0
+  timeout. Busca, raio e alertas seguem lendo a mesma coluna. Ver `20261018_preco_da_praca_vigente.sql`.
+- **#97 EMILIOMATOS religado** (suspenso desde 29/08 por gravar o catálogo GLOBAL do Superbid):
+  home → eventos de imóveis → só lotes com `/emilio-matos-rocha/imoveis/`. Parser: "Próxima Oferta",
+  modalidade só por sinal forte (o menu tem "Judicial (17)"), área do título, "Lote" = terreno. Busca
+  pelo Firecrawl (`waitFor` 1,5 s) no `scraper-firecrawl-semanal.yml` (segunda 09:41 UTC, ~47
+  créditos). Dry-run 18/10: 42 enumerados, 26 prontos, 15 descartados SEM motivo no log → o runner
+  agora imprime o motivo de cada descarte. **Conferir a 1ª rodada que grava (seg 19/10).**
+- **#102** duplicado do Fabrício: fabricio111x@ desativado. **#45** Bright Data: remover a faixa
+  54.20.63.0/24 da blacklist é clique do dono no e-mail de 25/09.
+
 ## 16/10 — timeout no banco e parceiro no êxito de 5% → 10% do honorário
 
 - **Timeout (57014), causa por causa — medido isolado antes de mexer:**

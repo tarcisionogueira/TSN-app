@@ -25,6 +25,8 @@ export function inferirTipo(titulo = '', url = '') {
   const t = (titulo + ' ' + url).toLowerCase();
   if (/apartament|apto|flat|kitnet|studio/.test(t)) return 'apartamento';
   if (/fazenda|s[íi]tio|ch[áa]cara|rural/.test(t)) return 'rural';
+  // "Lote - Garden Ville" na URL /imoveis/lote-residencial/... caía em 'casa' pelo "residenc" (18/10).
+  if (/^\s*lote\b|\/lote-(?:residencial|comercial|industrial)\//.test(t)) return 'terreno';
   if (/casa|sobrado|residenc/.test(t)) return 'casa';
   if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio|andar|industrial/.test(t)) return 'comercial';
   if (/terreno|lote|gleba|[áa]rea/.test(t)) return 'terreno';
@@ -139,7 +141,10 @@ export function parseDetalhe(html, url) {
   // mesma origem) — `[\d.]+,\d{2}` exige decimal colado, e o fallback `\d+` (sem ponto) casava
   // só os últimos 3 dígitos de um número com milhar. Padrão correto: 1-3 dígitos + grupos de
   // milhar de 3 dígitos, decimal opcional.
-  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m[²2]\b/i) || [])[1]);
+  // `\b` depois de "²" nunca casa ("²" e o espaço seguinte não são caractere de palavra): "150 m²" saía área 0.
+  // Título primeiro ("Apto A.T. 150 m²"): o corpo do layout de 10/2026 traz "Área Total: 0.00m2" antes de tudo.
+  const RE_AREA = /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m[²2](?![a-z0-9])/i;
+  const area = num((String(base.titulo || '').match(RE_AREA) || [])[1]) || num((txt.match(RE_AREA) || [])[1]);
   const { cidade, estado } = cidadeUF(txt, base.titulo || '', base.descricao || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
