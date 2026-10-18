@@ -18,6 +18,38 @@
   - Dry-run: CUNHA 33 prontos, ZACCARINO 2.
   - Um lote do Zaccarino (Vila Mada, 324 m²) é o mesmo do Shiokawa: são co-leiloeiros.
   - A API do Cunha diz "Florestal" para um apartamento cujo título diz Coronel Fabriciano. É dado da fonte.
+- **Fechadas também:**
+  - 30: o proprietário do Search Console é o Gmail pessoal do dono.
+  - 71: os portfólios do Meta mostram 1 conta só (BM Reimob). A conta solta em "Outros ativos" (1114056112873901) fica, por decisão do dono, porque não interfere.
+  - 72: as tags já se chamam "BidPro Brasil" (AW-16850175262) e "BidPro Brasil - Web" (G-5YNHQB5F81); o rodapé já tinha o endereço.
+  - 214: descartada pelo dono.
+  - 23 (runner WSL): configurado. Cron do Ubuntu às 2h, 8h, 14h e 20h, mais a tarefa "BidPro WSL" mantendo o WSL de pé; a tarefa "BidPro Runner (periodico)" do Windows continua às 4h, 10h, 16h e 22h. O `flock` impede duas coletas juntas. A conferência via fonte_saude está agendada para 19/10.
+
+### Stress test 18/10 (pelo banco; o site não é alcançável do container)
+- **Maior consumidor do banco:** a fila do geocodificador (3.691 chamadas, média de 3,5 s, máximo de 7,99 s, 213 min no total). Parametrizada pelo PostgREST, ela não usava o índice parcial. Virou a RPC `geocode_fila()` com o predicado literal: ~7 ms.
+- **`acervo_busca_cidade` (autocomplete público):** agora agrega as ~2.700 cidades antes de filtrar. Caiu de 703 para 99 ms.
+- **Alarme falso de `qa_invariante_rls_escreve_sem_ler`:** tratava "dono OU admin" como só admin. Corrigido; o alerta zerou.
+- **Sem achado:** `auditoria_seguranca` 0/0, `regras_negocio` 0 e `cliente_travou` vazio.
+- **Erros da Vercel em 24 h:** são os mesmos timeouts já atacados. Fora isso, só ruído conhecido: o CNJ com tribunais em timeout/429 e o "sem cota" do Bright Data.
+
+### Bug bounty 18/10 (3 agentes: dinheiro, API e telas). Cada achado foi confirmado no código ou no banco antes de corrigir (commit b0d6557)
+- **upload-anexo:** documento de arremate de qualquer conta, para qualquer imóvel, marcava parcela paga, trocava a guia que vai ao cliente ou encerrava a assessoria paga. Agora só a equipe ou o arrematante, e todos os arremates atuais têm a linha em `arrematados`.
+- **saque-nf:**
+  - aprovação automática só com verificador em `.gov.br` e número com fronteira (antes, qualquer página com "2026" servia);
+  - a mesma NF não cobre dois saques (checagem no código e índice `saque_nf_nota_unica`).
+- **Login:** "Esqueci a senha" e "Reenviar confirmação" iam sem `captchaToken`. Havia **12 recusas `captcha_failed`** no rastro.
+- **Caso.jsx:**
+  - um chamado novo a cada carregamento, depois que o jurídico criava o chamado interno (há casos com 6);
+  - erro de leitura criava caso duplicado.
+- **CaixaEmail:** a conversa trazia as 200 mensagens mais antigas.
+- **monitor-fontes-cron:** `fonte_saude` tinha 1.196 linhas e o teto de 1.000 do PostgREST escondia justamente a fonte parada. Agora pagina.
+- **parcelas-documentos-cron:** documento ilegível prendia a fila e repetia a IA. Agora sai como aviso e o dono é avisado.
+- **duvida (formulário público):** o HTML ia sem escape no e-mail da equipe.
+- **email-caixa:** anexo `.html` agora é servido como texto.
+- **gerar-analise:** falha na checagem não cobra mais a cota.
+- **email_cobranca:** o usuário só desliga; contador e datas são do cron (trigger `email_cobranca_so_desligar`).
+- **Abertas no banco:** 231 (estorno × repasse parcial), 232 (pagamento MP excedente descartado), 233 (tela sobrescreve o parcelamento), 234 (captcha no Checkout/Promo/Convite), 235 (encerramento de assessoria por matrícula do cliente) e 236 (menores).
+- **Descartado na conferência:** "venda direta na arrematação dá erro de constraint". O banco real não tem a trava; só o arquivo antigo de schema tinha.
 
 ## 17/10 — limpeza diária morria em timeout; login no 5G; pendências do dono
 
