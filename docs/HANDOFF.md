@@ -7,6 +7,18 @@
 
 
 
+## 18/10 (noite) — HASTA vazio de verdade, timeouts de pico, ARES +Zaccarino/Cunha
+- **230 HASTA (fechada):** o parser está íntegro. Recon via Firecrawl: o site lista 1 imóvel só (TRT-5, venda por proposta sem praça → descartado), e o leilão CAIXA 569 está publicado com 0 lotes. `/leiloes` redireciona para a home, mas os links `/leilao/N/lotes` continuam lá. "falhou / sem nenhum lote pronto" = acervo vazio. Volta sozinho quando a CAIXA publicar os lotes.
+- **222 timeouts (medido em `postgres_logs`, 52 em 24 h).** Migração `20261018_indices_timeouts_pico.sql`:
+  - índice `(fonte, atualizado_em desc) where ativo`. A consulta "última atualização da fonte" varria o índice inteiro de `atualizado_em` quando a fonte tinha 0 ativos (HASTA, LEJE). Agora leva 3 ms (eram 10 timeouts por dia).
+  - índice `(upper(estado), cidade_norm) include (cidade) where ativo`: `acervo_cidades_uf` caiu de 112 para 24 ms.
+  - `desativar_leiloes_encerrados`: lote de 500 para 150, porque 500 × 28 ms de gatilhos = 14 s. O `desativar-encerrados-cron` repete enquanto vier lote cheio, até 35 s.
+  - Ficaram para depois, sem ação: gatilhos de escrita (`endereco_do_titulo`, score) nos picos de coleta. Reavaliar em 23/10 com a mesma consulta de logs.
+- **38 ARES:** Zaccarino (`api.zaccarino.com.br`) e Cunha (`api.cunhaleiloeiro.com.br`) são a mesma plataforma de Picelli/Shiokawa. Entraram como tenants em `ares-parse.mjs`, com a chave publishable tirada do bundle público, e o teto subiu para 300.
+  - Dry-run: CUNHA 33 prontos, ZACCARINO 2.
+  - Um lote do Zaccarino (Vila Mada, 324 m²) é o mesmo do Shiokawa: são co-leiloeiros.
+  - A API do Cunha diz "Florestal" para um apartamento cujo título diz Coronel Fabriciano. É dado da fonte.
+
 ## 17/10 — limpeza diária morria em timeout; login no 5G; pendências do dono
 
 - **`limpar-imoveis-stale` falhava TODO DIA (≥ 15/10) em statement timeout** no 1º passo
