@@ -6,6 +6,19 @@ import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarIndicePDF } from '../components/IndicePDF';
 import { useAuth } from '../contexts/AuthContext';
 import CardDemografia from '../components/CardDemografia';
+
+// O LINK QUE A IA ESCREVE NÃO É O ANÚNCIO (18/10, dono: "abria páginas expiradas ou anúncios inexistentes").
+// A pesquisa lê páginas reais (os valores batem), mas o link é REDIGIDO pelo modelo no formato do portal, com
+// número inventado: em 60 dias, 43 de 73 links com número repetiam o número de OUTRO anúncio (VivaReal 1327660285
+// em dois imóveis; Zap 2592750346 em três apartamentos de 133, 122 e 72 m²). Abrir o link direto mostrava a página
+// errada ou expirada. Em vez dele, uma busca no próprio portal pelo que o anúncio descreve — sempre abre.
+function buscaDoAnuncio(a, esp, cidade) {
+  let site = '';
+  try { if (a.url) site = new URL(a.url).hostname.replace(/^www\./, ''); } catch { /* link malformado: busca sem site */ }
+  const termos = [site && `site:${site}`, a.condominio || a.endereco || a.bairro_norm, cidade,
+    a.area_m2 ? `${Math.round(a.area_m2)} m²` : '', esp === 'locacao' ? 'aluguel' : 'venda'].filter(Boolean).join(' ');
+  return `https://www.google.com/search?q=${encodeURIComponent(termos)}`;
+}
 import NotaMetodologica from '../components/NotaMetodologica';
 
 // Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
@@ -541,7 +554,7 @@ export default function IndiceConsulta() {
                               {brl(a.valor_m2)}/m²{esp === 'locacao' ? '·mês' : ''}
                             </div>
                             {Number(a.valor_total) > 0 && <div style={{ fontSize: 10, color: '#94a3b8' }}>{brl(a.valor_total)}</div>}
-                            {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>ver anúncio →</a>}
+                            {(a.url || a.condominio || a.endereco || a.bairro_norm) && <a href={buscaDoAnuncio(a, esp, form?.cidade)} target="_blank" rel="noopener noreferrer" title="Busca o anúncio no portal pelo que ele descreve" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>buscar anúncio →</a>}
                           </div>
                         </div>
                       ))}
