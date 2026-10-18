@@ -2085,8 +2085,12 @@ export default async function handler(req, res) {
   let cota = null;
   let cobrarCredito = false; // cota mensal esgotada → esta geração será cobrada do crédito
   try {
-    const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
-    const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
+    const rj = await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`);
+    // 18/10 (bug bounty): sem checar .ok, um 4xx/5xx virava "análise nova" e cobrava cota numa re-geração
+    // que é grátis. Leitura falhou → não cobra (mesma regra de "falha na checagem não trava quem tem direito").
+    const jaConcluida = rj.ok ? await rj.json().catch(() => null) : null;
+    if (!rj.ok) console.error('[gerar-analise] checagem de análise existente falhou: HTTP', rj.status, '— não cobra cota');
+    const isNovo = rj.ok && !(Array.isArray(jaConcluida) && jaConcluida.length);
     if (isNovo && !onBehalf && !isCron) {
       const rc = await sb('rpc/consumir_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);

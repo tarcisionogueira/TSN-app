@@ -197,12 +197,21 @@ async function handler(req) {
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
   const desde = new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString();
-  const { data: linhas, error } = await supabase
-    .from('fonte_saude')
-    .select('fonte,total,status,motivo,estrategia,uf_pct,valor_pct,link_pct,foto_pct,executado_em')
-    .gte('executado_em', desde)
-    .order('executado_em', { ascending: false });
-  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  // PAGINADO (18/10, bug bounty): 15 dias já passam de 1.000 linhas (1.196 medidas) e o PostgREST corta
+  // em 1.000 sem erro — as linhas que caíam fora eram as MAIS ANTIGAS, ou seja, a fonte mais parada sumia
+  // do mapa `ultima` e o alarme de "coleta parada" nunca disparava justamente para ela.
+  const linhas = [];
+  for (let de = 0; ; de += 1000) {
+    const { data: pag, error } = await supabase
+      .from('fonte_saude')
+      .select('fonte,total,status,motivo,estrategia,uf_pct,valor_pct,link_pct,foto_pct,executado_em')
+      .gte('executado_em', desde)
+      .order('executado_em', { ascending: false })
+      .range(de, de + 999);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    linhas.push(...(pag || []));
+    if (!pag || pag.length < 1000 || de >= 20000) break;
+  }
 
   const ultima = {};
   const penultima = {}; // 2ª leitura mais recente por fonte — p/ a trava de PERSISTÊNCIA (anti-ruído)

@@ -716,11 +716,14 @@ export default function Caso() {
         // Verifica se já existe caso para este imovel_id do cliente (no modo suporte,
         // o cliente é o usuário VISUALIZADO — effectiveUserId —, nunca o da equipe).
         const clienteAlvo = effectiveUserId || user.id;
-        const { data: existente } = await supabase.from('casos')
+        // 18/10 (bug bounty): erro de leitura virava "não existe" e criava um caso DUPLICADO do mesmo imóvel.
+        const { data: existentes, error: erroExistente } = await supabase.from('casos')
           .select('*')
           .eq('cliente_id', clienteAlvo)
           .eq('imovel_id', imovelInit.id)
-          .maybeSingle();
+          .order('created_at', { ascending: true }).limit(1);
+        if (erroExistente) throw erroExistente;
+        const existente = existentes?.[0] || null;
         if (existente) {
           casoData = existente;
           nav(`/caso/${existente.id}`, { replace: true });
@@ -831,9 +834,16 @@ export default function Caso() {
 
       // Carrega ou cria chamado vinculado ao caso
       let chamado = null;
-      const { data: chamadoExist } = await supabase.from('chamados')
-        .select('id').eq('caso_id', casoData.id).maybeSingle();
-      if (chamadoExist) {
+      // 18/10 (bug bounty): `maybeSingle()` sem filtro de segmento quebrava assim que o jurídico criava o
+      // chamado `interno` do mesmo caso (2 linhas → erro → data nula) e a tela criava OUTRO chamado a cada
+      // carregamento — há casos com 6. Pega o mais antigo não-interno, e erro de leitura não cria nada.
+      const { data: chamados, error: erroChamado } = await supabase.from('chamados')
+        .select('id').eq('caso_id', casoData.id).or('segmento.is.null,segmento.neq.interno')
+        .order('criado_em', { ascending: true }).limit(1);
+      const chamadoExist = chamados?.[0] || null;
+      if (erroChamado) {
+        console.error('[Caso] ler chamado do caso:', erroChamado.message);
+      } else if (chamadoExist) {
         chamado = chamadoExist;
       } else {
         const { data: novoChamado } = await supabase.from('chamados').insert({

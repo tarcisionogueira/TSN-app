@@ -185,7 +185,23 @@ async function handler(req) {
     const docs = [...doArremate, ...doCaso].slice(0, POR_RODADA);
     for (const d of docs) {
       try { res.resultados.push(await processar(d, { seco })); res.processados++; }
-      catch (e) { res.falhas++; res.resultados.push({ doc: d.id, erro: e?.message }); console.error(`[parcelas-documentos] ${d.id}:`, e?.message); }
+      catch (e) {
+        res.falhas++; res.resultados.push({ doc: d.id, erro: e?.message }); console.error(`[parcelas-documentos] ${d.id}:`, e?.message);
+        // 18/10 (bug bounty): erro PERMANENTE (formato que não lemos, arquivo sumido do storage, resposta da
+        // IA sem JSON) deixava o documento sem `parcela_processado_em` — voltava em toda rodada, repetia a IA
+        // e, com 6 deles, ocupava a fila inteira para sempre. Agora sai da fila como aviso e o dono fica sabendo.
+        // Erro transitório (rede, 5xx) continua tentando na próxima rodada.
+        const msg = String(e?.message || '');
+        const permanente = /formato|n[ãa]o lid|desconhecid|storage HTTP 4\d\d|JSON|Unexpected token/i.test(msg);
+        if (permanente && !seco) {
+          try {
+            await marcar(d, { parcela_status: 'aviso', parcela_aviso: `Não consegui ler este documento: ${msg.slice(0, 200)}` });
+            await avisarDono({ assunto: `Documento de parcela não lido · ${d.titulo || d.nome || d.id}`, casoId: d.caso_id || null,
+              linhas: [`Não consegui ler <b>${esc(d.titulo || d.nome || 'o documento')}</b> (${d.ehGuia ? 'guia' : 'comprovante'} de parcela).`,
+                `Motivo: ${esc(msg.slice(0, 200))}`, 'Confira o arquivo e registre a parcela pela tela, se for o caso.'] });
+          } catch (e2) { console.error(`[parcelas-documentos] ${d.id}: não consegui tirar da fila:`, e2?.message); }
+        }
+      }
     }
   } catch (e) {
     console.error('[parcelas-documentos] falhou:', e?.message);

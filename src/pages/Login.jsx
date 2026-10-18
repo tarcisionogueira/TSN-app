@@ -230,14 +230,18 @@ export default function Login() {
     e.preventDefault();
     setErro(''); setLoading(true);
     try {
+      // 18/10 (bug bounty): com o captcha ligado no Supabase, /recover sem token devolvia `captcha_failed`
+      // — 8 pedidos de "esqueci a senha" recusados até 30/09 sem o cliente entender o porquê.
       const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperar, {
         redirectTo: `${window.location.origin}/#/redefinir-senha`,
+        ...(turnstileConfigurado ? { captchaToken } : {}),
       });
       if (error) throw error;
       setModo('recuperar_sucesso');
     } catch (err) {
       registrarEvento('api_erro', { alvo: 'recuperacao_senha_falha', detalhe: motivoErroAuth(err) });
       setErro(traduzErroAuth(err.message) || 'Erro ao enviar email de recuperação.');
+      if (turnstileConfigurado) { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); } // token é de uso único
     }
     setLoading(false);
   };
@@ -319,12 +323,14 @@ export default function Login() {
   const reenviarConfirmacao = async () => {
     if (!form.email) { setErro('Informe seu e-mail no campo acima para reenviar a confirmação.'); return; }
     if (cooldownReenvio > 0) return;
+    if (turnstileConfigurado && !captchaToken) { setErro('Aguarde a verificação de segurança logo abaixo terminar e clique de novo.'); return; }
     setReenviando(true);
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: form.email,
-        options: { emailRedirectTo: `${window.location.origin}/` },
+        // Mesmo motivo do /recover: /resend sem captchaToken era recusado (4 falhas até 06/10).
+        options: { emailRedirectTo: `${window.location.origin}/`, ...(turnstileConfigurado ? { captchaToken } : {}) },
       });
       if (error) throw error;
       setReenviado(true); setErro('');
@@ -336,6 +342,8 @@ export default function Login() {
       if (seg > 0) setCooldownReenvio(seg);
       setErro(traduzErroAuth(err.message));
     }
+    // O token foi gasto (com sucesso ou não): pede um novo para o próximo clique — inclusive o "Entrar".
+    if (turnstileConfigurado) { setCaptchaToken(null); setTurnstileTentativa(n => n + 1); }
     setReenviando(false);
   };
 
@@ -995,8 +1003,15 @@ export default function Login() {
                 />
               </div>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading}
-                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+              {turnstileConfigurado && (
+                <TurnstileWidget
+                  resetKey={turnstileTentativa}
+                  onVerify={setCaptchaToken}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              )}
+              <button type="submit" disabled={loading || (turnstileConfigurado && !captchaToken)}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || (turnstileConfigurado && !captchaToken)) ? 0.7 : 1 }}>
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando...</> : 'Enviar link de recuperação'}
               </button>
             </form>

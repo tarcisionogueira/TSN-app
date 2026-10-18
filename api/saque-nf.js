@@ -152,6 +152,14 @@ async function lerComIA({ texto, bytes, mime }) {
 // da nota. Best-effort — prefeitura fora do ar não reprova ninguém, vira revisão.
 async function conferirNoEmissor(url, numero) {
   if (!url) return { status: 'sem_link', detalhe: 'A nota não traz link de verificação.' };
+  // 18/10 (bug bounty): o link vem do PDF, que o parceiro controla — qualquer página pública que citasse o
+  // número aprovava a nota sozinha. Só um verificador em domínio de GOVERNO conta como prova; o resto vai
+  // para a equipe (revisão manual não reprova ninguém, só tira a aprovação automática).
+  let host = '';
+  try { host = new URL(url).hostname.toLowerCase(); } catch { /* host vazio = não é governo */ }
+  if (!/(^|\.)gov\.br$/.test(host)) {
+    return { status: 'inconclusiva', detalhe: `O link de verificação não é de um domínio de governo (${host || 'link inválido'}).` };
+  }
   try {
     const r = await fetchExternoSeguro(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBot/1.0)' },
@@ -160,7 +168,9 @@ async function conferirNoEmissor(url, numero) {
     if (!r.ok) return { status: 'inconclusiva', detalhe: `O verificador respondeu ${r.status}.` };
     const corpo = (await r.text().catch(() => '')).slice(0, 200000);
     const alvo = so(numero);
-    if (alvo && (corpo.includes(String(numero)) || (alvo.length > 3 && corpo.replace(/\D/g, '').includes(alvo)))) {
+    // Número inteiro, com fronteira (não "26" dentro de "2026"), e de pelo menos 3 dígitos.
+    const citaNumero = alvo.length >= 3 && new RegExp(`(^|\\D)0*${alvo.replace(/^0+/, '')}(\\D|$)`).test(corpo);
+    if (citaNumero) {
       return { status: 'confirmada', detalhe: 'O verificador da prefeitura respondeu e cita o número da nota.' };
     }
     return { status: 'inconclusiva', detalhe: 'O verificador respondeu, mas não encontrei o número da nota na página.' };
@@ -330,6 +340,14 @@ export default async function handler(req, res) {
   // Valor EXATO (16/10): o repasse é pelo BRUTO da nota. Nota maior que o saque documentaria um
   // pagamento que não aconteceu; menor, um pagamento sem documento.
   else if (Math.abs(valorNf - valor) > 0.01) problemas.push(`o valor da nota (R$ ${valorNf.toFixed(2)}) é diferente do saque pedido (R$ ${valor.toFixed(2)}) — a nota deve ser do valor bruto exato do saque`);
+
+  // A MESMA NOTA NÃO DOCUMENTA DOIS SAQUES (18/10, bug bounty): depois de consumida ela sai do índice de
+  // "uma ativa por pessoa", e reenviar o mesmo PDF passaria de novo. O índice único no banco garante.
+  if (emitente && lida.numero) {
+    const dup = await db(`saque_nf?emitente_cnpj=eq.${emitente}&numero=eq.${encodeURIComponent(String(lida.numero))}&status=in.(revisao_manual,aprovada)&select=id&limit=1`);
+    if (!dup.ok) { res.status(503).json({ error: 'Não consegui conferir se esta nota já foi usada. Tente de novo.' }); return; }
+    if (dup.data?.[0]) problemas.push('esta nota fiscal já foi apresentada em outro saque');
+  }
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(lida.emitida_em || '')) {
     const dias = (Date.now() - new Date(`${lida.emitida_em}T12:00:00Z`).getTime()) / 86400000;

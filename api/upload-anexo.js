@@ -123,6 +123,18 @@ export default async function handler(req) {
     }
   }
 
+  // 18/10 (bug bounty): guia e comprovante de PARCELA alimentam o parcelas-documentos-cron, que liga o
+  // arquivo ao arremate parcelado do imóvel e marca parcela paga / troca a guia que vai ao cliente. Sem
+  // este gate, qualquer conta logada podia mandar um "Parcela 01 de 16" para o imóvel de outra pessoa.
+  // Vale para TODO documento do ciclo do arremate: `carta_arrematacao` + `matricula_registrada` encerram a
+  // assessoria paga sozinhos (concluir_assessorias_entregues), e o resto vira documento permanente do caso.
+  if (TIPOS_ARREMATE.includes(tipo) && !ROLES_STAFF.includes(perfil.role)) {
+    const donoRes = await sb(`arrematados?user_id=eq.${encodeURIComponent(user.id)}&imovel_id=eq.${encodeURIComponent(imovel_id)}&select=id&limit=1`);
+    if (!donoRes.ok) return json({ error: 'Não consegui conferir o arremate deste imóvel. Tente de novo.' }, 503);
+    const [dono] = await donoRes.json().catch(() => []);
+    if (!dono) return json({ error: 'Só o arrematante deste imóvel ou a equipe podem enviar documentos do arremate.' }, 403);
+  }
+
   if (file.size > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
 
   const buffer = await file.arrayBuffer();

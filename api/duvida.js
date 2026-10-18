@@ -9,6 +9,9 @@
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { getAuthUser } from './_auth.js';
 
+// 18/10 (bug bounty): o formulário é PÚBLICO — nome/mensagem iam crus para o HTML do e-mail da equipe.
+const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -246,10 +249,10 @@ export default async function handler(req) {
           meta: { tipo: ehAlavancagem ? 'lead_alavancagem' : 'chamado_novo' },
           html: `
             <div style="font-family:Arial,sans-serif;font-size:14px;color:#111;line-height:1.6">
-              <p><strong>${nome || '(sem nome)'}</strong> pediu contato sobre <strong>${modalidade}</strong>.</p>
-              <p>E-mail: <a href="mailto:${email}">${email}</a><br>
-                 ${telefone ? `WhatsApp: <a href="${wa}">${telefone}</a>` : 'WhatsApp: não informado'}</p>
-              <p style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${mensagem}</p>
+              <p><strong>${esc(nome) || '(sem nome)'}</strong> pediu contato sobre <strong>${esc(modalidade)}</strong>.</p>
+              <p>E-mail: <a href="mailto:${esc(email)}">${esc(email)}</a><br>
+                 ${telefone ? `WhatsApp: <a href="${esc(wa)}">${esc(telefone)}</a>` : 'WhatsApp: não informado'}</p>
+              <p style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${esc(mensagem)}</p>
               <p>${wa ? `<a href="${wa}" style="background:#059669;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Chamar no WhatsApp</a>&nbsp;` : ''}<a href="${base}/#/atendimento" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Abrir no Atendimento</a></p>
               <p style="color:#64748b;font-size:12px">Responder este e-mail fala direto com a pessoa. O chamado já está registrado no Atendimento.</p>
             </div>`,

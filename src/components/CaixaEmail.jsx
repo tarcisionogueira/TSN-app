@@ -305,7 +305,10 @@ export default function CaixaEmail({ soPessoal = false }) {
     const filtro = [`id.in.(${ids.join(',')})`];
     if (RE_FILTRO_SEGURO.test(c)) filtro.push(`de_email.ilike.${c}`, `para.cs.{"${c}"}`);
     const { data, error } = await supabase.from('email_caixa').select('*')
-      .in('pasta', pastas).or(filtro.join(',')).order('criado_em', { ascending: true }).limit(200);
+      .in('pasta', pastas).or(filtro.join(',')).order('criado_em', { ascending: false }).limit(200);
+    // 18/10 (bug bounty): era `ascending: true` + limit 200 — com o escritório jurídico (centenas de e-mails)
+    // vinham só os 200 MAIS ANTIGOS e a conversa aberta perdia justamente as últimas mensagens. Agora as 200
+    // mais recentes; a ordem cronológica é refeita abaixo (msgs.sort).
     if (error || !data?.length) { setErro(error ? `Não consegui abrir a conversa: ${error.message}` : 'Mensagem não encontrada.'); return; }
     const chave = chaveConversa(base);
     const doGrupo = new Set(ids);
