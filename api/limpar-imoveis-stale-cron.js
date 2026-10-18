@@ -33,8 +33,16 @@ export default async function handler(req, res) {
   async function emLotes(fn, body, orcamentoMs) {
     let total = 0;
     for (let i = 0; i < 25 && Date.now() - inicio < orcamentoMs; i++) {
-      const r = await rpc(fn, { ...body, lote: LOTE });
-      if (!r.ok) return { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`, parcial: total };
+      let r = await rpc(fn, { ...body, lote: LOTE });
+      if (!r.ok) {
+        const txt = (await r.text().catch(() => '')).slice(0, 200);
+        // 18/10: às 05h UTC o banco divide o horário com o runner residencial e a onda de crons — um timeout
+        // de carga ganha UMA nova tentativa (o que já foi feito não volta para a fila, então é seguro).
+        if (!/57014/.test(txt)) return { erro: `${r.status} ${txt}`, parcial: total };
+        await new Promise(ok => setTimeout(ok, 5000));
+        r = await rpc(fn, { ...body, lote: LOTE });
+        if (!r.ok) return { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`, parcial: total, tentativas: 2 };
+      }
       const n = Number(await r.json());
       if (!Number.isFinite(n)) return { erro: 'resposta sem contagem', parcial: total };
       total += n;
