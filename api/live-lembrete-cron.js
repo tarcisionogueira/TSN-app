@@ -260,7 +260,7 @@ export default async function handler(req, res) {
     });
     // Dedup só DEPOIS do aceite: um envio que falhou agora deve ser tentado na próxima
     // rodada — é para isso que a janela é larga.
-    if (r && r.ok !== false) {
+    if (r?.ok || r?.enfileirado) { // 19/10: enfileirado sai pela fila — tratar como falha duplicava
       const { error: eGrava } = await supabase.from('live_lembretes').insert({
         evento_id: item.eventoId, edicao: item.edicao, email: item.email, etapa: item.etapa, inscricao_id: item.inscricaoId,
       });

@@ -35,6 +35,10 @@ export default function NotasFiscaisSaqueAdmin() {
   const [filtro, setFiltro] = useState('pendentes');
   const [ocupado, setOcupado] = useState(null);
   const [msg, setMsg] = useState(null);
+  // Confirmação NA TELA (pendência 254): window.confirm/prompt são bloqueados em silêncio no celular/app
+  // embutido — devolvem null/false e a decisão "não acontecia", sem aviso. { id, acao } da nota aberta.
+  const [confirmando, setConfirmando] = useState(null);
+  const [motivo, setMotivo] = useState('');
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -50,22 +54,17 @@ export default function NotasFiscaisSaqueAdmin() {
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
+  function abrirConfirmacao(nota, acao) { setConfirmando({ id: nota.id, acao }); setMotivo(''); setMsg(null); }
+
   async function decidir(nota, acao) {
-    let motivo = '';
-    if (acao !== 'aprovar') {
-      motivo = window.prompt(acao === 'reprovar'
-        ? 'Motivo da reprovação (o parceiro vai ler):'
-        : 'Motivo da substituição (o parceiro vai ler):') || '';
-      if (!motivo.trim()) return;
-    } else if (!window.confirm(`Aprovar a nota de ${fmt(nota.valor_nf)} de ${nota.parceiro?.nome || 'parceiro'}? Isso libera o saque desse valor.`)) {
-      return;
-    }
+    const motivoTxt = acao === 'aprovar' ? '' : motivo.trim();
+    if (acao !== 'aprovar' && !motivoTxt) { setMsg({ tipo: 'erro', txt: 'Escreva o motivo — o parceiro vai ler.' }); return; }
     setOcupado(nota.id); setMsg(null);
     try {
-      const r = await apiCall('/api/saque-nf', { method: 'PATCH', body: JSON.stringify({ id: nota.id, acao, motivo }) });
+      const r = await apiCall('/api/saque-nf', { method: 'PATCH', body: JSON.stringify({ id: nota.id, acao, motivo: motivoTxt }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) setMsg({ tipo: 'erro', txt: d.error || 'Não consegui gravar a decisão.' });
-      else setMsg({ tipo: 'ok', txt: acao === 'aprovar' ? 'Nota aprovada — o saque desse valor está liberado.' : acao === 'reprovar' ? 'Nota reprovada.' : 'Substituição liberada — o parceiro já pode anexar outra nota.' });
+      else { setConfirmando(null); setMotivo(''); setMsg({ tipo: 'ok', txt: acao === 'aprovar' ? 'Nota aprovada — o saque desse valor está liberado.' : acao === 'reprovar' ? 'Nota reprovada.' : 'Substituição liberada — o parceiro já pode anexar outra nota.' }); }
     } catch (e) {
       setMsg({ tipo: 'erro', txt: e?.message || 'Falha ao gravar.' });
     } finally {
@@ -130,17 +129,38 @@ export default function NotasFiscaisSaqueAdmin() {
                 {n.arquivo_url
                   ? <a href={n.arquivo_url} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #cbd5e1', color: '#0D63DB', fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>📄 Abrir nota</a>
                   : <span style={{ fontSize: 12, color: '#b45309' }}>Não consegui gerar o link do arquivo.</span>}
-                {!usada && n.status === 'revisao_manual' && (
-                  <button disabled={ocupado === n.id} onClick={() => decidir(n, 'aprovar')} style={btn('#059669')}>Aprovar</button>
+                {!usada && confirmando?.id !== n.id && n.status === 'revisao_manual' && (
+                  <button disabled={ocupado === n.id} onClick={() => abrirConfirmacao(n, 'aprovar')} style={btn('#059669')}>Aprovar</button>
                 )}
-                {!usada && (n.status === 'revisao_manual' || n.status === 'aprovada') && (
-                  <button disabled={ocupado === n.id} onClick={() => decidir(n, 'reprovar')} style={btn('#dc2626')}>Reprovar</button>
+                {!usada && confirmando?.id !== n.id && (n.status === 'revisao_manual' || n.status === 'aprovada') && (
+                  <button disabled={ocupado === n.id} onClick={() => abrirConfirmacao(n, 'reprovar')} style={btn('#dc2626')}>Reprovar</button>
                 )}
-                {!usada && (n.status === 'revisao_manual' || n.status === 'aprovada') && (
-                  <button disabled={ocupado === n.id} onClick={() => decidir(n, 'liberar_substituicao')} style={btn('#475569')}>Liberar substituição</button>
+                {!usada && confirmando?.id !== n.id && (n.status === 'revisao_manual' || n.status === 'aprovada') && (
+                  <button disabled={ocupado === n.id} onClick={() => abrirConfirmacao(n, 'liberar_substituicao')} style={btn('#475569')}>Liberar substituição</button>
                 )}
                 {usada && <span style={{ fontSize: 11.5, color: '#64748b' }}>Vinculada ao saque #{n.lancamento_id} — não pode mais ser alterada.</span>}
               </div>
+              {!usada && confirmando?.id === n.id && (
+                <div style={{ marginTop: 9, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 12px', display: 'grid', gap: 7, fontSize: 12, color: '#334155' }}>
+                  {confirmando.acao === 'aprovar' ? (
+                    <div>Aprovar a nota de <strong>{fmt(n.valor_nf)}</strong> de <strong>{n.parceiro?.nome || 'parceiro'}</strong>? Isso libera o saque desse valor.</div>
+                  ) : (
+                    <>
+                      <div>{confirmando.acao === 'reprovar' ? 'Motivo da reprovação' : 'Motivo da substituição'} (o parceiro vai ler):</div>
+                      <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} autoFocus
+                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12.5, padding: '6px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontFamily: 'inherit', resize: 'vertical' }} />
+                    </>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button disabled={ocupado === n.id || (confirmando.acao !== 'aprovar' && !motivo.trim())} onClick={() => decidir(n, confirmando.acao)}
+                      style={{ ...btn(confirmando.acao === 'aprovar' ? '#059669' : confirmando.acao === 'reprovar' ? '#dc2626' : '#475569'), opacity: (confirmando.acao !== 'aprovar' && !motivo.trim()) ? 0.5 : 1 }}>
+                      {ocupado === n.id ? 'Gravando…' : confirmando.acao === 'aprovar' ? 'Confirmar aprovação' : confirmando.acao === 'reprovar' ? 'Confirmar reprovação' : 'Confirmar substituição'}
+                    </button>
+                    <button disabled={ocupado === n.id} onClick={() => { setConfirmando(null); setMotivo(''); }}
+                      style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #cbd5e1', background: 'white', color: '#334155', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

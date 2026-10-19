@@ -20,6 +20,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { checkRateLimit } from './_rate-limit.js';
 import { erroNome, normalizarNome } from './_nome.js';
 import { hashCpf, encryptCpf } from './_cpf.js';
+import { comprovanteValido, ERRO_SEM_COMPROVANTE } from './_comprovante-email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -88,6 +89,9 @@ export default async function handler(req, res) {
   // 1) Cria a conta (já confirmada — o cliente vai pagar em seguida). role explorador.
   // CPF NÃO vai para o metadata do Auth (só hash+cifra em perfis, adiante).
   const meta = { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };
+  // 19/10 (#251): conta nasce JÁ CONFIRMADA — só com prova de posse do e-mail (código enviado por
+  // api/codigo-email.js). Sem isto, alguém criava conta com o e-mail de outra pessoa e a senha dele.
+  if (!comprovanteValido(b.comprovante_email, email)) return res.status(400).json(ERRO_SEM_COMPROVANTE);
   const cRes = await adminAuth('users', { method: 'POST', body: JSON.stringify({ email, password: senha, email_confirm: true, user_metadata: meta }) });
   const cData = await cRes.json().catch(() => ({}));
   if (!cRes.ok) {

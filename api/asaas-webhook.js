@@ -390,7 +390,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, honorario_estorno: r });
       }
       if (mCobrancaAvulsa) {
-        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'chargeback');
+        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'chargeback', String(pagReal.id));
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       const result = await processarChargeback({
@@ -422,7 +422,7 @@ export default async function handler(req, res) {
       }
       if (mCobrancaAvulsa) {
         if (parcial) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_reembolso_parcial' });
-        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'reembolso');
+        const r = await reverterCobrancaAvulsaEstornada(mCobrancaAvulsa[1], 'reembolso', String(pagReal.id));
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       const result = await processarReembolso({ ...contexto, suspender: !parcial });

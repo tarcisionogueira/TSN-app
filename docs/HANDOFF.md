@@ -50,6 +50,26 @@
   autoativa — dono), 248 (financiamento-alertas fora do `enviarEmail`; chargeback de recarga não retira crédito).
 - **Validar no navegador (dono):** compra de assessoria pelo Checkout → contrato sai sozinho em até ~15 s.
 
+## 19/10 (2ª sessão, tarde) — #251 confirmação de e-mail por código + pendências 253–256
+- **#251 (conta já confirmada sem provar o e-mail):** `api/codigo-email.js` manda um código de 6 dígitos (15 min, reenvio
+  a cada 45 s, 5 tentativas, limite por IP) e, ao conferir, devolve um comprovante HMAC de 30 min (`api/_comprovante-email.js`).
+  `criar-conta-checkout`, `assinar-com-cadastro`, `promo-capturar` e `sdr-capturar` recusam sem comprovante
+  (`codigo_necessario`). No front, `src/lib/comprovanteEmail.jsx` (`pedirComprovanteEmail`) abre um modal que se monta
+  sozinho, só na hora de criar a conta: Checkout grátis e pago (antes de tokenizar o cartão), ProdutoPublico, Promo e
+  ProdutoLanding. Guarda o comprovante 25 min: cartão recusado não pede outro código. Tabela `verificacao_email_codigo`
+  (só hash). `EMAIL_CODIGO_SECRET` é opcional (cai na service key). **Validar no navegador:** cadastro pelo checkout.
+- **#253:** `enfileirado` como enviado em lancamento-remarketing, live-lembrete e juridico-lembretes (os demais não
+  duplicam). Sobra (forma 10, sem duplicar): ativacao-nudge/divulgacao/live-reforco gravam `email_ok=false` para o represado.
+- **#254:** Arrematei, remover análise, aprovar/reprovar NF de saque e "Enviar ao cliente" da guia (com a conferência de
+  nome/processo/valor) viraram confirmação na tela — sem `window.confirm/prompt`.
+- **#255:** fila do webhook MP reserva a linha (`reservado_ate`) antes de processar; estorno de cobrança avulsa só reabre se
+  for o pagamento que quitou — Pix parcial estornado vai para `pagamentos_conferencia`.
+- **#256:** aba Parceiros do Admin, Arrematados, AnalisesContext, CobrarPosicao, caso-aprendizado-cron (cursor anda na falha),
+  desativar-encerrados-cron (teto de tempo) e a migração 7b das políticas `admin_reembolsos_*` (não aplicada: já existem).
+- **Search Console:** `name` do Product no JSON-LD cortado em 150 caracteres. **CI "Testes"** vermelho desde 17/10: o teste
+  de parcelamento esperava a regra anterior a 8643448 — atualizado.
+- **Pendente do dono:** `drop index if exists public.idx_imoveis_ativo_id;` no SQL Editor (o conector travou no DROP).
+
 ## 19/10 (2ª sessão, em paralelo à de cima) — bug bounty complementar
 > Duas sessões rodaram o ritual ao mesmo tempo. Sobreposições (limpeza CEF, leitura de perfil e comissão no
 > `_webhook-core`, 404 do lote, login-rate) ficaram com a versão de cima; abaixo, só o que é desta sessão.

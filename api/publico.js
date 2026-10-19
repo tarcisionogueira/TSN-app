@@ -903,6 +903,14 @@ async function paginaCidade(uf, cidadeNorm, page) {
   });
 }
 
+// Google Merchant listings: `name` com no máx. 150 caracteres (19/10).
+function nomeProduto(txt) {
+  const t = String(txt || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= 150) return t;
+  const corte = t.slice(0, 147);
+  return `${corte.slice(0, corte.lastIndexOf(' ') > 100 ? corte.lastIndexOf(' ') : 147)}…`;
+}
+
 // ── /leilao/:id ──────────────────────────────────────────────────────────────
 async function paginaImovel(id) {
   // `fonte_id` e `data_fim` entram para o JSON-LD (identificador e priceValidUntil) — ver
@@ -1102,7 +1110,9 @@ async function paginaImovel(id) {
     // este erro (a pendência de fundo segue registrada acima, mas sem urgência).
     jsonld: Number(im.valor_minimo) > 0 ? {
       '@context': 'https://schema.org', '@type': 'Product',
-      name: im.titulo || `${t} em leilão em ${im.cidade || ''}`,
+      // 19/10: Search Console (Listagens do comerciante) — "comprimento da string do campo name não é válido";
+      // título de leiloeiro passa de 150 caracteres. Corta na palavra.
+      name: nomeProduto(im.titulo || `${t} em leilão em ${im.cidade || ''}`),
       description: `${t} em leilão em ${local}.`,
       url: canonical,
       ...(im.fonte_id ? { sku: String(im.fonte_id) } : {}),
@@ -1169,7 +1179,7 @@ async function paginaProduto(tipo, id) {
     jsonld: {
       '@context': 'https://schema.org',
       '@type': tipo === 'curso' ? 'Course' : 'Book',
-      name: p.titulo,
+      name: nomeProduto(p.titulo),
       description: descCurta,
       url: canonical,
       ...(p.capa_url ? { image: p.capa_url } : {}),

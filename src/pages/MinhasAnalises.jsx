@@ -61,10 +61,22 @@ export default function MinhasAnalises() {
   // Imóveis JÁ arrematados (fonte da verdade = tabela arrematados) — quando arrematado, some o
   // botão de AÇÃO "Arrematei" e aparece o ESTADO "Arrematado".
   const [arrematadosSet, setArrematadosSet] = React.useState(new Set());
+  // Falha na leitura NÃO é "nenhum arrematado" (forma 2): o card voltaria a oferecer "Arrematei"
+  // para imóvel já registrado. Avisa e reporta em vez de fundir com lista vazia.
+  const [erroArrematados, setErroArrematados] = React.useState(null);
   React.useEffect(() => {
     if (!effectiveUserId) return;
     supabase.from('arrematados').select('imovel_id').eq('user_id', effectiveUserId)
-      .then(({ data }) => setArrematadosSet(new Set((data || []).map(r => String(r.imovel_id)).filter(Boolean))));
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[MinhasAnalises] arrematados:', error.message);
+          reportarErroCliente({ msg: `arrematados (MinhasAnalises): ${error.message || 'erro'}` });
+          setErroArrematados(error.message || 'erro');
+          return;
+        }
+        setErroArrematados(null);
+        setArrematadosSet(new Set((data || []).map(r => String(r.imovel_id)).filter(Boolean)));
+      });
   }, [effectiveUserId]);
 
   // FONTE DA LISTA = RPC `minhas_analises_lista` (uma linha por imóvel, montada no servidor).
@@ -165,22 +177,34 @@ export default function MinhasAnalises() {
   // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.
   const [sinalizados, setSinalizados] = React.useState({});
   const [sinalizando, setSinalizando] = React.useState(null);
-  const sinalizarArremate = async (e, a) => {
+  // Confirmação NA TELA (pendência 254): window.prompt/confirm/alert são bloqueados em silêncio no
+  // celular/app embutido — devolvem null e o "Arrematei" simplesmente não acontecia, sem aviso.
+  const [confirmandoArr, setConfirmandoArr] = React.useState(null); // imovelId com o formulário aberto
+  const [valorArr, setValorArr] = React.useState('');
+  const [confirmandoRemover, setConfirmandoRemover] = React.useState(null); // imovelId
+  const [avisoCard, setAvisoCard] = React.useState({}); // imovelId -> mensagem de erro/aviso
+  const avisar = (id, msg) => setAvisoCard(p => ({ ...p, [id]: msg }));
+  const sinalizarArremate = (e, a) => {
     e.stopPropagation();
     // Modo suporte é só visualização: /api/sinalizar-arremate usa o token REAL (admin) e
     // registraria o arremate na conta do admin, não do cliente. Bloqueia.
-    if (impersonate) { window.alert('No modo suporte a conta é só para visualização. Saia do suporte para registrar em seu próprio nome.'); return; }
+    if (impersonate) { avisar(a.imovelId, 'No modo suporte a conta é só para visualização. Saia do suporte para registrar em seu próprio nome.'); return; }
     if (sinalizados[a.imovelId] || sinalizando) return;
-    const raw = window.prompt(`Confirme o arremate de "${a.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
-    if (raw == null) return; // cancelou
-    const valor = Number(String(raw).replace(/[^\d]/g, ''));
-    if (!valor || valor <= 0) { window.alert('Informe um valor de arremate válido (somente números).'); return; }
-    setSinalizando(a.imovelId);
+    setConfirmandoRemover(null); setValorArr(''); avisar(a.imovelId, ''); setConfirmandoArr(a.imovelId);
+  };
+  const confirmarArremate = async (e, a) => {
+    e.stopPropagation();
+    const valor = Number(String(valorArr).replace(/[^\d]/g, ''));
+    if (!valor || valor <= 0) { avisar(a.imovelId, 'Informe um valor de arremate válido (somente números inteiros em reais, ex: 250000).'); return; }
+    setSinalizando(a.imovelId); avisar(a.imovelId, '');
     try {
       const res = await apiCall('/api/sinalizar-arremate', { method: 'POST', body: JSON.stringify({ imovel_id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, valor }) });
-      if (res.ok) setSinalizados(p => ({ ...p, [a.imovelId]: true }));
-      else { const d = await res.json().catch(() => ({})); window.alert(d.error || 'Não foi possível registrar o arremate.'); }
-    } catch { /* ok */ }
+      if (res.ok) { setSinalizados(p => ({ ...p, [a.imovelId]: true })); setConfirmandoArr(null); }
+      else { const d = await res.json().catch(() => ({})); avisar(a.imovelId, d.error || `Não foi possível registrar o arremate (HTTP ${res.status}).`); }
+    } catch (err) {
+      console.error('[MinhasAnalises] sinalizar-arremate:', err?.message);
+      avisar(a.imovelId, `Não foi possível registrar o arremate: ${err?.message || 'falha de conexão'}. Nada foi gravado — tente de novo.`);
+    }
     setSinalizando(null);
   };
 
@@ -309,6 +333,12 @@ export default function MinhasAnalises() {
 
       <AcompanhamentoFavoritos key={favVersao} tipo="imovel" />
 
+      {erroArrematados && (
+        <div style={{ fontSize: 12, color: '#9a3412', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '8px 12px', lineHeight: 1.45 }}>
+          Não foi possível conferir seus imóveis já arrematados — o botão &quot;Arrematei&quot; pode aparecer em imóvel já registrado. Detalhe técnico: {erroArrematados}
+        </div>
+      )}
+
       {erroLista ? (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 16, padding: '20px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: '#b91c1c' }}>
@@ -344,7 +374,8 @@ export default function MinhasAnalises() {
             const jaArr = arrematadosSet.has(String(a.imovelId)) || !!sinalizados[a.imovelId]
               || ['segunda_reuniao', 'arrematado', 'pos_arrematacao', 'procuracao_assinada', 'honorarios_pagos'].includes(caso?.status_etapa);
             return (
-              <div key={a.imovelId} onClick={() => abrir(a)}
+              <React.Fragment key={a.imovelId}>
+              <div onClick={() => abrir(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer', transition: 'box-shadow .15s, border-color .15s' }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
@@ -390,24 +421,58 @@ export default function MinhasAnalises() {
                   </button>
                 )}
                 {/* "Arrematei" é AÇÃO de sinalizar — some quando o imóvel já está arrematado. */}
-                {!jaArr && podeDeclararArremate && (doisProntos(a) || leilaoPassou(a)) && (
+                {!jaArr && podeDeclararArremate && (doisProntos(a) || leilaoPassou(a)) && (confirmandoArr === a.imovelId ? (
+                  <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, cursor: 'default' }}>
+                    <span style={{ fontSize: 11, color: '#334155' }}>Por quanto você arrematou? (R$)</span>
+                    <input type="text" inputMode="numeric" autoFocus value={valorArr} placeholder="ex: 250000"
+                      onChange={(e) => setValorArr(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') confirmarArremate(e, a); if (e.key === 'Escape') setConfirmandoArr(null); }}
+                      style={{ width: 130, fontSize: 12, padding: '6px 8px', borderRadius: 8, border: '1px solid #cbd5e1' }} />
+                    <span style={{ display: 'inline-flex', gap: 6 }}>
+                      <button onClick={(e) => confirmarArremate(e, a)} disabled={sinalizando === a.imovelId}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 8, border: 'none', background: '#15803d', color: 'white', cursor: 'pointer' }}>
+                        {sinalizando === a.imovelId ? <Loader2 size={12} /> : <Trophy size={12} />} Confirmar
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmandoArr(null); avisar(a.imovelId, ''); }} disabled={sinalizando === a.imovelId}
+                        style={{ fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer' }}>Cancelar</button>
+                    </span>
+                  </div>
+                ) : (
                 <button onClick={(e) => sinalizarArremate(e, a)}
                   disabled={sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   <Trophy size={13} /> {sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei'}
                 </button>
-                )}
+                ))}
+                {confirmandoRemover === a.imovelId ? (
+                  <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, maxWidth: 220, cursor: 'default' }}>
+                    <span style={{ fontSize: 11, color: '#334155', textAlign: 'right' }}>Remover? Mercadológico, documental e laudo deste imóvel serão apagados, sem como desfazer.</span>
+                    <span style={{ display: 'inline-flex', gap: 6 }}>
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmandoRemover(null); setLista(prev => (prev || []).filter(r => r.imovelId !== a.imovelId)); Promise.resolve(remover(a.imovelId)).then(carregarLista); }}
+                        style={{ fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 8, border: 'none', background: '#b91c1c', color: 'white', cursor: 'pointer' }}>Remover</button>
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmandoRemover(null); }}
+                        style={{ fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer' }}>Cancelar</button>
+                    </span>
+                  </div>
+                ) : (
                 <button onClick={(e) => {
                   e.stopPropagation();
-                  // Mesmo guard de sinalizarArremate (linha 140): em modo suporte o delete roda com
+                  // Mesmo guard de sinalizarArremate: em modo suporte o delete roda com
                   // a sessão REAL do admin, e a RLS (auth.uid() = user_id) descarta o delete em
                   // silêncio — a tela removia o card como se tivesse apagado, e nada mudava no banco
                   // (bug bounty 03/09; card reaparecia ao recarregar a lista).
-                  if (impersonate) { window.alert('No modo suporte a conta é só para visualização. Saia do suporte para remover em seu próprio nome.'); return; }
-                  if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) { setLista(prev => (prev || []).filter(r => r.imovelId !== a.imovelId)); Promise.resolve(remover(a.imovelId)).then(carregarLista); }
+                  if (impersonate) { avisar(a.imovelId, 'No modo suporte a conta é só para visualização. Saia do suporte para remover em seu próprio nome.'); return; }
+                  setConfirmandoArr(null); setConfirmandoRemover(a.imovelId);
                 }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+                )}
               </div>
+              {avisoCard[a.imovelId] && (
+                <div style={{ fontSize: 12, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '7px 12px', marginTop: -4, lineHeight: 1.45 }}>
+                  {avisoCard[a.imovelId]}
+                </div>
+              )}
+              </React.Fragment>
             );
           })}
         </div>

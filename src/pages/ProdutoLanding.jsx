@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
 import { trackCadastro } from '../utils/gtag';
+import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
 const PLANOS_INFO = {
   top2: {
@@ -271,6 +272,8 @@ function CapturaLanding({ id }) {
     try {
       // Todo o trabalho sensível roda no backend (sorteio do consultor, vínculo
       // na carteira, criação da conta já confirmada e concessão do acesso).
+      const comprovante = await pedirComprovanteEmail(form.email); // 19/10 (#251): prova de posse do e-mail
+      if (!comprovante) { setEnviando(false); return; }
       const r = await fetch('/api/sdr-capturar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -282,6 +285,7 @@ function CapturaLanding({ id }) {
           whatsapp: wa,
           respostas,
           origem: window.location.href,
+          comprovante_email: comprovante,
         }),
       });
       const d = await r.json().catch(() => ({}));

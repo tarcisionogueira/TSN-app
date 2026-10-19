@@ -22,6 +22,7 @@ import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico'
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { ESTADOS_UF } from '../data/cidades';
+import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
 
@@ -417,11 +418,15 @@ export default function Checkout() {
     criandoContaRef.current = true; // marca antes do 1º await
     setSuLoading(true);
     try {
+      // 19/10 (#251): a conta nasce confirmada — antes, o código enviado ao e-mail prova que ele é seu.
+      const comprovante = await pedirComprovanteEmail(email);
+      if (!comprovante) { setSuLoading(false); return; }
       const res = await apiCall('/api/criar-conta-checkout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha, ...(refCode ? { ref_codigo: refCode } : {}) }),
+        body: JSON.stringify({ nome, email, senha, comprovante_email: comprovante, ...(refCode ? { ref_codigo: refCode } : {}) }),
       });
       const data = await res.json();
+      if (data?.codigo_necessario) esquecerComprovanteEmail(email);
       if (!res.ok) throw new Error(data.error || 'Não foi possível criar a conta.');
       // 18/08: a conversão de CADASTRO só disparava no Login.jsx — as três telas de criação
       // de conta do checkout (onde o tráfego PAGO aterrissa) nunca avisavam o Google Ads.
@@ -697,13 +702,17 @@ export default function Checkout() {
     try {
       // Secure Fields (24/09): token sai dos campos do MP montados no formulário — o número do cartão
       // não passa pelo nosso código. SDK barrado chega com `sdkBloqueado`, como antes.
+      // 19/10 (#251): prova de posse do e-mail ANTES de tokenizar o cartão (a conta nasce confirmada).
+      const comprovante = await pedirComprovanteEmail(email);
+      if (!comprovante) return;
       const token = await cartaoSeguro.tokenizar({ cardholderName: card.nome.trim(), cpf: cpfDigits });
       const deviceId = await obterDeviceId();
       const res = await apiCall('/api/assinar-com-cadastro', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2', deviceId }),
+        body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2', deviceId, comprovante_email: comprovante }),
       });
       const data = await res.json();
+      if (data?.codigo_necessario) esquecerComprovanteEmail(email);
       if (!res.ok) {
         if (res.status === 409) { setSuErro('Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'); setEtapa('ident'); return; }
         throw new Error(data.error || 'Não foi possível concluir a assinatura.');

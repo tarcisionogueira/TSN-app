@@ -16,10 +16,13 @@ const c = cronograma({ forma: 'parcelado', entrada_pct: 25, entrada_venc: '2026-
 ok(c.length === 31, 'entrada + 30 parcelas');
 ok(c[0].valor === 137088.79 && c[0].paga, 'entrada 25% = R$ 137.088,79, marcada paga');
 ok(Math.abs(c.reduce((s, x) => s + x.valor, 0) - 548355.15) < 0.005, 'soma fecha exatamente com o valor arrematado');
-ok(c[30].venc === '2029-03-16', '30ª parcela em 16/03/2029');
+// Regra de 8643448: parcelas a cada 30 dias contados da DATA DO LEILÃO; `dias` conta até o "pagar até"
+// (vencimento − 1 dia de folga). Caso real do Marcos: parcela 1 vence 16/10 e a guia diz "pagar até 15/10".
+ok(c[1].venc === '2026-10-16' && c[1].pagar_ate === '2026-10-15', 'parcela 1 vence 16/10, pagar até 15/10');
+ok(c[30].venc === '2029-03-04', '30ª parcela em 04/03/2029 (leilão + 900 dias)');
 const prox = proximaPendente(c, '2026-10-11');
-ok(prox.idx === 1 && prox.dias === 5, 'próxima pendente = parcela 1, faltam 5 dias');
-ok(proximaPendente(c, '2026-10-20').dias === -4, 'atrasada = dias negativos');
+ok(prox.idx === 1 && prox.dias === 4 && prox.dias_venc === 5, 'próxima pendente = parcela 1, 4 dias até pagar (5 até vencer)');
+ok(proximaPendente(c, '2026-10-20').dias === -5, 'atrasada = dias negativos');
 ok(cronograma({ forma: 'a_vista' }, { valor: 100000, dataArrematacao: '2026-09-16' })[0].venc === '2026-09-16', 'à vista sem data própria vence na data da arrematação');
 ok(cronograma({ forma: 'parcelado', parcelas: 10 }, { valor: 0, dataArrematacao: '2026-09-16' }).length === 0, 'sem valor não inventa cronograma');
 ok(/art\. 895/.test(avisoPenalidade('judicial')) && !/art\. 895/.test(avisoPenalidade('extrajudicial')), 'multa do CPC só no judicial');

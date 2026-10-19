@@ -386,11 +386,13 @@ export function AnalisesProvider({ children }) {
   const getDocumental = useCallback((imovelId) => documentais.find(a => a.imovelId === imovelId) || null, [documentais]);
   const getLaudo = useCallback((imovelId) => laudos.find(a => a.imovelId === imovelId) || null, [laudos]);
 
+  // Devolve { ok, apagadas, erro } — o chamador decide o aviso. 19/10: o card só sai do estado
+  // do contexto quando o banco PROVOU que apagou algo (antes saía antes do delete e voltava no
+  // recarregamento, sem explicação).
   const remover = useCallback(async (imovelId) => {
-    setAnalises(prev => prev.filter(a => a.imovelId !== imovelId));
-    setDocumentais(prev => prev.filter(a => a.imovelId !== imovelId));
-    setLaudos(prev => prev.filter(a => a.imovelId !== imovelId));
-    if (uid) {
+    if (!uid) return { ok: false, apagadas: 0, erro: 'sem usuário' };
+    let total = 0; let erro = null;
+    {
       // 19/08: postgrest-js NÃO lança (o try/catch era decorativo) e o resultado era
       // descartado — o cliente confirmava um diálogo "não há como desfazer" e via o card
       // voltar sem explicação quando a exclusão falhava. Erro agora tem log e a lista é
@@ -399,10 +401,22 @@ export function AnalisesProvider({ children }) {
         // 19/10 (forma 3): no modo suporte a RLS filtra as linhas e o delete volta `error: null` sem apagar nada —
         // o card sumia e voltava no recarregamento. `.select()` mostra o que foi de fato apagado.
         const { data: apagadas, error: errDel } = await supabase.from(tabela).delete().eq('user_id', uid).eq('imovel_id', imovelId).select('imovel_id');
-        if (errDel) console.error(`[analises] exclusão em ${tabela} falhou:`, errDel.message);
+        if (errDel) { console.error(`[analises] exclusão em ${tabela} falhou:`, errDel.message); erro = erro || errDel.message; }
         else if (!apagadas?.length) console.warn(`[analises] exclusão em ${tabela} não apagou nada (RLS/modo suporte?)`);
+        else total += apagadas.length;
       }
     }
+    if (total > 0) {
+      setAnalises(prev => prev.filter(a => a.imovelId !== imovelId));
+      setDocumentais(prev => prev.filter(a => a.imovelId !== imovelId));
+      setLaudos(prev => prev.filter(a => a.imovelId !== imovelId));
+    }
+    if (total === 0 && typeof window !== 'undefined') {
+      window.alert(erro
+        ? `Não foi possível remover a análise: ${erro}`
+        : 'Não foi possível remover a análise: nada foi apagado (sem permissão para este imóvel).');
+    }
+    return { ok: total > 0 && !erro, apagadas: total, erro };
   }, [uid]);
 
   const emAndamento = analises.filter(a => a.status === 'gerando').length + documentais.filter(a => a.status === 'gerando').length + laudos.filter(a => a.status === 'gerando').length;

@@ -48,12 +48,22 @@ async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
   if (!SUPABASE_URL || !SERVICE_KEY) return new Response(JSON.stringify({ error: 'Supabase ausente' }), { status: 500 });
 
-  const r = await sb(`mp_webhook_fila?status=eq.pendente&tentativas=lt.${MAX_TENT}&order=criado_em.asc&limit=${LOTE}&select=*`);
+  const agoraISO = new Date().toISOString();
+  const livre = `or=(reservado_ate.is.null,reservado_ate.lt.${encodeURIComponent(agoraISO)})`;
+  const r = await sb(`mp_webhook_fila?status=eq.pendente&tentativas=lt.${MAX_TENT}&${livre}&order=criado_em.asc&limit=${LOTE}&select=*`);
   if (!r.ok) return new Response(JSON.stringify({ error: 'query da fila falhou' }), { status: 500 });
   const fila = await r.json();
 
   let processados = 0, falhas = 0;
   for (const item of fila) {
+    // 19/10 (#255): RESERVA atômica — rodadas sobrepostas não processam o mesmo evento. Só segue quem
+    // conseguiu a linha (PATCH condicional devolve 1 linha); a reserva vence em 5 min se a rodada morrer.
+    const rv = await sb(`mp_webhook_fila?id=eq.${item.id}&status=eq.pendente&${livre}`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ reservado_ate: new Date(Date.now() + 5 * 60_000).toISOString() }),
+    });
+    const reservada = rv.ok ? await rv.json().catch(() => []) : [];
+    if (!Array.isArray(reservada) || reservada.length !== 1) continue;
     const fakeReq = { body: item.payload, headers: {} };
     const mockRes = criarResMock();
     try {
@@ -61,10 +71,11 @@ async function handler(req) {
       const ok = mockRes.statusCode >= 200 && mockRes.statusCode < 300;
       if (!ok) throw new Error(`status_${mockRes.statusCode}_${JSON.stringify(mockRes.body).slice(0, 300)}`);
       processados++;
-      await sb(`mp_webhook_fila?id=eq.${item.id}`, {
+      const fim = await sb(`mp_webhook_fila?id=eq.${item.id}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'processado', processado_em: new Date().toISOString(), resultado: mockRes.body }),
+        body: JSON.stringify({ status: 'processado', processado_em: new Date().toISOString(), resultado: mockRes.body, reservado_ate: null }),
       });
+      if (!fim.ok) console.error('[processar-fila-webhook-mp] processado mas NÃO marcado', item.id, fim.status);
     } catch (e) {
       falhas++;
       const tentativas = (item.tentativas || 0) + 1;
@@ -72,8 +83,8 @@ async function handler(req) {
       const motivo = String(e?.message || e).slice(0, 500);
       await sb(`mp_webhook_fila?id=eq.${item.id}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ tentativas, ultimo_erro: motivo, ...(esgotou ? { status: 'falhou' } : {}) }),
-      });
+        body: JSON.stringify({ tentativas, ultimo_erro: motivo, reservado_ate: null, ...(esgotou ? { status: 'falhou' } : {}) }),
+      }).then((x) => { if (!x.ok) console.error('[processar-fila-webhook-mp] falha não registrada', item.id, x.status); });
       if (esgotou) {
         console.error('[processar-fila-webhook-mp] esgotou tentativas', item.id, item.mp_topic, item.mp_data_id, motivo);
         alertarErro({

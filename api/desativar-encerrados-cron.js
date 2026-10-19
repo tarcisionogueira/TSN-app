@@ -29,9 +29,17 @@ export default async function handler(req, res) {
   // porque cada chamada desliga no máximo 500 e o que já saiu não volta para a fila.
   // 18/10 (pendência 222): a função passou a desligar no máx. 150 por chamada (500 × 28 ms = 14 s estourava os
   // 8 s mesmo sem carga). Lote cheio = pode haver mais: chama de novo enquanto couber no orçamento de 35 s.
+  // 19/10: orçamento de TEMPO contra o maxDuration (60 s). Antes: laço até 35 s + 15 s de espera + 2 × 8 s de
+  // timeout + 3 RPCs finais podia passar de 60 s — a Vercel mata a função, e o log/resposta (que é o que
+  // distingue "nada a fazer" de "parou") nunca saía. Agora: nova tentativa só se couber com folga para as
+  // finais, e cada RPC final roda com AbortSignal pelo tempo que resta (ou é pulada, dizendo que foi).
   const LOTE = 150, inicio = Date.now();
+  const LIMITE_MS = 56000;      // maxDuration 60 s − folga para log e resposta
+  const CUSTO_RPC_MS = 9000;    // statement timeout de 8 s + rede
+  const RESERVA_FINAL_MS = 12000; // as 3 RPCs finais costumam somar ~2-3 s; acima disso cada uma é cortada pelo relógio
+  const restante = () => LIMITE_MS - (Date.now() - inicio);
   let desativados = null, total = 0, chamadas = 0;
-  rodada: while (Date.now() - inicio < 35000 && chamadas < 6) {
+  rodada: while (Date.now() - inicio < 35000 && restante() > CUSTO_RPC_MS + RESERVA_FINAL_MS && chamadas < 6) {
     chamadas++;
     let n = null;
     for (let tentativa = 1; tentativa <= 2; tentativa++) {
@@ -40,11 +48,16 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
           body: '{}',
+          signal: AbortSignal.timeout(Math.max(1000, restante() - RESERVA_FINAL_MS)),
         });
         if (r.ok) { n = Number(await r.json().catch(() => 0)) || 0; break; }
         const txt = (await r.text().catch(() => '')).slice(0, 200);
         desativados = { erro: `${r.status} ${txt}`, tentativas: tentativa, ja_desativados: total };
         if (!/57014/.test(txt)) break rodada; // só o timeout de carga vale nova tentativa
+        if (tentativa === 1 && restante() < 15000 + CUSTO_RPC_MS + RESERVA_FINAL_MS) {
+          desativados.erro += ' · sem tempo no maxDuration para nova tentativa';
+          break rodada;
+        }
         await new Promise(ok => setTimeout(ok, 15000));
       } catch (e) { desativados = { erro: String(e?.message || e).slice(0, 200), tentativas: tentativa, ja_desativados: total }; break rodada; }
     }
@@ -54,45 +67,37 @@ export default async function handler(req, res) {
     if (n < LOTE) break; // veio menos que um lote: a fila acabou
   }
 
+  // RPC final com o relógio: pulada (e dito por extenso) se não há tempo; cortada se passar do que resta.
+  const rpcFinal = async (nome, comStatus = false) => {
+    if (restante() < 1500) return { erro: 'pulado: sem tempo no maxDuration (a próxima rodada horária faz)' };
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nome}`, {
+        method: 'POST',
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(Math.max(1000, restante())),
+      });
+      if (r.ok) return await r.json().catch(() => null);
+      const txt = (await r.text().catch(() => '')).slice(0, 200);
+      return { erro: comStatus ? `${r.status} ${txt}` : txt };
+    } catch (e) { return { erro: String(e?.message || e).slice(0, 200) }; }
+  };
+
   // Cópias do mesmo bem (13/10): veículo relistado e 2ª praça publicada como outro anúncio.
   // RPC própria — dentro de desativar_leiloes_encerrados somava ~2 s a quem já estourava o teto.
-  let relistados = null;
-  try {
-    const rr = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reconciliar_relistados`, {
-      method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    relistados = rr.ok ? await rr.json().catch(() => null) : { erro: `${rr.status} ${(await rr.text().catch(() => '')).slice(0, 200)}` };
-  } catch (e) { relistados = { erro: String(e?.message || e).slice(0, 200) }; }
+  const relistados = await rpcFinal('reconciliar_relistados', true);
 
   // Mesma varredura horária cuida do DESCONTO ANUNCIADO: ele é o da praça mais descontada ainda
   // DISPONÍVEL, e "ainda disponível" muda com o relógio sem ninguém escrever na linha. Quando a
   // 2ª praça vence, o desconto tem de voltar a ser o da praça que sobrou — senão o card anuncia
   // um abatimento que não existe mais.
-  let descontos = null;
-  try {
-    const r2 = await fetch(`${SUPABASE_URL}/rest/v1/rpc/recalcular_desconto_praca`, {
-      method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    descontos = r2.ok ? await r2.json().catch(() => null) : { erro: (await r2.text().catch(() => '')).slice(0, 200) };
-  } catch (e) { descontos = { erro: String(e?.message || e).slice(0, 200) }; }
+  const descontos = await rpcFinal('recalcular_desconto_praca');
   // 29/08: e os NÚMEROS DA VITRINE da aula ao vivo, pelo mesmo motivo — quem muda a conta é esta
   // varredura, ao ligar/desligar `ativo`. Eles eram calculados na hora e a página do tráfego pago
   // levava `statement timeout` (1,7 s varrendo 66 mil linhas com dois count(distinct)); agora vive
   // em `plataforma_numeros_cache`, lido em 1 ms. Se este passo parar, o invariante
   // `live_numeros_congelados` acusa em 3 h — cache que envelhece calado seria só outro defeito.
-  let numeros = null;
-  try {
-    const r3 = await fetch(`${SUPABASE_URL}/rest/v1/rpc/live_plataforma_numeros_atualizar`, {
-      method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    numeros = r3.ok ? await r3.json().catch(() => null) : { erro: (await r3.text().catch(() => '')).slice(0, 200) };
-  } catch (e) { numeros = { erro: String(e?.message || e).slice(0, 200) }; }
+  const numeros = await rpcFinal('live_plataforma_numeros_atualizar');
 
   // Log sempre, inclusive o zero: é o que permite ver que a varredura RODOU num dia sem baixas
   // (silêncio total não distingue "nada a fazer" de "cron parou").

@@ -91,6 +91,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [lancsErro, setLancsErro] = React.useState(false); // leitura FALHOU (≠ nenhum lançamento)
   const [docs, setDocs] = React.useState([]);
   const [docsLoading, setDocsLoading] = React.useState(true);
   const [docsErro, setDocsErro] = React.useState(false);
@@ -137,10 +138,16 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     } catch (e) { setRevenda(r => ({ ...r, enviando: false, erro: e.message })); }
   };
 
-  React.useEffect(() => {
-    supabase.from('arrematado_lancamentos').select('*').eq('arrematado_id', arr.id).order('data', { ascending: false })
-      .then(({ data }) => { setLancs(Array.isArray(data) ? data : []); setLoading(false); });
+  // 19/10 (forma 2): `{ data }` sem `error` fazia a falha de leitura virar "Nenhum lançamento
+  // ainda" e saldo R$ 0 — o cliente relançava o que já estava no banco.
+  const carregarLancs = React.useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('arrematado_lancamentos').select('*').eq('arrematado_id', arr.id).order('data', { ascending: false });
+    if (error) { console.error('[arrematados] leitura dos lançamentos falhou:', error.message); setLancsErro(true); }
+    else { setLancs(Array.isArray(data) ? data : []); setLancsErro(false); }
+    setLoading(false);
   }, [arr.id]);
+  React.useEffect(() => { carregarLancs(); }, [carregarLancs]);
 
   // Documentos do arremate: fonte única = imovel_anexos (é o que a atribuição gravou
   // e o que a IA lê). Assim os anexos incluídos na atribuição aparecem aqui.
@@ -242,6 +249,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
       const row = { arrematado_id: arr.id, user_id: user.id, tipo: novo.tipo, categoria: novo.categoria, descricao: novo.descricao.trim() || null, valor, data: novo.data || null, anexo_id: anexoId }; // padrao-ok: o form "Novo lançamento" inteiro fica oculto sob suporte (soLeitura = !!impersonate)
       const { data, error } = await supabase.from('arrematado_lancamentos').insert(row).select().single();
       if (!error && data) { setLancs(prev => [data, ...prev]); setNovo(n => ({ ...n, descricao: '', valor: '' })); setComprovanteFile(null); }
+      else {
+        // 19/10: antes a falha só deixava o formulário preenchido, sem dizer nada.
+        console.error('[arrematados] insert do lançamento falhou:', error?.message || 'sem linha devolvida');
+        alert(`Não foi possível salvar o lançamento — tente de novo.${error?.message ? `\n\n${error.message}` : ''}${anexoId ? '\n\nO comprovante já foi anexado aos documentos.' : ''}`);
+      }
     } finally { setEnviandoLanc(false); }
   };
   const delLanc = async (id) => {
@@ -451,7 +463,9 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
                 </div>
               </div>
               )}
-              {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando…</div> : lancs.length === 0 ? (
+              {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando…</div> : lancsErro && lancs.length === 0 ? (
+                <div style={{ color: '#b91c1c', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Não consegui carregar os lançamentos agora — o saldo acima pode estar incompleto. <button type="button" onClick={carregarLancs} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Tentar de novo</button></div>
+              ) : lancs.length === 0 ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum lançamento ainda.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -842,21 +856,29 @@ export default function Arrematados() {
       // os arremates do usuário. Um registro ruim não pode contaminar os bons.
       const imovelIds = [...new Set(lista.map(a => a.imovel_id).filter(ehUuid))];
       if (imovelIds.length) {
+        // 19/10 (forma 2): o postgrest-js NÃO lança em 4xx/5xx — o try/catch nunca via o erro e
+        // a falha virava "0 documentos" / "—" com cara de resposta. Agora `error` é conferido e
+        // vira aviso (sem sobrescrever um aviso de carga já posto acima).
+        const falhas = [];
         try {
-          const { data: an } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds).or(ANEXO_COM_ARQUIVO);
+          const { data: an, error: errAn } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds).or(ANEXO_COM_ARQUIVO);
+          if (errAn) throw errAn;
           const dc = {}; (an || []).forEach(x => { dc[x.imovel_id] = (dc[x.imovel_id] || 0) + 1; }); setNDocs(dc);
-        } catch { setNDocs({}); }
+        } catch (e) { console.warn('[arrematados] contagem de documentos:', e?.message || e); falhas.push('a contagem de documentos'); setNDocs({}); }
         try {
-          const { data: am } = await supabase.from('analises_mercado').select('imovel_id,result,updated_at').eq('user_id', uid).in('imovel_id', imovelIds).eq('status', 'concluida').order('updated_at', { ascending: false });
+          const { data: am, error: errAm } = await supabase.from('analises_mercado').select('imovel_id,result,updated_at').eq('user_id', uid).in('imovel_id', imovelIds).eq('status', 'concluida').order('updated_at', { ascending: false });
+          if (errAm) throw errAm;
           // Mesma regra da ficha do arremate: zero = não estimado, não é um valor.
           const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = Number(x.result?.valorMercado) > 0 ? Number(x.result.valorMercado) : null; }); setMercado(mm);
-        } catch { setMercado({}); }
+        } catch (e) { console.warn('[arrematados] valor de mercado:', e?.message || e); falhas.push('o valor de mercado'); setMercado({}); }
         try {
-          const { data: iv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao,modalidade,numero_processo').in('id', imovelIds);
+          const { data: iv, error: errIv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao,modalidade,numero_processo').in('id', imovelIds);
+          if (errIv) throw errIv;
           const av = {}; const proc = {};
           (iv || []).forEach(x => { av[x.id] = x.valor_avaliacao ?? null; proc[x.id] = { modalidade: x.modalidade, numero_processo: x.numero_processo }; });
           setAvals(av); setProcessos(proc);
-        } catch { setAvals({}); setProcessos({}); }
+        } catch (e) { console.warn('[arrematados] avaliação/processo:', e?.message || e); falhas.push('a avaliação e o processo'); setAvals({}); setProcessos({}); }
+        if (falhas.length) setErroCarga(prev => prev || `Não foi possível carregar ${falhas.join(', ')} dos arrematados — os números abaixo podem estar incompletos. Tente de novo.`);
       } else { setNDocs({}); setMercado({}); setAvals({}); setProcessos({}); }
     } else { setSaldos({}); setNDocs({}); setMercado({}); setAvals({}); setProcessos({}); }
     setLoading(false);

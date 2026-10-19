@@ -742,7 +742,7 @@ export async function processarEventoMp(req, res) {
         return res.status(200).json({ ok: true, honorario_estorno: r });
       }
       if (ehCobrancaAvulsaMp) {
-        const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'chargeback');
+        const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'chargeback', String(pagamento.id));
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       // 19/10: o Pro ANUAL pago por PIX vem com metadata.tipo='servico' (para o caminho genérico não
@@ -766,7 +766,7 @@ export async function processarEventoMp(req, res) {
       }
       if (ehCobrancaAvulsaMp) {
         if (parcial) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_reembolso_parcial' });
-        const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'reembolso');
+        const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'reembolso', String(pagamento.id));
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
       if (ehProdutoMp) {

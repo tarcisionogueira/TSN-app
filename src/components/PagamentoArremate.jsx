@@ -245,6 +245,9 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
   // Fluxo da guia já gerada (12/10, opção 1): anexar → ler → enviar ao cliente → comprovante dá baixa.
   const [ocupado, setOcupado] = React.useState('');
   const [msg, setMsg] = React.useState(null); // { tipo: 'ok'|'erro', txt, avisos }
+  // Conferência ANTES de enviar (pendência 254), igual a ParcelasCaso.jsx: o envio vai direto ao arrematante,
+  // então nome, processo e valor lidos da guia aparecem ao lado do que o caso diz, e só sai com "Confirmar envio".
+  const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false);
   const subir = async (file, tipo, descricao) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('imovel_id', imovelId); fd.append('tipo', tipo); fd.append('descricao', descricao);
@@ -268,6 +271,7 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
     try {
       const d = await chamarApi('/api/guia-parcela', { json: { acao: 'enviar', arrematado_id: arrematadoId, parcela_idx: parcela.idx } });
       if (d.parcelamento) onParcelamento(d.parcelamento);
+      setConfirmandoEnvio(false);
       setMsg({ tipo: 'ok', txt: `Guia enviada para ${d.enviada_para}.${d.aviso ? ` ${d.aviso}` : ''}` });
     } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
     setOcupado('');
@@ -380,10 +384,33 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
                 <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4 }}>
                   {guiaGerada.enviada_em ? `✅ Enviada ao cliente (${guiaGerada.enviada_para || 'e-mail do cadastro'}) em ${dataBR(guiaGerada.enviada_em)}.` : 'Ainda não enviada ao cliente.'}
                 </div>
+                {guiaGerada.avisos?.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 4 }}>⚠️ {guiaGerada.avisos.join(' ')}</div>
+                )}
+                {confirmandoEnvio && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', lineHeight: 1.6 }}>
+                      <div><b>Nome:</b> {guiaGerada.depositante || 'não lido na guia'} <span style={{ color: '#64748b' }}>· arrematante: {arrematante || '—'}</span></div>
+                      <div><b>Processo:</b> {guiaGerada.processo || 'não lido na guia'} <span style={{ color: '#64748b' }}>· caso: {guia?.cnj.formatado || processo || '—'}</span></div>
+                      <div><b>Valor:</b> {brl(guiaGerada.valor)} <span style={{ color: '#64748b' }}>· parcela: {brl(parcela.valor)}</span></div>
+                    </div>
+                    <span style={{ fontSize: 11.5, color: '#334155' }}>{guiaGerada.enviada_em ? 'Reenviar' : 'Enviar'} ao arrematante: pagar até {dataBR(parcela.pagar_ate || parcela.venc)}?</span>
+                    <span style={{ display: 'inline-flex', gap: 6 }}>
+                      <button onClick={enviarCliente} disabled={!!ocupado}
+                        style={{ padding: '7px 12px', borderRadius: 8, background: '#15803d', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>
+                        {ocupado === 'enviar' ? 'Enviando…' : 'Confirmar envio'}
+                      </button>
+                      <button onClick={() => setConfirmandoEnvio(false)} disabled={ocupado === 'enviar'}
+                        style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                    </span>
+                  </div>
+                )}
                 <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={enviarCliente} disabled={!!ocupado} style={{ padding: '7px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>
-                    {ocupado === 'enviar' ? 'Enviando…' : guiaGerada.enviada_em ? 'Reenviar ao cliente' : 'Enviar ao cliente'}
+                  {!confirmandoEnvio && (
+                  <button onClick={() => { setConfirmandoEnvio(true); setMsg(null); }} disabled={!!ocupado} style={{ padding: '7px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>
+                    {guiaGerada.enviada_em ? 'Reenviar ao cliente' : 'Enviar ao cliente'}
                   </button>
+                  )}
                   {botaoArquivo('Anexar comprovante (dá baixa)', anexarComprovante, 'comprovante', '#15803d')}
                   {botaoArquivo('Trocar guia', anexarGuia, 'guia', '#64748b')}
                 </div>

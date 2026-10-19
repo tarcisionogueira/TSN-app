@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
+import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
 // Ícones decorativos por plano
 const ICONE_PLANO = { top2: '⚖️', assessorado: '🤝', clube: '👑' };
@@ -144,11 +145,14 @@ export default function Promo() {
     setEnviandoSdr(true); setErroSdr('');
     try {
       const respArr = perguntas.map(p => ({ pergunta: p.texto, resposta: respostas[p.id] ?? '' }));
+      const comprovante = await pedirComprovanteEmail(contato.email); // 19/10 (#251): prova de posse do e-mail
+      if (!comprovante) { setEnviandoSdr(false); return; }
       const r = await fetch('/api/promo-capturar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, senha: contato.senha, respostas: respArr, ref: refParam }),
+        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, senha: contato.senha, respostas: respArr, ref: refParam, comprovante_email: comprovante }),
       });
       const data = await r.json().catch(() => ({}));
+      if (data?.codigo_necessario) esquecerComprovanteEmail(contato.email);
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
       // Login (prova de posse da conta — vale tanto p/ a conta recém-criada quanto p/ quem já tinha).
       const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha });

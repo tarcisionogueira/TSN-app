@@ -72,12 +72,26 @@ export async function reverterHonorarioEstornado(arrId, evento, paymentId) {
 // Estorno/chargeback de cobrança avulsa: mais simples que honorário — não existe conceito
 // de "distribuído à equipe" nem de partes múltiplas, é 1 cobrança = 1 pagamento. Só reabre
 // se ainda estava 'paga' por ESTE payment_id (idempotência básica).
-export async function reverterCobrancaAvulsaEstornada(cobrancaId, evento) {
-  const r = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&select=id,status`, {
+export async function reverterCobrancaAvulsaEstornada(cobrancaId, evento, paymentId = null) {
+  const r = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&select=id,status,gateway_payment_id,valor,valor_pago_pix`, {
     headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
   });
   if (!r.ok) throw new Error(`cobranca-estorno: leitura falhou (${r.status})`); // 19/10: não é "nada a estornar"
   const [cob] = await r.json();
+  // 19/10 (#255): o estorno é de UM pagamento. Se não foi o que QUITOU (ex.: Pix parcial A + cartão B,
+  // estorno de A), reabrir a cobrança inteira cobraria de novo a parte B. Esse caso vai para a conferência
+  // humana; só o pagamento que fechou a cobrança a reabre (o saldo volta a ser exatamente a parte dele).
+  // Quitada por PIX, o valor_pago_pix já soma a parte estornada: reabrir deixaria saldo 0 com status aberta.
+  const saldoZerado = cob?.status === 'paga' && Number(cob.valor_pago_pix || 0) >= Number(cob.valor || 0) - 0.01;
+  if (paymentId && cob && (String(cob.gateway_payment_id || '') !== String(paymentId) || saldoZerado)) {
+    const cRes = await fetch(`${_SB_URL}/rest/v1/pagamentos_conferencia?on_conflict=gateway,gateway_payment_id`, {
+      method: 'POST',
+      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ gateway: `estorno_${evento}`, gateway_payment_id: String(paymentId), referencia: `cobranca:${cobrancaId}`, motivo: 'estorno_pagamento_parcial_cobranca' }),
+    });
+    if (!cRes.ok) throw new Error(`cobranca-estorno: fila de conferência falhou (${cRes.status})`);
+    return { revertido: false, conferencia: true };
+  }
   if (cob?.status !== 'paga') return { revertido: false };
   const pr = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&status=eq.paga`, {
     method: 'PATCH',

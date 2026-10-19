@@ -286,7 +286,7 @@ export default async function handler(req, res) {
       meta: { userId: item.userId, tipo: `lancamento_${item.etapa}` },
     });
     // Dedup só depois do aceite: envio que falhou hoje deve ser tentado de novo.
-    if (r && r.ok !== false) {
+    if (r?.ok || r?.enfileirado) { // 19/10: enfileirado sai pela fila — tratar como falha duplicava
       const { error: eGrava } = await supabase.from('eventos_atividade').insert({
         user_id: item.userId, tipo: 'lancamento_email', alvo: item.alvo,
         detalhe: `${item.etapa} para ${email}`,

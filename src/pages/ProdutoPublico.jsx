@@ -11,6 +11,7 @@ import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import PagamentoServico from '../components/PagamentoServico';
 import { trackProdutoVisualizado, trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
+import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -233,11 +234,14 @@ export default function ProdutoPublico({ tipo }) {
     setSuLoading(true);
     try {
       const refCod = ref || lerRef();
+      const comprovante = await pedirComprovanteEmail(emailNorm); // 19/10 (#251): prova de posse do e-mail
+      if (!comprovante) return;
       const r = await apiCall('/api/criar-conta-checkout', {
         method: 'POST',
-        body: JSON.stringify({ nome: nomeNorm, email: emailNorm, senha: suSenha, ref_codigo: refCod || undefined }),
+        body: JSON.stringify({ nome: nomeNorm, email: emailNorm, senha: suSenha, ref_codigo: refCod || undefined, comprovante_email: comprovante }),
       });
       const j = await r.json().catch(() => ({}));
+      if (j?.codigo_necessario) esquecerComprovanteEmail(emailNorm);
       if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível criar a conta.');
       const { error: eLogin } = await supabase.auth.signInWithPassword({ email: emailNorm, password: suSenha });
       if (eLogin) throw new Error('Conta criada, mas o login automático falhou. Use "Já tenho conta, Entrar" com a senha que você definiu.');

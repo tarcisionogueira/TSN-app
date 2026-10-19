@@ -7557,10 +7557,21 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
   const [salvando, setSalvando] = useState(false);
   const [copiado, setCopiado] = useState('');
   const [contagens, setContagens] = useState({});
+  // Forma 2/3 (CLAUDE.md): `leiloeiros_parceiros` tem RLS só para service — o navegador lê []
+  // SEM erro e insert/update não alcançam nada. Sem checar `error` e sem `.select()`, o modal
+  // fechava como sucesso e a lista seguia vazia. Agora a falha aparece por extenso.
+  const [erro, setErro] = useState('');
+  const [erroModal, setErroModal] = useState('');
 
   const carregar = async () => {
     setLoading(true);
-    const { data } = await supabase.from('leiloeiros_parceiros').select('*').order('criado_em', { ascending: false });
+    setErro('');
+    const { data, error } = await supabase.from('leiloeiros_parceiros').select('*').order('criado_em', { ascending: false });
+    if (error) {
+      setErro(`Não consegui ler os parceiros: ${error.message}`);
+      setLoading(false);
+      return;
+    }
     setParceiros(data || []);
     // Contar imóveis por parceiro
     if (data?.length) {
@@ -7581,8 +7592,16 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
   const criarParceiro = async () => {
     if (!novoNome.trim() || !novoEmail.trim()) return;
     setSalvando(true);
-    await supabase.from('leiloeiros_parceiros').insert({ nome: novoNome.trim(), email: novoEmail.trim() });
+    setErroModal('');
+    const { data: criado, error } = await supabase.from('leiloeiros_parceiros')
+      .insert({ nome: novoNome.trim(), email: novoEmail.trim() }).select('id');
     setSalvando(false);
+    if (error || !criado?.length) {
+      setErroModal(error
+        ? `Não foi possível criar o parceiro: ${error.message}`
+        : 'Não foi possível criar o parceiro: sem permissão para gravar nesta tabela (nenhuma linha criada).');
+      return;
+    }
     setModalNovo(false);
     setNovoNome('');
     setNovoEmail('');
@@ -7590,7 +7609,14 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
   };
 
   const alterarStatus = async (id, status) => {
-    await supabase.from('leiloeiros_parceiros').update({ status }).eq('id', id);
+    setErro('');
+    const { data: alterado, error } = await supabase.from('leiloeiros_parceiros').update({ status }).eq('id', id).select('id');
+    if (error || !alterado?.length) {
+      setErro(error
+        ? `Não foi possível alterar o status: ${error.message}`
+        : 'Não foi possível alterar o status: sem permissão (nenhuma linha alterada).');
+      return;
+    }
     carregar();
   };
 
@@ -7622,13 +7648,20 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
         </button>
       </div>
 
+      {erro && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 12 }}>
+          {erro}
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Carregando…</div>
-      ) : parceiros.length === 0 ? (
+      ) : erro && parceiros.length === 0 ? null : parceiros.length === 0 ? (
         <div style={{ background: 'white', borderRadius: 14, border: '1px dashed #e2e8f0', padding: 40, textAlign: 'center', color: '#94a3b8' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>🔨</div>
           <div style={{ fontWeight: 700, color: '#475569', marginBottom: 6 }}>Nenhum parceiro cadastrado</div>
           <div style={{ fontSize: 13 }}>Crie um parceiro e envie o link de cadastro para o leiloeiro.</div>
+          <div style={{ fontSize: 11, marginTop: 8 }}>Obs.: a tabela tem RLS restrita ao servidor — lista vazia aqui pode ser falta de permissão de leitura, não ausência de parceiros.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -7679,7 +7712,7 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
 
       {modalNovo && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setModalNovo(false)}>
+          onClick={() => { setModalNovo(false); setErroModal(''); }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Novo Parceiro Leiloeiro</div>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>Um link de cadastro será gerado para o leiloeiro completar os dados.</div>
@@ -7693,8 +7726,13 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
               <input type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} placeholder="contato@leiloeiro.com.br"
                 style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
             </div>
+            {erroModal && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>
+                {erroModal}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setModalNovo(false)}
+              <button onClick={() => { setModalNovo(false); setErroModal(''); }}
                 style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>
                 Cancelar
               </button>

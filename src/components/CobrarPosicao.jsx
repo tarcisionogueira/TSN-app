@@ -18,15 +18,25 @@ export default function CobrarPosicao({ conversa, userId, onErro, onAviso }) {
   const [cob, setCob] = useState(undefined); // undefined = carregando · null = nenhuma
   const [dias, setDias] = useState(7);
   const [ocupado, setOcupado] = useState(false);
+  // 19/10 (forma 2): erro de leitura virava `null` = "nenhuma cobrança" e oferecia "Cobrar posição"
+  // por cima de uma cobrança ATIVA (ligar de novo duplicaria). Erro agora tem estado próprio.
+  const [erroLeitura, setErroLeitura] = useState('');
 
   const carregar = useCallback(async () => {
-    if (!ids.length) { setCob(null); return; }
+    if (!ids.length) { setCob(null); setErroLeitura(''); return; }
     const { data, error } = await supabase.from('email_cobranca').select('*').in('email_id', ids).order('criado_em', { ascending: false }).limit(1);
-    if (error) { console.error('[CobrarPosicao] ler:', error.message); setCob(null); return; }
+    if (error) { console.error('[CobrarPosicao] ler:', error.message); setErroLeitura(error.message); setCob(undefined); return; }
+    setErroLeitura('');
     setCob(data?.[0] || null);
   }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { carregar(); }, [carregar]);
 
+  if (erroLeitura) return (
+    <div style={{ fontSize: 12, color: '#b91c1c', margin: '0 0 10px' }}>
+      Não consegui verificar a cobrança de posição desta conversa ({erroLeitura}).{' '}
+      <button type="button" onClick={carregar} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 12 }}>Tentar de novo</button>
+    </div>
+  );
   if (cob === undefined) return null;
   const ativa = cob?.ativo;
   if (!ativa && !elegivel) return cob ? <div style={{ fontSize: 12, color: '#64748b', margin: '0 0 10px' }}>Cobrança de posição {MOTIVO[cob.encerrado_motivo] || 'encerrada'}.</div> : null;

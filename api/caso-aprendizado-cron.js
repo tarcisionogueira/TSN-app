@@ -14,7 +14,8 @@
  *
  * A IA devolve lições GERAIS (valem para outros imóveis), gravadas em juridico_aprendizado com fonte, UF e
  * modalidade; o gerar-documental lê e prioriza as do mesmo recorte. Caso sem nada novo não chama IA.
- * Falha da IA não move o cursor: o material volta na próxima rodada. `?seco=1` mostra sem gravar;
+ * Falha da IA não move as datas de cobertura (o material é relido), mas move `atualizado_em`: o caso vai
+ * para o fim da fila, para que um caso que falha sempre não trave os outros. `?seco=1` mostra sem gravar;
  * `?caso=<uuid>` força um caso.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
@@ -125,6 +126,16 @@ async function processarCaso(caso, cursor, licoesExistentes, { seco }) {
   return { caso: caso.id, lido, licoes: licoes.length };
 }
 
+// 19/10: caso que falha SEMPRE (IA fora do formato, leitura quebrada) não movia o cursor e, como a fila é
+// ordenada por `atualizado_em`, voltava ao topo em toda rodada — 4 casos assim travavam a fila inteira
+// (MAX_CASOS_POR_RODADA). Na falha, só o relógio da fila anda: as datas de cobertura (documentos_ate etc.)
+// ficam onde estavam, então o material NÃO se perde — é relido quando o caso voltar à vez.
+async function adiarNaFila(casoId) {
+  const r = await sb('caso_aprendizado_cursor?on_conflict=caso_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify({ caso_id: casoId, atualizado_em: new Date().toISOString() }) });
+  const cur = r.ok ? await r.json().catch(() => []) : [];
+  if (!cur.length) console.error(`[caso-aprendizado] não consegui adiar o caso ${casoId} na fila: HTTP ${r.status}`);
+}
+
 async function handler(req) {
   if (!isCronAuthorized(req)) return new Response(JSON.stringify({ error: 'não autorizado' }), { status: 401 });
   const url = new URL(req.url, BASE);
@@ -146,12 +157,13 @@ async function handler(req) {
         if (r.nada_novo) { res.nada_novo++; continue; }
         res.processados++;
         res.resultados.push(r);
-        if (r.erro) res.falhas++;
+        if (r.erro) { res.falhas++; if (!seco) await adiarNaFila(caso.id); }
         else res.licoes += Array.isArray(r.licoes) ? r.licoes.length : r.licoes || 0;
       } catch (e) {
         res.falhas++;
         res.resultados.push({ caso: caso.id, erro: e?.message });
         console.error(`[caso-aprendizado] caso ${caso.id}:`, e?.message);
+        if (!seco) await adiarNaFila(caso.id).catch((e2) => console.error(`[caso-aprendizado] adiar ${caso.id}:`, e2?.message));
       }
     }
   } catch (e) {

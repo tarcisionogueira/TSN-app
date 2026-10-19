@@ -227,7 +227,7 @@ export default async function handler(req, res) {
           subject: `Lembrete (${esperados}/3) — Análise jurídica — Caso ${refCurto}`,
           html: htmlBase('Lembrete de análise jurídica', corpo, refCurto),
         });
-        if (r.ok) {
+        if (r?.ok || r?.enfileirado) { // 19/10: enfileirado sai pela fila — tratar como falha duplicava
           resumo.lembretes++;
           await sbPatch(`casos?id=eq.${caso.id}`, { juridico_lembretes: esperados, juridico_ultimo_lembrete: agora.toISOString() });
         } else { resumo.erros++; }
