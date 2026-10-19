@@ -7,6 +7,49 @@
 
 
 
+## 19/10 — ritual de abertura + bug bounty (4 agentes: pré-login, dinheiro, crons, telas)
+
+### Ritual (heartbeat registrado)
+- **Verde:** auditoria_seguranca 0/0, regras_negocio 0, cliente_travou vazio, chamados sem resposta 0, KYC 0, documental
+  "OK: está discriminando" (25 da régua de 01/10), backup ok (226 arquivos, 210 iguais), deploy 514c2f2 READY.
+- **Limpeza diária falhou de novo às 05h:** agora no passo **`apurar_vendidos_cef`** (irmão do corrigido em 18/10, mesma
+  causa: máximo por estado lido do heap, 6,1 s a frio, duas vezes) — e o backlog chegava a centenas × ~30 gatilhos. Virou
+  `apurar_vendidos_cef_lote` (máximo do índice de ativos: 6.155 → 166 ms; em lotes de 200 pelo `emLotes`).
+  **557 vendidos inferidos drenados** (todos inativos, leilões de 24/07 a 16/10 que a falha diária represou).
+  `maxDuration` do cron 60 → 120 s (os orçamentos já somavam 57 s).
+- **fotos-orfas 04h20:** `herdar_foto_da_caixa` 1,7 → 0,66 s com índice parcial `idx_imoveis_ativo_sem_foto`;
+  `fotos_orfas_para_limpeza` mede 1,3 s isolada — foi pico (#222).
+- **Abertas no banco:** 249 (runner sem coleta das 23h UTC de 18/10 às 10h de 19/10 — madrugada inteira), 250 (SBID21
+  1 × piso 18, LEJE zerado; LEFFA/CRLEILOES com medição velha). EMILIOMATOS 1ª rodada: 35 lotes, parcial por cota (#238).
+- **Invariantes em alerta:** `receita_sem_cliente` = 1 pagamento MP **recusado** de 03/09 sem user_id (o invariante conta
+  recusado; não é receita); `resultado_leilao_atrasado` = 1 lote SHIOKAWA de 16/10; `qa_invariantes_lenta` 14 s (#237).
+- **4 pagantes sem relatório em 14 dias** (2 assessorados de setembro, 2 Pro) — churn em formação, olhar no Cliente 360.
+
+### Bug bounty — corrigidos (commit 8ce96da), cada um conferido no código/banco
+- **P0 contrato sem pagamento:** `auto-contrato` emitia contrato de assessoria/clube a qualquer logado e o
+  `assinar-contrato` promovia o papel (clube = R$ 48–60 mil). Agora, no autoatendimento, só com papel já promovido ou
+  pagamento MP aprovado `servico:<id>:assessoria` em 30 dias; o Checkout tenta de novo por ~15 s em 402.
+- **live-inscrever** devolvia o link de recuperação (que AUTENTICA) na resposta → login na conta criada com o e-mail de
+  outra pessoa. Saiu da resposta (só no e-mail). O rate limit era 600 **ms**.
+- **login-rate:** `registrar_falha` público travava o login de qualquer e-mail → conta por (e-mail, IP).
+- **baixar-doc:** `tipo` livre encerrava a assessoria de OUTRO cliente (`carta_arrematacao`+`matricula_registrada`) →
+  só matrícula/edital/regras/outro. **upload-anexo:** matrícula/edital capturados ('sistema'/nulo — ~4 mil) eram
+  substituíveis por qualquer explorador (e o original apagado) → só a equipe ou quem enviou.
+- **mp-webhook:** aprovado sem marca do app (link "Cobrar", Pix de conta MP) era mapeado a plano pelo VALOR → ignorado.
+- **reconciliar-assinaturas:** Pro anual pago há > 12 meses era reativado todo ano com a mesma cobrança → trava de 365 dias.
+- **_webhook-core:** leituras de perfil e `distribuir_comissao_rede` sem `error` (forma 2) → lançam/alertam.
+- **6 crons** liam e-mail `enfileirado` como falha e reenviavam (provado: 4 alertas públicos 2× em 15/09).
+  `semFila` em cobrança de posição, acompanhamento do caso e reatribuição urgente (a fila perde remetente/fio/anexo).
+- Menores: bônus sem preço lido não cria mandato (fallback 49,90 × real 89,90); paginação Asaas que falha não diz
+  `completo`; documental/veículo não cobram cota se a checagem falha; laudo responde 503 em vez de "gere o
+  mercadológico"; alerta-publico saneia cidade (HTML no e-mail); duvida não troca dono de lead por telefone digitado;
+  log-erro-cliente com rate limit; alerta confirmar/descadastrar conferem o que gravaram; página do lote em falha é 500
+  (não 404 ao Google); Arrematados/Caso não esvaziam anexos em erro; remover análise com `.select()`.
+- **Abertas (não corrigidas, decisão ou mudança maior):** 244 (assessoria pelo MP sem comissão e sem suspensão no
+  estorno), 245 (estorno de curso não desfaz rede/cortesia), 246 (downgrade Clube→Pro no Asaas), 247 (leiloeiro se
+  autoativa — dono), 248 (financiamento-alertas fora do `enviarEmail`; chargeback de recarga não retira crédito).
+- **Validar no navegador (dono):** compra de assessoria pelo Checkout → contrato sai sozinho em até ~15 s.
+
 ## 18/10 (noite) — HASTA vazio de verdade, timeouts de pico, ARES +Zaccarino/Cunha
 - **230 HASTA (fechada):** o parser está íntegro. Recon via Firecrawl: o site lista 1 imóvel só (TRT-5, venda por proposta sem praça → descartado), e o leilão CAIXA 569 está publicado com 0 lotes. `/leiloes` redireciona para a home, mas os links `/leilao/N/lotes` continuam lá. "falhou / sem nenhum lote pronto" = acervo vazio. Volta sozinho quando a CAIXA publicar os lotes.
 - **222 timeouts (medido em `postgres_logs`, 52 em 24 h).** Migração `20261018_indices_timeouts_pico.sql`:
