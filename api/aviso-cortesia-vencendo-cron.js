@@ -247,7 +247,8 @@ async function handler(req) {
         meta: { tipo: 'cortesia_vencendo', userId: p.id },
       });
 
-      if (r?.ok) resumo.avisados++;
+      // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro.
+      if (r?.ok || r?.enfileirado) resumo.avisados++;
       else { resumo.falhas++; await liberarTrava(p.id, dataVenc); }
     } catch (e) {
       resumo.falhas++;

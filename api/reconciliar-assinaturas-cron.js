@@ -179,6 +179,10 @@ async function handler(req) {
         if (meta.proposito !== 'plano_anual') continue;
         const uid = meta.user_id;
         if (!uid) continue;
+        // 19/10 (bug bounty): um anual pago HÁ MAIS DE 12 MESES já foi consumido. Sem esta trava, ao vencer o
+        // plano esta passagem reativava com a MESMA cobrança antiga e o ativarPlanoDireto dava +12 meses — renovação
+        // anual de graça, para sempre.
+        if (Date.now() - new Date(pg.criado_em).getTime() > 365 * 86400_000) continue;
         verificados++;
         const { data: perfil } = await supabase.from('perfis')
           .select('role, plano_ciclo, plano_vencimento, inadimplente_desde').eq('id', uid).maybeSingle();

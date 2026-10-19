@@ -270,6 +270,7 @@ async function handler(req) {
             subject: assunto, html, text: textoFinal, ...(fio ? { headers: fio } : {}),
             meta: { tipo: 'acompanhamento_caso', userId: admin.id },
             idempotencyKey: `acompanhamento:${ev.chave}`,
+            semFila: true, // 19/10: a fila não guarda remetente/fio/anexo — represado sairia por noreply@, fora do fio, e em dobro
           });
           if (!env?.ok) throw new Error(env?.error || 'envio sem confirmação');
           // O e-mail JÁ SAIU: falha no registro é só histórico — mas é o registro que liga a resposta

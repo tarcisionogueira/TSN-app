@@ -14,6 +14,8 @@
  */
 export const config = { runtime: 'edge' };
 
+import { getIP } from './_rate-limit.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
 const JANELA_MIN = 15;   // minutos
@@ -26,9 +28,12 @@ function sb(path, opts = {}) {
   });
 }
 
-async function contarFalhas(email) {
+// POR (E-MAIL, IP) desde 19/10: contado só por e-mail, qualquer um registrava 8 falhas no e-mail de outra
+// pessoa e a travava. O bloqueio vive no front (não segura quem chama o GoTrue direto), então por IP não
+// perde proteção real.
+async function contarFalhas(email, ip) {
   const janela = new Date(Date.now() - JANELA_MIN * 60_000).toISOString();
-  const res = await sb(`login_tentativas?email=eq.${encodeURIComponent(email)}&criado_em=gte.${janela}&select=id`).catch(() => null);
+  const res = await sb(`login_tentativas?email=eq.${encodeURIComponent(email)}&ip=eq.${encodeURIComponent(ip)}&criado_em=gte.${janela}&select=id`).catch(() => null);
   if (!res?.ok) return null; // infra indisponível → não sabemos, fail-open no chamador
   const rows = await res.json().catch(() => []);
   return Array.isArray(rows) ? rows.length : null;
@@ -42,16 +47,17 @@ export default async function handler(req) {
   let body; try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
   const email = String(body?.email || '').trim().toLowerCase().slice(0, 254);
   if (!email || !/\S+@\S+\.\S+/.test(email)) return new Response(JSON.stringify({ error: 'E-mail inválido' }), { status: 400, headers });
+  const ip = getIP(req);
 
   if (body?.action === 'registrar_falha') {
     // Best-effort: se a gravação falhar, o pior caso é o rate-limit ficar mais frouxo
     // desta vez — nunca deve travar o fluxo de login por causa da própria infra do limite.
-    await sb('login_tentativas', { method: 'POST', body: JSON.stringify({ email }), headers: { Prefer: 'return=minimal' } }).catch(() => {});
+    await sb('login_tentativas', { method: 'POST', body: JSON.stringify({ email, ip }), headers: { Prefer: 'return=minimal' } }).catch(() => {});
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
   // action: 'check' (padrão)
-  const falhas = await contarFalhas(email);
+  const falhas = await contarFalhas(email, ip);
   // Infra indisponível (falhas === null) → fail-open: não bloqueia tráfego legítimo por
   // causa de uma falha NOSSA de leitura, mesmo critério de verificar-cpf.js.
   const bloqueado = falhas != null && falhas >= TETO_FALHAS;

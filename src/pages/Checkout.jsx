@@ -1052,17 +1052,24 @@ export default function Checkout() {
       // "Pagamento aprovado! Preparando seu contrato para assinatura…" e era mandado para a home
       // sem contrato e sem nenhuma explicação. Pagou e não recebeu, sem rastro.
       try {
-        const res = await apiCall('/api/auto-contrato', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user?.id,
-            planoKey,
-            nomeUsuario,
-            emailUsuario: user?.email,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
+        // 19/10: o servidor passou a exigir o pagamento confirmado (402 até o webhook do MP gravar).
+        // O webhook chega segundos depois da aprovação — tenta de novo por ~15 s antes de desistir.
+        let res, data;
+        for (let tentativa = 0; tentativa < 6; tentativa++) {
+          if (tentativa) await new Promise((ok) => setTimeout(ok, 3000));
+          res = await apiCall('/api/auto-contrato', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user?.id,
+              planoKey,
+              nomeUsuario,
+              emailUsuario: user?.email,
+            }),
+          });
+          data = await res.json().catch(() => ({}));
+          if (res.status !== 402) break;
+        }
         if (res.ok && data.token) {
           setTimeout(() => nav(`/c/${data.token}`), 2000);
           return;

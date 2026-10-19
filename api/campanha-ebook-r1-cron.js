@@ -235,7 +235,8 @@ async function handler(req) {
         headers: { 'List-Unsubscribe': `<${unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
         meta: { tipo: 'campanha_ebook_r1', userId: p.id },
       });
-      if (r?.ok) resumo.enviados++;
+      // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro.
+      if (r?.ok || r?.enfileirado) resumo.enviados++;
       else {
         resumo.falhas++;
         await sb(`webhook_eventos_processados?gateway=eq.campanha&gateway_payment_id=eq.${encodeURIComponent(String(p.id))}&evento=eq.ebook_bonus_r1`, { method: 'DELETE' }).catch(() => {});

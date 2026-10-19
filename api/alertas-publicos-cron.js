@@ -114,7 +114,8 @@ async function handler(req) {
         meta: { tipo: 'alerta_publico' },
         html,
       });
-      if (r?.ok) {
+      // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro (15/09: 4 alertas saíram 2×).
+      if (r?.ok || r?.enfileirado) {
         await fetch(`${URL_}/rest/v1/alerta_publico?id=eq.${al.id}`, {
           method: 'PATCH', headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ ultimo_envio: new Date().toISOString(), total_enviados: (al.total_enviados || 0) + 1 }),

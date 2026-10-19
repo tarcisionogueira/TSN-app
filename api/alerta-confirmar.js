@@ -34,16 +34,19 @@ export default async function handler(req) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/alerta_publico?token=eq.${token}&select=id,cidade,uf&limit=1`, { headers: hdr });
     const [row] = r.ok ? await r.json().catch(() => []) : [];
     if (!row) return pagina('Alerta não encontrado', `<h1>Alerta não encontrado</h1><p>Não localizamos este alerta. Ele pode já ter sido removido.</p><a class="b" href="${SITE}/leiloes">Ver imóveis em leilão</a>`, 404);
-    await fetch(`${SUPABASE_URL}/rest/v1/alerta_publico?id=eq.${row.id}`, {
+    const up = await fetch(`${SUPABASE_URL}/rest/v1/alerta_publico?id=eq.${row.id}`, {
       method: 'PATCH', headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ confirmado: true, confirmado_em: new Date().toISOString(), ativo: true }),
     });
+    // 19/10: resultado descartado mostrava "confirmado" sem ter gravado.
+    if (!up.ok) throw new Error(`confirmação falhou: HTTP ${up.status}`);
     const local = row.cidade ? `${row.cidade}/${row.uf}` : row.uf;
     return pagina('Alerta confirmado', `<h1>Alerta confirmado ✅</h1>
       <p>Pronto! Vamos avisar você por e-mail quando surgirem novos imóveis em leilão em <strong>${String(local).replace(/[<>&]/g, '')}</strong>.</p>
       <a class="b" href="${SITE}/leiloes">Ver imóveis agora</a>
       <p style="margin-top:18px;font-size:13px">Quer a ficha completa (mapa, análise e parecer)?<br><a class="g" href="${SITE}/#/login?modo=cadastro">Criar conta grátis →</a></p>`);
-  } catch {
+  } catch (e) {
+    console.error('[alerta-confirmar]', e?.message || e);
     return pagina('Erro', `<h1>Não foi possível confirmar</h1><p>Tente novamente em instantes.</p><a class="b" href="${SITE}/leiloes">Ver imóveis em leilão</a>`, 500);
   }
 }

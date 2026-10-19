@@ -106,7 +106,9 @@ async function anthropic(payload, fetchOpts) {
 }
 async function ultimoConcluido(tabela, userId, imovelId) {
   const r = await sb(`${tabela}?user_id=eq.${userId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result,data_leilao,updated_at&order=updated_at.desc&limit=1`);
-  if (!r.ok) return null;
+  // 19/10 (forma 2/4): `null` aqui significa "não existe" — devolvê-lo também em falha de leitura mandava quem
+  // JÁ tem os dois relatórios "gerar o Mercadológico" de novo (IA à toa). Falha agora é falha.
+  if (!r.ok) throw Object.assign(new Error(`leitura de ${tabela} falhou: HTTP ${r.status}`), { leitura: true });
   const [row] = await r.json().catch(() => []);
   return row || null;
 }
@@ -246,10 +248,16 @@ export default async function handler(req, res) {
   }
 
   // Lê os dois relatórios já concluídos deste usuário para este imóvel.
-  const [mRow, dRow] = await Promise.all([
-    ultimoConcluido('analises_mercado', ownerId, imovelId),
-    ultimoConcluido('analises_documental', ownerId, imovelId),
-  ]);
+  let mRow, dRow;
+  try {
+    [mRow, dRow] = await Promise.all([
+      ultimoConcluido('analises_mercado', ownerId, imovelId),
+      ultimoConcluido('analises_documental', ownerId, imovelId),
+    ]);
+  } catch (e) {
+    console.error('[laudo]', e?.message || e);
+    return res.status(503).json({ error: 'Não consegui ler os seus relatórios agora. Tente de novo em instantes.' });
+  }
   // "CONCLUÍDA" NÃO É SINÔNIMO DE PRONTA (07/08 — mesma família do toast prematuro).
   // O gate só olhava se existia um `result`. Só que:
   //  · o documental grava `concluida` com `precisaDocumentos: true` enquanto a captura ainda

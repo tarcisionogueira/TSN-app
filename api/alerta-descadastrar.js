@@ -29,12 +29,18 @@ export default async function handler(req) {
   }
   const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/alerta_publico?token=eq.${token}`, {
-      method: 'PATCH', headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/alerta_publico?token=eq.${token}&select=id`, {
+      method: 'PATCH', headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify({ ativo: false, atualizado_em: new Date().toISOString() }),
     });
+    // 19/10 (formas 2/3): o resultado era descartado — timeout/4xx mostrava "você não receberá mais" e o alerta
+    // seguia saindo (LGPD). Só confirma o que o banco devolveu como alterado.
+    const linhas = r.ok ? await r.json().catch(() => null) : null;
+    if (!r.ok || !Array.isArray(linhas)) throw new Error(`descadastro falhou: HTTP ${r.status}`);
+    if (!linhas.length) return pagina('Alerta não encontrado', `<h1>Alerta não encontrado</h1><p>Não localizamos este alerta. Ele pode já ter sido removido.</p><a class="b" href="${SITE}/leiloes">Ver imóveis</a>`, 404);
     return pagina('Alerta cancelado', `<h1>Alerta cancelado</h1><p>Você não receberá mais esses avisos. Se foi engano, é só se inscrever de novo em qualquer página de imóveis.</p><a class="b" href="${SITE}/leiloes">Ver imóveis em leilão</a>`);
-  } catch {
+  } catch (e) {
+    console.error('[alerta-descadastrar]', e?.message || e);
     return pagina('Erro', `<h1>Não foi possível cancelar</h1><p>Tente novamente em instantes.</p><a class="b" href="${SITE}/leiloes">Ver imóveis</a>`, 500);
   }
 }

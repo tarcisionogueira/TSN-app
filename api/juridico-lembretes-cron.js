@@ -193,6 +193,7 @@ export default async function handler(req, res) {
             subject: `🔴 URGENTE — Análise jurídica reatribuída — Caso ${refCurto}`,
             html: htmlBase('Análise jurídica — URGENTE (reatribuição)', corpo, refCurto),
             attachments: anexos.map(a => ({ filename: a.nome || 'documento', path: a.url })),
+            semFila: true, // 19/10: a fila não guarda remetente/fio/anexo — represado sairia por noreply@, fora do fio, e em dobro
           });
           if (r.ok) {
             enviado = true;

@@ -144,7 +144,8 @@ async function handler(req) {
             subject: `Sua assinatura ${plano} renova em ${dataFmt}`,
             html: corpoEmail({ nome, plano, valor, dataFmt }),
           });
-          if (r?.ok) {
+          // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro.
+          if (r?.ok || r?.enfileirado) {
             avisados++;
           } else {
             await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados?gateway=eq.mercadopago&gateway_payment_id=eq.${encodeURIComponent(String(sub.id))}&evento=eq.${encodeURIComponent('renov_aviso:' + nextDate)}`,

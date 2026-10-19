@@ -699,6 +699,15 @@ export async function processarEventoMp(req, res) {
         }
         return res.status(200).json({ ok: true, produto: result });
       }
+      // 19/10 (bug bounty): pagamento SEM marca nossa (link "Cobrar" do app do MP, Pix de conta MP, pagamento a
+      // fornecedor) caía em mapearPlano pelo VALOR — um Pix de R$ 500 com o e-mail de um cliente o fazia
+      // assessorado, sem mandato que o rebaixasse depois. Só eleva plano o que o nosso checkout gerou.
+      const pagamentoNosso = pagamento.metadata?.origem === 'tsn-app' || !!pagamento.metadata?.user_id
+        || extRefMp.includes('|') || pagamento.operation_type === 'recurring_payment';
+      if (!pagamentoNosso) {
+        console.warn('[mp-webhook] aprovado sem identificação do app — não mapeia plano:', pagamento.id, pagamento.transaction_amount);
+        return res.status(200).json({ ok: true, ignorado: 'pagamento_sem_identificacao' });
+      }
       result = await processarConfirmado(contexto);
     } else if (status === 'rejected' || status === 'cancelled') {
       // Compra AVULSA de produto/serviço não é assinatura: PIX que expirou ou cartão recusado só

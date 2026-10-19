@@ -93,6 +93,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
   const [loading, setLoading] = React.useState(true);
   const [docs, setDocs] = React.useState([]);
   const [docsLoading, setDocsLoading] = React.useState(true);
+  const [docsErro, setDocsErro] = React.useState(false);
   const [enviando, setEnviando] = React.useState(false);
   const [docTipo, setDocTipo] = React.useState('auto_arrematacao');
   // Documentos PESSOAIS do arrematante (RG/CPF/comprovante) saíram daqui (22/09, pedido do
@@ -148,10 +149,13 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     // nenhum aviso — o cliente via "nenhum documento" num arremate que tinha edital e matrícula.
     if (!ehUuid(imovelId)) { setDocs([]); setDocsLoading(false); return; }
     setDocsLoading(true);
-    const { data } = await supabase.from('imovel_anexos')
+    const { data, error } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,storage_path,validacao,descricao,criado_em')
       .eq('imovel_id', imovelId).or(ANEXO_COM_ARQUIVO).order('criado_em', { ascending: true });
-    setDocs(Array.isArray(data) ? data : []);
+    // 19/10 (forma 2): falha de leitura aparecia como "nenhum documento" e convidava a reenviar carta/matrícula
+    // (tipos únicos — o reenvio SUBSTITUI). Em erro, mantém a lista que havia e avisa.
+    if (error) { console.error('[arrematados] leitura dos documentos falhou:', error.message); setDocsErro(true); }
+    else { setDocs(Array.isArray(data) ? data : []); setDocsErro(false); }
     setDocsLoading(false);
   }, [imovelId]);
   // Valida UM anexo (a IA confere se é mesmo desta arrematação). Chamado logo após
@@ -505,6 +509,8 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
               )}
               {docsLoading ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Carregando documentos…</div>
+              ) : docsErro && docs.length === 0 ? (
+                <div style={{ color: '#b91c1c', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Não consegui carregar os documentos agora. <button type="button" onClick={carregarDocs} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Tentar de novo</button></div>
               ) : docs.length === 0 ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>{soLeitura ? 'O assinante ainda não anexou documentos.' : 'Nenhum documento anexado. Guarde aqui o auto/carta de arrematação, contrato do banco, escritura, matrícula registrada, edital.'}</div>
               ) : (

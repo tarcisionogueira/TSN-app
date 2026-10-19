@@ -54,7 +54,8 @@ async function handler(req) {
           uma nota de 0 a 10 e um comentário livre. O link é pessoal e único.</p>
         </div>`,
     });
-    if (r?.ok) {
+    // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro.
+    if (r?.ok || r?.enfileirado) {
       // Marca DEPOIS do envio real; `error` conferido — marcação falha não pode sumir
       // (o cron re-enviaria amanhã: melhor e-mail duplicado que envio fantasma).
       const { error: eMark } = await supabase.rpc('nps_alavancagem_marcar_enviado', { p_lead: p.lead_id });

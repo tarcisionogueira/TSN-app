@@ -96,20 +96,25 @@ export default async function handler(req) {
 
   // 1. LEAD — não duplica (busca por email ou whatsapp)
   let leadId = null, leadConsultorId = null, leadStatus = null, leadOrigem = null;
+  // 19/10 (bug bounty): o lead é achado por e-mail OU telefone DIGITADOS — dado que qualquer visitante digita.
+  // Só mexe no dono do lead (user_id, consultor por ?ref) quando o lead é desta pessoa: criado agora, ou com o
+  // e-mail VERIFICADO da conta logada. Antes, o telefone de outra pessoa ligava o visitante ao lead dela.
+  let leadDoProprio = false;
   try {
     const filtros = [`email.eq.${encodeURIComponent(email)}`];
     if (telefone) filtros.push(`whatsapp.eq.${encodeURIComponent(telefone)}`);
-    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id,consultor_id,status,origem&limit=1`)).json();
+    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,email,whatsapp,user_id,consultor_id,status,origem&limit=1`)).json();
     if (Array.isArray(existentes) && existentes.length) {
       // Atualiza dados que estavam vazios, sem criar novo lead
       const lead = existentes[0];
       leadId = lead.id; leadConsultorId = lead.consultor_id || null; leadStatus = lead.status || null; leadOrigem = lead.origem || null;
+      leadDoProprio = !!usuario?.email && String(lead.email || '').toLowerCase() === String(usuario.email).toLowerCase();
       const patch = {};
       if (!lead.nome && nome) patch.nome = nome;
       if (!lead.whatsapp && telefone) patch.whatsapp = telefone;
       // Preenche o vínculo que faltou nos leads criados antes de 16/08 (e em qualquer um
       // que tenha nascido de visitante e depois virou conta).
-      if (!lead.user_id && usuario?.id) patch.user_id = usuario.id;
+      if (!lead.user_id && usuario?.id && leadDoProprio) patch.user_id = usuario.id;
       if (Object.keys(patch).length) {
         await sb(`sdr_leads?id=eq.${lead.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
       }
@@ -129,7 +134,7 @@ export default async function handler(req) {
         console.error('[duvida] lead NÃO gravado', leadRes.status, det.slice(0, 300));
       } else {
         const [novo] = await leadRes.json().catch(() => []);
-        if (novo?.id) { leadId = novo.id; leadConsultorId = null; leadStatus = 'novo'; leadOrigem = novo.origem || origem; }
+        if (novo?.id) { leadId = novo.id; leadConsultorId = null; leadStatus = 'novo'; leadOrigem = novo.origem || origem; leadDoProprio = true; }
       }
     }
   } catch (e) { console.error('[duvida] lead NÃO gravado (exceção)', String(e?.message || e)); }
@@ -150,7 +155,7 @@ export default async function handler(req) {
   try {
     const refCodigo = String(body.ref || '').trim().slice(0, 80).replace(/[^A-Za-z0-9-]/g, '');
     const leadEhAlavancagem = String(leadOrigem || '').startsWith('alavancagem');
-    if (leadId && !leadConsultorId && refCodigo && leadEhAlavancagem) {
+    if (leadId && leadDoProprio && !leadConsultorId && refCodigo && leadEhAlavancagem) {
       const campo = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(refCodigo) ? 'id' : 'codigo_indicacao';
       const consRes = await sb(`perfis?${campo}=eq.${encodeURIComponent(refCodigo)}&select=id,nome,role,vendedor_tipo&limit=1`);
       const [cons] = consRes.ok ? await consRes.json().catch(() => []) : [];

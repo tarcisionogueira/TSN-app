@@ -553,8 +553,11 @@ export default async function handler(req, res) {
   let cota = null;
   let cobrarCredito = false;
   if (!viaCron) try {
-    const jaConcluida = await (await sb(`analises_veiculo?user_id=eq.${user.id}&veiculo_id=eq.${encodeURIComponent(veiculoId)}&status=eq.concluida&select=veiculo_id&limit=1`)).json();
-    const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
+    // 19/10: mesmo conserto do gerar-analise (18/10) — sem .ok, um 4xx/5xx virava "análise nova" e cobrava cota.
+    const rj = await sb(`analises_veiculo?user_id=eq.${user.id}&veiculo_id=eq.${encodeURIComponent(veiculoId)}&status=eq.concluida&select=veiculo_id&limit=1`);
+    const jaConcluida = rj.ok ? await rj.json().catch(() => null) : null;
+    if (!rj.ok) console.error('[gerar-analise-veiculo] checagem de análise existente falhou: HTTP', rj.status, '— não cobra cota');
+    const isNovo = rj.ok && !(Array.isArray(jaConcluida) && jaConcluida.length);
     if (isNovo) {
       const rc = await sb('rpc/consumir_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null); // padrao-ok: leitura best-effort — cota null (rc falhou) cai no catch externo e NÃO bloqueia, mesmo padrão de api/gerar-analise.js

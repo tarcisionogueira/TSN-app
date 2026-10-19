@@ -396,8 +396,11 @@ export function AnalisesProvider({ children }) {
       // voltar sem explicação quando a exclusão falhava. Erro agora tem log e a lista é
       // recarregada pelo chamador de qualquer forma.
       for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
-        const { error: errDel } = await supabase.from(tabela).delete().eq('user_id', uid).eq('imovel_id', imovelId);
+        // 19/10 (forma 3): no modo suporte a RLS filtra as linhas e o delete volta `error: null` sem apagar nada —
+        // o card sumia e voltava no recarregamento. `.select()` mostra o que foi de fato apagado.
+        const { data: apagadas, error: errDel } = await supabase.from(tabela).delete().eq('user_id', uid).eq('imovel_id', imovelId).select('imovel_id');
         if (errDel) console.error(`[analises] exclusão em ${tabela} falhou:`, errDel.message);
+        else if (!apagadas?.length) console.warn(`[analises] exclusão em ${tabela} não apagou nada (RLS/modo suporte?)`);
       }
     }
   }, [uid]);

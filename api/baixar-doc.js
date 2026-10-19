@@ -67,6 +67,12 @@ export default async function handler(req) {
   if (!url || !imovel_id) {
     return new Response(JSON.stringify({ error: 'url e imovel_id são obrigatórios' }), { status: 400 });
   }
+  // 19/10 (bug bounty): `tipo` ia cru para imovel_anexos. Com `carta_arrematacao` + `matricula_registrada`
+  // qualquer plano pago encerrava a assessoria de OUTRO cliente (concluir_assessorias_entregues), e com
+  // `guia_parcela` entrava na fila de parcelas. Documento do arremate só pelo upload-anexo, que tem o gate.
+  if (!['matricula', 'edital', 'regras_venda', 'outro'].includes(tipo)) {
+    return new Response(JSON.stringify({ error: 'tipo inválido' }), { status: 400 });
+  }
   // SEGURANÇA: imovel_id vai cru no caminho do Storage (casos/${imovel_id}/...). Sem
   // validar, um "../" manipularia a chave. Exige UUID (mesma guarda do upload-anexo).
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(imovel_id))) {

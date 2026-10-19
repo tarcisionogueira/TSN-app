@@ -80,6 +80,7 @@ export default async function handler(req, res) {
   const T0 = Date.now();
   const ORCAMENTO_MS = 45000; // de 60s: sobra para responder e registrar
   let cortadoPorTempo = false;
+  let interrompido = null; // 19/10 (forma 4): falha de leitura do Asaas não pode virar "fim da lista"
   try {
     for (const status of ['PENDING', 'OVERDUE']) {
       if (cortadoPorTempo) break;
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
         if (Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
         const url = `/payments?status=${status}&dateCreated%5Ble%5D=${cutoffData}&limit=100&offset=${offset}`;
         const data = await asaasGet(url);
+        if (!data) { interrompido = `http@${status}:${offset}`; break; }
         const results = data?.data || [];
         if (!results.length) break;
 
@@ -133,7 +135,7 @@ export default async function handler(req, res) {
     ok: true, vistos, assinaturasCanceladas, cobrancasRemovidas, avulsasRemovidas,
     // `completo: false` = a varredura NÃO alcançou o fim da lista. Sem este campo, um run
     // cortado no meio se lia exatamente como um run que não tinha nada a fazer.
-    completo: !cortadoPorTempo, cortado_por_tempo: cortadoPorTempo,
+    completo: !cortadoPorTempo && !interrompido, cortado_por_tempo: cortadoPorTempo, interrompido,
     ignoradasPagas, indeterminados, erros: erros.slice(0, 20),
   });
 }

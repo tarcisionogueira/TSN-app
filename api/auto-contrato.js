@@ -110,6 +110,28 @@ export default async function handler(req, res) {
     }
   }
 
+  // PROVA DE PAGAMENTO NO AUTOATENDIMENTO (19/10, bug bounty P0). O Checkout só chama esta rota depois do
+  // pagamento, mas o servidor não conferia: qualquer explorador fazia POST {planoKey:'clube'}, assinava e o
+  // assinar-contrato o promovia a clube (R$ 48–60 mil) e criava a assinatura. Agora, sem equipe no meio, só
+  // emite se (a) o papel atual já chegou ao plano (webhook do Asaas/equipe já promoveu) ou (b) há pagamento
+  // MP APROVADO da assessoria deste usuário nos últimos 30 dias (mp-checkout grava `servico:<id>:assessoria`).
+  if (!isStaff) {
+    const RANK = { explorador: 0, top2: 1, assessorado: 2, clube: 3 };
+    let pago = (RANK[callerRole] ?? -1) >= RANK[planoKey];
+    if (!pago && planoKey === 'assessorado') {
+      const desde = new Date(Date.now() - 30 * 86400_000).toISOString();
+      const { data: pg, error: ePg } = await supabase.from('mp_pagamentos').select('mp_payment_id')
+        .eq('user_id', user.id).eq('status', 'approved').eq('external_ref', `servico:${user.id}:assessoria`)
+        .gte('criado_em', desde).limit(1);
+      if (ePg) {
+        console.error('[auto-contrato] leitura do pagamento falhou:', ePg.message);
+        return res.status(502).json({ error: 'nao_foi_possivel_validar_pagamento' });
+      }
+      pago = !!pg?.length;
+    }
+    if (!pago) return res.status(402).json({ error: 'pagamento_nao_confirmado', motivo: 'O contrato é emitido depois que o pagamento é confirmado. Se você já pagou, aguarde alguns minutos ou fale com a equipe.' });
+  }
+
   // Tenta buscar nome do perfil do usuário
   let nomeContrato = nomeUsuario || '';
   if (userId) {

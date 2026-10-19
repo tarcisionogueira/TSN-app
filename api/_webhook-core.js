@@ -216,7 +216,10 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, plano_ciclo, ciclo_agendado').eq('id', userId).maybeSingle();
+  const { data: atual, error: eAtual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, plano_ciclo, ciclo_agendado').eq('id', userId).maybeSingle();
+  // 19/10 (forma 2): sem isto um erro transitório virava `atual = null` e um assessorado que renovava o Pro era
+  // rebaixado a top2. Lança: os chamadores desfazem a marca de idempotência e devolvem 5xx (o gateway reentrega).
+  if (eAtual) throw new Error(`leitura do perfil falhou: ${eAtual.message}`);
 
   // ── ACESSO SÓ COM DINHEIRO NA CONTA (decisão do dono, 16/08) ────────────────────
   // A trava mora AQUI, e não em cada chamador, porque o defeito já tinha aparecido em
@@ -320,9 +323,11 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
       // já o tem à mão; sem ele, cai no bruto — nunca quebra por falta do dado, só comissiona
       // sobre um valor maior do que o ideal até o chamador passar a fornecer o líquido.
       const p_valor = Number(cobranca.valorLiquido ?? cobranca.valor);
-      const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
+      const { data: dist, error: eDist } = await supabase.rpc('distribuir_comissao_rede', {
         p_comprador: userId, p_tipo, p_valor, p_gateway_payment_id: String(cobranca.gatewayPaymentId),
       });
+      // 19/10: `{data}` sem `error` perdia a comissão calada num timeout. Lança para o catch abaixo alertar.
+      if (eDist) throw new Error(`distribuir_comissao_rede: ${eDist.message}`);
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede (recorrente):`, JSON.stringify(dist).slice(0, 200));
       // VENDA DA ASSESSORIA pelo advogado que conduziu a reunião (28/08). Chamada à parte, e não
       // dentro de `distribuir_comissao_rede`, porque o vínculo é OUTRO: aquela percorre a cadeia
@@ -337,6 +342,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
       }
     } catch (e) {
       console.error(`[${gateway}] comissao_rede (recorrente):`, e.message);
+      alertarErro({ rota: `webhook/${gateway}`, erro: `Falha na comissão de rede (recorrente): ${e.message}`, extra: { user_id: userId, payment_id: cobranca?.gatewayPaymentId } });
     }
     // Conversão de anúncio (Meta + Google) — cobrança recorrente RECEBIDA de verdade.
     await registrarConversaoAnuncio({ userId, valor: cobranca.valor, base: planoBase(planoKey), gateway });
@@ -383,8 +389,10 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
 // reativar quando o pagamento voltar.
 export async function suspenderPlanoDireto({ userId, gateway }) {
   if (!userId) return { skipped: 'sem_referencia' };
-  const { data: cliente } = await supabase
+  const { data: cliente, error: eCli } = await supabase
     .from('perfis').select('role, inadimplente_desde, plano_ciclo, plano_vencimento').eq('id', userId).maybeSingle();
+  // 19/10 (forma 2): erro de leitura virava `perfil_nao_encontrado` com 200 e a suspensão se perdia.
+  if (eCli) throw new Error(`leitura do perfil falhou: ${eCli.message}`);
   if (!cliente) return { skipped: 'perfil_nao_encontrado' };
   if (cliente.inadimplente_desde) return { ok: true, ja_inadimplente: true };
   // GUARDA da âncora ANUAL: cancelar o MANDATO anual (troca anual→mensal agendada, ou
@@ -724,9 +732,10 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
       const p_tipo = ['assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(mapeado.plano)
         ? 'venda_direta' : 'assinatura';
       const p_valor = Number(valorLiquido ?? valor);
-      const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
+      const { data: dist, error: eDist } = await supabase.rpc('distribuir_comissao_rede', {
         p_comprador: cliente.id, p_tipo, p_valor, p_gateway_payment_id: gatewayPaymentId,
       });
+      if (eDist) throw new Error(`distribuir_comissao_rede: ${eDist.message}`); // 19/10: o catch abaixo alerta
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
       // Mesma comissão de venda da assessoria, no outro caminho de pagamento. Precisa estar nos
       // DOIS: um pagamento de assessoria pode chegar por qualquer um deles, e cobrir só um faria

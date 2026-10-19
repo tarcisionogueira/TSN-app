@@ -24,7 +24,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { createClient } from '@supabase/supabase-js';
-import { checkRateLimit } from './_rate-limit.js';
+import { checkRateLimit, getIP } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { erroNome, normalizarNome } from './_nome.js';
 import { edicaoDe } from './_live-edicao.js';
@@ -79,8 +79,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return saida(405, { error: 'Método não permitido' });
   if (!SUPABASE_URL || !SERVICE_KEY) return saida(500, { error: 'Configuração ausente' });
 
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'sem-ip';
-  const rl = await checkRateLimit(`live:${ip}`, 8, 600);
+  // 19/10: a janela é em MILISSEGUNDOS — `600` deixava 8 inscrições a cada 0,6 s (cadastro em massa).
+  const ip = getIP(req);
+  const rl = await checkRateLimit(`live:${ip}`, 8, 600_000);
   if (!rl.ok) return saida(429, { error: 'Muitas tentativas. Tente novamente em alguns minutos.' });
 
   const b = req.body || {};
@@ -318,7 +319,7 @@ export default async function handler(req, res) {
     eventId: evId,
     fbc: fbclid ? `fb.1.${Date.now()}.${fbclid}` : null,
     fbp: String(b.fbp || '').trim() || null,
-    clientIp: ip !== 'sem-ip' ? ip : null,
+    clientIp: ip !== 'unknown' ? ip : null,
     userAgent: req.headers['user-agent'] || null,
     sourceUrl: `${APP_URL}/live/${slug}`,
   }).catch((e) => ({ ok: false, erro: String(e?.message || e) }));
@@ -428,10 +429,9 @@ export default async function handler(req, res) {
   return saida(200, {
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
     codigo_indicacao: codigoIndicacao,
-    // Link de acesso de verdade (só quando a conta é nova) — a tela usa isto no botão
-    // "explorar a plataforma" em vez da URL crua de antes. `null` quando a geração falhou
-    // ou não é conta nova; a tela cai para `/#/login` nesse caso (ver LiveInscricao.jsx).
-    link_acesso: linkAcesso,
+    // `link_acesso` NÃO volta mais na resposta (19/10, bug bounty): era um link de recuperação que
+    // AUTENTICA — qualquer um que inscrevesse o e-mail de outra pessoa saía logado na conta criada com
+    // o e-mail dela (e podia se pôr como indicante). O link só vai no e-mail, para o dono do endereço.
     // O NAVEGADOR RECEBE O ID PRONTO, não a regra para calculá-lo. Pixel e CAPI mandando o
     // mesmo `event_id` fazem o Meta contar UMA conversão em vez de duas; duplicar a fórmula
     // nos dois lados seria criar duas cópias de uma regra que só funciona enquanto forem

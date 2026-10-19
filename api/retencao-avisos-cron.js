@@ -163,7 +163,8 @@ async function handler(req) {
             : 'Confirme seu arremate para guardar os documentos',
           html: corpoEmail({ regra: c.regra, titulo: c.titulo, dataFmt }),
         });
-        emailOk = !!r?.ok;
+        // 19/10: `enfileirado` = vai sair amanhã pela fila (drenar-fila-emails-cron). Tratar como falha reenviava em dobro.
+        emailOk = !!(r?.ok || r?.enfileirado);
         if (emailOk) resumo.emails_enviados++;
         else console.error('[retencao-avisos] email nao enviado:', r?.error);
       } catch (e) { console.error('[retencao-avisos] email:', e?.message); }

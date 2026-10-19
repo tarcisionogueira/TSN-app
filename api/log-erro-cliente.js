@@ -11,6 +11,7 @@ export const config = { runtime: 'nodejs', maxDuration: 10 };
 
 import crypto from 'node:crypto';
 import { getUser } from './_auth.js';
+import { checkRateLimit, getIP } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -63,6 +64,10 @@ function ehRuidoMsg(msg = '') {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
+  // 19/10 (bug bounty): anônimo e sem limite — um script enchia `erros_cliente` de impressões digitais
+  // distintas e enterrava os erros reais que o ritual de abertura lê.
+  const rl = await checkRateLimit(`erro-cliente:${getIP(req)}`, 20, 60_000);
+  if (!rl.ok) { res.status(429).end(); return; }
   try {
     const b = req.body || {};
     const msg = String(b.msg || '').slice(0, 300);
@@ -98,7 +103,10 @@ export default async function handler(req, res) {
         // Sem stack, um "Maximum call stack size exceeded" chega sem nenhuma pista de origem.
         body: JSON.stringify({ p_fingerprint: fingerprint, p_msg: msg, p_rota: rota, p_url: url, p_ua: ua, p_user_id: userId, p_stack: String(b.stack || '').slice(0, 4000) || null }),
         signal: AbortSignal.timeout(4000),
-      }).catch(() => {});
+      }).then(async (r) => {
+        // 19/10: sem isto, uma deriva de assinatura da RPC descartava TODO erro de cliente calado (verde = vazio).
+        if (!r.ok) console.error('[erro-cliente] registrar_erro_cliente falhou', r.status, (await r.text().catch(() => '')).slice(0, 200));
+      }).catch((e) => console.error('[erro-cliente] registrar_erro_cliente lançou', e?.message || e));
     }
   } catch { /* nunca falha o cliente por causa do log */ }
   res.status(204).end();

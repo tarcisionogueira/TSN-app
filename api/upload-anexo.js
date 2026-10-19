@@ -154,7 +154,7 @@ export default async function handler(req) {
   // 'regras_venda'/'outro' aceitam múltiplos arquivos → sempre insere novo.
   let anterior = null;
   if (TIPOS_UNICOS.includes(tipo)) {
-    const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path,role_criador&limit=1`);
+    const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path,role_criador,criado_por&limit=1`);
     if (jaRes.ok) {
       const [e] = await jaRes.json().catch(() => []);
       if (e) anterior = e;
@@ -165,9 +165,12 @@ export default async function handler(req) {
   // ser sobrescrito por um usuário não-staff. Uploads NOVOS (sem anterior) e a
   // substituição de docs enviados por não-staff continuam abertos — o cliente
   // precisa poder anexar o documento do lote que está analisando.
+  // 19/10 (bug bounty): a trava só olhava `role_criador` da EQUIPE — mas o que a captura grava vem com
+  // 'sistema' (2.369 matrículas, 1.837 editais) ou nulo, e um explorador trocava a matrícula do lote (e
+  // apagava o original do Storage) para todos os clientes. Quem não é da equipe só substitui o que ELE enviou.
   const ehStaff = ROLES_STAFF.includes(perfil.role);
-  if (anterior && ROLES_STAFF.includes(anterior.role_criador) && !ehStaff) {
-    return json({ error: 'Este documento já foi validado pela equipe. Fale com a equipe para substituí-lo.' }, 403);
+  if (anterior && !ehStaff && anterior.criado_por !== user.id) {
+    return json({ error: 'Este imóvel já tem este documento. Fale com a equipe para substituí-lo.' }, 403);
   }
 
   // Sobe o novo arquivo

@@ -4,7 +4,9 @@
  * é 'CEF' → nunca removia nada, acumulando imóveis vencidos que davam "imóvel não
  * disponível" ao clicar em Acessar leiloeiro). Chama a RPC segura por-estado.
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+// 19/10: 120 s — os orçamentos somam até 57 s, e uma RPC em curso (+ nova tentativa de ~13 s) estourava os 60 s
+// e levava junto o alerta da falha.
+export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
 import { alertarErro } from './_error-alert.js';
@@ -63,10 +65,10 @@ export default async function handler(req, res) {
   // 1b) CEF VENDIDO inferido (23/09): imóvel de leilão/licitação que SAIU da lista da Caixa a
   // partir da véspera do leilão = vendido (resultado_origem='inferido_lista_caixa'). Roda logo
   // após o sweep acima — mesmo relógio do CSV. Best-effort: falha aqui não derruba a limpeza.
+  // 19/10: em lotes também — 469 pendentes × ~30 gatilhos não cabiam nos 8 s (timeout às 05h).
   let vendidosCef = null;
   try {
-    const rv = await rpc('apurar_vendidos_cef', {});
-    vendidosCef = rv.ok ? await rv.json().catch(() => null) : { erro: (await rv.text().catch(() => '')).slice(0, 200) };
+    vendidosCef = await emLotes('apurar_vendidos_cef_lote', {}, 35000);
   } catch (e) { vendidosCef = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // 2) LEILOEIROS (novo): desativa o que saiu do site (não veio no último scrape da fonte). Guarda

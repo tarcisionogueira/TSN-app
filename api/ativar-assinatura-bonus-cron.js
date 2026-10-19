@@ -63,8 +63,10 @@ async function precoTop2() {
       const v = Number(row?.preco);
       if (v > 0) return v;
     }
-  } catch { /* mantém o fallback abaixo */ }
-  return 49.90;
+  } catch (e) { console.error('[ativar-assinatura-bonus] leitura do preço lançou:', e?.message || e); }
+  // 19/10 (bug bounty): o fallback fixo de 49,90 (preço real hoje: 89,90) virava um mandato PERPÉTUO com
+  // desconto num soluço do banco. Sem preço lido, não cria assinatura nesta rodada (o cron repete amanhã).
+  return null;
 }
 
 async function emailDoUsuario(userId) {
@@ -118,6 +120,7 @@ async function handler(req) {
   if (!resumo.elegiveis) return new Response(JSON.stringify({ ok: true, ...resumo }), { headers: { 'Content-Type': 'application/json' } });
 
   const valorTop2 = await precoTop2();
+  if (!valorTop2) return new Response(JSON.stringify({ ok: false, ...resumo, erro: 'preco_top2_ilegivel' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
 
   for (const c of candidatos) {
     try {
@@ -151,6 +154,9 @@ async function handler(req) {
         method: 'PATCH',
         headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ assinatura_id: String(sub.id), assinatura_ativada_em: new Date().toISOString() }),
+      }).then(async (r) => {
+        // 19/10: resultado descartado → o candidato voltava amanhã e podia ganhar um 2º mandato.
+        if (!r.ok) console.error('[ativar-assinatura-bonus] MANDATO CRIADO E NÃO GRAVADO — conferir à mão', c.id, sub.id, r.status, (await r.text().catch(() => '')).slice(0, 200));
       });
       resumo.convertidos++;
     } catch (e) {

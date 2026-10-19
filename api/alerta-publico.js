@@ -60,7 +60,10 @@ export default async function handler(req) {
   const uf = String(body.uf || '').toUpperCase().slice(0, 2);
   if (!UFS.includes(uf)) return json({ error: 'Estado inválido.' }, 400);
 
-  const cidade = String(body.cidade || '').trim().slice(0, 80);
+  // 19/10 (bug bounty): `cidade` ia crua ao assunto/HTML do e-mail de confirmação (phishing com o nosso
+  // remetente para qualquer endereço) e fica gravada para o alertas-publicos-cron. Nome de cidade só tem letra,
+  // espaço, apóstrofo, ponto e hífen — o resto sai na entrada, que protege os dois usos.
+  const cidade = String(body.cidade || '').replace(/[^\p{L}\s'.-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const cidadeNorm = cidade ? norm(cidade).slice(0, 60) : '';
   const origem = String(body.origem || '').trim().slice(0, 160) || null;
 

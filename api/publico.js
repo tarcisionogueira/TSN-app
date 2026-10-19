@@ -909,6 +909,9 @@ async function paginaImovel(id) {
   // o bloco `jsonld` mais abaixo, que responde aos avisos do Search Console de 04/08.
   const campos = 'id,titulo,tipo,cidade,cidade_norm,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_fim,fonte_id,link_foto,fonte,modalidade,descricao,ativo';
   const { linhas } = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=${campos}&limit=1`);
+  // 19/10 (forma 4): `sb()` devolve linhas=null em timeout/5xx — virava 404 "não encontrado" para o Google em
+  // pico de banco. Lança como as páginas de cidade/UF (16/10): 500 no-store, e a borda segue com a cópia boa.
+  if (linhas === null) throw new Error('lote indisponível (leitura falhou)');
   const im = Array.isArray(linhas) ? linhas[0] : null;
   if (!im) return null;
 

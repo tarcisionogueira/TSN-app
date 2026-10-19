@@ -875,8 +875,11 @@ export default async function handler(req, res) {
   let cota = null; // hoisted p/ permitir estorno no catch se a geração falhar
   let cobrarCredito = false; // cota mensal esgotada → esta geração será cobrada do crédito
   try {
-    const jaFeita = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
-    const isNovo = !(Array.isArray(jaFeita) && jaFeita.length);
+    // 19/10: mesmo conserto do gerar-analise (18/10) — sem .ok, um 4xx/5xx virava "documental nova" e cobrava cota.
+    const rj = await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`);
+    const jaFeita = rj.ok ? await rj.json().catch(() => null) : null;
+    if (!rj.ok) console.error('[gerar-documental] checagem de documental existente falhou: HTTP', rj.status, '— não cobra cota');
+    const isNovo = rj.ok && !(Array.isArray(jaFeita) && jaFeita.length);
     if (isNovo && !onBehalf) {
       const rc = await sb('rpc/consumir_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);

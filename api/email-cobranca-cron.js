@@ -96,6 +96,7 @@ async function processar(c, { seco }) {
     from: `${nome} (BidPro Brasil) <${orig.caixa}>`, to: orig.para, cc: orig.cc?.length ? orig.cc : undefined,
     replyTo: orig.caixa.replace('@', `+${token}@`), subject: assunto, html, text: texto,
     meta: { tipo: 'cobranca_posicao', userId: c.user_id }, idempotencyKey: `cobranca:${c.id}:${n}`,
+    semFila: true, // 19/10: a fila não guarda remetente/fio/anexo — represado sairia por noreply@, fora do fio, e em dobro
   });
   if (!env?.ok) throw new Error(`envio: ${env?.error || 'sem confirmação'}`);
   // O e-mail JÁ SAIU. O registro é o que liga a resposta (+token) à cobrança — falha aqui grita, não some.

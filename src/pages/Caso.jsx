@@ -234,7 +234,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
 
   const carregarAnexos = useCallback(async () => {
     if (!imovelId) return;
-    const { data } = await supabase.from('imovel_anexos')
+    const { data, error } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,url,criado_em')
       .eq('imovel_id', imovelId)
       .or(ANEXO_COM_ARQUIVO)
@@ -243,6 +243,8 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
       // a tela nunca mostraria que já foram anexados — e o anexo existente apareceria como
       // faltando, convidando a equipe a subir de novo.
       .in('tipo', ['matricula', 'edital', 'regras_venda', 'outro', 'carta_arrematacao', 'matricula_registrada']);
+    // 19/10 (forma 2): erro de leitura esvaziava a lista e mostrava carta/matrícula "faltando". Mantém a anterior.
+    if (error) { console.error('[caso] leitura dos anexos falhou:', error.message); return; }
     // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
     setAnexos(await assinarAnexos(data || []));
   }, [imovelId]);

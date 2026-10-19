@@ -472,7 +472,12 @@ export default function LiveInscricao({ adminPreview = false }) {
                     pela cidade dela (RedefinirSenha.jsx ganhou a opção de pular a troca de
                     senha e ir direto pra lá). Sem `link_acesso` (falha rara na geração),
                     cai no login normal — nunca pior do que era. */}
-                <a href={pronto.link_acesso || '/#/login'}
+                {/* 19/10: o link de acesso saiu da resposta da API (autenticava quem inscrevesse o e-mail
+                    de outra pessoa). Ele chega só no e-mail de confirmação. */}
+                <p style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.6, margin: '0 0 10px' }}>
+                  O link para criar a sua senha foi para o seu e-mail.
+                </p>
+                <a href="/#/login"
                   style={{ display: 'block', textAlign: 'center', background: '#fff', color: AZUL, border: `2px solid ${AZUL}`, textDecoration: 'none', padding: '13px', borderRadius: 12, fontWeight: 800, fontSize: 15 }}>
                   Acessar a plataforma e explorar →
                 </a>
