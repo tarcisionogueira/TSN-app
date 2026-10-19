@@ -60,7 +60,10 @@ export default async function handler(req, res) {
   if (whatsapp.length < 10) return res.status(400).json({ error: 'WhatsApp inválido (com DDD).' });
 
   // 1) Valida o link.
-  const linkRows = await sb(`links_promo?codigo=eq.${encodeURIComponent(codigo)}&ativo=eq.true&select=id,produto,produto_tipo,criado_por,validade_ate`).then(r => r.json()).catch(() => []);
+  // 19/10: falha transitória do banco não pode responder "link não encontrado" (formas 1/2).
+  const linkResp = await sb(`links_promo?codigo=eq.${encodeURIComponent(codigo)}&ativo=eq.true&select=id,produto,produto_tipo,criado_por,validade_ate`).catch(() => null);
+  if (!linkResp || !linkResp.ok) return res.status(503).json({ error: 'Não foi possível validar o link agora. Tente de novo em instantes.' });
+  const linkRows = await linkResp.json().catch(() => null);
   const link = Array.isArray(linkRows) ? linkRows[0] : null;
   if (!link) return res.status(404).json({ error: 'Link promocional não encontrado ou inativo.' });
   if (link.validade_ate && new Date(link.validade_ate) < new Date()) {

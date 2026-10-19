@@ -454,7 +454,11 @@ async function coletarLJUD(paginas, deadline) {
       // `null` = teto de cota do Bright Data OU erro de rede — NÃO é "fim das páginas". Tratá-lo
       // como fim faria a coleta parcial parecer completa. Marca PARCIAL e para aqui.
       if (!bd) { completo = false; break; }
-      let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
+      // 19/10: com exigirOk:false um 502 da Web Unlocker / 500 da LJUD chega aqui não-nulo; o JSON não
+      // parseia, `items` sai vazio e virava "fim das páginas" com completo=true — e o sweep desativava
+      // os lotes vivos das páginas seguintes. Resposta não-ok ou corpo ilegível = coleta PARCIAL.
+      if (bd.ok === false) { completo = false; break; }
+      let data = null; try { data = JSON.parse(await bd.text()); } catch (e) { console.warn('[ljud] página ilegível, coleta PARCIAL:', p, e?.message); completo = false; break; }
       const items = ljudItens(data);
       if (!items.length) break; // fim genuíno da paginação (completo permanece true)
       for (const it of items) {

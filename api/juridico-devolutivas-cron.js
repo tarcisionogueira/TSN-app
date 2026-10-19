@@ -155,9 +155,17 @@ async function handler(req) {
       const ids = novas.map((n) => n.id);
       const feitas = ids.length ? await ler(`caso_acompanhamento_analise?email_id=in.(${ids.join(',')})&select=email_id`) : [];
       const ja = new Set(feitas.map((f) => f.email_id));
+      // 19/10: a análise só grava a linha da resposta MAIS RECENTE; as anteriores do mesmo caso ficavam
+      // "sem análise" e o caso era reanalisado na rodada seguinte (3 respostas = 3 IAs e 3 resumos ao dono).
+      // Resposta anterior à última análise do caso já está coberta por ela.
+      const casosIds = [...new Set(novas.filter((n) => !ja.has(n.id)).map((n) => n.caso_id))];
+      const ultimas = casosIds.length ? await ler(`caso_acompanhamento_analise?caso_id=in.(${casosIds.join(',')})&select=caso_id,criado_em&order=criado_em.desc`) : [];
+      const ultimaPorCaso = new Map();
+      for (const u of ultimas) if (!ultimaPorCaso.has(u.caso_id)) ultimaPorCaso.set(u.caso_id, u.criado_em);
+      const coberta = (n) => ultimaPorCaso.has(n.caso_id) && new Date(n.criado_em) <= new Date(ultimaPorCaso.get(n.caso_id));
       // Uma análise por caso por rodada (a da resposta mais recente cobre as anteriores).
       const porCaso = new Map();
-      for (const n of novas) if (!ja.has(n.id)) porCaso.set(n.caso_id, n);
+      for (const n of novas) if (!ja.has(n.id) && !coberta(n)) porCaso.set(n.caso_id, n);
       alvos = [...porCaso.values()].slice(0, MAX_POR_RODADA);
     }
     for (const a of alvos) {

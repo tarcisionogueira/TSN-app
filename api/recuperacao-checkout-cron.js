@@ -208,7 +208,7 @@ export default async function handler(req, res) {
       meta: { userId: p.id, tipo: item.produto ? 'recuperacao_produto' : 'recuperacao_checkout' },
     });
     // Só grava o dedup quando o envio FOI aceito — envio falho hoje deve tentar amanhã.
-    if (r && r.ok !== false) {
+    if (r && (r.ok !== false || r.enfileirado)) { // 19/10: enfileirado = a fila entrega amanhã; sem o dedup saía 2×
       // O DEDUP é o que impede o mesmo cliente de receber isto de novo amanhã. Se a gravação
       // falhar, precisa GRITAR no log — o e-mail já saiu e não volta; repetir vira spam.
       const { error: eDedup } = await supabase.from('eventos_atividade').insert({

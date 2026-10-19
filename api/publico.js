@@ -538,7 +538,7 @@ ${corpo}
     var sv=localStorage.getItem('bp_orig');
     if(sv){orig=JSON.parse(sv);}
     else{var q=new URLSearchParams(location.search),gt=function(k){return q.get(k)||null;};
-      var o={gclid:gt('gclid'),gbraid:gt('gbraid'),wbraid:gt('wbraid'),oppref:gt('oppref'),utm_source:gt('utm_source'),
+      var o={gclid:gt('gclid'),gbraid:gt('gbraid'),wbraid:gt('wbraid'),fbclid:gt('fbclid'),oppref:gt('oppref'),utm_source:gt('utm_source'),
         utm_medium:gt('utm_medium'),utm_campaign:gt('utm_campaign'),utm_term:gt('utm_term'),
         utm_content:gt('utm_content'),referrer_host:(ref==='(direto)'||ref==='(interno)')?null:ref,
         landing:location.pathname};

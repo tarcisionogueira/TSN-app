@@ -103,7 +103,11 @@ async function resolverAnexo(msg, { anexoId = '', idx = NaN } = {}) {
       console.error('[email-caixa] anexos enviados: Resend', rl.status, jl ? Object.keys(jl).join(',') : '(sem corpo)');
       return { erro: `O provedor não listou os anexos deste envio (HTTP ${rl.status}).`, status: 502 };
     }
-    const alvo = itens.find(a => a?.filename === esperado.nome) || itens[idx];
+    // 19/10: sem casamento por POSIÇÃO (o arquivador já tirou em 16/10) — anexo que não foi entregue
+    // desloca os índices e a tela mostrava/encaminhava OUTRO arquivo com o nome deste.
+    if (esperado.enviado === false) return { erro: 'Este anexo não foi entregue no envio original.', status: 404 };
+    const alvo = itens.find(a => a?.filename === esperado.nome);
+    if (!alvo) return { erro: 'Anexo não encontrado neste envio.', status: 404 };
     let url = alvo?.download_url || null;
     if (!url && alvo?.id) {
       const ra = await fetch(`https://api.resend.com/emails/${encodeURIComponent(msg.resend_email_id)}/attachments/${encodeURIComponent(alvo.id)}`,

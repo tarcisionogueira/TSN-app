@@ -354,13 +354,19 @@ export default async function handler(req) {
       const corteISO = corteHojeBahia().toISOString();
       const patch = { status: 'sacado', pago_em: new Date().toISOString(), pago_por: user.id };
       if (body.descricao) patch.comprovante_desc = String(body.descricao).slice(0, 500);
-      const r = await db(`saldo_lancamentos?status=eq.solicitado&criado_em=lte.${encodeURIComponent(corteISO)}`, {
+      // 19/10: um estorno de comissão que chega entre a solicitação e a sexta deixa o saldo NEGATIVO
+      // (o saque pendente já está descontado na view). Quem está negativo fica fora do lote.
+      const neg = await db(`saldo_usuarios?saldo_disponivel=lt.-0.005&select=user_id`);
+      if (!neg.ok) return json({ error: 'Erro ao conferir saldos antes do lote', detail: neg.data }, 500);
+      const negativos = (Array.isArray(neg.data) ? neg.data : []).map(x => x.user_id);
+      const filtroNeg = negativos.length ? `&user_id=not.in.(${negativos.join(',')})` : '';
+      const r = await db(`saldo_lancamentos?status=eq.solicitado&criado_em=lte.${encodeURIComponent(corteISO)}${filtroNeg}`, {
         method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=representation' },
       });
       if (!r.ok) return json({ error: 'Erro ao liberar pagamentos', detail: r.data }, 500);
       const linhas = Array.isArray(r.data) ? r.data : [];
       await Promise.all(linhas.map((l) => logSaque(l.user_id, 'saque_pago', `R$ ${Number(l.valor).toFixed(2)} (lote de sexta)`, { valor: l.valor, pago_por: user.id, lanc_id: l.id })));
-      return json({ ok: true, pagos: linhas.length });
+      return json({ ok: true, pagos: linhas.length, retidos_saldo_negativo: negativos.length });
     }
 
     // Ações individuais precisam do id do lançamento (bigint).
@@ -372,8 +378,13 @@ export default async function handler(req) {
       if (!ehSexta()) return json({ error: 'Pagamentos de saque são processados apenas às sextas-feiras.' }, 422);
       // Corte de sexta ao meio-dia: só paga hoje o que foi solicitado até 12h de HOJE.
       // Solicitação feita depois do corte entra na liberação da próxima sexta.
-      const alvo = (await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado&select=id,criado_em`)).data?.[0];
+      const alvo = (await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado&select=id,criado_em,user_id`)).data?.[0];
       if (!alvo) return json({ error: 'Solicitação não encontrada ou já processada.' }, 404);
+      // 19/10: estorno chegado depois da solicitação deixa o saldo negativo — pagar seria pagar o estornado.
+      const sal = await db(`saldo_usuarios?user_id=eq.${alvo.user_id}&select=saldo_disponivel`);
+      if (!sal.ok || !Array.isArray(sal.data)) return json({ error: 'Não foi possível conferir o saldo do parceiro. Tente de novo.' }, 500);
+      const disp = Number(sal.data[0]?.saldo_disponivel ?? 0);
+      if (disp < -0.005) return json({ error: `Saldo do parceiro ficou negativo (R$ ${disp.toFixed(2)}) depois da solicitação — houve estorno. Recuse ou ajuste antes de pagar.` }, 409);
       if (new Date(alvo.criado_em) > corteHojeBahia()) {
         return json({ error: 'Solicitação feita após o corte de sexta (12h). Entra na liberação da próxima sexta.' }, 422);
       }

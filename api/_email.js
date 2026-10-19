@@ -4,6 +4,7 @@
  * Retorna { ok, id, error }.
  */
 import { registrarUso } from './_uso.js';
+import { fetchExternoSeguro } from './_allowed-hosts.js';
 
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -289,8 +290,10 @@ async function materializarAnexos(attachments) {
   const baixados = await Promise.all(attachments.map(async (a) => {
     if (!a?.path || a.content) return { a, ok: true };
     try {
-      const r = await fetch(a.path, {
-        redirect: 'follow', signal: AbortSignal.timeout(15000),
+      // 19/10: a URL vem da coleta dos leiloeiros (lote.anexos) — redirect:'follow' sem revalidar cada hop
+      // era porta de SSRF (302 → 169.254.169.254 / rede interna). Mesmo cuidado dos leitores de edital.
+      const r = await fetchExternoSeguro(a.path, {
+        signal: AbortSignal.timeout(15000), manterCookies: true,
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBot/1.0)', Accept: '*/*' },
       });
       if (!r.ok) return { a, ok: false, motivo: `o arquivo não abriu (HTTP ${r.status})` };
@@ -301,7 +304,7 @@ async function materializarAnexos(attachments) {
       if (/text\/html/i.test(tipo) && !/\.html?$/i.test(a.filename || '')) return { a, ok: false, motivo: 'o link devolveu uma página (exige login?), não o arquivo' };
       return { a, ok: true, bytes, tipo };
     } catch (e) {
-      return { a, ok: false, motivo: e?.name === 'TimeoutError' ? 'tempo esgotado ao baixar o arquivo' : String(e?.message || e).slice(0, 120) };
+      return { a, ok: false, motivo: e?.name === 'TimeoutError' ? 'tempo esgotado ao baixar o arquivo' : /^ssrf_/.test(String(e?.message)) ? 'endereço do arquivo recusado por segurança' : String(e?.message || e).slice(0, 120) };
     }
   }));
   const prontos = [];

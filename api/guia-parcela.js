@@ -108,7 +108,7 @@ export default async function handler(req, res) {
       const [caso] = await sbGet(`casos?id=eq.${casoId}&select=id,cliente_id,imovel_id`);
       if (!caso) { res.status(404).json({ error: 'Caso não encontrado' }); return; }
       const arrs = await sbGet(`arrematados?user_id=eq.${caso.cliente_id}&parcelamento=not.is.null&select=id,imovel_id,titulo,valor_arrematacao,data_arrematacao,parcelamento`);
-      const a = arrs.find((x) => caso.imovel_id && String(x.imovel_id) === String(caso.imovel_id)) || (arrs.length === 1 ? arrs[0] : null);
+      const a = arrs.find((x) => caso.imovel_id && String(x.imovel_id) === String(caso.imovel_id)) || (!caso.imovel_id && arrs.length === 1 ? arrs[0] : null); // 19/10: caso com imóvel não herda o arremate de OUTRO imóvel
       const docs = await sbGet(`caso_documentos?caso_id=eq.${casoId}&tipo=in.(guia_deposito,comprovante_pagamento)&select=id,tipo,titulo,nome,parcela_idx,parcela_status,parcela_aviso,criado_em&order=criado_em.desc&limit=40`);
       if (!a) { res.status(200).json({ ok: true, arrematado: null, itens: [], docs }); return; }
       const itens = cronograma(a.parcelamento, { valor: a.valor_arrematacao, dataArrematacao: a.data_arrematacao });
@@ -210,7 +210,11 @@ export default async function handler(req, res) {
   <p style="margin:16px 0 0;font-size:13px">A guia em PDF segue em anexo. Depois de pagar, <b>responda este e-mail com o comprovante</b>: ele é registrado no seu caso e a parcela é baixada.</p>
   <p style="margin:12px 0 0;font-size:12px;color:#b45309">Atraso em qualquer parcela pode gerar multa de 10% sobre a parcela e as vincendas (art. 895, §§ 4º e 5º, do CPC).</p>
   <p style="margin:16px 0 0"><a href="${BASE}/#/arrematados" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Ver cronograma</a></p></div>`;
-    const tokenResposta = caso && remet?.endereco ? crypto.randomUUID().replace(/-/g, '').slice(0, 24) : null;
+    // 19/10: chave de idempotência por ENVIO (o reenvio depois de um envio que saiu ganha chave nova) e token
+    // de resposta derivado dela — com token aleatório o conteúdo mudava a cada clique: o reenvio em < 24 h
+    // batia 409 no Resend ("E-mail não saiu") e o duplo toque não era deduplicado.
+    const chaveEnvio = `guia-${arr.id}-${idx}-${g.anexo_id || g.storage_path}-${g.enviada_em || 'v1'}`;
+    const tokenResposta = caso && remet?.endereco ? crypto.createHash('sha256').update(chaveEnvio).digest('hex').slice(0, 24) : null;
     const replyTo = tokenResposta ? remet.endereco.replace('@', `+${tokenResposta}@`) : (remet?.endereco || undefined);
     const cc = [...new Set([DONO_EMAIL, EQUIPE_EMAIL].filter(Boolean).map((e) => e.toLowerCase()))].filter((e) => e !== destino);
     const assunto = `Guia da ${parcela.rotulo} · pagar até ${dataBR(pagarAte)} · ${brl(valor)}`;
@@ -219,7 +223,7 @@ export default async function handler(req, res) {
       from: FROM, to: destino, cc: cc.length ? cc : undefined, replyTo, subject: assunto,
       html, attachments: [{ filename: String(nomeArq).replace(/[^\w.\-]+/g, '_'), content: pdf.toString('base64') }],
       meta: { tipo: 'guia_parcela_arremate', userId: arr.user_id }, semFila: true,
-      idempotencyKey: `guia-${arr.id}-${idx}-${g.anexo_id || g.storage_path}`,
+      idempotencyKey: chaveEnvio,
     });
     if (!envio?.ok) {
       console.error('[guia-parcela] envio recusado:', envio?.error);

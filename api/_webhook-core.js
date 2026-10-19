@@ -79,6 +79,23 @@ export async function eventoJaProcessado({ gateway, gatewayPaymentId, evento }) 
 // Remove a marca de idempotência (gateway, payment_id, evento). Usar quando o EFEITO do
 // evento FALHOU depois da marca ter sido gravada: sem isso, o reenvio do gateway seria
 // deduplicado e o efeito (ativação/estorno) nunca completaria. Best-effort.
+/**
+ * Pagamento APROVADO que o webhook não pode aplicar (19/10, pendência 232): valor acima do saldo,
+ * ou honorário/cobrança já quitado por OUTRO pagamento. Antes: console.error + desfazer a marca + 200
+ * — o gateway não reentrega um 200, então o dinheiro entrava na conta sem rastro. Agora vai para a
+ * fila `pagamentos_conferencia` (invariante `pagamento_sem_conferencia` grita) e a marca FICA.
+ * Lança se não conseguir gravar: aí sim o webhook devolve 5xx e o gateway reentrega.
+ */
+export async function registrarPagamentoParaConferir({ gateway, gatewayPaymentId, referencia, valor, esperado, motivo }) {
+  const { error } = await supabase.from('pagamentos_conferencia').upsert({
+    gateway, gateway_payment_id: String(gatewayPaymentId), referencia: referencia || null,
+    valor: Number.isFinite(Number(valor)) ? Number(valor) : null,
+    esperado: Number.isFinite(Number(esperado)) ? Number(esperado) : null, motivo,
+  }, { onConflict: 'gateway,gateway_payment_id', ignoreDuplicates: true });
+  if (error) throw new Error(`pagamentos_conferencia: ${error.message}`);
+  alertarErro({ rota: `webhook/${gateway}/conferencia`, erro: `Pagamento aprovado NÃO aplicado (${motivo}) — conferir/devolver: ${gateway} ${gatewayPaymentId} · ${referencia} · pago ${valor} × esperado ${esperado}`, extra: { gateway, gatewayPaymentId: String(gatewayPaymentId), referencia, motivo } });
+}
+
 export async function removerEventoProcessado({ gateway, gatewayPaymentId, evento }) {
   if (!gatewayPaymentId || !evento) return;
   // Conferido (04/10, revisão de segurança): todo o "falhou → 5xx → gateway reentrega" depende
@@ -537,7 +554,7 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
     // gateway reentrega. É seguro repetir: cada estorno é idempotente pelo `estOid`.
     const { data: lancs, error: eLancs } = await supabase.from('saldo_lancamentos')
       .select('id, user_id, valor, origem_id, origem_tipo')
-      .in('tipo', ['comissao_rede', 'comissao_infinito']).like('origem_id', `${gatewayPaymentId}-%`);
+      .in('tipo', ['comissao_rede', 'comissao_infinito', 'comissao_venda']).like('origem_id', `${gatewayPaymentId}-%`); // comissao_venda (advogado, <pay>-advvenda): 19/10
     if (eLancs) throw new Error(`leitura de comissões: ${eLancs.message}`);
     let estornado = 0;
     for (const l of (lancs || [])) {

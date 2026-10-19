@@ -105,6 +105,8 @@ export default async function handler(req, res) {
             ] }],
           }),
         }, { retries: 1, timeoutMs: 60000, noFallback: true });
+        // 19/10: 429/529 da IA virava "não foi possível ler" gravado POR CIMA de uma validação boa.
+        if (!r.ok) { console.error('[validar-anexos] IA indisponível', r.status, a.id); resultados.push({ ...out, motivo: 'Leitura indisponível agora — tente de novo em instantes.' }); continue; }
         const parsed = parseJSON(extractText(await r.json()));
         if (parsed && ['coerente', 'divergente', 'indeterminado'].includes(parsed.status)) {
           out = { anexo_id: a.id, tipo: a.tipo, nome: a.nome, status: parsed.status, confianca: Number(parsed.confianca) || 0, motivo: String(parsed.motivo || '').slice(0, 240), encontrado: parsed.encontrado || null };

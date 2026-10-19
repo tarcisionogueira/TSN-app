@@ -632,6 +632,16 @@ export default function Login() {
               Clique no link para ativar sua conta — <strong>o login só funciona depois disso</strong>. Não chegou? Confira o <strong>spam</strong> ou reenvie abaixo.
               {planoEscolhido && <><br /><strong style={{ color: '#084BA6' }}>Depois de ativar e entrar, você vai direto para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
             </p>
+            {/* 19/10: a troca de modo zera o captchaToken e esta tela não montava o widget nem mostrava
+                `erro` — o reenvio esbarrava no guarda do captcha e o clique parecia morto. */}
+            {erro && !reenviado && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', marginBottom: 12 }}>{erro}</div>}
+            {turnstileConfigurado && !reenviado && (
+              <TurnstileWidget
+                resetKey={turnstileTentativa}
+                onVerify={setCaptchaToken}
+                onExpire={() => setCaptchaToken(null)}
+              />
+            )}
             {reenviado
               ? <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#15803d', marginBottom: 12 }}>✅ Confirmação reenviada. Verifique a caixa de entrada e o spam.</div>
               : <button type="button" onClick={reenviarConfirmacao} disabled={reenviando || cooldownReenvio > 0}

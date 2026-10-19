@@ -182,7 +182,8 @@ async function handler(req) {
         html: `<div style="font-family:Arial,sans-serif;max-width:600px;color:#1e293b;line-height:1.6"><p>A <b>${esc(p.rotulo)}</b> de ${esc(cli?.nome || 'cliente')} (${esc(c.imovel_endereco || 'imóvel arrematado')}) vence em <b>${dataBR(p.venc)}</b> — valor nominal ${brl(p.valor)}.</p><p>O caso está <b>sem advogado vinculado</b>, então ninguém recebeu o pedido da guia. Vincule o escritório no caso ou gere a guia pelo painel "Emitir guia" em <a href="${BASE}/arrematados">${BASE}/arrematados</a>.</p></div>`,
         meta: { tipo: 'acompanhamento_sem_advogado' }, idempotencyKey: `acompanhamento:${chave}`,
       }).catch((e) => ({ ok: false, error: e?.message }));
-      if (env?.ok) res.avisos_sem_advogado = (res.avisos_sem_advogado || 0) + 1;
+      // 19/10: represado no orçamento diário (enfileirado) SAI amanhã pela fila — liberar a trava duplicava.
+      if (env?.ok || env?.enfileirado) res.avisos_sem_advogado = (res.avisos_sem_advogado || 0) + 1;
       else { res.falhas++; console.error(`[acompanhamento] aviso sem advogado falhou caso ${c.id}:`, env?.error); await liberar(chave); }
     }
     const semana = semanaIso(new Date(`${hoje}T12:00:00Z`));
@@ -272,7 +273,7 @@ async function handler(req) {
             idempotencyKey: `acompanhamento:${ev.chave}`,
             semFila: true, // 19/10: a fila não guarda remetente/fio/anexo — represado sairia por noreply@, fora do fio, e em dobro
           });
-          if (!env?.ok) throw new Error(env?.error || 'envio sem confirmação');
+          if (!env?.ok && !env?.enfileirado) throw new Error(env?.error || 'envio sem confirmação'); // enfileirado = a fila entrega (19/10)
           // O e-mail JÁ SAIU: falha no registro é só histórico — mas é o registro que liga a resposta
           // ao caso, então grita no log em vez de engolir.
           const ins = await sb('email_caixa', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({

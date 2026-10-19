@@ -50,6 +50,33 @@
   autoativa — dono), 248 (financiamento-alertas fora do `enviarEmail`; chargeback de recarga não retira crédito).
 - **Validar no navegador (dono):** compra de assessoria pelo Checkout → contrato sai sozinho em até ~15 s.
 
+## 19/10 (2ª sessão, em paralelo à de cima) — bug bounty complementar
+> Duas sessões rodaram o ritual ao mesmo tempo. Sobreposições (limpeza CEF, leitura de perfil e comissão no
+> `_webhook-core`, 404 do lote, login-rate) ficaram com a versão de cima; abaixo, só o que é desta sessão.
+- **Invariantes:** `venda_direta_com_praca` → ZACCARINO/CUNHA (plataforma ARES, mesma exceção do SHIOKAWA). 
+- **Sitemap 500 intermitente:** cache frio (8,7 s → 60 ms morno). Criei `idx_imoveis_ativo_id` e o planejador NÃO usa —
+  pedir ao dono: `drop index if exists public.idx_imoveis_ativo_id;`.
+- **Dinheiro (corrigido):**
+  - estorno de CURSO não cancelava o saldo da rede níveis 2+ (`<pay>-prod-nN`) → `estornar_compra_produto` corrigida
+    (parte "rede" da #245; a cortesia segue aberta lá);
+  - chargeback não estornava `comissao_venda` do advogado (`<pay>-advvenda`) → incluída (toca a #244);
+  - chargeback/reembolso do Pro ANUAL por PIX não tirava o acesso (vinha como `servico`);
+  - pagar saque (individual e lote de sexta) agora recusa/retém quem ficou com saldo negativo por estorno;
+  - **#232:** pagamento aprovado excedente ou de honorário/cobrança JÁ quitado ia para o lixo (200 + desfazer marca) →
+    tabela `pagamentos_conferencia` + invariante crítico `pagamento_sem_conferencia`. Para conferir:
+    `select * from pagamentos_conferencia where conferido_em is null;`
+  - **#231:** estorno de honorário com repasse já creditado (mesmo parcial, status `pago`) vai para a mesma fila; PATCHes
+    com prova e leituras que lançam.
+- **Captura:** LJUD — 502/500 numa página do meio virava "fim das páginas" com `completo=true` e o sweep desativava os
+  lotes das páginas seguintes. Agora coleta PARCIAL.
+- **Outros corrigidos:** reenvio de confirmação na tela de sucesso do cadastro (sem widget/erro → clique morto);
+  `fbclid` fora do `bp_orig` nas páginas SEO; promo e convite com falha transitória
+  = "não encontrado"; ParcelasCaso sumia no erro; guia-parcela (idempotência por envio + caso com imóvel não herda arremate
+  de outro); e-mail represado tratado como falha em 3 crons (duplicava); validar-anexos gravava "não li" sobre validação
+  boa num 429; email-caixa casava anexo por posição; devolutivas reanalisavam o mesmo caso; SSRF em `materializarAnexos`.
+- **Abertas no banco:** 251 (contas criadas já confirmadas — DECISÃO DO DONO), 253 (enfileirado nos
+  outros 19 crons), 254 (confirm/prompt em ações críticas), 255 (estorno Pix parcial, fila MP), 256 (menores).
+
 ## 18/10 (noite) — HASTA vazio de verdade, timeouts de pico, ARES +Zaccarino/Cunha
 - **230 HASTA (fechada):** o parser está íntegro. Recon via Firecrawl: o site lista 1 imóvel só (TRT-5, venda por proposta sem praça → descartado), e o leilão CAIXA 569 está publicado com 0 lotes. `/leiloes` redireciona para a home, mas os links `/leilao/N/lotes` continuam lá. "falhou / sem nenhum lote pronto" = acervo vazio. Volta sozinho quando a CAIXA publicar os lotes.
 - **222 timeouts (medido em `postgres_logs`, 52 em 24 h).** Migração `20261018_indices_timeouts_pico.sql`:

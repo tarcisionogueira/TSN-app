@@ -35,7 +35,7 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setDados(d);
-    } catch (e) { console.error('[ParcelasCaso] carregar:', e?.message); setErro(`Não foi possível carregar as parcelas: ${e.message}`); setDados({ itens: [], docs: [] }); }
+    } catch (e) { console.error('[ParcelasCaso] carregar:', e?.message); setErro(`Não foi possível carregar as parcelas: ${e.message}`); setDados({ itens: [], docs: [], falhou: true }); }
   }, [casoId]);
   useEffect(() => { if (casoId) carregar(); }, [casoId, carregar]);
 
@@ -54,7 +54,8 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
     finally { setEnviando(null); }
   };
 
-  if (dados && !dados.arrematado && !(dados.docs || []).length) return null;
+  // 19/10: falha de carga NÃO é "caso sem parcelamento" — o aviso de erro tem que aparecer (forma 4).
+  if (dados && !dados.falhou && !dados.arrematado && !(dados.docs || []).length) return null;
   const itens = dados?.itens || [];
   const pendentes = itens.filter((x) => !x.paga);
   const visiveis = verTodas ? itens : [...itens.filter((x) => x.paga).slice(-1), ...pendentes.slice(0, 3)];

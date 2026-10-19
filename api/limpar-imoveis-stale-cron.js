@@ -32,15 +32,20 @@ export default async function handler(req, res) {
   // tocam no máx. LOTE linhas; aqui chamamos até vir menos que LOTE ou acabar o orçamento.
   const LOTE = 200;
   const inicio = Date.now();
+  // 19/10: nenhuma chamada começa depois de TETO_INICIO_MS — uma RPC (8 s) + espera (5 s) + nova tentativa (8 s)
+  // iniciada perto do maxDuration (120 s) passava dele e a função morria sem log, sem alerta e sem resposta.
+  const TETO_INICIO_MS = 98000;
   async function emLotes(fn, body, orcamentoMs) {
-    let total = 0;
-    for (let i = 0; i < 25 && Date.now() - inicio < orcamentoMs; i++) {
+    let total = 0, chamadas = 0;
+    const limite = Math.min(orcamentoMs, TETO_INICIO_MS);
+    for (let i = 0; i < 25 && Date.now() - inicio < limite; i++) {
+      chamadas++;
       let r = await rpc(fn, { ...body, lote: LOTE });
       if (!r.ok) {
         const txt = (await r.text().catch(() => '')).slice(0, 200);
         // 18/10: às 05h UTC o banco divide o horário com o runner residencial e a onda de crons — um timeout
         // de carga ganha UMA nova tentativa (o que já foi feito não volta para a fila, então é seguro).
-        if (!/57014/.test(txt)) return { erro: `${r.status} ${txt}`, parcial: total };
+        if (!/57014/.test(txt) || Date.now() - inicio > 105000) return { erro: `${r.status} ${txt}`, parcial: total };
         await new Promise(ok => setTimeout(ok, 5000));
         r = await rpc(fn, { ...body, lote: LOTE });
         if (!r.ok) return { erro: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`, parcial: total, tentativas: 2 };
@@ -50,6 +55,8 @@ export default async function handler(req, res) {
       total += n;
       if (n < LOTE) return total;
     }
+    // Sem NENHUMA chamada não houve medição: é "não coube hoje", não falha do passo (forma 10). Amanhã roda.
+    if (!chamadas) return { pulado: 'sem tempo nesta rodada' };
     return { erro: `orçamento de tempo esgotou com backlog restante`, parcial: total };
   }
 
@@ -119,6 +126,6 @@ export default async function handler(req, res) {
     try { alertarErro({ rota: 'limpar-imoveis-stale', erro: `Passo(s) da limpeza diária falhou(aram): ${falhas.join(' · ')}`, extra: { desativados } }); } catch { /* alerta é best-effort */ }
   }
 
-  (falhas.length ? console.error : console.log)('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos, preco_vigente: precoVigente, falhas }));
-  return res.status(falhas.length ? 500 : 200).json({ ok: !falhas.length, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
+  (falhas.length ? console.error : console.log)('[limpar-imoveis-stale]', JSON.stringify({ desativados, vendidos_cef: vendidosCef, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos, preco_vigente: precoVigente, falhas }));
+  return res.status(falhas.length ? 500 : 200).json({ ok: !falhas.length, desativados, vendidos_cef: vendidosCef, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos, preco_vigente: precoVigente });
 }

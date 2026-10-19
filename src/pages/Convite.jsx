@@ -36,7 +36,13 @@ export default function Convite() {
 
       // 1. Try convites_equipe first (team invite by token) — via RPC de match EXATO
       // (a tabela não é mais legível por token: evita enumeração de convites de staff).
-      const { data: equipeInfo } = await supabase.rpc('get_convite_equipe_info', { p_token: codigo });
+      const { data: equipeInfo, error: eEquipe } = await supabase.rpc('get_convite_equipe_info', { p_token: codigo });
+      // 19/10: falha transitória não é "convite não encontrado" (forma 2) — o convite de equipe válido sumia.
+      if (eEquipe) {
+        setErro('Não foi possível verificar o convite agora. Confira sua conexão e recarregue a página.');
+        setLoading(false);
+        return;
+      }
       if (equipeInfo?.valido) {
         setConviteEquipe(equipeInfo);
         salvarConvite(CHAVE_EQUIPE, codigo);

@@ -17,38 +17,56 @@ const _SB_SVC = process.env.SUPABASE_SERVICE_KEY;
 // mexer em saldo de terceiro sem as mesmas guardas de `distribuirHonorarios` — fica
 // registrado no log para conferência manual, nunca falha silenciosa.
 export async function reverterHonorarioEstornado(arrId, evento, paymentId) {
-  const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_status`, {
-    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
-  });
-  const [arr] = arrRes.ok ? await arrRes.json() : [];
-  if (arr?.honorarios_status === 'distribuido') {
-    console.error(`[honorario-estorno] ${evento} de honorário já distribuído à equipe — requer conferência manual`, { arrId });
-    return { revertido: false };
+  // 19/10 (pendência 231): leituras e escritas conferidas — leitura falha virava "nada a estornar"
+  // e o PATCH com return=minimal sem checar .ok perdia o estorno com o webhook respondendo 200.
+  // Lançar aqui faz o webhook desfazer a marca e o gateway reentregar.
+  const H = { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` };
+  const arrRes = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&select=id,honorarios_status`, { headers: H });
+  if (!arrRes.ok) throw new Error(`honorario-estorno: leitura da arrematação falhou (${arrRes.status})`);
+  const [arr] = await arrRes.json();
+  // Desde 10/10 a liquidação credita fatias com o status ainda 'pago' (repasse PARCIAL) e
+  // honorario_liquidar nunca debita. Então "já distribuído" não é só o status: é haver crédito
+  // positivo vivo desta arrematação. Nesses casos o estorno vai para a fila de conferência
+  // (invariante pagamento_sem_conferencia) — mexer em saldo de terceiro fica com a equipe.
+  const lRes = await fetch(`${_SB_URL}/rest/v1/saldo_lancamentos?origem_tipo=eq.arrematacao&origem_id=eq.${arrId}&valor=gt.0&status=neq.cancelado&select=id,valor`, { headers: H });
+  if (!lRes.ok) throw new Error(`honorario-estorno: leitura dos repasses falhou (${lRes.status})`);
+  const repasses = await lRes.json();
+  const creditado = repasses.reduce((t, l) => t + Number(l.valor || 0), 0);
+  if (creditado > 0 || arr?.honorarios_status === 'distribuido') {
+    const cRes = await fetch(`${_SB_URL}/rest/v1/pagamentos_conferencia?on_conflict=gateway,gateway_payment_id`, {
+      method: 'POST',
+      headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ gateway: `estorno_${evento}`, gateway_payment_id: String(paymentId || arrId), referencia: `arrematacao:${arrId}`, valor: creditado, esperado: 0, motivo: 'estorno_com_repasse_creditado' }),
+    });
+    if (!cRes.ok) throw new Error(`honorario-estorno: fila de conferência falhou (${cRes.status})`);
+    console.error(`[honorario-estorno] ${evento} com R$ ${creditado.toFixed(2)} já repassado à equipe — enviado à conferência`, { arrId });
+    if (arr?.honorarios_status === 'distribuido') return { revertido: false, conferencia: true };
   }
   if (paymentId) {
-    const recRes = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${arrId}&gateway_payment_id=eq.${paymentId}&status=eq.confirmado&select=id`, {
-      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
-    });
-    const [rec] = recRes.ok ? await recRes.json() : [];
+    const recRes = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?arrematacao_id=eq.${arrId}&gateway_payment_id=eq.${paymentId}&status=eq.confirmado&select=id`, { headers: H });
+    if (!recRes.ok) throw new Error(`honorario-estorno: leitura do recebimento falhou (${recRes.status})`);
+    const [rec] = await recRes.json();
     if (rec) {
-      await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?id=eq.${rec.id}`, {
+      const pr = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?id=eq.${rec.id}&status=eq.confirmado`, {
         method: 'PATCH',
-        headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        headers: { ...H, 'Content-Type': 'application/json', Prefer: 'return=representation' },
         body: JSON.stringify({ status: 'estornado' }),
       });
-      return { revertido: true, parte: rec.id };
+      if (!pr.ok) throw new Error(`honorario-estorno: marcar parte estornada falhou (${pr.status})`);
+      return { revertido: true, parte: rec.id, conferencia: creditado > 0 };
     }
   }
   // Fallback (sem linha de recebimento correspondente): comportamento antigo.
   if (arr?.honorarios_status === 'pago') {
-    await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}`, {
+    const pr = await fetch(`${_SB_URL}/rest/v1/arrematacoes?id=eq.${arrId}&honorarios_status=eq.pago`, {
       method: 'PATCH',
-      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...H, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify({ honorarios_status: 'pendente', honorarios_pago_em: null }),
     });
-    return { revertido: true };
+    if (!pr.ok) throw new Error(`honorario-estorno: reabrir honorário falhou (${pr.status})`);
+    return { revertido: true, conferencia: creditado > 0 };
   }
-  return { revertido: false };
+  return { revertido: false, conferencia: creditado > 0 };
 }
 
 // Estorno/chargeback de cobrança avulsa: mais simples que honorário — não existe conceito
@@ -58,13 +76,15 @@ export async function reverterCobrancaAvulsaEstornada(cobrancaId, evento) {
   const r = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&select=id,status`, {
     headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` },
   });
-  const [cob] = r.ok ? await r.json() : [];
+  if (!r.ok) throw new Error(`cobranca-estorno: leitura falhou (${r.status})`); // 19/10: não é "nada a estornar"
+  const [cob] = await r.json();
   if (cob?.status !== 'paga') return { revertido: false };
-  await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}`, {
+  const pr = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobrancaId}&status=eq.paga`, {
     method: 'PATCH',
-    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
     body: JSON.stringify({ status: 'aberta', pago_em: null }),
   });
+  if (!pr.ok) throw new Error(`cobranca-estorno: reabrir falhou (${pr.status})`);
   console.error(`[honorario-estorno] cobranca_avulsa ${evento} — reaberta para nova cobrança`, { cobrancaId });
   return { revertido: true };
 }

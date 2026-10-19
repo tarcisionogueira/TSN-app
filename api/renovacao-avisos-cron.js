@@ -186,7 +186,7 @@ async function handler(req) {
         </div>`;
         try {
           const r2 = await enviarEmail({ from: EMAIL_FROM, to: c.email, subject: 'Confirme o seu novo plano mensal — BidPro Brasil', html });
-          if (r2?.ok) avisados++;
+          if (r2?.ok || r2?.enfileirado) avisados++; // 19/10: enfileirado sai pela fila — apagar a trava duplicava
           else {
             await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados?gateway=eq.mercadopago&gateway_payment_id=eq.${encodeURIComponent('ciclo_' + c.user_id)}&evento=eq.${encodeURIComponent('renov_aviso:' + vencDate)}`, { method: 'DELETE', headers: { ...hdr } }).catch(() => {});
           }

@@ -8,7 +8,7 @@
  */
 import crypto from 'crypto';
 import { cancelarOutrasRecorrencias, assinaturasAsaasAtivas } from './_recorrencia-unica.js';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, registrarPagamentoParaConferir, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 import { mpSdk } from './_mp-sdk.js';
@@ -556,7 +556,12 @@ export async function processarEventoMp(req, res) {
         const [arr] = await arrRes.json();
         if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
         if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
-          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
+          // 19/10: se ESTE pagamento não é uma das partes já gravadas, é dinheiro a mais (2º boleto/link).
+          const jaR = await fetch(`${_SB_URL}/rest/v1/honorarios_recebimentos?gateway_payment_id=eq.${pagamento.id}&select=id&limit=1`, { headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` } });
+          if (!jaR.ok) throw new Error(`honorário: leitura do recebimento falhou (${jaR.status})`);
+          const [jaParte] = await jaR.json();
+          if (!jaParte) await registrarPagamentoParaConferir({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, referencia: `arrematacao:${arrId}`, valor: pagamento.transaction_amount, esperado: 0, motivo: 'ja_quitado' });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago', conferencia: !jaParte });
         }
         // 17/09: o webhook não patcheia mais `arrematacoes` direto — GRAVA A PARTE em
         // honorarios_recebimentos (idempotente por gateway_payment_id, unique) e deixa a
@@ -591,8 +596,8 @@ export async function processarEventoMp(req, res) {
         // ultrapassar); aqui só se rejeita o absurdo (pago ≤ 0 ou maior que o saldo atual).
         if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {
           console.error('[mp-webhook] honorario valor incompatível', { arrId, pago, esperado, total, jaRecebido });
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
-          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
+          await registrarPagamentoParaConferir({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, referencia: `arrematacao:${arrId}`, valor: pago, esperado, motivo: esperado <= 0 ? 'ja_quitado' : 'valor_acima_do_saldo' });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel', conferencia: true });
         }
         // Método real (17/09): antes tudo que vinha do link gravava 'cartao_mp', mesmo Pix —
         // rótulo errado desde que o Pix parcial existe. `payment_method_id` do MP diz 'pix'
@@ -641,7 +646,12 @@ export async function processarEventoMp(req, res) {
         }
         const [cob] = await cobRes.json();
         if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
-        if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
+        if (cob.status !== 'aberta') {
+          // 19/10: pagamento diferente do que quitou = dinheiro a mais (cobrança já paga/cancelada).
+          const outro = String(cob.gateway_payment_id || '') !== String(pagamento.id);
+          if (outro) await registrarPagamentoParaConferir({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, referencia: `cobranca:${cobId}`, valor: pagamento.transaction_amount, esperado: 0, motivo: 'ja_quitado' });
+          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga', conferencia: outro });
+        }
         // Dedup por payment_id: mesmo pagamento não pode incrementar valor_pago_pix 2x
         // (reenvio do MP do MESMO evento já é barrado por eventoJaProcessado lá em cima,
         // mas esta é a 2ª camada — o mesmo cuidado do gateway_payment_id único em
@@ -657,8 +667,8 @@ export async function processarEventoMp(req, res) {
         // ser uma PARTE do saldo (Pix parcial), não precisa bater exato com o que falta.
         if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {
           console.error('[mp-webhook] cobranca_avulsa valor incompatível', { cobId, pago, esperado, total, jaPagoPix });
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
-          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel' });
+          await registrarPagamentoParaConferir({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, referencia: `cobranca:${cobId}`, valor: pago, esperado, motivo: esperado <= 0 ? 'ja_quitado' : 'valor_acima_do_saldo' });
+          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel', conferencia: true });
         }
         const completou = pago >= esperado - Math.max(1, esperado * 0.01);
         const patchRes = await fetch(`${_SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}`, {
@@ -735,8 +745,12 @@ export async function processarEventoMp(req, res) {
         const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'chargeback');
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
+      // 19/10: o Pro ANUAL pago por PIX vem com metadata.tipo='servico' (para o caminho genérico não
+      // elevar plano) — mas no chargeback/reembolso ele É a assinatura: sem isto, R$ 449,90 voltavam
+      // e os 12 meses de Pro ficavam. O ramo de recusa NÃO usa isto (PIX expirado rebaixaria o mensal).
       result = await processarChargeback({
         ...contexto,
+        servico: contexto.servico && pagamento.metadata?.proposito !== 'plano_anual',
         evento: 'charged_back',
         motivo: pagamento.status_detail || 'charged_back',
         raw: { id: pagamento.id, status, status_detail: pagamento.status_detail },
@@ -767,7 +781,8 @@ export async function processarEventoMp(req, res) {
       // Reembolso de SERVIÇO avulso (recarga, assessoria) estorna a comissão mas NÃO
       // suspende o plano: o assinante devolvido de uma compra avulsa segue pagante.
       // Mesma lacuna do ramo rejected/cancelled — o guard cobria só produto.
-      result = await processarReembolso({ ...contexto, suspender: !parcial && !contexto.servico });
+      const servicoReemb = contexto.servico && pagamento.metadata?.proposito !== 'plano_anual'; // Pro anual: ver chargeback
+      result = await processarReembolso({ ...contexto, servico: servicoReemb, suspender: !parcial && !servicoReemb });
     } else {
       // pending, in_process, authorized — aguardar próxima notificação
       return res.status(200).json({ ok: true, ignored: status });

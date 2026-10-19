@@ -11,6 +11,7 @@ import {
   processarReembolso,
   eventoJaProcessado,
   removerEventoProcessado,
+  registrarPagamentoParaConferir,
   registrarConversaoAnuncio,
   registrarLiberacaoPagamento,
   buscarCliente,
@@ -209,7 +210,12 @@ export default async function handler(req, res) {
         const [arr] = await arrRes.json();
         if (!arr) return res.status(200).json({ ok: true, ignorado: 'honorario_arrematacao_nao_encontrada' });
         if (['pago', 'distribuido'].includes(arr.honorarios_status)) {
-          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago' });
+          // 19/10: se ESTE pagamento não é uma das partes já gravadas, é dinheiro a mais (2º boleto/link).
+          const jaR = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos?gateway_payment_id=eq.${pagReal.id}&select=id&limit=1`, { headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` } });
+          if (!jaR.ok) throw new Error(`honorário: leitura do recebimento falhou (${jaR.status})`);
+          const [jaParte] = await jaR.json();
+          if (!jaParte) await registrarPagamentoParaConferir({ gateway: 'asaas', gatewayPaymentId: pagReal.id, referencia: `arrematacao:${arrId}`, valor, esperado: 0, motivo: 'ja_quitado' });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_ja_pago', conferencia: !jaParte });
         }
         const jaRes = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos?gateway_payment_id=eq.${pagReal.id}&select=id&limit=1`, {
           headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
@@ -227,8 +233,8 @@ export default async function handler(req, res) {
         const valorHon = Math.round((valor - taxaHonorario) * 100) / 100; // o que é HONORÁRIO (sem a taxa repassada)
         if (esperado <= 0 || valorHon <= 0 || valorHon > esperado + Math.max(1, esperado * 0.01)) {
           console.error('[asaas-webhook] honorario valor incompatível', { arrId, valor, taxaHonorario, valorHon, esperado, total, jaRecebido });
-          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
-          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel' });
+          await registrarPagamentoParaConferir({ gateway: 'asaas', gatewayPaymentId: pagReal.id, referencia: `arrematacao:${arrId}`, valor: valorHon, esperado, motivo: esperado <= 0 ? 'ja_quitado' : 'valor_acima_do_saldo' });
+          return res.status(200).json({ ok: true, ignorado: 'honorario_valor_incompativel', conferencia: true });
         }
         const metodoReal = pagReal.billingType === 'PIX' ? 'pix_asaas' : pagReal.billingType === 'BOLETO' ? 'boleto_asaas' : 'cartao_asaas';
         const insRes = await fetch(`${SB_URL}/rest/v1/honorarios_recebimentos`, {
@@ -269,7 +275,11 @@ export default async function handler(req, res) {
         }
         const [cob] = await cobRes.json();
         if (!cob) return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_nao_encontrada' });
-        if (cob.status !== 'aberta') return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga' });
+        if (cob.status !== 'aberta') {
+          const outro = String(cob.gateway_payment_id || '') !== String(pagReal.id); // 19/10: ver mp-webhook
+          if (outro) await registrarPagamentoParaConferir({ gateway: 'asaas', gatewayPaymentId: pagReal.id, referencia: `cobranca:${cobId}`, valor, esperado: 0, motivo: 'ja_quitado' });
+          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_ja_paga', conferencia: outro });
+        }
         if (String(cob.gateway_payment_id || '') === String(pagReal.id)) {
           return res.status(200).json({ ok: true, duplicado: 'cobranca_avulsa_mesmo_payment' });
         }
@@ -278,8 +288,8 @@ export default async function handler(req, res) {
         const esperado = Math.max(0, Math.round((total - jaPagoPix) * 100) / 100);
         if (esperado <= 0 || valor <= 0 || valor > esperado + Math.max(1, esperado * 0.01)) {
           console.error('[asaas-webhook] cobranca_avulsa valor incompatível', { cobId, valor, esperado, total, jaPagoPix });
-          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
-          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel' });
+          await registrarPagamentoParaConferir({ gateway: 'asaas', gatewayPaymentId: pagReal.id, referencia: `cobranca:${cobId}`, valor, esperado, motivo: esperado <= 0 ? 'ja_quitado' : 'valor_acima_do_saldo' });
+          return res.status(200).json({ ok: true, ignorado: 'cobranca_avulsa_valor_incompativel', conferencia: true });
         }
         const completou = valor >= esperado - Math.max(1, esperado * 0.01);
         const patchRes = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${cobId}`, {
