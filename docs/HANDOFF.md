@@ -7,6 +7,16 @@
 
 
 
+## 20/10 — pendências 231 e 232: conferidas (resolvidas em f95b40e) + a TELA da fila
+- As duas já estavam fechadas por outra sessão (19/10): pagamento aprovado excedente/já quitado e estorno sobre
+  repasse creditado vão para `pagamentos_conferencia` (invariante crítico `pagamento_sem_conferencia`), leituras e
+  PATCH do estorno com prova. Conferido no código: cobre o que as pendências pediam.
+- **Faltava o elo humano:** a fila não tinha tela — o item alertava uma vez e só saía dali por SQL (que o conector
+  nem roda). Agora: Admin → Financeiro → **⚖️ Pagamentos a conferir** (`PagamentosConferenciaAdmin.jsx`,
+  `api/pagamentos-conferencia.js`, só admin). Pendentes primeiro; "Marcar como conferido" exige escrever o que foi
+  feito (grava `conferido_obs` com quem conferiu; filtro `conferido_em is null` na escrita + linha devolvida).
+  Devolução/ajuste de saldo seguem com a equipe. Fila vazia hoje.
+
 ## 20/10 — pendências 249 e 250 (captura)
 - **LEJE zerado desde 12/10 = a HOME MUDOU** (não era Cloudflare, como dizia a explicação de 02/10). Recon Firecrawl:
   home 200 com 43 eventos `acao=evento&cod=N` e nenhum `lote=` — o extrator só aceitava `lote=`. A página do evento

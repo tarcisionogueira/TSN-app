@@ -15,6 +15,7 @@ import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO } from '../components/TermoJuridico';
 import NotasFiscaisSaqueAdmin from '../components/NotasFiscaisSaqueAdmin'; // 16/10: nota em todo saque
+import PagamentosConferenciaAdmin from '../components/PagamentosConferenciaAdmin'; // 20/10: #231/#232
 import CarteiraPropostas from '../components/CarteiraPropostas'; // 14/10: lotes sem lance para proposta
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
@@ -9793,6 +9794,7 @@ function FinanceiroHub() {
     { key: 'assinaturas', label: '👥 Assinaturas' },
     { key: 'saques',      label: '💸 Saques da equipe' },
     { key: 'notas',       label: '🧾 Notas fiscais de saque' },
+    { key: 'conferencia', label: '⚖️ Pagamentos a conferir' },
   ];
   const [sub, setSub] = React.useState(() => {
     let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
@@ -9847,6 +9849,7 @@ function FinanceiroHub() {
       {sub === 'assinaturas' && <AbaAssinaturas />}
       {sub === 'saques'      && <PrestacaoContasTab />}
       {sub === 'notas'       && <NotasFiscaisSaqueAdmin />}
+      {sub === 'conferencia' && <PagamentosConferenciaAdmin />}
     </div>
   );
 }
