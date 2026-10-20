@@ -144,7 +144,7 @@ export default function Calculadora() {
   const [avaliacao, setAvaliacao] = useState(imPre?.valorAvaliacao ? String(imPre.valorAvaliacao) : '');
 
   const [debitos, setDebitos] = useState(Number(fjPre?.debitosAssumidos) || 0);
-  const [reforma, setReforma] = useState(Number(fjPre?.desocupacaoCusto) || 0);
+  const [reforma, setReforma] = useState(0) // sem o palpite de desocupação do laudo (20/10);
   const [iptuMensal, setIptuMensal] = useState(0);
   const [condominioMensal, setCondominioMensal] = useState(0);
   const [sinal, setSinal] = useState(25);
@@ -386,7 +386,6 @@ export default function Calculadora() {
               <div>
                 Valores pré-preenchidos de <strong>{imPre.titulo || 'este imóvel'}</strong>.
                 {fjPre?.debitosAssumidos ? ` Débitos assumidos (propter rem) do laudo: R$ ${Number(fjPre.debitosAssumidos).toLocaleString('pt-BR')}.` : ''}
-                {fjPre?.desocupacaoCusto ? ` Custo estimado de desocupação em "Reforma/desocupação": R$ ${Number(fjPre.desocupacaoCusto).toLocaleString('pt-BR')}${fjPre.desocupacaoPrazoMeses ? ` (~${fjPre.desocupacaoPrazoMeses} ${fjPre.desocupacaoPrazoMeses > 1 ? 'meses' : 'mês'})` : ''}.` : ''}
                 {' '}Revise antes de decidir.
               </div>
             </div>

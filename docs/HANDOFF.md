@@ -8,12 +8,12 @@
 
 
 ## 20/10 (tarde) — 3 pedidos do dono na tela do imóvel
-- **Custo de desocupação ("custo est. R$ 30.000")**: é ESTIMATIVA da IA do documental (`raioX.ocupacaoDetalhe`),
-  não vem do edital. No caso conferido (Tamboré/FRANCOLEILOES, 196f8afa) o edital só diz OCUPADO e que a desocupação
-  é do arrematante (itens 4 e 9.11); 12 meses / R$ 30 mil foram calculados pela IA, e o prompt pedia "custo estimado"
-  sem regra de origem. Agora o laudo grava `custoFonte` (edital|estimativa) + `custoBase`, a ficha guarda
-  `desocupacaoCustoFonte/Base`, e a tela, o relatório e o PDF dizem "(estimativa BidPro — não consta no edital)".
-  Laudo antigo sem o campo = estimativa. **Aberto para o dono:** trocar a estimativa da IA por cálculo determinístico.
+- **Custo de desocupação ("custo est. R$ 30.000") — REMOVIDO (decisão do dono):** era palpite da IA do documental
+  (`raioX.ocupacaoDetalhe.prazoMeses/custoEstimado`), não vinha do edital (Tamboré/FRANCOLEILOES, 196f8afa: o edital só
+  diz OCUPADO e desocupação por conta do arrematante, itens 4 e 9.11). O dono vende a desocupação na assessoria,
+  com honorário — o palpite concorria com ela. O prompt não pede mais prazo/custo; tela, relatório, PDF e Calculadora
+  (que pré-enchia "Reforma/desocupação") pararam de exibir/usar, inclusive o que fichas e laudos antigos ainda guardam.
+  Tipo de ocupação, direitos do ocupante e procedimento continuam. **Não reintroduzir.**
 - **Área**: `fmtArea` (utils/format.js) — no máx. 2 casas, vírgula. A ficha mostra a área do DOCUMENTO quando algum
   relatório já leu a matrícula (doc_fatos ou ficha_juridica), senão a do anúncio; Resumo mostra as duas se divergem >10%.
 - **"Voltar à busca" caía no relatório**: `nav(-1)` às cegas; o /analise empurra um imóvel novo na pilha ("abrir a

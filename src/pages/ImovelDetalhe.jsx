@@ -759,13 +759,10 @@ function AnaliseJuridicaCard({ fj }) {
 
   const linhas = [];
   if (fj.ocupacaoTipo) {
-    const prazo = fj.desocupacaoPrazoMeses ? ` · desocupação ~${fj.desocupacaoPrazoMeses} ${fj.desocupacaoPrazoMeses > 1 ? 'meses' : 'mês'}` : '';
-    const custo = fj.desocupacaoCusto ? ` · custo est. ${brl(fj.desocupacaoCusto)}` : '';
-    // Origem do prazo/custo (20/10): o edital quase nunca traz esses números — são estimativa
-    // do laudo. Sem a marca, o cliente lia "custo est. R$ 30.000" como valor do edital.
-    const origem = (prazo || custo) ? (fj.desocupacaoCustoFonte === 'edital' ? ' (conforme edital)' : ' (estimativa BidPro — não consta no edital)') : '';
-    linhas.push(<Linha key="oc" rot="Ocupação" val={`${OCUP_LABEL[fj.ocupacaoTipo] || fj.ocupacaoTipo}${prazo}${custo}${origem}`} cor={fj.ocupacaoTipo === 'desocupado' ? '#15803d' : '#b45309'} />);
-    if (origem && fj.desocupacaoCustoBase) linhas.push(<Linha key="ocb" rot="Base da estimativa" val={fj.desocupacaoCustoBase} />);
+    // Sem prazo/custo de desocupação (decisão do dono, 20/10): era palpite da IA, lido como
+    // dado do edital, e a desocupação é serviço da assessoria. Fichas antigas ainda trazem os
+    // campos `desocupacaoPrazoMeses/desocupacaoCusto` — ignorados de propósito.
+    linhas.push(<Linha key="oc" rot="Ocupação" val={OCUP_LABEL[fj.ocupacaoTipo] || fj.ocupacaoTipo} cor={fj.ocupacaoTipo === 'desocupado' ? '#15803d' : '#b45309'} />);
   }
   if (fj.debitosAssumidos) linhas.push(<Linha key="db" rot="Débitos que você assume" val={`${brl(fj.debitosAssumidos)} (propter rem)`} cor="#b45309" />);
   else if (fj.debitosALevantar) linhas.push(<Linha key="db2" rot="Débitos propter rem" val="a levantar (IPTU/condomínio)" />);

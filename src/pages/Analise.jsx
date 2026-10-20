@@ -3175,10 +3175,6 @@ export default function Analise() {
                         <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.6 }}>
                           <strong>{OCUP_LABEL_A[oc.tipo] || oc.tipo}</strong>
                           {oc.direitos ? ` · ${oc.direitos}` : ''}
-                          {oc.prazoMeses ? ` · desocupação ~${oc.prazoMeses} ${oc.prazoMeses>1?'meses':'mês'}` : ''}
-                          {oc.custoEstimado ? ` · custo est. ${brl(oc.custoEstimado)}` : ''}
-                          {(oc.prazoMeses || oc.custoEstimado) ? (oc.custoFonte === 'edital' ? ' (conforme edital)' : ' (estimativa BidPro — não consta no edital)') : ''}
-                          {oc.custoBase && oc.custoFonte !== 'edital' ? <div style={{ color:'#64748b', marginTop:3 }}>Base da estimativa: {oc.custoBase}</div> : null}
                           {oc.procedimentoDesocupacao ? <div style={{ color:'#64748b', marginTop:3 }}>{oc.procedimentoDesocupacao}</div> : null}
                         </div>
                       </Bloco>
