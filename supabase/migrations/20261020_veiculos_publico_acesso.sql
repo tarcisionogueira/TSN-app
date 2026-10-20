@@ -111,3 +111,19 @@ begin
   if novo = d then raise exception 'proteger_campos_sensiveis_perfil: âncora não encontrada'; end if;
   execute novo;
 end $$;
+
+-- Local do pátio (raw do leiloeiro reduzido às chaves de localização) só para quem tem acesso — o
+-- endereço do pátio costuma identificar o leiloeiro. Função à parte de veiculo_leiloeiro porque mudar o
+-- retorno de lá exigiria DROP (trava no conector do Supabase).
+create or replace function public.veiculo_local_patio(p_ids uuid[])
+returns table (id uuid, raw jsonb)
+language sql stable security definer set search_path = public as $$
+  select v.id, jsonb_strip_nulls(jsonb_build_object(
+           'lot_location_address', v.raw->'lot_location_address', 'offerDescription', v.raw->'offerDescription',
+           'addr', v.raw->'addr', 'product', jsonb_build_object('location', v.raw->'product'->'location'),
+           'localidade', v.raw->'localidade', 'local', v.raw->'local', 'lot_location', v.raw->'lot_location'))
+    from public.veiculos_leilao v
+   where public.tem_acesso_veiculos() and v.id = any(p_ids[1:60])
+$$;
+revoke all on function public.veiculo_local_patio(uuid[]) from public, anon;
+grant execute on function public.veiculo_local_patio(uuid[]) to authenticated;
