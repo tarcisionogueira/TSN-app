@@ -20,4 +20,4 @@ if [ "$IDADE" -lt "$LIMITE_S" ]; then exit 0; fi   # em dia: silêncio (roda a c
 # também seguraria, mas assim o log não ganha uma linha de "já há um runner" a cada 30 min.
 if command -v flock >/dev/null 2>&1 && ! flock -n "$HOME/.bidpro-runner.lock" true; then exit 0; fi
 echo "[$(date)] recuperando rodada atrasada: última completa há $(( IDADE / 3600 )) h — iniciando o runner"
-exec "$(cd "$(dirname "$0")" && pwd)/runner-residencial.sh"
+RUNNER_ORIGEM="recuperador_$(( IDADE / 3600 ))h" exec "$(cd "$(dirname "$0")" && pwd)/runner-residencial.sh"

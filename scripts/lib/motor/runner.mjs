@@ -100,6 +100,9 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         if (!htmlEvento1) htmlEvento1 = { url: ev, html: re.html };
         const antes = urls.size;
         for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
+        // 20/10 (LEJE): o evento de LOTE ÚNICO é a própria página do lote — o det sai daqui e o laço de coleta
+        // não paga a mesma página de novo. Nenhuma outra fonte tem nível 2 + detalhesDoCatalogo juntos.
+        if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(re.html, tenant.base)) detCatalogo.set(u, det);
         if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
         if (urls.size === antes) break;
         await sleep(400);

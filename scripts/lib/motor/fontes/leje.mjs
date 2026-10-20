@@ -13,7 +13,7 @@
  * 'firecrawl' (lib/motor/fetch-firecrawl.mjs); precisa do secret FIRECRAWL_API_KEY no GitHub.
  */
 import {
-  TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../leje-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
@@ -24,14 +24,18 @@ export default {
   catalogo: '/',
   paginaParam: 'page',
   maxPages: 1,
+  // 20/10 (#250): a home lista EVENTOS; cada um é aberto uma vez (lote único sai dali mesmo, ver leje-parse).
+  // Medido: 43 eventos no ar → ~44 créditos/rodada semanal. O teto padrão de 12 cortaria 2/3 do acervo.
+  maxEventos: 60,
+  maxPagesEvento: 1,
   // Semanal: 15 dias = ausente do catálogo em 2 rodadas seguidas → sumiu_da_fonte (ver runner).
   sumidoDias: 15,
   tenants: Object.values(TENANTS),
-  parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  parse: { extrairUrlsDeEvento, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Própria (PHP antigo, URL por query string)', acesso: 'firecrawl',
     custo: 'firecrawl (1 crédito/página)', anti_bot: 'cloudflare (403 ao runner/ISP)',
-    enumeracao: '/ (home — todo outro path testado é a mesma home)',
+    enumeracao: '/ (home lista eventos cod=N) → evento (lote único = o próprio evento; vários = links lote=)',
     url_lote: '/index.php?acao=evento&cod=<leilaoId>&lote=<loteId>',
     scraper: 'scraper-leje.mjs',
   },

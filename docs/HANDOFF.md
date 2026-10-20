@@ -7,6 +7,31 @@
 
 
 
+## 20/10 — pendências 249 e 250 (captura)
+- **LEJE zerado desde 12/10 = a HOME MUDOU** (não era Cloudflare, como dizia a explicação de 02/10). Recon Firecrawl:
+  home 200 com 43 eventos `acao=evento&cod=N` e nenhum `lote=` — o extrator só aceitava `lote=`. A página do evento
+  de lote único é o próprio lote e não traz o id do lote. Agora: home → evento (nível 2) → links `lote=` (vários lotes)
+  ou o próprio evento como lote, id `leje_e<cod>` (prefixo; nenhum dos 43 eventos tinha lote antigo no acervo). O det
+  do lote único sai da página que o nível 2 já abriu (motor: `detalhesDoCatalogo` também no nível 2 — só o LEJE usa
+  os dois), ~44 créditos Firecrawl/semana. De quebra: cidade "Edifício Antares em Guarujá" → "Guarujá" e foto da
+  galeria (`swiper-slide`) em vez do LOGO DO TRIBUNAL. Teste `npm run testar:leje`. Seco no HTML real: 43 eventos,
+  home sem falso lote, lote 7873 completo.
+- **SBID21 = portal da Superbid PERU.** 3 lotes na história inteira, todos peruanos e descartados pelo filtro BR; o
+  piso 18 vinha de candidatos crus (forma nº 10). Coleta retirada do scraper (`SCRAPER_FONTES=SBID21` ainda força).
+- **LEFFA/CRLEILOES `medicao_velha` = freio com janela IGUAL à cadência.** `coleta-recente.mjs` pulava o cron pago se
+  o acervo tinha < N dias, com N = intervalo do próprio cron; a coleta termina minutos depois do horário do cron, então
+  o disparo seguinte achava o acervo "fresco" por minutos e pulava → coleta a cada 2 ciclos (LEFFA: 08/10 17:37,
+  cron de 15/10 10:50 pulou). Margem de 12 h. Vale para os 7 workflows com freio (cobra o Bright Data no ritmo que
+  cada um foi desenhado para ter).
+- **EMILIOMATOS seguia `suspenso = true`** em `leiloeiro_conhecimento` desde 29/08, apesar de religado em 18/10 — o
+  monitor não o vigia. Conector trava em UPDATE: **`docs/SQL_DONO_2026-10-20.sql`** (dessuspende EMILIOMATOS e
+  suspende SBID21).
+- **#249 runner de madrugada:** rodadas de 18–19/10 às 21h, 10h e 19h UTC (18h, 7h e 16h locais). A das 7h está fora
+  da agenda = o recuperador agindo quando a máquina voltou → o PC dorme/desliga à noite; não há defeito no script.
+  Cada rodada agora grava `sistema_heartbeat.runner_residencial_rodada` (origem agenda/recuperador, host, horas desde
+  a última completa) e `runner_residencial_completa`. Correção é na máquina do dono (energia + "despertar para
+  executar"), ver resposta de 20/10.
+
 ## 20/10 — pendências 246 e 248
 - **#246 downgrade Clube→Pro:** pelo Asaas (`gerenciar_assinatura`) baixava só o VALOR da assinatura e a escada
   (só sobe) mantinha o Clube pagando o preço do Pro. Agora o servidor recusa downgrade ali (409) e o Checkout leva

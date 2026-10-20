@@ -24,6 +24,33 @@ export const TENANTS = {
   leje: { fonte: 'LEJE', leiloeiro: 'LEJE — Leilão Judicial Eletrônico', base: 'https://leje.com.br' },
 };
 
+// ⚠️ 20/10 (#250) — A HOME MUDOU: desde ~12/10 ela lista EVENTOS (`acao=evento&cod=N`, SEM `lote=`) e o
+// extrator, que só aceitava `lote=`, enumerava 0 com 43 eventos no ar (recon Firecrawl: home 200, 43 `cod=`
+// distintos, 0 `lote=`). A página do evento de LOTE ÚNICO ("Lote Único") é a própria página do lote — não
+// tem link `lote=` e não traz o id do lote em lugar nenhum do HTML. Por isso o fluxo virou de 2 níveis:
+// home → evento (extrairUrlsDeEvento); no evento, os links `lote=` (vários lotes) ou o próprio evento como
+// lote, com id `e<cod>` — prefixo para nunca colidir com os ids de lote antigos (~18–19 mil; cod ~6–8 mil).
+export function extrairUrlsDeEvento(html, base) {
+  const evs = new Map();
+  for (const m of String(html || '').matchAll(/href=["']([^"'#]*acao=evento(?:&|&amp;)cod=(\d+))["'#]/gi)) {
+    if (/[?&](?:amp;)?lote=/.test(m[1])) continue;
+    try { evs.set(m[2], new URL(`/index.php?acao=evento&cod=${m[2]}`, base).href); } catch { /* skip */ }
+  }
+  return evs;
+}
+
+// O evento aberto é ele mesmo um lote? Exige as DUAS provas: a linha "ID: <cod>" do bloco do lote (a mesma que
+// parseDetalhe usa para saber que não caiu na home) e a âncora do próprio evento (`cod=<cod>#`) — a home tem os
+// cartões "ID 7873", mas sem essa âncora; e evento com vários lotes tem links `lote=`, que vencem.
+function loteUnicoDoEvento(html, base) {
+  const h = String(html || '');
+  if (/acao=evento[^"']*[?&](?:amp;)?lote=\d+/i.test(h)) return null;
+  const linhaId = textoComLinhas(h).split('\n').map((l) => l.trim()).find((l) => /^ID:\s*\d+$/i.test(l));
+  const cod = linhaId && linhaId.match(/(\d+)/)[1];
+  if (!cod || !new RegExp(`acao=evento(?:&|&amp;)cod=${cod}#`).test(h)) return null;
+  try { return { cod, url: new URL(`/index.php?acao=evento&cod=${cod}`, base).href }; } catch { return null; }
+}
+
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
   // O HTML cru vem com "&amp;" entre os parâmetros da query string — "&" sozinho (sem "amp;")
@@ -31,10 +58,23 @@ export function extrairUrlsDeLote(html, base) {
   for (const m of String(html || '').matchAll(/href=["']([^"']*acao=evento[^"']*[?&](?:amp;)?lote=(\d+)[^"']*)["']/gi)) {
     try { urls.set(m[2], new URL(m[1].replace(/&amp;/g, '&'), base).href); } catch { /* skip */ }
   }
+  if (!urls.size) { const u = loteUnicoDoEvento(html, base); if (u) urls.set(`e${u.cod}`, u.url); }
   return urls;
 }
+
+// Evento de lote único: o det sai da página que o nível 2 já abriu (o motor não paga o Firecrawl duas vezes).
+export function detalhesDoCatalogo(html, base) {
+  const out = new Map();
+  const u = loteUnicoDoEvento(html, base);
+  if (u) { const det = parseDetalhe(html, u.url); if (det) out.set(u.url, det); }
+  return out;
+}
+
 export const idDaUrl = url => {
-  try { return new URL(url).searchParams.get('lote'); } catch { return (String(url).match(/[?&]lote=(\d+)/) || [])[1] || null; }
+  let lote = null, cod = null;
+  try { const q = new URL(url).searchParams; lote = q.get('lote'); cod = q.get('cod'); }
+  catch { lote = (String(url).match(/[?&]lote=(\d+)/) || [])[1] || null; cod = (String(url).match(/[?&]cod=(\d+)/) || [])[1] || null; }
+  return lote || (cod ? `e${cod}` : null);
 };
 
 // titleCase (dom-parse-util) só capitaliza depois de espaço/aspa/hífen — uma UF colada num
@@ -96,19 +136,28 @@ export function parseDetalhe(html, url) {
   const minimo = plaus(num((txt.match(/Valor\s+de\s+2[ºª°]?\s*leil[ãa]o\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1])) || avaliacao;
 
   const titulo = tituloDaLinha(linhas);
-  const { cidade, estado } = cidadeUFBare(txt);
+  const cu = cidadeUFBare(txt);
+  // 20/10: o título do LEJE é "... NO EDIFÍCIO ANTARES EM GUARUJÁ/SP" — a regex levava "Edifício Antares em
+  // Guarujá". A cidade é o que vem depois do ÚLTIMO " em ".
+  const cidade = cu.cidade && /\sem\s/i.test(cu.cidade) ? titleCase(cu.cidade.split(/\sem\s/i).pop()) : cu.cidade;
+  const estado = cu.estado;
   const area = extrairArea(titulo || '', txt.slice(0, 1500));
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : 'judicial';
   const mat = (txt.match(/Matr[íi]cula\s*n[º°]?\s*:?\s*([\d.]{3,})/i) || [])[1] || null;
   const docs = anexosDeHtml(html, url);
 
+  // FOTO (20/10): a genérica (fotoDeHtml, dentro de `docs`) pegava o LOGO DO TRIBUNAL (`tribunais/...png`) — a
+  // galeria do lote é a dos `swiper-slide`; o resto da página são cartões de OUTROS leilões, que nunca podem
+  // virar foto deste. Sem galeria, nenhuma foto: melhor vazio que a imagem errada.
+  const galeria = [...new Set([...String(html || '').matchAll(/class=["']swiper-slide["'][^>]*>\s*<img[^>]+src=["']([^"']*\/storage\/public\/imagem\/[^"']+)["']/gi)]
+    .map((m) => { try { return new URL(m[1], url).href; } catch { return null; } }).filter(Boolean))];
   return {
     titulo, cidade, estado,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     descricao: null,
     data_leilao: proximaDataLeje(bloco) || proximaData(bloco),
-    numero_matricula: mat, ...docs,
+    numero_matricula: mat, ...docs, link_foto: galeria[0] || null, fotos: galeria,
     encerrado: /\b(arrematado|vendido|deserto|cancelad[oa]|suspens[oa])\b/i.test(txt.slice(0, 1500)),
   };
 }

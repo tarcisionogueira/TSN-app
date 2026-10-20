@@ -93,6 +93,14 @@ fi
 
 echo "===== [$(date)] runner residencial ($(git rev-parse --short HEAD 2>/dev/null || echo '?')) ====="
 
+# ORIGEM DA RODADA (20/10, #249): agenda (cron/Windows) ou recuperador (máquina voltou depois de >6 h fora). Junto,
+# há quantas horas foi a última rodada COMPLETA — buraco de madrugada passa a ser dado no banco, não dedução.
+_ult="$(cat "$HOME/.bidpro-runner.ultimo" 2>/dev/null || echo 0)"
+_gap_h=$(( ( $(date +%s) - _ult ) / 3600 ))
+[ "$_ult" = "0" ] && _gap_h="?"
+node scripts/runner-carimbo.mjs runner_residencial_rodada \
+  "inicio $(date -u +%FT%TZ) origem=${RUNNER_ORIGEM:-agenda} host=$(hostname) ultima_completa_ha_h=${_gap_h}${RUNNER_SO:+ parcial=$RUNNER_SO}" || true
+
 # rodar <FONTE> <comando...> : só executa se o GATE liberar (2x/semana, sem overlap); conclui no sucesso.
 #
 # ATENÇÃO (lição de 11/08): `exit 0` do scraper NÃO é prova de coleta. O RJ rodava em
@@ -324,6 +332,8 @@ rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mj
 # achar que tudo rodou e pular a rodada inteira que ficou devendo (27/09).
 if [ -z "${RUNNER_SO:-}" ]; then
   date +%s > "$HOME/.bidpro-runner.ultimo"
+  node scripts/runner-carimbo.mjs runner_residencial_completa \
+    "fim $(date -u +%FT%TZ) origem=${RUNNER_ORIGEM:-agenda} host=$(hostname)" || true
 else
   echo "[$(date)] rodada parcial (RUNNER_SO=$RUNNER_SO) — carimbo de rodada completa NÃO gravado"
 fi

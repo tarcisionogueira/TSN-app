@@ -51,7 +51,13 @@ if (!fonte || !URL_BASE || !KEY) {
 }
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
-const corte = Date.now() - dias * 86400000;
+// MARGEM DE 12 h (20/10, #250). A janela era IGUAL à cadência do cron (semanal × 7 dias; CRLEILOES 2×/sem × 3
+// dias): a coleta paga termina minutos DEPOIS do horário do cron, então no disparo seguinte o acervo ainda tinha
+// "menos de N dias" por esses minutos e o freio pulava — a fonte passava a ser coletada a cada 2 ciclos. Medido no
+// LEFFA: coletado 08/10 17:37, cron de 15/10 10:50 pulou (acervo de 6 d 17 h), `medicao_velha` desde então.
+// Com a margem, só pula quem foi atualizado bem dentro da janela — que é o caso do runner residencial (72 h).
+const MARGEM_MS = 12 * 3600000;
+const corte = Date.now() - dias * 86400000 + MARGEM_MS;
 
 async function acervosDoGate() {
   try {
@@ -92,7 +98,7 @@ try {
   const detalhe = idades
     .map((a) => `${a.nome}=${a.t ? new Date(a.t).toISOString().slice(0, 10) : 'nunca'}${a.fresco ? '' : ' (VELHO)'}`)
     .join(', ');
-  console.error(`[coleta-recente] ${fonte}: acervo → ${detalhe} → ${fresco ? `PULAR o cron pago (tudo < ${dias} dias)` : 'RODAR via Bright Data (rede de segurança)'}`);
+  console.error(`[coleta-recente] ${fonte}: acervo → ${detalhe} → ${fresco ? `PULAR o cron pago (tudo < ${dias} dias − 12 h)` : 'RODAR via Bright Data (rede de segurança)'}`);
   console.log(`pular=${fresco ? 1 : 0}`);
 } catch (e) {
   console.error('[coleta-recente] erro (fail-open):', String(e?.message || e).slice(0, 160));

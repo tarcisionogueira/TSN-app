@@ -6560,9 +6560,12 @@ async function main() {
     // página de oferta que SUPERBID/SOLD (que capturam 74%/100% com enrich ligado), mas
     // aqui a chamada saía sem enriquecerDocumentosLote nenhuma vez → 0% de doc num
     // inventário pequeno o bastante (34/72 ativos) pro cap padrão (120) cobrir de sobra.
-    if (bSbid && rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
+    // SBID21 SAIU (20/10, #250): o portal 21 é o da Superbid PERU — 3 lotes na história inteira (jul–set), todos
+    // peruanos e todos descartados pelo filtro BR. O "piso 18" do monitor vinha de candidatos crus antes do filtro
+    // (forma nº 10). Só volta com recon mostrando imóvel brasileiro no portal 21 (`SCRAPER_FONTES=SBID21` força).
+    if (bSbid && rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portal 9...');
     if (bSbid && rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(bSbid, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
-    if (bSbid && rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(bSbid, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
+    if (bSbid && ONLY.includes('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(bSbid, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }), { enrich: true, enrichCap: 120, browser: bSbid });
 
     // 3c. White-labels da rede por LOJA (Round 35 do backlog TRT-15): mesma offer-query,
     // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
