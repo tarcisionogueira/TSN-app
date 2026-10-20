@@ -4,7 +4,7 @@
  * cabeçalho `apikey` público de cada site; o det sai pronto do catálogo, sem abrir página.
  * Custo Bright Data ZERO (a API não tem Cloudflare; o site do Picelli tem, mas não é usado).
  */
-import { TENANTS, CATALOGO, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade } from '../../ares-parse.mjs';
+import { TENANTS, CATALOGO, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade, apurarAusentes } from '../../ares-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
 
@@ -16,6 +16,7 @@ export default {
   maxPages: 1,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  apurarAusentes, // lote vencido sem resultado → desfecho lido na própria API (20/10)
   conhecimento: {
     plataforma: 'Ares (Agência Ares) — Supabase/PostgREST por leiloeiro, api.<domínio>/rest/v1',
     acesso: 'api-publica', custo: 'gratis', anti_bot: 'cloudflare no site (API livre)',

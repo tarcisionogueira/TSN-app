@@ -66,6 +66,36 @@ export function idDaUrl(url) {
   return (String(url).match(/\/lote\/([0-9a-f-]{36})(?:[/?#]|$)/i) || [])[1] || null;
 }
 
+// APURAÇÃO PELA API (20/10). O catálogo só pede `aberto,futuro`: lote encerrado SOME da coleta e
+// ninguém grava o resultado — o cron de apuração descarta "venda direta" e a Ares é quase toda
+// venda direta COM prazo. Achado: SHIOKAWA Piracicaba (16/10) ativo 4 dias depois do fim, alarme
+// crítico `resultado_leilao_atrasado`. A mesma API diz o desfecho sem abrir página:
+//   status vendido → vendido · cancelado/cancelled_at → cancelado · encerrado com bid_count 0 e
+//   highest_bid_value 0 → sem_lance · encerrado COM lance → não decide (pode ser lance abaixo do
+//   mínimo, condicional) · aberto/futuro → ainda corre, não é resultado.
+// Devolve `achado` no formato de api/_resultado-leilao.js (`patchDaApuracao`). Falha da API LANÇA:
+// "não consegui ler" não pode virar "nenhum resultado" (forma nº 2 do CLAUDE.md).
+export function desfechoAres(lote) {
+  const st = String(lote?.status || '').toLowerCase();
+  const lances = Number(lote?.bid_count) || 0;
+  const maior = Number(lote?.highest_bid_value) || 0;
+  if (st === 'vendido') return { resultado: 'vendido', valor: maior >= 1000 ? maior : null };
+  if (st === 'cancelado' || lote?.cancelled_at) return { resultado: 'cancelado', valor: null };
+  if (st === 'encerrado' && !lances && !maior) return { resultado: 'sem_lance', valor: null };
+  return null;
+}
+
+export async function apurarAusentes(candidatos, { fetchFonte, tenant }) {
+  const porId = new Map(candidatos.map(c => [idDaUrl(c.url_lote), c]).filter(([k]) => k));
+  if (!porId.size) return [];
+  const url = `${tenant.base}/rest/v1/lots?id=in.(${[...porId.keys()].join(',')})&select=id,status,bid_count,highest_bid_value,cancelled_at`;
+  const { html, via } = await fetchFonte(url);
+  if (!html) throw new Error(`apuração Ares não leu a API: ${via}`);
+  const lotes = JSON.parse(html);
+  if (!Array.isArray(lotes)) throw new Error('apuração Ares: resposta não é lista');
+  return lotes.map(l => ({ cand: porId.get(l.id), achado: desfechoAres(l), status: l.status })).filter(x => x.cand);
+}
+
 // O catálogo traz bens diversos e veículos junto: só categoria de imóvel entra na lista.
 export function extrairUrlsDeLote(txt, base) {
   const urls = new Map();

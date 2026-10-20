@@ -23,6 +23,7 @@ import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
 import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
 import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from '../galeria-veiculo.mjs';
+import { patchDaApuracao } from '../../../api/_resultado-leilao.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -410,6 +411,8 @@ export async function rodarFonte(cfg, opts) {
           metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
           motivo,
         });
+        // Catálogo vazio com a API respondendo: é justamente quando tudo encerrou — apurar mesmo assim.
+        if (!dryrun) await apurarVencidos(supabase, fetchFonte, tenant, cfg);
         continue;
       }
       await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
@@ -495,10 +498,45 @@ export async function rodarFonte(cfg, opts) {
       if (eSum) console.error(`[${tenant.fonte}] varredura de sumidos falhou:`, eSum.message);
       else console.log(`[${tenant.fonte}] varredura: ${sumidos?.length || 0} lote(s) fora do catálogo há ${cfg.sumidoDias}+ dias → sumiu_da_fonte`);
     }
+    await apurarVencidos(supabase, fetchFonte, tenant, cfg);
     await registrarConhecimento(supabase, { fonte: tenant.fonte, ...cfg.conhecimento, qualidade: qualidadeColeta(prontos) });
   }
   if (dryrun) console.log(`\nPara gravar, rode com ${rotulo}_DRYRUN=0.`);
   } finally { await motor.fechar?.(); }
+}
+
+// APURAÇÃO NA PRÓPRIA FONTE, opt-in (20/10): fonte cuja API diz o desfecho do lote (`cfg.apurarAusentes`,
+// hoje só a Ares) apura aqui os ativos com prazo vencido e sem resultado — o cron de apuração não os
+// alcança (venda direta fica fora dele; a página SPA não tem texto para o regex). Grava pelo mesmo
+// `patchDaApuracao` do cron; o filtro de resultado ainda aberto na escrita não pisa apuração feita no meio, e `.select()` prova o que gravou.
+async function apurarVencidos(supabase, fetchFonte, tenant, cfg) {
+  if (typeof cfg.apurarAusentes !== 'function') return;
+  // Mesma fila do cron: ativo OU desligado por praça vencida (o sem_lance volta à vitrine, para
+  // proposta — regra do dono de 14/10), resultado nulo ou indeterminado, fim nos últimos 30 dias.
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // dia em Brasília
+  const desde = new Date(Date.now() - 33 * 864e5).toISOString().slice(0, 10);
+  // Um `.or()` só por consulta (dois viram parâmetros repetidos); o par ativo/praça vencida sai em JS.
+  const { data: linhas, error } = await supabase.from('imoveis_leilao')
+    .select('id,url_lote,resultado_apuracao_tentativas,ativo,suprimido_motivo').eq('fonte', tenant.fonte)
+    .or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado')
+    .lt('data_fim', hoje).gte('data_fim', desde).limit(300);
+  if (error) { console.error(`[${tenant.fonte}] apuração: não li os vencidos:`, error.message); return; }
+  const cand = (linhas || []).filter(l => l.ativo || l.suprimido_motivo === 'praca_vencida').slice(0, 100);
+  if (!cand.length) return;
+  let lidos;
+  try { lidos = await cfg.apurarAusentes(cand, { fetchFonte, tenant }); } catch (e) {
+    console.error(`[${tenant.fonte}] apuração: ${e.message}`); return;
+  }
+  let gravados = 0, abertos = 0;
+  for (const { cand: c, achado, status } of lidos) {
+    if (!achado) { abertos++; console.log(`[${tenant.fonte}] apuração: ${c.id} segue sem desfecho (status ${status}).`); continue; }
+    const patch = { ...patchDaApuracao(achado, { tabela: 'imoveis_leilao', tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: c.ativo === false }), resultado_origem: `api_${cfg.chave}` };
+    const { data: ok, error: eUp } = await supabase.from('imoveis_leilao').update(patch).eq('id', c.id)
+      .or('resultado_leilao.is.null,resultado_leilao.eq.indeterminado').select('id');
+    if (eUp) console.error(`[${tenant.fonte}] apuração: ${c.id} não gravou:`, eUp.message);
+    else if (ok?.length) gravados++;
+  }
+  console.log(`[${tenant.fonte}] apuração pela API: ${gravados} resultado(s) gravado(s) de ${cand.length} vencido(s)${abertos ? `, ${abertos} sem desfecho` : ''}.`);
 }
 
 // Recon: enumera 1 tenant e disseca o 1º lote (o mesmo debugRecon dos scrapers de origem).

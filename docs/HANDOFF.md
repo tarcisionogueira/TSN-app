@@ -7,6 +7,20 @@
 
 
 
+## 20/10 (noite) — `resultado_leilao_atrasado`: lotes da plataforma ARES nunca eram apurados
+- O alarme NÃO era o Tamboré (esse foi apurado `sem_lance` em 17/10). Era SHIOKAWA Piracicaba (a3906439, venda direta
+  com prazo, fim 16/10), 0 tentativas de apuração. Causa dupla: o cron de apuração descarta toda `venda direta`
+  (`ehVendaDireta`) e a Ares é quase toda venda direta COM prazo; e o motor da Ares só lê `status=in.(aberto,futuro)`,
+  então o lote encerrado some da coleta sem resultado. Mesmo buraco calado em PICELLI (25 lotes de 14/10 desligados
+  como `praca_vencida` sem resultado) e CUNHA (1) — esses não acusavam porque já estavam inativos.
+- Conserto na fonte: `apurarAusentes`/`desfechoAres` (`scripts/lib/ares-parse.mjs`) + `apurarVencidos` no runner
+  (opt-in por `cfg.apurarAusentes`). A API da Ares diz o desfecho: `vendido` → vendido (valor = highest_bid_value);
+  `cancelado`/`cancelled_at` → cancelado; `encerrado` com `bid_count` 0 e lance 0 → sem_lance; encerrado COM lance
+  não decide; aberto/futuro segue. Mesma fila e mesmo `patchDaApuracao` do cron (religa sem_lance de praça vencida,
+  regra de 14/10); `resultado_origem = 'api_ares'`; falha da API lança e vira log, nunca "sem resultado".
+- Seco com dado real (pg_net): PICELLI 21 sem_lance + 1 vendido (R$ 170.636) + 3 ainda `aberto`; CUNHA 1 e SHIOKAWA 1
+  sem_lance. Roda no `scraper-ares.yml` (diário 9h10 UTC).
+
 ## 20/10 (tarde) — 3 pedidos do dono na tela do imóvel
 - **Custo de desocupação ("custo est. R$ 30.000") — REMOVIDO (decisão do dono):** era palpite da IA do documental
   (`raioX.ocupacaoDetalhe.prazoMeses/custoEstimado`), não vinha do edital (Tamboré/FRANCOLEILOES, 196f8afa: o edital só
