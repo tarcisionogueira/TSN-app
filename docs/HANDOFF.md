@@ -7,6 +7,17 @@
 
 
 
+## 20/10 (noite) — gêmeos entre leiloeiros + Asaas no preço novo
+- **Asaas (`mapearPlano`)** não reconhecia 89,90/899 (Pro desde 01/10): Pro pago pelo backup não ativaria. Corrigido;
+  conferido que o único pagamento Asaas desde 01/10 foi honorário (ninguém afetado). **99,90 segue mapeado como "Pro
+  legado"** — o combo novo de 99,90 NÃO pode depender do valor; precisa de referência do pedido.
+- **Gêmeos entre leiloeiros** (`20261020_gemeos_entre_leiloeiros.sql`, roda no monitor-fontes-cron): chave UF+cidade+
+  lance+avaliação+área inteira; grupo com matrícula/processo/nº de unidade diferente NÃO funde. Fica o de leilão vivo
+  mais próximo (decisão do dono), os outros saem como `gemeo_entre_leiloeiros` e entram em `anunciado_em` do principal;
+  ficha mostra "Também anunciado em" e a cópia aponta para o principal. 1ª rodada: 99 grupos, 155 suprimidos, 0 com
+  relatório de cliente; 2ª rodada 0/0 (idempotente). Vila Madalena: Lanceja (03/11) + 9. Ficaram fora por dado
+  divergente: Sanches (área do terreno 493), Mega (avaliação = lance), Sold (423 m²), Superbid (49.320 m², leitura errada).
+
 ## 20/10 (noite) — `resultado_leilao_atrasado`: lotes da plataforma ARES nunca eram apurados
 - O alarme NÃO era o Tamboré (esse foi apurado `sem_lance` em 17/10). Era SHIOKAWA Piracicaba (a3906439, venda direta
   com prazo, fim 16/10), 0 tentativas de apuração. Causa dupla: o cron de apuração descarta toda `venda direta`

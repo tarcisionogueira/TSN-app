@@ -730,6 +730,44 @@ const OCUP_LABEL = {
   desocupado: 'Desocupado', proprietario: 'Ocupado pelo proprietário', locatario: 'Ocupado por locatário',
   posseiro: 'Ocupado por posseiro', comodato: 'Ocupado (comodato)', invasao: 'Ocupado (invasão)',
 };
+// MESMO IMÓVEL EM OUTROS LEILOEIROS (20/10, dono: "vários lotes iguais em leiloeiros diferentes").
+// reconciliar_gemeos_entre_leiloeiros() deixa UM card na busca (o de leilão vivo mais próximo) e grava
+// nele os outros anúncios. A cópia, se aberta por link antigo/favorito, aponta para o principal.
+function AnunciadoEm({ imovel }) {
+  const nav = useNavigate();
+  const [principal, setPrincipal] = useState(null);
+  useEffect(() => {
+    if (!imovel?.copiaDeOutroAnuncio || !imovel?.id) return;
+    let vigente = true;
+    supabase.from('imoveis_leilao').select('id').contains('anunciado_em', [{ id: imovel.id }]).limit(1)
+      .then(({ data, error }) => { if (vigente && !error && data?.[0]) setPrincipal(data[0].id); });
+    return () => { vigente = false; };
+  }, [imovel?.id, imovel?.copiaDeOutroAnuncio]);
+  const outros = imovel?.anunciadoEm || [];
+  if (imovel?.copiaDeOutroAnuncio) {
+    if (!principal) return null;
+    return (
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 16, padding: 16, fontSize: 13, color: '#1e3a8a' }}>
+        Este imóvel também é anunciado por outro leiloeiro, com leilão mais próximo.{' '}
+        <button onClick={() => nav('/imovel/' + principal)} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Ver o anúncio principal →</button>
+      </div>
+    );
+  }
+  if (!outros.length) return null;
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Também anunciado em</div>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>O mesmo imóvel aparece em mais {outros.length} leiloeiro(s). Mostramos o de leilão mais próximo.</div>
+      {outros.map(o => (
+        <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
+          <span style={{ color: '#334155', fontWeight: 600 }}>{o.leiloeiro || o.fonte}</span>
+          <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{o.data_leilao ? fmtData(o.data_leilao) : 'data a confirmar'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AnaliseJuridicaCard({ fj }) {
   if (!fj || typeof fj !== 'object') return null;
   const temAlgo = fj.fraudeExecucao || fj.direitoPreferencia || fj.ocupacaoTipo || fj.debitosAssumidos ||
@@ -956,6 +994,9 @@ export default function ImovelDetalhe() {
           nomeCondominio: data.nomecondominio || null,
           docFatos: data.doc_fatos || null, docFatosEm: data.doc_fatos_em || null,
           resultadoLeilao: data.resultado_leilao || null, valorLanceVencedor: data.valor_lance_vencedor ?? null,
+          // Gêmeos entre leiloeiros (20/10): o principal lista os outros anúncios; a cópia sabe que é cópia.
+          anunciadoEm: Array.isArray(data.anunciado_em) ? data.anunciado_em : [],
+          copiaDeOutroAnuncio: data.suprimido_motivo === 'gemeo_entre_leiloeiros',
         });
       })
       .finally(() => { if (vigente) setLoading(false); });
@@ -2321,6 +2362,7 @@ export default function ImovelDetalhe() {
                 </div>
               ))}
             </div>
+            <AnunciadoEm imovel={imovel} />
           </div>
         </div>
       </div>
