@@ -102,7 +102,9 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
     if (e.length < 2) { setMsg('Descreva a etapa.'); return; }
     setSalvando(true); setMsg('');
     const { data, error } = await supabase.from('caso_andamentos').insert({
-      [dono.col]: dono.id, visivel_cliente: visivel, etapa: e.slice(0, 200), observacao: (observacao || '').trim() || null,
+      // Previsão do andamento (prazo entre despachos → quando sai a imissão) é dado INTERNO da equipe
+      // (decisão do dono, 20/10): nunca visível ao cliente, qualquer que seja o checkbox.
+      [dono.col]: dono.id, visivel_cliente: referencia?.previsao ? false : visivel, etapa: e.slice(0, 200), observacao: (observacao || '').trim() || null,
       origem, data_evento: dataEvento, referencia, numero_processo: numero.trim() || null,
     }).select('id');
     setSalvando(false);
@@ -273,7 +275,7 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
               )}
               <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>{p.aviso}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                <button style={btn('#15803d')} disabled={salvando} onClick={() => registrar({ etapaTxt: 'Previsão do próximo andamento', observacao: textoPrevisao(p), origem: 'cnj', dataEvento: new Date().toISOString().slice(0, 10), referencia: { previsao: true } })}>Registrar previsão no andamento</button>
+                <button style={btn('#15803d')} disabled={salvando} onClick={() => registrar({ etapaTxt: 'Previsão do próximo andamento', observacao: textoPrevisao(p), origem: 'cnj', dataEvento: new Date().toISOString().slice(0, 10), referencia: { previsao: true } })}>Registrar previsão no andamento (só equipe)</button>
                 <button style={btn('#475569')} disabled={juris?.carregando} onClick={pesquisarJuris}>{juris?.carregando ? 'Pesquisando nos tribunais… (até 1 min)' : '📚 Jurisprudência desta etapa'}</button>
               </div>
               {juris && !juris.carregando && (
