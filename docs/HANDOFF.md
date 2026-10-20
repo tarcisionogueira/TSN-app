@@ -82,6 +82,17 @@
   autoativa — dono), 248 (financiamento-alertas fora do `enviarEmail`; chargeback de recarga não retira crédito).
 - **Validar no navegador (dono):** compra de assessoria pelo Checkout → contrato sai sozinho em até ~15 s.
 
+## 20/10 — fechamento da sessão (continua amanhã)
+- `idx_imoveis_ativo_id` removido pelo dono no SQL Editor; conferido. Já há código de confirmação de e-mail emitido em
+  produção (fluxo da #251 em uso) — **validar no navegador** um cadastro pelo checkout, de preferência no celular.
+- **ONR (#170):** cobrança enviada pelo dono em 20/10 no chamado CS0819152 (cópia convenio@onr.org.br). Revisar em 23/10;
+  sem resposta → telefone do ONR. Aprovado → pedir documentação técnica e ambiente de homologação.
+- **E-mail Reimob (leitura de 19/10)** → pendência nova do dono: gov.br com 2FA desligado em 16/10 (confirmar que foi ele),
+  chave de API do Asaas expirando por falta de uso (ou seguir a #199) e correspondência na Conexa.
+- **Abrir amanhã por:** `select * from public.pendencias_abertas();` — P1 vencidas do dono (25, 32, 31, 23, 142, 164, 186)
+  e as de Claude com revisão próxima: 143/188 (liquidação do honorário do Marcos quando o cartão Asaas compensar),
+  198 (vincular escritório quando o convite for usado), 222/237 (timeouts e painel de invariantes, 23–25/10).
+
 ## 19/10 (2ª sessão, tarde) — #251 confirmação de e-mail por código + pendências 253–256
 - **#251 (conta já confirmada sem provar o e-mail):** `api/codigo-email.js` manda um código de 6 dígitos (15 min, reenvio
   a cada 45 s, 5 tentativas, limite por IP) e, ao conferir, devolve um comprovante HMAC de 30 min (`api/_comprovante-email.js`).
