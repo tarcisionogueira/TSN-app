@@ -75,6 +75,9 @@ export function indexarMarcas(marcas) {
     const sufixo = nome.includes(' - ') ? nome.split(' - ').slice(1).join(' - ') : null;
     porChaveExata.set(normalizar(nome), codigo);
     if (sufixo) porChaveExata.set(normalizar(sufixo), codigo);
+    // "Caoa Chery/Chery" (20/10): o nome após a barra também é chave — sem isso CHERY nunca casava
+    // (4 sem_match: Celer, Face, QQ). `has` antes: a 1ª marca que reivindica a chave fica com ela.
+    if (nome.includes('/')) for (const parte of nome.split('/')) { const k = normalizar(parte); if (k && !porChaveExata.has(k)) porChaveExata.set(k, codigo); }
   }
   return porChaveExata;
 }
@@ -102,10 +105,18 @@ export function acharCandidatosModelo(nossoModelo, modelos) {
   // 1ª palavra de 1 letra ("C-100 BIZ") não decide sozinha — vai direto ao fallback de versão
   let cands = alvo.length < 2 ? [] : modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
   let palavras = normalizar(nossoModelo).split(' ').slice(1, 4);
-  const colado = alvo.match(/^([a-z]{2,})(\d{2,4})[a-z]?$/);
+  // "F4000"/"D10" (20/10): 1 letra basta aqui — a FIPE escreve "F-1000", "D-10", que normaliza em "f 1000".
+  const colado = alvo.match(/^([a-z]{1,})(\d{2,4})[a-z]?$/);
   if (!cands.length && colado) {
     alvo = colado[1];
     palavras = [colado[2], ...palavras];
+    cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
+  }
+  // Número + versão colados ("207HB XR", "307SD16"): a FIPE lista "207 XR 1.4…", "307 Passion…".
+  const numVersao = alvo.match(/^(\d{2,4})([a-z]{1,4})\d*$/);
+  if (!cands.length && numVersao) {
+    alvo = numVersao[1];
+    palavras = [numVersao[2], ...palavras];
     cands = modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
   }
   // Nome de VERSÃO no lugar do modelo ("HONDA FAN 125" = "CG 125 Fan", "C-100 BIZ" = "Biz 100",
@@ -244,8 +255,12 @@ export function anoBate(nomeAno, anoFabricacao, anoModelo) {
   return ano === anoFabricacao || ano === anoModelo;
 }
 
-function ordemCategorias(tipoVeiculo) {
-  const preferida = TIPO_PARA_CATEGORIA[String(tipoVeiculo || '').toLowerCase()];
+// Moto cadastrada como "carro" na fonte (20/10: POP100, NXR150 BROS, EN125 YES): a Honda existe nos
+// carros, a marca casava lá e as motos nunca eram tentadas. O modelo decide a ordem quando é de moto.
+const MODELO_MOTO = new Set('cg biz pop nxr bros titan fan ybr factor fazer xre cb pcx lander crosser nmax xtz twister tornado falcon en burgman intruder crypton dt xr shadow hornet'.split(' '));
+function ordemCategorias(tipoVeiculo, modelo) {
+  const p1 = (primeiraPalavra(modelo).match(/^[a-z]+/) || [''])[0];
+  const preferida = MODELO_MOTO.has(p1) ? 'motorcycles' : TIPO_PARA_CATEGORIA[String(tipoVeiculo || '').toLowerCase()];
   if (!preferida) return CATEGORIAS;
   return [preferida, ...CATEGORIAS.filter(c => c !== preferida)];
 }
@@ -357,6 +372,71 @@ export function criarFipeFetch(reservar, cache = null) {
  * NUNCA lança por "não achei" — só `ErroFipeSemCota` sobe (quem chama decide o que fazer:
  * cron para o lote, endpoint on-demand devolve "tente mais tarde").
  */
+// ANO NO TÍTULO (20/10, dono: "sempre conseguir encontrar a FIPE de acordo com a descrição que temos").
+// 318 lotes ativos sem ano traziam o par de 2 dígitos no título ("PEUGEOT 206 SOLEIL, 01/01, GASOLINA",
+// "GOL 16V, 99/00") e iam ler edital à toa. Só vale par COERENTE (modelo = fabricação ou +1) e solto —
+// colado a outra barra é data ("26/10/26"), não ano. Devolve [fabricação, modelo] ou null.
+export function anoDoTitulo(titulo) {
+  const t = String(titulo || '');
+  const limite = new Date().getFullYear() + 1;
+  const coerente = (f, m) => (f >= 1950 && m <= limite && (m - f === 0 || m - f === 1) ? [f, m] : null);
+  const m4 = t.match(/(?<![\d/])((?:19|20)\d{2})\s*[/ ]\s*((?:19|20)\d{2})(?![\d/])/);
+  if (m4) return coerente(+m4[1], +m4[2]);
+  const m2 = t.match(/(?:^|[\s,;(–-])(\d{2})\s*\/\s*(\d{2})(?=$|[\s,;)–-])/);
+  if (m2) {
+    const seculo = (yy) => (yy <= (limite % 100) ? 2000 + yy : 1900 + yy);
+    return coerente(seculo(+m2[1]), seculo(+m2[2]));
+  }
+  const m1 = t.match(/\bano\b[^0-9]{0,12}((?:19|20)\d{2})(?![\d/])/i);
+  return m1 ? coerente(+m1[1], +m1[1]) : null;
+}
+
+// A tabela FIPE começa em 1985: D10 1984, Fusca 1978, Bandeirante 1978 não têm referência oficial —
+// é "fora da tabela", não "não consegui casar" (e não gasta cota tentando).
+export const ANO_MINIMO_FIPE = 1985;
+
+// Casamento numa marca já achada. null = esta marca/categoria não tem o modelo (o chamador tenta a próxima).
+async function casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, modelo, { triangular }) {
+  const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo } = veiculo;
+  const chaveModelos = `modelos:${categoria}:${codigoMarca}`;
+  if (!cache.has(chaveModelos)) cache.set(chaveModelos, await fipeGet(`/${categoria}/brands/${codigoMarca}/models`) || []);
+  const modelos = cache.get(chaveModelos);
+  const candidatosModelo = acharCandidatosModelo(modelo, modelos);
+
+  // Pára de checar assim que achar 2 — só precisamos saber se é único; o valor final vem
+  // sempre do PRIMEIRO que bateu, então checar um 3º/4º não muda o resultado.
+  const bateram = [];
+  const conferirAnos = async (lista) => {
+    for (const cm of lista) {
+      if (bateram.length >= 2) break;
+      const codigoModelo = cm.code ?? cm.codigo;
+      const anos = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${codigoModelo}/years`);
+      if (!Array.isArray(anos)) continue;
+      const anoOk = anos.find(a => anoBate(a.name || a.nome, anoFabricacao, anoModelo));
+      if (anoOk) bateram.push({ codigoModelo, codigoAno: anoOk.code ?? anoOk.codigo });
+    }
+  };
+  await conferirAnos(candidatosModelo);
+  // Nenhum ano bateu (ou nenhum candidato): 2ª tentativa ampla — nome FIPE que mudou com o ano
+  // ("DUSTER OROCH" até 2022) e modelo colado no lote ("416CDISPRINTERM").
+  if (!bateram.length) {
+    const tentados = new Set(candidatosModelo.map((m) => m.code ?? m.codigo));
+    await conferirAnos(acharCandidatosModeloAmplo(modelo, modelos, tentados));
+  }
+  // 3ª: TRIANGULAÇÃO por ano+combustível (ver triangularPorAno) — a mais cara (até 8 listas + 4 preços),
+  // por isso só na categoria preferida.
+  if (!bateram.length) return triangular ? triangularPorAno(fipeGet, categoria, codigoMarca, veiculo, modelo) : null;
+
+  const escolhido = bateram[0];
+  const detalhe = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${escolhido.codigoModelo}/years/${escolhido.codigoAno}`);
+  const valor = parseValor(detalhe?.price);
+  if (!valor) return { status: 'erro' };
+  return {
+    status: bateram.length > 1 ? 'aproximado' : 'ok',
+    valor, codigoFipe: detalhe.codeFipe || null, mesReferencia: detalhe.referenceMonth || null,
+  };
+}
+
 export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
   let doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
@@ -371,57 +451,29 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   const marca = marcaFonte || doTitulo?.marca;
   const modelo = veiculo.modelo || doTitulo?.modelo;
   if (!marca || !modelo || !anoFabricacao) return { status: 'sem_dados' };
+  if (Math.max(Number(anoFabricacao) || 0, Number(anoModelo) || 0) < ANO_MINIMO_FIPE) return { status: 'fora_tabela' };
+  // Modelo da FONTE com erro de digitação ("hillux", título "TOYOTA HILUX CD 4X4"): o do título é a 2ª tentativa.
+  const doTituloAlt = veiculo.modelo ? marcaModeloDoTitulo(veiculo.titulo, marca) : null;
+  const modelosTentar = [modelo];
+  if (doTituloAlt?.modelo && normalizar(doTituloAlt.modelo) !== normalizar(modelo)) modelosTentar.push(doTituloAlt.modelo);
   try {
-    let achado = null;
-    for (const categoria of ordemCategorias(tipoVeiculo)) {
+    let primeira = true;
+    // Todas as categorias em que a marca existe, na ordem preferida (20/10: antes parava na 1ª marca
+    // achada — moto cadastrada como carro nunca chegava às motos).
+    for (const categoria of ordemCategorias(tipoVeiculo, modelo)) {
       const chaveMarcas = `marcas:${categoria}`;
       if (!cache.has(chaveMarcas)) cache.set(chaveMarcas, await fipeGet(`/${categoria}/brands`));
       const marcas = cache.get(chaveMarcas);
       if (!Array.isArray(marcas)) continue;
-      const indice = indexarMarcas(marcas);
-      const codigoMarca = acharMarca(marca, marcas, indice);
-      if (codigoMarca) { achado = { categoria, codigoMarca }; break; }
-    }
-    if (!achado) return { status: 'sem_match' };
-
-    const { categoria, codigoMarca } = achado;
-    const chaveModelos = `modelos:${categoria}:${codigoMarca}`;
-    if (!cache.has(chaveModelos)) cache.set(chaveModelos, await fipeGet(`/${categoria}/brands/${codigoMarca}/models`) || []);
-    const modelos = cache.get(chaveModelos);
-    const candidatosModelo = acharCandidatosModelo(modelo, modelos);
-
-    // Pára de checar assim que achar 2 — só precisamos saber se é único; o valor final vem
-    // sempre do PRIMEIRO que bateu, então checar um 3º/4º não muda o resultado.
-    const bateram = [];
-    const conferirAnos = async (lista) => {
-      for (const cm of lista) {
-        if (bateram.length >= 2) break;
-        const codigoModelo = cm.code ?? cm.codigo;
-        const anos = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${codigoModelo}/years`);
-        if (!Array.isArray(anos)) continue;
-        const anoOk = anos.find(a => anoBate(a.name || a.nome, anoFabricacao, anoModelo));
-        if (anoOk) bateram.push({ codigoModelo, codigoAno: anoOk.code ?? anoOk.codigo });
+      const codigoMarca = acharMarca(marca, marcas, indexarMarcas(marcas));
+      if (!codigoMarca) continue;
+      for (const mod of modelosTentar) {
+        const r = await casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, mod, { triangular: primeira });
+        if (r) return r;
       }
-    };
-    await conferirAnos(candidatosModelo);
-    // Nenhum ano bateu (ou nenhum candidato): 2ª tentativa ampla — nome FIPE que mudou com o ano
-    // ("DUSTER OROCH" até 2022) e modelo colado no lote ("416CDISPRINTERM").
-    if (!bateram.length) {
-      const tentados = new Set(candidatosModelo.map((m) => m.code ?? m.codigo));
-      await conferirAnos(acharCandidatosModeloAmplo(modelo, modelos, tentados));
+      primeira = false;
     }
-    // 3ª: TRIANGULAÇÃO por ano+combustível (ver triangularPorAno) — antes de desistir.
-    if (!bateram.length) return (await triangularPorAno(fipeGet, categoria, codigoMarca, veiculo, modelo)) || { status: 'sem_match' };
-
-    const escolhido = bateram[0];
-    const detalhe = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${escolhido.codigoModelo}/years/${escolhido.codigoAno}`);
-    const valor = parseValor(detalhe?.price);
-    if (!valor) return { status: 'erro' };
-
-    return {
-      status: bateram.length > 1 ? 'aproximado' : 'ok',
-      valor, codigoFipe: detalhe.codeFipe || null, mesReferencia: detalhe.referenceMonth || null,
-    };
+    return { status: 'sem_match' };
   } catch (e) {
     if (e instanceof ErroFipeSemCota) return { status: 'sem_cota' };
     throw e;

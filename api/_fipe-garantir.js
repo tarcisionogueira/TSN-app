@@ -6,7 +6,7 @@
 // `sem_match` antigo — o relatório não pode sair sem tentar de novo.
 // Devolve o mesmo payload que a tela sempre recebeu (valor_fipe, fipe_status, …).
 import { anoPorDocumento } from './_ano-veiculo.js';
-import { criarFipeFetch, buscarFipe, fipeEstaVelho, RETENTAR_OK_DIAS, TETO_DIARIO_FIPE } from './_fipe.js';
+import { criarFipeFetch, buscarFipe, fipeEstaVelho, anoDoTitulo, RETENTAR_OK_DIAS, TETO_DIARIO_FIPE } from './_fipe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -38,7 +38,9 @@ export async function garantirFipe(v, { forcar = false } = {}) {
       if (!r.ok) return 2; // não consegui contar → trata como documento de vários lotes (não usa o texto inteiro)
       return (await r.json().catch(() => [])).length;
     };
-    const achado = await anoPorDocumento(v, lotesPorDoc);
+    // Antes do edital, o TÍTULO (20/10): "GOL 16V, 99/00" — 318 lotes tinham o ano ali e iam ler PDF.
+    const doTitulo = anoDoTitulo(v.titulo);
+    const achado = doTitulo ? { ano: doTitulo, fonte: 'título', motivos: [] } : await anoPorDocumento(v, lotesPorDoc);
     if (!achado.ano) {
       console.log(`[veiculo-fipe] ${id}: ano não achado (${achado.motivos.join(' · ') || 'sem edital nem página'})`);
       const r = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ fipe_status: 'sem_dados', fipe_atualizado_em: new Date().toISOString() }) });

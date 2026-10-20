@@ -2,7 +2,7 @@
  * npm run testar:fipe — marca/modelo pelo título, estreitamento de candidatos e cache de
  * respostas (api/_fipe.js, 24/09). API simulada: nenhum teste aqui gasta cota da FIPE.
  */
-import { marcaModeloDoTitulo, acharCandidatosModelo, acharCandidatosModeloAmplo, criarFipeFetch, buscarFipe } from '../../api/_fipe.js';
+import { marcaModeloDoTitulo, acharCandidatosModelo, acharCandidatosModeloAmplo, criarFipeFetch, buscarFipe, anoDoTitulo, indexarMarcas, acharMarca } from '../../api/_fipe.js';
 
 let falhas = 0;
 const ok = (c, m) => { if (c) console.log(`  ✓ ${m}`); else { falhas++; console.log(`  ✗ ${m}`); } };
@@ -96,6 +96,47 @@ ok(mm('ONIX LT 1.0 2020/2021')?.marca === 'chevrolet', 'ONIX sem marca → chevr
 ok(mm('Veículo UP TAKE 2016') === null, '"UP" (palavra comum) não vira modelo');
 ok(mm('CASA EM BH') === null, 'texto sem modelo conhecido → null');
 ok(mm('HB20 1.0M UNIQUE - 2019', 'CITROEN') === null, 'com marca da fonte, o título não inventa outra (decisão fica no buscarFipe)');
+
+// ── 20/10: os 43 sem_match e os 985 sem ano do acervo ativo, medidos contra o fipe_cache real ──
+console.log('\nANO PELO TÍTULO (20/10)');
+const ad = (t) => (anoDoTitulo(t) || []).join('/');
+ok(ad('PEUGEOT 206 SOLEIL, 01/01, GASOLINA, SUCATA APROVEITÁVEL.') === '2001/2001', 'par de 2 dígitos "01/01" → 2001/2001');
+ok(ad('VW GOL 16V, 99/00, GASOLINA') === '1999/2000', 'virada de século "99/00" → 1999/2000');
+ok(ad('FORD/CORCEL II L – 83/83 – Eldorado/MS') === '1983/1983', 'par entre travessões');
+ok(ad('CHERY CELER HATCH 1.5 FLEX DE ANO 2016/2017') === '2016/2017', 'par de 4 dígitos');
+ok(ad('TOYOTA COROLA 1994 1995 PRETA') === '1994/1995', 'par de 4 dígitos separado por espaço');
+ok(ad('CAMINHONETE FORD F4000 TURBO 4BT, ANO 1997') === '1997/1997', '"ANO 1997" sozinho');
+ok(anoDoTitulo('VISITAÇÃO NOS DIAS 26 A 30/10/26') === null, 'data (barra colada) não vira ano');
+ok(anoDoTitulo('GM CORSA, 06/09, GASOLINA') === null, 'par incoerente (modelo 3 anos depois) → null');
+ok(anoDoTitulo('YAMAHA/YBR 125E') === null, 'sem ano → null (não inventa)');
+
+console.log('\nMARCA E MODELO COMO A FIPE ESCREVE (20/10)');
+const marcasFipe = [{ code: '245', name: 'Caoa Chery' }, { code: '161', name: 'Caoa Chery/Chery' }, { code: '13', name: 'Citroën' }];
+ok(acharMarca('chery', marcasFipe, indexarMarcas(marcasFipe)) === '161', '"Chery" casa "Caoa Chery/Chery"');
+const peugeot = ['207 XR 1.4 Flex 8V 5p', '207 XS 1.6 Flex 16V 5p', '307 Passion 1.6 16V 110cv 5p', '206 Soleil 1.0'].map((name, i) => ({ code: String(i), name }));
+ok(acharCandidatosModelo('207hb xr', peugeot).map((m) => m.name).join() === '207 XR 1.4 Flex 8V 5p', '"207HB XR" colado → 207 XR');
+ok(acharCandidatosModelo('307sd16 fxpr', peugeot).map((m) => m.name).join() === '307 Passion 1.6 16V 110cv 5p', '"307SD16" → família 307');
+const ford = ['F-1000 XL 4.9i', 'F-4000 2.8 Turbo Diesel', 'Fiesta 1.6'].map((name, i) => ({ code: String(i), name }));
+ok(acharCandidatosModelo('f4000 turbo 4bt', ford).map((m) => m.name).join() === 'F-4000 2.8 Turbo Diesel', '"F4000" → "F-4000"');
+
+console.log('\nCASCATA DE CATEGORIA, MODELO DO TÍTULO E 1985 (20/10)');
+const falsa2 = (rotas) => async (path) => rotas[path] ?? (/years\/[^/]+$/.test(path) && !/\/years\/\d{4}-\d\/models$/.test(path) ? { price: 'R$ 9.800,00', codeFipe: '1-1', referenceMonth: 'outubro de 2026' } : null);
+const pop = await buscarFipe(falsa2({
+  '/cars/brands': [{ code: '25', name: 'Honda' }], '/motorcycles/brands': [{ code: '80', name: 'HONDA' }],
+  '/cars/brands/25/models': [{ code: '1', name: 'Civic 2.0' }],
+  '/motorcycles/brands/80/models': [{ code: '9', name: 'POP 100' }],
+  '/motorcycles/brands/80/models/9/years': [{ code: '2012-1', name: '2012' }],
+}), { marca: 'HONDA', modelo: 'POP100', titulo: 'VEÍCULO CONSERVADO HONDA / POP100 - 2012/2012', ano_fabricacao: 2012, ano_modelo: 2012, tipo_veiculo: 'carro' });
+ok(pop.status === 'ok' && pop.valor === 9800, `moto cadastrada como "carro" acha a FIPE nas motos → ${pop.status}`);
+const hilux = await buscarFipe(falsa2({
+  '/cars/brands': [{ code: '56', name: 'Toyota' }],
+  '/cars/brands/56/models': [{ code: '7', name: 'Hilux CD 4x4 2.8 Diesel' }],
+  '/cars/brands/56/models/7/years': [{ code: '2013-3', name: '2013 Diesel' }],
+}), { marca: 'TOYOTA', modelo: 'hillux', titulo: 'TOYOTA HILUX CD 4X4 STD DIESEL  ANO 2013/2013', ano_fabricacao: 2013, ano_modelo: 2013, tipo_veiculo: 'carro' });
+ok(hilux.status === 'ok', `modelo da fonte com erro ("hillux") → acha pelo título: ${hilux.status}`);
+let chamou = 0;
+const fusca = await buscarFipe(async () => { chamou++; return null; }, { marca: 'VW', modelo: 'FUSCA 1300 L', titulo: 'VW FUSCA 1300 L 1978 1978', ano_fabricacao: 1978, ano_modelo: 1978, tipo_veiculo: 'carro' });
+ok(fusca.status === 'fora_tabela' && chamou === 0, 'Fusca 1978 → fora_tabela, sem gastar cota');
 
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);

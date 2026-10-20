@@ -85,7 +85,8 @@ const COLUNAS = [
 const FIPE_EXPLICACAO = {
   aproximado: 'Mais de uma versão do modelo bateu com o ano informado — valor aproximado, pode variar por versão/motorização.',
   sem_match: 'Não foi possível casar marca/modelo com a tabela FIPE automaticamente.',
-  sem_dados: 'Faltam marca, modelo ou ano cadastrados para consultar a FIPE.',
+  sem_dados: 'O leiloeiro não informou marca, modelo ou ano deste lote — sem eles não há como consultar a FIPE.',
+  fora_tabela: 'A tabela FIPE só cobre veículos a partir de 1985 — não há referência oficial para este ano.',
   erro: 'A consulta à FIPE falhou — tente novamente mais tarde.',
   leiloeiro: 'Valor da tabela FIPE informado pelo próprio leiloeiro na ficha do lote — não foi conferido por nós.',
 };
@@ -173,7 +174,7 @@ export default function VeiculoDetalhe() {
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
     const velha = Date.now() - Date.parse(v.fipe_atualizado_em || 0) > 25 * 86400000;
-    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados');
+    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados' && v.fipe_status !== 'fora_tabela');
     if (!precisaBuscar) return;
     let cancelado = false;
     (async () => {
