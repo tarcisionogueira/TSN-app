@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useNavigationType } from 'react-router-dom';
+import { useLocation, useNavigationType } from 'react-router-dom';
 
 /**
  * VOLTAR DO LOTE PARA A LISTA SEM PERDER O LUGAR (pedido do dono, 24/09).
@@ -10,7 +10,9 @@ import { useNavigationType } from 'react-router-dom';
  *   - `lerSessao/gravarSessao`: estado da lista em sessionStorage (por aba; some ao fechar).
  *   - `useRolagemDaLista(chave, prontos)`: guarda o scroll ao SAIR da lista e o devolve ao
  *     VOLTAR (navegação POP = botão voltar / nav(-1)), só depois que os resultados chegaram.
- *     Entrar na lista por um link novo (PUSH) começa do topo, como antes.
+ *     Entrar na lista por um link novo (PUSH) começa do topo, como antes — exceto quando quem
+ *     navega pede a posição (`state.restaurarLista`: "Voltar à busca" do imóvel quando a busca
+ *     não é a entrada anterior do histórico, 20/10).
  *
  * sessionStorage pode lançar (aba anônima, cota, bloqueio): falhar aqui só significa não
  * lembrar a posição — a lista funciona igual. Por isso os `catch` devolvem o padrão.
@@ -30,7 +32,8 @@ export function gravarSessao(chave, valor) {
 
 export function useRolagemDaLista(chave, prontos) {
   const tipoNav = useNavigationType();
-  const alvo = useRef(tipoNav === 'POP' ? Number(lerSessao(`rolagem_${chave}`, 0)) || 0 : 0);
+  const loc = useLocation();
+  const alvo = useRef(tipoNav === 'POP' || loc.state?.restaurarLista ? Number(lerSessao(`rolagem_${chave}`, 0)) || 0 : 0);
 
   // Ao desmontar (indo para o detalhe ou qualquer outra tela) grava onde a pessoa estava.
   // O cleanup roda antes do efeito "vai ao topo" da rota nova, então window.scrollY ainda é o da lista.

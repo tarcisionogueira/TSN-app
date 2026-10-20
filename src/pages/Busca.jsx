@@ -2257,7 +2257,7 @@ export default function Busca() {
                     const desc = desconto(im);
                     const imgSrc = fotoCandidatos(im);
                     return (
-                      <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im } })}
+                      <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im, deBusca: true } })}
                         style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', gap:0, flexShrink:0 }}
                         onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'}
                         onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
@@ -2298,7 +2298,7 @@ export default function Busca() {
                         const desc = desconto(im);
                         const imgSrc = fotoCandidatos(im);
                         return (
-                          <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state:{ imovel: im } })}
+                          <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im, deBusca: true } })}
                             style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', flexShrink:0 }}
                             onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
                             <LazyImage src={imgSrc} alt={im.titulo} style={{ width:64, height:64, flexShrink:0 }} />
@@ -2346,7 +2346,7 @@ export default function Busca() {
               return (
                 <div key={im.id}
                   style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', flexDirection:'column', cursor:'pointer', transition:'box-shadow 0.15s' }}
-                  onClick={e => { if (e.target.closest('a,button,input')) return; nav('/imovel/'+im.id, { state: { imovel: im } }); }}
+                  onClick={e => { if (e.target.closest('a,button,input')) return; nav('/imovel/'+im.id, { state: { imovel: im, deBusca: true } }); }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
 
@@ -2493,7 +2493,7 @@ export default function Busca() {
                     {/* 02/09 — decisão do dono: o card leva SÓ para a página do imóvel. O botão
                         "Analisar" pulava direto para o /caso (sem o cliente ter visto o lote) e
                         dava erro; o fluxo é: Ver → página do imóvel → pedir a análise de lá. */}
-                    <button onClick={e=>{ e.stopPropagation(); nav('/imovel/'+im.id, { state: { imovel: im } }); }}
+                    <button onClick={e=>{ e.stopPropagation(); nav('/imovel/'+im.id, { state: { imovel: im, deBusca: true } }); }}
                       style={{ flex:1, padding:'8px 4px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                       Ver o imóvel →
                     </button>

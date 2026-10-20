@@ -734,7 +734,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 1) CADEIA DOMINIAL: já vem em "extracao.movimentacoesMatricula" — NÃO repita no raioX (o servidor copia de lá; repetir só gasta a resposta e era o que a fazia ser cortada, 14/10).
 2) CERTIDÕES RECOMENDADAS: as que o arrematante deve obter antes do lance, com órgão e por quê (ônus reais atualizada no CRI; distribuidores cível/trabalhista/federal do executado p/ checar fraude à execução; CND de IPTU; declaração de débitos do condomínio). "online": true quando é emitida grátis pela internet.
 3) FRAUDE À EXECUÇÃO/CONTRA CREDORES: cruzando o executado com o CNJ, o risco de a arrematação ser anulada (transmissão do bem após o início da ação; outras execuções contra o devedor). risco "nenhum|baixo|medio|alto" + motivo curto.
-4) OCUPAÇÃO DETALHADA: tipo, direitos do ocupante (ex.: locatário com preferência), procedimento e prazo/custo estimado de desocupação.
+4) OCUPAÇÃO DETALHADA: tipo, direitos do ocupante (ex.: locatário com preferência), procedimento e prazo/custo estimado de desocupação. ORIGEM DO NÚMERO (20/10): "custoFonte":"edital" SÓ quando o edital/matrícula traz o valor ou o prazo por escrito (ex.: edital que fixa custas de imissão); caso contrário é "estimativa" e "custoBase" diz em uma frase o que entra na conta (honorários, custas, prazo médio da via usada). Nunca apresente estimativa como se fosse do edital.
 5) DIREITO DE PREFERÊNCIA/ADJUDICAÇÃO DE TERCEIROS: condômino, locatário, credor hipotecário/fiduciário, confrontante (rural). Liste os titulares.
 6) DÉBITOS PROPTER REM × PESSOAIS: separe o que ACOMPANHA o imóvel (IPTU, condomínio, taxas) do que é pessoal do devedor. Estime o total que o ARREMATANTE assume em R$; se não der, marque aLevantar=true.
 7) CRONOGRAMA DO LEILÃO: 1ª e 2ª praça, prazo de pagamento e prazo de embargos/recursos, conforme o edital.
@@ -752,7 +752,7 @@ Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM AB
   "raioX": {
     "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
     "fraudeExecucao": {"risco":"nenhum|baixo|medio|alto","motivo":""},
-    "ocupacaoDetalhe": {"tipo":"desocupado|proprietario|locatario|posseiro|comodato|invasao|nao_consta","direitos":"","procedimentoDesocupacao":"","prazoMeses":0,"custoEstimado":0},
+    "ocupacaoDetalhe": {"tipo":"desocupado|proprietario|locatario|posseiro|comodato|invasao|nao_consta","direitos":"","procedimentoDesocupacao":"","prazoMeses":0,"custoEstimado":0,"custoFonte":"estimativa|edital","custoBase":""},
     "direitoPreferencia": {"existe":false,"titulares":[]},
     "debitos": {"totalAssumidoArrematante":0,"propterRem":[],"pessoais":[],"aLevantar":true},
     "cronogramaLeilao": {"primeiraPraca":"","segundaPraca":"","prazoPagamento":"","prazoEmbargos":""}
@@ -2818,6 +2818,10 @@ export default async function handler(req, res) {
         ocupacaoTipo: oc.tipo && oc.tipo !== 'nao_consta' ? oc.tipo : null,
         desocupacaoPrazoMeses: Number(oc.prazoMeses) || null,
         desocupacaoCusto: Number(oc.custoEstimado) || null,
+        // Sem a origem gravada (laudos antigos ou resposta sem o campo) vale "estimativa": a tela
+        // nunca pode atribuir ao edital um número que a IA calculou.
+        desocupacaoCustoFonte: (Number(oc.custoEstimado) || Number(oc.prazoMeses)) ? (oc.custoFonte === 'edital' ? 'edital' : 'estimativa') : null,
+        desocupacaoCustoBase: String(oc.custoBase || '').trim().slice(0, 240) || null,
         debitosAssumidos: Number(rx.debitos?.totalAssumidoArrematante) || null,
         debitosALevantar: !!(rx.debitos?.aLevantar),
         proprietariosNaCadeia: Array.isArray(rx.cadeiaDominial) ? rx.cadeiaDominial.filter(a => a && (a.parte || a.evento)).length : 0,

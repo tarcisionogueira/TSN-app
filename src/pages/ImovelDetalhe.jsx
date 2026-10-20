@@ -7,7 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
 import FavoritoBotao from '../components/FavoritoBotao';
-import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
+import { fmtBRL, fmtArea, fmtData, explicacaoData, modalidadeLabelDetalhado, dataResidualDeVenda } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR, liberaEquipePosLeilao } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -331,7 +331,7 @@ function ImoveisSimilares({ imovel, nav }) {
               </div>
               <div style={{ padding: '10px 12px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#111', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{it.bairro || it.titulo}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px' }}>{it.cidade}/{it.estado}{it.area_m2 ? ` · ${it.area_m2} m²` : ''}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px' }}>{it.cidade}/{it.estado}{fmtArea(it.area_m2) ? ` · ${fmtArea(it.area_m2)}` : ''}</div>
                 <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(valorRef)}</div>
               </div>
             </button>
@@ -649,7 +649,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
 // ofício e responsabilidade das despesas. Só renderiza os campos presentes.
 function FichaTecnicaCEF({ ficha }) {
   if (!ficha || typeof ficha !== 'object' || !Object.keys(ficha).length) return null;
-  const m2 = (v) => (v == null || v === '' ? null : `${v} m²`);
+  const m2 = (v) => (v == null || v === '' ? null : (fmtArea(v) || `${v} m²`));
   const areas = [
     ['Área privativa', m2(ficha.area_privativa)],
     ['Área total', m2(ficha.area_total)],
@@ -761,7 +761,11 @@ function AnaliseJuridicaCard({ fj }) {
   if (fj.ocupacaoTipo) {
     const prazo = fj.desocupacaoPrazoMeses ? ` · desocupação ~${fj.desocupacaoPrazoMeses} ${fj.desocupacaoPrazoMeses > 1 ? 'meses' : 'mês'}` : '';
     const custo = fj.desocupacaoCusto ? ` · custo est. ${brl(fj.desocupacaoCusto)}` : '';
-    linhas.push(<Linha key="oc" rot="Ocupação" val={`${OCUP_LABEL[fj.ocupacaoTipo] || fj.ocupacaoTipo}${prazo}${custo}`} cor={fj.ocupacaoTipo === 'desocupado' ? '#15803d' : '#b45309'} />);
+    // Origem do prazo/custo (20/10): o edital quase nunca traz esses números — são estimativa
+    // do laudo. Sem a marca, o cliente lia "custo est. R$ 30.000" como valor do edital.
+    const origem = (prazo || custo) ? (fj.desocupacaoCustoFonte === 'edital' ? ' (conforme edital)' : ' (estimativa BidPro — não consta no edital)') : '';
+    linhas.push(<Linha key="oc" rot="Ocupação" val={`${OCUP_LABEL[fj.ocupacaoTipo] || fj.ocupacaoTipo}${prazo}${custo}${origem}`} cor={fj.ocupacaoTipo === 'desocupado' ? '#15803d' : '#b45309'} />);
+    if (origem && fj.desocupacaoCustoBase) linhas.push(<Linha key="ocb" rot="Base da estimativa" val={fj.desocupacaoCustoBase} />);
   }
   if (fj.debitosAssumidos) linhas.push(<Linha key="db" rot="Débitos que você assume" val={`${brl(fj.debitosAssumidos)} (propter rem)`} cor="#b45309" />);
   else if (fj.debitosALevantar) linhas.push(<Linha key="db2" rot="Débitos propter rem" val="a levantar (IPTU/condomínio)" />);
@@ -790,6 +794,16 @@ export default function ImovelDetalhe() {
   const loc = useLocation();
   const { id: paramId } = useParams();
   const { user, role, effectiveUserId } = useAuth();
+  // Voltar à busca (20/10, mesmo desenho do VeiculoDetalhe de 29/09): `nav(-1)` às cegas caía no
+  // RELATÓRIO quando o caminho era busca → imóvel → /analise → "abrir a ficha" (push de um imóvel
+  // novo na pilha). Só volta no histórico quando a entrada anterior É a busca (`state.deBusca`,
+  // marcado por Busca.jsx); senão vai à busca pedindo a posição salva (`restaurarLista`).
+  // Visitante sem login segue com o voltar do navegador (/buscar é rota privada).
+  const voltarABusca = () => {
+    if (loc.state?.deBusca && (window.history.state?.idx ?? 0) > 0) return nav(-1);
+    if (user) return nav('/buscar', { state: { restaurarLista: true } });
+    return (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/');
+  };
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [avisoVendido, setAvisoVendido] = useState(null); // null | 'enviando' | 'ok' | 'erro'
   const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
@@ -1397,6 +1411,13 @@ export default function ImovelDetalhe() {
     ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
     : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
 
+  // ÁREA: o leiloeiro informa, o documento ajusta (20/10, pedido do dono). Depois que qualquer
+  // relatório leu a matrícula, a área dela (doc_fatos, ou a ficha jurídica do documental) passa
+  // a ser a exibida; antes disso, a do anúncio. O Resumo continua mostrando as duas quando
+  // divergem mais de 10%.
+  const areaDocumento = Number(imovel.docFatos?.matricula?.areaPrivativaM2) || Number(imovel.fichaJuridica?.areaPrivativaM2) || 0;
+  const areaVigente = areaDocumento || (Number(imovel.areaM2) > 0 ? Number(imovel.areaM2) : 0);
+
   return (
     <div className="detalhe-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
 
@@ -1409,7 +1430,7 @@ export default function ImovelDetalhe() {
               ceder é o título do imóvel, que já tem reticências para isso — por isso ele passa
               a `minWidth: 0` (sem isso um flex item não encolhe abaixo do conteúdo) e perde o
               `maxWidth` fixo de 300 px, que numa tela de 390 não sobrava mesmo. (14/08) */}
-          <button onClick={() => nav(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <button onClick={voltarABusca} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
             <ArrowLeft size={15} /> Voltar à busca
           </button>
           <span style={{ color: '#334155', fontSize: 13, flexShrink: 0 }}>/</span>
@@ -1490,9 +1511,9 @@ export default function ImovelDetalhe() {
                     {[imovel.endereco, imovel.bairro, imovel.cidade, imovel.estado].filter(Boolean).join(', ')}
                   </span>
                 )}
-                {imovel.areaM2 > 0 && (
+                {areaVigente > 0 && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Building2 size={14} color="#8b5cf6" /> {imovel.areaM2} m²
+                    <Building2 size={14} color="#8b5cf6" /> {fmtArea(areaVigente)}
                   </span>
                 )}
                 {imovel.leiloeiro && (
@@ -2025,8 +2046,8 @@ export default function ImovelDetalhe() {
               const identidade = [
                 idt.nomeCondominio && ['Condomínio/empreendimento', idt.nomeCondominio],
                 idt.logradouro && ['Endereço na documentação', [idt.logradouro, idt.bairro].filter(Boolean).join(', ')],
-                n(mat.areaPrivativaM2) && ['Área privativa (matrícula)', `${mat.areaPrivativaM2} m²`],
-                n(mat.areaTerrenoM2) && ['Área do terreno (matrícula)', `${mat.areaTerrenoM2} m²`],
+                n(mat.areaPrivativaM2) && ['Área privativa (matrícula)', fmtArea(mat.areaPrivativaM2)],
+                n(mat.areaTerrenoM2) && ['Área do terreno (matrícula)', fmtArea(mat.areaTerrenoM2)],
                 mat.numeroMatricula && ['Nº da matrícula', mat.numeroMatricula],
               ].filter(Boolean);
               const mensais = [
@@ -2285,13 +2306,13 @@ export default function ImovelDetalhe() {
                   label: 'Área',
                   value: (() => {
                     const anuncio = Number(imovel.areaM2) > 0 ? Number(imovel.areaM2) : 0;
-                    const mat = Number(imovel.docFatos?.matricula?.areaPrivativaM2) || 0;
+                    const mat = areaDocumento;
                     if (!anuncio && !mat) return null;
                     if (mat && anuncio && Math.abs(mat - anuncio) / anuncio > 0.10) {
-                      return `${mat} m² (matrícula) · anúncio: ${anuncio} m²`;
+                      return `${fmtArea(mat)} (matrícula) · anúncio: ${fmtArea(anuncio)}`;
                     }
-                    if (mat) return `${mat} m² (matrícula)`;
-                    return `${anuncio} m² (anúncio)`;
+                    if (mat) return `${fmtArea(mat)} (matrícula)`;
+                    return `${fmtArea(anuncio)} (anúncio)`;
                   })(),
                 },
                 { label: 'Fonte', value: imovel.fonte },

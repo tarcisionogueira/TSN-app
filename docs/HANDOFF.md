@@ -7,6 +7,20 @@
 
 
 
+## 20/10 (tarde) — 3 pedidos do dono na tela do imóvel
+- **Custo de desocupação ("custo est. R$ 30.000")**: é ESTIMATIVA da IA do documental (`raioX.ocupacaoDetalhe`),
+  não vem do edital. No caso conferido (Tamboré/FRANCOLEILOES, 196f8afa) o edital só diz OCUPADO e que a desocupação
+  é do arrematante (itens 4 e 9.11); 12 meses / R$ 30 mil foram calculados pela IA, e o prompt pedia "custo estimado"
+  sem regra de origem. Agora o laudo grava `custoFonte` (edital|estimativa) + `custoBase`, a ficha guarda
+  `desocupacaoCustoFonte/Base`, e a tela, o relatório e o PDF dizem "(estimativa BidPro — não consta no edital)".
+  Laudo antigo sem o campo = estimativa. **Aberto para o dono:** trocar a estimativa da IA por cálculo determinístico.
+- **Área**: `fmtArea` (utils/format.js) — no máx. 2 casas, vírgula. A ficha mostra a área do DOCUMENTO quando algum
+  relatório já leu a matrícula (doc_fatos ou ficha_juridica), senão a do anúncio; Resumo mostra as duas se divergem >10%.
+- **"Voltar à busca" caía no relatório**: `nav(-1)` às cegas; o /analise empurra um imóvel novo na pilha ("abrir a
+  ficha"). Mesmo desenho do VeiculoDetalhe: Busca marca `state.deBusca`; sem a marca vai a `/buscar` com
+  `state.restaurarLista`, que `useRolagemDaLista` agora honra (devolve a rolagem salva também em PUSH). Não testado
+  no navegador.
+
 ## 20/10 — FECHAMENTO DA SESSÃO (19–20/10)
 **Feito na sessão** (commits 8ce96da → 900d0f3, todos no `main`): bug bounty completo (4 agentes) e as pendências
 231–238, 244–246, 248–250 resolvidas e fechadas no banco com prova. Destaques: estornos que agora desfazem comissão,

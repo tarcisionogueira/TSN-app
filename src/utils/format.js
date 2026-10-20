@@ -64,6 +64,16 @@ export function explicacaoData(modalidade) {
   return 'A data do leilão será confirmada no edital do lote.';
 }
 
+// ÁREA EM m² COM NO MÁXIMO DUAS CASAS (20/10, pedido do dono): matrícula e edital trazem
+// "51,715375 m²" (fração ideal do cálculo condominial) e a tela repetia o número cru, com ponto
+// ("51.715375"). Inteiro sai sem casas ("710 m²"); fracionado sai com duas ("51,72 m²").
+export const fmtArea = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const casas = Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2;
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: 2 }) + ' m²';
+};
+
 export const fmtBRL = (v) =>
   v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 

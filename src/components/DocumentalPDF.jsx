@@ -117,7 +117,7 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
   const cron = [cr.primeiraPraca && `1ª praça: ${dataBR(cr.primeiraPraca)}`, cr.segundaPraca && `2ª praça: ${dataBR(cr.segundaPraca)}`, cr.prazoPagamento && `Pagamento: ${cr.prazoPagamento}`, cr.prazoEmbargos && `Embargos: ${cr.prazoEmbargos}`].filter(Boolean);
   const rxLinhas = [];
   if (fr.risco && fr.risco !== 'nenhum') rxLinhas.push(`<b>Fraude à execução:</b> ${esc(fr.risco)}${fr.motivo ? ` — ${esc(fr.motivo)}` : ''}`);
-  if (oc.tipo && oc.tipo !== 'nao_consta') rxLinhas.push(`<b>Ocupação:</b> ${esc(OCUP[oc.tipo] || oc.tipo)}${oc.prazoMeses ? ` · desocupação ~${oc.prazoMeses} mês(es)` : ''}${oc.custoEstimado ? ` · custo est. ${brl(oc.custoEstimado)}` : ''}`);
+  if (oc.tipo && oc.tipo !== 'nao_consta') rxLinhas.push(`<b>Ocupação:</b> ${esc(OCUP[oc.tipo] || oc.tipo)}${oc.prazoMeses ? ` · desocupação ~${oc.prazoMeses} mês(es)` : ''}${oc.custoEstimado ? ` · custo est. ${brl(oc.custoEstimado)}` : ''}${(oc.prazoMeses || oc.custoEstimado) ? (oc.custoFonte === 'edital' ? ' (conforme edital)' : ' (estimativa BidPro — não consta no edital)') : ''}`);
   if (db.totalAssumidoArrematante > 0) rxLinhas.push(`<b>Débitos que você assume (propter rem):</b> ${brl(db.totalAssumidoArrematante)}`);
   else if (db.aLevantar) rxLinhas.push(`<b>Débitos propter rem:</b> a levantar (IPTU/condomínio)`);
   if (cron.length) rxLinhas.push(`<b>Cronograma:</b> ${cron.map(esc).join(' · ')}`);
