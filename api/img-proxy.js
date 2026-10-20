@@ -37,9 +37,35 @@ function tipoPelaAssinatura(buf) {
 const LARGURAS = new Set([240, 480, 800]);
 
 export const GET = handler;
+// FOTO DE VEÍCULO POR ID (20/10, dono): o público não pode ver o CDN do leiloeiro na URL da foto (ele
+// identifica o leiloeiro, que só o plano Veículos libera). `veiculos_vitrine` entrega
+// `/api/img-proxy?veiculo=<id>&i=<n>`; aqui o servidor lê a URL original no banco (service key) e segue
+// o mesmo caminho seguro. Nada é guardado: a CDN da Vercel cacheia (s-maxage abaixo) — zero storage.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function urlDaFotoVeiculo(id, i) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SB || !KEY) throw new Error('supabase não configurado');
+  const r = await fetch(`${SB}/rest/v1/veiculos_leilao?id=eq.${id}&select=fotos&limit=1`, {
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}` }, signal: AbortSignal.timeout(6000),
+  });
+  if (!r.ok) throw new Error(`leitura do veículo HTTP ${r.status}`);
+  const [v] = await r.json();
+  const u = Array.isArray(v?.fotos) ? v.fotos[i] : null;
+  return typeof u === 'string' ? u : null;
+}
+
 async function handler(req) {
   const { searchParams } = new URL(req.url);
-  const url = searchParams.get('url');
+  let url = searchParams.get('url');
+  const veiculo = searchParams.get('veiculo');
+  if (veiculo) {
+    const i = Number(searchParams.get('i') || 0);
+    if (!UUID_RE.test(veiculo) || !Number.isInteger(i) || i < 0 || i > 60) return new Response('Invalid params', { status: 400 });
+    try { url = await urlDaFotoVeiculo(veiculo, i); }
+    catch (e) { console.error('[img-proxy] foto de veículo:', e?.message || e); return new Response('Lookup error', { status: 502 }); }
+    if (!url) return new Response('Image not found', { status: 404 });
+  }
 
   if (!url) return new Response('Missing url', { status: 400 });
 

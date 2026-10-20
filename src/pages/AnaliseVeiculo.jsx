@@ -40,7 +40,11 @@ const FAIXA_INFO = {
 };
 // REGISTRO FOTOGRÁFICO (29/09, pedido do dono: "todas as fotos, como num laudo cautelar"). A galeria
 // vem do scraper (scripts/lib/galeria-veiculo.mjs); "sem imagem" do site do leiloeiro não é foto.
+// Cliente lê a vitrine, onde a foto vem pelo NOSSO proxy (`/api/img-proxy?veiculo=…`, sem o CDN do
+// leiloeiro): vira URL absoluta para valer também na janela de impressão do PDF.
+const ORIGEM = typeof window !== 'undefined' ? window.location.origin : '';
 export const fotosDoVeiculo = (v) => [...new Set((Array.isArray(v?.fotos) ? v.fotos : [])
+  .map((u) => (typeof u === 'string' && u.startsWith('/api/img-proxy?veiculo=') ? ORIGEM + u : u))
   .filter((u) => typeof u === 'string' && /^https?:\/\//.test(u) && !/no-image|nao-?disp|sem-?foto|placeholder/i.test(u)))];
 
 const RECOMENDACAO_LABEL = { comprar: 'Comprar', avaliar_com_cautela: 'Avaliar com cautela', evitar: 'Evitar' };

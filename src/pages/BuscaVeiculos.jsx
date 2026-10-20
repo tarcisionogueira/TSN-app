@@ -245,7 +245,8 @@ const corSinistro = (s) => SINISTRO_COR[String(s || '').toLowerCase()] || { bg: 
 
 function fotosArray(v) {
   const f = v?.fotos;
-  if (Array.isArray(f)) return f.filter(Boolean);
+  // Foto pelo nosso proxy (vitrine pública): o card pede a miniatura WebP 480 px, cacheada na CDN.
+  if (Array.isArray(f)) return f.filter(Boolean).map((u) => (String(u).startsWith('/api/img-proxy?veiculo=') ? `${u}&w=480` : u));
   return [];
 }
 
