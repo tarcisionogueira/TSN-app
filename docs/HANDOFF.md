@@ -68,7 +68,7 @@
   desativar-encerrados-cron (teto de tempo) e a migração 7b das políticas `admin_reembolsos_*` (não aplicada: já existem).
 - **Search Console:** `name` do Product no JSON-LD cortado em 150 caracteres. **CI "Testes"** vermelho desde 17/10: o teste
   de parcelamento esperava a regra anterior a 8643448 — atualizado.
-- **Pendente do dono:** `drop index if exists public.idx_imoveis_ativo_id;` no SQL Editor (o conector travou no DROP).
+- `idx_imoveis_ativo_id` removido pelo dono no SQL Editor (20/10), conferido no banco.
 
 ## 19/10 (2ª sessão, em paralelo à de cima) — bug bounty complementar
 > Duas sessões rodaram o ritual ao mesmo tempo. Sobreposições (limpeza CEF, leitura de perfil e comissão no
