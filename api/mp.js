@@ -490,6 +490,12 @@ async function cancelarAssinatura({ assinaturaId, email, userId, trilha = 'princ
   // o `email` (vindo do body) permitiria cancelar a assinatura de um terceiro (IDOR).
   let ids = [];
   if (assinaturaId) {
+    // Id vindo do corpo (20/10): confere o DONO antes de cancelar — sem isto qualquer usuário logado
+    // cancelava o mandato de outro sabendo o id (o filtro anti-IDOR só valia na busca por e-mail).
+    const pre = await mpGet(`/preapproval/${encodeURIComponent(String(assinaturaId))}`).catch(() => null);
+    if (!pre || String(pre.external_reference || '').split('|')[0] !== String(userId)) {
+      return { ok: false, cancelados: 0, erro: 'assinatura_de_outra_conta_ou_inexistente' };
+    }
     ids = [assinaturaId];
   } else if (email && userId) {
     try {

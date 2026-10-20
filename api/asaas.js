@@ -5,6 +5,7 @@ import { cpfDoRegistro, hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF, validar
 import { podeContratarAssessoria } from './_assessoria.js';
 import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { logAtividade } from './_atividade.js';
+import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
 // no CPF que veio do body). Fallback ao body só durante a transição da cifra.
@@ -584,15 +585,18 @@ export default async function handler(req, res) {
 
     // ── Cancelar assinatura (solicitado pelo próprio membro) ──
     if (action === 'cancelar_assinatura') {
-      const { email } = body;
-      if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+      // 20/10: só a trilha pedida — 'veiculos' ou, por padrão, a principal (antes apagava a 1ª ACTIVE,
+      // que podia ser a de Veículos). E-mail da conta logada (o do corpo já é barrado acima se divergir).
+      if (!authUser?.email) return res.status(401).json({ error: 'Não autenticado' });
+      const email = authUser.email;
+      const trilha = body.trilha === 'veiculos' ? 'veiculos' : 'principal';
 
       const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
       const customer = customers.data?.[0];
       if (!customer) return res.status(404).json({ error: 'Cliente não encontrado no Asaas.' });
 
       const subs = await asaasGet(`/subscriptions?customer=${customer.id}&status=ACTIVE`);
-      const sub = subs.data?.[0];
+      const sub = (subs.data || []).find((x) => (planoDaAssinaturaAsaas(x) === 'veiculos' ? 'veiculos' : 'principal') === trilha);
       if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada.' });
 
       // Remove a assinatura no Asaas

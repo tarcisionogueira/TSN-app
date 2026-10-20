@@ -28,6 +28,10 @@ import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: login/cadastro fo
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
 
 const PLANOS_PAGOS = ['top2', 'clube', 'assessorado'];
+// 20/10: Veículos e Combo são assinaturas próprias (ver "DUAS TRILHAS" em api/_webhook-core.js) — nunca
+// "troca de plano" da assinatura atual: criam uma nova; a antiga da mesma trilha é cancelada pelo webhook
+// depois do 1º pagamento (o Combo substitui o Pro e o Veículos). O acesso vive em perfis.acesso_veiculos_ate.
+const PLANOS_VEICULOS = ['veiculos', 'combo'];
 
 // Mapeia mensagens técnicas de erro do Asaas para orientações amigáveis
 const MENSAGENS_RECUSA = [
@@ -331,9 +335,19 @@ export default function Checkout() {
     (async () => {
       const HIER = ['explorador', 'top2', 'assessorado', 'clube'];
       const alvo = HIER.indexOf(String(planoKey || '').replace(/_(anual|vista|mensal)$/i, ''));
+      const ehVeiculos = PLANOS_VEICULOS.includes(planoKey);
       for (let i = 0; i < 6 && vivo; i++) { // ~30s de tolerância para o webhook
         let p = null;
         try { p = await refreshPerfil?.(); } catch { /* tenta de novo */ }
+        // Veículos/Combo: a prova é o acesso a veículos gravado pelo webhook (o role do Veículos não muda).
+        if (ehVeiculos) {
+          const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
+          if (eAc) console.warn('[checkout] confirmação do acesso a veículos:', eAc.message); // tenta de novo no próximo ciclo
+          const roleOk = planoKey !== 'combo' || HIER.indexOf(String(p?.role || '').replace(/_anual$/, '')) >= 1;
+          if (temAcesso === true && roleOk) { if (vivo) confirmarPagamento(); return; }
+          await new Promise(r => setTimeout(r, 5000));
+          continue;
+        }
         const atual = HIER.indexOf(String(p?.role || '').replace(/_anual$/, ''));
         if (alvo < 0 || (atual >= 0 && atual >= alvo)) { if (vivo) confirmarPagamento(); return; }
         await new Promise(r => setTimeout(r, 5000));
@@ -821,6 +835,17 @@ export default function Checkout() {
       //  - para ANUAL (regra a): cancela a recorrência mensal + cria a anual recorrente, cobra
       //    agora (via gerarLink, que já cancela as anteriores antes de criar).
       //  - para MENSAL (regra b): NÃO cobra agora — agenda a virada para o fim do anual vigente.
+      // Já tem o que está comprando (20/10)? Evita a segunda assinatura cobrando em paralelo.
+      if (PLANOS_VEICULOS.includes(planoKey) && user) {
+        const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
+        if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+        if (temAcesso === true && (planoKey === 'veiculos' || ['top2', 'assessorado', 'clube'].includes(role))) {
+          setErro(planoKey === 'veiculos'
+            ? 'O Leilão de Veículos já está ativo na sua conta (sozinho ou no Combo).'
+            : 'Você já tem imóveis e veículos ativos na sua conta.');
+          return;
+        }
+      }
       if (ehTrocaCiclo && cicloAlvo === 'anual') return await gerarLink();
       if (ehTrocaCiclo && cicloAlvo === 'mensal') return await agendarCiclo();
       if (ehMudanca) return await mudarPlano();
@@ -836,7 +861,8 @@ export default function Checkout() {
 
   // Mudança de plano: já assina um plano pago e escolheu outro plano recorrente
   const planoAtual = PLANOS[role];
-  const ehMudanca = PLANOS_PAGOS.includes(role) && role !== planoKey && planoKey !== 'assessorado' && role !== 'assessorado';
+  const ehMudanca = PLANOS_PAGOS.includes(role) && role !== planoKey && planoKey !== 'assessorado' && role !== 'assessorado'
+    && !PLANOS_VEICULOS.includes(planoKey);
   const ehUpgrade = ehMudanca && plano.preco > (planoAtual?.preco || 0);
   // Troca de CICLO do Investidor Pro (mensal↔anual): ehMudanca compara a base (top2×top2),
   // então dá false de propósito — este é o sinal separado. Só quando o cliente JÁ é top2 e
@@ -918,7 +944,7 @@ export default function Checkout() {
     if (!mpDesligadoManualmente) {
       // ── Tenta Mercado Pago primeiro ───────────────────────────────────
       try {
-        const planoRecorrente = ['clube', 'top2', 'top2_anual'].includes(planoApiKey);
+        const planoRecorrente = ['clube', 'top2', 'top2_anual', 'veiculos', 'combo'].includes(planoApiKey);
         const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
         const res = await apiCall('/api/mp', {
           method: 'POST',

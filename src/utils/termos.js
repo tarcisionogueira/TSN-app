@@ -42,6 +42,8 @@ const VERSAO_FAMILIA = { assessorado: '3.2', clube: '3.2', termos_uso: '3.4' };
 export const PRODUTO_TITULOS = {
   explorador: 'Assinatura Explorador',
   top2: 'Assinatura Investidor Pro',
+  veiculos: 'Assinatura Leilão de Veículos',
+  combo: 'Assinatura Combo Imóveis + Veículos',
   assessorado: 'Assessoria de Arrematação',
   clube: 'Leilão Club',
   consultor: 'Consultor/Afiliado',
@@ -92,6 +94,8 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui, bonus } 
   const base = {
     explorador: { modelo: 'recorrente', inclui: 'busca de imóveis em leilão e relatórios conforme o plano contratado' },
     top2: { modelo: 'recorrente', inclui: 'busca de imóveis, relatórios mercadológico, documental e laudo de viabilidade, e demais recursos do plano contratado' },
+    veiculos: { modelo: 'recorrente', inclui: 'busca de veículos em leilão com a identificação do leiloeiro, acesso ao lote, documentos e local do pátio, e relatórios de análise de veículos por inteligência artificial conforme a cota do plano (sem assessoria de arrematação)' },
+    combo: { modelo: 'recorrente', inclui: 'todos os recursos do Investidor Pro (imóveis) e do Leilão de Veículos, conforme as cotas de cada plano (assessoria de arrematação não incluída)' },
     clube: { modelo: 'recorrente', honorarios: true, inclui: 'acesso a TODOS os cursos e ebooks da plataforma; encontro SEMANAL ao vivo (online) com o mentor para dúvidas e ensinamentos sobre o mercado de leilões; acesso aos eventos do mentor com até 10 (dez) convidados; e assessoria de arrematação inclusa para 1 (um) imóvel por mês' },
     assessorado: { modelo: 'parcelado', honorarios: true, inclui: 'assessoria de arrematação com equipe da plataforma e advogado parceiro, conforme escopo do contrato de prestação de serviços' },
     consultor: { modelo: 'recorrente' },

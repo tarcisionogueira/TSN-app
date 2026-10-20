@@ -7,6 +7,32 @@
 
 
 
+## 20/10 (noite) — VEÍCULOS PÚBLICOS + planos Veículos (R$ 29,90) e Combo (R$ 99,90) — pendências #262 e #263
+**Decisões do dono:** lista de veículos aberta, detalhe pede cadastro; leiloeiro, link, documentos, pátio e relatório por IA
+só com plano; sem amostra grátis de relatório; Veículos e Combo **recorrentes** (MP principal, Asaas backup); só mensal;
+sem assessoria para veículos; comunicação toda em "gere o relatório e desbloqueie o leiloeiro".
+- **Trava no banco** (`20261020_veiculos_publico_acesso.sql`): `veiculos_leilao` só equipe (antes `OR true` — a chave
+  pública lia leiloeiro/link/descrição); público lê `veiculos_vitrine`; `veiculo_leiloeiro(ids)` e `veiculo_local_patio(ids)`
+  só com `tem_acesso_veiculos()` (equipe ou `perfis.acesso_veiculos_ate` + 3 dias de folga). Provado como anônimo: 0 na
+  tabela, 11.612 na vitrine. Cota de relatório de veículo: 0 sem plano, 10/mês com plano; sem plano nem crédito avulso
+  gera (o relatório traz o leiloeiro). Ressalva: URL das FOTOS aponta para o CDN do leiloeiro (espelhar, se virar problema).
+- **Faturamento em DUAS TRILHAS** (ver bloco "DUAS TRILHAS" em `api/_webhook-core.js`): Veículos só estende o acesso (+1
+  mês por cobrança real, idempotente por pagamento), nunca toca role/ciclo; Combo = role top2 + acesso. Recusa/vencimento de
+  Veículos não rebaixa ninguém; estorno/chargeback revogam o acesso. Plano pela referência (`uid|plano`; Asaas grava
+  externalReference e, nas cobranças, vale a descrição "Leilão de Veículos"/"Combo Imóveis"), nunca pelo valor (99,90 =
+  Pro legado no mapearPlano). Recorrência única por trilha (Combo cancela as duas). Ajustados: mp-webhook, asaas-webhook,
+  os dois crons de reconciliação, agendar-plano/ciclo, garantia, cancelamentos (mp.js `trilha`, asaas.js `trilha`).
+- **Telas:** `/veiculos` (pública), `/veiculo/:id` e `/analise-veiculo` (login); equipe segue em `/admin/veiculos-leilao`.
+  Regra única em `src/utils/veiculosAcesso.js`. Menu "Leilões" → Imóveis / Veículos. Cards novos em /planos; Checkout
+  conhece as chaves (trava contra assinar em dobro; confirmação pós-pagamento pelo acesso). Perfil: quadro "Leilão de
+  Veículos" com vigência e cancelar renovação (MP e Asaas).
+- **Achados no caminho:** `cancelar_assinatura` do mp.js aceitava `assinaturaId` sem conferir o dono — agora confere.
+- **Não testado no navegador** (a sessão não alcança o site nem o banco pelo navegador). **Testar antes de anunciar:**
+  compra real de Veículos com uma conta Pro (o Pro NÃO pode cair), Combo partindo do Pro, recusa de cartão, cancelamento.
+- **Em aberto (#262):** garantia de 7 dias (CDC) para quem tem SÓ Veículos (`garantia-cancelar` exige role pagante); o
+  assessorado que tem Combo segue pagando a parte de veículos (cancelarRecorrenciaPro só pega `top2*`); FIPE sob demanda
+  continua só para a equipe (`api/veiculo-fipe.js` 403 para cliente — a FIPE do público vem do lote noturno).
+
 ## 20/10 (noite) — gêmeos entre leiloeiros + Asaas no preço novo
 - **Asaas (`mapearPlano`)** não reconhecia 89,90/899 (Pro desde 01/10): Pro pago pelo backup não ativaria. Corrigido;
   conferido que o único pagamento Asaas desde 01/10 foi honorário (ninguém afetado). **99,90 segue mapeado como "Pro
