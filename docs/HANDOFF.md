@@ -7,6 +7,21 @@
 
 
 
+## 20/10 — pendências 244 e 245 (dinheiro)
+- **#244 assessoria pelo Mercado Pago:** o pagamento chega com `metadata.tipo='servico'`, `proposito='assessoria'`
+  (preço já conferido no mp-checkout, ≥ tabela; com juros sai das faixas do `mapearPlano`). Agora o webhook passa
+  `planoForcado: 'assessorado'` ao `processarConfirmado` → promove (escada só sobe), cancela a recorrência do Pro,
+  comissiona a rede como `venda_direta` e chama `comissao_venda_assessoria` — igual ao caminho Asaas. Reembolso total
+  e chargeback de assessoria passam a SUSPENDER o acesso (o Pro anual por Pix já fazia, commit f95b40e). A recusa
+  (Pix expirado) segue sem rebaixar. Não testado ponta a ponta: nenhuma assessoria foi vendida pelo MP ainda.
+- **#245 estorno de produto** (`estornar_compra_produto`, prova em seco desfeita): cancela também o bônus infinito
+  (`<pay>-prod-inf%`), estorna os produtos entregues como bônus da compra e desfaz a CORTESIA — encurta até a outra
+  compra com cortesia vigente, ou volta ao papel anterior; quem tem ciclo pago não perde nada.
+- **Achado no seco — cortesia que nunca vencia:** `perfis.plano_ciclo` tem DEFAULT `'mensal'` (os 182 exploradores),
+  e `conceder_plano_usuario` só gravava `'cortesia'` com ciclo vazio. O explorador que ganhasse 3 meses de Pro ficava
+  `'mensal'`, e o reconciliar (rebaixa só `'anual'/'cortesia'` vencidos) nunca o rebaixaria: Pro permanente.
+  Corrigido (explorador recebe `'cortesia'`). Ninguém afetado (0 compras com concessão até hoje).
+
 ## 19/10 — ritual de abertura + bug bounty (4 agentes: pré-login, dinheiro, crons, telas)
 
 ### Ritual (heartbeat registrado)

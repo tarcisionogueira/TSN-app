@@ -718,7 +718,9 @@ export async function processarEventoMp(req, res) {
         console.warn('[mp-webhook] aprovado sem identificação do app — não mapeia plano:', pagamento.id, pagamento.transaction_amount);
         return res.status(200).json({ ok: true, ignorado: 'pagamento_sem_identificacao' });
       }
-      result = await processarConfirmado(contexto);
+      // #244 (20/10): assessoria paga pelo MP é a venda do plano assessorado — comissiona e promove como no Asaas.
+      result = await processarConfirmado(pagamento.metadata?.proposito === 'assessoria'
+        ? { ...contexto, servico: false, planoForcado: 'assessorado' } : contexto);
     } else if (status === 'rejected' || status === 'cancelled') {
       // Compra AVULSA de produto/serviço não é assinatura: PIX que expirou ou cartão recusado só
       // deixa a compra pendente. Sem este guard (que os ramos 'approved' e 'charged_back' já
@@ -748,9 +750,10 @@ export async function processarEventoMp(req, res) {
       // 19/10: o Pro ANUAL pago por PIX vem com metadata.tipo='servico' (para o caminho genérico não
       // elevar plano) — mas no chargeback/reembolso ele É a assinatura: sem isto, R$ 449,90 voltavam
       // e os 12 meses de Pro ficavam. O ramo de recusa NÃO usa isto (PIX expirado rebaixaria o mensal).
+      // #244 (20/10): o mesmo vale para a ASSESSORIA (R$ 4.800–6.000): chargeback dela mantinha o acesso.
       result = await processarChargeback({
         ...contexto,
-        servico: contexto.servico && pagamento.metadata?.proposito !== 'plano_anual',
+        servico: contexto.servico && !['plano_anual', 'assessoria'].includes(pagamento.metadata?.proposito),
         evento: 'charged_back',
         motivo: pagamento.status_detail || 'charged_back',
         raw: { id: pagamento.id, status, status_detail: pagamento.status_detail },
@@ -781,7 +784,7 @@ export async function processarEventoMp(req, res) {
       // Reembolso de SERVIÇO avulso (recarga, assessoria) estorna a comissão mas NÃO
       // suspende o plano: o assinante devolvido de uma compra avulsa segue pagante.
       // Mesma lacuna do ramo rejected/cancelled — o guard cobria só produto.
-      const servicoReemb = contexto.servico && pagamento.metadata?.proposito !== 'plano_anual'; // Pro anual: ver chargeback
+      const servicoReemb = contexto.servico && !['plano_anual', 'assessoria'].includes(pagamento.metadata?.proposito); // Pro anual e assessoria (#244): ver chargeback
       result = await processarReembolso({ ...contexto, servico: servicoReemb, suspender: !parcial && !servicoReemb });
     } else {
       // pending, in_process, authorized — aguardar próxima notificação

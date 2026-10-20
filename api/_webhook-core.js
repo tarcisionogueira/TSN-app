@@ -593,7 +593,7 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
 // comissão de rede — `valor` (bruto) segue sendo o que BidPro cobrou do cliente e o que vai na
 // NFS-e própria (imposto da BidPro incide sobre o que ela faturou, não sobre o que sobrou depois
 // da taxa do gateway). Sem `valorLiquido`, cai no bruto — nunca quebra por falta do dado.
-export async function processarConfirmado({ valor, valorLiquido, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
+export async function processarConfirmado({ valor, valorLiquido, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico, planoForcado = null }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (!cliente) {
     console.log(`[${gateway}] perfil não encontrado — id=${gatewayCustomerId} email=${email}`);
@@ -603,7 +603,10 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // Pagamento avulso de SERVIÇO (mp-checkout sem planoId): apenas limpa
   // inadimplência; NUNCA mapeia valor→plano (senão um serviço de R$500/5000/99,90
   // elevaria o plano do cliente "de graça"). mapeado=null pula toda a elevação.
-  const mapeado = servico ? null : mapearPlano(valor, descricao);
+  // `planoForcado` (20/10, #244): a ASSESSORIA paga pelo Checkout Transparente do MP chega com metadata.tipo='servico'
+  // e proposito='assessoria' — o preço já foi conferido no mp-checkout (≥ tabela; de 4x em diante o total leva juros
+  // e sai das faixas do mapearPlano). Sem isto ela não comissionava nem promovia; pelo Asaas, a mesma venda fazia os dois.
+  const mapeado = planoForcado ? { plano: planoForcado, role: planoForcado } : (servico ? null : mapearPlano(valor, descricao));
   let cicloMarcado = false; // marca 'ciclo_aplicado' gravada nesta chamada (desfeita se a gravação falhar)
 
   // Atualiza perfil. NÃO limpar inadimplência aqui: um pagamento de SERVIÇO (mapeado=null)
