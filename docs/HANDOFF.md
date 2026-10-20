@@ -23,8 +23,13 @@ descartado); "FIPE sob demanda para quem acessar a página do carro, e sempre en
   `, 01/01, `); Chery = "Caoa Chery/Chery"; modelo colado `F4000`/`D10`/`207HB`/`307SD16`; marca em várias categorias
   (moto cadastrada como carro); modelo da fonte errado ("hillux") → tenta o do título; < 1985 → `fora_tabela` (a FIPE não
   cobre) sem gastar cota. Triangulação só na categoria preferida (é a parte cara). Testes: `npm run testar:fipe`.
-  **O que continua sem FIPE, e é resposta, não falha:** 376 lotes da Urbes Sorocaba com "Ano/Modelo" VAZIO na própria
-  fonte; baú/munck/implemento (não existe FIPE).
+  **Valor de mercado nunca em branco (dono, mesma noite):** lote sem ano em lugar nenhum (~580, a maioria Urbes Sorocaba com
+  "Ano/Modelo" vazio na fonte; só 8 com placa completa — consulta por placa não compensa) agora recebe a FAIXA FIPE do
+  modelo (`fipe_status='faixa_modelo'`, `fipe_faixa_min/max`, `valor_fipe` nulo de propósito — fica fora do "% da FIPE").
+  Tela e relatório mostram a faixa e pedem para confirmar o ano. `aproximado` também guarda o intervalo das versões.
+  Sem FIPE de verdade só fica o que não tem FIPE: baú/munck/implemento e < 1985. Tudo gravado no veículo + `fipe_cache`
+  (25 dias): cada carro é consultado uma vez e o tráfego não multiplica gasto. Achado no caminho: o prompt do relatório
+  escrevia "R$ R$" (o `brl()` já põe o símbolo) — corrigido.
 - **Garantia 7 dias em Veículos**: âncora `perfis.veiculos_pago_em` (início do período contratado; renovação não mexe;
   protegida pelo gatilho). `garantia-cancelar {trilha:'veiculos'}` cancela só o mandato de Veículos (MP/Asaas); dentro de 7
   dias reembolsa 100% e encerra o acesso; uma vez por CPF **por trilha**. Combo pelo botão principal: reembolso encerra

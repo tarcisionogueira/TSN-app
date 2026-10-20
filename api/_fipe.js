@@ -437,6 +437,41 @@ async function casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, mod
   };
 }
 
+// FAIXA DO MODELO QUANDO O ANO NÃO EXISTE (20/10, dono: "não pode deixar de identificar o valor de mercado").
+// ~580 lotes ativos não têm ano em lugar nenhum (fonte, título, edital). Com marca+modelo, a FIPE ainda diz
+// quanto o modelo vale do ano mais antigo ao mais novo da tabela — 2 preços (os extremos) sobre os anos de até
+// 3 versões candidatas. `valor` NULO de propósito: um número só fingiria uma precisão que não existe.
+async function faixaDoModelo(fipeGet, cache, categoria, codigoMarca, modelo) {
+  const chaveModelos = `modelos:${categoria}:${codigoMarca}`;
+  if (!cache.has(chaveModelos)) cache.set(chaveModelos, await fipeGet(`/${categoria}/brands/${codigoMarca}/models`) || []);
+  const modelos = cache.get(chaveModelos);
+  let cands = acharCandidatosModelo(modelo, modelos);
+  if (!cands.length) cands = acharCandidatosModeloAmplo(modelo, modelos);
+  const limite = new Date().getFullYear() + 1;
+  const anos = [];
+  for (const cm of cands.slice(0, 3)) {
+    const lista = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${cm.code ?? cm.codigo}/years`);
+    for (const a of Array.isArray(lista) ? lista : []) {
+      const ano = parseInt(String(a.name || a.nome || '').match(/\d{4}/)?.[0] || '', 10); // "32000" (zero km) → 3200, fora
+      if (ano >= ANO_MINIMO_FIPE && ano <= limite) anos.push({ ano, modelo: cm.code ?? cm.codigo, codigo: a.code ?? a.codigo });
+    }
+  }
+  if (!anos.length) return null;
+  anos.sort((a, b) => a.ano - b.ano);
+  const extremos = anos.length > 1 ? [anos[0], anos[anos.length - 1]] : [anos[0]];
+  const precos = [];
+  let mesReferencia = null;
+  for (const e of extremos) {
+    const d = await fipeGet(`/${categoria}/brands/${codigoMarca}/models/${e.modelo}/years/${e.codigo}`);
+    const valor = parseValor(d?.price);
+    if (valor) { precos.push(valor); mesReferencia = mesReferencia || d.referenceMonth || null; }
+  }
+  if (!precos.length) return null;
+  precos.sort((a, b) => a - b);
+  return { status: 'faixa_modelo', valor: null, faixa: [precos[0], precos[precos.length - 1]], mesReferencia,
+    anos: [anos[0].ano, anos[anos.length - 1].ano] };
+}
+
 export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   const { ano_fabricacao: anoFabricacao, ano_modelo: anoModelo, tipo_veiculo: tipoVeiculo } = veiculo;
   let doTitulo = (!veiculo.marca || !veiculo.modelo) ? marcaModeloDoTitulo(veiculo.titulo, veiculo.marca) : null;
@@ -450,8 +485,9 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
   }
   const marca = marcaFonte || doTitulo?.marca;
   const modelo = veiculo.modelo || doTitulo?.modelo;
-  if (!marca || !modelo || !anoFabricacao) return { status: 'sem_dados' };
-  if (Math.max(Number(anoFabricacao) || 0, Number(anoModelo) || 0) < ANO_MINIMO_FIPE) return { status: 'fora_tabela' };
+  if (!marca || !modelo) return { status: 'sem_dados' };
+  const semAno = !anoFabricacao; // → faixa do modelo (faixaDoModelo), nunca em branco
+  if (!semAno && Math.max(Number(anoFabricacao) || 0, Number(anoModelo) || 0) < ANO_MINIMO_FIPE) return { status: 'fora_tabela' };
   // Modelo da FONTE com erro de digitação ("hillux", título "TOYOTA HILUX CD 4X4"): o do título é a 2ª tentativa.
   const doTituloAlt = veiculo.modelo ? marcaModeloDoTitulo(veiculo.titulo, marca) : null;
   const modelosTentar = [modelo];
@@ -468,7 +504,7 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
       const codigoMarca = acharMarca(marca, marcas, indexarMarcas(marcas));
       if (!codigoMarca) continue;
       for (const mod of modelosTentar) {
-        const r = await casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, mod, { triangular: primeira });
+        const r = semAno ? await faixaDoModelo(fipeGet, cache, categoria, codigoMarca, mod) : await casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, mod, { triangular: primeira });
         if (r) return r;
       }
       primeira = false;

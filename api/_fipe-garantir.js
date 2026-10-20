@@ -17,21 +17,21 @@ function sb(path, opts = {}) {
   });
 }
 
-export const COLUNAS_FIPE = 'id,titulo,marca,modelo,placa,chassi,anexos,link_lote,ano_fabricacao,ano_modelo,tipo_veiculo,valor_fipe,fipe_codigo,fipe_mes_referencia,fipe_status,fipe_atualizado_em';
+export const COLUNAS_FIPE = 'id,titulo,marca,modelo,placa,chassi,anexos,link_lote,ano_fabricacao,ano_modelo,tipo_veiculo,valor_fipe,fipe_codigo,fipe_mes_referencia,fipe_status,fipe_atualizado_em,fipe_faixa_min,fipe_faixa_max';
 
 export async function garantirFipe(v, { forcar = false } = {}) {
   const id = v.id;
   // 'sem_dados' gravado quando faltava o ano: se o ano chegou depois (ficha da Superbid, 14/10), tenta já —
   // sem esperar os 3 dias do `sem_dados`, que é a espera de quem continua sem dado.
-  const anoChegou = v.fipe_status === 'sem_dados' && !!v.ano_fabricacao;
+  const anoChegou = ['sem_dados', 'faixa_modelo'].includes(v.fipe_status) && !!v.ano_fabricacao;
   if (!forcar && !anoChegou && !fipeEstaVelho(v.fipe_status, v.fipe_atualizado_em)) {
-    return { valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, de_cache: true };
+    return { valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, fipe_faixa_min: v.fipe_faixa_min ?? null, fipe_faixa_max: v.fipe_faixa_max ?? null, de_cache: true };
   }
   // Sem marca/modelo na fonte, `buscarFipe` tenta pelo título (24/09) e devolve 'sem_dados'
   // quando nem o título tem — sem gastar cota.
   // SEM ANO → procura no EDITAL e na página do lote (26/09, dono: "quase todos disponibilizam
   // um edital"). Só para o veículo aberto; custo zero (PDF com texto + HTML público). Não achou →
-  // grava 'sem_dados' com data, e a próxima abertura não repete a leitura (fipeEstaVelho: 90 dias).
+  // segue sem ano: o motor devolve a faixa do modelo ('faixa_modelo'), refeita a cada 25 dias.
   if (!v.ano_fabricacao) {
     const lotesPorDoc = async (url) => {
       const r = await sb(`veiculos_leilao?anexos=cs.${encodeURIComponent(JSON.stringify([{ url }]))}&select=id&limit=2`);
@@ -41,28 +41,27 @@ export async function garantirFipe(v, { forcar = false } = {}) {
     // Antes do edital, o TÍTULO (20/10): "GOL 16V, 99/00" — 318 lotes tinham o ano ali e iam ler PDF.
     const doTitulo = anoDoTitulo(v.titulo);
     const achado = doTitulo ? { ano: doTitulo, fonte: 'título', motivos: [] } : await anoPorDocumento(v, lotesPorDoc);
-    if (!achado.ano) {
-      console.log(`[veiculo-fipe] ${id}: ano não achado (${achado.motivos.join(' · ') || 'sem edital nem página'})`);
-      const r = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ fipe_status: 'sem_dados', fipe_atualizado_em: new Date().toISOString() }) });
-      if (!r.ok) console.error(`[veiculo-fipe] ${id}: não gravei sem_dados (${r.status})`);
-      return { valor_fipe: null, fipe_status: 'sem_dados', de_cache: false, motivo: achado.motivos[achado.motivos.length - 1] || null };
-    }
+    // Sem ano em lugar nenhum (20/10): NÃO para aqui — segue sem ano e o motor devolve a FAIXA do modelo
+    // (faixaDoModelo em api/_fipe.js). Antes gravava 'sem_dados' e a tela ficava sem valor de mercado.
+    if (!achado.ano) console.log(`[veiculo-fipe] ${id}: ano não achado (${achado.motivos.join(' · ') || 'sem edital nem página'}) — segue pela faixa do modelo`);
     // Placa que já é de OUTRO veículo do acervo = o trecho lido era de outro lote → descarta tudo.
-    if (achado.placa) {
+    if (achado.ano && achado.placa) {
       const rP = await sb(`veiculos_leilao?placa=eq.${encodeURIComponent(achado.placa)}&id=neq.${encodeURIComponent(id)}&select=id&limit=1`);
       const outro = rP.ok ? await rP.json().catch(() => []) : [];
       if (!rP.ok || outro.length) {
         console.log(`[veiculo-fipe] ${id}: placa ${achado.placa} ${rP.ok ? 'é de outro veículo' : 'não conferida'} — leitura descartada`);
-        return { valor_fipe: null, fipe_status: v.fipe_status || null, de_cache: false, motivo: 'leitura do documento não confiável' };
+        achado.ano = null; // leitura não confiável → segue sem ano (faixa do modelo)
       }
     }
-    const patchAno = { ano_fabricacao: achado.ano[0], ano_modelo: achado.ano[1] };
-    if (achado.placa && !v.placa) patchAno.placa = achado.placa;
-    const gAno = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patchAno) });
-    const [comAno] = gAno.ok ? await gAno.json().catch(() => []) : [];
-    if (!comAno) console.error(`[veiculo-fipe] ${id}: ano achado (${achado.fonte}) mas não gravou (${gAno.status}) — segue a FIPE com ele assim mesmo`);
-    console.log(`[veiculo-fipe] ${id}: ano ${achado.ano.join('/')} pelo ${achado.fonte}${achado.placa ? ` · placa ${achado.placa}` : ''}`);
-    Object.assign(v, patchAno);
+    if (achado.ano) {
+      const patchAno = { ano_fabricacao: achado.ano[0], ano_modelo: achado.ano[1] };
+      if (achado.placa && !v.placa) patchAno.placa = achado.placa;
+      const gAno = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patchAno) });
+      const [comAno] = gAno.ok ? await gAno.json().catch(() => []) : [];
+      if (!comAno) console.error(`[veiculo-fipe] ${id}: ano achado (${achado.fonte}) mas não gravou (${gAno.status}) — segue a FIPE com ele assim mesmo`);
+      console.log(`[veiculo-fipe] ${id}: ano ${achado.ano.join('/')} pelo ${achado.fonte}${achado.placa ? ` · placa ${achado.placa}` : ''}`);
+      Object.assign(v, patchAno);
+    }
   }
   // Mesmo cache de respostas do cron (`fipe_cache`, 25 dias) — acerto não gasta cota.
   const validoDesde = new Date(Date.now() - RETENTAR_OK_DIAS * 86400000).toISOString();
@@ -91,9 +90,13 @@ export async function garantirFipe(v, { forcar = false } = {}) {
   }
 
   const agora = new Date().toISOString();
+  // Faixa: intervalo do `aproximado` (versões no mesmo ano) ou do `faixa_modelo` (ano não informado).
+  const faixa = Array.isArray(resultado.faixa) ? { fipe_faixa_min: resultado.faixa[0], fipe_faixa_max: resultado.faixa[1] } : { fipe_faixa_min: null, fipe_faixa_max: null };
   const patch = resultado.status === 'ok' || resultado.status === 'aproximado'
-    ? { valor_fipe: resultado.valor, fipe_codigo: resultado.codigoFipe, fipe_mes_referencia: resultado.mesReferencia, fipe_status: resultado.status, fipe_atualizado_em: agora }
-    : { fipe_status: resultado.status, fipe_atualizado_em: agora };
+    ? { valor_fipe: resultado.valor, fipe_codigo: resultado.codigoFipe, fipe_mes_referencia: resultado.mesReferencia, fipe_status: resultado.status, fipe_atualizado_em: agora, ...faixa }
+    : resultado.status === 'faixa_modelo'
+      ? { valor_fipe: null, fipe_codigo: null, fipe_mes_referencia: resultado.mesReferencia, fipe_status: 'faixa_modelo', fipe_atualizado_em: agora, ...faixa }
+      : { fipe_status: resultado.status, fipe_atualizado_em: agora };
 
   const grava = await sb(`veiculos_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
   if (!grava.ok) {
@@ -106,5 +109,6 @@ export async function garantirFipe(v, { forcar = false } = {}) {
     return { valor_fipe: null, fipe_status: 'erro', de_cache: false };
   }
   return ({ valor_fipe: gravado.valor_fipe, fipe_codigo: gravado.fipe_codigo, fipe_mes_referencia: gravado.fipe_mes_referencia, fipe_status: gravado.fipe_status, de_cache: false,
+    fipe_faixa_min: gravado.fipe_faixa_min, fipe_faixa_max: gravado.fipe_faixa_max,
     ano_fabricacao: gravado.ano_fabricacao, ano_modelo: gravado.ano_modelo, placa: gravado.placa });
 }

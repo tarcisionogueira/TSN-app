@@ -415,8 +415,11 @@ function promptVeiculo(v, percentualFipe, faixa, extra = {}) {
   ].filter(Boolean).join('\n- ');
 
   const fipeTexto = faixa === 'sem_fipe'
-    ? 'FIPE não disponível para este veículo (marca/modelo/ano não bateram com a tabela, ou consulta ainda não feita).'
-    : `Lance mínimo é ${percentualFipe.toFixed(1)}% da FIPE (R$ ${brl(v.valor_fipe)}, referência ${v.fipe_mes_referencia || 'não informada'}${v.fipe_status === 'aproximado' ? ' — valor APROXIMADO, mais de uma versão do modelo bateu com o ano' : v.fipe_status === 'leiloeiro' ? ' — valor INFORMADO PELO LEILOEIRO na ficha do lote, não conferido na tabela' : ''}). Regra da casa: ATÉ 65% da FIPE é considerado ótimo ponto de entrada; acima de 100% (lance acima da própria FIPE) é sinal de alerta forte.`;
+    ? (v.fipe_status === 'faixa_modelo' && Number(v.fipe_faixa_max) > 0
+      // Ano não informado em lugar nenhum (20/10): a FAIXA do modelo é a referência — sem % de FIPE (não há valor exato).
+      ? `FIPE exata indisponível: o leiloeiro não informou o ano. Faixa FIPE do modelo na tabela (ano mais antigo ao mais novo): ${brl(v.fipe_faixa_min)} a ${brl(v.fipe_faixa_max)} (referência ${v.fipe_mes_referencia || 'não informada'}). Use a faixa e os anúncios de mercado para estimar o valor; diga ao cliente que confirmar o ano (documento/vistoria) é condição para fechar o teto de lance.`
+      : 'FIPE não disponível para este veículo (marca/modelo/ano não bateram com a tabela, ou consulta ainda não feita).')
+    : `Lance mínimo é ${percentualFipe.toFixed(1)}% da FIPE (${brl(v.valor_fipe)}, referência ${v.fipe_mes_referencia || 'não informada'}${v.fipe_status === 'aproximado' ? ' — valor APROXIMADO, mais de uma versão do modelo bateu com o ano' : v.fipe_status === 'leiloeiro' ? ' — valor INFORMADO PELO LEILOEIRO na ficha do lote, não conferido na tabela' : ''}). Regra da casa: ATÉ 65% da FIPE é considerado ótimo ponto de entrada; acima de 100% (lance acima da própria FIPE) é sinal de alerta forte.`;
 
   return `Você avalia veículos de leilão para um investidor. Use SOMENTE o que está nos documentos anexos e na descrição abaixo — nunca invente característica, defeito ou ausência de defeito que não conste. Quando a informação não constar em lugar nenhum, diga explicitamente "não informado pelo leiloeiro" em vez de presumir.
 
@@ -427,7 +430,7 @@ DADOS DO LOTE (do sistema, não do documento — confie neles):
 - Modalidade: ${v.modalidade === 'judicial' ? 'Judicial' : v.modalidade === 'extrajudicial' ? 'Extrajudicial' : 'não identificada'}
 - Origem da venda: ${ORIGEM_PROMPT[v.origem_venda] || 'não identificada (o leiloeiro não informa quem vende)'}
 - Formas de pagamento publicadas pela plataforma: ${extra.formasPlataforma?.length ? extra.formasPlataforma.join('; ') : 'não publicadas em campo próprio — procure no edital, na página e na descrição (o "à vista" do cadastro é padrão da coleta, NÃO é condição do edital)'}
-- Lance mínimo: R$ ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: R$ ${brl(v.valor_avaliacao)}` : ''}
+- Lance mínimo: ${brl(v.valor_minimo)}${v.valor_avaliacao > 0 ? ` · Avaliação do leiloeiro: ${brl(v.valor_avaliacao)}` : ''}
 - Leiloeiro/plataforma: ${[v.leiloeiro, v.fonte].filter(Boolean).join(' · ') || 'não informado'}${v.comitente_edital ? ` · Comitente: ${v.comitente_edital}` : ''}
 - Pátio: ${[v.patio, v.cidade, v.estado].filter(Boolean).join(' · ') || 'não informado'}${v.opcionais ? `\n- Opcionais: ${String(v.opcionais).slice(0, 300)}` : ''}${v.motor_doc_texto ? `\n- Trecho de documento sobre o motor: ${String(v.motor_doc_texto).slice(0, 400)}` : ''}
 ${extra.eventoTexto ? `- Leilão (evento): ${extra.eventoTexto}\n` : ''}${extra.taxasPlataforma ? `- Taxas publicadas pela plataforma para este lote: ${extra.taxasPlataforma}\n` : ''}${sinais ? `\nSINAIS JÁ IDENTIFICADOS PELO SISTEMA (vieram do próprio leiloeiro, confirme/aprofunde com o documento, não repita cru):\n- ${sinais}\n` : ''}
@@ -625,7 +628,8 @@ export default async function handler(req, res) {
         garantirFipe(v, { forcar: true }),
         new Promise((ok) => setTimeout(() => ok(null), 25000)),
       ]);
-      if (fipe?.valor_fipe > 0) Object.assign(v, { valor_fipe: fipe.valor_fipe, fipe_status: fipe.fipe_status, fipe_mes_referencia: fipe.fipe_mes_referencia, fipe_codigo: fipe.fipe_codigo });
+      if (fipe?.valor_fipe > 0) Object.assign(v, { valor_fipe: fipe.valor_fipe, fipe_status: fipe.fipe_status, fipe_mes_referencia: fipe.fipe_mes_referencia, fipe_codigo: fipe.fipe_codigo, fipe_faixa_min: fipe.fipe_faixa_min, fipe_faixa_max: fipe.fipe_faixa_max });
+      else if (fipe?.fipe_status === 'faixa_modelo' && fipe.fipe_faixa_max > 0) Object.assign(v, { fipe_status: 'faixa_modelo', fipe_mes_referencia: fipe.fipe_mes_referencia, fipe_faixa_min: fipe.fipe_faixa_min, fipe_faixa_max: fipe.fipe_faixa_max });
       else console.warn(`[veiculo] FIPE não obtida para ${veiculoId}: ${fipe ? `${fipe.fipe_status}${fipe.motivo ? ` — ${fipe.motivo}` : ''}${fipe.cota_esgotada ? ' (cota do dia esgotada)' : ''}` : 'sem resposta em 25 s'}`);
     } catch (e) { console.warn(`[veiculo] FIPE falhou para ${veiculoId}:`, e?.message || e); }
   }

@@ -138,5 +138,15 @@ let chamou = 0;
 const fusca = await buscarFipe(async () => { chamou++; return null; }, { marca: 'VW', modelo: 'FUSCA 1300 L', titulo: 'VW FUSCA 1300 L 1978 1978', ano_fabricacao: 1978, ano_modelo: 1978, tipo_veiculo: 'carro' });
 ok(fusca.status === 'fora_tabela' && chamou === 0, 'Fusca 1978 → fora_tabela, sem gastar cota');
 
+console.log('\nSEM ANO → FAIXA DO MODELO (20/10)');
+const gol = await buscarFipe(async (path) => ({
+  '/cars/brands': [{ code: '59', name: 'VW - VolksWagen' }],
+  '/cars/brands/59/models': [{ code: '1', name: 'Gol 1.0 Mi 8V' }, { code: '2', name: 'Golf 2.0' }],
+  '/cars/brands/59/models/1/years': [{ code: '32000-1', name: '32000 Gasolina' }, { code: '2014-1', name: '2014 Gasolina' }, { code: '1997-1', name: '1997 Gasolina' }, { code: '2005-1', name: '2005 Gasolina' }],
+  '/cars/brands/59/models/1/years/1997-1': { price: 'R$ 9.100,00', referenceMonth: 'outubro de 2026' },
+  '/cars/brands/59/models/1/years/2014-1': { price: 'R$ 31.500,00', referenceMonth: 'outubro de 2026' },
+})[path] ?? null, { marca: 'VW', modelo: null, titulo: 'VW/GOL', ano_fabricacao: null, ano_modelo: null, tipo_veiculo: 'carro' });
+ok(gol.status === 'faixa_modelo' && gol.valor === null && gol.faixa?.join() === '9100,31500', `VW/GOL sem ano → faixa ${gol.faixa?.join(' a ')} (valor nulo; zero km fora)`);
+
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
 process.exit(falhas ? 1 : 0);

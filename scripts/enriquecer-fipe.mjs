@@ -111,13 +111,19 @@ async function main() {
       semCota++; break;
     }
     const agora = new Date().toISOString();
+    // Faixa (20/10): intervalo do `aproximado` ou do `faixa_modelo` (lote sem ano) — mesma gravação de api/_fipe-garantir.js.
+    const faixa = Array.isArray(resultado.faixa) ? { fipe_faixa_min: resultado.faixa[0], fipe_faixa_max: resultado.faixa[1] } : { fipe_faixa_min: null, fipe_faixa_max: null };
     if (resultado.status === 'ok' || resultado.status === 'aproximado') {
       const gravou = await gravar(v.id, {
         valor_fipe: resultado.valor, fipe_codigo: resultado.codigoFipe,
-        fipe_mes_referencia: resultado.mesReferencia, fipe_status: resultado.status, fipe_atualizado_em: agora,
+        fipe_mes_referencia: resultado.mesReferencia, fipe_status: resultado.status, fipe_atualizado_em: agora, ...faixa,
       });
       if (!gravou) { erro++; continue; }
       resultado.status === 'ok' ? ok++ : aproximado++;
+    } else if (resultado.status === 'faixa_modelo') {
+      const gravou = await gravar(v.id, { valor_fipe: null, fipe_codigo: null, fipe_mes_referencia: resultado.mesReferencia, fipe_status: 'faixa_modelo', fipe_atualizado_em: agora, ...faixa });
+      if (!gravou) { erro++; continue; }
+      aproximado++;
     } else {
       const gravou = await gravar(v.id, { fipe_status: resultado.status, fipe_atualizado_em: agora });
       if (!gravou) { erro++; continue; }

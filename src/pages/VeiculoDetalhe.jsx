@@ -64,7 +64,7 @@ const COLUNAS_PUBLICAS = [
   'id', 'titulo', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
   'fotos', 'data_leilao', 'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta',
-  'ipva_situacao', 'tipo_veiculo', 'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
+  'ipva_situacao', 'tipo_veiculo', 'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em', 'fipe_faixa_min', 'fipe_faixa_max',
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance', 'forma_pagamento', 'opcionais', 'status_patio',
 ].join(',');
 
@@ -73,7 +73,7 @@ const COLUNAS = [
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
   'link_lote', 'fotos', 'data_leilao', 'leiloeiro', 'sinistro', 'is_sucata', 'financiavel',
   'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao', 'tipo_veiculo',
-  'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
+  'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em', 'fipe_faixa_min', 'fipe_faixa_max',
   // faltavam até 24/09: sem elas o selo de resultado e a reapuração ao abrir nunca rodavam aqui
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
   // página interna completa (24/09): local do pátio, documentos e condições do leiloeiro
@@ -87,6 +87,7 @@ const FIPE_EXPLICACAO = {
   sem_match: 'Não foi possível casar marca/modelo com a tabela FIPE automaticamente.',
   sem_dados: 'O leiloeiro não informou marca, modelo ou ano deste lote — sem eles não há como consultar a FIPE.',
   fora_tabela: 'A tabela FIPE só cobre veículos a partir de 1985 — não há referência oficial para este ano.',
+  faixa_modelo: 'O leiloeiro não informou o ano: esta é a faixa FIPE do modelo, do ano mais antigo ao mais novo da tabela. Confirme o ano no documento ou na vistoria.',
   erro: 'A consulta à FIPE falhou — tente novamente mais tarde.',
   leiloeiro: 'Valor da tabela FIPE informado pelo próprio leiloeiro na ficha do lote — não foi conferido por nós.',
 };
@@ -174,7 +175,7 @@ export default function VeiculoDetalhe() {
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
     const velha = Date.now() - Date.parse(v.fipe_atualizado_em || 0) > 25 * 86400000;
-    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados' && v.fipe_status !== 'fora_tabela');
+    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados' && v.fipe_status !== 'fora_tabela' && v.fipe_status !== 'faixa_modelo');
     if (!precisaBuscar) return;
     let cancelado = false;
     (async () => {
@@ -185,7 +186,7 @@ export default function VeiculoDetalhe() {
         if (cancelado) return;
         if (r.ok) {
           // ano/placa vêm quando o servidor os achou no edital ou na página do lote (26/09).
-          setV(prev => prev && ({ ...prev, valor_fipe: dados.valor_fipe, fipe_codigo: dados.fipe_codigo, fipe_mes_referencia: dados.fipe_mes_referencia, fipe_status: dados.fipe_status,
+          setV(prev => prev && ({ ...prev, valor_fipe: dados.valor_fipe, fipe_codigo: dados.fipe_codigo, fipe_mes_referencia: dados.fipe_mes_referencia, fipe_status: dados.fipe_status, fipe_faixa_min: dados.fipe_faixa_min ?? null, fipe_faixa_max: dados.fipe_faixa_max ?? null,
             ...(dados.ano_fabricacao && !prev.ano_fabricacao ? { ano_fabricacao: dados.ano_fabricacao, ano_modelo: dados.ano_modelo } : {}),
             ...(dados.placa && !prev.placa ? { placa: dados.placa } : {}) }));
           setCotaEsgotada(!!dados.cota_esgotada);
@@ -262,6 +263,7 @@ export default function VeiculoDetalhe() {
   const PAGAMENTO = { a_vista: 'À vista', parcelado: 'Parcelado', financiado: 'Financiável', a_vista_ou_parcelado: 'À vista ou parcelado' };
   const anoLabel = [v.ano_fabricacao, v.ano_modelo].filter(Boolean).join('/');
   const mostrarFipe = v.valor_fipe > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status);
+  const mostrarFaixa = !mostrarFipe && v.fipe_status === 'faixa_modelo' && Number(v.fipe_faixa_max) > 0;
   const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
@@ -392,7 +394,14 @@ export default function VeiculoDetalhe() {
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
                     {v.fipe_codigo ? `Código FIPE ${v.fipe_codigo} · ` : ''}{v.fipe_mes_referencia || ''}
                   </div>
+                  {v.fipe_status === 'aproximado' && Number(v.fipe_faixa_max) > Number(v.fipe_faixa_min) && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Versões: {fmtBRL(v.fipe_faixa_min)} a {fmtBRL(v.fipe_faixa_max)}</div>}
                   {(v.fipe_status === 'aproximado' || v.fipe_status === 'leiloeiro') && <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>{FIPE_EXPLICACAO[v.fipe_status]}</div>}
+                </>
+              ) : mostrarFaixa ? (
+                <>
+                  <div style={{ fontWeight: 900, color: '#0369a1', fontSize: 17 }}>{fmtBRL(v.fipe_faixa_min)} a {fmtBRL(v.fipe_faixa_max)}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{v.fipe_mes_referencia || ''}</div>
+                  <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>{FIPE_EXPLICACAO.faixa_modelo}</div>
                 </>
               ) : (
                 <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
