@@ -23,7 +23,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
-import { supabase, buscarCliente, ativarPlanoDireto, mapearPlano } from './_webhook-core.js';
+import { supabase, buscarCliente, ativarPlanoDireto, mapearPlano, planoDaReferencia } from './_webhook-core.js';
 import { alertarErro } from './_error-alert.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // externalReference de compra de produto
 
@@ -108,6 +108,28 @@ async function handler(req) {
           try { cliente = await buscarCliente({ gatewayCustomerId: custId, email, gateway: 'asaas' }); }
           catch (e) { console.error('[reconciliar-asaas] perfil ilegível, pagamento pulado:', p.id, e?.message || e); continue; }
           if (!cliente) continue;
+
+          // TRILHA VEÍCULOS / COMBO (20/10): o plano vem da referência (ou da descrição que o Asaas copia
+          // da assinatura), nunca do valor — 99,90 é também o Pro legado. ativarPlanoDireto é idempotente
+          // por pagamento no acesso a veículos, então re-chamar com a mesma cobrança não estende de novo.
+          const refPlano = (() => {
+            const pr = planoDaReferencia(String(p.externalReference || ''));
+            if (pr === 'veiculos' || pr === 'combo') return pr;
+            if (/^Leil[aã]o de Ve[ií]culos/i.test(p.description || '')) return 'veiculos';
+            if (/^Combo Im[oó]veis/i.test(p.description || '')) return 'combo';
+            return null;
+          })();
+          // Veículos: idempotente de ponta a ponta (repetir não estende nem conta conversão). Combo passa pela
+          // ativação inteira do Pro, então só entra no mesmo caso de órfão do Pro (explorador sem inadimplência).
+          if (refPlano === 'combo' && (cliente.role !== 'explorador' || cliente.inadimplente_desde)) continue;
+          if (refPlano) {
+            try {
+              await ativarPlanoDireto({ userId: cliente.id, planoKey: refPlano, gateway: 'asaas',
+                cobranca: { gatewayPaymentId: String(p.id), valor: Number(p.value) } });
+              corrigidos++;
+            } catch (e) { erros.push(`${cliente.id}: ${e?.message || 'erro'}`); } // padrao-ok: motivo vai para `erros`, devolvido na resposta do cron
+            continue;
+          }
 
           // Órfão: pagou mas segue no Explorador (e não é suspensão por inadimplência).
           if (cliente.role !== 'explorador' || cliente.inadimplente_desde) continue;

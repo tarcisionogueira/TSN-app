@@ -28,6 +28,22 @@ const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sbHdr = () => ({ apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' });
 const dia = (v) => String(v || '').slice(0, 10); // 'YYYY-MM-DD' (MP traz ISO completo; Asaas só a data)
 
+// DUAS TRILHAS (20/10): o cliente pode ter o Pro E o plano Veículos ao mesmo tempo. A limpeza só
+// cancela recorrências da MESMA trilha da que ficou; o COMBO (Pro + veículos) alcança as duas.
+// Plano de cada recorrência: MP pela external_reference (`uid|plano`); Asaas pela externalReference
+// (gravada desde 20/10) ou, nas antigas sem ela, pela descrição ("Leilão de Veículos" → veículos).
+// Sem plano informado (chamador antigo), a trilha de veículos NUNCA é tocada.
+const trilhaDe = (plano) => (/^veiculos/.test(String(plano || '')) ? 'veiculos' : 'principal');
+const ehCombo = (plano) => /^combo/.test(String(plano || ''));
+export const alcancaTrilha = (planoMantido, planoOutro) =>
+  ehCombo(planoMantido) || trilhaDe(planoMantido) === trilhaDe(planoOutro);
+export function planoDaAssinaturaAsaas(s) {
+  const ref = String(s?.externalReference || '');
+  const doRef = ref.includes('|') ? ref.split('|')[1] : '';
+  if (doRef) return doRef;
+  return /ve[ií]culo/i.test(String(s?.description || '')) ? 'veiculos' : 'principal';
+}
+
 async function asaasIdDoPerfil(userId) {
   if (!userId || !SB_URL || !SB_KEY) return null;
   const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=asaas_id&limit=1`, { headers: sbHdr() });
@@ -70,7 +86,7 @@ export async function assinaturasAsaasAtivas({ asaasCustomerId, userId }) {
     const cust = asaasCustomerId || await asaasIdDoPerfil(userId);
     if (!cust) return { subs: [], erro: null };
     const d = await asaasGet(`/subscriptions?customer=${encodeURIComponent(cust)}&status=ACTIVE&limit=20`);
-    return { subs: (d?.data || []).filter((s) => s?.id).map((s) => ({ id: String(s.id), criadaEm: dia(s.dateCreated) })), erro: null };
+    return { subs: (d?.data || []).filter((s) => s?.id).map((s) => ({ id: String(s.id), criadaEm: dia(s.dateCreated), plano: planoDaAssinaturaAsaas(s) })), erro: null };
   } catch (e) { return { subs: [], erro: e?.message || String(e) }; }
 }
 
@@ -94,11 +110,14 @@ export async function apagarAssinaturaAsaas(subId) {
 // O cliente tem OUTRA recorrência ativa além de `excetoAsaasSubId`? (MP authorized do userId ou
 // subscription ACTIVE do Asaas). Tri-estado: { tem, erro }. Usado no vencimento de subscription
 // nunca paga: só é "troca abandonada" quando existe outra recorrência que o cliente segue pagando.
-export async function temOutraRecorrenciaAtiva({ userId, asaasCustomerId, excetoAsaasSubId }) {
+export async function temOutraRecorrenciaAtiva({ userId, asaasCustomerId, excetoAsaasSubId, plano = 'principal' }) {
+  // Só conta recorrência da MESMA trilha (20/10): a assinatura de veículos não prova que o cliente
+  // "segue pagando" o Pro, e vice-versa.
+  const mesma = (outro) => alcancaTrilha(plano, outro) || alcancaTrilha(outro, plano);
   try {
     const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
     if (erro) return { tem: false, erro };
-    if (subs.some((x) => x.id !== String(excetoAsaasSubId || ''))) return { tem: true, erro: null };
+    if (subs.some((x) => x.id !== String(excetoAsaasSubId || '') && mesma(x.plano))) return { tem: true, erro: null };
     const mpToken = process.env.MP_ACCESS_TOKEN;
     if (!mpToken || !userId) return { tem: false, erro: null };
     const email = await emailDaConta(userId);
@@ -106,11 +125,11 @@ export async function temOutraRecorrenciaAtiva({ userId, asaasCustomerId, exceto
     const r = await fetch(`${MP_BASE}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${mpToken}` } });
     if (!r.ok) return { tem: false, erro: `MP busca ${r.status}` };
     const d = await r.json();
-    return { tem: (d?.results || []).some((x) => String(x.external_reference || '').split('|')[0] === String(userId)), erro: null };
+    return { tem: (d?.results || []).some((x) => { const [uid, pl] = String(x.external_reference || '').split('|'); return uid === String(userId) && mesma(pl); }), erro: null };
   } catch (e) { return { tem: false, erro: e?.message || String(e) }; }
 }
 
-export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterCriadaEm = null, origem }) {
+export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterCriadaEm = null, manterPlano = 'principal', origem }) {
   const out = { mpCancelados: [], asaasCancelados: [], erros: [], pulado: null };
   const alertar = () => {
     if (!out.erros.length) return;
@@ -140,13 +159,15 @@ export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerI
       const d = await r.json();
       for (const p of d?.results || []) {
         if (String(p.id) === String(manterMpId || '')) continue;
-        if (String(p.external_reference || '').split('|')[0] !== String(userId)) continue;
+        const [uidRef, planoRef] = String(p.external_reference || '').split('|');
+        if (uidRef !== String(userId)) continue;
+        if (!alcancaTrilha(manterPlano, planoRef)) continue; // outra trilha (Pro × Veículos): fica
         mpOutros.push({ id: String(p.id), criadaEm: dia(p.date_created) });
       }
     }
     const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
     if (erro) throw new Error(`Asaas (consulta): ${erro}`);
-    const asaasOutros = subs.filter((s) => s.id !== String(manterAsaasSubId || ''));
+    const asaasOutros = subs.filter((s) => s.id !== String(manterAsaasSubId || '') && alcancaTrilha(manterPlano, s.plano));
 
     // Trava 2: existe alguma MAIS NOVA que a mantida? Então esta não é a escolha final do cliente.
     const maisNova = [...mpOutros, ...asaasOutros].find((o) => refDia && o.criadaEm && o.criadaEm > refDia);

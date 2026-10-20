@@ -39,6 +39,61 @@ const planoBase = (p) => String(p || '').replace(/_(anual|vista|mensal)$/i, '');
 // um caminho e não pelo outro dependendo de qual webhook chegou primeiro (18/09).
 const ROLES_COM_FIDELIDADE = ['clube', 'clube_anual'];
 
+// ─── DUAS TRILHAS DE ASSINATURA (20/10, decisão do dono) ─────────────────────────────────
+// Até aqui o faturamento supunha UMA assinatura por cliente. Com o plano VEÍCULOS (R$ 29,90) o cliente
+// pode ter o Pro E veículos ao mesmo tempo — por isso a assinatura de veículos é outra TRILHA:
+//   • principal: top2 / clube / assessorado / combo (o combo é o Pro + veículos numa assinatura só);
+//   • veículos:  'veiculos'.
+// A trilha veículos NUNCA mexe em role/ciclo/agendamento: ela só estende `perfis.acesso_veiculos_ate`
+// (+1 mês por cobrança REAL, uma vez por pagamento). Cobrança recusada ou assinatura cancelada não
+// rebaixa ninguém — o acesso vence sozinho; estorno/chargeback revogam o acesso na hora. Evento da
+// trilha veículos JAMAIS pode rebaixar o Pro, o Clube ou a Assessoria do mesmo cliente.
+// O plano vem da REFERÊNCIA do pedido (`userId|plano`), nunca do valor: 99,90 é também o Pro legado
+// no mapearPlano, e 29,90 não mapeia nada.
+export const PLANO_VEICULOS = 'veiculos';
+export const PLANO_COMBO = 'combo';
+export const ehTrilhaVeiculos = (k) => planoBase(k) === PLANO_VEICULOS;
+export const daAcessoVeiculos = (k) => [PLANO_VEICULOS, PLANO_COMBO].includes(planoBase(k));
+export function planoDaReferencia(ref) {
+  const s = String(ref || ''); const i = s.indexOf('|');
+  const plano = i > 0 ? s.slice(i + 1).trim() : '';
+  return /^[a-z0-9_]{2,40}$/.test(plano) ? plano : null;
+}
+
+// +1 mês sobre o que ainda resta (ou sobre agora), UMA vez por pagamento (marca em
+// webhook_eventos_processados — o webhook de assinatura e o tópico `payment` do MP chegam com o
+// MESMO id, e a reconciliação re-chama com a mesma cobrança). A folga de pagamento atrasado mora
+// em tem_acesso_veiculos() (3 dias), não aqui: somar folga a cada mês faria o acesso escorregar.
+export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway }) {
+  if (!userId || !gatewayPaymentId) return { skipped: 'sem_cobranca' };
+  if (await eventoJaProcessado({ gateway, gatewayPaymentId, evento: 'acesso_veiculos' })) return { ok: true, duplicado: true };
+  try {
+    const { data: p, error: eP } = await supabase.from('perfis').select('acesso_veiculos_ate').eq('id', userId).maybeSingle();
+    if (eP) throw new Error(`leitura do perfil falhou: ${eP.message}`);
+    const atual = p?.acesso_veiculos_ate ? new Date(p.acesso_veiculos_ate) : null;
+    const base = atual && atual.getTime() > Date.now() ? atual : new Date();
+    base.setMonth(base.getMonth() + 1);
+    const { data: ok, error } = await supabase.from('perfis').update({ acesso_veiculos_ate: base.toISOString() }).eq('id', userId).select('id');
+    if (error) throw new Error(error.message);
+    if (!ok?.length) throw new Error('perfil não encontrado para estender o acesso a veículos');
+    console.log(`[${gateway}] acesso a veículos de ${userId} até ${base.toISOString()}`);
+    return { ok: true, ate: base.toISOString(), anterior: p?.acesso_veiculos_ate || null };
+  } catch (e) { // padrao-ok: desfaz a marca e RELANÇA o erro — o webhook devolve 5xx e o gateway reentrega
+    await removerEventoProcessado({ gateway, gatewayPaymentId, evento: 'acesso_veiculos' });
+    throw e;
+  }
+}
+
+// Estorno/chargeback de cobrança que deu acesso a veículos: o acesso acaba agora.
+export async function revogarAcessoVeiculos({ userId, gateway, motivo }) {
+  if (!userId) return { skipped: 'sem_cliente' };
+  const { error } = await supabase.from('perfis').update({ acesso_veiculos_ate: new Date().toISOString() })
+    .eq('id', userId).gt('acesso_veiculos_ate', new Date().toISOString());
+  if (error) throw new Error(`revogar acesso a veículos: ${error.message}`);
+  console.log(`[${gateway}] acesso a veículos de ${userId} revogado (${motivo || 'estorno'})`);
+  return { ok: true };
+}
+
 // ── Escada de planos do CLIENTE (regra do dono, 30/07): um pagamento NUNCA rebaixa ──
 // o role. A mensalidade do Investidor Pro CONTINUA sendo cobrada enquanto o cliente é
 // assessorado (a assessoria é por arrematação, em cima do Pro) — sem esta guarda, a
@@ -262,6 +317,8 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // pagou. Negar isso trocaria o buraco de acesso por um buraco de atendimento: cliente
   // adimplente preso como Explorador porque um webhook se perdeu.
   const temCobrancaReal = !!(cobranca?.gatewayPaymentId && Number(cobranca.valor) > 0);
+  // TRILHA VEÍCULOS (20/10): não toca role/ciclo/agendamento/garantia do plano principal — só o acesso.
+  if (ehTrilhaVeiculos(planoKey)) return ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal });
   const semHistoricoDePagamento = !atual?.plano_pago_em && !PAGANTES.includes(atual?.role) && !atual?.role_anterior;
   if (semHistoricoDePagamento && !temCobrancaReal) {
     console.log(`[${gateway}] ativação SEGURADA para ${userId} (${planoKey}): mandato aceito, cobrança ainda não recebida`);
@@ -270,20 +327,22 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // O role fica sempre na BASE (top2/clube/assessorado) — o CICLO mora só em plano_ciclo (D5).
   // Assim nenhum gate que leia o sufixo do role classifica o anual como mensal.
   const planoBaseKey = String(planoKey).replace(/_anual$/, '');
+  // COMBO (20/10) = Pro + veículos numa assinatura: na escada de planos ele é o Pro (role top2).
+  const roleKey = planoBaseKey === PLANO_COMBO ? 'top2' : planoBaseKey;
   // Recuperação de inadimplência restaura o role suspenso (que pode ser MAIOR que o
   // plano pago — ex.: assessorado suspenso pagando a mensalidade do Pro); fora dela,
   // a escada decide: pagamento só SOBE o role, nunca desce (guarda anti-flip).
   const candidato = (atual?.role_anterior && atual?.inadimplente_desde)
-    ? roleAposPagamento(atual.role_anterior, planoBaseKey)
-    : planoBaseKey;
+    ? roleAposPagamento(atual.role_anterior, roleKey)
+    : roleKey;
   const upd = {
     inadimplente_desde: null,
     role_anterior:      null,
     // #246 (20/10): DOWNGRADE AGENDADO cumprido — o cliente pediu para descer (plano_agendado) e autorizou o plano
     // menor. A escada (só sobe) mantinha o Clube cobrando o preço do Pro. Só vale para o plano que ELE agendou.
-    role:               atual?.plano_agendado && atual.plano_agendado === planoBaseKey
-      ? planoBaseKey
-      : (roleAposPagamento(atual?.role, candidato) ?? planoBaseKey),
+    role:               atual?.plano_agendado && atual.plano_agendado === roleKey
+      ? roleKey
+      : (roleAposPagamento(atual?.role, candidato) ?? roleKey),
   };
   // CICLO do plano (mensal/anual) derivado do planoKey — o recorrente MP não usa valor.
   const cicloKey = /_anual$/.test(planoKey) ? 'anual' : 'mensal';
@@ -318,6 +377,10 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   }
   const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
   if (error) throw new Error(error.message);
+  // Combo pago de verdade → também libera veículos (+1 mês, uma vez por pagamento).
+  if (planoBaseKey === PLANO_COMBO && temCobrancaReal) {
+    await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway });
+  }
   // ASSESSORIA INCLUI O PRO (06/10): assessoria PAGA de verdade → para de cobrar a mensalidade
   // do Investidor Pro. Só com cobrança real (mandato autorizado sem pagamento não conta) e só se o
   // papel de fato virou assessorado (equipe/clube não são tocados). Nunca lança.
@@ -408,13 +471,58 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   return { ok: true, plano: planoKey };
 }
 
+// Ativação da TRILHA VEÍCULOS: só com cobrança real (mandato autorizado não é pagamento — mesma regra
+// de 16/08). Comissão de rede como assinatura e conversão de anúncio, iguais às do Pro.
+async function ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal }) {
+  if (!temCobrancaReal) {
+    console.log(`[${gateway}] veículos: mandato de ${userId} aceito, cobrança ainda não recebida`);
+    return { ok: true, skipped: 'aguardando_pagamento' };
+  }
+  const r = await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway });
+  if (r?.duplicado) return { ok: true, plano: PLANO_VEICULOS, duplicado: true };
+  const primeiraVez = !r?.anterior; // nunca teve acesso → boas-vindas; renovação não é estreia
+  try {
+    const { data: dist, error: eDist } = await supabase.rpc('distribuir_comissao_rede', {
+      p_comprador: userId, p_tipo: 'assinatura', p_valor: Number(cobranca.valorLiquido ?? cobranca.valor),
+      p_gateway_payment_id: String(cobranca.gatewayPaymentId),
+    });
+    if (eDist) throw new Error(`distribuir_comissao_rede: ${eDist.message}`);
+    if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede (veículos):`, JSON.stringify(dist).slice(0, 200));
+  } catch (e) {
+    console.error(`[${gateway}] comissao_rede (veículos):`, e.message);
+    alertarErro({ rota: `webhook/${gateway}`, erro: `Falha na comissão de rede (veículos): ${e.message}`, extra: { user_id: userId, payment_id: cobranca.gatewayPaymentId } });
+  }
+  await registrarConversaoAnuncio({ userId, valor: cobranca.valor, base: PLANO_VEICULOS, gateway });
+  await logAtividade(userId, 'plano_alterado', 'acesso a veículos', { plano: PLANO_VEICULOS, gateway, ate: r?.ate || null });
+  if (primeiraVez) {
+    try {
+      const { data: u, error: errU } = await supabase.auth.admin.getUserById(userId);
+      if (errU) throw new Error(`getUserById: ${errU.message}`);
+      const paraEmail = u?.user?.email;
+      const primeiroNome = String(u?.user?.user_metadata?.nome || '').trim().split(' ')[0] || '';
+      if (paraEmail) {
+        await enviarEmail({
+          from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+          to: paraEmail,
+          subject: 'Leilão de Veículos liberado — BidPro Brasil',
+          html: `<p>Olá, ${primeiroNome}!</p><p>Recebemos o seu pagamento: o <strong>Leilão de Veículos</strong> está liberado na sua conta. Agora você vê quem é o leiloeiro de cada carro, acessa o lote e gera o relatório por IA antes de dar o lance.</p><p>Bons arremates!<br/>BidPro Brasil</p>`,
+          meta: { tipo: 'boas_vindas_veiculos', userId },
+        });
+      }
+    } catch (e) { console.error(`[${gateway}] boas-vindas veículos:`, e?.message || e); }
+  }
+  return { ok: true, plano: PLANO_VEICULOS };
+}
+
 // ── SUSPENSÃO DIRETA POR REFERÊNCIA (falha de recorrência) ────────────────────
 // Cobrança recorrente recusada / assinatura pausada ou cancelada no MP → rebaixa
 // o cliente para 'explorador' e marca inadimplência (dispara o aviso in-app).
 // Idempotente: se já está inadimplente, não repete. Guarda role_anterior para
 // reativar quando o pagamento voltar.
-export async function suspenderPlanoDireto({ userId, gateway }) {
+export async function suspenderPlanoDireto({ userId, gateway, planoKey = null }) {
   if (!userId) return { skipped: 'sem_referencia' };
+  // Falha/cancelamento da assinatura de VEÍCULOS não rebaixa o plano principal: o acesso vence sozinho.
+  if (ehTrilhaVeiculos(planoKey)) return { ok: true, ignorado: 'trilha_veiculos' };
   const { data: cliente, error: eCli } = await supabase
     .from('perfis').select('role, inadimplente_desde, plano_ciclo, plano_vencimento').eq('id', userId).maybeSingle();
   // 19/10 (forma 2): erro de leitura virava `perfil_nao_encontrado` com 200 e a suspensão se perdia.
@@ -602,12 +710,20 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
 // comissão de rede — `valor` (bruto) segue sendo o que BidPro cobrou do cliente e o que vai na
 // NFS-e própria (imposto da BidPro incide sobre o que ela faturou, não sobre o que sobrou depois
 // da taxa do gateway). Sem `valorLiquido`, cai no bruto — nunca quebra por falta do dado.
-export async function processarConfirmado({ valor, valorLiquido, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico, planoForcado = null }) {
+export async function processarConfirmado({ valor, valorLiquido, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico, planoForcado = null, planoReferencia = null }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (!cliente) {
     console.log(`[${gateway}] perfil não encontrado — id=${gatewayCustomerId} email=${email}`);
     return { skipped: 'perfil_nao_encontrado' };
   }
+  // TRILHA VEÍCULOS / COMBO (20/10): o plano vem da referência do pedido, não do valor (99,90 = Pro legado
+  // no mapearPlano; 29,90 não mapeia). Veículos não toca role; Combo é o Pro + acesso a veículos.
+  if (ehTrilhaVeiculos(planoReferencia)) {
+    return ativarTrilhaVeiculos({ userId: cliente.id, gateway, temCobrancaReal: !!(gatewayPaymentId && Number(valor) > 0),
+      cobranca: { gatewayPaymentId, valor, valorLiquido } });
+  }
+  const ehComboRef = planoBase(planoReferencia) === PLANO_COMBO;
+  if (ehComboRef && gatewayPaymentId && Number(valor) > 0) await estenderAcessoVeiculos({ userId: cliente.id, gatewayPaymentId, gateway });
 
   // Pagamento avulso de SERVIÇO (mp-checkout sem planoId): apenas limpa
   // inadimplência; NUNCA mapeia valor→plano (senão um serviço de R$500/5000/99,90
@@ -615,7 +731,8 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // `planoForcado` (20/10, #244): a ASSESSORIA paga pelo Checkout Transparente do MP chega com metadata.tipo='servico'
   // e proposito='assessoria' — o preço já foi conferido no mp-checkout (≥ tabela; de 4x em diante o total leva juros
   // e sai das faixas do mapearPlano). Sem isto ela não comissionava nem promovia; pelo Asaas, a mesma venda fazia os dois.
-  const mapeado = planoForcado ? { plano: planoForcado, role: planoForcado } : (servico ? null : mapearPlano(valor, descricao));
+  const mapeado = ehComboRef ? { plano: PLANO_COMBO, role: 'top2', ciclo: 'mensal' }
+    : planoForcado ? { plano: planoForcado, role: planoForcado } : (servico ? null : mapearPlano(valor, descricao));
   let cicloMarcado = false; // marca 'ciclo_aplicado' gravada nesta chamada (desfeita se a gravação falhar)
 
   // Atualiza perfil. NÃO limpar inadimplência aqui: um pagamento de SERVIÇO (mapeado=null)
@@ -802,7 +919,9 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
 }
 
 // ── PAGAMENTO VENCIDO ─────────────────────────────────────────────────────────
-export async function processarVencido({ gatewayCustomerId, email, gateway, servico = false }) {
+export async function processarVencido({ gatewayCustomerId, email, gateway, servico = false, planoReferencia = null }) {
+  // Cobrança de VEÍCULOS vencida: o acesso vence sozinho — não rebaixa o plano principal (20/10).
+  if (ehTrilhaVeiculos(planoReferencia)) return { ok: true, trilha_veiculos: true, suspensao_ignorada: true };
   // Mesmo guard do processarRecusado (19/08): cobrança avulsa de SERVIÇO vencida não é
   // inadimplência de assinatura — sem isto, o assinante em dia que abandona um boleto de
   // serviço seria rebaixado a explorador com documentos em prazo de expiração.
@@ -842,7 +961,7 @@ export async function processarVencido({ gatewayCustomerId, email, gateway, serv
 // TODO (pendência): submissão AUTOMÁTICA da defesa via API de disputas do MP.
 // Adiado até poder validar contra a API real — ver docs/PENDENCIAS_PAGAMENTOS.md.
 // Hoje o dossiê fica pronto e copiável em /admin/chargebacks (envio manual).
-export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw, servico = false }) {
+export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw, servico = false, planoReferencia = null }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
 
   // Busca o aceite mais relevante (por pagamento → por usuário → por email)
@@ -909,7 +1028,9 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   // As duas etapas abaixo eram `catch (_) {}` (04/10, varredura): falhavam caladas e o evento
   // ficava marcado como processado. Agora as falhas são juntadas e, depois do alerta, LANÇAM —
   // o webhook desfaz a marca e o gateway reentrega (dossiê é upsert; estorno é idempotente).
-  if (!servico) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); } }
+  // Trilha VEÍCULOS (20/10): revoga só o acesso a veículos; Combo revoga o acesso E rebaixa o Pro.
+  if (daAcessoVeiculos(planoReferencia)) { try { await revogarAcessoVeiculos({ userId: cliente?.id, gateway, motivo: 'chargeback' }); } catch (e) { falhas.push(`acesso veículos: ${e?.message || e}`); } }
+  if (!servico && !ehTrilhaVeiculos(planoReferencia)) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); } }
 
   // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
   // não é mais devida). Evita "refund + comissão paga" (perda dupla).
@@ -936,16 +1057,23 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
 // mais devida (senão: indicar → comissão vira 'disponivel' → reembolso → sacar = fraude).
 // `suspender` (padrão true no reembolso TOTAL) rebaixa o acesso; no PARCIAL fica false
 // (o cliente pagou a maior parte) — a reconciliação re-ativa se a assinatura seguir ativa.
-export async function processarReembolso({ valor, email, gatewayCustomerId, gatewayPaymentId, gateway, suspender = true, servico = false }) {
+export async function processarReembolso({ valor, email, gatewayCustomerId, gatewayPaymentId, gateway, suspender = true, servico = false, planoReferencia = null }) {
   // 22/08: SERVIÇO avulso reembolsado NÃO derruba a assinatura. O guard já existia em
   // processarVencido/processarRecusado, mas processarReembolso não recebia `servico` e chamava
   // processarVencido sem ele — um assinante `clube` em dia que reembolsa uma assessoria avulsa
   // pelo Asaas era rebaixado a explorador (inadimplente_desde, docs em prazo LGPD). O MP já
   // fecha isto; agora o núcleo fecha para os dois gateways.
-  const suspendeAcesso = suspender && !servico;
+  const suspendeAcesso = suspender && !servico && !ehTrilhaVeiculos(planoReferencia);
   // Mesma regra do chargeback (04/10): a suspensão não bloqueia o estorno, mas nenhuma das duas
   // falha mais calada — juntadas e lançadas depois do alerta, para o gateway reentregar.
   const falhas = [];
+  // Reembolso TOTAL de Veículos/Combo (20/10): o acesso a veículos acaba agora.
+  if (suspender && daAcessoVeiculos(planoReferencia)) {
+    try {
+      const cli = await buscarCliente({ gatewayCustomerId, email, gateway });
+      await revogarAcessoVeiculos({ userId: cli?.id, gateway, motivo: 'reembolso' });
+    } catch (e) { falhas.push(`acesso veículos: ${e?.message || e}`); }
+  }
   if (suspendeAcesso) {
     try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (e) { falhas.push(`suspensão: ${e?.message || e}`); }
   }
@@ -972,7 +1100,9 @@ async function setExpiracaoDocumentos(userId) {
 }
 
 // ── PAGAMENTO RECUSADO ────────────────────────────────────────────────────────
-export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway, servico = false }) {
+export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway, servico = false, planoReferencia = null }) {
+  // Recusa da assinatura de VEÍCULOS registra o erro como serviço — nunca rebaixa o plano principal (20/10).
+  if (ehTrilhaVeiculos(planoReferencia)) servico = true;
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente) {
     const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];

@@ -33,6 +33,7 @@ export const config = { runtime: 'nodejs', maxDuration: 20 };
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -73,6 +74,8 @@ async function cancelarRecorrencias({ userId, email }) {
       // AUTENTICADO. Sem ele, um e-mail no body cancelaria a assinatura de terceiro.
       const ids = (j?.results || [])
         .filter((x) => String(x.external_reference || '').split('|')[0] === userId)
+        // Troca do plano PRINCIPAL não cancela a assinatura de Veículos (outra trilha, 20/10).
+        .filter((x) => !/^veiculos/.test(String(x.external_reference || '').split('|')[1] || ''))
         .map((x) => x.id).filter(Boolean);
       for (const id of ids) {
         const c = await fetch(`${MP_URL}/preapproval/${id}`, {
@@ -96,7 +99,8 @@ async function cancelarRecorrencias({ userId, email }) {
         const rs = await fetch(`${ASAAS_URL}/subscriptions?customer=${cus.id}&status=ACTIVE`, {
           headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(12000),
         });
-        const subs = rs.ok ? (await rs.json().catch(() => null))?.data || [] : [];
+        const subs = (rs.ok ? (await rs.json().catch(() => null))?.data || [] : [])
+          .filter((x) => planoDaAssinaturaAsaas(x) !== 'veiculos'); // outra trilha (20/10)
         for (const s of subs) {
           const d = await fetch(`${ASAAS_URL}/subscriptions/${s.id}`, {
             method: 'DELETE', headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(12000),

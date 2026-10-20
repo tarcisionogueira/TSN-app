@@ -17,6 +17,7 @@ import { getUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { hashCpf, cpfDoRegistro } from './_cpf.js';
 import { alertarErro } from './_error-alert.js';
+import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 
 const SB_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
@@ -56,7 +57,8 @@ async function cancelarMP(candidatos, email, userId) {
       const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
       const d = await r.json().catch(() => null);
       for (const p of (d?.results || [])) {
-        if (String(p.external_reference || '').split('|')[0] === userId && p.id) ids.add(String(p.id));
+        // Garantia do plano PRINCIPAL não cancela a assinatura de Veículos (outra trilha, 20/10).
+        if (String(p.external_reference || '').split('|')[0] === userId && p.id && !/^veiculos/.test(String(p.external_reference || '').split('|')[1] || '')) ids.add(String(p.id));
       }
     }
   } catch { /* segue com os candidatos do perfil */ }
@@ -78,7 +80,7 @@ async function cancelarAsaas(customerId) {
   if (!ASAAS_KEY || !customerId) return 0;
   try {
     const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
-    const subs = (await sr.json().catch(() => null))?.data || [];
+    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => planoDaAssinaturaAsaas(x) !== 'veiculos');
     let n = 0;
     for (const s of subs) {
       const dr = await fetch(`${ASAAS_URL}/subscriptions/${s.id}`, { method: 'DELETE', headers: { access_token: ASAAS_KEY } });

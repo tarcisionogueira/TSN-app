@@ -15,6 +15,7 @@ import {
   registrarConversaoAnuncio,
   registrarLiberacaoPagamento,
   buscarCliente,
+  planoDaReferencia,
 } from './_webhook-core.js';
 import { cancelarOutrasRecorrencias, assinaturaAsaasNuncaPaga, apagarAssinaturaAsaas, temOutraRecorrenciaAtiva } from './_recorrencia-unica.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
@@ -151,6 +152,16 @@ export default async function handler(req, res) {
     // mapearia o valor para PLANO (elevação indevida) e processarRecusado suspenderia a
     // assinatura por um serviço recusado — os dois buracos que o MP já fecha.
     servico: /^servico[|:]/i.test(extRef) || /^\[servico\]/i.test(pagReal.description || ''),
+    // TRILHA (20/10): Veículos/Combo pela referência `uid|plano` gravada na assinatura; na falta dela,
+    // pela descrição que o Asaas copia da assinatura para cada cobrança. Nunca pelo valor (99,90 = Pro legado).
+    planoReferencia: (() => {
+      const pr = planoDaReferencia(extRef);
+      if (pr === 'veiculos' || pr === 'combo') return pr;
+      const d = String(pagReal.description || '');
+      if (/^Leil[aã]o de Ve[ií]culos/i.test(d)) return 'veiculos';
+      if (/^Combo Im[oó]veis/i.test(d)) return 'combo';
+      return null;
+    })(),
   };
 
   // Produto avulso? externalReference = compras_produtos.id (uuid). Roteia para o
@@ -315,7 +326,7 @@ export default async function handler(req, res) {
           const cli = await buscarCliente({ gatewayCustomerId: custId, email: custEmail, gateway: 'asaas' });
           // custEmail vem sempre nulo (o Asaas manda `customer` como string): o helper busca o e-mail
           // da CONTA pelo userId — é o payer_email dos mandatos do MP.
-          if (cli?.id) await cancelarOutrasRecorrencias({ userId: cli.id, email: custEmail, asaasCustomerId: custId, manterAsaasSubId: pagReal.subscription, origem: 'asaas-confirmado' });
+          if (cli?.id) await cancelarOutrasRecorrencias({ userId: cli.id, email: custEmail, asaasCustomerId: custId, manterAsaasSubId: pagReal.subscription, manterPlano: contexto.planoReferencia || 'principal', origem: 'asaas-confirmado' });
         } catch (e) { console.error('[asaas-webhook] recorrência única:', e?.message || e); }
       }
       return res.status(200).json(result);
@@ -336,7 +347,7 @@ export default async function handler(req, res) {
           try { cliId = (await buscarCliente({ gatewayCustomerId: custId, email: custEmail, gateway: 'asaas' }))?.id || null; }
           catch (e) { erroPerfil = e?.message || String(e); console.error('[asaas-webhook] overdue: perfil ilegível', erroPerfil); }
           const outra = erroPerfil ? { tem: false, erro: `perfil: ${erroPerfil}` }
-            : cliId ? await temOutraRecorrenciaAtiva({ userId: cliId, asaasCustomerId: custId, excetoAsaasSubId: pagReal.subscription })
+            : cliId ? await temOutraRecorrenciaAtiva({ userId: cliId, asaasCustomerId: custId, excetoAsaasSubId: pagReal.subscription, plano: contexto.planoReferencia || 'principal' })
             : { tem: false, erro: null };
           if (nuncaPaga === null || outra.erro) {
             console.error('[asaas-webhook] overdue de subscription: situação incerta — reentrega', pagReal.subscription, outra.erro || 'pagamentos ilegíveis');

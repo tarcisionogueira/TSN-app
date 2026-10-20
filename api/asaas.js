@@ -53,6 +53,9 @@ const PLANOS_FALLBACK = {
   clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },
   assessorado_vista: { nome: 'Assessorado (À Vista)',       valor: 4800.00,  avulso: true },
+  // 20/10: segunda trilha (ver "DUAS TRILHAS" em _webhook-core.js). O plano vai na externalReference.
+  veiculos:          { nome: 'Leilão de Veículos',          valor: 29.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  combo:             { nome: 'Combo Imóveis + Veículos',    valor: 99.90,    ciclo: 'MONTHLY', maxPayments: undefined },
 };
 
 async function getPlanosConfig() {
@@ -450,6 +453,9 @@ export default async function handler(req, res) {
           cycle: info.ciclo,
           description: info.nome,
           maxPayments: info.maxPayments || undefined,
+          // `uid|plano` (20/10): o webhook identifica o plano pela referência, não pelo valor — 99,90 do
+          // Combo é também o Pro legado no mapearPlano, e 29,90 de Veículos não mapeia nada.
+          externalReference: authUser?.id ? `${authUser.id}|${plano}` : undefined,
         });
         subscriptionId = subscription.id;
 
@@ -519,6 +525,10 @@ export default async function handler(req, res) {
       const { email, plano } = body;
       const info = PLANOS[plano];
       if (!info || info.avulso) return res.status(400).json({ error: 'Plano inválido para gerenciamento de assinatura' });
+      // Veículos/Combo (20/10) não reaproveitam a assinatura ativa: mudar só o valor dela deixaria a
+      // externalReference antiga (o webhook leria Pro, sem veículos). 404 = o checkout cria uma NOVA; a
+      // antiga da mesma trilha é cancelada depois do 1º pagamento (_recorrencia-unica.js).
+      if (['veiculos', 'combo'].includes(plano)) return res.status(404).json({ error: 'Plano novo: criar assinatura própria.' });
 
       // Localiza customer e assinatura ativa
       const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);

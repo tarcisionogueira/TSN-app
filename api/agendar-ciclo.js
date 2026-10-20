@@ -16,6 +16,7 @@ export const config = { runtime: 'nodejs', maxDuration: 20 };
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -41,7 +42,8 @@ async function cancelarMP(candidatos, email, userId) {
       const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
       const d = await r.json().catch(() => null);
       for (const p of (d?.results || [])) {
-        if (String(p.external_reference || '').split('|')[0] === userId && p.id) ids.add(String(p.id));
+        // Troca de ciclo é do plano PRINCIPAL: a assinatura de Veículos (outra trilha, 20/10) fica.
+        if (String(p.external_reference || '').split('|')[0] === userId && p.id && !/^veiculos/.test(String(p.external_reference || '').split('|')[1] || '')) ids.add(String(p.id));
       }
     }
   } catch { /* segue com candidatos */ }
@@ -60,7 +62,7 @@ async function cancelarAsaas(customerId) {
   if (!ASAAS_KEY || !customerId) return 0;
   try {
     const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
-    const subs = (await sr.json().catch(() => null))?.data || [];
+    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => planoDaAssinaturaAsaas(x) !== 'veiculos');
     let n = 0;
     for (const s of subs) {
       const dr = await fetch(`${ASAAS_URL}/subscriptions/${s.id}`, { method: 'DELETE', headers: { access_token: ASAAS_KEY } });
@@ -140,18 +142,18 @@ async function confirmarSemMandato(asaasId, email, userId) {
       if (!r.ok) return { ok: false, erro: true };
       const d = await r.json().catch(() => null);
       if (d == null) return { ok: false, erro: true };
-      const vivo = (d.results || []).some(p => String(p.external_reference || '').split('|')[0] === userId);
+      const vivo = (d.results || []).some(p => String(p.external_reference || '').split('|')[0] === userId && !/^veiculos/.test(String(p.external_reference || '').split('|')[1] || ''));
       if (vivo) return { ok: false, erro: false };
     } catch { return { ok: false, erro: true }; }
   }
   // Asaas
   if (ASAAS_KEY && asaasId) {
     try {
-      const r = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=1`, { headers: { access_token: ASAAS_KEY } });
+      const r = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=20`, { headers: { access_token: ASAAS_KEY } });
       if (!r.ok) return { ok: false, erro: true };
       const d = await r.json().catch(() => null);
       if (d == null) return { ok: false, erro: true };
-      if ((d.data || []).length > 0) return { ok: false, erro: false };
+      if ((d.data || []).some((x) => planoDaAssinaturaAsaas(x) !== 'veiculos')) return { ok: false, erro: false };
     } catch { return { ok: false, erro: true }; }
   }
   return { ok: true };

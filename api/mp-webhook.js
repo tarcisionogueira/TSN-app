@@ -8,7 +8,7 @@
  */
 import crypto from 'crypto';
 import { cancelarOutrasRecorrencias, assinaturasAsaasAtivas } from './_recorrencia-unica.js';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, registrarPagamentoParaConferir, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, registrarPagamentoParaConferir, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento, ehTrilhaVeiculos, planoDaReferencia } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
 import { mpSdk } from './_mp-sdk.js';
@@ -302,14 +302,23 @@ export async function processarEventoMp(req, res) {
       // FALHA: cobrança recusada, ou assinatura pausada/cancelada no MP → rebaixa + avisa.
       const assinaturaMorta = preapproval.status === 'paused' || preapproval.status === 'cancelled';
       if (cobrancaRecusada || assinaturaMorta) {
+        // TRILHA VEÍCULOS (20/10): recusa/cancelamento da assinatura de veículos não rebaixa nada — o
+        // acesso (perfis.acesso_veiculos_ate) vence sozinho. Sem isto, a recusa de R$ 29,90 derrubava o Pro.
+        if (ehTrilhaVeiculos(planoKey)) {
+          console.log(`[mp-webhook] veículos: ${cobrancaRecusada ? 'cobrança recusada' : `mandato ${preapproval.status}`} para ${userId} — acesso vence no fim do período pago`);
+          return res.status(200).json({ ok: true, ignorado: 'trilha_veiculos' });
+        }
         // BLINDAGEM (P0.1 do design): NÃO rebaixar cego por userId. Se o cliente tem OUTRO
         // mandato authorized (troca de ciclo: cancelamos o mensal e criamos o anual — a ordem
         // de entrega dos webhooks do MP NÃO é garantida), o cancelamento do antigo não pode
         // clobberar a ativação do novo → senão vira explorador+inadimplente e o cron de
         // UPGRADE nunca resgata (só reativa com !inadimplente_desde).
         const outra = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(preapproval.payer_email || '')}&status=authorized&limit=10`);
-        const temOutraAtiva = (outra?.results || []).some(p =>
-          String(p.external_reference || '').split('|')[0] === userId && String(p.id) !== String(preapproval.id));
+        // Só conta mandato da MESMA trilha (20/10): a assinatura de veículos não segura o Pro.
+        const temOutraAtiva = (outra?.results || []).some(p => {
+          const [uidRef, planoRef] = String(p.external_reference || '').split('|');
+          return uidRef === userId && String(p.id) !== String(preapproval.id) && !ehTrilhaVeiculos(planoRef);
+        });
         if (temOutraAtiva) return res.status(200).json({ ok: true, ignorado: 'outro_mandato_ativo' });
         // E NO OUTRO GATEWAY (04/10, pendência 123): a troca para o Asaas cancela este mandato (ver
         // _recorrencia-unica.js) — sem esta checagem o cliente que acabou de pagar no Asaas era
@@ -317,7 +326,7 @@ export async function processarEventoMp(req, res) {
         // agora; a reconciliação diária (que já checa o Asaas) decide depois.
         {
           const { subs, erro } = await assinaturasAsaasAtivas({ userId });
-          if (subs.length) return res.status(200).json({ ok: true, ignorado: 'assinatura_asaas_ativa' });
+          if (subs.some((x) => !ehTrilhaVeiculos(x.plano))) return res.status(200).json({ ok: true, ignorado: 'assinatura_asaas_ativa' });
           if (erro) {
             console.error('[mp-webhook] consulta Asaas falhou — rebaixamento adiado para a reconciliação:', erro);
             return res.status(200).json({ ok: true, ignorado: 'asaas_incerto_reconciliacao_decide' });
@@ -347,7 +356,7 @@ export async function processarEventoMp(req, res) {
             }
           }
         }
-        const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago' });
+        const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago', planoKey });
         if (result?.suspenso && preapproval.payer_email) {
           // 14/09, pedido do dono: cobrança RECUSADA e CANCELAMENTO de verdade são coisas
           // diferentes pro cliente — mandar "não conseguimos processar sua cobrança" pra quem
@@ -382,7 +391,7 @@ export async function processarEventoMp(req, res) {
         // 04/10 (pendência 123): o backstop cobre os DOIS gateways — é ele, e não mais o checkout,
         // quem cancela a recorrência antiga (MP e Asaas), e só DEPOIS da nova estar autorizada.
         if (tipo === 'subscription_preapproval') {
-          await cancelarOutrasRecorrencias({ userId, email: preapproval.payer_email || '', manterMpId: preapproval.id, manterCriadaEm: preapproval.date_created || null, origem: 'mp-autorizacao' });
+          await cancelarOutrasRecorrencias({ userId, email: preapproval.payer_email || '', manterMpId: preapproval.id, manterCriadaEm: preapproval.date_created || null, manterPlano: planoKey, origem: 'mp-autorizacao' });
         }
         // Comissão SÓ mediante pagamento recebido: uma cobrança recorrente PROCESSADA
         // (subscription_authorized_payment + ap.status='processed') é dinheiro que ENTROU →
@@ -507,6 +516,9 @@ export async function processarEventoMp(req, res) {
 
   // Produto avulso? external_reference é o uuid da compra (sem pipe).
   const extRefMp = String(pagamento.external_reference || '').trim();
+  // Plano pela REFERÊNCIA (`uid|plano`), não pelo valor (20/10): a cobrança recorrente de Veículos (29,90)
+  // e do Combo (99,90 = valor do Pro legado no mapearPlano) chega também por aqui. O núcleo decide a trilha.
+  if (extRefMp.includes('|')) contexto.planoReferencia = planoDaReferencia(extRefMp);
   const ehProdutoMp = UUID_RE.test(extRefMp);
   // Honorário de êxito (pagamento Transparente via api/mp-checkout.js, proposito
   // 'honorario_exito' — src/pages/PagarHonorario.jsx): checado ANTES de ehProdutoMp por

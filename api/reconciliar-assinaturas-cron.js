@@ -12,7 +12,8 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
-import { ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
+import { ativarPlanoDireto, suspenderPlanoDireto, ehTrilhaVeiculos } from './_webhook-core.js';
+import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 import { createClient } from '@supabase/supabase-js';
 import { preencherDocumentosPendentes } from './_signatario.js';
 
@@ -39,11 +40,12 @@ async function checarAsaasAtivo(asaasId) {
   if (!asaasId || !ASAAS_KEY) return { ativo: false, erro: false };
   try {
     const url = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
-    const r = await fetch(`${url}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=1`, { headers: { access_token: ASAAS_KEY } });
+    const r = await fetch(`${url}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=20`, { headers: { access_token: ASAAS_KEY } });
     if (!r.ok) return { ativo: false, erro: true };          // consulta falhou → INCERTO
     const d = await r.json().catch(() => null);
     if (d == null) return { ativo: false, erro: true };
-    return { ativo: (d?.data || []).length > 0, erro: false };
+    // Só a trilha PRINCIPAL segura o plano (20/10): a assinatura de Veículos não mantém o Pro vivo.
+    return { ativo: (d?.data || []).some((x) => !ehTrilhaVeiculos(planoDaAssinaturaAsaas(x))), erro: false };
   } catch { return { ativo: false, erro: true }; }
 }
 
@@ -116,10 +118,16 @@ async function handler(req) {
             status: sub.status || null, dados_mp: sub, atualizado_em: new Date().toISOString(),
           }, { onConflict: 'mp_assinatura_id' });
         } catch { /* espelho — não bloqueia a reconciliação */ }
-        const { data: perfil } = await supabase.from('perfis').select('role, inadimplente_desde').eq('id', userId).maybeSingle();
+        const { data: perfil } = await supabase.from('perfis').select('role, inadimplente_desde, acesso_veiculos_ate').eq('id', userId).maybeSingle();
         // Órfão: assinatura autorizada no MP, mas o cliente segue no Explorador
         // (e não é suspensão por inadimplência). Reativa o plano contratado.
-        if (perfil && perfil.role === 'explorador' && !perfil.inadimplente_desde) {
+        // TRILHA VEÍCULOS (20/10): o órfão é "acesso a veículos vencido" (o role não muda); o Combo é órfão
+        // pelos dois lados. A reativação é idempotente por pagamento (estenderAcessoVeiculos).
+        // Combo fica só no caso de órfão do Pro: ele passa pela ativação inteira (conversão de anúncio), e
+        // repetir com a mesma cobrança todo dia inflaria a medição. Veículos é idempotente de ponta a ponta.
+        const acessoVencido = ehTrilhaVeiculos(planoKey) && !(perfil?.acesso_veiculos_ate && Date.parse(perfil.acesso_veiculos_ate) > Date.now());
+        const orfaoPrincipal = !ehTrilhaVeiculos(planoKey) && perfil?.role === 'explorador' && !perfil?.inadimplente_desde;
+        if (perfil && (orfaoPrincipal || acessoVencido)) {
           // BLINDAGEM (P0.4): NÃO re-conceder plano a quem exerceu a garantia de 7 dias. O
           // cancelamento MP na garantia é best-effort; se o PUT falhou, o preapproval segue
           // authorized e este loop re-concederia o plano REEMBOLSADO. Pula se há reembolso.
@@ -226,6 +234,8 @@ async function handler(req) {
           // fim NORMAL do parcelamento, não perda de plano — o encerramento da assessoria
           // é pelo fluxo de POSSE (marcar-posse), nunca pelo gateway (regra do dono 30/07).
           if (/^assessorado/.test(planoKey)) continue;
+          // Mandato de VEÍCULOS cancelado não rebaixa nada: o acesso vence sozinho (20/10).
+          if (ehTrilhaVeiculos(planoKey)) continue;
           // Período pago ainda vigente → mantém acesso. Sem data confiável, não
           // rebaixa (conservador: o webhook é o caminho primário).
           const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
@@ -236,7 +246,7 @@ async function handler(req) {
           // Anti-flip: não rebaixa quem está num degrau MAIOR que o plano desta
           // assinatura (ex.: virou assessorado/clube e o preapproval antigo do Pro
           // foi cancelado — o plano vigente não depende mais dele).
-          const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
+          const RANK = { explorador: 0, top2: 1, top2_anual: 1, combo: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
           if ((RANK[perfil.role] ?? 99) > (RANK[planoKey] ?? 0)) continue;
 
           // Não rebaixa quem tem assinatura ATIVA no MP (re-assinou após cancelar).
@@ -247,7 +257,10 @@ async function handler(req) {
           // `payer_id` (não deveria acontecer) preferimos o conservador: não rebaixa.
           const payerId = sub.payer_id || sub.payer?.id;
           if (!payerId) continue;
-          const ativo = await mpGet(`/preapproval/search?payer_id=${encodeURIComponent(payerId)}&status=authorized&limit=1`);
+          const ativoBruto = await mpGet(`/preapproval/search?payer_id=${encodeURIComponent(payerId)}&status=authorized&limit=20`);
+          // Só mandato da trilha PRINCIPAL segura o plano (20/10) — o de Veículos não é "re-assinou o Pro".
+          const ativo = ativoBruto === null ? null
+            : { results: (ativoBruto?.results || []).filter((x) => !ehTrilhaVeiculos(String(x.external_reference || '').split('|')[1])) };
           // mpGet devolve null em falha (429/5xx/timeout) — `ativo?.results?.length` vira
           // undefined (falsy) e o `continue` de baixo NÃO disparava, deixando o rebaixamento
           // seguir às cegas para quem pode muito bem ter assinatura ativa (bug bounty 03/09).

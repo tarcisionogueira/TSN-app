@@ -179,6 +179,9 @@ const PLANOS_CONFIG = {
   clube_vista:       { nome: 'Leilão Club (À Vista)',        valor: 48000.00, recorrente: false },
   top2:              { nome: 'Investidor Pro',               valor: 49.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
   top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: true, frequency: 12, frequency_type: 'months' },
+  // 20/10 (decisão do dono): segunda TRILHA de assinatura — ver "DUAS TRILHAS" em _webhook-core.js.
+  veiculos:          { nome: 'Leilão de Veículos',           valor: 29.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
+  combo:             { nome: 'Combo Imóveis + Veículos',     valor: 99.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
 };
 
 // Espelha os preços do admin (planos_config) respeitando mensal×total: clube.preco é
@@ -203,6 +206,9 @@ async function carregarPrecos() {
         if (num(C?.preco_vista) != null)   cfg.clube_vista.valor = num(C.preco_vista);
         if (num(T?.preco) != null)       { cfg.top2.valor = num(T.preco); if (T.nome) cfg.top2.nome = T.nome; }
         if (num(T?.preco_anual) != null)   cfg.top2_anual.valor = num(T.preco_anual);
+        for (const k of ['veiculos', 'combo']) {
+          if (num(by[k]?.preco) > 0) { cfg[k].valor = num(by[k].preco); if (by[k].nome) cfg[k].nome = by[k].nome; }
+        }
       }
     }
   } catch { /* mantém o fallback hardcoded */ }
@@ -476,7 +482,8 @@ async function verificar({ paymentId, assinaturaId, userId }) {
   return { tipo: 'pagamento', status: p.status, statusDetalhe: p.status_detail };
 }
 
-async function cancelarAssinatura({ assinaturaId, email, userId }) {
+async function cancelarAssinatura({ assinaturaId, email, userId, trilha = 'principal' }) {
+  trilha = trilha === 'veiculos' ? 'veiculos' : 'principal';
   // Cancela a renovação automática. Se não vier o id da assinatura, busca os
   // preapprovals ativos do pagador por e-mail — mas SEMPRE filtrando pelo
   // external_reference `${userId}|plano` do usuário AUTENTICADO. Sem esse filtro,
@@ -487,8 +494,11 @@ async function cancelarAssinatura({ assinaturaId, email, userId }) {
   } else if (email && userId) {
     try {
       const r = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`);
+      // DUAS TRILHAS (20/10): `trilha` = 'veiculos' cancela só a assinatura de Veículos; o padrão
+      // ('principal') cancela Pro/Combo/Clube e deixa a de Veículos em paz.
       ids = (r?.results || [])
         .filter(x => String(x.external_reference || '').split('|')[0] === userId)
+        .filter(x => (/^veiculos/.test(String(x.external_reference || '').split('|')[1] || '') ? 'veiculos' : 'principal') === trilha)
         .map(x => x.id).filter(Boolean);
     } catch (_) { ids = []; }
   }
