@@ -536,7 +536,10 @@ export default async function handler(req, res) {
       const customer = customers.data?.[0];
       if (!customer) return res.status(404).json({ error: 'Cliente não encontrado no Asaas. Faça a primeira assinatura.' });
       const subs = await asaasGet(`/subscriptions?customer=${customer.id}&status=ACTIVE`);
-      const sub = subs.data?.[0];
+      // Só a assinatura PRINCIPAL que não é Combo (revisão 20/10): com Pro + Veículos, a 1ª ACTIVE podia ser a
+      // de Veículos, e reprecificá-la deixava a referência `uid|veiculos` — o Clube nunca ativava. Combo vira
+      // assinatura nova (404 abaixo), porque a referência dele forçaria role top2 sobre o preço do Clube.
+      const sub = (subs.data || []).find((x) => !['veiculos', 'combo'].includes(planoDaAssinaturaAsaas(x)));
       if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada. Crie uma assinatura primeiro.' });
 
       const valorAtual = Number(sub.value) || 0;
@@ -554,6 +557,7 @@ export default async function handler(req, res) {
       await asaasPut(`/subscriptions/${sub.id}`, {
         value: valorNovo,
         description: info.nome,
+        externalReference: authUser?.id ? `${authUser.id}|${plano}` : undefined, // o webhook lê o plano daqui
         updatePendingPayments: true,
       });
 

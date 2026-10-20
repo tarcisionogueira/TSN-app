@@ -35,13 +35,23 @@ const dia = (v) => String(v || '').slice(0, 10); // 'YYYY-MM-DD' (MP traz ISO co
 // Sem plano informado (chamador antigo), a trilha de veículos NUNCA é tocada.
 const trilhaDe = (plano) => (/^veiculos/.test(String(plano || '')) ? 'veiculos' : 'principal');
 const ehCombo = (plano) => /^combo/.test(String(plano || ''));
+// O Combo (Pro + veículos) substitui SÓ o Pro, o Veículos e outro Combo — nunca Clube nem Assessoria
+// (revisão 20/10: comprar o Combo cancelava o mandato do Clube e o parcelamento da Assessoria).
+const substituivelPeloCombo = (plano) => /^(top2|veiculos|combo)/.test(String(plano || ''));
 export const alcancaTrilha = (planoMantido, planoOutro) =>
-  ehCombo(planoMantido) || trilhaDe(planoMantido) === trilhaDe(planoOutro);
+  ehCombo(planoMantido) ? substituivelPeloCombo(planoOutro) : trilhaDe(planoMantido) === trilhaDe(planoOutro);
 export function planoDaAssinaturaAsaas(s) {
   const ref = String(s?.externalReference || '');
   const doRef = ref.includes('|') ? ref.split('|')[1] : '';
   if (doRef) return doRef;
-  return /ve[ií]culo/i.test(String(s?.description || '')) ? 'veiculos' : 'principal';
+  // Antigas sem referência: pela descrição que o checkout grava (nomes em api/asaas.js / planos_config).
+  const d = String(s?.description || '');
+  if (/ve[ií]culo/i.test(d)) return 'veiculos';
+  if (/^combo/i.test(d)) return 'combo';
+  if (/investidor pro/i.test(d)) return /anual/i.test(d) ? 'top2_anual' : 'top2';
+  if (/club|clube/i.test(d)) return 'clube';
+  if (/assessor/i.test(d)) return 'assessorado';
+  return 'principal';
 }
 
 async function asaasIdDoPerfil(userId) {
@@ -126,6 +136,25 @@ export async function temOutraRecorrenciaAtiva({ userId, asaasCustomerId, exceto
     if (!r.ok) return { tem: false, erro: `MP busca ${r.status}` };
     const d = await r.json();
     return { tem: (d?.results || []).some((x) => { const [uid, pl] = String(x.external_reference || '').split('|'); return uid === String(userId) && mesma(pl); }), erro: null };
+  } catch (e) { return { tem: false, erro: e?.message || String(e) }; }
+}
+
+// O cliente assina o COMBO (MP authorized `uid|combo` ou Asaas ACTIVE do Combo)? Tri-estado { tem, erro }.
+// Usado para barrar troca/downgrade do plano principal que cancelaria o Combo e, junto, o acesso a veículos
+// sem o cliente perceber (revisão 20/10).
+export async function temAssinaturaCombo({ userId, email, asaasCustomerId }) {
+  try {
+    const { subs, erro } = await assinaturasAsaasAtivas({ asaasCustomerId, userId });
+    if (erro) return { tem: false, erro };
+    if (subs.some((x) => ehCombo(x.plano))) return { tem: true, erro: null };
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken || !userId) return { tem: false, erro: null };
+    if (!email) email = await emailDaConta(userId);
+    if (!email) return { tem: false, erro: 'sem e-mail da conta' };
+    const r = await fetch(`${MP_BASE}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${mpToken}` } });
+    if (!r.ok) return { tem: false, erro: `MP busca ${r.status}` };
+    const d = await r.json();
+    return { tem: (d?.results || []).some((x) => { const [uid, pl] = String(x.external_reference || '').split('|'); return uid === String(userId) && ehCombo(pl); }), erro: null };
   } catch (e) { return { tem: false, erro: e?.message || String(e) }; }
 }
 

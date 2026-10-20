@@ -549,6 +549,21 @@ export default async function handler(req, res) {
     if (!Array.isArray(existe) || !existe.length) { res.status(rExiste.ok ? 404 : 502).json({ error: rExiste.ok ? 'Sem análise anterior deste veículo para esse usuário — regeração não cria análise nova.' : 'Não consegui conferir a análise anterior.' }); return; }
   }
 
+  // PLANO VEÍCULOS (revisão 20/10): conferido ANTES da cota e FECHADO na falha. A checagem de cota abaixo é
+  // best-effort (leitura que falha não bloqueia) — sozinha, sob timeout do banco, entregava a quem não paga o
+  // relatório com o leiloeiro e o link do lote, por nossa conta. Equipe e a regeração do cron passam.
+  if (!viaCron && !(await ehEquipe(sb, user.id))) {
+    const ra = await sb('rpc/tem_acesso_veiculos', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
+    const tem = ra.ok ? await ra.json().catch(() => null) : null; // padrao-ok: leitura que falha vira `null` → bloqueia abaixo (fail-closed)
+    if (tem !== true) {
+      if (!ra.ok) console.error('[gerar-analise-veiculo] conferência do plano falhou: HTTP', ra.status);
+      res.status(ra.ok ? 402 : 503).json(ra.ok
+        ? { error: 'O relatório de veículos faz parte do plano Leilão de Veículos (R$ 29,90/mês).', motivo: 'sem_plano' }
+        : { error: 'Não consegui conferir o seu plano agora. Tente de novo em instantes.' });
+      return;
+    }
+  }
+
   // ── Cota no servidor (mesmo padrão de consumir_analise_por) ──
   let cota = null;
   let cobrarCredito = false;

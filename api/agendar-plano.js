@@ -33,7 +33,7 @@ export const config = { runtime: 'nodejs', maxDuration: 20 };
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
-import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
+import { planoDaAssinaturaAsaas, temAssinaturaCombo } from './_recorrencia-unica.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -148,6 +148,17 @@ export default async function handler(req, res) {
     return;
   }
 
+  // COMBO (revisão 20/10): cancelar a renovação dele derrubaria também o acesso a veículos, sem aviso. Quem
+  // assina o Combo troca de plano com a equipe. Consulta que falha não vira "não tem" (fail-closed).
+  {
+    const combo = await temAssinaturaCombo({ userId: user.id, email: user.email });
+    if (combo.tem || combo.erro) {
+      res.status(409).json({ error: combo.tem
+        ? 'Você assina o Combo Imóveis + Veículos. Para trocar de plano sem perder o acesso a veículos, fale com o atendimento.'
+        : 'Não consegui conferir suas assinaturas agora. Tente de novo em instantes.' });
+      return;
+    }
+  }
   const canc = await cancelarRecorrencias({ userId: user.id, email: user.email });
   // Se NADA foi cancelado e houve FALHA, a renovação segue viva: agendar aqui deixaria o
   // cliente pagando o plano caro de novo no vencimento, achando que trocou. Fail-closed.

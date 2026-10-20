@@ -56,3 +56,13 @@ insert into public.planos_config (plano_key, nome, preco, cobrar, ativo, assinat
 values ('veiculos', 'Leilão de Veículos', 29.90, true, true, true, 25, 'recorrente', 'cliente', 'assinante do Leilão de Veículos'),
        ('combo', 'Combo Imóveis + Veículos', 99.90, true, true, true, 25, 'recorrente', 'cliente', 'assinante do Combo Imóveis + Veículos')
 on conflict (plano_key) do nothing;
+
+-- Revisão 20/10: tem_acesso_veiculos(p_user_id) só responde sobre a PRÓPRIA conta (ou para o servidor/equipe).
+create or replace function public.tem_acesso_veiculos(p_user_id uuid default auth.uid())
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.perfis p
+                  where p.id = p_user_id
+                    and (p_user_id = auth.uid() or (select auth.role()) = 'service_role' or public.eh_equipe())
+                    and (p.role in ('admin','analista','consultor','advogado')
+                         or p.acesso_veiculos_ate > now() - interval '3 days'))
+$$;

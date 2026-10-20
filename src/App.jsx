@@ -379,8 +379,8 @@ function MainLayout() {
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           {/* Tela da EQUIPE (tabela completa, compartilhar, propor compra, e-mail do lote). */}
-          <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
-          <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista']}><VeiculoDetalhe /></PrivateRoute>} />
+          <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista','consultor','advogado']}><BuscaVeiculos /></PrivateRoute>} />
+          <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista','consultor','advogado']}><VeiculoDetalhe /></PrivateRoute>} />
           {/* VEÍCULOS PARA O PÚBLICO (20/10, dono): a busca é aberta (sem login); o detalhe e o relatório pedem
               cadastro. Leiloeiro, link, documentos, pátio e o relatório por IA só com o plano Veículos/Combo — a
               trava mora no banco (veiculos_vitrine / veiculo_leiloeiro). As rotas /admin seguem para a equipe. */}

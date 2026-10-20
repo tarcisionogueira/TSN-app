@@ -836,6 +836,12 @@ export default function Checkout() {
       //    agora (via gerarLink, que já cancela as anteriores antes de criar).
       //  - para MENSAL (regra b): NÃO cobra agora — agenda a virada para o fim do anual vigente.
       // Já tem o que está comprando (20/10)? Evita a segunda assinatura cobrando em paralelo.
+      // Clube/Assessoria já incluem o Pro: para veículos, o certo é o plano Veículos — o Combo trocaria o
+      // plano de imóveis por um Pro (revisão 20/10).
+      if (planoKey === 'combo' && ['clube', 'clube_anual', 'assessorado', 'assessorado_anual'].includes(role)) {
+        setErro('Seu plano já inclui o Investidor Pro. Para veículos, assine o Leilão de Veículos (R$ 29,90/mês).');
+        return;
+      }
       if (PLANOS_VEICULOS.includes(planoKey) && user) {
         const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
         if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
@@ -846,7 +852,14 @@ export default function Checkout() {
           return;
         }
       }
-      if (ehTrocaCiclo && cicloAlvo === 'anual') return await gerarLink();
+      // Pro → anual com acesso a veículos (revisão 20/10): se o acesso vier do Combo, o anual o substitui e os
+      // veículos acabam no fim do período. Avisa antes; quem tem o Veículos separado não perde nada.
+      if (ehTrocaCiclo && cicloAlvo === 'anual') {
+        const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
+        if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+        if (temAcesso === true && !window.confirm('Se você assina o Combo Imóveis + Veículos, o plano anual substitui o Combo e o acesso a veículos acaba no fim do período já pago (assine o Leilão de Veículos à parte para manter). Continuar?')) return;
+        return await gerarLink();
+      }
       if (ehTrocaCiclo && cicloAlvo === 'mensal') return await agendarCiclo();
       if (ehMudanca) return await mudarPlano();
       if (planoKey === 'assessorado') return setShowPagamento(true);

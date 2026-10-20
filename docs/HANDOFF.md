@@ -27,6 +27,16 @@ sem assessoria para veículos; comunicação toda em "gere o relatório e desblo
   conhece as chaves (trava contra assinar em dobro; confirmação pós-pagamento pelo acesso). Perfil: quadro "Leilão de
   Veículos" com vigência e cancelar renovação (MP e Asaas).
 - **Achados no caminho:** `cancelar_assinatura` do mp.js aceitava `assinaturaId` sem conferir o dono — agora confere.
+- **Revisão adversarial (agente, 20/10) — 5 achados, todos corrigidos antes de publicar:** (1) P0 o Combo alcançava
+  QUALQUER assinatura principal → cancelaria Clube/Assessoria; agora só substitui top2*/veiculos/combo, e as antigas do
+  Asaas sem referência são classificadas pela descrição (Pro/Clube/Assessoria); Checkout manda Clube/Assessoria para o
+  plano Veículos. (2) `gerenciar_assinatura` (Asaas) reprecificava a 1ª ACTIVE (podia ser a de Veículos) — agora só a
+  principal não-Combo, e grava a externalReference. (3) gerar-analise-veiculo: cota é best-effort; conferência do plano
+  agora ANTES e fail-closed. (4) consultor/advogado caíam na home nas rotas /admin/veiculos-leilao — liberados. (5) Combo
+  em downgrade agendado → 409 (fala com o atendimento); Pro→anual com acesso a veículos pede confirmação. Menores: folga de
+  3 dias no Perfil; `tem_acesso_veiculos(p)` só responde sobre a própria conta (salvo servidor/equipe).
+- Provado no banco com usuários reais (role authenticated simulado): Explorador sem plano → acesso false, 0 linhas de
+  leiloeiro, 0 na tabela, cota 0; admin → tudo.
 - **Não testado no navegador** (a sessão não alcança o site nem o banco pelo navegador). **Testar antes de anunciar:**
   compra real de Veículos com uma conta Pro (o Pro NÃO pode cair), Combo partindo do Pro, recusa de cartão, cancelamento.
 - **Em aberto (#262):** garantia de 7 dias (CDC) para quem tem SÓ Veículos (`garantia-cancelar` exige role pagante); o
