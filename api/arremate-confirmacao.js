@@ -60,10 +60,11 @@ export default async function handler(req) {
 
   try {
     if (req.method === 'GET') {
-      const arr = await ler('arrematados?select=id,user_id,imovel_id,titulo,cidade,estado,valor_arrematacao,data_arrematacao,created_at&order=created_at.asc&limit=200');
-      const conf = arr.length ? await ler(`arremate_confirmacao?arrematado_id=in.(${arr.map((a) => a.id).join(',')})&select=arrematado_id`) : [];
-      const decididos = new Set(conf.map((c) => c.arrematado_id));
-      const pend = arr.filter((a) => !decididos.has(a.id));
+      // #236 (20/10): o `limit=200` vinha ANTES de tirar os já decididos — passados 200 arremates, os pendentes
+      // mais novos sumiam da fila. Agora os decididos saem no filtro do banco e o corte vale só para pendentes.
+      const conf = await ler('arremate_confirmacao?select=arrematado_id');
+      const decididos = [...new Set(conf.map((c) => c.arrematado_id).filter((i) => UUID_RE.test(i || '')))];
+      const pend = await ler(`arrematados?select=id,user_id,imovel_id,titulo,cidade,estado,valor_arrematacao,data_arrematacao,created_at${decididos.length ? `&id=not.in.(${decididos.join(',')})` : ''}&order=created_at.asc&limit=200`);
       if (!pend.length) return json({ ok: true, pendentes: [] });
       const userIds = [...new Set(pend.map((a) => a.user_id))];
       const imovIds = [...new Set(pend.map((a) => a.imovel_id).filter((i) => UUID_RE.test(i || '')))];

@@ -406,8 +406,11 @@ export default function MinhaRede() {
     // (cnpj/razão/pix — campos não protegidos) e pede a verificação de sócio ao servidor
     // (QSA da Receita). O saque só libera quando o backend confirmar pj_validada_em — nunca
     // por este update do cliente (o trigger reverte pj_validada_em de qualquer forma).
-    const { error } = await supabase.from('perfis').update(payload).eq('id', uid);
+    // #236 (20/10, forma 3): no modo suporte a RLS filtra a linha e o update volta `error: null` sem gravar — a tela
+    // dizia "salvo" e pedia a validação de sócio de dados que não existiam. `.select()` prova o que mudou.
+    const { data: gravou, error } = await supabase.from('perfis').update(payload).eq('id', uid).select('id');
     if (error) { setMsgPj({ tipo: 'erro', txt: 'Erro ao salvar os dados da empresa.' }); setSalvandoPj(false); return; }
+    if (!gravou?.length) { setMsgPj({ tipo: 'erro', txt: 'Os dados da empresa não foram gravados (sem permissão para esta conta).' }); setSalvandoPj(false); return; }
     setPjSalva(true);
     let validada = false;
     try {

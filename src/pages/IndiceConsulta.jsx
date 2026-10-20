@@ -40,6 +40,9 @@ export default function IndiceConsulta() {
   const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento', lat: null, lng: null, endereco: '', condominio: '', numero: '', nivelConsulta: '' });
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
+  // #236 (20/10): cidade da CONSULTA que gerou `res` — a busca do anúncio usava `form.cidade`, que muda assim que a
+  // pessoa começa a digitar outra cidade, e o link procurava o anúncio de uma cidade no portal da outra.
+  const [cidadeRes, setCidadeRes] = React.useState('');
   const [erro, setErro] = React.useState('');
   const [gerando, setGerando] = React.useState(false);
   const [gerMsg, setGerMsg] = React.useState('');
@@ -79,7 +82,7 @@ export default function IndiceConsulta() {
   // sem botão. Se não estiver, o cartão convida a gerar na hora (na granularidade certa).
   const autoConsultar = async (f) => {
     setErro(''); setRes(null); setGerMsg(''); setLoading(true);
-    try { setRes(await consultarDe(f)); } catch (e2) { setErro(e2.message); }
+    try { setRes(await consultarDe(f)); setCidadeRes(f.cidade); } catch (e2) { setErro(e2.message); }
     setLoading(false);
   };
 
@@ -119,7 +122,7 @@ export default function IndiceConsulta() {
       if (!d.gerado) { setGerMsg(`Não encontramos anúncios de ${TIPO_LABEL[tipoPesquisa] || tipoPesquisa} nesta localidade.`); setGerando(false); return; }
       const dc = await consultarDe(form).catch(() => null);
       if (dc) {
-        setRes(dc);
+        setRes(dc); setCidadeRes(form.cidade);
         setGerMsg(d.inseridas
           ? `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa}: ${d.inseridas} amostra(s) nova(s) na base. Atualize outro tipo para completar.`
           : `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa} atualizado.`);
@@ -554,7 +557,7 @@ export default function IndiceConsulta() {
                               {brl(a.valor_m2)}/m²{esp === 'locacao' ? '·mês' : ''}
                             </div>
                             {Number(a.valor_total) > 0 && <div style={{ fontSize: 10, color: '#94a3b8' }}>{brl(a.valor_total)}</div>}
-                            {(a.url || a.condominio || a.endereco || a.bairro_norm) && <a href={buscaDoAnuncio(a, esp, form?.cidade)} target="_blank" rel="noopener noreferrer" title="Busca o anúncio no portal pelo que ele descreve" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>buscar anúncio →</a>}
+                            {(a.url || a.condominio || a.endereco || a.bairro_norm) && <a href={buscaDoAnuncio(a, esp, cidadeRes || form?.cidade)} target="_blank" rel="noopener noreferrer" title="Busca o anúncio no portal pelo que ele descreve" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>buscar anúncio →</a>}
                           </div>
                         </div>
                       ))}

@@ -7,6 +7,18 @@
 
 
 
+## 20/10 — pendências 235 e 236
+- **#235 encerramento da assessoria:** `concluir_assessorias_entregues` encerrava com carta + matrícula registrada de
+  QUALQUER autor — o cliente que anexasse a matrícula do LEILÃO como "registrada" encerrava a própria assessoria (e o
+  Pro incluído). A IA dos anexos só confere se é o mesmo imóvel, não se já tem o registro. Agora os dois documentos
+  precisam ser da EQUIPE (`role_criador`); com documento do cliente, a assinatura sai em `aguardando_conferencia` e o
+  `concluir-assessorias-cron` avisa a equipe UMA vez por assinatura (trava em `webhook_eventos_processados`). A
+  equipe confere e envia pela tela do caso → encerra no ciclo seguinte. Seco hoje: nada a encerrar nem a conferir.
+- **#236 (5 menores):** arremate-confirmacao cortava em 200 ANTES de tirar os decididos (agora filtra no banco);
+  informar-vendido ganhou teto por IP (10/h) e global (80/dia) além do por conta; AnaliseVeiculo mostra o erro e
+  "Tentar de novo" em vez de "Veículo não encontrado" quando a leitura falha; MinhaRede prova a gravação da empresa
+  (`.select()`); IndiceConsulta busca o anúncio na cidade da CONSULTA, não na que está sendo digitada.
+
 ## 20/10 — pendências 233 e 234
 - **#233 parcelamento (atualização perdida):** a tela gravava o jsonb lido ao abrir e a RPC substituía tudo — um
   clique apagava guia/comprovante que o cron ligou e a parcela que ele marcou paga. `salvar_parcelamento_arremate`

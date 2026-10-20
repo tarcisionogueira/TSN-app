@@ -54,6 +54,35 @@ async function handler(req) {
       avisos.falhas.push({ user_id: u.user_id, erro: String(e?.message || e).slice(0, 160) });
     }
   }
+  // DOCUMENTO DO CLIENTE AGUARDANDO CONFERÊNCIA (#235, 20/10): carta + matrícula registrada existem, mas ao menos
+  // uma veio do próprio cliente — a função não encerra mais sozinha (a "matrícula registrada" podia ser a do leilão).
+  // Avisa a equipe UMA vez por assinatura (trava em webhook_eventos_processados); conferido, a equipe envia o
+  // documento pela tela do caso e o encerramento segue no próximo ciclo.
+  const conferencia = { pendentes: (out?.aguardando_conferencia || []).length, avisados: 0, falhas: 0 };
+  const ADMIN = (process.env.ADMIN_EMAIL || process.env.APP_ADMIN_EMAIL || '').trim();
+  for (const a of (out?.aguardando_conferencia || [])) {
+    try {
+      const trava = await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados`, {
+        method: 'POST',
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ gateway: 'assessoria', gateway_payment_id: String(a.assinatura_id), evento: 'conferir_docs_encerramento' }),
+      });
+      if (trava.status === 409) continue; // já avisado
+      if (!trava.ok) { conferencia.falhas++; console.error('[concluir-assessorias] trava do aviso falhou', trava.status); continue; }
+      if (!ADMIN) { conferencia.falhas++; console.error('[concluir-assessorias] ADMIN_EMAIL ausente — aviso de conferência não enviado', a.assinatura_id); continue; }
+      const env = await enviarEmail({
+        to: ADMIN,
+        subject: 'Assessoria: documentos do encerramento enviados pelo CLIENTE — conferir',
+        html: `<p>O cliente anexou a <strong>carta de arrematação</strong> e a <strong>matrícula registrada</strong> do imóvel da assessoria, mas ao menos uma veio dele, não da equipe.</p>
+<p>O encerramento automático <strong>não</strong> acontece com documento do cliente (a "matrícula registrada" pode ser a matrícula do leilão). Confira os arquivos no caso; se estiverem certos, envie-os pela tela do caso e a assessoria é concluída no próximo ciclo.</p>
+<p style="color:#64748b;font-size:12px">Assinatura ${a.assinatura_id} · imóvel ${a.imovel_id} · cliente ${a.user_id}</p>`,
+        meta: { tipo: 'assessoria_conferir_docs', userId: a.user_id },
+      });
+      if (env?.ok || env?.enfileirado) conferencia.avisados++;
+      else { conferencia.falhas++; console.error('[concluir-assessorias] aviso de conferência não saiu', a.assinatura_id, env?.error); }
+    } catch (e) { conferencia.falhas++; console.error('[concluir-assessorias] aviso de conferência lançou', e?.message || e); }
+  }
+
   // MENSALIDADE DO PRO NÃO CORRE DURANTE A ASSESSORIA (06/10, regra_negocio['assessoria.inclui_pro']).
   // Varredura de todos os assessorados ATIVOS: cobre os caminhos em que a assessoria entra sem
   // passar pelo webhook (contrato assinado — que dispara este cron na hora —, registro manual do
@@ -75,8 +104,8 @@ async function handler(req) {
     }
   }
   // Log sempre, inclusive com 0: silêncio não distingue "nada a concluir" de "cron parou".
-  console.log('[concluir-assessorias]', JSON.stringify({ ...(out || {}), avisos, pro }));
-  return new Response(JSON.stringify({ ok: true, ...(out || {}), avisos, pro }), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[concluir-assessorias]', JSON.stringify({ ...(out || {}), avisos, conferencia, pro }));
+  return new Response(JSON.stringify({ ok: true, ...(out || {}), avisos, conferencia, pro }), { headers: { 'Content-Type': 'application/json' } });
 }
 
 async function avisarConclusao({ user_id: userId, role }) {

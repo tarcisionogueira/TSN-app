@@ -18,7 +18,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 10 };
 
 import { getUser } from './_auth.js';
-import { checkRateLimit, rateLimitedRes } from './_rate-limit.js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -42,6 +42,12 @@ export default async function handler(req, res) {
 
   const rl = await checkRateLimit(`informar-vendido:user:${user.id}`, 10, 3_600_000);
   if (!rl.ok) { rateLimitedRes(res, rl.resetAt); return; }
+  // #236 (20/10): o limite era só POR CONTA — várias contas grátis tiravam o acervo da Caixa do ar em massa.
+  // Teto também por IP e um teto global diário (o uso legítimo medido é de poucos avisos por dia).
+  const rlIp = await checkRateLimit(`informar-vendido:ip:${getIP(req)}`, 10, 3_600_000);
+  if (!rlIp.ok) { rateLimitedRes(res, rlIp.resetAt); return; }
+  const rlGlobal = await checkRateLimit('informar-vendido:global', 80, 86_400_000);
+  if (!rlGlobal.ok) { console.error('[informar-vendido] teto global diário atingido — possível abuso'); rateLimitedRes(res, rlGlobal.resetAt); return; }
 
   const rRow = await sb(`imoveis_leilao?id=eq.${imovelId}&select=id,fonte,ativo&limit=1`);
   if (!rRow.ok) { res.status(502).json({ error: 'Não foi possível ler o imóvel agora.' }); return; }

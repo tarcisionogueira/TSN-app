@@ -258,7 +258,11 @@ export default function AnaliseVeiculo() {
   if (!v) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
-        <p>Veículo não encontrado.</p>
+        {/* #236 (20/10): falha de rede/leitura aparecia como "não encontrado" — o veículo existia. */}
+        {erro ? <>
+          <p style={{ color: '#b91c1c' }}>{erro}</p>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 4, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>Tentar de novo</button>
+        </> : <p>Veículo não encontrado.</p>}
         <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
