@@ -31,7 +31,8 @@ create or replace view public.veiculos_vitrine with (security_invoker = false) a
          desconto_percentual, desconto_fipe_percentual, modalidade, origem_venda, forma_pagamento,
          cidade, estado, fotos, data_leilao, sinistro, is_sucata, financiavel, combustivel, cambio, cor,
          opcionais, motor_alerta, motor_status, ipva_situacao, tipo_veiculo,
-         resultado_leilao, valor_lance_vencedor, teve_lance, status_patio, ativo, criado_em, atualizado_em
+         resultado_leilao, valor_lance_vencedor, teve_lance, status_patio, ativo, criado_em, atualizado_em,
+         fipe_codigo, fipe_atualizado_em
     from public.veiculos_leilao
    where status_patio = 'confirmado';
 grant select on public.veiculos_vitrine to anon, authenticated;

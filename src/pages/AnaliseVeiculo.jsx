@@ -9,6 +9,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import { desagioFipe, calcularViabilidade, planoParcelado, TETO_FIPE } from '../utils/viabilidadeVeiculo';
 import { mdSimplesParaHtml } from '../utils/mdSimples';
 import { imprimirHtml } from '../components/pdfImprimir';
+import { ehEquipeVeiculos, rotaVeiculo, dadosRestritosVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
 // Mesmo defeito do Índice (18/10): o link do anúncio é REDIGIDO pela IA com número inventado e abria página
 // expirada/errada. Busca no portal pelo que o anúncio descreve (título, ano, cidade) — sempre abre.
@@ -176,7 +177,8 @@ export default function AnaliseVeiculo() {
   const nav = useNavigate();
   const loc = useLocation();
   const isMobile = useIsMobile();
-  const { user, effectiveUserId } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
+  const [semPlano, setSemPlano] = useState(false); // 402 do servidor sem plano: vira o convite, não um erro
   const veiculoId = useQueryParam('veiculo');
   const uid = effectiveUserId || user?.id;
 
@@ -194,13 +196,23 @@ export default function AnaliseVeiculo() {
     if (!veiculoId) return;
     let vivo = true;
     (async () => {
-      const { data, error } = await supabase.from('veiculos_leilao').select('*').eq('id', veiculoId).single();
+      // 20/10: cliente lê a vitrine + os dados do leiloeiro que o plano libera (ver utils/veiculosAcesso.js).
+      const ehStaff = ehEquipeVeiculos(role);
+      const { data, error } = await supabase.from(ehStaff ? 'veiculos_leilao' : 'veiculos_vitrine').select('*').eq('id', veiculoId).maybeSingle();
       if (!vivo) return;
       if (error) { setErro('Não foi possível carregar este veículo agora. Tente novamente.'); setCarregandoVeiculo(false); return; }
-      setV(data || null); setCarregandoVeiculo(false);
+      let completo = data || null;
+      if (completo && !ehStaff) {
+        try {
+          const extra = (await dadosRestritosVeiculos([veiculoId], { comLocal: true })).get(veiculoId);
+          if (extra) completo = { ...completo, ...extra };
+        } catch (e) { console.warn('[analise-veiculo] dados do leiloeiro:', e?.message || e); }
+      }
+      if (!vivo) return;
+      setV(completo); setCarregandoVeiculo(false);
     })();
     return () => { vivo = false; };
-  }, [veiculoId]);
+  }, [veiculoId, role]);
 
   const carregarAnalise = async () => {
     if (!veiculoId || !uid) return null;
@@ -241,6 +253,8 @@ export default function AnaliseVeiculo() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         setGerando(false);
+        // Sem plano (cota 0, sem crédito): o servidor responde 402 — é o convite de desbloqueio, não falha.
+        if (r.status === 402 && d?.motivo === 'sem_plano') { setSemPlano(true); return; }
         setErro(d?.error || 'Não foi possível gerar o relatório agora.');
         return;
       }
@@ -263,7 +277,7 @@ export default function AnaliseVeiculo() {
           <p style={{ color: '#b91c1c' }}>{erro}</p>
           <button onClick={() => window.location.reload()} style={{ marginTop: 4, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>Tentar de novo</button>
         </> : <p>Veículo não encontrado.</p>}
-        <button onClick={() => nav('/admin/veiculos-leilao')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
+        <button onClick={() => nav(ehEquipeVeiculos(role) ? '/admin/veiculos-leilao' : '/veiculos')} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }}>← Voltar à busca</button>
       </div>
     );
   }
@@ -293,7 +307,7 @@ export default function AnaliseVeiculo() {
       {/* LOOP (29/09, print do dono): "Voltar ao veículo" EMPURRAVA a rota do veículo; lá, "Voltar à
           busca" faz nav(-1) — e voltava para ESTE relatório, ida e volta sem fim. Quem veio da página
           do veículo (que passa `state.veiculo`) volta no histórico; link direto troca a entrada. */}
-      <button onClick={() => (loc.state?.veiculo && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(`/admin/veiculos-leilao/${v.id}`, { replace: true, state: { deBusca: false } }))} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
+      <button onClick={() => (loc.state?.veiculo && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(rotaVeiculo(role, v.id), { replace: true, state: { deBusca: false } }))} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 700, alignSelf: 'flex-start' }}>
         <ArrowLeft size={16} /> Voltar ao veículo
       </button>
 
@@ -307,7 +321,19 @@ export default function AnaliseVeiculo() {
 
       {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', color: '#b91c1c', fontSize: 13 }}>{erro}</div>}
 
-      {!result && !emGeracao && (
+      {semPlano && !result && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: 20, textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>Desbloqueie o relatório deste veículo</div>
+          <p style={{ color: '#334155', fontSize: 13, margin: '8px 0 14px', lineHeight: 1.55 }}>
+            O plano Leilão de Veículos libera o relatório por IA (10 por mês), quem é o leiloeiro, o lote, os documentos e o endereço do pátio.
+          </p>
+          <button onClick={() => nav(CHECKOUT_VEICULOS)} style={{ padding: '13px 22px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+            Assinar por R$ 29,90/mês
+          </button>
+        </div>
+      )}
+
+      {!result && !emGeracao && !semPlano && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 24, textAlign: 'center' }}>
           <p style={{ color: '#64748b', fontSize: 13.5, marginBottom: 16 }}>
             Gera um relatório único com a condição do veículo (com base no que o leiloeiro disponibilizou — edital, descrição e anexos do lote) e a FIPE atualizada, com veredito de compra.

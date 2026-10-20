@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network, Wallet, MessageCircle } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network, Wallet, MessageCircle, Car, ChevronDown } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -243,7 +243,11 @@ export default function Header() {
     // Acervo aberto (sem login). `externo: true` porque /leiloes NÃO é rota do React —
     // é servida por /api/publico via rewrite do vercel.json. Navegar com o router daria
     // tela em branco: o SPA não tem esse caminho e não há fallback para 404 interno.
-    { path: '/leiloes', label: 'Buscar Leilões', icon: Search, tourId: 'leiloes-publico', externo: true },
+    // LEILÕES → IMÓVEIS / VEÍCULOS (20/10, dono): os veículos saíram da tela interna para o público.
+    { path: 'menu-leiloes', label: 'Leilões', icon: Search, tourId: 'leiloes-publico', sub: [
+      { path: '/leiloes', label: 'Imóveis', icon: Home, externo: true },
+      { path: '/veiculos', label: 'Veículos', icon: Car },
+    ] },
     // Vitrine pública de eBooks/cursos (12/09, pedido do dono) — só no menu de visitante;
     // quem já está logado usa "Área de Membros" (linksPrivados), que é a mesma vitrine
     // com o acesso já resolvido pelo plano.
@@ -251,7 +255,10 @@ export default function Header() {
     { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
   ];
   const linksPrivados = [
-    { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
+    { path: 'menu-leiloes', label: 'Leilões', icon: Search, tourId: 'leiloes', sub: [
+      { path: '/buscar', label: 'Imóveis', icon: Home },
+      { path: ['admin', 'analista', 'consultor', 'advogado'].includes(effectiveRole) ? '/admin/veiculos-leilao' : '/veiculos', label: 'Veículos', icon: Car },
+    ] },
     { path: '/indice', label: 'Índice BidPro', icon: MapPin, tourId: 'indice' },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
     ...(mostrarRede ? [{ path: '/minha-rede', label: 'Indicações', icon: Briefcase, tourId: 'indicacoes' }] : []),
@@ -277,6 +284,9 @@ export default function Header() {
   // continuam disponíveis; só o auto-start após o cadastro foi desativado.
 
   const active = (p) => loc.pathname === p;
+  const ativoItem = (l) => (l.sub ? l.sub.some((x) => active(x.path)) : active(l.path));
+  const [subAberto, setSubAberto] = useState(null); // menu com subitens aberto no desktop
+  React.useEffect(() => { setSubAberto(null); }, [loc.pathname]);
 
   // Link do menu: rota do SPA vai pelo router; página server-side (rewrite do vercel.json,
   // como /leiloes → /api/publico) precisa de navegação REAL do navegador.
@@ -370,7 +380,24 @@ export default function Header() {
 
         {/* Nav desktop */}
         <nav style={{ display: 'flex', gap: 4, rowGap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }} className="hide-mobile">
-          {links.map(l => (
+          {links.map(l => l.sub ? (
+            <div key={l.path} style={{ position: 'relative' }} onMouseLeave={() => setSubAberto(null)}>
+              <button onClick={() => setSubAberto(subAberto === l.path ? null : l.path)} data-tour={l.tourId} aria-expanded={subAberto === l.path}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: ativoItem(l) ? '#084BA6' : 'transparent', color: ativoItem(l) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
+                <l.icon size={14} /> {l.label} <ChevronDown size={12} />
+              </button>
+              {subAberto === l.path && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 60, minWidth: 170, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+                  {l.sub.map(x => (
+                    <button key={x.path} onClick={() => { setSubAberto(null); irPara(x); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', border: 'none', borderRadius: 8, background: active(x.path) ? '#084BA6' : 'transparent', color: active(x.path) ? 'white' : '#cbd5e1', fontWeight: 600, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+                      <x.icon size={14} /> {x.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
             <button key={l.path} onClick={() => irPara(l)}
               data-tour={l.tourId}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
@@ -534,7 +561,7 @@ export default function Header() {
           safe-area para o último item não ficar sob o indicador de home do iPhone. */}
       {open && (
         <div style={{ background: '#111111', borderTop: '1px solid #111111', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'calc(100dvh - 56px - env(safe-area-inset-top, 0px))', overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
-          {links.map(l => (
+          {links.flatMap(l => (l.sub ? l.sub.map(x => ({ ...x, label: `${l.label} · ${x.label}` })) : [l])).map(l => (
             <button key={l.path} onClick={() => { irPara(l); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <l.icon size={16} /> {l.label}

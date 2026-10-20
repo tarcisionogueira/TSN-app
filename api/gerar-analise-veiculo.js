@@ -561,6 +561,12 @@ export default async function handler(req, res) {
     if (isNovo) {
       const rc = await sb('rpc/consumir_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null); // padrao-ok: leitura best-effort — cota null (rc falhou) cai no catch externo e NÃO bloqueia, mesmo padrão de api/gerar-analise.js
+      // SEM PLANO (20/10, decisão do dono): limite 0 = não assina Veículos/Combo. O relatório traz o
+      // leiloeiro e o link do lote — crédito avulso não pode virar a porta dos fundos do desbloqueio.
+      if (cota && cota.ok === false && Number(cota.limite) === 0) {
+        res.status(402).json({ error: 'O relatório de veículos faz parte do plano Leilão de Veículos (R$ 29,90/mês).', motivo: 'sem_plano', cota });
+        return;
+      }
       if (cota && cota.ok === false) {
         const EST_VEICULO_MICRO = 400000; // ~US$0,40 (1 chamada, poucos documentos)
         const pode = await sb('rpc/pode_debitar', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_custo_micro_estimado: EST_VEICULO_MICRO }) });

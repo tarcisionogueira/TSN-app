@@ -378,12 +378,15 @@ function MainLayout() {
           <Route path="/alavancagem" element={<Alavancagem />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
-          {/* Piloto (11/09, reafirmado 21/09): fica dentro do admin (Operacional) — é EXCLUSIVO
-              do dono/equipe, nunca do cliente. A análise/e-mail do lote (21/09) seguem a mesma
-              regra: ferramenta interna, não faz sentido ganhar rota pública. */}
+          {/* Tela da EQUIPE (tabela completa, compartilhar, propor compra, e-mail do lote). */}
           <Route path="/admin/veiculos-leilao" element={<PrivateRoute roles={['admin','analista']}><BuscaVeiculos /></PrivateRoute>} />
           <Route path="/admin/veiculos-leilao/:id" element={<PrivateRoute roles={['admin','analista']}><VeiculoDetalhe /></PrivateRoute>} />
-          <Route path="/analise-veiculo" element={<PrivateRoute roles={['admin','analista']}><AnaliseVeiculo /></PrivateRoute>} />
+          {/* VEÍCULOS PARA O PÚBLICO (20/10, dono): a busca é aberta (sem login); o detalhe e o relatório pedem
+              cadastro. Leiloeiro, link, documentos, pátio e o relatório por IA só com o plano Veículos/Combo — a
+              trava mora no banco (veiculos_vitrine / veiculo_leiloeiro). As rotas /admin seguem para a equipe. */}
+          <Route path="/veiculos" element={<BuscaVeiculos />} />
+          <Route path="/veiculo/:id" element={<PrivateRoute><VeiculoDetalhe /></PrivateRoute>} />
+          <Route path="/analise-veiculo" element={<PrivateRoute><AnaliseVeiculo /></PrivateRoute>} />
           <Route path="/carteira-propostas" element={<PrivateRoute roles={['admin','analista','consultor']}><div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><CarteiraPropostas /></div></PrivateRoute>} />
           <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />

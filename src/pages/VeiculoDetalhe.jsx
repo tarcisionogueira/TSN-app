@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ORIGEM_VENDA } from '../utils/origemVeiculo';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail, Share2 } from 'lucide-react';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail, Share2, Lock } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -14,11 +14,12 @@ import PropostaVeiculoModal from '../components/PropostaVeiculoModal';
 import { podeProporVeiculo } from '../utils/propostaVeiculo';
 import { localDoPatio } from '../utils/patioVeiculo';
 import DescricaoOrganizada from '../components/DescricaoOrganizada';
+import { ehEquipeVeiculos, rotaBuscaVeiculos, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
-// Tela EXCLUSIVA do operacional (dono/equipe) — nunca do cliente (reafirmado 21/09; a rota
-// em App.jsx já só existe sob /admin/veiculos-leilao*, roles=['admin','analista']). Por isso
-// "Solicitar análise" e "Enviar e-mail" abaixo não precisam tratar cliente/visitante: quem
-// chega aqui já passou pelo gate da rota.
+// 20/10 (dono): a tela passou a atender CLIENTE também (rota /veiculo/:id, login obrigatório). A equipe
+// segue lendo a tabela completa; o cliente lê a vitrine pública e recebe leiloeiro/link/documentos/pátio
+// só com o plano Veículos ou Combo (ver utils/veiculosAcesso.js — a trava mora no banco). Sem o plano,
+// cada ponto que levaria ao leiloeiro vira o convite de desbloqueio.
 // EXCEÇÃO deliberada (05/10, dono): o LINK DE COMPARTILHAMENTO (/#/v/<token>, rota pública) abre
 // esta MESMA tela em modo `compartilhado` — uma tela só, sem cópia. Nele o dado vem de
 // api/veiculo-compartilhado.js já sem link do leiloeiro/anexos, e somem: voltar, favoritar,
@@ -58,6 +59,15 @@ function fmtDataLeilao(d) {
   catch { return 'Data não informada'; }
 }
 
+// Cliente: o que a vitrine pública tem (sem placa/chassi/RENAVAM, link, leiloeiro, raw, anexos, descrição).
+const COLUNAS_PUBLICAS = [
+  'id', 'titulo', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'km',
+  'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
+  'fotos', 'data_leilao', 'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta',
+  'ipva_situacao', 'tipo_veiculo', 'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
+  'resultado_leilao', 'valor_lance_vencedor', 'teve_lance', 'forma_pagamento', 'opcionais', 'status_patio',
+].join(',');
+
 const COLUNAS = [
   'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'chassi', 'renavam', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
@@ -96,11 +106,15 @@ export default function VeiculoDetalhe() {
   // (filtros e posição perdidos). MAS só quando a entrada anterior É a busca — marcada por ela
   // (`state.deBusca`). Voltar "uma página" às cegas era o loop do dono (29/09): com o relatório
   // no meio da pilha, "Voltar à busca" caía no relatório. Sem a marca, vai direto à busca.
-  const voltarABusca = () => (loc.state?.deBusca && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/admin/veiculos-leilao'));
+  const { user, role, effectiveUserId } = useAuth();
+  const voltarABusca = () => (loc.state?.deBusca && (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(rotaBuscaVeiculos(role)));
   const { id, token } = useParams();
   const compartilhado = !!token;
   const isMobile = useIsMobile();
-  const { user, role, effectiveUserId } = useAuth();
+  const equipe = ehEquipeVeiculos(role);
+  const acesso = useAcessoVeiculos(user, role);
+  const semPlano = !compartilhado && !equipe && acesso === false;
+  const desbloquear = () => nav(CHECKOUT_VEICULOS);
   const [v, setV] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
@@ -129,14 +143,26 @@ export default function VeiculoDetalhe() {
         if (!cancelado) setCarregando(false);
         return;
       }
-      const { data, error } = await supabase.from('veiculos_leilao').select(COLUNAS).eq('id', id).single();
+      const ehStaff = ehEquipeVeiculos(role);
+      const { data, error } = await supabase.from(ehStaff ? 'veiculos_leilao' : 'veiculos_vitrine')
+        .select(ehStaff ? COLUNAS : COLUNAS_PUBLICAS).eq('id', id).maybeSingle();
       if (cancelado) return;
-      if (error || !data) { setErro('Veículo não encontrado.'); setCarregando(false); return; }
-      setV(data);
+      if (error) { setErro(`Não foi possível abrir o veículo agora (${error.message}). Tente de novo.`); setCarregando(false); return; }
+      if (!data) { setErro('Veículo não encontrado.'); setCarregando(false); return; }
+      let completo = data;
+      // Assinante: leiloeiro, link, placa, documentos, descrição e local do pátio (vazio para quem não tem plano).
+      if (!ehStaff) {
+        try {
+          const extra = (await dadosRestritosVeiculos([id], { comLocal: true })).get(id);
+          if (extra) completo = { ...data, ...extra };
+        } catch (e) { console.warn('[veiculo] dados do leiloeiro:', e?.message || e); }
+      }
+      if (cancelado) return;
+      setV(completo);
       setCarregando(false);
     })();
     return () => { cancelado = true; };
-  }, [id, token, compartilhado]);
+  }, [id, token, compartilhado, role, acesso]);
 
   // Ao abrir a tela: se a FIPE ainda não tem valor fresco, busca on-demand (pedido do dono —
   // "ao abrir o veículo trazer a FIPE dele"). A trava de cota diária vive no servidor
@@ -307,6 +333,11 @@ export default function VeiculoDetalhe() {
           <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
             <MapPin size={13} />{[v.cidade, v.estado].filter(Boolean).join(', ') || '—'}
             {v.leiloeiro && <span> · Leiloeiro: {v.leiloeiro}</span>}
+            {!v.leiloeiro && semPlano && (
+              <button onClick={desbloquear} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 6, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 8, padding: '2px 8px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}>
+                <Lock size={11} /> Ver quem é o leiloeiro
+              </button>
+            )}
           </div>
 
           {/* Resultado real do leilão (21/09) — só depois de encerrado e já apurado; ausência
@@ -376,10 +407,22 @@ export default function VeiculoDetalhe() {
 
           {/* Ações — nenhuma no link compartilhado (acervo não é público: sem leiloeiro, sem análise). */}
           {!compartilhado && (<>
+          {semPlano ? (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '13px 14px' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1e3a8a' }}>Gere o relatório e desbloqueie o leiloeiro</div>
+              <div style={{ fontSize: 12.5, color: '#334155', marginTop: 4, lineHeight: 1.5 }}>
+                Com o plano Leilão de Veículos você vê quem é o leiloeiro, abre o lote, os documentos e o endereço do pátio, e gera o relatório por IA deste carro (10 por mês).
+              </div>
+              <button onClick={desbloquear} style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                <Lock size={15} /> Desbloquear por R$ 29,90/mês
+              </button>
+            </div>
+          ) : (
           <a href={v.link_lote || undefined} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 16px', background: v.link_lote ? '#0D63DB' : '#e2e8f0', color: v.link_lote ? 'white' : '#94a3b8', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', pointerEvents: v.link_lote ? 'auto' : 'none' }}>
             Ver no leiloeiro <ExternalLink size={14} />
           </a>
+          )}
 
           {/* Proposta de compra direta (veio do card da busca, 30/09) — só lote SEM LANCE apurado. */}
           {podeProporVeiculo(v, role) && (
@@ -395,7 +438,7 @@ export default function VeiculoDetalhe() {
               Sem ramo de cliente/visitante aqui: a rota (App.jsx) já é exclusiva
               admin/analista — quem chegou nesta tela sempre pode gerar. */}
           {/* Encerrado SEM LANCE (proposta de compra direta) → equipe gera o relatório para negociar (30/09). */}
-          {leilaoEncerrado && !podeProporVeiculo(v, role) ? (
+          {semPlano ? null : leilaoEncerrado && !podeProporVeiculo(v, role) ? (
             <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
               <strong>Leilão encerrado.</strong> Como não é mais possível dar lance, o relatório não é gerado para este veículo.
             </div>
@@ -431,6 +474,7 @@ export default function VeiculoDetalhe() {
             <MapPin size={14} /> Abrir no mapa
           </a>
         )}
+        {semPlano && <div style={{ fontSize: 12, color: '#1d4ed8', marginTop: 8, fontWeight: 700 }}>🔒 O endereço do pátio e os documentos do lote são liberados no plano Leilão de Veículos.</div>}
         <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 10, lineHeight: 1.5 }}>Visitação e retirada são agendadas com o leiloeiro — confira dia e horário no edital ou na página do lote.</div>
       </div>
 

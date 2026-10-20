@@ -3,11 +3,13 @@ import InputReais from '../components/InputReais';
 import React, { useEffect, useRef, useState } from 'react';
 import { ORIGEM_VENDA, ORIGENS_EXTRAJUDICIAIS } from '../utils/origemVeiculo';
 import { useNavigate } from 'react-router-dom';
-import { Car, Filter, Loader2, MapPin, X } from 'lucide-react';
+import { Car, Filter, Loader2, Lock, MapPin, X } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { parseDataLocal } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
 import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
+import { useAuth } from '../contexts/AuthContext';
+import { ehEquipeVeiculos, fonteVeiculos, rotaVeiculo, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
 // Card da busca SÓ mostra o veículo e leva à página dele (30/09, dono): FIPE sob demanda, link do
 // leiloeiro e proposta de compra direta ficam em VeiculoDetalhe (components/PropostaVeiculoModal).
@@ -36,6 +38,10 @@ const COLUNAS = [
   // Pátio (29/09): nome do pátio quando o leiloeiro tem vários na mesma cidade ("Guarulhos III").
   'patio',
 ].join(',');
+// PÚBLICO (20/10): a vitrine não tem o que leva ao leiloeiro — descrição, placa, nome e pátio chegam
+// por dadosRestritosVeiculos() só para quem tem o plano (ver utils/veiculosAcesso.js).
+const RESTRITAS = new Set(['descricao', 'placa', 'leiloeiro', 'patio']);
+const COLUNAS_PUBLICAS = COLUNAS.split(',').filter((c) => !RESTRITAS.has(c)).join(',');
 
 // RESULTADO DO LEILÃO — mesmo par de opções/critério de Busca.jsx (imóveis), mesma apuração
 // (api/apurar-resultado-leilao-cron.js processa os dois acervos no mesmo run). 'sem_lance'
@@ -368,6 +374,10 @@ const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k
 export default function BuscaVeiculos({ embutido = false } = {}) {
   const nav = useNavigate();
   const isMobile = useIsMobile();
+  const { user, role } = useAuth();
+  const equipe = ehEquipeVeiculos(role);
+  const acesso = useAcessoVeiculos(user, role);
+  const desbloquear = () => nav(user ? CHECKOUT_VEICULOS : `/login?next=${encodeURIComponent(CHECKOUT_VEICULOS)}`);
   // Filtros e página sobrevivem a abrir um veículo e voltar (pedido do dono, 24/09) — por aba,
   // em sessionStorage (ver utils/estadoLista.js). Mescla com o vazio para chave nova não faltar.
   const [filtros, setFiltros] = useState(() => {
@@ -408,7 +418,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   async function diagnosticarVazio(f) {
     const ativos = Object.keys(ROTULO_FILTRO).filter(k => filtroAtivo(f, k));
     if (ativos.length < 2) return;
-    const base = () => supabase.from('veiculos_leilao').select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL);
+    const base = () => supabase.from(fonteVeiculos(role)).select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL);
     try {
       const contagens = await Promise.all(ativos.map(async k => {
         const { count, error } = await aplicarFiltros(base(), f, new Set([k]));
@@ -436,7 +446,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   async function buscar(p, f) {
     setLoading(true); setErro('');
     try {
-      let q = supabase.from('veiculos_leilao').select(COLUNAS, { count: 'estimated' })
+      let q = supabase.from(fonteVeiculos(role)).select(equipe ? COLUNAS : COLUNAS_PUBLICAS, { count: 'estimated' })
         .eq('ativo', true)
         // Rede de segurança pública (11/09, pedido do dono): nunca bem em posse do executado.
         // 05/10 (opção 2 do dono): além dos CONFIRMADOS em pátio, entram os 'nao_confirmado' — local de
@@ -454,16 +464,25 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       const de = (p - 1) * POR_PAGINA;
       const { data, error, count } = await q.range(de, de + POR_PAGINA - 1);
       if (error) { setErro('Não foi possível carregar os veículos agora. Tente de novo em instantes.'); setResultados([]); setTotal(0); return; }
-      setResultados(data || []); setTotal(count || 0);
+      let linhas = data || [];
+      // Assinante: junta leiloeiro/placa/pátio da página (o banco devolve vazio para quem não tem plano).
+      if (!equipe && user?.id && linhas.length) {
+        try {
+          const extra = await dadosRestritosVeiculos(linhas.map((v) => v.id));
+          if (extra.size) linhas = linhas.map((v) => ({ ...v, ...(extra.get(v.id) || {}) }));
+        } catch (e) { console.warn('[veiculos] dados do leiloeiro:', e?.message || e); }
+      }
+      setResultados(linhas); setTotal(count || 0);
       setDiagnostico(null);
       if (!(data || []).length && p === 1) diagnosticarVazio(f);
-    } catch {
+    } catch (e) {
+      console.warn('[veiculos] busca falhou:', e?.message || e);
       setErro('Não foi possível carregar os veículos agora. Tente de novo em instantes.');
     } finally { setLoading(false); }
   }
 
   // Carga inicial na página LEMBRADA (voltar do detalhe cai onde estava, não na página 1).
-  useEffect(() => { buscar(pagina, filtros); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { buscar(pagina, filtros); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [role, user?.id]);
   useEffect(() => { gravarSessao('veic_filtros', filtros); }, [filtros]);
   useEffect(() => { gravarSessao('veic_pagina', pagina); }, [pagina]);
   useRolagemDaLista('veiculos', !loading && resultados.length > 0);
@@ -491,10 +510,9 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Car size={22} color="#0D63DB" />
             <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111111', margin: 0 }}>Leilão de Veículos</h1>
-            <span style={{ fontSize: 10, fontWeight: 800, background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 8 }}>PILOTO</span>
           </div>
           <p style={{ fontSize: 12.5, color: '#64748b', margin: '4px 0 0' }}>
-            Só veículos já recolhidos ao pátio do leiloeiro — nunca em posse do executado. Fonte(s) de acesso gratuito, em expansão.
+            Só veículos já recolhidos ao pátio do leiloeiro — nunca em posse do executado.
           </p>
         </div>
         <button onClick={() => setMostrarFiltros(v => !v)}
@@ -502,6 +520,19 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
           <Filter size={14} /> Filtros
         </button>
       </div>
+
+      {/* Convite do plano (20/10, dono): toda a comunicação aponta para gerar o relatório e desbloquear o leiloeiro. */}
+      {!embutido && acesso === false && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: '12px 16px' }}>
+          <div style={{ fontSize: 13, color: '#1e3a8a', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
+            <strong>Descubra quem é o leiloeiro de cada carro</strong> e gere o relatório por IA antes de dar o lance.
+            <span style={{ color: '#475569' }}> Plano Leilão de Veículos — R$ 29,90/mês.</span>
+          </div>
+          <button onClick={desbloquear} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <Lock size={14} /> Desbloquear o leiloeiro
+          </button>
+        </div>
+      )}
 
       {mostrarFiltros && (
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 14, display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, alignItems: 'end' }}>
@@ -688,7 +719,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
             return (
               <div key={v.id}
                 style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-                onClick={e => { if (e.target.closest('a,button')) return; nav(`/admin/veiculos-leilao/${v.id}`, { state: { deBusca: true } }); }}
+                onClick={e => { if (e.target.closest('a,button')) return; nav(rotaVeiculo(role, v.id), { state: { deBusca: true } }); }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ width: '100%', height: isMobile ? 180 : 150, position: 'relative' }}>
@@ -698,10 +729,15 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                       -{desc}%{descFipe != null && <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 3 }}>FIPE</span>}
                     </div>
                   )}
-                  {v.leiloeiro && (
+                  {v.leiloeiro ? (
                     <div title={`Leiloeiro: ${v.leiloeiro}`} style={{ position: 'absolute', bottom: 8, left: 8, maxWidth: 'calc(100% - 16px)', background: 'rgba(15,23,42,0.82)', color: 'white', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       🔨 {v.leiloeiro}
                     </div>
+                  ) : !equipe && acesso === false && (
+                    <button onClick={e => { e.stopPropagation(); desbloquear(); }} title="Plano Leilão de Veículos: veja o leiloeiro e gere o relatório por IA"
+                      style={{ position: 'absolute', bottom: 8, left: 8, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(15,23,42,0.82)', color: 'white', fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>
+                      <Lock size={10} /> Leiloeiro — desbloquear
+                    </button>
                   )}
                 </div>
                 <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -784,7 +820,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                 <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
                   {/* Página interna primeiro (24/09, pedido do dono): dados do leiloeiro, local do pátio,
                       documentos e FIPE sob demanda; o site do leiloeiro vira o botão secundário. */}
-                  <button onClick={e => { e.stopPropagation(); nav(`/admin/veiculos-leilao/${v.id}`, { state: { deBusca: true } }); }}
+                  <button onClick={e => { e.stopPropagation(); nav(rotaVeiculo(role, v.id), { state: { deBusca: true } }); }}
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     Ver detalhes
                   </button>
@@ -809,9 +845,11 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         </div>
       )}
 
-      <button onClick={() => nav('/admin?aba=Veiculos')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
-        ← Voltar para Veículos
-      </button>
+      {equipe && !embutido && (
+        <button onClick={() => nav('/admin?aba=Veiculos')} style={{ alignSelf: 'center', marginTop: 4, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+          ← Voltar para Veículos
+        </button>
+      )}
 
     </div>
   );
