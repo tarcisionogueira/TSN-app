@@ -4,6 +4,7 @@ import { validarTelefone } from '../lib/telefone.js';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: sem captchaToken o Supabase recusa login/cadastro
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
@@ -321,6 +322,7 @@ async function comprimirImagem(dataUrl) {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function ConviteEquipe() {
   const { token } = useParams();
+  const captcha = useCaptcha();
   const nav = useNavigate();
   const { user, refreshPerfil } = useAuth();
 
@@ -593,6 +595,7 @@ export default function ConviteEquipe() {
         email: form.email.trim(),
         password: form.senha,
         options: {
+          ...(await captcha.aguardarOpcoes()),
           data: {
             nome: normalizarNome(form.nome),
             // 19/08: ia com máscara "(27) 99999-9999" enquanto todos os outros fluxos gravam
@@ -867,6 +870,7 @@ export default function ConviteEquipe() {
           )}
 
           {/* Navegação */}
+          {passoAtual === totalPassos - 1 && <div style={{ marginTop: 18 }}>{captcha.widget}</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
             {passoAtual > 0 && (
               <button onClick={voltar}
@@ -875,7 +879,7 @@ export default function ConviteEquipe() {
               </button>
             )}
             {(!isFoto || fotoOk) && (
-              <button onClick={avancar} disabled={enviando}
+              <button onClick={avancar} disabled={enviando || (passoAtual === totalPassos - 1 && captcha.pendente)}
                 style={{ flex: 2, padding: '13px', background: enviando ? '#94a3b8' : cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</>
                   : passoAtual === totalPassos - 1 ? <>Concluir <CheckCircle2 size={16} /></>

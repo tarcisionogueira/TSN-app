@@ -388,6 +388,16 @@ const REGRAS_ARQUIVO = [
     testar: (texto) => /\.auth\.signUp\s*\(/.test(texto) && !/identities/.test(texto),
   },
   {
+    id: 'login-sem-captcha',
+    titulo: 'Login por senha / signUp do Supabase sem captchaToken — o Auth recusa (captcha_failed)',
+    // #234 (20/10). O Turnstile está ligado no Supabase Auth: `signInWithPassword` e `signUp` sem `captchaToken`
+    // voltam "400 captcha protection: request disallowed" (auth_logs de 19/10). Seis telas fora do Login.jsx
+    // chamavam sem, e todo login automático depois de criar a conta falhava. Use `useCaptcha` (src/hooks) ou o
+    // `captchaToken` do próprio formulário. Só front (`src/`): o servidor não faz login por senha.
+    testar: (texto, arquivo) => /(^|\/)src\//.test(arquivo || '')
+      && /\.auth\.(signInWithPassword|signUp)\s*\(/.test(texto) && !/captcha/i.test(texto),
+  },
+  {
     id: 'cobranca-sem-estorno',
     titulo: 'Endpoint cobra cota ADIANTADA (consumir_*_por) sem NENHUM caminho de estorno — a falha cobra o cliente',
     // GAP #2 (20/08). A cobrança ADIANTADA de cota — `consumir_analise_por`/`consumir_documental_por`,

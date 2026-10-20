@@ -7,6 +7,22 @@
 
 
 
+## 20/10 — pendências 233 e 234
+- **#233 parcelamento (atualização perdida):** a tela gravava o jsonb lido ao abrir e a RPC substituía tudo — um
+  clique apagava guia/comprovante que o cron ligou e a parcela que ele marcou paga. `salvar_parcelamento_arremate`
+  agora trava a linha e: payload sem `guias`/`pagamentos` mantém os do banco (a tela parou de mandar); `pagas` =
+  pagas da tela ∪ (pagas do banco − `_base_pagas` que a tela leu) — a mudança da tela vale e o que o cron marcou
+  depois sobrevive; sem base, união. `guia-parcela`/`ler-condicoes` (leem o banco na hora) seguem iguais. Seco
+  desfeito: tela desmarca a 2 e muda para 12 parcelas; a 5, a guia e o comprovante do cron ficam.
+- **#234 captcha:** confirmado no auth_logs (19/10 14:10, `captcha_failed` em `/token` grant password) — login/cadastro
+  fora do Login.jsx sem `captchaToken` é recusado, e todo login automático pós-cadastro caía em "Conta criada! Não
+  conseguimos entrar". Hook `src/hooks/useCaptcha.jsx` (widget + `opcoes()` que consome e renova o token +
+  `aguardarOpcoes()` que espera o widget emitir um novo — o código por e-mail do #251 pode estourar os ~5 min do
+  token). Aplicado em Checkout (conta grátis, cadastro inline, assinatura com cadastro, recuperação Asaas), Promo,
+  ProdutoLanding, ProdutoPublico e ConviteEquipe; botões travados até o desafio terminar. Helper `signIn` morto de
+  `utils/supabase.js` removido. **Trava nova `login-sem-captcha`** em `verificar:padroes` (provada com arquivo de
+  teste). Não testado no navegador.
+
 ## 20/10 — pendências 231 e 232: conferidas (resolvidas em f95b40e) + a TELA da fila
 - As duas já estavam fechadas por outra sessão (19/10): pagamento aprovado excedente/já quitado e estorno sobre
   repasse creditado vão para `pagamentos_conferencia` (invariante crítico `pagamento_sem_conferencia`), leituras e

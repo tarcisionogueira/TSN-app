@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Check, Zap, ShieldCheck, Users, TrendingUp, Clock, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: sem captchaToken o Supabase recusa login/cadastro
 import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
@@ -16,6 +17,7 @@ function fmtPreco(v) {
 
 export default function Promo() {
   const { codigo } = useParams();
+  const captcha = useCaptcha();
   const nav = useNavigate();
   const { user } = useAuth();
 
@@ -155,7 +157,7 @@ export default function Promo() {
       if (data?.codigo_necessario) esquecerComprovanteEmail(contato.email);
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
       // Login (prova de posse da conta — vale tanto p/ a conta recém-criada quanto p/ quem já tinha).
-      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha });
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha, options: await captcha.aguardarOpcoes() });
       // E-MAIL JÁ CADASTRADO: o servidor DIZ, e a tela ignorava (10/08). `promo-capturar`
       // responde `{ ok:true, jaExistia:true, userId:null }` e não cria nada — decisão correta
       // dele (não atribuir vendedor a conta existente, para não sequestrar comissão). Só que
@@ -245,6 +247,7 @@ export default function Promo() {
             )}
 
             {erroSdr && <div style={{ marginTop: 12, padding: '9px 12px', background: '#fee2e2', color: '#dc2626', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>{erroSdr}</div>}
+            {noContato && <div style={{ marginTop: 12 }}>{captcha.widget}</div>}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={() => { if (passo === 0) setSdrAberto(false); else setPasso(p => p - 1); }} disabled={enviandoSdr}
@@ -257,7 +260,7 @@ export default function Promo() {
                   Próxima
                 </button>
               ) : (
-                <button onClick={enviarSdr} disabled={enviandoSdr}
+                <button onClick={enviarSdr} disabled={enviandoSdr || captcha.pendente}
                   style={{ flex: 1, padding: '12px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: enviandoSdr ? 0.6 : 1 }}>
                   {enviandoSdr ? 'Enviando…' : (ehPlano ? 'Continuar para o checkout →' : 'Liberar meu acesso →')}
                 </button>

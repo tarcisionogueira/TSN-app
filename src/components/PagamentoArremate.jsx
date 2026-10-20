@@ -77,6 +77,9 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
     setP(data || null);
     return true;
   };
+  // Tira do payload o que é do servidor (guias/pagamentos e o carimbo), para a cópia lida ao abrir a tela nunca
+  // sobrescrever o que o cron gravou depois (#233).
+  const semServidor = (x) => { const { guias, pagamentos, atualizado_em, atualizado_por, ...resto } = x || {}; return resto; }; // eslint-disable-line no-unused-vars
   const salvarForm = async () => {
     const novo = form.forma === 'a_vista'
       ? { forma: 'a_vista', entrada_venc: form.entrada_venc || null, indice: form.indice || null, pagas: p?.pagas || [] }
@@ -84,14 +87,16 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
     // Folga (dias antes do vencimento) vale para à vista e parcelado; 0 a 10, padrão 1 (dono, 15/10).
     novo.folga_dias = Math.max(0, Math.min(10, Math.round(Number(form.folga_dias ?? 1)) || 0));
     if (p?.fonte_doc) novo.fonte_doc = { ...p.fonte_doc, editado_a_mao: true };
-    if (p?.guias) novo.guias = p.guias;
-    if (p?.pagamentos) novo.pagamentos = p.pagamentos;
+    // #233 (20/10): guias e pagamentos são do SERVIDOR (o cron liga guia/comprovante a qualquer hora) — a tela não
+    // manda a cópia que leu, e a RPC mantém o que está no banco. `_base_pagas` = o que esta tela leu: a RPC aplica
+    // só a mudança daqui e preserva parcela que o cron marcou como paga depois.
+    novo._base_pagas = p?.pagas || [];
     if (await salvar(novo)) setEditando(false);
   };
   const alternarPaga = async (idx) => {
     const pagas = new Set((p?.pagas || []).map(Number));
     if (pagas.has(idx)) pagas.delete(idx); else pagas.add(idx);
-    await salvar({ ...p, pagas: [...pagas].sort((a, b) => a - b) });
+    await salvar({ ...semServidor(p), pagas: [...pagas].sort((a, b) => a - b), _base_pagas: p?.pagas || [] });
   };
 
   const cor = !prox ? { bg: '#f0fdf4', bd: '#bbf7d0', fg: '#15803d' }
@@ -204,7 +209,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
           </table>
           {ehEquipe && prox && <GuiaDeposito parcela={prox} processo={processo} indice={p.indice} partes={p.fonte_doc} titulo={arr.titulo} userId={arr.user_id} dataArrematacao={arr.data_arrematacao}
             arrematadoId={arr.id} imovelId={arr.imovel_id} guiaGerada={p.guias?.[prox.idx] || null} onParcelamento={setP}
-            marcarPaga={async (idx) => salvar({ ...p, pagas: [...new Set([...(p.pagas || []).map(Number), idx])].sort((a, b) => a - b) })} />}
+            marcarPaga={async (idx) => salvar({ ...semServidor(p), pagas: [...new Set([...(p.pagas || []).map(Number), idx])].sort((a, b) => a - b), _base_pagas: p.pagas || [] })} />}
           {itens.length > visiveis.length || verTudo ? (
             <button onClick={() => setVerTudo((v) => !v)} style={{ marginTop: 6, background: 'none', border: 'none', color: '#2563eb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
               {verTudo ? 'mostrar só as próximas' : `ver cronograma completo (${itens.length})`}

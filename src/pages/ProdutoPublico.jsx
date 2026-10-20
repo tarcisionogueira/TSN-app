@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: sem captchaToken o Supabase recusa login/cadastro
 import { AZUL, NAVY, LATAO, VERDE, corDoProduto, corSuave } from '../utils/marca';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
@@ -14,6 +15,7 @@ import { trackProdutoVisualizado, trackCheckoutIniciado, trackPlanContratado } f
 import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
 export default function ProdutoPublico({ tipo }) {
+  const captcha = useCaptcha();
   const { id } = useParams();
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -243,7 +245,7 @@ export default function ProdutoPublico({ tipo }) {
       const j = await r.json().catch(() => ({}));
       if (j?.codigo_necessario) esquecerComprovanteEmail(emailNorm);
       if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível criar a conta.');
-      const { error: eLogin } = await supabase.auth.signInWithPassword({ email: emailNorm, password: suSenha });
+      const { error: eLogin } = await supabase.auth.signInWithPassword({ email: emailNorm, password: suSenha, options: await captcha.aguardarOpcoes() });
       if (eLogin) throw new Error('Conta criada, mas o login automático falhou. Use "Já tenho conta, Entrar" com a senha que você definiu.');
       if (produto?.requer_cartao_bonus) {
         // Conta criada e logada — não abre redirecionamento nenhum. O formulário de cartão
@@ -999,7 +1001,8 @@ export default function ProdutoPublico({ tipo }) {
                     {suErro && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', marginBottom: 8 }}>{suErro}</div>
                     )}
-                    <button className="bp-btn-hover" onClick={criarContaEComprar} disabled={suLoading || comprando}
+                    {captcha.widget}
+                    <button className="bp-btn-hover" onClick={criarContaEComprar} disabled={suLoading || comprando || captcha.pendente}
                       style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (suLoading || comprando) ? 'default' : 'pointer', marginBottom: 10, opacity: (suLoading || comprando) ? 0.7 : 1, boxShadow: (suLoading || comprando) ? 'none' : `0 4px 14px ${corSuave(AZUL, '35')}` }}>
                       {suLoading || comprando ? 'Só um instante…' : isPago ? `Criar conta e comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} →` : 'Criar conta e assinar Investidor Pro →'}
                     </button>

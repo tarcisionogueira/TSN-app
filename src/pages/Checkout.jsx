@@ -23,6 +23,7 @@ import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { ESTADOS_UF } from '../data/cidades';
 import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
+import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: login/cadastro fora do Login.jsx sem captchaToken eram recusados
 
 const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
 
@@ -211,6 +212,7 @@ export default function Checkout() {
   const pixAnualPidRef = React.useRef(null); // paymentId do PIX-anuidade, p/ retry da ativação
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
+  const captcha = useCaptcha();
   const [card, setCard] = useState({ nome: '' }); // número/validade/CVV: Secure Fields do MP
   const [etapa, setEtapa] = useState('ident'); // 'ident' (dados) | 'pgto' (cartão), só top2 não-logado
   const [suErro, setSuErro] = useState('');
@@ -435,7 +437,7 @@ export default function Checkout() {
       // 19/08: signInWithPassword NÃO lança — devolve { error }; o try/catch antigo era
       // código morto e a falha de login mandava a pessoa DESLOGADA para /membros (o
       // PrivateRoute jogava no /login sem explicação). Mesmo tratamento do Promo.jsx.
-      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email, password: senha });
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email, password: senha, options: await captcha.aguardarOpcoes() });
       if (erroLogin) {
         setSuErro('Conta criada! Não conseguimos entrar automaticamente — clique em "Já tenho conta — Entrar" e use o e-mail e a senha que você acabou de cadastrar.');
         setSuLoading(false);
@@ -553,7 +555,8 @@ export default function Checkout() {
                   <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                 </label>
                 {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{suErro}</div>}
-                <button onClick={criarContaGratis} disabled={suLoading || !senhaForte(su.senha)} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {captcha.widget}
+                <button onClick={criarContaGratis} disabled={suLoading || !senhaForte(su.senha) || captcha.pendente} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</> : 'Criar conta grátis →'}
                 </button>
                 <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
@@ -634,6 +637,7 @@ export default function Checkout() {
       const { data, error } = await supabase.auth.signUp({
         email, password: senha,
         options: {
+          ...captcha.opcoes(),
           emailRedirectTo: `${window.location.origin}/`,
           data: { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString(), ...(promoCode ? { ref_codigo: promoCode } : {}) },
         },
@@ -724,7 +728,7 @@ export default function Checkout() {
       // código morto. Aqui o MANDATO JÁ FOI AUTORIZADO: a tela de sucesso continua (é
       // verdade), mas o destino do redirect vira /login quando a sessão não abriu — antes
       // a pessoa PAGAVA e caía deslogada em /membros → tela de login sem explicação.
-      const { error: erroLoginPos } = await supabase.auth.signInWithPassword({ email, password: senha });
+      const { error: erroLoginPos } = await supabase.auth.signInWithPassword({ email, password: senha, options: await captcha.aguardarOpcoes() });
       const destinoPos = erroLoginPos ? '/login' : null;
       // `acesso: 'aguardando_pagamento'` (16/08): o mandato aceito pelo MP — inclusive
       // com status 'authorized' — NÃO é pagamento recebido. Antes, 'authorized' caía no
@@ -773,12 +777,12 @@ export default function Checkout() {
       //    a conta existe e o webhook do pagamento vai anexar o plano pelo e-mail.
       await supabase.auth.signUp({
         email, password: senha,
-        options: { emailRedirectTo: `${window.location.origin}/`,
+        options: { ...(await captcha.aguardarOpcoes()), emailRedirectTo: `${window.location.origin}/`,
           data: { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString(), ...(promoCode ? { ref_codigo: promoCode } : {}) } },
       });
       // 2) tenta logar (best-effort; se a senha divergir de uma conta antiga, o pagamento
       //    ainda vale — o plano cai pelo e-mail no webhook).
-      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* segue */ }
+      try { await supabase.auth.signInWithPassword({ email, password: senha, options: await captcha.aguardarOpcoes(8000) }); } catch { /* segue */ }
       trackCadastro(email, nome);
       // 3) gera o link Asaas (bancário, seguro) e abre em nova aba.
       const res = await apiCall('/api/asaas', {
@@ -1547,7 +1551,8 @@ export default function Checkout() {
                     <div style={{ fontSize: 11, color: '#64748b' }}>🔒 Número, validade e CVV ficam em campos protegidos do Mercado Pago.</div>
                   </div>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
-                  <button onClick={assinarComCadastro} disabled={suLoading || !senhaForte(su.senha)}
+                  {captcha.widget}
+                  <button onClick={assinarComCadastro} disabled={suLoading || !senhaForte(su.senha) || captcha.pendente}
                     style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</> : `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}`}
                   </button>
@@ -1582,7 +1587,8 @@ export default function Checkout() {
                     <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                   </label>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
-                  <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading || !senhaForte(su.senha)}
+                  {planoKey !== 'top2' && captcha.widget}
+                  <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading || !senhaForte(su.senha) || (planoKey !== 'top2' && captcha.pendente)}
                     style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</>
                       : (planoKey === 'top2' ? 'Continuar para pagamento →' : 'Criar conta e continuar →')}

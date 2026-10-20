@@ -146,11 +146,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 // `signup-sem-guard-duplicado`) que o encontrou na PRIMEIRA execução. Cadastro se faz por
 // `Login.jsx`, `Checkout.jsx`, `ConviteEquipe.jsx` ou `Promo.jsx` — todos com o guard.
 
-export async function signIn({ email, senha }) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
-  if (error) throw error;
-  return data;
-}
+// O helper `signIn` também saiu (20/10, #234): ninguém o importava e ele chamava o login por senha SEM
+// captchaToken — o Supabase recusa (captcha_failed). Login com senha: Login.jsx, ou `useCaptcha` (src/hooks).
 
 export async function signOut() {
   const { error } = await supabase.auth.signOut();

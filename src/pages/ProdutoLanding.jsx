@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { useCaptcha } from '../hooks/useCaptcha.jsx'; // #234: sem captchaToken o Supabase recusa login/cadastro
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
 import { trackCadastro } from '../utils/gtag';
 import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
@@ -78,6 +79,7 @@ const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#9
 
 /* ── Lead Capture (captura tipo) — multi-step funnel ── */
 function CapturaLanding({ id }) {
+  const captcha = useCaptcha();
   const [produto, setProduto] = useState(null);
   const [loading, setLoading] = useState(true);
   // step: 'hero' | 'perguntas' | 'cadastro' | 'sucesso'
@@ -297,7 +299,7 @@ function CapturaLanding({ id }) {
       // Já loga o visitante (conta confirmada) para acesso imediato.
       // 19/08: signInWithPassword NÃO lança — devolve { error }; o try/catch era código
       // morto e "acesso liberado" aparecia para quem ficou DESLOGADO.
-      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: form.email.trim(), password: form.senha });
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: form.email.trim(), password: form.senha, options: await captcha.aguardarOpcoes() });
       if (erroLogin) {
         setErro('Conta criada! Não conseguimos entrar automaticamente — faça login com o e-mail e a senha cadastrados para acessar.');
         setEnviando(false);
@@ -347,7 +349,8 @@ function CapturaLanding({ id }) {
             </div>
           </div>
           {erro && <div style={{ background: '#450a0a', border: '1px solid #dc2626', borderRadius: 8, padding: '10px 14px', color: '#fca5a5', fontSize: 13 }}>{erro}</div>}
-          <button type="submit" disabled={enviando}
+          {captcha.widget}
+          <button type="submit" disabled={enviando || captcha.pendente}
             style={{ padding: '14px', background: enviando ? '#374151' : '#059669', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', marginTop: 4 }}>
             {enviando ? 'Criando conta…' : 'Criar conta e liberar acesso →'}
           </button>
