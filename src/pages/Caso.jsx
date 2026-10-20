@@ -2323,8 +2323,7 @@ export default function Caso() {
 // ─── Checklist Jurídico (advogado) ────────────────────────────────────────────
 function ChecklistJuridico({ juridica, casoId, onSalvo }) {
   // Sem "custo estimado de desocupação" (decisão do dono, 20/10): o custo da desocupação são os
-  // honorários de 10%, divididos pela equipe conforme Admin → honorários. A coluna
-  // analise_juridica.custo_desocupacao_est fica no banco (sem uso) — apagar exige DROP do dono.
+  // honorários de 10%, divididos pela equipe conforme Admin → honorários. A coluna foi apagada no banco.
   const [form, setForm] = useState({
     debitos_iptu_valor: juridica.debitos_iptu_valor || '',
     debitos_cond_valor: juridica.debitos_cond_valor || '',

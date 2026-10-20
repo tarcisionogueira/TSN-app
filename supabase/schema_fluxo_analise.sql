@@ -281,7 +281,6 @@ CREATE TABLE IF NOT EXISTS public.analise_juridica (
   debitos_cond_valor    numeric(15,2),
   hierarquia_ok         boolean,
   hierarquia_obs        text,
-  custo_desocupacao_est text,
 
   -- 6. Parecer Final (preenchido pelo advogado)
   red_flags             text,
