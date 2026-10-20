@@ -128,7 +128,12 @@ export function mapearPlano(valor, descricao = '') {
   // compatibilidade com assinaturas legadas no preço antigo. O `ciclo` distingue o anual
   // (antes ambos colapsavam em top2 sem ciclo → plano_ciclo='anual' nunca era gravado e a
   // proteção anti-rebaixamento do anual ficava órfã; bug bounty).
-  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // Pro mensal
+  // 20/10: o Pro passou a 89,90 / 899 em 01/10 (preço agendado em planos_config) e esta tabela não
+  // acompanhou — um Pro pago pelo ASAAS (backup do MP) e o reconciliar-asaas-cron não reconheciam o
+  // valor e não ativavam o plano. Preço novo em planos_config = linha nova aqui no mesmo commit.
+  if (dentroFaixa(v, 89.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // Pro mensal (desde 01/10)
+  if (dentroFaixa(v, 899))   return { plano: 'top2', role: 'top2', ciclo: 'anual' };  // Pro anual (desde 01/10)
+  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // Pro mensal (preço anterior)
   if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // legado
   if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2', ciclo: 'anual' };  // Pro anual
 
