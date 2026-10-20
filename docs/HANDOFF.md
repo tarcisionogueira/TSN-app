@@ -7,6 +7,23 @@
 
 
 
+## 20/10 — FECHAMENTO DA SESSÃO (19–20/10)
+**Feito na sessão** (commits 8ce96da → 900d0f3, todos no `main`): bug bounty completo (4 agentes) e as pendências
+231–238, 244–246, 248–250 resolvidas e fechadas no banco com prova. Destaques: estornos que agora desfazem comissão,
+bônus e cortesia; downgrade agendado de ponta a ponta; fila "⚖️ Pagamentos a conferir" no Admin; captcha em todos os
+logins fora do Login.jsx (trava `login-sem-captcha`); parcelamento sem atualização perdida; encerramento da
+assessoria só com documento da equipe; LEJE pela home de eventos; limpeza CEF em lotes; invariantes 17,7 s → 9,5 s;
+coleta que não relê lote recusado (`coleta_lote_recusado`).
+
+**Abrir a próxima sessão por aqui:**
+1. Ritual normal (heartbeat, `pendencias_abertas()`, 1b). Conferir se `qa_invariantes_lenta` zerou (a próxima
+   execução registrada já deve vir < 12 s) e o log da 1ª coleta com `coleta_lote_recusado` ("N recusa(s) lembradas").
+2. **Dono, bloqueia captura:** #258 (rodar `docs/SQL_DONO_2026-10-20.sql` — dessuspende EMILIOMATOS, suspende
+   SBID21) e #249 (energia do Windows / "despertar para executar" no runner residencial). Depois, #259 (teto do
+   EMILIOMATOS — opcional, o acervo já cicla em ~3 semanas).
+3. **Claude, P1 abertas:** #188 (1ª liquidação do honorário do Marcos), #198 (vincular escritório aos 3 casos),
+   #200 (Inter PJ após aprovação), #216 (aprovar guia de parcela pela tela do caso).
+
 ## 20/10 — pendências 237 e 238
 - **#237 qa_invariantes lenta (13–18 s):** o perfil mostrou que 12 s eram de UMA função, `bem_movel_barrado`: ela fazia
   `lower(translate(...))` sobre título + descrição inteira de cada lote ativo (19,5 mi de caracteres; translate
