@@ -18,7 +18,8 @@
   `api/_previsao-processo.js` (ritmo entre despachos + base da plataforma + prazo legal), servida só à equipe por
   `api/caso-andamento-cnj.js`. O CUSTO da desocupação são os HONORÁRIOS (10%, divididos pela equipe conforme
   Admin → honorários). Corrigido: "Registrar previsão no andamento" gravava `visivel_cliente` pelo checkbox
-  (padrão ligado) — agora previsão é sempre só equipe. 0 previsões tinham sido registradas (nada vazou).
+  (padrão ligado) — agora previsão é sempre só equipe. 0 previsões tinham sido registradas (nada vazou). Campo "Custo estimado de desocupação" do
+  checklist jurídico do Caso também removido (coluna `analise_juridica.custo_desocupacao_est` segue no banco, sem uso).
 - **Área**: `fmtArea` (utils/format.js) — no máx. 2 casas, vírgula. A ficha mostra a área do DOCUMENTO quando algum
   relatório já leu a matrícula (doc_fatos ou ficha_juridica), senão a do anúncio; Resumo mostra as duas se divergem >10%.
 - **"Voltar à busca" caía no relatório**: `nav(-1)` às cegas; o /analise empurra um imóvel novo na pilha ("abrir a

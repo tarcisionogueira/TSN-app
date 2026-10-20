@@ -2322,11 +2322,13 @@ export default function Caso() {
 
 // ─── Checklist Jurídico (advogado) ────────────────────────────────────────────
 function ChecklistJuridico({ juridica, casoId, onSalvo }) {
+  // Sem "custo estimado de desocupação" (decisão do dono, 20/10): o custo da desocupação são os
+  // honorários de 10%, divididos pela equipe conforme Admin → honorários. A coluna
+  // analise_juridica.custo_desocupacao_est fica no banco (sem uso) — apagar exige DROP do dono.
   const [form, setForm] = useState({
     debitos_iptu_valor: juridica.debitos_iptu_valor || '',
     debitos_cond_valor: juridica.debitos_cond_valor || '',
     hierarquia_ok: juridica.hierarquia_ok ?? null,
-    custo_desocupacao_est: juridica.custo_desocupacao_est || '',
     red_flags: juridica.red_flags || '',
     nivel_risco: juridica.nivel_risco || '',
     acoes_pos_arremate: juridica.acoes_pos_arremate || '',
@@ -2343,7 +2345,6 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
         ...form,
         debitos_iptu_valor: form.debitos_iptu_valor ? parseFloat(form.debitos_iptu_valor) : null,
         debitos_cond_valor: form.debitos_cond_valor ? parseFloat(form.debitos_cond_valor) : null,
-        custo_desocupacao_est: form.custo_desocupacao_est ? parseFloat(form.custo_desocupacao_est) : null,
         ...(entregar ? { entregue_em: new Date().toISOString() } : {}),
       };
       await supabase.from('analise_juridica').update(upd).eq('caso_id', casoId);
@@ -2382,7 +2383,6 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
             ))}
           </div>
         </div>
-        <div style={{ marginTop:10 }}><label style={lbl}>Custo estimado de desocupação (R$)</label><input value={form.custo_desocupacao_est} onChange={e=>f('custo_desocupacao_est',e.target.value)} style={inp2} placeholder="0.00"/></div>
       </div>
 
       {/* Seção 6: Conclusão */}
