@@ -7,6 +7,31 @@
 
 
 
+## 20/10 (noite, 2) — fotos sem o CDN do leiloeiro · FIPE pública e casamento · garantia de 7 dias em Veículos
+**Pedido do dono:** esconder o leiloeiro também na foto; garantia de 7 dias; "quem já é pagante continua pagando, as
+assessorias avulsas eu atribuo direto — são independentes" (→ o ponto "assessorado com Combo" do #262 **não é defeito**,
+descartado); "FIPE sob demanda para quem acessar a página do carro, e sempre encontrar pela descrição que temos".
+- **Fotos** (`20261020_veiculos_fotos_proxy.sql`): a vitrine entrega `/api/img-proxy?veiculo=<id>&i=<n>`; o servidor lê a
+  URL original (service key) e serve com cache de 7 dias na CDN da Vercel. **Escolhido no lugar de copiar** as ~76 mil fotos
+  para o storage (custo de espaço + banda + job de espelho): o efeito para o público é o mesmo — nenhuma URL do leiloeiro
+  chega ao navegador. Ressalva: se o leiloeiro apagar a foto, ela some aqui também (a cópia resolveria; não vale hoje).
+  `i` é a posição ORIGINAL (ordinality antes do filtro). "sem imagem/placeholder" filtrado na view. Relatório/PDF aceita a URL
+  do proxy (sem isso o cliente ficaria sem fotos no relatório). Card da busca pede WebP 480 px.
+- **FIPE**: `/api/veiculo-fipe` aberto a qualquer logado (cliente: só vitrine, 40/h por usuário, sem placa no retorno — a
+  cota de 450/dia é UMA para todos; se o tráfego crescer, #209 = token grátis sobe a cota). Casamento medido no acervo real
+  contra o `fipe_cache` (sem rede para a API daqui): ano pelo título antes do edital (318 dos 985 sem ano, formato
+  `, 01/01, `); Chery = "Caoa Chery/Chery"; modelo colado `F4000`/`D10`/`207HB`/`307SD16`; marca em várias categorias
+  (moto cadastrada como carro); modelo da fonte errado ("hillux") → tenta o do título; < 1985 → `fora_tabela` (a FIPE não
+  cobre) sem gastar cota. Triangulação só na categoria preferida (é a parte cara). Testes: `npm run testar:fipe`.
+  **O que continua sem FIPE, e é resposta, não falha:** 376 lotes da Urbes Sorocaba com "Ano/Modelo" VAZIO na própria
+  fonte; baú/munck/implemento (não existe FIPE).
+- **Garantia 7 dias em Veículos**: âncora `perfis.veiculos_pago_em` (início do período contratado; renovação não mexe;
+  protegida pelo gatilho). `garantia-cancelar {trilha:'veiculos'}` cancela só o mandato de Veículos (MP/Asaas); dentro de 7
+  dias reembolsa 100% e encerra o acesso; uma vez por CPF **por trilha**. Combo pelo botão principal: reembolso encerra
+  também o acesso a veículos e registra o preço do Combo (antes ficava o acesso e o valor do Pro).
+- **Ainda não testado no navegador** — vale o mesmo roteiro de compra real do bloco abaixo, mais: abrir um carro como
+  cliente (foto carrega? FIPE aparece?) e o cancelamento na garantia.
+
 ## 20/10 (noite) — VEÍCULOS PÚBLICOS + planos Veículos (R$ 29,90) e Combo (R$ 99,90) — pendências #262 e #263
 **Decisões do dono:** lista de veículos aberta, detalhe pede cadastro; leiloeiro, link, documentos, pátio e relatório por IA
 só com plano; sem amostra grátis de relatório; Veículos e Combo **recorrentes** (MP principal, Asaas backup); só mensal;
@@ -39,9 +64,7 @@ sem assessoria para veículos; comunicação toda em "gere o relatório e desblo
   leiloeiro, 0 na tabela, cota 0; admin → tudo.
 - **Não testado no navegador** (a sessão não alcança o site nem o banco pelo navegador). **Testar antes de anunciar:**
   compra real de Veículos com uma conta Pro (o Pro NÃO pode cair), Combo partindo do Pro, recusa de cartão, cancelamento.
-- **Em aberto (#262):** garantia de 7 dias (CDC) para quem tem SÓ Veículos (`garantia-cancelar` exige role pagante); o
-  assessorado que tem Combo segue pagando a parte de veículos (cancelarRecorrenciaPro só pega `top2*`); FIPE sob demanda
-  continua só para a equipe (`api/veiculo-fipe.js` 403 para cliente — a FIPE do público vem do lote noturno).
+- ~~Em aberto (#262)~~ → resolvido no bloco acima (garantia, FIPE pública; assessorado×Combo descartado pelo dono).
 
 ## 20/10 (noite) — gêmeos entre leiloeiros + Asaas no preço novo
 - **Asaas (`mapearPlano`)** não reconhecia 89,90/899 (Pro desde 01/10): Pro pago pelo backup não ativaria. Corrigido;
