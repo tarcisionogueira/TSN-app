@@ -9,6 +9,7 @@ import { alertarErro } from './_error-alert.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
+import { enviarEmail } from './_email.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end();
@@ -67,14 +68,15 @@ export default async function handler(req, res) {
       }
 
       if (vencimentos.length === 0) continue;
-      if (!RESEND_KEY) continue;
+      if (!RESEND_KEY) { erros.push(fin.id); continue; } // sem chave o lembrete do dia se perde: avisa
 
       // Busca email do usuário via auth.users (requer service role)
       const userRes = await fetch(
         `${SUPABASE_URL}/auth/v1/admin/users/${fin.user_id}`,
         { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
       );
-      if (!userRes.ok) continue;
+      // #248 (20/10): `continue` calado perdia o lembrete do dia (a elegibilidade é `=== hoje`).
+      if (!userRes.ok) { console.error('[financiamento-alertas] leitura do usuário falhou', fin.user_id, userRes.status); erros.push(fin.id); continue; }
       const userData = await userRes.json();
       const email = userData?.email;
       if (!email) continue;
@@ -116,18 +118,20 @@ export default async function handler(req, res) {
 </body>
 </html>`;
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: email,
-          subject: `⚠️ Vencimento hoje — ${fin.imovel_nome || 'Financiamento'}`,
-          html,
-        }),
+      // #248 (20/10): pelo `enviarEmail` — o envio direto ao Resend ficava fora do teto diário (os outros
+      // chamadores achavam que havia margem), da lista de supressão e do emails_log. `semFila`: um "vence
+      // HOJE" represado para amanhã estaria errado; a recusa cai no `else` e alerta a equipe no mesmo dia.
+      const emailRes = await enviarEmail({
+        from: FROM,
+        to: email,
+        subject: `⚠️ Vencimento hoje — ${fin.imovel_nome || 'Financiamento'}`,
+        html,
+        meta: { tipo: 'financiamento_vencimento', userId: fin.user_id },
+        idempotencyKey: `financiamento:${fin.id}:${hoje}`,
+        semFila: true,
       });
 
-      if (emailRes.ok) {
+      if (emailRes?.ok) {
         // Marca sinal como notificado se aplicável
         const hasSinal = vencimentos.some(v => v.tipo === 'Sinal');
         if (hasSinal) {
@@ -138,6 +142,9 @@ export default async function handler(req, res) {
           });
         }
         enviados++;
+      } else if (emailRes?.suprimido) {
+        // Destinatário na lista de supressão (bounce/queixa): não é falha nossa, não alerta.
+        console.warn('[financiamento-alertas] destinatário suprimido', fin.id);
       } else {
         // FALHA DE ENVIO ERA SILENCIOSA **E** IRRECUPERÁVEL (10/08). O `if (emailRes.ok)` foi
         // escrito para decidir se marca `notificado_sinal`, e acabou sendo o único ponto que
@@ -148,8 +155,7 @@ export default async function handler(req, res) {
         // E a perda é DEFINITIVA: a elegibilidade é a igualdade exata `dtStr === hoje` — amanhã
         // a parcela já não casa e o lembrete NUNCA mais sai. Por isso entra em `erros`, que é o
         // que dispara o e-mail ao admin: alguém tem de saber no MESMO dia.
-        const corpo = await emailRes.text().catch(() => '');
-        console.error('[financiamento-alertas] Resend recusou', emailRes.status, corpo.slice(0, 200));
+        console.error('[financiamento-alertas] e-mail não saiu', fin.id, emailRes?.error || 'sem confirmação');
         erros.push(fin.id);
       }
     } catch (e) {

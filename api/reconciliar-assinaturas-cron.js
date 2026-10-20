@@ -305,6 +305,32 @@ async function handler(req) {
       const { error: e2 } = await supabase.from('perfis').update(upd).eq('id', p.id);
       if (!e2) rebaixados++;
     }
+
+    // ── DOWNGRADE AGENDADO NÃO AUTORIZADO (#246, 20/10) ───────────────────────
+    // /api/agendar-plano cancela a renovação nos dois gateways e grava plano_agendado. Se o cliente autoriza o
+    // plano menor, a ativação cumpre a troca e limpa a marca. Se NÃO autoriza, nada encerrava o plano maior —
+    // o laço de DOWNGRADE acima só enxerga mandato MP cancelado, e o Clube/Pro mensal do Asaas seguia de graça.
+    // Mesma graça de 5 dias e o mesmo fail-safe: só rebaixa com confirmação de que não há mandato ativo.
+    const { data: agendadosVencidos, error: eAg } = await supabase.from('perfis')
+      .select('id, role, plano_agendado, asaas_id, mp_preapproval_id')
+      .not('plano_agendado', 'is', null).lt('plano_vencimento', grace)
+      .in('role', ['top2', 'top2_anual', 'clube', 'clube_anual']);
+    if (eAg) throw new Error(`leitura de downgrades agendados falhou: ${eAg.message}`);
+    for (const p of (agendadosVencidos || [])) {
+      let mandatoAtivo = false, incerto = false;
+      const asaas = await checarAsaasAtivo(p.asaas_id);
+      if (asaas.erro) incerto = true; else if (asaas.ativo) mandatoAtivo = true;
+      if (!mandatoAtivo && p.mp_preapproval_id) {
+        const pre = await mpGet(`/preapproval/${p.mp_preapproval_id}`);
+        if (pre == null) incerto = true;
+        else if (pre.status === 'authorized') mandatoAtivo = true;
+      }
+      if (mandatoAtivo || incerto) continue;
+      const upd = { role: 'explorador', role_anterior: p.role, plano_ciclo: null, plano_vencimento: null, plano_agendado: null };
+      const { error: e3 } = await supabase.from('perfis').update(upd).eq('id', p.id);
+      if (e3) console.error('[reconciliar] downgrade agendado vencido', p.id, e3.message);
+      else { rebaixados++; console.log('[reconciliar] downgrade agendado sem autorização → explorador', p.id, p.role, '→', p.plano_agendado); }
+    }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }

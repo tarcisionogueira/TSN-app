@@ -160,7 +160,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     // Lançando, o catch do webhook desfaz a marca e devolve 5xx para o gateway reentregar.
     const { data, error } = await supabase
       .from('perfis')
-      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento')
+      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento, plano_agendado')
       .eq(campo, gatewayCustomerId)
       .maybeSingle();
     if (error) throw new Error(`buscarCliente(${campo}): ${error.message}`);
@@ -174,7 +174,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     if (userId) {
       const { data, error } = await supabase
         .from('perfis')
-        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento')
+        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em, plano_ciclo, plano_vencimento, plano_agendado')
         .eq('id', userId)
         .maybeSingle();
       if (error) throw new Error(`buscarCliente(id): ${error.message}`);
@@ -233,7 +233,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const { data: atual, error: eAtual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, plano_ciclo, ciclo_agendado').eq('id', userId).maybeSingle();
+  const { data: atual, error: eAtual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, plano_ciclo, ciclo_agendado, plano_agendado').eq('id', userId).maybeSingle();
   // 19/10 (forma 2): sem isto um erro transitório virava `atual = null` e um assessorado que renovava o Pro era
   // rebaixado a top2. Lança: os chamadores desfazem a marca de idempotência e devolvem 5xx (o gateway reentrega).
   if (eAtual) throw new Error(`leitura do perfil falhou: ${eAtual.message}`);
@@ -274,7 +274,11 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   const upd = {
     inadimplente_desde: null,
     role_anterior:      null,
-    role:               roleAposPagamento(atual?.role, candidato) ?? planoBaseKey,
+    // #246 (20/10): DOWNGRADE AGENDADO cumprido — o cliente pediu para descer (plano_agendado) e autorizou o plano
+    // menor. A escada (só sobe) mantinha o Clube cobrando o preço do Pro. Só vale para o plano que ELE agendou.
+    role:               atual?.plano_agendado && atual.plano_agendado === planoBaseKey
+      ? planoBaseKey
+      : (roleAposPagamento(atual?.role, candidato) ?? planoBaseKey),
   };
   // CICLO do plano (mensal/anual) derivado do planoKey — o recorrente MP não usa valor.
   const cicloKey = /_anual$/.test(planoKey) ? 'anual' : 'mensal';
@@ -630,6 +634,9 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
       ? roleAposPagamento(cliente.role_anterior, mapeado.role)
       : mapeado.role;
     update.role = roleAposPagamento(cliente.role, candidato) ?? mapeado.role;
+    // #246 (20/10): mesmo cumprimento do downgrade agendado do ativarPlanoDireto, no caminho Asaas/fallback.
+    if (cliente.plano_agendado && cliente.plano_agendado === mapeado.role) update.role = mapeado.role;
+    if (cliente.plano_agendado) update.plano_agendado = null;
     if (cliente.role_anterior && cliente.inadimplente_desde) update.role_anterior = null;
     // Garantia de 7 dias (CDC art. 49): ancora plano_pago_em na 1ª ativação paga —
     // MESMO critério do ativarPlanoDireto, agora com a regra única em `_ancora-cdc.js`.

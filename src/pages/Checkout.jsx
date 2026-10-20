@@ -962,10 +962,26 @@ export default function Checkout() {
   // DOWNGRADE pelo MP fica de fora de propósito: cancelar e recriar por um valor menor faria o
   // cliente perder o restante do período já pago, e isso é decisão de produto, não detalhe de
   // implementação. Enquanto não houver decisão, a tela diz a verdade e encaminha ao suporte.
+  // DOWNGRADE agenda a virada para o fim do período JÁ PAGO (10/08), em qualquer gateway: não cobra agora e
+  // não tira nada do cliente; perto do vencimento ele recebe o link para autorizar o plano novo.
+  const agendarDowngrade = async () => {
+    const ag = await apiCall('/api/agendar-plano', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alvo: planoKey }),
+    });
+    const dAg = await ag.json().catch(() => ({}));
+    setLoading(false);
+    if (!ag.ok) { setErro(dAg.error || 'Não foi possível agendar a troca agora.'); return; }
+    setResultadoMudanca({ tipo: 'downgrade_agendado', ...dAg });
+  };
+
   const mudarPlano = async () => {
     setLoading(true);
     setErro('');
     try {
+      // #246 (20/10): downgrade vai SEMPRE ao agendamento. Pelo Asaas ele baixava só o valor e o Clube seguia
+      // Clube pagando o preço do Pro (o servidor agora recusa com 409).
+      if (!ehUpgrade) return await agendarDowngrade();
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -978,19 +994,7 @@ export default function Checkout() {
       let data = {}; try { data = JSON.parse(bruto); } catch { data = { error: bruto.slice(0, 120) || `HTTP ${res.status}` }; }
       if (res.status === 404) {
         // 404 do Asaas = a assinatura está no MP (o gateway PRINCIPAL).
-        if (ehUpgrade) { setLoading(false); return await gerarLink(); }
-        // DOWNGRADE: agenda a virada para o fim do período JÁ PAGO (10/08). Não cobra agora e
-        // não tira nada do cliente; perto do vencimento ele recebe o link para autorizar o
-        // plano novo. Mesma mecânica provada da troca anual→mensal.
-        const ag = await apiCall('/api/agendar-plano', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ alvo: planoKey }),
-        });
-        const dAg = await ag.json().catch(() => ({}));
-        setLoading(false);
-        if (!ag.ok) { setErro(dAg.error || 'Não foi possível agendar a troca agora.'); return; }
-        setResultadoMudanca({ tipo: 'downgrade_agendado', ...dAg });
-        return;
+        setLoading(false); return await gerarLink();
       }
       if (!res.ok) throw new Error(data.error || 'Erro ao alterar plano');
       setResultadoMudanca(data);
@@ -998,7 +1002,7 @@ export default function Checkout() {
         setLinkPagamento(data.linkPagamento);
         window.open(data.linkPagamento, '_blank', 'noopener');
       } else {
-        // Mudança sem link (downgrade): mostra sucesso e redireciona
+        // Upgrade sem diferença a cobrar: mostra sucesso e redireciona
         setTimeout(() => nav('/'), 3000);
       }
     } catch (err) {

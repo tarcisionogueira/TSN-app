@@ -531,14 +531,19 @@ export default async function handler(req, res) {
       const valorAtual = Number(sub.value) || 0;
       const valorNovo = info.valor;
       const isUpgrade = valorNovo > valorAtual;
+      // #246 (20/10): DOWNGRADE não passa mais por aqui. Baixar só o valor da assinatura deixava o Clube pagando
+      // o preço do Pro e continuando Clube — a cobrança seguinte entra no processarConfirmado, e a escada só sobe
+      // (roleAposPagamento('clube','top2') = clube). O caminho certo é /api/agendar-plano: cancela a renovação
+      // nos DOIS gateways, grava plano_agendado e preserva o acesso até o fim do período já pago.
+      if (!isUpgrade) {
+        return res.status(409).json({ error: 'Para descer de plano, use o agendamento da troca.', usar: 'agendar-plano' });
+      }
 
-      // Atualiza a assinatura para o novo valor/plano.
-      // Upgrade: aplica já (updatePendingPayments=true). Downgrade: mantém o ciclo
-      // atual e só muda na próxima cobrança (updatePendingPayments=false).
+      // Atualiza a assinatura para o novo valor/plano — só upgrade chega aqui (aplica já).
       await asaasPut(`/subscriptions/${sub.id}`, {
         value: valorNovo,
         description: info.nome,
-        updatePendingPayments: isUpgrade,
+        updatePendingPayments: true,
       });
 
       let linkPagamento = null;

@@ -7,6 +7,23 @@
 
 
 
+## 20/10 — pendências 246 e 248
+- **#246 downgrade Clube→Pro:** pelo Asaas (`gerenciar_assinatura`) baixava só o VALOR da assinatura e a escada
+  (só sobe) mantinha o Clube pagando o preço do Pro. Agora o servidor recusa downgrade ali (409) e o Checkout leva
+  todo downgrade ao `/api/agendar-plano` (cancela a renovação nos dois gateways, grava `plano_agendado`, preserva o
+  acesso até o vencimento). Dois elos que faltavam também no MP:
+  - autorizar o plano menor não rebaixava (`ativarPlanoDireto`/`processarConfirmado` só limpavam a marca) → agora a
+    ativação do plano AGENDADO aplica o papel dele;
+  - quem agendou e não autorizou ficava no plano maior para sempre no Asaas → o `reconciliar-assinaturas-cron`
+    rebaixa a explorador após o vencimento + 5 dias, só com confirmação de que não há mandato ativo.
+  Ninguém com troca agendada hoje.
+- **#248:** `financiamento-alertas-cron` passa por `enviarEmail` (`semFila`, idempotência por financiamento+dia;
+  suprimido não alerta) e falha de leitura do usuário alerta em vez de sumir. **Estorno de recarga:** nova
+  `estornar_recarga_credito(referência, total_estornado)` debita do saldo a diferença entre o acumulado devolvido e
+  o já debitado (parcial, total, chargeback e reentrega sem duplicar; saldo pode ficar negativo — o débito de uso
+  barra). Ligada nos ramos de chargeback e reembolso do mp-webhook. Seco desfeito: 100 → 70 → (reentrega) 70 → 0.
+  Nenhuma recarga feita até hoje.
+
 ## 20/10 — pendências 244 e 245 (dinheiro)
 - **#244 assessoria pelo Mercado Pago:** o pagamento chega com `metadata.tipo='servico'`, `proposito='assessoria'`
   (preço já conferido no mp-checkout, ≥ tabela; com juros sai das faixas do `mapearPlano`). Agora o webhook passa

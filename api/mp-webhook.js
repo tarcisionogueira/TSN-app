@@ -157,6 +157,21 @@ export default async function handler(req, res) {
   }
 }
 
+// #248 (20/10): reembolso/chargeback de RECARGA tira o crédito do saldo. `total` é o ACUMULADO devolvido
+// (a função debita só a diferença → idempotente na reentrega e no parcial seguido de total). Lança em falha:
+// o catch do handler desmarca o evento e devolve 5xx para o MP reentregar.
+async function estornarRecargaMp(pagamento, total, motivo) {
+  if (pagamento.metadata?.proposito !== 'recarga' || !(Number(total) > 0)) return null;
+  const r = await fetch(`${_SB_URL}/rest/v1/rpc/estornar_recarga_credito`, {
+    method: 'POST',
+    headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_referencia: `mp_${pagamento.id}`, p_total_estornado: Number(total), p_motivo: motivo }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || j?.ok === false) throw new Error(`estornar_recarga_credito: HTTP ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
+  return j;
+}
+
 export async function processarEventoMp(req, res) {
   const tipo = req.body?.type || req.body?.action || '';
   const dataId = req.body?.data?.id;
@@ -747,6 +762,7 @@ export async function processarEventoMp(req, res) {
         const r = await reverterCobrancaAvulsaEstornada(pagamento.metadata.cobranca_id, 'chargeback', String(pagamento.id));
         return res.status(200).json({ ok: true, cobranca_estorno: r });
       }
+      const recargaEstorno = await estornarRecargaMp(pagamento, pagamento.transaction_amount, 'chargeback'); // #248
       // 19/10: o Pro ANUAL pago por PIX vem com metadata.tipo='servico' (para o caminho genérico não
       // elevar plano) — mas no chargeback/reembolso ele É a assinatura: sem isto, R$ 449,90 voltavam
       // e os 12 meses de Pro ficavam. O ramo de recusa NÃO usa isto (PIX expirado rebaixaria o mensal).
@@ -758,6 +774,7 @@ export async function processarEventoMp(req, res) {
         motivo: pagamento.status_detail || 'charged_back',
         raw: { id: pagamento.id, status, status_detail: pagamento.status_detail },
       });
+      if (recargaEstorno) result = { ...result, recarga_estorno: recargaEstorno };
     } else if (status === 'refunded' || status === 'partially_refunded') {
       // Reembolso: estorna a comissão de rede e (no total) suspende o acesso. Antes caía no
       // 'ignored' → a comissão ficava paga sobre dinheiro devolvido (perda dupla / fraude).
@@ -785,7 +802,11 @@ export async function processarEventoMp(req, res) {
       // suspende o plano: o assinante devolvido de uma compra avulsa segue pagante.
       // Mesma lacuna do ramo rejected/cancelled — o guard cobria só produto.
       const servicoReemb = contexto.servico && !['plano_anual', 'assessoria'].includes(pagamento.metadata?.proposito); // Pro anual e assessoria (#244): ver chargeback
+      const recargaEstorno = await estornarRecargaMp(pagamento,
+        parcial ? pagamento.transaction_amount_refunded : (pagamento.transaction_amount_refunded || pagamento.transaction_amount),
+        parcial ? 'reembolso_parcial' : 'reembolso');
       result = await processarReembolso({ ...contexto, servico: servicoReemb, suspender: !parcial && !servicoReemb });
+      if (recargaEstorno) result = { ...result, recarga_estorno: recargaEstorno };
     } else {
       // pending, in_process, authorized — aguardar próxima notificação
       return res.status(200).json({ ok: true, ignored: status });
