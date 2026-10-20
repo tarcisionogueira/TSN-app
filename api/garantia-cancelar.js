@@ -10,6 +10,11 @@
  *    fim do período já pago; sem reembolso.
  *
  * O mesmo botão serve os dois casos — o texto muda no front conforme a janela.
+ *
+ * TRILHA VEÍCULOS (20/10, body `{ trilha: 'veiculos' }`): mesma regra, âncora própria
+ * (`perfis.veiculos_pago_em`, início do período contratado). Mexe SÓ no mandato de Veículos e no
+ * `acesso_veiculos_ate` — o plano principal fica intacto. A garantia é uma vez por CPF POR TRILHA.
+ * COMBO pelo botão principal: o reembolso encerra também o acesso a veículos (vinha no mesmo pagamento).
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -48,8 +53,9 @@ function sb(path, opts = {}) {
 // tentava cancelar /preapproval/<letra> e a assinatura real nunca era cancelada por esse
 // caminho (achado do bug bounty 02/08). O `mp_preapproval_id`, que é o id da recorrência,
 // nem era passado: o perfil o usava só para descobrir o gateway.
-async function cancelarMP(candidatos, email, userId) {
-  if (!MP_TOKEN) return 0;
+async function cancelarMP(candidatos, email, userId, trilha = 'principal') {
+  const out = { n: 0, combo: false };
+  if (!MP_TOKEN) return out;
   const lista = Array.isArray(candidatos) ? candidatos : (candidatos ? [candidatos] : []);
   const ids = new Set();
   try {
@@ -57,12 +63,16 @@ async function cancelarMP(candidatos, email, userId) {
       const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
       const d = await r.json().catch(() => null);
       for (const p of (d?.results || [])) {
-        // Garantia do plano PRINCIPAL não cancela a assinatura de Veículos (outra trilha, 20/10).
-        if (String(p.external_reference || '').split('|')[0] === userId && p.id && !/^veiculos/.test(String(p.external_reference || '').split('|')[1] || '')) ids.add(String(p.id));
+        // Cada trilha cancela só o próprio mandato (20/10): principal nunca leva o de Veículos, e vice-versa.
+        const [uid, plano = ''] = String(p.external_reference || '').split('|');
+        if (uid !== userId || !p.id || /^veiculos/.test(plano) !== (trilha === 'veiculos')) continue;
+        ids.add(String(p.id));
+        if (/^combo/.test(plano)) out.combo = true;
       }
     }
-  } catch { /* segue com os candidatos do perfil */ }
-  for (const c of lista) if (c) ids.add(String(c));
+  } catch (e) { console.warn('[garantia-cancelar] busca de mandatos no MP falhou:', e?.message || e); } // segue com os candidatos do perfil
+  // Os ids do PERFIL são do plano principal — nunca entram no cancelamento de Veículos.
+  if (trilha !== 'veiculos') for (const c of lista) if (c) ids.add(String(c));
   let cancelados = 0;
   for (const id of ids) {
     try {
@@ -70,24 +80,93 @@ async function cancelarMP(candidatos, email, userId) {
       if (pr.ok) cancelados++;
     } catch { /* best-effort por id */ }
   }
-  return cancelados;
+  out.n = cancelados;
+  return out;
 }
 
 // Cancela a assinatura recorrente do Asaas (por customer do e-mail).
 // Cancela pelo customer id do PRÓPRIO usuário (perfil.asaas_id), não por e-mail —
 // e-mail pode ter duplicata/homônimo no Asaas e cancelaria assinatura de terceiro.
-async function cancelarAsaas(customerId) {
-  if (!ASAAS_KEY || !customerId) return 0;
+async function cancelarAsaas(customerId, trilha = 'principal') {
+  const out = { n: 0, combo: false };
+  if (!ASAAS_KEY || !customerId) return out;
   try {
     const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
-    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => planoDaAssinaturaAsaas(x) !== 'veiculos');
-    let n = 0;
+    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => (planoDaAssinaturaAsaas(x) === 'veiculos') === (trilha === 'veiculos'));
     for (const s of subs) {
       const dr = await fetch(`${ASAAS_URL}/subscriptions/${s.id}`, { method: 'DELETE', headers: { access_token: ASAAS_KEY } });
-      if (dr.ok) n++;
+      if (dr.ok) { out.n++; if (planoDaAssinaturaAsaas(s) === 'combo') out.combo = true; }
     }
-    return n;
-  } catch { return 0; }
+    return out;
+  } catch (e) { console.warn('[garantia-cancelar] cancelamento no Asaas falhou:', e?.message || e); return out; }
+}
+
+// Garantia é UMA VEZ POR CPF por trilha: impede o loop assinar→reembolsar→assinar (inclusive recriando
+// conta com o mesmo CPF). Sem CPF apurável → não bloqueia o cancelamento (só não reembolsa 2×).
+async function garantiaDoCpf(perfil, trilha) {
+  try {
+    const cpf = await cpfDoRegistro(perfil);
+    const cpfHash = cpf ? await hashCpf(cpf) : null;
+    if (!cpfHash) return { cpfHash: null, jaUsou: false };
+    const filtro = trilha === 'veiculos' ? 'plano=eq.veiculos' : 'plano=neq.veiculos';
+    const [ja] = await (await sb(`reembolsos_garantia?cpf_hash=eq.${encodeURIComponent(cpfHash)}&${filtro}&select=id&limit=1`)).json().catch(() => []);
+    return { cpfHash, jaUsou: !!ja };
+  } catch (e) { console.warn('[garantia-cancelar] apuração do CPF falhou:', e?.message || e); return { cpfHash: null, jaUsou: false }; }
+}
+
+async function precoDe(planoKey, anual = false) {
+  try {
+    const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(planoKey)}&select=preco,preco_anual&limit=1`)).json();
+    return anual ? (pc?.preco_anual ?? pc?.preco ?? null) : (pc?.preco ?? null);
+  } catch { return null; } // padrao-ok: valor só de referência para o admin conferir o estorno
+}
+
+// ── Trilha Veículos ───────────────────────────────────────────────────────────────────────────
+async function garantiaVeiculos({ user, email, res }) {
+  const rP = await sb(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,asaas_id,acesso_veiculos_ate,veiculos_pago_em`).catch(() => null);
+  if (!rP?.ok) { res.status(503).json({ error: 'Não consegui ler o seu plano agora. Nada foi cancelado — tente de novo em instantes.' }); return; }
+  const [perfil] = await rP.json().catch(() => []);
+  if (!perfil) { res.status(404).json({ error: 'Perfil não encontrado' }); return; }
+  if (!(perfil.acesso_veiculos_ate && new Date(perfil.acesso_veiculos_ate).getTime() > Date.now())) {
+    res.status(200).json({ ok: true, semAssinatura: true, msg: 'Não há plano Leilão de Veículos ativo para cancelar.' }); return;
+  }
+  const dentro7 = !!perfil.veiculos_pago_em && (Date.now() - new Date(perfil.veiculos_pago_em).getTime() <= JANELA_MS);
+  const { cpfHash, jaUsou } = await garantiaDoCpf(perfil, 'veiculos');
+  const mp = await cancelarMP([], email, user.id, 'veiculos');
+  const asaas = await cancelarAsaas(perfil.asaas_id, 'veiculos');
+  const cancelados = mp.n + asaas.n;
+  let jaCancelado = false;
+  if (!cancelados) {
+    const rEsp = await sb(`mp_assinaturas?user_id=eq.${user.id}&plano_key=like.veiculos*&select=status`).catch(() => null);
+    const esp = rEsp?.ok ? await rEsp.json().catch(() => null) : null;
+    jaCancelado = Array.isArray(esp) && esp.some((a) => a.status === 'cancelled') && !esp.some((a) => a.status === 'authorized');
+  }
+  // Nenhum mandato SÓ de Veículos e nada cancelado antes: o acesso vem do Combo (botão do plano principal).
+  if (!cancelados && !jaCancelado) {
+    res.status(200).json({ ok: true, semAssinatura: true, cancelados: 0, msg: 'Não achamos uma assinatura só do Leilão de Veículos. Se você tem o Combo, o cancelamento é o do plano principal.' });
+    return;
+  }
+  if (dentro7 && !jaUsou) {
+    const r = await sb(`perfis?id=eq.${user.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ acesso_veiculos_ate: new Date().toISOString(), veiculos_pago_em: null }) }).catch(() => null);
+    const confirmado = !!r?.ok && ((await r.json().catch(() => [])) || []).length > 0;
+    if (!confirmado) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Reembolso de Veículos decidido mas o acesso NÃO foi encerrado — encerrar manualmente (perfis.acesso_veiculos_ate).', extra: { user_id: user.id, http_status: r?.status ?? null } });
+    const valorRef = await precoDe('veiculos');
+    const gateway = mp.n ? 'mercadopago' : asaas.n ? 'asaas' : 'desconhecido';
+    const rReg = await sb('reembolsos_garantia', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: 'veiculos', valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49) — Leilão de Veículos', cpf_hash: cpfHash, rebaixamento_confirmado: confirmado }) }).catch(() => null);
+    if (!rReg?.ok) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Pedido de reembolso de Veículos NÃO registrado — estornar manualmente.', extra: { user_id: user.id, email, valorRef, http_status: rReg?.status ?? null } });
+    try {
+      if (email) await enviarEmail({ from: EMAIL_FROM, to: email, subject: 'Leilão de Veículos cancelado — reembolso em processamento', html: `<p>Olá${perfil.nome ? ', ' + perfil.nome : ''}!</p><p>Confirmamos o <strong>cancelamento do plano Leilão de Veículos</strong> dentro da <strong>garantia de 7 dias</strong>. O reembolso de 100% está em processamento e cai no mesmo meio de pagamento em alguns dias úteis.</p><p>Seus outros planos não foram alterados.</p>` });
+      if (ADMIN_EMAIL) await enviarEmail({ from: EMAIL_FROM, to: ADMIN_EMAIL, subject: `Reembolso garantia 7 dias (Veículos) — ${perfil.nome || email}`, html: `<p>Processar estorno no ${gateway}:</p><ul><li>Cliente: ${perfil.nome || '—'} (${email || '—'})</li><li>Plano: Leilão de Veículos${valorRef ? ` — R$ ${Number(valorRef).toFixed(2)}` : ''}</li><li>Assinaturas canceladas: ${cancelados}</li></ul>` });
+    } catch (e) { console.warn('[garantia-cancelar] e-mail (veículos):', e?.message || e); }
+    res.status(200).json({ ok: true, reembolso: true, dentro7: true, cancelados, msg: 'Plano Leilão de Veículos cancelado. Reembolso de 100% em processamento.' });
+    return;
+  }
+  res.status(200).json({
+    ok: true, reembolso: false, dentro7, garantiaJaUsada: jaUsou, cancelados, renovacaoCancelada: true, jaCancelado,
+    msg: jaUsou
+      ? 'Renovação cancelada. A garantia de 7 dias do Leilão de Veículos já foi usada com este CPF; o acesso segue até o fim do período pago.'
+      : 'Renovação do Leilão de Veículos cancelada. O acesso segue até o fim do período já pago.',
+  });
 }
 
 export default async function handler(req, res) {
@@ -97,6 +176,9 @@ export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
   const email = user.email || null;
+  let corpo = req.body;
+  if (typeof corpo === 'string') { try { corpo = JSON.parse(corpo); } catch { corpo = {}; } } // padrao-ok: corpo inválido = trilha principal (o padrão de antes)
+  if (corpo?.trilha === 'veiculos') { await garantiaVeiculos({ user, email, res }); return; }
 
   const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,plano_ciclo,mp_id,mp_preapproval_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
   if (!perfil) { res.status(404).json({ error: 'Perfil não encontrado' }); return; }
@@ -110,22 +192,16 @@ export default async function handler(req, res) {
   // Garantia é UMA VEZ POR CPF: apura o hash do CPF do cliente e verifica se esse CPF
   // já exerceu a garantia antes (impede o loop assinar→reembolsar→assinar→reembolsar,
   // inclusive recriando conta com o mesmo CPF).
-  let cpfHash = null, jaUsouGarantia = false;
-  try {
-    const cpf = await cpfDoRegistro(perfil);
-    cpfHash = cpf ? await hashCpf(cpf) : null;
-    if (cpfHash) {
-      const [ja] = await (await sb(`reembolsos_garantia?cpf_hash=eq.${encodeURIComponent(cpfHash)}&select=id&limit=1`)).json().catch(() => []);
-      jaUsouGarantia = !!ja;
-    }
-  } catch { /* sem CPF apurável → segue sem bloquear o cancelamento (só não reembolsa 2x) */ }
+  const { cpfHash, jaUsou: jaUsouGarantia } = await garantiaDoCpf(perfil, 'principal');
   const podeReembolso = dentro7 && !jaUsouGarantia;
 
   // 1) Cancela a recorrência nos gateways (best-effort nos dois).
   // Passa os DOIS ids do perfil (mp_preapproval_id é o da recorrência; mp_id é legado) —
   // antes só o mp_id ia, e como string, o que inutilizava o fallback.
-  const cancelados = (await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], email, user.id))
-    + (await cancelarAsaas(perfil.asaas_id));
+  const mpRes = await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], email, user.id);
+  const asaasRes = await cancelarAsaas(perfil.asaas_id);
+  const cancelados = mpRes.n + asaasRes.n;
+  const combo = mpRes.combo || asaasRes.combo; // o Combo pagou Pro + Veículos juntos
   // O usuário precisa saber quando NÓS não conseguimos cancelar no gateway: dizer
   // "cancelada" sem ter cancelado é o pior resultado possível (ele para de acompanhar e
   // segue sendo cobrado). `cancelados === 0` com gateway conhecido = falha real.
@@ -158,7 +234,8 @@ export default async function handler(req, res) {
     // marcar a linha para o admin resolver manualmente).
     const rDowngrade = await sb(`perfis?id=eq.${user.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null }),
+      body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null,
+        ...(combo ? { acesso_veiculos_ate: new Date().toISOString(), veiculos_pago_em: null } : {}) }),
     }).catch(() => null);
     const rebaixamentoConfirmado = !!rDowngrade && rDowngrade.ok;
     if (!rebaixamentoConfirmado) {
@@ -181,21 +258,15 @@ export default async function handler(req, res) {
     }
 
     // valor de referência do plano (para o admin conferir o estorno)
-    let valorRef = null;
-    try {
-      // Coluna é `preco` ('valor' não existe). O CICLO vem de plano_ciclo (M1) — o `role` é
-      // sempre BASE (top2), então /_anual$/ no role dava sempre false e gravava o valor MENSAL
-      // no reembolso de quem pagou o ANUAL. Anual → preco_anual.
-      const base = rolePagante.replace(/_anual$/, '');
-      const ehAnual = /anual/i.test(perfil?.plano_ciclo || '');
-      const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(base)}&select=preco,preco_anual&limit=1`)).json();
-      valorRef = ehAnual ? (pc?.preco_anual ?? pc?.preco ?? null) : (pc?.preco ?? null);
-    } catch { /* opcional */ }
+    // O CICLO vem de plano_ciclo (M1) — o `role` é sempre BASE (top2), então /_anual$/ no role dava
+    // sempre false e gravava o valor MENSAL no reembolso de quem pagou o ANUAL. Combo: role é top2,
+    // mas o pago foi o preço do Combo.
+    const valorRef = await precoDe(combo ? 'combo' : rolePagante.replace(/_anual$/, ''), !combo && /anual/i.test(perfil?.plano_ciclo || ''));
 
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).
     await sb('reembolsos_garantia', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)', cpf_hash: cpfHash, rebaixamento_confirmado: rebaixamentoConfirmado }),
+      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: combo ? 'combo' : rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)', cpf_hash: cpfHash, rebaixamento_confirmado: rebaixamentoConfirmado }),
     }).catch(() => {});
 
     // 4) E-mails (cliente + admin). Não bloqueiam a resposta.

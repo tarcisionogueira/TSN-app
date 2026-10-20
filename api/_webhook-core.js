@@ -71,9 +71,12 @@ export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway
     const { data: p, error: eP } = await supabase.from('perfis').select('acesso_veiculos_ate').eq('id', userId).maybeSingle();
     if (eP) throw new Error(`leitura do perfil falhou: ${eP.message}`);
     const atual = p?.acesso_veiculos_ate ? new Date(p.acesso_veiculos_ate) : null;
-    const base = atual && atual.getTime() > Date.now() ? atual : new Date();
+    const renovacao = !!(atual && atual.getTime() > Date.now());
+    const base = renovacao ? atual : new Date();
     base.setMonth(base.getMonth() + 1);
-    const { data: ok, error } = await supabase.from('perfis').update({ acesso_veiculos_ate: base.toISOString() }).eq('id', userId).select('id');
+    // Período NOVO (sem acesso vigente) = contratação: âncora da garantia de 7 dias (garantia-cancelar).
+    const upd = renovacao ? { acesso_veiculos_ate: base.toISOString() } : { acesso_veiculos_ate: base.toISOString(), veiculos_pago_em: new Date().toISOString() };
+    const { data: ok, error } = await supabase.from('perfis').update(upd).eq('id', userId).select('id');
     if (error) throw new Error(error.message);
     if (!ok?.length) throw new Error('perfil não encontrado para estender o acesso a veículos');
     console.log(`[${gateway}] acesso a veículos de ${userId} até ${base.toISOString()}`);
@@ -87,7 +90,7 @@ export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway
 // Estorno/chargeback de cobrança que deu acesso a veículos: o acesso acaba agora.
 export async function revogarAcessoVeiculos({ userId, gateway, motivo }) {
   if (!userId) return { skipped: 'sem_cliente' };
-  const { error } = await supabase.from('perfis').update({ acesso_veiculos_ate: new Date().toISOString() })
+  const { error } = await supabase.from('perfis').update({ acesso_veiculos_ate: new Date().toISOString(), veiculos_pago_em: null })
     .eq('id', userId).gt('acesso_veiculos_ate', new Date().toISOString());
   if (error) throw new Error(`revogar acesso a veículos: ${error.message}`);
   console.log(`[${gateway}] acesso a veículos de ${userId} revogado (${motivo || 'estorno'})`);

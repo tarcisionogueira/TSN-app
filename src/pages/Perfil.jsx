@@ -292,33 +292,30 @@ export default function Perfil() {
   // LEILÃO DE VEÍCULOS (20/10): assinatura de outra trilha — vigência e cancelamento próprios. Cancelar a
   // renovação só desliga o mandato de Veículos; o acesso segue até o fim do período já pago.
   const [veicAte, setVeicAte] = useState(null);
+  const [veicPagoEm, setVeicPagoEm] = useState(null); // âncora da garantia de 7 dias da trilha Veículos
   const [veicMsg, setVeicMsg] = useState(null);
   const [veicCancelando, setVeicCancelando] = useState(false);
   useEffect(() => {
     if (!uid) return;
-    supabase.from('perfis').select('acesso_veiculos_ate').eq('id', uid).maybeSingle()
-      .then(({ data, error }) => { if (error) console.warn('[perfil] acesso a veículos:', error.message); setVeicAte(data?.acesso_veiculos_ate || null); });
+    supabase.from('perfis').select('acesso_veiculos_ate,veiculos_pago_em').eq('id', uid).maybeSingle()
+      .then(({ data, error }) => { if (error) console.warn('[perfil] acesso a veículos:', error.message); setVeicAte(data?.acesso_veiculos_ate || null); setVeicPagoEm(data?.veiculos_pago_em || null); });
   }, [uid]);
+  const veicNaGarantia = !!veicPagoEm && Date.now() - new Date(veicPagoEm).getTime() <= 7 * 864e5;
+  // Um endpoint só para os dois casos e os dois gateways (api/garantia-cancelar.js, trilha 'veiculos'):
+  // dentro de 7 dias da contratação reembolsa 100% e encerra o acesso; depois, só para a renovação.
   async function cancelarVeiculos() {
     if (emSuporte) { setVeicMsg({ ok: false, texto: 'Modo suporte: cancelamento desativado.' }); return; }
+    if (veicNaGarantia && !window.confirm('Cancelar o Leilão de Veículos com reembolso de 100% (garantia de 7 dias)? O acesso ao leiloeiro e aos relatórios de veículos acaba agora.')) return;
     setVeicCancelando(true); setVeicMsg(null);
     try {
-      const res = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'cancelar_assinatura', trilha: 'veiculos', email: user?.email }) });
+      const res = await apiCall('/api/garantia-cancelar', { method: 'POST', body: JSON.stringify({ trilha: 'veiculos' }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || `Não foi possível cancelar agora (HTTP ${res.status}).`);
-      // Não estava no cartão (MP)? Tenta o Asaas (boleto/Pix), só a assinatura de Veículos.
-      let asaasOk = false;
-      if (!(d.cancelados > 0)) {
-        const ra = await apiCall('/api/asaas', { method: 'POST', body: JSON.stringify({ action: 'cancelar_assinatura', trilha: 'veiculos' }) });
-        const da = await ra.json().catch(() => ({}));
-        if (!ra.ok && ra.status !== 404) throw new Error(da.error || `Não foi possível cancelar agora (HTTP ${ra.status}).`);
-        asaasOk = !!da.cancelado;
-      }
-      setVeicMsg(d.cancelados > 0 || asaasOk
-        ? { ok: true, texto: 'Renovação do Leilão de Veículos cancelada. O acesso segue até o fim do período pago.' }
-        : { ok: false, texto: 'Não achamos uma assinatura só de Veículos no cartão. No Combo, o cancelamento é o da assinatura principal.' });
+      setVeicMsg({ ok: !d.semAssinatura, texto: d.msg || 'Solicitação registrada.' });
+      if (d.reembolso) setTimeout(() => window.location.reload(), 2500);
     } catch (e) { setVeicMsg({ ok: false, texto: e.message }); } finally { setVeicCancelando(false); }
   }
+
 
   const dentroGarantia = planoPagoEm && (Date.now() - new Date(planoPagoEm).getTime() <= 7 * 24 * 3600 * 1000);
   const diasRestantesGarantia = planoPagoEm ? Math.max(0, 7 - Math.floor((Date.now() - new Date(planoPagoEm).getTime()) / 86400000)) : 0;
@@ -1170,7 +1167,7 @@ export default function Perfil() {
             {new Date(veicAte).getTime() > Date.now() - 3 * 864e5 && (
               <button onClick={cancelarVeiculos} disabled={veicCancelando}
                 style={{ marginTop: 8, background: 'none', border: 'none', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 12.5 }}>
-                {veicCancelando ? 'Cancelando…' : 'Cancelar renovação do Leilão de Veículos'}
+                {veicCancelando ? 'Cancelando…' : veicNaGarantia ? 'Cancelar com reembolso total (garantia de 7 dias)' : 'Cancelar renovação do Leilão de Veículos'}
               </button>
             )}
             {veicMsg && <div style={{ marginTop: 6, fontSize: 12.5, color: veicMsg.ok ? '#15803d' : '#b91c1c' }}>{veicMsg.texto}</div>}
