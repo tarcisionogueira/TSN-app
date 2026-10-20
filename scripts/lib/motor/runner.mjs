@@ -178,8 +178,10 @@ const SEM_FOTO_TETO = 15;
  * deixa de reler para sempre), então ela sai do laço de I/O e vira função testável em seco.
  * Devolve `iReleitura` = o índice a partir do qual `alvo` deixa de ser lote novo.
  */
-export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora = Date.now() }) {
-  const novos = urls.filter(u => !meta.has(chaveDe(u)));
+export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusados = new Set(), agora = Date.now() }) {
+  // `recusados` (#238, 20/10): lote lido e RECUSADO há pouco (encerrado/não-imóvel/descartado) nunca entra em
+  // imoveis_leilao, então sem esta memória ele era "novo" para sempre e gastava leitura antes dos não lidos.
+  const novos = urls.filter(u => !meta.has(chaveDe(u)) && !recusados.has(chaveDe(u)));
   const limite = agora + DIAS_IMINENTE * 864e5;
   const porOrdemBase = urls
     .filter(u => meta.has(chaveDe(u)))
@@ -214,7 +216,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora 
   };
 }
 
-async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
+async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun = true }) {
   const enumerado = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   const { fetchOk, via, eventosCount, vazioDeclarado } = enumerado;
   // FILTRO OPCIONAL POR URL (30/09, NORDESTE): quando a URL já diz que o lote não é imóvel, ele sai
@@ -224,6 +226,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   console.log(`[${tenant.fonte}] enumerados ${enumerado.urls.length} lote(s)${via ? ` (via ${via})` : ''}${foraPelaUrl ? ` · ${foraPelaUrl} fora pela URL (não é imóvel) · ${urls.length} candidatos` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
   const naoImovelIds = [];
+  const recusas = [];   // #238: { fonte_id, motivo, dias } — gravadas no fim (fora do dry-run)
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const meta = new Map();
@@ -233,14 +236,24 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         .select('fonte_id,atualizado_em,data_fim,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
       for (const r of data || []) meta.set(r.fonte_id, r);
     }
+    // Memória de recusa (#238). Falhar aqui só custa leitura repetida (o comportamento antigo), nunca dado
+    // errado — então segue sem ela, mas deixa o motivo no log.
+    const recusados = new Set();
+    const semMeta = ids.filter(id => !meta.has(id));
+    for (let i = 0; i < semMeta.length; i += 200) {
+      const { data, error } = await supabase.from('coleta_lote_recusado')
+        .select('fonte_id').in('fonte_id', semMeta.slice(i, i + 200)).gt('rever_apos', new Date().toISOString());
+      if (error) { console.log(`⚠️ [${tenant.fonte}] memória de recusa ilegível — segue relendo os recusados: ${error.message}`); break; }
+      for (const r of data || []) recusados.add(r.fonte_id);
+    }
     // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
     // o caminho antigo, intacto.
     const { novos, releitura, alvo, iReleitura } = planejarAlvo({
       urls, meta, chaveDe: u => idFonte(tenant, cfg.parse.idDaUrl(u)),
-      maxLotes, maxRefresh: cfg.maxRefresh,
+      maxLotes, maxRefresh: cfg.maxRefresh, recusados,
     });
     let pararReleitura = false;
-    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length} · processando ${alvo.length}`);
+    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · processando ${alvo.length}`);
     const t0 = Date.now();
     for (let i = 0; i < alvo.length; i++) {
       // SINAL DE VIDA (30/08). O laço não imprimia NADA por lote. Com 13 lotes isso durava um
@@ -288,7 +301,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
       // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
       if (!det) { sem++; continue; }
-      if (det.encerrado) { encerrados++; continue; }
+      if (det.encerrado) { encerrados++; if (i < iReleitura) recusas.push({ fonte_id: idFonte(tenant, cfg.parse.idDaUrl(url)), motivo: 'encerrado', dias: 30 }); continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
       // GALERIA (08/10): plataformas com a galeria na pasta exclusiva da capa (lib/galeria-veiculo.mjs).
       // Só grava quando achou mais de uma; o banco não deixa a galeria antiga virar nula (trg_imovel_fotos_nao_encolhem).
@@ -297,7 +310,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         if (gal.length > 1) row.fotos = gal;
       }
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
-      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); continue; }
+      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); if (i < iReleitura) recusas.push({ fonte_id: row.fonte_id, motivo: 'nao_imovel', dias: 30 }); continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });
       if (q.descartar) {
         reprov++;
@@ -306,7 +319,10 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         if (reprov <= 15) console.log(`   [${tenant.fonte}] descartado ${row.fonte_id}: ${q.motivo || (q.faltando || []).join(', ')}`);
         // Descarte por DECISÃO DE NEGÓCIO (fração ideal / fora do acervo) é permanente: o lote já
         // gravado sai junto, como o não-imóvel. Sem valor/data pode ser temporário — fica.
-        if (q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo') || q.faltando?.includes('vaga_garagem')) naoImovelIds.push(row.fonte_id);
+        const permanente = q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo') || q.faltando?.includes('vaga_garagem');
+        if (permanente) naoImovelIds.push(row.fonte_id);
+        // Sem valor/data pode ser temporário (a fonte publica depois): volta à fila em 10 dias, não 30.
+        if (i < iReleitura) recusas.push({ fonte_id: row.fonte_id, motivo: `descartado: ${(q.motivo || (q.faltando || []).join(', ')).slice(0, 120)}`, dias: permanente ? 30 : 10 });
         continue;
       }
       prontos.push(row);
@@ -326,6 +342,16 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const comFoto = prontos.filter(r => r.link_foto).length;
   const comDesc = prontos.filter(r => r.descricao).length;
   const pct = (n) => prontos.length ? Math.round(100 * n / prontos.length) : 0;
+  if (recusas.length && !dryrun) {
+    const agora = Date.now();
+    const linhas = [...new Map(recusas.map(r => [r.fonte_id, {
+      fonte_id: r.fonte_id, fonte: tenant.fonte, motivo: r.motivo,
+      visto_em: new Date(agora).toISOString(), rever_apos: new Date(agora + r.dias * 864e5).toISOString(),
+    }])).values()];
+    const { error: eRec } = await supabase.from('coleta_lote_recusado').upsert(linhas, { onConflict: 'fonte_id' });
+    if (eRec) console.log(`⚠️ [${tenant.fonte}] não gravei a memória de ${linhas.length} recusa(s) — serão relidas na próxima rodada: ${eRec.message}`);
+    else console.log(`[${tenant.fonte}] ${linhas.length} recusa(s) lembradas — fora da fila até o prazo (encerrado/não-imóvel 30 d, descarte 10–30 d).`);
+  }
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   // `fonteVazia`/`enumerados` medem o que o SITE listou, não o que sobrou do filtro por URL — senão
@@ -355,7 +381,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que

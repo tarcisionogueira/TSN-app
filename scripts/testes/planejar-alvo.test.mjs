@@ -106,5 +106,13 @@ const eq = (nome, a, b) => {
     r.releitura[15], 'com_foto_bem_velho');
 }
 
-console.log(falhas ? `\n${falhas} FALHA(S)` : '\n10/10 cenários passam');
+// 11) #238 (20/10): lote RECUSADO há pouco (nunca gravado) não ocupa vaga de novo — o teto vai para o
+//     ainda não lido. Antes, os ~20 recusados do EMILIOMATOS voltavam na frente toda semana.
+{
+  const r = planejarAlvo({ urls: ['rec1','rec2','novo1','novo2'], meta: new Map(), chaveDe, maxLotes: 2,
+    recusados: new Set(['f_rec1','f_rec2']), agora: AGORA });
+  eq('recusado recente sai da fila de novos', r.alvo, ['novo1','novo2']);
+}
+
+console.log(falhas ? `\n${falhas} FALHA(S)` : '\n11/11 cenários passam');
 process.exit(falhas ? 1 : 0);

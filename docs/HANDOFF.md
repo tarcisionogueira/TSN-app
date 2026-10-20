@@ -7,6 +7,23 @@
 
 
 
+## 20/10 — pendências 237 e 238
+- **#237 qa_invariantes lenta (13–18 s):** o perfil mostrou que 12 s eram de UMA função, `bem_movel_barrado`: ela fazia
+  `lower(translate(...))` sobre título + descrição inteira de cada lote ativo (19,5 mi de caracteres; translate
+  multibyte ≈ 5 s por passada, e o `td` aparecia 3× no corpo). Agora um pré-filtro no texto CRU (veiculo/chassi/
+  renavam com cada letra na classe de todas as formas que o translate levaria a ela — superconjunto exato) decide o
+  caso comum, e o translate só roda quando ele passa. 0 divergências contra a versão antiga (acervo ativo inteiro,
+  8 mil inativos, 3 mil veículos com 2.320 verdadeiros); 12 s → 4 s. E as 25 contagens simples sobre `imoveis_leilao
+  where ativo` viraram UMA varredura (`ativos_agg`). Total 17,7 s → 9,5 s, saída idêntica chave a chave.
+  **Lição: medir antes de otimizar** — a consolidação sozinha não mudou nada; o custo estava numa função só.
+- **#238 EMILIOMATOS (~144 lotes, ~35 gravados/semana):** a prioridade já era dos não gravados (`planejarAlvo` põe
+  `novos` antes da releitura), MAS lote RECUSADO na leitura (encerrado / não-imóvel / descartado) nunca é gravado
+  e voltava como "novo" toda rodada, na frente — ~20 das 55 leituras de 19/10, acumulando. Nova tabela
+  `coleta_lote_recusado` (RLS sem política): o runner lembra a recusa e pula o lote por 30 dias (permanente) ou 10
+  (sem valor/data, pode ser temporário). Vale para TODAS as fontes do motor; dry-run não grava. Com isso o teto de 55
+  cobre o acervo em ~3 semanas sem custo a mais. **Decisão do dono continua aberta:** subir o teto (~150 páginas
+  Firecrawl/semana a mais) para cobrir tudo numa rodada. E EMILIOMATOS segue `suspenso=true` até rodar o SQL da #258.
+
 ## 20/10 — pendências 235 e 236
 - **#235 encerramento da assessoria:** `concluir_assessorias_entregues` encerrava com carta + matrícula registrada de
   QUALQUER autor — o cliente que anexasse a matrícula do LEILÃO como "registrada" encerrava a própria assessoria (e o
