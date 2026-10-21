@@ -17,6 +17,10 @@ export default {
   catalogo: '/',
   paginaParam: 'page',
   maxPages: 1,
+  // 21/10: o EVENTO pagina (16 lotes por página, `?page=N` — medido no 217: page=2 traz 017–032).
+  // Sem isto valia `maxPages: 1` também dentro do evento e só a 1ª página de cada um entrava.
+  // O laço para sozinho na 1ª página sem lote novo.
+  maxPagesEvento: 15,
   maxEventos: 15,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, urlCandidata },

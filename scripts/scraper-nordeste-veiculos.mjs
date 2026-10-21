@@ -36,10 +36,16 @@ async function main() {
     const lotes = new Map();
     let eventosLidos = 0;
     for (const ev of eventos) {
-      const r = await motor.fetchFonte(ev);
-      if (!r.html) { console.warn(`  evento não abriu: ${ev} (${r.via})`); continue; }
-      eventosLidos++;
-      for (const [id, url] of extrairUrlsDeLote(r.html, base)) lotes.set(id, url);
+      // 21/10: o evento pagina (16 por página, `?page=N`); lia só a 1ª — o 217 tem 3 páginas.
+      // Para na 1ª página sem lote novo (o site repete a última quando passa do fim).
+      for (let p = 1; p <= 15; p++) {
+        const r = await motor.fetchFonte(p > 1 ? `${ev}${ev.includes('?') ? '&' : '?'}page=${p}` : ev);
+        if (!r.html) { if (p === 1) console.warn(`  evento não abriu: ${ev} (${r.via})`); break; }
+        if (p === 1) eventosLidos++;
+        const antes = lotes.size;
+        for (const [id, url] of extrairUrlsDeLote(r.html, base)) lotes.set(id, url);
+        if (lotes.size === antes) break;
+      }
     }
     const alvos = [...lotes.values()].filter(ehVeiculoInteiro);
     console.log(`  ${eventosLidos}/${eventos.length} eventos · ${lotes.size} lotes · ${alvos.length} veículos inteiros`);
