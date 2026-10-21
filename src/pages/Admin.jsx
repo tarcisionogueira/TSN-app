@@ -21,7 +21,6 @@ import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { setItemSeguro } from '../utils/storageSeguro.js';
-const BuscaVeiculosEmbutida = React.lazy(() => import('./BuscaVeiculos.jsx'));
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -5157,33 +5156,6 @@ function ScrapersMonitor() {
   );
 }
 
-function VeiculosTab() {
-  const nav = useNavigate();
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* A aba abre DIRETO nos filtros e na lista (29/09, pedido do dono). O painel do piloto Sodré
-          (contagem em pátio/indefinido) saiu: a busca já cobre todas as fontes e filtra por status. */}
-      <div id="veiculos-lotes" style={S.card}>
-        <React.Suspense fallback={<p style={{ fontSize: 12.5, color: '#94a3b8' }}>Carregando lotes…</p>}>
-          <BuscaVeiculosEmbutida embutido />
-        </React.Suspense>
-      </div>
-      <div style={S.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>⚖️ Retomada de veículos (CNJ)</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-              Processos de busca e apreensão/alienação fiduciária por banco — dado público do CNJ, uso interno
-            </div>
-          </div>
-          <button onClick={() => nav('/admin/retomada-veiculos')} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-            🔍 Buscar processos
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // E-mail de contato por leiloeiro (11/09) — a maioria nasce SOZINHA (captura automática no
 // scraper, scripts/_contato-leiloeiro.mjs), esta tela é só para corrigir quando vier errado.
@@ -12504,7 +12476,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Administrativo',icone: '🏢', desc: 'Pessoas, contratos e ajustes',  tabs: ['Usuários', 'Convites', 'Equipe', 'Contratos', 'Configurações'] },
   { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Propostas', 'Marketing', 'Promoções', 'Aula ao vivo', 'Cursos', 'eBooks'] },
   { nome: 'Financeiro',    icone: '💰', desc: 'Fluxo de caixa e conciliação',  tabs: ['Financeiro'] },
-  { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Veiculos', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
+  { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
 
 // Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
@@ -13239,6 +13211,12 @@ function CnjTab() {
 
   return (
     <div style={{ padding: '24px 0', height: 'calc(100vh - 200px)', minHeight: 500, display: 'flex', flexDirection: 'column' }}>
+      {/* Atalho que morava na aba Veículos (removida em 21/10, dono: a lista de veículos já é a busca /veiculos). */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+        <a href="#/admin/retomada-veiculos" style={{ padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+          ⚖️ Retomada de veículos (busca e apreensão por banco)
+        </a>
+      </div>
       <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', flex: 1 }}>
 
         {/* Header */}
@@ -13443,6 +13421,7 @@ export default function Admin() {
     // salvas na sessão.
     if (t === 'Prestação de contas') { sessionStorage.setItem('admin_fin_sub', 'saques'); sessionStorage.setItem('admin_tab', 'Financeiro'); t = 'Financeiro'; }
     if (t === 'Central da Equipe') { sessionStorage.setItem('admin_equipe_sub', 'casos'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; }
+    if (t === 'Veiculos') { sessionStorage.setItem('admin_tab', 'Scrapers'); t = 'Scrapers'; } // aba removida em 21/10
     if (t === 'Agenda') { sessionStorage.setItem('admin_equipe_sub', 'agenda'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; } // Agenda virou sub-aba
     return t;
   });
@@ -13546,7 +13525,6 @@ export default function Admin() {
         {tab === 'Propostas'      && <CarteiraPropostas />}
         {tab === 'Equipe'         && <EquipeHub />}
         {tab === 'Scrapers'       && <ScrapersTab />}
-        {tab === 'Veiculos'       && <VeiculosTab />}
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Editais'        && <RadarEditaisTab />}
