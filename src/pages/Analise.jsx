@@ -194,7 +194,20 @@ export default function Analise() {
   // Leiloeiro só para plano pago (21/10, dono — utils/leiloeiroAcesso.js): sem plano, o lote chega à tela sem nome
   // do leiloeiro, link e documentos hospedados no site dele (a amostra do relatório de mercado continua).
   const verLeiloeiro = podeVerLeiloeiro(role);
-  const mascararLeiloeiro = (im) => (!im || verLeiloeiro ? im : { ...im, leiloeiro: null, urlLote: null, linkEdital: null, linkMatricula: null, anexos: [] });
+  // #265 (21/10): fonte e foto também identificam o leiloeiro. A cópia do imóvel guardada numa análise ANTIGA
+  // (antes da máscara) chega crua por aqui — fora da Caixa/lote manual, some a fonte e a foto vai pelo proxy por id.
+  const FONTES_NEUTRAS = ['CEF', 'caixa', 'MANUAL', 'EDITAL_DJEN'];
+  const mascararLeiloeiro = (im) => {
+    if (!im || verLeiloeiro) return im;
+    const neutra = FONTES_NEUTRAS.includes(im.fonte) || /^(webhook|parceiro)_/.test(im.fonte || '');
+    const ehCaixa = im.fonte === 'CEF' || im.fonte === 'caixa';
+    const uuid = /^[0-9a-f-]{36}$/i.test(String(im.id || ''));
+    return {
+      ...im, leiloeiro: null, urlLote: null, linkEdital: null, linkMatricula: null, anexos: [],
+      ...(neutra ? {} : { fonte: null, fonteId: null }),
+      ...(ehCaixa || !im.foto || String(im.foto).startsWith('/') ? {} : { foto: uuid ? `/api/img-proxy?imovel=${im.id}&capa=1` : null, fotos: undefined }),
+    };
+  };
   const imovelInicial = mascararLeiloeiro(imovelRecuperado || location.state?.imovel);
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).

@@ -32,6 +32,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { tituloSemLeiloeiro } from './_leiloeiro-acesso.js';
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
@@ -111,7 +112,7 @@ function cardImovel(im, L) {
   // "Ver relatório →" existem para isso, não para enfeite.
   return `<tr><td style="padding:0 0 12px;">
     <a href="${url}" target="_blank" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-left:4px solid #0D63DB;border-radius:12px;padding:14px 16px;background:#ffffff;">
-      <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.4;">${esc(im.titulo || 'Imóvel em leilão')}</div>
+      <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.4;">${esc(tituloSemLeiloeiro(im) || 'Imóvel em leilão')}</div>
       <div style="font-size:12px;color:#64748b;margin-top:4px;">${esc(im.cidade || '')}${im.estado ? ' · ' + esc(im.estado) : ''}</div>
       <div style="margin-top:8px;font-size:15px;font-weight:800;color:#0D63DB;">${brl(v.valor)}${v.ehSegunda ? '<span style="font-size:11px;font-weight:600;color:#64748b;margin-left:6px;">na 2ª praça</span>' : ''}
         ${v.desconto >= 25 ? `<span style="font-size:12px;font-weight:700;color:#059669;margin-left:8px;">${v.desconto}% abaixo da avaliação</span>` : ''}

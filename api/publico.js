@@ -36,6 +36,9 @@ export const config = { runtime: 'nodejs', maxDuration: 15 };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+// Lote para o PÚBLICO (21/10, #265): lido da view imoveis_leilao_mascarado com a chave pública — o banco tira
+// leiloeiro, links, fonte, foto do CDN dele e o nome dele no texto. A página é de visitante: nunca vê o leiloeiro.
+const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 const SITE = 'https://www.bidprobrasil.com.br';
 const POR_PAGINA = 36;
 
@@ -57,10 +60,11 @@ const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
 
-async function sb(path) {
+async function sb(path, { publico = false } = {}) {
+  const chave = publico && ANON_KEY ? ANON_KEY : SERVICE_KEY;
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: 'count=exact' },
+      headers: { apikey: chave, Authorization: `Bearer ${chave}`, Prefer: 'count=exact' },
       signal: AbortSignal.timeout(8000),
     });
     // 21/10: o valor devolvido segue igual (a página trata `linhas: null`), mas o motivo vai
@@ -860,8 +864,8 @@ async function paginaCidade(uf, cidadeNorm, page) {
   // Campos do cartão alinhado à Busca — todos já na linha (custo zero; a página é edge-cached).
   const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,modalidade,data_leilao,tem_edital_doc,tem_matricula_doc,fonte';
   const { linhas, total } = await sb(
-    `imoveis_leilao?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
-    `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`);
+    `imoveis_leilao_mascarado?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
+    `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`, { publico: true });
   // `sb()` devolve linhas null em falha. Sem isto a cidade saía "Nenhum lote ativo" + noindex,
   // cacheada 1 h na borda, por causa de um timeout (16/10).
   if (linhas === null) throw new Error('acervo da cidade indisponível');
@@ -938,7 +942,7 @@ async function paginaImovel(id) {
   // `fonte_id` e `data_fim` entram para o JSON-LD (identificador e priceValidUntil) — ver
   // o bloco `jsonld` mais abaixo, que responde aos avisos do Search Console de 04/08.
   const campos = 'id,titulo,tipo,cidade,cidade_norm,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_fim,fonte_id,link_foto,fonte,modalidade,descricao,ativo';
-  const { linhas } = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=${campos}&limit=1`);
+  const { linhas } = await sb(`imoveis_leilao_mascarado?id=eq.${encodeURIComponent(id)}&select=${campos}&limit=1`, { publico: true });
   // 19/10 (forma 4): `sb()` devolve linhas=null em timeout/5xx — virava 404 "não encontrado" para o Google em
   // pico de banco. Lança como as páginas de cidade/UF (16/10): 500 no-store, e a borda segue com a cópia boa.
   if (linhas === null) throw new Error('lote indisponível (leitura falhou)');
@@ -1138,7 +1142,7 @@ async function paginaImovel(id) {
       description: `${t} em leilão em ${local}.`,
       url: canonical,
       ...(im.fonte_id ? { sku: String(im.fonte_id) } : {}),
-      ...(im.link_foto ? { image: fotoServivel(im.link_foto, 'https://www.bidprobrasil.com.br') } : {}),
+      ...(im.link_foto ? { image: im.link_foto.startsWith('/') ? `${SITE}${im.link_foto}` : fotoServivel(im.link_foto, 'https://www.bidprobrasil.com.br') } : {}),
       offers: {
         '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
         availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',

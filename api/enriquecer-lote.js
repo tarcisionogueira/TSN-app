@@ -431,7 +431,9 @@ export default async function handler(req, res) {
   const role = await getUserRoleById(user.id).catch(() => null);
   const verLeiloeiro = podeVerLeiloeiro(role);
   const forcar = params.get('forcar') === '1' && ROLES_EQUIPE.includes(role);
-  const semLeiloeiro = (o) => (verLeiloeiro ? o : { ...o, anexos: undefined, matricula: undefined, edital: undefined, regras: undefined });
+  // #265: a foto (CDN do leiloeiro) e o texto completo (traz nome/site dele) também ficam de fora — a tela do
+  // explorador mantém o que a view mascarada já entregou.
+  const semLeiloeiro = (o) => (verLeiloeiro ? o : { ...o, anexos: undefined, matricula: undefined, edital: undefined, regras: undefined, foto: undefined, descricao: undefined });
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
   const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em,titulo,descricao,area_m2,valor_avaliacao,valor_minimo&limit=1`)).json();

@@ -14,10 +14,11 @@
 export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
-import { acessoLeiloeiro, mascararLote } from './_leiloeiro-acesso.js';
+import { acessoLeiloeiro } from './_leiloeiro-acesso.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
 // Mesma regra de src/pages/Busca.jsx `calcularJanelaPrazo` — duplicada aqui (server) de
 // propósito: é 6 linhas, e importar código de src/ num endpoint api/ não é o padrão deste
@@ -109,9 +110,15 @@ export default async function handler(req) {
   // RPC principal — não atrasa a resposta normal, e se falhar não derruba a busca (só não
   // mostra o aviso).
   const cidadeNormCentro = String(filtros.cidadeNormCentro || '').trim();
+  // #264/#265: a RPC lê a view imoveis_leilao_mascarado, que mascara leiloeiro, links, foto, fonte e texto
+  // conforme QUEM LÊ. Com a service key ela não mascara nada — então quem não tem plano pago consulta com a
+  // chave pública (anon), e a regra fica num lugar só (o banco), sem cópia em JS para divergir.
+  const { pode } = await acessoLeiloeiro(req);
+  const comoPublico = !pode && ANON_KEY ? { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` } : {};
   const [rpcRes, semGeocodeRes] = await Promise.all([
     sb('rpc/buscar_por_raio_v2', {
       method: 'POST',
+      headers: comoPublico,
       body: JSON.stringify({
         lat, lng,
         raio_metros: raioMetros,
@@ -142,11 +149,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Erro ao buscar por raio', detalhes: err }), { status: 500 });
   }
 
-  const dadosBrutos = await rpcRes.json();
-  // #264: a RPC roda com a service key, e para ela a view mascarada NÃO mascara — sem isto a rota pública
-  // entregava leiloeiro e links a qualquer anônimo. Mascara pelo papel de quem chamou.
-  const { pode } = await acessoLeiloeiro(req);
-  const dados = pode || !Array.isArray(dadosBrutos) ? dadosBrutos : dadosBrutos.map(mascararLote);
+  const dados = await rpcRes.json();
   // total vem repetido em cada linha (window-less count via subselect); 0 linhas → 0
   const total = (dados && dados.length > 0 && dados[0].total != null) ? Number(dados[0].total) : 0;
 

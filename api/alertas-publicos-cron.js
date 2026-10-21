@@ -12,6 +12,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { tituloSemLeiloeiro } from './_leiloeiro-acesso.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
@@ -21,7 +22,7 @@ import { cabecalhoEmailHTML } from './_email-header.js';
 export const GET = handler;
 export const POST = handler;
 
-const SEL = 'id,titulo,tipo,cidade,cidade_norm,estado,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,link_foto';
+const SEL = 'id,titulo,tipo,cidade,cidade_norm,estado,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,link_foto,fonte';
 const LIMITE_ALERTAS = 500;   // teto de runtime; se estourar, o log avisa (nada de corte silencioso)
 const POR_ENVIO = 6;
 
@@ -71,8 +72,14 @@ async function handler(req) {
         const url = `${BASE}/leilao/${im.id}`;
         // Só foto hospedada por nós carrega de forma confiável no e-mail; demais hosts (Caixa)
         // bloqueiam hotlink — melhor sem foto do que quadro quebrado.
-        const foto = (im.link_foto && String(im.link_foto).includes('supabase.co'))
-          ? `<a href="${url}"><img src="${im.link_foto}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
+        // #265 (21/10): alerta de VISITANTE — fora da Caixa a foto sai pelo nosso proxy por id (o caminho da
+        // nossa cópia tem o nome da fonte, e o CDN dele identifica o leiloeiro). Gmail não segue o 308 do apex.
+        const ehCaixa = im.fonte === 'CEF' || im.fonte === 'caixa';
+        const fotoSrc = !im.link_foto ? null
+          : !ehCaixa ? `https://www.bidprobrasil.com.br/api/img-proxy?imovel=${im.id}&capa=1`
+            : String(im.link_foto).includes('supabase.co') ? im.link_foto : null;
+        const foto = fotoSrc
+          ? `<a href="${url}"><img src="${fotoSrc}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
         // Selo e preço saem do MESMO par de números (`lanceVitrine`): o "% OFF" é da 2ª praça
         // quando ela existe, e antes ficava ao lado do "Lance mínimo" da 1ª — em 3.461 lotes
         // ativos isso anunciava desconto sobre um valor acima da própria avaliação.
@@ -83,7 +90,7 @@ async function handler(req) {
         return `<div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
           <div style="padding:14px 16px;">
-            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(im.titulo || 'Imóvel em leilão')}</div></a>
+            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(tituloSemLeiloeiro(im) || 'Imóvel em leilão')}</div></a>
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">

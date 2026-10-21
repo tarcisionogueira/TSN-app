@@ -55,10 +55,35 @@ async function urlDaFotoVeiculo(id, i) {
   return typeof u === 'string' ? u : null;
 }
 
+// FOTO DE IMÓVEL POR ID (21/10, #265): mesmo desenho dos veículos. Para quem não tem plano pago, a view
+// imoveis_leilao_mascarado entrega `?imovel=<id>&capa=1` (link_foto) ou `&i=<n>` (fotos[n]) — o CDN do leiloeiro,
+// e até o caminho da nossa cópia (imoveis-fotos/<fonte>/<fonte_id>.jpg), revelariam quem é o leiloeiro.
+async function urlDaFotoImovel(id, i, capa) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SB || !KEY) throw new Error('supabase não configurado');
+  const r = await fetch(`${SB}/rest/v1/imoveis_leilao?id=eq.${id}&select=link_foto,fotos&limit=1`, {
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}` }, signal: AbortSignal.timeout(6000),
+  });
+  if (!r.ok) throw new Error(`leitura do imóvel HTTP ${r.status}`);
+  const [im] = await r.json();
+  const u = capa ? im?.link_foto : (Array.isArray(im?.fotos) ? im.fotos[i] : null);
+  return typeof u === 'string' ? u : null;
+}
+
 async function handler(req) {
   const { searchParams } = new URL(req.url);
   let url = searchParams.get('url');
   const veiculo = searchParams.get('veiculo');
+  const imovel = searchParams.get('imovel');
+  if (imovel) {
+    const capa = searchParams.get('capa') === '1';
+    const i = Number(searchParams.get('i') || 0);
+    if (!UUID_RE.test(imovel) || (!capa && (!Number.isInteger(i) || i < 0 || i > 80))) return new Response('Invalid params', { status: 400 });
+    try { url = await urlDaFotoImovel(imovel, i, capa); }
+    catch (e) { console.error('[img-proxy] foto de imóvel:', e?.message || e); return new Response('Lookup error', { status: 502 }); }
+    if (!url) return new Response('Image not found', { status: 404 });
+  }
   if (veiculo) {
     const i = Number(searchParams.get('i') || 0);
     if (!UUID_RE.test(veiculo) || !Number.isInteger(i) || i < 0 || i > 60) return new Response('Invalid params', { status: 400 });

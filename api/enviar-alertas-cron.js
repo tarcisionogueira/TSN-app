@@ -53,6 +53,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { podeVerLeiloeiro, tituloSemLeiloeiro } from './_leiloeiro-acesso.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
@@ -146,11 +147,15 @@ const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor
 // (que manda o Referer correto e busca do nosso IP). supabase/local vai direto; host
 // fora da whitelist cai no hotlink direto (best-effort); CEF deriva a foto de fonte_id
 // no padrão F<num>21.jpg (confirmado servindo 200/JPEG) e proxia. URL absoluta ou null.
-function fotoParaEmail(im, base) {
+// #265 (21/10): sem plano pago, nem o CDN da foto nem o título de reserva do scraper (ver _leiloeiro-acesso.js).
+function fotoParaEmail(im, base, verLeiloeiro = true) {
   // Proxy SEMPRE por www: o apex bidprobrasil.com.br responde 308 e clientes de e-mail
   // (Gmail) não seguem redirect em <img>, então a foto some.
   const proxBase = String(base || '').replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
   const src = im?.link_foto || '';
+  const isCefFonte = im?.fonte === 'CEF' || im?.fonte === 'caixa';
+  // Sem plano pago: a foto sai pelo NOSSO proxy por id (nem o caminho da nossa cópia aparece — ele tem o nome da fonte).
+  if (!verLeiloeiro && !isCefFonte) return src ? `${proxBase}/api/img-proxy?imovel=${im.id}&capa=1` : null;
   // 1) Foto já hospedada por NÓS (Storage do Supabase): é o caminho confiável no e-mail —
   //    a Caixa RECUSA o IP da Vercel (edge e node), então o img-proxy dá 404 no Gmail.
   //    O backfill (scripts/backfill-fotos-caixa.mjs) migra as fotos da Caixa p/ o Storage.
@@ -982,7 +987,8 @@ async function handler(req) {
         // como utm_content (convenção de _utm.js: posição do link dentro da peça), então dá
         // para medir se o que o cliente PEDIU converte mais que o que foi SUGERIDO.
         const url = linkRastreado(perfil.id, 'oportunidades', `/#/imovel/${im.id}?${utmEmail('oportunidades', origem)}`);
-        const fotoUrl = fotoParaEmail(im, BASE);
+        const verLeiloeiro = podeVerLeiloeiro(perfil.role);
+        const fotoUrl = fotoParaEmail(im, BASE, verLeiloeiro);
         const foto = fotoUrl ? `<a href="${url}"><img src="${fotoUrl}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
         const desc = Number(im.desconto_percentual) || 0;
         const descTag = desc > 0 ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">${Math.round(desc)}% OFF</span>` : '';
@@ -994,7 +1000,7 @@ async function handler(req) {
         <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
           <div style="padding:14px 16px;">
-            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(im.titulo || im.endereco || 'Imóvel em leilão')}</div></a>
+            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml((verLeiloeiro ? im.titulo : tituloSemLeiloeiro(im)) || im.endereco || 'Imóvel em leilão')}</div></a>
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
             ${motivo ? `<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border-radius:8px;padding:6px 8px;margin-bottom:8px;">💡 ${escapeHtml(motivo)}</div>` : ''}
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
