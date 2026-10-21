@@ -931,12 +931,28 @@ export default async function handler(req, res) {
   // para o estado "faltam documentos". Guardamos o anterior e, nos GATES de semDocs
   // abaixo, se já havia um relatório bom, ele é preservado em vez de sobrescrito.
   let resultadoAnterior = null, cnjPendenteAntes = false, soCnjPendenteAntes = false;
+  // 21/10 (formas 2/4): o "best-effort" aqui fundia "não há anterior" com "não consegui ler" — num
+  // 4xx/5xx/timeout o anterior virava null, o 'gerando' gravava `result: null` por cima do bom e uma
+  // falha depois não tinha o que restaurar. Leitura que FALHA aborta antes (estorno + 503); `[]` segue.
+  let leituraAnteriorFalhou = null;
   try {
-    const [ant] = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result,regen_motivo&limit=1`)).json();
-    resultadoAnterior = ant?.result || null;
-    cnjPendenteAntes = /cnj_nao_consultado/.test(String(ant?.regen_motivo || ''));
-    soCnjPendenteAntes = String(ant?.regen_motivo || '').trim() === 'cnj_nao_consultado';
-  } catch { /* best-effort */ }
+    const rAnt = await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result,regen_motivo&limit=1`);
+    if (!rAnt.ok) leituraAnteriorFalhou = `HTTP ${rAnt.status}`;
+    else {
+      const [ant] = await rAnt.json();
+      resultadoAnterior = ant?.result || null;
+      cnjPendenteAntes = /cnj_nao_consultado/.test(String(ant?.regen_motivo || ''));
+      soCnjPendenteAntes = String(ant?.regen_motivo || '').trim() === 'cnj_nao_consultado';
+    }
+  } catch (e) { leituraAnteriorFalhou = String(e?.message || e).slice(0, 120); }
+  if (leituraAnteriorFalhou) {
+    console.error('[gerar-documental] leitura do relatório anterior falhou:', leituraAnteriorFalhou, '— aborta antes de gravar "gerando"');
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[gerar-documental] estorno falhou:', e2?.message || e2); }
+    }
+    res.status(503).json({ error: 'Não consegui ler o relatório anterior agora. Nada foi cobrado — tente de novo.' });
+    return;
+  }
   // Saída antecipada (sem ler documentos) NÃO consulta o CNJ: se a consulta estava pendente, a marca
   // continua. Antes ela era sobrescrita e o juridico-retry-cron mandava ao cliente "consulta jurídica
   // concluída" sem consulta nenhuma (pendência de 30/09).

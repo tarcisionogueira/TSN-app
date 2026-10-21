@@ -607,16 +607,34 @@ export default async function handler(req, res) {
     titulo: v.titulo || [v.marca, v.modelo].filter(Boolean).join(' ') || null,
     marca: v.marca || null, modelo: v.modelo || null, veiculo: v,
   };
+  // REGERAÇÃO NÃO APAGA O RELATÓRIO PRONTO (21/10): a falha gravava 'erro' por cima do 'concluida' —
+  // a tela só mostra 'concluida' e o próximo clique cobrava cota de novo (isNovo filtra concluida).
+  // Mesmo idioma dos gêmeos: guarda o anterior e o devolve se esta geração falhar. Leitura que FALHA
+  // (não-2xx/exceção) não é "não havia anterior": aborta antes de gravar 'gerando', pelo ramo abaixo.
+  let resultAnterior = null;
+  let leituraAnteriorFalhou = null;
   try {
+    const rAnt = await sb(`analises_veiculo?user_id=eq.${user.id}&veiculo_id=eq.${encodeURIComponent(veiculoId)}&status=eq.concluida&select=result&limit=1`);
+    if (rAnt.ok) { const [ant] = await rAnt.json(); resultAnterior = ant?.result || null; }
+    else leituraAnteriorFalhou = `HTTP ${rAnt.status}`;
+  } catch (e) { leituraAnteriorFalhou = String(e?.message || e).slice(0, 120); }
+  try {
+    if (leituraAnteriorFalhou) throw Object.assign(new Error(`leitura do relatório anterior falhou: ${leituraAnteriorFalhou}`), { leituraAnterior: true });
     await upsertAnaliseVeiculo({ ...base, status: 'gerando', erro: null });
   } catch (e) {
-    console.error('[veiculo] gravação inicial falhou:', e?.message || e);
+    console.error(`[veiculo] ${e?.leituraAnterior ? '' : 'gravação inicial falhou: '}${e?.message || e}`);
     if (cota?.ok && cota.tipo && !cobrarCredito) {
       try { await sb('rpc/estornar_veiculo_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[veiculo] estorno falhou:', e2?.message || e2); }
     }
-    res.status(503).json({ error: 'Não consegui iniciar o relatório agora (banco indisponível). Nada foi cobrado — tente de novo em instantes.' });
+    res.status(503).json({ error: e?.leituraAnterior
+      ? 'Não consegui ler o relatório anterior agora. Nada foi cobrado — tente de novo.'
+      : 'Não consegui iniciar o relatório agora (banco indisponível). Nada foi cobrado — tente de novo em instantes.' });
     return;
   }
+  // Falha com relatório anterior: volta 'concluida' com o anterior e o motivo em `erro`; sem anterior, 'erro'.
+  const gravarFalha = (motivo) => (resultAnterior
+    ? upsertAnaliseVeiculo({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(motivo).slice(0, 160)}`, result: resultAnterior })
+    : upsertAnaliseVeiculo({ ...base, status: 'erro', erro: String(motivo).slice(0, 500) }));
 
   // FIPE NUNCA FALTA NO RELATÓRIO (02/10, dono: "temos marca, nome, ano e modelo — conseguimos
   // triangular"). Sem valor válido, tenta AGORA — forçando por cima da espera de 90 dias de um
@@ -720,7 +738,7 @@ export default async function handler(req, res) {
       const bruto = extractText(data);
       const motivoVazio = `${bruto.trim() ? 'JSON inválido' : 'sem texto'}, stop=${data?.stop_reason || '?'}, ${bruto.length} chars${bruto ? `: ${bruto.slice(0, 120)}` : ''}`;
       console.error(`[veiculo] resposta sem parecer (${veiculoId}): ${motivoVazio}`);
-      await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: `Resposta ${bruto.trim() ? 'inválida' : 'vazia'} da IA (${motivoVazio})`.slice(0, 300) });
+      await gravarFalha(`Resposta ${bruto.trim() ? 'inválida' : 'vazia'} da IA (${motivoVazio})`.slice(0, 300));
       res.status(502).json({ error: 'Não foi possível gerar o relatório agora. Tente novamente.' });
       return;
     }
@@ -794,7 +812,7 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, status: 'concluida' });
   } catch (e) {
     await estornar();
-    try { await upsertAnaliseVeiculo({ ...base, status: 'erro', erro: String(e?.message || e).slice(0, 500) }); }
+    try { await gravarFalha(String(e?.message || e)); }
     catch (e2) { console.error('[veiculo] registro do erro falhou:', e2?.message || e2); }
     if (!res.headersSent) res.status(500).json({ error: 'Falha ao gerar o relatório do veículo.' });
   }

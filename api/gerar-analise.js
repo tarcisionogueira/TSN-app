@@ -2483,11 +2483,27 @@ export default async function handler(req, res) {
   // saiu R$ 3,6 mi e R$ 7,8 mi com minutos de diferença; outro, R$ 0,65 mi e R$ 1,6 mi no
   // mesmo dia — nenhuma das gerações marcada como reaproveitada.
   let mercadoAnteriorReuso = null;
+  // 21/10 (formas 2/4): sem `.ok`, um 4xx/5xx/timeout virava "não havia anterior" e o reset abaixo
+  // gravava `result: null` por cima do relatório bom — sem nada para restaurar se a geração falhasse.
+  // Leitura que FALHA aborta antes do reset (mesmo ramo de estorno + 503); `[]` segue (é relatório novo).
+  let leituraAnteriorFalhou = null;
   try {
-    const [prev] = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result,updated_at&limit=1`)).json();
-    if (prev?.result) resultAnterior = prev.result;
-    mercadoAnteriorReuso = mercadoReutilizavel(prev);
-  } catch { /* sem anterior → nada a preservar nem a reaproveitar */ }
+    const rPrev = await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result,updated_at&limit=1`);
+    if (!rPrev.ok) leituraAnteriorFalhou = `HTTP ${rPrev.status}`;
+    else {
+      const [prev] = await rPrev.json();
+      if (prev?.result) resultAnterior = prev.result;
+      mercadoAnteriorReuso = mercadoReutilizavel(prev);
+    }
+  } catch (e) { leituraAnteriorFalhou = String(e?.message || e).slice(0, 120); }
+  if (leituraAnteriorFalhou) {
+    console.error('[gerar-analise] leitura do relatório anterior falhou:', leituraAnteriorFalhou, '— aborta antes do reset');
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch (e2) { console.error('[gerar-analise] estorno falhou:', e2?.message || e2); }
+    }
+    res.status(503).json({ error: 'Não consegui ler o relatório anterior agora. Nada foi cobrado — tente de novo.' });
+    return;
+  }
 
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.

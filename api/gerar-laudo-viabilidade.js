@@ -321,10 +321,20 @@ export default async function handler(req, res) {
   // gravava 'erro' sem restaurar — regerar um laudo pronto e falhar deixava o cliente sem nenhum.
   // Mesmo desenho do mercadológico: guarda o anterior e o devolve se esta geração falhar.
   let laudoAnterior = null;
+  // 21/10 (forma 2): leitura que falhava seguia com `null` e o 'gerando' gravava `result: null` por
+  // cima do laudo bom — sem nada para restaurar se a geração falhasse. Falhou: aborta antes (503;
+  // o laudo não consome cota). `[]` segue normal: é laudo novo.
+  let leituraAnteriorFalhou = null;
   try {
     const rAnt = await sb(`analises_laudo?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result&limit=1`);
     if (rAnt.ok) { const [ant] = await rAnt.json(); laudoAnterior = ant?.result || null; }
-  } catch (e) { console.warn('[laudo] leitura do anterior falhou:', e?.message || e); }
+    else leituraAnteriorFalhou = `HTTP ${rAnt.status}`;
+  } catch (e) { leituraAnteriorFalhou = String(e?.message || e).slice(0, 120); }
+  if (leituraAnteriorFalhou) {
+    console.error('[laudo] leitura do anterior falhou:', leituraAnteriorFalhou, '— aborta antes de gravar "gerando"');
+    res.status(503).json({ error: 'Não consegui ler o relatório anterior agora. Nada foi cobrado — tente de novo.' });
+    return;
+  }
   try {
     await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: laudoAnterior,
       progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } });

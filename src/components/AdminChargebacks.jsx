@@ -66,7 +66,7 @@ export default function AdminChargebacks() {
                 return (
                   <div key={cb.id} style={{ border: '1px solid #e2e8f0', borderRadius: 14, background: 'white', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', gap: 12, flexWrap: 'wrap' }}>
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 800, color: '#111', fontSize: 14 }}>{cb.user_email || '—'} · {fmtR(cb.valor)}</div>
                         <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{cb.gateway?.toUpperCase()} · {cb.plano_key || '—'} · {fmtD(cb.aberto_em)}</div>
                       </div>
