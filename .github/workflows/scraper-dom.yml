@@ -311,12 +311,12 @@ jobs:
       # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
       # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
       # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
-      - name: Veículos (JE, Simon, Nakakogue)
+      - name: Veículos (Globo, JE, Simon, Nakakogue)
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: jeleiloes,simon,nakakogue
+          VEIC_FONTES: globo,jeleiloes,simon,nakakogue
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs

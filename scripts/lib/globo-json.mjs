@@ -2,7 +2,8 @@
  * GLOBOLEILOES pelo JSON da própria página (29/09). O site é Inertia.js: cada página traz os dados
  * num atributo `data-page` (JSON com entidades HTML). Medido pelo banco (pg_net) no mesmo dia:
  *   /leiloes?category_id=N&page=P → props.initialLots = {data[10], total, last_page, current_page}
- *     categorias de imóvel: 1 Residenciais · 2 Comerciais · 3 Rurais (4 = Outros: sapato, impressora…)
+ *     categorias de imóvel: 1 Residenciais · 2 Comerciais · 3 Rurais · 5 Imóveis (4 = Outros: sapato, impressora…)
+ *     ⚠️ a 5 nasceu depois (medido 21/10: 18 lotes, áreas para incorporação) e ficava de fora.
  *   /leiloes/<slug>/<id>          → props.lot = {images[], files[], street, zip_code, process_number…}
  * O coletor antigo (fonte `dom`) procurava links `<a href=/leiloes/lote-…>` no HTML renderizado e
  * achava 0 — os lotes estão no JSON, não em links. Tinha 6 lotes gravados, com cidade/tipo errados
@@ -14,7 +15,7 @@ import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js'
 
 export const FONTE = 'GLOBOLEILOES';
 export const BASE = 'https://globoleiloes.com.br';
-export const CATEGORIAS_IMOVEL = [1, 2, 3];
+export const CATEGORIAS_IMOVEL = [1, 2, 3, 5];
 const CDN = 'https://d1etsb4iun2r36.cloudfront.net/auctions';
 
 const brl = (s) => Number(String(s ?? '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -59,7 +60,7 @@ function tipoDoc(nome) {
 
 const TIPO = [[/apart|flat|kitnet|cobertura/i, 'apartamento'], [/casa|sobrado|resid[êe]ncia/i, 'casa'],
   [/terreno|lote/i, 'terreno'], [/fazenda|s[íi]tio|ch[áa]cara|gleba|rural|[áa]rea rural/i, 'rural'],
-  [/sala|loja|galp[ãa]o|pr[ée]dio|comercial|industrial|hotel|posto|box|garagem/i, 'comercial']];
+  [/sala|loja|galp[ãa]o|pr[ée]dio|comercial|industrial|hotel|posto|box|garagem/i, 'comercial'], [/^[áa]rea$/i, 'terreno']];
 export function tipoGlobo(lot) {
   const sub = String(lot?.subcategory?.name || '');
   const hit = TIPO.find(([re]) => re.test(sub))?.[1];

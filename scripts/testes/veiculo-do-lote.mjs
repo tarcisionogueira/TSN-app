@@ -39,5 +39,10 @@ ok(veiculoDoLote({ ...base, url_lote: 'https://x/lotes/sucata-de-veiculo-inservi
 const je = veiculoDoLote({ ...base, titulo: 'Imóvel JE Leilões 41454', descricao: 'Imóvel JE Leilões 41454 BEM: 01 (um) veículo, FORD FIESTA 1.6 HATCH - PLACAS ARZ-1C96 Cor preta, flex, ano/modelo 2009/2010, odômetro marcando 193.545' }, { id: '41454', fonte: 'JELEILOES' });
 ok(je.row?.marca === 'FORD' && je.row?.ano_modelo === 2010, `JE: "Imóvel JE…" vira FORD FIESTA 2010 (${je.row?.titulo || je.motivo})`);
 
+// GLOBO/Balbino (21/10): ano sozinho no fim do título e "Localização:" rotulado na ficha.
+const globo = veiculoDoLote({ ...base, titulo: 'Ford F-250 XLT L 1999', descricao: 'INFORMAÇÕES DO ATIVO: Marca: Ford Modelo: F-250 XLT L Ano de fabricação: 1999 Ano modelo: 1999 Chassi: 9BFFF25L3XDXXXXXX Localização: Secretaria de Obras de Nova Ubiratã, Rua Pedro Duarte, 371, Centro' }, { id: '3740', fonte: 'GLOBOLEILOES' });
+ok(globo.row?.ano_modelo === 1999 && globo.row?.modelo === 'F-250 XLT L', `GLOBO: ano do fim do título (${globo.row?.modelo} ${globo.row?.ano_modelo})`);
+ok(globo.row?.status_patio === 'nao_confirmado', 'GLOBO: "Localização:" é local informado (selo)');
+
 if (falhas) { console.error(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nveiculo-do-lote: todos os casos passaram');

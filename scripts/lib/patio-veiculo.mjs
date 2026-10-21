@@ -14,6 +14,7 @@
  * viram nao_confirmado.
  * 21/10 (veículos SOLEON): "Comitente: DEPOSITO PUBLICO" (bem recolhido em depósito público) conta como
  * pátio; "Local de Exposição" / "Visitação Externa:" contam como local informado (selo).
+ * 21/10 (veículos GLOBO/Balbino): "Localização: Secretaria de Obras…, Rua…" também é local informado (selo).
  */
 // "Bem encontra-se: <endereço>" é a frase-padrão da Sodré para onde o veículo está guardado (11/09, 47/47
 // lotes reais) — fica FORA do \b…\b: o \b não casa depois de ":" + espaço.
@@ -21,7 +22,7 @@ export const SINAL_PATIO = /\b(p[áa]tio|apreendid[oa]|recolhid[oa] ao dep[óo]s
 export const SINAL_EXECUTADO = /\b(n[ãa]o localizado|sujeito a busca e apreens[ãa]o|em poder d[oa] (executad[oa]|devedor[a]?)|posse d[oa] (executad[oa]|devedor[a]?)|aguardando localiza[çc][ãa]o|bem n[ãa]o recolhido|com [oa] (executad[oa]|devedor[a]?|parte executada)|em m[ãa]os d[oa] (executad[oa]|devedor[a]?))\b/i;
 // "em mãos de <alguém>" que não seja leiloeiro/pátio/depósito: a pessoa pode ser o próprio devedor.
 const SINAL_EM_MAOS_DE_PESSOA = /em m[ãa]os de\s+(?!.{0,40}(leiloeir|p[áa]tio|dep[óo]sito))/i;
-const SINAL_LOCAL_INFORMADO = /(local\s+(para|de)\s+vistoria|vistoria\s*:|localiza[çc][ãa]o do bem|local do bem|bem (se )?encontra-se|endere[çc]o (do bem|para visita[çc][ãa]o|de visita[çc][ãa]o)|visita[çc][ãa]o(\s+externa)?\s*:|local de exposi[çc][ãa]o)/i;
+const SINAL_LOCAL_INFORMADO = /(local\s+(para|de)\s+vistoria|vistoria\s*:|localiza[çc][ãa]o( do bem)?\s*:|localiza[çc][ãa]o do bem|local do bem|bem (se )?encontra-se|endere[çc]o (do bem|para visita[çc][ãa]o|de visita[çc][ãa]o)|visita[çc][ãa]o(\s+externa)?\s*:|local de exposi[çc][ãa]o)/i;
 
 export function classificarPatio(texto) {
   const t = String(texto || '');

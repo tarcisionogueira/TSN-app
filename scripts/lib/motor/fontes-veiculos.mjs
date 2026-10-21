@@ -8,5 +8,6 @@ import mgl from './fontes/mgl.mjs';
 import simon from './fontes/simon.mjs';
 import jeleiloes from './fontes/jeleiloes.mjs';
 import nakakogue from './fontes/nakakogue.mjs';
+import globo from './fontes/globo.mjs';
 
-export const FONTES_VEICULOS = [freitas, mgl, jeleiloes, simon, nakakogue];
+export const FONTES_VEICULOS = [freitas, globo, mgl, jeleiloes, simon, nakakogue];

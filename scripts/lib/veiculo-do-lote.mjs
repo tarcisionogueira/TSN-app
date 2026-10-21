@@ -56,7 +56,29 @@ function marcaAnoDoTitulo(titulo) {
     const a = titulo.match(/\bano\s*:?\s*((?:19[5-9]|20[0-4])\d)\b/i);
     if (a) r.ano_modelo = r.ano_fabricacao = Number(a[1]);
   }
+  // Ano SOZINHO no fim ("Ford F-250 XLT L 1999", GLOBO 21/10): sai do modelo e vira o ano.
+  if (!r.ano_modelo) {
+    const a = titulo.match(/\s((?:19[5-9]|20[0-4])\d)$/);
+    if (a) {
+      r.ano_modelo = r.ano_fabricacao = Number(a[1]);
+      if (r.modelo) r.modelo = r.modelo.replace(/\s*\b(?:19|20)\d\d$/, '').trim() || r.modelo;
+    }
+  }
   return r;
+}
+
+// Ficha rotulada ("Ano de fabricação: 1999", "Ano modelo: 2000" — Balbino/Globo): vale quando o
+// título não trouxe o ano.
+function comAnoDaFicha(r, descricao) {
+  if (r.ano_modelo) return r;
+  const f = anoDaFicha(descricao);
+  return f.ano_modelo ? { ...r, ...f } : r;
+}
+function anoDaFicha(descricao) {
+  const d = String(descricao || '');
+  const fab = d.match(/ano\s*(?:de\s*)?fabrica[çc][ãa]o\s*:?\s*((?:19[5-9]|20[0-4])\d)\b/i);
+  const mod = d.match(/ano\s*(?:do\s*)?modelo\s*:?\s*((?:19[5-9]|20[0-4])\d)\b/i);
+  return { ano_fabricacao: fab ? Number(fab[1]) : null, ano_modelo: mod ? Number(mod[1]) : (fab ? Number(fab[1]) : null) };
 }
 
 // "BEM: 01 (um) veículo, FORD FIESTA 1.6 HATCH - PLACAS ARZ-1C96 … ano/modelo 2009/2010" → "FORD FIESTA 1.6
@@ -117,7 +139,7 @@ export function veiculoDoLote(row, { id, fonte }) {
   const out = {
     fonte, fonte_id: `${fonte.toLowerCase()}_veic_${id}`,
     leiloeiro: row.leiloeiro || null, titulo: titulo || `Veículo ${fonte} ${id}`, descricao: (descricao || titulo).slice(0, 8000),
-    ...normalizarMarca(marcaAnoDoTitulo(titulo)), tipo_veiculo: tipoVeiculo(titulo),
+    ...comAnoDaFicha(normalizarMarca(marcaAnoDoTitulo(titulo)), descricao), tipo_veiculo: tipoVeiculo(titulo),
     placa: placa ? placa.replace('-', '').toUpperCase() : null, chassi: chassi ? chassi.toUpperCase() : null,
     renavam: (texto.match(RE_RENAVAM) || [])[1] || null, km: km && km < 2_000_000 ? km : null,
     valor_minimo: vMin || vAval, valor_avaliacao: vAval || null,
