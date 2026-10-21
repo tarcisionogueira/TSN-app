@@ -598,7 +598,8 @@ function cardImovel(im) {
   const prazoISO = isoData(im.data_leilao);
   const fonteRaw = String(im.fonte || '').trim();
   const ehCaixa = /caixa|cef/i.test(fonteRaw);
-  const fonteLabel = ehCaixa ? 'CAIXA' : (fonteRaw ? fonteRaw.toUpperCase().slice(0, 16) : '');
+  // Selo da fonte/leiloeiro na foto saiu da página pública (21/10, dono): quem é o leiloeiro é do plano pago.
+  const fonteLabel = '';
   const selos = [
     m2 ? `<span class="selo">${esc(m2)}</span>` : '',
     im.tem_edital_doc ? '<span class="selo">📄 Edital</span>' : '',
@@ -958,7 +959,7 @@ async function paginaImovel(id) {
   const modalCurto = MODAL_CURTO[String(im.modalidade || '').toLowerCase()] || null;
   const fonteRaw = String(im.fonte || '').trim();
   const ehCaixa = /caixa|cef/i.test(fonteRaw);
-  const fonteLabel = ehCaixa ? 'CAIXA' : (fonteRaw ? fonteRaw.toUpperCase().slice(0, 18) : '');
+  const fonteLabel = ''; // selo do leiloeiro fora da página pública (21/10, dono)
   return pagina({
     // A ÚNICA das seis páginas públicas que tem um lote: é aqui, e só aqui, que os botões do
     // topo passam a levar o imóvel junto. Nas outras `imovelId` fica vazio e nada muda.
@@ -1024,7 +1025,7 @@ async function paginaImovel(id) {
             </div>
           </div>
 
-          ${im.descricao ? `<div class="secao"><h2><span class="ic">📝</span> Descrição do lote</h2><p style="margin:0;color:#334155">${esc(String(im.descricao).slice(0, 1200))}</p></div>` : ''}
+          ${im.descricao ? `<div class="secao"><h2><span class="ic">📝</span> Descrição do lote</h2><p style="margin:0;color:#334155">${esc(String(im.descricao).replace(/https?:\/\/\S+|www\.\S+/gi, '').slice(0, 1200))}</p></div>` : ''}
 
           <!-- TEASER de localização: mostra QUE existe mapa e chama o cadastro, sem revelar o
                endereço exato (que é do produto). Miolo borrado por CSS, sem dado real. -->

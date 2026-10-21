@@ -23,6 +23,7 @@ import { fotoCandidatos } from '../utils/foto';
 import { registrarEvento } from '../utils/tracker.js';
 import { carregarLeaflet } from '../utils/leafletSeguro';
 import SeletorAcervo from '../components/SeletorAcervo';
+import { podeVerLeiloeiro } from '../utils/leiloeiroAcesso';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -2216,7 +2217,7 @@ export default function Busca() {
                 <span style={{ fontSize:16 }}>🔒</span>
                 <div style={{ fontSize:13, color:'#92400e', flex:1 }}>
                   {!user
-                    ? <><strong>Faça login</strong> para acessar o site do leiloeiro e gerar análises completas dos imóveis.</>
+                    ? <><strong>Faça login</strong> e assine para ver quem é o leiloeiro de cada imóvel e gerar análises completas.</>
                     : <>
                         <strong>Plano {PLANO_LABELS[role] || 'atual'}:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴.
                         {' '}Para gerar análise completa, faça upgrade para o <strong>Plano Investidor</strong> ou superior.
@@ -2379,6 +2380,15 @@ export default function Busca() {
                         LJUD) aparecem por extenso. Descarta valores com cara de código
                         (ex.: script capturado por engano na coleta). */}
                     {(() => {
+                      // Sem plano pago (21/10, dono): o selo vira o cadeado — quem é o leiloeiro é do plano.
+                      if (!podeVerLeiloeiro(role)) {
+                        return (
+                          <div title="Assine para ver quem é o leiloeiro"
+                            style={{ position:'absolute', bottom:8, left:8, background:'rgba(15,23,42,0.82)', color:'white', fontSize:9, fontWeight:800, padding:'2px 8px', borderRadius:8, display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap' }}>
+                            <span aria-hidden="true" style={{ fontSize:8 }}>🔒</span>Leiloeiro no plano
+                          </div>
+                        );
+                      }
                       const isCaixa = im.fonte === 'CEF' || im.fonte === 'caixa';
                       let nome = isCaixa ? 'Caixa' : String(im.leiloeiro || '').trim();
                       if (/[{};=]|_0x|function\s*\(|=>/.test(nome)) nome = isCaixa ? 'Caixa' : '';

@@ -42,6 +42,7 @@ import { soAceitaAVista } from '../data/pagamento.js';
 import { dataBrParaIso } from '../../api/_data-br.js';
 import { definirTrabalhoNaoSalvo } from '../utils/swAtualizacao';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
+import { podeVerLeiloeiro } from '../utils/leiloeiroAcesso';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -190,7 +191,11 @@ export default function Analise() {
   const [docsRecuperados, setDocsRecuperados] = useState(null);
   // O recuperado VENCE o state: o state que a lista passa é magro ({id, título, cidade}); quando a
   // recuperação roda é porque ele não servia (ver o efeito RECUPERAÇÃO).
-  const imovelInicial = imovelRecuperado || location.state?.imovel;
+  // Leiloeiro só para plano pago (21/10, dono — utils/leiloeiroAcesso.js): sem plano, o lote chega à tela sem nome
+  // do leiloeiro, link e documentos hospedados no site dele (a amostra do relatório de mercado continua).
+  const verLeiloeiro = podeVerLeiloeiro(role);
+  const mascararLeiloeiro = (im) => (!im || verLeiloeiro ? im : { ...im, leiloeiro: null, urlLote: null, linkEdital: null, linkMatricula: null, anexos: [] });
+  const imovelInicial = mascararLeiloeiro(imovelRecuperado || location.state?.imovel);
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
   const paraUserId = location.state?.paraUserId || null;
@@ -427,7 +432,7 @@ export default function Analise() {
         if (!cancel && !eFresco && fresco) {
           setAnexosLote(Array.isArray(fresco.anexos) ? fresco.anexos : []);
           // Registro fotográfico do relatório (01/10): as fotos vêm do lote, relidas como os anexos.
-          setFotosLote({ lista: fotosDoImovel({ fotos: fresco.fotos, linkFoto: fresco.link_foto, fonte: fresco.fonte, fonteId: fresco.fonte_id, imovelId: idImovel }), linkLote: fresco.url_lote || '' });
+          setFotosLote({ lista: fotosDoImovel({ fotos: fresco.fotos, linkFoto: fresco.link_foto, fonte: fresco.fonte, fonteId: fresco.fonte_id, imovelId: idImovel }), linkLote: verLeiloeiro ? (fresco.url_lote || '') : '' });
         } else if (!cancel && eFresco) {
           console.warn('[analise] fotos/anexos do lote não relidos:', eFresco.message);
         }
@@ -1598,7 +1603,7 @@ export default function Analise() {
   useEffect(() => {
     if (!imovelRecuperado) return;
     setD((prev) => (prev.imovelIdAcervo === imovelRecuperado.id && (Number(prev.valorAvaliacao) || Number(prev.areaM2))
-      ? prev : sementeDoImovel(imovelRecuperado)));
+      ? prev : sementeDoImovel(mascararLeiloeiro(imovelRecuperado))));
   }, [imovelRecuperado]); // eslint-disable-line react-hooks/exhaustive-deps
   // Os anexos guardados entram DEPOIS da re-semeadura acima (efeito declarado depois = roda depois):
   // a recomposição deles aplica à ficha os dados lidos (avaliação, lance, área), e a semente não os apaga.
@@ -2437,8 +2442,8 @@ export default function Analise() {
             </>
           )}
 
-          {/* Documentos do leiloeiro */}
-          <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
+          {/* Documentos do leiloeiro — só plano pago (21/10). */}
+          {verLeiloeiro && <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
             {erroDocsLeiloeiro && (
               <div style={{ fontSize:12.5, color:'#991b1b', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'8px 11px', marginBottom:10, fontWeight:600 }}>
@@ -2615,7 +2620,7 @@ export default function Analise() {
                 </div>
               );
             })()}
-          </div>
+          </div>}
 
           {/* Relatórios gerados */}
           <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>

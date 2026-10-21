@@ -1,3 +1,4 @@
+import { podeVerLeiloeiro } from '../utils/leiloeiroAcesso';
 // Cabeçalho PADRÃO dos relatórios em PDF (mercadológico, documental, laudo — e, por herança, o
 // combinado). Um só lugar para a IDENTIFICAÇÃO: marca BidPro Brasil, o relatório, o imóvel, a
 // matrícula, o executado, o processo, e QUEM solicitou (assinante + nível/role) + data. Antes cada
@@ -65,7 +66,7 @@ export function cabecalhoBidPro({ titulo = '', subtitulo = '', docSeq = '', imov
     ${linha('Executado', executado)}
     ${linha('Processo', processo)}
     ${linha('Solicitado por', quem)}
-    ${linha('Leiloeiro', imovel.leiloeiro)}
+    ${podeVerLeiloeiro(solicitante.role) ? linha('Leiloeiro', imovel.leiloeiro) : ''}
   </div>
 </div>`;
 }

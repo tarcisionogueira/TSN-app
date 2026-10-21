@@ -323,7 +323,8 @@ export default function Planos() {
               Explore leilões em todo o Brasil, acesse cursos e use a calculadora de arrematação sem pagar nada.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-              {['Busca de leilões em todo o Brasil', '3 relatórios mercadológicos e viabilidade financeira de amostra (uso único, não renovam)', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
+              {['Busca de leilões em todo o Brasil', '3 relatórios mercadológicos e viabilidade financeira de amostra (uso único, não renovam)', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos'].map(t => <CheckItem key={t} txt={t} />)}
+              <CheckItem txt="Quem é o leiloeiro e acesso ao lote (Investidor Pro)" off />
               <CheckItem txt="Análise Documental e Jurídica (Investidor Pro)" off />
             </div>
             <button onClick={() => ctaTipo('explorador') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=explorador')} disabled={atual('explorador')}
@@ -362,6 +363,7 @@ export default function Planos() {
 
               <GroupLabel txt="📑 Análise & Relatórios com IA" />
               {[
+                'Quem é o leiloeiro, link do lote, edital e matrícula',
                 'Relatório de viabilidade com IA',
                 'Análise de edital, matrícula e processo',
                 'Análise processual do imóvel',

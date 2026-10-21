@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText, ShieldCheck, Share2, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText, ShieldCheck, Share2, Check, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -22,6 +22,7 @@ import { CUSTO_AQUISICAO_PCT, ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, aluguelAlvo
 import { TIPOS_LIQUIDOS } from '../lib/intencao';
 import { carregarLeaflet } from '../utils/leafletSeguro';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import { podeVerLeiloeiro, CHECKOUT_LEILOEIRO } from '../utils/leiloeiroAcesso';
 
 // As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
 // aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
@@ -839,10 +840,19 @@ export default function ImovelDetalhe() {
     if (user) return nav('/buscar', { state: { restaurarLista: true } });
     return (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/');
   };
-  const [imovel, setImovel] = useState(loc.state?.imovel || null);
+  const [imovelBruto, setImovel] = useState(loc.state?.imovel || null);
+  // LEILOEIRO SÓ PARA PLANO PAGO (21/10, dono) — regra em utils/leiloeiroAcesso.js. A tela inteira lê `imovel`
+  // já MASCARADO para quem não pode: sem nome do leiloeiro, link do lote, edital/matrícula/anexos hospedados no
+  // site dele e "também anunciado em". `fonte` fica (decide foto e regras da Caixa), mas não é exibida.
+  const verLeiloeiro = podeVerLeiloeiro(role);
+  const imovel = React.useMemo(() => (!imovelBruto || verLeiloeiro ? imovelBruto : {
+    ...imovelBruto, leiloeiro: null, urlLote: null, linkEdital: null, linkMatricula: null, linkRegrasVenda: null,
+    anexos: [], anunciado_em: null, anunciadoEm: null,
+  }), [imovelBruto, verLeiloeiro]);
   const [avisoVendido, setAvisoVendido] = useState(null); // null | 'enviando' | 'ok' | 'erro'
   const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
-  const [anexosDocs, setAnexosDocs] = useState([]);
+  const [anexosDocsBrutos, setAnexosDocs] = useState([]);
+  const anexosDocs = verLeiloeiro ? anexosDocsBrutos : []; // edital/matrícula capturados identificam o leiloeiro
   const [buscandoDocs, setBuscandoDocs] = useState('');
   const [filaDocs, setFilaDocs] = useState(null); // status da fila de captura CEF (persiste no F5)
   // Matrícula indisponível (pedido do dono, 21/08): o hotlink da Caixa pode dar 404 cru do
@@ -1867,8 +1877,20 @@ export default function ImovelDetalhe() {
               </div>
             )}
 
-            {/* Documentos */}
-            {temCardDocumentos && (
+            {/* Documentos — o edital e a matrícula do lote identificam o leiloeiro: só plano pago (21/10). */}
+            {!verLeiloeiro && (
+              <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <Lock size={20} color="#0D63DB" style={{ flexShrink: 0 }} />
+                <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Leiloeiro, edital e matrícula</div>
+                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, lineHeight: 1.5 }}>Assine o Investidor Pro para ver quem é o leiloeiro, abrir o lote no site dele e ler o edital e a matrícula.</div>
+                </div>
+                <button onClick={() => nav(CHECKOUT_LEILOEIRO)} style={{ padding: '10px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Desbloquear o leiloeiro
+                </button>
+              </div>
+            )}
+            {verLeiloeiro && temCardDocumentos && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
@@ -2234,7 +2256,13 @@ export default function ImovelDetalhe() {
                 );
               })()}
 
-              {/* Ir ao leiloeiro */}
+              {/* Ir ao leiloeiro — sem plano pago, o mesmo lugar vira o convite (21/10). */}
+              {!verLeiloeiro && imovelBruto?.urlLote && (
+                <button onClick={() => nav(CHECKOUT_LEILOEIRO)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', marginBottom: 10, background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  <Lock size={15} /> Ver quem é o leiloeiro
+                </button>
+              )}
               {imovel.urlLote && (
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
@@ -2353,7 +2381,7 @@ export default function ImovelDetalhe() {
                     return `${fmtArea(anuncio)} (anúncio)`;
                   })(),
                 },
-                { label: 'Fonte', value: imovel.fonte },
+                { label: 'Fonte', value: verLeiloeiro ? imovel.fonte : null },
                 { label: 'Leiloeiro', value: imovel.leiloeiro },
               ].filter(({ value }) => value).map(({ label, value }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
@@ -2362,7 +2390,7 @@ export default function ImovelDetalhe() {
                 </div>
               ))}
             </div>
-            <AnunciadoEm imovel={imovel} />
+            {verLeiloeiro && <AnunciadoEm imovel={imovel} />}
           </div>
         </div>
       </div>
@@ -2373,6 +2401,12 @@ export default function ImovelDetalhe() {
           "Solicitar Análise") ficam sempre à mão, sem o usuário precisar rolar até o
           fim. No desktop a sidebar sticky já resolve, então a barra fica oculta. */}
       <div className="acoes-mobile-bar">
+        {!verLeiloeiro && imovelBruto?.urlLote && (
+          <button onClick={() => nav(CHECKOUT_LEILOEIRO)}
+            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <Lock size={16} /> Leiloeiro
+          </button>
+        )}
         {imovel.urlLote && (
           <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
             style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 16px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>

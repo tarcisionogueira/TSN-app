@@ -40,7 +40,7 @@ export default function ImovelGate() {
       // 05/10 (dono): "apresentar mais informações" — galeria, ocupação, condomínio, pagamento e
       // data da 2ª praça entram; continuam FORA sem login: link do leiloeiro, anexos/documentos,
       // endereço exato/mapa e análise. Após login, a página completa (ImovelDetalhe) abre tudo.
-      .select('id,titulo,cidade,estado,bairro,tipo,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,modalidade,leiloeiro,descricao,link_foto,fotos,fonte,fonte_id,ocupacao,forma_pagamento,nomecondominio')
+      .select('id,titulo,cidade,estado,bairro,tipo,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,modalidade,descricao,link_foto,fotos,fonte,fonte_id,ocupacao,forma_pagamento,nomecondominio')
       .eq('id', id).maybeSingle()
       // `{ data }` SEM `error` funde "não achei o imóvel" com "não consegui ler" — o
       // postgrest-js não lança em não-2xx. Numa rota PÚBLICA (as 33 mil páginas indexadas)
@@ -88,7 +88,7 @@ export default function ImovelGate() {
     ['Condomínio', im.nomecondominio || null],
     ['Pagamento', im.forma_pagamento ? String(im.forma_pagamento).replace(/_/g, ' ').slice(0, 80) : null],
     ['Modalidade', MODALIDADE_LABEL[String(im.modalidade || '').toLowerCase()] || im.modalidade || null],
-    ['Leiloeiro', im.leiloeiro || null],
+    // Leiloeiro saiu (21/10, dono): quem é o leiloeiro é só para plano pago (utils/leiloeiroAcesso.js).
   ].filter(([, v]) => v);
 
   // Galeria: `fotos` (quando a fonte traz várias) ou a foto principal com seus espelhos.
