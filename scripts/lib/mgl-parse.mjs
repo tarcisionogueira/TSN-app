@@ -17,9 +17,12 @@ import { num, plaus, textoDe, titleCase, anexosDeHtml, fotoDeHtml, montarRowDom,
 import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
 
 export const TENANTS = {
-  fernando: { fonte: 'FERNANDOLEILOEIRO', leiloeiro: 'Fernando Leiloeiro', base: 'https://www.fernandoleiloeiro.com.br' },
-  jonas: { fonte: 'JONASLEILOEIRO', leiloeiro: 'Jonas Leiloeiro', base: 'https://www.jonasleiloeiro.com.br' },
-  lucas: { fonte: 'LUCASLEILOEIRO', leiloeiro: 'Lucas Leiloeiro', base: 'https://www.lucasleiloeiro.com.br' },
+  // 21/10: os três também no feed. O catálogo padrão `/busca/#Engine=Start&ID_Categoria=2` é um
+  // FRAGMENTO — o `#` não chega ao servidor e a busca é feita em JS, então a enumeração dava 0
+  // (Fernando: 18 imóveis no site, 2 aqui; Lucas: ~6 contra 1). Mesmo remédio de Viva/Jinkings.
+  fernando: { fonte: 'FERNANDOLEILOEIRO', leiloeiro: 'Fernando Leiloeiro', base: 'https://www.fernandoleiloeiro.com.br', catalogo: '/sitemap.xml' },
+  jonas: { fonte: 'JONASLEILOEIRO', leiloeiro: 'Jonas Leiloeiro', base: 'https://www.jonasleiloeiro.com.br', catalogo: '/sitemap.xml' },
+  lucas: { fonte: 'LUCASLEILOEIRO', leiloeiro: 'Lucas Leiloeiro', base: 'https://www.lucasleiloeiro.com.br', catalogo: '/sitemap.xml' },
   // 10/10: mesma plataforma Degrau, achada no radar de editais (Cloudflare 400 ao runner). SP capital.
   viva: { fonte: 'VIVALEILOES', leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br',
     // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro). 15/10: catálogo = feed

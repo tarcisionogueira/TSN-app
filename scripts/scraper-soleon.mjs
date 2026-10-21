@@ -349,12 +349,28 @@ function parseDetalhe(html, url) {
     // junto. Regra do dono: "venda direta é compra imediata, sem prazo" — praça e venda_direta
     // são mutuamente exclusivos por definição, então a data nunca pode sobreviver aqui.
     data_leilao: modalidade === 'venda_direta' ? null : dataLeilaoDetectada,
+    ...(modalidade === 'venda_direta' ? {} : segundaPracaSoleon(txt)),
     numero_matricula: mat,
     link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i),
     anexos,
     // Endereço do bloco "Localização do Imóvel" (08/10, #88) — a descrição é texto de matrícula.
     local: enderecoSoleon(html),
   };
+}
+
+// 2ª PRAÇA (21/10). A página traz "Data 1º Leilão: 16/10/2026 14:00 · Lance Inicial: R$372.274,05 ·
+// Data 2º Leilão: 05/11/2026 14:00 · Lance Inicial: R$223.364,43" e só a 1ª entrava. Sem
+// `data_leilao_2`, a retenção desligava o lote assim que a 1ª passava — justo quando o lance cai
+// ~40% (APICE 17606 inativo com a 2ª em 05/11; ~90 lotes assim em APICE/DANIELGARCIA/CALIL).
+// Devolve {} quando não acha: ausência não apaga o que já está gravado (mesmo cuidado do PECINI).
+function segundaPracaSoleon(txt) {
+  const m = String(txt || '').match(/Data\s*2[ºo°ª]?\s*Leil[ãa]o:?\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s*(?:[àa]s\s*)?(\d{2}):(\d{2}))?/i);
+  if (!m) return {};
+  const [, d, mes, a, hh = '12', mm = '00'] = m;
+  const out = { data_leilao_2: `${a}-${mes}-${d}T${hh}:${mm}:00-03:00` };
+  const lance = String(txt).slice(m.index, m.index + 200).match(/Lance\s*Inicial:?\s*R\$\s*([\d.]+,\d{2})/i);
+  if (lance) out.valor_minimo_2 = num(lance[1]);
+  return out;
 }
 
 function montarRow(tenant, url, det) {
@@ -382,6 +398,8 @@ function montarRow(tenant, url, det) {
     // nenhum gatilho preserva `cep` — lote sem CEP na rodada apagaria o de outro.
     leiloeiro: tenant.leiloeiro,
     data_leilao: det.data_leilao || null,
+    ...(det.data_leilao_2 ? { data_leilao_2: det.data_leilao_2 } : {}),
+    ...(det.valor_minimo_2 ? { valor_minimo_2: det.valor_minimo_2 } : {}),
     forma_pagamento: 'a_vista',
     ativo: true,
     suprimido_motivo: null, // voltou a ser coletado ⇒ motivo velho (ex.: sumiu_da_fonte) não vale mais
