@@ -4839,41 +4839,40 @@ function mapLoteWebLeiloesVeiculo(l, detalhe = null) {
 }
 
 async function scraperWebLeiloesVeiculos(browser) {
-  console.log('  WebLeilões (veículos, piloto) — busca?tipo=Veículos...');
+  // ROTA NOVA (21/10). O site trocou a estrutura em 06-07/10 e só o coletor de imóveis migrou: este
+  // seguia em `/busca?tipo=Veículos` com o seletor `/oferta/…/veiculos/` — 0 card desde então, e os
+  // 29 veículos antigos ficaram ativos sem atualização (desligar exige > 50 salvos). Agora é o mesmo
+  // caminho dos imóveis: `/veiculos?pagina=N` + extrairCardsWebLeiloes('veiculos').
+  console.log('  WebLeilões (veículos) — /veiculos paginado (estrutura nova de 07/10)...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const bens = new Map();
+  let total = 0;
   try {
-    try {
-      await page.goto(`${WEBLEILOES_BASE}/busca?tipo=Ve%C3%ADculos`, { waitUntil: 'networkidle2', timeout: 45000 });
-      await new Promise(r => setTimeout(r, 2500));
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {}); // padrao-ok: scroll best-effort pra disparar lazy-load; sem ele a página segue com os cards já carregados
-      await new Promise(r => setTimeout(r, 1500));
-      const lotes = await page.evaluate(() => {
-        const out = []; const vistos = new Set();
-        const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
-        document.querySelectorAll('a[href*="/oferta/"][href*="/veiculos/"]').forEach((a) => {
-          const href = a.getAttribute('href') || '';
-          const mid = href.match(/id-(\d+)/); const id = mid ? mid[1] : null;
-          if (!id || vistos.has(id)) return; vistos.add(id);
-          const card = a.closest('article') || a.closest('li, [class*="card"]') || a.parentElement;
-          const q = (sel) => card ? clean(card.querySelector(sel)?.textContent) : '';
-          const imgEl = card ? card.querySelector('img') : null;
-          out.push({
-            href, id,
-            descPct: q('.r1 small'),
-            local: q('.cont-infos ul li') || q('ul li'),
-            alt: imgEl ? (imgEl.getAttribute('alt') || '') : '',
-            img: imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '',
-            texto: card ? clean(card.textContent).slice(0, 400) : '',
-          });
-        });
-        return out;
-      }).catch(() => []); // padrao-ok: falha de evaluate vira lista vazia, tratado como "sem lotes nesta página" logo abaixo
-      for (const l of lotes) if (l.id && !bens.has(l.id)) bens.set(l.id, l);
-      console.log(`    WebLeilões veículos: ${lotes.length} coletados`);
-    } catch (e) { console.log(`    WebLeilões veículos: ${String(e.message).slice(0, 80)}`); }
+    for (let pagina = 1; pagina <= 12; pagina++) {
+      const url = pagina === 1 ? `${WEBLEILOES_BASE}/veiculos` : `${WEBLEILOES_BASE}/veiculos?pagina=${pagina}`;
+      const antes = bens.size;
+      try {
+        const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        if (resp && resp.status() >= 400) { console.log(`    WebLeilões veículos ${url}: HTTP ${resp.status()} — parando`); break; }
+        await new Promise(r => setTimeout(r, 2000));
+        const { lotes, itens } = await page.evaluate(extrairCardsWebLeiloes, 'veiculos').catch(() => ({ lotes: [], itens: 0 })); // padrao-ok: falha de evaluate = página sem card; o laço para logo abaixo
+        if (itens) total = itens;
+        for (const c of lotes) {
+          // /veiculos/<categoria>/<uf>/<cidade>/<slug>-<ID>: id, UF e cidade são segmentos da URL.
+          const m = String(c.href || '').match(/\/veiculos\/([a-z0-9-]+)\/([a-z]{2})\/([a-z0-9-]+)\/(.+?)-(\d+)(?:[?#]|$)/i);
+          if (!m || bens.has(m[5])) continue;
+          if (/sucata|pecas|maquina|trator|embarcac|aeronave/i.test(`${m[1]} ${m[4]}`)) continue;
+          const cidade = toTitleCase(m[3].replace(/-/g, ' '));
+          bens.set(m[5], { href: c.href, id: m[5], descPct: '', local: `${cidade}/${m[2].toUpperCase()}`,
+            alt: m[4].replace(new RegExp(`-${m[2]}$`, 'i'), '').replace(/-/g, ' ').toUpperCase(), img: c.img || '', texto: c.texto || '' });
+        }
+        console.log(`    WebLeilões veículos ${pagina === 1 ? '/veiculos' : `?pagina=${pagina}`}: +${bens.size - antes} (total ${bens.size}${total ? ` de ${total}` : ''})`);
+      } catch (e) { console.log(`    WebLeilões veículos página ${pagina}: ${String(e.message).slice(0, 60)}`); break; }
+      if (bens.size === antes) break;
+      if (total && bens.size >= total) break;
+    }
   } finally { await page.close(); }
   const lista = [...bens.values()];
   const detalhePorId = await visitarTextoDetalhe(browser, lista, {
@@ -4882,6 +4881,9 @@ async function scraperWebLeiloesVeiculos(browser) {
   });
   const veiculos = lista.map((l) => mapLoteWebLeiloesVeiculo(l, detalhePorId.get(l.id))).filter(v => v.valor_minimo > 0);
   console.log(`  ✅ WebLeilões (veículos): ${veiculos.length} mapeados`);
+  // Os da rota antiga (`/oferta/`, ids renumerados pelo site) saem SÓ depois de a rota nova gravar —
+  // mesmo cuidado de aposentarRotaAntigaWebLeiloes (imóveis): nunca zera a fonte.
+  veiculos.aposentarRotaAntiga = veiculos.length > 0;
   return veiculos;
 }
 
@@ -6938,7 +6940,14 @@ async function main() {
     if (ONLY.includes('WEBLEILOES_VEICULOS')) {
       console.log('\n📋 WebLeilões (veículos, piloto)...');
       const veiculosWebLeiloes = await scraperWebLeiloesVeiculos(browser);
-      await salvarVeiculos(veiculosWebLeiloes);
+      const salvosWL = await salvarVeiculos(veiculosWebLeiloes);
+      // Rota antiga (`/oferta/`) aposentada só depois de a nova gravar algo — e `.select()` prova quantos saíram.
+      if (veiculosWebLeiloes.aposentarRotaAntiga && salvosWL > 0) {
+        const { data, error } = await supabase.from('veiculos_leilao').update({ ativo: false })
+          .eq('fonte', 'WEBLEILOES').eq('ativo', true).like('link_lote', '%/oferta/%').select('id');
+        if (error) console.log(`    WebLeilões veículos: rota antiga NÃO aposentada — ${error.message}`);
+        else if (data.length) console.log(`    WebLeilões veículos: ${data.length} da rota antiga (/oferta/) aposentados`);
+      }
     }
 
     // Roda sempre no fim do job (não depende de qual fonte de veículo rodou nesta

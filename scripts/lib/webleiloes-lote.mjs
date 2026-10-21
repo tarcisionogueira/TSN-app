@@ -151,8 +151,10 @@ export function mapaCardWebLeiloes({ href, texto = '', img = '' } = {}) {
  * meça exatamente o mesmo código que a coleta de verdade roda.
  * Devolve os cards (href + texto + foto) e o total que a própria página declara.
  */
-export function extrairCardsWebLeiloes() {
-  const RE_LOTE = /\/imoveis\/[a-z0-9-]+\/[a-z]{2}\/[a-z0-9-]+\/.+-(\d+)(?:[?#]|$)/i;
+// `secao` (21/10): a seção de VEÍCULOS usa o mesmo card e a mesma URL, trocando só o 1º segmento
+// (/veiculos/<categoria>/<uf>/<cidade>/<slug>-<ID>). Corre no navegador via page.evaluate(fn, secao).
+export function extrairCardsWebLeiloes(secao = 'imoveis') {
+  const RE_LOTE = new RegExp(`\\/${secao}\\/[a-z0-9-]+\\/[a-z]{2}\\/[a-z0-9-]+\\/.+-(\\d+)(?:[?#]|$)`, 'i');
   const idDe = (h) => (String(h || '').match(RE_LOTE) || [])[1] || null;
   // FOTO (07/10): o ensaio em seco saiu com 0 de 49. O bloco onde o texto do card termina (a
   // parada antecipada abaixo) é IRMÃO do bloco da foto, então "a img dentro do card" não acha
