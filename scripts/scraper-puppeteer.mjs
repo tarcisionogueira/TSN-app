@@ -7,6 +7,7 @@
  */
 
 import { classificarPatio, patioPreservado } from './lib/patio-veiculo.mjs';
+import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
 import { marcaModeloAnoVIP } from './lib/vip-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
@@ -4021,6 +4022,9 @@ async function registrarVendidosPestana(vendidos) {
 const PESTANA_BASE = 'https://www.pestanaleiloes.com.br';
 const PESTANA_GED = 'https://ged.pestanaleiloes.com.br/ged/';
 const PESTANA_TIPOBEM_IMOVEL = 462;
+// 421 = veículos (23 dos 46 leilões em 21/10: "Veículos Retomados", "de Seguradoras", "Simpala"…);
+// 461 = máquinas/equipamentos (fora). Medido em /api/v2/leilao → subTipoBens[].tipoBem.
+const PESTANA_TIPOBEM_VEICULO = 421;
 
 function parseDataPestana(s) {
   if (!s || typeof s !== 'string') return null;
@@ -4073,10 +4077,10 @@ export function descricaoPestana(desc, bem, nomeLeilao) {
   return partes.filter(Boolean).join(' — ').slice(0, 4000);
 }
 
-function mapLotePestana(lote, leilao, leiloesPorId) {
+function mapLotePestana(lote, leilao, leiloesPorId, { tipoBem = PESTANA_TIPOBEM_IMOVEL } = {}) {
   const bens = Array.isArray(lote.bens) ? lote.bens : [];
-  const bem = bens.find(b => b && b.tipoBem && Number(b.tipoBem.id) === PESTANA_TIPOBEM_IMOVEL);
-  if (!bem) return null; // não é imóvel (veículo/outros)
+  const bem = bens.find(b => b && b.tipoBem && Number(b.tipoBem.id) === tipoBem);
+  if (!bem) return null; // não é do tipo pedido (imóvel por padrão; veículo no modo veículo)
   // O LEILÃO DONO é `lote.leilao`, NÃO o leilão cuja LISTA trouxe o lote. A Pestana tem leilões
   // AGREGADORES (venda direta) que listam lotes de OUTROS leilões: o lote de Barueri/SP aparecia
   // na lista do #5872 "Venda Direta - Eldorado/RS" (data 26/10) mas pertence ao #6154 "Leilão de
@@ -4290,6 +4294,69 @@ async function scraperPestana(browser) {
   } finally { await page.close().catch(() => {}); }
   console.log(`    Pestana: ${imoveis.length} imóveis mapeados`);
   return imoveis;
+}
+
+// PESTANA — VEÍCULOS (21/10, pedido do dono: "faça todos os veículos"). Mesma API, mesmo mapeador
+// (modo tipoBem=421) e a conversão única para veiculos_leilao (lib/veiculo-do-lote.mjs: pátio pelo
+// classificador único, bem com o executado nunca gravado). A maior parte da agenda da Pestana é de
+// veículo — retomados, seguradoras, liquidação — e nada disso entrava: o filtro só aceitava 462.
+async function scraperPestanaVeiculos(browser) {
+  console.log('  Pestana Leilões (veículos) — API /api/v2 (tipoBem 421)...');
+  const page = await browser.newPage();
+  const veiculos = [];
+  const motivos = new Map();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    try { await page.goto(`${PESTANA_BASE}/lotes/veiculos`, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
+    catch (e) { console.log(`    Pestana veículos: goto (${String(e.message).slice(0, 35)})`); }
+    await new Promise(r => setTimeout(r, 4000));
+    let leiloes = null;
+    for (let tentativa = 1; tentativa <= 3 && !Array.isArray(leiloes); tentativa++) {
+      if (tentativa > 1) await new Promise(r => setTimeout(r, 3000 * tentativa));
+      leiloes = await page.evaluate(async () => {
+        try { const r = await fetch('/api/v2/leilao', { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
+        catch (e) { return null; }
+      }).catch(() => null);
+    }
+    if (!Array.isArray(leiloes)) { console.log('    Pestana veículos: /api/v2/leilao sem lista após 3 tentativas'); veiculos.coletaParcial = 'PESTANA veículos: lista de leilões não veio'; return veiculos; }
+    const agora = Date.now();
+    // Só leilão com veículo E ainda por acontecer (há leilões de 2018 na lista).
+    const alvo = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_VEICULO)
+      && (!l.data || Date.parse(l.data) > agora - 86400000));
+    const leiloesPorId = new Map(leiloes.filter(l => l && l.id != null).map(l => [Number(l.id), l]));
+    console.log(`    Pestana veículos: ${alvo.length}/${leiloes.length} leilões com veículos por vir`);
+    const QTD = 300;
+    const falhas = [];
+    const seen = new Set();
+    for (const leilao of alvo) {
+      let lotes = [];
+      for (let pg = 1; pg <= 20; pg++) {
+        const pagina = await page.evaluate(async ({ id, pg, qtd }) => {
+          try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=${pg}&qtd=${qtd}`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : `HTTP ${r.status}`; }
+          catch (e) { return `rede: ${String(e?.message || e).slice(0, 40)}`; }
+        }, { id: leilao.id, pg, qtd: QTD }).catch((e) => `evaluate: ${String(e?.message || e).slice(0, 40)}`);
+        if (!Array.isArray(pagina)) { falhas.push(`leilão ${leilao.id} p${pg} (${pagina})`); lotes = null; break; }
+        lotes.push(...pagina);
+        if (pagina.length < QTD) break;
+      }
+      if (!Array.isArray(lotes)) continue;
+      for (const lote of lotes) {
+        if (lote && lote.situacaoId != null && Number(lote.situacaoId) !== 1) continue; // só Disponível
+        if (lote && /vendid|repasse|retirad|arrematad|suspens|cancelad/i.test(String(lote.status || ''))) continue;
+        const imo = mapLotePestana(lote, leilao, leiloesPorId, { tipoBem: PESTANA_TIPOBEM_VEICULO });
+        if (!imo || seen.has(lote.id)) continue;
+        seen.add(lote.id);
+        const { row, motivo } = veiculoDoLote(imo, { id: String(lote.id), fonte: 'PESTANA' });
+        if (!row || motivo) { motivos.set(motivo, (motivos.get(motivo) || 0) + 1); continue; }
+        veiculos.push(row);
+      }
+      await new Promise(r => setTimeout(r, 120));
+    }
+    if (falhas.length) veiculos.coletaParcial = `PESTANA veículos: ${falhas.length} leilão(ões) não lidos`;
+  } finally { await page.close().catch(() => {}); }
+  console.log(`    Pestana veículos: ${veiculos.length} mapeados${[...motivos].map(([m, n]) => ` · ${m}: ${n}`).join('')}`);
+  return veiculos;
 }
 
 // ─── BIASI LEILÕES ────────────────────────────────────────────────────────────
@@ -6665,6 +6732,13 @@ async function main() {
       console.log('\n📋 Sodré Santoro (veículos, piloto)...');
       const veiculos = await scraperSodreVeiculos(browser);
       await salvarVeiculos(veiculos);
+    }
+    // PESTANA — VEÍCULOS (21/10): mesmo job diário de veículos (veiculos-puppeteer.yml).
+    if (ONLY.includes('PESTANA_VEICULOS')) {
+      console.log('\n📋 Pestana (veículos)...');
+      const veiculos = await scraperPestanaVeiculos(browser);
+      await salvarVeiculos(veiculos, 'PESTANA veículos');
+      await registrarSaude('PESTANA_VEICULOS', veiculos, 'principal', { ok: veiculos.length > 0 && !veiculos.coletaParcial, motivo: veiculos.coletaParcial || (veiculos.length ? '' : 'nenhum veículo mapeado') });
     }
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe

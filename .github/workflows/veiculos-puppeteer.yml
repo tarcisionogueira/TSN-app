@@ -60,7 +60,7 @@ jobs:
           # Sem input manual, roda TODOS os pilotos — é o comportamento do disparo por schedule
           # e do disparo manual default. `ONLY.includes(...)` em scraper-puppeteer.mjs já trata
           # este valor como lista exclusiva, então nenhuma fonte de IMÓVEL roda neste job.
-          SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS,SUPERBID_VEICULOS,MEGA_VEICULOS,WEBLEILOES_VEICULOS,ZUK_VEICULOS,LJUD_VEICULOS,VIP_VEICULOS' }}
+          SCRAPER_FONTES: ${{ github.event.inputs.fontes || 'SODRE_VEICULOS,SUPORTE_VEICULOS,SUPERBID_VEICULOS,PESTANA_VEICULOS,MEGA_VEICULOS,WEBLEILOES_VEICULOS,ZUK_VEICULOS,LJUD_VEICULOS,VIP_VEICULOS' }}
           # VIP veículos (05/10): seco conferido (21 lotes, marca/ano pelo parser vip-veiculo.mjs). Agendado GRAVA;
           # disparo manual segue SECO salvo vip_gravar=1.
           VIP_VEIC_DRYRUN: ${{ (github.event_name == 'schedule' || github.event.inputs.vip_gravar == '1') && '0' || '1' }}
