@@ -10,6 +10,7 @@ import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../ut
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
+import OfertaCombo, { podeOferecerCombo } from '../components/OfertaCombo';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
@@ -174,6 +175,8 @@ export default function Checkout() {
   // seguinte. (Até 06/10 era o fluxo Pro→assessoria; links antigos com ?apos seguem valendo.) Assim o
   // link único de assessoria vira uma jornada só, reaproveitando os checkouts já testados.
   const aposPlano = params.get('apos') || '';
+  // Oferta do Combo no link de qualquer plano (21/10, dono) — troca o plano mantendo ref/promo do link.
+  const irParaCombo = () => { const p = new URLSearchParams(params); p.set('plano', 'combo'); nav(`/checkout?${p}`); window.scrollTo(0, 0); };
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
   const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending', vindo do redirect MP
@@ -540,6 +543,9 @@ export default function Checkout() {
                 </div>
               ))}
             </div>
+            {podeOferecerCombo(planoKey, role, PLANOS) && (
+              <div style={{ marginTop: 28 }}><OfertaCombo planoKey={planoKey} PLANOS={PLANOS} onEscolher={irParaCombo} escuro /></div>
+            )}
           </div>
           {/* Coluna direita, cadastro grátis inline (mesma lógica, sem pagamento) */}
           <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -1321,6 +1327,9 @@ export default function Checkout() {
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>
             Plano {plano.nome}
           </h2>
+          {podeOferecerCombo(planoKey, role, PLANOS) && (
+            <div style={{ marginTop: 12 }}><OfertaCombo planoKey={planoKey} PLANOS={PLANOS} onEscolher={irParaCombo} /></div>
+          )}
 
           {/* Toggle mensal/anual, Investidor Pro (top2) */}
           {temToggleAnual && (

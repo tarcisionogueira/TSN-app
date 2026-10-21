@@ -285,8 +285,9 @@ export default function Planos() {
           );
         })()}
 
-        {/* ── 2 Planos principais: Explorador + Investidor Pro ── */}
-        <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
+        {/* ── 3 planos lado a lado (21/10, dono): Explorador · Investidor Pro · Leilão de Veículos. O Combo é
+            oferecido ao abrir o link de qualquer um (components/OfertaCombo.jsx, no Checkout) e na faixa abaixo. ── */}
+        <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr)', gap: 18, maxWidth: 1100, margin: '0 auto 28px', alignItems: 'stretch' }}>
 
           {/* Explorador */}
           <div id="plano-explorador" style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
@@ -308,7 +309,7 @@ export default function Planos() {
           </div>
 
           {/* Investidor Pro */}
-          <div id="plano-top2" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 32px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
+          <div id="plano-top2" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
             <div style={{ position: 'absolute', top: 20, right: 20, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Star size={9} fill="#78350f" /> Mais popular
@@ -372,43 +373,54 @@ export default function Planos() {
             </button>
             <BotaoCompartilhar planoKey="top2" dark />
           </div>
+
+          {/* Leilão de Veículos */}
+          {ativoPlano('veiculos') && (
+            <div id="plano-veiculos" style={{ background: 'white', borderRadius: 20, border: '1px solid #99f6e4', padding: '32px 26px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#ccfbf1', color: '#0f766e', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Leilão de Veículos</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                <div style={{ fontSize: 48, fontWeight: 900, color: '#111' }}>{pLabel('veiculos', 'precoLabel', 'R$ 29,90')}</div>
+                <div style={{ fontSize: 14, color: '#64748b' }}>/mês</div>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Cancele quando quiser</div>
+              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
+                Ache o carro de graça. Com o plano, veja quem é o leiloeiro, abra o lote e gere o relatório por IA antes de dar o lance.
+              </p>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+                {['Busca de veículos com FIPE em todo o Brasil', 'Selo com o nome do leiloeiro em cada veículo', 'Link do lote, documentos e endereço do pátio', '10 relatórios por IA de veículos/mês (condição, FIPE e teto de lance)'].map(t => <CheckItem key={t} txt={t} />)}
+              </div>
+              <button onClick={() => ir('veiculos')}
+                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: '#0f766e', color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+                Desbloquear veículos →
+              </button>
+              <BotaoCompartilhar planoKey="veiculos" />
+            </div>
+          )}
         </div>
 
-        {/* ── Leilão de Veículos + Combo (20/10, decisão do dono) ── R$ 29,90 e R$ 99,90, mensais. A comunicação
-            é toda em cima de desbloquear o leiloeiro e gerar o relatório. Sem assessoria para veículos. */}
-        <div style={{ maxWidth: 920, margin: '-24px auto 64px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 18 }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>Leilão de Veículos</div>
-            <div style={{ fontSize: 14, color: '#64748b', marginTop: 4 }}>Ache o carro de graça. Desbloqueie o leiloeiro e o relatório por IA com o plano.</div>
-          </div>
-          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20, alignItems: 'stretch' }}>
-            {[
-              { key: 'veiculos', titulo: 'Leilão de Veículos', fundo: 'white', borda: '1px solid #99f6e4', cor: '#0f766e', texto: '#334155',
-                desc: 'Veja quem é o leiloeiro de cada carro, abra o lote e gere o relatório por IA antes de dar o lance.',
-                itens: ['Selo com o nome do leiloeiro em cada veículo', 'Link do lote, documentos e endereço do pátio', '10 relatórios por IA de veículos/mês (condição, FIPE e teto de lance)'] },
-              { key: 'combo', titulo: 'Combo Imóveis + Veículos', fundo: 'linear-gradient(145deg,#4c1d95 0%,#6d28d9 100%)', borda: '2px solid #8b5cf6', cor: '#ffffff', texto: '#ede9fe',
-                desc: 'Investidor Pro de imóveis e Leilão de Veículos numa assinatura só.',
-                itens: ['Tudo do Investidor Pro (imóveis)', 'Tudo do Leilão de Veículos', '10 + 10 relatórios de imóveis e 10 de veículos/mês'] },
-            ].filter(c => ativoPlano(c.key)).map(c => (
-              <div key={c.key} id={`plano-${c.key}`} style={{ background: c.fundo, borderRadius: 20, border: c.borda, padding: '28px 26px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, color: c.cor, marginBottom: 10 }}>{c.titulo}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
-                  <div style={{ fontSize: 40, fontWeight: 900, color: c.key === 'combo' ? 'white' : '#111' }}>{pLabel(c.key, 'precoLabel', c.key === 'combo' ? 'R$ 99,90' : 'R$ 29,90')}</div>
-                  <div style={{ fontSize: 14, color: c.key === 'combo' ? '#ddd6fe' : '#64748b' }}>/mês</div>
-                </div>
-                <p style={{ fontSize: 14, color: c.texto, lineHeight: 1.6, marginBottom: 16 }}>{c.desc}</p>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                  {c.itens.map(t => <CheckItem key={t} txt={t} light={c.key === 'combo'} />)}
-                </div>
-                <button onClick={() => ir(c.key)}
-                  style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: c.key === 'combo' ? 'white' : '#0f766e', color: c.key === 'combo' ? '#5b21b6' : 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
-                  {c.key === 'combo' ? 'Assinar o Combo →' : 'Desbloquear veículos →'}
-                </button>
-                <BotaoCompartilhar planoKey={c.key} dark={c.key === 'combo'} />
+        {/* ── Combo Imóveis + Veículos (20/10; faixa desde 21/10) ── preço e economia do planos_config. */}
+        {ativoPlano('combo') && (
+          <div id="plano-combo" style={{ maxWidth: 1100, margin: '0 auto 64px', background: 'linear-gradient(135deg,#4c1d95 0%,#6d28d9 100%)', border: '2px solid #8b5cf6', borderRadius: 20, padding: '22px 26px', display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', boxShadow: '0 12px 32px rgba(109,40,217,0.25)' }}>
+            <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, color: '#ddd6fe' }}>Combo Imóveis + Veículos</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'white', margin: '4px 0' }}>
+                Investidor Pro + Leilão de Veículos por {pLabel('combo', 'precoLabel', 'R$ 99,90')}/mês
               </div>
-            ))}
+              <div style={{ fontSize: 13.5, color: '#ede9fe', lineHeight: 1.6 }}>
+                Relatórios de imóveis e de veículos e o leiloeiro de cada carro desbloqueado, numa assinatura só
+                {PLANOS.top2?.preco && PLANOS.veiculos?.preco && PLANOS.combo?.preco && PLANOS.top2.preco + PLANOS.veiculos.preco > PLANOS.combo.preco
+                  ? <> — <strong style={{ color: '#86efac' }}>economize {fmtR(PLANOS.top2.preco + PLANOS.veiculos.preco - PLANOS.combo.preco)}/mês</strong></> : null}.
+              </div>
+            </div>
+            <div style={{ flex: '0 1 240px', minWidth: 0, width: '100%' }}>
+              <button onClick={() => ir('combo')}
+                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: 'white', color: '#5b21b6', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
+                Assinar o Combo →
+              </button>
+              <BotaoCompartilhar planoKey="combo" dark />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Assessoria Personalizada (só logado) ── */}
         <div style={{ textAlign: 'center', margin: '0 0 36px' }}>
