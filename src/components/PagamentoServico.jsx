@@ -693,7 +693,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
               tela mostra o mesmo número antes do clique (revisão 30/09: mostrava o total do MP). */}
           {extra.honorario_saldo > 0 && (
             <div style={{ fontSize: 12, color: '#1e3a8a' }}>
-              Total pelo Asaas: <strong>{fmtBRL(honorarioComTaxa(extra.honorario_saldo, 'cartao_asaas').total)}</strong> (honorário {fmtBRL(extra.honorario_saldo)} + taxa do cartão).
+              Total pelo Asaas: <strong>{fmtBRL(honorarioComTaxa(extra.honorario_saldo, 'cartao_asaas').total)}</strong> {honorarioComTaxa(extra.honorario_saldo, 'cartao_asaas').taxa > 0 ? <> (honorário {fmtBRL(extra.honorario_saldo)} + taxa do cartão).</> : ' — sem custo adicional à vista.'}
             </div>
           )}
           {/* CPF (11) ou CNPJ (14): quem paga pode ser empresa (30/09) — a máscara cortava em 11. */}

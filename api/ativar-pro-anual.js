@@ -1,6 +1,9 @@
 /**
- * POST /api/ativar-pro-anual
- * Ativa o Investidor Pro ANUAL a partir de um PIX à vista (pagamento ÚNICO de 12 meses,
+ * POST /api/ativar-pro-anual   { paymentId, plano?: 'top2' | 'veiculos' | 'combo' }
+ * 21/10 (dono): "PIX à vista pode ser para qualquer plano no anual" e "no anual pode parcelar" — vale para
+ * Pro, Veículos e Combo, por PIX ou cartão parcelado (o pagamento único de 12 meses do mp-checkout). O plano
+ * pedido só decide QUAL preço anual conferir: pagar o de Veículos e pedir o Combo falha na trava de valor.
+ * Ativa o plano ANUAL a partir de um pagamento à vista (pagamento ÚNICO de 12 meses,
  * sem recorrência — PIX não debita sozinho). Chamado pelo frontend quando o PIX-anuidade
  * é confirmado.
  *
@@ -38,6 +41,7 @@ export default async function handler(req, res) {
 
   const { paymentId } = req.body || {};
   if (!paymentId) return res.status(400).json({ error: 'paymentId obrigatório' });
+  const plano = ['top2', 'veiculos', 'combo'].includes(req.body?.plano) ? req.body.plano : 'top2';
 
   // 1) Fonte da verdade: consulta o pagamento no MP com o NOSSO token (nunca o corpo do cliente).
   let pg;
@@ -68,14 +72,16 @@ export default async function handler(req, res) {
   }
 
   // Preço anual VEM DO SERVIDOR — trava contra "paga R$1 e vira Pro".
-  let precoAnual = PRECO_ANUAL_FALLBACK;
+  // Sem preço do banco para Veículos/Combo não há fallback seguro: recusa (fail-closed) em vez de adivinhar.
+  let precoAnual = plano === 'top2' ? PRECO_ANUAL_FALLBACK : null;
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/planos_config?plano_key=eq.top2&select=preco_anual`, {
+    const r = await fetch(`${SB_URL}/rest/v1/planos_config?plano_key=eq.${plano}&select=preco_anual`, {
       headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
     });
     const [row] = await r.json().catch(() => []);
     if (row?.preco_anual) precoAnual = Number(row.preco_anual);
-  } catch { /* usa o fallback */ }
+  } catch (e) { console.warn('[ativar-pro-anual] preço anual ilegível:', e?.message || e); }
+  if (!(precoAnual > 0)) return res.status(503).json({ error: 'preco_anual_indisponivel' });
   const valor = Number(pg.transaction_amount) || 0;
   if (Math.abs(valor - precoAnual) > Math.max(1, precoAnual * 0.01)) {
     return res.status(409).json({ error: 'valor_incompativel', esperado: precoAnual, recebido: valor });
@@ -95,11 +101,11 @@ export default async function handler(req, res) {
   try {
     const result = await ativarPlanoDireto({
       userId: user.id,
-      planoKey: 'top2_anual',
+      planoKey: `${plano}_anual`,
       gateway: 'mercadopago',
       cobranca: { gatewayPaymentId: String(paymentId), valor, valorLiquido },
     });
-    await auditLog({ acao: 'ativar_pro_anual_pix', user_id: user.id, ip, detalhes: { payment_id: paymentId, valor }, sucesso: true });
+    await auditLog({ acao: 'ativar_pro_anual_pix', user_id: user.id, ip, detalhes: { payment_id: paymentId, valor, plano }, sucesso: true });
     return res.status(200).json({ ok: true, ...result });
   } catch (e) {
     // Efeito falhou depois da marca de idempotência → desmarca p/ o cliente reexecutar.

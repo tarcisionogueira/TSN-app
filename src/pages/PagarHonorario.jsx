@@ -223,7 +223,7 @@ export default function PagarHonorario() {
         <div style={{ textAlign: 'center', padding: '4px 0' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Honorário a pagar</div>
           <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(saldoDevido)}</div>
-          <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>+ taxa do meio de pagamento escolhido, paga por quem paga</div>
+          <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>Boleto ou cartão à vista sem custo adicional · parcelado a partir de 2× com juros do cartão</div>
         </div>
 
         <div>
@@ -307,8 +307,8 @@ export default function PagarHonorario() {
             {!meio && (
               <div style={{ display: 'grid', gap: 10 }}>
                 {[
-                  { k: 'boleto', t: 'Boleto bancário', d: `taxa do boleto ${fmtBRL(viaBoleto.taxa)} · compensa em 1 a 3 dias úteis`, v: viaBoleto.total },
-                  { k: 'cartao', t: 'Cartão de crédito', d: `taxa do cartão ${String(TAXA_CARTAO_MP_PCT).replace('.', ',')}% (${fmtBRL(viaCartao.taxa)}) · parcelamento com juros da operadora`, v: viaCartao.total },
+                  { k: 'boleto', t: 'Boleto bancário', d: `${viaBoleto.taxa > 0 ? `taxa do boleto ${fmtBRL(viaBoleto.taxa)} · ` : 'sem custo adicional · '}compensa em 1 a 3 dias úteis`, v: viaBoleto.total },
+                  { k: 'cartao', t: 'Cartão de crédito', d: `${viaCartao.taxa > 0 ? `taxa do cartão ${String(TAXA_CARTAO_MP_PCT).replace('.', ',')}% (${fmtBRL(viaCartao.taxa)}) · ` : 'à vista sem custo adicional · '}de 2× em diante com juros do cartão`, v: viaCartao.total },
                 ].map(o => (
                   <button key={o.k} onClick={() => setMeio(o.k)}
                     style={{ textAlign: 'left', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
@@ -332,7 +332,9 @@ export default function PagarHonorario() {
             {meio === 'cartao' && (
               <>
                 <div style={{ fontSize: 12.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', lineHeight: 1.6, marginBottom: 10 }}>
-                  Honorário {fmtBRL(viaCartao.honorario)} + taxa do cartão {fmtBRL(viaCartao.taxa)} = <strong>{fmtBRL(viaCartao.total)}</strong>
+                  {viaCartao.taxa > 0
+                    ? <>Honorário {fmtBRL(viaCartao.honorario)} + taxa do cartão {fmtBRL(viaCartao.taxa)} = <strong>{fmtBRL(viaCartao.total)}</strong></>
+                    : <>Honorário <strong>{fmtBRL(viaCartao.total)}</strong> — à vista sem custo adicional; de 2× em diante, com os juros do cartão.</>}
                 </div>
                 <PagamentoServico
                   servico={{ nome: 'Honorários de êxito', valor: viaCartao.total, proposito: 'honorario_exito' }}

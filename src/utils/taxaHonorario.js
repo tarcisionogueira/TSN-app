@@ -32,9 +32,18 @@ export function gatewayDoBoleto(saldo) {
 }
 
 // meio: 'boleto_mp' | 'boleto_asaas' | 'cartao_mp' | 'cartao_asaas'
+//
+// 21/10 (decisão do dono, substitui a de 30/09): "nos honorários as taxas de cartão a partir de 2× já são do
+// cliente; boleto e crédito à vista não há custo adicional". Boleto e cartão 1× → o cliente paga só o saldo
+// (taxa 0, a tarifa fica com a BidPro). Parcelado de 2× em diante: os JUROS do parcelamento são do cliente
+// pelo próprio gateway (PagamentoServico com parcelasSemJuros=1) — por isso nada é somado aqui. Os cálculos
+// de gross-up abaixo ficam em REPASSAR_TAXA_DO_MEIO=false, prontos se a regra voltar.
+const REPASSAR_TAXA_DO_MEIO = false;
 export function honorarioComTaxa(saldo, meio) {
   const h = r2(Number(saldo) || 0);
   if (!(h > 0)) return { honorario: 0, taxa: 0, total: 0 };
+  if (!['boleto_mp', 'boleto_asaas', 'cartao_mp', 'cartao_asaas'].includes(meio)) throw new Error(`meio de pagamento desconhecido: ${meio}`);
+  if (!REPASSAR_TAXA_DO_MEIO) return { honorario: h, taxa: 0, total: h };
   let total;
   if (meio === 'boleto_asaas') total = r2(h + TAXA_BOLETO_ASAAS);
   else if (meio === 'boleto_mp') total = r2(h + TAXA_BOLETO_MP);

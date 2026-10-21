@@ -448,7 +448,9 @@ export default async function handler(req, res) {
         // Assinatura recorrente
         const subscription = await asaasPost('/subscriptions', {
           customer: customerId,
-          billingType: 'UNDEFINED',
+          // MENSAL SÓ NO CARTÃO (21/10, dono: "no mensal ideal ser cartão apenas") — boleto/PIX todo mês vira
+          // inadimplência por esquecimento. O anual segue aberto (PIX à vista, boleto ou cartão).
+          billingType: info.ciclo === 'MONTHLY' ? 'CREDIT_CARD' : 'UNDEFINED',
           value: info.valor,
           nextDueDate: new Date().toISOString().split('T')[0],
           cycle: info.ciclo,

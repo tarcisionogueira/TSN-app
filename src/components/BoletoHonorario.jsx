@@ -91,7 +91,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
           <CheckCircle2 size={20} /> Boleto gerado
         </div>
         <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6 }}>
-          Valor: <strong>{fmtBRL(boleto.valor)}</strong> (honorário {fmtBRL(boleto.honorario)} + taxa do boleto {fmtBRL(boleto.taxa)})
+          Valor: <strong>{fmtBRL(boleto.valor)}</strong>{Number(boleto.taxa) > 0 ? <> (honorário {fmtBRL(boleto.honorario)} + taxa do boleto {fmtBRL(boleto.taxa)})</> : ' — sem custo adicional'}
           {boleto.vencimento && <> · vence em <strong>{new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></>}
         </div>
         {boleto.linhaDigitavel && (
@@ -120,7 +120,9 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 12.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', lineHeight: 1.6 }}>
-        Honorário {fmtBRL(previsto.honorario)} + taxa do boleto {fmtBRL(previsto.taxa)} = <strong>{fmtBRL(previsto.total)}</strong>
+        {Number(previsto.taxa) > 0
+          ? <>Honorário {fmtBRL(previsto.honorario)} + taxa do boleto {fmtBRL(previsto.taxa)} = <strong>{fmtBRL(previsto.total)}</strong></>
+          : <>Honorário <strong>{fmtBRL(previsto.total)}</strong> — boleto sem custo adicional</>}
       </div>
       <div style={{ fontSize: 11.5, color: '#64748b' }}>Boleto em nome de <strong>{nome}</strong> ({documento?.length === 14 ? 'CNPJ' : 'CPF'} {documento}). Endereço de quem paga:</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 8 }}>
