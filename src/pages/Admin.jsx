@@ -55,9 +55,6 @@ function maskBRL(raw) {
   const reais = cents.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `R$ ${reais},${cents.slice(-2)}`;
 }
-function parseBRL(masked) {
-  return parseFloat(String(masked).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
-}
 function InputBRL({ value, onChange, disabled, placeholder, style }) {
   const display = value === '' || value == null ? '' : maskBRL(Math.round(Number(value) * 100));
   return (
@@ -1058,7 +1055,6 @@ function EbooksTab() {
   const [form, setForm] = useState(defaultEbook());
   const [saving, setSaving] = useState(false);
   const [anunciando, setAnunciando] = useState(null);
-  const [testandoCampanha, setTestandoCampanha] = useState(null);
 
   const loadEbooks = useCallback(async () => {
     setLoading(true);
@@ -1103,22 +1099,6 @@ function EbooksTab() {
     setAnunciando(null);
   }
 
-  // Campanha do bônus com cartão salvo (12/09, ver api/campanha-ebook-r1-cron.js). Manda o
-  // e-mail REAL da campanha só para o admin logado — clicar aqui É a autorização (mesmo
-  // raciocínio do `anunciar` acima), sem precisar de CRON_SECRET nem curl.
-  async function testarCampanhaBonus(e) {
-    if (!e?.id || !user?.email) return;
-    setTestandoCampanha(e.id);
-    try {
-      const r = await apiCall(`/api/campanha-ebook-r1-cron?somenteEmail=${encodeURIComponent(user.email)}`, { method: 'POST' });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
-      alert(j?.enviados ? `✅ E-mail de teste enviado para ${user.email}` : `Não enviou: ${j?.erro || 'motivo desconhecido'}`);
-    } catch (err) {
-      alert('Erro ao testar campanha: ' + (err?.message || err));
-    }
-    setTestandoCampanha(null);
-  }
 
   // COMPLETUDE p/ publicar um EBOOK: título + descrição + capa + arquivo (PDF). Incompleto = rascunho.
   // eBook estruturado (docx → capítulos, ver AdminEbookEditor) não usa arquivo_url — a
@@ -1182,6 +1162,8 @@ function EbooksTab() {
 
   return (
     <div>
+      {/* Quem começou/terminou de ler (veio do Início em 21/10). */}
+      <PainelLeituraEbooks />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>eBooks / Materiais</h2>
         <button style={S.btn('primary')} onClick={openNew}>+ Novo eBook</button>
@@ -1209,7 +1191,6 @@ function EbooksTab() {
                           <button style={S.btn('outline')} onClick={() => navEbook(`/admin/ebook-editor/${e.id}`)} title="Subir .docx, ajustar e editar capítulos">📖 Capítulos</button>
                           <button style={S.btn('outline')} onClick={() => toggleAtivo(e.id, e.ativo)}>{e.ativo ? 'Desativar' : 'Ativar'}</button>
                           {e.ativo && <button style={S.btn('outline')} disabled={anunciando === e.id} onClick={() => anunciar(e)} title="Enviar e-mail de apresentação para os clientes">{anunciando === e.id ? 'Enviando…' : '📣 Anunciar'}</button>}
-                          {e.requer_cartao_bonus && <button style={S.btn('outline')} disabled={testandoCampanha === e.id} onClick={() => testarCampanhaBonus(e)} title="Manda o e-mail REAL da campanha só para você, para validar antes do disparo geral">{testandoCampanha === e.id ? 'Enviando…' : '🎁 Testar campanha (envia pra mim)'}</button>}
                           <button style={S.btn('danger')} onClick={() => deleteEbook(e.id)}>Deletar</button>
                         </div>
                       </td>
@@ -3502,1032 +3483,6 @@ function ConfigTab() {
 // CONTRATOS TAB — admin gera, aprova e libera contratos para assinatura
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ContratosTab() {
-  const planosCfg = usePlanos(); // preços/termos ao vivo do planos_config (fonte única do valor)
-  const [contratosLink, setContratosLink] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Modal em 3 etapas: null (fechado) | 1 (descrever) | 2 (revisar) | 3 (link gerado)
-  const [step, setStep] = useState(null);
-  const [detalhe, setDetalhe] = useState(null); // contrato (linha representante do grupo) aberto para ver
-  const [roster, setRoster] = useState([]);     // partes do contrato aberto (get_partes_contrato)
-  const [rosterLoad, setRosterLoad] = useState(false);
-  const [editParte, setEditParte] = useState(null); // { id, nome, cpf, email } em edição
-  const [savingParte, setSavingParte] = useState(false);
-
-  // Etapa 1
-  const [templateSelecionado, setTemplateSelecionado] = useState(null);
-  const [titulo, setTitulo] = useState('');
-  const [tipo, setTipo] = useState('servico');
-  const [descricao, setDescricao] = useState('');
-  const [arquivos, setArquivos] = useState([]); // [{ nome, conteudo }]
-
-  // Etapa 2
-  const [conteudo, setConteudo] = useState('');
-  const [perguntas, setPerguntas] = useState([]);
-  const [respostas, setRespostas] = useState({});
-  const [gerandoContrato, setGerandoContrato] = useState(false);
-
-  // Etapa 3
-  const [linkGerado, setLinkGerado] = useState('');
-  const [savingLink, setSavingLink] = useState(false);
-
-  const [kycIncluido, setKycIncluido] = useState(false);
-  const [reqTestemunhaDoc, setReqTestemunhaDoc] = useState(false); // documento pronto: exigir testemunha (link próprio p/ a parte encaminhar)
-  const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
-  // Documento: 'fisico' (frente + verso) | 'digital' (CNH-e / RG digital)
-  const [kycModalidade, setKycModalidade] = useState('fisico');
-  // Extra opcional: selfie segurando o documento
-  const [kycSelfieSegurando, setKycSelfieSegurando] = useState(false);
-  // Verificação de identidade por IA em andamento (bloqueia o botão)
-  const [verificandoKyc, setVerificandoKyc] = useState(false);
-
-  // Modo de criação: 'ia' (IA gera o texto) | 'assinar' (documento pronto que o admin carrega)
-  const [modo, setModo] = useState(null);
-  // Modo 'assinar': documento pronto enviado ao Storage
-  const [arquivoUrl, setArquivoUrl] = useState('');
-  const [arquivoNome, setArquivoNome] = useState('');
-  const [arquivoUploading, setArquivoUploading] = useState(false);
-
-  // ATRIBUIÇÃO do documento a um usuário/arrematação (mesmo após assinado; avulso = sem vínculo).
-  const [atrUserBusca, setAtrUserBusca] = useState('');
-  const [atrUserRes, setAtrUserRes] = useState([]);
-  const [atrUser, setAtrUser] = useState(null);          // {id, nome}
-  const [atrArrematacoes, setAtrArrematacoes] = useState([]);
-  const [atrBusy, setAtrBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('contratos_link').select('*, kyc_incluido, kyc_fotos').order('criado_em', { ascending: false });
-    setContratosLink((data || []).filter(c => c.status !== 'cancelado'));
-    setLoading(false);
-  }, []);
-
-  // Busca de usuário + suas arrematações para atribuir o documento (o vínculo faz o documento
-  // aparecer nos documentos/anexos da arrematação do usuário e entrar no que a IA lê/aprende).
-  const buscarUsuarioAtr = async (q) => {
-    setAtrUserBusca(q); setAtrUser(null); setAtrArrematacoes([]);
-    if (q.trim().length < 2) { setAtrUserRes([]); return; }
-    const { data } = await supabase.from('perfis').select('id, nome').ilike('nome', `%${q.trim()}%`).limit(8);
-    setAtrUserRes(Array.isArray(data) ? data : []);
-  };
-  const escolherUsuarioAtr = async (u) => {
-    setAtrUser(u); setAtrUserBusca(u.nome || '(sem nome)'); setAtrUserRes([]);
-    const { data } = await supabase.from('arrematados').select('id, imovel_id, titulo, cidade, estado').eq('user_id', u.id).order('created_at', { ascending: false });
-    setAtrArrematacoes(Array.isArray(data) ? data : []);
-  };
-  const aplicarAtribuicao = async (patch, msgOk) => {
-    if (!detalhe) return;
-    setAtrBusy(true);
-    try {
-      const q = detalhe.contrato_grupo_id
-        ? supabase.from('contratos_link').update(patch).eq('contrato_grupo_id', detalhe.contrato_grupo_id)
-        : supabase.from('contratos_link').update(patch).eq('id', detalhe.id);
-      const { error } = await q;
-      if (error) throw error;
-      setDetalhe(d => (d ? { ...d, ...patch } : d));
-      setAtrUser(null); setAtrUserBusca(''); setAtrArrematacoes([]);
-      await load();
-      if (msgOk) alert(msgOk);
-    } catch { alert('Não foi possível atualizar a atribuição (verifique a permissão).'); }
-    setAtrBusy(false);
-  };
-  const atribuirArrematacao = (a) => aplicarAtribuicao(
-    { arremate_user_id: atrUser.id, arremate_imovel_id: a.imovel_id },
-    'Documento atribuído. Ele aparece agora nos documentos da arrematação do usuário e entra no aprendizado da IA.');
-  const tornarAvulso = () => aplicarAtribuicao({ arremate_user_id: null, arremate_imovel_id: null });
-
-  useEffect(() => { load(); }, [load]);
-
-  function abrirModal() {
-    setTitulo(''); setTipo('servico'); setDescricao('');
-    setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
-    setLinkGerado(''); setTemplateSelecionado(null);
-    setKycIncluido(false); setReqTestemunhaDoc(false); setKycFotos({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
-    setKycModalidade('fisico'); setKycSelfieSegurando(false); setVerificandoKyc(false);
-    setModo(null); setArquivoUrl(''); setArquivoNome(''); setArquivoUploading(false);
-    setStep(0); // etapa 0 = escolher o modo (IA ou documento pronto)
-  }
-
-  // Modo 'assinar': envia o documento pronto ao Storage privado e guarda a signed URL.
-  async function enviarDocumentoPronto(file) {
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) { alert('Arquivo muito grande. Limite: 20 MB.'); return; }
-    setArquivoUploading(true);
-    try {
-      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
-      const path = `contratos-docs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      // contentType EXPLÍCITO: sem ele o Storage pode servir como octet-stream → o PDF NÃO
-      // renderiza embutido (iframe fica quebrado) e o navegador força download. Fixa por extensão.
-      const CT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', html: 'text/html', htm: 'text/html' };
-      const contentType = file.type || CT[ext] || 'application/octet-stream';
-      const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false, contentType });
-      if (error) throw error;
-      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
-      setArquivoUrl(signed?.signedUrl || '');
-      setArquivoNome(file.name);
-      if (!titulo.trim()) setTitulo(file.name.replace(/\.[^.]+$/, ''));
-    } catch (e) {
-      alert('Erro ao enviar o documento: ' + (e.message || 'tente novamente'));
-      setArquivoUrl(''); setArquivoNome('');
-    }
-    setArquivoUploading(false);
-  }
-
-  function aplicarTemplate(key) {
-    setTemplateSelecionado(key);
-    if (key === 'assessorado') {
-      setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
-      setTipo('servico');
-      // Valores/termos vêm do planos_config (fonte única) — muda no painel, o contrato acompanha.
-      setDescricao(descricaoContratoPlano('assessorado', planosCfg?.assessorado));
-    } else if (key === 'clube') {
-      setTitulo('Contrato de Adesão ao Clube de Negócios BidPro Brasil');
-      setTipo('servico');
-      setDescricao(descricaoContratoPlano('clube', planosCfg?.clube));
-    } else if (key === 'analista') {
-      setTitulo('Contrato de Prestação de Serviços de Análise de Imóveis em Leilão');
-      setTipo('servico');
-      setDescricao('Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais de imóveis em leilão judicial e extrajudicial. Remuneração por laudo emitido, a combinar. Sigilo sobre todos os dados dos clientes e imóveis analisados. Prazo indeterminado, rescisão com aviso de 30 dias.');
-    } else if (key === 'advogado') {
-      setTitulo('Contrato de Parceria Jurídica para Análise de Imóveis em Leilão');
-      setTipo('servico');
-      setDescricao('Parceria com advogado para análise jurídica de matrícula, edital, processo e certidões de imóveis em leilão, emissão de parecer jurídico por operação. Remuneração por parecer emitido, a combinar. Total sigilo sobre dados dos clientes. Prazo indeterminado, rescisão com aviso de 30 dias. Escritório parceiro independente.');
-    } else if (key === 'consultor') {
-      setTitulo('Contrato de Consultoria e Afiliação BidPro Brasil');
-      setTipo('servico');
-      setDescricao('Contratação de consultor/afiliado para divulgação dos serviços BidPro Brasil e captação de novos clientes. Remuneração por comissão sobre cada cliente ativo indicado, a combinar. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.');
-    } else if (key === 'nda') {
-      setTitulo('Acordo de Confidencialidade e Não Divulgação');
-      setTipo('nda');
-      setDescricao('');
-    } else if (key === 'personalizado') {
-      setTitulo(''); setTipo('servico'); setDescricao('');
-    }
-  }
-
-  async function lerArquivos(files) {
-    const lidos = [];
-    // 02/10: PDF e Word iam SÓ PELO NOME ("só nome como referência") — a IA nunca lia o conteúdo.
-    // Agora o texto de PDF/Word/.txt é extraído no navegador (utils/claude → textoDeArquivo); foto
-    // sem texto segue como referência por nome, e o motivo aparece no lugar do conteúdo.
-    for (const file of files) {
-      try {
-        const { texto, motivo } = await textoDeArquivo(file);
-        lidos.push({ nome: file.name, conteudo: texto ? texto.slice(0, 3000) : null, ...(texto ? {} : { motivo }) });
-      } catch (e) {
-        lidos.push({ nome: file.name, conteudo: null, motivo: String(e?.message || e).slice(0, 120) });
-      }
-    }
-    setArquivos(prev => [...prev, ...lidos]);
-  }
-
-  async function gerarContrato() {
-    if (!descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
-    setGerandoContrato(true);
-    try {
-      const r = await apiCall('/api/gerar-contrato', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          titulo,
-          tipo,
-          descricao,
-          arquivos: arquivos.map(a => ({ nome: a.nome, conteudo: a.conteudo })),
-          respostas: Object.keys(respostas).length > 0 ? respostas : undefined,
-        }),
-      });
-      const d = await r.json();
-      if (d.conteudo) {
-        setConteudo(d.conteudo);
-        setPerguntas(d.perguntas || []);
-        setRespostas({});
-        setStep(2);
-      } else {
-        alert(d.error || 'Não foi possível gerar o contrato. Tente novamente.');
-      }
-    } catch { alert('Erro de conexão ao gerar o contrato.'); }
-    setGerandoContrato(false);
-  }
-
-  async function gerarLinkContrato() {
-    const ehAssinar = modo === 'assinar';
-    if (ehAssinar) {
-      if (!arquivoUrl) { alert('Envie o documento pronto antes de gerar o link.'); return; }
-    } else if (!conteudo.trim()) {
-      alert('O conteúdo do contrato está vazio.'); return;
-    }
-
-    // Monta o conjunto de fotos KYC conforme a modalidade escolhida.
-    let kycFotosFinal = null;
-    let verificacaoKyc = null;
-    if (kycIncluido) {
-      kycFotosFinal = { selfie_rosto: kycFotos.selfie_rosto };
-      if (kycModalidade === 'digital') kycFotosFinal.doc_digital = kycFotos.doc_digital;
-      else { kycFotosFinal.doc_frente = kycFotos.doc_frente; kycFotosFinal.doc_verso = kycFotos.doc_verso; }
-      if (kycSelfieSegurando) kycFotosFinal.selfie_doc = kycFotos.selfie_doc;
-
-      // Fotos mínimas: selfie + documento (frente+verso no físico / digital).
-      const faltando = kycKeys.filter(k => !kycFotos[k]);
-      if (faltando.length) { alert('Envie todas as fotos do KYC: ' + faltando.map(k => KYC_LABELS[k].label).join(', ')); return; }
-
-      // Verificação por IA (documento válido + rosto bate). Veredito híbrido.
-      setVerificandoKyc(true);
-      try {
-        const rv = await apiCall('/api/verificar-identidade-kyc', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            selfie: kycFotos.selfie_rosto,
-            doc_tipo: kycModalidade,
-            doc_frente: kycFotos.doc_frente,
-            doc_verso: kycFotos.doc_verso,
-            doc_digital: kycFotos.doc_digital,
-          }),
-        });
-        const v = await rv.json().catch(() => ({}));
-        verificacaoKyc = { resultado: v.resultado || 'revisar', detalhes: v.detalhes || null, em: new Date().toISOString() };
-        setVerificandoKyc(false);
-        if (v.resultado === 'bloqueado') {
-          alert('⚠️ Verificação de identidade reprovada: ' + (v.mensagem || 'documento/rosto não conferem') + '\n\nCorrija as fotos e tente novamente.');
-          return;
-        }
-        if (v.resultado === 'revisar') {
-          if (!window.confirm('A IA não confirmou a identidade com segurança (' + (v.detalhes?.motivo || 'imagem pouco nítida') + ').\n\nGerar o contrato mesmo assim e marcar para revisão manual?')) return;
-        }
-      } catch {
-        setVerificandoKyc(false);
-        verificacaoKyc = { resultado: 'revisar', detalhes: { motivo: 'falha técnica na verificação' }, em: new Date().toISOString() };
-        if (!window.confirm('Não foi possível verificar a identidade automaticamente. Gerar o contrato e marcar para revisão manual?')) return;
-      }
-    }
-
-    setSavingLink(true);
-    const { data, error } = await supabase.from('contratos_link').insert({
-      titulo: titulo || 'Contrato',
-      conteudo: ehAssinar ? `Documento anexo: ${arquivoNome || 'contrato'}` : conteudo,
-      arquivo_url: ehAssinar ? arquivoUrl : null,
-      arquivo_nome: ehAssinar ? arquivoNome : null,
-      tipo_contrato: tipo,
-      kyc_incluido: kycIncluido,
-      kyc_fotos: kycFotosFinal,
-      verificacao_kyc: verificacaoKyc,
-      // Documento pronto também pode exigir testemunha: a parte assina e, ao concluir, recebe
-      // um link (/#/t/<testemunha_token>, gerado por DEFAULT no banco) para encaminhar à testemunha.
-      requer_testemunha: ehAssinar ? reqTestemunhaDoc : false,
-    }).select().single();
-    setSavingLink(false);
-    if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
-    const base = window.location.href.split('#')[0];
-    setLinkGerado(`${base}#/c/${data.token}`);
-    setStep(3);
-    await load();
-  }
-
-  async function excluirLink(id) {
-    if (!window.confirm('Excluir este contrato permanentemente?')) return;
-    await supabase.from('contratos_link').delete().eq('id', id);
-    load();
-  }
-
-  async function cancelarLink(id) {
-    if (!window.confirm('Cancelar este contrato?')) return;
-    await supabase.from('contratos_link').update({ status: 'cancelado' }).eq('id', id);
-    load();
-  }
-
-  // AGRUPA por contrato (multi-parte = várias linhas com o mesmo contrato_grupo_id → UMA linha
-  // na tabela). Ordena as partes de forma estável e calcula um status agregado.
-  const contratosAgrupados = useMemo(() => {
-    const grupos = new Map();
-    for (const cl of contratosLink) {
-      const gid = cl.contrato_grupo_id || cl.id;
-      if (!grupos.has(gid)) grupos.set(gid, { gid, rep: cl, linhas: [] });
-      const g = grupos.get(gid);
-      g.linhas.push(cl);
-      // representante = a linha mais recente (a lista já vem criado_em desc → a 1ª)
-    }
-    return Array.from(grupos.values()).map(g => {
-      const total = g.linhas.length;
-      const assinados = g.linhas.filter(l => l.status === 'assinado' || l.assinado_em).length;
-      const statusAgg = assinados >= total ? 'assinado' : 'aguardando';
-      return { ...g, total, assinados, statusAgg };
-    });
-  }, [contratosLink]);
-
-  // Abre o detalhe e carrega as PARTES do grupo (roster) — reusa a RPC get_partes_contrato
-  // (equipe autorizada). Sem grupo, monta o roster da própria linha.
-  async function abrirDetalhe(grupo) {
-    const rep = grupo.rep;
-    setDetalhe({ ...rep, _grupo: grupo });
-    setEditParte(null);
-    setRoster([]);
-    setRosterLoad(true);
-    try {
-      let partes = [];
-      if (rep.contrato_grupo_id) {
-        const { data } = await supabase.rpc('get_partes_contrato', { p_grupo_id: rep.contrato_grupo_id });
-        partes = Array.isArray(data) ? data : [];
-      }
-      if (!partes.length) {
-        // fallback: uma linha só (ou RPC vazia) → monta do que temos em mãos
-        partes = grupo.linhas.map(l => ({
-          id: l.id, nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || null,
-          email: l.assinante_email || l.dados_signatario?.email || null,
-          assinou: l.status === 'assinado' || !!l.assinado_em, assinado_em: l.assinado_em || null,
-          requer_testemunha: !!l.requer_testemunha, testemunha_assinou: !!l.testemunha_em,
-        }));
-      }
-      setRoster(partes);
-    } catch { setRoster([]); }
-    setRosterLoad(false);
-  }
-
-  // EXCLUIR o documento inteiro (todas as partes do grupo).
-  async function excluirGrupo(grupo) {
-    if (!window.confirm(`Excluir DEFINITIVAMENTE este documento${grupo.total > 1 ? ` e as ${grupo.total} partes` : ''}? Não dá para desfazer.`)) return;
-    try {
-      if (grupo.rep.contrato_grupo_id) await supabase.from('contratos_link').delete().eq('contrato_grupo_id', grupo.rep.contrato_grupo_id);
-      else await supabase.from('contratos_link').delete().eq('id', grupo.rep.id);
-    } catch (e) { alert('Erro ao excluir: ' + (e?.message || e)); return; }
-    setDetalhe(null);
-    load();
-  }
-
-  // ALTERAR dados de um signatário (nome/cpf/e-mail). Só para quem AINDA NÃO assinou — mexer
-  // depois de assinado quebraria a integridade da assinatura.
-  async function salvarSignatario() {
-    if (!editParte?.id) return;
-    setSavingParte(true);
-    try {
-      const linha = (detalhe?._grupo?.linhas || []).find(l => l.id === editParte.id) || {};
-      const dados = { ...(linha.dados_signatario || {}) };
-      if (editParte.nome != null) dados.nome = editParte.nome;
-      if (editParte.cpf != null) dados.cpf = editParte.cpf;
-      const patch = { dados_signatario: dados };
-      if (editParte.email != null) patch.assinante_email = editParte.email;
-      const { error } = await supabase.from('contratos_link').update(patch).eq('id', editParte.id);
-      if (error) throw error;
-      // Atualização otimista local (evita re-fetch com estado defasado) + reload da tabela ao fundo.
-      const parteId = editParte.id, novo = { nome: editParte.nome, email: editParte.email };
-      setRoster(rs => rs.map(x => x.id === parteId ? { ...x, nome: novo.nome, email: novo.email } : x));
-      setDetalhe(d => d && d._grupo ? { ...d, _grupo: { ...d._grupo, linhas: d._grupo.linhas.map(l => l.id === parteId ? { ...l, dados_signatario: dados, assinante_email: patch.assinante_email ?? l.assinante_email } : l) } } : d);
-      setEditParte(null);
-      load();
-    } catch (e) { alert('Erro ao alterar: ' + (e?.message || e)); }
-    setSavingParte(false);
-  }
-
-  // VISUALIZAR o documento COM as assinaturas de TODAS as partes. O admin tem acesso às linhas
-  // inteiras (assinatura, IP, geo, dispositivo) → monta um roster COMPLETO (_full) para o PDF
-  // renderizar os pontos de autenticação de cada signatário (não só do "eu").
-  function baixarComAssinaturas() {
-    if (!detalhe) return;
-    const linhas = detalhe._grupo?.linhas || [detalhe];
-    const rosterFull = linhas.map(l => ({
-      nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || l.assinante_email || '—',
-      email: l.assinante_email || l.dados_signatario?.email || null,
-      assinou: l.status === 'assinado' || !!l.assinado_em,
-      assinado_em: l.assinado_em || null,
-      dados_signatario: l.dados_signatario || null,
-      token: l.token || null,
-      assinatura: l.assinatura || null,
-      assinante_ip: l.assinante_ip || null,
-      assinante_geo: l.assinante_geo || null,
-      assinante_user_agent: l.assinante_user_agent || null,
-      dados_complementados_em: l.dados_complementados_em || null,
-      requer_testemunha: !!l.requer_testemunha,
-      testemunha_assinou: !!l.testemunha_em,
-      nome_testemunha: l.nome_testemunha || null,
-      assinatura_testemunha: l.assinatura_testemunha || null,
-      _full: true,
-    }));
-    try { gerarContratoPDF({ contrato: detalhe, roster: rosterFull }); }
-    catch (e) { alert('Não foi possível gerar o documento: ' + (e?.message || e)); }
-  }
-
-  // Cópia robusta (com fallback quando navigator.clipboard não está disponível) + feedback.
-  function copiarTexto(txt) {
-    if (!txt) { alert('Link indisponível para esta parte.'); return; }
-    const fallback = () => {
-      try { const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert('Link copiado!'); }
-      catch { window.prompt('Copie o link de assinatura:', txt); }
-    };
-    try {
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(() => alert('Link copiado!'), fallback);
-      else fallback();
-    } catch { fallback(); }
-  }
-
-  const ST_LINK = {
-    aguardando: ['Aguardando assinatura', '#d97706'],
-    assinado:   ['Assinado', '#059669'],
-    expirado:   ['Expirado', '#94a3b8'],
-    cancelado:  ['Cancelado', '#dc2626'],
-  };
-
-  const TIPO_LABEL = { servico:'Serviço', prestacao:'Prestação', locacao:'Locação', compra:'Compra e Venda', outro:'Outro', nda:'NDA / Sigilo' };
-
-  // Seção KYC compartilhada (modo IA e documento pronto): selfie + documento
-  // (FÍSICO frente/verso ou DIGITAL) + opcional "selfie segurando o documento".
-  // Ao gerar, a IA confere se o documento é válido e se a selfie é a mesma pessoa.
-  const KYC_LABELS = {
-    selfie_rosto: { label: 'Selfie (rosto)', emoji: '🤳' },
-    doc_frente:   { label: 'Documento — frente', emoji: '🪪' },
-    doc_verso:    { label: 'Documento — verso', emoji: '🪪' },
-    doc_digital:  { label: 'Documento digital (CNH-e / RG digital)', emoji: '📱' },
-    selfie_doc:   { label: 'Selfie segurando o documento', emoji: '📋' },
-  };
-  const kycKeys = [
-    'selfie_rosto',
-    ...(kycModalidade === 'digital' ? ['doc_digital'] : ['doc_frente', 'doc_verso']),
-    ...(kycSelfieSegurando ? ['selfie_doc'] : []),
-  ];
-  const slotKyc = (key) => (
-    <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
-      {kycFotos[key] ? (
-        <img src={kycFotos[key]} alt={KYC_LABELS[key].label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
-      ) : (
-        <>
-          <span style={{ fontSize: 24 }}>{KYC_LABELS[key].emoji}</span>
-          <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{KYC_LABELS[key].label}</span>
-        </>
-      )}
-      <input type="file" accept="image/*" style={{ display: 'none' }}
-        onChange={e => {
-          const file = e.target.files[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
-          reader.readAsDataURL(file);
-        }} />
-    </label>
-  );
-  const renderKyc = () => (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
-        <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir e verificar identidade (KYC) ao final do contrato</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Ao gerar, a IA confere se o documento é válido e se a selfie é a mesma pessoa do documento. As fotos ficam na última página do contrato.</div>
-        </div>
-      </label>
-      {kycIncluido && (
-        <>
-          {/* Modalidade do documento */}
-          <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.4, marginTop:14, marginBottom:6 }}>Tipo de documento</div>
-          <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap' }}>
-            {[
-              { v:'fisico', label:'Físico (frente e verso)' },
-              { v:'digital', label:'Digital (CNH-e / RG digital)' },
-            ].map(op => (
-              <button key={op.v} type="button" onClick={() => setKycModalidade(op.v)}
-                style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
-                  background: kycModalidade === op.v ? '#0D63DB' : '#fff',
-                  color: kycModalidade === op.v ? '#fff' : '#475569',
-                  borderColor: kycModalidade === op.v ? '#0D63DB' : '#cbd5e1' }}>
-                {op.label}
-              </button>
-            ))}
-          </div>
-          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, color:'#475569', marginBottom:10 }}>
-            <input type="checkbox" checked={kycSelfieSegurando} onChange={e => setKycSelfieSegurando(e.target.checked)} style={{ width:15, height:15, accentColor:'#0D63DB' }} />
-            Incluir também “selfie segurando o documento”
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(kycKeys.length, 3)}, minmax(0, 1fr))`, gap: 10 }}>
-            {kycKeys.map(slotKyc)}
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  return (
-    <div>
-      {/* Cabeçalho */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <h2 style={{ fontSize:18, fontWeight:700, color:'#111111', margin:0 }}>Contratos ({contratosAgrupados.length})</h2>
-        <button style={S.btn('primary')} onClick={abrirModal}>🔗 Novo contrato com link</button>
-      </div>
-
-      {/* Tabela */}
-      <div style={S.card}>
-        {loading ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32 }}>Carregando...</p>
-          : contratosAgrupados.length === 0
-          ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32, fontSize:13 }}>Nenhum contrato gerado ainda. Clique em "Novo contrato com link" para começar.</p>
-          : (
-            <div style={{ overflowX:'auto' }}>
-              <table style={S.table}>
-                <thead><tr>
-                  <th style={S.th}>Título</th>
-                  <th style={S.th}>Tipo</th>
-                  <th style={S.th}>Contratante</th>
-                  <th style={S.th}>Contratado</th>
-                  <th style={S.th}>Status</th>
-                  <th style={S.th}>Criado</th>
-                  <th style={S.th}>Expira</th>
-                  <th style={S.th}>Ações</th>
-                </tr></thead>
-                <tbody>
-                  {contratosAgrupados.map(g => {
-                    const cl = g.rep;
-                    const [lbl, cor] = ST_LINK[g.statusAgg] || ST_LINK.aguardando;
-                    const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
-                    const sig = cl.dados_signatario;
-                    // Documento ENVIADO (não gerado por IA) = a plataforma só COLETA assinaturas →
-                    // NÃO há "contratante" (Nogueira). Contrato gerado por IA tem a Nogueira como parte.
-                    const ehColeta = !!cl.arquivo_url || cl.gerado_por_ia === false;
-                    const nomeContratado = g.total > 1
-                      ? `${g.total} signatários · ${g.assinados}/${g.total} assinaram`
-                      : (sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—'));
-                    return (
-                      <tr key={g.gid}>
-                        <td style={S.td}><strong>{cl.titulo}</strong></td>
-                        <td style={S.td}>{TIPO_LABEL[cl.tipo_contrato] || cl.tipo_contrato}</td>
-                        <td style={{ ...S.td, fontSize:11 }}>{ehColeta ? <span style={{ color:'#94a3b8' }}>— <span style={{ fontSize:10 }}>(coleta de assinaturas)</span></span> : 'Nogueira Empreendimentos'}</td>
-                        <td style={{ ...S.td, fontSize:11 }}>{nomeContratado}</td>
-                        <td style={S.td}>
-                          <span style={{ padding:'2px 10px', borderRadius:999, fontSize:12, fontWeight:700, background:cor+'20', color:cor }}>{lbl}</span>
-                          {g.total > 1 && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:6 }}>{g.assinados}/{g.total}</span>}
-                        </td>
-                        <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
-                        <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
-                        <td style={S.td}>
-                          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                            <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => abrirDetalhe(g)}>Ver</button>
-                            {g.total === 1 && cl.status === 'aguardando' && (
-                              <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => copiarTexto(linkUrl)}>Copiar link</button>
-                            )}
-                            <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => excluirGrupo(g)}>Excluir</button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </div>
-
-      {/* Modal de detalhe do contrato */}
-      {detalhe && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setDetalhe(null)}>
-          <div style={{ ...S.modal, maxWidth:640 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-              <div>
-                <h3 style={{ margin:'0 0 4px', fontSize:17, fontWeight:700 }}>{detalhe.titulo}</h3>
-                <span style={{ fontSize:12, color:'#64748b' }}>{TIPO_LABEL[detalhe.tipo_contrato] || detalhe.tipo_contrato}</span>
-              </div>
-              <button onClick={() => setDetalhe(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8' }}>×</button>
-            </div>
-
-            {/* Contratante — só quando o contrato foi GERADO pela plataforma (IA). Documento ENVIADO
-                é só COLETA de assinaturas: a Nogueira não é parte. */}
-            {(detalhe.arquivo_url || detalhe.gerado_por_ia === false) ? (
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
-                <div style={{ fontSize:12, color:'#64748b' }}>📄 Documento enviado — a plataforma apenas <strong>coleta as assinaturas</strong> das partes designadas (sem contratante).</div>
-              </div>
-            ) : (
-              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
-              </div>
-            )}
-
-            {/* SIGNATÁRIOS (roster) — quem assinou / quem falta, com link, edição e status */}
-            <div style={{ border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:16, background:'#f8fbff' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span>Signatários {roster.length ? `(${roster.filter(p => p.assinou).length}/${roster.length} assinaram)` : ''}</span>
-                {rosterLoad && <span style={{ color:'#94a3b8', fontWeight:600, textTransform:'none' }}>carregando…</span>}
-              </div>
-              {!rosterLoad && roster.length === 0 && (
-                <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Aguardando preenchimento pelo signatário.</div>
-              )}
-              {roster.map((p, i) => {
-                const linhasG = detalhe._grupo?.linhas || [];
-                const linha = linhasG.find(l => l.id === p.id)
-                  || (p.email && linhasG.find(l => (l.assinante_email || l.dados_signatario?.email) === p.email));
-                const tokenLinha = linha?.token;
-                const linkP = tokenLinha ? `${window.location.href.split('#')[0]}#/c/${tokenLinha}` : null;
-                const emEdicao = editParte?.id === p.id;
-                return (
-                  <div key={p.id || i} style={{ borderTop: i ? '1px solid #e2e8f0' : 'none', padding:'8px 0' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                      <div style={{ minWidth:0 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{p.nome || <span style={{ color:'#94a3b8', fontStyle:'italic', fontWeight:500 }}>Aguardando preenchimento</span>}</div>
-                        {p.email && <div style={{ fontSize:11, color:'#475569' }}>{p.email}</div>}
-                      </div>
-                      <span style={{ padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700, background:(p.assinou?'#059669':'#d97706')+'20', color:p.assinou?'#059669':'#d97706' }}>
-                        {p.assinou ? `✓ Assinou${p.assinado_em ? ' · '+new Date(p.assinado_em).toLocaleDateString('pt-BR') : ''}` : 'Pendente'}
-                      </span>
-                    </div>
-                    {p.requer_testemunha && (
-                      <div style={{ fontSize:10.5, color:'#64748b', marginTop:2 }}>Testemunha: {p.testemunha_assinou ? '✓ assinou' : 'pendente'}</div>
-                    )}
-                    <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
-                      {!p.assinou && (
-                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => copiarTexto(linkP)}>Copiar link</button>
-                      )}
-                      {!p.assinou && p.id && !emEdicao && (
-                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => setEditParte({ id:p.id, nome:(linha?.dados_signatario?.nome)||p.nome||'', cpf:(linha?.dados_signatario?.cpf)||'', email:(linha?.assinante_email)||p.email||'' })}>Alterar dados</button>
-                      )}
-                      {p.assinou && <span style={{ fontSize:10.5, color:'#94a3b8' }}>Assinado — dados travados (integridade da assinatura).</span>}
-                    </div>
-                    {emEdicao && (
-                      <div style={{ marginTop:8, background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', display:'grid', gap:6 }}>
-                        <input placeholder="Nome" value={editParte.nome} onChange={e => setEditParte(v => ({ ...v, nome:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
-                        <input placeholder="CPF/CNPJ" value={editParte.cpf} onChange={e => setEditParte(v => ({ ...v, cpf:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
-                        <input placeholder="E-mail" value={editParte.email} onChange={e => setEditParte(v => ({ ...v, email:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
-                        <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
-                          <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => setEditParte(null)} disabled={savingParte}>Cancelar</button>
-                          <button style={{ ...S.btn('primary'), fontSize:11, padding:'4px 10px' }} onClick={salvarSignatario} disabled={savingParte}>{savingParte ? 'Salvando…' : 'Salvar'}</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Documento / Conteúdo — se houver arquivo ENVIADO, mostra o documento embutido (o
-                mesmo que o signatário vê) + botão para abrir em nova aba. Senão, o texto do contrato. */}
-            {detalhe.arquivo_url ? (() => {
-              const nome = detalhe.arquivo_nome || detalhe.arquivo_url || '';
-              const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nome) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(detalhe.arquivo_url);
-              return (
-                <div style={{ marginBottom:16 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5 }}>Documento</div>
-                    <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }}
-                      onClick={() => window.open(detalhe.arquivo_url, '_blank', 'noopener')}>Abrir em nova aba{detalhe.arquivo_nome ? ` (${detalhe.arquivo_nome})` : ''}</button>
-                  </div>
-                  {ehImg
-                    ? <img src={detalhe.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:520, objectFit:'contain', background:'#fff', border:'1px solid #e2e8f0' }} />
-                    : <iframe src={detalhe.arquivo_url} title="Documento" style={{ width:'100%', height:'55vh', border:'1px solid #e2e8f0', borderRadius:10, background:'#fff' }} />}
-                </div>
-              );
-            })() : (
-              <div style={{ background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0', padding:'14px 16px', maxHeight:300, overflowY:'auto', marginBottom:16 }}>
-                <div style={{ fontSize:13, color:'#111111', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
-              </div>
-            )}
-
-            {/* KYC fotos + resultado da verificação por IA */}
-            {detalhe.kyc_incluido && detalhe.kyc_fotos && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                  Documentação KYC
-                  {detalhe.verificacao_kyc?.resultado && (() => {
-                    const r = detalhe.verificacao_kyc.resultado;
-                    const cor = r === 'aprovado' ? '#059669' : r === 'bloqueado' ? '#dc2626' : '#d97706';
-                    const txt = r === 'aprovado' ? '✓ Identidade verificada (IA)' : r === 'bloqueado' ? '✗ Reprovada (IA)' : '⚠ Revisão manual (IA)';
-                    return <span style={{ padding:'2px 8px', borderRadius:999, fontSize:10, fontWeight:800, background:cor+'20', color:cor, textTransform:'none', letterSpacing:0 }}>{txt}</span>;
-                  })()}
-                </div>
-                {detalhe.verificacao_kyc?.detalhes?.motivo && (
-                  <div style={{ fontSize:11, color:'#64748b', marginBottom:8 }}>IA: {detalhe.verificacao_kyc.detalhes.motivo}</div>
-                )}
-                <div style={{ display: 'flex', gap: 8, flexWrap:'wrap' }}>
-                  {['selfie_rosto','doc_frente','doc_verso','doc_digital','selfie_doc'].filter(k => detalhe.kyc_fotos[k]).map(k => (
-                    <a key={k} href={detalhe.kyc_fotos[k]} target="_blank" rel="noopener noreferrer"
-                      style={{ flex: '1 1 30%', minWidth: 90, display: 'block' }}>
-                      <img src={detalhe.kyc_fotos[k]} alt={k} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Identidade enviada pelo SIGNATÁRIO ao assinar (selfie + documento exigidos no contrato) */}
-            {detalhe.docs_identidade && Object.keys(detalhe.docs_identidade).length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                  Identidade enviada na assinatura
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {[['selfie', 'Selfie'], ['foto_doc', 'Documento'], ['selfie_doc', 'Selfie com documento'], ['comprovante_residencia', 'Comprovante de residência']]
-                    .filter(([k]) => detalhe.docs_identidade[k]).map(([k, lbl]) => (
-                      <a key={k} href={detalhe.docs_identidade[k]} target="_blank" rel="noopener noreferrer" title={lbl}
-                        style={{ flex: '1 1 30%', minWidth: 90, display: 'block' }}>
-                        <img src={detalhe.docs_identidade[k]} alt={lbl} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                        <div style={{ fontSize: 9.5, color: '#94a3b8', textAlign: 'center', marginTop: 2 }}>{lbl}</div>
-                      </a>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* Assinatura (se assinado) */}
-            {detalhe.status === 'assinado' && (
-              <div style={{ background:'#dcfce7', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:'#166534' }}>✔ Assinado em {detalhe.assinado_em ? new Date(detalhe.assinado_em).toLocaleString('pt-BR') : '—'}</div>
-                {detalhe.assinatura && <img src={detalhe.assinatura} alt="assinatura" style={{ maxHeight:60, background:'white', borderRadius:6, marginTop:8, padding:4 }}/>}
-                {detalhe.assinatura_hash && <div style={{ fontSize:10, color:'#15803d', wordBreak:'break-all', marginTop:4 }}>Hash: {detalhe.assinatura_hash}</div>}
-              </div>
-            )}
-
-            {/* ATRIBUIÇÃO — vincula o documento (mesmo já assinado) a um usuário e à arrematação
-                dele. Vinculado, ele aparece nos documentos/anexos do arremate do usuário e entra
-                no que a IA de arremates lê/aprende. Sem vínculo = documento avulso. */}
-            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
-              <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:6 }}>🔗 Atribuição a uma arrematação</div>
-              {detalhe.arremate_imovel_id ? (
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:12, color:'#166534', fontWeight:700 }}>✓ Atribuído (imóvel {String(detalhe.arremate_imovel_id).slice(0,8)}…) — aparece nos documentos do arremate do usuário.</span>
-                  <button style={{ ...S.btn('outline'), fontSize:11, padding:'5px 10px' }} disabled={atrBusy} onClick={tornarAvulso}>Tornar avulso</button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ fontSize:11.5, color:'#64748b', marginBottom:8 }}>Documento avulso. Para vincular a um usuário e à arrematação dele (mesmo já assinado), busque o usuário:</div>
-                  <div style={{ position:'relative', marginBottom: (atrUser && atrArrematacoes.length) ? 8 : 0 }}>
-                    <input value={atrUserBusca} onChange={e => buscarUsuarioAtr(e.target.value)} placeholder="Buscar usuário por nome…" style={{ ...S.input }} />
-                    {atrUserRes.length > 0 && !atrUser && (
-                      <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:8, marginTop:4, boxShadow:'0 8px 24px rgba(0,0,0,0.1)', zIndex:10, overflow:'hidden' }}>
-                        {atrUserRes.map(u => (
-                          <button key={u.id} onClick={() => escolherUsuarioAtr(u)} style={{ display:'block', width:'100%', textAlign:'left', padding:'8px 12px', border:'none', background:'white', cursor:'pointer', fontSize:13, color:'#334155' }}>{u.nome || '(sem nome)'}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {atrUser && (atrArrematacoes.length ? (
-                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                      <div style={{ fontSize:11, color:'#64748b' }}>Arrematações de {atrUser.nome}:</div>
-                      {atrArrematacoes.map(a => (
-                        <button key={a.id} disabled={atrBusy} onClick={() => atribuirArrematacao(a)} style={{ ...S.btn('outline'), justifyContent:'flex-start', textAlign:'left', fontSize:12 }}>
-                          {a.titulo || a.imovel_id}{a.cidade ? ` · ${a.cidade}/${a.estado || ''}` : ''}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize:12, color:'#94a3b8' }}>Esse usuário ainda não tem arrematações cadastradas.</div>
-                  ))}
-                </>
-              )}
-            </div>
-
-            <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
-              <button style={{ ...S.btn('danger') }} onClick={() => detalhe._grupo && excluirGrupo(detalhe._grupo)}>Excluir documento</button>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button style={S.btn('primary')} onClick={baixarComAssinaturas}>Visualizar com assinaturas</button>
-                <button style={S.btn('outline')} onClick={() => setDetalhe(null)}>Fechar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Novo contrato — etapa 0 (modo) → 1/2/3. step===0 é válido (não usar truthiness). */}
-      {step !== null && (
-        <div style={{ ...S.overlay, alignItems: step === 2 ? 'stretch' : 'center', padding: step === 2 ? 0 : '20px' }}
-          onClick={e => e.target === e.currentTarget && setStep(null)}>
-          <div style={step === 2
-            ? { background:'white', display:'flex', flexDirection:'column', width:'100%', height:'100%', maxWidth:'100%', overflow:'hidden' }
-            : { ...S.modal, maxWidth:700 }}>
-
-            {/* Indicador de etapas — só a partir da etapa 1 (a 0 é a escolha do modo).
-                Em modo 'assinar' não há revisão de texto gerado pela IA. */}
-            {step >= 1 && (() => {
-              const passos = modo === 'assinar'
-                ? [{ label:'Documento', n:1 }, { label:'Link gerado', n:3 }]
-                : [{ label:'Descrever', n:1 }, { label:'Revisar', n:2 }, { label:'Link gerado', n:3 }];
-              return (
-                <div style={{ display:'flex', alignItems:'center', gap:8, padding: step===2 ? '14px 24px' : '0 0 20px',
-                  borderBottom: step===2 ? '1px solid #e2e8f0' : 'none', flexShrink:0,
-                  background: step===2 ? 'white' : 'transparent' }}>
-                  {passos.map((p, i) => (
-                    <React.Fragment key={p.n}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <div style={{ width:22, height:22, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800,
-                          background: step > p.n ? '#059669' : step === p.n ? '#0D63DB' : '#e2e8f0',
-                          color: step >= p.n ? 'white' : '#94a3b8' }}>{step > p.n ? '✓' : i+1}</div>
-                        <span style={{ fontSize:12, fontWeight:step===p.n?700:400, color:step===p.n?'#111111':'#94a3b8' }}>{p.label}</span>
-                      </div>
-                      {i < passos.length-1 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
-                    </React.Fragment>
-                  ))}
-                  {step === 2 && (
-                    <button onClick={() => setStep(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* ── Etapa 0: Escolher o modo ── */}
-            {step === 0 && (
-              <>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-                  <h3 style={{ ...S.sectionTitle, margin:0 }}>Novo contrato</h3>
-                  <button onClick={() => setStep(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
-                </div>
-                <p style={{ fontSize:13, color:'#64748b', marginBottom:18 }}>Como você quer criar este contrato? Emitido pela <strong>Nogueira Empreendimentos</strong>, com foro de Feira de Santana/BA e cláusulas de LGPD e anticorrupção.</p>
-                <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:12 }}>
-                  {[
-                    { id:'ia', emoji:'✨', cor:'#6366f1', titulo:'Criar com IA', desc:'Você escreve em texto livre o que o contrato deve conter (e pode anexar documentos para a IA extrair as informações). A IA redige com máximo resguardo jurídico.' },
-                    { id:'assinar', emoji:'📄', cor:'#0D63DB', titulo:'Assinar documento pronto', desc:'Você já tem o documento. Carregue o arquivo (PDF/Word/imagem) e gere o link de assinatura, sem editar o conteúdo.' },
-                  ].map(op => (
-                    <button key={op.id} onClick={() => { setModo(op.id); if (op.id === 'assinar') setTipo('outro'); setStep(1); }}
-                      style={{ padding:'22px 18px', background:'white', border:`2px solid ${op.cor}33`, borderRadius:14, cursor:'pointer', textAlign:'left' }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = op.cor; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = `${op.cor}33`; }}>
-                      <div style={{ fontSize:28, marginBottom:10 }}>{op.emoji}</div>
-                      <div style={{ fontWeight:800, fontSize:15, color:'#111111', marginBottom:6 }}>{op.titulo}</div>
-                      <div style={{ fontSize:12.5, color:'#64748b', lineHeight:1.6 }}>{op.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* ── Etapa 1 (modo assinar): documento pronto ── */}
-            {step === 1 && modo === 'assinar' && (
-              <>
-                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Documento pronto para assinatura</h3>
-                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Carregue o arquivo final. Ele será enviado para assinatura <strong>sem edição</strong>. A outra parte preenche os dados e assina digitalmente.</p>
-
-                <div style={{ marginBottom:14 }}>
-                  <label style={S.label}>Título do contrato</label>
-                  <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
-                </div>
-
-                <div style={{ marginBottom:16 }}>
-                  <label style={S.label}>Arquivo do contrato (PDF, Word ou imagem) *</label>
-                  <input type="file" accept={ACEITA_DOCUMENTO}
-                    style={{ fontSize:12, color:'#334155' }}
-                    onChange={e => enviarDocumentoPronto(e.target.files?.[0])} />
-                  {arquivoUploading && <div style={{ fontSize:12, color:'#0D63DB', marginTop:8 }}>⏳ Enviando documento…</div>}
-                  {arquivoUrl && !arquivoUploading && (
-                    <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#dcfce7', color:'#166534', fontSize:12, fontWeight:700, padding:'5px 12px', borderRadius:20, marginTop:8 }}>
-                      ✓ {arquivoNome}
-                      <button onClick={() => { setArquivoUrl(''); setArquivoNome(''); }} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0 }}>×</button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Exigir testemunha: a parte assina e, ao concluir, recebe um link para
-                    encaminhar à SUA testemunha (mesmo fluxo do contrato gerado por IA). */}
-                <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', padding:'12px 14px', borderRadius:10, border:`1px solid ${reqTestemunhaDoc ? '#0D63DB' : '#e2e8f0'}`, background: reqTestemunhaDoc ? '#eff6ff' : '#f8fafc', marginBottom:16 }}>
-                  <input type="checkbox" checked={reqTestemunhaDoc} onChange={e => setReqTestemunhaDoc(e.target.checked)} style={{ width:16, height:16, accentColor:'#0D63DB', marginTop:2 }} />
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Exigir assinatura de testemunha</div>
-                    <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Ao final da assinatura da parte, o sistema disponibiliza um link para ela <strong>compartilhar com a sua testemunha</strong>. A testemunha abre o link, preenche nome e CPF e assina. O contrato só fica completo quando a parte e a testemunha assinarem.</div>
-                  </div>
-                </label>
-
-                {renderKyc()}
-
-                <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
-                  <button style={S.btn('outline')} onClick={() => setStep(0)}>← Voltar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || verificandoKyc || arquivoUploading || !arquivoUrl}>
-                    {verificandoKyc ? '🔎 Verificando identidade…' : savingLink ? 'Gerando link…' : 'Gerar link de assinatura →'}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── Etapa 1 (modo IA): Descrever ── */}
-            {step === 1 && modo !== 'assinar' && (
-              <>
-                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
-                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Escreva livremente o que o contrato deve conter — a IA redige com máximo resguardo jurídico (leis aplicáveis, LGPD, anticorrupção e foro de Feira de Santana/BA). O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
-
-                <div style={{ marginBottom:12 }}>
-                  <label style={S.label}>Título do contrato</label>
-                  <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
-                </div>
-
-                <div style={{ marginBottom:14 }}>
-                  <label style={S.label}>O que o contrato deve conter? *</label>
-                  <textarea style={{ ...S.input, height:110, resize:'vertical', fontFamily:'inherit', fontSize:13 }}
-                    value={descricao}
-                    onChange={e => setDescricao(e.target.value)}
-                    placeholder="Descreva livremente o que o contrato deve conter."/>
-                </div>
-
-                <div style={{ marginBottom:16 }}>
-                  <label style={S.label}>Anexar arquivos de referência (opcional)</label>
-                  <div style={{ fontSize:11, color:'#94a3b8', marginBottom:6 }}>Documentos que embasam o contrato. Textos (.txt, .md) são lidos; PDFs ficam referenciados pelo nome.</div>
-                  <input type="file" multiple accept={ACEITA_DOCUMENTO}
-                    style={{ fontSize:12, color:'#334155' }}
-                    onChange={e => lerArquivos(Array.from(e.target.files))} />
-                  {arquivos.length > 0 && (
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
-                      {arquivos.map((a, i) => (
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, background: a.conteudo ? '#dbeafe' : '#fef3c7', color: a.conteudo ? '#084BA6' : '#92400e', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>
-                          {a.conteudo ? '📄' : '📎'} {a.nome}
-                          <button onClick={() => setArquivos(prev => prev.filter((_, j) => j !== i))}
-                            style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, marginLeft:2 }}>×</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {renderKyc()}
-
-                <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-                  <button style={S.btn('outline')} onClick={() => setStep(null)}>Cancelar</button>
-                  <button style={S.btn('primary')} onClick={gerarContrato} disabled={gerandoContrato || !descricao.trim()}>
-                    {gerandoContrato ? '⏳ Gerando contrato…' : 'Gerar contrato →'}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── Etapa 2: Revisar — layout fullscreen ── */}
-            {step === 2 && (
-              <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-
-                {/* Sidebar esquerda — partes + perguntas */}
-                <div style={{ width:300, flexShrink:0, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflowY:'auto', background:'#f8fafc' }}>
-                  <div style={{ padding:'20px 18px', flex:1 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>Partes do contrato</div>
-
-                    <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:10 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-                      <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
-                    </div>
-                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
-                      <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
-                    </div>
-
-                    {perguntas.length > 0 && (
-                      <>
-                        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Pontos a confirmar</div>
-                        <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 14px', marginBottom:14 }}>
-                          {perguntas.map((p, i) => (
-                            <div key={i} style={{ marginBottom:12 }}>
-                              <label style={{ fontSize:11, color:'#c2410c', fontWeight:700, display:'block', marginBottom:5, lineHeight:1.4 }}>{p}</label>
-                              <input style={{ ...S.input, fontSize:12 }}
-                                value={respostas[i] || ''}
-                                onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
-                                placeholder="Sua resposta…" />
-                            </div>
-                          ))}
-                          <button style={{ ...S.btn('outline'), fontSize:12, width:'100%' }} onClick={gerarContrato} disabled={gerandoContrato}>
-                            {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
-                          </button>
-                        </div>
-                      </>
-                    )}
-
-                    <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.6, marginTop: perguntas.length > 0 ? 0 : 8 }}>
-                      Revise o texto ao lado. Clique em qualquer trecho para editar diretamente antes de aprovar.
-                    </div>
-                  </div>
-                </div>
-
-                {/* Área principal — texto do contrato */}
-                <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-                  <div style={{ padding:'16px 24px 8px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{titulo || 'Contrato'}</div>
-                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Edite diretamente se necessário antes de aprovar.</div>
-                  </div>
-                  <textarea
-                    style={{ flex:1, border:'none', outline:'none', resize:'none', fontFamily:'Georgia, serif', fontSize:14, lineHeight:1.9, padding:'24px 32px', color:'#111111', background:'white' }}
-                    value={conteudo}
-                    onChange={e => setConteudo(e.target.value)} />
-                </div>
-              </div>
-            )}
-
-            {/* ── Etapa 2: barra inferior ── */}
-            {step === 2 && (
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 24px', borderTop:'1px solid #e2e8f0', background:'white', flexShrink:0 }}>
-                <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar e editar</button>
-                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                  <span style={{ fontSize:12, color:'#94a3b8' }}>{conteudo.split(/\s+/).filter(Boolean).length} palavras</span>
-                  <button style={{ ...S.btn('primary'), padding:'10px 28px' }} onClick={gerarLinkContrato} disabled={savingLink || verificandoKyc || !conteudo.trim()}>
-                    {verificandoKyc ? '🔎 Verificando identidade…' : savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Etapa 3: Link gerado ── */}
-            {step === 3 && (
-              <>
-                <div style={{ textAlign:'center', padding:'20px 0 12px' }}>
-                  <div style={{ fontSize:48, marginBottom:10 }}>🔗</div>
-                  <h3 style={{ fontSize:18, fontWeight:800, color:'#111111', margin:'0 0 6px' }}>Link gerado com sucesso!</h3>
-                  <p style={{ fontSize:13, color:'#64748b', margin:0 }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</p>
-                </div>
-                <div style={{ background:'#f1f5f9', borderRadius:8, padding:'14px 16px', margin:'16px 0', display:'flex', gap:10, alignItems:'center' }}>
-                  <span style={{ fontSize:12, color:'#334155', wordBreak:'break-all', flex:1 }}>{linkGerado}</span>
-                  <button style={S.btn('primary')} onClick={() => navigator.clipboard.writeText(linkGerado).then(() => alert('Link copiado!'))}>Copiar</button>
-                </div>
-                <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                  <button style={S.btn('outline')} onClick={() => setStep(null)}>Fechar</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
 // Produtos (planos pagos) que um link de promoção pode ofertar. Deriva o nome do
@@ -5069,92 +4024,6 @@ function diagnosticoCaptacao(atual, anterior) {
 // Monitor de coleta — usa a MESMA fonte de verdade da aba Scrapers (tabela
 // fonte_saude, keyed em MAIÚSCULAS por FONTES_LEILAO). Antes lia scrapers_log com
 // uma lista antiga (Santander/Rodobens/Sicoob) que não batia com as fontes reais.
-function ScrapersMonitor() {
-  const [saude, setSaude] = useState({});
-  const [prev, setPrev] = useState({}); // coleta anterior por fonte (tendência do diagnóstico)
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Puxa os indicadores de qualidade e as 2 últimas coletas por fonte (a 2ª serve
-    // de base para o diagnóstico determinístico apontar regressão/tendência).
-    supabase.from('fonte_saude')
-      .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
-      .order('executado_em', { ascending: false }).limit(400)
-      .then(({ data }) => {
-        const ult = {}, ant = {};
-        (data || []).forEach(l => {
-          if (!ult[l.fonte]) ult[l.fonte] = l;
-          else if (!ant[l.fonte]) ant[l.fonte] = l;
-        });
-        setSaude(ult); setPrev(ant); setLoading(false);
-      });
-  }, []);
-
-  const estilo = (st) => st === 'ok' ? { cor: '#10b981', bg: '#f0fdf4', icone: '✅' }
-    : st === 'degradado' ? { cor: '#d97706', bg: '#fefce8', icone: '⚠️' }
-    : st === 'falhou' ? { cor: '#dc2626', bg: '#fef2f2', icone: '❌' }
-    : { cor: '#94a3b8', bg: '#f8fafc', icone: '⏸' };
-  // MOSTRA TODAS as fontes que reportaram saúde (não só as 7 fixas) — o acervo real tem muito mais
-  // leiloeiros. Usa FONTES_LEILAO só para o nome/cor amigável; o resto entra com o código da fonte.
-  const META = Object.fromEntries(FONTES_LEILAO.map(f => [f.fonte, f]));
-  const nomeFonte = (code) => META[code]?.nome || (code.charAt(0) + code.slice(1).toLowerCase());
-  const corFonte = (code) => META[code]?.cor || '#94a3b8';
-  const fontes = Array.from(new Set([...FONTES_LEILAO.map(f => f.fonte), ...Object.keys(saude)]))
-    .sort((a, b) => (Number(saude[b]?.total) || 0) - (Number(saude[a]?.total) || 0));
-  const problemas = fontes.filter(code => ['degradado', 'falhou'].includes(saude[code]?.status));
-
-  return (
-    <div style={S.card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Monitor de coleta</div>
-        {problemas.length > 0 && (
-          <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-            ⚠️ {problemas.length} com atenção
-          </span>
-        )}
-      </div>
-      {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {fontes.map(code => {
-            const f = { fonte: code, nome: nomeFonte(code), cor: corFonte(code) };
-            const s = saude[f.fonte];
-            const e = estilo(s?.status);
-            const diag = diagnosticoCaptacao(s, prev[f.fonte]);
-            const dc = diag ? (diag.nivel === 'falhou' ? { bg: '#fef2f2', bd: '#fecaca', cor: '#b91c1c' } : { bg: '#fffbeb', bd: '#fde68a', cor: '#92400e' }) : null;
-            return (
-              <div key={f.fonte} style={{ padding: '10px 12px', background: e.bg, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.nome}</div>
-                      {s ? <div style={{ fontSize: 11, color: '#64748b' }}>
-                        {Number(s.total || 0).toLocaleString('pt-BR')} imóveis · {new Date(s.executado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </div> : <div style={{ fontSize: 11, color: '#94a3b8' }}>Sem coleta registrada</div>}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 16 }}>{e.icone}</span>
-                </div>
-                {/* Diagnóstico determinístico (SEM IA): causa provável + próxima ação. */}
-                {diag && (
-                  <div style={{ background: dc.bg, border: `1px solid ${dc.bd}`, borderRadius: 8, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: dc.cor, marginBottom: 4 }}>🔧 Diagnóstico automático (sem IA)</div>
-                    {diag.problemas.slice(0, 3).map((p, i) => (
-                      <div key={i} style={{ fontSize: 10.5, color: dc.cor, lineHeight: 1.5, marginBottom: i < Math.min(diag.problemas.length, 3) - 1 ? 5 : 0 }}>
-                        <div><strong>Causa:</strong> {p.causa}</div>
-                        <div><strong>Ação:</strong> {p.acao}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 
 // E-mail de contato por leiloeiro (11/09) — a maioria nasce SOZINHA (captura automática no
@@ -5431,92 +4300,6 @@ function mrrMensalPlano(plano, fallback = 0) {
   return preco / 12;
 }
 
-function UsuariosPlanoDetalhe({ planoKey }) {
-  const [usuarios, setUsuarios] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-
-  const planosCtx = usePlanos();
-  const pNome = (key) => planosCtx?.[key]?.nome || key;
-  const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  // Mensal-equivalente por plano — mesma conta do marcador do topo (mrrMensalPlano).
-  const PRECO = {
-    explorador: 0,
-    top2: mrrMensalPlano(planosCtx?.top2, 49.90),
-    assessorado: mrrMensalPlano(planosCtx?.assessorado, 500),
-    clube: mrrMensalPlano(planosCtx?.clube, 5000),
-  };
-  // "eq." nos pacotes de prazo fixo (Assessoria/Club) deixa claro que é mensal-equivalente,
-  // não uma cobrança recorrente de fato — some a divergência com o valor cheio do pacote.
-  const LABEL = {
-    explorador: 'Explorador (Grátis)',
-    top2: `${pNome('top2')} (R$ ${fmt(PRECO.top2)}/mês)`,
-    assessorado: `${pNome('assessorado')} (R$ ${fmt(PRECO.assessorado)}/mês eq.)`,
-    clube: `${pNome('clube')} (R$ ${fmt(PRECO.clube)}/mês eq.)`,
-  };
-
-  React.useEffect(() => {
-    supabase.from('perfis')
-      .select('id, nome, created_at, inadimplente_desde, plano_ciclo, plano_vencimento')
-      .eq('role', planoKey)
-      .order('created_at', { ascending: false })
-      .then(async ({ data, error }) => {
-        // Era aqui que o detalhe por plano mostrava "0 usuários / MRR R$ 0,00": o `email` no
-        // select derrubava a query inteira (400) e o erro não era checado.
-        if (error) console.error('[dashboard plano]', error.message);
-        const linhas = data || [];
-        const mapa = await emailsPorIds(linhas.map((u) => u.id));
-        setUsuarios(linhas.map((u) => ({ ...u, email: mapa.get(u.id) || '' })));
-        setLoading(false);
-      });
-  }, [planoKey]);
-
-  if (loading) return <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>Carregando...</div>;
-
-  const preco = PRECO[planoKey] || 0;
-  const mrr = usuarios.filter(u => !u.inadimplente_desde).length * preco;
-  const inadimplentes = usuarios.filter(u => u.inadimplente_desde).length;
-
-  return (
-    <div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#111111', marginBottom: 12 }}>{LABEL[planoKey]}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginBottom: 16 }}>
-        {[
-          { label: 'Total', value: usuarios.length, cor: '#0D63DB' },
-          { label: 'Ativos', value: usuarios.length - inadimplentes, cor: '#10b981' },
-          { label: preco > 0 ? 'MRR estimado' : '—', value: preco > 0 ? `R$ ${fmt(mrr)}` : '—', cor: '#7c3aed' },
-        ].map(({ label, value, cor }) => (
-          <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: cor }}>{value}</div>
-          </div>
-        ))}
-      </div>
-      {inadimplentes > 0 && (
-        <div style={{ background: '#fef2f2', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#dc2626', fontWeight: 600, marginBottom: 12 }}>
-          ⚠️ {inadimplentes} inadimplente{inadimplentes > 1 ? 's' : ''}
-        </div>
-      )}
-      <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {usuarios.map(u => (
-          <div key={u.id} style={{ padding: '8px 10px', background: u.inadimplente_desde ? '#fef2f2' : '#f8fafc', borderRadius: 8, border: `1px solid ${u.inadimplente_desde ? '#fca5a5' : '#e2e8f0'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{u.nome || '—'}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{u.email}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>Desde {new Date(u.created_at).toLocaleDateString('pt-BR')}</div>
-                {u.inadimplente_desde && <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 700 }}>Inadimplente</div>}
-                {u.plano_ciclo === 'anual' && <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>Anual</div>}
-              </div>
-            </div>
-          </div>
-        ))}
-        {usuarios.length === 0 && <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum usuário neste plano.</div>}
-      </div>
-    </div>
-  );
-}
 
 // Painel "Custos & Uso das Integrações" — marcadores de teto (grátis/orçamento)
 // por provedor pago (Gemini, Claude, geocoders, Resend, Daily, Bright Data), para
@@ -6775,226 +5558,16 @@ function DashboardTab({ irParaTab }) {
           '#7c3aed')}
       </div>
 
-      {/* Quem ainda NÃO é cliente: onde chega, onde para, por quê. Vem antes da cobertura
-          porque é o topo do funil — se ninguém entra, o resto não importa. */}
-      <PainelFunilPublico />
-
+      {/* INÍCIO ENXUTO (21/10, dono aprovou a limpeza): funil → Marketing, leitura de eBooks → eBooks, documentos
+          por leiloeiro + diagnóstico/auditoria → Qualidade; "usuários por plano", membro da equipe e monitor de
+          coleta já têm tela própria (Usuários, Equipe, Operação de Coleta). */}
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
       <PainelCoberturaRelatorios />
 
-      {/* Leitura dos eBooks (bônus do Investidor Pro) — quem começou/terminou de ler */}
-      <PainelLeituraEbooks />
-
-      {/* Cobertura documental por leiloeiro + sinalizadores de confusão de documento */}
-      <PainelDocsLeiloeiro />
-
-      {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento).
-          Recebe o dado JÁ buscado pelo Dashboard (loadCustos) — não busca /api/uso-integracoes
-          de novo (antes o endpoint era chamado 2× por carga). */}
+      {/* Custos & Uso das integrações pagas + infraestrutura, num bloco só (21/10).
+          Recebe o dado JÁ buscado pelo Dashboard (loadCustos) — não busca /api/uso-integracoes de novo. */}
       <PainelCustosUso controlado uso={custos} erro={custosErro} />
-
-      {/* Diagnóstico por IA sobre os indicadores (assertividade + economia) */}
-      <PainelDiagnosticoIA />
-
-      {/* Auditoria técnica do sistema pelo Claude (só leitura; correções via PR) */}
-      <PainelAuditoriaSistema />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16 }}>
-
-        {/* Coluna esquerda: Usuários por plano */}
-        <div>
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              Usuários por plano
-              {usuariosDetalhe && <button onClick={() => setUsuariosDetalhe(false)} style={{ fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
-            </div>
-
-            {!usuariosDetalhe ? (
-              // Vista resumida — só quantidade, clicável
-              [
-                { key: 'explorador', label: 'Explorador (Grátis)',        cor: '#64748b' },
-                { key: 'top2',       label: pNome('top2'),                cor: '#7c3aed' },
-                { key: 'assessorado',label: pNome('assessorado'),         cor: '#d97706' },
-                { key: 'clube',      label: pNome('clube'),               cor: '#059669' },
-              ].map(({ key, label, cor }) => {
-                const qtd = dados.contagem[key] || 0;
-                return (
-                  <div key={key} onClick={() => setUsuariosDetalhe(key)}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 8, marginBottom: 4, cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
-                      <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: '#111111' }}>{qtd}</span>
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>→</span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              // Vista analítica — lista completa de usuários do plano selecionado
-              <UsuariosPlanoDetalhe planoKey={usuariosDetalhe} />
-            )}
-          </div>
-
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              Equipe interna
-              {equipeDetalhe && <button onClick={() => setEquipeDetalhe(null)} style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
-            </div>
-            {[
-              { key: 'consultor', label: 'Consultores', cor: '#0891b2' },
-              { key: 'analista',  label: 'Analistas',   cor: '#f59e0b' },
-              { key: 'advogado',  label: 'Advogados',   cor: '#dc2626' },
-              { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
-            ].map(({ key, label, cor }) => (
-              <div key={key}
-                onClick={() => loadEquipeDetalhe(key, periodo, dataInicio, dataFim)}
-                style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
-                  <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>→</span>
-                </div>
-              </div>
-            ))}
-            {/* Detalhe por membro */}
-            {equipeDetalhe && equipeMembros.length > 0 && (
-              <div style={{ marginTop: 12, borderTop: '2px solid #f1f5f9', paddingTop: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Indicadores por membro</span>
-                  <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>
-                    {periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'últimos 7 dias' : periodo === 'custom' ? `${dataInicio} – ${dataFim}` : 'este mês'}
-                  </span>
-                </div>
-                {equipeMembros.map(m => {
-                  const met = equipeMetrics[m.id] || {};
-                  const isConsultor = equipeDetalhe === 'consultor';
-                  const isAnalista  = equipeDetalhe === 'analista';
-                  return (
-                    <div key={m.id} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 6 }}>{m.nome || m.email}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {isConsultor && <>
-                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#084BA6', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>👥 {met.leadsSDR || 0} leads</span>
-                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>🎯 {met.leadsConv || 0} convertidos</span>
-                          <span style={{ fontSize: 11, background: '#fef9c3', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💰 R$ {Number(met.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
-                        </>}
-                        {isAnalista && <>
-                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#084BA6', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📋 {met.analises || 0} análises</span>
-                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>✅ {met.analisesOk || 0} concluídas</span>
-                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamadosFin || 0} tickets</span>
-                        </>}
-                        {!isConsultor && !isAnalista && <>
-                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
-                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>✅ {met.chamadosFin || 0} finalizados</span>
-                        </>}
-                        <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 'auto', alignSelf: 'center' }}>desde {new Date(m.created_at).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Coluna direita: Taxas Asaas + Marco + Infraestrutura */}
-        <div>
-          {/* Taxas Asaas reais */}
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro — saldo consolidado</div>
-            {/* Saldo unificado (Asaas + Mercado Pago) — clique para destrinchar */}
-            {(() => {
-              const asaasDisp = Number(asaasDados?.balance?.balance) || 0;
-              const mpDisp = Number(mpSaldo?.available_balance) || 0;
-              const mpIndispon = !!mpSaldo?.error;
-              const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
-              const recebidoMes = Number(asaasDados?.statsMes?.revenue) || 0;
-              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); };
-              return (
-                <div onClick={abrirFinanceiro} style={{ cursor: 'pointer' }}>
-                  <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Saldo disponível (Asaas + Mercado Pago)</span>
-                      <span style={{ fontSize: 11, opacity: 0.85 }}>destrinchar →</span>
-                    </div>
-                    <div style={{ fontSize: 26, fontWeight: 900, margin: '6px 0 4px' }}>R$ {fmt(total)}</div>
-                    <div style={{ fontSize: 11, opacity: 0.9 }}>
-                      Asaas R$ {fmt(asaasDisp)} · Mercado Pago {mpIndispon ? '(consultar no painel MP)' : `R$ ${fmt(mpDisp)}`}
-                    </div>
-                    <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.22)', paddingTop: 6 }}>
-                      Recebido no mês (Asaas): <strong>R$ {fmt(recebidoMes)}</strong> · o saldo zera após o saque para o banco
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-            {asaasLoading ? (
-              <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
-            ) : asaasDados?.error ? (
-              <p style={{ fontSize: 13, color: '#f59e0b', background: '#fefce8', padding: '10px 14px', borderRadius: 8, margin: 0 }}>
-                ⚠️ {asaasDados.error}
-              </p>
-            ) : asaasDados ? (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginBottom: 12 }}>
-                  {[
-                    { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
-                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#0D63DB' },
-                    { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
-                    { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
-                  ].map(({ label, value, cor }) => (
-                    <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px' }}>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: cor }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
-                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); }}
-                    style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Ver detalhes →</button>
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          {/* Marco comercial */}
-          <div style={{ ...S.card, border: `2px solid ${marco.cor}20` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Marco Comercial Asaas</div>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
-            </div>
-            {proximo && (
-              <>
-                <div style={{ background: '#f1f5f9', borderRadius: 8, height: 10, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 8, transition: 'width 0.5s' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-                  <span>MRR atual: R$ {fmt(dados.mrr)}</span>
-                  <span>Próximo marco: R$ {fmtN(proximo)}</span>
-                </div>
-              </>
-            )}
-            <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 13, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
-              📞 {marco.desc}
-            </div>
-          </div>
-
-          {/* Monitor de Scrapers */}
-          <ScrapersMonitor />
-
-          {/* Infraestrutura */}
+      {/* Infraestrutura */}
           <div style={S.card}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 14 }}>Infraestrutura & Custos</div>
 
@@ -7184,224 +5757,37 @@ function DashboardTab({ irParaTab }) {
               );
             })()}
           </div>
-        </div>
-      </div>
-
-      {/* Estratégia de plataforma & marcos — conteúdo consultivo (recolhido por padrão
-          para não competir com as métricas de negócio/operação do dia a dia). */}
-      <button onClick={() => setConsultivoAberto(o => !o)}
-        style={{ marginTop: 24, width: '100%', textAlign: 'left', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>🧭 Estratégia de plataforma & marcos de eficiência (consultivo)</span>
-        <span style={{ color: '#94a3b8' }}>{consultivoAberto ? '▲ recolher' : '▼ expandir'}</span>
-      </button>
-      {consultivoAberto && (<>
-
-      {/* Guia de Decisão de Plataforma */}
-      {(() => {
-        const dbMB = dados.dbSizeMB ?? 0;
-        const plataformas = [
-          {
-            nome: 'Supabase', categoria: 'Banco de Dados & Auth',
-            veredicto: 'MANTER',
-            cor: '#10b981',
-            icone: '🗄️',
-            justificativa: 'É a escolha certa para o estágio atual. Oferece Postgres + Auth + RLS + Realtime + RPC em uma única plataforma. Migrar custaria semanas de desenvolvimento e quebraria a arquitetura atual sem ganho proporcional.',
-            gatilhoTroca: 'DB > 8 GB no plano Pro OU MRR > R$ 80.000',
-            atingiuGatilho: dbMB > 8192 || dados.mrr > 80000,
-            alternativa: {
-              nome: 'Neon (Serverless Postgres)',
-              motivo: 'Postgres puro (mesma sintaxe, sem refatorar SQL), escala a zero, cobra só o que usa. A partir de $19/mês com performance superior ao Supabase Pro para cargas variáveis. Auth pode migrar para Clerk ($25/mês) ou continuar no Supabase Auth separado.',
-              custo: '~$19–40/mês',
-              url: 'neon.tech',
-            },
-          },
-          {
-            nome: 'Bunny.net', categoria: 'Vídeos & CDN',
-            veredicto: 'MANTER',
-            cor: '#10b981',
-            icone: '🎥',
-            justificativa: 'Melhor custo-benefício do mercado para vídeo + CDN com PoPs no Brasil. $0,005/GB entregue e armazenamento barato. O custo em dólar no cartão é centavos — o IOF é irrelevante frente à performance.',
-            gatilhoTroca: 'Fatura Bunny > $50/mês OU necessidade de conformidade LGPD com dados em solo brasileiro',
-            atingiuGatilho: false,
-            alternativa: {
-              nome: 'Cloudflare Stream + R2',
-              motivo: 'Stream cobra $5/1.000 minutos armazenados + $1/1.000 minutos entregues. R2 (arquivos estáticos) tem egress zero. Ideal se já usa Cloudflare para DNS. Infraestrutura em solo BR via PoPs globais com latência excelente.',
-              custo: '~$10–30/mês',
-              url: 'cloudflare.com/developer-platform',
-            },
-          },
-          {
-            nome: 'Vercel', categoria: 'Hosting & Edge Functions',
-            veredicto: 'MANTER',
-            cor: '#10b981',
-            icone: '⚡',
-            justificativa: 'Plano gratuito cobre o estágio atual com folga. Deploy automático do Git, Edge Functions globais e preview por PR sem configuração adicional. Não há alternativa com melhor custo zero.',
-            gatilhoTroca: 'Edge Functions > 500k invocações/mês OU necessidade de servidor persistente (WebSockets)',
-            atingiuGatilho: false,
-            alternativa: {
-              nome: 'Railway',
-              motivo: 'Suporte a servidores Node.js persistentes (útil para WebSockets e filas). Cobra por uso de CPU/RAM. Plano Starter: $5/mês. Ideal se precisar de processos background (fila de laudos, WebSockets em tempo real).',
-              custo: '$5–20/mês',
-              url: 'railway.app',
-            },
-          },
-          {
-            nome: 'Mercado Pago + Asaas', categoria: 'Gateway de Pagamento',
-            veredicto: 'ATIVO (MP principal · Asaas backup)',
-            cor: '#059669',
-            icone: '💳',
-            justificativa: 'Cobrança com Mercado Pago como gateway PRINCIPAL e Asaas como BACKUP (redundância: se um recusar/falhar, o outro assume). Cobre recorrência (planos) e avulso (cursos, assessoria). Pagar.me foi descartado.',
-            gatilhoTroca: 'Ativar o split de marketplace do MP antes de escalar a rede de consultores',
-            atingiuGatilho: dados.mrr >= 5000,
-            alternativa: {
-              nome: 'Split nativo do Mercado Pago (marketplace)',
-              motivo: 'Para a rede de consultores vendendo planos/cursos/assessorias em escala, o split automático por venda (parte BidPro + parte do consultor, com repasse por recebedor) é feito pelo PRÓPRIO Mercado Pago, via marketplace/split por transação. É a evolução do gateway atual, sem trocar de provedor. Planeje a ativação do split antes de abrir vendas de consultores em volume.',
-              custo: 'Taxas padrão do Mercado Pago · BRL',
-              url: 'mercadopago.com.br',
-            },
-          },
-          {
-            nome: 'IA híbrida — Claude + Gemini', categoria: 'Laudos, Visão & Chat IA',
-            veredicto: 'HÍBRIDO ATIVO',
-            cor: '#10b981',
-            icone: '🤖',
-            justificativa: 'Arquitetura em camadas já em produção: o NÚCLEO (jurídico, documental, contratos e visão/KYC) fica no Claude pela qualidade em português; as funções não-críticas (chat de dúvidas, resumo de tickets e CNJ-chat) foram para o Gemini 2.5 Flash pelo custo, com fallback automático ao Claude se o Gemini falhar. O consumo dos dois é acompanhado no painel "Custos & Uso" acima.',
-            gatilhoTroca: 'Piloto A/B da pesquisa mercadológica (Claude vs Gemini) rodou uma única vez em 04/07 e está PAUSADO desde então (disparo manual, não retomado) — retomar e concluir antes de migrar essa função ao vencedor',
-            atingiuGatilho: false,
-            alternativa: {
-              nome: 'Gemini 2.5 Flash (já em uso)',
-              motivo: 'Menor custo para prompts longos e alto volume; grounding com Google Search para pesquisa. Já atende chat/dúvidas/tickets em produção. O teto gratuito e o custo estão visíveis nos marcadores do painel Custos & Uso, evitando surpresa ao exceder a cota.',
-              custo: 'grátis até a cota diária · depois pré-pago',
-              url: 'ai.google.dev',
-            },
-          },
-        ];
-        return (
-          <div style={{ marginTop: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              🧭 Guia de Decisão de Plataforma
-            </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Análise atual de cada serviço: manter ou substituir, e qual seria a melhor alternativa se precisar trocar.</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {plataformas.map((p) => (
-                <div key={p.nome} style={{ background: 'white', borderRadius: 12, border: `1.5px solid ${p.atingiuGatilho ? '#f59e0b' : p.cor}30`, overflow: 'hidden' }}>
-                  {/* Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: p.atingiuGatilho ? '#fefce8' : p.cor === '#10b981' ? '#f0fdf4' : '#fff7ed', borderBottom: '1px solid #f1f5f9' }}>
-                    <span style={{ fontSize: 22 }}>{p.icone}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{p.nome}</div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>{p.categoria}</div>
+          {/* Saldo consolidado (Asaas + Mercado Pago) — o detalhe do Asaas e o Marco Comercial saíram em 21/10 */}
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro — saldo consolidado</div>
+            {/* Saldo unificado (Asaas + Mercado Pago) — clique para destrinchar */}
+            {(() => {
+              const asaasDisp = Number(asaasDados?.balance?.balance) || 0;
+              const mpDisp = Number(mpSaldo?.available_balance) || 0;
+              const mpIndispon = !!mpSaldo?.error;
+              const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
+              const recebidoMes = Number(asaasDados?.statsMes?.revenue) || 0;
+              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); };
+              return (
+                <div onClick={abrirFinanceiro} style={{ cursor: 'pointer' }}>
+                  <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Saldo disponível (Asaas + Mercado Pago)</span>
+                      <span style={{ fontSize: 11, opacity: 0.85 }}>destrinchar →</span>
                     </div>
-                    <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 800, background: p.cor, color: 'white', letterSpacing: 0.5 }}>
-                      {p.veredicto}
-                    </span>
-                  </div>
-                  {/* Body */}
-                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>{p.justificativa}</div>
-                    {/* Gatilho de troca */}
-                    <div style={{ padding: '8px 10px', background: p.atingiuGatilho ? '#fef3c7' : '#f8fafc', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: 13 }}>{p.atingiuGatilho ? '🔔' : '⏳'}</span>
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: p.atingiuGatilho ? '#92400e' : '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
-                          {p.atingiuGatilho ? 'GATILHO ATINGIDO' : 'Gatilho para reavaliar'}
-                        </div>
-                        <div style={{ fontSize: 12, color: p.atingiuGatilho ? '#92400e' : '#64748b' }}>{p.gatilhoTroca}</div>
-                      </div>
+                    <div style={{ fontSize: 26, fontWeight: 900, margin: '6px 0 4px' }}>R$ {fmt(total)}</div>
+                    <div style={{ fontSize: 11, opacity: 0.9 }}>
+                      Asaas R$ {fmt(asaasDisp)} · Mercado Pago {mpIndispon ? '(consultar no painel MP)' : `R$ ${fmt(mpDisp)}`}
                     </div>
-                    {/* Alternativa */}
-                    <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-                        Melhor substituta se precisar trocar
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{p.alternativa.nome}</div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB', background: '#eff6ff', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{p.alternativa.custo}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{p.alternativa.motivo}</div>
+                    <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.22)', paddingTop: 6 }}>
+                      Recebido no mês (Asaas): <strong>R$ {fmt(recebidoMes)}</strong> · o saldo zera após o saque para o banco
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
-        );
-      })()}
 
-      {/* Marcos de melhoria e sugestões de eficiência */}
-      <div style={{ marginTop: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          🗺️ Marcos de Melhoria & Eficiência
-          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            {
-              gatilho: 'Antes de escalar rede de consultores',
-              atingido: dados.mrr >= 5000,
-              titulo: 'Ativar split de marketplace no Mercado Pago',
-              desc: 'O modelo de consultores vendendo planos, cursos e assessorias exige split automático por venda (parte BidPro + parte do consultor). O próprio Mercado Pago (gateway principal) faz isso via marketplace/split por transação, com repasse por recebedor — sem trocar de provedor. Planeje a ativação do split antes de abrir vendas de consultores em volume.',
-              cor: '#d97706', icone: '💳',
-            },
-            {
-              gatilho: `DB > 400 MB ou > 40k usuários`,
-              atingido: (dados.dbSizeMB ?? 0) > 400 || dados.total > 40000,
-              titulo: 'Upgrade Supabase para o plano Pro',
-              desc: `Custo: $25/mês (~R$ 150). Você ganha 8 GB de banco (16× mais), backups diários automáticos e 100 GB egress. O tempo economizado em DevOps vale muito mais que R$ 150/mês.`,
-              cor: '#7c3aed', icone: '🗄️',
-            },
-            {
-              gatilho: `MRR ≥ R$ 30.000`,
-              atingido: dados.mrr >= 30000,
-              titulo: 'Avaliar RDS AWS São Paulo (sa-east-1)',
-              desc: 'Com volume alto, avaliar migração para AWS São Paulo para melhor latência e SLA 99,99%. Custo estimado: ~$50–80/mês com suporte nativo em BRL via parceiro AWS.',
-              cor: '#6366f1', icone: '🏗️',
-            },
-            {
-              gatilho: `MRR ≥ R$ 50.000`,
-              atingido: dados.mrr >= 50000,
-              titulo: 'Ativar CDN e cache de relatórios',
-              desc: 'Implementar cache de PDFs e imagens via Cloudflare R2 (S3 compatível) para reduzir latência dos laudos e custo de storage.',
-              cor: '#0891b2', icone: '⚡',
-            },
-            {
-              gatilho: `MRR ≥ R$ 100.000`,
-              atingido: dados.mrr >= 100000,
-              titulo: 'Infraestrutura dedicada + SLA',
-              desc: 'Contratar plano Enterprise Asaas (<0,3% PIX), mover para ECS Fargate ou EC2 dedicado, implementar monitoramento com Datadog/New Relic.',
-              cor: '#dc2626', icone: '🏢',
-            },
-            {
-              gatilho: '> 500 análises/mês',
-              atingido: false,
-              titulo: 'Fila assíncrona para relatórios',
-              desc: 'Implementar processamento de laudos em background (SQS ou Supabase Edge Functions) para evitar timeout nas funções serverless do Vercel.',
-              cor: '#059669', icone: '🔄',
-            },
-            {
-              gatilho: '> 50 contratos/mês',
-              atingido: false,
-              titulo: 'Assinatura digital via ICP-Brasil',
-              desc: 'Integrar com DocuSign ou ClickSign para validade jurídica reforçada com certificado digital. Custo: ~R$ 2-5/assinatura.',
-              cor: '#6366f1', icone: '📝',
-            },
-          ].map((m, i) => (
-            <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${m.cor}30`, background: m.atingido ? m.cor + '08' : 'white', alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{m.titulo}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
-                    {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{m.desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      </>)}
       {/* ── Quadro de Configurações & Pendências ─────────────────────────────── */}
       <SystemStatusCard />
     </div>
@@ -7747,11 +6133,8 @@ function ScrapersTab() {
   // Progresso "executar todos" do Caixa (estado a estado)
   const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
   const [leil, setLeil] = useState({ rodando: false, msg: '', erro: '' });
-  const [reconLj, setReconLj] = useState({ rodando: false, msg: '', erro: '' });
   const [geocDebug, setGeocDebug] = useState(null);
   const [geocDebugRodando, setGeocDebugRodando] = useState(false);
-  const [sysDebug, setSysDebug] = useState({});
-  const [sysDebugRodando, setSysDebugRodando] = useState({});
 
   useEffect(() => {
     if (abaAtiva === 'geocod') {
@@ -7865,23 +6248,6 @@ function ScrapersTab() {
     }
   }
 
-  // Recon de datas da LJUD: sonda os endpoints de detalhe e loga em debug_fetch.
-  async function triggerReconLjud() {
-    setReconLj({ rodando: true, msg: '', erro: '' });
-    try {
-      const r = await apiCall('/api/scraper-leiloeiros?fontes=ljud&ljud_recon=1', { method: 'POST' });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      const probes = d.recon?.probes || [];
-      const bons = probes.filter(p => !p.erro && (p.camposData || []).length);
-      const resumo = bons.length
-        ? `✔ Campos de data no get-lotes: ${[...new Set(bons.flatMap(p => (p.camposData || []).map(c => c.split('=')[0])))].join(', ')}`
-        : `${probes.length} sondas — get-lotes sem data legível (ver debug_fetch=LJUD-RECON)`;
-      setReconLj({ rodando: false, msg: resumo, erro: '' });
-    } catch (e) {
-      setReconLj({ rodando: false, msg: '', erro: e.message });
-    }
-  }
 
   // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
   async function triggerGeoc(uf) {
@@ -7943,39 +6309,7 @@ function ScrapersTab() {
     setGeocDebugRodando(false);
   }
 
-  async function rodarSysDebug(modulo) {
-    setSysDebugRodando(s => ({ ...s, [modulo]: true }));
-    setSysDebug(s => ({ ...s, [modulo]: null }));
-    try {
-      const r = await apiCall(`/api/sistema-debug?modulo=${modulo}`, { method: 'GET' });
-      const d = await r.json();
-      setSysDebug(s => ({ ...s, [modulo]: { status: r.status, body: d } }));
-    } catch (e) {
-      setSysDebug(s => ({ ...s, [modulo]: { status: 'erro', body: { erro: e.message } } }));
-    }
-    setSysDebugRodando(s => ({ ...s, [modulo]: false }));
-  }
 
-  function BotaoDebug({ modulo, label }) {
-    const rodando = sysDebugRodando[modulo];
-    const resultado = sysDebug[modulo];
-    return (
-      <div style={{ marginTop: 10 }}>
-        <button onClick={() => rodarSysDebug(modulo)} disabled={rodando}
-          style={{ padding: '5px 12px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-          {rodando ? '⏳ Verificando...' : `🔍 ${label || 'Diagnóstico'}`}
-        </button>
-        {resultado && (
-          <div style={{ marginTop: 8, background: resultado.status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${resultado.status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-            <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: resultado.status === 200 ? '#059669' : '#dc2626' }}>
-              {resultado.status === 200 ? '✅ OK' : `❌ Erro (${resultado.status})`}
-            </div>
-            <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(resultado.body, null, 2)} />
-          </div>
-        )}
-      </div>
-    );
-  }
 
   const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
 
@@ -8078,14 +6412,7 @@ function ScrapersTab() {
   }
 
   // Scrapers planejados (fila nacional — Zuk/Sodré/Frazão/LJUD/Biasi/HastaPública já integrados)
-  const scrapersPlanjados = [
-    { nome: 'MGL Leilões (MG/SP/ES)', volume: '~800-1.5k', status: 'planejado' },
-    { nome: 'CCJ Leilões (nacional)', volume: '~1-2k', status: 'planejado' },
-    { nome: 'Destak Leilões', volume: '~500-1k', status: 'planejado' },
-    { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
-    { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
-    { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
-  ];
+
 
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
@@ -8094,7 +6421,6 @@ function ScrapersTab() {
   const ABAS = [
     { key: 'fontes',    label: '🏛️ Fontes',    desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
     { key: 'parceiros', label: '🤝 Parceiros',  desc: `${parceiros.length} leiloeiros` },
-    { key: 'roadmap',   label: '🚀 Roadmap',    desc: `${scrapersPlanjados.length} fontes planejadas` },
     { key: 'geocod',    label: '📍 Geo',        desc: `${geoPct}% · on-demand` },
   ];
 
@@ -8195,10 +6521,6 @@ function ScrapersTab() {
                       <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: erros > 0 ? '#fef2f2' : temDados ? '#f0fdf4' : '#f1f5f9', color: erros > 0 ? '#dc2626' : temDados ? '#16a34a' : '#94a3b8' }}>
                         {erros > 0 ? `❌ ${erros} erros` : agendados > 0 ? `● ${agendados} agendados` : temDados ? '● Ativo' : '○ Sem dados'}
                       </span>
-                      <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
-                        style={{ padding: '4px 10px', borderRadius: 7, background: '#fff', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
-                        {sysDebugRodando['scraper'] ? '⏳' : '🔍 Diagnóstico'}
-                      </button>
                       <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)} disabled={caixaTodos.rodando}
                         style={{ padding: '5px 12px', borderRadius: 7, background: caixaTodos.rodando ? '#f1f5f9' : '#c2410c', color: caixaTodos.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: 'none' }}>
                         {caixaTodos.rodando ? `⏳ ${caixaTodos.ufAtual} [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos'}
@@ -8208,22 +6530,12 @@ function ScrapersTab() {
                         style={{ padding: '5px 12px', borderRadius: 7, background: leil.rodando ? '#f1f5f9' : '#4f46e5', color: leil.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: leil.rodando ? 'default' : 'pointer', border: 'none' }}>
                         {leil.rodando ? '⏳ Leiloeiros (BD)…' : '▶ Leiloeiros (BD)'}
                       </button>
-                      <button onClick={triggerReconLjud} disabled={reconLj.rodando}
-                        title="Sonda os endpoints de detalhe da LJUD p/ descobrir as datas de praça (loga em debug_fetch)"
-                        style={{ padding: '5px 12px', borderRadius: 7, background: reconLj.rodando ? '#f1f5f9' : '#0891b2', color: reconLj.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: reconLj.rodando ? 'default' : 'pointer', border: 'none' }}>
-                        {reconLj.rodando ? '⏳ Recon LJUD…' : '🔎 Recon datas LJUD'}
-                      </button>
                     </div>
                   </div>
 
                   {(leil.msg || leil.erro) && (
                     <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: leil.erro ? '#dc2626' : '#16a34a' }}>
                       {leil.erro ? `❌ Leiloeiros (BD): ${leil.erro}` : `✅ Leiloeiros (BD): ${leil.msg}`}
-                    </div>
-                  )}
-                  {(reconLj.msg || reconLj.erro) && (
-                    <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: reconLj.erro ? '#dc2626' : '#0e7490' }}>
-                      {reconLj.erro ? `❌ Recon LJUD: ${reconLj.erro}` : `🔎 Recon LJUD: ${reconLj.msg}`}
                     </div>
                   )}
 
@@ -8239,15 +6551,6 @@ function ScrapersTab() {
                     label={caixaTodos.rodando ? `Agendando ${caixaTodos.ufAtual}...` : `✅ ${caixaTodos.atual} estados agendados`}
                     sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'} cor="#c2410c" />
 
-                  {sysDebug['scraper'] && (
-                    <div style={{ marginBottom: 8, background: sysDebug['scraper'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '8px 12px', border: `1px solid ${sysDebug['scraper'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-                      <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['scraper'].status === 200 ? '#059669' : '#dc2626' }}>
-                        {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
-                        <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
-                      </div>
-                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 160, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['scraper'].body, null, 2)} />
-                    </div>
-                  )}
 
                   {/* 27 estados expansíveis */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
@@ -8353,10 +6656,6 @@ function ScrapersTab() {
                     );
                   })()}
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
-                      style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
-                      {sysDebugRodando[debugKey] ? '⏳' : '🔍 Diagnóstico'}
-                    </button>
                     {s.tipo === 'scraper' && (
                       <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
                         style={{ padding: '4px 10px', borderRadius: 6, background: puppeteerStatus?.rodando ? '#f1f5f9' : s.cor, color: puppeteerStatus?.rodando ? '#94a3b8' : 'white', border: 'none', cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
@@ -8364,15 +6663,6 @@ function ScrapersTab() {
                       </button>
                     )}
                   </div>
-                  {sysDebug[debugKey] && (
-                    <div style={{ marginTop: 8, background: sysDebug[debugKey].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[debugKey].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-                      <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[debugKey].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
-                        {sysDebug[debugKey].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug[debugKey].status})`}
-                        <button onClick={() => setSysDebug(d => ({ ...d, [debugKey]: null }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 10 }}>✕</button>
-                      </div>
-                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 9, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 120, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug[debugKey].body, null, 2)} />
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -8380,20 +6670,11 @@ function ScrapersTab() {
           </div>
 
           {/* Scraper Puppeteer status */}
-          {(puppeteerStatus?.erro || puppeteerStatus?.agendado || sysDebug['banco']) && (
+          {(puppeteerStatus?.erro || puppeteerStatus?.agendado) && (
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '12px 16px', fontSize: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 12, color: '#475569', marginBottom: 6 }}>Puppeteer · cron 07:00 BRT</div>
               {puppeteerStatus?.erro && <div style={{ color: '#ef4444', marginBottom: 6 }}>⚠️ {puppeteerStatus.erro}</div>}
               {puppeteerStatus?.agendado && <div style={{ color: '#059669', marginBottom: 6 }}>✅ {puppeteerStatus.msg}</div>}
-              {sysDebug['banco'] && (
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 11, color: sysDebug['banco'].status === 200 ? '#059669' : '#dc2626' }}>
-                    {sysDebug['banco'].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug['banco'].status})`}
-                    <button onClick={() => setSysDebug(s => ({ ...s, banco: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
-                  </div>
-                  <textarea readOnly style={{ fontSize: 10, width: '100%', maxHeight: 140, background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace' }} value={JSON.stringify(sysDebug['banco'].body, null, 2)} />
-                </div>
-              )}
               <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
                 style={{ marginTop: 8, padding: '5px 12px', borderRadius: 7, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer' }}>
                 {puppeteerStatus?.rodando ? '⏳' : '▶ Executar Puppeteer agora'}
@@ -8418,10 +6699,6 @@ function ScrapersTab() {
               <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 24h contínuo · a cada 10min · CEP+Correios → endereço → rua → bairro → cidade</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button onClick={() => rodarSysDebug('geocod')} disabled={sysDebugRodando['geocod']}
-                style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                {sysDebugRodando['geocod'] ? '⏳' : '🔍 Diagnóstico'}
-              </button>
               <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
                 style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
                 {geocTodos.rodando
@@ -8431,15 +6708,6 @@ function ScrapersTab() {
             </div>
           </div>
 
-          {sysDebug['geocod'] && (
-            <div style={{ marginBottom: 12, background: sysDebug['geocod'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['geocod'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-              <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['geocod'].status === 200 ? '#059669' : '#dc2626' }}>
-                {sysDebug['geocod'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['geocod'].status})`}
-                <button onClick={() => setSysDebug(s => ({ ...s, geocod: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
-              </div>
-              <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['geocod'].body, null, 2)} />
-            </div>
-          )}
 
           {/* Resumo por nível */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
@@ -8546,23 +6814,6 @@ function ScrapersTab() {
       )}
 
       {/* ═══ ABA ROADMAP ═══ */}
-      {abaAtiva === 'roadmap' && (
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>Próximas integrações</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-            Volume estimado ao integrar todas as fontes: <b style={{ color: '#0D63DB' }}>~50.000–80.000 imóveis</b> no banco.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-            {scrapersPlanjados.map(s => (
-              <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px dashed #cbd5e1' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#334155' }}>{s.nome}</div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{s.volume} imóveis</div>
-                <div style={{ marginTop: 8, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -10064,7 +8315,6 @@ function PrestacaoContasTab() {
   const [pendentes, setPendentes] = React.useState([]);
   const [emValidacaoPJ, setEmValidacaoPJ] = React.useState([]); // saques de parceiro aguardando validação da PJ
   const [docsPJ, setDocsPJ] = React.useState({}); // user_id -> docs (contrato social etc.)
-  const [diag, setDiag] = React.useState({ cnpj: '', cpf: '', nome: '', loading: false, res: null }); // teste real da consulta Receita
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
@@ -10182,17 +8432,7 @@ function PrestacaoContasTab() {
     setProcessando(p => ({ ...p, [`pj-${id}`]: false }));
   };
 
-  // Teste REAL da integração com a Receita: consulta o quadro societário do CNPJ e diz se o CPF
-  // consta (sem gravar nada). Serve para validar a integração com dados reais em produção.
-  const testarReceita = async () => {
-    if (!diag.cnpj || !diag.cpf) { setMsg({ tipo: 'erro', txt: 'Informe CNPJ e CPF para o teste.' }); return; }
-    setDiag(d => ({ ...d, loading: true, res: null }));
-    try {
-      const res = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({ cnpj: diag.cnpj, cpf: diag.cpf, nome: diag.nome }) });
-      const data = await res.json();
-      setDiag(d => ({ ...d, loading: false, res: data }));
-    } catch { setDiag(d => ({ ...d, loading: false, res: { ok: false, motivo: 'Erro na consulta à Receita.' } })); }
-  };
+
 
   // Documentos enviados pelo parceiro (contrato social etc.) para a conferência.
   const verDocsPJ = async (userId) => {
@@ -10273,33 +8513,6 @@ function PrestacaoContasTab() {
         )}
       </div>
 
-      {/* Teste REAL da consulta à Receita (quadro societário) — valida a integração com dados reais */}
-      <div style={S2.card}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Testar consulta à Receita (quadro societário)</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Consulta REAL na Receita (dado aberto, grátis) e diz se o CPF consta como sócio do CNPJ. Não grava nada — é só para validar a integração.</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={diag.cnpj} onChange={e => setDiag(d => ({ ...d, cnpj: e.target.value }))} placeholder="CNPJ" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 150 }} />
-          <input value={diag.cpf} onChange={e => setDiag(d => ({ ...d, cpf: e.target.value }))} placeholder="CPF do sócio" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 140 }} />
-          <input value={diag.nome} onChange={e => setDiag(d => ({ ...d, nome: e.target.value }))} placeholder="Nome do sócio" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 160, flex: 1 }} />
-          <button onClick={testarReceita} disabled={diag.loading} style={{ padding: '8px 16px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{diag.loading ? 'Consultando…' : 'Consultar'}</button>
-        </div>
-        {diag.res && (
-          <div style={{ marginTop: 12, background: diag.res.matched ? '#f0fdf4' : '#fffbeb', border: `1px solid ${diag.res.matched ? '#bbf7d0' : '#fde68a'}`, borderRadius: 10, padding: '10px 12px' }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: diag.res.matched ? '#15803d' : '#b45309' }}>
-              {diag.res.matched ? '✓ CPF consta no quadro societário (validaria automaticamente)' : '✕ CPF/nome não confere — iria para conferência manual'}
-            </div>
-            {diag.res.motivo && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{diag.res.motivo}{diag.res.fonte ? ` · fonte: ${diag.res.fonte}` : ''}</div>}
-            {Array.isArray(diag.res.socios) && diag.res.socios.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 3 }}>Sócios retornados pela Receita:</div>
-                {diag.res.socios.map((s, i) => (
-                  <div key={i} style={{ fontSize: 11.5, color: '#475569' }}>• {s.nome} <span style={{ color: '#94a3b8' }}>({s.cpf_masc})</span></div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Validação da PJ do parceiro (anti-interposição) — 1º saque sem match automático ou 2º+ */}
       <div style={{ ...S2.card, border: emValidacaoPJ.length ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
@@ -10693,6 +8906,8 @@ function MarketingTab() {
 
   return (
     <div>
+      {/* Funil de visitantes — quem ainda não é cliente: onde chega, onde para (veio do Início em 21/10). */}
+      <PainelFunilPublico />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
@@ -11720,6 +9935,10 @@ function QualidadeTab() {
   };
   return (
     <div style={{ maxWidth: 920 }}>
+      {/* Vieram do Início em 21/10: cobertura documental por leiloeiro, diagnóstico por IA e auditoria do sistema. */}
+      <PainelDocsLeiloeiro />
+      <PainelDiagnosticoIA />
+      <PainelAuditoriaSistema />
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:8, flexWrap:'wrap' }}>
         <div>
           <h2 style={{ margin:0, fontSize:18 }}>✅ Qualidade — invariantes de funcionalidade</h2>

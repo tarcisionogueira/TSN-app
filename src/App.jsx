@@ -61,7 +61,6 @@ const OportunidadesCliente = lazy(() => import('./pages/OportunidadesCliente'));
 const Curso = lazy(() => import('./pages/Curso'));
 const Planos = lazy(() => import('./pages/Planos'));
 const Alavancagem = lazy(() => import('./pages/Alavancagem'));
-const AdminChargebacks = lazy(() => import('./pages/AdminChargebacks'));
 const AdminEbookEditor = lazy(() => import('./pages/AdminEbookEditor'));
 const DisparoWhatsApp = lazy(() => import('./pages/DisparoWhatsApp.jsx'));
 const GeradorMensagensGrupo = lazy(() => import('./pages/GeradorMensagensGrupo.jsx'));
@@ -428,7 +427,6 @@ function MainLayout() {
           {/* Prévia ADMIN (20/09): mesma tela, mas lê `live_proxima_preview` (ignora `ativo`,
               exige role admin no próprio banco) — é assim que o dono revisa um rascunho de
               lançamento sem publicá-lo: a rota pública continua só enxergando evento `ativo`. */}
-          <Route path="/admin/live-preview/:slug" element={<PrivateRoute roles={['admin']}><LiveInscricao adminPreview /></PrivateRoute>} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           {/* Vitrine PÚBLICA de eBooks/cursos (12/09) — mesmo espírito do Acervo Aberto de
               imóveis, sem exigir login. A compra em si continua em /p/:tipo/:id. */}
@@ -445,7 +443,6 @@ function MainLayout() {
           {/* Comissões: qualquer usuário autenticado vê as PRÓPRIAS comissões/saldo/PIX (o
               MLM abrange clientes pagantes, não só equipe). A página é escopada ao user.id. */}
           <Route path="/comissoes" element={<PrivateRoute><Comissoes /></PrivateRoute>} />
-          <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
           <Route path="/admin/ebook-editor/:id" element={<PrivateRoute roles={['admin']}><AdminEbookEditor /></PrivateRoute>} />
           <Route path="/admin/whatsapp" element={<PrivateRoute roles={['admin']}><DisparoWhatsApp /></PrivateRoute>} />
           <Route path="/admin/mensagens-grupo" element={<PrivateRoute roles={['admin']}><GeradorMensagensGrupo /></PrivateRoute>} />
