@@ -11,7 +11,8 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
-import { getUser } from './_auth.js';
+import { getUser, getUserRoleById } from './_auth.js';
+import { podeVerLeiloeiro, ROLES_EQUIPE } from './_leiloeiro-acesso.js';
 import { buscarViaBrightData } from './_brightdata.js';
 import { buscarViaProxyIsp } from './_brightdata-isp-node.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
@@ -425,7 +426,12 @@ export default async function handler(req, res) {
 
   const params = new URL(req.url, 'http://localhost').searchParams;
   const id = params.get('imovel_id');
-  const forcar = params.get('forcar') === '1';
+  // #264 (bug bounty 21/10): a resposta vem da TABELA (service key) — links do site do leiloeiro só para quem
+  // pode vê-lo. E `forcar` pula o throttle de 12 h e gasta Bright Data: só equipe.
+  const role = await getUserRoleById(user.id).catch(() => null);
+  const verLeiloeiro = podeVerLeiloeiro(role);
+  const forcar = params.get('forcar') === '1' && ROLES_EQUIPE.includes(role);
+  const semLeiloeiro = (o) => (verLeiloeiro ? o : { ...o, anexos: undefined, matricula: undefined, edital: undefined, regras: undefined });
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
   const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em,titulo,descricao,area_m2,valor_avaliacao,valor_minimo&limit=1`)).json();
@@ -515,7 +521,7 @@ export default async function handler(req, res) {
   // O throttle de 12h continua valendo por cima: ele existe para não martelar a fonte, e essa
   // razão não muda por termos mais campos a preencher.
   if (!forcar && ((temDocs && !precisaData && !precisaTexto) || enriqRecente)) {
-    res.status(200).json({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
+    res.status(200).json(semLeiloeiro({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] })); return;
   }
 
   const alvo = im.url_lote || im.link_edital;
@@ -628,7 +634,7 @@ export default async function handler(req, res) {
 
   const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
 
-  res.status(200).json({
+  res.status(200).json(semLeiloeiro({
     ok: up.ok, via, alterado: up.ok,
     encontrados: achado.anexos.length,
     matricula: patch.link_matricula || im.link_matricula || null,
@@ -642,5 +648,5 @@ export default async function handler(req, res) {
     descricao: up.ok && patch.descricao ? patch.descricao : null,
     area_m2: up.ok && patch.area_m2 ? patch.area_m2 : null,
     anexos: achado.anexos,
-  });
+  }));
 }

@@ -253,6 +253,30 @@ export default async function handler(req, res) {
     }
   }
 
+  // PLANO ANUAL À VISTA (bug bounty 21/10): o valor vinha do corpo e o plano não ia para o pagamento. Um PIX de
+  // R$ 1 com proposito=plano_anual acabava ativado pela reconciliação, e Veículos/Combo anual eram lidos como Pro.
+  // Agora o PREÇO É DO SERVIDOR (planos_config.preco_anual; no anual a taxa do cartão fica com a plataforma, então
+  // o valor não muda com as parcelas) e o plano vai no metadata para webhook, reconciliação e garantia.
+  // Sem `plano` no corpo = front antigo, que só vendia o Pro anual.
+  let planoAnualCtx = null;
+  if (proposito === 'plano_anual') {
+    const planoA = req.body?.plano == null ? 'top2' : String(req.body.plano);
+    if (!['top2', 'veiculos', 'combo'].includes(planoA)) return res.status(400).json({ error: 'Plano anual inválido.' });
+    const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    let precoA = 0;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/planos_config?plano_key=eq.${planoA}&select=preco_anual`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+      });
+      const [cfg] = r.ok ? await r.json().catch(() => []) : [];
+      precoA = Number(cfg?.preco_anual) || 0;
+      if (!r.ok) console.error('[mp-checkout] plano_anual: planos_config', r.status);
+    } catch (e) { console.error('[mp-checkout] plano_anual: preço', e?.message || e); }
+    if (!(precoA > 0)) return res.status(503).json({ error: 'Não consegui validar o preço agora. Tente em instantes.' });
+    valor = precoA;
+    planoAnualCtx = { plano: planoA };
+  }
+
   const valorCentavos = Math.round(Number(valor) * 100);
   if (valorCentavos < 100) return res.status(400).json({ error: 'Valor mínimo R$ 1,00' });
 
@@ -454,7 +478,7 @@ export default async function handler(req, res) {
           : cobrancaCtx
             // idem: quem paga pode não ter sessão (link repassado a terceiro).
             ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId }
-            : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
+            : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito, ...(planoAnualCtx ? { plano: planoAnualCtx.plano } : {}) },
       // external_reference sempre presente (score de qualidade da integração MP pede
       // referência externa em toda cobrança). Só o formato do produto (uuid puro) é lido
       // de volta pelo webhook (ehProdutoMp/UUID_RE); os demais levam prefixo — que o

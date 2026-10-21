@@ -182,6 +182,7 @@ async function handler(req) {
         .eq('status', 'approved')
         .order('criado_em', { ascending: false })
         .limit(300);
+      const precosAnuais = {};
       for (const pg of (pagosAvulsos || [])) {
         const meta = pg?.dados_mp?.metadata || {};
         if (meta.proposito !== 'plano_anual') continue;
@@ -191,18 +192,31 @@ async function handler(req) {
         // plano esta passagem reativava com a MESMA cobrança antiga e o ativarPlanoDireto dava +12 meses — renovação
         // anual de graça, para sempre.
         if (Date.now() - new Date(pg.criado_em).getTime() > 365 * 86400_000) continue;
+        // 21/10 (bug bounty): o plano PAGO vem no metadata (mp-checkout) e o VALOR é conferido contra o preço anual
+        // dele. Antes ativava sempre o Pro e sem olhar o valor: um PIX de R$ 1 com proposito=plano_anual virava 12
+        // meses de Pro, e Veículos/Combo anual ganhavam o plano errado. Sem `plano` = pagamento antigo, só havia o Pro.
+        const planoPago = ['top2', 'veiculos', 'combo'].includes(meta.plano) ? meta.plano : 'top2';
+        if (!(planoPago in precosAnuais)) {
+          const { data: pc, error: ePc } = await supabase.from('planos_config').select('preco_anual').eq('plano_key', planoPago).maybeSingle();
+          precosAnuais[planoPago] = ePc ? null : (Number(pc?.preco_anual) || null);
+          if (ePc) console.error('[reconciliar] preço anual ilegível', planoPago, ePc.message);
+        }
+        const precoA = precosAnuais[planoPago];
+        if (!(precoA > 0)) continue;                           // sem preço = não sei → não ativa
+        if (Math.abs((Number(pg.valor) || 0) - precoA) > Math.max(1, precoA * 0.01)) continue;
         verificados++;
         const { data: perfil } = await supabase.from('perfis')
-          .select('role, plano_ciclo, plano_vencimento, inadimplente_desde').eq('id', uid).maybeSingle();
+          .select('role, plano_ciclo, plano_vencimento, inadimplente_desde, acesso_veiculos_ate').eq('id', uid).maybeSingle();
         if (!perfil || perfil.inadimplente_desde) continue;
-        if (proAnualVigente(perfil)) continue;                 // já tem o anual vigente
-        if (['assessorado', 'clube'].includes(perfil.role)) continue; // tier MAIOR: não mexe
+        const veiculosVigente = perfil.acesso_veiculos_ate && new Date(perfil.acesso_veiculos_ate) > new Date();
+        if (planoPago === 'veiculos' ? veiculosVigente : (proAnualVigente(perfil) && (planoPago !== 'combo' || veiculosVigente))) continue;
+        if (planoPago !== 'veiculos' && ['assessorado', 'clube'].includes(perfil.role)) continue; // tier MAIOR: não mexe
         // Garantia de 7 dias exercida → não re-conceder o que foi reembolsado (mesma
         // blindagem P0.4 do laço de preapproval).
         const { data: garantia } = await supabase.from('reembolsos_garantia').select('id').eq('user_id', uid).limit(1).maybeSingle();
         if (garantia) continue;
         try {
-          await ativarPlanoDireto({ userId: uid, planoKey: 'top2_anual', gateway: 'mercadopago',
+          await ativarPlanoDireto({ userId: uid, planoKey: `${planoPago}_anual`, gateway: 'mercadopago',
             cobranca: { gatewayPaymentId: String(pg.mp_payment_id), valor: Number(pg.valor) || 0 } });
           corrigidos++;
           console.log('[reconciliar] plano anual pago e sem acesso → ativado', uid, pg.mp_payment_id);

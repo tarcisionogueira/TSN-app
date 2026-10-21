@@ -115,6 +115,20 @@ async function garantiaDoCpf(perfil, trilha) {
   } catch (e) { console.warn('[garantia-cancelar] apuração do CPF falhou:', e?.message || e); return { cpfHash: null, jaUsou: false }; }
 }
 
+// Anual À VISTA (21/10, bug bounty): não há mandato para cancelar — o que existe é o pagamento único dos últimos
+// 7 dias, com o plano pago no metadata (mp-checkout). Sem isto o Veículos anual negava a garantia do CDC ("não
+// achamos uma assinatura") e o Combo anual reembolsava sem tirar os veículos. Leitura que falha = null (segue o
+// caminho do mandato, como antes).
+async function planoAnualVistaRecente(userId) {
+  try {
+    const desde = new Date(Date.now() - JANELA_MS).toISOString();
+    const r = await sb(`mp_pagamentos?user_id=eq.${userId}&status=eq.approved&criado_em=gte.${desde}&dados_mp->metadata->>proposito=eq.plano_anual&select=plano:dados_mp->metadata->>plano&order=criado_em.desc&limit=1`);
+    if (!r.ok) { console.warn('[garantia-cancelar] anual à vista ilegível', r.status); return null; }
+    const [pg] = await r.json().catch(() => []);
+    return pg ? (pg.plano || 'top2') : null;
+  } catch (e) { console.warn('[garantia-cancelar] anual à vista:', e?.message || e); return null; }
+}
+
 async function precoDe(planoKey, anual = false) {
   try {
     const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(planoKey)}&select=preco,preco_anual&limit=1`)).json();
@@ -143,7 +157,8 @@ async function garantiaVeiculos({ user, email, res }) {
     jaCancelado = Array.isArray(esp) && esp.some((a) => a.status === 'cancelled') && !esp.some((a) => a.status === 'authorized');
   }
   // Nenhum mandato SÓ de Veículos e nada cancelado antes: o acesso vem do Combo (botão do plano principal).
-  if (!cancelados && !jaCancelado) {
+  const anualVista = !cancelados && !jaCancelado ? await planoAnualVistaRecente(user.id) : null;
+  if (!cancelados && !jaCancelado && anualVista !== 'veiculos') {
     res.status(200).json({ ok: true, semAssinatura: true, cancelados: 0, msg: 'Não achamos uma assinatura só do Leilão de Veículos. Se você tem o Combo, o cancelamento é o do plano principal.' });
     return;
   }
@@ -151,8 +166,8 @@ async function garantiaVeiculos({ user, email, res }) {
     const r = await sb(`perfis?id=eq.${user.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ acesso_veiculos_ate: new Date().toISOString(), veiculos_pago_em: null }) }).catch(() => null);
     const confirmado = !!r?.ok && ((await r.json().catch(() => [])) || []).length > 0;
     if (!confirmado) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Reembolso de Veículos decidido mas o acesso NÃO foi encerrado — encerrar manualmente (perfis.acesso_veiculos_ate).', extra: { user_id: user.id, http_status: r?.status ?? null } });
-    const valorRef = await precoDe('veiculos', mp.anual || asaas.anual);
-    const gateway = mp.n ? 'mercadopago' : asaas.n ? 'asaas' : 'desconhecido';
+    const valorRef = await precoDe('veiculos', mp.anual || asaas.anual || anualVista === 'veiculos');
+    const gateway = mp.n || anualVista ? 'mercadopago' : asaas.n ? 'asaas' : 'desconhecido';
     const rReg = await sb('reembolsos_garantia', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: 'veiculos', valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49) — Leilão de Veículos', cpf_hash: cpfHash, rebaixamento_confirmado: confirmado }) }).catch(() => null);
     if (!rReg?.ok) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Pedido de reembolso de Veículos NÃO registrado — estornar manualmente.', extra: { user_id: user.id, email, valorRef, http_status: rReg?.status ?? null } });
     try {
@@ -202,7 +217,8 @@ export default async function handler(req, res) {
   const mpRes = await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], email, user.id);
   const asaasRes = await cancelarAsaas(perfil.asaas_id);
   const cancelados = mpRes.n + asaasRes.n;
-  const combo = mpRes.combo || asaasRes.combo; // o Combo pagou Pro + Veículos juntos
+  const anualVista = cancelados === 0 ? await planoAnualVistaRecente(user.id) : null;
+  const combo = mpRes.combo || asaasRes.combo || anualVista === 'combo'; // o Combo pagou Pro + Veículos juntos
   // O usuário precisa saber quando NÓS não conseguimos cancelar no gateway: dizer
   // "cancelada" sem ter cancelado é o pior resultado possível (ele para de acompanhar e
   // segue sendo cobrado). `cancelados === 0` com gateway conhecido = falha real.
@@ -221,7 +237,8 @@ export default async function handler(req, res) {
       console.error('[garantia-cancelar] espelho mp_assinaturas ilegível', rEsp?.status, '— trato como falha');
     }
   }
-  const falhouNoGateway = cancelados === 0 && gateway !== 'desconhecido' && !jaCancelado;
+  // Anual à vista não tem recorrência: nada a cancelar não é falha.
+  const falhouNoGateway = cancelados === 0 && gateway !== 'desconhecido' && !jaCancelado && !anualVista;
 
   if (podeReembolso) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida). Limpa também a âncora de

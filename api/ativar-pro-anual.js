@@ -16,15 +16,15 @@
  * Idempotente por paymentId (um pagamento ativa uma vez). Sem preapproval → o loop
  * ANUAL VENCIDO do reconciliar-cron rebaixa quando plano_vencimento passa (sem mandato ativo).
  */
-import { getUser } from './_auth.js';
+import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
 import { ativarPlanoDireto, eventoJaProcessado, removerEventoProcessado, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { auditLog } from './_audit.js';
+import { cancelarOutrasRecorrencias } from './_recorrencia-unica.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_SVC = process.env.SUPABASE_SERVICE_KEY;
-const PRECO_ANUAL_FALLBACK = 449.90;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
   const { paymentId } = req.body || {};
   if (!paymentId) return res.status(400).json({ error: 'paymentId obrigatório' });
-  const plano = ['top2', 'veiculos', 'combo'].includes(req.body?.plano) ? req.body.plano : 'top2';
+  const planoPedido = ['top2', 'veiculos', 'combo'].includes(req.body?.plano) ? req.body.plano : 'top2';
 
   // 1) Fonte da verdade: consulta o pagamento no MP com o NOSSO token (nunca o corpo do cliente).
   let pg;
@@ -70,15 +70,21 @@ export default async function handler(req, res) {
   if (String(pg.metadata?.proposito || '') !== 'plano_anual') {
     return res.status(409).json({ error: 'proposito_invalido' });
   }
+  // O plano PAGO mora no pagamento desde 21/10 (mp-checkout grava metadata.plano). Pedir outro plano com ele é
+  // tentativa de trocar o que foi pago; pagamento antigo sem o campo segue pelo pedido (só existia o Pro anual).
+  const planoPago = pg.metadata?.plano ? String(pg.metadata.plano) : null;
+  if (planoPago && planoPago !== planoPedido) return res.status(409).json({ error: 'plano_divergente' });
+  const plano = planoPago || planoPedido;
 
   // Preço anual VEM DO SERVIDOR — trava contra "paga R$1 e vira Pro".
   // Sem preço do banco para Veículos/Combo não há fallback seguro: recusa (fail-closed) em vez de adivinhar.
-  let precoAnual = plano === 'top2' ? PRECO_ANUAL_FALLBACK : null;
+  // Sem reserva fixa (21/10): a antiga (449,90) era o preço de antes de 01/10 e aceitaria metade do valor.
+  let precoAnual = null;
   try {
     const r = await fetch(`${SB_URL}/rest/v1/planos_config?plano_key=eq.${plano}&select=preco_anual`, {
       headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}` },
     });
-    const [row] = await r.json().catch(() => []);
+    const [row] = r.ok ? await r.json().catch(() => []) : [];
     if (row?.preco_anual) precoAnual = Number(row.preco_anual);
   } catch (e) { console.warn('[ativar-pro-anual] preço anual ilegível:', e?.message || e); }
   if (!(precoAnual > 0)) return res.status(503).json({ error: 'preco_anual_indisponivel' });
@@ -106,6 +112,11 @@ export default async function handler(req, res) {
       cobranca: { gatewayPaymentId: String(paymentId), valor, valorLiquido },
     });
     await auditLog({ acao: 'ativar_pro_anual_pix', user_id: user.id, ip, detalhes: { payment_id: paymentId, valor, plano }, sucesso: true });
+    // Recorrência da MESMA trilha deixa de cobrar (Pro mensal → Combo anual, Veículos mensal → Veículos anual).
+    // Nunca derruba a ativação: falha é alertada lá dentro. Pro anual NÃO limpa a trilha principal de quem tem
+    // assessoria/clube: o parcelamento deles também é recorrência "principal" e não pode ser cancelado.
+    const roleAtual = plano === 'top2' ? await getUserRoleById(user.id).catch(() => null) : null;
+    if (!/^(assessorado|clube)/.test(roleAtual || '')) await cancelarOutrasRecorrencias({ userId: user.id, email: user.email, manterPagamentoId: String(paymentId), manterCriadaEm: pg.date_created || null, manterPlano: `${plano}_anual`, origem: 'anual-a-vista' }).catch((e) => console.error('[ativar-pro-anual] recorrência antiga:', e?.message || e));
     return res.status(200).json({ ok: true, ...result });
   } catch (e) {
     // Efeito falhou depois da marca de idempotência → desmarca p/ o cliente reexecutar.

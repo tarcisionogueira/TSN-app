@@ -174,11 +174,11 @@ async function ativarRoleInline(userId, planoKey, mpId) {
 // recorrente de 12 meses (frequency:12) → renova sozinho (regra c), sem cron de cobrança.
 const PLANOS_CONFIG = {
   assessorado:       { nome: 'Assessoria Pós-Arrematação',  valor: 6000.00,  recorrente: false }, // 12× de R$ 500
-  assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 4800.00,  recorrente: false },
+  assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 5000.00,  recorrente: false },
   clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00,  recorrente: true, frequency: 1,  frequency_type: 'months' }, // 60.000 ÷ 12
   clube_vista:       { nome: 'Leilão Club (À Vista)',        valor: 48000.00, recorrente: false },
-  top2:              { nome: 'Investidor Pro',               valor: 49.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
-  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: true, frequency: 12, frequency_type: 'months' },
+  top2:              { nome: 'Investidor Pro',               valor: 89.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 899.00,   recorrente: true, frequency: 12, frequency_type: 'months' },
   // 20/10 (decisão do dono): segunda TRILHA de assinatura — ver "DUAS TRILHAS" em _webhook-core.js.
   veiculos:          { nome: 'Leilão de Veículos',           valor: 29.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
   combo:             { nome: 'Combo Imóveis + Veículos',     valor: 99.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },

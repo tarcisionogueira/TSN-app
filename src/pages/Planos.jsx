@@ -134,7 +134,7 @@ export default function Planos() {
 
   // Valores reais do Investidor Pro (planos_config) para o FAQ
   const _precoMes = Number(PLANOS.top2?.preco) || 49.90;
-  const _precoAno = Number(PLANOS.top2?.precoAnual) || 449.90;
+  const _precoAno = Number(PLANOS.top2?.precoAnual) || 899;
   const _economiaPct = _precoMes ? (1 - _precoAno / (_precoMes * 12)) * 100 : 0;
   const FAQS = buildFAQS({
     precoMesLabel: fmtR(_precoMes),
@@ -349,7 +349,7 @@ export default function Planos() {
               <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
             </div>
             {periodo === 'anual'
-              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 449,90')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
+              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 899,00')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
               : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual{descAnual('top2') ? ` (-${descAnual('top2')}%)` : ''}</div>}
             <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, alignSelf: 'flex-start' }}>
               {periodo === 'anual' ? 'Cancele a renovação automática quando quiser' : 'Cancele quando quiser'}

@@ -161,7 +161,9 @@ export async function temAssinaturaCombo({ userId, email, asaasCustomerId }) {
   } catch (e) { return { tem: false, erro: e?.message || String(e) }; }
 }
 
-export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterCriadaEm = null, manterPlano = 'principal', origem }) {
+// manterPagamentoId (21/10): o anual À VISTA não é recorrência — mantém-se o PAGAMENTO e cancelam-se as recorrências
+// da mesma trilha (Pro mensal que pagou o Combo anual seguia cobrado todo mês).
+export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerId, manterMpId = null, manterAsaasSubId = null, manterPagamentoId = null, manterCriadaEm = null, manterPlano = 'principal', origem }) {
   const out = { mpCancelados: [], asaasCancelados: [], erros: [], pulado: null };
   const alertar = () => {
     if (!out.erros.length) return;
@@ -169,7 +171,7 @@ export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerI
     alertarErro({ rota: `recorrencia-unica/${origem}`, erro: `Recorrência antiga NÃO cancelada — RISCO DE COBRANÇA DUPLA para o usuário ${userId}. Conferir nos painéis do MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId, manterMpId, manterAsaasSubId } });
   };
   if (!userId) { out.erros.push('sem userId'); alertar(); return out; }
-  const chave = manterMpId ? `mp:${manterMpId}` : `asaas:${manterAsaasSubId}`;
+  const chave = manterMpId ? `mp:${manterMpId}` : manterAsaasSubId ? `asaas:${manterAsaasSubId}` : `pagamento:${manterPagamentoId}`;
   const mpToken = process.env.MP_ACCESS_TOKEN;
 
   try {

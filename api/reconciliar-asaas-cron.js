@@ -108,6 +108,12 @@ async function handler(req) {
           try { cliente = await buscarCliente({ gatewayCustomerId: custId, email, gateway: 'asaas' }); }
           catch (e) { console.error('[reconciliar-asaas] perfil ilegível, pagamento pulado:', p.id, e?.message || e); continue; }
           if (!cliente) continue;
+          // Garantia de 7 dias exercida → não re-conceder o que foi reembolsado (21/10, bug bounty). Até o admin
+          // estornar no painel a cobrança segue RECEIVED, e a cada 6 h este laço devolvia o Pro/Combo/Veículos.
+          // Mesma trava do cron do MP. Leitura que falha pula (fail-closed: amanhã tenta de novo).
+          const { data: garantia, error: eGar } = await supabase.from('reembolsos_garantia').select('id').eq('user_id', cliente.id).limit(1).maybeSingle();
+          if (eGar) { erros.push(`${cliente.id}: garantia ilegível (${eGar.message})`); continue; }
+          if (garantia) continue;
 
           // TRILHA VEÍCULOS / COMBO (20/10): o plano vem da referência (ou da descrição que o Asaas copia
           // da assinatura), nunca do valor — 99,90 é também o Pro legado. ativarPlanoDireto é idempotente

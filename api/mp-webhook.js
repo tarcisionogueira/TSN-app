@@ -519,6 +519,11 @@ export async function processarEventoMp(req, res) {
   // Plano pela REFERÊNCIA (`uid|plano`), não pelo valor (20/10): a cobrança recorrente de Veículos (29,90)
   // e do Combo (99,90 = valor do Pro legado no mapearPlano) chega também por aqui. O núcleo decide a trilha.
   if (extRefMp.includes('|')) contexto.planoReferencia = planoDaReferencia(extRefMp);
+  // Anual À VISTA (21/10): a referência é `servico:uid:plano_anual`, sem `|` — o plano pago vem no metadata
+  // (mp-checkout). Sem isto, estorno de Veículos/Combo anual revogava a trilha errada.
+  const planoAnualMeta = pagamento.metadata?.proposito === 'plano_anual'
+    ? (['top2', 'veiculos', 'combo'].includes(pagamento.metadata?.plano) ? pagamento.metadata.plano : 'top2') : null;
+  if (planoAnualMeta && !contexto.planoReferencia) contexto.planoReferencia = `${planoAnualMeta}_anual`;
   const ehProdutoMp = UUID_RE.test(extRefMp);
   // Honorário de êxito (pagamento Transparente via api/mp-checkout.js, proposito
   // 'honorario_exito' — src/pages/PagarHonorario.jsx): checado ANTES de ehProdutoMp por
@@ -539,12 +544,18 @@ export async function processarEventoMp(req, res) {
       if (pagamento.metadata?.proposito === 'plano_anual') {
         const uidAnual = pagamento.metadata?.user_id;
         if (!uidAnual) return res.status(200).json({ ok: true, ignorado: 'plano_anual_sem_user' });
-        let precoAnual = 449.90;
+        // Preço do PLANO PAGO (21/10: Veículos/Combo anual eram conferidos contra o Pro e ignorados). Sem preço legível
+        // responde 500 para o MP reenviar — o 200 de antes perdia o pagamento (e a reserva fixa era o preço velho).
+        let precoAnual = null;
         try {
-          const rc = await fetch(`${_SB_URL}/rest/v1/planos_config?plano_key=eq.top2&select=preco_anual`, { headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` } });
-          const [row] = await rc.json().catch(() => []);
+          const rc = await fetch(`${_SB_URL}/rest/v1/planos_config?plano_key=eq.${planoAnualMeta}&select=preco_anual`, { headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` } });
+          const [row] = rc.ok ? await rc.json().catch(() => []) : [];
           if (row?.preco_anual) precoAnual = Number(row.preco_anual);
-        } catch { /* usa o fallback */ }
+        } catch (e) { console.error('[mp-webhook] plano_anual preço:', e?.message || e); }
+        if (!(precoAnual > 0)) {
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: status });
+          return res.status(500).json({ error: 'plano_anual_preco_indisponivel' });
+        }
         const vAnual = Number(pagamento.transaction_amount) || 0;
         if (Math.abs(vAnual - precoAnual) > Math.max(1, precoAnual * 0.01)) {
           return res.status(200).json({ ok: true, ignorado: 'plano_anual_valor_incompativel' });
@@ -553,7 +564,16 @@ export async function processarEventoMp(req, res) {
           return res.status(200).json({ ok: true, duplicado: 'plano_anual' });
         }
         try {
-          const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: 'top2_anual', gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual, valorLiquido: valorLiquidoMp ?? vAnual } });
+          const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: `${planoAnualMeta}_anual`, gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual, valorLiquido: valorLiquidoMp ?? vAnual } });
+          // Recorrência da mesma trilha para de cobrar (cliente que fechou a aba antes do ativar-pro-anual).
+          // Pro anual não toca a trilha principal de assessoria/clube (o parcelamento deles é recorrência principal).
+          try {
+            const rr = await fetch(`${_SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(uidAnual)}&select=role`, { headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` } });
+            const [pf] = rr.ok ? await rr.json().catch(() => []) : [];
+            if (rr.ok && !(planoAnualMeta === 'top2' && /^(assessorado|clube)/.test(pf?.role || ''))) {
+              await cancelarOutrasRecorrencias({ userId: uidAnual, email: payer.email || '', manterPagamentoId: String(pagamento.id), manterCriadaEm: pagamento.date_created || null, manterPlano: `${planoAnualMeta}_anual`, origem: 'anual-a-vista-webhook' });
+            } else if (!rr.ok) console.error('[mp-webhook] plano_anual: papel ilegível, recorrência antiga não conferida', rr.status);
+          } catch (e) { console.error('[mp-webhook] plano_anual recorrência antiga:', e?.message || e); }
           return res.status(200).json({ ok: true, plano_anual: r });
         } catch (e) {
           // O CLIENTE PAGOU: o reenvio do MP PRECISA reprocessar (regra do dono, 05/08).

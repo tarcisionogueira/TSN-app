@@ -1429,7 +1429,7 @@ export default function Checkout() {
                     {descontoAnualPct > 0 && <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{descontoAnualPct}% off{mesesGratisAnual > 0 ? ` · ${mesesGratisAnual} meses grátis` : ''}</span>}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
+                    Total de <strong>{plano?.precoAnualLabel || 'R$ 899,00'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
                   </div>
                 </>
               )}
@@ -1704,11 +1704,17 @@ export default function Checkout() {
                 servico={{
                   id: `${planoKey}_anual`,
                   nome: `${plano?.nome || 'Plano'} — 1 ano`,
-                  valor: plano.precoAnual || 449.90,
+                  valor: plano.precoAnual,
                   descricao: `${plano?.nome || 'Plano'} anual`,
                   proposito: 'plano_anual',
                 }}
                 parcelasMax={12}
+                // Taxa do parcelado fica com a plataforma: o servidor cobra o preço anual em qualquer nº de parcelas
+                // (antes de 5× a tela somava juros, o MP cobrava a mais e a ativação recusava o valor).
+                parcelasSemJuros={12}
+                // O PLANO vai no pagamento: o servidor tira dele o preço e o webhook/reconciliação/garantia sabem
+                // se foi Pro, Veículos ou Combo.
+                extra={{ plano: planoKey }}
                 onPago={(pid) => ativarProAnual(pid)}
                 onCancelar={() => { setShowPixAnual(false); setPixAnualFase('pagando'); }}
               />
@@ -1803,7 +1809,7 @@ export default function Checkout() {
                     {planoKey === 'assessorado'
                       ? `Estou ciente de que este é um serviço de assessoria ${modalidade === 'vista' ? 'pago à vista' : 'parcelado em até 12×'}. O acesso à assessoria é ativado após confirmação do pagamento.`
                       : temToggleAnual && modalidade === 'anual'
-                        ? `Autorizo a cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 449,90'}), que renova automaticamente a cada 12 meses pelo valor vigente. Posso cancelar a renovação a qualquer momento pela plataforma, sem multa — o acesso continua até o fim do período já pago.`
+                        ? `Autorizo a cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 899,00'}), que renova automaticamente a cada 12 meses pelo valor vigente. Posso cancelar a renovação a qualquer momento pela plataforma, sem multa — o acesso continua até o fim do período já pago.`
                         : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
                     {(() => {
                       // Termo COMPLETO do produto (registro central utils/termos.js) — o texto
@@ -1839,7 +1845,7 @@ export default function Checkout() {
                   onClick={() => { if (aceitouTermos && perfilFaturamentoOk) { setPixAnualFase('pagando'); setShowPixAnual(true); } }}
                   disabled={loading || !aceitouTermos || !perfilFaturamentoOk}
                   style={{ width: '100%', marginTop: 10, padding: '13px', background: 'white', color: '#059669', border: '1.5px solid #059669', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 0.6 : 1 }}>
-                  Pagar o ano de uma vez: PIX ou cartão em até 12× ({plano?.precoAnualLabel || 'R$ 449,90'})
+                  Pagar o ano de uma vez: PIX ou cartão em até 12× ({plano?.precoAnualLabel || 'R$ 899,00'})
                 </button>
               )}
               {!perfilFaturamentoOk && aceitouTermos && (
@@ -1853,7 +1859,7 @@ export default function Checkout() {
                 {planoKey === 'assessorado'
                   ? 'Pague via PIX (sem taxa) ou cartão de crédito em até 12×'
                   : temToggleAnual && modalidade === 'anual'
-                    ? `Cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 449,90'}) · Renova a cada 12 meses · Cancele a renovação quando quiser`
+                    ? `Cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 899,00'}) · Renova a cada 12 meses · Cancele a renovação quando quiser`
                     : 'Somente cartão de crédito · Cancele quando quiser'}
               </p>
             </>

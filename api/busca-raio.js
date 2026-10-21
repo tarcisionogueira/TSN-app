@@ -14,6 +14,7 @@
 export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { acessoLeiloeiro, mascararLote } from './_leiloeiro-acesso.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -141,7 +142,11 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Erro ao buscar por raio', detalhes: err }), { status: 500 });
   }
 
-  const dados = await rpcRes.json();
+  const dadosBrutos = await rpcRes.json();
+  // #264: a RPC roda com a service key, e para ela a view mascarada NÃO mascara — sem isto a rota pública
+  // entregava leiloeiro e links a qualquer anônimo. Mascara pelo papel de quem chamou.
+  const { pode } = await acessoLeiloeiro(req);
+  const dados = pode || !Array.isArray(dadosBrutos) ? dadosBrutos : dadosBrutos.map(mascararLote);
   // total vem repetido em cada linha (window-less count via subselect); 0 linhas → 0
   const total = (dados && dados.length > 0 && dados[0].total != null) ? Number(dados[0].total) : 0;
 

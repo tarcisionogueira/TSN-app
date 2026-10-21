@@ -1302,11 +1302,8 @@ export default function Busca() {
             cidadeNormCentro: normCidade(filtrosAtivos.cidades?.[0] || ''),
           },
         };
-        const resp = await fetch('/api/busca-raio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+        // apiCall leva o token: o servidor mascara o leiloeiro para quem não tem plano pago (#264).
+        const resp = await apiCall('/api/busca-raio', { method: 'POST', body: JSON.stringify(body) });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
           // GUARD FALTANTE (03/09, achado do bloco 2): sem `atual()`, uma resposta de erro de

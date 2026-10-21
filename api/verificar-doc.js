@@ -21,7 +21,8 @@
  */
 export const config = { runtime: 'edge' };
 
-import { getAuthUser } from './_auth.js';
+import { getAuthUser, getUserRoleById } from './_auth.js';
+import { podeVerLeiloeiro } from './_leiloeiro-acesso.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -112,6 +113,11 @@ export default async function handler(req) {
   if (!imovelRes.ok) return json({ error: 'Erro ao consultar o imóvel' }, 502);
   const [imovel] = await imovelRes.json().catch(() => []);
   if (!imovel) return json({ error: 'Imóvel não encontrado' }, 404);
+  // #264 (bug bounty 21/10): matrícula de LEILOEIRO (nossa cópia ou hotlink do site dele) só para plano pago/equipe.
+  // A da Caixa segue aberta: o documento padrão da CEF não identifica leiloeiro.
+  if (!ehCef(imovel.fonte) && !podeVerLeiloeiro(await getUserRoleById(user.id).catch(() => null))) {
+    return json({ disponivel: false, motivo: 'plano', busca: null }, 403);
+  }
 
   if (tipoDoc === 'regras') {
     // Documento FIXO da Caixa (mesmo PDF pra todo imóvel de venda direta) — não há fila de
