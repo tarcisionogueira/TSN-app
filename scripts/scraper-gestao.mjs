@@ -70,10 +70,11 @@ import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
 import { inferirUF } from './lib/inferir-uf.mjs';
-import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/fetch-residencial.mjs';
+import { fetchResidencial, fecharHeadless, estatisticaResidencial, decodificarCorpo } from './lib/fetch-residencial.mjs';
 
-// vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
-// CDN d335luupugsy2.cloudfront.net) — entra no cluster (dedup global por idLote cuida de sobreposição).
+// vincoleiloes.com.br: recon 26/07 viu o MESMO back-office (leilao.php?idLeilao=N), mas é uma
+// instalação PRÓPRIA (fotos em vincoleiloes.com.br/sishp, UTF-8, outro layout de lote — ver
+// fatiarCardsGrade, 21/10). idLote do vinco NÃO é do backend compartilhado: fonte_id leva o domínio.
 const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br';
 const DOMINIOS = (process.env.GESTAO_DOMINIOS || DOMINIOS_PADRAO_CLUSTER)
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -113,7 +114,7 @@ async function bd(url, { timeoutMs = 60000, valido = null } = {}) {
     // de graça), com o navegador de rede de segurança. `valido` é o marcador que o parser
     // precisa: sem ele, o stub de 1,5 kB que o back-office devolve bloqueado passaria como
     // página boa e o fallback nunca dispararia.
-    return await fetchResidencial(url, { timeoutMs, charset: 'windows-1252', valido });
+    return await fetchResidencial(url, { timeoutMs, charset: 'auto', valido });
   }
   // `buscarViaBrightData` LANÇA com o motivo em vez de devolver `null` para quatro causas
   // diferentes. Continuamos devolvendo `null` ao chamador — a enumeração por domínio/evento é
@@ -134,7 +135,7 @@ async function bd(url, { timeoutMs = 60000, valido = null } = {}) {
   // deixando-o subir junto do erro de transporte trocaria uma falha silenciosa por outra.
   try {
     const buf = await r.arrayBuffer();
-    return new TextDecoder('windows-1252').decode(buf);
+    return decodificarCorpo(buf, 'auto');   // latin1 do back-office × UTF-8 do vinco
   } catch { return null; }
 }
 
@@ -168,11 +169,24 @@ function inferirTipo(txt = '') {
   return 'outros';
 }
 
+const STATUS_EVENTO_VIVO = /aberto para lances|aguardando abertura|em loteamento|em andamento/i;
+
 // Extrai os idLeilao de uma home: links diretos + links de compartilhamento (whatsapp).
 function extrairIdLeiloes(html) {
   const ids = new Set();
   for (const m of html.matchAll(/leilao\.php\?idLeilao=(\d+)/gi)) ids.add(m[1]);
   for (const m of html.matchAll(/idLeilao(?:=|%3D)(\d+)/gi)) ids.add(m[1]);
+  // 21/10 (Vinco): a home do vinco NÃO linka os eventos. O card só tem "ID: 448" e a foto
+  // `sishp/leilao/448/fotos/snapshot.jpg`; o clique é JS. Só o 447 (carrossel) tinha link, e
+  // o domínio rodou meses com 1 de ~21 eventos vivos e 0 lote gravado, sem alarme: a fonte é o
+  // cluster inteiro e os outros domínios seguravam o total. Lemos o ID da foto, só de card VIVO:
+  // "Divulgação"/"Encerrado"/"Sustado" é evento passado, e "SFrazão…"/"WLeilões…" no rodapé é
+  // evento hospedado no site do parceiro (o FRAZAO já é coletado por conta própria).
+  for (const card of html.split(/<div class="card card-1\b/).slice(1)) {
+    const id = (card.match(/\/sishp\/leilao\/(\d+)\/fotos\/snapshot/) || [])[1];
+    const status = (card.match(/title="Ir para o leil[^"]*"[^>]*>\s*<span>([^<]+)<\/span>/i) || [])[1] || '';
+    if (id && STATUS_EVENTO_VIVO.test(status)) ids.add(id);
+  }
   return [...ids];
 }
 
@@ -217,6 +231,117 @@ function fatiarCards(html) {
     cards.push({ idLote: pontos[k].idLote, vendaDireta: pontos[k].tipo === 'loteVendaDireta', html: html.slice(ini, fim) });
   }
   return cards;
+}
+
+// LAYOUT EM GRADE (21/10, Vinco): card `div.lote-borda` com link `<a href=…lote.php?idLote=N>`,
+// 20 por página (`&pagina=N`; `&pagina=-1&action=0&todos=1` traz todos numa página só). O card
+// não tem CATEGORIA nem DESCRIÇÃO — só título ("Sala coml. c/ 42,120m² em Tamboré, Barueri/SP"),
+// avaliação e lance mínimo. O imóvel sai pelo título; descrição/endereço/matrícula vêm da
+// página do lote (completarDetalheGrade).
+const ehGrade = h => /class="lote-borda\b/.test(h);
+function fatiarCardsGrade(html) {
+  return html.split(/<div class="lote-borda\b/).slice(1).map((pedaco) => {
+    const idLote = (pedaco.match(/lote\.php\?idLote=(\d+)/) || [])[1];
+    return idLote ? { idLote, vendaDireta: /loteVendaDireta\.php/.test(pedaco), html: pedaco.slice(0, 8000) } : null;
+  }).filter(Boolean);
+}
+// Local no fim do título (ou do endereço), nas formas vistas em 21/10: "em Tamboré, Barueri/SP",
+// "no Jardim X, São Carlos/SP", "em São Bernardo do Campo - São Paulo/SP" (cidade - estado por
+// extenso) e "no Bairro do Cristal - Mairinque-SP". Vírgula só conta seguida de espaço: "293,09m²".
+function localDoTexto(texto = '') {
+  const t = String(texto).replace(/[.\s]+$/, '');
+  const m = t.match(/(,\s+|\s[-–]\s*|\b(?:em|no|na)\s+)(?!\d)([^,\-–/]+?)\s*[/-]\s*([A-Z]{2})$/i);
+  if (!m) return { cidade: null, estado: null, bairro: null };
+  const estado = m[3].toUpperCase();
+  let cidade = m[2].trim();
+  let antes = t.slice(0, m.index);
+  // "São Bernardo do Campo - São Paulo/SP": o que casou é o ESTADO por extenso; a cidade vem antes.
+  if (/^\s[-–]/.test(m[1]) && /^s[ãa]o paulo$/i.test(cidade) && estado === 'SP') {
+    const c2 = antes.match(/(?:,\s+|\b(?:em|no|na)\s+)([^,]+?)\s*$/i);
+    if (c2) { cidade = c2[1].trim(); antes = antes.slice(0, c2.index); }
+  }
+  let bairro = (antes.match(/\b(?:em|no|na)\s+([^,]+?)\s*$/i) || [])[1]?.trim() || null;
+  if (bairro && /\d/.test(bairro)) bairro = null;   // "… c/ 42m² em" não é bairro
+  const caixa = (x) => tituloCase(x).replace(/ (Da|De|Do|Das|Dos|E) /g, (y) => y.toLowerCase());
+  return { cidade: caixa(cidade), estado, bairro: bairro && bairro.toLowerCase() !== cidade.toLowerCase() ? caixa(bairro) : null };
+}
+const NAO_IMOVEL = /ve[íi]culo|\bcarro\b|\bmoto|caminh[ãa]o|sucata|\bm[áa]quina|equipamento|eletro|\bm[óo]veis\b|mercadoria/i;
+function parseCardGrade(card, ctx) {
+  // O `alt` da miniatura tem a grafia do leiloeiro; o span de `lote-nome` vem em caixa alta
+  // feita byte a byte no servidor ("PARAISóPOLIS") e às vezes cortado ("BOM JESUS/P").
+  const titulo = decodificarEntidades((card.html.match(/lote-miniatura[^"]*"\s+alt="([^"]+)"/) || card.html.match(/lote-nome[^>]*>\s*<span[^>]*>([^<]+)</) || [])[1] || '')
+    .replace(/\s+/g, ' ').trim();
+  const tipo = inferirTipo(titulo);
+  if (!titulo || tipo === 'outros' || NAO_IMOVEL.test(titulo)) return null;
+  const txt = decodificarEntidades(card.html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+  const valorAval = num((txt.match(/Avalia[çc][ãa]o:\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]);
+  const valorMinimo = num((txt.match(/Lance m[íi]nimo:\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]);
+  let { cidade, estado, bairro } = localDoTexto(titulo);
+  if (!estado) {
+    const x = inferirUF({ cidade, titulo, endereco: null, descricao: titulo });
+    if (x) { estado = x.uf; if (x.cidade && !cidade) cidade = tituloCase(x.cidade); }
+  }
+  const area = num((titulo.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,3})?)\s*m²/i) || [])[1]);
+  const reFotoLote = new RegExp(`["']([^"']*/${card.idLote}_[^"'/]*\\.(?:jpe?g|png|webp|jfif)[^"']*)["']`, 'i');
+  const foto = (String(ctx.htmlEvento || card.html).match(reFotoLote) || [])[1] || null;
+  const temDesconto = valorAval > 0 && valorMinimo > 0 && valorMinimo <= valorAval;
+  const base = ctx.dominio.replace(/^www\./, '').split('.')[0];
+  return {
+    fonte: 'GESTAOLEILOES',
+    fonte_id: `gestao_${base}_${card.idLote}`,
+    titulo: titulo.slice(0, 180),
+    tipo,
+    modalidade: card.vendaDireta ? 'venda_direta' : (ctx.judicial ? 'judicial' : 'extrajudicial'),
+    estado, cidade, bairro,
+    endereco: null,
+    valor_avaliacao: valorAval,
+    valor_minimo: valorMinimo || valorAval,
+    area_m2: area || 0,
+    descricao: null,
+    numero_matricula: null,
+    link_edital: `https://${ctx.dominio}/leilao.php?idLeilao=${ctx.idLeilao}`,
+    url_lote: `https://${ctx.dominio}/lote.php?idLote=${card.idLote}`,
+    link_foto: foto ? (foto.startsWith('http') ? foto : `https://${ctx.dominio}/${foto.replace(/^\//, '')}`) : null,
+    leiloeiro: ctx.leiloeiro,
+    data_leilao: card.vendaDireta ? null : (ctx.data_leilao || null),
+    forma_pagamento: 'a_vista',
+    ativo: true,
+    viavel: temDesconto ? (1 - valorMinimo / valorAval) >= 0.3 : null,
+    score_viabilidade: temDesconto ? Math.min(100, Math.round((1 - valorMinimo / valorAval) * 150)) : 30,
+    desconto_percentual: temDesconto ? Math.round((1 - valorMinimo / valorAval) * 100) : null,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+// Página do lote (layout em grade): "Descrição do lote" (título em <strong> + texto) e
+// "Endereço:" (link do Maps). 1 request por imóvel — só no residencial (grátis), com teto.
+const DETALHE_CAP = Number(process.env.GESTAO_DETALHE_CAP || (RESIDENCIAL ? 200 : 0));
+function extrairDetalheGrade(html) {
+  const bloco = (html.match(/Descri[çc][ãa]o do lote<\/span>\s*<div[^>]*>\s*<div[^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+  const descricao = decodificarEntidades(bloco.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() || null;
+  const endereco = decodificarEntidades((html.match(/Endere[çc]o:<\/strong>\s*<a[^>]*>([^<]+)<\/a>/i) || [])[1] || '').trim() || null;
+  const matricula = descricao ? ((descricao.match(/matr[íi]cula[:\s]*n?[ºo°.]?\s*(\d[\d.\-\/]{2,})/i) || [])[1] || null) : null;
+  return { descricao, endereco, matricula };
+}
+async function completarDetalheGrade(rows) {
+  const alvo = rows.filter(r => !r.descricao && /^gestao_[a-z]/.test(r.fonte_id)).slice(0, DETALHE_CAP);
+  if (!alvo.length) return;
+  let ok = 0;
+  for (const r of alvo) {
+    const h = await bd(r.url_lote, { valido: x => !!x && /Descri[çc][ãa]o do lote/i.test(x) });
+    if (h) {
+      const d = extrairDetalheGrade(h);
+      if (d.descricao) { r.descricao = d.descricao.slice(0, 8000); ok++; }
+      if (d.endereco) r.endereco = d.endereco.slice(0, 200);
+      // Título cortado na fonte ("Bom Jesus/P"): o endereço da página do lote completa.
+      if (d.endereco && !r.estado) { const l = localDoTexto(d.endereco); if (l.estado) Object.assign(r, { cidade: l.cidade, estado: l.estado, bairro: r.bairro || l.bairro }); }
+      if (d.matricula) r.numero_matricula = d.matricula.replace(/[.\s]/g, '');
+    }
+    await sleep(300);
+  }
+  // Sem descrição o lote ainda entra (título/valor/cidade bastam para a busca), mas o número
+  // vai para o log: "0 de N" é o sinal de que a página do lote mudou de layout.
+  console.log(`  📝 detalhe (layout em grade): ${ok}/${alvo.length} com descrição (teto ${DETALHE_CAP}).`);
 }
 
 function parseCard(card, ctx) {
@@ -463,7 +588,7 @@ async function coletarEvento(dominio, idLeilao) {
   // mas fora do slice(0,6000) que dataEvento() lia — 153 ativos do GESTAOLEILOES em 0% de
   // data_leilao apesar de a página vir completa.
   const textoCompleto = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
-  const idxData = textoCompleto.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a/i);
+  const idxData = textoCompleto.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a|Data:\s*\d{1,2}\/[A-Za-zç]{3}\/\d{4}/i);
   const textoData = idxData >= 0 ? textoCompleto.slice(Math.max(0, idxData - 100), idxData + 200) : cabecalho;
   const ctx = {
     dominio, idLeilao,
@@ -471,10 +596,26 @@ async function coletarEvento(dominio, idLeilao) {
     data_leilao: dataEvento(textoData),
     htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)
   };
-  const cards = fatiarCards(html);
+  let cards = fatiarCards(html);
+  let parse = parseCard;
+  if (!cards.length && ehGrade(html)) {
+    // Layout em grade (vinco): a 1ª página traz 20 de "LOTES EM LEILÃO N". Se faltar lote,
+    // 1 request a mais com `todos=1` traz o evento inteiro (o próprio site monta essa URL).
+    let h = html;
+    const total = Number((textoCompleto.match(/LOTES EM LEIL[ÃA]O\s*(\d+)/i) || [])[1] || 0);
+    if (total > fatiarCardsGrade(h).length) {
+      const hTodos = await bd(`${url}&pagina=-1&action=0&todos=1`, { valido: paginaOk });
+      if (paginaOk(hTodos)) h = hTodos;
+      else console.error(`  [${dominio}] evento ${idLeilao}: todos=1 não veio — fico com a 1ª página (${fatiarCardsGrade(h).length}/${total}).`);
+    }
+    cards = fatiarCardsGrade(h);
+    ctx.htmlEvento = h;
+    ctx.judicial = /Tipo:\s*Judicial/i.test(textoCompleto);
+    parse = parseCardGrade;
+  }
   const rows = [];
   for (const c of cards) {
-    const row = parseCard(c, ctx);
+    const row = parse(c, ctx);
     if (row) rows.push(row);
   }
   return { rows, bloqueado: false, total: cards.length, leiloeiro: ctx.leiloeiro };
@@ -546,6 +687,7 @@ async function main() {
   }
 
   const todos = [...porId.values()];
+  if (!DRYRUN) await completarDetalheGrade(todos);   // 1 request por imóvel: só quando vai gravar
   const prontos = todos.filter(r => !checarQualidade(r, { estrito: false }).descartar);
   console.log(`\n${todos.length} lotes-imóvel · ${prontos.length} passam na qualidade · ${bloq} evento(s) bloqueado(s).`);
   // Zero pronto não é "a fonte está vazia" — é coleta quebrada até prova em contrário.

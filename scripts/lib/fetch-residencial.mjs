@@ -97,13 +97,22 @@ export function estatisticaResidencial() { return { ..._placar }; }
  * @param {string} url
  * @param {object} opts
  * @param {number} opts.timeoutMs
- * @param {string} opts.charset  'windows-1252' no GESTAO (o back-office serve latin1; o
+ * @param {string} opts.charset  'auto' no GESTAO (ver decodificarCorpo); antes 'windows-1252' (o back-office serve latin1; o
  *   navegador decodificava de graça e o fetch puro tem de fazer na mão — sem isto os acentos
  *   viram mojibake e some marcador acentuado: seria "o site mudou" no lugar de "eu decodifiquei
  *   errado"). O caminho do navegador NÃO redecodifica: ele já entrega texto.
  * @param {(html:string)=>boolean} opts.valido  o corpo tem o que o parser precisa? Falso →
  *   tenta o navegador. Default: só exige corpo não-vazio.
  */
+// 'auto' (21/10, Vinco): o cluster GESTÃO mistura back-office latin1 com um domínio (vinco)
+// que serve UTF-8. Texto latin1 acentuado quase nunca é UTF-8 válido, então: decodificou sem
+// erro em UTF-8 → é UTF-8; senão, windows-1252. Página só ASCII sai igual nos dois.
+export function decodificarCorpo(buf, charset = 'utf-8') {
+  if (charset !== 'auto') return new TextDecoder(charset).decode(buf);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { return new TextDecoder('windows-1252').decode(buf); }   // não é UTF-8: é o latin1 do back-office
+}
+
 export async function fetchResidencial(url, { timeoutMs = 60000, charset = 'utf-8', valido = null } = {}) {
   const serve = (h) => !!h && !ehChallenge(h) && (valido ? valido(h) : h.length > 0);
   let motivo;
@@ -112,7 +121,7 @@ export async function fetchResidencial(url, { timeoutMs = 60000, charset = 'utf-
     if (!r.ok) motivo = `HTTP ${r.status}`;
     else {
       const buf = await r.arrayBuffer();
-      const html = new TextDecoder(charset).decode(buf);
+      const html = decodificarCorpo(buf, charset);
       if (serve(html)) { _placar.fetch++; return html; }
       motivo = ehChallenge(html) ? 'desafio Cloudflare' : `corpo não serve (${html.length} bytes)`;
     }

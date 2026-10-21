@@ -7,6 +7,25 @@
 
 
 
+## 21/10 (noite) — Vinco nunca entrou no acervo (pedido do dono: lote 7399, sala em Tamboré/Barueri)
+- **Estava na lista do cluster GESTÃO desde 26/07 e gravou ZERO lote, sem alarme** (a saúde é do cluster; os
+  outros 4 domínios seguravam o total). Três defeitos empilhados, medidos com o parser real sobre HTML vivo
+  (Firecrawl, 5 créditos):
+  1. a home do vinco não linka eventos (card com "ID: 448" + foto `sishp/leilao/448/fotos/snapshot.jpg`, clique em JS):
+     `extrairIdLeiloes` via 1 evento (o 447 do carrossel) de ~21 vivos. Agora lê o ID da foto, só de card com status
+     vivo (Aberto para lances / Aguardando abertura / Em loteamento). "Divulgação" é evento de 2025; rodapé
+     "SFrazão…/WLeilões…" é evento no site do parceiro (FRAZAO já é coletado à parte);
+  2. página do evento em **outro layout** (grade `div.lote-borda`, 20 por página): `fatiarCards` achava 0.
+     `fatiarCardsGrade`/`parseCardGrade` (imóvel pelo título, local por `localDoTexto`) + `&pagina=-1&action=0&todos=1`
+     (100 lotes numa página). Descrição/endereço/matrícula vêm da página do lote (`completarDetalheGrade`, só quando
+     grava; teto `GESTAO_DETALHE_CAP`, 200 no residencial);
+  3. vinco serve **UTF-8** e o cluster decodificava tudo como latin1 → `decodificarCorpo(buf,'auto')` em
+     `fetch-residencial.mjs` (UTF-8 válido → UTF-8; senão windows-1252).
+- `fonte_id` do layout em grade = `gestao_vincoleiloes_<idLote>`: é instalação própria, o idLote não é do backend
+  compartilhado e colidiria.
+- Pendência **#268** (claude, revisar 23/10): conferir a 1ª coleta do runner. O lote 7399 é leiloado **22/10 10h** —
+  para o dono analisar antes, colar o link na análise de lote externo do app.
+
 ## 21/10 (manhã) — #265 e #258 fechadas
 - **#265:** quem não tem plano pago não identifica o leiloeiro de imóvel nem por foto, fonte, título ou texto. Regra
   ÚNICA na view `imoveis_leilao_mascarado` (funções `descricao_sem_leiloeiro`, `titulo_sem_leiloeiro`,
