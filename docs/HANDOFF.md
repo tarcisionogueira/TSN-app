@@ -7,6 +7,24 @@
 
 
 
+## 21/10 (noite, 3) — VARREDURA COMPLETA DE CAPTURA (site × banco, ~85 fontes, 5 agentes em paralelo)
+Pedido do dono depois de Vinco e Freitas. Método: sinais do banco (enumerados constante e redondo = página
+cortada; domínio de cluster sem ativo; veículo zerado) → contagem ao vivo no site (Firecrawl, ~150 chamadas).
+**A assinatura que se repetiu:** parâmetro de página IGNORADO pelo site (devolve a pág. 1) + laço "página sem
+novidade = acabou" ⇒ coleta parcial com saúde verde. Freitas, SUPORTE, SIMON e leilão/index tinham isso.
+**Consertado e no ar (13):**
+- SUPORTE `pagina=`→`page=` (Líder 565 imóveis × 10), teto 60 — imóveis e veículos;
+- SOLD veículos (646 × 0; `SOLD_VEICULOS` no job de veículos) · LJUD veículos `/veiculos` (só carros antes);
+- GESTÃO: data = Encerramento (não Abertura — lote nascia vencido) + evento inteiro no layout clássico (20→497);
+- NORDESTE pagina o evento (`?page=N`, imóveis e veículos) · SOLEON grava 2ª praça (`data_leilao_2`/
+  `valor_minimo_2`; ~90 lotes desligados no melhor desconto) · Fernando/Jonas/Lucas no feed /sitemap.xml
+  (catálogo `#` enumerava 0) · ALFA domínio novo `.com` · SIMON `page` · leilão/index `pg` (Giordano/Rigolon/
+  Thais) · Sodré veículos aceitam leilão futuro (1.236 no histórico, 0 ativos).
+**Aberto (pendências 271–279):** veículos em ~25 fontes (~3.000 lotes; decisão do dono, #271) · RJ 156/597 por teto
+de custo (#272) · LEILOTECH só `primaryLote` (#273) · GRUPOLANCE congelado desde 14/10 com saúde ok (#274) ·
+MEGA −265 / LJUD −276 (#275) · FRAZÃO (#276) · acervo inflado por sumido não desativado (#277) · saúde por
+TENANT nos clusters (#278) · menores (#279). Fontes não medidas: LEFFA, JONAS (Cloudflare), JMF/DILSON (SPA).
+
 ## 21/10 (noite, 2) — diagnóstico de abertura + 3 consertos (Freitas, cidades em cache, ig-motor)
 - **Diagnóstico:** segurança/regras 0 achado, KYC 0, nenhum cliente travado, relatório 0 falha 7d, backup em dia,
   documental discriminando (6/9 células, n=25). Atenção: 4 pagantes sem relatório em 14 d; 0 gclid em 1.269
