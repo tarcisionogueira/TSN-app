@@ -1277,19 +1277,29 @@ export default function Checkout() {
               <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
             </div>
           </div>
+          {/* Texto da coluna conforme o plano (21/10): o de Veículos falava de imóveis. */}
           <h2 style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.25, margin: '0 0 14px' }}>
-            Arremate imóveis com segurança e inteligência de dados.
+            {planoKey === 'veiculos' ? 'Arremate veículos sabendo quanto valem e de quem são.'
+              : planoKey === 'combo' ? 'Imóveis e veículos de leilão, com segurança, numa assinatura só.'
+                : 'Arremate imóveis com segurança e inteligência de dados.'}
           </h2>
           <p style={{ color: '#cbd5e1', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-            A BidPro Brasil une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança, do primeiro lance à arrematação.
+            {planoKey === 'veiculos'
+              ? 'A BidPro Brasil mostra a FIPE de cada carro, revela o leiloeiro e gera o relatório por IA para você dar o lance certo, sem surpresa no pátio.'
+              : 'A BidPro Brasil une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança, do primeiro lance à arrematação.'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
+            {(planoKey === 'veiculos' ? [
+              [TrendingUp, 'FIPE de cada veículo', 'Valor de referência gravado no lote — e a faixa do modelo quando o leiloeiro não informa o ano.'],
+              [ShieldCheck, 'Leiloeiro desbloqueado', 'Quem vende, o link do lote, os documentos e o endereço do pátio.'],
+              [MapPin, 'Veículos no Brasil inteiro', 'Só lotes já recolhidos ao pátio do leiloeiro, com filtros por marca, ano e cidade.'],
+              [Headphones, 'Relatório por IA', 'Condição, riscos e teto de lance antes de você dar o lance.'],
+            ] : [
               [TrendingUp, 'Viabilidade real', 'Relatórios de mercado e fluxo de caixa antes de dar o lance.'],
               [ShieldCheck, 'Risco jurídico mapeado', 'Análise de edital, matrícula e processo para evitar surpresas.'],
-              [MapPin, 'Imóveis no Brasil inteiro', 'Milhares de oportunidades da Caixa e dos maiores leiloeiros, num só lugar.'],
+              [MapPin, planoKey === 'combo' ? 'Imóveis e veículos no Brasil inteiro' : 'Imóveis no Brasil inteiro', planoKey === 'combo' ? 'Lotes da Caixa e dos maiores leiloeiros, e o leiloeiro de cada carro desbloqueado.' : 'Milhares de oportunidades da Caixa e dos maiores leiloeiros, num só lugar.'],
               [Headphones, 'Suporte da equipe', 'Assessoria humana quando você precisar avançar na arrematação.'],
-            ].map(([Icon, t, d]) => (
+            ]).map(([Icon, t, d]) => (
               <div key={t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                 <div style={{ background: 'rgba(37,99,235,0.2)', borderRadius: 9, padding: 8, flexShrink: 0 }}><Icon size={16} color="#60a5fa" /></div>
                 <div>
@@ -1327,9 +1337,6 @@ export default function Checkout() {
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>
             Plano {plano.nome}
           </h2>
-          {podeOferecerCombo(planoKey, role, PLANOS) && (
-            <div style={{ marginTop: 12 }}><OfertaCombo planoKey={planoKey} PLANOS={PLANOS} onEscolher={irParaCombo} /></div>
-          )}
 
           {/* Toggle mensal/anual, Investidor Pro (top2) */}
           {temToggleAnual && (
@@ -1826,6 +1833,11 @@ export default function Checkout() {
                     : 'Somente cartão de crédito · Cancele quando quiser'}
               </p>
             </>
+          )}
+
+          {/* Combo PERTO do botão de pagamento (21/10, dono): primeiro o plano escolhido, depois a alternativa. */}
+          {podeOferecerCombo(planoKey, role, PLANOS) && (
+            <div style={{ marginTop: 20 }}><OfertaCombo planoKey={planoKey} PLANOS={PLANOS} onEscolher={irParaCombo} /></div>
           )}
 
           <button onClick={() => nav('/')} style={{ marginTop: 16, width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>

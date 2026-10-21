@@ -186,6 +186,11 @@ export default function Planos() {
     <div style={{ fontSize: 10.5, fontWeight: 800, color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: 1, marginTop: 6 }}>{txt}</div>
   );
 
+  // Cabeçalho dos 3 cards lado a lado (21/10, dono: "alinhamento, fontes"): MESMA altura e MESMO tamanho de
+  // preço, sem quebrar linha — o card mais estreito partia "R$ 29,90" em duas e as listas começavam desalinhadas.
+  const PRECO_TOPO = { fontSize: 'clamp(34px, 3.4vw, 46px)', fontWeight: 900, lineHeight: 1.05, whiteSpace: 'nowrap', letterSpacing: '-0.5px' };
+  const CABECALHO = { minHeight: 108, marginBottom: 12 };
+
   // Preço comercial: a PARCELA em DESTAQUE (visão de acessibilidade — mais
   // comercial) e o valor à vista com o % OFF em texto secundário. `mensal` mostra
   // a parcela como /mês (Leilão Club); senão como 12× (Assessoria). Sem juros até 3×.
@@ -287,14 +292,16 @@ export default function Planos() {
 
         {/* ── 3 planos lado a lado (21/10, dono): Explorador · Investidor Pro · Leilão de Veículos. O Combo é
             oferecido ao abrir o link de qualquer um (components/OfertaCombo.jsx, no Checkout) e na faixa abaixo. ── */}
-        <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr)', gap: 18, maxWidth: 1100, margin: '0 auto 28px', alignItems: 'stretch' }}>
+        <div className="grid-3 grid-planos" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr)', gap: 20, maxWidth: 1100, margin: '0 auto 28px', alignItems: 'stretch' }}>
 
           {/* Explorador */}
           <div id="plano-explorador" style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#eef2ff', color: '#1e293b', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Explorador</div>
-            <div style={{ fontSize: 48, fontWeight: 900, color: '#111', marginBottom: 2 }}>Grátis</div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Sem cartão de crédito</div>
-            <p style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
+            <div style={CABECALHO}>
+              <div style={{ ...PRECO_TOPO, color: '#111', marginBottom: 6 }}>Grátis</div>
+              <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Sem cartão de crédito</div>
+            </div>
+            <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.7 }}>
               Explore leilões em todo o Brasil, acesse cursos e use a calculadora de arrematação sem pagar nada.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
@@ -315,8 +322,9 @@ export default function Planos() {
               <Star size={9} fill="#78350f" /> Mais popular
             </div>
             <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.2)', color: '#ffffff', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Investidor Pro</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 48, fontWeight: 900, color: 'white' }}>
+            <div style={CABECALHO}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+              <div style={{ ...PRECO_TOPO, color: 'white' }}>
                 {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49') : pLabel('top2', 'precoLabel', 'R$ 49,90')}
               </div>
               <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
@@ -324,13 +332,14 @@ export default function Planos() {
             {periodo === 'anual'
               ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 449,90')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
               : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual (-25%)</div>}
-            <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 20, alignSelf: 'flex-start' }}>
+            <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, alignSelf: 'flex-start' }}>
               {periodo === 'anual' ? 'Cancele a renovação automática quando quiser' : 'Cancele quando quiser'}
             </div>
-            <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.7 }}>
+            </div>
+            <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 24, lineHeight: 1.7 }}>
               Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 10 relatórios de cada tipo por mês, e relatórios adicionais por crédito quando precisar.
             </p>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
               <CheckItem txt="Tudo do Explorador" light />
 
               <GroupLabel txt="📑 Análise & Relatórios com IA" />
@@ -376,14 +385,16 @@ export default function Planos() {
 
           {/* Leilão de Veículos */}
           {ativoPlano('veiculos') && (
-            <div id="plano-veiculos" style={{ background: 'white', borderRadius: 20, border: '1px solid #99f6e4', padding: '32px 26px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+            <div id="plano-veiculos" style={{ background: 'white', borderRadius: 20, border: '1px solid #99f6e4', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#ccfbf1', color: '#0f766e', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Leilão de Veículos</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-                <div style={{ fontSize: 48, fontWeight: 900, color: '#111' }}>{pLabel('veiculos', 'precoLabel', 'R$ 29,90')}</div>
-                <div style={{ fontSize: 14, color: '#64748b' }}>/mês</div>
+              <div style={CABECALHO}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                  <div style={{ ...PRECO_TOPO, color: '#111' }}>{pLabel('veiculos', 'precoLabel', 'R$ 29,90')}</div>
+                  <div style={{ fontSize: 14, color: '#64748b' }}>/mês</div>
+                </div>
+                <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Cancele quando quiser</div>
               </div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Cancele quando quiser</div>
-              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
+              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.7 }}>
                 Ache o carro de graça. Com o plano, veja quem é o leiloeiro, abra o lote e gere o relatório por IA antes de dar o lance.
               </p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
@@ -583,6 +594,10 @@ export default function Planos() {
         @media (max-width: 768px) {
           .grid-2 { grid-template-columns: 1fr !important; }
           .grid-3 { grid-template-columns: 1fr !important; }
+        }
+        /* 3 planos lado a lado só onde cabem (~300 px cada); abaixo disso, um por linha e centralizados. */
+        @media (max-width: 980px) {
+          .grid-planos { grid-template-columns: 1fr !important; max-width: 560px !important; }
         }
       `}</style>
     </div>

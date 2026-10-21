@@ -30,9 +30,12 @@ export default function OfertaCombo({ planoKey, PLANOS, onEscolher, escuro = fal
     : planoKey === 'top2' ? 'Leve também os veículos'
       : 'Quer imóveis e veículos?';
   return (
-    <div style={{ background: 'linear-gradient(145deg,#4c1d95 0%,#6d28d9 100%)', border: '2px solid #8b5cf6', borderRadius: 16, padding: '16px 18px', marginBottom: 18, color: '#ede9fe', boxShadow: escuro ? 'none' : '0 8px 24px rgba(109,40,217,0.25)' }}>
+    <div style={{ background: 'linear-gradient(145deg,#4c1d95 0%,#6d28d9 100%)', border: '2px solid #8b5cf6', borderRadius: 16, padding: '16px 18px', color: '#ede9fe', boxShadow: escuro ? 'none' : '0 8px 24px rgba(109,40,217,0.25)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 15.5, fontWeight: 900, color: 'white', flex: 1, minWidth: 0 }}>{titulo} — Combo Imóveis + Veículos</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 1 }}>Combo Imóveis + Veículos</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: 'white', marginTop: 2 }}>{titulo}</div>
+        </div>
         {combo > 0 && <div style={{ fontSize: 15, fontWeight: 900, color: 'white', whiteSpace: 'nowrap' }}>{fmt(combo)}<span style={{ fontSize: 12, fontWeight: 600, color: '#ddd6fe' }}>/mês</span></div>}
       </div>
       {economia > 0 && (
