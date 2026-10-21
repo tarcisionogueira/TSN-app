@@ -23,5 +23,5 @@ export async function acessoLeiloeiro(req) {
 // Título de reserva do scraper ("Imóvel Hasta Leilões 12107") traz o nome do leiloeiro: para quem não pode vê-lo,
 // vira "Casa em Campinas/SP". MESMA regra de public.titulo_sem_leiloeiro() no banco (#265) — mudar nos dois.
 export const tituloSemLeiloeiro = (im) => (/leil(õ|o)es|leiloeir/i.test(im?.titulo || '')
-  ? `${im.tipo ? im.tipo.charAt(0).toUpperCase() + im.tipo.slice(1) : 'Imóvel'}${im.cidade ? ` em ${im.cidade}${im.estado ? `/${im.estado}` : ''}` : ''}`
+  ? `${im.tipo && !/^(outros?|im[oó]vel)$/i.test(im.tipo) ? im.tipo.charAt(0).toUpperCase() + im.tipo.slice(1) : 'Imóvel'}${im.cidade ? ` em ${im.cidade}${im.estado ? `/${im.estado}` : ''}` : ''}`
   : im?.titulo);
