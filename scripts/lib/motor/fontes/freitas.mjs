@@ -31,7 +31,7 @@ export default {
   tenants: Object.values(TENANTS),
   // VEÍCULOS (21/10): mesmo ajax, Categoria=1 (~736 no site, 0 no acervo). Lido por
   // scraper-veiculos-motor.mjs com o mesmo parser; a conversão é lib/veiculo-do-lote.mjs.
-  veiculos: { catalogo: '/Leiloes/PesquisarLotes?Categoria=1&ClienteSclId=0&PageNumber=1&TopRows=2000', maxPages: 1, complemento: complementoVeiculo },
+  veiculos: { catalogo: '/Leiloes/PesquisarLotes?Categoria=1&ClienteSclId=0&PageNumber=1&TopRows=2000', maxPages: 1, listaCompleta: true, complemento: complementoVeiculo },
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Própria (ASP.NET MVC)', acesso: 'dom-puppeteer (grátis; certificado sem cadeia intermediária)',

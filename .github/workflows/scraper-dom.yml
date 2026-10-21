@@ -308,6 +308,19 @@ jobs:
           FREITAS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-freitas.mjs
 
+      # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
+      # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
+      # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
+      - name: Veículos (JE, Simon, Nakakogue)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VEIC_FONTES: jeleiloes,simon,nakakogue
+          VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          VEIC_MAX_LOTES: '80'
+        run: node scripts/scraper-veiculos-motor.mjs
+
       - name: Notify on failure
         # `cancelled()` também: estourar o timeout-minutes não é `failure()` pro GitHub, e sem
         # isto uma rodada agendada cortada no meio termina sem aviso nenhum (mesma lição já

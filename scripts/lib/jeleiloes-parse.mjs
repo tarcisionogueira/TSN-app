@@ -54,7 +54,19 @@ export function extrairUrlsDeLote(html, base) {
   }
   return urls;
 }
-export const idDaUrl = url => (String(url).match(/\/ofertas?\/leilao\/imoveis\/[a-z0-9-]+\/\d+\/(?:id-)?(\d+)\//i) || [])[1] || null;
+export const idDaUrl = url => (String(url).match(/\/ofertas?\/leilao\/(?:imoveis|veiculos)\/[a-z0-9-]+\/\d+\/(?:id-)?(\d+)\//i) || [])[1] || null;
+
+// VEÍCULOS (21/10): /oferta/leilao/veiculos/<categoria>/<n>/id-<id>/<slug>. Sucata, trator/máquina e
+// aeronave saem PELA CATEGORIA da URL, antes de gastar uma leitura (JE: 124 veículos, 0 no acervo).
+const CAT_VEICULO_FORA = /^(sucatas?|trator-maquina|maquinas?|aeronaves?|embarcac(?:ao|oes)|pecas)$/i;
+export function extrairUrlsDeVeiculo(html, base) {
+  const urls = new Map();
+  for (const m of String(html || '').matchAll(/href=["']([^"'}]*\/ofertas?\/leilao\/veiculos\/([a-z0-9-]+)\/\d+\/(?:id-)?(\d+)\/[a-z0-9-]+)\/?["'}]/gi)) {
+    if (CAT_VEICULO_FORA.test(m[2])) continue;
+    try { urls.set(m[3], new URL(m[1], base).href); } catch { /* href malformado: ignora o card */ }
+  }
+  return urls;
+}
 
 const slugDa = url => (String(url).match(/\/ofertas?\/leilao\/imoveis\/[a-z0-9-]+\/\d+\/(?:id-)?\d+\/([a-z0-9-]+)/i) || [])[1] || '';
 

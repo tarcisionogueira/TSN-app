@@ -5,5 +5,8 @@
  */
 import freitas from './fontes/freitas.mjs';
 import mgl from './fontes/mgl.mjs';
+import simon from './fontes/simon.mjs';
+import jeleiloes from './fontes/jeleiloes.mjs';
+import nakakogue from './fontes/nakakogue.mjs';
 
-export const FONTES_VEICULOS = [freitas, mgl];
+export const FONTES_VEICULOS = [freitas, mgl, jeleiloes, simon, nakakogue];

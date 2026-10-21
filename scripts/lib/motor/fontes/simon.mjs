@@ -21,6 +21,8 @@ export default {
   paginaParam: 'page',
   maxPages: 6,
   tenants: Object.values(TENANTS),
+  // VEÍCULOS (21/10): /leiloes/veiculos, mesma paginação (51 no site, 0 no acervo).
+  veiculos: { catalogo: '/leiloes/veiculos', paginaParam: 'page', maxPages: 8 },
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Própria', acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'nenhum',

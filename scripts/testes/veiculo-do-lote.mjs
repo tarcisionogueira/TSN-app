@@ -25,5 +25,19 @@ ok(!ehVeiculoInteiro('Apartamento em Santos/SP com vaga de garagem'), 'imóvel f
 ok(ehVeiculoInteiro('Caminhão Mercedes-Benz 710'), 'caminhão entra');
 ok(veiculoDoLote({ ...base, valor_minimo: 0, titulo: 'FIAT/UNO 2010/2011', descricao: '' }, { id: '4', fonte: 'X' }).motivo === 'sem valor', 'sem valor não grava');
 
+// Simon (21/10): ficha com "Depósito Em mãos do executado" → nunca gravado; sucata só no slug → fora.
+import { complementoGenerico } from '../lib/veiculo-do-lote.mjs';
+const htmlSimon = '<div>Descrição do lote Marca/Modelo: I/VW JETTA 2.0, Ano de Fabricação/Modelo: 2013 / 2014, Placa: AXV-1H84, Cor: PRATA. Informações adicionais Vendedor Vara Cível Depósito Em mãos do executado: Linha Cabeceira Barra Bonita</div>';
+const cS = complementoGenerico(htmlSimon);
+ok(cS.titulo === 'I/VW JETTA 2.0 2013/2014', 'Marca/Modelo + ano viram título');
+const simon = veiculoDoLote({ ...base, titulo: cS.titulo, descricao: cS.ficha }, { id: '13202', fonte: 'SIMONLEILOES' });
+ok(simon.row?.marca === 'VOLKSWAGEN', 'I/VW vira VOLKSWAGEN');
+ok(/executado/.test(simon.motivo || ''), 'Simon "em mãos do executado" não grava');
+ok(veiculoDoLote({ ...base, url_lote: 'https://x/lotes/sucata-de-veiculo-inservivel-vara-n1-13198', titulo: 'FIAT/UNO 2010/2011', descricao: 'FIAT/UNO' }, { id: '5', fonte: 'X' }).motivo === 'não é veículo inteiro', 'sucata só no slug fica fora');
+
+// JE (21/10): título de reserva do parser de imóvel é refeito pela descrição.
+const je = veiculoDoLote({ ...base, titulo: 'Imóvel JE Leilões 41454', descricao: 'Imóvel JE Leilões 41454 BEM: 01 (um) veículo, FORD FIESTA 1.6 HATCH - PLACAS ARZ-1C96 Cor preta, flex, ano/modelo 2009/2010, odômetro marcando 193.545' }, { id: '41454', fonte: 'JELEILOES' });
+ok(je.row?.marca === 'FORD' && je.row?.ano_modelo === 2010, `JE: "Imóvel JE…" vira FORD FIESTA 2010 (${je.row?.titulo || je.motivo})`);
+
 if (falhas) { console.error(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nveiculo-do-lote: todos os casos passaram');

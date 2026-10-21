@@ -84,6 +84,9 @@ export default {
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, detalhesDoCatalogo },
   enriquecerProntos: enriquecer,
+  // VEÍCULOS (21/10): /lotes/consulta/2 — mesma página única com o detalhe no card (22 no site, 0 aqui).
+  // O card não traz data: `listaCompleta` desliga o que sai da lista, senão ficaria ativo para sempre.
+  veiculos: { catalogo: '/lotes/consulta/2', maxPages: 1, listaCompleta: true },
   conhecimento: {
     plataforma: 'Multiplix (PHP)', acesso: 'fetch', custo: 'gratis', anti_bot: 'nenhum',
     enumeracao: '/lotes/consulta/1 (categoria imóveis, todos os leilões; detalhe no próprio card)',

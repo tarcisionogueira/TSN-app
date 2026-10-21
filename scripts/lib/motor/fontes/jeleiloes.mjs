@@ -5,7 +5,7 @@
  * lib/jeleiloes-parse.mjs.
  */
 import {
-  TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  TENANTS, extrairUrlsDeLote, extrairUrlsDeVeiculo, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../jeleiloes-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
@@ -24,6 +24,8 @@ export default {
   maxPages: 10,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // VEÍCULOS (21/10): /veiculos?page=N (JE 124, K Leilões ≥20 no site; 0 no acervo).
+  veiculos: { catalogo: '/veiculos', paginaParam: 'page', maxPages: 10, extrairUrlsDeLote: extrairUrlsDeVeiculo },
   conhecimento: {
     plataforma: 'Suporte Leilões (infra) com front-end próprio — não é o template /buscador do SUEDPETER/LIDER',
     acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'nenhum',

@@ -59,6 +59,29 @@ function marcaAnoDoTitulo(titulo) {
   return r;
 }
 
+// "BEM: 01 (um) veículo, FORD FIESTA 1.6 HATCH - PLACAS ARZ-1C96 … ano/modelo 2009/2010" → "FORD FIESTA 1.6
+// HATCH 2009/2010"; sem marca na descrição, o slug ("ford-fiesta-1-6-hatch-09-10-em-umuarama-pr").
+function tituloDoVeiculo(descricao, url) {
+  const d = String(descricao || '');
+  const palavras = d.split(/\s+/);
+  const i = palavras.findIndex((p) => RE_MARCA.test(p.replace(/[^A-Za-z.]/g, '')));
+  const ano = d.match(/\b((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})\b/);
+  if (i >= 0) {
+    const corpo = palavras.slice(i, i + 8).join(' ').split(/\s+-\s+|,|\s+PLACA|\s+placa|\s+Cor\b|\s+cor\b|\s+ano\b/)[0].trim();
+    if (corpo.length >= 4) return `${corpo}${ano ? ` ${ano[1]}/${ano[2]}` : ''}`.slice(0, 180);
+  }
+  const slug = (String(url || '').replace(/[?#].*$/, '').split('/').filter(Boolean).pop() || '').replace(/-em-[a-z-]+-[a-z]{2}$/i, '');
+  return slug && !/^\d+$/.test(slug) ? slug.replace(/-/g, ' ').toUpperCase().slice(0, 180) : null;
+}
+
+const MARCA_CANON = { VW: 'VOLKSWAGEN', GM: 'CHEVROLET', 'M.BENZ': 'MERCEDES-BENZ', MBENZ: 'MERCEDES-BENZ', MERCEDES: 'MERCEDES-BENZ' };
+function normalizarMarca(r) {
+  // "UM VEICULO VW" (o split por "/" pegou o começo da frase): fica a última palavra, se for marca.
+  if (r.marca && /\s/.test(r.marca)) { const ult = r.marca.trim().split(/\s+/).pop(); r.marca = RE_MARCA.test(ult) ? ult : null; }
+  if (r.marca) r.marca = MARCA_CANON[r.marca.replace(/^I\s*\/\s*/, '').toUpperCase()] || r.marca.replace(/^I\s*\/\s*/, '').toUpperCase();
+  return r;
+}
+
 const RE_PLACA = /\bPLACA(?:\s+POLICIAL)?\s*:?\s*([A-Z]{3}-?\d[A-Z0-9]\d{2})\b/i;
 const RE_CHASSI = /\bCHASSI\s*:?\s*([A-HJ-NPR-Z0-9]{17})\b/i;
 const RE_RENAVAM = /\bRENAVAM\s*:?\s*(\d{9,11})\b/i;
@@ -72,9 +95,14 @@ const RE_KM = /\b(?:km|quilometragem|hod[ôo]metro)\s*:?\s*([\d.]{1,9})\b/i;
 export function veiculoDoLote(row, { id, fonte }) {
   if (!row) return { motivo: 'lote sem leitura' };
   // "1 (UM) AUTOMÓVEL CHEVROLET PRISMA…" (SOLEON): a quantidade no começo esconde tipo e marca.
-  const titulo = String(row.titulo || '').replace(/\s+/g, ' ').trim().replace(/^\d+\s*\(\s*[a-zà-ú]+\s*\)\s*/i, '').slice(0, 180);
   const descricao = String(row.descricao || '').replace(/\s+/g, ' ').trim();
-  if (!ehVeiculoInteiro(titulo, descricao)) return { motivo: 'não é veículo inteiro' };
+  let titulo = String(row.titulo || '').replace(/\s+/g, ' ').trim().replace(/^\d+\s*\(\s*[a-zà-ú]+\s*\)\s*/i, '')
+    .replace(/^(?:um|uma|01)\s+(?=ve[íi]culo|autom[óo]vel|motocicleta|moto\b|caminh)/i, '').slice(0, 180);
+  // Título de RESERVA do parser de imóvel ("Imóvel JE Leilões 41454", "Imóvel") não descreve o bem —
+  // e o "Imóvel" nele faria o lote ser recusado como imóvel. Refaz pela descrição ou pelo slug.
+  if (!titulo || /^im[óo]vel\b/i.test(titulo) && (/\d\s*$/.test(titulo) || titulo.length < 12)) titulo = tituloDoVeiculo(descricao, row.url_lote) || titulo;
+  // A URL também conta: no Simon a sucata só aparece no slug ("sucata-de-veiculo-inservivel-…").
+  if (!ehVeiculoInteiro(titulo, descricao) || RE_NAO_VEICULO.test(String(row.url_lote || '').replace(/[-_/]/g, ' '))) return { motivo: 'não é veículo inteiro' };
   const vMin = Number(row.valor_minimo) || 0, vAval = Number(row.valor_avaliacao) || 0;
   if (!vMin && !vAval) return { motivo: 'sem valor' };
   const texto = `${titulo} ${descricao}`;
@@ -89,7 +117,7 @@ export function veiculoDoLote(row, { id, fonte }) {
   const out = {
     fonte, fonte_id: `${fonte.toLowerCase()}_veic_${id}`,
     leiloeiro: row.leiloeiro || null, titulo: titulo || `Veículo ${fonte} ${id}`, descricao: (descricao || titulo).slice(0, 8000),
-    ...marcaAnoDoTitulo(titulo), tipo_veiculo: tipoVeiculo(titulo),
+    ...normalizarMarca(marcaAnoDoTitulo(titulo)), tipo_veiculo: tipoVeiculo(titulo),
     placa: placa ? placa.replace('-', '').toUpperCase() : null, chassi: chassi ? chassi.toUpperCase() : null,
     renavam: (texto.match(RE_RENAVAM) || [])[1] || null, km: km && km < 2_000_000 ? km : null,
     valor_minimo: vMin || vAval, valor_avaliacao: vAval || null,
@@ -105,4 +133,29 @@ export function veiculoDoLote(row, { id, fonte }) {
   if (Array.isArray(row.anexos) && row.anexos.length) out.anexos = row.anexos;
   if (patio.status === 'excluido') return { motivo: 'bem com o executado/devedor — nunca gravado', row: out };
   return { row: out };
+}
+
+// COMPLEMENTO GENÉRICO DA PÁGINA DE VEÍCULO (21/10). Os parsers do motor foram escritos para imóvel:
+// título do slug ("Automovel Vara Civel de Salto do Lontra…"), descrição sintetizada. A página de
+// veículo, em várias plataformas, traz os rótulos "Marca/Modelo:", "Ano de Fabricação/Modelo:",
+// "Placa:", e o bloco de depósito ("Depósito Em mãos do executado: …" — Simon), que é o que o
+// classificador de pátio precisa ler. Puro; quem chama só usa o que veio.
+export function complementoGenerico(html) {
+  const txt = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+  const mm = (txt.match(/Marca\s*\/\s*Modelo\s*:\s*(.{3,80}?)\s*(?:,|\s+Ano\b|\s+Placa\b|\s+Cor\b|\s+Chassi\b|\s+Renavam\b)/i) || [])[1] || null;
+  const ano = txt.match(/Ano\s*(?:de\s*)?(?:Fabrica[çc][ãa]o)?\s*\/?\s*(?:Modelo)?\s*:\s*((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})/i)
+    || txt.match(/\bAno\s*(?:Modelo)?\s*:\s*((?:19|20)\d{2})\b/i);
+  const blocos = [];
+  const desc = txt.match(/Descri[çc][ãa]o(?:\s+do\s+(?:lote|bem))?\s*:?\s*(.{30,1500}?)(?:\s+Informa[çc][õo]es adicionais|\s+Documentos\b|\s+Lances\b|$)/i);
+  if (desc) blocos.push(desc[1]);
+  // Janela fixa depois do rótulo (sem exigir palavra de fim: ela nem sempre vem perto, e a regex
+  // falhava calada — o "Em mãos do executado" do Simon passava como "sem sinal").
+  for (const re of [/(Dep[óo]sit(?:o|[áa]rio)\b\s*:?\s*.{5,200})/i,
+    /(Localiza[çc][ãa]o do (?:bem|ve[íi]culo)\s*:?\s*.{5,200})/i,
+    /((?:Local\s+(?:de|para)\s+(?:vistoria|visita[çc][ãa]o|exposi[çc][ãa]o))\s*:?\s*.{5,200})/i]) {
+    const m = txt.match(re); if (m) blocos.push(m[1]);
+  }
+  const titulo = mm ? `${mm.trim()}${ano ? ` ${ano[1]}${ano[2] ? `/${ano[2]}` : ''}` : ''}` : null;
+  return { titulo, ficha: blocos.length ? blocos.join(' · ').slice(0, 4000) : null };
 }

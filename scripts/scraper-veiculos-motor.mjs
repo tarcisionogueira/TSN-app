@@ -21,7 +21,7 @@ import { criarMotorFetch } from './lib/motor/fetch-fonte.mjs';
 import { criarMotorDom } from './lib/motor/fetch-dom.mjs';
 import { criarMotorFirecrawl } from './lib/motor/fetch-firecrawl.mjs';
 import { criarMotorApi } from './lib/motor/fetch-api.mjs';
-import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
+import { veiculoDoLote, complementoGenerico } from './lib/veiculo-do-lote.mjs';
 import { patioPreservado } from './lib/patio-veiculo.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
 import { FONTES_VEICULOS } from './lib/motor/fontes-veiculos.mjs';
@@ -56,6 +56,25 @@ async function gravar(rows) {
   return n;
 }
 
+async function desligarSumidos(fonte, idsNoSite) {
+  const ativos = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from('veiculos_leilao').select('id,fonte_id').eq('fonte', fonte).eq('ativo', true)
+      .like('fonte_id', `${fonte.toLowerCase()}_veic_%`).order('id').range(de, de + 999);
+    if (error) { console.warn(`  [${fonte}] sumidos: leitura falhou (${error.message}) — pulado`); return; }
+    ativos.push(...data);
+    if (data.length < 1000) break;
+  }
+  const sumidos = ativos.filter((v) => !idsNoSite.has(v.fonte_id)).map((v) => v.id);
+  if (!sumidos.length) return;
+  // Freio: mais da metade do acervo "sumindo" de uma vez é mais provável lista parcial do que o site
+  // ter esvaziado — não desliga, avisa.
+  if (sumidos.length > Math.max(10, ativos.length / 2)) { console.warn(`  [${fonte}] sumidos: ${sumidos.length} de ${ativos.length} — demais para uma rodada, NÃO desligados (conferir a lista)`); return; }
+  const { data, error } = await supabase.from('veiculos_leilao').update({ ativo: false }).in('id', sumidos).select('id');
+  if (error) console.warn(`  [${fonte}] sumidos: desligamento falhou (${error.message})`);
+  else console.log(`  [${fonte}] ${data.length} veículo(s) que saíram do site desligados`);
+}
+
 async function coletarTenant(cfg, fetchFonte, tenant) {
   const v = cfg.veiculos;
   const cfgV = {
@@ -85,17 +104,21 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
 
   const rows = []; const motivos = new Map(); let sem = 0, cota = 0;
   for (const url of alvo) {
-    const r = await fetchFonte(url, { semBD: SEM_BD });
+    // Fonte cujo CATÁLOGO já traz o detalhe (Nakakogue: `detalhesDoCatalogo`) não abre a página do lote.
+    const detPronto = en.detCatalogo?.get(url);
+    const r = detPronto ? { html: null } : await fetchFonte(url, { semBD: SEM_BD });
     if (r?.semCota) { cota = alvo.length - rows.length; console.log(`💰 [${tenant.fonte}] teto de orçamento — parei (não é regressão da fonte)`); break; }
-    if (!r?.html) { sem++; continue; }
-    const det = await cfg.parse.parseDetalhe(r.html, url, { fetchFonte, tenant });
+    if (!r?.html && !detPronto) { sem++; continue; }
+    const det = detPronto || await cfg.parse.parseDetalhe(r.html, url, { fetchFonte, tenant });
     if (!det) { sem++; continue; }
     if (det.encerrado) { motivos.set('encerrado', (motivos.get('encerrado') || 0) + 1); continue; }
     const imo = cfg.parse.montarRow(url, det, tenant);
     // Gancho por fonte: o que a página de VEÍCULO tem e o parser de imóvel não lê (título real,
     // comitente, local). Só preenche o que veio — nunca troca dado lido por vazio.
-    if (cfg.veiculos.complemento) {
-      const c = cfg.veiculos.complemento(r.html) || {};
+    {
+      // Sem gancho próprio, vale o genérico (rótulos "Marca/Modelo:", "Depósito:", "Descrição do lote").
+      const c = r.html ? ((cfg.veiculos.complemento || complementoGenerico)(r.html) || {}) : {};
+      if (c.ficha) imo.descricao = `${imo.titulo || ''} ${imo.descricao || ''} ${c.ficha}`.trim();
       if (c.titulo) imo.titulo = c.titulo;
       if (c.cidade && !imo.cidade) imo.cidade = c.cidade;
       if (c.estado && !imo.estado) imo.estado = c.estado;
@@ -110,7 +133,7 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   }
   // O motivo de cada descarte vai para o log: "N descartados" sozinho obriga outra rodada para saber o porquê.
   console.log(`[${tenant.fonte}] prontos ${rows.length} · sem detalhe ${sem}${[...motivos].map(([m, n]) => ` · ${m}: ${n}`).join('')}`);
-  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota };
+  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, idsEnumerados: new Set(en.urls.map(idDe)) };
 }
 
 async function main() {
@@ -125,6 +148,11 @@ async function main() {
         try {
           const r = await coletarTenant(cfg, motor.fetchFonte, tenant);
           if (!DRYRUN && r.rows.length) console.log(`✅ [${tenant.fonte}] ${await gravar(r.rows)} veículos gravados/atualizados.`);
+          // SUMIDOS (só fonte cujo catálogo vem INTEIRO numa chamada — `listaCompleta`): veículo ativo que
+          // não está mais na lista saiu do site. Sem isto, lote sem data no card (Nakakogue) ficaria
+          // ativo para sempre — o acervo inflado da varredura de 21/10 (VIP 107 × ~38 no site).
+          // Só com a lista lida de verdade e não vazia: lista que não abriu NÃO é "tudo sumiu".
+          if (!DRYRUN && cfg.veiculos.listaCompleta && r.fetchOk && r.idsEnumerados.size) await desligarSumidos(tenant.fonte, r.idsEnumerados);
           if (!DRYRUN) {
             await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, r.rows, cfg.chave, {
               ok: r.fetchOk && (r.rows.length > 0 || r.enumerados === 0), enumerados: r.enumerados, semCota: r.cota > 0,
