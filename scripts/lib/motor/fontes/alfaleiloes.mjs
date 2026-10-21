@@ -13,9 +13,11 @@ export default {
   chave: 'alfa',
   fetch: 'dom',
   dom: { esperaMs: 3000 },
-  catalogo: '/imoveis',
-  paginaParam: 'pagina',
-  maxPages: 2,
+  // 21/10: domínio novo (.com) — catálogo é /leiloes/ com `?page=N` (5 páginas; mistura veículo e
+  // gado, que o filtro de não-imóvel do motor já descarta).
+  catalogo: '/leiloes/',
+  paginaParam: 'page',
+  maxPages: 8,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {

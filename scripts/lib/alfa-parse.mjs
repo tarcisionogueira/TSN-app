@@ -15,12 +15,14 @@ import { inferirTipo, cidadeUF, extrairArea, proximaData, checarQualidade } from
 import { textoDe, valorPorRotulo, tituloDeSlug, cidadeUFDeSlug, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
 
 export const TENANTS = {
-  alfa: { fonte: 'ALFA', leiloeiro: 'Alfa Leilões', base: 'https://www.alfaleiloes.com.br' },
+  // 21/10: o site mudou para alfaleiloes.COM — o .com.br/imoveis redireciona para a home nova, que
+  // só tem ~7 destaques (enum 3–9 contra ≥16 imóveis no site). Mesmo id de lote (/lote/<id>/<slug>/).
+  alfa: { fonte: 'ALFA', leiloeiro: 'Alfa Leilões', base: 'https://www.alfaleiloes.com' },
 };
 
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["'](\/lote\/(\d+)\/[a-z0-9-]+\/?)["']/gi)) {
+  for (const m of String(html || '').matchAll(/href=["'](?:https?:\/\/[^"'/]*alfaleiloes\.com(?:\.br)?)?(\/lote\/(\d+)\/[a-z0-9-]+\/?)["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
   }
   return urls;
