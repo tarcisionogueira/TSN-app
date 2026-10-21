@@ -88,7 +88,7 @@ export default function AndamentoProcessoCaso({ casoId = null, arrematadoId = nu
   useEffect(() => {
     if (!imovelId) return;
     let vivo = true;
-    supabase.from('imoveis_leilao').select('numero_processo, modalidade').eq('id', imovelId).maybeSingle()
+    supabase.from('imoveis_leilao_mascarado').select('numero_processo, modalidade').eq('id', imovelId).maybeSingle()
       .then(({ data }) => {
         if (!vivo || !data) return;
         setExtrajudicial(/extra/i.test(String(data.modalidade || '')));

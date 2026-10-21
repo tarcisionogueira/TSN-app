@@ -5238,7 +5238,7 @@ function PedidosLeiloeiroEquipeManager() {
       if (error) { setErro('Não consegui ler os pedidos: ' + error.message); setLinhas([]); return; }
       const ids = [...new Set((data || []).map(d => d.imovel_id))];
       if (!ids.length) { setLinhas([]); return; }
-      const { data: ims, error: e2 } = await supabase.from('imoveis_leilao')
+      const { data: ims, error: e2 } = await supabase.from('imoveis_leilao_mascarado')
         .select('id, titulo, cidade, estado, tem_matricula_doc, tem_edital_doc, ativo').in('id', ids);
       if (e2) { setErro('Não consegui ler os lotes: ' + e2.message); setLinhas([]); return; }
       const porId = Object.fromEntries((ims || []).map(i => [i.id, i]));
@@ -7550,7 +7550,7 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
     if (data?.length) {
       const res = await Promise.all(
         data.map(p =>
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('fonte', `parceiro_${p.id}`)
+          supabase.from('imoveis_leilao_mascarado').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('fonte', `parceiro_${p.id}`)
         )
       );
       const mapa = {};

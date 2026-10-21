@@ -36,7 +36,7 @@ export default function ImovelGate() {
     // link o que já está aberto na página indexada do mesmo lote.
     // A DECISÃO DE 08/08 SEGUE DE PÉ: endereço exato, mapa, edital/matrícula e as análises
     // continuam atrás do cadastro. O público vê o FATO; a conta abre o que é NOSSO.
-    supabase.from('imoveis_leilao')
+    supabase.from('imoveis_leilao_mascarado')
       // 05/10 (dono): "apresentar mais informações" — galeria, ocupação, condomínio, pagamento e
       // data da 2ª praça entram; continuam FORA sem login: link do leiloeiro, anexos/documentos,
       // endereço exato/mapa e análise. Após login, a página completa (ImovelDetalhe) abre tudo.

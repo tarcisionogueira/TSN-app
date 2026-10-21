@@ -202,7 +202,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     (async () => {
       let avaliacao = null, valorMercado = null;
       if (imovelId) {
-        try { const { data: im } = await supabase.from('imoveis_leilao').select('valor_avaliacao').eq('id', imovelId).maybeSingle(); avaliacao = im?.valor_avaliacao ?? null; } catch { /* ignore */ }
+        try { const { data: im } = await supabase.from('imoveis_leilao_mascarado').select('valor_avaliacao').eq('id', imovelId).maybeSingle(); avaliacao = im?.valor_avaliacao ?? null; } catch { /* ignore */ }
         try {
           const { data: am } = await supabase.from('analises_mercado').select('result').eq('user_id', arr.user_id).eq('imovel_id', imovelId).eq('status', 'concluida').order('updated_at', { ascending: false }).limit(1);
           // `?? null` cobria o campo AUSENTE, mas não o ZERO: um mercadológico que concluiu
@@ -872,7 +872,7 @@ export default function Arrematados() {
           const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = Number(x.result?.valorMercado) > 0 ? Number(x.result.valorMercado) : null; }); setMercado(mm);
         } catch (e) { console.warn('[arrematados] valor de mercado:', e?.message || e); falhas.push('o valor de mercado'); setMercado({}); }
         try {
-          const { data: iv, error: errIv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao,modalidade,numero_processo').in('id', imovelIds);
+          const { data: iv, error: errIv } = await supabase.from('imoveis_leilao_mascarado').select('id,valor_avaliacao,modalidade,numero_processo').in('id', imovelIds);
           if (errIv) throw errIv;
           const av = {}; const proc = {};
           (iv || []).forEach(x => { av[x.id] = x.valor_avaliacao ?? null; proc[x.id] = { modalidade: x.modalidade, numero_processo: x.numero_processo }; });

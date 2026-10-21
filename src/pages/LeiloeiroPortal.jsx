@@ -30,7 +30,7 @@ export default function LeiloeiroPortal() {
 
     // Estatísticas dos imóveis vinculados (catálogo único imoveis_leilao, fonte=webhook_<id>)
     const { count: totalImoveis } = await supabase
-      .from('imoveis_leilao')
+      .from('imoveis_leilao_mascarado')
       .select('*', { count: 'exact', head: true })
       .eq('fonte', `webhook_${alvoId}`)
       .eq('ativo', true);

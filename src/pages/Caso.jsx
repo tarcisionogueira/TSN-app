@@ -806,7 +806,7 @@ export default function Caso() {
           // Tabela e coluna CERTAS (08/08): não existe `imoveis` nem `link_leilao` — é
           // `imoveis_leilao` e `url_lote`. A consulta devolvia 400 e a tela do caso perdia a
           // data do leilão e o link do lote em silêncio.
-          ? supabase.from('imoveis_leilao').select('data_leilao,titulo,url_lote').eq('id', casoData.imovel_id).maybeSingle()
+          ? supabase.from('imoveis_leilao_mascarado').select('data_leilao,titulo,url_lote').eq('id', casoData.imovel_id).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 

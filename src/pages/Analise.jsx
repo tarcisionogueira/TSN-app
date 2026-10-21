@@ -355,7 +355,7 @@ export default function Analise() {
       // `{ data, error }`: falha de leitura não pode virar "imóvel sem endereço" — que é
       // exatamente o defeito que esta recuperação existe para consertar.
       const { data, error } = await lerComRenovacao(supabase, () => supabase
-        .from('imoveis_leilao')
+        .from('imoveis_leilao_mascarado')
         .select('id, fonte, titulo, tipo, endereco, bairro, cidade, estado, valor_avaliacao, valor_minimo, valor_minimo_2, data_leilao, data_leilao_2, area_m2, leiloeiro, modalidade, forma_pagamento, anexos, link_edital, link_matricula, url_lote, doc_fatos')
         .eq('id', idDaUrl).maybeSingle());
       if (!vivo) return;
@@ -426,7 +426,7 @@ export default function Analise() {
       // de propósito (o usuário pode ter editado valores).
       if (/^[0-9a-f-]{36}$/i.test(String(idImovel))) {
         const { data: fresco, error: eFresco } = await supabase
-          .from('imoveis_leilao').select('anexos, fotos, link_foto, fonte, fonte_id, url_lote').eq('id', idImovel).maybeSingle();
+          .from('imoveis_leilao_mascarado').select('anexos, fotos, link_foto, fonte, fonte_id, url_lote').eq('id', idImovel).maybeSingle();
         // `error` conferido: leitura que falha NÃO pode virar "o lote não tem anexo" e apagar
         // da tela o que existe — sem isto, um 5xx transitório esconderia os documentos.
         if (!cancel && !eFresco && fresco) {
@@ -1446,9 +1446,9 @@ export default function Analise() {
       if (link && ehIdManual(analiseImovelId)) {
         const semProto = link.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/#?]+$/, '');
         const variantes = [...new Set(['https://', 'http://', 'https://www.', 'http://www.'].flatMap((p) => [`${p}${semProto}`, `${p}${semProto}/`]))];
-        const { data: noAcervo, error: errAcervo } = await supabase.from('imoveis_leilao')
-          .select('id, ativo, data_leilao, fonte').in('url_lote', variantes)
-          .order('ativo', { ascending: false }).order('data_leilao', { ascending: false, nullsFirst: false }).limit(1);
+        // RPC (21/10, #264): url_lote não é mais legível pelo navegador — a função só diz SE o link está na base.
+        const { data: achados, error: errAcervo } = await supabase.rpc('imovel_por_url_lote', { p_urls: variantes });
+        const noAcervo = (achados || []).slice().sort((a, b) => (Number(b.ativo) - Number(a.ativo)) || String(b.data_leilao || '').localeCompare(String(a.data_leilao || '')));
         if (errAcervo) console.warn('[analise] busca do link no acervo falhou — segue como lote manual:', errAcervo.message);
         else if (noAcervo?.[0]?.id) {
           showMsg(noAcervo[0].ativo

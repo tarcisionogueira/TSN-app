@@ -4,8 +4,8 @@
  * Regra única para todas as telas de imóvel: nome do leiloeiro, selo da fonte na foto, link do lote, documentos
  * hospedados no site do leiloeiro e "também anunciado em". Combo = role top2 (já entra). Só Veículos não libera
  * o leiloeiro de IMÓVEL (é outra trilha).
- * ⚠️ Camada de TELA: a tabela imoveis_leilao ainda é legível por qualquer um (política `OR true`). Fechar no banco,
- * como em veiculos_vitrine, é a pendência registrada em pendencias_projeto.
+ * No BANCO desde 21/10 (#264, 20261021_imoveis_leiloeiro_plano_pago.sql): o navegador lê o acervo pela view
+ * imoveis_leilao_mascarado (as colunas do leiloeiro vazias para quem não pode) e não lê mais essas colunas na tabela.
  */
 export const ROLES_PAGOS_IMOVEIS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
 export const ROLES_EQUIPE = ['admin', 'analista', 'consultor', 'advogado', 'suporte'];

@@ -282,7 +282,7 @@ function ImoveisSimilares({ imovel, nav }) {
       // 19/08: `valor_minimo` cru é a 1ª praça — a Busca exibe/filtra/ordena por
       // `valor_minimo_ref` (a praça mais descontada) e pelo `desconto_percentual` da coluna.
       // Este card mostrava o MESMO lote caro aqui e barato na lista (2 praças = 2 réguas).
-      let q = supabase.from('imoveis_leilao')
+      let q = supabase.from('imoveis_leilao_mascarado')
         .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_minimo_ref,desconto_percentual,valor_avaliacao,link_foto,tipo,area_m2,fonte,fonte_id')
         .eq('ativo', true).eq('cidade', imovel.cidade).neq('id', imovel.id).limit(12);
       // SEMPRE junto do estado: há cidades homônimas em UFs diferentes (ex.: Palmas/TO
@@ -740,7 +740,7 @@ function AnunciadoEm({ imovel }) {
   useEffect(() => {
     if (!imovel?.copiaDeOutroAnuncio || !imovel?.id) return;
     let vigente = true;
-    supabase.from('imoveis_leilao').select('id').contains('anunciado_em', [{ id: imovel.id }]).limit(1)
+    supabase.from('imoveis_leilao_mascarado').select('id').contains('anunciado_em', [{ id: imovel.id }]).limit(1)
       .then(({ data, error }) => { if (vigente && !error && data?.[0]) setPrincipal(data[0].id); });
     return () => { vigente = false; };
   }, [imovel?.id, imovel?.copiaDeOutroAnuncio]);
@@ -959,7 +959,7 @@ export default function ImovelDetalhe() {
     //     sobrescrever a tela. `vigente` descarta resposta de um id que já saiu — é o mesmo
     //     idioma (`vivo`) que o efeito da cota, logo acima, já usa neste arquivo.
     let vigente = true;
-    supabase.from('imoveis_leilao').select('*').eq('id', id).single()
+    supabase.from('imoveis_leilao_mascarado').select('*').eq('id', id).single()
       .then(({ data, error }) => {
         if (!vigente) return;   // resposta de um imóvel que já não está na tela
         if (error || !data) {

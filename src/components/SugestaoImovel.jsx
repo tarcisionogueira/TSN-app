@@ -83,7 +83,7 @@ export default function SugestaoImovel() {
         if (!uf && !cidadesRef.length) return;
         const normCid = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
         const base = () => {
-          let q = supabase.from('imoveis_leilao')
+          let q = supabase.from('imoveis_leilao_mascarado')
             .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto,fonte,fonte_id')
             .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
             .gte('desconto_percentual', descMin);

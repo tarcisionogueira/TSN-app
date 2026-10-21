@@ -388,7 +388,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const GRAU_LAT_KM = 111.32;
       const LIMITE_PINS = 2000;
       let q = supabase
-        .from('imoveis_leilao')
+        .from('imoveis_leilao_mascarado')
         .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, valor_minimo_ref, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, tem_edital_doc, tem_matricula_doc, score_juridico, score_financeiro, valor_mercado, analise_viavel')
         .not('latitude', 'is', null)
         .neq('latitude', 0);
@@ -961,7 +961,7 @@ export default function Busca() {
         // Inclui bairros SEM imóvel ativo agora (lotes desativados/históricos) para
         // que o investidor possa selecioná-los e SALVAR o filtro, recebendo as
         // oportunidades por e-mail quando surgirem. `count` conta só os ativos.
-        const { data } = await supabase.from('imoveis_leilao')
+        const { data } = await supabase.from('imoveis_leilao_mascarado')
           .select('bairro, ativo')
           .eq('estado', filtros.estado)
           .in('cidade_norm', cidades.map(normCidade))
@@ -1101,7 +1101,7 @@ export default function Busca() {
     if (!cidade) { if (atual()) setCentroRaio(null); return null; }
     // 1) Centroide dos imóveis da cidade (fonte da verdade)
     try {
-      let q = supabase.from('imoveis_leilao')
+      let q = supabase.from('imoveis_leilao_mascarado')
         .select('latitude, longitude')
         .eq('ativo', true).eq('cidade_norm', normCidade(cidade))
         .not('latitude', 'is', null).neq('latitude', 0).limit(500);
@@ -1414,8 +1414,8 @@ export default function Busca() {
         const [{ count, error: countError }, { data, error }] = await Promise.all([
           // count 'estimated' (planner): exato p/ conjuntos pequenos, estimativa barata p/
           // grandes — evita um COUNT(*) cheio do catálogo a cada busca (escala com 10k users).
-          buildQuery(supabase.from('imoveis_leilao').select('id', { count: 'estimated', head: true })),
-          buildQuery(supabase.from('imoveis_leilao').select(COLUNAS_BUSCA))
+          buildQuery(supabase.from('imoveis_leilao_mascarado').select('id', { count: 'estimated', head: true })),
+          buildQuery(supabase.from('imoveis_leilao_mascarado').select(COLUNAS_BUSCA))
             .order(coluna, { ascending: dir, nullsFirst: false })
             // Achado do QA de 21/09: `coluna` (desconto/valor/data) não é única — com o
             // scraper inserindo/atualizando o catálogo o tempo todo, dois imóveis podem

@@ -69,7 +69,7 @@ export default function MapaImoveis() {
     const { tipo, estado } = filtrosRef.current;
 
     let q = supabase
-      .from('imoveis_leilao')
+      .from('imoveis_leilao_mascarado')
       .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto, fonte, fonte_id, geocod_nivel')
       .eq('ativo', true)
       .not('latitude', 'is', null)
@@ -150,7 +150,7 @@ export default function MapaImoveis() {
 
   // Carrega estados para o filtro
   useEffect(() => {
-    supabase.from('imoveis_leilao').select('estado').eq('ativo', true)
+    supabase.from('imoveis_leilao_mascarado').select('estado').eq('ativo', true)
       .not('latitude', 'is', null).neq('latitude', 0)
       .then(({ data }) => {
         const unicos = [...new Set((data || []).map(e => e.estado).filter(Boolean))].sort();

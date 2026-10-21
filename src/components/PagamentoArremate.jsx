@@ -28,7 +28,7 @@ export default function PagamentoArremate({ arr, podeEditar, cardStyle, ehEquipe
   const [processo, setProcesso] = React.useState(arr.imovel?.numero_processo || '');
   React.useEffect(() => {
     if (!arr.imovel_id) return;
-    supabase.from('imoveis_leilao').select('modalidade, numero_processo').eq('id', arr.imovel_id).maybeSingle()
+    supabase.from('imoveis_leilao_mascarado').select('modalidade, numero_processo').eq('id', arr.imovel_id).maybeSingle()
       .then(({ data, error }) => {
         if (error) { console.warn('[PagamentoArremate] modalidade/processo:', error.message); return; }
         if (data?.modalidade) setModalidade(data.modalidade);
