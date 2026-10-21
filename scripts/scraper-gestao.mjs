@@ -590,14 +590,30 @@ async function coletarEvento(dominio, idLeilao) {
   const textoCompleto = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const idxData = textoCompleto.search(/Data:\s*Abertura|1[ªa]\s*Pra[çc]a|Data:\s*\d{1,2}\/[A-Za-zç]{3}\/\d{4}/i);
   const textoData = idxData >= 0 ? textoCompleto.slice(Math.max(0, idxData - 100), idxData + 200) : cabecalho;
+  // ENCERRAMENTO, não ABERTURA (21/10). O cabeçalho é "Data: Abertura 14/Out/2026, 10h00
+  // Encerramento 04/Nov/2026" — a abertura é quando os LANCES começam; o leilão é o encerramento.
+  // Gravar a 1ª data da janela punha a abertura em `data_leilao`, e o gatilho de praça vencida
+  // desligava o lote NA GRAVAÇÃO: granado/extrajust/lancetotal com 0 ativos, 195 lotes do cluster
+  // gravados inativos em 21/10. Sem "Encerramento" (vinco: "Data: 22/Out/2026"), segue a 1ª data.
+  const mEnc = textoData.match(/Encerramento\s*(\d{1,2}\/[A-Za-zç]{3}\/\d{4})/i);
   const ctx = {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),
-    data_leilao: dataEvento(textoData),
+    data_leilao: dataEvento(mEnc ? mEnc[1] : textoData),
     htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)
   };
   let cards = fatiarCards(html);
   let parse = parseCard;
+  // EVENTO INTEIRO NO LAYOUT CLÁSSICO (21/10). A página traz 20 lotes de "Total de lotes N" (granado
+  // 109: 20 de 497) e só o layout em grade buscava o resto. Mesmo back-office, mesmo `todos=1`
+  // (medido: 497 cards). Fica com a resposta que trouxer MAIS cards — nunca troca para pior.
+  const totalClassico = Number((textoCompleto.match(/Total de lotes\s*(\d+)/i) || [])[1] || 0);
+  if (cards.length && totalClassico > cards.length) {
+    const hTodos = await bd(`${url}&pagina=-1&action=0&todos=1`, { valido: paginaOk });
+    const cTodos = paginaOk(hTodos) ? fatiarCards(hTodos) : [];
+    if (cTodos.length > cards.length) { cards = cTodos; ctx.htmlEvento = hTodos; }
+    else console.error(`  [${dominio}] evento ${idLeilao}: todos=1 não trouxe mais lotes — fico com ${cards.length}/${totalClassico}.`);
+  }
   if (!cards.length && ehGrade(html)) {
     // Layout em grade (vinco): a 1ª página traz 20 de "LOTES EM LEILÃO N". Se faltar lote,
     // 1 request a mais com `todos=1` traz o evento inteiro (o próprio site monta essa URL).
