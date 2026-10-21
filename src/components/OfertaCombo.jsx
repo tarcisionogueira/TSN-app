@@ -57,3 +57,36 @@ export default function OfertaCombo({ planoKey, PLANOS, onEscolher, escuro = fal
     </div>
   );
 }
+
+/**
+ * COMBO COMO CHECKBOX no checkout (21/10, dono: "coloque o combo como um checkbox — apenas atualizando o valor e
+ * permissões do sistema"). Marcar troca o plano da tela para `combo` (preço, termo e cobrança do Combo — e com ele
+ * as permissões: o webhook ativa Pro + acesso a veículos); desmarcar volta ao plano de origem (`base`).
+ */
+export function ComboCheckbox({ marcado, base, PLANOS, onChange }) {
+  const num = (k) => Number(PLANOS?.[k]?.preco) || 0;
+  const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const combo = num('combo');
+  const diferenca = combo - num(base);
+  const economia = num('top2') + num('veiculos') - combo;
+  const inclui = base === 'veiculos' ? 'os imóveis (Investidor Pro)' : 'os veículos (Leilão de Veículos)';
+  return (
+    <label style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer', background: marcado ? '#f5f3ff' : '#faf5ff', border: `2px solid ${marcado ? '#7c3aed' : '#ddd6fe'}`, borderRadius: 14, padding: '14px 16px', marginBottom: 16, transition: 'border-color .15s, background .15s' }}>
+      <input type="checkbox" checked={marcado} onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: '#7c3aed', cursor: 'pointer' }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#4c1d95' }}>
+          Incluir {inclui} — Combo {combo > 0 ? fmt(combo) : ''}/mês
+        </span>
+        <span style={{ display: 'block', fontSize: 12.5, color: '#5b21b6', marginTop: 3, lineHeight: 1.5 }}>
+          {diferenca > 0 ? `Só +${fmt(diferenca)}/mês` : 'Imóveis e veículos'}{economia > 0 ? ` · economize ${fmt(economia)}/mês em relação aos dois separados` : ''}.
+        </span>
+        <span style={{ display: 'block', fontSize: 12, color: '#6b21a8', marginTop: 6, lineHeight: 1.55 }}>
+          {base === 'veiculos'
+            ? 'Relatórios de viabilidade e análise de edital, matrícula e processo dos imóveis (10 + 10/mês), além de tudo de veículos.'
+            : 'O leiloeiro de cada carro desbloqueado, com link, documentos e pátio, e 10 relatórios por IA de veículos/mês.'}
+        </span>
+      </span>
+    </label>
+  );
+}

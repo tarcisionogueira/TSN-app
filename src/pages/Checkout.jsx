@@ -10,7 +10,7 @@ import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../ut
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
-import OfertaCombo, { podeOferecerCombo } from '../components/OfertaCombo';
+import OfertaCombo, { podeOferecerCombo, ComboCheckbox } from '../components/OfertaCombo';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
@@ -183,6 +183,15 @@ export default function Checkout() {
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   // À prova de falha: nunca indexa um PLANOS indefinido e sempre cai no estático.
   const plano = (PLANOS && PLANOS[planoKey]) || PLANOS_STATIC[planoKey] || null;
+  // Checkbox do Combo (21/10): troca o plano NA MESMA TELA (replace — o Voltar não passa por cada clique) e
+  // lembra o plano de origem em `de` para desmarcar voltar a ele.
+  const comboBase = planoKey === 'combo' ? params.get('de') : planoKey;
+  const mostrarComboCheckbox = ['top2', 'veiculos'].includes(comboBase) && podeOferecerCombo(comboBase, role, PLANOS);
+  const alternarCombo = (marcar) => {
+    const p = new URLSearchParams(params);
+    if (marcar) { p.set('plano', 'combo'); p.set('de', comboBase); } else { p.set('plano', comboBase); p.delete('de'); }
+    nav(`/checkout?${p}`, { replace: true });
+  };
 
   useEffect(() => {
     // Só troca o catálogo se veio um objeto válido — senão mantém o estático
@@ -1474,6 +1483,9 @@ export default function Checkout() {
               Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})
             </div>
           )}
+          {mostrarComboCheckbox && !resultadoMudanca && (
+            <ComboCheckbox marcado={planoKey === 'combo'} base={comboBase} PLANOS={PLANOS} onChange={alternarCombo} />
+          )}
           {/* Aviso LGPD, CPF e nome são enviados ao processador de pagamento */}
           <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 20, fontSize: 11, color: '#0369a1', lineHeight: 1.5 }}>
             Seus dados (nome e CPF) serão compartilhados com o processador de pagamento para emissão da cobrança, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
@@ -1833,11 +1845,6 @@ export default function Checkout() {
                     : 'Somente cartão de crédito · Cancele quando quiser'}
               </p>
             </>
-          )}
-
-          {/* Combo PERTO do botão de pagamento (21/10, dono): primeiro o plano escolhido, depois a alternativa. */}
-          {podeOferecerCombo(planoKey, role, PLANOS) && (
-            <div style={{ marginTop: 20 }}><OfertaCombo planoKey={planoKey} PLANOS={PLANOS} onEscolher={irParaCombo} /></div>
           )}
 
           <button onClick={() => nav('/')} style={{ marginTop: 16, width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
