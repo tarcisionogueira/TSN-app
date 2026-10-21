@@ -8,7 +8,11 @@ import { supabase } from '../utils/supabase';
 import { AZUL } from '../utils/marca';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
-import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
+import { FinanceiroCaixa, AbaAssinaturas, SinteseFinanceira, AbaRecusas } from './AdminFinanceiro';
+import ExtratoUnificado from '../components/ExtratoUnificado';
+import ConciliacaoBancaria from '../components/ConciliacaoBancaria';
+import MonitorFinanceiro from '../components/MonitorFinanceiro';
+import CobrancaAvulsaAdmin from '../components/CobrancaAvulsaAdmin';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 import { imprimirHtml } from '../components/pdfImprimir';
 import { tituloProduto, termoDoProduto } from '../utils/termos';
@@ -30,7 +34,7 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 // 'consultor' e 'afiliado' (venda avulsa) APOSENTADOS — substituídos pelo MLM/Programa de
 // Parceiros (todos ganham sendo pagantes em dia + link). Não são mais atribuíveis.
 const ROLES_DISPONIVEIS = [
-  'admin','explorador','top2','assessorado','clube','analista','advogado','leiloeiro',
+  'admin','explorador','top2','assessorado','analista','advogado','leiloeiro',
 ];
 
 // `perfis` NÃO tem coluna `email` — o e-mail mora em auth.users. Pedir `email` no select ou no
@@ -116,7 +120,6 @@ const PLANOS_ACESSO = [
   { key: 'top2',        label: 'Investidor Pro (mensal)' },
   { key: 'top2_anual',  label: 'Investidor Pro (anual)' },
   { key: 'assessorado', label: 'Assessoria' },
-  { key: 'clube',       label: 'Leilão Club' },
 ];
 
 // Regra do dono (12/09): curso pago, por padrão, concede Investidor Pro e cobra a
@@ -664,8 +667,7 @@ function CursosTab() {
                     <option value="">Não concede</option>
                     <option value="top2">Investidor Pro</option>
                     <option value="assessorado">Assessoria</option>
-                    <option value="clube">Leilão Club</option>
-                  </select>
+                                      </select>
                   {form.concede_plano && (
                     <label style={{ fontSize:14, color:'#374151', display:'flex', alignItems:'center', gap:6 }}>
                       por
@@ -1270,8 +1272,7 @@ function EbooksTab() {
                   <option value="">Não concede</option>
                   <option value="top2">Investidor Pro</option>
                   <option value="assessorado">Assessoria</option>
-                  <option value="clube">Leilão Club</option>
-                </select>
+                                  </select>
                 {form.concede_plano && (
                   <label style={{ fontSize:14, color:'#374151', display:'flex', alignItems:'center', gap:6 }}>
                     por
@@ -2446,8 +2447,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
             <label style={{ fontSize:11, fontWeight:700, color:'#64748b' }}>Plano</label>
             <select value={assinForm.plano} onChange={e => setAssinForm(p => ({ ...p, plano: e.target.value }))} style={S.input}>
               <option value="assessorado">Assessoria</option>
-              <option value="clube">Leilão Club</option>
-            </select>
+                          </select>
 
             <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Forma de pagamento</label>
             <select value={assinForm.forma} onChange={e => setAssinForm(p => ({ ...p, forma: e.target.value }))} style={S.input}>
@@ -2629,7 +2629,8 @@ function ConfigTab() {
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
       .then(({ data, error }) => {
-        if (!error && data) setPlanos(data.map(p => ({
+        // Leilão Club aposentado (21/10, dono): fica no banco inativo, sai da tabela de preços.
+        if (!error && data) setPlanos(data.filter(p => !/^clube/.test(p.plano_key)).map(p => ({
           ...p,
           desconto_vista_pct: (p.preco && p.preco_vista)
             ? Math.round((1 - p.preco_vista / p.preco) * 10000) / 100
@@ -2642,10 +2643,10 @@ function ConfigTab() {
       .then(({ data, error }) => setTaxasReais(error ? { erro: error.message } : data));
     supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle()
       .then(({ data }) => { if (data) setHonorarios(data); });
-    // Carrega config de fidelidade para assessorado e clube
+    // Carrega config de fidelidade da assessoria
     supabase.from('planos_config')
       .select('plano_key, fidelidade_meses, multa_cancelamento_pct, pagamento_tipo, acesso_meses, vinculado_arrematacao, honorarios_exito_pct')
-      .in('plano_key', ['assessorado', 'clube'])
+      .in('plano_key', ['assessorado'])
       .then(({ data }) => {
         if (data) {
           const m = {};
@@ -3246,7 +3247,6 @@ function ConfigTab() {
 
         {[
           { key: 'assessorado', nome: 'Assessorado', cor: '#d97706', bg: '#fef3c7' },
-          { key: 'clube',       nome: 'Leilão Club', cor: '#059669', bg: '#d1fae5' },
         ].map(({ key, nome, cor, bg }) => {
           const cfg = fidConfig[key] || {};
           return (
@@ -3441,7 +3441,7 @@ function ConfigTab() {
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
           Este quadro é de <b>leitura</b>. A taxa sai do próprio pagamento: o Mercado Pago
           devolve, em cada cobrança aprovada, quanto reteve — e é isso que aparece aqui, não um
-          percentual digitado. O detalhamento por mês fica no <a href="/#/admin/financeiro" style={{ color: '#0D63DB', fontWeight: 700 }}>financeiro</a>.
+          percentual digitado. O detalhamento por mês fica em Financeiro › Síntese.
         </p>
         {taxasReais === null && <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Apurando…</div>}
         {taxasReais?.erro && (
@@ -3489,8 +3489,8 @@ function ConfigTab() {
 // PlanosContext quando já carregou; cai num rótulo estático se ainda for null.
 // (A ausência desta função causava "buildProdutosPromo is not defined" ao abrir a aba.)
 function buildProdutosPromo(planosCtx) {
-  const LABELS = { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club' };
-  return ['top2', 'assessorado', 'clube'].map((key) => ({
+  const LABELS = { top2: 'Investidor Pro', assessorado: 'Assessoria' };
+  return ['top2', 'assessorado'].map((key) => ({
     key,
     label: planosCtx?.[key]?.nome || LABELS[key] || key,
   }));
@@ -6835,7 +6835,6 @@ function ComercialTab() {
   const [indicadoresExtra, setIndicadoresExtra] = useState([]);
   const [leadsMap, setLeadsMap] = useState({});
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState('todos'); // 'todos' | 'sem' | consultorId
   const [busca, setBusca] = useState('');
   // Aplicações de CONSÓRCIO/HOME EQUITY (leads de alavancagem) — F3: atribuição manual
   // via RPC admin_comercial_atribuir (garante o evento na trilha; update direto não).
@@ -6950,17 +6949,9 @@ function ComercialTab() {
   // Verdade sobre a amostra: se o banco tem mais do que veio, os KPIs abaixo são do LOTE.
   const truncado = typeof totalClientes === 'number' && totalClientes > clientes.length;
   const pagantes = clientes.filter(ehPagante).length;
-  const semCons = clientes.filter(c => !c.indicado_por).length;
   const inadimplentes = clientes.filter(c => c.inadimplente_desde).length;
 
-  const porConsultor = consultores.map(co => {
-    const meus = clientes.filter(c => c.indicado_por === co.id);
-    return { ...co, total: meus.length, pagantes: meus.filter(ehPagante).length };
-  });
-
   const filtrados = clientes.filter(c => {
-    if (filtro === 'sem' && c.indicado_por) return false;
-    if (filtro !== 'todos' && filtro !== 'sem' && c.indicado_por !== filtro) return false;
     if (busca && !`${c.nome || ''} ${c.telefone || ''}`.toLowerCase().includes(busca.toLowerCase())) return false;
     return true;
   });
@@ -7062,19 +7053,7 @@ function ComercialTab() {
         {card(truncado ? `Clientes (de ${totalClientes})` : 'Clientes', total, '#111111')}
         {card('Pagantes', pagantes, '#059669')}
         {card('Não pagantes', total - pagantes, '#0D63DB')}
-        {card('Sem consultor', semCons, semCons > 0 ? '#d97706' : '#94a3b8')}
         {card('Inadimplentes', inadimplentes, inadimplentes > 0 ? '#dc2626' : '#94a3b8')}
-      </div>
-
-      {/* Consultores (clicáveis para filtrar) */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        <button onClick={() => setFiltro('todos')} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === 'todos' ? '#0D63DB' : '#e2e8f0'}`, background: filtro === 'todos' ? '#eff6ff' : '#fff', fontSize: 12, fontWeight: 700, color: '#111', cursor: 'pointer' }}>Todos ({total})</button>
-        <button onClick={() => setFiltro('sem')} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === 'sem' ? '#d97706' : '#e2e8f0'}`, background: filtro === 'sem' ? '#fffbeb' : '#fff', fontSize: 12, fontWeight: 700, color: '#92400e', cursor: 'pointer' }}>Sem consultor ({semCons})</button>
-        {porConsultor.map(co => (
-          <button key={co.id} onClick={() => setFiltro(co.id)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === co.id ? '#059669' : '#e2e8f0'}`, background: filtro === co.id ? '#f0fdf4' : '#fff', fontSize: 12, fontWeight: 700, color: '#111', cursor: 'pointer' }}>
-            🤝 {co.nome} <span style={{ color: '#64748b', fontWeight: 600 }}>({co.total} · {co.pagantes} pag.)</span>
-          </button>
-        ))}
       </div>
 
       {/* Busca */}
@@ -7083,12 +7062,12 @@ function ComercialTab() {
       {/* Tabela */}
       <div style={{ ...S.card, borderRadius: 14, overflowX: 'auto' }}>
         {loading ? <p style={{ color: '#94a3b8' }}>Carregando…</p>
-          : filtrados.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum cliente neste filtro.</p>
+          : filtrados.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum cliente nesta busca.</p>
           : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11 }}>
-                  <th style={S.td}>Cliente</th><th style={S.td}>WhatsApp</th><th style={S.td}>Plano</th><th style={S.td}>Origem</th><th style={S.td}>Consultor</th><th style={S.td}>Entrou</th>
+                  <th style={S.td}>Cliente</th><th style={S.td}>WhatsApp</th><th style={S.td}>Plano</th><th style={S.td}>Origem</th><th style={S.td}>Indicado por</th><th style={S.td}>Entrou</th>
                 </tr>
               </thead>
               <tbody>
@@ -8009,47 +7988,38 @@ function EquipeTab() {
 // (só acessível pelos links do Dashboard). Agora tudo mora num lugar só.
 // ═══════════════════════════════════════════════════════════════════════════════
 function FinanceiroHub() {
-  // Ordem reflete a realidade do negócio: Mercado Pago é o PRINCIPAL (config_financeira.mp
-  // ativo), Asaas é o BACKUP. Por isso o MP vem primeiro e é o padrão.
+  // UM FINANCEIRO SÓ (21/10, dono aprovou): as abas que moravam em /admin/financeiro (Síntese, Extrato,
+  // Conciliação, Monitor, Recusas, Cobrança avulsa, Cartório) vieram para cá; Assinaturas e Fluxo de caixa
+  // existiam nas duas telas. Mercado Pago é o PRINCIPAL (config_financeira.mp ativo) → primeiro e padrão.
   const SUBS = [
-    { key: 'mp',          label: '🏦 Mercado Pago (principal)' },
-    { key: 'asaas',       label: '💰 Asaas (backup)' },
-    { key: 'assinaturas', label: '👥 Assinaturas' },
-    { key: 'saques',      label: '💸 Saques da equipe' },
-    { key: 'notas',       label: '🧾 Notas fiscais de saque' },
-    { key: 'conferencia', label: '⚖️ Pagamentos a conferir' },
+    { key: 'mp',              label: '🏦 Mercado Pago' },
+    { key: 'sintese',         label: '📊 Síntese' },
+    { key: 'asaas',           label: '💰 Fluxo de caixa' },
+    { key: 'extrato',         label: '🧾 Extrato' },
+    { key: 'conciliacao',     label: '📒 Conciliação e DRE' },
+    { key: 'monitor',         label: '📈 Monitor' },
+    { key: 'assinaturas',     label: '👥 Assinaturas' },
+    { key: 'recusas',         label: '⛔ Recusas' },
+    { key: 'cobranca_avulsa', label: '🔗 Cobrança avulsa' },
+    { key: 'cartorio',        label: '🏛️ Cartório' },
+    { key: 'saques',          label: '💸 Saques da equipe' },
+    { key: 'notas',           label: '🧾 Notas fiscais de saque' },
+    { key: 'conferencia',     label: '⚖️ Pagamentos a conferir' },
   ];
   const [sub, setSub] = React.useState(() => {
     let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
     if (s === 'caixa') s = 'asaas';   // chaves antigas (#249) → novas
     if (s === 'gateway') s = 'mp';
-    return s;
+    return SUBS.some((x) => x.key === s) ? s : 'mp';
   });
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
-  const navFin = useNavigate();
-
-  // A CONTABILIDADE ESTAVA ÓRFÃ (08/08). Extrato, Conciliação, DRE, importação de OFX e
-  // fechamento de competência vivem em `/admin/financeiro`, uma rota que existia "para
-  // deep-link" e que NENHUM lugar do app linkava — só se chegava digitando a URL. O dono
-  // procurou a tela de conciliação e não achou, com razão: não havia caminho.
-  // Estes atalhos ligam as duas telas. Cada um abre a rota já na aba certa.
-  const IR_PARA = [
-    { aba: 'extrato',     label: '🏦 Extrato real' },
-    { aba: 'conciliacao', label: '📒 Conciliação e DRE' },
-    { aba: 'monitor',     label: '📈 Monitor' },
-  ];
-  const abrirContabil = (aba) => {
-    sessionStorage.setItem('admin_fin_aba', aba);
-    navFin('/admin/financeiro');
-  };
 
   return (
     <div>
-      {/* Sub-abas do Financeiro */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 22, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, maxWidth: '100%' }}>
         {SUBS.map(s => (
           <button key={s.key} onClick={() => irSub(s.key)}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700,
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
               background: sub === s.key ? '#fff' : 'transparent', color: sub === s.key ? '#0D63DB' : '#64748b',
               boxShadow: sub === s.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
             {s.label}
@@ -8057,22 +8027,19 @@ function FinanceiroHub() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Contabilidade:</span>
-        {IR_PARA.map(x => (
-          <button key={x.aba} onClick={() => abrirContabil(x.aba)}
-            style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', color: '#334155', cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>
-            {x.label}
-          </button>
-        ))}
-      </div>
-
-      {sub === 'mp'          && <FinanceiroTab />}
-      {sub === 'asaas'       && <FinanceiroCaixa />}
-      {sub === 'assinaturas' && <AbaAssinaturas />}
-      {sub === 'saques'      && <PrestacaoContasTab />}
-      {sub === 'notas'       && <NotasFiscaisSaqueAdmin />}
-      {sub === 'conferencia' && <PagamentosConferenciaAdmin />}
+      {sub === 'mp'              && <FinanceiroTab />}
+      {sub === 'sintese'         && <SinteseFinanceira />}
+      {sub === 'asaas'           && <FinanceiroCaixa />}
+      {sub === 'extrato'         && <ExtratoUnificado />}
+      {sub === 'conciliacao'     && <ConciliacaoBancaria />}
+      {sub === 'monitor'         && <MonitorFinanceiro />}
+      {sub === 'assinaturas'     && <AbaAssinaturas />}
+      {sub === 'recusas'         && <AbaRecusas />}
+      {sub === 'cobranca_avulsa' && <CobrancaAvulsaAdmin />}
+      {sub === 'cartorio'        && <ServicosCartorio ehEquipe ehAdmin />}
+      {sub === 'saques'          && <PrestacaoContasTab />}
+      {sub === 'notas'           && <NotasFiscaisSaqueAdmin />}
+      {sub === 'conferencia'     && <PagamentosConferenciaAdmin />}
     </div>
   );
 }
@@ -11615,10 +11582,8 @@ const ROLES_SIMULAVEIS = [
   { key: 'explorador', label: '🔍 Explorador',      cor: '#64748b' },
   { key: 'top2',       label: '💎 Investidor Pro',   cor: '#0D63DB' },
   { key: 'assessorado',label: '🏠 Assessorado',      cor: '#d97706' },
-  { key: 'clube',      label: '⭐ Leilão Club',      cor: '#6366f1' },
   { key: 'analista',   label: '🔍 Analista',         cor: '#f59e0b' },
   { key: 'advogado',   label: '⚖️ Advogado',         cor: '#7c3aed' },
-  { key: 'consultor',  label: '🤝 Consultor',        cor: '#059669' },
   { key: 'leiloeiro',  label: '🔨 Leiloeiro',        cor: '#ea580c' },
 ];
 

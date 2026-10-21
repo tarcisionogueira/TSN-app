@@ -421,16 +421,6 @@ export default function Consultor() {
                         comissao: comissaoDePlano('assessorado'),
                         recorrente: false,
                       },
-                      {
-                        emoji: '🏛️',
-                        label: pNome('clube'),
-                        sub: planosCtx?.clube
-                          ? `${fmtPreco(planosCtx.clube.preco)} em 12× · ${fmtPreco(planosCtx.clube.precoVista || planosCtx.clube.preco * 12 * 0.8)} à vista`
-                          : 'R$ 60.000/ano · R$ 48.000 à vista',
-                        url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
-                        comissao: comissaoDePlano('clube'),
-                        recorrente: false,
-                      },
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',
                         label: c.titulo,

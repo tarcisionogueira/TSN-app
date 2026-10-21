@@ -334,7 +334,9 @@ export default function Checkout() {
 
   React.useEffect(() => {
     if (!plano && planoKey !== 'explorador') nav('/');
-  }, [planoKey]);
+    // Plano desligado no banco (ex.: Leilão Club, aposentado em 21/10) não vende por link antigo.
+    else if (plano?.ativo === false && mpStatus !== 'approved') nav('/planos', { replace: true });
+  }, [planoKey, plano?.ativo]);
 
   // Ativa plano quando MP redireciona de volta com status=approved.
   //

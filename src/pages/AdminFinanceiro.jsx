@@ -722,7 +722,7 @@ function TaxasGateway() {
 // RECUSAS DE PAGAMENTO (22/08): o código do Mercado Pago traduzido para o motivo + ação.
 // Antes só dava para ler no banco/equipe; aqui o admin vê por que uma cobrança não passou
 // (ex.: "alto risco" do antifraude do MP ≠ falta de saldo) e decide a recuperação.
-function AbaRecusas() {
+export function AbaRecusas() {
   const [rows, setRows] = useState(null);
   const [erro, setErro] = useState('');
   useEffect(() => {
@@ -752,68 +752,16 @@ function AbaRecusas() {
   );
 }
 
+// TELA ÚNICA (21/10, dono aprovou unir os dois financeiros): tudo o que morava aqui virou sub-aba de
+// Admin > Financeiro. A rota /admin/financeiro só redireciona, levando a aba pedida (links antigos e o
+// atalho `admin_fin_aba` continuam funcionando).
 export default function AdminFinanceiro() {
   const navigate = useNavigate();
-  // Abre já na aba que o atalho do Admin pediu (Extrato / Conciliação / Monitor). Sem isto,
-  // quem clicava em "Conciliação e DRE" caía na Síntese e tinha de procurar a aba de novo.
-  const [aba, setAba] = useState(() => {
-    try {
-      const pedida = sessionStorage.getItem('admin_fin_aba');
-      if (pedida) { sessionStorage.removeItem('admin_fin_aba'); return pedida; }
-    } catch { /* sessionStorage indisponível */ }
-    return 'sintese';
-  });
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '0 0 60px' }}>
-      {/* Header — paddingTop com env(safe-area-inset-top) p/ o botão "Voltar" não ficar
-          atrás da barra de status no PWA iOS (viewport-fit=cover + status bar translúcida). */}
-      <div style={{ background: '#111111', padding: '20px 32px', paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <button onClick={() => navigate('/admin')}
-          style={{ background: 'none', border: '1px solid #374151', color: '#94a3b8', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
-          ← Voltar
-        </button>
-        <div style={{ color: '#ffffff', fontWeight: 900, fontSize: 20 }}>Financeiro</div>
-      </div>
-
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Seletor de visão. `flexWrap` desde 07/10: são NOVE abas e a barra, com `width:
-            fit-content` e sem quebra, media ~1.190px dentro de um container de 860 — as últimas
-            ficavam fora da tela. O dono não achou "🏛️ Cartório", que é justamente a última.
-            A aba existia e funcionava; o que faltava era caber. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content', maxWidth: '100%' }}>
-          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas'], ['recusas', '⛔ Recusas'], ['cobranca_avulsa', '🧾 Cobrança avulsa'], ['cartorio', '🏛️ Cartório']].map(([k, label]) => (
-            <button key={k} onClick={() => setAba(k)}
-              style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
-                boxShadow: aba === k ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {aba === 'sintese' && <SinteseFinanceira />}
-        {aba === 'assinaturas' && <AbaAssinaturas />}
-        {aba === 'caixa' && <FinanceiroCaixa />}
-        {/* EXTRATO REAL das contas integradas (Asaas + Mercado Pago), com os DOIS lados do
-            fluxo. As outras abas partem do que o sistema registrou; esta lê as contas e mostra
-            também as SAÍDAS — sem elas há faturamento, não fluxo de caixa. */}
-        {aba === 'extrato' && <ExtratoUnificado />}
-        {/* CONCILIAÇÃO: onde o extrato vira contabilidade. Classifica pelo plano de contas,
-            registra quem classificou e exporta (PDF/OFX) para a contabilidade fechar a DRE. */}
-        {aba === 'conciliacao' && <ConciliacaoBancaria />}
-        {/* MONITOR: para onde o dinheiro vai, a fila de credores a classificar e o diagnóstico
-            da operação. É a leitura de decisão — a conciliação é o trabalho que a alimenta. */}
-        {aba === 'monitor' && <MonitorFinanceiro />}
-        {/* RECUSAS: por que uma cobrança não passou (código do MP traduzido) — base para recuperação. */}
-        {aba === 'recusas' && <AbaRecusas />}
-        {/* COBRANÇA AVULSA: motivo/valor livres fora do catálogo fixo de PROPOSITOS —
-            gera link público (api/cobranca-avulsa-criar.js), preço sempre do servidor. */}
-        {aba === 'cobranca_avulsa' && <CobrancaAvulsaAdmin />}
-        {/* CARTÓRIO (07/10): todas as operações cartorárias (vinculadas a arrematações e avulsas),
-            fila por status e catálogo de preços. A mesma tela aparece no caso de cada assessorado. */}
-        {aba === 'cartorio' && <ServicosCartorio ehEquipe ehAdmin />}
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    let aba = 'sintese';
+    try { aba = sessionStorage.getItem('admin_fin_aba') || 'sintese'; sessionStorage.removeItem('admin_fin_aba'); } catch { /* sessionStorage indisponível */ }
+    try { sessionStorage.setItem('admin_fin_sub', aba === 'caixa' ? 'asaas' : aba); } catch { /* idem */ }
+    navigate('/admin?aba=Financeiro', { replace: true });
+  }, [navigate]);
+  return null;
 }
