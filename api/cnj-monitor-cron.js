@@ -77,8 +77,14 @@ async function avisarCaso(mon, texto) {
 async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
-  const monitores = await (await sb(`processos_monitorados?ativo=eq.true&select=*&order=ultima_checagem.asc.nullsfirst&limit=40`)).json();
-  let checados = 0, alertas = 0, movimentosGravados = 0, falhas = 0, semTempo = 0;
+  const monitores = await (await sb(`processos_monitorados?ativo=eq.true&select=*&order=ultima_checagem.asc.nullsfirst&limit=120`)).json();
+  // 21/10: limit 40 → 120 (116 monitores ativos). Com 40/dia, cada processo era revisto a cada
+  // ~3 dias. O PRAZO abaixo é quem protege o teto da função: o que não couber fica SEM carimbo
+  // de `ultima_checagem` e volta no topo da fila amanhã — nada é pulado em silêncio.
+  let checados = 0, alertas = 0, movimentosGravados = 0, semTempo = 0;
+  // 21/10: falha guardada por monitor (e não só contada) para poder repetir no fim e para o
+  // corpo da resposta dizer QUAL processo ficou sem consulta.
+  const falhados = new Map(); // mon.id → { mon, erro }
   // Auditoria 30/09 (item 13): 40 processos em SÉRIE (até ~26 s cada) sem orçamento, e falha da
   // consulta contava como "checado" sem rastro. Agora 4 de cada vez, prazo de 240 s (função: 300),
   // e o erro fica no snapshot.
@@ -91,12 +97,16 @@ async function handler(req) {
       const proc = (r.processos || []).find(p => p.numero?.replace(/\D/g, '') === mon.numero_processo.replace(/\D/g, ''));
       if (!proc) {
         const erro = (r.erros || []).join(' | ').slice(0, 300) || null;
-        if (erro) falhas++; else checados++;
+        if (erro) falhados.set(mon.id, { mon, erro }); else { checados++; falhados.delete(mon.id); }
+        // 21/10: consulta que FALHOU não é checagem. Carimbar `ultima_checagem` mandava o processo
+        // para o fim da fila (ordem asc) como se tivesse sido visto — o erro fica no snapshot, mas
+        // sem carimbo ele continua no topo e é o primeiro a ser tentado de novo.
         await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
-          body: { ultima_checagem: new Date().toISOString(), snapshot: { ...(mon.snapshot || {}), ultimo_erro: erro, nao_localizado: !erro, checado_em: new Date().toISOString() } } });
+          body: { ...(erro ? {} : { ultima_checagem: new Date().toISOString() }), snapshot: { ...(mon.snapshot || {}), ultimo_erro: erro, nao_localizado: !erro, checado_em: new Date().toISOString() } } });
         return;
       }
       checados++;
+      falhados.delete(mon.id); // repetição no fim que deu certo deixa de ser falha
       const dataMov = ultimaData(proc);
       movimentosGravados += await gravarMovimentos(proc.numero || mon.numero_processo, proc.movimentos_serie?.length ? proc.movimentos_serie : proc.movimentos);
       const temSusp = !!proc.tem_suspensiva || !!proc.tem_bloqueante;
@@ -129,14 +139,27 @@ async function handler(req) {
         body: { ultima_data_mov: dataMov || mon.ultima_data_mov, ultima_checagem: new Date().toISOString(),
           snapshot: { total_mov: (proc.movimentos || []).length, ultima_data: dataMov, tem_suspensiva: temSusp } } });
     } catch (e) {
-      falhas++;
+      falhados.set(mon.id, { mon, erro: String(e?.message || e).slice(0, 300) });
       console.error('[cnj-monitor] falhou', mon.numero_processo, e?.message || e);
+      // 21/10: sem `ultima_checagem` (ver acima) — só o erro no snapshot.
       await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
-        body: { ultima_checagem: new Date().toISOString(), snapshot: { ...(mon.snapshot || {}), ultimo_erro: String(e?.message || e).slice(0, 300) } } }).catch((e2) => console.error('[cnj-monitor] snapshot não gravado', e2?.message || e2));
+        body: { snapshot: { ...(mon.snapshot || {}), ultimo_erro: String(e?.message || e).slice(0, 300) } } }).catch((e2) => console.error('[cnj-monitor] snapshot não gravado', e2?.message || e2));
     }
   };
   const lista = Array.isArray(monitores) ? monitores : [];
   for (let i = 0; i < lista.length; i += 4) await Promise.all(lista.slice(i, i + 4).map(checar));
+
+  // 21/10: REPETIÇÃO EM SÉRIE das falhas, se sobrar tempo. Os erros se concentram quando várias
+  // buscas batem juntas no DataJud (cada processo abre buscas em paralelo por tribunal); uma
+  // segunda tentativa sozinha costuma passar. Só começa outra com folga de 35 s antes do PRAZO,
+  // porque uma consulta pode levar ~30 s (+ retry de 429) e a função morre em 300 s.
+  let repetidas = 0;
+  for (const { mon } of [...falhados.values()]) {
+    if (PRAZO - Date.now() < 35000) break;
+    repetidas++;
+    await checar(mon);
+  }
+  const falhas = falhados.size;
 
   // Limpeza do cache de consultas (api/_cnj.js): vale 3 h, então o que passou de 1 dia é só peso.
   let cacheLimpo = null;
@@ -145,5 +168,9 @@ async function handler(req) {
     cacheLimpo = rL.ok ? 'ok' : `HTTP ${rL.status}`;
   } catch (e) { cacheLimpo = String(e?.message || e).slice(0, 80); }
 
-  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados, falhas, sem_tempo: semTempo, cache_limpo: cacheLimpo }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  // 21/10: resposta honesta — `ok: true` com processos sem consulta era o check verde mentindo.
+  // 500 deixa o cron vermelho; o corpo continua dizendo quais falharam e por quê.
+  return new Response(JSON.stringify({ ok: falhas === 0, checados, alertas, movimentosGravados, falhas, repetidas, sem_tempo: semTempo, cache_limpo: cacheLimpo,
+    falhas_detalhe: [...falhados.values()].map(({ mon, erro }) => ({ numero: mon.numero_processo, erro })) }),
+    { status: falhas === 0 ? 200 : 500, headers: { 'Content-Type': 'application/json' } });
 }

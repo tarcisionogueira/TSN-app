@@ -80,18 +80,30 @@ async function handler(req) {
   }
 
   let enviados = 0, semEmail = 0, falhas = 0;
+  // 21/10: quem NÃO foi avisado nesta rodada (sem e-mail ou envio que falhou). A sincronização
+  // antiga marcava todos como avisados e o cliente só voltava a ser avisado com dinheiro novo;
+  // `saldo_avisos_sincronizar_exceto` pula estes. Fila/supressão/limite não entram: fila sai
+  // amanhã sozinha, e os outros dois são "não" deliberado, não falha.
+  const naoAvisados = [];
   for (const p of pendentes) {
     let email = null;
     try { const u = await supabase.auth.admin.getUserById(p.user_id); email = u?.data?.user?.email || null; } catch { /* segue sem email */ }
-    if (!email) { semEmail++; continue; }
+    if (!email) { semEmail++; naoAvisados.push(p.user_id); continue; }
 
     const conteudo = emailAviso({ nome: p.nome, saldo: Number(p.saldo_disponivel), novo: Number(p.saldo_disponivel) - Number(p.saldo_anterior || 0) });
     try {
       const r = await enviarEmail({ from: FROM, to: email, subject: conteudo.subject, html: conteudo.html, text: conteudo.text,
         meta: { tipo: 'saldo_disponivel_aviso', userId: p.user_id } });
-      if (r?.ok !== false) enviados++; else falhas++;
+      // 21/10: `r?.ok !== false` contava resposta sem `ok` (undefined) como enviado. Só conta
+      // o que o helper CONFIRMOU.
+      if (r?.ok) enviados++;
+      else {
+        falhas++;
+        if (!r?.enfileirado && !r?.suprimido && !r?.limitado) naoAvisados.push(p.user_id);
+      }
     } catch (e) {
       falhas++;
+      naoAvisados.push(p.user_id);
       console.error('[saldo-disponivel-aviso] falha ao enviar', p.user_id, e?.message || e);
     }
   }
@@ -101,14 +113,14 @@ async function handler(req) {
   // rodada, e é essa baixa que deixa a PRÓXIMA comissão nova disparar aviso de novo.
   let sincronizados = 0;
   try {
-    const { data, error } = await supabase.rpc('saldo_avisos_sincronizar');
+    const { data, error } = await supabase.rpc('saldo_avisos_sincronizar_exceto', { p_excluir: naoAvisados });
     if (error) throw new Error(error.message);
     sincronizados = Number(data) || 0;
   } catch (e) {
     console.error('[saldo-disponivel-aviso] sincronização falhou — o snapshot pode ficar desatualizado:', e?.message || e);
   }
 
-  return new Response(JSON.stringify({ ok: true, liberadas, pendentes: pendentes.length, enviados, sem_email: semEmail, falhas, sincronizados }), {
+  return new Response(JSON.stringify({ ok: true, liberadas, pendentes: pendentes.length, enviados, sem_email: semEmail, falhas, nao_avisados: naoAvisados.length, sincronizados }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

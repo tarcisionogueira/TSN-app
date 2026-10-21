@@ -37,6 +37,9 @@ export default async function handler(req, res) {
 
   const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
   let apagadas = 0, bytes = 0, rodadas = 0, descartadas = 0;
+  // 21/10: qualquer ramo de falha marca aqui. Antes só havia console.error e a resposta era
+  // 200 ok:true — a herança ou a limpeza podiam parar por semanas com o cron verde.
+  let falhou = false;
 
   // ─── HERDAR ANTES DE LIMPAR (27/08) ────────────────────────────────────────────────────
   // A ORDEM É O MOTIVO DE ESTAR AQUI, e não em outro cron. Leiloeiro que REVENDE imóvel da
@@ -56,9 +59,10 @@ export default async function handler(req, res) {
     const rh = await fetch(`${SUPABASE_URL}/rest/v1/rpc/herdar_foto_da_caixa`, {
       method: 'POST', headers: hdr, body: '{}', signal: AbortSignal.timeout(20000),
     });
-    if (!rh.ok) console.error('[fotos-orfas] herdar_foto_da_caixa:', rh.status, (await rh.text().catch(() => '')).slice(0, 200));
+    if (!rh.ok) { falhou = true; console.error('[fotos-orfas] herdar_foto_da_caixa:', rh.status, (await rh.text().catch(() => '')).slice(0, 200)); }
     else fotosHerdadas = await rh.json().catch(() => null);
   } catch (e) {
+    falhou = true;
     console.error('[fotos-orfas] herdar_foto_da_caixa:', e?.message || e);
   }
 
@@ -69,6 +73,7 @@ export default async function handler(req, res) {
         signal: AbortSignal.timeout(15000),
       });
       if (!r.ok) {
+        falhou = true;
         console.error('[fotos-orfas] RPC falhou:', r.status, (await r.text().catch(() => '')).slice(0, 200));
         break;
       }
@@ -81,7 +86,7 @@ export default async function handler(req, res) {
       const nomes = lista.map((f) => f?.name).filter((n) => typeof n === 'string' && n.length > 3
         && !n.startsWith('/') && !n.includes('..'));
       descartadas += lista.length - nomes.length;
-      if (nomes.length !== lista.length) { console.error('[fotos-orfas] lote com nome suspeito — abortado'); break; }
+      if (nomes.length !== lista.length) { falhou = true; console.error('[fotos-orfas] lote com nome suspeito — abortado'); break; }
 
       const del = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
         method: 'DELETE', headers: hdr,
@@ -89,6 +94,7 @@ export default async function handler(req, res) {
         signal: AbortSignal.timeout(20000),
       });
       if (!del.ok) {
+        falhou = true;
         console.error('[fotos-orfas] falha ao apagar lote:', del.status, (await del.text().catch(() => '')).slice(0, 200));
         break;
       }
@@ -101,9 +107,10 @@ export default async function handler(req, res) {
       if (lista.length < LOTE) break; // acabou a fila
     }
   } catch (e) {
+    falhou = true;
     console.error('[fotos-orfas]', e?.message || e);
   }
 
-  console.log('[fotos-orfas]', JSON.stringify({ apagadas, mb: Math.round(bytes / 1048576), rodadas, descartadas }));
-  return res.status(200).json({ ok: true, fotos_herdadas: fotosHerdadas, apagadas, mb_liberados: Math.round(bytes / 1048576), rodadas });
+  console.log('[fotos-orfas]', JSON.stringify({ apagadas, mb: Math.round(bytes / 1048576), rodadas, descartadas, falhou }));
+  return res.status(falhou ? 500 : 200).json({ ok: !falhou, fotos_herdadas: fotosHerdadas, apagadas, mb_liberados: Math.round(bytes / 1048576), rodadas });
 }

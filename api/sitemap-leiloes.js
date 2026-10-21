@@ -64,7 +64,9 @@ async function rpc(nome, corpo = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(corpo), signal: AbortSignal.timeout(20000),
   });
-  if (!r.ok) throw new Error(`supabase ${r.status}`);
+  // 21/10: nome da RPC + começo do corpo no erro — só o status no log da Vercel não dizia
+  // qual consulta quebrou nem por quê (timeout, função inexistente, permissão).
+  if (!r.ok) throw new Error(`supabase ${r.status} rpc/${nome}: ${(await r.text().catch(() => '')).slice(0, 160)}`);
   return r.json();
 }
 

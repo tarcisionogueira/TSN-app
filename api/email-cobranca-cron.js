@@ -67,12 +67,14 @@ async function processar(c, { seco }) {
     if (seco) return { id: c.id, limite: true };
     await encerrar(c, 'limite');
     const para = await emailDoUsuario(c.user_id);
+    // 21/10: o link "Abrir a caixa" ia para `#/caixa` (rota inexistente → home). A caixa vive
+    // em /atendimento; `?modo=email` abre direto nela.
     if (para) {
       const env = await enviarEmail({ from: FROM_ALERTA, to: para, subject: `Sem resposta após ${c.enviadas} cobranças · ${orig.assunto || '(sem assunto)'}`,
         html: `<div style="font-family:Arial,sans-serif;max-width:600px;color:#1e293b;line-height:1.6"><p>Cobrei <b>${c.enviadas}×</b> (a cada ${c.intervalo_dias} dias) o e-mail
           "<b>${esc(orig.assunto)}</b>" enviado em ${dataBR(orig.criado_em)} para ${esc((orig.para || []).join(', '))} e não houve resposta.</p>
           <p>Parei de cobrar. Se quiser insistir, ligue de novo na conversa ou faça contato por outro canal.</p>
-          <p><a href="${BASE}/#/caixa" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Abrir a caixa</a></p></div>`,
+          <p><a href="${BASE}/#/atendimento?modo=email" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Abrir a caixa</a></p></div>`,
         meta: { tipo: 'cobranca_posicao_limite', userId: c.user_id } }).catch((e) => ({ ok: false, error: e?.message }));
       if (!env?.ok) console.error('[email-cobranca] aviso de limite ao dono falhou:', env?.error);
     }

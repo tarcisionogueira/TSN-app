@@ -78,13 +78,37 @@ export async function garantirFipe(v, { forcar = false } = {}) {
     },
   };
 
+  // 21/10: falha AO CONSULTAR a cota (HTTP/rede/corpo) não é cota esgotada. Antes virava
+  // `{permitido:false}` e a tela/relatório diziam "cota do dia esgotada" por um erro de rede —
+  // o freio de custo inventado (forma 5 do CLAUDE.md, ao contrário). O motor (`criarFipeFetch`)
+  // só conhece "permitido ou não", então o motivo real fica guardado aqui e decide o retorno.
+  let falhaReserva = null;
   const fipeGet = criarFipeFetch(async () => {
-    const r = await sb('rpc/registrar_uso_fipe', { method: 'POST', body: JSON.stringify({ p_teto: TETO_DIARIO_FIPE }) });
-    if (!r.ok) return { permitido: false };
-    return r.json();
+    falhaReserva = null;
+    try {
+      const r = await sb('rpc/registrar_uso_fipe', { method: 'POST', body: JSON.stringify({ p_teto: TETO_DIARIO_FIPE }) });
+      if (!r.ok) {
+        falhaReserva = `HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}`;
+        console.error(`[veiculo-fipe] registrar_uso_fipe falhou (veículo ${id}) — ${falhaReserva}`);
+        return { permitido: false };
+      }
+      const j = await r.json();
+      if (!j || typeof j !== 'object') { falhaReserva = 'resposta sem corpo'; return { permitido: false }; }
+      return j;
+    } catch (e) {
+      falhaReserva = String(e?.message || e).slice(0, 120);
+      console.error(`[veiculo-fipe] registrar_uso_fipe falhou (veículo ${id}) — ${falhaReserva}`);
+      return { permitido: false };
+    }
   }, cacheFipe);
   const resultado = await buscarFipe(fipeGet, v);
 
+  if (resultado.status === 'sem_cota' && falhaReserva) {
+    // Mesmo payload do "não consegui agora" (o que já existe, sem fingir valor novo), mas SEM
+    // `cota_esgotada`: quem chama mostra/loga o `motivo`, não o aviso de cota.
+    return { valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, de_cache: true,
+      erro_cota: true, motivo: `controle de cota da FIPE indisponível (${falhaReserva})` };
+  }
   if (resultado.status === 'sem_cota') {
     return { valor_fipe: v.valor_fipe, fipe_codigo: v.fipe_codigo, fipe_mes_referencia: v.fipe_mes_referencia, fipe_status: v.fipe_status, de_cache: true, cota_esgotada: true };
   }

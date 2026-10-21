@@ -131,8 +131,11 @@ export default function Atendimento() {
   // de atendimento, menos advogado (a caixa mistura privacidade@ e devolutivas de outros casos).
   const loc = useLocation();
   // Endereço de e-mail clicado numa mensagem chega como `?escrever=` — abre direto na caixa.
-  const [modo, setModo] = useState(() => (new URLSearchParams(loc.search).get('escrever') ? 'email' : 'chamados'));
-  useEffect(() => { if (new URLSearchParams(loc.search).get('escrever')) setModo('email'); }, [loc.search]);
+  // 21/10: `?modo=email` abre a caixa SEM rascunho (link "Abrir a caixa" do e-mail de cobrança,
+  // que apontava para `#/caixa`, rota inexistente que caía na home).
+  const abreCaixa = (search) => { const q = new URLSearchParams(search); return !!q.get('escrever') || q.get('modo') === 'email'; };
+  const [modo, setModo] = useState(() => (abreCaixa(loc.search) ? 'email' : 'chamados'));
+  useEffect(() => { if (abreCaixa(loc.search)) setModo('email'); }, [loc.search]);
   const fileRef = useRef();
   const msgEndRef = useRef();
 

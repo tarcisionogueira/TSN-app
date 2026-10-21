@@ -41,6 +41,10 @@ async function handler(req) {
       to: p.email,
       subject: `Como foi seu atendimento de ${p.produto}?`,
       meta: { tipo: 'nps_alavancagem' },
+      // 21/10: se a marcação de enviado falhar, o lead volta amanhã na fila — a chave faz o
+      // Resend devolver o envio original (24 h) em vez de mandar a pesquisa de novo. O token é
+      // estável por lead (criado uma vez em `sdr_lead_nps`), então o corpo repetido é idêntico.
+      idempotencyKey: `nps:${p.lead_id}`,
       html: `
         <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;color:#111">
           <h2 style="color:#084BA6;margin:24px 0 8px">Sua opinião fecha o nosso ciclo</h2>

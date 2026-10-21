@@ -63,10 +63,18 @@ async function sb(path) {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: 'count=exact' },
       signal: AbortSignal.timeout(8000),
     });
-    if (!r.ok) return { linhas: null, total: 0 };
+    // 21/10: o valor devolvido segue igual (a página trata `linhas: null`), mas o motivo vai
+    // para o log da Vercel — antes status e corpo morriam aqui e a página só saía mais vazia.
+    if (!r.ok) {
+      console.error('[publico] sb falhou', r.status, path.split('?')[0], (await r.text().catch(() => '')).slice(0, 160));
+      return { linhas: null, total: 0 };
+    }
     const total = Number(String(r.headers.get('content-range') || '').split('/')[1]) || 0;
     return { linhas: await r.json(), total };
-  } catch { return { linhas: null, total: 0 }; }
+  } catch (e) {
+    console.error('[publico] sb exceção', 0, path.split('?')[0], String(e?.message || e).slice(0, 160));
+    return { linhas: null, total: 0 };
+  }
 }
 
 /**
@@ -84,9 +92,16 @@ async function rpc(nome, corpo = {}) {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(corpo), signal: AbortSignal.timeout(10000),
     });
-    if (!r.ok) return null;
+    // 21/10: idem `sb()` — mesmo retorno (null), agora com rastro do motivo no log.
+    if (!r.ok) {
+      console.error('[publico] rpc falhou', r.status, `rpc/${nome}`, (await r.text().catch(() => '')).slice(0, 160));
+      return null;
+    }
     return await r.json();
-  } catch { return null; }
+  } catch (e) {
+    console.error('[publico] rpc exceção', 0, `rpc/${nome}`, String(e?.message || e).slice(0, 160));
+    return null;
+  }
 }
 
 // ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
