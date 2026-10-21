@@ -2422,7 +2422,10 @@ async function scraperLJUDVeiculos(browser) {
   try {
     for (let p = 0; p < MAX_PAGINAS; p++) {
       try {
-        await page.goto(`https://www.leiloesjudiciais.com.br/veiculos/carros?pagina=${p}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        // 21/10: era `/veiculos/carros` — motos, caminhões, pesados e ônibus nunca entravam (o portal
+        // tinha 795 veículos; a listagem de carros é uma fatia). `/veiculos` é o mesmo HTML com todas as
+        // categorias (~19 páginas de 42, dentro do teto); o tipo sai do texto por classificarTipoVeiculo.
+        await page.goto(`https://www.leiloesjudiciais.com.br/veiculos?pagina=${p}`, { waitUntil: 'networkidle2', timeout: 45000 });
         await new Promise((r) => setTimeout(r, 1500));
       } catch (e) { console.log(`    LJUD veículos p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`); break; }
       const cardsPagina = await page.evaluate(() => {
@@ -5382,11 +5385,15 @@ async function scraperSuporteTenant(browser, tenant) {
   const bens = new Map();
   const DEADLINE = Date.now() + 5 * 60 * 1000;
   try {
-    for (let p = 1; p <= 40; p++) {
+    // 21/10: o parâmetro era `pagina=`, que a plataforma IGNORA (devolve a pág. 1) — a regra
+    // "página sem novidade = acabou" parava na 2ª e cada tenant rendia 12 cards. A Líder tinha
+    // 565 imóveis no site e 10 aqui. O link real da paginação é `page=` (o recon-suporte.mjs já
+    // lia assim). Teto 60: a Líder tem 48 páginas de 12.
+    for (let p = 1; p <= 60; p++) {
       if (Date.now() > DEADLINE) break;
       const antes = bens.size;
       try {
-        await page.goto(`https://${tenant.domain}/buscador?categoria=2&pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.goto(`https://${tenant.domain}/buscador?categoria=2&page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await new Promise(r => setTimeout(r, 1200));
       } catch { break; }
       const lotes = await suporteParsePagina(page);
@@ -5697,11 +5704,11 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   // tende a ser bem menor.
   const DEADLINE = Date.now() + 3 * 60 * 1000;
   try {
-    for (let p = 1; p <= 40; p++) {
+    for (let p = 1; p <= 60; p++) {   // `page=`, não `pagina=` — ver scraperSuporteTenant (21/10)
       if (Date.now() > DEADLINE) break;
       const antes = bens.size;
       try {
-        await page.goto(`https://${tenant.domain}/buscador?categoria=1&pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.goto(`https://${tenant.domain}/buscador?categoria=1&page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await new Promise(r => setTimeout(r, 1200));
       } catch { break; } // padrao-ok: mesmo padrão de scraperSuporteTenant (imóveis, linha ~3332) — falha de navegação na paginação encerra o loop, próxima rodada tenta de novo; não é I/O de dado, é fim de paginação best-effort
       const lotes = await suporteParsePagina(page);
@@ -6436,7 +6443,7 @@ async function scraperLeilofy(browser) {
 // CREPALDI, KRONLEILOES). Desde 24/09 14h53 as cinco tomam "Failed to fetch" em TODAS as tentativas
 // do GitHub (run 36015162979) — o mesmo bloqueio que tirou SUPERBID/SOLD daqui em 23/09 — e caíam
 // para 0 com alerta de regressão todo dia. Agora seguem o mesmo gate residencial.
-const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES', 'DILSONMOREIRA', 'JMFLEILOES'];
+const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SOLD_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES', 'DILSONMOREIRA', 'JMFLEILOES'];
 async function navegadorRedeSuperbid(browser) {
   if (process.env.GITHUB_ACTIONS !== 'true') return { browser, proprio: null };
   const forcar = process.env.SUPERBID_FORCAR_ISP === '1';
@@ -6532,7 +6539,7 @@ async function main() {
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos. O
     // detalhe da oferta (/oferta/{id}) é server-rendered com a seção "Documentação"
     // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
-    const pedeRedeSbid = REDE_SBID_RESIDENCIAL.some(f => (f === 'SUPERBID_VEICULOS' ? ONLY.includes(f) : rodar(f)));
+    const pedeRedeSbid = REDE_SBID_RESIDENCIAL.some(f => (/_VEICULOS$/.test(f) ? ONLY.includes(f) : rodar(f)));
     const redeSbid = pedeRedeSbid ? await navegadorRedeSuperbid(browser) : { browser: null, proprio: null };
     sbidProprio = redeSbid.proprio;
     const bSbid = redeSbid.browser;
@@ -6548,6 +6555,17 @@ async function main() {
       await salvarVeiculos(veiculosSuperbid);
       try { await reconciliarSumidosSuperbidVeic(bSbid, veiculosSuperbid); }
       catch (e) { console.log(`  ⚠️ sumidos (veículos SUPERBID) falhou (segue sem): ${String(e.message).slice(0, 100)}`); }
+    }
+
+    // SOLD — VEÍCULOS (21/10). Portal 15 da mesma rede: 646 veículos no site (carros/motos +
+    // caminhões/ônibus) e ZERO aqui — só os imóveis do portal eram chamados. Mesma função e mesma
+    // API da Superbid acima, só trocando portal/prefixo; `sold_veic_<id>` não colide com `sbid_veic_`.
+    if (bSbid && ONLY.includes('SOLD_VEICULOS')) {
+      console.log('\n📋 Sold (veículos)...');
+      const veiculosSold = await scraperSuperbidVeiculos(bSbid, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' });
+      await salvarVeiculos(veiculosSold);
+      try { await reconciliarSumidosSuperbidVeic(bSbid, veiculosSold, { fonte: 'SOLD', prefixo: 'sold_veic_', baseSite: 'https://www.sold.com.br' }); }
+      catch (e) { console.log(`  ⚠️ sumidos (veículos SOLD) falhou (segue sem): ${String(e.message).slice(0, 100)}`); }
     }
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
