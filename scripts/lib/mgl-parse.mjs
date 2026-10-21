@@ -59,6 +59,25 @@ export function extrairUrlsDeLote(html, base) {
 }
 export const idDaUrl = (url) => (String(url).match(/\/lote\/[^/]+\/(\d+)/) || [])[1] || null;
 
+// VEÍCULOS (21/10): o MESMO feed, filtro invertido — fica só o que tem cara de veículo inteiro no slug
+// ou no nome (Fernando: 351 veículos no site, 0 no acervo). Sucata, peça, bens diversos e prefeitura
+// (frota/sucata) continuam fora; a decisão final é de lib/veiculo-do-lote.mjs, já com a página lida.
+const RE_VEICULO_SLUG = /ve[ií]culo|automovel|carro|moto|caminhao|caminhonete|onibus|utilitario|furgao|reboque/i;
+const RE_NAO_VEICULO_SLUG = /sucata|pecas|bens-diversos|mobiliario|equipamento|maquin|trator|sofa|notebook|eletro|exemplo-de-leilao/i;
+const ehVeiculoDoFeed = (slug, nome) => {
+  const t = `${slug.replace(/-/g, ' ')} ${nome}`;
+  return (RE_VEICULO_SLUG.test(t) || RE_MARCA_VEICULO.test(t)) && !RE_NAO_VEICULO_SLUG.test(t);
+};
+export function extrairUrlsDeVeiculo(html, base) {
+  if (ehFeedDegrau(html)) return lotesDoFeed(html, base, { descartar: (slug, nome) => !ehVeiculoDoFeed(slug, nome) });
+  const urls = new Map();
+  for (const m of String(html || '').matchAll(/href=["']((?:https?:\/\/[^"'/]+)?\/lote\/([^"'/]+)\/(\d+)\/?)["']/gi)) {
+    if (!ehVeiculoDoFeed(decodeURIComponent(m[2]), '')) continue;
+    try { urls.set(m[3], new URL(m[1], base).href); } catch { /* href malformado: ignora o link */ }
+  }
+  return urls;
+}
+
 const porClasse = (html, cls) => {
   const m = String(html || '').match(new RegExp(`class="[^"]*\\b${cls}\\b[^"]*"[^>]*>\\s*([^<]*)<`, 'i'));
   const v = (m?.[1] || '').trim();

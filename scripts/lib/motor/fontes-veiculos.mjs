@@ -1,0 +1,9 @@
+/**
+ * Fontes do motor que TAMBÉM têm veículos (21/10). Cada config declara `veiculos: { catalogo, … }`
+ * no próprio arquivo de fonte — aqui só a lista do que scraper-veiculos-motor.mjs percorre, na ordem
+ * do tamanho do buraco medido na varredura de 21/10 (maior primeiro).
+ */
+import freitas from './fontes/freitas.mjs';
+import mgl from './fontes/mgl.mjs';
+
+export const FONTES_VEICULOS = [freitas, mgl];

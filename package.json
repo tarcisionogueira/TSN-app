@@ -145,7 +145,8 @@
     "testar:data-br-leilao": "node scripts/testes/data-br-leilao.mjs",
     "testar:webleiloes": "node scripts/testes/webleiloes-lote.mjs",
     "testar:vip-ficha": "node scripts/testes/vip-ficha.mjs",
-    "testar:leje": "node scripts/testes/leje-home-lista-eventos.mjs"
+    "testar:leje": "node scripts/testes/leje-home-lista-eventos.mjs",
+    "testar:veiculo-do-lote": "node scripts/testes/veiculo-do-lote.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

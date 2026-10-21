@@ -64,6 +64,20 @@ jobs:
           MGL_MAX_LOTES: ${{ github.event.inputs.mgl_max || '40' }}
         run: node scripts/scraper-mgl.mjs
 
+      # 21/10: VEÍCULOS do MGL (Fernando 351, Lucas ~14 — 0 no acervo). Mesmo parser, conversão em
+      # lib/veiculo-do-lote.mjs. Teto de 55 detalhes/semana (~60 créditos), os novos primeiro.
+      - name: MGL veículos (Fernando, Lucas)
+        if: ${{ !cancelled() && contains(env.FONTES, 'mgl') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_MAX_PAGINAS: '60'
+          VEIC_FONTES: mgl
+          VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          VEIC_MAX_LOTES: '55'
+        run: node scripts/scraper-veiculos-motor.mjs
+
       # 18/10: religado SÓ com o acervo do leiloeiro (home → eventos de imóveis → /emilio-matos-rocha/imoveis/...).
       # O cron próprio (scraper-emiliomatos.yml) segue suspenso: ele lia o catálogo GLOBAL do Superbid.
       - name: Emílio Matos

@@ -151,3 +151,25 @@ export function parseDetalhe(html, url) {
 
 export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);
 export { checarQualidade };
+
+// VEÍCULO (21/10): a página do lote de veículo usa o mesmo template, mas o título real e o COMITENTE
+// ficam no cabeçalho ("TOYOTA/COROLLA GLI UPPER - 2018/2019" + "FINANCEIRA"), fora do que
+// `parseDetalhe` lê para imóvel — sem isto o título saía "Imóvel" e o lote era recusado. O local é o
+// do leilão presencial ("Local do leilão: AV. DOS ESTADOS, 584 … SANTO ANDRÉ/SP" — pátio do leiloeiro).
+// O comitente vai para a ficha como "Comitente: X": banco/financeira/seguradora é o sinal de bem
+// recuperado que o classificador único de pátio já reconhece (lib/patio-veiculo.mjs).
+export function complementoVeiculo(html) {
+  const h = String(html || '');
+  const limpo = s => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  const cab = h.match(/à venda em leilão<\/h1>\s*<div[^>]*>\s*<div>([\s\S]*?)<\/div>\s*<div>([\s\S]*?)<\/div>/i);
+  const titulo = cab ? limpo(cab[1].replace(/<!--[\s\S]*?-->/g, '')) : null;
+  const comitente = cab ? limpo(cab[2]) : null;
+  const txt = limpo(h.replace(/<script[\s\S]*?<\/script>/gi, ' '));
+  const local = (txt.match(/Local do leil[ãa]o:\s*(.{5,160}?)\s+Leia atentamente/i) || [])[1] || '';
+  const cu = local.match(/-\s*([A-ZÀ-Ý][A-ZÀ-Ý ']{2,40}?)\s*\/\s*([A-Z]{2})\s*$/);
+  return {
+    titulo: titulo || null,
+    comitente: comitente && comitente.length <= 60 ? comitente : null,
+    cidade: cu ? titleCase(cu[1].trim()) : null, estado: cu ? cu[2] : null,
+  };
+}

@@ -6450,7 +6450,7 @@ async function scraperLeilofy(browser) {
 // CREPALDI, KRONLEILOES). Desde 24/09 14h53 as cinco tomam "Failed to fetch" em TODAS as tentativas
 // do GitHub (run 36015162979) — o mesmo bloqueio que tirou SUPERBID/SOLD daqui em 23/09 — e caíam
 // para 0 com alerta de regressão todo dia. Agora seguem o mesmo gate residencial.
-const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SOLD_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES', 'DILSONMOREIRA', 'JMFLEILOES'];
+const REDE_SBID_RESIDENCIAL = ['SUPERBID', 'SOLD', 'SUPERBID_VEICULOS', 'SBID9', 'SBID21', 'TOTALLEILOES', 'CREPALDI', 'KRONLEILOES', 'DILSONMOREIRA', 'JMFLEILOES'];
 async function navegadorRedeSuperbid(browser) {
   if (process.env.GITHUB_ACTIONS !== 'true') return { browser, proprio: null };
   const forcar = process.env.SUPERBID_FORCAR_ISP === '1';
@@ -6564,16 +6564,10 @@ async function main() {
       catch (e) { console.log(`  ⚠️ sumidos (veículos SUPERBID) falhou (segue sem): ${String(e.message).slice(0, 100)}`); }
     }
 
-    // SOLD — VEÍCULOS (21/10). Portal 15 da mesma rede: 646 veículos no site (carros/motos +
-    // caminhões/ônibus) e ZERO aqui — só os imóveis do portal eram chamados. Mesma função e mesma
-    // API da Superbid acima, só trocando portal/prefixo; `sold_veic_<id>` não colide com `sbid_veic_`.
-    if (bSbid && ONLY.includes('SOLD_VEICULOS')) {
-      console.log('\n📋 Sold (veículos)...');
-      const veiculosSold = await scraperSuperbidVeiculos(bSbid, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' });
-      await salvarVeiculos(veiculosSold);
-      try { await reconciliarSumidosSuperbidVeic(bSbid, veiculosSold, { fonte: 'SOLD', prefixo: 'sold_veic_', baseSite: 'https://www.sold.com.br' }); }
-      catch (e) { console.log(`  ⚠️ sumidos (veículos SOLD) falhou (segue sem): ${String(e.message).slice(0, 100)}`); }
-    }
+    // SOLD — VEÍCULOS: NÃO há coletor próprio, de propósito (21/10). Os veículos da Sold já entram pela
+    // coleta do portal [2] acima, com fonte SUPERBID e leiloeiro "SOLD" (448 ativos em 21/10) — um
+    // coletor do portal [15] gravaria as MESMAS ofertas de novo como `sold_veic_<id>`. Idem Kron (526),
+    // Total, Dilson e JMF. A varredura de 21/10 contou por FONTE e leu esses como "0".
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
     if (bSbid && rodar('SOLD')) console.log('\n📋 Sold Leilões...');

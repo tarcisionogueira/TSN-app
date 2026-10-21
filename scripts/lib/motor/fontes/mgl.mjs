@@ -8,7 +8,7 @@
  * créditos, 1x por semana") em scraper-firecrawl-semanal.yml.
  */
 import {
-  TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  TENANTS, extrairUrlsDeLote, extrairUrlsDeVeiculo, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../mgl-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
@@ -22,6 +22,9 @@ export default {
   maxPages: 1,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // VEÍCULOS (21/10): o mesmo feed com o filtro invertido. Só os tenants com veículo medido na
+  // varredura (Fernando 351, Lucas ~14). Via Firecrawl (1 crédito/página): teto no job semanal.
+  veiculos: { catalogo: '/sitemap.xml', maxPages: 1, extrairUrlsDeLote: extrairUrlsDeVeiculo, tenants: [TENANTS.fernando, TENANTS.lucas] },
   conhecimento: {
     plataforma: 'Sua Plataforma de Leilão (Degrau) — tema MGL', acesso: 'firecrawl',
     custo: 'firecrawl (1 crédito/página)', anti_bot: 'cloudflare (403 ao runner/Unlocker/ISP)',

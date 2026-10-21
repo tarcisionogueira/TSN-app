@@ -139,6 +139,8 @@ fi
 
 # SOLEON (calil/vegas/3torres) — sem Cloudflare: fetch direto do IP residencial = grátis (SOLEON_NO_BD).
 rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
+# SOLEON VEÍCULOS (21/10): mesmo cluster, /lotes/veiculo (~300 no site, 0 no acervo). Só via grátis.
+rodar SOLEON_VEICULOS env SOLEON_VEICULOS=1 SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
 
 # GESTAOLEILOES (granado/vinco/…) — Cloudflare: Chromium real (puppeteer) de IP residencial, sem BD.
 rodar GESTAO env GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.mjs
@@ -251,6 +253,10 @@ rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 # 21/10: catálogo via ajax traz ~135 lotes (eram 12); teto 150 p/ caber tudo — detalhe é grátis (DOM), e o
 # pago segue preso ao teto `freitas` (25/sem) do Bright Data.
 rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 FREITAS_MAX_LOTES=150 node scripts/scraper-freitas.mjs
+# VEÍCULOS DAS FONTES DO MOTOR (21/10, pedido do dono): ~3.000 veículos à venda que o motor de imóveis
+# descartava. Mesmo parser de cada fonte, conversão em lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD
+# desligado); 150 detalhes por fonte por rodada, os novos primeiro — o acervo grande entra em poucos dias.
+rodar VEICULOS_MOTOR env VEIC_FONTES=freitas VEIC_DRYRUN=0 VEIC_MAX_LOTES=150 node scripts/scraper-veiculos-motor.mjs
 
 # UBERLANDIALEILOES (28/09) — Plataforma Leiloar (leiloesuberlandia.com.br). HTTP 403 ao IP do
 # GitHub (Azure); o servidor do banco (AWS) recebeu 200 no recon. Fetch direto, grátis (semBD —

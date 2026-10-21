@@ -48,6 +48,8 @@ import { registrarSaude } from './_saude-fonte.mjs';
 import { planejarAlvo } from './lib/motor/runner.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from './lib/vazio-declarado.mjs';
 import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from './lib/galeria-veiculo.mjs';
+import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
+import { patioPreservado } from './lib/patio-veiculo.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -685,7 +687,106 @@ async function varrerSumidos(tenant) {
   console.log(`  [${fonte}] varredura: ${sumidos.length} fora da enumeração · ${desligados} desativados (sumiu_da_fonte) · ${sumidos.length - desligados} retidos (leilão negativo < 15 dias) · ${religados} reativados`);
 }
 
+// ─── VEÍCULOS (21/10, pedido do dono: "faça todos os veículos") ────────────────────────────────
+// Todo tenant SOLEON tem `/lotes/veiculo` (mesmo template, mesma paginação `?tipo=veiculo&page=N`) e só
+// `/lotes/imovel` era lido: ~300 veículos à venda no cluster e 0 no acervo (JOAOEMILIO 116, CERULI,
+// DANIELGARCIA 29, AGOSTINHO 21, FERREIRA 18, PURCENA 17, CALIL 14, APICE 12, ISAIAS 11…). Mesmo
+// `parseDetalhe`/`montarRow`; conversão e regra do pátio em lib/veiculo-do-lote.mjs. Ligado por
+// SOLEON_VEICULOS=1 (o runner residencial roda com SOLEON_NO_BD=1: só via grátis, nunca Bright Data).
+const MAX_VEIC = Number(process.env.SOLEON_VEIC_MAX_LOTES || 60);
+
+function fichaVeiculoSoleon(html) {
+  const txt = decodificarEntidades(String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+  const ficha = (txt.match(/Detalhes do Lote\s*(?:Compartilhar:\s*)?(.{20,2500}?)\s*(?:Consultar Documenta|J[áa] fez seu Cadastro)/i) || [])[1] || null;
+  const marcaModelo = ficha ? ((ficha.match(/Marca\/Modelo:\s*(.+?)\s+(?:Placa|Ano|Cor|Chassi|Renavam|Local|Combust)/i) || [])[1] || null) : null;
+  const locs = ficha ? [...ficha.matchAll(/,\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/g)] : [];
+  const loc = locs[locs.length - 1];
+  return { ficha, marcaModelo, cidade: loc ? loc[1].trim() : null, estado: loc ? loc[2] : null };
+}
+
+async function enumerarVeiculos(tenant) {
+  const urls = new Set(); let respondeu = false;
+  for (let p = 1; p <= MAX_PAGES_GRATIS; p++) {
+    const { html } = await fetchTenant(`${tenant.base}/lotes/veiculo${p > 1 ? `?tipo=veiculo&page=${p}` : ''}`);
+    if (!html) break;
+    respondeu = true;
+    const antes = urls.size;
+    for (const u of extrairUrlsDeLote(html, tenant.base)) urls.add(u);
+    if (urls.size === antes) break;
+    await sleep(400);
+  }
+  return { urls: [...urls], respondeu };
+}
+
+async function coletarVeiculosTenant(tenant) {
+  const { urls, respondeu } = await enumerarVeiculos(tenant);
+  const idV = (u) => `${tenant.fonte.toLowerCase()}_veic_${idDaUrl(u)}`;
+  const ant = new Map();
+  for (let i = 0; i < urls.length; i += 200) {
+    const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id,atualizado_em,status_patio,status_patio_motivo')
+      .eq('fonte', tenant.fonte).in('fonte_id', urls.slice(i, i + 200).map(idV));
+    if (error) { console.warn(`  [${tenant.fonte}] sem a idade dos já gravados (${error.message}) — ordem da página`); break; }
+    for (const r of data || []) ant.set(r.fonte_id, r);
+  }
+  // Novos primeiro, depois o mais antigo; teto por rodada — o resto entra nas próximas.
+  const alvo = [...urls].sort((a, b) => {
+    const ia = ant.get(idV(a))?.atualizado_em ?? null, ib = ant.get(idV(b))?.atualizado_em ?? null;
+    if (ia === null || ib === null) return (ia === null ? 0 : 1) - (ib === null ? 0 : 1);
+    return ia < ib ? -1 : ia > ib ? 1 : 0;
+  }).slice(0, MAX_VEIC);
+  const rows = []; const motivos = new Map(); let sem = 0;
+  for (const url of alvo) {
+    const { html } = await fetchTenant(url);
+    if (!html) { sem++; continue; }
+    const det = parseDetalhe(html, url);
+    const imo = montarRow(tenant, url, det);
+    // A ficha do veículo é o bloco "Detalhes do Lote" (comitente, marca/modelo, local de exposição) —
+    // o parser de imóvel lê a descrição do imóvel, que aqui é só "Leilão: 22/10/2026 às 11:00".
+    const f = fichaVeiculoSoleon(html);
+    // O título original fica na descrição: é nele que vêm placa, chassi e renavam completos (a ficha mascara a placa).
+    if (f.ficha) imo.descricao = `${imo.titulo || ''} ${imo.descricao || ''} ${f.ficha}`.trim();
+    if (f.marcaModelo) imo.titulo = `${f.marcaModelo}${(imo.titulo.match(/,\s*ANO\s*\d{4}/i) || [''])[0]}`;
+    if (f.cidade) { imo.cidade = f.cidade; imo.estado = f.estado; }
+    const { row, motivo } = veiculoDoLote(imo, { id: idDaUrl(url), fonte: tenant.fonte });
+    if (!row || motivo) { motivos.set(motivo, (motivos.get(motivo) || 0) + 1); continue; }
+    const anterior = ant.get(row.fonte_id);
+    if (patioPreservado(row, anterior)) { row.status_patio = anterior.status_patio; row.status_patio_motivo = anterior.status_patio_motivo; }
+    rows.push(row);
+    await sleep(300);
+  }
+  console.log(`[${tenant.fonte}] veículos: enumerados ${urls.length} · lidos ${alvo.length} · prontos ${rows.length} · sem detalhe ${sem}${[...motivos].map(([m, n]) => ` · ${m}: ${n}`).join('')}`);
+  if (!DRYRUN && rows.length) {
+    // Em grupos de mesmas colunas: num upsert misto o PostgREST grava NULL na coluna ausente (fotos).
+    const grupos = new Map();
+    for (const r of rows) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+    for (const g of grupos.values()) {
+      const { error } = await supabase.from('veiculos_leilao').upsert(g, { onConflict: 'fonte,fonte_id' }).select('id');
+      if (error) throw new Error(`upsert veiculos ${tenant.fonte}: ${error.message}`);
+    }
+  }
+  if (!DRYRUN) {
+    await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, rows, 'soleon', {
+      ok: respondeu && (rows.length > 0 || urls.length === 0), enumerados: urls.length,
+      motivo: !respondeu ? 'catálogo de veículos não abriu' : (urls.length && !rows.length ? `${urls.length} enumerados e nenhum gravado` : ''),
+    });
+  }
+  return rows.length;
+}
+
+async function mainVeiculos() {
+  console.log(`SOLEON VEÍCULOS ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${TENANTS.map(t => t.fonte).join(', ')} · max ${MAX_VEIC}/tenant`);
+  let total = 0, falhou = false;
+  for (const tenant of TENANTS) {
+    try { total += await coletarVeiculosTenant(tenant); }
+    catch (e) { falhou = true; console.error(`[${tenant.fonte}] veículos falhou: ${e?.message || e}`); }
+  }
+  console.log(`\nTotal: ${total} veículos prontos.`);
+  if (falhou || !total) process.exitCode = 1;   // nada gravado não é sucesso (o gate do runner não carimba)
+}
+
 async function main() {
+  if (process.env.SOLEON_VEICULOS === '1') return mainVeiculos();
   if (DEBUG) {
     if (!brightDataDisponivel()) console.log('(aviso: Bright Data ausente — só a via grátis será tentada)');
     await debugRecon();
