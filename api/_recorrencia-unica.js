@@ -46,8 +46,11 @@ export function planoDaAssinaturaAsaas(s) {
   if (doRef) return doRef;
   // Antigas sem referência: pela descrição que o checkout grava (nomes em api/asaas.js / planos_config).
   const d = String(s?.description || '');
-  if (/ve[ií]culo/i.test(d)) return 'veiculos';
-  if (/^combo/i.test(d)) return 'combo';
+  // Combo ANTES de veículo: "Combo Imóveis + Veículos" contém "Veículos" e saía classificado como a trilha
+  // de veículos (21/10). `(Anual)` no nome = variante anual (asaas.js grava `${nome} (Anual)`).
+  const anual = /anual/i.test(d) ? '_anual' : '';
+  if (/^combo/i.test(d)) return `combo${anual}`;
+  if (/ve[ií]culo/i.test(d)) return `veiculos${anual}`;
   if (/investidor pro/i.test(d)) return /anual/i.test(d) ? 'top2_anual' : 'top2';
   if (/club|clube/i.test(d)) return 'clube';
   if (/assessor/i.test(d)) return 'assessorado';

@@ -216,7 +216,8 @@ export default function Checkout() {
   // Pagou, mas o contrato não pôde ser emitido. Estado PRÓPRIO: sem ele, o cliente lia
   // "Preparando seu contrato…" e caía na home sem contrato e sem explicação (10/08).
   const [contratoFalhou, setContratoFalhou] = useState(false);
-  const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
+  // `?ciclo=anual` (21/10): /planos com o seletor no Anual abre o checkout já no anual.
+  const [modalidade, setModalidade] = useState(() => (params.get('ciclo') === 'anual' ? 'anual' : 'mensal')); // 'mensal' | 'anual' | 'vista'
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
   const [verificando, setVerificando] = useState(false);
@@ -306,7 +307,13 @@ export default function Checkout() {
   }, [planoKey, user?.id, role]);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
-  const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
+  // Anual em todos os planos de assinatura (21/10, dono), mesmo desconto do Pro — só aparece se houver preço anual.
+  const temToggleAnual = ['top2', 'veiculos', 'combo'].includes(planoKey) && Number(plano?.precoAnual) > 0;
+  // Desconto REAL do anual (o selo dizia "20% off" fixo: 899 sobre 12 × 89,90 é 16,7%).
+  const descontoAnualPct = Number(plano?.precoAnual) > 0 && Number(plano?.preco) > 0
+    ? Math.round((1 - Number(plano.precoAnual) / (Number(plano.preco) * 12)) * 100) : 0;
+  const mesesGratisAnual = Number(plano?.precoAnual) > 0 && Number(plano?.preco) > 0
+    ? Math.round(12 - Number(plano.precoAnual) / Number(plano.preco)) : 0;
   const planoApiKey = temModalidade && modalidade === 'vista'
     ? `${planoKey}_vista`
     : temToggleAnual && modalidade === 'anual' ? `${planoKey}_anual` : planoKey;
@@ -972,7 +979,7 @@ export default function Checkout() {
     if (!mpDesligadoManualmente) {
       // ── Tenta Mercado Pago primeiro ───────────────────────────────────
       try {
-        const planoRecorrente = ['clube', 'top2', 'top2_anual', 'veiculos', 'combo'].includes(planoApiKey);
+        const planoRecorrente = ['clube', 'top2', 'top2_anual', 'veiculos', 'veiculos_anual', 'combo', 'combo_anual'].includes(planoApiKey);
         const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
         const res = await apiCall('/api/mp', {
           method: 'POST',
@@ -1417,7 +1424,7 @@ export default function Checkout() {
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                     <strong style={{ color: '#111111', fontSize: 32 }}>12× {plano.precoMensalAnualLabel}</strong>
-                    <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
+                    {descontoAnualPct > 0 && <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{descontoAnualPct}% off{mesesGratisAnual > 0 ? ` · ${mesesGratisAnual} meses grátis` : ''}</span>}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
                     Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
@@ -1484,7 +1491,7 @@ export default function Checkout() {
             </div>
           )}
           {mostrarComboCheckbox && !resultadoMudanca && (
-            <ComboCheckbox marcado={planoKey === 'combo'} base={comboBase} PLANOS={PLANOS} onChange={alternarCombo} />
+            <ComboCheckbox marcado={planoKey === 'combo'} base={comboBase} PLANOS={PLANOS} onChange={alternarCombo} anual={temToggleAnual && modalidade === 'anual'} />
           )}
           {/* Aviso LGPD, CPF e nome são enviados ao processador de pagamento */}
           <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 20, fontSize: 11, color: '#0369a1', lineHeight: 1.5 }}>
@@ -1822,7 +1829,7 @@ export default function Checkout() {
               </button>
               {/* Investidor Pro por PIX = ANUIDADE à vista (cartão = mensalidade recorrente, acima).
                   Só num contrato NOVO do Pro anual (não em troca de ciclo / mudança de plano). */}
-              {temToggleAnual && modalidade === 'anual' && !ehTrocaCiclo && !ehMudanca && (
+              {planoKey === 'top2' && temToggleAnual && modalidade === 'anual' && !ehTrocaCiclo && !ehMudanca && (
                 <button
                   onClick={() => { if (aceitouTermos && perfilFaturamentoOk) { setPixAnualFase('pagando'); setShowPixAnual(true); } }}
                   disabled={loading || !aceitouTermos || !perfilFaturamentoOk}

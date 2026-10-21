@@ -54,6 +54,9 @@ export const PLANO_VEICULOS = 'veiculos';
 export const PLANO_COMBO = 'combo';
 export const ehTrilhaVeiculos = (k) => planoBase(k) === PLANO_VEICULOS;
 export const daAcessoVeiculos = (k) => [PLANO_VEICULOS, PLANO_COMBO].includes(planoBase(k));
+// ANUAL também nas duas trilhas (21/10, dono: "o plano anual disponível para todos os planos com o mesmo % de
+// desconto"): `veiculos_anual` / `combo_anual` pagam 12 meses de uma vez → o acesso a veículos cresce 12 meses.
+export const mesesDoCiclo = (k) => (/_anual$/.test(String(k || '')) ? 12 : 1);
 export function planoDaReferencia(ref) {
   const s = String(ref || ''); const i = s.indexOf('|');
   const plano = i > 0 ? s.slice(i + 1).trim() : '';
@@ -64,7 +67,7 @@ export function planoDaReferencia(ref) {
 // webhook_eventos_processados — o webhook de assinatura e o tópico `payment` do MP chegam com o
 // MESMO id, e a reconciliação re-chama com a mesma cobrança). A folga de pagamento atrasado mora
 // em tem_acesso_veiculos() (3 dias), não aqui: somar folga a cada mês faria o acesso escorregar.
-export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway }) {
+export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway, meses = 1 }) {
   if (!userId || !gatewayPaymentId) return { skipped: 'sem_cobranca' };
   if (await eventoJaProcessado({ gateway, gatewayPaymentId, evento: 'acesso_veiculos' })) return { ok: true, duplicado: true };
   try {
@@ -73,7 +76,7 @@ export async function estenderAcessoVeiculos({ userId, gatewayPaymentId, gateway
     const atual = p?.acesso_veiculos_ate ? new Date(p.acesso_veiculos_ate) : null;
     const renovacao = !!(atual && atual.getTime() > Date.now());
     const base = renovacao ? atual : new Date();
-    base.setMonth(base.getMonth() + 1);
+    base.setMonth(base.getMonth() + (meses === 12 ? 12 : 1));
     // Período NOVO (sem acesso vigente) = contratação: âncora da garantia de 7 dias (garantia-cancelar).
     const upd = renovacao ? { acesso_veiculos_ate: base.toISOString() } : { acesso_veiculos_ate: base.toISOString(), veiculos_pago_em: new Date().toISOString() };
     const { data: ok, error } = await supabase.from('perfis').update(upd).eq('id', userId).select('id');
@@ -321,7 +324,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // adimplente preso como Explorador porque um webhook se perdeu.
   const temCobrancaReal = !!(cobranca?.gatewayPaymentId && Number(cobranca.valor) > 0);
   // TRILHA VEÍCULOS (20/10): não toca role/ciclo/agendamento/garantia do plano principal — só o acesso.
-  if (ehTrilhaVeiculos(planoKey)) return ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal });
+  if (ehTrilhaVeiculos(planoKey)) return ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal, meses: mesesDoCiclo(planoKey) });
   const semHistoricoDePagamento = !atual?.plano_pago_em && !PAGANTES.includes(atual?.role) && !atual?.role_anterior;
   if (semHistoricoDePagamento && !temCobrancaReal) {
     console.log(`[${gateway}] ativação SEGURADA para ${userId} (${planoKey}): mandato aceito, cobrança ainda não recebida`);
@@ -382,7 +385,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   if (error) throw new Error(error.message);
   // Combo pago de verdade → também libera veículos (+1 mês, uma vez por pagamento).
   if (planoBaseKey === PLANO_COMBO && temCobrancaReal) {
-    await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway });
+    await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway, meses: mesesDoCiclo(planoKey) });
   }
   // ASSESSORIA INCLUI O PRO (06/10): assessoria PAGA de verdade → para de cobrar a mensalidade
   // do Investidor Pro. Só com cobrança real (mandato autorizado sem pagamento não conta) e só se o
@@ -476,12 +479,12 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
 
 // Ativação da TRILHA VEÍCULOS: só com cobrança real (mandato autorizado não é pagamento — mesma regra
 // de 16/08). Comissão de rede como assinatura e conversão de anúncio, iguais às do Pro.
-async function ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal }) {
+async function ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal, meses = 1 }) {
   if (!temCobrancaReal) {
     console.log(`[${gateway}] veículos: mandato de ${userId} aceito, cobrança ainda não recebida`);
     return { ok: true, skipped: 'aguardando_pagamento' };
   }
-  const r = await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway });
+  const r = await estenderAcessoVeiculos({ userId, gatewayPaymentId: cobranca.gatewayPaymentId, gateway, meses });
   if (r?.duplicado) return { ok: true, plano: PLANO_VEICULOS, duplicado: true };
   const primeiraVez = !r?.anterior; // nunca teve acesso → boas-vindas; renovação não é estreia
   try {
@@ -723,10 +726,10 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // no mapearPlano; 29,90 não mapeia). Veículos não toca role; Combo é o Pro + acesso a veículos.
   if (ehTrilhaVeiculos(planoReferencia)) {
     return ativarTrilhaVeiculos({ userId: cliente.id, gateway, temCobrancaReal: !!(gatewayPaymentId && Number(valor) > 0),
-      cobranca: { gatewayPaymentId, valor, valorLiquido } });
+      cobranca: { gatewayPaymentId, valor, valorLiquido }, meses: mesesDoCiclo(planoReferencia) });
   }
   const ehComboRef = planoBase(planoReferencia) === PLANO_COMBO;
-  if (ehComboRef && gatewayPaymentId && Number(valor) > 0) await estenderAcessoVeiculos({ userId: cliente.id, gatewayPaymentId, gateway });
+  if (ehComboRef && gatewayPaymentId && Number(valor) > 0) await estenderAcessoVeiculos({ userId: cliente.id, gatewayPaymentId, gateway, meses: mesesDoCiclo(planoReferencia) });
 
   // Pagamento avulso de SERVIÇO (mp-checkout sem planoId): apenas limpa
   // inadimplência; NUNCA mapeia valor→plano (senão um serviço de R$500/5000/99,90
@@ -734,7 +737,7 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // `planoForcado` (20/10, #244): a ASSESSORIA paga pelo Checkout Transparente do MP chega com metadata.tipo='servico'
   // e proposito='assessoria' — o preço já foi conferido no mp-checkout (≥ tabela; de 4x em diante o total leva juros
   // e sai das faixas do mapearPlano). Sem isto ela não comissionava nem promovia; pelo Asaas, a mesma venda fazia os dois.
-  const mapeado = ehComboRef ? { plano: PLANO_COMBO, role: 'top2', ciclo: 'mensal' }
+  const mapeado = ehComboRef ? { plano: PLANO_COMBO, role: 'top2', ciclo: mesesDoCiclo(planoReferencia) === 12 ? 'anual' : 'mensal' }
     : planoForcado ? { plano: planoForcado, role: planoForcado } : (servico ? null : mapearPlano(valor, descricao));
   let cicloMarcado = false; // marca 'ciclo_aplicado' gravada nesta chamada (desfeita se a gravação falhar)
 

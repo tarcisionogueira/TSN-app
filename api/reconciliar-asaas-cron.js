@@ -114,14 +114,15 @@ async function handler(req) {
           // por pagamento no acesso a veículos, então re-chamar com a mesma cobrança não estende de novo.
           const refPlano = (() => {
             const pr = planoDaReferencia(String(p.externalReference || ''));
-            if (pr === 'veiculos' || pr === 'combo') return pr;
-            if (/^Leil[aã]o de Ve[ií]culos/i.test(p.description || '')) return 'veiculos';
-            if (/^Combo Im[oó]veis/i.test(p.description || '')) return 'combo';
+            if (/^(veiculos|combo)(_anual)?$/.test(pr || '')) return pr; // anual desde 21/10
+            const anual = /anual/i.test(p.description || '') ? '_anual' : '';
+            if (/^Leil[aã]o de Ve[ií]culos/i.test(p.description || '')) return `veiculos${anual}`;
+            if (/^Combo Im[oó]veis/i.test(p.description || '')) return `combo${anual}`;
             return null;
           })();
           // Veículos: idempotente de ponta a ponta (repetir não estende nem conta conversão). Combo passa pela
           // ativação inteira do Pro, então só entra no mesmo caso de órfão do Pro (explorador sem inadimplência).
-          if (refPlano === 'combo' && (cliente.role !== 'explorador' || cliente.inadimplente_desde)) continue;
+          if (/^combo/.test(refPlano || '') && (cliente.role !== 'explorador' || cliente.inadimplente_desde)) continue;
           if (refPlano) {
             try {
               await ativarPlanoDireto({ userId: cliente.id, planoKey: refPlano, gateway: 'asaas',

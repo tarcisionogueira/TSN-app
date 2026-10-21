@@ -68,6 +68,7 @@ async function cancelarMP(candidatos, email, userId, trilha = 'principal') {
         if (uid !== userId || !p.id || /^veiculos/.test(plano) !== (trilha === 'veiculos')) continue;
         ids.add(String(p.id));
         if (/^combo/.test(plano)) out.combo = true;
+        if (/_anual$/.test(plano)) out.anual = true;
       }
     }
   } catch (e) { console.warn('[garantia-cancelar] busca de mandatos no MP falhou:', e?.message || e); } // segue com os candidatos do perfil
@@ -92,10 +93,10 @@ async function cancelarAsaas(customerId, trilha = 'principal') {
   if (!ASAAS_KEY || !customerId) return out;
   try {
     const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
-    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => (planoDaAssinaturaAsaas(x) === 'veiculos') === (trilha === 'veiculos'));
+    const subs = ((await sr.json().catch(() => null))?.data || []).filter((x) => /^veiculos/.test(planoDaAssinaturaAsaas(x)) === (trilha === 'veiculos'));
     for (const s of subs) {
       const dr = await fetch(`${ASAAS_URL}/subscriptions/${s.id}`, { method: 'DELETE', headers: { access_token: ASAAS_KEY } });
-      if (dr.ok) { out.n++; if (planoDaAssinaturaAsaas(s) === 'combo') out.combo = true; }
+      if (dr.ok) { out.n++; if (/^combo/.test(planoDaAssinaturaAsaas(s))) out.combo = true; if (/_anual$/.test(planoDaAssinaturaAsaas(s))) out.anual = true; }
     }
     return out;
   } catch (e) { console.warn('[garantia-cancelar] cancelamento no Asaas falhou:', e?.message || e); return out; }
@@ -150,7 +151,7 @@ async function garantiaVeiculos({ user, email, res }) {
     const r = await sb(`perfis?id=eq.${user.id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ acesso_veiculos_ate: new Date().toISOString(), veiculos_pago_em: null }) }).catch(() => null);
     const confirmado = !!r?.ok && ((await r.json().catch(() => [])) || []).length > 0;
     if (!confirmado) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Reembolso de Veículos decidido mas o acesso NÃO foi encerrado — encerrar manualmente (perfis.acesso_veiculos_ate).', extra: { user_id: user.id, http_status: r?.status ?? null } });
-    const valorRef = await precoDe('veiculos');
+    const valorRef = await precoDe('veiculos', mp.anual || asaas.anual);
     const gateway = mp.n ? 'mercadopago' : asaas.n ? 'asaas' : 'desconhecido';
     const rReg = await sb('reembolsos_garantia', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: 'veiculos', valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49) — Leilão de Veículos', cpf_hash: cpfHash, rebaixamento_confirmado: confirmado }) }).catch(() => null);
     if (!rReg?.ok) alertarErro({ rota: '/api/garantia-cancelar', erro: 'Pedido de reembolso de Veículos NÃO registrado — estornar manualmente.', extra: { user_id: user.id, email, valorRef, http_status: rReg?.status ?? null } });
@@ -261,7 +262,7 @@ export default async function handler(req, res) {
     // O CICLO vem de plano_ciclo (M1) — o `role` é sempre BASE (top2), então /_anual$/ no role dava
     // sempre false e gravava o valor MENSAL no reembolso de quem pagou o ANUAL. Combo: role é top2,
     // mas o pago foi o preço do Combo.
-    const valorRef = await precoDe(combo ? 'combo' : rolePagante.replace(/_anual$/, ''), !combo && /anual/i.test(perfil?.plano_ciclo || ''));
+    const valorRef = await precoDe(combo ? 'combo' : rolePagante.replace(/_anual$/, ''), /anual/i.test(perfil?.plano_ciclo || ''));
 
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).
     await sb('reembolsos_garantia', {

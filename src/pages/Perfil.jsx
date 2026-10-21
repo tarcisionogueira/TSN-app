@@ -1163,7 +1163,7 @@ export default function Perfil() {
         {veicAte && (
           <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 12, padding: '14px 18px', marginBottom: 20, fontSize: 13, color: '#134e4a', lineHeight: 1.6 }}>
             <div style={{ fontWeight: 800 }}>Leilão de Veículos</div>
-            <div>{new Date(veicAte).getTime() > Date.now() - 3 * 864e5 ? 'Ativo' : 'Vencido'} até <strong>{new Date(veicAte).toLocaleDateString('pt-BR')}</strong>{new Date(veicAte).getTime() > Date.now() - 3 * 864e5 ? ' — renova sozinho a cada mês.' : '.'}</div>
+            <div>{new Date(veicAte).getTime() > Date.now() - 3 * 864e5 ? 'Ativo' : 'Vencido'} até <strong>{new Date(veicAte).toLocaleDateString('pt-BR')}</strong>{new Date(veicAte).getTime() > Date.now() - 3 * 864e5 ? ' — renova sozinho ao fim do período.' : '.'}</div>
             {new Date(veicAte).getTime() > Date.now() - 3 * 864e5 && (
               <button onClick={cancelarVeiculos} disabled={veicCancelando}
                 style={{ marginTop: 8, background: 'none', border: 'none', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 12.5 }}>

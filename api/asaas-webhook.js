@@ -156,10 +156,10 @@ export default async function handler(req, res) {
     // pela descrição que o Asaas copia da assinatura para cada cobrança. Nunca pelo valor (99,90 = Pro legado).
     planoReferencia: (() => {
       const pr = planoDaReferencia(extRef);
-      if (pr === 'veiculos' || pr === 'combo') return pr;
+      if (/^(veiculos|combo)(_anual)?$/.test(pr || '')) return pr; // anual desde 21/10
       const d = String(pagReal.description || '');
-      if (/^Leil[aã]o de Ve[ií]culos/i.test(d)) return 'veiculos';
-      if (/^Combo Im[oó]veis/i.test(d)) return 'combo';
+      if (/^Leil[aã]o de Ve[ií]culos/i.test(d)) return /anual/i.test(d) ? 'veiculos_anual' : 'veiculos';
+      if (/^Combo Im[oó]veis/i.test(d)) return /anual/i.test(d) ? 'combo_anual' : 'combo';
       return null;
     })(),
   };

@@ -529,7 +529,7 @@ export default async function handler(req, res) {
       // Veículos/Combo (20/10) não reaproveitam a assinatura ativa: mudar só o valor dela deixaria a
       // externalReference antiga (o webhook leria Pro, sem veículos). 404 = o checkout cria uma NOVA; a
       // antiga da mesma trilha é cancelada depois do 1º pagamento (_recorrencia-unica.js).
-      if (['veiculos', 'combo'].includes(plano)) return res.status(404).json({ error: 'Plano novo: criar assinatura própria.' });
+      if (/^(veiculos|combo)/.test(plano || '')) return res.status(404).json({ error: 'Plano novo: criar assinatura própria.' });
 
       // Localiza customer e assinatura ativa
       const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
@@ -539,7 +539,7 @@ export default async function handler(req, res) {
       // Só a assinatura PRINCIPAL que não é Combo (revisão 20/10): com Pro + Veículos, a 1ª ACTIVE podia ser a
       // de Veículos, e reprecificá-la deixava a referência `uid|veiculos` — o Clube nunca ativava. Combo vira
       // assinatura nova (404 abaixo), porque a referência dele forçaria role top2 sobre o preço do Clube.
-      const sub = (subs.data || []).find((x) => !['veiculos', 'combo'].includes(planoDaAssinaturaAsaas(x)));
+      const sub = (subs.data || []).find((x) => !/^(veiculos|combo)/.test(planoDaAssinaturaAsaas(x)));
       if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada. Crie uma assinatura primeiro.' });
 
       const valorAtual = Number(sub.value) || 0;
@@ -600,7 +600,7 @@ export default async function handler(req, res) {
       if (!customer) return res.status(404).json({ error: 'Cliente não encontrado no Asaas.' });
 
       const subs = await asaasGet(`/subscriptions?customer=${customer.id}&status=ACTIVE`);
-      const sub = (subs.data || []).find((x) => (planoDaAssinaturaAsaas(x) === 'veiculos' ? 'veiculos' : 'principal') === trilha);
+      const sub = (subs.data || []).find((x) => (/^veiculos/.test(planoDaAssinaturaAsaas(x)) ? 'veiculos' : 'principal') === trilha);
       if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada.' });
 
       // Remove a assinatura no Asaas

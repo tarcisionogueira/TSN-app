@@ -7,6 +7,20 @@
 
 
 
+## 21/10 — ANUAL em todos os planos (mesmo desconto do Pro) + vitrine de planos
+- **Preços** (`20261021_anual_veiculos_combo.sql`): Pro 899 (12×89,90 = 1.078,80 → −16,7%, 2 meses grátis); mesma razão
+  → Veículos **299/ano**, Combo **999/ano**. Chaves `veiculos_anual` / `combo_anual` no mp.js (preapproval de 12 meses) e
+  no asaas.js (YEARLY, gerada do preco_anual). `mesesDoCiclo()` no _webhook-core: cobrança anual estende
+  `acesso_veiculos_ate` +12 meses; Combo anual grava `plano_ciclo='anual'` como o Pro anual.
+- **Achados no caminho:** (1) o Checkout só tratava `top2_anual` como recorrente — o anual novo viraria cobrança AVULSA sem
+  renovação; (2) descrição "Combo Imóveis + **Veículos**" no Asaas era classificada como trilha Veículos (regex testava
+  "veículo" antes de "combo") — valia também para o mensal; (3) os selos de desconto eram fixos e errados ("20% off" no
+  checkout, "-25%" em /planos) — agora calculados (17%).
+- **Telas:** /planos com 3 cards lado a lado + seletor Mensal/Anual (o estado existia, o botão nunca foi desenhado); Combo
+  como CHECKBOX no checkout (troca o plano na tela, `?de=` lembra a origem), botão de pagamento por último; `?ciclo=anual`
+  abre o checkout no anual. "Voltar" flutuante não prende mais (se a volta quica, vai a destino fixo).
+- PIX à vista do anual continua só no Pro (`ativar-pro-anual` é específico). **Não testado com cobrança real.**
+
 ## 20/10 (noite, 2) — fotos sem o CDN do leiloeiro · FIPE pública e casamento · garantia de 7 dias em Veículos
 **Pedido do dono:** esconder o leiloeiro também na foto; garantia de 7 dias; "quem já é pagante continua pagando, as
 assessorias avulsas eu atribuo direto — são independentes" (→ o ponto "assessorado com Combo" do #262 **não é defeito**,

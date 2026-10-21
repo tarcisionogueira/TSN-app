@@ -63,8 +63,10 @@ export default function OfertaCombo({ planoKey, PLANOS, onEscolher, escuro = fal
  * permissões do sistema"). Marcar troca o plano da tela para `combo` (preço, termo e cobrança do Combo — e com ele
  * as permissões: o webhook ativa Pro + acesso a veículos); desmarcar volta ao plano de origem (`base`).
  */
-export function ComboCheckbox({ marcado, base, PLANOS, onChange }) {
-  const num = (k) => Number(PLANOS?.[k]?.preco) || 0;
+export function ComboCheckbox({ marcado, base, PLANOS, onChange, anual = false }) {
+  // No ciclo ANUAL (21/10) a conta é com os preços anuais — mesmo desconto em todos os planos.
+  const num = (k) => Number(anual ? PLANOS?.[k]?.precoAnual : PLANOS?.[k]?.preco) || 0;
+  const per = anual ? '/ano' : '/mês';
   const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const combo = num('combo');
   const diferenca = combo - num(base);
@@ -76,10 +78,10 @@ export function ComboCheckbox({ marcado, base, PLANOS, onChange }) {
         style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: '#7c3aed', cursor: 'pointer' }} />
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#4c1d95' }}>
-          Incluir {inclui} — Combo {combo > 0 ? fmt(combo) : ''}/mês
+          Incluir {inclui} — Combo {combo > 0 ? fmt(combo) : ''}{per}
         </span>
         <span style={{ display: 'block', fontSize: 12.5, color: '#5b21b6', marginTop: 3, lineHeight: 1.5 }}>
-          {diferenca > 0 ? `Só +${fmt(diferenca)}/mês` : 'Imóveis e veículos'}{economia > 0 ? ` · economize ${fmt(economia)}/mês em relação aos dois separados` : ''}.
+          {diferenca > 0 ? `Só +${fmt(diferenca)}${per}` : 'Imóveis e veículos'}{economia > 0 ? ` · economize ${fmt(economia)}${per} em relação aos dois separados` : ''}.
         </span>
         <span style={{ display: 'block', fontSize: 12, color: '#6b21a8', marginTop: 6, lineHeight: 1.55 }}>
           {base === 'veiculos'

@@ -135,7 +135,7 @@ export default function Planos() {
   // Valores reais do Investidor Pro (planos_config) para o FAQ
   const _precoMes = Number(PLANOS.top2?.preco) || 49.90;
   const _precoAno = Number(PLANOS.top2?.precoAnual) || 449.90;
-  const _economiaPct = _precoMes ? (1 - _precoAno / (_precoMes * 12)) * 100 : 25;
+  const _economiaPct = _precoMes ? (1 - _precoAno / (_precoMes * 12)) * 100 : 0;
   const FAQS = buildFAQS({
     precoMesLabel: fmtR(_precoMes),
     mesAnualLabel: fmtR(_precoAno / 12),
@@ -148,6 +148,7 @@ export default function Planos() {
     if (!plano) return;
     if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
     const params = new URLSearchParams({ plano: key });
+    if (periodo === 'anual' && Number(plano.precoAnual) > 0) params.set('ciclo', 'anual'); // abre o checkout no anual
     nav(user ? `/checkout?${params}` : `/login?next=${encodeURIComponent(`/checkout?plano=${key}`)}`);
   };
 
@@ -188,6 +189,9 @@ export default function Planos() {
 
   // Cabeçalho dos 3 cards lado a lado (21/10, dono: "alinhamento, fontes"): MESMA altura e MESMO tamanho de
   // preço, sem quebrar linha — o card mais estreito partia "R$ 29,90" em duas e as listas começavam desalinhadas.
+  // Desconto REAL do anual de cada plano (o texto dizia "-25%" fixo; 899 sobre 12 × 89,90 é 17%).
+  const descAnual = (k) => { const p = PLANOS[k]; return p?.preco > 0 && p?.precoAnual > 0 ? Math.round((1 - p.precoAnual / (p.preco * 12)) * 100) : 0; };
+  const mesesGratis = (k) => { const p = PLANOS[k]; return p?.preco > 0 && p?.precoAnual > 0 ? Math.round(12 - p.precoAnual / p.preco) : 0; };
   const PRECO_TOPO = { fontSize: 'clamp(34px, 3.4vw, 46px)', fontWeight: 900, lineHeight: 1.05, whiteSpace: 'nowrap', letterSpacing: '-0.5px' };
   const CABECALHO = { minHeight: 108, marginBottom: 12 };
 
@@ -290,6 +294,20 @@ export default function Planos() {
           );
         })()}
 
+        {/* Mensal | Anual (21/10, dono: "o anual disponível para todos os planos com o mesmo % de desconto"). */}
+        {PLANOS.top2?.precoAnual > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '0 0 22px' }}>
+            <div role="group" aria-label="Ciclo de cobrança" style={{ display: 'flex', gap: 4, padding: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              {[['mensal', 'Mensal'], ['anual', `Anual${mesesGratis('top2') > 0 ? ` · ${mesesGratis('top2')} meses grátis` : ''}`]].map(([k, rot]) => (
+                <button key={k} onClick={() => setPeriodo(k)} aria-pressed={periodo === k}
+                  style={{ padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13.5, background: periodo === k ? '#084BA6' : 'transparent', color: periodo === k ? 'white' : '#475569' }}>
+                  {rot}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── 3 planos lado a lado (21/10, dono): Explorador · Investidor Pro · Leilão de Veículos. O Combo é
             oferecido ao abrir o link de qualquer um (components/OfertaCombo.jsx, no Checkout) e na faixa abaixo. ── */}
         <div className="grid-3 grid-planos" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr)', gap: 20, maxWidth: 1100, margin: '0 auto 28px', alignItems: 'stretch' }}>
@@ -331,7 +349,7 @@ export default function Planos() {
             </div>
             {periodo === 'anual'
               ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 449,90')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
-              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual (-25%)</div>}
+              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual{descAnual('top2') ? ` (-${descAnual('top2')}%)` : ''}</div>}
             <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, alignSelf: 'flex-start' }}>
               {periodo === 'anual' ? 'Cancele a renovação automática quando quiser' : 'Cancele quando quiser'}
             </div>
@@ -376,7 +394,7 @@ export default function Planos() {
                 ].map(t => <CheckItem key={t} txt={t} light />)}
               </div>
             </div>
-            <button onClick={() => ctaTipo('top2') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=top2')} disabled={atual('top2')}
+            <button onClick={() => ctaTipo('top2') === 'downgrade' ? irDowngrade() : ir('top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               {atual('top2') ? 'Seu plano atual' : ctaTipo('top2') === 'downgrade' ? 'Fazer downgrade' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
             </button>
@@ -389,10 +407,12 @@ export default function Planos() {
               <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#ccfbf1', color: '#0f766e', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Leilão de Veículos</div>
               <div style={CABECALHO}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                  <div style={{ ...PRECO_TOPO, color: '#111' }}>{pLabel('veiculos', 'precoLabel', 'R$ 29,90')}</div>
+                  <div style={{ ...PRECO_TOPO, color: '#111' }}>{periodo === 'anual' && PLANOS.veiculos?.precoAnual ? pLabel('veiculos', 'precoMensalAnualLabel', 'R$ 24,92') : pLabel('veiculos', 'precoLabel', 'R$ 29,90')}</div>
                   <div style={{ fontSize: 14, color: '#64748b' }}>/mês</div>
                 </div>
-                <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Cancele quando quiser</div>
+                {periodo === 'anual' && PLANOS.veiculos?.precoAnual
+                  ? <div style={{ fontSize: 13, color: '#15803d', fontWeight: 700 }}>{pLabel('veiculos', 'precoAnualLabel', 'R$ 299,00')}/ano · economize {fmtR(PLANOS.veiculos.preco * 12 - PLANOS.veiculos.precoAnual)}</div>
+                  : <div style={{ fontSize: 12.5, color: '#94a3b8' }}>{PLANOS.veiculos?.precoAnual ? `ou ${pLabel('veiculos', 'precoMensalAnualLabel', '')}/mês no plano anual (-${descAnual('veiculos')}%) · ` : ''}Cancele quando quiser</div>}
               </div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.7 }}>
                 Ache o carro de graça. Com o plano, veja quem é o leiloeiro, abra o lote e gere o relatório por IA antes de dar o lance.
@@ -415,7 +435,7 @@ export default function Planos() {
             <div style={{ flex: '1 1 320px', minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, color: '#ddd6fe' }}>Combo Imóveis + Veículos</div>
               <div style={{ fontSize: 20, fontWeight: 900, color: 'white', margin: '4px 0' }}>
-                Investidor Pro + Leilão de Veículos por {pLabel('combo', 'precoLabel', 'R$ 99,90')}/mês
+                Investidor Pro + Leilão de Veículos por {periodo === 'anual' && PLANOS.combo?.precoAnual ? `${pLabel('combo', 'precoAnualLabel', 'R$ 999,00')}/ano` : `${pLabel('combo', 'precoLabel', 'R$ 99,90')}/mês`}
               </div>
               <div style={{ fontSize: 13.5, color: '#ede9fe', lineHeight: 1.6 }}>
                 Relatórios de imóveis e de veículos e o leiloeiro de cada carro desbloqueado, numa assinatura só

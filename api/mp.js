@@ -182,6 +182,9 @@ const PLANOS_CONFIG = {
   // 20/10 (decisão do dono): segunda TRILHA de assinatura — ver "DUAS TRILHAS" em _webhook-core.js.
   veiculos:          { nome: 'Leilão de Veículos',           valor: 29.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
   combo:             { nome: 'Combo Imóveis + Veículos',     valor: 99.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
+  // 21/10 (dono): anual em todos os planos, mesmo desconto do Pro (10 meses pelo preço de 12) — preço do planos_config.
+  veiculos_anual:    { nome: 'Leilão de Veículos (Anual)',   valor: 299.00,   recorrente: true, frequency: 12, frequency_type: 'months' },
+  combo_anual:       { nome: 'Combo Imóveis + Veículos (Anual)', valor: 999.00, recorrente: true, frequency: 12, frequency_type: 'months' },
 };
 
 // Espelha os preços do admin (planos_config) respeitando mensal×total: clube.preco é
@@ -208,6 +211,7 @@ async function carregarPrecos() {
         if (num(T?.preco_anual) != null)   cfg.top2_anual.valor = num(T.preco_anual);
         for (const k of ['veiculos', 'combo']) {
           if (num(by[k]?.preco) > 0) { cfg[k].valor = num(by[k].preco); if (by[k].nome) cfg[k].nome = by[k].nome; }
+          if (num(by[k]?.preco_anual) > 0) { cfg[`${k}_anual`].valor = num(by[k].preco_anual); if (by[k].nome) cfg[`${k}_anual`].nome = `${by[k].nome} (Anual)`; }
         }
       }
     }
