@@ -7,6 +7,30 @@
 
 
 
+## 21/10 (madrugada, 2) — BUG BOUNTY completo (4 agentes: dinheiro · auth/#264 · telas · crons/IA)
+Tudo corrigido e no ar (commits 3f2ec5d, 25e9d8e, efe13cc, 7a2daf6). Os achados mais graves:
+- **#264 vazava pelo SERVIDOR.** A view mascarada não mascara para a service key: `api/busca-raio` (pública, sem
+  login) devolvia leiloeiro e links do acervo inteiro; `imovel_anexos` (policy) dava ~24 mil links de edital/matrícula
+  a qualquer logado; `enriquecer-lote` e `verificar-doc` idem. Helper único `api/_leiloeiro-acesso.js`
+  (`acessoLeiloeiro`, `mascararLote`). **Regra: endpoint que lê o acervo com a service key e devolve ao navegador
+  tem que mascarar pelo papel de quem chamou.** Residual (decisão do dono, pendência 265): foto no CDN do leiloeiro e `fonte`.
+- **Anual à vista não sabia qual plano foi pago.** `mp-checkout` aceitava o valor do corpo (PIX de R$ 1 virava Pro
+  anual pela reconciliação) e não gravava o plano; webhook/reconciliação/garantia tratavam tudo como Pro. Agora preço
+  do servidor + `metadata.plano`, trilha certa no estorno, recorrência da mesma trilha cancelada
+  (`cancelarOutrasRecorrencias({ manterPagamentoId })`), 12× sem juros na tela. Nenhum pagamento anual à vista existia.
+- **Relatórios:** regerar e falhar não apaga mais o pronto (veículo gravava `erro` por cima; mercado/documental/laudo
+  zeravam o anterior quando a LEITURA dele falhava).
+- **Admin:** `?aba=` nunca funcionou (HashRouter: a query fica depois do `#`); dossiê de chargeback restaurado
+  (sub-aba Financeiro › Chargebacks — tinha saído por engano na limpeza).
+- **Crons:** CNJ carimbava "checado" em consulta que falhou (41 de 116 sem verificação) e respondia ok; fotos órfãs
+  4,6 s → 0,33 s (índice de expressão); índice para página de cidade/sitemap; aviso de saldo marcava como avisado quem
+  falhou (`saldo_avisos_sincronizar_exceto`); NPS com idempotência; FIPE: erro ≠ "cota esgotada"; link #/caixa morto.
+- **Não mexido de propósito:** `reconciliar_relistados` 57014 (cron horário refaz); vencimento anual que reinicia em
+  hoje+12 em vez de somar (só seguro junto com a limpeza de recorrência, agora existente — avaliar); pinos genéricos
+  (heurística ambígua em condomínio); MILAN 15626/008 sem cidade (1 lote); LEJE no runner residencial.
+- **Lição do deploy:** um `npm run build` meu passou com arquivo novo que a trava reprovou na Vercel — confira o
+  EXIT do build completo (`npm run build; echo $?`) antes do push.
+
 ## 21/10 (madrugada) — leiloeiro só para plano pago (#264, banco) · pagamentos · limpeza do Admin
 - **#264 FECHADA no banco.** Identidade e links do leiloeiro em imóveis só para plano pago (top2/assessorado/clube* +
   equipe), agora também na API e não só na tela. `pode_ver_leiloeiro()` + view `imoveis_leilao_mascarado` (definer;
