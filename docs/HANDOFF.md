@@ -7,6 +7,28 @@
 
 
 
+## 21/10 (madrugada) — leiloeiro só para plano pago (#264, banco) · pagamentos · limpeza do Admin
+- **#264 FECHADA no banco.** Identidade e links do leiloeiro em imóveis só para plano pago (top2/assessorado/clube* +
+  equipe), agora também na API e não só na tela. `pode_ver_leiloeiro()` + view `imoveis_leilao_mascarado` (definer;
+  zera leiloeiro, url_lote, link_edital, link_matricula, link_regras_venda, anexos, anunciado_em, raw) + RPCs
+  `imovel_leiloeiro(uuid[])` e `imovel_por_url_lote(text[])`. As 22 leituras de `src/` leem a view; `buscar_por_raio*`,
+  `fonte_cobertura/qualidade` e `meus_favoritos` leem a view. **Parte C aplicada:** `anon/authenticated` têm SELECT só
+  nas colunas livres da TABELA (grant por coluna, não RLS — RLS filtraria linha e falharia calado, forma nº 3).
+  ⚠️ **Coluna nova em `imoveis_leilao` precisa de `grant select (col) ... to anon, authenticated`** se o navegador for
+  ler — senão dá 42501 (é o desenho: a falha é barulhenta). Servidor (service_role) não é afetado.
+  Prova: anon/explorador → `insufficient_privilege` no leiloeiro; view 28.907 ativos com 0 leiloeiro; Pro vê 28.517.
+- **Pagamentos:** mensal só cartão; anual PIX à vista ou cartão parcelado em todos os planos (`ativar-pro-anual` aceita
+  top2/veiculos/combo, preço do banco, fail-closed). Honorários: boleto e cartão 1× sem acréscimo; de 2× em diante o
+  cliente paga os juros (`REPASSAR_TAXA_DO_MEIO=false`). **Para 12× sem juros no anual, o dono precisa ligar o
+  parcelamento sem juros no painel do Mercado Pago** (hoje a conta oferece 3×).
+- **Admin enxugado** (aprovado pelo dono, itens 1–16): fora a aba Veículos do Operacional, Roadmap, botões de
+  debug/diagnóstico/recon, painéis de teste de receita/campanha, rotas /admin/chargebacks e /admin/live-preview, e código
+  morto (ContratosTab, ScrapersMonitor…). Painéis movidos: Funil público → Marketing; Leitura de e-books → E-books;
+  docs do leiloeiro/diagnóstico IA/auditoria → Qualidade. **Financeiro unificado** em Admin › Financeiro (13 sub-abas;
+  `/admin/financeiro` redireciona). **Leilão Club aposentado** (0 usuários, plano já inativo; checkout devolve plano
+  inativo para /planos). Comercial sem filtro "por consultor" (a coluna virou "Indicado por"). Mantidos de propósito:
+  disparos manuais de scraper e catálogo de cartório na Config.
+
 ## 21/10 — ANUAL em todos os planos (mesmo desconto do Pro) + vitrine de planos
 - **Preços** (`20261021_anual_veiculos_combo.sql`): Pro 899 (12×89,90 = 1.078,80 → −16,7%, 2 meses grátis); mesma razão
   → Veículos **299/ano**, Combo **999/ano**. Chaves `veiculos_anual` / `combo_anual` no mp.js (preapproval de 12 meses) e
@@ -19,7 +41,7 @@
 - **Telas:** /planos com 3 cards lado a lado + seletor Mensal/Anual (o estado existia, o botão nunca foi desenhado); Combo
   como CHECKBOX no checkout (troca o plano na tela, `?de=` lembra a origem), botão de pagamento por último; `?ciclo=anual`
   abre o checkout no anual. "Voltar" flutuante não prende mais (se a volta quica, vai a destino fixo).
-- PIX à vista do anual continua só no Pro (`ativar-pro-anual` é específico). **Não testado com cobrança real.**
+- PIX à vista do anual: estendido aos 3 planos na mesma noite (ver bloco acima). **Não testado com cobrança real.**
 
 ## 20/10 (noite, 2) — fotos sem o CDN do leiloeiro · FIPE pública e casamento · garantia de 7 dias em Veículos
 **Pedido do dono:** esconder o leiloeiro também na foto; garantia de 7 dias; "quem já é pagante continua pagando, as
